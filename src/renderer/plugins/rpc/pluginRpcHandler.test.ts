@@ -750,7 +750,10 @@ describe('plugin panel persisted element mutations', () => {
       { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
       { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
     ];
-    const patch = { shadow: { color: '  raw shadow  ' } };
+    const patch = {
+      property: 'shadow',
+      value: { leaf: 'color', value: '  raw shadow  ' },
+    };
     mocks.requestListener?.(
       envelope('layers:patchProperty', { targets, patch }),
     );
@@ -766,7 +769,7 @@ describe('plugin panel persisted element mutations', () => {
     const target = {
       elementType: 'knob',
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      patch: { activeShadow: { blur: 22.5 } },
+      patch: { property: 'activeShadow', value: { leaf: 'blur', value: 22.5 } },
     };
     mocks.requestListener?.(envelope('layers:patchProperty', { target }));
     await vi.waitFor(() => expect(mocks.patchShadow).toHaveBeenCalledOnce());
@@ -791,7 +794,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { shadowEnabled: false },
+          patch: { property: 'shadowEnabled', value: false },
         },
       }),
     );
@@ -808,35 +811,35 @@ describe('plugin panel persisted element mutations', () => {
       'graph',
       {
         targets: [{ elementType: 'graph', id: RPC_GRAPH_ID }],
-        patch: { shadow: { blur: 1 } },
+        patch: { property: 'shadow', value: { leaf: 'blur', value: 1 } },
       },
     ],
     [
       'active stat',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { activeShadow: { blur: 1 } },
+        patch: { property: 'activeShadow', value: { leaf: 'blur', value: 1 } },
       },
     ],
     [
       'empty color',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { shadow: { color: '' } },
+        patch: { property: 'shadow', value: { leaf: 'color', value: '' } },
       },
     ],
     [
       'range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { shadow: { offsetX: 101 } },
+        patch: { property: 'shadow', value: { leaf: 'offsetX', value: 101 } },
       },
     ],
     [
       'combined inner',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { shadow: { blur: 1, color: '#000' } },
+        patch: { property: 'shadow', value: { blur: 1, color: '#000' } },
       },
     ],
     [
@@ -1189,33 +1192,41 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    ['가시성', { hidden: true }, 'graph'],
-    ['이름', { layerName: 'renamed' }],
-    ['이름 clear', { layerName: null }],
-    ['그래프 타입', { graphType: 'bar' }],
-    ['그래프 색상', { graphColor: '#12abEF' }],
-    ['평균선', { showAvgLine: false }],
-    ['그래프 애니메이션', { graphAnimationEnabled: true }],
-    ['그래프 속도', { graphSpeed: 1200 }],
-    ['노브 축', { axisId: '  HIDA:raw  ' }, 'knob'],
-    ['사운드', { soundPath: '  sounds/raw.wav  ' }, 'key'],
-    ['인라인 스타일', { useInlineStyles: true }],
-    ['글꼴 굵기', { fontWeight: 700 }],
-    ['글꼴 기울임', { fontItalic: true }],
-    ['글꼴 밑줄', { fontUnderline: false }],
-    ['글꼴 취소선', { fontStrikethrough: true }],
-    ['글꼴 패밀리', { fontFamily: '  Raw Family  ' }],
-    ['대기 이미지', { inactiveImage: '  Raw Image.png  ' }],
-    ['활성 이미지', { activeImage: '  Raw Active.png  ' }, 'key'],
-    ['대기 투명', { idleTransparent: true }],
-    ['활성 투명', { activeTransparent: false }, 'knob'],
-    ['대기 이미지 맞춤', { idleImageFit: 'contain' }],
-    ['활성 이미지 맞춤', { activeImageFit: 'fill' }, 'key'],
-    ['노트 효과', { noteEffectEnabled: false }, 'key'],
-    ['노트 Y 보정', { noteAutoYCorrection: true }, 'key'],
-    ['노트 글로우', { noteGlowEnabled: false }, 'key'],
-    ['노트 정렬', { noteAlignment: 'right' }, 'key'],
-    ['노트 테두리 방향', { noteBorderSide: 'horizontal' }, 'key'],
+    ['가시성', { property: 'hidden', value: true }, 'graph'],
+    ['이름', { property: 'layerName', value: 'renamed' }],
+    ['이름 clear', { property: 'layerName', value: null }],
+    ['그래프 타입', { property: 'graphType', value: 'bar' }],
+    ['그래프 색상', { property: 'graphColor', value: '#12abEF' }],
+    ['평균선', { property: 'showAvgLine', value: false }],
+    ['그래프 애니메이션', { property: 'graphAnimationEnabled', value: true }],
+    ['그래프 속도', { property: 'graphSpeed', value: 1200 }],
+    ['노브 축', { property: 'axisId', value: '  HIDA:raw  ' }, 'knob'],
+    ['사운드', { property: 'soundPath', value: '  sounds/raw.wav  ' }, 'key'],
+    ['인라인 스타일', { property: 'useInlineStyles', value: true }],
+    ['글꼴 굵기', { property: 'fontWeight', value: 700 }],
+    ['글꼴 기울임', { property: 'fontItalic', value: true }],
+    ['글꼴 밑줄', { property: 'fontUnderline', value: false }],
+    ['글꼴 취소선', { property: 'fontStrikethrough', value: true }],
+    ['글꼴 패밀리', { property: 'fontFamily', value: '  Raw Family  ' }],
+    ['대기 이미지', { property: 'inactiveImage', value: '  Raw Image.png  ' }],
+    [
+      '활성 이미지',
+      { property: 'activeImage', value: '  Raw Active.png  ' },
+      'key',
+    ],
+    ['대기 투명', { property: 'idleTransparent', value: true }],
+    ['활성 투명', { property: 'activeTransparent', value: false }, 'knob'],
+    ['대기 이미지 맞춤', { property: 'idleImageFit', value: 'contain' }],
+    ['활성 이미지 맞춤', { property: 'activeImageFit', value: 'fill' }, 'key'],
+    ['노트 효과', { property: 'noteEffectEnabled', value: false }, 'key'],
+    ['노트 Y 보정', { property: 'noteAutoYCorrection', value: true }, 'key'],
+    ['노트 글로우', { property: 'noteGlowEnabled', value: false }, 'key'],
+    ['노트 정렬', { property: 'noteAlignment', value: 'right' }, 'key'],
+    [
+      '노트 테두리 방향',
+      { property: 'noteBorderSide', value: 'horizontal' },
+      'key',
+    ],
   ])(
     'native %s exact literal을 main semantic executor에 전달한다',
     async (_label, patch, elementType = 'graph') => {
@@ -1265,7 +1276,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { useInlineStyles: false },
+        patch: { property: 'useInlineStyles', value: false },
       }),
     );
 
@@ -1280,10 +1291,10 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    [{ fontWeight: 700 }],
-    [{ fontItalic: true }],
-    [{ fontUnderline: false }],
-    [{ fontStrikethrough: true }],
+    [{ property: 'fontWeight', value: 700 }],
+    [{ property: 'fontItalic', value: true }],
+    [{ property: 'fontUnderline', value: false }],
+    [{ property: 'fontStrikethrough', value: true }],
   ] as const)(
     'font style batch %j는 혼합 native 대상을 ordered semantic commit 하나로 전달한다',
     async (patch) => {
@@ -1339,7 +1350,7 @@ describe('plugin panel persisted element mutations', () => {
         id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       },
     ] as const;
-    const patch = { fontFamily: '  Raw Family  ' } as const;
+    const patch = { property: 'fontFamily', value: '  Raw Family  ' } as const;
     mocks.requestListener?.(
       envelope('layers:patchProperty', { targets, patch }),
     );
@@ -1369,7 +1380,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { displayText: '  Raw label  ' },
+        patch: { property: 'displayText', value: '  Raw label  ' },
         gestureId,
       }),
     );
@@ -1379,7 +1390,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     expect(mocks.patchDisplayText).toHaveBeenCalledWith(
       targets,
-      { displayText: '  Raw label  ' },
+      { property: 'displayText', value: '  Raw label  ' },
       {
         gestureId,
         preflight: expect.any(Function),
@@ -1400,7 +1411,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { className: '  Raw class  ' },
+        patch: { property: 'className', value: '  Raw class  ' },
         gestureId,
       }),
     );
@@ -1410,7 +1421,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     expect(mocks.patchDisplayText).toHaveBeenCalledWith(
       targets,
-      { className: '  Raw class  ' },
+      { property: 'className', value: '  Raw class  ' },
       {
         gestureId,
         preflight: expect.any(Function),
@@ -1421,9 +1432,9 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    ['borderWidth', 'key', { borderWidth: 12.5 }],
-    ['borderRadius', 'knob', { borderRadius: 999 }],
-    ['fontSize', 'graph', { fontSize: 31.5 }],
+    ['borderWidth', 'key', { property: 'borderWidth', value: 12.5 }],
+    ['borderRadius', 'knob', { property: 'borderRadius', value: 999 }],
+    ['fontSize', 'graph', { property: 'fontSize', value: 31.5 }],
   ] as const)(
     '%s batch는 common targets와 gesture를 공용 style commit으로 전달한다',
     async (_label, elementType, patch) => {
@@ -1460,7 +1471,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { noteGlowSize: 20.5 },
+        patch: { property: 'noteGlowSize', value: 20.5 },
       }),
     );
 
@@ -1469,7 +1480,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     expect(mocks.patchDisplayText).toHaveBeenCalledWith(
       targets,
-      { noteGlowSize: 20.5 },
+      { property: 'noteGlowSize', value: 20.5 },
       { preflight: expect.any(Function) },
     );
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
@@ -1477,11 +1488,11 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    { noteOffsetX: 0 },
-    { noteOffsetY: null },
-    { noteWidth: null },
-    { noteBorderWidth: 2.5 },
-    { noteBorderRadius: 12.5 },
+    { property: 'noteOffsetX', value: 0 },
+    { property: 'noteOffsetY', value: null },
+    { property: 'noteWidth', value: null },
+    { property: 'noteBorderWidth', value: 2.5 },
+    { property: 'noteBorderRadius', value: 12.5 },
   ] as const)(
     'note numeric %j batch는 key-only exact literal과 slot preflight를 전달한다',
     async (patch) => {
@@ -1515,7 +1526,7 @@ describe('plugin panel persisted element mutations', () => {
     const target = {
       elementType: 'key',
       id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-      patch: { noteOffsetX: null },
+      patch: { property: 'noteOffsetX', value: null },
     } as const;
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
@@ -1550,7 +1561,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           },
         ],
-        patch: { noteWidth: null },
+        patch: { property: 'noteWidth', value: null },
       }),
     );
 
@@ -1567,7 +1578,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: ids.map((id) => ({ elementType: 'key', id })),
-        patch: { notePaint: { opacity: 60 } },
+        patch: { property: 'notePaint', value: { opacity: 60 } },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
     );
@@ -1575,7 +1586,7 @@ describe('plugin panel persisted element mutations', () => {
     await vi.waitFor(() => expect(mocks.patchNotePaint).toHaveBeenCalledOnce());
     expect(mocks.patchNotePaint).toHaveBeenCalledWith(
       ids,
-      { notePaint: { opacity: 60 } },
+      { property: 'notePaint', value: { opacity: 60 } },
       {
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         preflight: expect.any(Function),
@@ -1591,7 +1602,10 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id,
-          patch: { noteBorderPaint: { color: '#A0B1C2', opacity: 55 } },
+          patch: {
+            property: 'noteBorderPaint',
+            value: { color: '#A0B1C2', opacity: 55 },
+          },
         },
       }),
     );
@@ -1599,7 +1613,7 @@ describe('plugin panel persisted element mutations', () => {
     await vi.waitFor(() => expect(mocks.patchNotePaint).toHaveBeenCalledOnce());
     expect(mocks.patchNotePaint).toHaveBeenCalledWith(
       [id],
-      { noteBorderPaint: { color: '#A0B1C2', opacity: 55 } },
+      { property: 'noteBorderPaint', value: { color: '#A0B1C2', opacity: 55 } },
       { preflight: expect.any(Function) },
     );
     expect(mocks.patchElementProperty).not.toHaveBeenCalled();
@@ -1621,7 +1635,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           },
         ],
-        patch: { noteGlowPaint: { color: '#fff' } },
+        patch: { property: 'noteGlowPaint', value: { color: '#fff' } },
       }),
     );
 
@@ -1649,7 +1663,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           },
         ],
-        patch: { noteGlowSize: 20.5 },
+        patch: { property: 'noteGlowSize', value: 20.5 },
       }),
     );
 
@@ -1683,7 +1697,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { inactiveImage: '  Raw Image.png  ' },
+        patch: { property: 'inactiveImage', value: '  Raw Image.png  ' },
       }),
     );
 
@@ -1713,7 +1727,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { activeImage: '  Raw Active.png  ' },
+        patch: { property: 'activeImage', value: '  Raw Active.png  ' },
       }),
     );
 
@@ -1730,8 +1744,16 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    ['idle', { idleTransparent: true }, 'patchIdleTransparent'],
-    ['active', { activeTransparent: false }, 'patchActiveTransparent'],
+    [
+      'idle',
+      { property: 'idleTransparent', value: true },
+      'patchIdleTransparent',
+    ],
+    [
+      'active',
+      { property: 'activeTransparent', value: false },
+      'patchActiveTransparent',
+    ],
   ] as const)(
     '%s transparency batch는 exact bool을 전용 helper에 전달한다',
     async (_label, patch, mockName) => {
@@ -1746,11 +1768,9 @@ describe('plugin panel persisted element mutations', () => {
       );
 
       await vi.waitFor(() => expect(mocks[mockName]).toHaveBeenCalledOnce());
-      expect(mocks[mockName]).toHaveBeenCalledWith(
-        targets,
-        Object.values(patch)[0],
-        { preflight: expect.any(Function) },
-      );
+      expect(mocks[mockName]).toHaveBeenCalledWith(targets, patch.value, {
+        preflight: expect.any(Function),
+      });
       await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
     },
@@ -1764,7 +1784,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { soundPath: '  sounds/raw.wav  ' },
+        patch: { property: 'soundPath', value: '  sounds/raw.wav  ' },
       }),
     );
 
@@ -1787,8 +1807,16 @@ describe('plugin panel persisted element mutations', () => {
       } as const;
       const payload =
         shape === 'single'
-          ? { target: { ...target, patch: { soundEnabled: true } } }
-          : { targets: [target], patch: { soundEnabled: true } };
+          ? {
+              target: {
+                ...target,
+                patch: { property: 'soundEnabled', value: true },
+              },
+            }
+          : {
+              targets: [target],
+              patch: { property: 'soundEnabled', value: true },
+            };
       mocks.requestListener?.(envelope('layers:patchProperty', payload));
 
       await vi.waitFor(() =>
@@ -1810,7 +1838,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { soundVolume: 137.5 },
+        patch: { property: 'soundVolume', value: 137.5 },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
     );
@@ -1845,7 +1873,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { counterAnimationPreset: intent },
+        patch: { property: 'counterAnimationPreset', value: intent },
       }),
     );
 
@@ -1874,7 +1902,7 @@ describe('plugin panel persisted element mutations', () => {
       mocks.requestListener?.(
         envelope('layers:patchProperty', {
           targets,
-          patch: { [field]: enabled },
+          patch: { property: field, value: enabled },
         }),
       );
       const helper =
@@ -1902,7 +1930,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { counterEnabled: true },
+          patch: { property: 'counterEnabled', value: true },
         },
       }),
     );
@@ -1914,10 +1942,10 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    { counterPlacement: 'outside' },
-    { counterAlign: 'right' },
-    { counterAlignMode: 'between' },
-    { counterGap: 4_294_967_295 },
+    { property: 'counterPlacement', value: 'outside' },
+    { property: 'counterAlign', value: 'right' },
+    { property: 'counterAlignMode', value: 'between' },
+    { property: 'counterGap', value: 4_294_967_295 },
   ] as const)(
     'counter layout batch $patch는 key/stat exact leaf를 전용 helper에 전달한다',
     async (patch) => {
@@ -1951,7 +1979,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { counterAlign: 'left' },
+          patch: { property: 'counterAlign', value: 'left' },
         },
       }),
     );
@@ -1963,11 +1991,11 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    { counterFontSize: 72 },
-    { counterFontWeight: 900 },
-    { counterFontItalic: true },
-    { counterFontUnderline: true },
-    { counterFontStrikethrough: true },
+    { property: 'counterFontSize', value: 72 },
+    { property: 'counterFontWeight', value: 900 },
+    { property: 'counterFontItalic', value: true },
+    { property: 'counterFontUnderline', value: true },
+    { property: 'counterFontStrikethrough', value: true },
   ] as const)(
     'counter typography batch $patch는 key/stat exact leaf를 전용 helper에 전달한다',
     async (patch) => {
@@ -2003,7 +2031,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { counterFontSize: 72 },
+          patch: { property: 'counterFontSize', value: 72 },
         },
       }),
     );
@@ -2022,7 +2050,10 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
-        patch: { counterFontFamily: '  Raw Counter Family  ' },
+        patch: {
+          property: 'counterFontFamily',
+          value: '  Raw Counter Family  ',
+        },
       }),
     );
     await vi.waitFor(() =>
@@ -2030,7 +2061,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     expect(mocks.patchCounterTypography).toHaveBeenCalledWith(
       targets,
-      { counterFontFamily: '  Raw Counter Family  ' },
+      { property: 'counterFontFamily', value: '  Raw Counter Family  ' },
       { preflight: expect.any(Function) },
     );
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
@@ -2049,7 +2080,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'stat',
           id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-          patch: { counterFontFamily: '' },
+          patch: { property: 'counterFontFamily', value: '' },
         },
       }),
     );
@@ -2062,14 +2093,14 @@ describe('plugin panel persisted element mutations', () => {
 
   it.each([
     [
-      { counterStrokeIdle: '  raw idle  ' },
+      { property: 'counterStrokeIdle', value: '  raw idle  ' },
       [
         { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
         { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
       ],
     ],
     [
-      { counterStrokeActive: '' },
+      { property: 'counterStrokeActive', value: '' },
       [{ elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
     ],
   ] as const)(
@@ -2101,7 +2132,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { counterStrokeActive: '#ffffff' },
+          patch: { property: 'counterStrokeActive', value: '#ffffff' },
         },
       }),
     );
@@ -2118,7 +2149,10 @@ describe('plugin panel persisted element mutations', () => {
       { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
       { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
     ];
-    const patch = { counterFillIdle: { color: ' raw solid ' } } as const;
+    const patch = {
+      property: 'counterFillIdle',
+      value: { color: ' raw solid ' },
+    } as const;
     mocks.requestListener?.(
       envelope('layers:patchProperty', { targets, patch }),
     );
@@ -2145,7 +2179,10 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { counterFillActive: { color: ' active solid ' } },
+          patch: {
+            property: 'counterFillActive',
+            value: { color: ' active solid ' },
+          },
         },
       }),
     );
@@ -2164,7 +2201,7 @@ describe('plugin panel persisted element mutations', () => {
       { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
       { elementType: 'knob', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
     ];
-    const patch = { fontColor: '  raw idle  ' } as const;
+    const patch = { property: 'fontColor', value: '  raw idle  ' } as const;
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets,
@@ -2194,7 +2231,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'knob',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { activeFontColor: ' active raw ' },
+          patch: { property: 'activeFontColor', value: ' active raw ' },
         },
       }),
     );
@@ -2214,7 +2251,8 @@ describe('plugin panel persisted element mutations', () => {
       { elementType: 'graph', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
     ];
     const patch = {
-      backgroundPaint: {
+      property: 'backgroundPaint',
+      value: {
         color: '#first',
         gradient: {
           angle: 45,
@@ -2242,7 +2280,8 @@ describe('plugin panel persisted element mutations', () => {
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
         patch: {
-          activeBackgroundPaint: { color: '#fff', gradient: null },
+          property: 'activeBackgroundPaint',
+          value: { color: '#fff', gradient: null },
         },
       },
     ],
@@ -2251,7 +2290,8 @@ describe('plugin panel persisted element mutations', () => {
       {
         targets: [{ elementType: 'key', id: 'stable' }],
         patch: {
-          backgroundPaint: { color: '#fff', gradient: null, extra: true },
+          property: 'backgroundPaint',
+          value: { color: '#fff', gradient: null, extra: true },
         },
       },
     ],
@@ -2260,7 +2300,8 @@ describe('plugin panel persisted element mutations', () => {
       {
         targets: [{ elementType: 'key', id: 'stable' }],
         patch: {
-          backgroundPaint: {
+          property: 'backgroundPaint',
+          value: {
             color: '#first',
             gradient: {
               angle: -0,
@@ -2278,7 +2319,8 @@ describe('plugin panel persisted element mutations', () => {
       {
         targets: [{ elementType: 'key', id: 'stable' }],
         patch: {
-          backgroundPaint: {
+          property: 'backgroundPaint',
+          value: {
             color: '#mismatch',
             gradient: {
               angle: 45,
@@ -2318,23 +2360,28 @@ describe('plugin panel persisted element mutations', () => {
   it.each([
     {
       targets: [{ elementType: 'graph', id: 'a' }],
-      patch: { counterAnimationPreset: { presetId: 'a' } },
+      patch: { property: 'counterAnimationPreset', value: { presetId: 'a' } },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
       patch: {
-        counterAnimationPreset: { presetId: 'a', applyPresetId: false },
+        property: 'counterAnimationPreset',
+        value: { presetId: 'a', applyPresetId: false },
       },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
       patch: {
-        counterAnimationPreset: { presetId: 'a', bezier: [-0.1, 0, 0, 1] },
+        property: 'counterAnimationPreset',
+        value: { presetId: 'a', bezier: [-0.1, 0, 0, 1] },
       },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterAnimationPreset: { presetId: 'a', durationMs: 0 } },
+      patch: {
+        property: 'counterAnimationPreset',
+        value: { presetId: 'a', durationMs: 0 },
+      },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
@@ -2342,15 +2389,15 @@ describe('plugin panel persisted element mutations', () => {
     },
     {
       targets: [{ elementType: 'graph', id: 'a' }],
-      patch: { counterEnabled: true },
+      patch: { property: 'counterEnabled', value: true },
     },
     {
       targets: [{ elementType: 'knob', id: 'a' }],
-      patch: { counterAnimationEnabled: true },
+      patch: { property: 'counterAnimationEnabled', value: true },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterEnabled: 1 },
+      patch: { property: 'counterEnabled', value: 1 },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
@@ -2358,27 +2405,27 @@ describe('plugin panel persisted element mutations', () => {
     },
     {
       targets: [{ elementType: 'graph', id: 'a' }],
-      patch: { counterPlacement: 'inside' },
+      patch: { property: 'counterPlacement', value: 'inside' },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterPlacement: 'middle' },
+      patch: { property: 'counterPlacement', value: 'middle' },
     },
     {
       targets: [{ elementType: 'stat', id: 'a' }],
-      patch: { counterAlign: 'center' },
+      patch: { property: 'counterAlign', value: 'center' },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterAlignMode: 'ends' },
+      patch: { property: 'counterAlignMode', value: 'ends' },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterGap: 4_294_967_296 },
+      patch: { property: 'counterGap', value: 4_294_967_296 },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterGap: 1.5 },
+      patch: { property: 'counterGap', value: 1.5 },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
@@ -2386,23 +2433,23 @@ describe('plugin panel persisted element mutations', () => {
     },
     {
       targets: [{ elementType: 'graph', id: 'a' }],
-      patch: { counterFontSize: 12 },
+      patch: { property: 'counterFontSize', value: 12 },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterFontSize: 7 },
+      patch: { property: 'counterFontSize', value: 7 },
     },
     {
       targets: [{ elementType: 'stat', id: 'a' }],
-      patch: { counterFontWeight: 901 },
+      patch: { property: 'counterFontWeight', value: 901 },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterFontWeight: 400.5 },
+      patch: { property: 'counterFontWeight', value: 400.5 },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterFontItalic: 1 },
+      patch: { property: 'counterFontItalic', value: 1 },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
@@ -2410,15 +2457,15 @@ describe('plugin panel persisted element mutations', () => {
     },
     {
       targets: [{ elementType: 'graph', id: 'a' }],
-      patch: { counterFontFamily: 'Counter' },
+      patch: { property: 'counterFontFamily', value: 'Counter' },
     },
     {
       targets: [{ elementType: 'knob', id: 'a' }],
-      patch: { counterFontFamily: '' },
+      patch: { property: 'counterFontFamily', value: '' },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterFontFamily: null },
+      patch: { property: 'counterFontFamily', value: null },
     },
     {
       targets: [{ elementType: 'stat', id: 'a' }],
@@ -2426,15 +2473,15 @@ describe('plugin panel persisted element mutations', () => {
     },
     {
       targets: [{ elementType: 'graph', id: 'a' }],
-      patch: { counterStrokeIdle: '#fff' },
+      patch: { property: 'counterStrokeIdle', value: '#fff' },
     },
     {
       targets: [{ elementType: 'stat', id: 'a' }],
-      patch: { counterStrokeActive: '#fff' },
+      patch: { property: 'counterStrokeActive', value: '#fff' },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterStrokeIdle: null },
+      patch: { property: 'counterStrokeIdle', value: null },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
@@ -2445,35 +2492,39 @@ describe('plugin panel persisted element mutations', () => {
         { elementType: 'key', id: 'a' },
         { elementType: 'stat', id: 'a' },
       ],
-      patch: { counterStrokeIdle: '#fff' },
+      patch: { property: 'counterStrokeIdle', value: '#fff' },
     },
     {
       targets: [{ elementType: 'key', id: 'key-0' }],
-      patch: { counterStrokeActive: '#fff' },
+      patch: { property: 'counterStrokeActive', value: '#fff' },
     },
     {
       targets: Array.from({ length: 4097 }, (_, index) => ({
         elementType: 'key',
         id: `counter-stroke-${index}`,
       })),
-      patch: { counterStrokeActive: '#fff' },
+      patch: { property: 'counterStrokeActive', value: '#fff' },
     },
     {
       targets: [{ elementType: 'graph', id: 'a' }],
-      patch: { counterFillIdle: { color: '#fff' } },
+      patch: { property: 'counterFillIdle', value: { color: '#fff' } },
     },
     {
       targets: [{ elementType: 'stat', id: 'a' }],
-      patch: { counterFillActive: { color: '#fff' } },
-    },
-    {
-      targets: [{ elementType: 'key', id: 'a' }],
-      patch: { counterFillIdle: { color: '#fff', gradient: null } },
+      patch: { property: 'counterFillActive', value: { color: '#fff' } },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
       patch: {
-        counterFillIdle: {
+        property: 'counterFillIdle',
+        value: { color: '#fff', gradient: null },
+      },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: {
+        property: 'counterFillIdle',
+        value: {
           color: '#112233',
           gradient: {
             angle: 45,
@@ -2487,19 +2538,19 @@ describe('plugin panel persisted element mutations', () => {
     },
     {
       targets: [{ elementType: 'key', id: 'key-0' }],
-      patch: { counterFillIdle: { color: '#fff' } },
+      patch: { property: 'counterFillIdle', value: { color: '#fff' } },
     },
     {
       targets: [{ elementType: 'stat', id: 'a' }],
-      patch: { activeFontColor: '#fff' },
+      patch: { property: 'activeFontColor', value: '#fff' },
     },
     {
       targets: [{ elementType: 'graph', id: 'a' }],
-      patch: { activeFontColor: '#fff' },
+      patch: { property: 'activeFontColor', value: '#fff' },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
-      patch: { fontColor: null },
+      patch: { property: 'fontColor', value: null },
     },
     {
       targets: [{ elementType: 'key', id: 'a' }],
@@ -2507,32 +2558,32 @@ describe('plugin panel persisted element mutations', () => {
     },
     {
       targets: [{ elementType: 'key', id: 'key-0' }],
-      patch: { fontColor: '#fff' },
+      patch: { property: 'fontColor', value: '#fff' },
     },
     {
       targets: Array.from({ length: 4097 }, (_, index) => ({
         elementType: 'key',
         id: `font-color-${index}`,
       })),
-      patch: { fontColor: '#fff' },
+      patch: { property: 'fontColor', value: '#fff' },
     },
     {
       targets: [
         { elementType: 'key', id: 'a' },
         { elementType: 'stat', id: 'a' },
       ],
-      patch: { counterGap: 4 },
+      patch: { property: 'counterGap', value: 4 },
     },
     {
       targets: [{ elementType: 'key', id: 'key-0' }],
-      patch: { counterGap: 4 },
+      patch: { property: 'counterGap', value: 4 },
     },
     {
       targets: Array.from({ length: 4097 }, (_, index) => ({
         elementType: 'key',
         id: `counter-layout-${index}`,
       })),
-      patch: { counterGap: 4 },
+      patch: { property: 'counterGap', value: 4 },
     },
   ])(
     'counter animation invalid exact payload를 executor 전에 거절한다',
@@ -2683,11 +2734,11 @@ describe('plugin panel persisted element mutations', () => {
   );
 
   it.each([
-    [{ noteEffectEnabled: false }],
-    [{ noteAutoYCorrection: true }],
-    [{ noteGlowEnabled: false }],
-    [{ noteAlignment: 'right' }],
-    [{ noteBorderSide: 'horizontal' }],
+    [{ property: 'noteEffectEnabled', value: false }],
+    [{ property: 'noteAutoYCorrection', value: true }],
+    [{ property: 'noteGlowEnabled', value: false }],
+    [{ property: 'noteAlignment', value: 'right' }],
+    [{ property: 'noteBorderSide', value: 'horizontal' }],
   ] as const)(
     'note batch %j는 key ID를 ordered semantic commit 하나로 전달한다',
     async (patch) => {
@@ -2714,8 +2765,8 @@ describe('plugin panel persisted element mutations', () => {
   );
 
   it.each([
-    ['민감도', { sensitivity: 1.25 }],
-    ['방향 반전', { reverse: true }],
+    ['민감도', { property: 'sensitivity', value: 1.25 }],
+    ['방향 반전', { property: 'reverse', value: true }],
   ])(
     'native knob %s exact literal을 main semantic executor에 전달한다',
     async (_label, patch) => {
@@ -2756,7 +2807,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           },
         ],
-        patch: { graphType: 'line' },
+        patch: { property: 'graphType', value: 'line' },
       }),
     );
 
@@ -2789,7 +2840,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           },
         ],
-        patch: { graphColor: '#12abEF' },
+        patch: { property: 'graphColor', value: '#12abEF' },
       }),
     );
 
@@ -2811,9 +2862,9 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    ['평균선', { showAvgLine: false }],
-    ['그래프 애니메이션', { graphAnimationEnabled: true }],
-    ['그래프 속도', { graphSpeed: 1200 }],
+    ['평균선', { property: 'showAvgLine', value: false }],
+    ['그래프 애니메이션', { property: 'graphAnimationEnabled', value: true }],
+    ['그래프 속도', { property: 'graphSpeed', value: 1200 }],
   ])(
     'graph %s batch는 exact literal과 ordered IDs를 한 semantic commit으로 전달한다',
     async (_label, patch) => {
@@ -2840,8 +2891,8 @@ describe('plugin panel persisted element mutations', () => {
   );
 
   it.each([
-    ['민감도', { sensitivity: 1.25 }],
-    ['방향 반전', { reverse: true }],
+    ['민감도', { property: 'sensitivity', value: 1.25 }],
+    ['방향 반전', { property: 'reverse', value: true }],
   ])(
     'knob %s batch는 exact literal과 ordered IDs를 한 semantic commit으로 전달한다',
     async (_label, patch) => {
@@ -2871,7 +2922,11 @@ describe('plugin panel persisted element mutations', () => {
     [
       'top-level extra',
       {
-        target: { elementType: 'key', id: 'stable', patch: { hidden: true } },
+        target: {
+          elementType: 'key',
+          id: 'stable',
+          patch: { property: 'hidden', value: true },
+        },
         extra: 1,
       },
     ],
@@ -2881,7 +2936,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'stable',
-          patch: { hidden: true },
+          patch: { property: 'hidden', value: true },
           index: 0,
         },
       },
@@ -2892,7 +2947,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'plugin',
           id: 'plugin-a:one',
-          patch: { hidden: true },
+          patch: { property: 'hidden', value: true },
         },
       },
     ],
@@ -2902,7 +2957,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'key-0',
-          patch: { hidden: true },
+          patch: { property: 'hidden', value: true },
         },
       },
     ],
@@ -2912,7 +2967,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'stat',
           id: ' ',
-          patch: { hidden: true },
+          patch: { property: 'hidden', value: true },
         },
       },
     ],
@@ -2943,11 +2998,14 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'knob',
           id: 'stable',
-          patch: { hidden: 1 },
+          patch: { property: 'hidden', value: 1 },
         },
       },
     ],
-    ['empty batch', { targets: [], patch: { graphType: 'bar' } }],
+    [
+      'empty batch',
+      { targets: [], patch: { property: 'graphType', value: 'bar' } },
+    ],
     [
       'oversized batch',
       {
@@ -2955,7 +3013,7 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'graph',
           id: `stable-${index}`,
         })),
-        patch: { graphType: 'bar' },
+        patch: { property: 'graphType', value: 'bar' },
       },
     ],
     [
@@ -2965,35 +3023,35 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'graph', id: 'stable' },
           { elementType: 'graph', id: 'stable' },
         ],
-        patch: { graphType: 'bar' },
+        patch: { property: 'graphType', value: 'bar' },
       },
     ],
     [
       'batch empty id',
       {
         targets: [{ elementType: 'graph', id: ' ' }],
-        patch: { graphColor: '#ffffff' },
+        patch: { property: 'graphColor', value: '#ffffff' },
       },
     ],
     [
       'batch synthetic id',
       {
         targets: [{ elementType: 'graph', id: 'graph-0' }],
-        patch: { graphColor: '#ffffff' },
+        patch: { property: 'graphColor', value: '#ffffff' },
       },
     ],
     [
       'batch target extra',
       {
         targets: [{ elementType: 'graph', id: 'stable', index: 0 }],
-        patch: { graphColor: '#ffffff' },
+        patch: { property: 'graphColor', value: '#ffffff' },
       },
     ],
     [
       'batch top-level extra',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { graphColor: '#ffffff' },
+        patch: { property: 'graphColor', value: '#ffffff' },
         extra: true,
       },
     ],
@@ -3001,7 +3059,7 @@ describe('plugin panel persisted element mutations', () => {
       'batch wrong type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { graphType: 'bar' },
+        patch: { property: 'graphType', value: 'bar' },
       },
     ],
     [
@@ -3010,7 +3068,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'knob',
           id: 'stable',
-          patch: { graphType: 'bar' },
+          patch: { property: 'graphType', value: 'bar' },
         },
       },
     ],
@@ -3020,7 +3078,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'stat',
           id: 'stable',
-          patch: { graphColor: '#ffffff' },
+          patch: { property: 'graphColor', value: '#ffffff' },
         },
       },
     ],
@@ -3030,7 +3088,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'graph',
           id: 'stable',
-          patch: { graphColor: 42 },
+          patch: { property: 'graphColor', value: 42 },
         },
       },
     ],
@@ -3038,7 +3096,7 @@ describe('plugin panel persisted element mutations', () => {
       'batch graph color invalid value',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { graphColor: false },
+        patch: { property: 'graphColor', value: false },
       },
     ],
     [
@@ -3054,7 +3112,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'knob',
           id: 'stable',
-          patch: { showAvgLine: true },
+          patch: { property: 'showAvgLine', value: true },
         },
       },
     ],
@@ -3064,7 +3122,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'graph',
           id: 'stable',
-          patch: { reverse: true },
+          patch: { property: 'reverse', value: true },
         },
       },
     ],
@@ -3074,7 +3132,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'graph',
           id: 'stable',
-          patch: { axisId: 'HIDA:test' },
+          patch: { property: 'axisId', value: 'HIDA:test' },
         },
       },
     ],
@@ -3084,7 +3142,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'knob',
           id: 'stable',
-          patch: { axisId: 1 },
+          patch: { property: 'axisId', value: 1 },
         },
       },
     ],
@@ -3112,28 +3170,28 @@ describe('plugin panel persisted element mutations', () => {
       'graphSpeed fractional',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { graphSpeed: 1.5 },
+        patch: { property: 'graphSpeed', value: 1.5 },
       },
     ],
     [
       'graphSpeed negative',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { graphSpeed: -1 },
+        patch: { property: 'graphSpeed', value: -1 },
       },
     ],
     [
       'graphSpeed overflow',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { graphSpeed: 4_294_967_296 },
+        patch: { property: 'graphSpeed', value: 4_294_967_296 },
       },
     ],
     [
       'sensitivity nonfinite',
       {
         targets: [{ elementType: 'knob', id: RPC_KNOB_ID }],
-        patch: { sensitivity: Number.POSITIVE_INFINITY },
+        patch: { property: 'sensitivity', value: Number.POSITIVE_INFINITY },
       },
     ],
     [
@@ -3161,7 +3219,7 @@ describe('plugin panel persisted element mutations', () => {
       'fontFamily null',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { fontFamily: null },
+        patch: { property: 'fontFamily', value: null },
       },
     ],
     [
@@ -3180,7 +3238,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           },
         ],
-        patch: { displayText: 1 },
+        patch: { property: 'displayText', value: 1 },
       },
     ],
     [
@@ -3204,7 +3262,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           },
         ],
-        patch: { displayText: '' },
+        patch: { property: 'displayText', value: '' },
         gestureId: 'not-a-uuid',
       },
     ],
@@ -3217,7 +3275,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           },
         ],
-        patch: { className: null },
+        patch: { property: 'className', value: null },
       },
     ],
     [
@@ -3253,7 +3311,7 @@ describe('plugin panel persisted element mutations', () => {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           },
         ],
-        patch: { className: '' },
+        patch: { property: 'className', value: '' },
         gestureId: 'not-a-uuid',
       },
     ],
@@ -3261,42 +3319,42 @@ describe('plugin panel persisted element mutations', () => {
       'borderWidth below range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { borderWidth: -0.1 },
+        patch: { property: 'borderWidth', value: -0.1 },
       },
     ],
     [
       'borderWidth nonfinite',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { borderWidth: Number.POSITIVE_INFINITY },
+        patch: { property: 'borderWidth', value: Number.POSITIVE_INFINITY },
       },
     ],
     [
       'borderRadius non-knob above range',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { borderRadius: 100.1 },
+        patch: { property: 'borderRadius', value: 100.1 },
       },
     ],
     [
       'borderRadius knob above range',
       {
         targets: [{ elementType: 'knob', id: 'stable' }],
-        patch: { borderRadius: 999.1 },
+        patch: { property: 'borderRadius', value: 999.1 },
       },
     ],
     [
       'fontSize below range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { fontSize: 7.9 },
+        patch: { property: 'fontSize', value: 7.9 },
       },
     ],
     [
       'numeric style non-number',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { fontSize: '12' },
+        patch: { property: 'fontSize', value: '12' },
       },
     ],
     [
@@ -3317,28 +3375,28 @@ describe('plugin panel persisted element mutations', () => {
       'noteGlowSize wrong type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { noteGlowSize: 20 },
+        patch: { property: 'noteGlowSize', value: 20 },
       },
     ],
     [
       'noteGlowSize below range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteGlowSize: -0.1 },
+        patch: { property: 'noteGlowSize', value: -0.1 },
       },
     ],
     [
       'noteGlowSize above range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteGlowSize: 50.1 },
+        patch: { property: 'noteGlowSize', value: 50.1 },
       },
     ],
     [
       'noteGlowSize nonfinite',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteGlowSize: Number.NaN },
+        patch: { property: 'noteGlowSize', value: Number.NaN },
       },
     ],
     [
@@ -3352,7 +3410,7 @@ describe('plugin panel persisted element mutations', () => {
       'noteGlowSize null',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteGlowSize: null },
+        patch: { property: 'noteGlowSize', value: null },
       },
     ],
     [
@@ -3366,42 +3424,42 @@ describe('plugin panel persisted element mutations', () => {
       'note numeric wrong type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { noteOffsetX: 0 },
+        patch: { property: 'noteOffsetX', value: 0 },
       },
     ],
     [
       'note offset nonfinite',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteOffsetY: Number.POSITIVE_INFINITY },
+        patch: { property: 'noteOffsetY', value: Number.POSITIVE_INFINITY },
       },
     ],
     [
       'note offset range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteOffsetX: -500.1 },
+        patch: { property: 'noteOffsetX', value: -500.1 },
       },
     ],
     [
       'note width zero',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteWidth: 0 },
+        patch: { property: 'noteWidth', value: 0 },
       },
     ],
     [
       'note border width null',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteBorderWidth: null },
+        patch: { property: 'noteBorderWidth', value: null },
       },
     ],
     [
       'note border radius range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteBorderRadius: 100.1 },
+        patch: { property: 'noteBorderRadius', value: 100.1 },
       },
     ],
     [
@@ -3422,7 +3480,7 @@ describe('plugin panel persisted element mutations', () => {
       'note paint wrong type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { notePaint: { color: '#fff' } },
+        patch: { property: 'notePaint', value: { color: '#fff' } },
       },
     ],
     [
@@ -3430,7 +3488,8 @@ describe('plugin panel persisted element mutations', () => {
       {
         targets: [{ elementType: 'key', id: 'stable' }],
         patch: {
-          notePaint: { color: { type: 'gradient', top: '#fff' } },
+          property: 'notePaint',
+          value: { color: { type: 'gradient', top: '#fff' } },
         },
       },
     ],
@@ -3438,14 +3497,17 @@ describe('plugin panel persisted element mutations', () => {
       'note paint opacity range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteGlowPaint: { opacity: 101 } },
+        patch: { property: 'noteGlowPaint', value: { opacity: 101 } },
       },
     ],
     [
       'note paint incomplete opacity tuple',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { notePaint: { opacity: 50, opacityTop: 40 } },
+        patch: {
+          property: 'notePaint',
+          value: { opacity: 50, opacityTop: 40 },
+        },
       },
     ],
     [
@@ -3459,14 +3521,17 @@ describe('plugin panel persisted element mutations', () => {
       'note border paint invalid color',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteBorderPaint: { color: '#fff', opacity: 50 } },
+        patch: {
+          property: 'noteBorderPaint',
+          value: { color: '#fff', opacity: 50 },
+        },
       },
     ],
     [
       'note paint non canonical gesture',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { notePaint: { opacity: 50 } },
+        patch: { property: 'notePaint', value: { opacity: 50 } },
         gestureId: 'not-a-uuid',
       },
     ],
@@ -3477,14 +3542,14 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'key', id: 'stable' },
         ],
-        patch: { borderWidth: 10 },
+        patch: { property: 'borderWidth', value: 10 },
       },
     ],
     [
       'numeric style synthetic target',
       {
         targets: [{ elementType: 'graph', id: 'graph-0' }],
-        patch: { borderRadius: 10 },
+        patch: { property: 'borderRadius', value: 10 },
       },
     ],
     [
@@ -3494,14 +3559,14 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'stat',
           id: `stable-numeric-style-${index}`,
         })),
-        patch: { fontSize: 12 },
+        patch: { property: 'fontSize', value: 12 },
       },
     ],
     [
       'inactiveImage non-string',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { inactiveImage: null },
+        patch: { property: 'inactiveImage', value: null },
       },
     ],
     [
@@ -3525,14 +3590,14 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'key', id: 'stable' },
         ],
-        patch: { inactiveImage: 'idle.png' },
+        patch: { property: 'inactiveImage', value: 'idle.png' },
       },
     ],
     [
       'inactiveImage synthetic target',
       {
         targets: [{ elementType: 'graph', id: 'graph-0' }],
-        patch: { inactiveImage: 'idle.png' },
+        patch: { property: 'inactiveImage', value: 'idle.png' },
       },
     ],
     [
@@ -3542,28 +3607,28 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'stat',
           id: `stable-image-${index}`,
         })),
-        patch: { inactiveImage: 'idle.png' },
+        patch: { property: 'inactiveImage', value: 'idle.png' },
       },
     ],
     [
       'activeImage wrong stat type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { activeImage: 'active.png' },
+        patch: { property: 'activeImage', value: 'active.png' },
       },
     ],
     [
       'activeImage wrong graph type',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { activeImage: 'active.png' },
+        patch: { property: 'activeImage', value: 'active.png' },
       },
     ],
     [
       'activeImage non-string',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { activeImage: null },
+        patch: { property: 'activeImage', value: null },
       },
     ],
     [
@@ -3580,14 +3645,14 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'knob', id: 'stable' },
         ],
-        patch: { activeImage: 'active.png' },
+        patch: { property: 'activeImage', value: 'active.png' },
       },
     ],
     [
       'activeImage synthetic target',
       {
         targets: [{ elementType: 'knob', id: 'knob-0' }],
-        patch: { activeImage: 'active.png' },
+        patch: { property: 'activeImage', value: 'active.png' },
       },
     ],
     [
@@ -3597,14 +3662,14 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'key',
           id: `stable-active-${index}`,
         })),
-        patch: { activeImage: 'active.png' },
+        patch: { property: 'activeImage', value: 'active.png' },
       },
     ],
     [
       'idleTransparent non-boolean',
       {
         targets: [{ elementType: 'graph', id: 'stable-idle-transparent' }],
-        patch: { idleTransparent: 1 },
+        patch: { property: 'idleTransparent', value: 1 },
       },
     ],
     [
@@ -3618,21 +3683,21 @@ describe('plugin panel persisted element mutations', () => {
       'activeTransparent wrong stat type',
       {
         targets: [{ elementType: 'stat', id: 'stable-active-transparent' }],
-        patch: { activeTransparent: true },
+        patch: { property: 'activeTransparent', value: true },
       },
     ],
     [
       'activeTransparent wrong graph type',
       {
         targets: [{ elementType: 'graph', id: 'stable-active-transparent' }],
-        patch: { activeTransparent: true },
+        patch: { property: 'activeTransparent', value: true },
       },
     ],
     [
       'activeTransparent non-boolean',
       {
         targets: [{ elementType: 'key', id: 'stable-active-transparent' }],
-        patch: { activeTransparent: 'true' },
+        patch: { property: 'activeTransparent', value: 'true' },
       },
     ],
     [
@@ -3642,14 +3707,14 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable-active-transparent' },
           { elementType: 'knob', id: 'stable-active-transparent' },
         ],
-        patch: { activeTransparent: true },
+        patch: { property: 'activeTransparent', value: true },
       },
     ],
     [
       'idleTransparent synthetic target',
       {
         targets: [{ elementType: 'graph', id: 'graph-0' }],
-        patch: { idleTransparent: true },
+        patch: { property: 'idleTransparent', value: true },
       },
     ],
     [
@@ -3659,7 +3724,7 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'key',
           id: `stable-transparent-${index}`,
         })),
-        patch: { idleTransparent: true },
+        patch: { property: 'idleTransparent', value: true },
       },
     ],
     [
@@ -3668,7 +3733,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'graph',
           id: 'stable-fit',
-          patch: { idleImageFit: 'stretch' },
+          patch: { property: 'idleImageFit', value: 'stretch' },
         },
       },
     ],
@@ -3688,7 +3753,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'stat',
           id: 'stable-fit',
-          patch: { activeImageFit: 'contain' },
+          patch: { property: 'activeImageFit', value: 'contain' },
         },
       },
     ],
@@ -3698,7 +3763,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'graph',
           id: 'stable-fit',
-          patch: { activeImageFit: 'fill' },
+          patch: { property: 'activeImageFit', value: 'fill' },
         },
       },
     ],
@@ -3708,7 +3773,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'stable-fit',
-          patch: { activeImageFit: 1 },
+          patch: { property: 'activeImageFit', value: 1 },
         },
       },
     ],
@@ -3716,14 +3781,14 @@ describe('plugin panel persisted element mutations', () => {
       'soundEnabled wrong stat type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { soundEnabled: true },
+        patch: { property: 'soundEnabled', value: true },
       },
     ],
     [
       'soundEnabled non-boolean',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundEnabled: 1 },
+        patch: { property: 'soundEnabled', value: 1 },
       },
     ],
     [
@@ -3740,14 +3805,14 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'key', id: 'stable' },
         ],
-        patch: { soundEnabled: true },
+        patch: { property: 'soundEnabled', value: true },
       },
     ],
     [
       'soundEnabled synthetic target',
       {
         targets: [{ elementType: 'key', id: 'key-0' }],
-        patch: { soundEnabled: true },
+        patch: { property: 'soundEnabled', value: true },
       },
     ],
     [
@@ -3757,49 +3822,49 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'key',
           id: `stable-sound-enabled-${index}`,
         })),
-        patch: { soundEnabled: true },
+        patch: { property: 'soundEnabled', value: true },
       },
     ],
     [
       'soundVolume wrong stat type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { soundVolume: 100 },
+        patch: { property: 'soundVolume', value: 100 },
       },
     ],
     [
       'soundVolume below range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundVolume: -0.1 },
+        patch: { property: 'soundVolume', value: -0.1 },
       },
     ],
     [
       'soundVolume above range',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundVolume: 200.1 },
+        patch: { property: 'soundVolume', value: 200.1 },
       },
     ],
     [
       'soundVolume non-number',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundVolume: '100' },
+        patch: { property: 'soundVolume', value: '100' },
       },
     ],
     [
       'soundVolume NaN',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundVolume: Number.NaN },
+        patch: { property: 'soundVolume', value: Number.NaN },
       },
     ],
     [
       'soundVolume infinity',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundVolume: Number.POSITIVE_INFINITY },
+        patch: { property: 'soundVolume', value: Number.POSITIVE_INFINITY },
       },
     ],
     [
@@ -3813,7 +3878,7 @@ describe('plugin panel persisted element mutations', () => {
       'soundVolume non canonical gesture',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundVolume: 100 },
+        patch: { property: 'soundVolume', value: 100 },
         gestureId: 'bad space',
       },
     ],
@@ -3821,7 +3886,7 @@ describe('plugin panel persisted element mutations', () => {
       'soundVolume oversized gesture',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundVolume: 100 },
+        patch: { property: 'soundVolume', value: 100 },
         gestureId: `${'a'.repeat(65)}`,
       },
     ],
@@ -3829,7 +3894,7 @@ describe('plugin panel persisted element mutations', () => {
       'other property gesture',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundEnabled: true },
+        patch: { property: 'soundEnabled', value: true },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       },
     ],
@@ -3840,14 +3905,14 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'key', id: 'stable' },
         ],
-        patch: { soundVolume: 100 },
+        patch: { property: 'soundVolume', value: 100 },
       },
     ],
     [
       'soundVolume synthetic target',
       {
         targets: [{ elementType: 'key', id: 'key-0' }],
-        patch: { soundVolume: 100 },
+        patch: { property: 'soundVolume', value: 100 },
       },
     ],
     [
@@ -3857,14 +3922,14 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'key',
           id: `stable-sound-volume-${index}`,
         })),
-        patch: { soundVolume: 100 },
+        patch: { property: 'soundVolume', value: 100 },
       },
     ],
     [
       'soundPath wrong stat type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { soundPath: 'sounds/stat.wav' },
+        patch: { property: 'soundPath', value: 'sounds/stat.wav' },
       },
     ],
     [
@@ -3873,7 +3938,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'stat',
           id: 'stable',
-          patch: { soundPath: 'sounds/stat.wav' },
+          patch: { property: 'soundPath', value: 'sounds/stat.wav' },
         },
       },
     ],
@@ -3881,7 +3946,7 @@ describe('plugin panel persisted element mutations', () => {
       'soundPath non-string',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { soundPath: null },
+        patch: { property: 'soundPath', value: null },
       },
     ],
     [
@@ -3905,14 +3970,14 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'key', id: 'stable' },
         ],
-        patch: { soundPath: 'sounds/key.wav' },
+        patch: { property: 'soundPath', value: 'sounds/key.wav' },
       },
     ],
     [
       'soundPath synthetic target',
       {
         targets: [{ elementType: 'key', id: 'key-0' }],
-        patch: { soundPath: 'sounds/key.wav' },
+        patch: { property: 'soundPath', value: 'sounds/key.wav' },
       },
     ],
     [
@@ -3922,35 +3987,35 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'key',
           id: `stable-sound-${index}`,
         })),
-        patch: { soundPath: 'sounds/key.wav' },
+        patch: { property: 'soundPath', value: 'sounds/key.wav' },
       },
     ],
     [
       'fontWeight fractional',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { fontWeight: 700.5 },
+        patch: { property: 'fontWeight', value: 700.5 },
       },
     ],
     [
       'fontWeight negative',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { fontWeight: -1 },
+        patch: { property: 'fontWeight', value: -1 },
       },
     ],
     [
       'fontWeight overflow',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { fontWeight: 4_294_967_296 },
+        patch: { property: 'fontWeight', value: 4_294_967_296 },
       },
     ],
     [
       'font boolean wrong type',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { fontStrikethrough: 1 },
+        patch: { property: 'fontStrikethrough', value: 1 },
       },
     ],
     [
@@ -3960,21 +4025,21 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'knob', id: 'stable' },
         ],
-        patch: { fontUnderline: true },
+        patch: { property: 'fontUnderline', value: true },
       },
     ],
     [
       'font batch synthetic id',
       {
         targets: [{ elementType: 'stat', id: 'stat-0' }],
-        patch: { fontItalic: true },
+        patch: { property: 'fontItalic', value: true },
       },
     ],
     [
       'font batch empty id',
       {
         targets: [{ elementType: 'key', id: ' ' }],
-        patch: { fontWeight: 700 },
+        patch: { property: 'fontWeight', value: 700 },
       },
     ],
     [
@@ -3984,35 +4049,35 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'key',
           id: `stable-font-${index}`,
         })),
-        patch: { fontWeight: 700 },
+        patch: { property: 'fontWeight', value: 700 },
       },
     ],
     [
       'note leaf wrong native type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
-        patch: { noteEffectEnabled: true },
+        patch: { property: 'noteEffectEnabled', value: true },
       },
     ],
     [
       'note enum invalid',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteAlignment: 'top' },
+        patch: { property: 'noteAlignment', value: 'top' },
       },
     ],
     [
       'note border enum invalid',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteBorderSide: 'left' },
+        patch: { property: 'noteBorderSide', value: 'left' },
       },
     ],
     [
       'note bool invalid',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
-        patch: { noteGlowEnabled: 1 },
+        patch: { property: 'noteGlowEnabled', value: 1 },
       },
     ],
     [
@@ -4029,21 +4094,21 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'key', id: 'stable' },
         ],
-        patch: { noteAutoYCorrection: false },
+        patch: { property: 'noteAutoYCorrection', value: false },
       },
     ],
     [
       'note batch synthetic id',
       {
         targets: [{ elementType: 'key', id: 'key-0' }],
-        patch: { noteAlignment: 'center' },
+        patch: { property: 'noteAlignment', value: 'center' },
       },
     ],
     [
       'note batch empty id',
       {
         targets: [{ elementType: 'key', id: ' ' }],
-        patch: { noteBorderSide: 'all' },
+        patch: { property: 'noteBorderSide', value: 'all' },
       },
     ],
     [
@@ -4053,21 +4118,21 @@ describe('plugin panel persisted element mutations', () => {
           elementType: 'key',
           id: `stable-note-${index}`,
         })),
-        patch: { noteEffectEnabled: true },
+        patch: { property: 'noteEffectEnabled', value: true },
       },
     ],
     [
       'batch non-graph leaf',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
-        patch: { hidden: true },
+        patch: { property: 'hidden', value: true },
       },
     ],
     [
       '인라인 스타일 batch plugin target',
       {
         targets: [{ elementType: 'plugin', id: 'plugin-a:one' }],
-        patch: { useInlineStyles: true },
+        patch: { property: 'useInlineStyles', value: true },
       },
     ],
     [
@@ -4077,7 +4142,7 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: 'stable' },
           { elementType: 'knob', id: 'stable' },
         ],
-        patch: { useInlineStyles: true },
+        patch: { property: 'useInlineStyles', value: true },
       },
     ],
     [
@@ -4086,10 +4151,10 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'graph',
           id: 'single',
-          patch: { graphType: 'bar' },
+          patch: { property: 'graphType', value: 'bar' },
         },
         targets: [{ elementType: 'graph', id: 'batch' }],
-        patch: { graphType: 'bar' },
+        patch: { property: 'graphType', value: 'bar' },
       },
     ],
   ])(
@@ -4136,7 +4201,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { layerName: null },
+          patch: { property: 'layerName', value: null },
         },
       }),
     );
@@ -4167,7 +4232,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'knob',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { axisId: '  HIDA:raw  ' },
+          patch: { property: 'axisId', value: '  HIDA:raw  ' },
         },
       }),
     );
@@ -4176,7 +4241,7 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.patchElementProperty).toHaveBeenCalledWith(
       'knob',
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      { axisId: '  HIDA:raw  ' },
+      { property: 'axisId', value: '  HIDA:raw  ' },
       expect.objectContaining({ preflight: expect.any(Function) }),
     );
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
@@ -4192,7 +4257,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'stat',
           id,
-          patch: { statType: 'kpsMax' },
+          patch: { property: 'statType', value: 'kpsMax' },
         },
       }),
     );
@@ -4201,14 +4266,14 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.patchElementProperty).toHaveBeenCalledWith(
       'stat',
       id,
-      { statType: 'kpsMax' },
+      { property: 'statType', value: 'kpsMax' },
       expect.objectContaining({ preflight: expect.any(Function) }),
     );
   });
 
   it.each([
-    ['wrong type', 'graph', { statType: 'kps' }],
-    ['wrong enum', 'stat', { statType: 'unknown' }],
+    ['wrong type', 'graph', { property: 'statType', value: 'kps' }],
+    ['wrong enum', 'stat', { property: 'statType', value: 'unknown' }],
     ['combined', 'stat', { statType: 'kps', hidden: true }],
   ])(
     'statType %s payload는 실행 전에 거절한다',
@@ -5202,7 +5267,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { hidden: true },
+          patch: { property: 'hidden', value: true },
         },
       }),
     );
@@ -5227,7 +5292,7 @@ describe('plugin panel persisted element mutations', () => {
         target: {
           elementType: 'knob',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          patch: { activeImageFit: 'contain' },
+          patch: { property: 'activeImageFit', value: 'contain' },
         },
       }),
     );
@@ -5250,7 +5315,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'graph', id: RPC_GRAPH_ID }],
-        patch: { graphColor: '#ffffff' },
+        patch: { property: 'graphColor', value: '#ffffff' },
       }),
     );
 
@@ -5272,7 +5337,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'knob', id: RPC_KNOB_ID }],
-        patch: { reverse: true },
+        patch: { property: 'reverse', value: true },
       }),
     );
 
@@ -5297,7 +5362,7 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: RPC_KEY_ID },
           { elementType: 'knob', id: RPC_KNOB_ID },
         ],
-        patch: { useInlineStyles: true },
+        patch: { property: 'useInlineStyles', value: true },
       }),
     );
 
@@ -5322,7 +5387,7 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: RPC_KEY_ID },
           { elementType: 'graph', id: RPC_GRAPH_ID },
         ],
-        patch: { fontWeight: 700 },
+        patch: { property: 'fontWeight', value: 700 },
       }),
     );
 
@@ -5347,7 +5412,7 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: RPC_KEY_ID },
           { elementType: 'graph', id: RPC_GRAPH_ID },
         ],
-        patch: { fontFamily: '  Raw Family  ' },
+        patch: { property: 'fontFamily', value: '  Raw Family  ' },
       }),
     );
 
@@ -5372,7 +5437,7 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: RPC_KEY_ID },
           { elementType: 'knob', id: RPC_KNOB_ID },
         ],
-        patch: { inactiveImage: '  Raw Image.png  ' },
+        patch: { property: 'inactiveImage', value: '  Raw Image.png  ' },
       }),
     );
 
@@ -5397,7 +5462,7 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: RPC_KEY_ID },
           { elementType: 'knob', id: RPC_KNOB_ID },
         ],
-        patch: { activeImage: '  Raw Active.png  ' },
+        patch: { property: 'activeImage', value: '  Raw Active.png  ' },
       }),
     );
 
@@ -5419,7 +5484,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'knob', id: RPC_KNOB_ID }],
-        patch: { displayText: 'Knob' },
+        patch: { property: 'displayText', value: 'Knob' },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
     );
@@ -5445,7 +5510,7 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'key', id: RPC_KEY_ID },
           { elementType: 'graph', id: RPC_GRAPH_ID },
         ],
-        patch: { idleTransparent: true },
+        patch: { property: 'idleTransparent', value: true },
       }),
     );
 
@@ -5467,7 +5532,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'key', id: RPC_KEY_ID }],
-        patch: { soundPath: '  sounds/raw.wav  ' },
+        patch: { property: 'soundPath', value: '  sounds/raw.wav  ' },
       }),
     );
 
@@ -5489,7 +5554,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'key', id: RPC_KEY_ID }],
-        patch: { soundEnabled: true },
+        patch: { property: 'soundEnabled', value: true },
       }),
     );
 
@@ -5511,7 +5576,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'key', id: RPC_KEY_ID }],
-        patch: { soundVolume: 100 },
+        patch: { property: 'soundVolume', value: 100 },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
     );
@@ -5534,7 +5599,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'key', id: RPC_KEY_ID }],
-        patch: { noteAlignment: 'right' },
+        patch: { property: 'noteAlignment', value: 'right' },
       }),
     );
 

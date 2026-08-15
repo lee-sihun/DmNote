@@ -415,8 +415,8 @@ describe('single geometry input bindings', () => {
         controls.onEnabledChange(false);
       });
       expect(commit.mock.calls).toEqual([
-        [{ shadow: { blur: 22 } }],
-        [{ shadowEnabled: false }],
+        [{ property: 'shadow', value: { leaf: 'blur', value: 22 } }],
+        [{ property: 'shadowEnabled', value: false }],
       ]);
       expect(legacy).not.toHaveBeenCalled();
       expect(controls.showActiveState).toBe(active);
@@ -467,8 +467,8 @@ describe('single geometry input bindings', () => {
       controls.onEnabledChange(true);
     });
     expect(commit.mock.calls).toEqual([
-      [{ activeShadow: { color: ' raw ' } }],
-      [{ shadowEnabled: true }],
+      [{ property: 'activeShadow', value: { leaf: 'color', value: ' raw ' } }],
+      [{ property: 'shadowEnabled', value: true }],
     ]);
     expect(legacy).not.toHaveBeenCalled();
   });
@@ -532,10 +532,16 @@ describe('single geometry input bindings', () => {
     );
     expect(glow).toMatchObject({ min: 0, max: 50 });
     act(() => glow?.onPreview?.(20.5));
-    expect(preview).toHaveBeenCalledWith({ noteGlowSize: 20.5 });
+    expect(preview).toHaveBeenCalledWith({
+      property: 'noteGlowSize',
+      value: 20.5,
+    });
     expect(commit).not.toHaveBeenCalled();
     act(() => glow?.onChange(21.5));
-    expect(commit).toHaveBeenCalledWith({ noteGlowSize: 21.5 });
+    expect(commit).toHaveBeenCalledWith({
+      property: 'noteGlowSize',
+      value: 21.5,
+    });
     expect(legacyPreview).not.toHaveBeenCalled();
     expect(legacyCommit).not.toHaveBeenCalled();
   });
@@ -580,13 +586,13 @@ describe('single geometry input bindings', () => {
     act(() => width?.onChange(undefined));
 
     expect(preview.mock.calls).toEqual([
-      [{ noteOffsetX: 0 }],
-      [{ noteOffsetY: null }],
+      [{ property: 'noteOffsetX', value: 0 }],
+      [{ property: 'noteOffsetY', value: null }],
     ]);
     expect(commit.mock.calls).toEqual([
-      [{ noteOffsetX: 0 }],
-      [{ noteOffsetY: null }],
-      [{ noteWidth: null }],
+      [{ property: 'noteOffsetX', value: 0 }],
+      [{ property: 'noteOffsetY', value: null }],
+      [{ property: 'noteWidth', value: null }],
     ]);
   });
 
@@ -618,12 +624,12 @@ describe('single geometry input bindings', () => {
     act(() => borderRadius?.onChange(13.5));
 
     expect(preview.mock.calls).toEqual([
-      [{ noteBorderWidth: 2.5 }],
-      [{ noteBorderRadius: 12.5 }],
+      [{ property: 'noteBorderWidth', value: 2.5 }],
+      [{ property: 'noteBorderRadius', value: 12.5 }],
     ]);
     expect(commit.mock.calls).toEqual([
-      [{ noteBorderWidth: 3.5 }],
-      [{ noteBorderRadius: 13.5 }],
+      [{ property: 'noteBorderWidth', value: 3.5 }],
+      [{ property: 'noteBorderRadius', value: 13.5 }],
     ]);
   });
 
@@ -662,8 +668,8 @@ describe('single geometry input bindings', () => {
       act(() => input?.onPreview?.(value));
       act(() => input?.onChange(value));
 
-      expect(preview).toHaveBeenCalledWith({ [property]: value });
-      expect(commit).toHaveBeenCalledWith({ [property]: value });
+      expect(preview).toHaveBeenCalledWith({ property, value });
+      expect(commit).toHaveBeenCalledWith({ property, value });
       expect(legacyPreview).not.toHaveBeenCalled();
       expect(legacyCommit).not.toHaveBeenCalled();
     },
@@ -704,13 +710,15 @@ describe('single geometry input bindings', () => {
       expect(paint).not.toHaveBeenCalled();
       act(() => captured.color?.onColorChangeComplete(' final '));
       expect(paint).toHaveBeenLastCalledWith({
-        backgroundPaint: { color: ' final ', gradient: null },
+        property: 'backgroundPaint',
+        value: { color: ' final ', gradient: null },
       });
       if (activeReachable) {
         act(() => captured.color?.onStateModeChange?.('active'));
         act(() => captured.color?.onColorChangeComplete(' active '));
         expect(paint).toHaveBeenLastCalledWith({
-          activeBackgroundPaint: { color: ' active ', gradient: null },
+          property: 'activeBackgroundPaint',
+          value: { color: ' active ', gradient: null },
         });
       }
       expect(legacy).not.toHaveBeenCalled();
@@ -746,14 +754,18 @@ describe('single geometry input bindings', () => {
       act(() => captured.color?.onColorChange('local-only'));
       expect(fontColor).not.toHaveBeenCalled();
       act(() => captured.color?.onColorChangeComplete(' idle raw '));
-      expect(fontColor).toHaveBeenLastCalledWith({ fontColor: ' idle raw ' });
+      expect(fontColor).toHaveBeenLastCalledWith({
+        property: 'fontColor',
+        value: ' idle raw ',
+      });
       if (activeReachable) {
         act(() => captured.color?.onStateModeChange?.('active'));
         act(() => captured.color?.onColorChange('active-local'));
         expect(fontColor).toHaveBeenCalledOnce();
         act(() => captured.color?.onColorChangeComplete(' active raw '));
         expect(fontColor).toHaveBeenLastCalledWith({
-          activeFontColor: ' active raw ',
+          property: 'activeFontColor',
+          value: ' active raw ',
         });
       } else {
         expect(captured.color?.onStateModeChange).toBeUndefined();
@@ -824,10 +836,8 @@ describe('single geometry input bindings', () => {
       }),
     );
     expect(paint).toHaveBeenCalledWith({
-      backgroundPaint: {
-        color: '#first',
-        gradient,
-      },
+      property: 'backgroundPaint',
+      value: { color: '#first', gradient },
     });
     expect(legacy).not.toHaveBeenCalled();
   });
@@ -866,8 +876,14 @@ describe('single geometry input bindings', () => {
       act(() => displayText?.onChange('  Preview  '));
       act(() => displayText?.onBlur?.('  Final  '));
 
-      expect(preview).toHaveBeenCalledWith({ displayText: '  Preview  ' });
-      expect(commit).toHaveBeenCalledWith({ displayText: '  Final  ' });
+      expect(preview).toHaveBeenCalledWith({
+        property: 'displayText',
+        value: '  Preview  ',
+      });
+      expect(commit).toHaveBeenCalledWith({
+        property: 'displayText',
+        value: '  Final  ',
+      });
       expect(legacyPreview).not.toHaveBeenCalled();
       expect(legacyCommit).not.toHaveBeenCalled();
     },
@@ -909,9 +925,13 @@ describe('single geometry input bindings', () => {
       act(() => className?.onBlur?.('  Final class  '));
 
       expect(preview).toHaveBeenCalledWith({
-        className: '  Preview class  ',
+        property: 'className',
+        value: '  Preview class  ',
       });
-      expect(commit).toHaveBeenCalledWith({ className: '  Final class  ' });
+      expect(commit).toHaveBeenCalledWith({
+        property: 'className',
+        value: '  Final class  ',
+      });
       expect(legacyPreview).not.toHaveBeenCalled();
       expect(legacyCommit).not.toHaveBeenCalled();
     },
@@ -977,12 +997,16 @@ describe('single geometry input bindings', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
     expect(preview).toHaveBeenLastCalledWith({
-      displayText: '  Final label  ',
+      property: 'displayText',
+      value: '  Final label  ',
     });
 
     act(() => input.blur());
     expect(commit).toHaveBeenCalledOnce();
-    expect(commit).toHaveBeenCalledWith({ displayText: '  Final label  ' });
+    expect(commit).toHaveBeenCalledWith({
+      property: 'displayText',
+      value: '  Final label  ',
+    });
     expect(preview.mock.invocationCallOrder[0]).toBeLessThan(
       commit.mock.invocationCallOrder[0],
     );
@@ -1012,7 +1036,8 @@ describe('single geometry input bindings', () => {
       act(() => captured.font?.onFontSelect('  Raw Counter Family  '));
 
       expect(typography).toHaveBeenCalledWith({
-        counterFontFamily: '  Raw Counter Family  ',
+        property: 'counterFontFamily',
+        value: '  Raw Counter Family  ',
       });
       expect(legacy).not.toHaveBeenCalled();
     },
@@ -1045,20 +1070,28 @@ describe('single geometry input bindings', () => {
       act(() => captured.fontStyle?.onUnderlineChange(true));
       act(() => captured.fontStyle?.onStrikethroughChange(true));
       expect(typography.mock.calls).toEqual([
-        [{ counterFontSize: 72 }],
-        [{ counterFontWeight: 700 }],
-        [{ counterFontItalic: true }],
-        [{ counterFontUnderline: true }],
-        [{ counterFontStrikethrough: true }],
+        [{ property: 'counterFontSize', value: 72 }],
+        [{ property: 'counterFontWeight', value: 700 }],
+        [{ property: 'counterFontItalic', value: true }],
+        [{ property: 'counterFontUnderline', value: true }],
+        [{ property: 'counterFontStrikethrough', value: true }],
       ]);
       expect(legacy).not.toHaveBeenCalled();
     },
   );
 
   it.each([
-    ['key', 'idle', { counterStrokeIdle: '  idle stroke  ' }],
-    ['key', 'active', { counterStrokeActive: '  active stroke  ' }],
-    ['stat', 'idle', { counterStrokeIdle: '' }],
+    [
+      'key',
+      'idle',
+      { property: 'counterStrokeIdle', value: '  idle stroke  ' },
+    ],
+    [
+      'key',
+      'active',
+      { property: 'counterStrokeActive', value: '  active stroke  ' },
+    ],
+    ['stat', 'idle', { property: 'counterStrokeIdle', value: '' }],
   ] as const)(
     '%s counter stroke %s picker는 drag local-only 뒤 final exact commit한다',
     (type, state, expected) => {
@@ -1080,7 +1113,7 @@ describe('single geometry input bindings', () => {
       if (state === 'active') {
         act(() => captured.color?.onStateModeChange?.('active'));
       }
-      const value = Object.values(expected)[0];
+      const value = expected.value;
       act(() => captured.color?.onColorChange(value));
       expect(stroke).not.toHaveBeenCalled();
       act(() => captured.color?.onColorChangeComplete(value));
@@ -1094,9 +1127,21 @@ describe('single geometry input bindings', () => {
   );
 
   it.each([
-    ['key', 'idle', { counterFillIdle: { color: ' final fill ' } }],
-    ['key', 'active', { counterFillActive: { color: ' final fill ' } }],
-    ['stat', 'idle', { counterFillIdle: { color: ' final fill ' } }],
+    [
+      'key',
+      'idle',
+      { property: 'counterFillIdle', value: { color: ' final fill ' } },
+    ],
+    [
+      'key',
+      'active',
+      { property: 'counterFillActive', value: { color: ' final fill ' } },
+    ],
+    [
+      'stat',
+      'idle',
+      { property: 'counterFillIdle', value: { color: ' final fill ' } },
+    ],
   ] as const)(
     '%s counter fill %s picker는 local drag 뒤 final exact descriptor만 commit한다',
     (type, state, expected) => {
@@ -1157,10 +1202,8 @@ describe('single geometry input bindings', () => {
     act(() => captured.color?.onGradientSpecSelect?.(gradient));
 
     expect(fill).toHaveBeenCalledWith({
-      counterFillIdle: {
-        color: 'rgba(17,34,51,1)',
-        gradient,
-      },
+      property: 'counterFillIdle',
+      value: { color: 'rgba(17,34,51,1)', gradient },
     });
   });
 
@@ -1299,10 +1342,10 @@ describe('single geometry input bindings', () => {
       expect(gap).toMatchObject({ min: 0, max: 9999 });
       act(() => gap?.onChange(9999));
       expect(layout.mock.calls).toEqual([
-        [{ counterPlacement: 'outside' }],
-        [{ counterAlign: 'right' }],
-        [{ counterAlignMode: 'between' }],
-        [{ counterGap: 9999 }],
+        [{ property: 'counterPlacement', value: 'outside' }],
+        [{ property: 'counterAlign', value: 'right' }],
+        [{ property: 'counterAlignMode', value: 'between' }],
+        [{ property: 'counterGap', value: 9999 }],
       ]);
       expect(legacy).not.toHaveBeenCalled();
     },
@@ -1814,7 +1857,10 @@ describe('single geometry input bindings', () => {
       act(() => input?.onBlur?.('  Final class  '));
 
       expect(commit).toHaveBeenCalledOnce();
-      expect(commit).toHaveBeenCalledWith({ className: '  Final class  ' });
+      expect(commit).toHaveBeenCalledWith({
+        property: 'className',
+        value: '  Final class  ',
+      });
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -1887,7 +1933,7 @@ describe('single geometry input bindings', () => {
       expect(input?.onPreview).toBeUndefined();
       act(() => input?.onChange(value));
 
-      expect(commit).toHaveBeenCalledWith({ [property]: value });
+      expect(commit).toHaveBeenCalledWith({ property, value });
       expect(legacy).not.toHaveBeenCalled();
     },
   );

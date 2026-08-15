@@ -28,15 +28,55 @@ export const elementShadowSpecSchema = z.object({
 export type ElementShadowSpec = z.infer<typeof elementShadowSpecSchema>;
 
 export type ElementShadowValuePatch =
-  | { color: string }
-  | { offsetX: number }
-  | { offsetY: number }
-  | { blur: number };
+  | { leaf: 'color'; value: string }
+  | { leaf: 'offsetX'; value: number }
+  | { leaf: 'offsetY'; value: number }
+  | { leaf: 'blur'; value: number };
 
 export type ElementShadowSemanticPatch =
-  | { shadow: ElementShadowValuePatch }
-  | { activeShadow: ElementShadowValuePatch }
-  | { shadowEnabled: boolean };
+  | { property: 'shadow'; value: ElementShadowValuePatch }
+  | { property: 'activeShadow'; value: ElementShadowValuePatch }
+  | { property: 'shadowEnabled'; value: boolean };
+
+// 피커 다이얼이 만드는 단일 키 partial을 leaf wire로 변환
+export const elementShadowLeafFromPartial = (
+  partial: Partial<
+    Pick<ElementShadowSpec, 'color' | 'offsetX' | 'offsetY' | 'blur'>
+  >,
+): ElementShadowValuePatch | null => {
+  const keys = Object.keys(partial);
+  if (keys.length !== 1) return null;
+  if (partial.color !== undefined)
+    return { leaf: 'color', value: partial.color };
+  if (partial.offsetX !== undefined) {
+    return { leaf: 'offsetX', value: partial.offsetX };
+  }
+  if (partial.offsetY !== undefined) {
+    return { leaf: 'offsetY', value: partial.offsetY };
+  }
+  if (partial.blur !== undefined) return { leaf: 'blur', value: partial.blur };
+  return null;
+};
+
+export const applyElementShadowLeaf = (
+  spec: ElementShadowSpec,
+  patch: ElementShadowValuePatch,
+): ElementShadowSpec => {
+  switch (patch.leaf) {
+    case 'color':
+      return { ...spec, color: patch.value };
+    case 'offsetX':
+      return { ...spec, offsetX: patch.value };
+    case 'offsetY':
+      return { ...spec, offsetY: patch.value };
+    case 'blur':
+      return { ...spec, blur: patch.value };
+    default: {
+      const exhaustive: never = patch;
+      return exhaustive;
+    }
+  }
+};
 
 interface ElementShadowPosition {
   inactiveImage?: string;
@@ -138,21 +178,21 @@ export const projectElementShadowPatch = ({
       defaultShadow,
       defaultActiveShadow,
     });
-  if ('shadowEnabled' in patch) {
+  if (patch.property === 'shadowEnabled') {
     return {
-      shadow: { ...resolve(false), enabled: patch.shadowEnabled },
+      shadow: { ...resolve(false), enabled: patch.value },
       ...(elementType === 'stat'
         ? {}
         : {
             activeShadow: {
               ...resolve(true),
-              enabled: patch.shadowEnabled,
+              enabled: patch.value,
             },
           }),
     };
   }
-  if ('activeShadow' in patch) {
-    return { activeShadow: { ...resolve(true), ...patch.activeShadow } };
+  if (patch.property === 'activeShadow') {
+    return { activeShadow: applyElementShadowLeaf(resolve(true), patch.value) };
   }
-  return { shadow: { ...resolve(false), ...patch.shadow } };
+  return { shadow: applyElementShadowLeaf(resolve(false), patch.value) };
 };

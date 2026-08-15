@@ -77,7 +77,6 @@ import type { KnobItemPosition } from '@src/types/key/knobs';
 import {
   inheritedPaintMaterialization,
   paintPropertyFields,
-  type PaintPropertyNameV1,
 } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
@@ -667,20 +666,8 @@ export const patchElementPropertyById = (
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!isNativeElementId(id)) return Promise.resolve(false);
-  const eagerPatch =
-    'layerName' in patch
-      ? { layerName: patch.layerName ?? undefined }
-      : 'noteOffsetX' in patch
-      ? { noteOffsetX: patch.noteOffsetX ?? undefined }
-      : 'noteOffsetY' in patch
-      ? { noteOffsetY: patch.noteOffsetY ?? undefined }
-      : 'noteWidth' in patch
-      ? { noteWidth: patch.noteWidth ?? undefined }
-      : 'graphType' in patch
-      ? { graphType: patch.graphType }
-      : 'graphColor' in patch
-      ? { graphColor: patch.graphColor }
-      : { ...patch };
+  // nullable leaf의 null은 위치 조각에서 undefined로, 나머지는 1:1 투영
+  const eagerPatch = { [patch.property]: patch.value ?? undefined };
   const intents: PropertyIntents = new Map([
     [type, new Map([[id, eagerPatch]])],
   ]);
@@ -724,20 +711,10 @@ const patchElementPropertiesByIds = (
     Map<string, Record<string, unknown>>
   >();
   for (const target of targets) {
-    const eagerPatch =
-      'layerName' in target.patch
-        ? { layerName: target.patch.layerName ?? undefined }
-        : 'noteOffsetX' in target.patch
-        ? { noteOffsetX: target.patch.noteOffsetX ?? undefined }
-        : 'noteOffsetY' in target.patch
-        ? { noteOffsetY: target.patch.noteOffsetY ?? undefined }
-        : 'noteWidth' in target.patch
-        ? { noteWidth: target.patch.noteWidth ?? undefined }
-        : 'graphType' in target.patch
-        ? { graphType: target.patch.graphType }
-        : 'graphColor' in target.patch
-        ? { graphColor: target.patch.graphColor }
-        : { ...target.patch };
+    // nullable leaf의 null은 위치 조각에서 undefined로, 나머지는 1:1 투영
+    const eagerPatch = {
+      [target.patch.property]: target.patch.value ?? undefined,
+    };
     const byId = mutableIntents.get(target.type) ?? new Map();
     byId.set(target.id, eagerPatch);
     mutableIntents.set(target.type, byId);
@@ -773,7 +750,13 @@ export const patchElementHiddenById = (
   id: string,
   hidden: boolean,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => patchElementPropertyById(type, id, { hidden }, options);
+): Promise<boolean> =>
+  patchElementPropertyById(
+    type,
+    id,
+    { property: 'hidden', value: hidden },
+    options,
+  );
 
 export const setLayerGroupHidden = (
   mode: string,
@@ -847,7 +830,11 @@ export const setLayerGroupHidden = (
             unsupported = true;
             continue;
           }
-          targets.push({ type, id: position.id, patch: { hidden } });
+          targets.push({
+            type,
+            id: position.id,
+            patch: { property: 'hidden', value: hidden },
+          });
         }
       }
       if (unsupported || targets.length === 0) {
@@ -1047,7 +1034,12 @@ export const patchElementLayerNameById = (
   layerName: string | null,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  return patchElementPropertyById(type, id, { layerName }, options);
+  return patchElementPropertyById(
+    type,
+    id,
+    { property: 'layerName', value: layerName },
+    options,
+  );
 };
 
 export const patchGraphTypesByIds = (
@@ -1063,7 +1055,11 @@ export const patchGraphTypesByIds = (
     return Promise.resolve(false);
   }
   return patchElementPropertiesByIds(
-    ids.map((id) => ({ type: 'graph', id, patch: { graphType } })),
+    ids.map((id) => ({
+      type: 'graph',
+      id,
+      patch: { property: 'graphType', value: graphType },
+    })),
     options,
   );
 };
@@ -1081,7 +1077,11 @@ export const patchGraphColorsByIds = (
     return Promise.resolve(false);
   }
   return patchElementPropertiesByIds(
-    ids.map((id) => ({ type: 'graph', id, patch: { graphColor } })),
+    ids.map((id) => ({
+      type: 'graph',
+      id,
+      patch: { property: 'graphColor', value: graphColor },
+    })),
     options,
   );
 };
@@ -1109,7 +1109,12 @@ export const patchKnobAxisIdById = (
   axisId: string,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  return patchElementPropertyById('knob', id, { axisId }, options);
+  return patchElementPropertyById(
+    'knob',
+    id,
+    { property: 'axisId', value: axisId },
+    options,
+  );
 };
 
 export const patchSoundPathById = (
@@ -1118,7 +1123,12 @@ export const patchSoundPathById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById('key', id, { soundPath }, options);
+  return patchElementPropertyById(
+    'key',
+    id,
+    { property: 'soundPath', value: soundPath },
+    options,
+  );
 };
 
 export const patchSoundEnabledById = (
@@ -1127,7 +1137,12 @@ export const patchSoundEnabledById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById('key', id, { soundEnabled }, options);
+  return patchElementPropertyById(
+    'key',
+    id,
+    { property: 'soundEnabled', value: soundEnabled },
+    options,
+  );
 };
 
 export const patchSoundEnabledByIds = (
@@ -1143,7 +1158,11 @@ export const patchSoundEnabledByIds = (
     return Promise.resolve(false);
   }
   return patchElementPropertiesByIds(
-    ids.map((id) => ({ type: 'key', id, patch: { soundEnabled } })),
+    ids.map((id) => ({
+      type: 'key',
+      id,
+      patch: { property: 'soundEnabled', value: soundEnabled },
+    })),
     options,
   );
 };
@@ -1162,7 +1181,12 @@ export const patchSoundVolumeById = (
   ) {
     return Promise.resolve(false);
   }
-  return patchElementPropertyById('key', id, { soundVolume }, options);
+  return patchElementPropertyById(
+    'key',
+    id,
+    { property: 'soundVolume', value: soundVolume },
+    options,
+  );
 };
 
 export const patchSoundVolumeByIds = (
@@ -1181,7 +1205,11 @@ export const patchSoundVolumeByIds = (
     return Promise.resolve(false);
   }
   return patchElementPropertiesByIds(
-    ids.map((id) => ({ type: 'key', id, patch: { soundVolume } })),
+    ids.map((id) => ({
+      type: 'key',
+      id,
+      patch: { property: 'soundVolume', value: soundVolume },
+    })),
     options,
   );
 };
@@ -1199,7 +1227,11 @@ export const patchSoundPathByIds = (
     return Promise.resolve(false);
   }
   return patchElementPropertiesByIds(
-    ids.map((id) => ({ type: 'key', id, patch: { soundPath } })),
+    ids.map((id) => ({
+      type: 'key',
+      id,
+      patch: { property: 'soundPath', value: soundPath },
+    })),
     options,
   );
 };
@@ -1237,8 +1269,8 @@ const counterBooleanPropertyIntents = (
     }
     const counter = current.counter as Record<string, unknown>;
     const nextCounter =
-      'counterEnabled' in patch
-        ? { ...counter, enabled: patch.counterEnabled }
+      patch.property === 'counterEnabled'
+        ? { ...counter, enabled: patch.value }
         : counter.animation !== null &&
           typeof counter.animation === 'object' &&
           !Array.isArray(counter.animation)
@@ -1246,7 +1278,7 @@ const counterBooleanPropertyIntents = (
             ...counter,
             animation: {
               ...(counter.animation as Record<string, unknown>),
-              enabled: patch.counterAnimationEnabled,
+              enabled: patch.value,
             },
           }
         : null;
@@ -1325,13 +1357,13 @@ const counterLayoutPropertyIntents = (
     }
     const counter = current.counter as Record<string, unknown>;
     const nextCounter =
-      'counterPlacement' in patch
-        ? { ...counter, placement: patch.counterPlacement }
-        : 'counterAlign' in patch
-        ? { ...counter, align: patch.counterAlign }
-        : 'counterAlignMode' in patch
-        ? { ...counter, alignMode: patch.counterAlignMode }
-        : { ...counter, gap: patch.counterGap };
+      patch.property === 'counterPlacement'
+        ? { ...counter, placement: patch.value }
+        : patch.property === 'counterAlign'
+        ? { ...counter, align: patch.value }
+        : patch.property === 'counterAlignMode'
+        ? { ...counter, alignMode: patch.value }
+        : { ...counter, gap: patch.value };
     const byId = propertyIntents.get(elementType) ?? new Map();
     byId.set(id, { counter: nextCounter });
     propertyIntents.set(elementType, byId);
@@ -1414,17 +1446,17 @@ const counterTypographyPropertyIntents = (
     }
     const counter = current.counter as Record<string, unknown>;
     const nextCounter =
-      'counterFontSize' in patch
-        ? { ...counter, fontSize: patch.counterFontSize }
-        : 'counterFontWeight' in patch
-        ? { ...counter, fontWeight: patch.counterFontWeight }
-        : 'counterFontItalic' in patch
-        ? { ...counter, fontItalic: patch.counterFontItalic }
-        : 'counterFontUnderline' in patch
-        ? { ...counter, fontUnderline: patch.counterFontUnderline }
-        : 'counterFontStrikethrough' in patch
-        ? { ...counter, fontStrikethrough: patch.counterFontStrikethrough }
-        : { ...counter, fontFamily: patch.counterFontFamily };
+      patch.property === 'counterFontSize'
+        ? { ...counter, fontSize: patch.value }
+        : patch.property === 'counterFontWeight'
+        ? { ...counter, fontWeight: patch.value }
+        : patch.property === 'counterFontItalic'
+        ? { ...counter, fontItalic: patch.value }
+        : patch.property === 'counterFontUnderline'
+        ? { ...counter, fontUnderline: patch.value }
+        : patch.property === 'counterFontStrikethrough'
+        ? { ...counter, fontStrikethrough: patch.value }
+        : { ...counter, fontFamily: patch.value };
     const byId = propertyIntents.get(elementType) ?? new Map();
     byId.set(id, { counter: nextCounter });
     propertyIntents.set(elementType, byId);
@@ -1435,32 +1467,29 @@ const counterTypographyPropertyIntents = (
 const isCounterTypographyPatch = (
   patch: EditorCounterTypographyPropertyPatchV1,
 ): boolean => {
-  if (Object.keys(patch).length !== 1) return false;
-  if ('counterFontSize' in patch) {
+  if (patch.property === 'counterFontSize') {
     return (
-      Number.isSafeInteger(patch.counterFontSize) &&
-      patch.counterFontSize >= 8 &&
-      patch.counterFontSize <= 72
+      Number.isSafeInteger(patch.value) && patch.value >= 8 && patch.value <= 72
     );
   }
-  if ('counterFontWeight' in patch) {
+  if (patch.property === 'counterFontWeight') {
     return (
-      Number.isSafeInteger(patch.counterFontWeight) &&
-      patch.counterFontWeight >= 100 &&
-      patch.counterFontWeight <= 900
+      Number.isSafeInteger(patch.value) &&
+      patch.value >= 100 &&
+      patch.value <= 900
     );
   }
-  if ('counterFontItalic' in patch) {
-    return typeof patch.counterFontItalic === 'boolean';
+  if (patch.property === 'counterFontItalic') {
+    return typeof patch.value === 'boolean';
   }
-  if ('counterFontUnderline' in patch) {
-    return typeof patch.counterFontUnderline === 'boolean';
+  if (patch.property === 'counterFontUnderline') {
+    return typeof patch.value === 'boolean';
   }
-  if ('counterFontStrikethrough' in patch) {
-    return typeof patch.counterFontStrikethrough === 'boolean';
+  if (patch.property === 'counterFontStrikethrough') {
+    return typeof patch.value === 'boolean';
   }
   return (
-    'counterFontFamily' in patch && typeof patch.counterFontFamily === 'string'
+    patch.property === 'counterFontFamily' && typeof patch.value === 'string'
   );
 };
 
@@ -1549,9 +1578,9 @@ const counterStrokePropertyIntents = (
     }
     const stroke = rawStroke as Record<string, unknown>;
     const nextStroke =
-      'counterStrokeIdle' in patch
-        ? { ...stroke, idle: patch.counterStrokeIdle }
-        : { ...stroke, active: patch.counterStrokeActive };
+      patch.property === 'counterStrokeIdle'
+        ? { ...stroke, idle: patch.value }
+        : { ...stroke, active: patch.value };
     const byId = propertyIntents.get(elementType) ?? new Map();
     byId.set(id, { counter: { ...counter, stroke: nextStroke } });
     propertyIntents.set(elementType, byId);
@@ -1564,14 +1593,13 @@ export const patchCounterStrokeByTargets = (
   patch: EditorCounterStrokePropertyPatchV1,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  const active = 'counterStrokeActive' in patch;
+  const active = patch.property === 'counterStrokeActive';
   if (
-    Object.keys(patch).length !== 1 ||
     (active
-      ? typeof patch.counterStrokeActive !== 'string' ||
+      ? typeof patch.value !== 'string' ||
         targets.some(({ elementType }) => elementType !== 'key')
-      : !('counterStrokeIdle' in patch) ||
-        typeof patch.counterStrokeIdle !== 'string') ||
+      : patch.property !== 'counterStrokeIdle' ||
+        typeof patch.value !== 'string') ||
     targets.length === 0 ||
     targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
@@ -1618,7 +1646,11 @@ export const patchCounterEnabledByTargets = (
   enabled: boolean,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> =>
-  patchCounterBooleanByTargets(targets, { counterEnabled: enabled }, options);
+  patchCounterBooleanByTargets(
+    targets,
+    { property: 'counterEnabled', value: enabled },
+    options,
+  );
 
 export const patchCounterEnabledById = (
   elementType: 'key' | 'stat',
@@ -1635,7 +1667,7 @@ export const patchCounterAnimationEnabledByTargets = (
 ): Promise<boolean> =>
   patchCounterBooleanByTargets(
     targets,
-    { counterAnimationEnabled: enabled },
+    { property: 'counterAnimationEnabled', value: enabled },
     options,
   );
 
@@ -1725,7 +1757,10 @@ export const patchCounterAnimationPresetByTargets = (
       kind: 'patchElement' as const,
       elementType,
       id,
-      patch: { counterAnimationPreset: structuredClone(intent) },
+      patch: {
+        property: 'counterAnimationPreset',
+        value: structuredClone(intent),
+      },
     })),
     {
       preflight: options.preflight,
@@ -1758,7 +1793,12 @@ export const patchInactiveImageById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(type, id, { inactiveImage }, options);
+  return patchElementPropertyById(
+    type,
+    id,
+    { property: 'inactiveImage', value: inactiveImage },
+    options,
+  );
 };
 
 export const patchInactiveImageByTargets = (
@@ -1779,7 +1819,7 @@ export const patchInactiveImageByTargets = (
     targets.map(({ elementType, id }) => ({
       type: elementType,
       id,
-      patch: { inactiveImage },
+      patch: { property: 'inactiveImage', value: inactiveImage },
     })),
     options,
   );
@@ -1792,7 +1832,12 @@ export const patchActiveImageById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(type, id, { activeImage }, options);
+  return patchElementPropertyById(
+    type,
+    id,
+    { property: 'activeImage', value: activeImage },
+    options,
+  );
 };
 
 export const patchActiveImageByTargets = (
@@ -1813,7 +1858,7 @@ export const patchActiveImageByTargets = (
     targets.map(({ elementType, id }) => ({
       type: elementType,
       id,
-      patch: { activeImage },
+      patch: { property: 'activeImage', value: activeImage },
     })),
     options,
   );
@@ -1826,7 +1871,12 @@ export const patchIdleTransparentById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(type, id, { idleTransparent }, options);
+  return patchElementPropertyById(
+    type,
+    id,
+    { property: 'idleTransparent', value: idleTransparent },
+    options,
+  );
 };
 
 export const patchIdleTransparentByTargets = (
@@ -1847,7 +1897,7 @@ export const patchIdleTransparentByTargets = (
     targets.map(({ elementType, id }) => ({
       type: elementType,
       id,
-      patch: { idleTransparent },
+      patch: { property: 'idleTransparent', value: idleTransparent },
     })),
     options,
   );
@@ -1860,7 +1910,12 @@ export const patchActiveTransparentById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(type, id, { activeTransparent }, options);
+  return patchElementPropertyById(
+    type,
+    id,
+    { property: 'activeTransparent', value: activeTransparent },
+    options,
+  );
 };
 
 export const patchActiveTransparentByTargets = (
@@ -1881,7 +1936,7 @@ export const patchActiveTransparentByTargets = (
     targets.map(({ elementType, id }) => ({
       type: elementType,
       id,
-      patch: { activeTransparent },
+      patch: { property: 'activeTransparent', value: activeTransparent },
     })),
     options,
   );
@@ -1896,7 +1951,12 @@ export const patchIdleImageFitById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(type, id, { idleImageFit }, options);
+  return patchElementPropertyById(
+    type,
+    id,
+    { property: 'idleImageFit', value: idleImageFit },
+    options,
+  );
 };
 
 export const patchActiveImageFitById = (
@@ -1906,7 +1966,12 @@ export const patchActiveImageFitById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(type, id, { activeImageFit }, options);
+  return patchElementPropertyById(
+    type,
+    id,
+    { property: 'activeImageFit', value: activeImageFit },
+    options,
+  );
 };
 
 export const patchKnobPropertiesByIds = (
@@ -1943,7 +2008,7 @@ export const patchUseInlineStylesByTargets = (
     targets.map(({ elementType, id }) => ({
       type: elementType,
       id,
-      patch: { useInlineStyles },
+      patch: { property: 'useInlineStyles', value: useInlineStyles },
     })),
     options,
   );
@@ -2000,8 +2065,8 @@ const paintPropertyIntents = (
   patch: EditorPaintPropertyPatchV1,
 ): PropertyIntents => {
   const document = captureEditorDocument();
-  const fieldName = Object.keys(patch)[0] as PaintPropertyNameV1;
-  const descriptor = patch[fieldName]!;
+  const fieldName = patch.property;
+  const descriptor = patch.value;
   const {
     active,
     colorField,
@@ -2070,7 +2135,8 @@ export const patchPaintByTargets = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   const active =
-    'activeBackgroundPaint' in patch || 'activeBorderPaint' in patch;
+    patch.property === 'activeBackgroundPaint' ||
+    patch.property === 'activeBorderPaint';
   if (
     !isEditorPaintPropertyPatchV1(patch) ||
     targets.length === 0 ||
@@ -2150,7 +2216,7 @@ export const patchCounterFillByTargets = (
   patch: EditorCounterFillPropertyPatchV1,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  const active = 'counterFillActive' in patch;
+  const active = patch.property === 'counterFillActive';
   if (
     !isCounterFillPropertyPatchV1(patch) ||
     targets.length === 0 ||
@@ -2236,7 +2302,7 @@ export const patchFontColorByTargets = (
   patch: EditorFontColorPropertyPatchV1,
   options: { preflight?: () => void; gestureId?: string } = {},
 ): Promise<boolean> => {
-  const active = 'activeFontColor' in patch;
+  const active = patch.property === 'activeFontColor';
   if (
     !isFontColorPropertyPatchV1(patch) ||
     targets.length === 0 ||
@@ -2341,7 +2407,7 @@ export const patchShadowByTargets = (
         id.length === 0 ||
         !isNativeElementId(id) ||
         elementType === 'graph' ||
-        ('activeShadow' in patch && elementType === 'stat'),
+        (patch.property === 'activeShadow' && elementType === 'stat'),
     ) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
   ) {
@@ -2452,40 +2518,40 @@ export const patchStylePropertyById = (
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   const noteNumericInvalid =
-    ('noteOffsetX' in patch &&
+    (patch.property === 'noteOffsetX' &&
       (type !== 'key' ||
-        (patch.noteOffsetX !== null &&
-          (!Number.isFinite(patch.noteOffsetX) ||
-            patch.noteOffsetX < -500 ||
-            patch.noteOffsetX > 500)))) ||
-    ('noteOffsetY' in patch &&
+        (patch.value !== null &&
+          (!Number.isFinite(patch.value) ||
+            patch.value < -500 ||
+            patch.value > 500)))) ||
+    (patch.property === 'noteOffsetY' &&
       (type !== 'key' ||
-        (patch.noteOffsetY !== null &&
-          (!Number.isFinite(patch.noteOffsetY) ||
-            patch.noteOffsetY < -500 ||
-            patch.noteOffsetY > 500)))) ||
-    ('noteWidth' in patch &&
+        (patch.value !== null &&
+          (!Number.isFinite(patch.value) ||
+            patch.value < -500 ||
+            patch.value > 500)))) ||
+    (patch.property === 'noteWidth' &&
       (type !== 'key' ||
-        (patch.noteWidth !== null &&
-          (!Number.isFinite(patch.noteWidth) || patch.noteWidth <= 0)))) ||
-    ('noteBorderWidth' in patch &&
+        (patch.value !== null &&
+          (!Number.isFinite(patch.value) || patch.value <= 0)))) ||
+    (patch.property === 'noteBorderWidth' &&
       (type !== 'key' ||
-        !Number.isFinite(patch.noteBorderWidth) ||
-        patch.noteBorderWidth < 0 ||
-        patch.noteBorderWidth > 20)) ||
-    ('noteBorderRadius' in patch &&
+        !Number.isFinite(patch.value) ||
+        patch.value < 0 ||
+        patch.value > 20)) ||
+    (patch.property === 'noteBorderRadius' &&
       (type !== 'key' ||
-        !Number.isFinite(patch.noteBorderRadius) ||
-        patch.noteBorderRadius < 1 ||
-        patch.noteBorderRadius > 100));
+        !Number.isFinite(patch.value) ||
+        patch.value < 1 ||
+        patch.value > 100));
   if (
     !id ||
     !isNativeElementId(id) ||
-    ('noteGlowSize' in patch &&
+    (patch.property === 'noteGlowSize' &&
       (type !== 'key' ||
-        !Number.isFinite(patch.noteGlowSize) ||
-        patch.noteGlowSize < 0 ||
-        patch.noteGlowSize > 50)) ||
+        !Number.isFinite(patch.value) ||
+        patch.value < 0 ||
+        patch.value > 50)) ||
     noteNumericInvalid
   ) {
     return Promise.resolve(false);
@@ -2502,43 +2568,43 @@ export const patchStylePropertyByTargets = (
     (target) => target.elementType !== 'key',
   );
   const noteNumericInvalid =
-    ('noteOffsetX' in patch &&
+    (patch.property === 'noteOffsetX' &&
       (hasNonKeyTarget ||
-        (patch.noteOffsetX !== null &&
-          (!Number.isFinite(patch.noteOffsetX) ||
-            patch.noteOffsetX < -500 ||
-            patch.noteOffsetX > 500)))) ||
-    ('noteOffsetY' in patch &&
+        (patch.value !== null &&
+          (!Number.isFinite(patch.value) ||
+            patch.value < -500 ||
+            patch.value > 500)))) ||
+    (patch.property === 'noteOffsetY' &&
       (hasNonKeyTarget ||
-        (patch.noteOffsetY !== null &&
-          (!Number.isFinite(patch.noteOffsetY) ||
-            patch.noteOffsetY < -500 ||
-            patch.noteOffsetY > 500)))) ||
-    ('noteWidth' in patch &&
+        (patch.value !== null &&
+          (!Number.isFinite(patch.value) ||
+            patch.value < -500 ||
+            patch.value > 500)))) ||
+    (patch.property === 'noteWidth' &&
       (hasNonKeyTarget ||
-        (patch.noteWidth !== null &&
-          (!Number.isFinite(patch.noteWidth) || patch.noteWidth <= 0)))) ||
-    ('noteBorderWidth' in patch &&
+        (patch.value !== null &&
+          (!Number.isFinite(patch.value) || patch.value <= 0)))) ||
+    (patch.property === 'noteBorderWidth' &&
       (hasNonKeyTarget ||
-        !Number.isFinite(patch.noteBorderWidth) ||
-        patch.noteBorderWidth < 0 ||
-        patch.noteBorderWidth > 20)) ||
-    ('noteBorderRadius' in patch &&
+        !Number.isFinite(patch.value) ||
+        patch.value < 0 ||
+        patch.value > 20)) ||
+    (patch.property === 'noteBorderRadius' &&
       (hasNonKeyTarget ||
-        !Number.isFinite(patch.noteBorderRadius) ||
-        patch.noteBorderRadius < 1 ||
-        patch.noteBorderRadius > 100));
+        !Number.isFinite(patch.value) ||
+        patch.value < 1 ||
+        patch.value > 100));
   if (
     targets.length === 0 ||
     targets.some(
       (target) => target.id.length === 0 || !isNativeElementId(target.id),
     ) ||
     new Set(targets.map((target) => target.id)).size !== targets.length ||
-    ('noteGlowSize' in patch &&
+    (patch.property === 'noteGlowSize' &&
       (targets.some((target) => target.elementType !== 'key') ||
-        !Number.isFinite(patch.noteGlowSize) ||
-        patch.noteGlowSize < 0 ||
-        patch.noteGlowSize > 50)) ||
+        !Number.isFinite(patch.value) ||
+        patch.value < 0 ||
+        patch.value > 50)) ||
     noteNumericInvalid
   ) {
     return Promise.resolve(false);

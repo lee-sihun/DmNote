@@ -527,7 +527,7 @@ export const setMixedLayerGroupHidden = (
             kind: 'patchElement',
             elementType: type,
             id,
-            patch: { hidden },
+            patch: { property: 'hidden', value: hidden },
           }));
           return {
             kind: 'ops',

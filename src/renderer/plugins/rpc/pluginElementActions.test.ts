@@ -157,15 +157,31 @@ describe('plugin element panel queue', () => {
   });
 
   it.each([
-    ['가시성', { hidden: true }, 'stat'],
-    ['이름 clear', { layerName: null }, 'stat'],
-    ['글꼴 패밀리', { fontFamily: '  Raw Family  ' }, 'stat'],
-    ['노브 축', { axisId: '  HIDA:raw  ' }, 'knob'],
-    ['사운드', { soundPath: '  sounds/raw.wav  ' }, 'key'],
-    ['대기 이미지', { inactiveImage: '  Raw Image.png  ' }, 'graph'],
-    ['활성 이미지', { activeImage: '  Raw Active.png  ' }, 'key'],
-    ['대기 이미지 맞춤', { idleImageFit: 'contain' }, 'graph'],
-    ['활성 이미지 맞춤', { activeImageFit: 'fill' }, 'knob'],
+    ['가시성', { property: 'hidden', value: true }, 'stat'],
+    ['이름 clear', { property: 'layerName', value: null }, 'stat'],
+    [
+      '글꼴 패밀리',
+      { property: 'fontFamily', value: '  Raw Family  ' },
+      'stat',
+    ],
+    ['노브 축', { property: 'axisId', value: '  HIDA:raw  ' }, 'knob'],
+    ['사운드', { property: 'soundPath', value: '  sounds/raw.wav  ' }, 'key'],
+    [
+      '대기 이미지',
+      { property: 'inactiveImage', value: '  Raw Image.png  ' },
+      'graph',
+    ],
+    [
+      '활성 이미지',
+      { property: 'activeImage', value: '  Raw Active.png  ' },
+      'key',
+    ],
+    [
+      '대기 이미지 맞춤',
+      { property: 'idleImageFit', value: 'contain' },
+      'graph',
+    ],
+    ['활성 이미지 맞춤', { property: 'activeImageFit', value: 'fill' }, 'knob'],
   ] as const)(
     '%s literal과 enqueue 시점 generation을 고정한다',
     async (_label, patch, elementType) => {
@@ -210,22 +226,25 @@ describe('plugin element panel queue', () => {
     ];
 
     await expect(
-      actions.patchStylePropertyViaAuthority(targets, { noteGlowSize: 20.5 }),
+      actions.patchStylePropertyViaAuthority(targets, {
+        property: 'noteGlowSize',
+        value: 20.5,
+      }),
     ).resolves.toBe(true);
     expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
       'layers:patchProperty',
-      { targets, patch: { noteGlowSize: 20.5 } },
+      { targets, patch: { property: 'noteGlowSize', value: 20.5 } },
       0,
       7,
     );
   });
 
   it.each([
-    { noteOffsetX: 0 },
-    { noteOffsetY: null },
-    { noteWidth: null },
-    { noteBorderWidth: 2.5 },
-    { noteBorderRadius: 12.5 },
+    { property: 'noteOffsetX', value: 0 },
+    { property: 'noteOffsetY', value: null },
+    { property: 'noteWidth', value: null },
+    { property: 'noteBorderWidth', value: 2.5 },
+    { property: 'noteBorderRadius', value: 12.5 },
   ] satisfies readonly EditorPreviewStylePropertyPatchV1[])(
     'note numeric %j batch는 key-only exact literal을 공용 envelope로 보낸다',
     async (patch) => {
@@ -408,13 +427,14 @@ describe('plugin element panel queue', () => {
 
     await expect(
       actions.patchFontFamilyViaAuthority(targets, {
-        fontFamily: '  Raw Family  ',
+        property: 'fontFamily',
+        value: '  Raw Family  ',
       }),
     ).resolves.toBe(true);
 
     expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
       'layers:patchProperty',
-      { targets, patch: { fontFamily: '  Raw Family  ' } },
+      { targets, patch: { property: 'fontFamily', value: '  Raw Family  ' } },
       0,
       7,
     );
@@ -439,7 +459,7 @@ describe('plugin element panel queue', () => {
     await expect(
       actions.patchStylePropertyViaAuthority(
         targets,
-        { displayText: '  Raw label  ' },
+        { property: 'displayText', value: '  Raw label  ' },
         'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       ),
     ).resolves.toBe(true);
@@ -448,7 +468,7 @@ describe('plugin element panel queue', () => {
       'layers:patchProperty',
       {
         targets,
-        patch: { displayText: '  Raw label  ' },
+        patch: { property: 'displayText', value: '  Raw label  ' },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       },
       0,
@@ -471,7 +491,7 @@ describe('plugin element panel queue', () => {
     await expect(
       actions.patchStylePropertyViaAuthority(
         targets,
-        { className: '  Raw class  ' },
+        { property: 'className', value: '  Raw class  ' },
         'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       ),
     ).resolves.toBe(true);
@@ -480,7 +500,7 @@ describe('plugin element panel queue', () => {
       'layers:patchProperty',
       {
         targets,
-        patch: { className: '  Raw class  ' },
+        patch: { property: 'className', value: '  Raw class  ' },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       },
       0,
@@ -489,9 +509,9 @@ describe('plugin element panel queue', () => {
   });
 
   it.each([
-    ['borderWidth', { borderWidth: 12.5 }],
-    ['borderRadius', { borderRadius: 999 }],
-    ['fontSize', { fontSize: 31.5 }],
+    ['borderWidth', { property: 'borderWidth', value: 12.5 }],
+    ['borderRadius', { property: 'borderRadius', value: 999 }],
+    ['fontSize', { property: 'fontSize', value: 31.5 }],
   ] as const)(
     '%s batch도 공용 style envelope와 gesture를 사용한다',
     async (_label, patch) => {
@@ -549,7 +569,10 @@ describe('plugin element panel queue', () => {
 
     expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
       'layers:patchProperty',
-      { targets, patch: { inactiveImage: '  Raw Image.png  ' } },
+      {
+        targets,
+        patch: { property: 'inactiveImage', value: '  Raw Image.png  ' },
+      },
       0,
       7,
     );
@@ -577,18 +600,25 @@ describe('plugin element panel queue', () => {
 
     expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
       'layers:patchProperty',
-      { targets, patch: { activeImage: '  Raw Active.png  ' } },
+      {
+        targets,
+        patch: { property: 'activeImage', value: '  Raw Active.png  ' },
+      },
       0,
       7,
     );
   });
 
   it.each([
-    ['idle', 'patchIdleTransparentViaAuthority', { idleTransparent: true }],
+    [
+      'idle',
+      'patchIdleTransparentViaAuthority',
+      { property: 'idleTransparent', value: true },
+    ],
     [
       'active',
       'patchActiveTransparentViaAuthority',
-      { activeTransparent: false },
+      { property: 'activeTransparent', value: false },
     ],
   ] as const)(
     '%s transparency batch는 exact bool과 default envelope를 고정한다',
@@ -604,9 +634,7 @@ describe('plugin element panel queue', () => {
         },
       ];
 
-      await expect(
-        actions[method](targets, Object.values(patch)[0]),
-      ).resolves.toBe(true);
+      await expect(actions[method](targets, patch.value)).resolves.toBe(true);
       expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
         'layers:patchProperty',
         { targets, patch },
@@ -634,7 +662,7 @@ describe('plugin element panel queue', () => {
       'layers:patchProperty',
       {
         targets: ids.map((id) => ({ elementType: 'key', id })),
-        patch: { soundPath: '  sounds/raw.wav  ' },
+        patch: { property: 'soundPath', value: '  sounds/raw.wav  ' },
       },
       0,
       7,
@@ -659,7 +687,7 @@ describe('plugin element panel queue', () => {
       'layers:patchProperty',
       {
         targets: ids.map((id) => ({ elementType: 'key', id })),
-        patch: { soundEnabled: true },
+        patch: { property: 'soundEnabled', value: true },
       },
       0,
       7,
@@ -688,7 +716,7 @@ describe('plugin element panel queue', () => {
       'layers:patchProperty',
       {
         targets: ids.map((id) => ({ elementType: 'key', id })),
-        patch: { soundVolume: 137.5 },
+        patch: { property: 'soundVolume', value: 137.5 },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       },
       0,
@@ -718,7 +746,7 @@ describe('plugin element panel queue', () => {
     ).resolves.toBe(true);
     expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
       'layers:patchProperty',
-      { targets, patch: { counterAnimationPreset: intent } },
+      { targets, patch: { property: 'counterAnimationPreset', value: intent } },
       0,
       7,
     );
@@ -748,11 +776,11 @@ describe('plugin element panel queue', () => {
     ).resolves.toBe(true);
     expect(mocks.sendPluginRpc.mock.calls[0]?.slice(0, 2)).toEqual([
       'layers:patchProperty',
-      { targets, patch: { counterEnabled: false } },
+      { targets, patch: { property: 'counterEnabled', value: false } },
     ]);
     expect(mocks.sendPluginRpc.mock.calls[1]?.slice(0, 2)).toEqual([
       'layers:patchProperty',
-      { targets, patch: { counterAnimationEnabled: true } },
+      { targets, patch: { property: 'counterAnimationEnabled', value: true } },
     ]);
   });
 
@@ -819,10 +847,10 @@ describe('plugin element panel queue', () => {
       },
     ];
     const patches: EditorCounterLayoutPropertyPatchV1[] = [
-      { counterPlacement: 'outside' as const },
-      { counterAlign: 'right' as const },
-      { counterAlignMode: 'between' as const },
-      { counterGap: 4_294_967_295 },
+      { property: 'counterPlacement', value: 'outside' as const },
+      { property: 'counterAlign', value: 'right' as const },
+      { property: 'counterAlignMode', value: 'between' as const },
+      { property: 'counterGap', value: 4_294_967_295 },
     ];
 
     for (const patch of patches) {
@@ -851,7 +879,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { counterGap: 4_294_967_295 },
+      { property: 'counterGap', value: 4_294_967_295 },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -880,11 +908,11 @@ describe('plugin element panel queue', () => {
       },
     ];
     const patches: EditorCounterTypographyPropertyPatchV1[] = [
-      { counterFontSize: 72 },
-      { counterFontWeight: 900 },
-      { counterFontItalic: true },
-      { counterFontUnderline: true },
-      { counterFontStrikethrough: true },
+      { property: 'counterFontSize', value: 72 },
+      { property: 'counterFontWeight', value: 900 },
+      { property: 'counterFontItalic', value: true },
+      { property: 'counterFontUnderline', value: true },
+      { property: 'counterFontStrikethrough', value: true },
     ];
 
     for (const patch of patches) {
@@ -913,7 +941,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { counterFontSize: 72 },
+      { property: 'counterFontSize', value: 72 },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -944,14 +972,18 @@ describe('plugin element panel queue', () => {
 
     await expect(
       actions.patchCounterTypographyViaAuthority(targets, {
-        counterFontFamily: '  Raw Counter Family  ',
+        property: 'counterFontFamily',
+        value: '  Raw Counter Family  ',
       }),
     ).resolves.toBe(true);
     expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
       'layers:patchProperty',
       {
         targets,
-        patch: { counterFontFamily: '  Raw Counter Family  ' },
+        patch: {
+          property: 'counterFontFamily',
+          value: '  Raw Counter Family  ',
+        },
       },
       0,
       7,
@@ -972,7 +1004,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { counterFontFamily: '' },
+      { property: 'counterFontFamily', value: '' },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -1004,10 +1036,13 @@ describe('plugin element panel queue', () => {
       targets: typeof idleTargets;
       patch: EditorCounterStrokePropertyPatchV1;
     }> = [
-      { targets: idleTargets, patch: { counterStrokeIdle: '  raw idle  ' } },
+      {
+        targets: idleTargets,
+        patch: { property: 'counterStrokeIdle', value: '  raw idle  ' },
+      },
       {
         targets: [idleTargets[0]],
-        patch: { counterStrokeActive: '' },
+        patch: { property: 'counterStrokeActive', value: '' },
       },
     ];
 
@@ -1040,7 +1075,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { counterStrokeActive: '  raw active  ' },
+      { property: 'counterStrokeActive', value: '  raw active  ' },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -1065,7 +1100,10 @@ describe('plugin element panel queue', () => {
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       },
     ];
-    const patch = { counterFillIdle: { color: ' raw solid ' } } as const;
+    const patch = {
+      property: 'counterFillIdle',
+      value: { color: ' raw solid ' },
+    } as const;
 
     await expect(
       actions.patchCounterFillViaAuthority(targets, patch),
@@ -1092,7 +1130,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { counterFillActive: { color: ' active solid ' } },
+      { property: 'counterFillActive', value: { color: ' active solid ' } },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -1117,7 +1155,7 @@ describe('plugin element panel queue', () => {
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       },
     ];
-    const patch = { fontColor: '  raw idle  ' } as const;
+    const patch = { property: 'fontColor', value: '  raw idle  ' } as const;
 
     await expect(
       actions.patchFontColorViaAuthority(
@@ -1149,7 +1187,7 @@ describe('plugin element panel queue', () => {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           },
         ],
-        { fontColor: '#fff' },
+        { property: 'fontColor', value: '#fff' },
       ),
     ).resolves.toBe(false);
 
@@ -1171,7 +1209,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { activeFontColor: '  active raw  ' },
+      { property: 'activeFontColor', value: '  active raw  ' },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -1293,17 +1331,17 @@ describe('plugin element panel queue', () => {
 
     expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
       'layers:patchProperty',
-      { targets, patch: { useInlineStyles: true } },
+      { targets, patch: { property: 'useInlineStyles', value: true } },
       0,
       7,
     );
   });
 
   it.each([
-    [{ fontWeight: 700 }],
-    [{ fontItalic: true }],
-    [{ fontUnderline: false }],
-    [{ fontStrikethrough: true }],
+    [{ property: 'fontWeight', value: 700 }],
+    [{ property: 'fontItalic', value: true }],
+    [{ property: 'fontUnderline', value: false }],
+    [{ property: 'fontStrikethrough', value: true }],
   ] as const)(
     'font style batch %j는 혼합 native 대상과 absolute literal을 고정한다',
     async (patch) => {
@@ -1336,11 +1374,11 @@ describe('plugin element panel queue', () => {
   );
 
   it.each([
-    [{ noteEffectEnabled: false }],
-    [{ noteAutoYCorrection: true }],
-    [{ noteGlowEnabled: false }],
-    [{ noteAlignment: 'right' }],
-    [{ noteBorderSide: 'horizontal' }],
+    [{ property: 'noteEffectEnabled', value: false }],
+    [{ property: 'noteAutoYCorrection', value: true }],
+    [{ property: 'noteGlowEnabled', value: false }],
+    [{ property: 'noteAlignment', value: 'right' }],
+    [{ property: 'noteBorderSide', value: 'horizontal' }],
   ] as const)(
     'note batch %j는 key ID와 absolute literal을 한 요청으로 고정한다',
     async (patch) => {
@@ -1416,7 +1454,7 @@ describe('plugin element panel queue', () => {
           id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         },
       ],
-      { fontWeight: 700 },
+      { property: 'fontWeight', value: 700 },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -1449,7 +1487,7 @@ describe('plugin element panel queue', () => {
           id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         },
       ],
-      { fontFamily: '  Raw Family  ' },
+      { property: 'fontFamily', value: '  Raw Family  ' },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -1478,7 +1516,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { displayText: '  Raw label  ' },
+      { property: 'displayText', value: '  Raw label  ' },
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     );
     await vi.waitFor(() =>
@@ -1508,7 +1546,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { borderRadius: 99.5 },
+      { property: 'borderRadius', value: 99.5 },
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     );
     await vi.waitFor(() =>
@@ -1538,7 +1576,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { noteGlowSize: 20.5 },
+      { property: 'noteGlowSize', value: 20.5 },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -1567,7 +1605,7 @@ describe('plugin element panel queue', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      { noteWidth: null },
+      { property: 'noteWidth', value: null },
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     );
     await vi.waitFor(() =>
@@ -1595,7 +1633,8 @@ describe('plugin element panel queue', () => {
       },
     ];
     const patch = {
-      noteGlowPaint: { opacity: 60, opacityTop: 50, opacityBottom: 40 },
+      property: 'noteGlowPaint',
+      value: { opacity: 60, opacityTop: 50, opacityBottom: 40 },
     } as const;
 
     await expect(
@@ -1627,7 +1666,7 @@ describe('plugin element panel queue', () => {
       });
     const changed = actions.patchNotePaintViaAuthority(
       ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
-      { noteBorderPaint: { color: '#A0B1C2', opacity: 65 } },
+      { property: 'noteBorderPaint', value: { color: '#A0B1C2', opacity: 65 } },
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     );
     await vi.waitFor(() =>
@@ -1806,7 +1845,8 @@ describe('plugin element panel queue', () => {
       },
     ];
     const patch = {
-      backgroundPaint: {
+      property: 'backgroundPaint' as const,
+      value: {
         color: '#first',
         gradient: {
           angle: 45,
@@ -1852,7 +1892,10 @@ describe('plugin element panel queue', () => {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           },
         ],
-        { activeBorderPaint: { color: ' raw ', gradient: null } },
+        {
+          property: 'activeBorderPaint',
+          value: { color: ' raw ', gradient: null },
+        },
       );
       await vi.waitFor(() =>
         expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -1876,7 +1919,10 @@ describe('plugin element panel queue', () => {
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       },
     ];
-    const patch = { shadow: { blur: 22.5 } };
+    const patch = {
+      property: 'shadow',
+      value: { leaf: 'blur', value: 22.5 },
+    } as const;
 
     await expect(actions.patchShadowViaAuthority(targets, patch)).resolves.toBe(
       false,
@@ -1911,7 +1957,7 @@ describe('plugin element panel queue', () => {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           },
         ],
-        { shadowEnabled: false },
+        { property: 'shadowEnabled', value: false },
       );
       await vi.waitFor(() =>
         expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -2159,7 +2205,7 @@ describe('plugin element panel queue', () => {
       });
     const changed = actions.patchNotePropertiesViaAuthority(
       ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
-      { noteBorderSide: 'all' },
+      { property: 'noteBorderSide', value: 'all' },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -2203,7 +2249,7 @@ describe('plugin element panel queue', () => {
             id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           },
         ],
-        patch: { graphType: 'bar' },
+        patch: { property: 'graphType', value: 'bar' },
       },
       0,
       7,
@@ -2263,7 +2309,7 @@ describe('plugin element panel queue', () => {
             id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           },
         ],
-        patch: { graphColor: '#12abEF' },
+        patch: { property: 'graphColor', value: '#12abEF' },
       },
       0,
       7,
@@ -2271,11 +2317,11 @@ describe('plugin element panel queue', () => {
   });
 
   it.each([
-    ['graph', { showAvgLine: false }],
-    ['graph', { graphAnimationEnabled: true }],
-    ['graph', { graphSpeed: 1200 }],
-    ['knob', { sensitivity: 1.25 }],
-    ['knob', { reverse: true }],
+    ['graph', { property: 'showAvgLine', value: false }],
+    ['graph', { property: 'graphAnimationEnabled', value: true }],
+    ['graph', { property: 'graphSpeed', value: 1200 }],
+    ['knob', { property: 'sensitivity', value: 1.25 }],
+    ['knob', { property: 'reverse', value: true }],
   ] as const)(
     '%s runtime batch는 absolute literal과 안정 ID 배열을 한 요청으로 고정한다',
     async (elementType, patch) => {
@@ -2315,7 +2361,7 @@ describe('plugin element panel queue', () => {
       });
     const changed = actions.patchKnobPropertiesViaAuthority(
       ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
-      { reverse: true },
+      { property: 'reverse', value: true },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -2340,7 +2386,7 @@ describe('plugin element panel queue', () => {
     const changed = actions.patchNativeLayerPropertyViaAuthority({
       elementType: 'knob',
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      patch: { axisId: '  HIDA:raw  ' },
+      patch: { property: 'axisId', value: '  HIDA:raw  ' },
     });
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -2365,7 +2411,7 @@ describe('plugin element panel queue', () => {
     const changed = actions.patchNativeLayerPropertyViaAuthority({
       elementType: 'knob',
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      patch: { activeImageFit: 'contain' },
+      patch: { property: 'activeImageFit', value: 'contain' },
     });
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
@@ -2393,7 +2439,7 @@ describe('plugin element panel queue', () => {
       const changed = actions.patchNativeLayerPropertyViaAuthority({
         elementType: 'key',
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        patch: { layerName: 'renamed' },
+        patch: { property: 'layerName', value: 'renamed' },
       });
       await vi.waitFor(() =>
         expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

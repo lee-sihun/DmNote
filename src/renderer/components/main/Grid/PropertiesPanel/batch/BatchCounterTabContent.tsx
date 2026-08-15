@@ -155,7 +155,10 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             value={batchCounterSettings.placement}
             onChange={(value) => {
               const placement = value as 'inside' | 'outside';
-              onCounterLayoutCommit?.({ counterPlacement: placement });
+              onCounterLayoutCommit?.({
+                property: 'counterPlacement',
+                value: placement,
+              });
             }}
           />
         </PropertyRow>
@@ -179,7 +182,10 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             value={batchCounterSettings.align}
             onChange={(value) => {
               const align = value as 'top' | 'bottom' | 'left' | 'right';
-              onCounterLayoutCommit?.({ counterAlign: align });
+              onCounterLayoutCommit?.({
+                property: 'counterAlign',
+                value: align,
+              });
             }}
           />
         </PropertyRow>
@@ -202,7 +208,10 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
               value={batchCounterSettings.alignMode ?? 'center'}
               onChange={(value) => {
                 const alignMode = value as 'center' | 'between';
-                onCounterLayoutCommit?.({ counterAlignMode: alignMode });
+                onCounterLayoutCommit?.({
+                  property: 'counterAlignMode',
+                  value: alignMode,
+                });
               }}
             />
           </PropertyRow>
@@ -213,7 +222,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           <NumberInput
             value={batchCounterSettings.gap}
             onChange={(value) => {
-              onCounterLayoutCommit?.({ counterGap: value });
+              onCounterLayoutCommit?.({ property: 'counterGap', value: value });
             }}
             suffix="px"
             min={0}
@@ -283,7 +292,10 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           <NumberInput
             value={batchCounterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}
             onChange={(value) => {
-              onCounterTypographyCommit?.({ counterFontSize: value });
+              onCounterTypographyCommit?.({
+                property: 'counterFontSize',
+                value: value,
+              });
             }}
             suffix="px"
             min={8}
@@ -301,18 +313,26 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             isStrikethrough={batchCounterSettings.fontStrikethrough ?? false}
             onBoldChange={(value) => {
               onCounterTypographyCommit?.({
-                counterFontWeight: value ? 700 : 400,
+                property: 'counterFontWeight',
+                value: value ? 700 : 400,
               });
             }}
             onItalicChange={(value) => {
-              onCounterTypographyCommit?.({ counterFontItalic: value });
+              onCounterTypographyCommit?.({
+                property: 'counterFontItalic',
+                value: value,
+              });
             }}
             onUnderlineChange={(value) => {
-              onCounterTypographyCommit?.({ counterFontUnderline: value });
+              onCounterTypographyCommit?.({
+                property: 'counterFontUnderline',
+                value: value,
+              });
             }}
             onStrikethroughChange={(value) => {
               onCounterTypographyCommit?.({
-                counterFontStrikethrough: value,
+                property: 'counterFontStrikethrough',
+                value: value,
               });
             }}
           />
@@ -361,7 +381,8 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             onFontSelect={(fontFamily) => {
               if (fontFamily !== null) {
                 onCounterTypographyCommit?.({
-                  counterFontFamily: fontFamily,
+                  property: 'counterFontFamily',
+                  value: fontFamily,
                 });
               }
             }}

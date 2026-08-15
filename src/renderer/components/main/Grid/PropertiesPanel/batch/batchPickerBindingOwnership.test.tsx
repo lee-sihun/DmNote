@@ -514,7 +514,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       handleBatchPickerColorChangeComplete: vi.fn(),
       handleBatchNotePickerColorChangeComplete: vi.fn(),
       handleBatchFillPickerColorChangeComplete: (color, semantic) =>
-        semantic({ counterFillIdle: { color } }),
+        semantic({ property: 'counterFillIdle', value: { color } }),
       getBatchPickerColor: () => '#ffffff',
       getBatchPickerRef: () => createRef<HTMLButtonElement>(),
       batchColorPickerInteractiveRefs: [],
@@ -731,10 +731,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         ({ elementType }) => elementType === 'key' || elementType === 'knob',
       );
       const patch = {
-        activeBackgroundPaint: {
-          color: 'active-final',
-          gradient: null,
-        },
+        property: 'activeBackgroundPaint',
+        value: { color: 'active-final', gradient: null },
       } as const;
       if (windowType === 'panel') {
         expect(patches.patchPaintViaAuthority).toHaveBeenCalledWith(
@@ -773,10 +771,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'knob', id: ID_B },
       ],
       {
-        activeBackgroundPaint: {
-          color: 'active-stable',
-          gradient: null,
-        },
+        property: 'activeBackgroundPaint',
+        value: { color: 'active-stable', gradient: null },
       },
     );
     expect(legacy).not.toHaveBeenCalled();
@@ -823,13 +819,13 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       if (windowType === 'panel') {
         expect(writer).toHaveBeenCalledWith(
           [{ elementType: 'key', id: ID_B }],
-          { noteGlowSize: 20.5 },
+          { property: 'noteGlowSize', value: 20.5 },
           undefined,
         );
       } else {
         expect(writer).toHaveBeenCalledWith(
           [{ elementType: 'key', id: ID_B }],
-          { noteGlowSize: 20.5 },
+          { property: 'noteGlowSize', value: 20.5 },
           { gestureId: undefined },
         );
       }
@@ -891,11 +887,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           : patches.patchDisplayTextByTargets;
       const target = [{ elementType: 'key', id: ID_B }];
       const patchesInOrder = [
-        { noteOffsetX: 0 },
-        { noteOffsetY: null },
-        { noteWidth: 55.5 },
-        { noteBorderWidth: 2.5 },
-        { noteBorderRadius: 18.5 },
+        { property: 'noteOffsetX', value: 0 },
+        { property: 'noteOffsetY', value: null },
+        { property: 'noteWidth', value: 55.5 },
+        { property: 'noteBorderWidth', value: 2.5 },
+        { property: 'noteBorderRadius', value: 18.5 },
       ];
       expect(writer).toHaveBeenCalledTimes(5);
       for (const [index, patch] of patchesInOrder.entries()) {
@@ -981,22 +977,42 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(gestures.preview.mock.calls).toEqual([
         [
           '4key',
-          [{ index: 1, patch: { displayText: '  Preview label  ' } }],
+          [
+            {
+              index: 1,
+              patch: { displayText: '  Preview label  ' },
+            },
+          ],
           { domain: 'keyPosition' },
         ],
         [
           '4key',
-          [{ index: 0, patch: { displayText: '  Preview label  ' } }],
+          [
+            {
+              index: 0,
+              patch: { displayText: '  Preview label  ' },
+            },
+          ],
           { domain: 'statPosition' },
         ],
         [
           '4key',
-          [{ index: 0, patch: { displayText: '  Preview label  ' } }],
+          [
+            {
+              index: 0,
+              patch: { displayText: '  Preview label  ' },
+            },
+          ],
           { domain: 'graphPosition' },
         ],
         [
           '4key',
-          [{ index: 0, patch: { displayText: '  Preview label  ' } }],
+          [
+            {
+              index: 0,
+              patch: { displayText: '  Preview label  ' },
+            },
+          ],
           { domain: 'knobPosition' },
         ],
       ]);
@@ -1014,7 +1030,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           : patches.patchDisplayTextByTargets;
       expect(writer).toHaveBeenCalledWith(
         targets,
-        { displayText: '  Preview label  ' },
+        { property: 'displayText', value: '  Preview label  ' },
         windowType === 'panel'
           ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
           : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
@@ -1197,7 +1213,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           : patches.patchDisplayTextByTargets;
       expect(writer).toHaveBeenCalledWith(
         targets,
-        { className: '  Raw class  ' },
+        { property: 'className', value: '  Raw class  ' },
         windowType === 'panel'
           ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
           : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
@@ -1258,8 +1274,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ];
       const patch =
         state === 'active'
-          ? { activeFontColor: ' final raw ' }
-          : { fontColor: ' final raw ' };
+          ? { property: 'activeFontColor', value: ' final raw ' }
+          : { property: 'fontColor', value: ' final raw ' };
       const writer =
         windowType === 'panel'
           ? patches.patchFontColorViaAuthority
@@ -1355,7 +1371,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           : patches.patchDisplayTextByTargets;
       expect(writer).toHaveBeenCalledWith(
         targets,
-        { [property]: value },
+        { property, value },
         windowType === 'panel'
           ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
           : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
@@ -1448,10 +1464,10 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'stat', id: statB },
       ];
       const calls = [
-        [targets, { counterPlacement: 'outside' }],
-        [targets, { counterAlign: 'right' }],
-        [targets, { counterAlignMode: 'between' }],
-        [targets, { counterGap: 9999 }],
+        [targets, { property: 'counterPlacement', value: 'outside' }],
+        [targets, { property: 'counterAlign', value: 'right' }],
+        [targets, { property: 'counterAlignMode', value: 'between' }],
+        [targets, { property: 'counterGap', value: 9999 }],
       ];
       if (windowType === 'panel') {
         expect(patches.patchCounterLayoutViaAuthority.mock.calls).toEqual(
@@ -1492,11 +1508,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'stat', id: statB },
       ];
       const calls = [
-        [targets, { counterFontSize: 72 }],
-        [targets, { counterFontWeight: 700 }],
-        [targets, { counterFontItalic: true }],
-        [targets, { counterFontUnderline: true }],
-        [targets, { counterFontStrikethrough: true }],
+        [targets, { property: 'counterFontSize', value: 72 }],
+        [targets, { property: 'counterFontWeight', value: 700 }],
+        [targets, { property: 'counterFontItalic', value: true }],
+        [targets, { property: 'counterFontUnderline', value: true }],
+        [targets, { property: 'counterFontStrikethrough', value: true }],
       ];
       if (windowType === 'panel') {
         expect(patches.patchCounterTypographyViaAuthority.mock.calls).toEqual(
@@ -1533,7 +1549,10 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'key', id: ID_B },
         { elementType: 'stat', id: statB },
       ];
-      const args = [targets, { counterFontFamily: '  Raw Counter Family  ' }];
+      const args = [
+        targets,
+        { property: 'counterFontFamily', value: '  Raw Counter Family  ' },
+      ];
       if (windowType === 'panel') {
         expect(patches.patchCounterTypographyViaAuthority).toHaveBeenCalledWith(
           ...args,
@@ -1626,8 +1645,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         props.handleBatchFillPickerColorChangeComplete = (color, semantic) =>
           semantic(
             state === 'active'
-              ? { counterFillActive: { color } }
-              : { counterFillIdle: { color } },
+              ? { property: 'counterFillActive', value: { color } }
+              : { property: 'counterFillIdle', value: { color } },
           );
         act(() => {
           root.render(
@@ -1661,8 +1680,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ];
       const patch =
         state === 'active'
-          ? { counterFillActive: { color: ' solid final ' } }
-          : { counterFillIdle: { color: ' solid final ' } };
+          ? { property: 'counterFillActive', value: { color: ' solid final ' } }
+          : { property: 'counterFillIdle', value: { color: ' solid final ' } };
       if (windowType === 'panel') {
         expect(patches.patchCounterFillViaAuthority).toHaveBeenCalledWith(
           targets,
@@ -1726,8 +1745,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       props.handleBatchFillPickerColorChangeComplete = (color, semantic) =>
         semantic(
           state === 'active'
-            ? { counterFillActive: { color } }
-            : { counterFillIdle: { color } },
+            ? { property: 'counterFillActive', value: { color } }
+            : { property: 'counterFillIdle', value: { color } },
         );
       act(() => {
         root.render(
@@ -1749,7 +1768,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       if (exact) {
         expect(patches.patchCounterFillByTargets).toHaveBeenCalledWith(
           [{ elementType: 'key', id: stableKeyId }],
-          { counterFillActive: { color: '#778899' } },
+          { property: 'counterFillActive', value: { color: '#778899' } },
         );
         expect(legacy).not.toHaveBeenCalled();
       } else {
@@ -1963,7 +1982,10 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         windowType === 'panel'
           ? patches.patchShadowViaAuthority
           : patches.patchShadowByTargets;
-      expect(writer).toHaveBeenCalledWith(targets, { shadow: { blur: 22.5 } });
+      expect(writer).toHaveBeenCalledWith(targets, {
+        property: 'shadow',
+        value: { leaf: 'blur', value: 22.5 },
+      });
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -1985,7 +2007,10 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'key', id: ID_A },
         { elementType: 'knob', id: ID_B },
       ],
-      { activeShadow: { color: ' raw active ' } },
+      {
+        property: 'activeShadow',
+        value: { leaf: 'color', value: ' raw active ' },
+      },
     );
     expect(legacy).not.toHaveBeenCalled();
   });
@@ -2035,7 +2060,10 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
       const args = [
         targets,
-        { backgroundPaint: { color: ' raw final ', gradient: null } },
+        {
+          property: 'backgroundPaint',
+          value: { color: ' raw final ', gradient: null },
+        },
       ] as const;
       if (windowType === 'panel') {
         expect(patches.patchPaintViaAuthority).toHaveBeenCalledWith(...args);
@@ -2061,7 +2089,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       await commitBackgroundPaint(state, `${kind}-${state}`);
 
       expect(patches.patchPaintByTargets).toHaveBeenCalledWith(targets, {
-        [state === 'active' ? 'activeBackgroundPaint' : 'backgroundPaint']: {
+        property:
+          state === 'active' ? 'activeBackgroundPaint' : 'backgroundPaint',
+        value: {
           color: `${kind}-${state}`,
           gradient: null,
         },

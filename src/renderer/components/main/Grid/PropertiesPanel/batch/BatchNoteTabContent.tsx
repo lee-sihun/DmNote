@@ -129,7 +129,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               getMixedValue((pos) => pos.noteOffsetX, 0).value || undefined
             }
             onChange={(value) =>
-              onStylePropertyCommit?.({ noteOffsetX: value ?? null })
+              onStylePropertyCommit?.({
+                property: 'noteOffsetX',
+                value: value ?? null,
+              })
             }
             prefix="X"
             width={AXIS_FIELD_WIDTH}
@@ -146,7 +149,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               getMixedValue((pos) => pos.noteOffsetY, 0).value || undefined
             }
             onChange={(value) =>
-              onStylePropertyCommit?.({ noteOffsetY: value ?? null })
+              onStylePropertyCommit?.({
+                property: 'noteOffsetY',
+                value: value ?? null,
+              })
             }
             prefix="Y"
             width={AXIS_FIELD_WIDTH}
@@ -165,7 +171,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           <OptionalNumberInput
             value={noteWidthMixed.value}
             onChange={(value) =>
-              onStylePropertyCommit?.({ noteWidth: value ?? null })
+              onStylePropertyCommit?.({
+                property: 'noteWidth',
+                value: value ?? null,
+              })
             }
             suffix="px"
             min={1}
@@ -337,7 +346,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               ).value
             }
             onChange={(value) =>
-              onStylePropertyCommit?.({ noteBorderWidth: value })
+              onStylePropertyCommit?.({
+                property: 'noteBorderWidth',
+                value: value,
+              })
             }
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
@@ -363,7 +375,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               ).value
             }
             onChange={(value) =>
-              onStylePropertyCommit?.({ noteBorderRadius: value })
+              onStylePropertyCommit?.({
+                property: 'noteBorderRadius',
+                value: value,
+              })
             }
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
@@ -414,7 +429,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           <NumberInput
             value={getMixedValue((pos) => pos.noteGlowSize, 20).value}
             onChange={(value) => {
-              onStylePropertyCommit?.({ noteGlowSize: value });
+              onStylePropertyCommit?.({
+                property: 'noteGlowSize',
+                value: value,
+              });
             }}
             suffix="px"
             min={0}

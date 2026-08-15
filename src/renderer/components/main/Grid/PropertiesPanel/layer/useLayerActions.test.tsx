@@ -202,7 +202,7 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.patchPropertyViaAuthority).toHaveBeenCalledWith({
       elementType: 'stat',
       id: STABLE_ID,
-      patch: { hidden: false },
+      patch: { property: 'hidden', value: false },
     });
     expect(mocks.patchHidden).not.toHaveBeenCalled();
     expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
@@ -383,7 +383,7 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.patchPropertyViaAuthority).toHaveBeenCalledWith({
       elementType: 'graph',
       id: STABLE_ID,
-      patch: { layerName: null },
+      patch: { property: 'layerName', value: null },
     });
     expect(mocks.patchLayerName).not.toHaveBeenCalled();
     expect(mocks.updateKeyPositions).not.toHaveBeenCalled();

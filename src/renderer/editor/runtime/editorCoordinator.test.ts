@@ -379,65 +379,68 @@ const applyOpsForTest = (
       } else if (op.kind === 'patchElement') {
         record[mode] = positions.map((position, positionIndex) => {
           if (positionIndex !== index) return position;
-          if ('layerName' in op.patch) {
+          if (op.patch.property === 'layerName') {
             const updated = { ...position };
-            if (op.patch.layerName === null) delete updated.layerName;
-            else updated.layerName = op.patch.layerName;
+            if (op.patch.value === null) delete updated.layerName;
+            else updated.layerName = op.patch.value;
             return updated;
           }
-          if ('graphType' in op.patch) {
-            return { ...position, graphType: op.patch.graphType };
+          if (op.patch.property === 'graphType') {
+            return { ...position, graphType: op.patch.value };
           }
-          if ('graphColor' in op.patch) {
-            return { ...position, graphColor: op.patch.graphColor };
+          if (op.patch.property === 'graphColor') {
+            return { ...position, graphColor: op.patch.value };
           }
-          if ('showAvgLine' in op.patch) {
-            return { ...position, showAvgLine: op.patch.showAvgLine };
+          if (op.patch.property === 'showAvgLine') {
+            return { ...position, showAvgLine: op.patch.value };
           }
-          if ('graphAnimationEnabled' in op.patch) {
+          if (op.patch.property === 'graphAnimationEnabled') {
             return {
               ...position,
-              graphAnimationEnabled: op.patch.graphAnimationEnabled,
+              graphAnimationEnabled: op.patch.value,
             };
           }
-          if ('graphSpeed' in op.patch) {
-            return { ...position, graphSpeed: op.patch.graphSpeed };
+          if (op.patch.property === 'graphSpeed') {
+            return { ...position, graphSpeed: op.patch.value };
           }
-          if ('reverse' in op.patch) {
-            return { ...position, reverse: op.patch.reverse };
+          if (op.patch.property === 'reverse') {
+            return { ...position, reverse: op.patch.value };
           }
-          if ('sensitivity' in op.patch) {
-            return { ...position, sensitivity: op.patch.sensitivity };
+          if (op.patch.property === 'sensitivity') {
+            return { ...position, sensitivity: op.patch.value };
           }
-          if ('useInlineStyles' in op.patch) {
-            return { ...position, useInlineStyles: op.patch.useInlineStyles };
+          if (op.patch.property === 'axisId') {
+            return { ...position, axisId: op.patch.value };
           }
-          if ('fontWeight' in op.patch) {
-            return { ...position, fontWeight: op.patch.fontWeight };
+          if (op.patch.property === 'useInlineStyles') {
+            return { ...position, useInlineStyles: op.patch.value };
           }
-          if ('fontItalic' in op.patch) {
-            return { ...position, fontItalic: op.patch.fontItalic };
+          if (op.patch.property === 'fontWeight') {
+            return { ...position, fontWeight: op.patch.value };
           }
-          if ('fontUnderline' in op.patch) {
-            return { ...position, fontUnderline: op.patch.fontUnderline };
+          if (op.patch.property === 'fontItalic') {
+            return { ...position, fontItalic: op.patch.value };
           }
-          if ('fontStrikethrough' in op.patch) {
+          if (op.patch.property === 'fontUnderline') {
+            return { ...position, fontUnderline: op.patch.value };
+          }
+          if (op.patch.property === 'fontStrikethrough') {
             return {
               ...position,
-              fontStrikethrough: op.patch.fontStrikethrough,
+              fontStrikethrough: op.patch.value,
             };
           }
-          if ('fontFamily' in op.patch) {
-            return { ...position, fontFamily: op.patch.fontFamily };
+          if (op.patch.property === 'fontFamily') {
+            return { ...position, fontFamily: op.patch.value };
           }
-          if ('counterEnabled' in op.patch) {
+          if (op.patch.property === 'counterEnabled') {
             const counter = position.counter as Record<string, unknown>;
             return {
               ...position,
-              counter: { ...counter, enabled: op.patch.counterEnabled },
+              counter: { ...counter, enabled: op.patch.value },
             };
           }
-          if ('counterAnimationEnabled' in op.patch) {
+          if (op.patch.property === 'counterAnimationEnabled') {
             const counter = position.counter as Record<string, unknown>;
             const animation = counter.animation as Record<string, unknown>;
             return {
@@ -446,15 +449,15 @@ const applyOpsForTest = (
                 ...counter,
                 animation: {
                   ...animation,
-                  enabled: op.patch.counterAnimationEnabled,
+                  enabled: op.patch.value,
                 },
               },
             };
           }
-          if ('counterAnimationPreset' in op.patch) {
+          if (op.patch.property === 'counterAnimationPreset') {
             const counter = position.counter as Record<string, unknown>;
             const animation = counter.animation as Record<string, unknown>;
-            const intent = op.patch.counterAnimationPreset;
+            const intent = op.patch.value;
             return {
               ...position,
               counter: {
@@ -473,34 +476,39 @@ const applyOpsForTest = (
               },
             };
           }
-          if ('noteEffectEnabled' in op.patch) {
+          if (op.patch.property === 'noteEffectEnabled') {
             return {
               ...position,
-              noteEffectEnabled: op.patch.noteEffectEnabled,
+              noteEffectEnabled: op.patch.value,
             };
           }
-          if ('noteAutoYCorrection' in op.patch) {
+          if (op.patch.property === 'noteAutoYCorrection') {
             return {
               ...position,
-              noteAutoYCorrection: op.patch.noteAutoYCorrection,
+              noteAutoYCorrection: op.patch.value,
             };
           }
-          if ('noteGlowEnabled' in op.patch) {
+          if (op.patch.property === 'noteGlowEnabled') {
             return {
               ...position,
-              noteGlowEnabled: op.patch.noteGlowEnabled,
+              noteGlowEnabled: op.patch.value,
             };
           }
-          if ('noteAlignment' in op.patch) {
-            return { ...position, noteAlignment: op.patch.noteAlignment };
+          if (op.patch.property === 'noteAlignment') {
+            return { ...position, noteAlignment: op.patch.value };
           }
-          if ('noteBorderSide' in op.patch) {
-            return { ...position, noteBorderSide: op.patch.noteBorderSide };
+          if (op.patch.property === 'noteBorderSide') {
+            return { ...position, noteBorderSide: op.patch.value };
           }
-          if ('statType' in op.patch) {
-            return { ...position, statType: op.patch.statType };
+          if (op.patch.property === 'statType') {
+            return { ...position, statType: op.patch.value };
           }
-          return { ...position, hidden: op.patch.hidden };
+          // 미열거 속성은 구형 harness와 동일하게 hidden 슬롯만 갱신해
+          // 문서 차이를 만들고 applied 판정을 유지한다
+          return {
+            ...position,
+            hidden: op.patch.property === 'hidden' ? op.patch.value : undefined,
+          };
         });
       } else {
         record[mode] = positions.filter(
@@ -700,7 +708,7 @@ describe('editor document helpers', () => {
                 kind: 'patchElement',
                 elementType: 'key',
                 id: base.keyPositions['4key'][0].id!,
-                patch: { hidden: true },
+                patch: { property: 'hidden', value: true },
               },
             ])
           : harness.coordinator.commitGesture(
@@ -1425,7 +1433,8 @@ describe('EditorSaveCoordinator', () => {
       'gesture-ops',
       async (context) => {
         expect(context).toMatchObject({
-          editorOpsVersion: 1,
+          // 프론트만 승격되는 사고를 잡는 anchor - 상수 참조로 바꾸지 말 것
+          editorOpsVersion: 2,
           editorOps: [expect.objectContaining({ id })],
         });
         return {
@@ -3193,7 +3202,7 @@ describe('commitSemanticOpsInternal', () => {
     kind: 'patchElement',
     elementType: 'key',
     id,
-    patch: { hidden },
+    patch: { property: 'hidden', value: hidden },
   });
 
   it('fixed invalid ops는 Promise로 거절하고 transport start 전에 중단한다', async () => {
@@ -3243,7 +3252,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { layerName: 'After' },
+        patch: { property: 'layerName', value: 'After' },
       },
     ]);
     expect(
@@ -3255,7 +3264,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { layerName: null },
+        patch: { property: 'layerName', value: null },
       },
     ]);
     expect(outcome.document.keyPositions['4key'][0]).not.toHaveProperty(
@@ -3289,7 +3298,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'graph',
         id,
-        patch: { graphType: 'bar' as const },
+        patch: { property: 'graphType', value: 'bar' as const },
       } satisfies EditorOpV1,
     ]);
 
@@ -3322,7 +3331,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'stat',
         id,
-        patch: { statType: 'kpsAvg' },
+        patch: { property: 'statType', value: 'kpsAvg' },
       },
     ]);
 
@@ -3357,7 +3366,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'graph',
         id,
-        patch: { graphColor: '  custom  ' },
+        patch: { property: 'graphColor', value: '  custom  ' },
       },
     ]);
 
@@ -3371,55 +3380,64 @@ describe('commitSemanticOpsInternal', () => {
   });
 
   it.each([
-    [{ showAvgLine: true }],
-    [{ graphAnimationEnabled: false }],
-    [{ graphSpeed: 3200 }],
-  ] as const)('graph runtime patch %j는 해당 leaf만 바꾼다', async (patch) => {
-    const id = '00000000-0000-4000-8000-000000000097';
-    const base = makeDocument();
-    base.graphPositions = {
-      '4key': [
+    [{ property: 'showAvgLine', value: true }, { showAvgLine: true }],
+    [
+      { property: 'graphAnimationEnabled', value: false },
+      { graphAnimationEnabled: false },
+    ],
+    [{ property: 'graphSpeed', value: 3200 }, { graphSpeed: 3200 }],
+  ] as const)(
+    'graph runtime patch %j는 해당 leaf만 바꾼다',
+    async (patch, expected) => {
+      const id = '00000000-0000-4000-8000-000000000097';
+      const base = makeDocument();
+      base.graphPositions = {
+        '4key': [
+          {
+            ...createDefaultKeyPosition(),
+            id,
+            statType: 'kps',
+            graphType: 'line',
+            graphSpeed: 1000,
+            graphColor: '#before',
+            showAvgLine: false,
+            graphAnimationEnabled: true,
+          },
+        ],
+      };
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+
+      const outcome = await harness.coordinator.commitSemanticOpsInternal([
         {
-          ...createDefaultKeyPosition(),
+          kind: 'patchElement',
+          elementType: 'graph',
           id,
-          statType: 'kps',
-          graphType: 'line',
-          graphSpeed: 1000,
-          graphColor: '#before',
-          showAvgLine: false,
-          graphAnimationEnabled: true,
+          patch,
         },
-      ],
-    };
-    const harness = createHarness(base);
-    await harness.coordinator.start();
+      ]);
 
-    const outcome = await harness.coordinator.commitSemanticOpsInternal([
-      {
-        kind: 'patchElement',
-        elementType: 'graph',
+      expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
         id,
-        patch,
-      },
-    ]);
-
-    expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
-      id,
-      graphType: 'line',
-      graphColor: '#before',
-      ...patch,
-    });
-    harness.coordinator.stop();
-  });
+        graphType: 'line',
+        graphColor: '#before',
+        ...expected,
+      });
+      harness.coordinator.stop();
+    },
+  );
 
   it.each([
-    [{ reverse: true }, { sensitivity: 1, reverse: true, axisId: 'HIDA:test' }],
     [
-      { sensitivity: 2.5 },
+      { property: 'reverse', value: true },
+      { sensitivity: 1, reverse: true, axisId: 'HIDA:test' },
+    ],
+    [
+      { property: 'sensitivity', value: 2.5 },
       { sensitivity: 2.5, reverse: false, axisId: 'HIDA:test' },
     ],
     [
-      { axisId: '  HIDA:raw  ' },
+      { property: 'axisId', value: '  HIDA:raw  ' },
       { sensitivity: 1, reverse: false, axisId: '  HIDA:raw  ' },
     ],
   ] as const)(
@@ -3496,37 +3514,37 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'graph',
         id: graphIds[0],
-        patch: { showAvgLine: true },
+        patch: { property: 'showAvgLine', value: true },
       },
       {
         kind: 'patchElement',
         elementType: 'graph',
         id: graphIds[1],
-        patch: { graphAnimationEnabled: false },
+        patch: { property: 'graphAnimationEnabled', value: false },
       },
       {
         kind: 'patchElement',
         elementType: 'graph',
         id: graphIds[2],
-        patch: { graphSpeed: 3200 },
+        patch: { property: 'graphSpeed', value: 3200 },
       },
       {
         kind: 'patchElement',
         elementType: 'knob',
         id: knobIds[0],
-        patch: { reverse: true },
+        patch: { property: 'reverse', value: true },
       },
       {
         kind: 'patchElement',
         elementType: 'knob',
         id: knobIds[1],
-        patch: { sensitivity: 2.5 },
+        patch: { property: 'sensitivity', value: 2.5 },
       },
       {
         kind: 'patchElement',
         elementType: 'knob',
         id: knobIds[2],
-        patch: { axisId: '  HIDA:raw  ' },
+        patch: { property: 'axisId', value: '  HIDA:raw  ' },
       },
     ];
     const harness = createHarness(base);
@@ -3571,7 +3589,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { useInlineStyles: false },
+      patch: { property: 'useInlineStyles', value: false },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -3623,25 +3641,25 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[0],
-        patch: { fontWeight: 700 },
+        patch: { property: 'fontWeight', value: 700 },
       },
       {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[1],
-        patch: { fontItalic: false },
+        patch: { property: 'fontItalic', value: false },
       },
       {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[2],
-        patch: { fontUnderline: false },
+        patch: { property: 'fontUnderline', value: false },
       },
       {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[3],
-        patch: { fontStrikethrough: false },
+        patch: { property: 'fontStrikethrough', value: false },
       },
     ];
     const harness = createHarness(base);
@@ -3682,7 +3700,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { fontFamily: '  Raw Family  ' },
+      patch: { property: 'fontFamily', value: '  Raw Family  ' },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -3721,7 +3739,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { displayText: '  Raw label  ' },
+      patch: { property: 'displayText', value: '  Raw label  ' },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -3776,7 +3794,8 @@ describe('commitSemanticOpsInternal', () => {
           elementType: 'key',
           id,
           patch: {
-            backgroundPaint: { color: '#next', gradient: null },
+            property: 'backgroundPaint',
+            value: { color: '#next', gradient: null },
           },
         },
       ]);
@@ -3811,7 +3830,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { shadowEnabled: true },
+        patch: { property: 'shadowEnabled', value: true },
       },
     ]);
 
@@ -3848,7 +3867,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { className: '  Raw class  ' },
+      patch: { property: 'className', value: '  Raw class  ' },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -3896,10 +3915,10 @@ describe('commitSemanticOpsInternal', () => {
         id,
         patch:
           property === 'borderWidth'
-            ? { borderWidth: value }
+            ? { property: 'borderWidth', value }
             : property === 'borderRadius'
-            ? { borderRadius: value }
-            : { fontSize: value },
+            ? { property: 'borderRadius', value }
+            : { property: 'fontSize', value },
       };
       const harness = createHarness(base);
       await harness.coordinator.start();
@@ -3930,7 +3949,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { inactiveImage: '  /tmp/raw.png  ' },
+      patch: { property: 'inactiveImage', value: '  /tmp/raw.png  ' },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -3969,7 +3988,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { soundPath: '  sounds/raw.wav  ' },
+      patch: { property: 'soundPath', value: '  sounds/raw.wav  ' },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -4008,7 +4027,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { soundEnabled: true },
+      patch: { property: 'soundEnabled', value: true },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -4046,7 +4065,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { soundVolume: 100 },
+      patch: { property: 'soundVolume', value: 100 },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -4084,7 +4103,7 @@ describe('commitSemanticOpsInternal', () => {
       kind: 'patchElement',
       elementType: 'key',
       id,
-      patch: { activeImage: '  /tmp/raw active.png  ' },
+      patch: { property: 'activeImage', value: '  /tmp/raw active.png  ' },
     };
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -4128,7 +4147,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { idleTransparent: true },
+        patch: { property: 'idleTransparent', value: true },
       },
     ]);
     expect(applied.document.keyPositions['4key'][0]).toMatchObject({
@@ -4150,7 +4169,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { idleTransparent: true },
+        patch: { property: 'idleTransparent', value: true },
       },
     ]);
     expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
@@ -4179,7 +4198,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { activeImageFit: 'fill' },
+        patch: { property: 'activeImageFit', value: 'fill' },
       },
     ]);
     expect(applied.document.keyPositions['4key'][0]).toMatchObject({
@@ -4219,7 +4238,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { counterEnabled: false },
+        patch: { property: 'counterEnabled', value: false },
       },
     ]);
     const toggled = await harness.coordinator.commitSemanticOpsInternal([
@@ -4227,7 +4246,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { counterAnimationEnabled: true },
+        patch: { property: 'counterAnimationEnabled', value: true },
       },
     ]);
     expect(
@@ -4250,7 +4269,8 @@ describe('commitSemanticOpsInternal', () => {
         elementType: 'key',
         id,
         patch: {
-          counterAnimationPreset: {
+          property: 'counterAnimationPreset',
+          value: {
             presetId: 'preset-a',
             scale: 1.4,
           },
@@ -4273,7 +4293,8 @@ describe('commitSemanticOpsInternal', () => {
         elementType: 'key',
         id,
         patch: {
-          counterAnimationPreset: {
+          property: 'counterAnimationPreset',
+          value: {
             presetId: 'preset-a',
             applyPresetId: true as const,
           },
@@ -4289,10 +4310,19 @@ describe('commitSemanticOpsInternal', () => {
   it('counter layout 4 leaf projection은 각 필드만 적용하고 raw siblings를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000cb';
     for (const [patch, expected] of [
-      [{ counterPlacement: 'outside' as const }, { placement: 'outside' }],
-      [{ counterAlign: 'right' as const }, { align: 'right' }],
-      [{ counterAlignMode: 'center' as const }, { alignMode: 'center' }],
-      [{ counterGap: 4_294_967_295 }, { gap: 4_294_967_295 }],
+      [
+        { property: 'counterPlacement', value: 'outside' },
+        { placement: 'outside' },
+      ],
+      [{ property: 'counterAlign', value: 'right' }, { align: 'right' }],
+      [
+        { property: 'counterAlignMode', value: 'center' },
+        { alignMode: 'center' },
+      ],
+      [
+        { property: 'counterGap', value: 4_294_967_295 },
+        { gap: 4_294_967_295 },
+      ],
     ] as const) {
       const base = withStableId(id);
       base.keyPositions['4key'][0] = {
@@ -4321,11 +4351,17 @@ describe('commitSemanticOpsInternal', () => {
   it('counter typography 5 leaf projection은 각 필드만 적용하고 raw siblings를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000cc';
     for (const [patch, expected] of [
-      [{ counterFontSize: 72 }, { fontSize: 72 }],
-      [{ counterFontWeight: 900 }, { fontWeight: 900 }],
-      [{ counterFontItalic: true }, { fontItalic: true }],
-      [{ counterFontUnderline: true }, { fontUnderline: true }],
-      [{ counterFontStrikethrough: true }, { fontStrikethrough: true }],
+      [{ property: 'counterFontSize', value: 72 }, { fontSize: 72 }],
+      [{ property: 'counterFontWeight', value: 900 }, { fontWeight: 900 }],
+      [{ property: 'counterFontItalic', value: true }, { fontItalic: true }],
+      [
+        { property: 'counterFontUnderline', value: true },
+        { fontUnderline: true },
+      ],
+      [
+        { property: 'counterFontStrikethrough', value: true },
+        { fontStrikethrough: true },
+      ],
     ] as const) {
       const base = withStableId(id);
       base.keyPositions['4key'][0] = {
@@ -4373,7 +4409,10 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { counterFontFamily: '  Raw Counter Family  ' },
+        patch: {
+          property: 'counterFontFamily',
+          value: '  Raw Counter Family  ',
+        },
       },
     ]);
 
@@ -4391,8 +4430,11 @@ describe('commitSemanticOpsInternal', () => {
   });
 
   it.each([
-    [{ counterStrokeIdle: '  raw idle  ' }, { idle: '  raw idle  ' }],
-    [{ counterStrokeActive: '' }, { active: '' }],
+    [
+      { property: 'counterStrokeIdle', value: '  raw idle  ' },
+      { idle: '  raw idle  ' },
+    ],
+    [{ property: 'counterStrokeActive', value: '' }, { active: '' }],
   ] as const)(
     'counter stroke projection은 한 nested leaf만 바꾸고 raw siblings를 보존한다',
     async (patch, expected) => {
@@ -4448,11 +4490,11 @@ describe('commitSemanticOpsInternal', () => {
     };
     base.keys = { '4key': ['A', 'B', 'C', 'D', 'E'] };
     const patches: EditorNotePropertyPatchV1[] = [
-      { noteEffectEnabled: false },
-      { noteAutoYCorrection: false },
-      { noteGlowEnabled: true },
-      { noteAlignment: 'right' as const },
-      { noteBorderSide: 'horizontal' as const },
+      { property: 'noteEffectEnabled', value: false },
+      { property: 'noteAutoYCorrection', value: false },
+      { property: 'noteGlowEnabled', value: true },
+      { property: 'noteAlignment', value: 'right' as const },
+      { property: 'noteBorderSide', value: 'horizontal' as const },
     ];
     const ops: EditorOpV1[] = patches.map((patch, index) => ({
       kind: 'patchElement',
@@ -4468,7 +4510,7 @@ describe('commitSemanticOpsInternal', () => {
     expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
     outcome.document.keyPositions['4key'].forEach((position, index) => {
       expect(position).toMatchObject({
-        ...patches[index],
+        [patches[index].property]: patches[index].value,
         noteColor: '#sentinel',
         noteGlowSize: 27,
       });
@@ -4499,7 +4541,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { noteGlowSize: 20.5 },
+        patch: { property: 'noteGlowSize', value: 20.5 },
       },
     ]);
 
@@ -4534,11 +4576,11 @@ describe('commitSemanticOpsInternal', () => {
     };
     base.keys = { '4key': ids.map(() => 'A') };
     const patches = [
-      { noteOffsetX: null },
-      { noteOffsetY: 0 },
-      { noteWidth: null },
-      { noteBorderWidth: 3.5 },
-      { noteBorderRadius: 12.5 },
+      { property: 'noteOffsetX', value: null },
+      { property: 'noteOffsetY', value: 0 },
+      { property: 'noteWidth', value: null },
+      { property: 'noteBorderWidth', value: 3.5 },
+      { property: 'noteBorderRadius', value: 12.5 },
     ] as const;
     const ops: EditorOpV1[] = patches.map((patch, index) => ({
       kind: 'patchElement',
@@ -4592,21 +4634,25 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[0],
-        patch: { notePaint: { opacity: 99 } },
+        patch: { property: 'notePaint', value: { opacity: 99 } },
       },
       {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[1],
         patch: {
-          noteGlowPaint: { opacity: 66, opacityTop: 55, opacityBottom: 44 },
+          property: 'noteGlowPaint',
+          value: { opacity: 66, opacityTop: 55, opacityBottom: 44 },
         },
       },
       {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[2],
-        patch: { noteBorderPaint: { color: '#A0B1C2', opacity: 77 } },
+        patch: {
+          property: 'noteBorderPaint',
+          value: { color: '#A0B1C2', opacity: 77 },
+        },
       },
     ];
     const harness = createHarness(base);
@@ -4670,7 +4716,10 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { counterFillIdle: { color: ' solid final ' } },
+        patch: {
+          property: 'counterFillIdle',
+          value: { color: ' solid final ' },
+        },
       },
     ]);
 
@@ -4702,7 +4751,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { fontColor: '  idle raw  ' },
+        patch: { property: 'fontColor', value: '  idle raw  ' },
       },
     ]);
 
@@ -4741,7 +4790,7 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { fontColor: 'new-idle' },
+        patch: { property: 'fontColor', value: 'new-idle' },
       },
     ]);
 

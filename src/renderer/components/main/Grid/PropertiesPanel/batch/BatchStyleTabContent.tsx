@@ -37,6 +37,7 @@ import { usePanelNav } from '../PanelNavContext';
 import BatchGeometrySection from './BatchGeometrySection';
 import ShadowControls from '../ShadowControls';
 import {
+  elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
@@ -302,13 +303,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     _shadow: ElementShadowSpec,
     patch: Partial<ElementShadowSpec>,
   ) => {
-    onShadowCommit?.({
-      [state === 'active' ? 'activeShadow' : 'shadow']: patch,
-    } as EditorShadowPropertyPatchV1);
+    const leaf = elementShadowLeafFromPartial(patch);
+    if (!leaf) return;
+    onShadowCommit?.(
+      state === 'active'
+        ? { property: 'activeShadow', value: leaf }
+        : { property: 'shadow', value: leaf },
+    );
   };
 
   const handleShadowEnabledChange = (enabled: boolean) => {
-    onShadowCommit?.({ shadowEnabled: enabled });
+    onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
   };
 
   // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
@@ -432,11 +437,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value
             }
             onModeCommit={(state, modeValue) =>
-              onPaintCommit?.({
-                [state === 'active'
-                  ? 'activeBackgroundPaint'
-                  : 'backgroundPaint']: paintDescriptor(modeValue),
-              } as EditorPaintPropertyPatchV1)
+              onPaintCommit?.(
+                state === 'active'
+                  ? {
+                      property: 'activeBackgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    }
+                  : {
+                      property: 'backgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    },
+              )
             }
           />
         </PropertyRow>
@@ -494,10 +505,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value
             }
             onModeCommit={(state, modeValue) =>
-              onPaintCommit?.({
-                [state === 'active' ? 'activeBorderPaint' : 'borderPaint']:
-                  paintDescriptor(modeValue),
-              } as EditorPaintPropertyPatchV1)
+              onPaintCommit?.(
+                state === 'active'
+                  ? {
+                      property: 'activeBorderPaint',
+                      value: paintDescriptor(modeValue),
+                    }
+                  : {
+                      property: 'borderPaint',
+                      value: paintDescriptor(modeValue),
+                    },
+              )
             }
           />
         </PropertyRow>
@@ -518,10 +536,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value
             }
             onChange={(value) =>
-              onStylePropertyCommit?.({ borderWidth: value })
+              onStylePropertyCommit?.({ property: 'borderWidth', value: value })
             }
             onPreview={(value) =>
-              onStylePropertyPreview?.({ borderWidth: value })
+              onStylePropertyPreview?.({
+                property: 'borderWidth',
+                value: value,
+              })
             }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
@@ -544,10 +565,16 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 .value
             }
             onChange={(value) =>
-              onStylePropertyCommit?.({ borderRadius: value })
+              onStylePropertyCommit?.({
+                property: 'borderRadius',
+                value: value,
+              })
             }
             onPreview={(value) =>
-              onStylePropertyPreview?.({ borderRadius: value })
+              onStylePropertyPreview?.({
+                property: 'borderRadius',
+                value: value,
+              })
             }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
@@ -611,10 +638,16 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <TextInput
                     value={isMixed ? '' : displayTextValue}
                     onChange={(v) =>
-                      onStylePropertyCommit?.({ displayText: v })
+                      onStylePropertyCommit?.({
+                        property: 'displayText',
+                        value: v,
+                      })
                     }
                     onPreview={(v) =>
-                      onStylePropertyPreview?.({ displayText: v })
+                      onStylePropertyPreview?.({
+                        property: 'displayText',
+                        value: v,
+                      })
                     }
                     onCancel={() => editGestureController.cancel()}
                     placeholder={isMixed ? 'Mixed' : value}
@@ -655,10 +688,16 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 <NumberInput
                   value={getMixedValue((pos) => pos.fontSize, 14).value}
                   onChange={(value) =>
-                    onStylePropertyCommit?.({ fontSize: value })
+                    onStylePropertyCommit?.({
+                      property: 'fontSize',
+                      value: value,
+                    })
                   }
                   onPreview={(value) =>
-                    onStylePropertyPreview?.({ fontSize: value })
+                    onStylePropertyPreview?.({
+                      property: 'fontSize',
+                      value: value,
+                    })
                   }
                   onCancel={() => editGestureController.cancel()}
                   suffix="px"
@@ -705,15 +744,18 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   onChange={(color) =>
                     onFontColorPreview?.(
                       effectiveColorState === 'active'
-                        ? { activeFontColor: color }
-                        : { fontColor: color },
+                        ? { property: 'activeFontColor', value: color }
+                        : { property: 'fontColor', value: color },
                     )
                   }
                   onChangeComplete={(color) =>
-                    onFontColorCommit?.({ fontColor: color })
+                    onFontColorCommit?.({ property: 'fontColor', value: color })
                   }
                   onActiveChangeComplete={(color) =>
-                    onFontColorCommit?.({ activeFontColor: color })
+                    onFontColorCommit?.({
+                      property: 'activeFontColor',
+                      value: color,
+                    })
                   }
                   panelElement={panelElement}
                 />
@@ -767,7 +809,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   false,
                 ).value;
                 onElementPropertyCommit?.({
-                  useInlineStyles: !currentValue,
+                  property: 'useInlineStyles',
+                  value: !currentValue,
                 });
               }}
             />
@@ -782,10 +825,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   : getMixedValue((pos) => pos.className, '').value
               }
               onChange={(value) =>
-                onStylePropertyCommit?.({ className: value })
+                onStylePropertyCommit?.({ property: 'className', value: value })
               }
               onPreview={(value) =>
-                onStylePropertyPreview?.({ className: value })
+                onStylePropertyPreview?.({
+                  property: 'className',
+                  value: value,
+                })
               }
               onCancel={() => editGestureController.cancel()}
               placeholder={
@@ -881,7 +927,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
             onFontSelect={(fontName) => {
               if (fontName !== null) {
-                onElementPropertyCommit?.({ fontFamily: fontName });
+                onElementPropertyCommit?.({
+                  property: 'fontFamily',
+                  value: fontName,
+                });
               }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}

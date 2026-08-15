@@ -474,7 +474,7 @@ describe('setMixedLayerGroupHidden', () => {
         kind: 'patchElement',
         elementType: 'key',
         id: KEY_ID,
-        patch: { hidden: true },
+        patch: { property: 'hidden', value: true },
       },
     ]);
     expect(request.pluginChanges).toEqual([

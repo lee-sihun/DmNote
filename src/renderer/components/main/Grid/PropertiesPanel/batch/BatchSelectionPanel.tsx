@@ -6,7 +6,7 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import { paintPropertyFields, type PaintDescriptorV1 } from '@src/types/color';
+import { paintPropertyFields } from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
@@ -92,6 +92,10 @@ import type {
   EditorElementPropertyPatchV1,
 } from '@src/types/editor';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
+import {
+  previewBatchFontColor,
+  previewBatchStyleProperty,
+} from '../previewPatchForwarders';
 import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
@@ -117,31 +121,8 @@ const createStylePropertyHandlers = (
     };
   }
   return {
-    previewStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) => {
-      const grouped = new Map<
-        'key' | 'stat' | 'graph' | 'knob',
-        Array<{ index: number; patch: EditorPreviewStylePropertyPatchV1 }>
-      >();
-      for (const target of stableTargets) {
-        const locator = resolveElementById(target.elementType, target.id);
-        if (!locator || locator.mode !== selectedKeyType) return;
-        const entries = grouped.get(target.elementType) ?? [];
-        entries.push({ index: locator.index, patch });
-        grouped.set(target.elementType, entries);
-      }
-      for (const [type, entries] of grouped) {
-        editGestureController.preview(selectedKeyType, entries, {
-          domain:
-            type === 'key'
-              ? 'keyPosition'
-              : type === 'stat'
-              ? 'statPosition'
-              : type === 'graph'
-              ? 'graphPosition'
-              : 'knobPosition',
-        });
-      }
-    },
+    previewStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) =>
+      previewBatchStyleProperty(stableTargets, selectedKeyType, patch),
     commitStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) => {
       const gestureId = options.settleGesture
         ? editGestureController.activeGestureId() ?? undefined
@@ -159,12 +140,8 @@ const createStylePropertyHandlers = (
 };
 
 const paintPatchDetails = (patch: EditorPaintPropertyPatchV1) => {
-  const field = Object.keys(patch)[0] as
-    | 'backgroundPaint'
-    | 'activeBackgroundPaint'
-    | 'borderPaint'
-    | 'activeBorderPaint';
-  const descriptor = patch[field] as PaintDescriptorV1;
+  const field = patch.property;
+  const descriptor = patch.value;
   const { active, background } = paintPropertyFields(field);
   return {
     field,
@@ -212,7 +189,7 @@ const createFontColorHandlers = (
   selectedKeyType: string,
 ) => {
   const relevantTargets = (patch: EditorFontColorPropertyPatchV1) =>
-    'activeFontColor' in patch
+    patch.property === 'activeFontColor'
       ? targets.filter(
           ({ elementType }) => elementType === 'key' || elementType === 'knob',
         )
@@ -229,34 +206,12 @@ const createFontColorHandlers = (
     previewFontColor: (patch: EditorFontColorPropertyPatchV1) => {
       const stable = stableTargets(patch);
       if (!stable) return;
-      const grouped = new Map<
-        'key' | 'stat' | 'graph' | 'knob',
-        Array<{ index: number; patch: EditorFontColorPropertyPatchV1 }>
-      >();
-      for (const target of stable) {
-        const locator = resolveElementById(target.elementType, target.id);
-        if (!locator || locator.mode !== selectedKeyType) return;
-        const entries = grouped.get(target.elementType) ?? [];
-        entries.push({ index: locator.index, patch });
-        grouped.set(target.elementType, entries);
-      }
-      for (const [type, entries] of grouped) {
-        editGestureController.preview(selectedKeyType, entries, {
-          domain:
-            type === 'key'
-              ? 'keyPosition'
-              : type === 'stat'
-              ? 'statPosition'
-              : type === 'graph'
-              ? 'graphPosition'
-              : 'knobPosition',
-        });
-      }
+      previewBatchFontColor(stable, selectedKeyType, patch);
     },
     commitFontColor: (patch: EditorFontColorPropertyPatchV1) => {
       const stable = stableTargets(patch);
       if (!stable) return;
-      const active = 'activeFontColor' in patch;
+      const active = patch.property === 'activeFontColor';
       const gestureId = active
         ? undefined
         : editGestureController.activeGestureId() ?? undefined;
@@ -283,7 +238,7 @@ const createShadowCommitHandler =
   ) =>
   (patch: EditorShadowPropertyPatchV1) => {
     const relevant =
-      'activeShadow' in patch
+      patch.property === 'activeShadow'
         ? targets.filter(({ elementType }) => elementType !== 'stat')
         : targets;
     const stable =
@@ -1473,16 +1428,20 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   batchPickerFor === 'noteColor' &&
                   typeof color === 'string'
                 ) {
-                  previewNotePaint({ notePaint: { color } });
+                  previewNotePaint({ property: 'notePaint', value: { color } });
                 } else if (
                   batchPickerFor === 'glowColor' &&
                   typeof color === 'string'
                 ) {
-                  previewNotePaint({ noteGlowPaint: { color } });
+                  previewNotePaint({
+                    property: 'noteGlowPaint',
+                    value: { color },
+                  });
                 } else if (batchPickerFor === 'borderColor') {
                   const raw = typeof color === 'string' ? color : undefined;
                   previewNotePaint({
-                    noteBorderPaint: {
+                    property: 'noteBorderPaint',
+                    value: {
                       color: toRgbHexColor(raw),
                       opacity: parseAlphaPercent(
                         raw,
@@ -1554,13 +1513,19 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     ...prev,
                     noteOpacity: value,
                   }));
-                  previewNotePaint?.({ notePaint: { opacity: value } });
+                  previewNotePaint?.({
+                    property: 'notePaint',
+                    value: { opacity: value },
+                  });
                 } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     glowOpacity: value,
                   }));
-                  previewNotePaint?.({ noteGlowPaint: { opacity: value } });
+                  previewNotePaint?.({
+                    property: 'noteGlowPaint',
+                    value: { opacity: value },
+                  });
                 }
               }}
               onOpacityPercentChangeComplete={(value: number) => {
@@ -1570,7 +1535,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     noteOpacity: value,
                   }));
                   if (commitNotePaint) {
-                    commitNotePaint({ notePaint: { opacity: value } });
+                    commitNotePaint({
+                      property: 'notePaint',
+                      value: { opacity: value },
+                    });
                   }
                 } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
@@ -1578,7 +1546,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     glowOpacity: value,
                   }));
                   if (commitNotePaint) {
-                    commitNotePaint({ noteGlowPaint: { opacity: value } });
+                    commitNotePaint({
+                      property: 'noteGlowPaint',
+                      value: { opacity: value },
+                    });
                   }
                 }
               }}

@@ -185,6 +185,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
+import { previewSingleStyleProperty } from './PropertiesPanel/previewPatchForwarders';
 import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
@@ -243,13 +244,16 @@ const getGraphRuntimePropertyPatch = (
   const keys = Object.keys(updates);
   if (keys.length !== 1) return null;
   if (keys[0] === 'showAvgLine' && typeof updates.showAvgLine === 'boolean') {
-    return { showAvgLine: updates.showAvgLine };
+    return { property: 'showAvgLine', value: updates.showAvgLine };
   }
   if (
     keys[0] === 'graphAnimationEnabled' &&
     typeof updates.graphAnimationEnabled === 'boolean'
   ) {
-    return { graphAnimationEnabled: updates.graphAnimationEnabled };
+    return {
+      property: 'graphAnimationEnabled',
+      value: updates.graphAnimationEnabled,
+    };
   }
   if (
     keys[0] === 'graphSpeed' &&
@@ -257,7 +261,7 @@ const getGraphRuntimePropertyPatch = (
     (updates.graphSpeed as number) >= 0 &&
     (updates.graphSpeed as number) <= 4_294_967_295
   ) {
-    return { graphSpeed: updates.graphSpeed as number };
+    return { property: 'graphSpeed', value: updates.graphSpeed as number };
   }
   return null;
 };
@@ -268,14 +272,14 @@ const getKnobRuntimePropertyPatch = (
   const keys = Object.keys(updates);
   if (keys.length !== 1) return null;
   if (keys[0] === 'reverse' && typeof updates.reverse === 'boolean') {
-    return { reverse: updates.reverse };
+    return { property: 'reverse', value: updates.reverse };
   }
   if (
     keys[0] === 'sensitivity' &&
     typeof updates.sensitivity === 'number' &&
     Number.isFinite(updates.sensitivity)
   ) {
-    return { sensitivity: updates.sensitivity };
+    return { property: 'sensitivity', value: updates.sensitivity };
   }
   return null;
 };
@@ -302,22 +306,22 @@ const getFontStylePatch = (
     (values.fontWeight as number) >= 0 &&
     (values.fontWeight as number) <= 4_294_967_295
   ) {
-    return { fontWeight: values.fontWeight as number };
+    return { property: 'fontWeight', value: values.fontWeight as number };
   }
   if (keys[0] === 'fontItalic' && typeof values.fontItalic === 'boolean') {
-    return { fontItalic: values.fontItalic };
+    return { property: 'fontItalic', value: values.fontItalic };
   }
   if (
     keys[0] === 'fontUnderline' &&
     typeof values.fontUnderline === 'boolean'
   ) {
-    return { fontUnderline: values.fontUnderline };
+    return { property: 'fontUnderline', value: values.fontUnderline };
   }
   if (
     keys[0] === 'fontStrikethrough' &&
     typeof values.fontStrikethrough === 'boolean'
   ) {
-    return { fontStrikethrough: values.fontStrikethrough };
+    return { property: 'fontStrikethrough', value: values.fontStrikethrough };
   }
   return null;
 };
@@ -330,7 +334,7 @@ const getFontFamilyPatch = (
   return keys.length === 1 &&
     keys[0] === 'fontFamily' &&
     typeof values.fontFamily === 'string'
-    ? { fontFamily: values.fontFamily }
+    ? { property: 'fontFamily', value: values.fontFamily }
     : null;
 };
 
@@ -344,26 +348,30 @@ const getNotePropertyPatch = (
     keys[0] === 'noteEffectEnabled' &&
     typeof values.noteEffectEnabled === 'boolean'
   ) {
-    return { noteEffectEnabled: values.noteEffectEnabled };
+    return { property: 'noteEffectEnabled', value: values.noteEffectEnabled };
   }
   if (
     keys[0] === 'noteAutoYCorrection' &&
     typeof values.noteAutoYCorrection === 'boolean'
   ) {
-    return { noteAutoYCorrection: values.noteAutoYCorrection };
+    return {
+      property: 'noteAutoYCorrection',
+      value: values.noteAutoYCorrection,
+    };
   }
   if (
     keys[0] === 'noteGlowEnabled' &&
     typeof values.noteGlowEnabled === 'boolean'
   ) {
-    return { noteGlowEnabled: values.noteGlowEnabled };
+    return { property: 'noteGlowEnabled', value: values.noteGlowEnabled };
   }
   if (
     keys[0] === 'noteAlignment' &&
     ['left', 'center', 'right'].includes(values.noteAlignment as string)
   ) {
     return {
-      noteAlignment: values.noteAlignment as 'left' | 'center' | 'right',
+      property: 'noteAlignment',
+      value: values.noteAlignment as 'left' | 'center' | 'right',
     };
   }
   if (
@@ -371,10 +379,8 @@ const getNotePropertyPatch = (
     ['all', 'vertical', 'horizontal'].includes(values.noteBorderSide as string)
   ) {
     return {
-      noteBorderSide: values.noteBorderSide as
-        | 'all'
-        | 'vertical'
-        | 'horizontal',
+      property: 'noteBorderSide',
+      value: values.noteBorderSide as 'all' | 'vertical' | 'horizontal',
     };
   }
   return null;
@@ -1036,7 +1042,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (stableTarget && isNativeElementId(stableTarget.id)) {
       const target = {
         ...stableTarget,
-        patch: { layerName: newLayerName },
+        patch: { property: 'layerName', value: newLayerName },
       } as const;
       try {
         if (window.__dmn_window_type === 'panel') {
@@ -1045,7 +1051,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           await patchElementLayerNameById(
             target.elementType,
             target.id,
-            target.patch.layerName,
+            target.patch.value,
           );
         }
       } catch (error) {
@@ -1582,7 +1588,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ? patchNativeLayerPropertyViaAuthority({
                   elementType: type,
                   id,
-                  patch: { inactiveImage },
+                  patch: { property: 'inactiveImage', value: inactiveImage },
                 })
               : patchInactiveImageById(type, id, inactiveImage);
           void persisted.catch((error) => {
@@ -1602,7 +1608,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ? patchNativeLayerPropertyViaAuthority({
                   elementType: type,
                   id,
-                  patch: { activeImage },
+                  patch: { property: 'activeImage', value: activeImage },
                 })
               : patchActiveImageById(type, id, activeImage);
           void persisted.catch((error) => {
@@ -1622,7 +1628,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ? patchNativeLayerPropertyViaAuthority({
                   elementType: type,
                   id,
-                  patch: { idleTransparent },
+                  patch: {
+                    property: 'idleTransparent',
+                    value: idleTransparent,
+                  },
                 })
               : patchIdleTransparentById(type, id, idleTransparent);
           void persisted.catch((error) => {
@@ -1642,7 +1651,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ? patchNativeLayerPropertyViaAuthority({
                   elementType: type,
                   id,
-                  patch: { activeTransparent },
+                  patch: {
+                    property: 'activeTransparent',
+                    value: activeTransparent,
+                  },
                 })
               : patchActiveTransparentById(type, id, activeTransparent);
           void persisted.catch((error) => {
@@ -1662,7 +1674,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ? patchNativeLayerPropertyViaAuthority({
                   elementType: type,
                   id,
-                  patch: { idleImageFit },
+                  patch: { property: 'idleImageFit', value: idleImageFit },
                 })
               : patchIdleImageFitById(type, id, idleImageFit);
           void persisted.catch((error) => {
@@ -1682,7 +1694,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ? patchNativeLayerPropertyViaAuthority({
                   elementType: type,
                   id,
-                  patch: { activeImageFit },
+                  patch: { property: 'activeImageFit', value: activeImageFit },
                 })
               : patchActiveImageFitById(type, id, activeImageFit);
           void persisted.catch((error) => {
@@ -1738,24 +1750,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id: string | undefined,
   ) =>
     id && isNativeElementId(id)
-      ? (patch: EditorPreviewStylePropertyPatchV1) => {
-          const locator = resolveElementById(type, id);
-          if (!locator) return;
-          editGestureController.preview(
-            locator.mode,
-            [{ index: locator.index, patch }],
-            {
-              domain:
-                type === 'key'
-                  ? 'keyPosition'
-                  : type === 'stat'
-                  ? 'statPosition'
-                  : type === 'graph'
-                  ? 'graphPosition'
-                  : 'knobPosition',
-            },
-          );
-        }
+      ? (patch: EditorPreviewStylePropertyPatchV1) =>
+          previewSingleStyleProperty(type, id, patch)
       : undefined;
 
   const stableStylePropertyCommitHandler = (
@@ -2980,16 +2976,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     if (batchPickerFor === 'noteColor') {
-      onNotePaintCommit?.({ notePaint: { color: newColor } });
+      onNotePaintCommit?.({
+        property: 'notePaint',
+        value: { color: newColor },
+      });
     } else if (batchPickerFor === 'glowColor') {
-      onNotePaintCommit?.({ noteGlowPaint: { color: newColor } });
+      onNotePaintCommit?.({
+        property: 'noteGlowPaint',
+        value: { color: newColor },
+      });
     } else if (batchPickerFor === 'borderColor') {
       // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화(이슈 #73), 알파는 noteBorderOpacity로 분리
       const raw = typeof newColor === 'string' ? newColor : undefined;
       const solidColor = toRgbHexColor(raw);
       const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
       onNotePaintCommit?.({
-        noteBorderPaint: { color: solidColor, opacity },
+        property: 'noteBorderPaint',
+        value: { color: solidColor, opacity },
       });
     } else if (batchPickerFor === 'fill') {
       return;
@@ -3013,8 +3016,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         targets.every(({ id }) => id.length > 0 && isNativeElementId(id));
       if (!stableTargets) return;
       const patch: EditorCounterStrokePropertyPatchV1 = active
-        ? { counterStrokeActive: strokeColor }
-        : { counterStrokeIdle: strokeColor };
+        ? { property: 'counterStrokeActive', value: strokeColor }
+        : { property: 'counterStrokeIdle', value: strokeColor };
       const persisted =
         window.__dmn_window_type === 'panel'
           ? patchCounterStrokeViaAuthority(targets, patch)
@@ -3039,8 +3042,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setBatchLocalColors((prev) => ({ ...prev, [key]: newColor }));
     onCounterFillCommit(
       effectiveBatchCounterColorState === 'active'
-        ? { counterFillActive: { color: newColor } }
-        : { counterFillIdle: { color: newColor } },
+        ? { property: 'counterFillActive', value: { color: newColor } }
+        : { property: 'counterFillIdle', value: { color: newColor } },
     );
   };
 

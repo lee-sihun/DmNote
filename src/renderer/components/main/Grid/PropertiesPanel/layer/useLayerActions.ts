@@ -177,7 +177,7 @@ export function useLayerActions({
           await patchNativeLayerPropertyViaAuthority({
             elementType: target.elementType,
             id: target.id,
-            patch: { hidden: target.hidden },
+            patch: { property: 'hidden', value: target.hidden },
           });
         } else {
           await patchElementHiddenById(
@@ -261,7 +261,7 @@ export function useLayerActions({
         const target = {
           elementType: item.type,
           id: item.id,
-          patch: { layerName: newLayerName },
+          patch: { property: 'layerName', value: newLayerName },
         } as const;
         if (window.__dmn_window_type === 'panel') {
           await patchNativeLayerPropertyViaAuthority(target);
@@ -269,7 +269,7 @@ export function useLayerActions({
           await patchElementLayerNameById(
             target.elementType,
             target.id,
-            target.patch.layerName,
+            target.patch.value,
           );
         }
       } catch (error) {

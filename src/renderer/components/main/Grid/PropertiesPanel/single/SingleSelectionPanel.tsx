@@ -40,7 +40,10 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
-import { resolveElementShadowForPosition } from '@src/types/key/shadows';
+import {
+  elementShadowLeafFromPartial,
+  resolveElementShadowForPosition,
+} from '@src/types/key/shadows';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -501,7 +504,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   value={singleGraphPosition.graphType || 'line'}
                   onChange={(value) =>
                     onElementPropertyCommit?.({
-                      graphType: value as GraphItemType,
+                      property: 'graphType',
+                      value: value as GraphItemType,
                     })
                   }
                 />
@@ -518,7 +522,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     checked={singleGraphPosition.showAvgLine ?? true}
                     onChange={() =>
                       onElementPropertyCommit?.({
-                        showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
+                        property: 'showAvgLine',
+                        value: !(singleGraphPosition.showAvgLine ?? true),
                       })
                     }
                   />
@@ -534,7 +539,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   onChange={(value) => {
                     const clamped = Math.max(500, Math.min(5000, value));
                     const snapped = Math.round(clamped / 100) * 100;
-                    onElementPropertyCommit?.({ graphSpeed: snapped });
+                    onElementPropertyCommit?.({
+                      property: 'graphSpeed',
+                      value: snapped,
+                    });
                   }}
                   min={500}
                   max={5000}
@@ -549,7 +557,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   value={singleGraphPosition.graphColor || '#86EFAC'}
                   onChange={() => {}}
                   onChangeComplete={(value) =>
-                    onElementPropertyCommit?.({ graphColor: value })
+                    onElementPropertyCommit?.({
+                      property: 'graphColor',
+                      value: value,
+                    })
                   }
                   colorId={`graph-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   panelElement={panelElement}
@@ -565,7 +576,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   checked={singleGraphPosition.graphAnimationEnabled ?? true}
                   onChange={() =>
                     onElementPropertyCommit?.({
-                      graphAnimationEnabled: !(
+                      property: 'graphAnimationEnabled',
+                      value: !(
                         singleGraphPosition.graphAnimationEnabled ?? true
                       ),
                     })
@@ -595,7 +607,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   }
                   onModeCommit={(_state, modeValue) =>
                     onPaintCommit?.({
-                      backgroundPaint: paintDescriptor(modeValue),
+                      property: 'backgroundPaint',
+                      value: paintDescriptor(modeValue),
                     })
                   }
                   colorId={`graph-bg-color-${selectedKeyType}-${singleGraphPosition.id}`}
@@ -621,7 +634,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   }
                   onModeCommit={(_state, modeValue) =>
                     onPaintCommit?.({
-                      borderPaint: paintDescriptor(modeValue),
+                      property: 'borderPaint',
+                      value: paintDescriptor(modeValue),
                     })
                   }
                   colorId={`graph-border-color-${selectedKeyType}-${singleGraphPosition.id}`}
@@ -637,7 +651,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   value={Math.round(singleGraphPosition.borderWidth ?? 1)}
                   onChange={(value) =>
                     onStylePropertyCommit?.({
-                      borderWidth: Math.max(0, Math.min(20, value)),
+                      property: 'borderWidth',
+                      value: Math.max(0, Math.min(20, value)),
                     })
                   }
                   min={0}
@@ -655,7 +670,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   )}
                   onChange={(value) =>
                     onStylePropertyCommit?.({
-                      borderRadius: Math.max(0, Math.min(100, value)),
+                      property: 'borderRadius',
+                      value: Math.max(0, Math.min(100, value)),
                     })
                   }
                   min={0}
@@ -692,9 +708,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     checked={singleGraphPosition.useInlineStyles ?? false}
                     onChange={() =>
                       onElementPropertyCommit?.({
-                        useInlineStyles: !(
-                          singleGraphPosition.useInlineStyles ?? false
-                        ),
+                        property: 'useInlineStyles',
+                        value: !(singleGraphPosition.useInlineStyles ?? false),
                       })
                     }
                   />
@@ -705,7 +720,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     value={graphClassNameDraft}
                     onChange={setGraphClassNameDraft}
                     onBlur={(value) =>
-                      onStylePropertyCommit?.({ className: value })
+                      onStylePropertyCommit?.({
+                        property: 'className',
+                        value: value,
+                      })
                     }
                     placeholder="className"
                     width="90px"
@@ -850,7 +868,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             ? patchNativeLayerPropertyViaAuthority({
                 elementType: 'knob',
                 id: axisCaptureTarget,
-                patch: { axisId },
+                patch: { property: 'axisId', value: axisId },
               })
             : patchKnobAxisIdById(axisCaptureTarget, axisId);
         void persisted.catch(reportElementOpError);
@@ -1010,7 +1028,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         ? 'backgroundPaint'
         : 'borderPaint';
     setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-    onPaintCommit?.({ [paintField]: descriptor } as never);
+    onPaintCommit?.({ property: paintField, value: descriptor } as never);
   };
 
   const knobGradientState = useGradientColorState({
@@ -1209,7 +1227,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   value={Number(singleKnobPosition.sensitivity ?? 1)}
                   onChange={(value) =>
                     onElementPropertyCommit?.({
-                      sensitivity: Math.max(0, value),
+                      property: 'sensitivity',
+                      value: Math.max(0, value),
                     })
                   }
                   suffix="×"
@@ -1229,7 +1248,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   checked={singleKnobPosition.reverse ?? false}
                   onChange={() =>
                     onElementPropertyCommit?.({
-                      reverse: !(singleKnobPosition.reverse ?? false),
+                      property: 'reverse',
+                      value: !(singleKnobPosition.reverse ?? false),
                     })
                   }
                 />
@@ -1282,7 +1302,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={singleKnobPosition.borderWidth ?? 0}
                   onChange={(value) =>
-                    onStylePropertyCommit?.({ borderWidth: value })
+                    onStylePropertyCommit?.({
+                      property: 'borderWidth',
+                      value: value,
+                    })
                   }
                   suffix="px"
                   min={0}
@@ -1297,7 +1320,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={effectiveBorderRadius}
                   onChange={(value) =>
-                    onStylePropertyCommit?.({ borderRadius: value })
+                    onStylePropertyCommit?.({
+                      property: 'borderRadius',
+                      value: value,
+                    })
                   }
                   suffix="px"
                   min={0}
@@ -1332,9 +1358,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                       checked={singleKnobPosition.useInlineStyles ?? false}
                       onChange={() =>
                         onElementPropertyCommit?.({
-                          useInlineStyles: !(
-                            singleKnobPosition.useInlineStyles ?? false
-                          ),
+                          property: 'useInlineStyles',
+                          value: !(singleKnobPosition.useInlineStyles ?? false),
                         })
                       }
                     />
@@ -1347,7 +1372,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                       value={classNameDraft}
                       onChange={setClassNameDraft}
                       onBlur={(value) =>
-                        onStylePropertyCommit?.({ className: value })
+                        onStylePropertyCommit?.({
+                          property: 'className',
+                          value: value,
+                        })
                       }
                       placeholder="className"
                       width="90px"
@@ -1361,12 +1389,16 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               idleShadow={knobIdleShadow}
               activeShadow={knobActiveShadow}
               onChange={(state, _shadow, patch) => {
-                onShadowCommit?.({
-                  [state === 'active' ? 'activeShadow' : 'shadow']: patch,
-                } as EditorShadowPropertyPatchV1);
+                const leaf = elementShadowLeafFromPartial(patch);
+                if (!leaf) return;
+                onShadowCommit?.(
+                  state === 'active'
+                    ? { property: 'activeShadow', value: leaf }
+                    : { property: 'shadow', value: leaf },
+                );
               }}
               onEnabledChange={(enabled) => {
-                onShadowCommit?.({ shadowEnabled: enabled });
+                onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
               }}
               panelElement={panelElement}
               t={t}
@@ -1618,11 +1650,15 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
           value={statBaseValue}
           onChange={(value) => {
             if (value === 'total') {
-              onElementPropertyCommit?.({ statType: 'total' });
+              onElementPropertyCommit?.({
+                property: 'statType',
+                value: 'total',
+              });
               return;
             }
             onElementPropertyCommit?.({
-              statType: resolvedStatType === 'total' ? 'kps' : resolvedStatType,
+              property: 'statType',
+              value: resolvedStatType === 'total' ? 'kps' : resolvedStatType,
             });
           }}
         />
@@ -1635,7 +1671,8 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             value={resolvedStatType}
             onChange={(value) =>
               onElementPropertyCommit?.({
-                statType: value as StatItemType,
+                property: 'statType',
+                value: value as StatItemType,
               })
             }
           />

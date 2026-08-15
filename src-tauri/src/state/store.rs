@@ -4325,9 +4325,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1::Hidden(
-                crate::models::EditorHiddenPropertyPatchV1 { hidden },
-            ),
+            patch: EditorElementPropertyPatchV1::Hidden(hidden),
         }
     }
 
@@ -4339,11 +4337,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1::LayerName(
-                crate::models::EditorLayerNamePropertyPatchV1 {
-                    layer_name: layer_name.map(str::to_string),
-                },
-            ),
+            patch: EditorElementPropertyPatchV1::LayerName(layer_name.map(str::to_string)),
         }
     }
 
@@ -4351,9 +4345,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type: EditorElementTypeV1::Graph,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1::GraphType(
-                crate::models::EditorGraphTypePropertyPatchV1 { graph_type },
-            ),
+            patch: EditorElementPropertyPatchV1::GraphType(graph_type),
         }
     }
 
@@ -4361,11 +4353,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type: EditorElementTypeV1::Graph,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1::GraphColor(
-                crate::models::EditorGraphColorPropertyPatchV1 {
-                    graph_color: graph_color.into(),
-                },
-            ),
+            patch: EditorElementPropertyPatchV1::GraphColor(graph_color.into()),
         }
     }
 
@@ -4431,9 +4419,7 @@ mod tests {
     }
 
     fn shadow_leaf_blur(blur: f64) -> crate::models::EditorShadowLeafPatchV1 {
-        crate::models::EditorShadowLeafPatchV1::Blur(crate::models::EditorShadowBlurLeafPatchV1 {
-            blur,
-        })
+        crate::models::EditorShadowLeafPatchV1::Blur(blur)
     }
 
     fn frozen_key_insert_op(id: impl Into<String>) -> EditorOpV1 {
@@ -9217,57 +9203,37 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_ids[0],
-                EditorElementPropertyPatchV1::ShowAvgLine(
-                    crate::models::EditorShowAvgLinePropertyPatchV1 {
-                        show_avg_line: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::ShowAvgLine(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_ids[1],
-                EditorElementPropertyPatchV1::GraphAnimationEnabled(
-                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
-                        graph_animation_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::GraphAnimationEnabled(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_ids[2],
-                EditorElementPropertyPatchV1::GraphSpeed(
-                    crate::models::EditorGraphSpeedPropertyPatchV1 {
-                        graph_speed: u32::MAX,
-                    },
-                ),
+                EditorElementPropertyPatchV1::GraphSpeed(u32::MAX),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_ids[0],
-                EditorElementPropertyPatchV1::Reverse(
-                    crate::models::EditorReversePropertyPatchV1 { reverse: true },
-                ),
+                EditorElementPropertyPatchV1::Reverse(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_ids[1],
-                EditorElementPropertyPatchV1::Sensitivity(
-                    crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: -7.25 },
-                ),
+                EditorElementPropertyPatchV1::Sensitivity(-7.25),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_ids[2],
-                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
-                    axis_id: "  HIDA:raw  ".to_string(),
-                }),
+                EditorElementPropertyPatchV1::AxisId("  HIDA:raw  ".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 missing_id,
-                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
-                    axis_id: "missing-axis".to_string(),
-                }),
+                EditorElementPropertyPatchV1::AxisId("missing-axis".to_string()),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -9318,9 +9284,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Knob,
             &knob_ids[2],
-            EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
-                axis_id: "different-axis".to_string(),
-            }),
+            EditorElementPropertyPatchV1::AxisId("different-axis".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -9459,11 +9423,7 @@ mod tests {
                 },
             ))
             .unwrap();
-        let patch = EditorElementPropertyPatchV1::UseInlineStyles(
-            crate::models::EditorUseInlineStylesPropertyPatchV1 {
-                use_inline_styles: false,
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::UseInlineStyles(false);
         let ops = [
             (EditorElementTypeV1::Key, key_id),
             (EditorElementTypeV1::Stat, stat_id),
@@ -9540,11 +9500,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &changed.document.key_positions["4key"][0].id,
-            EditorElementPropertyPatchV1::UseInlineStyles(
-                crate::models::EditorUseInlineStylesPropertyPatchV1 {
-                    use_inline_styles: true,
-                },
-            ),
+            EditorElementPropertyPatchV1::UseInlineStyles(true),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -9623,45 +9579,27 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &redone.key_positions["4key"][0].id,
-                EditorElementPropertyPatchV1::FontWeight(
-                    crate::models::EditorFontWeightPropertyPatchV1 {
-                        font_weight: u32::MAX,
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontWeight(u32::MAX),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &redone.stat_positions["4key"][0].position.id,
-                EditorElementPropertyPatchV1::FontItalic(
-                    crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
-                ),
+                EditorElementPropertyPatchV1::FontItalic(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &redone.graph_positions["4key"][0].position.id,
-                EditorElementPropertyPatchV1::FontUnderline(
-                    crate::models::EditorFontUnderlinePropertyPatchV1 {
-                        font_underline: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontUnderline(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &redone.knob_positions["4key"][0].position.id,
-                EditorElementPropertyPatchV1::FontStrikethrough(
-                    crate::models::EditorFontStrikethroughPropertyPatchV1 {
-                        font_strikethrough: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontStrikethrough(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::FontWeight(
-                    crate::models::EditorFontWeightPropertyPatchV1 {
-                        font_weight: u32::MAX,
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontWeight(u32::MAX),
             ),
         ];
         let font_mutation_id = uuid::Uuid::new_v4().to_string();
@@ -9752,9 +9690,7 @@ mod tests {
         font_reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &font_changed.document.key_positions["4key"][0].id,
-            EditorElementPropertyPatchV1::FontWeight(
-                crate::models::EditorFontWeightPropertyPatchV1 { font_weight: 700 },
-            ),
+            EditorElementPropertyPatchV1::FontWeight(700),
         )]);
         assert_eq!(
             store
@@ -9881,11 +9817,7 @@ mod tests {
                 .font_strikethrough
         );
 
-        let family_patch = EditorElementPropertyPatchV1::FontFamily(
-            crate::models::EditorFontFamilyPropertyPatchV1 {
-                font_family: " raw-family ".to_string(),
-            },
-        );
+        let family_patch = EditorElementPropertyPatchV1::FontFamily(" raw-family ".to_string());
         let family_ops = [
             (
                 EditorElementTypeV1::Key,
@@ -9996,11 +9928,7 @@ mod tests {
         family_reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &family_changed.document.key_positions["4key"][0].id,
-            EditorElementPropertyPatchV1::FontFamily(
-                crate::models::EditorFontFamilyPropertyPatchV1 {
-                    font_family: "different".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::FontFamily("different".to_string()),
         )]);
         assert_eq!(
             store
@@ -10162,21 +10090,13 @@ mod tests {
                 patch_property_op(
                     *element_type,
                     id,
-                    EditorElementPropertyPatchV1::DisplayText(
-                        crate::models::EditorDisplayTextPropertyPatchV1 {
-                            display_text: (*display_text).to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::DisplayText((*display_text).to_string()),
                 )
             })
             .chain(std::iter::once(patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::DisplayText(
-                    crate::models::EditorDisplayTextPropertyPatchV1 {
-                        display_text: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::DisplayText("missing".to_string()),
             )))
             .collect::<Vec<_>>();
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -10239,11 +10159,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &targets[0].1,
-            EditorElementPropertyPatchV1::DisplayText(
-                crate::models::EditorDisplayTextPropertyPatchV1 {
-                    display_text: "different".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::DisplayText("different".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -10344,20 +10260,12 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &target_id,
-                EditorElementPropertyPatchV1::ClassName(
-                    crate::models::EditorClassNamePropertyPatchV1 {
-                        class_name: String::new(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ClassName(String::new()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ClassName(
-                    crate::models::EditorClassNamePropertyPatchV1 {
-                        class_name: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ClassName("missing".to_string()),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -10398,11 +10306,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &target_id,
-            EditorElementPropertyPatchV1::ClassName(
-                crate::models::EditorClassNamePropertyPatchV1 {
-                    class_name: "different".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::ClassName("different".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -10516,32 +10420,22 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &targets[0].1,
-                EditorElementPropertyPatchV1::BorderWidth(
-                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 0.5 },
-                ),
+                EditorElementPropertyPatchV1::BorderWidth(0.5),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &targets[1].1,
-                EditorElementPropertyPatchV1::BorderRadius(
-                    crate::models::EditorBorderRadiusPropertyPatchV1 {
-                        border_radius: 99.5,
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderRadius(99.5),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &targets[2].1,
-                EditorElementPropertyPatchV1::FontSize(
-                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 8.5 },
-                ),
+                EditorElementPropertyPatchV1::FontSize(8.5),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::BorderWidth(
-                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 1.0 },
-                ),
+                EditorElementPropertyPatchV1::BorderWidth(1.0),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -10596,9 +10490,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &targets[0].1,
-            EditorElementPropertyPatchV1::FontSize(crate::models::EditorFontSizePropertyPatchV1 {
-                font_size: 9.0,
-            }),
+            EditorElementPropertyPatchV1::FontSize(9.0),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -10739,11 +10631,7 @@ mod tests {
                 },
             ))
             .unwrap();
-        let patch = EditorElementPropertyPatchV1::InactiveImage(
-            crate::models::EditorInactiveImagePropertyPatchV1 {
-                inactive_image: String::new(),
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::InactiveImage(String::new());
         let ops = targets
             .iter()
             .map(|(element_type, id)| patch_property_op(*element_type, id, patch.clone()))
@@ -10817,11 +10705,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &targets[0].1,
-            EditorElementPropertyPatchV1::InactiveImage(
-                crate::models::EditorInactiveImagePropertyPatchV1 {
-                    inactive_image: "different.png".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::InactiveImage("different.png".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -10927,11 +10811,7 @@ mod tests {
                 },
             ))
             .unwrap();
-        let patch = EditorElementPropertyPatchV1::ActiveImage(
-            crate::models::EditorActiveImagePropertyPatchV1 {
-                active_image: String::new(),
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::ActiveImage(String::new());
         let targets = [
             (EditorElementTypeV1::Key, template.id.clone()),
             (EditorElementTypeV1::Knob, knob_id),
@@ -10996,11 +10876,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &targets[0].1,
-            EditorElementPropertyPatchV1::ActiveImage(
-                crate::models::EditorActiveImagePropertyPatchV1 {
-                    active_image: "different.png".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::ActiveImage("different.png".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -11153,16 +11029,8 @@ mod tests {
                 },
             ))
             .unwrap();
-        let idle_patch = EditorElementPropertyPatchV1::IdleTransparent(
-            crate::models::EditorIdleTransparentPropertyPatchV1 {
-                idle_transparent: true,
-            },
-        );
-        let active_patch = EditorElementPropertyPatchV1::ActiveTransparent(
-            crate::models::EditorActiveTransparentPropertyPatchV1 {
-                active_transparent: true,
-            },
-        );
+        let idle_patch = EditorElementPropertyPatchV1::IdleTransparent(true);
+        let active_patch = EditorElementPropertyPatchV1::ActiveTransparent(true);
         let mut ops = targets
             .iter()
             .map(|(element_type, id)| patch_property_op(*element_type, id, idle_patch.clone()))
@@ -11281,11 +11149,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &targets[0].1,
-            EditorElementPropertyPatchV1::IdleTransparent(
-                crate::models::EditorIdleTransparentPropertyPatchV1 {
-                    idle_transparent: false,
-                },
-            ),
+            EditorElementPropertyPatchV1::IdleTransparent(false),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -11407,16 +11271,9 @@ mod tests {
                 },
             ))
             .unwrap();
-        let idle_patch = EditorElementPropertyPatchV1::IdleImageFit(
-            crate::models::EditorIdleImageFitPropertyPatchV1 {
-                idle_image_fit: crate::models::ImageFit::Cover,
-            },
-        );
-        let active_patch = EditorElementPropertyPatchV1::ActiveImageFit(
-            crate::models::EditorActiveImageFitPropertyPatchV1 {
-                active_image_fit: crate::models::ImageFit::Cover,
-            },
-        );
+        let idle_patch = EditorElementPropertyPatchV1::IdleImageFit(crate::models::ImageFit::Cover);
+        let active_patch =
+            EditorElementPropertyPatchV1::ActiveImageFit(crate::models::ImageFit::Cover);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &template.id, idle_patch.clone()),
             patch_property_op(EditorElementTypeV1::Knob, &knob_id, active_patch.clone()),
@@ -11478,11 +11335,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &template.id,
-            EditorElementPropertyPatchV1::IdleImageFit(
-                crate::models::EditorIdleImageFitPropertyPatchV1 {
-                    idle_image_fit: crate::models::ImageFit::Contain,
-                },
-            ),
+            EditorElementPropertyPatchV1::IdleImageFit(crate::models::ImageFit::Contain),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -11575,11 +11428,7 @@ mod tests {
                 },
             ))
             .unwrap();
-        let patch = EditorElementPropertyPatchV1::SoundPath(
-            crate::models::EditorSoundPathPropertyPatchV1 {
-                sound_path: String::new(),
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::SoundPath(String::new());
         let targets = [first.id, second_id];
         let ops = targets
             .iter()
@@ -11629,11 +11478,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &targets[0],
-            EditorElementPropertyPatchV1::SoundPath(
-                crate::models::EditorSoundPathPropertyPatchV1 {
-                    sound_path: "different.wav".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::SoundPath("different.wav".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -11724,11 +11569,7 @@ mod tests {
                 },
             ))
             .unwrap();
-        let patch = EditorElementPropertyPatchV1::SoundEnabled(
-            crate::models::EditorSoundEnabledPropertyPatchV1 {
-                sound_enabled: false,
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::SoundEnabled(false);
         let targets = [first.id, second_id];
         let ops = targets
             .iter()
@@ -11778,11 +11619,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &targets[0],
-            EditorElementPropertyPatchV1::SoundEnabled(
-                crate::models::EditorSoundEnabledPropertyPatchV1 {
-                    sound_enabled: true,
-                },
-            ),
+            EditorElementPropertyPatchV1::SoundEnabled(true),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -11874,11 +11711,7 @@ mod tests {
                 },
             ))
             .unwrap();
-        let patch = EditorElementPropertyPatchV1::SoundVolume(
-            crate::models::EditorSoundVolumePropertyPatchV1 {
-                sound_volume: 100.0,
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::SoundVolume(100.0);
         let targets = [first.id, second_id];
         let ops = targets
             .iter()
@@ -11928,9 +11761,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &targets[0],
-            EditorElementPropertyPatchV1::SoundVolume(
-                crate::models::EditorSoundVolumePropertyPatchV1 { sound_volume: 50.0 },
-            ),
+            EditorElementPropertyPatchV1::SoundVolume(50.0),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -12021,16 +11852,8 @@ mod tests {
             },
         )
         .unwrap();
-        let counter_enabled = EditorElementPropertyPatchV1::CounterEnabled(
-            crate::models::EditorCounterEnabledPropertyPatchV1 {
-                counter_enabled: false,
-            },
-        );
-        let animation_enabled = EditorElementPropertyPatchV1::CounterAnimationEnabled(
-            crate::models::EditorCounterAnimationEnabledPropertyPatchV1 {
-                counter_animation_enabled: false,
-            },
-        );
+        let counter_enabled = EditorElementPropertyPatchV1::CounterEnabled(false);
+        let animation_enabled = EditorElementPropertyPatchV1::CounterAnimationEnabled(false);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &key_id, counter_enabled.clone()),
             patch_property_op(
@@ -12241,44 +12064,30 @@ mod tests {
                 EditorElementTypeV1::Key,
                 &key_ids[0],
                 EditorElementPropertyPatchV1::CounterPlacement(
-                    crate::models::EditorCounterPlacementPropertyPatchV1 {
-                        counter_placement: crate::models::KeyCounterPlacement::Outside,
-                    },
+                    crate::models::KeyCounterPlacement::Outside,
                 ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[1],
-                EditorElementPropertyPatchV1::CounterAlign(
-                    crate::models::EditorCounterAlignPropertyPatchV1 {
-                        counter_align: crate::models::KeyCounterAlign::Right,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterAlign(crate::models::KeyCounterAlign::Right),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_ids[0],
                 EditorElementPropertyPatchV1::CounterAlignMode(
-                    crate::models::EditorCounterAlignModePropertyPatchV1 {
-                        counter_align_mode: crate::models::KeyCounterAlignMode::Center,
-                    },
+                    crate::models::KeyCounterAlignMode::Center,
                 ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_ids[1],
-                EditorElementPropertyPatchV1::CounterGap(
-                    crate::models::EditorCounterGapPropertyPatchV1 {
-                        counter_gap: u32::MAX,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterGap(u32::MAX),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterGap(
-                    crate::models::EditorCounterGapPropertyPatchV1 { counter_gap: 9 },
-                ),
+                EditorElementPropertyPatchV1::CounterGap(9),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -12339,9 +12148,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &key_ids[0],
-            EditorElementPropertyPatchV1::CounterGap(
-                crate::models::EditorCounterGapPropertyPatchV1 { counter_gap: 13 },
-            ),
+            EditorElementPropertyPatchV1::CounterGap(13),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -12477,65 +12284,37 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[0],
-                EditorElementPropertyPatchV1::CounterFontSize(
-                    crate::models::EditorCounterFontSizePropertyPatchV1 {
-                        counter_font_size: 72,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontSize(72),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[1],
-                EditorElementPropertyPatchV1::CounterFontWeight(
-                    crate::models::EditorCounterFontWeightPropertyPatchV1 {
-                        counter_font_weight: 900,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontWeight(900),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_ids[0],
-                EditorElementPropertyPatchV1::CounterFontItalic(
-                    crate::models::EditorCounterFontItalicPropertyPatchV1 {
-                        counter_font_italic: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontItalic(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_ids[1],
-                EditorElementPropertyPatchV1::CounterFontUnderline(
-                    crate::models::EditorCounterFontUnderlinePropertyPatchV1 {
-                        counter_font_underline: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontUnderline(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_ids[2],
-                EditorElementPropertyPatchV1::CounterFontStrikethrough(
-                    crate::models::EditorCounterFontStrikethroughPropertyPatchV1 {
-                        counter_font_strikethrough: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontStrikethrough(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_ids[3],
-                EditorElementPropertyPatchV1::CounterFontFamily(
-                    crate::models::EditorCounterFontFamilyPropertyPatchV1 {
-                        counter_font_family: "  raw-counter-font  ".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontFamily("  raw-counter-font  ".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterFontSize(
-                    crate::models::EditorCounterFontSizePropertyPatchV1 {
-                        counter_font_size: 72,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontSize(72),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -12611,11 +12390,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &key_ids[0],
-            EditorElementPropertyPatchV1::CounterFontSize(
-                crate::models::EditorCounterFontSizePropertyPatchV1 {
-                    counter_font_size: 24,
-                },
-            ),
+            EditorElementPropertyPatchV1::CounterFontSize(24),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -12755,38 +12530,22 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[0],
-                EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: idle_gradient.clone(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillIdle(idle_gradient.clone()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[1],
-                EditorElementPropertyPatchV1::CounterFillActive(
-                    crate::models::EditorCounterFillActivePropertyPatchV1 {
-                        counter_fill_active: counter_fill_solid(""),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillActive(counter_fill_solid("")),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: counter_fill_solid("  raw solid  "),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillIdle(counter_fill_solid("  raw solid  ")),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: counter_fill_solid("missing"),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillIdle(counter_fill_solid("missing")),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -12845,11 +12604,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &key_ids[0],
-            EditorElementPropertyPatchV1::CounterFillIdle(
-                crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                    counter_fill_idle: counter_fill_solid("different"),
-                },
-            ),
+            EditorElementPropertyPatchV1::CounterFillIdle(counter_fill_solid("different")),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -12959,38 +12714,22 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[0],
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                        counter_stroke_idle: String::new(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(String::new()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[1],
-                EditorElementPropertyPatchV1::CounterStrokeActive(
-                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
-                        counter_stroke_active: "  raw active  ".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeActive("  raw active  ".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                        counter_stroke_idle: "raw stat".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeIdle("raw stat".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                        counter_stroke_idle: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeIdle("missing".to_string()),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -13041,11 +12780,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &key_ids[0],
-            EditorElementPropertyPatchV1::CounterStrokeIdle(
-                crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                    counter_stroke_idle: "different".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::CounterStrokeIdle("different".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -13154,25 +12889,21 @@ mod tests {
         )
         .unwrap();
         let partial = EditorElementPropertyPatchV1::CounterAnimationPreset(
-            crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
-                counter_animation_preset: crate::models::EditorCounterAnimationPresetIntentV1 {
-                    preset_id: preset.id.clone(),
-                    apply_preset_id: None,
-                    bezier: None,
-                    scale: Some(preset.scale),
-                    duration_ms: None,
-                },
+            crate::models::EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: None,
+                scale: Some(preset.scale),
+                duration_ms: None,
             },
         );
         let full = EditorElementPropertyPatchV1::CounterAnimationPreset(
-            crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
-                counter_animation_preset: crate::models::EditorCounterAnimationPresetIntentV1 {
-                    preset_id: preset.id.clone(),
-                    apply_preset_id: Some(true),
-                    bezier: Some(preset.bezier),
-                    scale: Some(preset.scale),
-                    duration_ms: Some(preset.duration_ms),
-                },
+            crate::models::EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: Some(true),
+                bezier: Some(preset.bezier),
+                scale: Some(preset.scale),
+                duration_ms: Some(preset.duration_ms),
             },
         );
         let ops = vec![
@@ -13335,11 +13066,7 @@ mod tests {
                 },
             ))
             .unwrap();
-        let patch = |stat_type| {
-            EditorElementPropertyPatchV1::StatType(crate::models::EditorStatTypePropertyPatchV1 {
-                stat_type,
-            })
-        };
+        let patch = |stat_type| EditorElementPropertyPatchV1::StatType(stat_type);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Stat, &stat_id, patch(StatType::Total)),
             patch_property_op(
@@ -13476,37 +13203,31 @@ mod tests {
                 EditorElementTypeV1::Key,
                 &ids[0],
                 EditorElementPropertyPatchV1::NotePaint(
-                    crate::models::EditorNotePaintPropertyPatchV1 {
-                        note_paint: crate::models::EditorNotePaintIntentV1::Opacity(
-                            crate::models::EditorNotePaintOpacityIntentV1 { opacity: 55 },
-                        ),
-                    },
+                    crate::models::EditorNotePaintIntentV1::Opacity(
+                        crate::models::EditorNotePaintOpacityIntentV1 { opacity: 55 },
+                    ),
                 ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[1],
                 EditorElementPropertyPatchV1::NoteGlowPaint(
-                    crate::models::EditorNoteGlowPaintPropertyPatchV1 {
-                        note_glow_paint: crate::models::EditorNotePaintIntentV1::GradientOpacity(
-                            crate::models::EditorNotePaintGradientOpacityIntentV1 {
-                                opacity: 70,
-                                opacity_top: 20,
-                                opacity_bottom: 80,
-                            },
-                        ),
-                    },
+                    crate::models::EditorNotePaintIntentV1::GradientOpacity(
+                        crate::models::EditorNotePaintGradientOpacityIntentV1 {
+                            opacity: 70,
+                            opacity_top: 20,
+                            opacity_bottom: 80,
+                        },
+                    ),
                 ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[2],
                 EditorElementPropertyPatchV1::NoteBorderPaint(
-                    crate::models::EditorNoteBorderPaintPropertyPatchV1 {
-                        note_border_paint: crate::models::EditorNoteBorderPaintV1 {
-                            color: "#FFFFFF".to_string(),
-                            opacity: 100,
-                        },
+                    crate::models::EditorNoteBorderPaintV1 {
+                        color: "#FFFFFF".to_string(),
+                        opacity: 100,
                     },
                 ),
             ),
@@ -13514,13 +13235,11 @@ mod tests {
                 EditorElementTypeV1::Key,
                 &ids[3],
                 EditorElementPropertyPatchV1::NoteGlowPaint(
-                    crate::models::EditorNoteGlowPaintPropertyPatchV1 {
-                        note_glow_paint: crate::models::EditorNotePaintIntentV1::Color(
-                            crate::models::EditorNotePaintColorIntentV1 {
-                                color: crate::models::EditorNoteColorV1::Solid(String::new()),
-                            },
-                        ),
-                    },
+                    crate::models::EditorNotePaintIntentV1::Color(
+                        crate::models::EditorNotePaintColorIntentV1 {
+                            color: crate::models::EditorNoteColorV1::Solid(String::new()),
+                        },
+                    ),
                 ),
             ),
         ];
@@ -13564,11 +13283,9 @@ mod tests {
             EditorElementTypeV1::Key,
             &ids[0],
             EditorElementPropertyPatchV1::NotePaint(
-                crate::models::EditorNotePaintPropertyPatchV1 {
-                    note_paint: crate::models::EditorNotePaintIntentV1::Opacity(
-                        crate::models::EditorNotePaintOpacityIntentV1 { opacity: 56 },
-                    ),
-                },
+                crate::models::EditorNotePaintIntentV1::Opacity(
+                    crate::models::EditorNotePaintOpacityIntentV1 { opacity: 56 },
+                ),
             ),
         )]);
         assert_eq!(
@@ -13656,13 +13373,7 @@ mod tests {
             position.note_border_width = Some(2.5);
         })
         .unwrap();
-        let patch = |value| {
-            EditorElementPropertyPatchV1::NoteGlowSize(
-                crate::models::EditorNoteGlowSizePropertyPatchV1 {
-                    note_glow_size: value,
-                },
-            )
-        };
+        let patch = |value| EditorElementPropertyPatchV1::NoteGlowSize(value);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &target_id, patch(0.5)),
             patch_property_op(
@@ -13800,54 +13511,32 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[0],
-                EditorElementPropertyPatchV1::NoteOffsetX(
-                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
-                        note_offset_x: Some(0.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetX(Some(0.0)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[1],
-                EditorElementPropertyPatchV1::NoteOffsetY(
-                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
-                        note_offset_y: None,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetY(None),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[2],
-                EditorElementPropertyPatchV1::NoteWidth(
-                    crate::models::EditorNoteWidthPropertyPatchV1 { note_width: None },
-                ),
+                EditorElementPropertyPatchV1::NoteWidth(None),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[3],
-                EditorElementPropertyPatchV1::NoteBorderWidth(
-                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
-                        note_border_width: 0.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderWidth(0.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[4],
-                EditorElementPropertyPatchV1::NoteBorderRadius(
-                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
-                        note_border_radius: 4.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderRadius(4.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::NoteWidth(
-                    crate::models::EditorNoteWidthPropertyPatchV1 {
-                        note_width: Some(20.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteWidth(Some(20.0)),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -13908,11 +13597,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &ids[0],
-            EditorElementPropertyPatchV1::NoteOffsetX(
-                crate::models::EditorNoteOffsetXPropertyPatchV1 {
-                    note_offset_x: None,
-                },
-            ),
+            EditorElementPropertyPatchV1::NoteOffsetX(None),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -14000,32 +13685,23 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &first_id,
-                EditorElementPropertyPatchV1::BackgroundPaint(
-                    crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                        background_paint: paint_descriptor(
-                            "next-bg",
-                            Some((135.0, &gradient_stops)),
-                        ),
-                    },
-                ),
+                EditorElementPropertyPatchV1::BackgroundPaint(paint_descriptor(
+                    "next-bg",
+                    Some((135.0, &gradient_stops)),
+                )),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &second_id,
-                EditorElementPropertyPatchV1::ActiveBorderPaint(
-                    crate::models::EditorActiveBorderPaintPropertyPatchV1 {
-                        active_border_paint: paint_descriptor("active-border", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveBorderPaint(paint_descriptor(
+                    "active-border",
+                    None,
+                )),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::BorderPaint(
-                    crate::models::EditorBorderPaintPropertyPatchV1 {
-                        border_paint: paint_descriptor("missing", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderPaint(paint_descriptor("missing", None)),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -14073,11 +13749,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &first_id,
-            EditorElementPropertyPatchV1::BackgroundPaint(
-                crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                    background_paint: paint_descriptor("different", None),
-                },
-            ),
+            EditorElementPropertyPatchV1::BackgroundPaint(paint_descriptor("different", None)),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -14229,56 +13901,32 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_idle_id,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: "same-idle".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontColor("same-idle".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_active_id,
-                EditorElementPropertyPatchV1::ActiveFontColor(
-                    crate::models::EditorActiveFontColorPropertyPatchV1 {
-                        active_font_color: String::new(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveFontColor(String::new()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: String::new(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontColor(String::new()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_id,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: " graph new ".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontColor(" graph new ".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: "knob-new".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontColor("knob-new".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ActiveFontColor(
-                    crate::models::EditorActiveFontColorPropertyPatchV1 {
-                        active_font_color: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveFontColor("missing".to_string()),
             ),
         ];
         let history_before = store.history_status().history_revision;
@@ -14377,11 +14025,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &key_idle_id,
-            EditorElementPropertyPatchV1::FontColor(
-                crate::models::EditorFontColorPropertyPatchV1 {
-                    font_color: "different".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::FontColor("different".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -14485,11 +14129,7 @@ mod tests {
         let op = patch_property_op(
             EditorElementTypeV1::Key,
             &target_id,
-            EditorElementPropertyPatchV1::BackgroundPaint(
-                crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                    background_paint: paint_descriptor("same-paint", None),
-                },
-            ),
+            EditorElementPropertyPatchV1::BackgroundPaint(paint_descriptor("same-paint", None)),
         );
 
         let changed = store
@@ -14602,29 +14242,17 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_id,
-                EditorElementPropertyPatchV1::ShadowEnabled(
-                    crate::models::EditorShadowEnabledPropertyPatchV1 {
-                        shadow_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::ShadowEnabled(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::ShadowEnabled(
-                    crate::models::EditorShadowEnabledPropertyPatchV1 {
-                        shadow_enabled: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::ShadowEnabled(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::ShadowEnabled(
-                    crate::models::EditorShadowEnabledPropertyPatchV1 {
-                        shadow_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::ShadowEnabled(true),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -14800,9 +14428,7 @@ mod tests {
         let op = patch_property_op(
             EditorElementTypeV1::Key,
             &target_id,
-            EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
-                shadow: shadow_leaf_blur(10.0),
-            }),
+            EditorElementPropertyPatchV1::Shadow(shadow_leaf_blur(10.0)),
         );
         let mutation_id = uuid::Uuid::new_v4().to_string();
         let request = editor_ops_request(setup.result.revision, &mutation_id, vec![op.clone()]);
@@ -14833,9 +14459,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &target_id,
-            EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
-                shadow: shadow_leaf_blur(11.0),
-            }),
+            EditorElementPropertyPatchV1::Shadow(shadow_leaf_blur(11.0)),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -14918,56 +14542,34 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[0],
-                EditorElementPropertyPatchV1::NoteEffectEnabled(
-                    crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
-                        note_effect_enabled: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteEffectEnabled(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[1],
-                EditorElementPropertyPatchV1::NoteGlowEnabled(
-                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
-                        note_glow_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteGlowEnabled(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[2],
-                EditorElementPropertyPatchV1::NoteAutoYCorrection(
-                    crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
-                        note_auto_y_correction: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteAutoYCorrection(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[3],
-                EditorElementPropertyPatchV1::NoteAlignment(
-                    crate::models::EditorNoteAlignmentPropertyPatchV1 {
-                        note_alignment: crate::models::NoteAlignment::Right,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteAlignment(crate::models::NoteAlignment::Right),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[4],
                 EditorElementPropertyPatchV1::NoteBorderSide(
-                    crate::models::EditorNoteBorderSidePropertyPatchV1 {
-                        note_border_side: crate::models::EditorNoteBorderSideV1::All,
-                    },
+                    crate::models::EditorNoteBorderSideV1::All,
                 ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::NoteGlowEnabled(
-                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
-                        note_glow_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteGlowEnabled(true),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -15021,11 +14623,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &ids[0],
-            EditorElementPropertyPatchV1::NoteEffectEnabled(
-                crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
-                    note_effect_enabled: true,
-                },
-            ),
+            EditorElementPropertyPatchV1::NoteEffectEnabled(true),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,

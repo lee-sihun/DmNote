@@ -30,8 +30,11 @@ export const extractMdxCodeFences = (content: string): MdxCodeFence[] => {
   const fences: MdxCodeFence[] = [];
   const lines = content.split('\n');
 
-  let open: { lang: string; fragment: FragmentKind | null; start: number } | null =
-    null;
+  let open: {
+    lang: string;
+    fragment: FragmentKind | null;
+    start: number;
+  } | null = null;
   let buffer: string[] = [];
 
   for (let i = 0; i < lines.length; i += 1) {

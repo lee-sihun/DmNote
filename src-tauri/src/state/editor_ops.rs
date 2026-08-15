@@ -302,33 +302,32 @@ fn patch_counter_fill(
 
 fn validate_shadow_leaf(patch: &EditorShadowLeafPatchV1) -> Result<(), EditorCommitError> {
     match patch {
-        EditorShadowLeafPatchV1::Color(patch) if patch.color.is_empty() => {
+        EditorShadowLeafPatchV1::Color(color) if color.is_empty() => {
             Err(EditorCommitError::validation(
                 "INVALID_ELEMENT_SHADOW",
                 "shadow color must be a non-empty string",
             ))
         }
-        EditorShadowLeafPatchV1::OffsetX(patch)
-            if !patch.offset_x.is_finite()
-                || !(SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(&patch.offset_x) =>
+        EditorShadowLeafPatchV1::OffsetX(offset_x)
+            if !offset_x.is_finite()
+                || !(SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(offset_x) =>
         {
             Err(EditorCommitError::validation(
                 "INVALID_ELEMENT_SHADOW",
                 "shadow offset X must be finite and between -100 and 100",
             ))
         }
-        EditorShadowLeafPatchV1::OffsetY(patch)
-            if !patch.offset_y.is_finite()
-                || !(SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(&patch.offset_y) =>
+        EditorShadowLeafPatchV1::OffsetY(offset_y)
+            if !offset_y.is_finite()
+                || !(SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(offset_y) =>
         {
             Err(EditorCommitError::validation(
                 "INVALID_ELEMENT_SHADOW",
                 "shadow offset Y must be finite and between -100 and 100",
             ))
         }
-        EditorShadowLeafPatchV1::Blur(patch)
-            if !patch.blur.is_finite()
-                || !(SHADOW_BLUR_MIN..=SHADOW_BLUR_MAX).contains(&patch.blur) =>
+        EditorShadowLeafPatchV1::Blur(blur)
+            if !blur.is_finite() || !(SHADOW_BLUR_MIN..=SHADOW_BLUR_MAX).contains(blur) =>
         {
             Err(EditorCommitError::validation(
                 "INVALID_ELEMENT_SHADOW",
@@ -380,35 +379,35 @@ fn default_shadow_spec(
 
 fn apply_shadow_leaf(shadow: &mut ElementShadowSpec, patch: &EditorShadowLeafPatchV1) -> bool {
     match patch {
-        EditorShadowLeafPatchV1::Color(patch) => {
-            if shadow.color == patch.color {
+        EditorShadowLeafPatchV1::Color(color) => {
+            if shadow.color == *color {
                 false
             } else {
-                shadow.color.clone_from(&patch.color);
+                shadow.color.clone_from(color);
                 true
             }
         }
-        EditorShadowLeafPatchV1::OffsetX(patch) => {
-            if shadow.offset_x == patch.offset_x {
+        EditorShadowLeafPatchV1::OffsetX(offset_x) => {
+            if shadow.offset_x == *offset_x {
                 false
             } else {
-                shadow.offset_x = patch.offset_x;
+                shadow.offset_x = *offset_x;
                 true
             }
         }
-        EditorShadowLeafPatchV1::OffsetY(patch) => {
-            if shadow.offset_y == patch.offset_y {
+        EditorShadowLeafPatchV1::OffsetY(offset_y) => {
+            if shadow.offset_y == *offset_y {
                 false
             } else {
-                shadow.offset_y = patch.offset_y;
+                shadow.offset_y = *offset_y;
                 true
             }
         }
-        EditorShadowLeafPatchV1::Blur(patch) => {
-            if shadow.blur == patch.blur {
+        EditorShadowLeafPatchV1::Blur(blur) => {
+            if shadow.blur == *blur {
                 false
             } else {
-                shadow.blur = patch.blur;
+                shadow.blur = *blur;
                 true
             }
         }
@@ -1384,7 +1383,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             ),
                         ));
                     }
-                    validate_shadow_leaf(&patch.active_shadow)?;
+                    validate_shadow_leaf(patch)?;
                 }
                 // key·stat·knob 한정 shadow
                 EditorElementPropertyPatchV1::Shadow(_)
@@ -1403,7 +1402,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         ));
                     }
                     if let EditorElementPropertyPatchV1::Shadow(patch) = patch {
-                        validate_shadow_leaf(&patch.shadow)?;
+                        validate_shadow_leaf(patch)?;
                     }
                 }
                 // key·knob 한정 active paint
@@ -1419,12 +1418,8 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         ));
                     }
                     let descriptor = match patch {
-                        EditorElementPropertyPatchV1::ActiveBackgroundPaint(patch) => {
-                            &patch.active_background_paint
-                        }
-                        EditorElementPropertyPatchV1::ActiveBorderPaint(patch) => {
-                            &patch.active_border_paint
-                        }
+                        EditorElementPropertyPatchV1::ActiveBackgroundPaint(patch) => patch,
+                        EditorElementPropertyPatchV1::ActiveBorderPaint(patch) => patch,
                         _ => unreachable!(),
                     };
                     validate_paint_descriptor(descriptor)?;
@@ -1445,10 +1440,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 }
                 // 타입 무제약, paint 값 검증만
                 EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
-                    validate_paint_descriptor(&patch.background_paint)?;
+                    validate_paint_descriptor(patch)?;
                 }
                 EditorElementPropertyPatchV1::BorderPaint(patch) => {
-                    validate_paint_descriptor(&patch.border_paint)?;
+                    validate_paint_descriptor(patch)?;
                 }
                 // key·knob 한정 active 이미지 상태
                 EditorElementPropertyPatchV1::ActiveImage(_)
@@ -1479,10 +1474,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             ),
                         ));
                     }
-                    validate_counter_animation_preset_patch(
-                        current_store,
-                        &patch.counter_animation_preset,
-                    )?;
+                    validate_counter_animation_preset_patch(current_store, patch)?;
                 }
                 // key·stat 한정 카운터
                 EditorElementPropertyPatchV1::CounterEnabled(_)
@@ -1509,7 +1501,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         ));
                     }
                     if let EditorElementPropertyPatchV1::CounterFontSize(patch) = patch {
-                        if !(8..=72).contains(&patch.counter_font_size) {
+                        if !(8..=72).contains(patch) {
                             return Err(EditorCommitError::validation(
                                 "COUNTER_FONT_SIZE_OUT_OF_RANGE",
                                 format!(
@@ -1519,7 +1511,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         }
                     }
                     if let EditorElementPropertyPatchV1::CounterFontWeight(patch) = patch {
-                        if !(100..=900).contains(&patch.counter_font_weight) {
+                        if !(100..=900).contains(patch) {
                             return Err(EditorCommitError::validation(
                                 "COUNTER_FONT_WEIGHT_OUT_OF_RANGE",
                                 format!(
@@ -1529,7 +1521,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         }
                     }
                     if let EditorElementPropertyPatchV1::CounterFillIdle(patch) = patch {
-                        validate_counter_fill_intent(&patch.counter_fill_idle)?;
+                        validate_counter_fill_intent(patch)?;
                     }
                 }
                 // key 전용 카운터 active 계열
@@ -1541,7 +1533,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         *element_type,
                     )?;
                     if let EditorElementPropertyPatchV1::CounterFillActive(patch) = patch {
-                        validate_counter_fill_intent(&patch.counter_fill_active)?;
+                        validate_counter_fill_intent(patch)?;
                     }
                 }
                 // key 전용 사운드·노트
@@ -1568,9 +1560,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         *element_type,
                     )?;
                     if let EditorElementPropertyPatchV1::SoundVolume(patch) = patch {
-                        if !patch.sound_volume.is_finite()
-                            || !(0.0..=200.0).contains(&patch.sound_volume)
-                        {
+                        if !patch.is_finite() || !(0.0..=200.0).contains(patch) {
                             return Err(EditorCommitError::validation(
                                 "SOUND_VOLUME_OUT_OF_RANGE",
                                 format!(
@@ -1580,9 +1570,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         }
                     }
                     if let EditorElementPropertyPatchV1::NoteGlowSize(patch) = patch {
-                        if !patch.note_glow_size.is_finite()
-                            || !(0.0..=50.0).contains(&patch.note_glow_size)
-                        {
+                        if !patch.is_finite() || !(0.0..=50.0).contains(patch) {
                             return Err(EditorCommitError::validation(
                                 "NOTE_GLOW_SIZE_OUT_OF_RANGE",
                                 format!(
@@ -1593,21 +1581,18 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                     match patch {
                         EditorElementPropertyPatchV1::NotePaint(patch) => {
-                            validate_note_paint_intent(&patch.note_paint)?;
+                            validate_note_paint_intent(patch)?;
                         }
                         EditorElementPropertyPatchV1::NoteGlowPaint(patch) => {
-                            validate_note_paint_intent(&patch.note_glow_paint)?;
+                            validate_note_paint_intent(patch)?;
                         }
                         EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
-                            validate_note_border_paint(
-                                &patch.note_border_paint.color,
-                                patch.note_border_paint.opacity,
-                            )?;
+                            validate_note_border_paint(&patch.color, patch.opacity)?;
                         }
                         _ => {}
                     }
                     if let EditorElementPropertyPatchV1::NoteOffsetX(patch) = patch {
-                        if patch.note_offset_x.is_some_and(|value| {
+                        if patch.is_some_and(|value| {
                             !value.is_finite() || !(-500.0..=500.0).contains(&value)
                         }) {
                             return Err(EditorCommitError::validation(
@@ -1619,7 +1604,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         }
                     }
                     if let EditorElementPropertyPatchV1::NoteOffsetY(patch) = patch {
-                        if patch.note_offset_y.is_some_and(|value| {
+                        if patch.is_some_and(|value| {
                             !value.is_finite() || !(-500.0..=500.0).contains(&value)
                         }) {
                             return Err(EditorCommitError::validation(
@@ -1631,10 +1616,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         }
                     }
                     if let EditorElementPropertyPatchV1::NoteWidth(patch) = patch {
-                        if patch
-                            .note_width
-                            .is_some_and(|value| !value.is_finite() || value <= 0.0)
-                        {
+                        if patch.is_some_and(|value| !value.is_finite() || value <= 0.0) {
                             return Err(EditorCommitError::validation(
                                 "NOTE_WIDTH_OUT_OF_RANGE",
                                 format!(
@@ -1644,9 +1626,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         }
                     }
                     if let EditorElementPropertyPatchV1::NoteBorderWidth(patch) = patch {
-                        if !patch.note_border_width.is_finite()
-                            || !(0.0..=20.0).contains(&patch.note_border_width)
-                        {
+                        if !patch.is_finite() || !(0.0..=20.0).contains(patch) {
                             return Err(EditorCommitError::validation(
                                 "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
                                 format!(
@@ -1656,9 +1636,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         }
                     }
                     if let EditorElementPropertyPatchV1::NoteBorderRadius(patch) = patch {
-                        if !patch.note_border_radius.is_finite()
-                            || !(1.0..=100.0).contains(&patch.note_border_radius)
-                        {
+                        if !patch.is_finite() || !(1.0..=100.0).contains(patch) {
                             return Err(EditorCommitError::validation(
                                 "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
                                 format!(
@@ -1670,9 +1648,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 }
                 // 타입 무제약, 값 범위 검증만
                 EditorElementPropertyPatchV1::BorderWidth(patch) => {
-                    if !patch.border_width.is_finite()
-                        || !(0.0..=20.0).contains(&patch.border_width)
-                    {
+                    if !patch.is_finite() || !(0.0..=20.0).contains(patch) {
                         return Err(EditorCommitError::validation(
                             "BORDER_WIDTH_OUT_OF_RANGE",
                             format!(
@@ -1687,9 +1663,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     } else {
                         100.0
                     };
-                    if !patch.border_radius.is_finite()
-                        || !(0.0..=maximum).contains(&patch.border_radius)
-                    {
+                    if !patch.is_finite() || !(0.0..=maximum).contains(patch) {
                         return Err(EditorCommitError::validation(
                             "BORDER_RADIUS_OUT_OF_RANGE",
                             format!(
@@ -1699,7 +1673,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                 }
                 EditorElementPropertyPatchV1::FontSize(patch) => {
-                    if !patch.font_size.is_finite() || !(8.0..=72.0).contains(&patch.font_size) {
+                    if !patch.is_finite() || !(8.0..=72.0).contains(patch) {
                         return Err(EditorCommitError::validation(
                             "FONT_SIZE_OUT_OF_RANGE",
                             format!(
@@ -1785,19 +1759,19 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 let changed = match patch {
                     EditorElementPropertyPatchV1::Hidden(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.hidden == patch.hidden {
+                        if position.hidden == *patch {
                             false
                         } else {
-                            position.hidden = patch.hidden;
+                            position.hidden = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::LayerName(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.layer_name == patch.layer_name {
+                        if position.layer_name == *patch {
                             false
                         } else {
-                            position.layer_name.clone_from(&patch.layer_name);
+                            position.layer_name.clone_from(patch);
                             true
                         }
                     }
@@ -1812,10 +1786,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "graph property target no longer matches its stable ID",
                                 )
                             })?;
-                        if graph.graph_type == patch.graph_type {
+                        if graph.graph_type == *patch {
                             false
                         } else {
-                            graph.graph_type = patch.graph_type.clone();
+                            graph.graph_type = patch.clone();
                             true
                         }
                     }
@@ -1830,10 +1804,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "graph property target no longer matches its stable ID",
                                 )
                             })?;
-                        if graph.graph_color == patch.graph_color {
+                        if graph.graph_color == *patch {
                             false
                         } else {
-                            graph.graph_color.clone_from(&patch.graph_color);
+                            graph.graph_color.clone_from(patch);
                             true
                         }
                     }
@@ -1848,10 +1822,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "graph property target no longer matches its stable ID",
                                 )
                             })?;
-                        if graph.show_avg_line == patch.show_avg_line {
+                        if graph.show_avg_line == *patch {
                             false
                         } else {
-                            graph.show_avg_line = patch.show_avg_line;
+                            graph.show_avg_line = *patch;
                             true
                         }
                     }
@@ -1866,13 +1840,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "graph property target no longer matches its stable ID",
                                 )
                             })?;
-                        if graph.position.graph_animation_enabled
-                            == Some(patch.graph_animation_enabled)
-                        {
+                        if graph.position.graph_animation_enabled == Some(*patch) {
                             false
                         } else {
-                            graph.position.graph_animation_enabled =
-                                Some(patch.graph_animation_enabled);
+                            graph.position.graph_animation_enabled = Some(*patch);
                             true
                         }
                     }
@@ -1887,10 +1858,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "graph property target no longer matches its stable ID",
                                 )
                             })?;
-                        if graph.graph_speed == patch.graph_speed {
+                        if graph.graph_speed == *patch {
                             false
                         } else {
-                            graph.graph_speed = patch.graph_speed;
+                            graph.graph_speed = *patch;
                             true
                         }
                     }
@@ -1905,10 +1876,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "knob property target no longer matches its stable ID",
                                 )
                             })?;
-                        if knob.reverse == patch.reverse {
+                        if knob.reverse == *patch {
                             false
                         } else {
-                            knob.reverse = patch.reverse;
+                            knob.reverse = *patch;
                             true
                         }
                     }
@@ -1923,10 +1894,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "knob property target no longer matches its stable ID",
                                 )
                             })?;
-                        if knob.sensitivity == patch.sensitivity {
+                        if knob.sensitivity == *patch {
                             false
                         } else {
-                            knob.sensitivity = patch.sensitivity;
+                            knob.sensitivity = *patch;
                             true
                         }
                     }
@@ -1941,82 +1912,82 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "knob property target no longer matches its stable ID",
                                 )
                             })?;
-                        if knob.axis_id == patch.axis_id {
+                        if knob.axis_id == *patch {
                             false
                         } else {
-                            knob.axis_id.clone_from(&patch.axis_id);
+                            knob.axis_id.clone_from(patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::UseInlineStyles(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.use_inline_styles == Some(patch.use_inline_styles) {
+                        if position.use_inline_styles == Some(*patch) {
                             false
                         } else {
-                            position.use_inline_styles = Some(patch.use_inline_styles);
+                            position.use_inline_styles = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::FontWeight(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.font_weight == Some(patch.font_weight) {
+                        if position.font_weight == Some(*patch) {
                             false
                         } else {
-                            position.font_weight = Some(patch.font_weight);
+                            position.font_weight = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::FontItalic(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.font_italic == Some(patch.font_italic) {
+                        if position.font_italic == Some(*patch) {
                             false
                         } else {
-                            position.font_italic = Some(patch.font_italic);
+                            position.font_italic = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::FontUnderline(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.font_underline == Some(patch.font_underline) {
+                        if position.font_underline == Some(*patch) {
                             false
                         } else {
-                            position.font_underline = Some(patch.font_underline);
+                            position.font_underline = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::FontStrikethrough(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.font_strikethrough == Some(patch.font_strikethrough) {
+                        if position.font_strikethrough == Some(*patch) {
                             false
                         } else {
-                            position.font_strikethrough = Some(patch.font_strikethrough);
+                            position.font_strikethrough = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::FontFamily(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.font_family.as_deref() == Some(patch.font_family.as_str()) {
+                        if position.font_family.as_deref() == Some(patch.as_str()) {
                             false
                         } else {
-                            position.font_family = Some(patch.font_family.clone());
+                            position.font_family = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::DisplayText(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.display_text.as_deref() == Some(patch.display_text.as_str()) {
+                        if position.display_text.as_deref() == Some(patch.as_str()) {
                             false
                         } else {
-                            position.display_text = Some(patch.display_text.clone());
+                            position.display_text = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::ClassName(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.class_name.as_deref() == Some(patch.class_name.as_str()) {
+                        if position.class_name.as_deref() == Some(patch.as_str()) {
                             false
                         } else {
-                            position.class_name = Some(patch.class_name.clone());
+                            position.class_name = Some(patch.clone());
                             true
                         }
                     }
@@ -2026,33 +1997,30 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             location.element_type,
                             EditorElementTypeV1::Key | EditorElementTypeV1::Knob
                         ) && preserve_active_font_color_fallback(position);
-                        let changed =
-                            position.font_color.as_deref() != Some(patch.font_color.as_str());
-                        position.font_color = Some(patch.font_color.clone());
+                        let changed = position.font_color.as_deref() != Some(patch.as_str());
+                        position.font_color = Some(patch.clone());
                         changed || preserved
                     }
                     EditorElementPropertyPatchV1::ActiveFontColor(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.active_font_color.as_deref()
-                            == Some(patch.active_font_color.as_str())
-                        {
+                        if position.active_font_color.as_deref() == Some(patch.as_str()) {
                             false
                         } else {
-                            position.active_font_color = Some(patch.active_font_color.clone());
+                            position.active_font_color = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::Shadow(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        patch_shadow(position, location.element_type, false, &patch.shadow)
+                        patch_shadow(position, location.element_type, false, patch)
                     }
                     EditorElementPropertyPatchV1::ActiveShadow(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        patch_shadow(position, location.element_type, true, &patch.active_shadow)
+                        patch_shadow(position, location.element_type, true, patch)
                     }
                     EditorElementPropertyPatchV1::ShadowEnabled(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        patch_shadow_enabled(position, location.element_type, patch.shadow_enabled)
+                        patch_shadow_enabled(position, location.element_type, *patch)
                     }
                     EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -2063,7 +2031,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         apply_paint_descriptor(
                             &mut position.background_color,
                             &mut position.background_gradient,
-                            &patch.background_paint,
+                            patch,
                         ) || preserved
                     }
                     EditorElementPropertyPatchV1::ActiveBackgroundPaint(patch) => {
@@ -2071,7 +2039,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         apply_paint_descriptor(
                             &mut position.active_background_color,
                             &mut position.active_background_gradient,
-                            &patch.active_background_paint,
+                            patch,
                         )
                     }
                     EditorElementPropertyPatchV1::BorderPaint(patch) => {
@@ -2083,7 +2051,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         apply_paint_descriptor(
                             &mut position.border_color,
                             &mut position.border_gradient,
-                            &patch.border_paint,
+                            patch,
                         ) || preserved
                     }
                     EditorElementPropertyPatchV1::ActiveBorderPaint(patch) => {
@@ -2091,256 +2059,252 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         apply_paint_descriptor(
                             &mut position.active_border_color,
                             &mut position.active_border_gradient,
-                            &patch.active_border_paint,
+                            patch,
                         )
                     }
                     EditorElementPropertyPatchV1::BorderWidth(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.border_width == Some(patch.border_width) {
+                        if position.border_width == Some(*patch) {
                             false
                         } else {
-                            position.border_width = Some(patch.border_width);
+                            position.border_width = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::BorderRadius(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.border_radius == Some(patch.border_radius) {
+                        if position.border_radius == Some(*patch) {
                             false
                         } else {
-                            position.border_radius = Some(patch.border_radius);
+                            position.border_radius = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::FontSize(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.font_size == Some(patch.font_size) {
+                        if position.font_size == Some(*patch) {
                             false
                         } else {
-                            position.font_size = Some(patch.font_size);
+                            position.font_size = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::InactiveImage(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.inactive_image.as_deref() == Some(patch.inactive_image.as_str())
-                        {
+                        if position.inactive_image.as_deref() == Some(patch.as_str()) {
                             false
                         } else {
-                            position.inactive_image = Some(patch.inactive_image.clone());
+                            position.inactive_image = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::ActiveImage(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.active_image.as_deref() == Some(patch.active_image.as_str()) {
+                        if position.active_image.as_deref() == Some(patch.as_str()) {
                             false
                         } else {
-                            position.active_image = Some(patch.active_image.clone());
+                            position.active_image = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::IdleTransparent(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.idle_transparent == patch.idle_transparent {
+                        if position.idle_transparent == *patch {
                             false
                         } else {
-                            position.idle_transparent = patch.idle_transparent;
+                            position.idle_transparent = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::ActiveTransparent(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.active_transparent == patch.active_transparent {
+                        if position.active_transparent == *patch {
                             false
                         } else {
-                            position.active_transparent = patch.active_transparent;
+                            position.active_transparent = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::IdleImageFit(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.idle_image_fit.as_ref() == Some(&patch.idle_image_fit) {
+                        if position.idle_image_fit.as_ref() == Some(patch) {
                             false
                         } else {
-                            position.idle_image_fit = Some(patch.idle_image_fit.clone());
+                            position.idle_image_fit = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::ActiveImageFit(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.active_image_fit.as_ref() == Some(&patch.active_image_fit) {
+                        if position.active_image_fit.as_ref() == Some(patch) {
                             false
                         } else {
-                            position.active_image_fit = Some(patch.active_image_fit.clone());
+                            position.active_image_fit = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::SoundPath(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.sound_path.as_deref() == Some(patch.sound_path.as_str()) {
+                        if position.sound_path.as_deref() == Some(patch.as_str()) {
                             false
                         } else {
-                            position.sound_path = Some(patch.sound_path.clone());
+                            position.sound_path = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::SoundEnabled(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.sound_enabled == Some(patch.sound_enabled) {
+                        if position.sound_enabled == Some(*patch) {
                             false
                         } else {
-                            position.sound_enabled = Some(patch.sound_enabled);
+                            position.sound_enabled = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::SoundVolume(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.sound_volume == Some(patch.sound_volume) {
+                        if position.sound_volume == Some(*patch) {
                             false
                         } else {
-                            position.sound_volume = Some(patch.sound_volume);
+                            position.sound_volume = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterEnabled(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.enabled == patch.counter_enabled {
+                        if position.counter.enabled == *patch {
                             false
                         } else {
-                            position.counter.enabled = patch.counter_enabled;
+                            position.counter.enabled = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterAnimationEnabled(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.animation.enabled == patch.counter_animation_enabled {
+                        if position.counter.animation.enabled == *patch {
                             false
                         } else {
-                            position.counter.animation.enabled = patch.counter_animation_enabled;
+                            position.counter.animation.enabled = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterPlacement(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.placement == patch.counter_placement {
+                        if position.counter.placement == *patch {
                             false
                         } else {
-                            position.counter.placement = patch.counter_placement.clone();
+                            position.counter.placement = patch.clone();
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterAlign(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.align == patch.counter_align {
+                        if position.counter.align == *patch {
                             false
                         } else {
-                            position.counter.align = patch.counter_align.clone();
+                            position.counter.align = patch.clone();
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterAlignMode(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.align_mode == patch.counter_align_mode {
+                        if position.counter.align_mode == *patch {
                             false
                         } else {
-                            position.counter.align_mode = patch.counter_align_mode.clone();
+                            position.counter.align_mode = patch.clone();
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterGap(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.gap == patch.counter_gap {
+                        if position.counter.gap == *patch {
                             false
                         } else {
-                            position.counter.gap = patch.counter_gap;
+                            position.counter.gap = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterFontSize(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.font_size == patch.counter_font_size {
+                        if position.counter.font_size == *patch {
                             false
                         } else {
-                            position.counter.font_size = patch.counter_font_size;
+                            position.counter.font_size = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterFontWeight(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.font_weight == patch.counter_font_weight {
+                        if position.counter.font_weight == *patch {
                             false
                         } else {
-                            position.counter.font_weight = patch.counter_font_weight;
+                            position.counter.font_weight = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterFontItalic(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.font_italic == patch.counter_font_italic {
+                        if position.counter.font_italic == *patch {
                             false
                         } else {
-                            position.counter.font_italic = patch.counter_font_italic;
+                            position.counter.font_italic = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterFontUnderline(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.font_underline == patch.counter_font_underline {
+                        if position.counter.font_underline == *patch {
                             false
                         } else {
-                            position.counter.font_underline = patch.counter_font_underline;
+                            position.counter.font_underline = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterFontStrikethrough(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.font_strikethrough == patch.counter_font_strikethrough {
+                        if position.counter.font_strikethrough == *patch {
                             false
                         } else {
-                            position.counter.font_strikethrough = patch.counter_font_strikethrough;
+                            position.counter.font_strikethrough = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterFontFamily(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.font_family.as_deref()
-                            == Some(patch.counter_font_family.as_str())
-                        {
+                        if position.counter.font_family.as_deref() == Some(patch.as_str()) {
                             false
                         } else {
-                            position.counter.font_family = Some(patch.counter_font_family.clone());
+                            position.counter.font_family = Some(patch.clone());
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterFillIdle(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        patch_counter_fill(position, false, &patch.counter_fill_idle)
+                        patch_counter_fill(position, false, patch)
                     }
                     EditorElementPropertyPatchV1::CounterFillActive(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        patch_counter_fill(position, true, &patch.counter_fill_active)
+                        patch_counter_fill(position, true, patch)
                     }
                     EditorElementPropertyPatchV1::CounterStrokeIdle(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.stroke.idle == patch.counter_stroke_idle {
+                        if position.counter.stroke.idle == *patch {
                             false
                         } else {
-                            position.counter.stroke.idle = patch.counter_stroke_idle.clone();
+                            position.counter.stroke.idle = patch.clone();
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterStrokeActive(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.stroke.active == patch.counter_stroke_active {
+                        if position.counter.stroke.active == *patch {
                             false
                         } else {
-                            position.counter.stroke.active = patch.counter_stroke_active.clone();
+                            position.counter.stroke.active = patch.clone();
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::CounterAnimationPreset(patch) => {
-                        let patch = &patch.counter_animation_preset;
                         let position = position_at_mut(&mut candidate, location)?;
                         let animation = &mut position.counter.animation;
                         let mut changed = false;
@@ -2381,123 +2345,123 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                                     "stat property target no longer matches its stable ID",
                                 )
                             })?;
-                        if stat.stat_type == patch.stat_type {
+                        if stat.stat_type == *patch {
                             false
                         } else {
-                            stat.stat_type = patch.stat_type.clone();
+                            stat.stat_type = patch.clone();
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteEffectEnabled(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_effect_enabled == patch.note_effect_enabled {
+                        if position.note_effect_enabled == *patch {
                             false
                         } else {
-                            position.note_effect_enabled = patch.note_effect_enabled;
+                            position.note_effect_enabled = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteGlowEnabled(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_glow_enabled == patch.note_glow_enabled {
+                        if position.note_glow_enabled == *patch {
                             false
                         } else {
-                            position.note_glow_enabled = patch.note_glow_enabled;
+                            position.note_glow_enabled = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteGlowSize(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_glow_size == patch.note_glow_size {
+                        if position.note_glow_size == *patch {
                             false
                         } else {
-                            position.note_glow_size = patch.note_glow_size;
+                            position.note_glow_size = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NotePaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        patch_note_paint(position, false, &patch.note_paint)
+                        patch_note_paint(position, false, patch)
                     }
                     EditorElementPropertyPatchV1::NoteGlowPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        patch_note_paint(position, true, &patch.note_glow_paint)
+                        patch_note_paint(position, true, patch)
                     }
                     EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
                         let changed = position.note_border_color.as_deref()
-                            != Some(patch.note_border_paint.color.as_str())
-                            || position.note_border_opacity != patch.note_border_paint.opacity;
-                        position.note_border_color = Some(patch.note_border_paint.color.clone());
-                        position.note_border_opacity = patch.note_border_paint.opacity;
+                            != Some(patch.color.as_str())
+                            || position.note_border_opacity != patch.opacity;
+                        position.note_border_color = Some(patch.color.clone());
+                        position.note_border_opacity = patch.opacity;
                         changed
                     }
                     EditorElementPropertyPatchV1::NoteOffsetX(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_offset_x == patch.note_offset_x {
+                        if position.note_offset_x == *patch {
                             false
                         } else {
-                            position.note_offset_x = patch.note_offset_x;
+                            position.note_offset_x = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteOffsetY(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_offset_y == patch.note_offset_y {
+                        if position.note_offset_y == *patch {
                             false
                         } else {
-                            position.note_offset_y = patch.note_offset_y;
+                            position.note_offset_y = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteWidth(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_width == patch.note_width {
+                        if position.note_width == *patch {
                             false
                         } else {
-                            position.note_width = patch.note_width;
+                            position.note_width = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteBorderWidth(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_border_width == Some(patch.note_border_width) {
+                        if position.note_border_width == Some(*patch) {
                             false
                         } else {
-                            position.note_border_width = Some(patch.note_border_width);
+                            position.note_border_width = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteBorderRadius(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_border_radius == Some(patch.note_border_radius) {
+                        if position.note_border_radius == Some(*patch) {
                             false
                         } else {
-                            position.note_border_radius = Some(patch.note_border_radius);
+                            position.note_border_radius = Some(*patch);
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteAutoYCorrection(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_auto_y_correction == patch.note_auto_y_correction {
+                        if position.note_auto_y_correction == *patch {
                             false
                         } else {
-                            position.note_auto_y_correction = patch.note_auto_y_correction;
+                            position.note_auto_y_correction = *patch;
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteAlignment(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.note_alignment == patch.note_alignment {
+                        if position.note_alignment == *patch {
                             false
                         } else {
-                            position.note_alignment = patch.note_alignment.clone();
+                            position.note_alignment = patch.clone();
                             true
                         }
                     }
                     EditorElementPropertyPatchV1::NoteBorderSide(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        let note_border_side = patch.note_border_side.as_str();
+                        let note_border_side = patch.as_str();
                         if position.note_border_side.as_deref() == Some(note_border_side) {
                             false
                         } else {
@@ -2638,11 +2602,11 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            AppStoreData, EditorCounterAnimationPresetPropertyPatchV1, EditorElementGroupTargetV1,
-            EditorElementPropertyPatchV1, EditorFrozenElementV1, EditorFrozenGroupV1,
-            EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpV1,
-            EditorTargetGroupV1, EditorZUpdateV1, GraphPosition, GraphStatType, GraphType,
-            KeyPosition, KnobPosition, StatPosition, StatType,
+            AppStoreData, EditorElementGroupTargetV1, EditorElementPropertyPatchV1,
+            EditorFrozenElementV1, EditorFrozenGroupV1, EditorFrozenKeySlotV1, EditorGroupUpdateV1,
+            EditorOpResultStatusV1, EditorOpV1, EditorTargetGroupV1, EditorZUpdateV1,
+            GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, StatPosition,
+            StatType,
         },
         state::native_element_id::backfill_store_element_ids,
     };
@@ -2776,9 +2740,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1::Hidden(
-                crate::models::EditorHiddenPropertyPatchV1 { hidden },
-            ),
+            patch: EditorElementPropertyPatchV1::Hidden(hidden),
         }
     }
 
@@ -2790,11 +2752,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1::LayerName(
-                crate::models::EditorLayerNamePropertyPatchV1 {
-                    layer_name: layer_name.map(str::to_string),
-                },
-            ),
+            patch: EditorElementPropertyPatchV1::LayerName(layer_name.map(str::to_string)),
         }
     }
 
@@ -2806,9 +2764,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1::GraphType(
-                crate::models::EditorGraphTypePropertyPatchV1 { graph_type },
-            ),
+            patch: EditorElementPropertyPatchV1::GraphType(graph_type),
         }
     }
 
@@ -2820,11 +2776,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1::GraphColor(
-                crate::models::EditorGraphColorPropertyPatchV1 {
-                    graph_color: graph_color.into(),
-                },
-            ),
+            patch: EditorElementPropertyPatchV1::GraphColor(graph_color.into()),
         }
     }
 
@@ -2893,21 +2845,19 @@ mod tests {
     }
 
     fn shadow_leaf_color(color: &str) -> EditorShadowLeafPatchV1 {
-        EditorShadowLeafPatchV1::Color(crate::models::EditorShadowColorLeafPatchV1 {
-            color: color.to_string(),
-        })
+        EditorShadowLeafPatchV1::Color(color.to_string())
     }
 
     fn shadow_leaf_offset_x(offset_x: f64) -> EditorShadowLeafPatchV1 {
-        EditorShadowLeafPatchV1::OffsetX(crate::models::EditorShadowOffsetXLeafPatchV1 { offset_x })
+        EditorShadowLeafPatchV1::OffsetX(offset_x)
     }
 
     fn shadow_leaf_offset_y(offset_y: f64) -> EditorShadowLeafPatchV1 {
-        EditorShadowLeafPatchV1::OffsetY(crate::models::EditorShadowOffsetYLeafPatchV1 { offset_y })
+        EditorShadowLeafPatchV1::OffsetY(offset_y)
     }
 
     fn shadow_leaf_blur(blur: f64) -> EditorShadowLeafPatchV1 {
-        EditorShadowLeafPatchV1::Blur(crate::models::EditorShadowBlurLeafPatchV1 { blur })
+        EditorShadowLeafPatchV1::Blur(blur)
     }
 
     struct PatchTargetMatrixRow {
@@ -2945,519 +2895,221 @@ mod tests {
             })
         };
         vec![
-            row(
-                "hidden",
-                ALL,
-                Patch::Hidden(crate::models::EditorHiddenPropertyPatchV1 { hidden: true }),
-            ),
+            row("hidden", ALL, Patch::Hidden(true)),
             row(
                 "layerName",
                 ALL,
-                Patch::LayerName(crate::models::EditorLayerNamePropertyPatchV1 {
-                    layer_name: Some("layer".to_string()),
-                }),
+                Patch::LayerName(Some("layer".to_string())),
             ),
-            row(
-                "graphType",
-                GRAPH_ONLY,
-                Patch::GraphType(crate::models::EditorGraphTypePropertyPatchV1 {
-                    graph_type: GraphType::Bar,
-                }),
-            ),
+            row("graphType", GRAPH_ONLY, Patch::GraphType(GraphType::Bar)),
             row(
                 "graphColor",
                 GRAPH_ONLY,
-                Patch::GraphColor(crate::models::EditorGraphColorPropertyPatchV1 {
-                    graph_color: "#336699".to_string(),
-                }),
+                Patch::GraphColor("#336699".to_string()),
             ),
-            row(
-                "showAvgLine",
-                GRAPH_ONLY,
-                Patch::ShowAvgLine(crate::models::EditorShowAvgLinePropertyPatchV1 {
-                    show_avg_line: false,
-                }),
-            ),
+            row("showAvgLine", GRAPH_ONLY, Patch::ShowAvgLine(false)),
             row(
                 "graphAnimationEnabled",
                 GRAPH_ONLY,
-                Patch::GraphAnimationEnabled(
-                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
-                        graph_animation_enabled: true,
-                    },
-                ),
+                Patch::GraphAnimationEnabled(true),
             ),
-            row(
-                "graphSpeed",
-                GRAPH_ONLY,
-                Patch::GraphSpeed(crate::models::EditorGraphSpeedPropertyPatchV1 {
-                    graph_speed: 120,
-                }),
-            ),
-            row(
-                "reverse",
-                KNOB_ONLY,
-                Patch::Reverse(crate::models::EditorReversePropertyPatchV1 { reverse: true }),
-            ),
-            row(
-                "sensitivity",
-                KNOB_ONLY,
-                Patch::Sensitivity(crate::models::EditorSensitivityPropertyPatchV1 {
-                    sensitivity: 1.5,
-                }),
-            ),
-            row(
-                "axisId",
-                KNOB_ONLY,
-                Patch::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
-                    axis_id: "axis-2".to_string(),
-                }),
-            ),
-            row(
-                "useInlineStyles",
-                ALL,
-                Patch::UseInlineStyles(crate::models::EditorUseInlineStylesPropertyPatchV1 {
-                    use_inline_styles: true,
-                }),
-            ),
-            row(
-                "fontWeight",
-                ALL,
-                Patch::FontWeight(crate::models::EditorFontWeightPropertyPatchV1 {
-                    font_weight: 700,
-                }),
-            ),
-            row(
-                "fontItalic",
-                ALL,
-                Patch::FontItalic(crate::models::EditorFontItalicPropertyPatchV1 {
-                    font_italic: true,
-                }),
-            ),
-            row(
-                "fontUnderline",
-                ALL,
-                Patch::FontUnderline(crate::models::EditorFontUnderlinePropertyPatchV1 {
-                    font_underline: true,
-                }),
-            ),
-            row(
-                "fontStrikethrough",
-                ALL,
-                Patch::FontStrikethrough(crate::models::EditorFontStrikethroughPropertyPatchV1 {
-                    font_strikethrough: true,
-                }),
-            ),
-            row(
-                "fontFamily",
-                ALL,
-                Patch::FontFamily(crate::models::EditorFontFamilyPropertyPatchV1 {
-                    font_family: "Sans".to_string(),
-                }),
-            ),
-            row(
-                "displayText",
-                ALL,
-                Patch::DisplayText(crate::models::EditorDisplayTextPropertyPatchV1 {
-                    display_text: "A".to_string(),
-                }),
-            ),
-            row(
-                "className",
-                ALL,
-                Patch::ClassName(crate::models::EditorClassNamePropertyPatchV1 {
-                    class_name: "custom".to_string(),
-                }),
-            ),
-            row(
-                "fontColor",
-                ALL,
-                Patch::FontColor(crate::models::EditorFontColorPropertyPatchV1 {
-                    font_color: "#ffffff".to_string(),
-                }),
-            ),
+            row("graphSpeed", GRAPH_ONLY, Patch::GraphSpeed(120)),
+            row("reverse", KNOB_ONLY, Patch::Reverse(true)),
+            row("sensitivity", KNOB_ONLY, Patch::Sensitivity(1.5)),
+            row("axisId", KNOB_ONLY, Patch::AxisId("axis-2".to_string())),
+            row("useInlineStyles", ALL, Patch::UseInlineStyles(true)),
+            row("fontWeight", ALL, Patch::FontWeight(700)),
+            row("fontItalic", ALL, Patch::FontItalic(true)),
+            row("fontUnderline", ALL, Patch::FontUnderline(true)),
+            row("fontStrikethrough", ALL, Patch::FontStrikethrough(true)),
+            row("fontFamily", ALL, Patch::FontFamily("Sans".to_string())),
+            row("displayText", ALL, Patch::DisplayText("A".to_string())),
+            row("className", ALL, Patch::ClassName("custom".to_string())),
+            row("fontColor", ALL, Patch::FontColor("#ffffff".to_string())),
             row(
                 "activeFontColor",
                 KEY_KNOB,
-                Patch::ActiveFontColor(crate::models::EditorActiveFontColorPropertyPatchV1 {
-                    active_font_color: "#ff0000".to_string(),
-                }),
+                Patch::ActiveFontColor("#ff0000".to_string()),
             ),
             row(
                 "shadow",
                 KEY_STAT_KNOB,
-                Patch::Shadow(crate::models::EditorShadowPropertyPatchV1 {
-                    shadow: shadow_leaf_color("#000000"),
-                }),
+                Patch::Shadow(shadow_leaf_color("#000000")),
             ),
             row(
                 "activeShadow",
                 KEY_KNOB,
-                Patch::ActiveShadow(crate::models::EditorActiveShadowPropertyPatchV1 {
-                    active_shadow: shadow_leaf_color("#000000"),
-                }),
+                Patch::ActiveShadow(shadow_leaf_color("#000000")),
             ),
-            row(
-                "shadowEnabled",
-                KEY_STAT_KNOB,
-                Patch::ShadowEnabled(crate::models::EditorShadowEnabledPropertyPatchV1 {
-                    shadow_enabled: true,
-                }),
-            ),
+            row("shadowEnabled", KEY_STAT_KNOB, Patch::ShadowEnabled(true)),
             row(
                 "backgroundPaint",
                 ALL,
-                Patch::BackgroundPaint(crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                    background_paint: paint_descriptor("#112233", None),
-                }),
+                Patch::BackgroundPaint(paint_descriptor("#112233", None)),
             ),
             row(
                 "activeBackgroundPaint",
                 KEY_KNOB,
-                Patch::ActiveBackgroundPaint(
-                    crate::models::EditorActiveBackgroundPaintPropertyPatchV1 {
-                        active_background_paint: paint_descriptor("#112233", None),
-                    },
-                ),
+                Patch::ActiveBackgroundPaint(paint_descriptor("#112233", None)),
             ),
             row(
                 "borderPaint",
                 ALL,
-                Patch::BorderPaint(crate::models::EditorBorderPaintPropertyPatchV1 {
-                    border_paint: paint_descriptor("#112233", None),
-                }),
+                Patch::BorderPaint(paint_descriptor("#112233", None)),
             ),
             row(
                 "activeBorderPaint",
                 KEY_KNOB,
-                Patch::ActiveBorderPaint(crate::models::EditorActiveBorderPaintPropertyPatchV1 {
-                    active_border_paint: paint_descriptor("#112233", None),
-                }),
+                Patch::ActiveBorderPaint(paint_descriptor("#112233", None)),
             ),
-            row(
-                "borderWidth",
-                ALL,
-                Patch::BorderWidth(crate::models::EditorBorderWidthPropertyPatchV1 {
-                    border_width: 2.0,
-                }),
-            ),
-            row(
-                "borderRadius",
-                ALL,
-                Patch::BorderRadius(crate::models::EditorBorderRadiusPropertyPatchV1 {
-                    border_radius: 8.0,
-                }),
-            ),
-            row(
-                "fontSize",
-                ALL,
-                Patch::FontSize(crate::models::EditorFontSizePropertyPatchV1 { font_size: 16.0 }),
-            ),
+            row("borderWidth", ALL, Patch::BorderWidth(2.0)),
+            row("borderRadius", ALL, Patch::BorderRadius(8.0)),
+            row("fontSize", ALL, Patch::FontSize(16.0)),
             row(
                 "inactiveImage",
                 ALL,
-                Patch::InactiveImage(crate::models::EditorInactiveImagePropertyPatchV1 {
-                    inactive_image: "idle.png".to_string(),
-                }),
+                Patch::InactiveImage("idle.png".to_string()),
             ),
             row(
                 "activeImage",
                 KEY_KNOB,
-                Patch::ActiveImage(crate::models::EditorActiveImagePropertyPatchV1 {
-                    active_image: "active.png".to_string(),
-                }),
+                Patch::ActiveImage("active.png".to_string()),
             ),
-            row(
-                "idleTransparent",
-                ALL,
-                Patch::IdleTransparent(crate::models::EditorIdleTransparentPropertyPatchV1 {
-                    idle_transparent: true,
-                }),
-            ),
+            row("idleTransparent", ALL, Patch::IdleTransparent(true)),
             row(
                 "activeTransparent",
                 KEY_KNOB,
-                Patch::ActiveTransparent(crate::models::EditorActiveTransparentPropertyPatchV1 {
-                    active_transparent: true,
-                }),
+                Patch::ActiveTransparent(true),
             ),
-            row(
-                "idleImageFit",
-                ALL,
-                Patch::IdleImageFit(crate::models::EditorIdleImageFitPropertyPatchV1 {
-                    idle_image_fit: ImageFit::Contain,
-                }),
-            ),
+            row("idleImageFit", ALL, Patch::IdleImageFit(ImageFit::Contain)),
             row(
                 "activeImageFit",
                 KEY_KNOB,
-                Patch::ActiveImageFit(crate::models::EditorActiveImageFitPropertyPatchV1 {
-                    active_image_fit: ImageFit::Fill,
-                }),
+                Patch::ActiveImageFit(ImageFit::Fill),
             ),
             row(
                 "soundPath",
                 KEY_ONLY,
-                Patch::SoundPath(crate::models::EditorSoundPathPropertyPatchV1 {
-                    sound_path: "sound.mp3".to_string(),
-                }),
+                Patch::SoundPath("sound.mp3".to_string()),
             ),
-            row(
-                "soundEnabled",
-                KEY_ONLY,
-                Patch::SoundEnabled(crate::models::EditorSoundEnabledPropertyPatchV1 {
-                    sound_enabled: true,
-                }),
-            ),
-            row(
-                "soundVolume",
-                KEY_ONLY,
-                Patch::SoundVolume(crate::models::EditorSoundVolumePropertyPatchV1 {
-                    sound_volume: 80.0,
-                }),
-            ),
-            row(
-                "counterEnabled",
-                KEY_STAT,
-                Patch::CounterEnabled(crate::models::EditorCounterEnabledPropertyPatchV1 {
-                    counter_enabled: true,
-                }),
-            ),
+            row("soundEnabled", KEY_ONLY, Patch::SoundEnabled(true)),
+            row("soundVolume", KEY_ONLY, Patch::SoundVolume(80.0)),
+            row("counterEnabled", KEY_STAT, Patch::CounterEnabled(true)),
             row(
                 "counterAnimationEnabled",
                 KEY_STAT,
-                Patch::CounterAnimationEnabled(
-                    crate::models::EditorCounterAnimationEnabledPropertyPatchV1 {
-                        counter_animation_enabled: true,
-                    },
-                ),
+                Patch::CounterAnimationEnabled(true),
             ),
             row(
                 "counterPlacement",
                 KEY_STAT,
-                Patch::CounterPlacement(crate::models::EditorCounterPlacementPropertyPatchV1 {
-                    counter_placement: KeyCounterPlacement::Outside,
-                }),
+                Patch::CounterPlacement(KeyCounterPlacement::Outside),
             ),
             row(
                 "counterAlign",
                 KEY_STAT,
-                Patch::CounterAlign(crate::models::EditorCounterAlignPropertyPatchV1 {
-                    counter_align: KeyCounterAlign::Top,
-                }),
+                Patch::CounterAlign(KeyCounterAlign::Top),
             ),
             row(
                 "counterAlignMode",
                 KEY_STAT,
-                Patch::CounterAlignMode(crate::models::EditorCounterAlignModePropertyPatchV1 {
-                    counter_align_mode: KeyCounterAlignMode::Between,
-                }),
+                Patch::CounterAlignMode(KeyCounterAlignMode::Between),
             ),
-            row(
-                "counterGap",
-                KEY_STAT,
-                Patch::CounterGap(crate::models::EditorCounterGapPropertyPatchV1 {
-                    counter_gap: 4,
-                }),
-            ),
-            row(
-                "counterFontSize",
-                KEY_STAT,
-                Patch::CounterFontSize(crate::models::EditorCounterFontSizePropertyPatchV1 {
-                    counter_font_size: 14,
-                }),
-            ),
-            row(
-                "counterFontWeight",
-                KEY_STAT,
-                Patch::CounterFontWeight(crate::models::EditorCounterFontWeightPropertyPatchV1 {
-                    counter_font_weight: 500,
-                }),
-            ),
+            row("counterGap", KEY_STAT, Patch::CounterGap(4)),
+            row("counterFontSize", KEY_STAT, Patch::CounterFontSize(14)),
+            row("counterFontWeight", KEY_STAT, Patch::CounterFontWeight(500)),
             row(
                 "counterFontItalic",
                 KEY_STAT,
-                Patch::CounterFontItalic(crate::models::EditorCounterFontItalicPropertyPatchV1 {
-                    counter_font_italic: true,
-                }),
+                Patch::CounterFontItalic(true),
             ),
             row(
                 "counterFontUnderline",
                 KEY_STAT,
-                Patch::CounterFontUnderline(
-                    crate::models::EditorCounterFontUnderlinePropertyPatchV1 {
-                        counter_font_underline: true,
-                    },
-                ),
+                Patch::CounterFontUnderline(true),
             ),
             row(
                 "counterFontStrikethrough",
                 KEY_STAT,
-                Patch::CounterFontStrikethrough(
-                    crate::models::EditorCounterFontStrikethroughPropertyPatchV1 {
-                        counter_font_strikethrough: true,
-                    },
-                ),
+                Patch::CounterFontStrikethrough(true),
             ),
             row(
                 "counterFontFamily",
                 KEY_STAT,
-                Patch::CounterFontFamily(crate::models::EditorCounterFontFamilyPropertyPatchV1 {
-                    counter_font_family: "Sans".to_string(),
-                }),
+                Patch::CounterFontFamily("Sans".to_string()),
             ),
             row(
                 "counterFillIdle",
                 KEY_STAT,
-                Patch::CounterFillIdle(crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                    counter_fill_idle: counter_fill_solid("#ffffff"),
-                }),
+                Patch::CounterFillIdle(counter_fill_solid("#ffffff")),
             ),
             row(
                 "counterFillActive",
                 KEY_ONLY,
-                Patch::CounterFillActive(crate::models::EditorCounterFillActivePropertyPatchV1 {
-                    counter_fill_active: counter_fill_solid("#ffffff"),
-                }),
+                Patch::CounterFillActive(counter_fill_solid("#ffffff")),
             ),
             row(
                 "counterStrokeIdle",
                 KEY_STAT,
-                Patch::CounterStrokeIdle(crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                    counter_stroke_idle: "#000000".to_string(),
-                }),
+                Patch::CounterStrokeIdle("#000000".to_string()),
             ),
             row(
                 "counterStrokeActive",
                 KEY_ONLY,
-                Patch::CounterStrokeActive(
-                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
-                        counter_stroke_active: "#000000".to_string(),
-                    },
-                ),
+                Patch::CounterStrokeActive("#000000".to_string()),
             ),
             row(
                 "counterAnimationPreset",
                 KEY_STAT,
-                Patch::CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1 {
-                    counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
-                        preset_id: "builtin-ease-out".to_string(),
-                        apply_preset_id: None,
-                        bezier: None,
-                        scale: None,
-                        duration_ms: None,
-                    },
+                Patch::CounterAnimationPreset(EditorCounterAnimationPresetIntentV1 {
+                    preset_id: "builtin-ease-out".to_string(),
+                    apply_preset_id: None,
+                    bezier: None,
+                    scale: None,
+                    duration_ms: None,
                 }),
             ),
-            row(
-                "statType",
-                STAT_ONLY,
-                Patch::StatType(crate::models::EditorStatTypePropertyPatchV1 {
-                    stat_type: StatType::Total,
-                }),
-            ),
+            row("statType", STAT_ONLY, Patch::StatType(StatType::Total)),
             row(
                 "noteEffectEnabled",
                 KEY_ONLY,
-                Patch::NoteEffectEnabled(crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
-                    note_effect_enabled: true,
-                }),
+                Patch::NoteEffectEnabled(true),
             ),
-            row(
-                "noteGlowEnabled",
-                KEY_ONLY,
-                Patch::NoteGlowEnabled(crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
-                    note_glow_enabled: true,
-                }),
-            ),
-            row(
-                "noteGlowSize",
-                KEY_ONLY,
-                Patch::NoteGlowSize(crate::models::EditorNoteGlowSizePropertyPatchV1 {
-                    note_glow_size: 10.0,
-                }),
-            ),
-            row(
-                "notePaint",
-                KEY_ONLY,
-                Patch::NotePaint(crate::models::EditorNotePaintPropertyPatchV1 {
-                    note_paint: note_opacity(80),
-                }),
-            ),
+            row("noteGlowEnabled", KEY_ONLY, Patch::NoteGlowEnabled(true)),
+            row("noteGlowSize", KEY_ONLY, Patch::NoteGlowSize(10.0)),
+            row("notePaint", KEY_ONLY, Patch::NotePaint(note_opacity(80))),
             row(
                 "noteGlowPaint",
                 KEY_ONLY,
-                Patch::NoteGlowPaint(crate::models::EditorNoteGlowPaintPropertyPatchV1 {
-                    note_glow_paint: note_opacity(60),
-                }),
+                Patch::NoteGlowPaint(note_opacity(60)),
             ),
             row(
                 "noteBorderPaint",
                 KEY_ONLY,
-                Patch::NoteBorderPaint(crate::models::EditorNoteBorderPaintPropertyPatchV1 {
-                    note_border_paint: crate::models::EditorNoteBorderPaintV1 {
-                        color: "#112233".to_string(),
-                        opacity: 80,
-                    },
+                Patch::NoteBorderPaint(crate::models::EditorNoteBorderPaintV1 {
+                    color: "#112233".to_string(),
+                    opacity: 80,
                 }),
             ),
-            row(
-                "noteOffsetX",
-                KEY_ONLY,
-                Patch::NoteOffsetX(crate::models::EditorNoteOffsetXPropertyPatchV1 {
-                    note_offset_x: Some(10.0),
-                }),
-            ),
-            row(
-                "noteOffsetY",
-                KEY_ONLY,
-                Patch::NoteOffsetY(crate::models::EditorNoteOffsetYPropertyPatchV1 {
-                    note_offset_y: Some(-10.0),
-                }),
-            ),
-            row(
-                "noteWidth",
-                KEY_ONLY,
-                Patch::NoteWidth(crate::models::EditorNoteWidthPropertyPatchV1 {
-                    note_width: Some(40.0),
-                }),
-            ),
-            row(
-                "noteBorderWidth",
-                KEY_ONLY,
-                Patch::NoteBorderWidth(crate::models::EditorNoteBorderWidthPropertyPatchV1 {
-                    note_border_width: 2.0,
-                }),
-            ),
-            row(
-                "noteBorderRadius",
-                KEY_ONLY,
-                Patch::NoteBorderRadius(crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
-                    note_border_radius: 8.0,
-                }),
-            ),
+            row("noteOffsetX", KEY_ONLY, Patch::NoteOffsetX(Some(10.0))),
+            row("noteOffsetY", KEY_ONLY, Patch::NoteOffsetY(Some(-10.0))),
+            row("noteWidth", KEY_ONLY, Patch::NoteWidth(Some(40.0))),
+            row("noteBorderWidth", KEY_ONLY, Patch::NoteBorderWidth(2.0)),
+            row("noteBorderRadius", KEY_ONLY, Patch::NoteBorderRadius(8.0)),
             row(
                 "noteAutoYCorrection",
                 KEY_ONLY,
-                Patch::NoteAutoYCorrection(
-                    crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
-                        note_auto_y_correction: true,
-                    },
-                ),
+                Patch::NoteAutoYCorrection(true),
             ),
             row(
                 "noteAlignment",
                 KEY_ONLY,
-                Patch::NoteAlignment(crate::models::EditorNoteAlignmentPropertyPatchV1 {
-                    note_alignment: NoteAlignment::Left,
-                }),
+                Patch::NoteAlignment(NoteAlignment::Left),
             ),
             row(
                 "noteBorderSide",
                 KEY_ONLY,
-                Patch::NoteBorderSide(crate::models::EditorNoteBorderSidePropertyPatchV1 {
-                    note_border_side: EditorNoteBorderSideV1::Vertical,
-                }),
+                Patch::NoteBorderSide(EditorNoteBorderSideV1::Vertical),
             ),
         ]
     }
@@ -4595,59 +4247,37 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_ids[0],
-                EditorElementPropertyPatchV1::ShowAvgLine(
-                    crate::models::EditorShowAvgLinePropertyPatchV1 {
-                        show_avg_line: !graph_template.show_avg_line,
-                    },
-                ),
+                EditorElementPropertyPatchV1::ShowAvgLine(!graph_template.show_avg_line),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_ids[1],
-                EditorElementPropertyPatchV1::GraphAnimationEnabled(
-                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
-                        graph_animation_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::GraphAnimationEnabled(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_ids[2],
-                EditorElementPropertyPatchV1::GraphSpeed(
-                    crate::models::EditorGraphSpeedPropertyPatchV1 {
-                        graph_speed: u32::MAX,
-                    },
-                ),
+                EditorElementPropertyPatchV1::GraphSpeed(u32::MAX),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_ids[0],
-                EditorElementPropertyPatchV1::Reverse(
-                    crate::models::EditorReversePropertyPatchV1 {
-                        reverse: !knob_template.reverse,
-                    },
-                ),
+                EditorElementPropertyPatchV1::Reverse(!knob_template.reverse),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_ids[1],
-                EditorElementPropertyPatchV1::Sensitivity(
-                    crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: -7.25 },
-                ),
+                EditorElementPropertyPatchV1::Sensitivity(-7.25),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_ids[2],
-                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
-                    axis_id: "  HIDA:raw  ".to_string(),
-                }),
+                EditorElementPropertyPatchV1::AxisId("  HIDA:raw  ".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
-                    axis_id: "missing-axis".to_string(),
-                }),
+                EditorElementPropertyPatchV1::AxisId("missing-axis".to_string()),
             ),
         ];
 
@@ -4709,28 +4339,12 @@ mod tests {
 
         let key_id = store.key_positions["4key"][0].id.clone();
         for patch in [
-            EditorElementPropertyPatchV1::ShowAvgLine(
-                crate::models::EditorShowAvgLinePropertyPatchV1 {
-                    show_avg_line: false,
-                },
-            ),
-            EditorElementPropertyPatchV1::GraphAnimationEnabled(
-                crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
-                    graph_animation_enabled: false,
-                },
-            ),
-            EditorElementPropertyPatchV1::GraphSpeed(
-                crate::models::EditorGraphSpeedPropertyPatchV1 { graph_speed: 0 },
-            ),
-            EditorElementPropertyPatchV1::Reverse(crate::models::EditorReversePropertyPatchV1 {
-                reverse: false,
-            }),
-            EditorElementPropertyPatchV1::Sensitivity(
-                crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: 0.0 },
-            ),
-            EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
-                axis_id: String::new(),
-            }),
+            EditorElementPropertyPatchV1::ShowAvgLine(false),
+            EditorElementPropertyPatchV1::GraphAnimationEnabled(false),
+            EditorElementPropertyPatchV1::GraphSpeed(0),
+            EditorElementPropertyPatchV1::Reverse(false),
+            EditorElementPropertyPatchV1::Sensitivity(0.0),
+            EditorElementPropertyPatchV1::AxisId(String::new()),
         ] {
             let error = prepare_editor_ops_transition(
                 &store,
@@ -4746,11 +4360,7 @@ mod tests {
         let invalid = patch_property_op(
             EditorElementTypeV1::Knob,
             &knob_ids[0],
-            EditorElementPropertyPatchV1::Sensitivity(
-                crate::models::EditorSensitivityPropertyPatchV1 {
-                    sensitivity: f64::INFINITY,
-                },
-            ),
+            EditorElementPropertyPatchV1::Sensitivity(f64::INFINITY),
         );
         let error = prepare_editor_ops_transition(&store, &[invalid]).unwrap_err();
         assert_eq!(validation_code(&error), Some("INVALID_NUMBER"));
@@ -4787,11 +4397,7 @@ mod tests {
                 store.knob_positions["4key"][0].position.id.clone(),
             ),
         ];
-        let patch = EditorElementPropertyPatchV1::UseInlineStyles(
-            crate::models::EditorUseInlineStylesPropertyPatchV1 {
-                use_inline_styles: false,
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::UseInlineStyles(false);
         let mut ops = targets
             .iter()
             .map(|(element_type, id)| patch_property_op(*element_type, id, patch.clone()))
@@ -4914,43 +4520,27 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_id,
-                EditorElementPropertyPatchV1::FontWeight(
-                    crate::models::EditorFontWeightPropertyPatchV1 { font_weight: 400 },
-                ),
+                EditorElementPropertyPatchV1::FontWeight(400),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::FontItalic(
-                    crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
-                ),
+                EditorElementPropertyPatchV1::FontItalic(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_id,
-                EditorElementPropertyPatchV1::FontUnderline(
-                    crate::models::EditorFontUnderlinePropertyPatchV1 {
-                        font_underline: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontUnderline(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::FontStrikethrough(
-                    crate::models::EditorFontStrikethroughPropertyPatchV1 {
-                        font_strikethrough: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontStrikethrough(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::FontWeight(
-                    crate::models::EditorFontWeightPropertyPatchV1 {
-                        font_weight: u32::MAX,
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontWeight(u32::MAX),
             ),
         ];
 
@@ -5049,9 +4639,7 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Stat,
                     &graph_id,
-                    EditorElementPropertyPatchV1::FontItalic(
-                        crate::models::EditorFontItalicPropertyPatchV1 { font_italic: true },
-                    ),
+                    EditorElementPropertyPatchV1::FontItalic(true),
                 ),
             ],
         )
@@ -5106,21 +4694,13 @@ mod tests {
                 patch_property_op(
                     *element_type,
                     id,
-                    EditorElementPropertyPatchV1::FontFamily(
-                        crate::models::EditorFontFamilyPropertyPatchV1 {
-                            font_family: (*font_family).to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::FontFamily((*font_family).to_string()),
                 )
             })
             .chain(std::iter::once(patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::FontFamily(
-                    crate::models::EditorFontFamilyPropertyPatchV1 {
-                        font_family: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontFamily("missing".to_string()),
             )))
             .collect::<Vec<_>>();
 
@@ -5231,11 +4811,7 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Stat,
                     &targets[2].1,
-                    EditorElementPropertyPatchV1::FontFamily(
-                        crate::models::EditorFontFamilyPropertyPatchV1 {
-                            font_family: "wrong-type".to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::FontFamily("wrong-type".to_string()),
                 ),
             ],
         )
@@ -5287,21 +4863,13 @@ mod tests {
                 patch_property_op(
                     *element_type,
                     id,
-                    EditorElementPropertyPatchV1::DisplayText(
-                        crate::models::EditorDisplayTextPropertyPatchV1 {
-                            display_text: (*display_text).to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::DisplayText((*display_text).to_string()),
                 )
             })
             .chain(std::iter::once(patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::DisplayText(
-                    crate::models::EditorDisplayTextPropertyPatchV1 {
-                        display_text: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::DisplayText("missing".to_string()),
             )))
             .collect::<Vec<_>>();
 
@@ -5373,11 +4941,7 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Stat,
                     &targets[2].1,
-                    EditorElementPropertyPatchV1::DisplayText(
-                        crate::models::EditorDisplayTextPropertyPatchV1 {
-                            display_text: "wrong-type".to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::DisplayText("wrong-type".to_string()),
                 ),
             ],
         )
@@ -5429,21 +4993,13 @@ mod tests {
                 patch_property_op(
                     *element_type,
                     id,
-                    EditorElementPropertyPatchV1::ClassName(
-                        crate::models::EditorClassNamePropertyPatchV1 {
-                            class_name: (*class_name).to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::ClassName((*class_name).to_string()),
                 )
             })
             .chain(std::iter::once(patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ClassName(
-                    crate::models::EditorClassNamePropertyPatchV1 {
-                        class_name: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ClassName("missing".to_string()),
             )))
             .collect::<Vec<_>>();
 
@@ -5515,11 +5071,7 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Stat,
                     &targets[2].1,
-                    EditorElementPropertyPatchV1::ClassName(
-                        crate::models::EditorClassNamePropertyPatchV1 {
-                            class_name: "wrong-type".to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::ClassName("wrong-type".to_string()),
                 ),
             ],
         )
@@ -5552,41 +5104,27 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_id,
-                EditorElementPropertyPatchV1::BorderWidth(
-                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 0.0 },
-                ),
+                EditorElementPropertyPatchV1::BorderWidth(0.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::BorderRadius(
-                    crate::models::EditorBorderRadiusPropertyPatchV1 {
-                        border_radius: 100.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderRadius(100.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_id,
-                EditorElementPropertyPatchV1::FontSize(
-                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 8.0 },
-                ),
+                EditorElementPropertyPatchV1::FontSize(8.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::BorderRadius(
-                    crate::models::EditorBorderRadiusPropertyPatchV1 {
-                        border_radius: 999.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderRadius(999.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::BorderWidth(
-                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 1.0 },
-                ),
+                EditorElementPropertyPatchV1::BorderWidth(1.0),
             ),
         ];
 
@@ -5671,16 +5209,12 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Stat,
                     &stat_id,
-                    EditorElementPropertyPatchV1::BorderWidth(
-                        crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 20.0 },
-                    ),
+                    EditorElementPropertyPatchV1::BorderWidth(20.0),
                 ),
                 patch_property_op(
                     EditorElementTypeV1::Graph,
                     &graph_id,
-                    EditorElementPropertyPatchV1::FontSize(
-                        crate::models::EditorFontSizePropertyPatchV1 { font_size: 72.0 },
-                    ),
+                    EditorElementPropertyPatchV1::FontSize(72.0),
                 ),
             ],
         )
@@ -5705,9 +5239,7 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Stat,
                     &graph_id,
-                    EditorElementPropertyPatchV1::FontSize(
-                        crate::models::EditorFontSizePropertyPatchV1 { font_size: 16.0 },
-                    ),
+                    EditorElementPropertyPatchV1::FontSize(16.0),
                 ),
             ],
         )
@@ -5718,66 +5250,42 @@ mod tests {
         let invalid = [
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::BorderWidth(
-                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: -0.1 },
-                ),
+                EditorElementPropertyPatchV1::BorderWidth(-0.1),
                 "BORDER_WIDTH_OUT_OF_RANGE",
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::BorderWidth(
-                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 20.1 },
-                ),
+                EditorElementPropertyPatchV1::BorderWidth(20.1),
                 "BORDER_WIDTH_OUT_OF_RANGE",
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::BorderRadius(
-                    crate::models::EditorBorderRadiusPropertyPatchV1 {
-                        border_radius: 100.1,
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderRadius(100.1),
                 "BORDER_RADIUS_OUT_OF_RANGE",
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::BorderRadius(
-                    crate::models::EditorBorderRadiusPropertyPatchV1 {
-                        border_radius: 999.1,
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderRadius(999.1),
                 "BORDER_RADIUS_OUT_OF_RANGE",
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::FontSize(
-                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 7.9 },
-                ),
+                EditorElementPropertyPatchV1::FontSize(7.9),
                 "FONT_SIZE_OUT_OF_RANGE",
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::FontSize(
-                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 72.1 },
-                ),
+                EditorElementPropertyPatchV1::FontSize(72.1),
                 "FONT_SIZE_OUT_OF_RANGE",
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::BorderWidth(
-                    crate::models::EditorBorderWidthPropertyPatchV1 {
-                        border_width: f64::NAN,
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderWidth(f64::NAN),
                 "BORDER_WIDTH_OUT_OF_RANGE",
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::FontSize(
-                    crate::models::EditorFontSizePropertyPatchV1 {
-                        font_size: f64::INFINITY,
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontSize(f64::INFINITY),
                 "FONT_SIZE_OUT_OF_RANGE",
             ),
         ];
@@ -5831,11 +5339,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Key,
                 &targets[0].1,
-                EditorElementPropertyPatchV1::InactiveImage(
-                    crate::models::EditorInactiveImagePropertyPatchV1 {
-                        inactive_image: "  raw/path.png  ".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::InactiveImage("  raw/path.png  ".to_string()),
             )],
         )
         .unwrap();
@@ -5845,11 +5349,7 @@ mod tests {
                 .as_deref(),
             Some("  raw/path.png  ")
         );
-        let patch = EditorElementPropertyPatchV1::InactiveImage(
-            crate::models::EditorInactiveImagePropertyPatchV1 {
-                inactive_image: String::new(),
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::InactiveImage(String::new());
         let ops = targets
             .iter()
             .map(|(element_type, id)| patch_property_op(*element_type, id, patch.clone()))
@@ -5919,11 +5419,7 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Stat,
                     &targets[2].1,
-                    EditorElementPropertyPatchV1::InactiveImage(
-                        crate::models::EditorInactiveImagePropertyPatchV1 {
-                            inactive_image: "wrong".to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::InactiveImage("wrong".to_string()),
                 ),
             ],
         )
@@ -5951,11 +5447,7 @@ mod tests {
         let key_id = store.key_positions["4key"][0].id.clone();
         let knob_id = store.knob_positions["4key"][0].position.id.clone();
         let missing_id = uuid::Uuid::new_v4().to_string();
-        let patch = EditorElementPropertyPatchV1::ActiveImage(
-            crate::models::EditorActiveImagePropertyPatchV1 {
-                active_image: String::new(),
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::ActiveImage(String::new());
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &key_id, patch.clone()),
             patch_property_op(EditorElementTypeV1::Knob, &knob_id, patch.clone()),
@@ -5967,11 +5459,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::ActiveImage(
-                    crate::models::EditorActiveImagePropertyPatchV1 {
-                        active_image: "  raw/active.png  ".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveImage("  raw/active.png  ".to_string()),
             )],
         )
         .unwrap();
@@ -6083,11 +5571,7 @@ mod tests {
                 store.knob_positions["4key"][0].position.id.clone(),
             ),
         ];
-        let idle_patch = EditorElementPropertyPatchV1::IdleTransparent(
-            crate::models::EditorIdleTransparentPropertyPatchV1 {
-                idle_transparent: true,
-            },
-        );
+        let idle_patch = EditorElementPropertyPatchV1::IdleTransparent(true);
         let idle_ops = targets
             .iter()
             .map(|(element_type, id)| patch_property_op(*element_type, id, idle_patch.clone()))
@@ -6159,11 +5643,7 @@ mod tests {
             ]
         );
 
-        let active_patch = EditorElementPropertyPatchV1::ActiveTransparent(
-            crate::models::EditorActiveTransparentPropertyPatchV1 {
-                active_transparent: true,
-            },
-        );
+        let active_patch = EditorElementPropertyPatchV1::ActiveTransparent(true);
         let active_ops = vec![
             patch_property_op(
                 EditorElementTypeV1::Key,
@@ -6261,11 +5741,7 @@ mod tests {
                 store.knob_positions["4key"][0].position.id.clone(),
             ),
         ];
-        let idle_patch = EditorElementPropertyPatchV1::IdleImageFit(
-            crate::models::EditorIdleImageFitPropertyPatchV1 {
-                idle_image_fit: crate::models::ImageFit::Cover,
-            },
-        );
+        let idle_patch = EditorElementPropertyPatchV1::IdleImageFit(crate::models::ImageFit::Cover);
         let idle_ops = targets
             .iter()
             .map(|(element_type, id)| patch_property_op(*element_type, id, idle_patch.clone()))
@@ -6325,11 +5801,8 @@ mod tests {
             ]
         );
 
-        let active_patch = EditorElementPropertyPatchV1::ActiveImageFit(
-            crate::models::EditorActiveImageFitPropertyPatchV1 {
-                active_image_fit: crate::models::ImageFit::Cover,
-            },
-        );
+        let active_patch =
+            EditorElementPropertyPatchV1::ActiveImageFit(crate::models::ImageFit::Cover);
         let active_ops = vec![
             patch_property_op(
                 EditorElementTypeV1::Key,
@@ -6405,11 +5878,7 @@ mod tests {
             .take(2)
             .map(|position| position.id.clone())
             .collect::<Vec<_>>();
-        let patch = EditorElementPropertyPatchV1::SoundPath(
-            crate::models::EditorSoundPathPropertyPatchV1 {
-                sound_path: String::new(),
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::SoundPath(String::new());
         let ops = key_ids
             .iter()
             .map(|id| patch_property_op(EditorElementTypeV1::Key, id, patch.clone()))
@@ -6425,11 +5894,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[0],
-                EditorElementPropertyPatchV1::SoundPath(
-                    crate::models::EditorSoundPathPropertyPatchV1 {
-                        sound_path: "  raw/sound.wav  ".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::SoundPath("  raw/sound.wav  ".to_string()),
             )],
         )
         .unwrap();
@@ -6523,11 +5988,7 @@ mod tests {
             position.active_image = Some("active-sibling.png".to_string());
             position.counter.enabled = false;
         }
-        let patch = EditorElementPropertyPatchV1::SoundEnabled(
-            crate::models::EditorSoundEnabledPropertyPatchV1 {
-                sound_enabled: false,
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::SoundEnabled(false);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &key_ids[0], patch.clone()),
             patch_property_op(EditorElementTypeV1::Key, &key_ids[1], patch.clone()),
@@ -6621,11 +6082,7 @@ mod tests {
             position.active_image = Some("active-sibling.png".to_string());
             position.counter.enabled = false;
         }
-        let patch = EditorElementPropertyPatchV1::SoundVolume(
-            crate::models::EditorSoundVolumePropertyPatchV1 {
-                sound_volume: 100.0,
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::SoundVolume(100.0);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &key_ids[0], patch.clone()),
             patch_property_op(EditorElementTypeV1::Key, &key_ids[1], patch.clone()),
@@ -6701,11 +6158,7 @@ mod tests {
                     patch_property_op(
                         EditorElementTypeV1::Key,
                         uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::SoundVolume(
-                            crate::models::EditorSoundVolumePropertyPatchV1 {
-                                sound_volume: invalid,
-                            },
-                        ),
+                        EditorElementPropertyPatchV1::SoundVolume(invalid),
                     ),
                 ],
             )
@@ -6719,11 +6172,7 @@ mod tests {
                 &[patch_property_op(
                     EditorElementTypeV1::Key,
                     &key_ids[0],
-                    EditorElementPropertyPatchV1::SoundVolume(
-                        crate::models::EditorSoundVolumePropertyPatchV1 {
-                            sound_volume: boundary,
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::SoundVolume(boundary),
                 )],
             )
             .unwrap();
@@ -6754,16 +6203,8 @@ mod tests {
             counter.animation.preset_id = Some("builtin-linear".to_string());
             counter.animation.scale = 1.75;
         }
-        let counter_enabled = EditorElementPropertyPatchV1::CounterEnabled(
-            crate::models::EditorCounterEnabledPropertyPatchV1 {
-                counter_enabled: false,
-            },
-        );
-        let animation_enabled = EditorElementPropertyPatchV1::CounterAnimationEnabled(
-            crate::models::EditorCounterAnimationEnabledPropertyPatchV1 {
-                counter_animation_enabled: false,
-            },
-        );
+        let counter_enabled = EditorElementPropertyPatchV1::CounterEnabled(false);
+        let animation_enabled = EditorElementPropertyPatchV1::CounterAnimationEnabled(false);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &key_id, counter_enabled.clone()),
             patch_property_op(
@@ -6953,25 +6394,14 @@ mod tests {
             store.stat_positions["4key"][1].position.counter.clone(),
         ];
         let placement = EditorElementPropertyPatchV1::CounterPlacement(
-            crate::models::EditorCounterPlacementPropertyPatchV1 {
-                counter_placement: crate::models::KeyCounterPlacement::Outside,
-            },
+            crate::models::KeyCounterPlacement::Outside,
         );
-        let align = EditorElementPropertyPatchV1::CounterAlign(
-            crate::models::EditorCounterAlignPropertyPatchV1 {
-                counter_align: crate::models::KeyCounterAlign::Right,
-            },
-        );
+        let align =
+            EditorElementPropertyPatchV1::CounterAlign(crate::models::KeyCounterAlign::Right);
         let align_mode = EditorElementPropertyPatchV1::CounterAlignMode(
-            crate::models::EditorCounterAlignModePropertyPatchV1 {
-                counter_align_mode: crate::models::KeyCounterAlignMode::Center,
-            },
+            crate::models::KeyCounterAlignMode::Center,
         );
-        let gap = EditorElementPropertyPatchV1::CounterGap(
-            crate::models::EditorCounterGapPropertyPatchV1 {
-                counter_gap: u32::MAX,
-            },
-        );
+        let gap = EditorElementPropertyPatchV1::CounterGap(u32::MAX);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &key_ids[0], placement.clone()),
             patch_property_op(EditorElementTypeV1::Key, &key_ids[1], align.clone()),
@@ -7121,36 +6551,12 @@ mod tests {
             store.stat_positions["4key"][3].position.counter.clone(),
         ];
         let patches = [
-            EditorElementPropertyPatchV1::CounterFontSize(
-                crate::models::EditorCounterFontSizePropertyPatchV1 {
-                    counter_font_size: 72,
-                },
-            ),
-            EditorElementPropertyPatchV1::CounterFontWeight(
-                crate::models::EditorCounterFontWeightPropertyPatchV1 {
-                    counter_font_weight: 900,
-                },
-            ),
-            EditorElementPropertyPatchV1::CounterFontItalic(
-                crate::models::EditorCounterFontItalicPropertyPatchV1 {
-                    counter_font_italic: true,
-                },
-            ),
-            EditorElementPropertyPatchV1::CounterFontUnderline(
-                crate::models::EditorCounterFontUnderlinePropertyPatchV1 {
-                    counter_font_underline: true,
-                },
-            ),
-            EditorElementPropertyPatchV1::CounterFontStrikethrough(
-                crate::models::EditorCounterFontStrikethroughPropertyPatchV1 {
-                    counter_font_strikethrough: true,
-                },
-            ),
-            EditorElementPropertyPatchV1::CounterFontFamily(
-                crate::models::EditorCounterFontFamilyPropertyPatchV1 {
-                    counter_font_family: "  raw-counter-font  ".to_string(),
-                },
-            ),
+            EditorElementPropertyPatchV1::CounterFontSize(72),
+            EditorElementPropertyPatchV1::CounterFontWeight(900),
+            EditorElementPropertyPatchV1::CounterFontItalic(true),
+            EditorElementPropertyPatchV1::CounterFontUnderline(true),
+            EditorElementPropertyPatchV1::CounterFontStrikethrough(true),
+            EditorElementPropertyPatchV1::CounterFontFamily("  raw-counter-font  ".to_string()),
         ];
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &key_ids[0], patches[0].clone()),
@@ -7268,35 +6674,19 @@ mod tests {
 
         for (patch, code) in [
             (
-                EditorElementPropertyPatchV1::CounterFontSize(
-                    crate::models::EditorCounterFontSizePropertyPatchV1 {
-                        counter_font_size: 7,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontSize(7),
                 "COUNTER_FONT_SIZE_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::CounterFontSize(
-                    crate::models::EditorCounterFontSizePropertyPatchV1 {
-                        counter_font_size: 73,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontSize(73),
                 "COUNTER_FONT_SIZE_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::CounterFontWeight(
-                    crate::models::EditorCounterFontWeightPropertyPatchV1 {
-                        counter_font_weight: 99,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontWeight(99),
                 "COUNTER_FONT_WEIGHT_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::CounterFontWeight(
-                    crate::models::EditorCounterFontWeightPropertyPatchV1 {
-                        counter_font_weight: 901,
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFontWeight(901),
                 "COUNTER_FONT_WEIGHT_OUT_OF_RANGE",
             ),
         ] {
@@ -7318,20 +6708,12 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Key,
                     &key_ids[0],
-                    EditorElementPropertyPatchV1::CounterFontSize(
-                        crate::models::EditorCounterFontSizePropertyPatchV1 {
-                            counter_font_size: 8,
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::CounterFontSize(8),
                 ),
                 patch_property_op(
                     EditorElementTypeV1::Stat,
                     &stat_ids[0],
-                    EditorElementPropertyPatchV1::CounterFontWeight(
-                        crate::models::EditorCounterFontWeightPropertyPatchV1 {
-                            counter_font_weight: 100,
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::CounterFontWeight(100),
                 ),
             ],
         )
@@ -7420,38 +6802,22 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[0],
-                EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: idle_gradient.clone(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillIdle(idle_gradient.clone()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[1],
-                EditorElementPropertyPatchV1::CounterFillActive(
-                    crate::models::EditorCounterFillActivePropertyPatchV1 {
-                        counter_fill_active: active_gradient.clone(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillActive(active_gradient.clone()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: counter_fill_solid("  raw solid  "),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillIdle(counter_fill_solid("  raw solid  ")),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: counter_fill_solid("missing"),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillIdle(counter_fill_solid("missing")),
             ),
         ];
 
@@ -7543,11 +6909,7 @@ mod tests {
                     patch_property_op(
                         EditorElementTypeV1::Key,
                         uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::CounterFillIdle(
-                            crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                                counter_fill_idle: invalid,
-                            },
-                        ),
+                        EditorElementPropertyPatchV1::CounterFillIdle(invalid),
                     ),
                 ],
             )
@@ -7559,27 +6921,15 @@ mod tests {
         for (element_type, patch) in [
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: counter_fill_solid("idle"),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillIdle(counter_fill_solid("idle")),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: counter_fill_solid("idle"),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillIdle(counter_fill_solid("idle")),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterFillActive(
-                    crate::models::EditorCounterFillActivePropertyPatchV1 {
-                        counter_fill_active: counter_fill_solid("active"),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterFillActive(counter_fill_solid("active")),
             ),
         ] {
             let error = prepare_editor_ops_transition(
@@ -7638,38 +6988,24 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[0],
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                        counter_stroke_idle: String::new(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(String::new()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[1],
                 EditorElementPropertyPatchV1::CounterStrokeActive(
-                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
-                        counter_stroke_active: "  raw active stroke  ".to_string(),
-                    },
+                    "  raw active stroke  ".to_string(),
                 ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                        counter_stroke_idle: "raw stat stroke".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeIdle("raw stat stroke".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                        counter_stroke_idle: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeIdle("missing".to_string()),
             ),
         ];
 
@@ -7728,19 +7064,11 @@ mod tests {
         for (element_type, patch) in [
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                        counter_stroke_idle: "wrong".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeIdle("wrong".to_string()),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeActive(
-                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
-                        counter_stroke_active: "wrong".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeActive("wrong".to_string()),
             ),
         ] {
             let error = prepare_editor_ops_transition(
@@ -7783,25 +7111,21 @@ mod tests {
             animation.duration_ms = 777;
         }
         let partial = EditorElementPropertyPatchV1::CounterAnimationPreset(
-            EditorCounterAnimationPresetPropertyPatchV1 {
-                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
-                    preset_id: preset.id.clone(),
-                    apply_preset_id: None,
-                    bezier: None,
-                    scale: Some(preset.scale),
-                    duration_ms: None,
-                },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: None,
+                scale: Some(preset.scale),
+                duration_ms: None,
             },
         );
         let full = EditorElementPropertyPatchV1::CounterAnimationPreset(
-            EditorCounterAnimationPresetPropertyPatchV1 {
-                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
-                    preset_id: preset.id.clone(),
-                    apply_preset_id: Some(true),
-                    bezier: Some(preset.bezier),
-                    scale: Some(preset.scale),
-                    duration_ms: Some(preset.duration_ms),
-                },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: Some(true),
+                bezier: Some(preset.bezier),
+                scale: Some(preset.scale),
+                duration_ms: Some(preset.duration_ms),
             },
         );
         let ops = vec![
@@ -7859,14 +7183,12 @@ mod tests {
         );
 
         let id_only = EditorElementPropertyPatchV1::CounterAnimationPreset(
-            EditorCounterAnimationPresetPropertyPatchV1 {
-                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
-                    preset_id: preset.id.clone(),
-                    apply_preset_id: None,
-                    bezier: None,
-                    scale: None,
-                    duration_ms: None,
-                },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: None,
+                scale: None,
+                duration_ms: None,
             },
         );
         prepare_editor_ops_transition(
@@ -7880,14 +7202,12 @@ mod tests {
         .unwrap();
 
         let stale = EditorElementPropertyPatchV1::CounterAnimationPreset(
-            EditorCounterAnimationPresetPropertyPatchV1 {
-                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
-                    preset_id: preset.id.clone(),
-                    apply_preset_id: None,
-                    bezier: Some(preset.bezier),
-                    scale: Some(preset.scale + 0.01),
-                    duration_ms: Some(preset.duration_ms),
-                },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: Some(preset.bezier),
+                scale: Some(preset.scale + 0.01),
+                duration_ms: Some(preset.duration_ms),
             },
         );
         let error = prepare_editor_ops_transition(
@@ -7912,14 +7232,12 @@ mod tests {
         );
 
         let missing_preset = EditorElementPropertyPatchV1::CounterAnimationPreset(
-            EditorCounterAnimationPresetPropertyPatchV1 {
-                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
-                    preset_id: "user-deleted".to_string(),
-                    apply_preset_id: Some(true),
-                    bezier: None,
-                    scale: None,
-                    duration_ms: None,
-                },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: "user-deleted".to_string(),
+                apply_preset_id: Some(true),
+                bezier: None,
+                scale: None,
+                duration_ms: None,
             },
         );
         let error = prepare_editor_ops_transition(
@@ -7978,11 +7296,7 @@ mod tests {
                 &[patch_property_op(
                     EditorElementTypeV1::Key,
                     &key_id,
-                    EditorElementPropertyPatchV1::CounterAnimationPreset(
-                        EditorCounterAnimationPresetPropertyPatchV1 {
-                            counter_animation_preset: invalid,
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::CounterAnimationPreset(invalid),
                 )],
             )
             .unwrap_err();
@@ -8014,10 +7328,7 @@ mod tests {
         let graph = store.graph_positions["4key"][0].clone();
         let stat_id = stat.position.id.clone();
         let missing_id = uuid::Uuid::new_v4().to_string();
-        let patch =
-            EditorElementPropertyPatchV1::StatType(crate::models::EditorStatTypePropertyPatchV1 {
-                stat_type: StatType::Total,
-            });
+        let patch = EditorElementPropertyPatchV1::StatType(StatType::Total);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Stat, &stat_id, patch.clone()),
             patch_property_op(EditorElementTypeV1::Stat, missing_id, patch.clone()),
@@ -8097,56 +7408,34 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[0],
-                EditorElementPropertyPatchV1::NoteEffectEnabled(
-                    crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
-                        note_effect_enabled: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteEffectEnabled(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[1],
-                EditorElementPropertyPatchV1::NoteGlowEnabled(
-                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
-                        note_glow_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteGlowEnabled(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[2],
-                EditorElementPropertyPatchV1::NoteAutoYCorrection(
-                    crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
-                        note_auto_y_correction: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteAutoYCorrection(false),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[3],
-                EditorElementPropertyPatchV1::NoteAlignment(
-                    crate::models::EditorNoteAlignmentPropertyPatchV1 {
-                        note_alignment: crate::models::NoteAlignment::Right,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteAlignment(crate::models::NoteAlignment::Right),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[4],
                 EditorElementPropertyPatchV1::NoteBorderSide(
-                    crate::models::EditorNoteBorderSidePropertyPatchV1 {
-                        note_border_side: crate::models::EditorNoteBorderSideV1::All,
-                    },
+                    crate::models::EditorNoteBorderSideV1::All,
                 ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::NoteGlowEnabled(
-                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
-                        note_glow_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteGlowEnabled(true),
             ),
         ];
 
@@ -8219,11 +7508,7 @@ mod tests {
                     patch_property_op(
                         element_type,
                         id,
-                        EditorElementPropertyPatchV1::NoteGlowEnabled(
-                            crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
-                                note_glow_enabled: true,
-                            },
-                        ),
+                        EditorElementPropertyPatchV1::NoteGlowEnabled(true),
                     ),
                 ],
             )
@@ -8251,11 +7536,7 @@ mod tests {
         position.note_color = crate::models::NoteColor::Solid("note-sibling".to_string());
         position.note_border_width = Some(2.5);
         let original = position.clone();
-        let patch = EditorElementPropertyPatchV1::NoteGlowSize(
-            crate::models::EditorNoteGlowSizePropertyPatchV1 {
-                note_glow_size: 0.5,
-            },
-        );
+        let patch = EditorElementPropertyPatchV1::NoteGlowSize(0.5);
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &id, patch.clone()),
             patch_property_op(
@@ -8308,11 +7589,7 @@ mod tests {
                     patch_property_op(
                         EditorElementTypeV1::Key,
                         uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::NoteGlowSize(
-                            crate::models::EditorNoteGlowSizePropertyPatchV1 {
-                                note_glow_size: value,
-                            },
-                        ),
+                        EditorElementPropertyPatchV1::NoteGlowSize(value),
                     ),
                 ],
             )
@@ -8326,11 +7603,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Key,
                 &id,
-                EditorElementPropertyPatchV1::NoteGlowSize(
-                    crate::models::EditorNoteGlowSizePropertyPatchV1 {
-                        note_glow_size: 0.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteGlowSize(0.0),
             )],
         )
         .unwrap();
@@ -8340,11 +7613,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Key,
                 &id,
-                EditorElementPropertyPatchV1::NoteGlowSize(
-                    crate::models::EditorNoteGlowSizePropertyPatchV1 {
-                        note_glow_size: 50.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteGlowSize(50.0),
             )],
         )
         .unwrap();
@@ -8406,56 +7675,37 @@ mod tests {
         full.note_glow_color = Some(NoteColor::Solid("glow-sibling".to_string()));
         let original = store.clone();
 
-        let note_color = EditorElementPropertyPatchV1::NotePaint(
-            crate::models::EditorNotePaintPropertyPatchV1 {
-                note_paint: EditorNotePaintIntentV1::Color(
-                    crate::models::EditorNotePaintColorIntentV1 {
-                        color: EditorNoteColorV1::Gradient(
-                            crate::models::EditorNoteGradientColorV1 {
-                                kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
-                                top: "top".to_string(),
-                                bottom: "bottom".to_string(),
-                            },
-                        ),
-                    },
-                ),
+        let note_color = EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Color(
+            crate::models::EditorNotePaintColorIntentV1 {
+                color: EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                    kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                    top: "top".to_string(),
+                    bottom: "bottom".to_string(),
+                }),
             },
-        );
-        let note_opacity = EditorElementPropertyPatchV1::NotePaint(
-            crate::models::EditorNotePaintPropertyPatchV1 {
-                note_paint: EditorNotePaintIntentV1::Opacity(
-                    crate::models::EditorNotePaintOpacityIntentV1 { opacity: 60 },
-                ),
-            },
-        );
+        ));
+        let note_opacity =
+            EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Opacity(
+                crate::models::EditorNotePaintOpacityIntentV1 { opacity: 60 },
+            ));
         let glow_color = EditorElementPropertyPatchV1::NoteGlowPaint(
-            crate::models::EditorNoteGlowPaintPropertyPatchV1 {
-                note_glow_paint: EditorNotePaintIntentV1::Color(
-                    crate::models::EditorNotePaintColorIntentV1 {
-                        color: EditorNoteColorV1::Solid(String::new()),
-                    },
-                ),
-            },
+            EditorNotePaintIntentV1::Color(crate::models::EditorNotePaintColorIntentV1 {
+                color: EditorNoteColorV1::Solid(String::new()),
+            }),
         );
-        let border = EditorElementPropertyPatchV1::NoteBorderPaint(
-            crate::models::EditorNoteBorderPaintPropertyPatchV1 {
-                note_border_paint: crate::models::EditorNoteBorderPaintV1 {
-                    color: "#FFFFFF".to_string(),
-                    opacity: 100,
+        let border =
+            EditorElementPropertyPatchV1::NoteBorderPaint(crate::models::EditorNoteBorderPaintV1 {
+                color: "#FFFFFF".to_string(),
+                opacity: 100,
+            });
+        let glow_tuple =
+            EditorElementPropertyPatchV1::NoteGlowPaint(EditorNotePaintIntentV1::GradientOpacity(
+                crate::models::EditorNotePaintGradientOpacityIntentV1 {
+                    opacity: 65,
+                    opacity_top: 10,
+                    opacity_bottom: 90,
                 },
-            },
-        );
-        let glow_tuple = EditorElementPropertyPatchV1::NoteGlowPaint(
-            crate::models::EditorNoteGlowPaintPropertyPatchV1 {
-                note_glow_paint: EditorNotePaintIntentV1::GradientOpacity(
-                    crate::models::EditorNotePaintGradientOpacityIntentV1 {
-                        opacity: 65,
-                        opacity_top: 10,
-                        opacity_bottom: 90,
-                    },
-                ),
-            },
-        );
+            ));
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &ids[0], note_color.clone()),
             patch_property_op(EditorElementTypeV1::Key, &ids[1], note_opacity.clone()),
@@ -8538,22 +7788,16 @@ mod tests {
 
         for (invalid, expected_code) in [
             (
-                EditorElementPropertyPatchV1::NotePaint(
-                    crate::models::EditorNotePaintPropertyPatchV1 {
-                        note_paint: EditorNotePaintIntentV1::Opacity(
-                            crate::models::EditorNotePaintOpacityIntentV1 { opacity: 101 },
-                        ),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Opacity(
+                    crate::models::EditorNotePaintOpacityIntentV1 { opacity: 101 },
+                )),
                 "NOTE_OPACITY_OUT_OF_RANGE",
             ),
             (
                 EditorElementPropertyPatchV1::NoteBorderPaint(
-                    crate::models::EditorNoteBorderPaintPropertyPatchV1 {
-                        note_border_paint: crate::models::EditorNoteBorderPaintV1 {
-                            color: "rgba(1,2,3,1)".to_string(),
-                            opacity: 100,
-                        },
+                    crate::models::EditorNoteBorderPaintV1 {
+                        color: "rgba(1,2,3,1)".to_string(),
+                        opacity: 100,
                     },
                 ),
                 "INVALID_NOTE_BORDER_COLOR",
@@ -8626,54 +7870,32 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[0],
-                EditorElementPropertyPatchV1::NoteOffsetX(
-                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
-                        note_offset_x: None,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetX(None),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[1],
-                EditorElementPropertyPatchV1::NoteOffsetY(
-                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
-                        note_offset_y: Some(-12.5),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetY(Some(-12.5)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[2],
-                EditorElementPropertyPatchV1::NoteWidth(
-                    crate::models::EditorNoteWidthPropertyPatchV1 { note_width: None },
-                ),
+                EditorElementPropertyPatchV1::NoteWidth(None),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[3],
-                EditorElementPropertyPatchV1::NoteBorderWidth(
-                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
-                        note_border_width: 0.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderWidth(0.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[4],
-                EditorElementPropertyPatchV1::NoteBorderRadius(
-                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
-                        note_border_radius: 4.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderRadius(4.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::NoteWidth(
-                    crate::models::EditorNoteWidthPropertyPatchV1 {
-                        note_width: Some(20.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteWidth(Some(20.0)),
             ),
         ];
 
@@ -8725,11 +7947,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[1],
-                EditorElementPropertyPatchV1::NoteOffsetY(
-                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
-                        note_offset_y: Some(0.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetY(Some(0.0)),
             )],
         )
         .unwrap();
@@ -8746,47 +7964,27 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[0],
-                EditorElementPropertyPatchV1::NoteOffsetX(
-                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
-                        note_offset_x: Some(-500.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetX(Some(-500.0)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[1],
-                EditorElementPropertyPatchV1::NoteOffsetY(
-                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
-                        note_offset_y: Some(500.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetY(Some(500.0)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[2],
-                EditorElementPropertyPatchV1::NoteWidth(
-                    crate::models::EditorNoteWidthPropertyPatchV1 {
-                        note_width: Some(f64::MIN_POSITIVE),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteWidth(Some(f64::MIN_POSITIVE)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[3],
-                EditorElementPropertyPatchV1::NoteBorderWidth(
-                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
-                        note_border_width: 20.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderWidth(20.0),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[4],
-                EditorElementPropertyPatchV1::NoteBorderRadius(
-                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
-                        note_border_radius: 100.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderRadius(100.0),
             ),
         ];
         prepare_editor_ops_transition(&store, &boundary_ops).unwrap();
@@ -8795,11 +7993,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[4],
-                EditorElementPropertyPatchV1::NoteBorderRadius(
-                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
-                        note_border_radius: 1.0,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderRadius(1.0),
             )],
         )
         .unwrap();
@@ -8810,75 +8004,39 @@ mod tests {
 
         let invalid_patches = [
             (
-                EditorElementPropertyPatchV1::NoteOffsetX(
-                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
-                        note_offset_x: Some(-500.1),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetX(Some(-500.1)),
                 "NOTE_OFFSET_X_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteOffsetY(
-                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
-                        note_offset_y: Some(500.1),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetY(Some(500.1)),
                 "NOTE_OFFSET_Y_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteOffsetY(
-                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
-                        note_offset_y: Some(f64::INFINITY),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteOffsetY(Some(f64::INFINITY)),
                 "NOTE_OFFSET_Y_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteWidth(
-                    crate::models::EditorNoteWidthPropertyPatchV1 {
-                        note_width: Some(0.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteWidth(Some(0.0)),
                 "NOTE_WIDTH_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteWidth(
-                    crate::models::EditorNoteWidthPropertyPatchV1 {
-                        note_width: Some(f64::NAN),
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteWidth(Some(f64::NAN)),
                 "NOTE_WIDTH_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteBorderWidth(
-                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
-                        note_border_width: -0.1,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderWidth(-0.1),
                 "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteBorderWidth(
-                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
-                        note_border_width: 20.1,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderWidth(20.1),
                 "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteBorderRadius(
-                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
-                        note_border_radius: 0.9,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderRadius(0.9),
                 "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteBorderRadius(
-                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
-                        note_border_radius: 100.1,
-                    },
-                ),
+                EditorElementPropertyPatchV1::NoteBorderRadius(100.1),
                 "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
             ),
         ];
@@ -8911,11 +8069,7 @@ mod tests {
                     patch_property_op(
                         element_type,
                         uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::NoteWidth(
-                            crate::models::EditorNoteWidthPropertyPatchV1 {
-                                note_width: Some(20.0),
-                            },
-                        ),
+                        EditorElementPropertyPatchV1::NoteWidth(Some(20.0)),
                     ),
                 ],
             )
@@ -8976,50 +8130,32 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_id,
-                EditorElementPropertyPatchV1::BackgroundPaint(
-                    crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                        background_paint: paint_descriptor(
-                            "new-key",
-                            Some((45.0, &gradient_stops)),
-                        ),
-                    },
-                ),
+                EditorElementPropertyPatchV1::BackgroundPaint(paint_descriptor(
+                    "new-key",
+                    Some((45.0, &gradient_stops)),
+                )),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::BorderPaint(
-                    crate::models::EditorBorderPaintPropertyPatchV1 {
-                        border_paint: paint_descriptor("stat-new", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderPaint(paint_descriptor("stat-new", None)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_id,
-                EditorElementPropertyPatchV1::BackgroundPaint(
-                    crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                        background_paint: paint_descriptor("", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::BackgroundPaint(paint_descriptor("", None)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::BorderPaint(
-                    crate::models::EditorBorderPaintPropertyPatchV1 {
-                        border_paint: paint_descriptor("knob-new", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderPaint(paint_descriptor("knob-new", None)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ActiveBackgroundPaint(
-                    crate::models::EditorActiveBackgroundPaintPropertyPatchV1 {
-                        active_background_paint: paint_descriptor("missing", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveBackgroundPaint(paint_descriptor(
+                    "missing", None,
+                )),
             ),
         ];
 
@@ -9107,11 +8243,7 @@ mod tests {
         let fallback_only_op = patch_property_op(
             EditorElementTypeV1::Key,
             &key_id,
-            EditorElementPropertyPatchV1::BackgroundPaint(
-                crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                    background_paint: paint_descriptor(" key idle ", None),
-                },
-            ),
+            EditorElementPropertyPatchV1::BackgroundPaint(paint_descriptor(" key idle ", None)),
         );
         let fallback_only =
             prepare_editor_ops_transition(&store, std::slice::from_ref(&fallback_only_op)).unwrap();
@@ -9148,20 +8280,18 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 key_active_id,
-                EditorElementPropertyPatchV1::ActiveBackgroundPaint(
-                    crate::models::EditorActiveBackgroundPaintPropertyPatchV1 {
-                        active_background_paint: paint_descriptor("active-key", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveBackgroundPaint(paint_descriptor(
+                    "active-key",
+                    None,
+                )),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::ActiveBorderPaint(
-                    crate::models::EditorActiveBorderPaintPropertyPatchV1 {
-                        active_border_paint: paint_descriptor("active-knob", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveBorderPaint(paint_descriptor(
+                    "active-knob",
+                    None,
+                )),
             ),
         ];
         let active = prepare_editor_ops_transition(&transition.scratch, &active_ops).unwrap();
@@ -9191,11 +8321,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Key,
                 &explicit_active_store.key_positions["4key"][1].id,
-                EditorElementPropertyPatchV1::BackgroundPaint(
-                    crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                        background_paint: paint_descriptor("new-idle", None),
-                    },
-                ),
+                EditorElementPropertyPatchV1::BackgroundPaint(paint_descriptor("new-idle", None)),
             )],
         )
         .unwrap();
@@ -9263,11 +8389,7 @@ mod tests {
                     patch_property_op(
                         EditorElementTypeV1::Key,
                         uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::BackgroundPaint(
-                            crate::models::EditorBackgroundPaintPropertyPatchV1 {
-                                background_paint: descriptor,
-                            },
-                        ),
+                        EditorElementPropertyPatchV1::BackgroundPaint(descriptor),
                     ),
                 ],
             )
@@ -9281,14 +8403,10 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Key,
                 &store.key_positions["4key"][2].id,
-                EditorElementPropertyPatchV1::BorderPaint(
-                    crate::models::EditorBorderPaintPropertyPatchV1 {
-                        border_paint: paint_descriptor(
-                            "a",
-                            Some((0.0, &[("a", 0.0), ("equal", 0.0), ("b", 1.0)])),
-                        ),
-                    },
-                ),
+                EditorElementPropertyPatchV1::BorderPaint(paint_descriptor(
+                    "a",
+                    Some((0.0, &[("a", 0.0), ("equal", 0.0), ("b", 1.0)])),
+                )),
             )],
         )
         .unwrap();
@@ -9310,11 +8428,9 @@ mod tests {
                     patch_property_op(
                         element_type,
                         uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::ActiveBorderPaint(
-                            crate::models::EditorActiveBorderPaintPropertyPatchV1 {
-                                active_border_paint: paint_descriptor("active", None),
-                            },
-                        ),
+                        EditorElementPropertyPatchV1::ActiveBorderPaint(paint_descriptor(
+                            "active", None,
+                        )),
                     ),
                 ],
             )
@@ -9350,47 +8466,27 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_id,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: " key idle ".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontColor(" key idle ".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: String::new(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontColor(String::new()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Graph,
                 &graph_id,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: " graph new ".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontColor(" graph new ".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: "knob-new".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::FontColor("knob-new".to_string()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ActiveFontColor(
-                    crate::models::EditorActiveFontColorPropertyPatchV1 {
-                        active_font_color: "missing".to_string(),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveFontColor("missing".to_string()),
             ),
         ];
 
@@ -9468,20 +8564,12 @@ mod tests {
                 patch_property_op(
                     EditorElementTypeV1::Key,
                     active_key_id,
-                    EditorElementPropertyPatchV1::ActiveFontColor(
-                        crate::models::EditorActiveFontColorPropertyPatchV1 {
-                            active_font_color: String::new(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::ActiveFontColor(String::new()),
                 ),
                 patch_property_op(
                     EditorElementTypeV1::Knob,
                     &knob_id,
-                    EditorElementPropertyPatchV1::ActiveFontColor(
-                        crate::models::EditorActiveFontColorPropertyPatchV1 {
-                            active_font_color: " active raw ".to_string(),
-                        },
-                    ),
+                    EditorElementPropertyPatchV1::ActiveFontColor(" active raw ".to_string()),
                 ),
             ],
         )
@@ -9508,11 +8596,7 @@ mod tests {
                     patch_property_op(
                         element_type,
                         uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::ActiveFontColor(
-                            crate::models::EditorActiveFontColorPropertyPatchV1 {
-                                active_font_color: "wrong-type".to_string(),
-                            },
-                        ),
+                        EditorElementPropertyPatchV1::ActiveFontColor("wrong-type".to_string()),
                     ),
                 ],
             )
@@ -9568,34 +8652,22 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_id,
-                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
-                    shadow: shadow_leaf_color("new-shadow"),
-                }),
+                EditorElementPropertyPatchV1::Shadow(shadow_leaf_color("new-shadow")),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
-                    shadow: shadow_leaf_offset_x(-100.0),
-                }),
+                EditorElementPropertyPatchV1::Shadow(shadow_leaf_offset_x(-100.0)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Knob,
                 &knob_id,
-                EditorElementPropertyPatchV1::ShadowEnabled(
-                    crate::models::EditorShadowEnabledPropertyPatchV1 {
-                        shadow_enabled: true,
-                    },
-                ),
+                EditorElementPropertyPatchV1::ShadowEnabled(true),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ActiveShadow(
-                    crate::models::EditorActiveShadowPropertyPatchV1 {
-                        active_shadow: shadow_leaf_blur(100.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveShadow(shadow_leaf_blur(100.0)),
             ),
         ];
         let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
@@ -9687,11 +8759,7 @@ mod tests {
             &[patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::ShadowEnabled(
-                    crate::models::EditorShadowEnabledPropertyPatchV1 {
-                        shadow_enabled: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::ShadowEnabled(false),
             )],
         )
         .unwrap();
@@ -9747,15 +8815,9 @@ mod tests {
                 _ => unreachable!(),
             }
             let patch = if active {
-                EditorElementPropertyPatchV1::ActiveShadow(
-                    crate::models::EditorActiveShadowPropertyPatchV1 {
-                        active_shadow: shadow_leaf_blur(8.0),
-                    },
-                )
+                EditorElementPropertyPatchV1::ActiveShadow(shadow_leaf_blur(8.0))
             } else {
-                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
-                    shadow: shadow_leaf_blur(10.0),
-                })
+                EditorElementPropertyPatchV1::Shadow(shadow_leaf_blur(10.0))
             };
             let op = patch_property_op(element_type, id, patch);
             let seeded =
@@ -9797,9 +8859,7 @@ mod tests {
                     patch_property_op(
                         EditorElementTypeV1::Key,
                         uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::Shadow(
-                            crate::models::EditorShadowPropertyPatchV1 { shadow: patch },
-                        ),
+                        EditorElementPropertyPatchV1::Shadow(patch),
                     ),
                 ],
             )
@@ -9811,25 +8871,15 @@ mod tests {
         for (element_type, patch) in [
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
-                    shadow: shadow_leaf_blur(4.0),
-                }),
+                EditorElementPropertyPatchV1::Shadow(shadow_leaf_blur(4.0)),
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::ShadowEnabled(
-                    crate::models::EditorShadowEnabledPropertyPatchV1 {
-                        shadow_enabled: false,
-                    },
-                ),
+                EditorElementPropertyPatchV1::ShadowEnabled(false),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::ActiveShadow(
-                    crate::models::EditorActiveShadowPropertyPatchV1 {
-                        active_shadow: shadow_leaf_offset_y(1.0),
-                    },
-                ),
+                EditorElementPropertyPatchV1::ActiveShadow(shadow_leaf_offset_y(1.0)),
             ),
         ] {
             let error = prepare_editor_ops_transition(

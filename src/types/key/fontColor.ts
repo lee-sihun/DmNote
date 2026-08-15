@@ -1,8 +1,8 @@
 import type { KeyPosition } from './keys';
 
 export type FontColorPropertyPatchV1 =
-  | { fontColor: string; activeFontColor?: never }
-  | { fontColor?: never; activeFontColor: string };
+  | { property: 'fontColor'; value: string }
+  | { property: 'activeFontColor'; value: string };
 
 export const isFontColorPropertyPatchV1 = (
   value: unknown,
@@ -11,12 +11,13 @@ export const isFontColorPropertyPatchV1 = (
     return false;
   }
   const record = value as Record<string, unknown>;
-  const keys = Object.keys(record);
   return (
-    keys.length === 1 &&
-    ((keys[0] === 'fontColor' && typeof record.fontColor === 'string') ||
-      (keys[0] === 'activeFontColor' &&
-        typeof record.activeFontColor === 'string'))
+    Object.keys(record).length === 2 &&
+    'property' in record &&
+    'value' in record &&
+    (record.property === 'fontColor' ||
+      record.property === 'activeFontColor') &&
+    typeof record.value === 'string'
   );
 };
 
@@ -25,15 +26,15 @@ export const projectFontColorPatch = (
   elementType: 'key' | 'stat' | 'graph' | 'knob',
   patch: FontColorPropertyPatchV1,
 ): Partial<KeyPosition> => {
-  if ('activeFontColor' in patch) {
-    return { activeFontColor: patch.activeFontColor };
+  if (patch.property === 'activeFontColor') {
+    return { activeFontColor: patch.value };
   }
   const shouldPreserveActive =
     (elementType === 'key' || elementType === 'knob') &&
     !position.activeFontColor?.trim() &&
     Boolean(position.fontColor?.trim());
   return {
-    fontColor: patch.fontColor,
+    fontColor: patch.value,
     ...(shouldPreserveActive ? { activeFontColor: position.fontColor } : {}),
   };
 };

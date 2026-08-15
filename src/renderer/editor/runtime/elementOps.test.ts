@@ -895,7 +895,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_B,
-          patch: { hidden: true },
+          patch: { property: 'hidden', value: true },
         },
       ]);
       return {
@@ -1016,7 +1016,10 @@ describe('elementOps', () => {
 
     const generate = api.commitGeneratedSemanticOps.mock.calls[0][0];
     expect(generate(latest)).toEqual([
-      expect.objectContaining({ id: ID_A, patch: { hidden: true } }),
+      expect.objectContaining({
+        id: ID_A,
+        patch: { property: 'hidden', value: true },
+      }),
     ]);
   });
 
@@ -1707,7 +1710,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { hidden: true },
+          patch: { property: 'hidden', value: true },
         },
       ],
       expect.objectContaining({ onEnrolled: expect.any(Function) }),
@@ -1796,7 +1799,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { layerName: 'Layer A' },
+          patch: { property: 'layerName', value: 'Layer A' },
         },
       ],
       expect.objectContaining({ onEnrolled: expect.any(Function) }),
@@ -1807,7 +1810,11 @@ describe('elementOps', () => {
       useKeyStore.getState().canonicalPositions['4key'][0].layerName,
     ).toBeUndefined();
     expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
-      [expect.objectContaining({ patch: { layerName: null } })],
+      [
+        expect.objectContaining({
+          patch: { property: 'layerName', value: null },
+        }),
+      ],
       expect.anything(),
     );
   });
@@ -1900,7 +1907,7 @@ describe('elementOps', () => {
         { elementType: 'key', id: ID_A },
         { elementType: 'knob', id: knobId },
       ],
-      { fontColor: ' new idle ' },
+      { property: 'fontColor', value: ' new idle ' },
     );
 
     expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
@@ -1919,17 +1926,17 @@ describe('elementOps', () => {
     [
       'active stat',
       [{ elementType: 'stat', id: ID_A }],
-      { activeFontColor: '#fff' },
+      { property: 'activeFontColor', value: '#fff' },
     ],
     [
       'active graph',
       [{ elementType: 'graph', id: ID_A }],
-      { activeFontColor: '#fff' },
+      { property: 'activeFontColor', value: '#fff' },
     ],
     [
       'synthetic idle',
       [{ elementType: 'key', id: 'key-0' }],
-      { fontColor: '#fff' },
+      { property: 'fontColor', value: '#fff' },
     ],
   ] as const)(
     'font color %s는 eager/wire 전에 거절한다',
@@ -1953,7 +1960,10 @@ describe('elementOps', () => {
     });
     api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
     await expect(
-      patchGraphPropertiesByIds([ID_A, otherId], { graphSpeed: 2200 }),
+      patchGraphPropertiesByIds([ID_A, otherId], {
+        property: 'graphSpeed',
+        value: 2200,
+      }),
     ).rejects.toThrow('start failed');
     expect(
       useGraphItemStore
@@ -1971,7 +1981,10 @@ describe('elementOps', () => {
     });
     api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
     await expect(
-      patchKnobPropertiesByIds([ID_A, otherId], { sensitivity: 3 }),
+      patchKnobPropertiesByIds([ID_A, otherId], {
+        property: 'sensitivity',
+        value: 3,
+      }),
     ).rejects.toThrow('start failed');
     expect(
       useKnobItemStore
@@ -2003,12 +2016,13 @@ describe('elementOps', () => {
           { elementType: 'key', id: ID_A },
           { elementType: 'stat', id: ID_A },
         ],
-        { fontUnderline: true },
+        { property: 'fontUnderline', value: true },
       ),
     ).resolves.toBe(false);
     await expect(
       patchFontStyleByTargets([{ elementType: 'graph', id: '' }], {
-        fontStrikethrough: true,
+        property: 'fontStrikethrough',
+        value: true,
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
@@ -2021,12 +2035,13 @@ describe('elementOps', () => {
           { elementType: 'key', id: ID_A },
           { elementType: 'stat', id: ID_A },
         ],
-        { fontFamily: 'Family One' },
+        { property: 'fontFamily', value: 'Family One' },
       ),
     ).resolves.toBe(false);
     await expect(
       patchFontFamilyByTargets([{ elementType: 'graph', id: '' }], {
-        fontFamily: 'Family One',
+        property: 'fontFamily',
+        value: 'Family One',
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
@@ -2044,7 +2059,7 @@ describe('elementOps', () => {
 
     await patchStylePropertyByTargets(
       targets,
-      { displayText: '  Raw label  ' },
+      { property: 'displayText', value: '  Raw label  ' },
       {
         gestureId: 'gesture-display',
       },
@@ -2056,7 +2071,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType,
         id,
-        patch: { displayText: '  Raw label  ' },
+        patch: { property: 'displayText', value: '  Raw label  ' },
       })),
     );
     expect(api.commitSemanticOps.mock.calls[0]?.[1]).toEqual(
@@ -2075,7 +2090,7 @@ describe('elementOps', () => {
 
     await patchStylePropertyByTargets(
       targets,
-      { className: '  Raw class  ' },
+      { property: 'className', value: '  Raw class  ' },
       {
         gestureId: 'gesture-class',
       },
@@ -2087,7 +2102,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType,
         id,
-        patch: { className: '  Raw class  ' },
+        patch: { property: 'className', value: '  Raw class  ' },
       })),
     );
     expect(api.commitSemanticOps.mock.calls[0]?.[1]).toEqual(
@@ -2099,9 +2114,9 @@ describe('elementOps', () => {
   });
 
   it.each([
-    [{ borderWidth: 12.5 }, 'gesture-border-width'],
-    [{ borderRadius: 88.5 }, 'gesture-border-radius'],
-    [{ fontSize: 31.5 }, 'gesture-font-size'],
+    [{ property: 'borderWidth', value: 12.5 }, 'gesture-border-width'],
+    [{ property: 'borderRadius', value: 88.5 }, 'gesture-border-radius'],
+    [{ property: 'fontSize', value: 31.5 }, 'gesture-font-size'],
   ] as const)(
     '%j numeric style은 exact leaf와 gesture를 한 commit으로 보낸다',
     async (patch, gestureId) => {
@@ -2143,7 +2158,7 @@ describe('elementOps', () => {
 
     await patchStylePropertyByTargets(
       [{ elementType: 'key', id: ID_A }],
-      { noteGlowSize: 20.5 },
+      { property: 'noteGlowSize', value: 20.5 },
       { gestureId: 'gesture-note-glow' },
     );
 
@@ -2153,7 +2168,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { noteGlowSize: 20.5 },
+          patch: { property: 'noteGlowSize', value: 20.5 },
         },
       ],
       expect.objectContaining({
@@ -2175,7 +2190,10 @@ describe('elementOps', () => {
     ['nonfinite', [{ elementType: 'key' as const, id: ID_A }], Infinity],
   ])('noteGlowSize %s는 wire 전에 거절한다', async (_label, targets, value) => {
     await expect(
-      patchStylePropertyByTargets(targets, { noteGlowSize: value }),
+      patchStylePropertyByTargets(targets, {
+        property: 'noteGlowSize',
+        value: value,
+      }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
@@ -2197,11 +2215,11 @@ describe('elementOps', () => {
     });
     api.captureEditorDocument.mockImplementation(documentFromStores);
     const patches = [
-      { noteOffsetX: null },
-      { noteOffsetY: 0 },
-      { noteWidth: null },
-      { noteBorderWidth: 3.5 },
-      { noteBorderRadius: 12.5 },
+      { property: 'noteOffsetX', value: null },
+      { property: 'noteOffsetY', value: 0 },
+      { property: 'noteWidth', value: null },
+      { property: 'noteBorderWidth', value: 3.5 },
+      { property: 'noteBorderRadius', value: 12.5 },
     ] as const;
 
     for (const patch of patches) {
@@ -2252,7 +2270,8 @@ describe('elementOps', () => {
       api.captureEditorDocument.mockReturnValue(documentFromStores());
 
       await patchPaintByTargets([{ elementType: 'key', id: ID_A }], {
-        backgroundPaint: { color: '#next', gradient: null },
+        property: 'backgroundPaint',
+        value: { color: '#next', gradient: null },
       });
 
       expect(
@@ -2271,7 +2290,8 @@ describe('elementOps', () => {
             elementType: 'key',
             id: ID_A,
             patch: {
-              backgroundPaint: { color: '#next', gradient: null },
+              property: 'backgroundPaint',
+              value: { color: '#next', gradient: null },
             },
           },
         ],
@@ -2303,14 +2323,15 @@ describe('elementOps', () => {
     api.captureEditorDocument.mockImplementation(documentFromStores);
 
     await patchShadowByTargets([{ elementType: 'key', id: ID_A }], {
-      shadow: { blur: 22 },
+      property: 'shadow',
+      value: { leaf: 'blur', value: 22 },
     });
     await patchShadowByTargets(
       [
         { elementType: 'key', id: ID_A },
         { elementType: 'stat', id: ID_B },
       ],
-      { shadowEnabled: false },
+      { property: 'shadowEnabled', value: false },
     );
 
     expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
@@ -2363,7 +2384,8 @@ describe('elementOps', () => {
     });
 
     await patchCounterFillByTargets([{ elementType: 'key', id: ID_A }], {
-      counterFillIdle: { color: ' solid final ' },
+      property: 'counterFillIdle',
+      value: { color: ' solid final ' },
     });
 
     expect(
@@ -2383,7 +2405,10 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { counterFillIdle: { color: ' solid final ' } },
+          patch: {
+            property: 'counterFillIdle',
+            value: { color: ' solid final ' },
+          },
         },
       ],
       expect.anything(),
@@ -2394,17 +2419,17 @@ describe('elementOps', () => {
     [
       'idle graph',
       [{ elementType: 'graph', id: ID_A }],
-      { counterFillIdle: { color: '#fff' } },
+      { property: 'counterFillIdle', value: { color: '#fff' } },
     ],
     [
       'active stat',
       [{ elementType: 'stat', id: ID_A }],
-      { counterFillActive: { color: '#fff' } },
+      { property: 'counterFillActive', value: { color: '#fff' } },
     ],
     [
       'synthetic',
       [{ elementType: 'key', id: 'key-0' }],
-      { counterFillIdle: { color: '#fff' } },
+      { property: 'counterFillIdle', value: { color: '#fff' } },
     ],
   ] as const)(
     'counter fill %s는 eager/wire 전에 거절한다',
@@ -2420,22 +2445,22 @@ describe('elementOps', () => {
     [
       'graph',
       [{ elementType: 'graph' as const, id: ID_A }],
-      { shadow: { blur: 1 } },
+      { property: 'shadow', value: { leaf: 'blur', value: 1 } },
     ],
     [
       'active stat',
       [{ elementType: 'stat' as const, id: ID_B }],
-      { activeShadow: { blur: 1 } },
+      { property: 'activeShadow', value: { leaf: 'blur', value: 1 } },
     ],
     [
       'empty color',
       [{ elementType: 'key' as const, id: ID_A }],
-      { shadow: { color: '' } },
+      { property: 'shadow', value: { leaf: 'color', value: '' } },
     ],
     [
       'range',
       [{ elementType: 'key' as const, id: ID_A }],
-      { shadow: { offsetX: 101 } },
+      { property: 'shadow', value: { leaf: 'offsetX', value: 101 } },
     ],
   ] as const)(
     'shadow %s는 wire 전에 거절한다',
@@ -2469,7 +2494,7 @@ describe('elementOps', () => {
 
     await patchNotePaintByIds(
       [ID_A],
-      { noteGlowPaint: { opacity: 77 } },
+      { property: 'noteGlowPaint', value: { opacity: 77 } },
       { gestureId: '00000000-0000-4000-8000-000000000077' },
     );
 
@@ -2492,7 +2517,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { noteGlowPaint: { opacity: 77 } },
+          patch: { property: 'noteGlowPaint', value: { opacity: 77 } },
         },
       ],
       expect.objectContaining({
@@ -2501,7 +2526,8 @@ describe('elementOps', () => {
     );
 
     await patchNotePaintById(ID_A, {
-      notePaint: { opacity: 66, opacityTop: 55, opacityBottom: 44 },
+      property: 'notePaint',
+      value: { opacity: 66, opacityTop: 55, opacityBottom: 44 },
     });
     expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
       noteOpacity: 66,
@@ -2512,14 +2538,26 @@ describe('elementOps', () => {
   });
 
   it.each([
-    ['synthetic', ['key-0'], { notePaint: { color: '#fff' } }],
-    ['empty', [], { notePaint: { opacity: 50 } }],
-    ['duplicate', [ID_A, ID_A], { notePaint: { opacity: 50 } }],
-    ['combined', [ID_A], { notePaint: { color: '#fff', opacity: 50 } }],
+    [
+      'synthetic',
+      ['key-0'],
+      { property: 'notePaint', value: { color: '#fff' } },
+    ],
+    ['empty', [], { property: 'notePaint', value: { opacity: 50 } }],
+    [
+      'duplicate',
+      [ID_A, ID_A],
+      { property: 'notePaint', value: { opacity: 50 } },
+    ],
+    [
+      'combined',
+      [ID_A],
+      { property: 'notePaint', value: { color: '#fff', opacity: 50 } },
+    ],
     [
       'border color',
       [ID_A],
-      { noteBorderPaint: { color: '#fff', opacity: 50 } },
+      { property: 'noteBorderPaint', value: { color: '#fff', opacity: 50 } },
     ],
   ] as const)(
     'note paint %s는 wire 전에 거절한다',
@@ -2546,7 +2584,10 @@ describe('elementOps', () => {
     api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
 
     await expect(
-      patchNotePaintById(ID_A, { notePaint: { opacity: 99 } }),
+      patchNotePaintById(ID_A, {
+        property: 'notePaint',
+        value: { opacity: 99 },
+      }),
     ).rejects.toThrow('start failed');
     expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
       noteOpacity: 80,
@@ -2557,11 +2598,15 @@ describe('elementOps', () => {
   });
 
   it.each([
-    ['wrong type', 'stat', { noteOffsetX: 0 }],
-    ['offset range', 'key', { noteOffsetY: 500.1 }],
-    ['width zero', 'key', { noteWidth: 0 }],
-    ['border width range', 'key', { noteBorderWidth: 20.1 }],
-    ['border radius range', 'key', { noteBorderRadius: 0.9 }],
+    ['wrong type', 'stat', { property: 'noteOffsetX', value: 0 }],
+    ['offset range', 'key', { property: 'noteOffsetY', value: 500.1 }],
+    ['width zero', 'key', { property: 'noteWidth', value: 0 }],
+    ['border width range', 'key', { property: 'noteBorderWidth', value: 20.1 }],
+    [
+      'border radius range',
+      'key',
+      { property: 'noteBorderRadius', value: 0.9 },
+    ],
   ] as const)(
     'note numeric %s는 wire 전에 거절한다',
     async (_label, elementType, patch) => {
@@ -2579,19 +2624,23 @@ describe('elementOps', () => {
           { elementType: 'key', id: ID_A },
           { elementType: 'graph', id: ID_A },
         ],
-        { displayText: '' },
+        { property: 'displayText', value: '' },
       ),
     ).resolves.toBe(false);
     await expect(
       patchStylePropertyByTargets([{ elementType: 'knob', id: 'knob-0' }], {
-        displayText: '',
+        property: 'displayText',
+        value: '',
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
 
     api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
     await expect(
-      patchStylePropertyById('key', ID_A, { displayText: 'After' }),
+      patchStylePropertyById('key', ID_A, {
+        property: 'displayText',
+        value: 'After',
+      }),
     ).rejects.toThrow('start failed');
     expect(
       useKeyStore.getState().canonicalPositions['4key'][0].displayText,
@@ -2600,10 +2649,16 @@ describe('elementOps', () => {
 
   it('note batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
     await expect(
-      patchNotePropertiesByIds([ID_A, ID_A], { noteAlignment: 'center' }),
+      patchNotePropertiesByIds([ID_A, ID_A], {
+        property: 'noteAlignment',
+        value: 'center',
+      }),
     ).resolves.toBe(false);
     await expect(
-      patchNotePropertiesByIds([''], { noteGlowEnabled: true }),
+      patchNotePropertiesByIds([''], {
+        property: 'noteGlowEnabled',
+        value: true,
+      }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
@@ -2630,7 +2685,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'knob',
           id: ID_A,
-          patch: { axisId: '  HIDA:raw  ' },
+          patch: { property: 'axisId', value: '  HIDA:raw  ' },
         },
       ],
       expect.anything(),
@@ -2669,7 +2724,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { soundPath: '  sounds/raw.wav  ' },
+          patch: { property: 'soundPath', value: '  sounds/raw.wav  ' },
         },
       ],
       expect.anything(),
@@ -2681,7 +2736,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { soundPath: '' },
+        patch: { property: 'soundPath', value: '' },
       })),
       expect.anything(),
     );
@@ -2728,7 +2783,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { soundEnabled: true },
+          patch: { property: 'soundEnabled', value: true },
         },
       ],
       expect.anything(),
@@ -2740,7 +2795,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { soundEnabled: true },
+        patch: { property: 'soundEnabled', value: true },
       })),
       expect.anything(),
     );
@@ -2799,7 +2854,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { soundVolume: 137.5 },
+          patch: { property: 'soundVolume', value: 137.5 },
         },
       ],
       expect.objectContaining({
@@ -2813,7 +2868,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { soundVolume: 200 },
+        patch: { property: 'soundVolume', value: 200 },
       })),
       expect.anything(),
     );
@@ -2888,7 +2943,8 @@ describe('elementOps', () => {
           elementType: 'key',
           id: ID_A,
           patch: {
-            counterAnimationPreset: {
+            property: 'counterAnimationPreset',
+            value: {
               presetId: 'preset-new',
               applyPresetId: true,
               durationMs: 450,
@@ -2939,10 +2995,8 @@ describe('elementOps', () => {
       [
         expect.objectContaining({
           patch: {
-            counterAnimationPreset: {
-              presetId: 'preset-a',
-              scale: 1.4,
-            },
+            property: 'counterAnimationPreset',
+            value: { presetId: 'preset-a', scale: 1.4 },
           },
         }),
       ],
@@ -3014,7 +3068,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType,
         id,
-        patch: { counterEnabled: true },
+        patch: { property: 'counterEnabled', value: true },
       })),
       expect.anything(),
     );
@@ -3033,7 +3087,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType,
         id,
-        patch: { counterAnimationEnabled: true },
+        patch: { property: 'counterAnimationEnabled', value: true },
       })),
       expect.anything(),
     );
@@ -3110,10 +3164,10 @@ describe('elementOps', () => {
     ];
 
     const patches: EditorCounterLayoutPropertyPatchV1[] = [
-      { counterPlacement: 'outside' as const },
-      { counterAlign: 'right' as const },
-      { counterAlignMode: 'center' as const },
-      { counterGap: 4_294_967_295 },
+      { property: 'counterPlacement', value: 'outside' as const },
+      { property: 'counterAlign', value: 'right' as const },
+      { property: 'counterAlignMode', value: 'center' as const },
+      { property: 'counterGap', value: 4_294_967_295 },
     ];
     for (const patch of patches) {
       api.captureEditorDocument.mockReturnValue(documentFromStores());
@@ -3141,7 +3195,7 @@ describe('elementOps', () => {
 
   it('counter layout batch는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
     await expect(
-      patchCounterLayoutByTargets([], { counterGap: 2 }),
+      patchCounterLayoutByTargets([], { property: 'counterGap', value: 2 }),
     ).resolves.toBe(false);
     await expect(
       patchCounterLayoutByTargets(
@@ -3149,12 +3203,13 @@ describe('elementOps', () => {
           { elementType: 'key', id: ID_A },
           { elementType: 'stat', id: ID_A },
         ],
-        { counterAlign: 'top' },
+        { property: 'counterAlign', value: 'top' },
       ),
     ).resolves.toBe(false);
     await expect(
       patchCounterLayoutByTargets([{ elementType: 'key', id: 'key-0' }], {
-        counterPlacement: 'inside',
+        property: 'counterPlacement',
+        value: 'inside',
       }),
     ).resolves.toBe(false);
   });
@@ -3201,11 +3256,11 @@ describe('elementOps', () => {
       { elementType: 'stat' as const, id: statId },
     ];
     const patches: EditorCounterTypographyPropertyPatchV1[] = [
-      { counterFontSize: 72 },
-      { counterFontWeight: 900 },
-      { counterFontItalic: true },
-      { counterFontUnderline: true },
-      { counterFontStrikethrough: true },
+      { property: 'counterFontSize', value: 72 },
+      { property: 'counterFontWeight', value: 900 },
+      { property: 'counterFontItalic', value: true },
+      { property: 'counterFontUnderline', value: true },
+      { property: 'counterFontStrikethrough', value: true },
     ];
 
     for (const patch of patches) {
@@ -3235,7 +3290,10 @@ describe('elementOps', () => {
 
   it('counter typography는 invalid leaf와 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
     await expect(
-      patchCounterTypographyByTargets([], { counterFontSize: 8 }),
+      patchCounterTypographyByTargets([], {
+        property: 'counterFontSize',
+        value: 8,
+      }),
     ).resolves.toBe(false);
     await expect(
       patchCounterTypographyByTargets(
@@ -3243,22 +3301,25 @@ describe('elementOps', () => {
           { elementType: 'key', id: ID_A },
           { elementType: 'stat', id: ID_A },
         ],
-        { counterFontWeight: 400 },
+        { property: 'counterFontWeight', value: 400 },
       ),
     ).resolves.toBe(false);
     await expect(
       patchCounterTypographyByTargets([{ elementType: 'key', id: 'key-0' }], {
-        counterFontItalic: true,
+        property: 'counterFontItalic',
+        value: true,
       }),
     ).resolves.toBe(false);
     await expect(
       patchCounterTypographyByTargets([{ elementType: 'key', id: ID_A }], {
-        counterFontSize: 7,
+        property: 'counterFontSize',
+        value: 7,
       }),
     ).resolves.toBe(false);
     await expect(
       patchCounterTypographyByTargets([{ elementType: 'key', id: ID_A }], {
-        counterFontWeight: 400.5,
+        property: 'counterFontWeight',
+        value: 400.5,
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
@@ -3295,14 +3356,15 @@ describe('elementOps', () => {
     api.captureEditorDocument.mockReturnValue(documentFromStores());
 
     await patchCounterStrokeByTargets(idleTargets, {
-      counterStrokeIdle: '  raw idle  ',
+      property: 'counterStrokeIdle',
+      value: '  raw idle  ',
     });
     expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
       idleTargets.map(({ elementType, id }) => ({
         kind: 'patchElement',
         elementType,
         id,
-        patch: { counterStrokeIdle: '  raw idle  ' },
+        patch: { property: 'counterStrokeIdle', value: '  raw idle  ' },
       })),
       expect.anything(),
     );
@@ -3320,7 +3382,8 @@ describe('elementOps', () => {
     });
     await expect(
       patchCounterStrokeByTargets([{ elementType: 'stat', id: statId }], {
-        counterStrokeActive: 'wrong',
+        property: 'counterStrokeActive',
+        value: 'wrong',
       }),
     ).resolves.toBe(false);
   });
@@ -3370,7 +3433,8 @@ describe('elementOps', () => {
     api.captureEditorDocument.mockReturnValue(documentFromStores());
 
     await patchCounterTypographyByTargets(targets, {
-      counterFontFamily: '  Raw Counter Family  ',
+      property: 'counterFontFamily',
+      value: '  Raw Counter Family  ',
     });
 
     expect(api.commitSemanticOps).toHaveBeenCalledWith(
@@ -3378,7 +3442,10 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType,
         id,
-        patch: { counterFontFamily: '  Raw Counter Family  ' },
+        patch: {
+          property: 'counterFontFamily',
+          value: '  Raw Counter Family  ',
+        },
       })),
       expect.anything(),
     );
@@ -3393,7 +3460,10 @@ describe('elementOps', () => {
 
   it('counter fontFamily는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
     await expect(
-      patchCounterTypographyByTargets([], { counterFontFamily: '' }),
+      patchCounterTypographyByTargets([], {
+        property: 'counterFontFamily',
+        value: '',
+      }),
     ).resolves.toBe(false);
     await expect(
       patchCounterTypographyByTargets(
@@ -3401,12 +3471,13 @@ describe('elementOps', () => {
           { elementType: 'key', id: ID_A },
           { elementType: 'stat', id: ID_A },
         ],
-        { counterFontFamily: 'Counter' },
+        { property: 'counterFontFamily', value: 'Counter' },
       ),
     ).resolves.toBe(false);
     await expect(
       patchCounterTypographyByTargets([{ elementType: 'key', id: 'key-0' }], {
-        counterFontFamily: 'Counter',
+        property: 'counterFontFamily',
+        value: 'Counter',
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
@@ -3438,7 +3509,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { inactiveImage: '  /tmp/raw.png  ' },
+          patch: { property: 'inactiveImage', value: '  /tmp/raw.png  ' },
         },
       ],
       expect.anything(),
@@ -3456,7 +3527,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType,
         id,
-        patch: { inactiveImage: 'picked.png' },
+        patch: { property: 'inactiveImage', value: 'picked.png' },
       })),
       expect.anything(),
     );
@@ -3507,7 +3578,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { activeImage: '  /tmp/raw active.png  ' },
+          patch: { property: 'activeImage', value: '  /tmp/raw active.png  ' },
         },
       ],
       expect.anything(),
@@ -3523,7 +3594,7 @@ describe('elementOps', () => {
         kind: 'patchElement',
         elementType,
         id,
-        patch: { activeImage: '' },
+        patch: { property: 'activeImage', value: '' },
       })),
       expect.anything(),
     );
@@ -3583,7 +3654,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'graph',
           id: graphId,
-          patch: { idleTransparent: true },
+          patch: { property: 'idleTransparent', value: true },
         },
       ],
       expect.anything(),
@@ -3608,13 +3679,13 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'key',
           id: ID_A,
-          patch: { activeTransparent: true },
+          patch: { property: 'activeTransparent', value: true },
         },
         {
           kind: 'patchElement',
           elementType: 'knob',
           id: knobId,
-          patch: { activeTransparent: true },
+          patch: { property: 'activeTransparent', value: true },
         },
       ],
       expect.anything(),
@@ -3672,7 +3743,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'knob',
           id: knobId,
-          patch: { idleImageFit: 'fill' },
+          patch: { property: 'idleImageFit', value: 'fill' },
         },
       ],
       expect.anything(),
@@ -3684,7 +3755,7 @@ describe('elementOps', () => {
           kind: 'patchElement',
           elementType: 'knob',
           id: knobId,
-          patch: { activeImageFit: 'none' },
+          patch: { property: 'activeImageFit', value: 'none' },
         },
       ],
       expect.anything(),

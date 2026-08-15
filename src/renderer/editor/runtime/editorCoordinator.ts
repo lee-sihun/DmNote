@@ -533,82 +533,82 @@ const applySemanticOps = (
           ...record,
           [mode]: positions.map((position, positionIndex) => {
             if (positionIndex !== index) return position;
-            if ('layerName' in op.patch) {
+            if (op.patch.property === 'layerName') {
               const updated = { ...position };
-              if (op.patch.layerName === null) delete updated.layerName;
-              else updated.layerName = op.patch.layerName;
+              if (op.patch.value === null) delete updated.layerName;
+              else updated.layerName = op.patch.value;
               return updated;
             }
-            if ('graphType' in op.patch) {
-              return { ...position, graphType: op.patch.graphType };
+            if (op.patch.property === 'graphType') {
+              return { ...position, graphType: op.patch.value };
             }
-            if ('graphColor' in op.patch) {
-              return { ...position, graphColor: op.patch.graphColor };
+            if (op.patch.property === 'graphColor') {
+              return { ...position, graphColor: op.patch.value };
             }
-            if ('showAvgLine' in op.patch) {
-              return { ...position, showAvgLine: op.patch.showAvgLine };
+            if (op.patch.property === 'showAvgLine') {
+              return { ...position, showAvgLine: op.patch.value };
             }
-            if ('graphAnimationEnabled' in op.patch) {
+            if (op.patch.property === 'graphAnimationEnabled') {
               return {
                 ...position,
-                graphAnimationEnabled: op.patch.graphAnimationEnabled,
+                graphAnimationEnabled: op.patch.value,
               };
             }
-            if ('graphSpeed' in op.patch) {
-              return { ...position, graphSpeed: op.patch.graphSpeed };
+            if (op.patch.property === 'graphSpeed') {
+              return { ...position, graphSpeed: op.patch.value };
             }
-            if ('reverse' in op.patch) {
-              return { ...position, reverse: op.patch.reverse };
+            if (op.patch.property === 'reverse') {
+              return { ...position, reverse: op.patch.value };
             }
-            if ('sensitivity' in op.patch) {
-              return { ...position, sensitivity: op.patch.sensitivity };
+            if (op.patch.property === 'sensitivity') {
+              return { ...position, sensitivity: op.patch.value };
             }
-            if ('axisId' in op.patch) {
-              return { ...position, axisId: op.patch.axisId };
+            if (op.patch.property === 'axisId') {
+              return { ...position, axisId: op.patch.value };
             }
-            if ('soundEnabled' in op.patch) {
-              return { ...position, soundEnabled: op.patch.soundEnabled };
+            if (op.patch.property === 'soundEnabled') {
+              return { ...position, soundEnabled: op.patch.value };
             }
-            if ('soundVolume' in op.patch) {
-              return { ...position, soundVolume: op.patch.soundVolume };
+            if (op.patch.property === 'soundVolume') {
+              return { ...position, soundVolume: op.patch.value };
             }
-            if ('soundPath' in op.patch) {
-              return { ...position, soundPath: op.patch.soundPath };
+            if (op.patch.property === 'soundPath') {
+              return { ...position, soundPath: op.patch.value };
             }
-            if ('inactiveImage' in op.patch) {
-              return { ...position, inactiveImage: op.patch.inactiveImage };
+            if (op.patch.property === 'inactiveImage') {
+              return { ...position, inactiveImage: op.patch.value };
             }
-            if ('activeImage' in op.patch) {
-              return { ...position, activeImage: op.patch.activeImage };
+            if (op.patch.property === 'activeImage') {
+              return { ...position, activeImage: op.patch.value };
             }
-            if ('idleTransparent' in op.patch) {
+            if (op.patch.property === 'idleTransparent') {
               return {
                 ...position,
-                idleTransparent: op.patch.idleTransparent,
+                idleTransparent: op.patch.value,
               };
             }
-            if ('activeTransparent' in op.patch) {
+            if (op.patch.property === 'activeTransparent') {
               return {
                 ...position,
-                activeTransparent: op.patch.activeTransparent,
+                activeTransparent: op.patch.value,
               };
             }
-            if ('idleImageFit' in op.patch) {
-              return { ...position, idleImageFit: op.patch.idleImageFit };
+            if (op.patch.property === 'idleImageFit') {
+              return { ...position, idleImageFit: op.patch.value };
             }
-            if ('activeImageFit' in op.patch) {
-              return { ...position, activeImageFit: op.patch.activeImageFit };
+            if (op.patch.property === 'activeImageFit') {
+              return { ...position, activeImageFit: op.patch.value };
             }
-            if ('counterEnabled' in op.patch) {
+            if (op.patch.property === 'counterEnabled') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
               return {
                 ...position,
-                counter: { ...counter, enabled: op.patch.counterEnabled },
+                counter: { ...counter, enabled: op.patch.value },
               };
             }
-            if ('counterAnimationEnabled' in op.patch) {
+            if (op.patch.property === 'counterAnimationEnabled') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
@@ -622,75 +622,75 @@ const applySemanticOps = (
                   ...counter,
                   animation: {
                     ...animation,
-                    enabled: op.patch.counterAnimationEnabled,
+                    enabled: op.patch.value,
                   },
                 },
               };
             }
-            if ('counterPlacement' in op.patch) {
+            if (op.patch.property === 'counterPlacement') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
               return {
                 ...position,
-                counter: { ...counter, placement: op.patch.counterPlacement },
+                counter: { ...counter, placement: op.patch.value },
               };
             }
-            if ('counterAlign' in op.patch) {
+            if (op.patch.property === 'counterAlign') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
               return {
                 ...position,
-                counter: { ...counter, align: op.patch.counterAlign },
+                counter: { ...counter, align: op.patch.value },
               };
             }
-            if ('counterAlignMode' in op.patch) {
+            if (op.patch.property === 'counterAlignMode') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
               return {
                 ...position,
-                counter: { ...counter, alignMode: op.patch.counterAlignMode },
+                counter: { ...counter, alignMode: op.patch.value },
               };
             }
-            if ('counterGap' in op.patch) {
+            if (op.patch.property === 'counterGap') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
               return {
                 ...position,
-                counter: { ...counter, gap: op.patch.counterGap },
+                counter: { ...counter, gap: op.patch.value },
               };
             }
-            if ('counterFontSize' in op.patch) {
+            if (op.patch.property === 'counterFontSize') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
               return {
                 ...position,
-                counter: { ...counter, fontSize: op.patch.counterFontSize },
+                counter: { ...counter, fontSize: op.patch.value },
               };
             }
-            if ('counterFontWeight' in op.patch) {
+            if (op.patch.property === 'counterFontWeight') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
               return {
                 ...position,
-                counter: { ...counter, fontWeight: op.patch.counterFontWeight },
+                counter: { ...counter, fontWeight: op.patch.value },
               };
             }
-            if ('counterFontItalic' in op.patch) {
+            if (op.patch.property === 'counterFontItalic') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
               return {
                 ...position,
-                counter: { ...counter, fontItalic: op.patch.counterFontItalic },
+                counter: { ...counter, fontItalic: op.patch.value },
               };
             }
-            if ('counterFontUnderline' in op.patch) {
+            if (op.patch.property === 'counterFontUnderline') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
@@ -698,11 +698,11 @@ const applySemanticOps = (
                 ...position,
                 counter: {
                   ...counter,
-                  fontUnderline: op.patch.counterFontUnderline,
+                  fontUnderline: op.patch.value,
                 },
               };
             }
-            if ('counterFontStrikethrough' in op.patch) {
+            if (op.patch.property === 'counterFontStrikethrough') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
@@ -710,11 +710,11 @@ const applySemanticOps = (
                 ...position,
                 counter: {
                   ...counter,
-                  fontStrikethrough: op.patch.counterFontStrikethrough,
+                  fontStrikethrough: op.patch.value,
                 },
               };
             }
-            if ('counterFontFamily' in op.patch) {
+            if (op.patch.property === 'counterFontFamily') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
@@ -722,13 +722,13 @@ const applySemanticOps = (
                 ...position,
                 counter: {
                   ...counter,
-                  fontFamily: op.patch.counterFontFamily,
+                  fontFamily: op.patch.value,
                 },
               };
             }
             if (
-              'counterStrokeIdle' in op.patch ||
-              'counterStrokeActive' in op.patch
+              op.patch.property === 'counterStrokeIdle' ||
+              op.patch.property === 'counterStrokeActive'
             ) {
               const counter = position.counter as
                 | Record<string, unknown>
@@ -739,13 +739,13 @@ const applySemanticOps = (
                 counter: {
                   ...counter,
                   stroke:
-                    'counterStrokeIdle' in op.patch
-                      ? { ...stroke, idle: op.patch.counterStrokeIdle }
-                      : { ...stroke, active: op.patch.counterStrokeActive },
+                    op.patch.property === 'counterStrokeIdle'
+                      ? { ...stroke, idle: op.patch.value }
+                      : { ...stroke, active: op.patch.value },
                 },
               };
             }
-            if ('counterAnimationPreset' in op.patch) {
+            if (op.patch.property === 'counterAnimationPreset') {
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
@@ -753,7 +753,7 @@ const applySemanticOps = (
                 string,
                 unknown
               >;
-              const intent = op.patch.counterAnimationPreset;
+              const intent = op.patch.value;
               return {
                 ...position,
                 counter: {
@@ -774,42 +774,38 @@ const applySemanticOps = (
                 },
               };
             }
-            if ('useInlineStyles' in op.patch) {
+            if (op.patch.property === 'useInlineStyles') {
               return {
                 ...position,
-                useInlineStyles: op.patch.useInlineStyles,
+                useInlineStyles: op.patch.value,
               };
             }
-            if ('fontWeight' in op.patch) {
-              return { ...position, fontWeight: op.patch.fontWeight };
+            if (op.patch.property === 'fontWeight') {
+              return { ...position, fontWeight: op.patch.value };
             }
-            if ('fontItalic' in op.patch) {
-              return { ...position, fontItalic: op.patch.fontItalic };
+            if (op.patch.property === 'fontItalic') {
+              return { ...position, fontItalic: op.patch.value };
             }
-            if ('fontUnderline' in op.patch) {
-              return { ...position, fontUnderline: op.patch.fontUnderline };
+            if (op.patch.property === 'fontUnderline') {
+              return { ...position, fontUnderline: op.patch.value };
             }
-            if ('fontStrikethrough' in op.patch) {
+            if (op.patch.property === 'fontStrikethrough') {
               return {
                 ...position,
-                fontStrikethrough: op.patch.fontStrikethrough,
+                fontStrikethrough: op.patch.value,
               };
             }
-            if ('fontFamily' in op.patch) {
-              return { ...position, fontFamily: op.patch.fontFamily };
+            if (op.patch.property === 'fontFamily') {
+              return { ...position, fontFamily: op.patch.value };
             }
             if (
-              'backgroundPaint' in op.patch ||
-              'activeBackgroundPaint' in op.patch ||
-              'borderPaint' in op.patch ||
-              'activeBorderPaint' in op.patch
+              op.patch.property === 'backgroundPaint' ||
+              op.patch.property === 'activeBackgroundPaint' ||
+              op.patch.property === 'borderPaint' ||
+              op.patch.property === 'activeBorderPaint'
             ) {
-              const field = Object.keys(op.patch)[0] as
-                | 'backgroundPaint'
-                | 'activeBackgroundPaint'
-                | 'borderPaint'
-                | 'activeBorderPaint';
-              const paint = op.patch[field]!;
+              const field = op.patch.property;
+              const paint = op.patch.value;
               const {
                 active,
                 colorField,
@@ -883,83 +879,83 @@ const applySemanticOps = (
             if (isNotePaintPropertyPatchV1(op.patch)) {
               return { ...position, ...projectNotePaintPatch(op.patch) };
             }
-            if ('displayText' in op.patch) {
-              return { ...position, displayText: op.patch.displayText };
+            if (op.patch.property === 'displayText') {
+              return { ...position, displayText: op.patch.value };
             }
-            if ('className' in op.patch) {
-              return { ...position, className: op.patch.className };
+            if (op.patch.property === 'className') {
+              return { ...position, className: op.patch.value };
             }
-            if ('borderWidth' in op.patch) {
-              return { ...position, borderWidth: op.patch.borderWidth };
+            if (op.patch.property === 'borderWidth') {
+              return { ...position, borderWidth: op.patch.value };
             }
-            if ('borderRadius' in op.patch) {
-              return { ...position, borderRadius: op.patch.borderRadius };
+            if (op.patch.property === 'borderRadius') {
+              return { ...position, borderRadius: op.patch.value };
             }
-            if ('fontSize' in op.patch) {
-              return { ...position, fontSize: op.patch.fontSize };
+            if (op.patch.property === 'fontSize') {
+              return { ...position, fontSize: op.patch.value };
             }
-            if ('noteGlowSize' in op.patch) {
-              return { ...position, noteGlowSize: op.patch.noteGlowSize };
+            if (op.patch.property === 'noteGlowSize') {
+              return { ...position, noteGlowSize: op.patch.value };
             }
-            if ('noteOffsetX' in op.patch) {
+            if (op.patch.property === 'noteOffsetX') {
               return {
                 ...position,
-                noteOffsetX: op.patch.noteOffsetX ?? undefined,
+                noteOffsetX: op.patch.value ?? undefined,
               };
             }
-            if ('noteOffsetY' in op.patch) {
+            if (op.patch.property === 'noteOffsetY') {
               return {
                 ...position,
-                noteOffsetY: op.patch.noteOffsetY ?? undefined,
+                noteOffsetY: op.patch.value ?? undefined,
               };
             }
-            if ('noteWidth' in op.patch) {
+            if (op.patch.property === 'noteWidth') {
               return {
                 ...position,
-                noteWidth: op.patch.noteWidth ?? undefined,
+                noteWidth: op.patch.value ?? undefined,
               };
             }
-            if ('noteBorderWidth' in op.patch) {
+            if (op.patch.property === 'noteBorderWidth') {
               return {
                 ...position,
-                noteBorderWidth: op.patch.noteBorderWidth,
+                noteBorderWidth: op.patch.value,
               };
             }
-            if ('noteBorderRadius' in op.patch) {
+            if (op.patch.property === 'noteBorderRadius') {
               return {
                 ...position,
-                noteBorderRadius: op.patch.noteBorderRadius,
+                noteBorderRadius: op.patch.value,
               };
             }
-            if ('noteEffectEnabled' in op.patch) {
+            if (op.patch.property === 'noteEffectEnabled') {
               return {
                 ...position,
-                noteEffectEnabled: op.patch.noteEffectEnabled,
+                noteEffectEnabled: op.patch.value,
               };
             }
-            if ('noteAutoYCorrection' in op.patch) {
+            if (op.patch.property === 'noteAutoYCorrection') {
               return {
                 ...position,
-                noteAutoYCorrection: op.patch.noteAutoYCorrection,
+                noteAutoYCorrection: op.patch.value,
               };
             }
-            if ('noteGlowEnabled' in op.patch) {
+            if (op.patch.property === 'noteGlowEnabled') {
               return {
                 ...position,
-                noteGlowEnabled: op.patch.noteGlowEnabled,
+                noteGlowEnabled: op.patch.value,
               };
             }
-            if ('noteAlignment' in op.patch) {
-              return { ...position, noteAlignment: op.patch.noteAlignment };
+            if (op.patch.property === 'noteAlignment') {
+              return { ...position, noteAlignment: op.patch.value };
             }
-            if ('noteBorderSide' in op.patch) {
-              return { ...position, noteBorderSide: op.patch.noteBorderSide };
+            if (op.patch.property === 'noteBorderSide') {
+              return { ...position, noteBorderSide: op.patch.value };
             }
-            if ('statType' in op.patch) {
-              return { ...position, statType: op.patch.statType };
+            if (op.patch.property === 'statType') {
+              return { ...position, statType: op.patch.value };
             }
-            if ('hidden' in op.patch) {
-              return { ...position, hidden: op.patch.hidden };
+            if (op.patch.property === 'hidden') {
+              return { ...position, hidden: op.patch.value };
             }
             // 속성 arm 누락을 컴파일 시점에 잡는다. Rust 적용부는 exhaustive
             // match라 누락이 컴파일 오류지만 이 체인은 폴백으로 흘렀다

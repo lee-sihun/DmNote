@@ -234,9 +234,7 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type: EditorElementTypeV1::Key,
             id: uuid::Uuid::new_v4().to_string(),
-            patch: EditorElementPropertyPatchV1::Hidden(
-                crate::models::EditorHiddenPropertyPatchV1 { hidden: true },
-            ),
+            patch: EditorElementPropertyPatchV1::Hidden(true),
         }
     }
 
@@ -447,14 +445,12 @@ mod tests {
         layer_name.editor_ops = Some(vec![EditorOpV1::PatchElement {
             element_type: EditorElementTypeV1::Graph,
             id: uuid::Uuid::new_v4().to_string(),
-            patch: EditorElementPropertyPatchV1::LayerName(
-                crate::models::EditorLayerNamePropertyPatchV1 { layer_name: None },
-            ),
+            patch: EditorElementPropertyPatchV1::LayerName(None),
         }]);
         let layer_name_wire = serde_json::to_value(layer_name).unwrap();
         assert_eq!(
             layer_name_wire["editorOps"][0]["patch"],
-            serde_json::json!({ "layerName": null })
+            serde_json::json!({ "property": "layerName", "value": null })
         );
         decode_gesture_commit_request(layer_name_wire.clone()).unwrap();
 
@@ -463,16 +459,12 @@ mod tests {
         graph_type.editor_ops = Some(vec![EditorOpV1::PatchElement {
             element_type: EditorElementTypeV1::Graph,
             id: uuid::Uuid::new_v4().to_string(),
-            patch: EditorElementPropertyPatchV1::GraphType(
-                crate::models::EditorGraphTypePropertyPatchV1 {
-                    graph_type: crate::models::GraphType::Bar,
-                },
-            ),
+            patch: EditorElementPropertyPatchV1::GraphType(crate::models::GraphType::Bar),
         }]);
         let graph_type_wire = serde_json::to_value(graph_type).unwrap();
         assert_eq!(
             graph_type_wire["editorOps"][0]["patch"],
-            serde_json::json!({ "graphType": "bar" })
+            serde_json::json!({ "property": "graphType", "value": "bar" })
         );
         decode_gesture_commit_request(graph_type_wire.clone()).unwrap();
 
@@ -481,16 +473,12 @@ mod tests {
         graph_color.editor_ops = Some(vec![EditorOpV1::PatchElement {
             element_type: EditorElementTypeV1::Graph,
             id: uuid::Uuid::new_v4().to_string(),
-            patch: EditorElementPropertyPatchV1::GraphColor(
-                crate::models::EditorGraphColorPropertyPatchV1 {
-                    graph_color: "not-normalized".to_string(),
-                },
-            ),
+            patch: EditorElementPropertyPatchV1::GraphColor("not-normalized".to_string()),
         }]);
         let graph_color_wire = serde_json::to_value(graph_color).unwrap();
         assert_eq!(
             graph_color_wire["editorOps"][0]["patch"],
-            serde_json::json!({ "graphColor": "not-normalized" })
+            serde_json::json!({ "property": "graphColor", "value": "not-normalized" })
         );
         decode_gesture_commit_request(graph_color_wire.clone()).unwrap();
 
@@ -500,626 +488,392 @@ mod tests {
             element_type: EditorElementTypeV1::Knob,
             id: uuid::Uuid::new_v4().to_string(),
             patch: EditorElementPropertyPatchV1::ActiveBorderPaint(
-                crate::models::EditorActiveBorderPaintPropertyPatchV1 {
-                    active_border_paint: crate::models::EditorPaintDescriptorV1 {
-                        color: "active".to_string(),
-                        gradient: None,
-                    },
+                crate::models::EditorPaintDescriptorV1 {
+                    color: "active".to_string(),
+                    gradient: None,
                 },
             ),
         }]);
         let paint_wire = serde_json::to_value(paint).unwrap();
         assert_eq!(
             paint_wire["editorOps"][0]["patch"],
-            serde_json::json!({
-                "activeBorderPaint": { "color": "active", "gradient": null }
-            })
+            serde_json::json!({ "property": "activeBorderPaint", "value": { "color": "active", "gradient": null } })
         );
         decode_gesture_commit_request(paint_wire.clone()).unwrap();
 
         let literal_properties = [
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::ShowAvgLine(
-                    crate::models::EditorShowAvgLinePropertyPatchV1 {
-                        show_avg_line: true,
-                    },
-                ),
-                serde_json::json!({ "showAvgLine": true }),
+                EditorElementPropertyPatchV1::ShowAvgLine(true),
+                serde_json::json!({ "property": "showAvgLine", "value": true }),
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::GraphAnimationEnabled(
-                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
-                        graph_animation_enabled: false,
-                    },
-                ),
-                serde_json::json!({ "graphAnimationEnabled": false }),
+                EditorElementPropertyPatchV1::GraphAnimationEnabled(false),
+                serde_json::json!({ "property": "graphAnimationEnabled", "value": false }),
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::GraphSpeed(
-                    crate::models::EditorGraphSpeedPropertyPatchV1 { graph_speed: 0 },
-                ),
-                serde_json::json!({ "graphSpeed": 0 }),
+                EditorElementPropertyPatchV1::GraphSpeed(0),
+                serde_json::json!({ "property": "graphSpeed", "value": 0 }),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::Reverse(
-                    crate::models::EditorReversePropertyPatchV1 { reverse: true },
-                ),
-                serde_json::json!({ "reverse": true }),
+                EditorElementPropertyPatchV1::Reverse(true),
+                serde_json::json!({ "property": "reverse", "value": true }),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::Sensitivity(
-                    crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: -7.25 },
-                ),
-                serde_json::json!({ "sensitivity": -7.25 }),
+                EditorElementPropertyPatchV1::Sensitivity(-7.25),
+                serde_json::json!({ "property": "sensitivity", "value": -7.25 }),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
-                    axis_id: "  HIDA:raw  ".to_string(),
-                }),
-                serde_json::json!({ "axisId": "  HIDA:raw  " }),
+                EditorElementPropertyPatchV1::AxisId("  HIDA:raw  ".to_string()),
+                serde_json::json!({ "property": "axisId", "value": "  HIDA:raw  " }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::UseInlineStyles(
-                    crate::models::EditorUseInlineStylesPropertyPatchV1 {
-                        use_inline_styles: false,
-                    },
-                ),
-                serde_json::json!({ "useInlineStyles": false }),
+                EditorElementPropertyPatchV1::UseInlineStyles(false),
+                serde_json::json!({ "property": "useInlineStyles", "value": false }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::FontWeight(
-                    crate::models::EditorFontWeightPropertyPatchV1 { font_weight: 400 },
-                ),
-                serde_json::json!({ "fontWeight": 400 }),
+                EditorElementPropertyPatchV1::FontWeight(400),
+                serde_json::json!({ "property": "fontWeight", "value": 400 }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::FontItalic(
-                    crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
-                ),
-                serde_json::json!({ "fontItalic": false }),
+                EditorElementPropertyPatchV1::FontItalic(false),
+                serde_json::json!({ "property": "fontItalic", "value": false }),
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::FontUnderline(
-                    crate::models::EditorFontUnderlinePropertyPatchV1 {
-                        font_underline: true,
-                    },
-                ),
-                serde_json::json!({ "fontUnderline": true }),
+                EditorElementPropertyPatchV1::FontUnderline(true),
+                serde_json::json!({ "property": "fontUnderline", "value": true }),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::FontStrikethrough(
-                    crate::models::EditorFontStrikethroughPropertyPatchV1 {
-                        font_strikethrough: false,
-                    },
-                ),
-                serde_json::json!({ "fontStrikethrough": false }),
+                EditorElementPropertyPatchV1::FontStrikethrough(false),
+                serde_json::json!({ "property": "fontStrikethrough", "value": false }),
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::FontFamily(
-                    crate::models::EditorFontFamilyPropertyPatchV1 {
-                        font_family: " raw-font ".to_string(),
-                    },
-                ),
-                serde_json::json!({ "fontFamily": " raw-font " }),
+                EditorElementPropertyPatchV1::FontFamily(" raw-font ".to_string()),
+                serde_json::json!({ "property": "fontFamily", "value": " raw-font " }),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::DisplayText(
-                    crate::models::EditorDisplayTextPropertyPatchV1 {
-                        display_text: "  raw display  ".to_string(),
-                    },
-                ),
-                serde_json::json!({ "displayText": "  raw display  " }),
+                EditorElementPropertyPatchV1::DisplayText("  raw display  ".to_string()),
+                serde_json::json!({ "property": "displayText", "value": "  raw display  " }),
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::ClassName(
-                    crate::models::EditorClassNamePropertyPatchV1 {
-                        class_name: "  raw class  ".to_string(),
-                    },
-                ),
-                serde_json::json!({ "className": "  raw class  " }),
+                EditorElementPropertyPatchV1::ClassName("  raw class  ".to_string()),
+                serde_json::json!({ "property": "className", "value": "  raw class  " }),
             ),
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::FontColor(
-                    crate::models::EditorFontColorPropertyPatchV1 {
-                        font_color: String::new(),
-                    },
-                ),
-                serde_json::json!({ "fontColor": "" }),
+                EditorElementPropertyPatchV1::FontColor(String::new()),
+                serde_json::json!({ "property": "fontColor", "value": "" }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::ActiveFontColor(
-                    crate::models::EditorActiveFontColorPropertyPatchV1 {
-                        active_font_color: "  raw active font  ".to_string(),
-                    },
-                ),
-                serde_json::json!({ "activeFontColor": "  raw active font  " }),
+                EditorElementPropertyPatchV1::ActiveFontColor("  raw active font  ".to_string()),
+                serde_json::json!({ "property": "activeFontColor", "value": "  raw active font  " }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
-                    shadow: crate::models::EditorShadowLeafPatchV1::Blur(
-                        crate::models::EditorShadowBlurLeafPatchV1 { blur: 8.5 },
-                    ),
-                }),
-                serde_json::json!({ "shadow": { "blur": 8.5 } }),
+                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowLeafPatchV1::Blur(
+                    8.5,
+                )),
+                serde_json::json!({ "property": "shadow", "value": { "leaf": "blur", "value": 8.5 } }),
             ),
             (
                 EditorElementTypeV1::Knob,
                 EditorElementPropertyPatchV1::ActiveShadow(
-                    crate::models::EditorActiveShadowPropertyPatchV1 {
-                        active_shadow: crate::models::EditorShadowLeafPatchV1::OffsetY(
-                            crate::models::EditorShadowOffsetYLeafPatchV1 { offset_y: -3.25 },
-                        ),
-                    },
+                    crate::models::EditorShadowLeafPatchV1::OffsetY(-3.25),
                 ),
-                serde_json::json!({ "activeShadow": { "offsetY": -3.25 } }),
+                serde_json::json!({ "property": "activeShadow", "value": { "leaf": "offsetY", "value": -3.25 } }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::ShadowEnabled(
-                    crate::models::EditorShadowEnabledPropertyPatchV1 {
-                        shadow_enabled: true,
-                    },
-                ),
-                serde_json::json!({ "shadowEnabled": true }),
+                EditorElementPropertyPatchV1::ShadowEnabled(true),
+                serde_json::json!({ "property": "shadowEnabled", "value": true }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::BorderWidth(
-                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 0.5 },
-                ),
-                serde_json::json!({ "borderWidth": 0.5 }),
+                EditorElementPropertyPatchV1::BorderWidth(0.5),
+                serde_json::json!({ "property": "borderWidth", "value": 0.5 }),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::BorderRadius(
-                    crate::models::EditorBorderRadiusPropertyPatchV1 {
-                        border_radius: 999.0,
-                    },
-                ),
-                serde_json::json!({ "borderRadius": 999.0 }),
+                EditorElementPropertyPatchV1::BorderRadius(999.0),
+                serde_json::json!({ "property": "borderRadius", "value": 999.0 }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::FontSize(
-                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 8.5 },
-                ),
-                serde_json::json!({ "fontSize": 8.5 }),
+                EditorElementPropertyPatchV1::FontSize(8.5),
+                serde_json::json!({ "property": "fontSize", "value": 8.5 }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::InactiveImage(
-                    crate::models::EditorInactiveImagePropertyPatchV1 {
-                        inactive_image: String::new(),
-                    },
-                ),
-                serde_json::json!({ "inactiveImage": "" }),
+                EditorElementPropertyPatchV1::InactiveImage(String::new()),
+                serde_json::json!({ "property": "inactiveImage", "value": "" }),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::ActiveImage(
-                    crate::models::EditorActiveImagePropertyPatchV1 {
-                        active_image: "  active.png  ".to_string(),
-                    },
-                ),
-                serde_json::json!({ "activeImage": "  active.png  " }),
+                EditorElementPropertyPatchV1::ActiveImage("  active.png  ".to_string()),
+                serde_json::json!({ "property": "activeImage", "value": "  active.png  " }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::IdleTransparent(
-                    crate::models::EditorIdleTransparentPropertyPatchV1 {
-                        idle_transparent: true,
-                    },
-                ),
-                serde_json::json!({ "idleTransparent": true }),
+                EditorElementPropertyPatchV1::IdleTransparent(true),
+                serde_json::json!({ "property": "idleTransparent", "value": true }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::ActiveTransparent(
-                    crate::models::EditorActiveTransparentPropertyPatchV1 {
-                        active_transparent: false,
-                    },
-                ),
-                serde_json::json!({ "activeTransparent": false }),
+                EditorElementPropertyPatchV1::ActiveTransparent(false),
+                serde_json::json!({ "property": "activeTransparent", "value": false }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::IdleImageFit(
-                    crate::models::EditorIdleImageFitPropertyPatchV1 {
-                        idle_image_fit: crate::models::ImageFit::Fill,
-                    },
-                ),
-                serde_json::json!({ "idleImageFit": "fill" }),
+                EditorElementPropertyPatchV1::IdleImageFit(crate::models::ImageFit::Fill),
+                serde_json::json!({ "property": "idleImageFit", "value": "fill" }),
             ),
             (
                 EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::ActiveImageFit(
-                    crate::models::EditorActiveImageFitPropertyPatchV1 {
-                        active_image_fit: crate::models::ImageFit::Cover,
-                    },
-                ),
-                serde_json::json!({ "activeImageFit": "cover" }),
+                EditorElementPropertyPatchV1::ActiveImageFit(crate::models::ImageFit::Cover),
+                serde_json::json!({ "property": "activeImageFit", "value": "cover" }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::SoundPath(
-                    crate::models::EditorSoundPathPropertyPatchV1 {
-                        sound_path: String::new(),
-                    },
-                ),
-                serde_json::json!({ "soundPath": "" }),
+                EditorElementPropertyPatchV1::SoundPath(String::new()),
+                serde_json::json!({ "property": "soundPath", "value": "" }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::SoundEnabled(
-                    crate::models::EditorSoundEnabledPropertyPatchV1 {
-                        sound_enabled: false,
-                    },
-                ),
-                serde_json::json!({ "soundEnabled": false }),
+                EditorElementPropertyPatchV1::SoundEnabled(false),
+                serde_json::json!({ "property": "soundEnabled", "value": false }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::SoundVolume(
-                    crate::models::EditorSoundVolumePropertyPatchV1 {
-                        sound_volume: 137.5,
-                    },
-                ),
-                serde_json::json!({ "soundVolume": 137.5 }),
+                EditorElementPropertyPatchV1::SoundVolume(137.5),
+                serde_json::json!({ "property": "soundVolume", "value": 137.5 }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterEnabled(
-                    crate::models::EditorCounterEnabledPropertyPatchV1 {
-                        counter_enabled: true,
-                    },
-                ),
-                serde_json::json!({ "counterEnabled": true }),
+                EditorElementPropertyPatchV1::CounterEnabled(true),
+                serde_json::json!({ "property": "counterEnabled", "value": true }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterAnimationEnabled(
-                    crate::models::EditorCounterAnimationEnabledPropertyPatchV1 {
-                        counter_animation_enabled: false,
-                    },
-                ),
-                serde_json::json!({ "counterAnimationEnabled": false }),
+                EditorElementPropertyPatchV1::CounterAnimationEnabled(false),
+                serde_json::json!({ "property": "counterAnimationEnabled", "value": false }),
             ),
             (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::CounterPlacement(
-                    crate::models::EditorCounterPlacementPropertyPatchV1 {
-                        counter_placement: crate::models::KeyCounterPlacement::Outside,
-                    },
+                    crate::models::KeyCounterPlacement::Outside,
                 ),
-                serde_json::json!({ "counterPlacement": "outside" }),
+                serde_json::json!({ "property": "counterPlacement", "value": "outside" }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterAlign(
-                    crate::models::EditorCounterAlignPropertyPatchV1 {
-                        counter_align: crate::models::KeyCounterAlign::Right,
-                    },
-                ),
-                serde_json::json!({ "counterAlign": "right" }),
+                EditorElementPropertyPatchV1::CounterAlign(crate::models::KeyCounterAlign::Right),
+                serde_json::json!({ "property": "counterAlign", "value": "right" }),
             ),
             (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::CounterAlignMode(
-                    crate::models::EditorCounterAlignModePropertyPatchV1 {
-                        counter_align_mode: crate::models::KeyCounterAlignMode::Between,
-                    },
+                    crate::models::KeyCounterAlignMode::Between,
                 ),
-                serde_json::json!({ "counterAlignMode": "between" }),
+                serde_json::json!({ "property": "counterAlignMode", "value": "between" }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterGap(
-                    crate::models::EditorCounterGapPropertyPatchV1 {
-                        counter_gap: u32::MAX,
-                    },
-                ),
-                serde_json::json!({ "counterGap": u32::MAX }),
+                EditorElementPropertyPatchV1::CounterGap(u32::MAX),
+                serde_json::json!({ "property": "counterGap", "value": u32::MAX }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterFontSize(
-                    crate::models::EditorCounterFontSizePropertyPatchV1 {
-                        counter_font_size: 72,
-                    },
-                ),
-                serde_json::json!({ "counterFontSize": 72 }),
+                EditorElementPropertyPatchV1::CounterFontSize(72),
+                serde_json::json!({ "property": "counterFontSize", "value": 72 }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterFontWeight(
-                    crate::models::EditorCounterFontWeightPropertyPatchV1 {
-                        counter_font_weight: 900,
-                    },
-                ),
-                serde_json::json!({ "counterFontWeight": 900 }),
+                EditorElementPropertyPatchV1::CounterFontWeight(900),
+                serde_json::json!({ "property": "counterFontWeight", "value": 900 }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterFontItalic(
-                    crate::models::EditorCounterFontItalicPropertyPatchV1 {
-                        counter_font_italic: true,
-                    },
-                ),
-                serde_json::json!({ "counterFontItalic": true }),
+                EditorElementPropertyPatchV1::CounterFontItalic(true),
+                serde_json::json!({ "property": "counterFontItalic", "value": true }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterFontUnderline(
-                    crate::models::EditorCounterFontUnderlinePropertyPatchV1 {
-                        counter_font_underline: true,
-                    },
-                ),
-                serde_json::json!({ "counterFontUnderline": true }),
+                EditorElementPropertyPatchV1::CounterFontUnderline(true),
+                serde_json::json!({ "property": "counterFontUnderline", "value": true }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterFontStrikethrough(
-                    crate::models::EditorCounterFontStrikethroughPropertyPatchV1 {
-                        counter_font_strikethrough: true,
-                    },
-                ),
-                serde_json::json!({ "counterFontStrikethrough": true }),
+                EditorElementPropertyPatchV1::CounterFontStrikethrough(true),
+                serde_json::json!({ "property": "counterFontStrikethrough", "value": true }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterFontFamily(
-                    crate::models::EditorCounterFontFamilyPropertyPatchV1 {
-                        counter_font_family: "  raw-counter-font  ".to_string(),
-                    },
-                ),
-                serde_json::json!({ "counterFontFamily": "  raw-counter-font  " }),
+                EditorElementPropertyPatchV1::CounterFontFamily("  raw-counter-font  ".to_string()),
+                serde_json::json!({ "property": "counterFontFamily", "value": "  raw-counter-font  " }),
             ),
             (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterFillIdle(
-                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
-                        counter_fill_idle: crate::models::EditorCounterFillIntentV1::Solid(
-                            crate::models::EditorCounterFillSolidIntentV1 {
-                                color: String::new(),
-                            },
-                        ),
-                    },
+                    crate::models::EditorCounterFillIntentV1::Solid(
+                        crate::models::EditorCounterFillSolidIntentV1 {
+                            color: String::new(),
+                        },
+                    ),
                 ),
-                serde_json::json!({ "counterFillIdle": { "color": "" } }),
+                serde_json::json!({ "property": "counterFillIdle", "value": { "color": "" } }),
             ),
             (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::CounterFillActive(
-                    crate::models::EditorCounterFillActivePropertyPatchV1 {
-                        counter_fill_active: crate::models::EditorCounterFillIntentV1::Gradient(
-                            crate::models::EditorCounterFillGradientIntentV1 {
-                                color: "rgba(170,187,204,1)".to_string(),
-                                gradient: crate::models::EditorPaintGradientV1 {
-                                    angle: 180.0,
-                                    stops: vec![
-                                        crate::models::EditorPaintGradientStopV1 {
-                                            color: "#ABC".to_string(),
-                                            pos: 0.0,
-                                        },
-                                        crate::models::EditorPaintGradientStopV1 {
-                                            color: "transparent".to_string(),
-                                            pos: 1.0,
-                                        },
-                                    ],
-                                },
+                    crate::models::EditorCounterFillIntentV1::Gradient(
+                        crate::models::EditorCounterFillGradientIntentV1 {
+                            color: "rgba(170,187,204,1)".to_string(),
+                            gradient: crate::models::EditorPaintGradientV1 {
+                                angle: 180.0,
+                                stops: vec![
+                                    crate::models::EditorPaintGradientStopV1 {
+                                        color: "#ABC".to_string(),
+                                        pos: 0.0,
+                                    },
+                                    crate::models::EditorPaintGradientStopV1 {
+                                        color: "transparent".to_string(),
+                                        pos: 1.0,
+                                    },
+                                ],
                             },
-                        ),
-                    },
+                        },
+                    ),
                 ),
-                serde_json::json!({
-                    "counterFillActive": {
-                        "color": "rgba(170,187,204,1)",
-                        "gradient": {
-                            "angle": 180.0,
-                            "stops": [
-                                { "color": "#ABC", "pos": 0.0 },
-                                { "color": "transparent", "pos": 1.0 }
-                            ]
-                        }
-                    }
-                }),
+                serde_json::json!({ "property": "counterFillActive", "value": { "color": "rgba(170,187,204,1)", "gradient": { "angle": 180.0, "stops": [ { "color": "#ABC", "pos": 0.0 }, { "color": "transparent", "pos": 1.0 } ] } } }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
-                        counter_stroke_idle: "  raw-idle-stroke  ".to_string(),
-                    },
-                ),
-                serde_json::json!({ "counterStrokeIdle": "  raw-idle-stroke  " }),
+                EditorElementPropertyPatchV1::CounterStrokeIdle("  raw-idle-stroke  ".to_string()),
+                serde_json::json!({ "property": "counterStrokeIdle", "value": "  raw-idle-stroke  " }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterStrokeActive(
-                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
-                        counter_stroke_active: String::new(),
-                    },
-                ),
-                serde_json::json!({ "counterStrokeActive": "" }),
+                EditorElementPropertyPatchV1::CounterStrokeActive(String::new()),
+                serde_json::json!({ "property": "counterStrokeActive", "value": "" }),
             ),
             (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterAnimationPreset(
-                    crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
-                        counter_animation_preset:
-                            crate::models::EditorCounterAnimationPresetIntentV1 {
-                                preset_id: "builtin-ease-out".to_string(),
-                                apply_preset_id: None,
-                                bezier: None,
-                                scale: None,
-                                duration_ms: None,
-                            },
+                    crate::models::EditorCounterAnimationPresetIntentV1 {
+                        preset_id: "builtin-ease-out".to_string(),
+                        apply_preset_id: None,
+                        bezier: None,
+                        scale: None,
+                        duration_ms: None,
                     },
                 ),
-                serde_json::json!({
-                    "counterAnimationPreset": { "presetId": "builtin-ease-out" }
-                }),
+                serde_json::json!({ "property": "counterAnimationPreset", "value": { "presetId": "builtin-ease-out" } }),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::StatType(
-                    crate::models::EditorStatTypePropertyPatchV1 {
-                        stat_type: crate::models::StatType::Total,
-                    },
-                ),
-                serde_json::json!({ "statType": "total" }),
+                EditorElementPropertyPatchV1::StatType(crate::models::StatType::Total),
+                serde_json::json!({ "property": "statType", "value": "total" }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteEffectEnabled(
-                    crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
-                        note_effect_enabled: false,
-                    },
-                ),
-                serde_json::json!({ "noteEffectEnabled": false }),
+                EditorElementPropertyPatchV1::NoteEffectEnabled(false),
+                serde_json::json!({ "property": "noteEffectEnabled", "value": false }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteGlowEnabled(
-                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
-                        note_glow_enabled: true,
-                    },
-                ),
-                serde_json::json!({ "noteGlowEnabled": true }),
+                EditorElementPropertyPatchV1::NoteGlowEnabled(true),
+                serde_json::json!({ "property": "noteGlowEnabled", "value": true }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteGlowSize(
-                    crate::models::EditorNoteGlowSizePropertyPatchV1 {
-                        note_glow_size: 19.75,
-                    },
-                ),
-                serde_json::json!({ "noteGlowSize": 19.75 }),
+                EditorElementPropertyPatchV1::NoteGlowSize(19.75),
+                serde_json::json!({ "property": "noteGlowSize", "value": 19.75 }),
             ),
             (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NotePaint(
-                    crate::models::EditorNotePaintPropertyPatchV1 {
-                        note_paint: crate::models::EditorNotePaintIntentV1::Color(
-                            crate::models::EditorNotePaintColorIntentV1 {
-                                color: crate::models::EditorNoteColorV1::Solid(String::new()),
-                            },
-                        ),
-                    },
+                    crate::models::EditorNotePaintIntentV1::Color(
+                        crate::models::EditorNotePaintColorIntentV1 {
+                            color: crate::models::EditorNoteColorV1::Solid(String::new()),
+                        },
+                    ),
                 ),
-                serde_json::json!({ "notePaint": { "color": "" } }),
+                serde_json::json!({ "property": "notePaint", "value": { "color": "" } }),
             ),
             (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteGlowPaint(
-                    crate::models::EditorNoteGlowPaintPropertyPatchV1 {
-                        note_glow_paint: crate::models::EditorNotePaintIntentV1::Opacity(
-                            crate::models::EditorNotePaintOpacityIntentV1 { opacity: 70 },
-                        ),
-                    },
+                    crate::models::EditorNotePaintIntentV1::Opacity(
+                        crate::models::EditorNotePaintOpacityIntentV1 { opacity: 70 },
+                    ),
                 ),
-                serde_json::json!({ "noteGlowPaint": { "opacity": 70 } }),
+                serde_json::json!({ "property": "noteGlowPaint", "value": { "opacity": 70 } }),
             ),
             (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteBorderPaint(
-                    crate::models::EditorNoteBorderPaintPropertyPatchV1 {
-                        note_border_paint: crate::models::EditorNoteBorderPaintV1 {
-                            color: "#112233".to_string(),
-                            opacity: 0,
-                        },
+                    crate::models::EditorNoteBorderPaintV1 {
+                        color: "#112233".to_string(),
+                        opacity: 0,
                     },
                 ),
-                serde_json::json!({ "noteBorderPaint": { "color": "#112233", "opacity": 0 } }),
+                serde_json::json!({ "property": "noteBorderPaint", "value": { "color": "#112233", "opacity": 0 } }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteOffsetX(
-                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
-                        note_offset_x: Some(0.0),
-                    },
-                ),
-                serde_json::json!({ "noteOffsetX": 0.0 }),
+                EditorElementPropertyPatchV1::NoteOffsetX(Some(0.0)),
+                serde_json::json!({ "property": "noteOffsetX", "value": 0.0 }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteOffsetY(
-                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
-                        note_offset_y: None,
-                    },
-                ),
-                serde_json::json!({ "noteOffsetY": null }),
+                EditorElementPropertyPatchV1::NoteOffsetY(None),
+                serde_json::json!({ "property": "noteOffsetY", "value": null }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteWidth(
-                    crate::models::EditorNoteWidthPropertyPatchV1 {
-                        note_width: Some(32.5),
-                    },
-                ),
-                serde_json::json!({ "noteWidth": 32.5 }),
+                EditorElementPropertyPatchV1::NoteWidth(Some(32.5)),
+                serde_json::json!({ "property": "noteWidth", "value": 32.5 }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteBorderWidth(
-                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
-                        note_border_width: 2.5,
-                    },
-                ),
-                serde_json::json!({ "noteBorderWidth": 2.5 }),
+                EditorElementPropertyPatchV1::NoteBorderWidth(2.5),
+                serde_json::json!({ "property": "noteBorderWidth", "value": 2.5 }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteBorderRadius(
-                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
-                        note_border_radius: 4.0,
-                    },
-                ),
-                serde_json::json!({ "noteBorderRadius": 4.0 }),
+                EditorElementPropertyPatchV1::NoteBorderRadius(4.0),
+                serde_json::json!({ "property": "noteBorderRadius", "value": 4.0 }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteAutoYCorrection(
-                    crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
-                        note_auto_y_correction: false,
-                    },
-                ),
-                serde_json::json!({ "noteAutoYCorrection": false }),
+                EditorElementPropertyPatchV1::NoteAutoYCorrection(false),
+                serde_json::json!({ "property": "noteAutoYCorrection", "value": false }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::NoteAlignment(
-                    crate::models::EditorNoteAlignmentPropertyPatchV1 {
-                        note_alignment: crate::models::NoteAlignment::Left,
-                    },
-                ),
-                serde_json::json!({ "noteAlignment": "left" }),
+                EditorElementPropertyPatchV1::NoteAlignment(crate::models::NoteAlignment::Left),
+                serde_json::json!({ "property": "noteAlignment", "value": "left" }),
             ),
             (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteBorderSide(
-                    crate::models::EditorNoteBorderSidePropertyPatchV1 {
-                        note_border_side: crate::models::EditorNoteBorderSideV1::Horizontal,
-                    },
+                    crate::models::EditorNoteBorderSideV1::Horizontal,
                 ),
-                serde_json::json!({ "noteBorderSide": "horizontal" }),
+                serde_json::json!({ "property": "noteBorderSide", "value": "horizontal" }),
             ),
         ];
         for (element_type, patch, expected) in literal_properties {
@@ -1136,7 +890,8 @@ mod tests {
         }
 
         let mut invalid_axis_id = graph_color_wire.clone();
-        invalid_axis_id["editorOps"][0]["patch"] = serde_json::json!({ "axisId": false });
+        invalid_axis_id["editorOps"][0]["patch"] =
+            serde_json::json!({ "property": "axisId", "value": false });
         let error = decode_gesture_commit_request(invalid_axis_id).unwrap_err();
         assert_eq!(
             validation_code(error).as_deref(),
@@ -1164,7 +919,8 @@ mod tests {
         );
 
         let mut invalid_font_family = layer_name_wire.clone();
-        invalid_font_family["editorOps"][0]["patch"] = serde_json::json!({ "fontFamily": null });
+        invalid_font_family["editorOps"][0]["patch"] =
+            serde_json::json!({ "property": "fontFamily", "value": null });
         let error = decode_gesture_commit_request(invalid_font_family).unwrap_err();
         assert_eq!(
             validation_code(error).as_deref(),
@@ -1172,8 +928,8 @@ mod tests {
         );
 
         for patch in [
-            serde_json::json!({ "displayText": null }),
-            serde_json::json!({ "displayText": 1 }),
+            serde_json::json!({ "property": "displayText", "value": null }),
+            serde_json::json!({ "property": "displayText", "value": 1 }),
             serde_json::json!({ "displayText": "text", "hidden": true }),
             serde_json::json!({ "displayText": "text", "unexpected": true }),
         ] {
@@ -1187,8 +943,8 @@ mod tests {
         }
 
         for patch in [
-            serde_json::json!({ "className": null }),
-            serde_json::json!({ "className": 1 }),
+            serde_json::json!({ "property": "className", "value": null }),
+            serde_json::json!({ "property": "className", "value": 1 }),
             serde_json::json!({ "className": "class", "hidden": true }),
             serde_json::json!({ "className": "class", "unexpected": true }),
         ] {
@@ -1202,9 +958,9 @@ mod tests {
         }
 
         for patch in [
-            serde_json::json!({ "fontColor": null }),
-            serde_json::json!({ "fontColor": false }),
-            serde_json::json!({ "activeFontColor": 1 }),
+            serde_json::json!({ "property": "fontColor", "value": null }),
+            serde_json::json!({ "property": "fontColor", "value": false }),
+            serde_json::json!({ "property": "activeFontColor", "value": 1 }),
             serde_json::json!({ "fontColor": "idle", "activeFontColor": "active" }),
             serde_json::json!({ "fontColor": "idle", "unexpected": true }),
         ] {
@@ -1218,12 +974,12 @@ mod tests {
         }
 
         for patch in [
-            serde_json::json!({ "shadow": {} }),
-            serde_json::json!({ "shadow": { "offsetX": 1, "blur": 2 } }),
-            serde_json::json!({ "shadow": { "color": "shadow", "unexpected": true } }),
-            serde_json::json!({ "activeShadow": null }),
-            serde_json::json!({ "activeShadow": { "offsetY": "1" } }),
-            serde_json::json!({ "shadowEnabled": "true" }),
+            serde_json::json!({ "property": "shadow", "value": {} }),
+            serde_json::json!({ "property": "shadow", "value": { "offsetX": 1, "blur": 2 } }),
+            serde_json::json!({ "property": "shadow", "value": { "color": "shadow", "unexpected": true } }),
+            serde_json::json!({ "property": "activeShadow", "value": null }),
+            serde_json::json!({ "property": "activeShadow", "value": { "leaf": "offsetY", "value": "1" } }),
+            serde_json::json!({ "property": "shadowEnabled", "value": "true" }),
             serde_json::json!({ "shadow": { "blur": 1 }, "hidden": false }),
         ] {
             let mut invalid_shadow = layer_name_wire.clone();
@@ -1236,12 +992,12 @@ mod tests {
         }
 
         for patch in [
-            serde_json::json!({ "activeBorderPaint": {} }),
-            serde_json::json!({ "activeBorderPaint": { "color": "active" } }),
-            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": null, "unexpected": true } }),
-            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": { "stops": [{ "color": "active", "pos": 0 }, { "color": "tail", "pos": 1 }] } } }),
-            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": { "angle": 90 } } }),
-            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": { "angle": 90, "stops": [{ "color": "active", "pos": 0, "unexpected": true }, { "color": "tail", "pos": 1 }] } } }),
+            serde_json::json!({ "property": "activeBorderPaint", "value": {} }),
+            serde_json::json!({ "property": "activeBorderPaint", "value": { "color": "active" } }),
+            serde_json::json!({ "property": "activeBorderPaint", "value": { "color": "active", "gradient": null, "unexpected": true } }),
+            serde_json::json!({ "property": "activeBorderPaint", "value": { "color": "active", "gradient": { "stops": [{ "color": "active", "pos": 0 }, { "color": "tail", "pos": 1 }] } } }),
+            serde_json::json!({ "property": "activeBorderPaint", "value": { "color": "active", "gradient": { "angle": 90 } } }),
+            serde_json::json!({ "property": "activeBorderPaint", "value": { "color": "active", "gradient": { "angle": 90, "stops": [{ "color": "active", "pos": 0, "unexpected": true }, { "color": "tail", "pos": 1 }] } } }),
             serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": null }, "hidden": false }),
         ] {
             let mut invalid_paint = paint_wire.clone();
@@ -1254,15 +1010,15 @@ mod tests {
         }
 
         for patch in [
-            serde_json::json!({ "borderWidth": null }),
-            serde_json::json!({ "borderWidth": "1" }),
+            serde_json::json!({ "property": "borderWidth", "value": null }),
+            serde_json::json!({ "property": "borderWidth", "value": "1" }),
             serde_json::json!({ "borderWidth": 1, "fontSize": 14 }),
             serde_json::json!({ "borderWidth": 1, "unexpected": true }),
-            serde_json::json!({ "borderRadius": null }),
-            serde_json::json!({ "borderRadius": "1" }),
+            serde_json::json!({ "property": "borderRadius", "value": null }),
+            serde_json::json!({ "property": "borderRadius", "value": "1" }),
             serde_json::json!({ "borderRadius": 1, "hidden": false }),
-            serde_json::json!({ "fontSize": null }),
-            serde_json::json!({ "fontSize": "14" }),
+            serde_json::json!({ "property": "fontSize", "value": null }),
+            serde_json::json!({ "property": "fontSize", "value": "14" }),
             serde_json::json!({ "fontSize": 14, "unexpected": true }),
         ] {
             let mut invalid_numeric_style = layer_name_wire.clone();
@@ -1275,94 +1031,94 @@ mod tests {
         }
 
         for patch in [
-            serde_json::json!({ "inactiveImage": null }),
+            serde_json::json!({ "property": "inactiveImage", "value": null }),
             serde_json::json!({ "inactiveImage": "path", "hidden": false }),
             serde_json::json!({ "inactiveImage": "path", "unexpected": true }),
-            serde_json::json!({ "activeImage": null }),
+            serde_json::json!({ "property": "activeImage", "value": null }),
             serde_json::json!({ "activeImage": "path", "hidden": false }),
             serde_json::json!({ "activeImage": "path", "unexpected": true }),
-            serde_json::json!({ "idleTransparent": null }),
-            serde_json::json!({ "idleTransparent": "true" }),
+            serde_json::json!({ "property": "idleTransparent", "value": null }),
+            serde_json::json!({ "property": "idleTransparent", "value": "true" }),
             serde_json::json!({ "idleTransparent": true, "activeTransparent": false }),
-            serde_json::json!({ "activeTransparent": 1 }),
+            serde_json::json!({ "property": "activeTransparent", "value": 1 }),
             serde_json::json!({ "activeTransparent": false, "unexpected": true }),
-            serde_json::json!({ "idleImageFit": "stretch" }),
-            serde_json::json!({ "idleImageFit": null }),
+            serde_json::json!({ "property": "idleImageFit", "value": "stretch" }),
+            serde_json::json!({ "property": "idleImageFit", "value": null }),
             serde_json::json!({ "idleImageFit": "cover", "activeImageFit": "contain" }),
-            serde_json::json!({ "activeImageFit": 1 }),
+            serde_json::json!({ "property": "activeImageFit", "value": 1 }),
             serde_json::json!({ "activeImageFit": "none", "unexpected": true }),
-            serde_json::json!({ "soundPath": null }),
-            serde_json::json!({ "soundPath": 1 }),
+            serde_json::json!({ "property": "soundPath", "value": null }),
+            serde_json::json!({ "property": "soundPath", "value": 1 }),
             serde_json::json!({ "soundPath": "path", "soundEnabled": true }),
             serde_json::json!({ "soundPath": "path", "unexpected": true }),
-            serde_json::json!({ "soundEnabled": null }),
-            serde_json::json!({ "soundEnabled": "true" }),
+            serde_json::json!({ "property": "soundEnabled", "value": null }),
+            serde_json::json!({ "property": "soundEnabled", "value": "true" }),
             serde_json::json!({ "soundEnabled": true, "unexpected": true }),
-            serde_json::json!({ "soundVolume": null }),
-            serde_json::json!({ "soundVolume": "100" }),
+            serde_json::json!({ "property": "soundVolume", "value": null }),
+            serde_json::json!({ "property": "soundVolume", "value": "100" }),
             serde_json::json!({ "soundVolume": 100, "soundEnabled": true }),
             serde_json::json!({ "soundVolume": 100, "unexpected": true }),
-            serde_json::json!({ "counterEnabled": 1 }),
-            serde_json::json!({ "counterAnimationEnabled": null }),
+            serde_json::json!({ "property": "counterEnabled", "value": 1 }),
+            serde_json::json!({ "property": "counterAnimationEnabled", "value": null }),
             serde_json::json!({ "counterAnimationEnabled": true, "hidden": false }),
-            serde_json::json!({ "counterPlacement": "center" }),
-            serde_json::json!({ "counterAlign": "center" }),
-            serde_json::json!({ "counterAlignMode": "outside" }),
-            serde_json::json!({ "counterGap": -1 }),
-            serde_json::json!({ "counterGap": 1.5 }),
-            serde_json::json!({ "counterGap": 4_294_967_296_u64 }),
+            serde_json::json!({ "property": "counterPlacement", "value": "center" }),
+            serde_json::json!({ "property": "counterAlign", "value": "center" }),
+            serde_json::json!({ "property": "counterAlignMode", "value": "outside" }),
+            serde_json::json!({ "property": "counterGap", "value": -1 }),
+            serde_json::json!({ "property": "counterGap", "value": 1.5 }),
+            serde_json::json!({ "property": "counterGap", "value": 4_294_967_296_u64 }),
             serde_json::json!({ "counterPlacement": "inside", "counterAlign": "top" }),
-            serde_json::json!({ "counterFontSize": -1 }),
-            serde_json::json!({ "counterFontWeight": "400" }),
-            serde_json::json!({ "counterFontItalic": null }),
-            serde_json::json!({ "counterFontUnderline": 1 }),
-            serde_json::json!({ "counterFontStrikethrough": "false" }),
+            serde_json::json!({ "property": "counterFontSize", "value": -1 }),
+            serde_json::json!({ "property": "counterFontWeight", "value": "400" }),
+            serde_json::json!({ "property": "counterFontItalic", "value": null }),
+            serde_json::json!({ "property": "counterFontUnderline", "value": 1 }),
+            serde_json::json!({ "property": "counterFontStrikethrough", "value": "false" }),
             serde_json::json!({ "counterFontSize": 16, "counterFontWeight": 400 }),
             serde_json::json!({ "counterFontSize": 16, "unexpected": true }),
-            serde_json::json!({ "counterFontFamily": null }),
-            serde_json::json!({ "counterFontFamily": 1 }),
+            serde_json::json!({ "property": "counterFontFamily", "value": null }),
+            serde_json::json!({ "property": "counterFontFamily", "value": 1 }),
             serde_json::json!({ "counterFontFamily": "font", "counterFontItalic": true }),
             serde_json::json!({ "counterFontFamily": "font", "unexpected": true }),
-            serde_json::json!({ "counterFillIdle": {} }),
-            serde_json::json!({ "counterFillIdle": { "color": false } }),
-            serde_json::json!({ "counterFillIdle": { "color": "solid", "gradient": null } }),
-            serde_json::json!({ "counterFillActive": { "color": "first", "gradient": { "angle": 45 } } }),
-            serde_json::json!({ "counterFillActive": { "color": "first", "gradient": { "angle": 45, "stops": [{ "color": "first", "pos": 0, "unexpected": true }, { "color": "last", "pos": 1 }] } } }),
-            serde_json::json!({ "counterFillIdle": { "color": "solid", "unexpected": true } }),
+            serde_json::json!({ "property": "counterFillIdle", "value": {} }),
+            serde_json::json!({ "property": "counterFillIdle", "value": { "color": false } }),
+            serde_json::json!({ "property": "counterFillIdle", "value": { "color": "solid", "gradient": null } }),
+            serde_json::json!({ "property": "counterFillActive", "value": { "color": "first", "gradient": { "angle": 45 } } }),
+            serde_json::json!({ "property": "counterFillActive", "value": { "color": "first", "gradient": { "angle": 45, "stops": [{ "color": "first", "pos": 0, "unexpected": true }, { "color": "last", "pos": 1 }] } } }),
+            serde_json::json!({ "property": "counterFillIdle", "value": { "color": "solid", "unexpected": true } }),
             serde_json::json!({ "counterFillActive": { "color": "active" }, "hidden": false }),
-            serde_json::json!({ "counterStrokeIdle": null }),
-            serde_json::json!({ "counterStrokeIdle": 1 }),
+            serde_json::json!({ "property": "counterStrokeIdle", "value": null }),
+            serde_json::json!({ "property": "counterStrokeIdle", "value": 1 }),
             serde_json::json!({ "counterStrokeIdle": "idle", "counterStrokeActive": "active" }),
             serde_json::json!({ "counterStrokeIdle": "idle", "unexpected": true }),
-            serde_json::json!({ "counterStrokeActive": null }),
-            serde_json::json!({ "counterStrokeActive": 1 }),
+            serde_json::json!({ "property": "counterStrokeActive", "value": null }),
+            serde_json::json!({ "property": "counterStrokeActive", "value": 1 }),
             serde_json::json!({ "counterStrokeActive": "active", "hidden": true }),
-            serde_json::json!({ "counterAnimationPreset": null }),
-            serde_json::json!({ "counterAnimationPreset": {} }),
-            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "enabled": false } }),
-            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "applyPresetId": false } }),
-            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "scale": "1.2" } }),
+            serde_json::json!({ "property": "counterAnimationPreset", "value": null }),
+            serde_json::json!({ "property": "counterAnimationPreset", "value": {} }),
+            serde_json::json!({ "property": "counterAnimationPreset", "value": { "presetId": "preset", "enabled": false } }),
+            serde_json::json!({ "property": "counterAnimationPreset", "value": { "presetId": "preset", "applyPresetId": false } }),
+            serde_json::json!({ "property": "counterAnimationPreset", "value": { "presetId": "preset", "scale": "1.2" } }),
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset" }, "hidden": true }),
-            serde_json::json!({ "noteGlowSize": null }),
-            serde_json::json!({ "noteGlowSize": "20" }),
+            serde_json::json!({ "property": "noteGlowSize", "value": null }),
+            serde_json::json!({ "property": "noteGlowSize", "value": "20" }),
             serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
             serde_json::json!({ "noteGlowSize": 20, "unexpected": true }),
-            serde_json::json!({ "notePaint": {} }),
-            serde_json::json!({ "notePaint": { "color": { "top": "a", "bottom": "b" } } }),
-            serde_json::json!({ "notePaint": { "color": { "type": "gradient", "top": "a", "bottom": "b", "unexpected": true } } }),
-            serde_json::json!({ "notePaint": { "opacity": 50, "opacityBottom": 60 } }),
-            serde_json::json!({ "noteGlowPaint": { "color": "x", "opacity": 70 } }),
-            serde_json::json!({ "noteBorderPaint": { "color": "#FFFFFF" } }),
-            serde_json::json!({ "noteBorderPaint": { "color": "#FFFFFF", "opacity": "100" } }),
+            serde_json::json!({ "property": "notePaint", "value": {} }),
+            serde_json::json!({ "property": "notePaint", "value": { "color": { "top": "a", "bottom": "b" } } }),
+            serde_json::json!({ "property": "notePaint", "value": { "color": { "type": "gradient", "top": "a", "bottom": "b", "unexpected": true } } }),
+            serde_json::json!({ "property": "notePaint", "value": { "opacity": 50, "opacityBottom": 60 } }),
+            serde_json::json!({ "property": "noteGlowPaint", "value": { "color": "x", "opacity": 70 } }),
+            serde_json::json!({ "property": "noteBorderPaint", "value": { "color": "#FFFFFF" } }),
+            serde_json::json!({ "property": "noteBorderPaint", "value": { "color": "#FFFFFF", "opacity": "100" } }),
             serde_json::json!({ "notePaint": { "color": "x" }, "unexpected": true }),
-            serde_json::json!({ "noteOffsetX": "0" }),
+            serde_json::json!({ "property": "noteOffsetX", "value": "0" }),
             serde_json::json!({ "noteOffsetX": null, "noteOffsetY": null }),
             serde_json::json!({ "noteOffsetY": null, "unexpected": true }),
-            serde_json::json!({ "noteWidth": "20" }),
+            serde_json::json!({ "property": "noteWidth", "value": "20" }),
             serde_json::json!({ "noteWidth": null, "hidden": true }),
-            serde_json::json!({ "noteBorderWidth": null }),
-            serde_json::json!({ "noteBorderWidth": "1" }),
-            serde_json::json!({ "noteBorderRadius": null }),
+            serde_json::json!({ "property": "noteBorderWidth", "value": null }),
+            serde_json::json!({ "property": "noteBorderWidth", "value": "1" }),
+            serde_json::json!({ "property": "noteBorderRadius", "value": null }),
             serde_json::json!({ "noteBorderRadius": 4, "unexpected": true }),
         ] {
             let mut invalid_image = layer_name_wire.clone();
@@ -1375,7 +1131,8 @@ mod tests {
         }
 
         let mut invalid_stat_type = layer_name_wire.clone();
-        invalid_stat_type["editorOps"][0]["patch"] = serde_json::json!({ "statType": "invalid" });
+        invalid_stat_type["editorOps"][0]["patch"] =
+            serde_json::json!({ "property": "statType", "value": "invalid" });
         let error = decode_gesture_commit_request(invalid_stat_type).unwrap_err();
         assert_eq!(
             validation_code(error).as_deref(),
@@ -1387,9 +1144,7 @@ mod tests {
         request.editor_ops = Some(vec![EditorOpV1::PatchElement {
             element_type: EditorElementTypeV1::Stat,
             id: uuid::Uuid::new_v4().to_string(),
-            patch: EditorElementPropertyPatchV1::FontItalic(
-                crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
-            ),
+            patch: EditorElementPropertyPatchV1::FontItalic(false),
         }]);
         let mut invalid_font = serde_json::to_value(request).unwrap();
         invalid_font["editorOps"][0]["patch"] =

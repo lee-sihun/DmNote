@@ -6,8 +6,8 @@ export type CounterFillDescriptorV1 =
   | { color: string; gradient: GradientSpec };
 
 export type CounterFillPropertyPatchV1 =
-  | { counterFillIdle: CounterFillDescriptorV1; counterFillActive?: never }
-  | { counterFillIdle?: never; counterFillActive: CounterFillDescriptorV1 };
+  | { property: 'counterFillIdle'; value: CounterFillDescriptorV1 }
+  | { property: 'counterFillActive'; value: CounterFillDescriptorV1 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -50,7 +50,9 @@ const isStrictGradient = (value: unknown): value is GradientSpec => {
   return true;
 };
 
-const isDescriptor = (value: unknown): value is CounterFillDescriptorV1 => {
+export const isCounterFillDescriptorV1 = (
+  value: unknown,
+): value is CounterFillDescriptorV1 => {
   if (!isRecord(value) || typeof value.color !== 'string') return false;
   if (exactKeys(value, ['color'])) return true;
   return (
@@ -63,17 +65,27 @@ const isDescriptor = (value: unknown): value is CounterFillDescriptorV1 => {
 export const isCounterFillPropertyPatchV1 = (
   value: unknown,
 ): value is CounterFillPropertyPatchV1 => {
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if ('counterFillIdle' in value) return isDescriptor(value.counterFillIdle);
-  return 'counterFillActive' in value && isDescriptor(value.counterFillActive);
+  if (
+    !isRecord(value) ||
+    Object.keys(value).length !== 2 ||
+    !('property' in value) ||
+    !('value' in value)
+  ) {
+    return false;
+  }
+  return (
+    (value.property === 'counterFillIdle' ||
+      value.property === 'counterFillActive') &&
+    isCounterFillDescriptorV1(value.value)
+  );
 };
 
 export const projectCounterFillPatch = (
   position: KeyPosition,
   patch: CounterFillPropertyPatchV1,
 ): Partial<KeyPosition> => {
-  const active = 'counterFillActive' in patch;
-  const descriptor = active ? patch.counterFillActive : patch.counterFillIdle;
+  const active = patch.property === 'counterFillActive';
+  const descriptor = patch.value;
   const counter = position.counter;
   return {
     counter: {

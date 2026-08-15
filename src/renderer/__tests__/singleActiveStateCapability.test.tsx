@@ -129,7 +129,8 @@ describe('단일 통계 active 색 편집 차단', () => {
     act(() => captured.colorPickerProps?.onColorChangeComplete('#abcdef'));
 
     expect(onPaintCommit).toHaveBeenLastCalledWith({
-      backgroundPaint: { color: '#abcdef', gradient: null },
+      property: 'backgroundPaint',
+      value: { color: '#abcdef', gradient: null },
     });
   });
 
@@ -163,7 +164,8 @@ describe('단일 통계 active 색 편집 차단', () => {
     act(() => captured.colorPickerProps?.onColorChangeComplete('#abcdef'));
 
     expect(onCounterFillCommit).toHaveBeenLastCalledWith({
-      counterFillIdle: { color: '#abcdef' },
+      property: 'counterFillIdle',
+      value: { color: '#abcdef' },
     });
   });
 });

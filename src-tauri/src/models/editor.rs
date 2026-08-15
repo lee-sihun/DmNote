@@ -9,7 +9,7 @@ use super::{
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
 pub const EDITOR_COMMIT_SCHEMA_VERSION_V2: u16 = 2;
-pub const EDITOR_OPS_VERSION: u16 = 1;
+pub const EDITOR_OPS_VERSION: u16 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -204,275 +204,103 @@ pub struct EditorBoundsV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(
+    tag = "property",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
 pub enum EditorElementPropertyPatchV1 {
-    Hidden(EditorHiddenPropertyPatchV1),
-    LayerName(EditorLayerNamePropertyPatchV1),
-    GraphType(EditorGraphTypePropertyPatchV1),
-    GraphColor(EditorGraphColorPropertyPatchV1),
-    ShowAvgLine(EditorShowAvgLinePropertyPatchV1),
-    GraphAnimationEnabled(EditorGraphAnimationEnabledPropertyPatchV1),
-    GraphSpeed(EditorGraphSpeedPropertyPatchV1),
-    Reverse(EditorReversePropertyPatchV1),
-    Sensitivity(EditorSensitivityPropertyPatchV1),
-    AxisId(EditorAxisIdPropertyPatchV1),
-    UseInlineStyles(EditorUseInlineStylesPropertyPatchV1),
-    FontWeight(EditorFontWeightPropertyPatchV1),
-    FontItalic(EditorFontItalicPropertyPatchV1),
-    FontUnderline(EditorFontUnderlinePropertyPatchV1),
-    FontStrikethrough(EditorFontStrikethroughPropertyPatchV1),
-    FontFamily(EditorFontFamilyPropertyPatchV1),
-    DisplayText(EditorDisplayTextPropertyPatchV1),
-    ClassName(EditorClassNamePropertyPatchV1),
-    FontColor(EditorFontColorPropertyPatchV1),
-    ActiveFontColor(EditorActiveFontColorPropertyPatchV1),
-    Shadow(EditorShadowPropertyPatchV1),
-    ActiveShadow(EditorActiveShadowPropertyPatchV1),
-    ShadowEnabled(EditorShadowEnabledPropertyPatchV1),
-    BackgroundPaint(EditorBackgroundPaintPropertyPatchV1),
-    ActiveBackgroundPaint(EditorActiveBackgroundPaintPropertyPatchV1),
-    BorderPaint(EditorBorderPaintPropertyPatchV1),
-    ActiveBorderPaint(EditorActiveBorderPaintPropertyPatchV1),
-    BorderWidth(EditorBorderWidthPropertyPatchV1),
-    BorderRadius(EditorBorderRadiusPropertyPatchV1),
-    FontSize(EditorFontSizePropertyPatchV1),
-    InactiveImage(EditorInactiveImagePropertyPatchV1),
-    ActiveImage(EditorActiveImagePropertyPatchV1),
-    IdleTransparent(EditorIdleTransparentPropertyPatchV1),
-    ActiveTransparent(EditorActiveTransparentPropertyPatchV1),
-    IdleImageFit(EditorIdleImageFitPropertyPatchV1),
-    ActiveImageFit(EditorActiveImageFitPropertyPatchV1),
-    SoundPath(EditorSoundPathPropertyPatchV1),
-    SoundEnabled(EditorSoundEnabledPropertyPatchV1),
-    SoundVolume(EditorSoundVolumePropertyPatchV1),
-    CounterEnabled(EditorCounterEnabledPropertyPatchV1),
-    CounterAnimationEnabled(EditorCounterAnimationEnabledPropertyPatchV1),
-    CounterPlacement(EditorCounterPlacementPropertyPatchV1),
-    CounterAlign(EditorCounterAlignPropertyPatchV1),
-    CounterAlignMode(EditorCounterAlignModePropertyPatchV1),
-    CounterGap(EditorCounterGapPropertyPatchV1),
-    CounterFontSize(EditorCounterFontSizePropertyPatchV1),
-    CounterFontWeight(EditorCounterFontWeightPropertyPatchV1),
-    CounterFontItalic(EditorCounterFontItalicPropertyPatchV1),
-    CounterFontUnderline(EditorCounterFontUnderlinePropertyPatchV1),
-    CounterFontStrikethrough(EditorCounterFontStrikethroughPropertyPatchV1),
-    CounterFontFamily(EditorCounterFontFamilyPropertyPatchV1),
-    CounterFillIdle(EditorCounterFillIdlePropertyPatchV1),
-    CounterFillActive(EditorCounterFillActivePropertyPatchV1),
-    CounterStrokeIdle(EditorCounterStrokeIdlePropertyPatchV1),
-    CounterStrokeActive(EditorCounterStrokeActivePropertyPatchV1),
-    CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1),
-    StatType(EditorStatTypePropertyPatchV1),
-    NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
-    NoteGlowEnabled(EditorNoteGlowEnabledPropertyPatchV1),
-    NoteGlowSize(EditorNoteGlowSizePropertyPatchV1),
-    NotePaint(EditorNotePaintPropertyPatchV1),
-    NoteGlowPaint(EditorNoteGlowPaintPropertyPatchV1),
-    NoteBorderPaint(EditorNoteBorderPaintPropertyPatchV1),
-    NoteOffsetX(EditorNoteOffsetXPropertyPatchV1),
-    NoteOffsetY(EditorNoteOffsetYPropertyPatchV1),
-    NoteWidth(EditorNoteWidthPropertyPatchV1),
-    NoteBorderWidth(EditorNoteBorderWidthPropertyPatchV1),
-    NoteBorderRadius(EditorNoteBorderRadiusPropertyPatchV1),
-    NoteAutoYCorrection(EditorNoteAutoYCorrectionPropertyPatchV1),
-    NoteAlignment(EditorNoteAlignmentPropertyPatchV1),
-    NoteBorderSide(EditorNoteBorderSidePropertyPatchV1),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorHiddenPropertyPatchV1 {
-    pub hidden: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorLayerNamePropertyPatchV1 {
+    Hidden(bool),
+    // nullable 4건은 value 키 자체가 없으면 거부 - Option 기본 동작(None) 차단
     #[serde(deserialize_with = "deserialize_required_nullable_string")]
-    pub layer_name: Option<String>,
+    LayerName(Option<String>),
+    GraphType(GraphType),
+    GraphColor(String),
+    ShowAvgLine(bool),
+    GraphAnimationEnabled(bool),
+    GraphSpeed(u32),
+    Reverse(bool),
+    Sensitivity(f64),
+    AxisId(String),
+    UseInlineStyles(bool),
+    FontWeight(u32),
+    FontItalic(bool),
+    FontUnderline(bool),
+    FontStrikethrough(bool),
+    FontFamily(String),
+    DisplayText(String),
+    ClassName(String),
+    FontColor(String),
+    ActiveFontColor(String),
+    Shadow(EditorShadowLeafPatchV1),
+    ActiveShadow(EditorShadowLeafPatchV1),
+    ShadowEnabled(bool),
+    BackgroundPaint(EditorPaintDescriptorV1),
+    ActiveBackgroundPaint(EditorPaintDescriptorV1),
+    BorderPaint(EditorPaintDescriptorV1),
+    ActiveBorderPaint(EditorPaintDescriptorV1),
+    BorderWidth(f64),
+    BorderRadius(f64),
+    FontSize(f64),
+    InactiveImage(String),
+    ActiveImage(String),
+    IdleTransparent(bool),
+    ActiveTransparent(bool),
+    IdleImageFit(ImageFit),
+    ActiveImageFit(ImageFit),
+    SoundPath(String),
+    SoundEnabled(bool),
+    SoundVolume(f64),
+    CounterEnabled(bool),
+    CounterAnimationEnabled(bool),
+    CounterPlacement(KeyCounterPlacement),
+    CounterAlign(KeyCounterAlign),
+    CounterAlignMode(KeyCounterAlignMode),
+    CounterGap(u32),
+    CounterFontSize(u32),
+    CounterFontWeight(u32),
+    CounterFontItalic(bool),
+    CounterFontUnderline(bool),
+    CounterFontStrikethrough(bool),
+    CounterFontFamily(String),
+    CounterFillIdle(EditorCounterFillIntentV1),
+    CounterFillActive(EditorCounterFillIntentV1),
+    CounterStrokeIdle(String),
+    CounterStrokeActive(String),
+    CounterAnimationPreset(EditorCounterAnimationPresetIntentV1),
+    StatType(StatType),
+    NoteEffectEnabled(bool),
+    NoteGlowEnabled(bool),
+    NoteGlowSize(f64),
+    NotePaint(EditorNotePaintIntentV1),
+    NoteGlowPaint(EditorNotePaintIntentV1),
+    NoteBorderPaint(EditorNoteBorderPaintV1),
+    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
+    NoteOffsetX(Option<f64>),
+    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
+    NoteOffsetY(Option<f64>),
+    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
+    NoteWidth(Option<f64>),
+    NoteBorderWidth(f64),
+    NoteBorderRadius(f64),
+    NoteAutoYCorrection(bool),
+    NoteAlignment(NoteAlignment),
+    NoteBorderSide(EditorNoteBorderSideV1),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorGraphTypePropertyPatchV1 {
-    pub graph_type: GraphType,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorGraphColorPropertyPatchV1 {
-    pub graph_color: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorShowAvgLinePropertyPatchV1 {
-    pub show_avg_line: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorGraphAnimationEnabledPropertyPatchV1 {
-    pub graph_animation_enabled: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorGraphSpeedPropertyPatchV1 {
-    pub graph_speed: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorReversePropertyPatchV1 {
-    pub reverse: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorSensitivityPropertyPatchV1 {
-    pub sensitivity: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorAxisIdPropertyPatchV1 {
-    pub axis_id: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorUseInlineStylesPropertyPatchV1 {
-    pub use_inline_styles: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorFontWeightPropertyPatchV1 {
-    pub font_weight: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorFontItalicPropertyPatchV1 {
-    pub font_italic: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorFontUnderlinePropertyPatchV1 {
-    pub font_underline: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorFontStrikethroughPropertyPatchV1 {
-    pub font_strikethrough: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorFontFamilyPropertyPatchV1 {
-    pub font_family: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorDisplayTextPropertyPatchV1 {
-    pub display_text: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorClassNamePropertyPatchV1 {
-    pub class_name: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorFontColorPropertyPatchV1 {
-    pub font_color: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorActiveFontColorPropertyPatchV1 {
-    pub active_font_color: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorShadowPropertyPatchV1 {
-    pub shadow: EditorShadowLeafPatchV1,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorActiveShadowPropertyPatchV1 {
-    pub active_shadow: EditorShadowLeafPatchV1,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorShadowEnabledPropertyPatchV1 {
-    pub shadow_enabled: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(
+    tag = "leaf",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
 pub enum EditorShadowLeafPatchV1 {
-    Color(EditorShadowColorLeafPatchV1),
-    OffsetX(EditorShadowOffsetXLeafPatchV1),
-    OffsetY(EditorShadowOffsetYLeafPatchV1),
-    Blur(EditorShadowBlurLeafPatchV1),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorShadowColorLeafPatchV1 {
-    pub color: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorShadowOffsetXLeafPatchV1 {
-    pub offset_x: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorShadowOffsetYLeafPatchV1 {
-    pub offset_y: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorShadowBlurLeafPatchV1 {
-    pub blur: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorBackgroundPaintPropertyPatchV1 {
-    pub background_paint: EditorPaintDescriptorV1,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorActiveBackgroundPaintPropertyPatchV1 {
-    pub active_background_paint: EditorPaintDescriptorV1,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorBorderPaintPropertyPatchV1 {
-    pub border_paint: EditorPaintDescriptorV1,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorActiveBorderPaintPropertyPatchV1 {
-    pub active_border_paint: EditorPaintDescriptorV1,
+    Color(String),
+    OffsetX(f64),
+    OffsetY(f64),
+    Blur(f64),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -521,162 +349,6 @@ where
     Option::<EditorPaintGradientV1>::deserialize(deserializer)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorBorderWidthPropertyPatchV1 {
-    pub border_width: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorBorderRadiusPropertyPatchV1 {
-    pub border_radius: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorFontSizePropertyPatchV1 {
-    pub font_size: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorInactiveImagePropertyPatchV1 {
-    pub inactive_image: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorActiveImagePropertyPatchV1 {
-    pub active_image: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorIdleTransparentPropertyPatchV1 {
-    pub idle_transparent: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorActiveTransparentPropertyPatchV1 {
-    pub active_transparent: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorIdleImageFitPropertyPatchV1 {
-    pub idle_image_fit: ImageFit,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorActiveImageFitPropertyPatchV1 {
-    pub active_image_fit: ImageFit,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorSoundPathPropertyPatchV1 {
-    pub sound_path: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorSoundEnabledPropertyPatchV1 {
-    pub sound_enabled: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorSoundVolumePropertyPatchV1 {
-    pub sound_volume: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterEnabledPropertyPatchV1 {
-    pub counter_enabled: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterAnimationEnabledPropertyPatchV1 {
-    pub counter_animation_enabled: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterPlacementPropertyPatchV1 {
-    pub counter_placement: KeyCounterPlacement,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterAlignPropertyPatchV1 {
-    pub counter_align: KeyCounterAlign,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterAlignModePropertyPatchV1 {
-    pub counter_align_mode: KeyCounterAlignMode,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterGapPropertyPatchV1 {
-    pub counter_gap: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterFontSizePropertyPatchV1 {
-    pub counter_font_size: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterFontWeightPropertyPatchV1 {
-    pub counter_font_weight: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterFontItalicPropertyPatchV1 {
-    pub counter_font_italic: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterFontUnderlinePropertyPatchV1 {
-    pub counter_font_underline: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterFontStrikethroughPropertyPatchV1 {
-    pub counter_font_strikethrough: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterFontFamilyPropertyPatchV1 {
-    pub counter_font_family: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterFillIdlePropertyPatchV1 {
-    pub counter_fill_idle: EditorCounterFillIntentV1,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterFillActivePropertyPatchV1 {
-    pub counter_fill_active: EditorCounterFillIntentV1,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EditorCounterFillIntentV1 {
@@ -695,24 +367,6 @@ pub struct EditorCounterFillSolidIntentV1 {
 pub struct EditorCounterFillGradientIntentV1 {
     pub color: String,
     pub gradient: EditorPaintGradientV1,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterStrokeIdlePropertyPatchV1 {
-    pub counter_stroke_idle: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterStrokeActivePropertyPatchV1 {
-    pub counter_stroke_active: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorCounterAnimationPresetPropertyPatchV1 {
-    pub counter_animation_preset: EditorCounterAnimationPresetIntentV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -742,42 +396,6 @@ where
         return Err(serde::de::Error::custom("applyPresetId must be true"));
     }
     Ok(Some(true))
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorStatTypePropertyPatchV1 {
-    pub stat_type: StatType,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteEffectEnabledPropertyPatchV1 {
-    pub note_effect_enabled: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteGlowEnabledPropertyPatchV1 {
-    pub note_glow_enabled: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteGlowSizePropertyPatchV1 {
-    pub note_glow_size: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNotePaintPropertyPatchV1 {
-    pub note_paint: EditorNotePaintIntentV1,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteGlowPaintPropertyPatchV1 {
-    pub note_glow_paint: EditorNotePaintIntentV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -832,66 +450,9 @@ pub enum EditorNoteGradientColorKindV1 {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteBorderPaintPropertyPatchV1 {
-    pub note_border_paint: EditorNoteBorderPaintV1,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorNoteBorderPaintV1 {
     pub color: String,
     pub opacity: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteOffsetXPropertyPatchV1 {
-    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
-    pub note_offset_x: Option<f64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteOffsetYPropertyPatchV1 {
-    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
-    pub note_offset_y: Option<f64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteWidthPropertyPatchV1 {
-    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
-    pub note_width: Option<f64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteBorderWidthPropertyPatchV1 {
-    pub note_border_width: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteBorderRadiusPropertyPatchV1 {
-    pub note_border_radius: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteAutoYCorrectionPropertyPatchV1 {
-    pub note_auto_y_correction: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteAlignmentPropertyPatchV1 {
-    pub note_alignment: NoteAlignment,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorNoteBorderSidePropertyPatchV1 {
-    pub note_border_side: EditorNoteBorderSideV1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1244,4 +805,441 @@ pub struct CommittedEditorChange {
 pub struct EditorTransactionResult<T> {
     pub value: T,
     pub change: CommittedEditorChange,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // TS canonical 배열과 공유하는 property 태그 fixture
+    const PROPERTY_TAG_FIXTURE: &str =
+        include_str!("../../../tests/fixtures/editor-property-tags.json");
+
+    fn paint(color: &str) -> EditorPaintDescriptorV1 {
+        EditorPaintDescriptorV1 {
+            color: color.to_string(),
+            gradient: None,
+        }
+    }
+
+    // 71개 variant 전수: (patch, property 태그, value wire) 고정 표본
+    fn property_patch_samples() -> Vec<(
+        EditorElementPropertyPatchV1,
+        &'static str,
+        serde_json::Value,
+    )> {
+        use serde_json::json;
+        use EditorElementPropertyPatchV1 as P;
+        vec![
+            (P::Hidden(true), "hidden", json!(true)),
+            (
+                P::LayerName(Some("layer".to_string())),
+                "layerName",
+                json!("layer"),
+            ),
+            (P::GraphType(GraphType::Bar), "graphType", json!("bar")),
+            (
+                P::GraphColor("#123456".to_string()),
+                "graphColor",
+                json!("#123456"),
+            ),
+            (P::ShowAvgLine(false), "showAvgLine", json!(false)),
+            (
+                P::GraphAnimationEnabled(true),
+                "graphAnimationEnabled",
+                json!(true),
+            ),
+            (P::GraphSpeed(7), "graphSpeed", json!(7)),
+            (P::Reverse(true), "reverse", json!(true)),
+            (P::Sensitivity(1.5), "sensitivity", json!(1.5)),
+            (P::AxisId("axis-1".to_string()), "axisId", json!("axis-1")),
+            (P::UseInlineStyles(true), "useInlineStyles", json!(true)),
+            (P::FontWeight(700), "fontWeight", json!(700)),
+            (P::FontItalic(true), "fontItalic", json!(true)),
+            (P::FontUnderline(false), "fontUnderline", json!(false)),
+            (P::FontStrikethrough(true), "fontStrikethrough", json!(true)),
+            (
+                P::FontFamily("font".to_string()),
+                "fontFamily",
+                json!("font"),
+            ),
+            (
+                P::DisplayText("text".to_string()),
+                "displayText",
+                json!("text"),
+            ),
+            (
+                P::ClassName("class".to_string()),
+                "className",
+                json!("class"),
+            ),
+            (
+                P::FontColor("#111111".to_string()),
+                "fontColor",
+                json!("#111111"),
+            ),
+            (
+                P::ActiveFontColor("#222222".to_string()),
+                "activeFontColor",
+                json!("#222222"),
+            ),
+            (
+                P::Shadow(EditorShadowLeafPatchV1::Color(
+                    "rgba(0, 0, 0, 0.2)".to_string(),
+                )),
+                "shadow",
+                json!({ "leaf": "color", "value": "rgba(0, 0, 0, 0.2)" }),
+            ),
+            (
+                P::ActiveShadow(EditorShadowLeafPatchV1::OffsetY(-3.25)),
+                "activeShadow",
+                json!({ "leaf": "offsetY", "value": -3.25 }),
+            ),
+            (P::ShadowEnabled(false), "shadowEnabled", json!(false)),
+            (
+                P::BackgroundPaint(paint("#010101")),
+                "backgroundPaint",
+                json!({ "color": "#010101", "gradient": null }),
+            ),
+            (
+                P::ActiveBackgroundPaint(paint("#020202")),
+                "activeBackgroundPaint",
+                json!({ "color": "#020202", "gradient": null }),
+            ),
+            (
+                P::BorderPaint(paint("#030303")),
+                "borderPaint",
+                json!({ "color": "#030303", "gradient": null }),
+            ),
+            (
+                P::ActiveBorderPaint(paint("#040404")),
+                "activeBorderPaint",
+                json!({ "color": "#040404", "gradient": null }),
+            ),
+            (P::BorderWidth(2.5), "borderWidth", json!(2.5)),
+            (P::BorderRadius(8.5), "borderRadius", json!(8.5)),
+            (P::FontSize(12.5), "fontSize", json!(12.5)),
+            (
+                P::InactiveImage("idle.png".to_string()),
+                "inactiveImage",
+                json!("idle.png"),
+            ),
+            (
+                P::ActiveImage("active.png".to_string()),
+                "activeImage",
+                json!("active.png"),
+            ),
+            (P::IdleTransparent(true), "idleTransparent", json!(true)),
+            (
+                P::ActiveTransparent(false),
+                "activeTransparent",
+                json!(false),
+            ),
+            (
+                P::IdleImageFit(ImageFit::Contain),
+                "idleImageFit",
+                json!("contain"),
+            ),
+            (
+                P::ActiveImageFit(ImageFit::Fill),
+                "activeImageFit",
+                json!("fill"),
+            ),
+            (
+                P::SoundPath("sound.wav".to_string()),
+                "soundPath",
+                json!("sound.wav"),
+            ),
+            (P::SoundEnabled(true), "soundEnabled", json!(true)),
+            (P::SoundVolume(80.5), "soundVolume", json!(80.5)),
+            (P::CounterEnabled(true), "counterEnabled", json!(true)),
+            (
+                P::CounterAnimationEnabled(false),
+                "counterAnimationEnabled",
+                json!(false),
+            ),
+            (
+                P::CounterPlacement(KeyCounterPlacement::Outside),
+                "counterPlacement",
+                json!("outside"),
+            ),
+            (
+                P::CounterAlign(KeyCounterAlign::Top),
+                "counterAlign",
+                json!("top"),
+            ),
+            (
+                P::CounterAlignMode(KeyCounterAlignMode::Between),
+                "counterAlignMode",
+                json!("between"),
+            ),
+            (P::CounterGap(4), "counterGap", json!(4)),
+            (P::CounterFontSize(16), "counterFontSize", json!(16)),
+            (P::CounterFontWeight(500), "counterFontWeight", json!(500)),
+            (P::CounterFontItalic(true), "counterFontItalic", json!(true)),
+            (
+                P::CounterFontUnderline(false),
+                "counterFontUnderline",
+                json!(false),
+            ),
+            (
+                P::CounterFontStrikethrough(true),
+                "counterFontStrikethrough",
+                json!(true),
+            ),
+            (
+                P::CounterFontFamily("counter-font".to_string()),
+                "counterFontFamily",
+                json!("counter-font"),
+            ),
+            (
+                P::CounterFillIdle(EditorCounterFillIntentV1::Solid(
+                    EditorCounterFillSolidIntentV1 {
+                        color: "#050505".to_string(),
+                    },
+                )),
+                "counterFillIdle",
+                json!({ "color": "#050505" }),
+            ),
+            (
+                P::CounterFillActive(EditorCounterFillIntentV1::Solid(
+                    EditorCounterFillSolidIntentV1 {
+                        color: "#060606".to_string(),
+                    },
+                )),
+                "counterFillActive",
+                json!({ "color": "#060606" }),
+            ),
+            (
+                P::CounterStrokeIdle("#070707".to_string()),
+                "counterStrokeIdle",
+                json!("#070707"),
+            ),
+            (
+                P::CounterStrokeActive("#080808".to_string()),
+                "counterStrokeActive",
+                json!("#080808"),
+            ),
+            (
+                P::CounterAnimationPreset(EditorCounterAnimationPresetIntentV1 {
+                    preset_id: "preset".to_string(),
+                    apply_preset_id: None,
+                    bezier: None,
+                    scale: None,
+                    duration_ms: None,
+                }),
+                "counterAnimationPreset",
+                json!({ "presetId": "preset" }),
+            ),
+            (P::StatType(StatType::Total), "statType", json!("total")),
+            (P::NoteEffectEnabled(true), "noteEffectEnabled", json!(true)),
+            (P::NoteGlowEnabled(false), "noteGlowEnabled", json!(false)),
+            (P::NoteGlowSize(6.5), "noteGlowSize", json!(6.5)),
+            (
+                P::NotePaint(EditorNotePaintIntentV1::Opacity(
+                    EditorNotePaintOpacityIntentV1 { opacity: 40 },
+                )),
+                "notePaint",
+                json!({ "opacity": 40 }),
+            ),
+            (
+                P::NoteGlowPaint(EditorNotePaintIntentV1::Opacity(
+                    EditorNotePaintOpacityIntentV1 { opacity: 60 },
+                )),
+                "noteGlowPaint",
+                json!({ "opacity": 60 }),
+            ),
+            (
+                P::NoteBorderPaint(EditorNoteBorderPaintV1 {
+                    color: "#0a0b0c".to_string(),
+                    opacity: 30,
+                }),
+                "noteBorderPaint",
+                json!({ "color": "#0a0b0c", "opacity": 30 }),
+            ),
+            (P::NoteOffsetX(Some(11.5)), "noteOffsetX", json!(11.5)),
+            (P::NoteOffsetY(Some(-12.5)), "noteOffsetY", json!(-12.5)),
+            (P::NoteWidth(Some(13.5)), "noteWidth", json!(13.5)),
+            (P::NoteBorderWidth(1.5), "noteBorderWidth", json!(1.5)),
+            (P::NoteBorderRadius(9.5), "noteBorderRadius", json!(9.5)),
+            (
+                P::NoteAutoYCorrection(true),
+                "noteAutoYCorrection",
+                json!(true),
+            ),
+            (
+                P::NoteAlignment(NoteAlignment::Right),
+                "noteAlignment",
+                json!("right"),
+            ),
+            (
+                P::NoteBorderSide(EditorNoteBorderSideV1::Vertical),
+                "noteBorderSide",
+                json!("vertical"),
+            ),
+        ]
+    }
+
+    #[test]
+    fn property_patch_wire_pins_all_tag_value_pairs_and_roundtrips() {
+        let samples = property_patch_samples();
+        assert_eq!(samples.len(), 71);
+        for (patch, tag, value) in samples {
+            let wire = serde_json::to_value(&patch).unwrap();
+            assert_eq!(
+                wire,
+                serde_json::json!({ "property": tag, "value": value }),
+                "wire mismatch for {tag}"
+            );
+            let decoded: EditorElementPropertyPatchV1 = serde_json::from_value(wire).unwrap();
+            assert_eq!(decoded, patch, "roundtrip mismatch for {tag}");
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct PropertyTagFixture {
+        version: u16,
+        properties: Vec<String>,
+    }
+
+    fn property_tag_fixture() -> PropertyTagFixture {
+        serde_json::from_str(PROPERTY_TAG_FIXTURE).unwrap()
+    }
+
+    #[test]
+    fn property_patch_tags_match_shared_fixture() {
+        let fixture = property_tag_fixture();
+        // 양방향 anchor: Rust 상수만 승격되는 사고도 fixture 대조로 잡는다
+        assert_eq!(fixture.version, EDITOR_OPS_VERSION);
+        let tags: Vec<String> = property_patch_samples()
+            .iter()
+            .map(|(_, tag, _)| (*tag).to_string())
+            .collect();
+        assert_eq!(tags, fixture.properties);
+    }
+
+    // serde가 알 수 없는 variant 오류에 나열하는 기대 목록에서 enum의
+    // wire 태그 전수를 기계적으로 추출 - 수기 목록 없이 variant 추가를 감지
+    fn wire_property_tags_from_serde() -> std::collections::BTreeSet<String> {
+        let message = serde_json::from_value::<EditorElementPropertyPatchV1>(serde_json::json!({
+            "property": "__unknown__",
+            "value": null,
+        }))
+        .unwrap_err()
+        .to_string();
+        let (_, listed) = message
+            .split_once("expected one of ")
+            .expect("serde unknown-variant error must enumerate every variant");
+        let tags: std::collections::BTreeSet<String> = listed
+            .split(", ")
+            .map(|tag| tag.trim().trim_matches('`').to_string())
+            .collect();
+        assert!(!tags.is_empty());
+        tags
+    }
+
+    #[test]
+    fn sample_and_fixture_tags_cover_every_enum_variant() {
+        let enum_tags = wire_property_tags_from_serde();
+        let sample_tags: std::collections::BTreeSet<String> = property_patch_samples()
+            .iter()
+            .map(|(_, tag, _)| (*tag).to_string())
+            .collect();
+        let fixture_tags: std::collections::BTreeSet<String> =
+            property_tag_fixture().properties.into_iter().collect();
+        // variant 신규 추가 시 표본·fixture 갱신 누락을 단방향 드리프트 없이 차단
+        assert_eq!(sample_tags, enum_tags);
+        assert_eq!(fixture_tags, enum_tags);
+    }
+
+    #[test]
+    fn property_patch_rejects_untagged_extra_unknown_and_missing_fields() {
+        use serde_json::json;
+        let reject = |value: serde_json::Value| {
+            assert!(
+                serde_json::from_value::<EditorElementPropertyPatchV1>(value.clone()).is_err(),
+                "expected rejection: {value}"
+            );
+        };
+        // 옛 one-key 형식
+        reject(json!({ "hidden": true }));
+        reject(json!({ "graphType": "bar" }));
+        // outer 추가 필드
+        reject(json!({ "property": "hidden", "value": true, "extra": 1 }));
+        // 알 수 없는 property
+        reject(json!({ "property": "unknown", "value": 1 }));
+        // property 누락
+        reject(json!({ "value": true }));
+        // 원시값 payload의 value 누락
+        reject(json!({ "property": "hidden" }));
+        // 잘못된 값 타입
+        reject(json!({ "property": "hidden", "value": "true" }));
+        // 중복 키
+        for duplicated in [
+            r#"{ "property": "hidden", "property": "hidden", "value": true }"#,
+            r#"{ "property": "hidden", "value": true, "value": false }"#,
+        ] {
+            assert!(
+                serde_json::from_str::<EditorElementPropertyPatchV1>(duplicated).is_err(),
+                "expected duplicate key rejection: {duplicated}"
+            );
+        }
+    }
+
+    #[test]
+    fn nullable_variants_require_an_explicit_value_key() {
+        use serde_json::json;
+        use EditorElementPropertyPatchV1 as P;
+        let cases = [
+            ("layerName", P::LayerName(None)),
+            ("noteOffsetX", P::NoteOffsetX(None)),
+            ("noteOffsetY", P::NoteOffsetY(None)),
+            ("noteWidth", P::NoteWidth(None)),
+        ];
+        for (tag, expected_null) in cases {
+            // value 키 자체가 없으면 None으로 통과하지 않고 거부
+            assert!(
+                serde_json::from_value::<EditorElementPropertyPatchV1>(json!({ "property": tag }))
+                    .is_err(),
+                "expected missing value rejection for {tag}"
+            );
+            let decoded: EditorElementPropertyPatchV1 =
+                serde_json::from_value(json!({ "property": tag, "value": null })).unwrap();
+            assert_eq!(decoded, expected_null, "explicit null mismatch for {tag}");
+        }
+        let decoded: EditorElementPropertyPatchV1 = serde_json::from_value(json!({
+            "property": "layerName",
+            "value": "named"
+        }))
+        .unwrap();
+        assert_eq!(decoded, P::LayerName(Some("named".to_string())));
+    }
+
+    #[test]
+    fn shadow_leaf_wire_requires_leaf_tag_and_exact_fields() {
+        use serde_json::json;
+        let decoded: EditorShadowLeafPatchV1 =
+            serde_json::from_value(json!({ "leaf": "blur", "value": 4.5 })).unwrap();
+        assert_eq!(decoded, EditorShadowLeafPatchV1::Blur(4.5));
+        for invalid in [
+            // 옛 one-key 형식
+            json!({ "blur": 4.5 }),
+            // leaf 누락
+            json!({ "value": 4.5 }),
+            // leaf 오타
+            json!({ "leaf": "blr", "value": 4.5 }),
+            // value 누락
+            json!({ "leaf": "blur" }),
+            // 추가 필드
+            json!({ "leaf": "blur", "value": 4.5, "extra": 1 }),
+            // 잘못된 값 타입
+            json!({ "leaf": "offsetX", "value": "1" }),
+        ] {
+            assert!(
+                serde_json::from_value::<EditorShadowLeafPatchV1>(invalid.clone()).is_err(),
+                "expected shadow leaf rejection: {invalid}"
+            );
+        }
+    }
 }

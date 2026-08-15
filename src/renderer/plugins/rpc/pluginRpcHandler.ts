@@ -112,8 +112,10 @@ import type {
   EditorNotePropertyPatchV1,
 } from '@src/types/editor';
 import {
+  isEditorElementPropertyPatchV1,
   isEditorPaintPropertyPatchV1,
   isEditorShadowPropertyPatchV1,
+  type EditorElementTypeV1,
 } from '@src/types/editor';
 import { isNotePaintPropertyPatchV1 } from '@src/types/key/notePaint';
 import { isCounterFillPropertyPatchV1 } from '@src/types/key/counterFill';
@@ -188,51 +190,51 @@ const parseNoteNumericStylePropertyPatch = (
   patch: Record<string, unknown>,
 ): EditorPreviewStylePropertyPatchV1 | null => {
   if (
-    hasExactKeys(patch, ['noteOffsetX']) &&
-    (patch.noteOffsetX === null ||
-      (typeof patch.noteOffsetX === 'number' &&
-        Number.isFinite(patch.noteOffsetX) &&
-        patch.noteOffsetX >= -500 &&
-        patch.noteOffsetX <= 500))
+    patch.property === 'noteOffsetX' &&
+    (patch.value === null ||
+      (typeof patch.value === 'number' &&
+        Number.isFinite(patch.value) &&
+        patch.value >= -500 &&
+        patch.value <= 500))
   ) {
-    return { noteOffsetX: patch.noteOffsetX as number | null };
+    return { property: 'noteOffsetX', value: patch.value as number | null };
   }
   if (
-    hasExactKeys(patch, ['noteOffsetY']) &&
-    (patch.noteOffsetY === null ||
-      (typeof patch.noteOffsetY === 'number' &&
-        Number.isFinite(patch.noteOffsetY) &&
-        patch.noteOffsetY >= -500 &&
-        patch.noteOffsetY <= 500))
+    patch.property === 'noteOffsetY' &&
+    (patch.value === null ||
+      (typeof patch.value === 'number' &&
+        Number.isFinite(patch.value) &&
+        patch.value >= -500 &&
+        patch.value <= 500))
   ) {
-    return { noteOffsetY: patch.noteOffsetY as number | null };
+    return { property: 'noteOffsetY', value: patch.value as number | null };
   }
   if (
-    hasExactKeys(patch, ['noteWidth']) &&
-    (patch.noteWidth === null ||
-      (typeof patch.noteWidth === 'number' &&
-        Number.isFinite(patch.noteWidth) &&
-        patch.noteWidth > 0))
+    patch.property === 'noteWidth' &&
+    (patch.value === null ||
+      (typeof patch.value === 'number' &&
+        Number.isFinite(patch.value) &&
+        patch.value > 0))
   ) {
-    return { noteWidth: patch.noteWidth as number | null };
+    return { property: 'noteWidth', value: patch.value as number | null };
   }
   if (
-    hasExactKeys(patch, ['noteBorderWidth']) &&
-    typeof patch.noteBorderWidth === 'number' &&
-    Number.isFinite(patch.noteBorderWidth) &&
-    patch.noteBorderWidth >= 0 &&
-    patch.noteBorderWidth <= 20
+    patch.property === 'noteBorderWidth' &&
+    typeof patch.value === 'number' &&
+    Number.isFinite(patch.value) &&
+    patch.value >= 0 &&
+    patch.value <= 20
   ) {
-    return { noteBorderWidth: patch.noteBorderWidth };
+    return { property: 'noteBorderWidth', value: patch.value };
   }
   if (
-    hasExactKeys(patch, ['noteBorderRadius']) &&
-    typeof patch.noteBorderRadius === 'number' &&
-    Number.isFinite(patch.noteBorderRadius) &&
-    patch.noteBorderRadius >= 1 &&
-    patch.noteBorderRadius <= 100
+    patch.property === 'noteBorderRadius' &&
+    typeof patch.value === 'number' &&
+    Number.isFinite(patch.value) &&
+    patch.value >= 1 &&
+    patch.value <= 100
   ) {
-    return { noteBorderRadius: patch.noteBorderRadius };
+    return { property: 'noteBorderRadius', value: patch.value };
   }
   return null;
 };
@@ -415,222 +417,10 @@ const parseNativeLayerPropertyTarget = (
     !['key', 'stat', 'graph', 'knob'].includes(target.elementType) ||
     typeof target.id !== 'string' ||
     !isNativeElementId(target.id) ||
-    target.patch === null ||
-    typeof target.patch !== 'object' ||
-    Array.isArray(target.patch)
-  ) {
-    return null;
-  }
-  const patch = target.patch as Record<string, unknown>;
-  const counterAnimationPreset = parseCounterAnimationPresetIntent(
-    patch.counterAnimationPreset,
-  );
-  const paintPatch = isEditorPaintPropertyPatchV1(patch);
-  const shadowPatch = isEditorShadowPropertyPatchV1(patch);
-  const notePaintPatch = isNotePaintPropertyPatchV1(patch);
-  const counterFillPatch = isCounterFillPropertyPatchV1(patch);
-  const fontColorPatch = isFontColorPropertyPatchV1(patch);
-  const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
-  const patchValid =
-    (shadowPatch &&
-      target.elementType !== 'graph' &&
-      (!('activeShadow' in patch) ||
-        target.elementType === 'key' ||
-        target.elementType === 'knob')) ||
-    (notePaintPatch && target.elementType === 'key') ||
-    (counterFillPatch &&
-      (target.elementType === 'key' ||
-        (!('counterFillActive' in patch) && target.elementType === 'stat'))) ||
-    (fontColorPatch &&
-      (!('activeFontColor' in patch) ||
-        target.elementType === 'key' ||
-        target.elementType === 'knob')) ||
-    (paintPatch &&
-      (!('activeBackgroundPaint' in patch) && !('activeBorderPaint' in patch)
-        ? true
-        : target.elementType === 'key' || target.elementType === 'knob')) ||
-    (hasExactKeys(patch, ['hidden']) && typeof patch.hidden === 'boolean') ||
-    (hasExactKeys(patch, ['layerName']) &&
-      (typeof patch.layerName === 'string' || patch.layerName === null)) ||
-    (hasExactKeys(patch, ['graphType']) &&
-      (patch.graphType === 'line' || patch.graphType === 'bar')) ||
-    (hasExactKeys(patch, ['graphColor']) &&
-      typeof patch.graphColor === 'string') ||
-    (hasExactKeys(patch, ['showAvgLine']) &&
-      typeof patch.showAvgLine === 'boolean') ||
-    (hasExactKeys(patch, ['graphAnimationEnabled']) &&
-      typeof patch.graphAnimationEnabled === 'boolean') ||
-    (hasExactKeys(patch, ['graphSpeed']) &&
-      typeof patch.graphSpeed === 'number' &&
-      Number.isSafeInteger(patch.graphSpeed) &&
-      patch.graphSpeed >= 0 &&
-      patch.graphSpeed <= 4_294_967_295) ||
-    (hasExactKeys(patch, ['sensitivity']) &&
-      typeof patch.sensitivity === 'number' &&
-      Number.isFinite(patch.sensitivity)) ||
-    (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean') ||
-    (hasExactKeys(patch, ['axisId']) && typeof patch.axisId === 'string') ||
-    (hasExactKeys(patch, ['displayText']) &&
-      typeof patch.displayText === 'string') ||
-    (hasExactKeys(patch, ['className']) &&
-      typeof patch.className === 'string') ||
-    (hasExactKeys(patch, ['borderWidth']) &&
-      typeof patch.borderWidth === 'number' &&
-      Number.isFinite(patch.borderWidth) &&
-      patch.borderWidth >= 0 &&
-      patch.borderWidth <= 20) ||
-    (hasExactKeys(patch, ['borderRadius']) &&
-      typeof patch.borderRadius === 'number' &&
-      Number.isFinite(patch.borderRadius) &&
-      patch.borderRadius >= 0 &&
-      patch.borderRadius <= (target.elementType === 'knob' ? 999 : 100)) ||
-    (hasExactKeys(patch, ['fontSize']) &&
-      typeof patch.fontSize === 'number' &&
-      Number.isFinite(patch.fontSize) &&
-      patch.fontSize >= 8 &&
-      patch.fontSize <= 72) ||
-    (hasExactKeys(patch, ['noteGlowSize']) &&
-      target.elementType === 'key' &&
-      typeof patch.noteGlowSize === 'number' &&
-      Number.isFinite(patch.noteGlowSize) &&
-      patch.noteGlowSize >= 0 &&
-      patch.noteGlowSize <= 50) ||
-    (noteNumericStylePatch !== null && target.elementType === 'key') ||
-    (hasExactKeys(patch, ['soundEnabled']) &&
-      target.elementType === 'key' &&
-      typeof patch.soundEnabled === 'boolean') ||
-    (hasExactKeys(patch, ['soundPath']) &&
-      target.elementType === 'key' &&
-      typeof patch.soundPath === 'string') ||
-    (hasExactKeys(patch, ['soundVolume']) &&
-      target.elementType === 'key' &&
-      typeof patch.soundVolume === 'number' &&
-      Number.isFinite(patch.soundVolume) &&
-      patch.soundVolume >= 0 &&
-      patch.soundVolume <= 200) ||
-    (hasExactKeys(patch, ['inactiveImage']) &&
-      typeof patch.inactiveImage === 'string') ||
-    (hasExactKeys(patch, ['activeImage']) &&
-      (target.elementType === 'key' || target.elementType === 'knob') &&
-      typeof patch.activeImage === 'string') ||
-    (hasExactKeys(patch, ['idleTransparent']) &&
-      typeof patch.idleTransparent === 'boolean') ||
-    (hasExactKeys(patch, ['activeTransparent']) &&
-      (target.elementType === 'key' || target.elementType === 'knob') &&
-      typeof patch.activeTransparent === 'boolean') ||
-    (hasExactKeys(patch, ['idleImageFit']) &&
-      ['cover', 'contain', 'fill', 'none'].includes(
-        patch.idleImageFit as string,
-      )) ||
-    (hasExactKeys(patch, ['activeImageFit']) &&
-      (target.elementType === 'key' || target.elementType === 'knob') &&
-      ['cover', 'contain', 'fill', 'none'].includes(
-        patch.activeImageFit as string,
-      )) ||
-    (hasExactKeys(patch, ['counterEnabled']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      typeof patch.counterEnabled === 'boolean') ||
-    (hasExactKeys(patch, ['counterAnimationEnabled']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      typeof patch.counterAnimationEnabled === 'boolean') ||
-    (hasExactKeys(patch, ['counterPlacement']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      (patch.counterPlacement === 'inside' ||
-        patch.counterPlacement === 'outside')) ||
-    (hasExactKeys(patch, ['counterAlign']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      ['top', 'bottom', 'left', 'right'].includes(
-        patch.counterAlign as string,
-      )) ||
-    (hasExactKeys(patch, ['counterAlignMode']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      (patch.counterAlignMode === 'center' ||
-        patch.counterAlignMode === 'between')) ||
-    (hasExactKeys(patch, ['counterGap']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      Number.isSafeInteger(patch.counterGap) &&
-      (patch.counterGap as number) >= 0 &&
-      (patch.counterGap as number) <= 4_294_967_295) ||
-    (hasExactKeys(patch, ['counterFontSize']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      Number.isSafeInteger(patch.counterFontSize) &&
-      (patch.counterFontSize as number) >= 8 &&
-      (patch.counterFontSize as number) <= 72) ||
-    (hasExactKeys(patch, ['counterFontWeight']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      Number.isSafeInteger(patch.counterFontWeight) &&
-      (patch.counterFontWeight as number) >= 100 &&
-      (patch.counterFontWeight as number) <= 900) ||
-    (hasExactKeys(patch, ['counterFontItalic']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      typeof patch.counterFontItalic === 'boolean') ||
-    (hasExactKeys(patch, ['counterFontUnderline']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      typeof patch.counterFontUnderline === 'boolean') ||
-    (hasExactKeys(patch, ['counterFontStrikethrough']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      typeof patch.counterFontStrikethrough === 'boolean') ||
-    (hasExactKeys(patch, ['counterFontFamily']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      typeof patch.counterFontFamily === 'string') ||
-    (hasExactKeys(patch, ['counterStrokeIdle']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      typeof patch.counterStrokeIdle === 'string') ||
-    (hasExactKeys(patch, ['counterStrokeActive']) &&
-      target.elementType === 'key' &&
-      typeof patch.counterStrokeActive === 'string') ||
-    (hasExactKeys(patch, ['counterAnimationPreset']) &&
-      (target.elementType === 'key' || target.elementType === 'stat') &&
-      counterAnimationPreset !== null) ||
-    (hasExactKeys(patch, ['useInlineStyles']) &&
-      typeof patch.useInlineStyles === 'boolean') ||
-    (hasExactKeys(patch, ['fontWeight']) &&
-      typeof patch.fontWeight === 'number' &&
-      Number.isSafeInteger(patch.fontWeight) &&
-      patch.fontWeight >= 0 &&
-      patch.fontWeight <= 4_294_967_295) ||
-    (hasExactKeys(patch, ['fontItalic']) &&
-      typeof patch.fontItalic === 'boolean') ||
-    (hasExactKeys(patch, ['fontUnderline']) &&
-      typeof patch.fontUnderline === 'boolean') ||
-    (hasExactKeys(patch, ['fontStrikethrough']) &&
-      typeof patch.fontStrikethrough === 'boolean') ||
-    (hasExactKeys(patch, ['fontFamily']) &&
-      typeof patch.fontFamily === 'string') ||
-    (hasExactKeys(patch, ['noteEffectEnabled']) &&
-      target.elementType === 'key' &&
-      typeof patch.noteEffectEnabled === 'boolean') ||
-    (hasExactKeys(patch, ['noteAutoYCorrection']) &&
-      target.elementType === 'key' &&
-      typeof patch.noteAutoYCorrection === 'boolean') ||
-    (hasExactKeys(patch, ['noteGlowEnabled']) &&
-      target.elementType === 'key' &&
-      typeof patch.noteGlowEnabled === 'boolean') ||
-    (hasExactKeys(patch, ['noteAlignment']) &&
-      target.elementType === 'key' &&
-      ['left', 'center', 'right'].includes(patch.noteAlignment as string)) ||
-    (hasExactKeys(patch, ['noteBorderSide']) &&
-      target.elementType === 'key' &&
-      ['all', 'vertical', 'horizontal'].includes(
-        patch.noteBorderSide as string,
-      )) ||
-    (hasExactKeys(patch, ['statType']) &&
-      target.elementType === 'stat' &&
-      ['kps', 'kpsAvg', 'kpsMax', 'total'].includes(patch.statType as string));
-  const graphOnlyPatch =
-    hasExactKeys(patch, ['graphType']) ||
-    hasExactKeys(patch, ['graphColor']) ||
-    hasExactKeys(patch, ['showAvgLine']) ||
-    hasExactKeys(patch, ['graphAnimationEnabled']) ||
-    hasExactKeys(patch, ['graphSpeed']);
-  const knobOnlyPatch =
-    hasExactKeys(patch, ['sensitivity']) ||
-    hasExactKeys(patch, ['reverse']) ||
-    hasExactKeys(patch, ['axisId']);
-  if (
-    !patchValid ||
-    (graphOnlyPatch && target.elementType !== 'graph') ||
-    (knobOnlyPatch && target.elementType !== 'knob')
+    !isEditorElementPropertyPatchV1(
+      target.patch,
+      target.elementType as EditorElementTypeV1,
+    )
   ) {
     return null;
   }
@@ -892,7 +682,9 @@ type NativeLayerPropertyRequest =
   | {
       kind: 'counterBooleanBatch';
       targets: Array<{ elementType: 'key' | 'stat'; id: string }>;
-      patch: { counterEnabled: boolean } | { counterAnimationEnabled: boolean };
+      patch:
+        | { property: 'counterEnabled'; value: boolean }
+        | { property: 'counterAnimationEnabled'; value: boolean };
     }
   | {
       kind: 'counterLayoutBatch';
@@ -964,234 +756,210 @@ const parseNativeLayerPropertyRequest = (
   }
   const patch = payload.patch as Record<string, unknown>;
   const graphType =
-    hasExactKeys(patch, ['graphType']) &&
-    (patch.graphType === 'line' || patch.graphType === 'bar')
-      ? patch.graphType
+    patch.property === 'graphType' &&
+    (patch.value === 'line' || patch.value === 'bar')
+      ? patch.value
       : null;
   const graphColor =
-    hasExactKeys(patch, ['graphColor']) && typeof patch.graphColor === 'string'
-      ? patch.graphColor
+    patch.property === 'graphColor' && typeof patch.value === 'string'
+      ? patch.value
       : null;
   const graphRuntimePatch: EditorGraphRuntimePropertyPatchV1 | null =
-    hasExactKeys(patch, ['showAvgLine']) &&
-    typeof patch.showAvgLine === 'boolean'
-      ? { showAvgLine: patch.showAvgLine }
-      : hasExactKeys(patch, ['graphAnimationEnabled']) &&
-        typeof patch.graphAnimationEnabled === 'boolean'
-      ? { graphAnimationEnabled: patch.graphAnimationEnabled }
-      : hasExactKeys(patch, ['graphSpeed']) &&
-        typeof patch.graphSpeed === 'number' &&
-        Number.isSafeInteger(patch.graphSpeed) &&
-        patch.graphSpeed >= 0 &&
-        patch.graphSpeed <= 4_294_967_295
-      ? { graphSpeed: patch.graphSpeed }
+    patch.property === 'showAvgLine' && typeof patch.value === 'boolean'
+      ? { property: 'showAvgLine', value: patch.value }
+      : patch.property === 'graphAnimationEnabled' &&
+        typeof patch.value === 'boolean'
+      ? { property: 'graphAnimationEnabled', value: patch.value }
+      : patch.property === 'graphSpeed' &&
+        typeof patch.value === 'number' &&
+        Number.isSafeInteger(patch.value) &&
+        patch.value >= 0 &&
+        patch.value <= 4_294_967_295
+      ? { property: 'graphSpeed', value: patch.value }
       : null;
   const knobRuntimePatch: EditorKnobRuntimePropertyPatchV1 | null =
-    hasExactKeys(patch, ['sensitivity']) &&
-    typeof patch.sensitivity === 'number' &&
-    Number.isFinite(patch.sensitivity)
-      ? { sensitivity: patch.sensitivity }
-      : hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean'
-      ? { reverse: patch.reverse }
+    patch.property === 'sensitivity' &&
+    typeof patch.value === 'number' &&
+    Number.isFinite(patch.value)
+      ? { property: 'sensitivity', value: patch.value }
+      : patch.property === 'reverse' && typeof patch.value === 'boolean'
+      ? { property: 'reverse', value: patch.value }
       : null;
   const useInlineStyles =
-    hasExactKeys(patch, ['useInlineStyles']) &&
-    typeof patch.useInlineStyles === 'boolean'
-      ? patch.useInlineStyles
+    patch.property === 'useInlineStyles' && typeof patch.value === 'boolean'
+      ? patch.value
       : null;
   const fontStylePatch: EditorFontStylePropertyPatchV1 | null =
-    hasExactKeys(patch, ['fontWeight']) &&
-    typeof patch.fontWeight === 'number' &&
-    Number.isSafeInteger(patch.fontWeight) &&
-    patch.fontWeight >= 0 &&
-    patch.fontWeight <= 4_294_967_295
-      ? { fontWeight: patch.fontWeight }
-      : hasExactKeys(patch, ['fontItalic']) &&
-        typeof patch.fontItalic === 'boolean'
-      ? { fontItalic: patch.fontItalic }
-      : hasExactKeys(patch, ['fontUnderline']) &&
-        typeof patch.fontUnderline === 'boolean'
-      ? { fontUnderline: patch.fontUnderline }
-      : hasExactKeys(patch, ['fontStrikethrough']) &&
-        typeof patch.fontStrikethrough === 'boolean'
-      ? { fontStrikethrough: patch.fontStrikethrough }
+    patch.property === 'fontWeight' &&
+    typeof patch.value === 'number' &&
+    Number.isSafeInteger(patch.value) &&
+    patch.value >= 0 &&
+    patch.value <= 4_294_967_295
+      ? { property: 'fontWeight', value: patch.value }
+      : patch.property === 'fontItalic' && typeof patch.value === 'boolean'
+      ? { property: 'fontItalic', value: patch.value }
+      : patch.property === 'fontUnderline' && typeof patch.value === 'boolean'
+      ? { property: 'fontUnderline', value: patch.value }
+      : patch.property === 'fontStrikethrough' &&
+        typeof patch.value === 'boolean'
+      ? { property: 'fontStrikethrough', value: patch.value }
       : null;
   const fontFamilyPatch: EditorFontFamilyPropertyPatchV1 | null =
-    hasExactKeys(patch, ['fontFamily']) && typeof patch.fontFamily === 'string'
-      ? { fontFamily: patch.fontFamily }
+    patch.property === 'fontFamily' && typeof patch.value === 'string'
+      ? { property: 'fontFamily', value: patch.value }
       : null;
   const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
   const paintPatch = isEditorPaintPropertyPatchV1(patch) ? patch : null;
   const shadowPatch = isEditorShadowPropertyPatchV1(patch) ? patch : null;
   const notePaintPatch = isNotePaintPropertyPatchV1(patch) ? patch : null;
   const stylePropertyPatch: EditorPreviewStylePropertyPatchV1 | null =
-    hasExactKeys(patch, ['displayText']) &&
-    typeof patch.displayText === 'string'
-      ? { displayText: patch.displayText }
-      : hasExactKeys(patch, ['className']) &&
-        typeof patch.className === 'string'
-      ? { className: patch.className }
-      : hasExactKeys(patch, ['borderWidth']) &&
-        typeof patch.borderWidth === 'number' &&
-        Number.isFinite(patch.borderWidth) &&
-        patch.borderWidth >= 0 &&
-        patch.borderWidth <= 20
-      ? { borderWidth: patch.borderWidth }
-      : hasExactKeys(patch, ['borderRadius']) &&
-        typeof patch.borderRadius === 'number' &&
-        Number.isFinite(patch.borderRadius) &&
-        patch.borderRadius >= 0 &&
-        patch.borderRadius <= 999
-      ? { borderRadius: patch.borderRadius }
-      : hasExactKeys(patch, ['fontSize']) &&
-        typeof patch.fontSize === 'number' &&
-        Number.isFinite(patch.fontSize) &&
-        patch.fontSize >= 8 &&
-        patch.fontSize <= 72
-      ? { fontSize: patch.fontSize }
-      : hasExactKeys(patch, ['noteGlowSize']) &&
-        typeof patch.noteGlowSize === 'number' &&
-        Number.isFinite(patch.noteGlowSize) &&
-        patch.noteGlowSize >= 0 &&
-        patch.noteGlowSize <= 50
-      ? { noteGlowSize: patch.noteGlowSize }
+    patch.property === 'displayText' && typeof patch.value === 'string'
+      ? { property: 'displayText', value: patch.value }
+      : patch.property === 'className' && typeof patch.value === 'string'
+      ? { property: 'className', value: patch.value }
+      : patch.property === 'borderWidth' &&
+        typeof patch.value === 'number' &&
+        Number.isFinite(patch.value) &&
+        patch.value >= 0 &&
+        patch.value <= 20
+      ? { property: 'borderWidth', value: patch.value }
+      : patch.property === 'borderRadius' &&
+        typeof patch.value === 'number' &&
+        Number.isFinite(patch.value) &&
+        patch.value >= 0 &&
+        patch.value <= 999
+      ? { property: 'borderRadius', value: patch.value }
+      : patch.property === 'fontSize' &&
+        typeof patch.value === 'number' &&
+        Number.isFinite(patch.value) &&
+        patch.value >= 8 &&
+        patch.value <= 72
+      ? { property: 'fontSize', value: patch.value }
+      : patch.property === 'noteGlowSize' &&
+        typeof patch.value === 'number' &&
+        Number.isFinite(patch.value) &&
+        patch.value >= 0 &&
+        patch.value <= 50
+      ? { property: 'noteGlowSize', value: patch.value }
       : noteNumericStylePatch !== null
       ? noteNumericStylePatch
       : null;
   const inactiveImage =
-    hasExactKeys(patch, ['inactiveImage']) &&
-    typeof patch.inactiveImage === 'string'
-      ? patch.inactiveImage
+    patch.property === 'inactiveImage' && typeof patch.value === 'string'
+      ? patch.value
       : null;
   const soundPath =
-    hasExactKeys(patch, ['soundPath']) && typeof patch.soundPath === 'string'
-      ? patch.soundPath
+    patch.property === 'soundPath' && typeof patch.value === 'string'
+      ? patch.value
       : null;
   const soundEnabled =
-    hasExactKeys(patch, ['soundEnabled']) &&
-    typeof patch.soundEnabled === 'boolean'
-      ? patch.soundEnabled
+    patch.property === 'soundEnabled' && typeof patch.value === 'boolean'
+      ? patch.value
       : null;
   const soundVolume =
-    hasExactKeys(patch, ['soundVolume']) &&
-    typeof patch.soundVolume === 'number' &&
-    Number.isFinite(patch.soundVolume) &&
-    patch.soundVolume >= 0 &&
-    patch.soundVolume <= 200
-      ? patch.soundVolume
+    patch.property === 'soundVolume' &&
+    typeof patch.value === 'number' &&
+    Number.isFinite(patch.value) &&
+    patch.value >= 0 &&
+    patch.value <= 200
+      ? patch.value
       : null;
   const activeImage =
-    hasExactKeys(patch, ['activeImage']) &&
-    typeof patch.activeImage === 'string'
-      ? patch.activeImage
+    patch.property === 'activeImage' && typeof patch.value === 'string'
+      ? patch.value
       : null;
   const idleTransparent =
-    hasExactKeys(patch, ['idleTransparent']) &&
-    typeof patch.idleTransparent === 'boolean'
-      ? patch.idleTransparent
+    patch.property === 'idleTransparent' && typeof patch.value === 'boolean'
+      ? patch.value
       : null;
   const activeTransparent =
-    hasExactKeys(patch, ['activeTransparent']) &&
-    typeof patch.activeTransparent === 'boolean'
-      ? patch.activeTransparent
+    patch.property === 'activeTransparent' && typeof patch.value === 'boolean'
+      ? patch.value
       : null;
-  const counterAnimationPreset = hasExactKeys(patch, ['counterAnimationPreset'])
-    ? parseCounterAnimationPresetIntent(patch.counterAnimationPreset)
-    : null;
+  const counterAnimationPreset =
+    patch.property === 'counterAnimationPreset'
+      ? parseCounterAnimationPresetIntent(patch.value)
+      : null;
   const counterBooleanPatch =
-    hasExactKeys(patch, ['counterEnabled']) &&
-    typeof patch.counterEnabled === 'boolean'
-      ? { counterEnabled: patch.counterEnabled }
-      : hasExactKeys(patch, ['counterAnimationEnabled']) &&
-        typeof patch.counterAnimationEnabled === 'boolean'
-      ? { counterAnimationEnabled: patch.counterAnimationEnabled }
+    patch.property === 'counterEnabled' && typeof patch.value === 'boolean'
+      ? { property: 'counterEnabled' as const, value: patch.value }
+      : patch.property === 'counterAnimationEnabled' &&
+        typeof patch.value === 'boolean'
+      ? { property: 'counterAnimationEnabled' as const, value: patch.value }
       : null;
   const counterLayoutPatch: EditorCounterLayoutPropertyPatchV1 | null =
-    hasExactKeys(patch, ['counterPlacement']) &&
-    (patch.counterPlacement === 'inside' ||
-      patch.counterPlacement === 'outside')
-      ? { counterPlacement: patch.counterPlacement }
-      : hasExactKeys(patch, ['counterAlign']) &&
-        ['top', 'bottom', 'left', 'right'].includes(
-          patch.counterAlign as string,
-        )
+    patch.property === 'counterPlacement' &&
+    (patch.value === 'inside' || patch.value === 'outside')
+      ? { property: 'counterPlacement', value: patch.value }
+      : patch.property === 'counterAlign' &&
+        ['top', 'bottom', 'left', 'right'].includes(patch.value as string)
       ? {
-          counterAlign: patch.counterAlign as
-            | 'top'
-            | 'bottom'
-            | 'left'
-            | 'right',
+          property: 'counterAlign',
+          value: patch.value as 'top' | 'bottom' | 'left' | 'right',
         }
-      : hasExactKeys(patch, ['counterAlignMode']) &&
-        (patch.counterAlignMode === 'center' ||
-          patch.counterAlignMode === 'between')
-      ? { counterAlignMode: patch.counterAlignMode }
-      : hasExactKeys(patch, ['counterGap']) &&
-        Number.isSafeInteger(patch.counterGap) &&
-        (patch.counterGap as number) >= 0 &&
-        (patch.counterGap as number) <= 4_294_967_295
-      ? { counterGap: patch.counterGap as number }
+      : patch.property === 'counterAlignMode' &&
+        (patch.value === 'center' || patch.value === 'between')
+      ? { property: 'counterAlignMode', value: patch.value }
+      : patch.property === 'counterGap' &&
+        Number.isSafeInteger(patch.value) &&
+        (patch.value as number) >= 0 &&
+        (patch.value as number) <= 4_294_967_295
+      ? { property: 'counterGap', value: patch.value as number }
       : null;
   const counterTypographyPatch: EditorCounterTypographyPropertyPatchV1 | null =
-    hasExactKeys(patch, ['counterFontSize']) &&
-    Number.isSafeInteger(patch.counterFontSize) &&
-    (patch.counterFontSize as number) >= 8 &&
-    (patch.counterFontSize as number) <= 72
-      ? { counterFontSize: patch.counterFontSize as number }
-      : hasExactKeys(patch, ['counterFontWeight']) &&
-        Number.isSafeInteger(patch.counterFontWeight) &&
-        (patch.counterFontWeight as number) >= 100 &&
-        (patch.counterFontWeight as number) <= 900
-      ? { counterFontWeight: patch.counterFontWeight as number }
-      : hasExactKeys(patch, ['counterFontItalic']) &&
-        typeof patch.counterFontItalic === 'boolean'
-      ? { counterFontItalic: patch.counterFontItalic }
-      : hasExactKeys(patch, ['counterFontUnderline']) &&
-        typeof patch.counterFontUnderline === 'boolean'
-      ? { counterFontUnderline: patch.counterFontUnderline }
-      : hasExactKeys(patch, ['counterFontStrikethrough']) &&
-        typeof patch.counterFontStrikethrough === 'boolean'
-      ? { counterFontStrikethrough: patch.counterFontStrikethrough }
-      : hasExactKeys(patch, ['counterFontFamily']) &&
-        typeof patch.counterFontFamily === 'string'
-      ? { counterFontFamily: patch.counterFontFamily }
+    patch.property === 'counterFontSize' &&
+    Number.isSafeInteger(patch.value) &&
+    (patch.value as number) >= 8 &&
+    (patch.value as number) <= 72
+      ? { property: 'counterFontSize', value: patch.value as number }
+      : patch.property === 'counterFontWeight' &&
+        Number.isSafeInteger(patch.value) &&
+        (patch.value as number) >= 100 &&
+        (patch.value as number) <= 900
+      ? { property: 'counterFontWeight', value: patch.value as number }
+      : patch.property === 'counterFontItalic' &&
+        typeof patch.value === 'boolean'
+      ? { property: 'counterFontItalic', value: patch.value }
+      : patch.property === 'counterFontUnderline' &&
+        typeof patch.value === 'boolean'
+      ? { property: 'counterFontUnderline', value: patch.value }
+      : patch.property === 'counterFontStrikethrough' &&
+        typeof patch.value === 'boolean'
+      ? { property: 'counterFontStrikethrough', value: patch.value }
+      : patch.property === 'counterFontFamily' &&
+        typeof patch.value === 'string'
+      ? { property: 'counterFontFamily', value: patch.value }
       : null;
   const counterStrokePatch: EditorCounterStrokePropertyPatchV1 | null =
-    hasExactKeys(patch, ['counterStrokeIdle']) &&
-    typeof patch.counterStrokeIdle === 'string'
-      ? { counterStrokeIdle: patch.counterStrokeIdle }
-      : hasExactKeys(patch, ['counterStrokeActive']) &&
-        typeof patch.counterStrokeActive === 'string'
-      ? { counterStrokeActive: patch.counterStrokeActive }
+    patch.property === 'counterStrokeIdle' && typeof patch.value === 'string'
+      ? { property: 'counterStrokeIdle', value: patch.value }
+      : patch.property === 'counterStrokeActive' &&
+        typeof patch.value === 'string'
+      ? { property: 'counterStrokeActive', value: patch.value }
       : null;
   const counterFillPatch: EditorCounterFillPropertyPatchV1 | null =
     isCounterFillPropertyPatchV1(patch) ? patch : null;
   const fontColorPatch: EditorFontColorPropertyPatchV1 | null =
     isFontColorPropertyPatchV1(patch) ? patch : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
-    hasExactKeys(patch, ['noteEffectEnabled']) &&
-    typeof patch.noteEffectEnabled === 'boolean'
-      ? { noteEffectEnabled: patch.noteEffectEnabled }
-      : hasExactKeys(patch, ['noteAutoYCorrection']) &&
-        typeof patch.noteAutoYCorrection === 'boolean'
-      ? { noteAutoYCorrection: patch.noteAutoYCorrection }
-      : hasExactKeys(patch, ['noteGlowEnabled']) &&
-        typeof patch.noteGlowEnabled === 'boolean'
-      ? { noteGlowEnabled: patch.noteGlowEnabled }
-      : hasExactKeys(patch, ['noteAlignment']) &&
-        ['left', 'center', 'right'].includes(patch.noteAlignment as string)
+    patch.property === 'noteEffectEnabled' && typeof patch.value === 'boolean'
+      ? { property: 'noteEffectEnabled', value: patch.value }
+      : patch.property === 'noteAutoYCorrection' &&
+        typeof patch.value === 'boolean'
+      ? { property: 'noteAutoYCorrection', value: patch.value }
+      : patch.property === 'noteGlowEnabled' && typeof patch.value === 'boolean'
+      ? { property: 'noteGlowEnabled', value: patch.value }
+      : patch.property === 'noteAlignment' &&
+        ['left', 'center', 'right'].includes(patch.value as string)
       ? {
-          noteAlignment: patch.noteAlignment as 'left' | 'center' | 'right',
+          property: 'noteAlignment',
+          value: patch.value as 'left' | 'center' | 'right',
         }
-      : hasExactKeys(patch, ['noteBorderSide']) &&
-        ['all', 'vertical', 'horizontal'].includes(
-          patch.noteBorderSide as string,
-        )
+      : patch.property === 'noteBorderSide' &&
+        ['all', 'vertical', 'horizontal'].includes(patch.value as string)
       ? {
-          noteBorderSide: patch.noteBorderSide as
-            | 'all'
-            | 'vertical'
-            | 'horizontal',
+          property: 'noteBorderSide',
+          value: patch.value as 'all' | 'vertical' | 'horizontal',
         }
       : null;
   if (
@@ -1298,39 +1066,39 @@ const parseNativeLayerPropertyRequest = (
         target.elementType !== 'key' &&
         target.elementType !== 'stat') ||
       (counterStrokePatch !== null &&
-        'counterStrokeActive' in counterStrokePatch &&
+        counterStrokePatch.property === 'counterStrokeActive' &&
         target.elementType !== 'key') ||
       (counterFillPatch !== null &&
-        'counterFillActive' in counterFillPatch &&
+        counterFillPatch.property === 'counterFillActive' &&
         target.elementType !== 'key') ||
       (fontColorPatch !== null &&
-        'activeFontColor' in fontColorPatch &&
+        fontColorPatch.property === 'activeFontColor' &&
         target.elementType !== 'key' &&
         target.elementType !== 'knob') ||
       (stylePropertyPatch !== null &&
-        'borderRadius' in stylePropertyPatch &&
-        stylePropertyPatch.borderRadius > 100 &&
+        stylePropertyPatch.property === 'borderRadius' &&
+        stylePropertyPatch.value > 100 &&
         target.elementType !== 'knob') ||
       (stylePropertyPatch !== null &&
-        'noteGlowSize' in stylePropertyPatch &&
+        stylePropertyPatch.property === 'noteGlowSize' &&
         target.elementType !== 'key') ||
       (paintPatch !== null &&
-        ('activeBackgroundPaint' in paintPatch ||
-          'activeBorderPaint' in paintPatch) &&
+        (paintPatch.property === 'activeBackgroundPaint' ||
+          paintPatch.property === 'activeBorderPaint') &&
         target.elementType !== 'key' &&
         target.elementType !== 'knob') ||
       (shadowPatch !== null &&
         (target.elementType === 'graph' ||
-          ('activeShadow' in shadowPatch &&
+          (shadowPatch.property === 'activeShadow' &&
             target.elementType !== 'key' &&
             target.elementType !== 'knob'))) ||
       (notePaintPatch !== null && target.elementType !== 'key') ||
       (stylePropertyPatch !== null &&
-        ('noteOffsetX' in stylePropertyPatch ||
-          'noteOffsetY' in stylePropertyPatch ||
-          'noteWidth' in stylePropertyPatch ||
-          'noteBorderWidth' in stylePropertyPatch ||
-          'noteBorderRadius' in stylePropertyPatch) &&
+        (stylePropertyPatch.property === 'noteOffsetX' ||
+          stylePropertyPatch.property === 'noteOffsetY' ||
+          stylePropertyPatch.property === 'noteWidth' ||
+          stylePropertyPatch.property === 'noteBorderWidth' ||
+          stylePropertyPatch.property === 'noteBorderRadius') &&
         target.elementType !== 'key') ||
       (elementType !== null &&
         elementType !== 'active-capable' &&
@@ -2449,10 +2217,10 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           );
         }
         if (
-          'counterPlacement' in request.target.patch ||
-          'counterAlign' in request.target.patch ||
-          'counterAlignMode' in request.target.patch ||
-          'counterGap' in request.target.patch
+          request.target.patch.property === 'counterPlacement' ||
+          request.target.patch.property === 'counterAlign' ||
+          request.target.patch.property === 'counterAlignMode' ||
+          request.target.patch.property === 'counterGap'
         ) {
           return patchCounterLayoutByTargets(
             [
@@ -2466,12 +2234,12 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           );
         }
         if (
-          'counterFontSize' in request.target.patch ||
-          'counterFontWeight' in request.target.patch ||
-          'counterFontItalic' in request.target.patch ||
-          'counterFontUnderline' in request.target.patch ||
-          'counterFontStrikethrough' in request.target.patch ||
-          'counterFontFamily' in request.target.patch
+          request.target.patch.property === 'counterFontSize' ||
+          request.target.patch.property === 'counterFontWeight' ||
+          request.target.patch.property === 'counterFontItalic' ||
+          request.target.patch.property === 'counterFontUnderline' ||
+          request.target.patch.property === 'counterFontStrikethrough' ||
+          request.target.patch.property === 'counterFontFamily'
         ) {
           return patchCounterTypographyByTargets(
             [
@@ -2485,8 +2253,8 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           );
         }
         if (
-          'counterStrokeIdle' in request.target.patch ||
-          'counterStrokeActive' in request.target.patch
+          request.target.patch.property === 'counterStrokeIdle' ||
+          request.target.patch.property === 'counterStrokeActive'
         ) {
           return patchCounterStrokeByTargets(
             [
@@ -2499,14 +2267,14 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
             options,
           );
         }
-        if ('soundEnabled' in request.target.patch) {
+        if (request.target.patch.property === 'soundEnabled') {
           return patchSoundEnabledByIds(
             [request.target.id],
-            request.target.patch.soundEnabled,
+            request.target.patch.value,
             options,
           );
         }
-        if ('counterEnabled' in request.target.patch) {
+        if (request.target.patch.property === 'counterEnabled') {
           return patchCounterEnabledByTargets(
             [
               {
@@ -2514,11 +2282,11 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
                 id: request.target.id,
               },
             ],
-            request.target.patch.counterEnabled,
+            request.target.patch.value,
             options,
           );
         }
-        if ('counterAnimationEnabled' in request.target.patch) {
+        if (request.target.patch.property === 'counterAnimationEnabled') {
           return patchCounterAnimationEnabledByTargets(
             [
               {
@@ -2526,11 +2294,11 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
                 id: request.target.id,
               },
             ],
-            request.target.patch.counterAnimationEnabled,
+            request.target.patch.value,
             options,
           );
         }
-        if ('counterAnimationPreset' in request.target.patch) {
+        if (request.target.patch.property === 'counterAnimationPreset') {
           return patchCounterAnimationPresetByTargets(
             [
               {
@@ -2538,7 +2306,7 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
                 id: request.target.id,
               },
             ],
-            request.target.patch.counterAnimationPreset,
+            request.target.patch.value,
             options,
           );
         }
@@ -2645,15 +2413,15 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
         );
       }
       if (request.kind === 'counterBooleanBatch') {
-        return 'counterEnabled' in request.patch
+        return request.patch.property === 'counterEnabled'
           ? patchCounterEnabledByTargets(
               request.targets,
-              request.patch.counterEnabled,
+              request.patch.value,
               options,
             )
           : patchCounterAnimationEnabledByTargets(
               request.targets,
-              request.patch.counterAnimationEnabled,
+              request.patch.value,
               options,
             );
       }

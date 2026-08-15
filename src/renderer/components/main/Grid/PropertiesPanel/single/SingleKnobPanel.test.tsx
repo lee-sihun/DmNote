@@ -165,7 +165,7 @@ describe('SingleKnobPanel 대상 전환 세션 정리', () => {
     expect(mocks.patchAuthority).toHaveBeenCalledWith({
       elementType: 'knob',
       id: knobPosition.id,
-      patch: { axisId: 'HIDA:panel' },
+      patch: { property: 'axisId', value: 'HIDA:panel' },
     });
     expect(mocks.patchAxis).not.toHaveBeenCalled();
   });

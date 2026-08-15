@@ -172,8 +172,8 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
     onCounterStrokeCommit?.(
       effectiveColorState === 'active'
-        ? { counterStrokeActive: color }
-        : { counterStrokeIdle: color },
+        ? { property: 'counterStrokeActive', value: color }
+        : { property: 'counterStrokeIdle', value: color },
     );
   };
 
@@ -191,12 +191,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     onCounterFillCommit?.(
       effectiveColorState === 'active'
         ? {
-            counterFillActive: pair.gradient
+            property: 'counterFillActive',
+            value: pair.gradient
               ? { color: pair.color, gradient: pair.gradient }
               : { color: pair.color },
           }
         : {
-            counterFillIdle: pair.gradient
+            property: 'counterFillIdle',
+            value: pair.gradient
               ? { color: pair.color, gradient: pair.gradient }
               : { color: pair.color },
           },
@@ -267,7 +269,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             value={counterSettings.placement}
             onChange={(value) => {
               const placement = value as 'inside' | 'outside';
-              onCounterLayoutCommit?.({ counterPlacement: placement });
+              onCounterLayoutCommit?.({
+                property: 'counterPlacement',
+                value: placement,
+              });
             }}
           />
         </PropertyRow>
@@ -291,7 +296,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             value={counterSettings.align}
             onChange={(value) => {
               const align = value as 'top' | 'bottom' | 'left' | 'right';
-              onCounterLayoutCommit?.({ counterAlign: align });
+              onCounterLayoutCommit?.({
+                property: 'counterAlign',
+                value: align,
+              });
             }}
           />
         </PropertyRow>
@@ -314,7 +322,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
               value={counterSettings.alignMode ?? 'center'}
               onChange={(value) => {
                 const alignMode = value as 'center' | 'between';
-                onCounterLayoutCommit?.({ counterAlignMode: alignMode });
+                onCounterLayoutCommit?.({
+                  property: 'counterAlignMode',
+                  value: alignMode,
+                });
               }}
             />
           </PropertyRow>
@@ -325,7 +336,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           <NumberInput
             value={counterSettings.gap}
             onChange={(value) => {
-              onCounterLayoutCommit?.({ counterGap: value });
+              onCounterLayoutCommit?.({ property: 'counterGap', value: value });
             }}
             suffix="px"
             min={0}
@@ -391,7 +402,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           <NumberInput
             value={counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}
             onChange={(value) => {
-              onCounterTypographyCommit?.({ counterFontSize: value });
+              onCounterTypographyCommit?.({
+                property: 'counterFontSize',
+                value: value,
+              });
             }}
             suffix="px"
             min={8}
@@ -409,18 +423,26 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             isStrikethrough={counterSettings.fontStrikethrough ?? false}
             onBoldChange={(value) => {
               onCounterTypographyCommit?.({
-                counterFontWeight: value ? 700 : 400,
+                property: 'counterFontWeight',
+                value: value ? 700 : 400,
               });
             }}
             onItalicChange={(value) => {
-              onCounterTypographyCommit?.({ counterFontItalic: value });
+              onCounterTypographyCommit?.({
+                property: 'counterFontItalic',
+                value: value,
+              });
             }}
             onUnderlineChange={(value) => {
-              onCounterTypographyCommit?.({ counterFontUnderline: value });
+              onCounterTypographyCommit?.({
+                property: 'counterFontUnderline',
+                value: value,
+              });
             }}
             onStrikethroughChange={(value) => {
               onCounterTypographyCommit?.({
-                counterFontStrikethrough: value,
+                property: 'counterFontStrikethrough',
+                value: value,
               });
             }}
           />
@@ -522,7 +544,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             selectedFont={counterSettings.fontFamily || null}
             onFontSelect={(fontName) => {
               if (fontName !== null) {
-                onCounterTypographyCommit?.({ counterFontFamily: fontName });
+                onCounterTypographyCommit?.({
+                  property: 'counterFontFamily',
+                  value: fontName,
+                });
               }
             }}
             pageTitle={t('counterSetting.font') || '폰트'}

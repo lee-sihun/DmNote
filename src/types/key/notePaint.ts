@@ -30,21 +30,9 @@ export interface NoteBorderPaintValueV1 {
 }
 
 export type NotePaintPropertyPatchV1 =
-  | {
-      notePaint: NotePaintValuePatchV1;
-      noteGlowPaint?: never;
-      noteBorderPaint?: never;
-    }
-  | {
-      notePaint?: never;
-      noteGlowPaint: NotePaintValuePatchV1;
-      noteBorderPaint?: never;
-    }
-  | {
-      notePaint?: never;
-      noteGlowPaint?: never;
-      noteBorderPaint: NoteBorderPaintValueV1;
-    };
+  | { property: 'notePaint'; value: NotePaintValuePatchV1 }
+  | { property: 'noteGlowPaint'; value: NotePaintValuePatchV1 }
+  | { property: 'noteBorderPaint'; value: NoteBorderPaintValueV1 };
 
 const cloneNoteColor = (color: StrictNoteColorV1): StrictNoteColorV1 =>
   typeof color === 'string' ? color : { ...color };
@@ -52,14 +40,14 @@ const cloneNoteColor = (color: StrictNoteColorV1): StrictNoteColorV1 =>
 export const projectNotePaintPatch = (
   patch: NotePaintPropertyPatchV1,
 ): Partial<KeyPosition> => {
-  if ('noteBorderPaint' in patch) {
+  if (patch.property === 'noteBorderPaint') {
     return {
-      noteBorderColor: patch.noteBorderPaint.color,
-      noteBorderOpacity: patch.noteBorderPaint.opacity,
+      noteBorderColor: patch.value.color,
+      noteBorderOpacity: patch.value.opacity,
     };
   }
-  const glow = 'noteGlowPaint' in patch;
-  const value = glow ? patch.noteGlowPaint : patch.notePaint;
+  const glow = patch.property === 'noteGlowPaint';
+  const value = patch.value;
   if ('color' in value) {
     return glow
       ? { noteGlowColor: cloneNoteColor(value.color) }
@@ -112,7 +100,7 @@ export const isStrictNoteColorV1 = (
   );
 };
 
-const isNotePaintValuePatchV1 = (
+export const isNotePaintValuePatchV1 = (
   value: unknown,
 ): value is NotePaintValuePatchV1 => {
   if (!isRecord(value)) return false;
@@ -126,20 +114,31 @@ const isNotePaintValuePatchV1 = (
   );
 };
 
+export const isNoteBorderPaintValueV1 = (
+  value: unknown,
+): value is NoteBorderPaintValueV1 =>
+  isRecord(value) &&
+  hasExactKeys(value, ['color', 'opacity']) &&
+  typeof value.color === 'string' &&
+  /^#[0-9A-Fa-f]{6}$/.test(value.color) &&
+  isOpacity(value.opacity);
+
 export const isNotePaintPropertyPatchV1 = (
   value: unknown,
 ): value is NotePaintPropertyPatchV1 => {
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if ('notePaint' in value) return isNotePaintValuePatchV1(value.notePaint);
-  if ('noteGlowPaint' in value) {
-    return isNotePaintValuePatchV1(value.noteGlowPaint);
+  if (
+    !isRecord(value) ||
+    Object.keys(value).length !== 2 ||
+    !('property' in value) ||
+    !('value' in value)
+  ) {
+    return false;
+  }
+  if (value.property === 'notePaint' || value.property === 'noteGlowPaint') {
+    return isNotePaintValuePatchV1(value.value);
   }
   return (
-    'noteBorderPaint' in value &&
-    isRecord(value.noteBorderPaint) &&
-    hasExactKeys(value.noteBorderPaint, ['color', 'opacity']) &&
-    typeof value.noteBorderPaint.color === 'string' &&
-    /^#[0-9A-Fa-f]{6}$/.test(value.noteBorderPaint.color) &&
-    isOpacity(value.noteBorderPaint.opacity)
+    value.property === 'noteBorderPaint' &&
+    isNoteBorderPaintValueV1(value.value)
   );
 };

@@ -560,13 +560,19 @@ export const patchGraphTypesViaAuthority = (
   ids: readonly string[],
   graphType: 'line' | 'bar',
 ): Promise<boolean> =>
-  patchNativeLayerPropertiesViaAuthority('graph', ids, { graphType });
+  patchNativeLayerPropertiesViaAuthority('graph', ids, {
+    property: 'graphType',
+    value: graphType,
+  });
 
 export const patchGraphColorsViaAuthority = (
   ids: readonly string[],
   graphColor: string,
 ): Promise<boolean> =>
-  patchNativeLayerPropertiesViaAuthority('graph', ids, { graphColor });
+  patchNativeLayerPropertiesViaAuthority('graph', ids, {
+    property: 'graphColor',
+    value: graphColor,
+  });
 
 export const patchGraphPropertiesViaAuthority = (
   ids: readonly string[],
@@ -590,7 +596,7 @@ export const patchUseInlineStylesViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
-        patch: { useInlineStyles },
+        patch: { property: 'useInlineStyles', value: useInlineStyles },
       },
       authorityGeneration,
       retryPolicy: 'default',
@@ -737,7 +743,7 @@ export const patchInactiveImageViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
-        patch: { inactiveImage },
+        patch: { property: 'inactiveImage', value: inactiveImage },
       },
       authorityGeneration,
       retryPolicy: 'default',
@@ -757,7 +763,7 @@ export const patchSoundPathViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: ids.map((id) => ({ elementType: 'key' as const, id })),
-        patch: { soundPath },
+        patch: { property: 'soundPath', value: soundPath },
       },
       authorityGeneration,
       retryPolicy: 'staleOnly',
@@ -777,7 +783,7 @@ export const patchSoundEnabledViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: ids.map((id) => ({ elementType: 'key' as const, id })),
-        patch: { soundEnabled },
+        patch: { property: 'soundEnabled', value: soundEnabled },
       },
       authorityGeneration,
       retryPolicy: 'staleOnly',
@@ -798,7 +804,7 @@ export const patchSoundVolumeViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: ids.map((id) => ({ elementType: 'key' as const, id })),
-        patch: { soundVolume },
+        patch: { property: 'soundVolume', value: soundVolume },
         ...(gestureId ? { gestureId } : {}),
       },
       authorityGeneration,
@@ -819,7 +825,10 @@ export const patchCounterAnimationPresetViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
-        patch: { counterAnimationPreset: structuredClone(intent) },
+        patch: {
+          property: 'counterAnimationPreset',
+          value: structuredClone(intent),
+        },
       },
       authorityGeneration,
       retryPolicy: 'staleOnly',
@@ -831,7 +840,9 @@ export const patchCounterAnimationPresetViaAuthority = (
 
 const patchCounterBooleanViaAuthority = (
   targets: readonly { elementType: 'key' | 'stat'; id: string }[],
-  patch: { counterEnabled: boolean } | { counterAnimationEnabled: boolean },
+  patch:
+    | { property: 'counterEnabled'; value: boolean }
+    | { property: 'counterAnimationEnabled'; value: boolean },
 ): Promise<boolean> => {
   const authorityGeneration = getPluginAuthorityGeneration();
   return new Promise((resolve) => {
@@ -853,14 +864,18 @@ export const patchCounterEnabledViaAuthority = (
   targets: readonly { elementType: 'key' | 'stat'; id: string }[],
   enabled: boolean,
 ): Promise<boolean> =>
-  patchCounterBooleanViaAuthority(targets, { counterEnabled: enabled });
+  patchCounterBooleanViaAuthority(targets, {
+    property: 'counterEnabled',
+    value: enabled,
+  });
 
 export const patchCounterAnimationEnabledViaAuthority = (
   targets: readonly { elementType: 'key' | 'stat'; id: string }[],
   enabled: boolean,
 ): Promise<boolean> =>
   patchCounterBooleanViaAuthority(targets, {
-    counterAnimationEnabled: enabled,
+    property: 'counterAnimationEnabled',
+    value: enabled,
   });
 
 export const patchCounterLayoutViaAuthority = (
@@ -958,7 +973,8 @@ export const patchFontColorViaAuthority = (
         ...(gestureId ? { gestureId } : {}),
       },
       authorityGeneration,
-      retryPolicy: 'activeFontColor' in patch ? 'default' : 'staleOnly',
+      retryPolicy:
+        patch.property === 'activeFontColor' ? 'default' : 'staleOnly',
       resolve,
     });
     void ensureQueueDrain();
@@ -1023,7 +1039,7 @@ export const patchActiveImageViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
-        patch: { activeImage },
+        patch: { property: 'activeImage', value: activeImage },
       },
       authorityGeneration,
       retryPolicy: 'default',
@@ -1043,7 +1059,7 @@ export const patchIdleTransparentViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
-        patch: { idleTransparent },
+        patch: { property: 'idleTransparent', value: idleTransparent },
       },
       authorityGeneration,
       retryPolicy: 'default',
@@ -1063,7 +1079,7 @@ export const patchActiveTransparentViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
-        patch: { activeTransparent },
+        patch: { property: 'activeTransparent', value: activeTransparent },
       },
       authorityGeneration,
       retryPolicy: 'default',

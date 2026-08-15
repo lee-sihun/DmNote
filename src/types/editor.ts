@@ -18,20 +18,18 @@ import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
-  isNotePaintPropertyPatchV1,
+  isNoteBorderPaintValueV1,
+  isNotePaintValuePatchV1,
   type NoteBorderPaintValueV1,
   type NotePaintPropertyPatchV1,
   type NotePaintValuePatchV1,
 } from '@src/types/key/notePaint';
 import {
-  isCounterFillPropertyPatchV1,
+  isCounterFillDescriptorV1,
   type CounterFillDescriptorV1,
   type CounterFillPropertyPatchV1,
 } from '@src/types/key/counterFill';
-import {
-  isFontColorPropertyPatchV1,
-  type FontColorPropertyPatchV1,
-} from '@src/types/key/fontColor';
+import { type FontColorPropertyPatchV1 } from '@src/types/key/fontColor';
 import {
   canonicalizePositionGradients,
   type PaintDescriptorV1,
@@ -43,7 +41,7 @@ export const EDITOR_SCHEMA_VERSION = 1 as const;
 // 유지하고 id를 additive로 싣는다. v2 커밋은 포함된 모든 위치 항목에 유효 ID가
 // 필수라 백엔드가 형식·전역 유일성을 강제한다. 구형 플러그인 gateway만 v1로 남는다
 export const EDITOR_COMMIT_SCHEMA_VERSION = 2 as const;
-export const EDITOR_OPS_VERSION = 1 as const;
+export const EDITOR_OPS_VERSION = 2 as const;
 
 export const EDITOR_FIELDS = [
   'keys',
@@ -271,12 +269,101 @@ interface EditorElementPropertyValuesV1 {
   statType: 'kps' | 'kpsAvg' | 'kpsMax' | 'total';
 }
 
-type ExactEditorPropertyPatchV1<K extends keyof EditorElementPropertyValuesV1> =
-  Pick<EditorElementPropertyValuesV1, K> &
-    Partial<Record<Exclude<keyof EditorElementPropertyValuesV1, K>, never>>;
+export type EditorElementPropertyKeyV1 = keyof EditorElementPropertyValuesV1;
 
-type EditorPropertyPatchUnionV1<K extends keyof EditorElementPropertyValuesV1> =
-  { [P in K]: ExactEditorPropertyPatchV1<P> }[K];
+// wire 판별 유니온: { property, value } adjacently tagged 형식 (Rust enum과 동일)
+type EditorPropertyPatchUnionV1<K extends EditorElementPropertyKeyV1> = {
+  [P in K]: { property: P; value: EditorElementPropertyValuesV1[P] };
+}[K];
+
+// canonical property 태그 목록, Rust enum 선언 순서와 동일하게 유지
+// (tests/fixtures/editor-property-tags.json과 파리티 테스트로 대조)
+export const EDITOR_ELEMENT_PROPERTY_KEYS = [
+  'hidden',
+  'layerName',
+  'graphType',
+  'graphColor',
+  'showAvgLine',
+  'graphAnimationEnabled',
+  'graphSpeed',
+  'reverse',
+  'sensitivity',
+  'axisId',
+  'useInlineStyles',
+  'fontWeight',
+  'fontItalic',
+  'fontUnderline',
+  'fontStrikethrough',
+  'fontFamily',
+  'displayText',
+  'className',
+  'fontColor',
+  'activeFontColor',
+  'shadow',
+  'activeShadow',
+  'shadowEnabled',
+  'backgroundPaint',
+  'activeBackgroundPaint',
+  'borderPaint',
+  'activeBorderPaint',
+  'borderWidth',
+  'borderRadius',
+  'fontSize',
+  'inactiveImage',
+  'activeImage',
+  'idleTransparent',
+  'activeTransparent',
+  'idleImageFit',
+  'activeImageFit',
+  'soundPath',
+  'soundEnabled',
+  'soundVolume',
+  'counterEnabled',
+  'counterAnimationEnabled',
+  'counterPlacement',
+  'counterAlign',
+  'counterAlignMode',
+  'counterGap',
+  'counterFontSize',
+  'counterFontWeight',
+  'counterFontItalic',
+  'counterFontUnderline',
+  'counterFontStrikethrough',
+  'counterFontFamily',
+  'counterFillIdle',
+  'counterFillActive',
+  'counterStrokeIdle',
+  'counterStrokeActive',
+  'counterAnimationPreset',
+  'statType',
+  'noteEffectEnabled',
+  'noteGlowEnabled',
+  'noteGlowSize',
+  'notePaint',
+  'noteGlowPaint',
+  'noteBorderPaint',
+  'noteOffsetX',
+  'noteOffsetY',
+  'noteWidth',
+  'noteBorderWidth',
+  'noteBorderRadius',
+  'noteAutoYCorrection',
+  'noteAlignment',
+  'noteBorderSide',
+] as const satisfies readonly EditorElementPropertyKeyV1[];
+
+type AssertNever<T extends never> = T;
+// canonical 배열에서 property가 하나라도 빠지면 컴파일 에러
+export type EditorPropertyKeysCompleteness = AssertNever<
+  Exclude<
+    EditorElementPropertyKeyV1,
+    (typeof EDITOR_ELEMENT_PROPERTY_KEYS)[number]
+  >
+>;
+
+const EDITOR_ELEMENT_PROPERTY_KEY_SET = new Set<string>(
+  EDITOR_ELEMENT_PROPERTY_KEYS,
+);
 
 export type EditorGraphRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'showAvgLine' | 'graphAnimationEnabled' | 'graphSpeed'
@@ -689,61 +776,67 @@ export const isEditorPaintDescriptorV1 = (
   return gradient.stops[0]?.color === value.color;
 };
 
+const isTaggedPatchRecord = (
+  value: unknown,
+): value is Record<string, unknown> & { property: unknown; value: unknown } =>
+  isRecord(value) &&
+  Object.keys(value).length === 2 &&
+  'property' in value &&
+  'value' in value;
+
 export const isEditorPaintPropertyPatchV1 = (
   value: unknown,
-): value is EditorPaintPropertyPatchV1 => {
-  if (!isRecord(value)) return false;
-  const keys = Object.keys(value);
-  return (
-    keys.length === 1 &&
-    [
-      'backgroundPaint',
-      'activeBackgroundPaint',
-      'borderPaint',
-      'activeBorderPaint',
-    ].includes(keys[0]) &&
-    isEditorPaintDescriptorV1(value[keys[0]])
-  );
-};
+): value is EditorPaintPropertyPatchV1 =>
+  isTaggedPatchRecord(value) &&
+  [
+    'backgroundPaint',
+    'activeBackgroundPaint',
+    'borderPaint',
+    'activeBorderPaint',
+  ].includes(value.property as string) &&
+  isEditorPaintDescriptorV1(value.value);
 
 export const isEditorShadowValuePatchV1 = (
   value: unknown,
 ): value is ElementShadowValuePatch => {
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if ('color' in value) {
-    return typeof value.color === 'string' && value.color.length > 0;
+  if (
+    !isRecord(value) ||
+    Object.keys(value).length !== 2 ||
+    !('leaf' in value) ||
+    !('value' in value)
+  ) {
+    return false;
   }
-  if ('offsetX' in value || 'offsetY' in value) {
-    const offset = 'offsetX' in value ? value.offsetX : value.offsetY;
+  if (value.leaf === 'color') {
+    return typeof value.value === 'string' && value.value.length > 0;
+  }
+  if (value.leaf === 'offsetX' || value.leaf === 'offsetY') {
     return (
-      typeof offset === 'number' &&
-      Number.isFinite(offset) &&
-      offset >= -100 &&
-      offset <= 100
+      typeof value.value === 'number' &&
+      Number.isFinite(value.value) &&
+      value.value >= -100 &&
+      value.value <= 100
     );
   }
   return (
-    'blur' in value &&
-    typeof value.blur === 'number' &&
-    Number.isFinite(value.blur) &&
-    value.blur >= 0 &&
-    value.blur <= 100
+    value.leaf === 'blur' &&
+    typeof value.value === 'number' &&
+    Number.isFinite(value.value) &&
+    value.value >= 0 &&
+    value.value <= 100
   );
 };
 
 export const isEditorShadowPropertyPatchV1 = (
   value: unknown,
 ): value is EditorShadowPropertyPatchV1 => {
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if ('shadowEnabled' in value) {
-    return typeof value.shadowEnabled === 'boolean';
+  if (!isTaggedPatchRecord(value)) return false;
+  if (value.property === 'shadowEnabled') {
+    return typeof value.value === 'boolean';
   }
   return (
-    (('shadow' in value && !('activeShadow' in value)) ||
-      ('activeShadow' in value && !('shadow' in value))) &&
-    isEditorShadowValuePatchV1(
-      'shadow' in value ? value.shadow : value.activeShadow,
-    )
+    (value.property === 'shadow' || value.property === 'activeShadow') &&
+    isEditorShadowValuePatchV1(value.value)
   );
 };
 
@@ -1257,6 +1350,311 @@ function assertEditorFrozenElement(
   throw new EditorProtocolError(`${label}.elementType is invalid`);
 }
 
+export const isEditorCounterAnimationPresetIntentV1 = (
+  value: unknown,
+): value is EditorCounterAnimationPresetIntentV1 => {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  if (
+    !keys.includes('presetId') ||
+    keys.some(
+      (key) =>
+        ![
+          'presetId',
+          'applyPresetId',
+          'bezier',
+          'scale',
+          'durationMs',
+        ].includes(key),
+    ) ||
+    typeof value.presetId !== 'string' ||
+    value.presetId.length === 0
+  ) {
+    return false;
+  }
+  if ('applyPresetId' in value && value.applyPresetId !== true) {
+    return false;
+  }
+  if (
+    'bezier' in value &&
+    (!Array.isArray(value.bezier) ||
+      value.bezier.length !== 4 ||
+      !value.bezier.every(
+        (item, index) =>
+          typeof item === 'number' &&
+          Number.isFinite(item) &&
+          (index === 0 || index === 2
+            ? item >= 0 && item <= 1
+            : item >= -2 && item <= 2),
+      ))
+  ) {
+    return false;
+  }
+  if (
+    'scale' in value &&
+    (typeof value.scale !== 'number' || !Number.isFinite(value.scale))
+  ) {
+    return false;
+  }
+  if (
+    'durationMs' in value &&
+    (!Number.isSafeInteger(value.durationMs) ||
+      (value.durationMs as number) < 1 ||
+      (value.durationMs as number) > 5000)
+  ) {
+    return false;
+  }
+  return true;
+};
+
+// property별 value 형식과 대상 타입 제약. property 추가 시 여기 누락은 컴파일 에러
+const isEditorElementPropertyValueValid = (
+  property: EditorElementPropertyKeyV1,
+  value: unknown,
+  elementType: EditorElementTypeV1,
+): boolean => {
+  const keyOrKnob = elementType === 'key' || elementType === 'knob';
+  const keyOrStat = elementType === 'key' || elementType === 'stat';
+  switch (property) {
+    case 'hidden':
+    case 'useInlineStyles':
+    case 'fontItalic':
+    case 'fontUnderline':
+    case 'fontStrikethrough':
+    case 'idleTransparent':
+      return typeof value === 'boolean';
+    case 'layerName':
+      return typeof value === 'string' || value === null;
+    case 'graphType':
+      return elementType === 'graph' && (value === 'line' || value === 'bar');
+    case 'graphColor':
+      return elementType === 'graph' && typeof value === 'string';
+    case 'showAvgLine':
+    case 'graphAnimationEnabled':
+      return elementType === 'graph' && typeof value === 'boolean';
+    case 'graphSpeed':
+      return (
+        elementType === 'graph' &&
+        Number.isSafeInteger(value) &&
+        (value as number) >= 0 &&
+        (value as number) <= 4_294_967_295
+      );
+    case 'reverse':
+      return elementType === 'knob' && typeof value === 'boolean';
+    case 'sensitivity':
+      return (
+        elementType === 'knob' &&
+        typeof value === 'number' &&
+        Number.isFinite(value)
+      );
+    case 'axisId':
+      return elementType === 'knob' && typeof value === 'string';
+    case 'fontWeight':
+      return (
+        Number.isSafeInteger(value) &&
+        (value as number) >= 0 &&
+        (value as number) <= 4_294_967_295
+      );
+    case 'fontFamily':
+    case 'displayText':
+    case 'className':
+    case 'fontColor':
+    case 'inactiveImage':
+      return typeof value === 'string';
+    case 'activeFontColor':
+    case 'activeImage':
+      return keyOrKnob && typeof value === 'string';
+    case 'shadow':
+      return elementType !== 'graph' && isEditorShadowValuePatchV1(value);
+    case 'activeShadow':
+      return keyOrKnob && isEditorShadowValuePatchV1(value);
+    case 'shadowEnabled':
+      return elementType !== 'graph' && typeof value === 'boolean';
+    case 'backgroundPaint':
+    case 'borderPaint':
+      return isEditorPaintDescriptorV1(value);
+    case 'activeBackgroundPaint':
+    case 'activeBorderPaint':
+      return keyOrKnob && isEditorPaintDescriptorV1(value);
+    case 'borderWidth':
+      return (
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= 20
+      );
+    case 'borderRadius':
+      return (
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= (elementType === 'knob' ? 999 : 100)
+      );
+    case 'fontSize':
+      return (
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
+        value >= 8 &&
+        value <= 72
+      );
+    case 'activeTransparent':
+      return keyOrKnob && typeof value === 'boolean';
+    case 'idleImageFit':
+      return ['cover', 'contain', 'fill', 'none'].includes(value as string);
+    case 'activeImageFit':
+      return (
+        keyOrKnob &&
+        ['cover', 'contain', 'fill', 'none'].includes(value as string)
+      );
+    case 'soundPath':
+      return elementType === 'key' && typeof value === 'string';
+    case 'soundEnabled':
+      return elementType === 'key' && typeof value === 'boolean';
+    case 'soundVolume':
+      return (
+        elementType === 'key' &&
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= 200
+      );
+    case 'counterEnabled':
+    case 'counterAnimationEnabled':
+    case 'counterFontItalic':
+    case 'counterFontUnderline':
+    case 'counterFontStrikethrough':
+      return keyOrStat && typeof value === 'boolean';
+    case 'counterPlacement':
+      return keyOrStat && (value === 'inside' || value === 'outside');
+    case 'counterAlign':
+      return (
+        keyOrStat &&
+        ['top', 'bottom', 'left', 'right'].includes(value as string)
+      );
+    case 'counterAlignMode':
+      return keyOrStat && (value === 'center' || value === 'between');
+    case 'counterGap':
+      return (
+        keyOrStat &&
+        Number.isSafeInteger(value) &&
+        (value as number) >= 0 &&
+        (value as number) <= 4_294_967_295
+      );
+    case 'counterFontSize':
+      return (
+        keyOrStat &&
+        Number.isSafeInteger(value) &&
+        (value as number) >= 8 &&
+        (value as number) <= 72
+      );
+    case 'counterFontWeight':
+      return (
+        keyOrStat &&
+        Number.isSafeInteger(value) &&
+        (value as number) >= 100 &&
+        (value as number) <= 900
+      );
+    case 'counterFontFamily':
+    case 'counterStrokeIdle':
+      return keyOrStat && typeof value === 'string';
+    case 'counterStrokeActive':
+      return elementType === 'key' && typeof value === 'string';
+    case 'counterFillIdle':
+      return keyOrStat && isCounterFillDescriptorV1(value);
+    case 'counterFillActive':
+      return elementType === 'key' && isCounterFillDescriptorV1(value);
+    case 'counterAnimationPreset':
+      return keyOrStat && isEditorCounterAnimationPresetIntentV1(value);
+    case 'statType':
+      return elementType === 'stat' && STAT_TYPES.has(value as string);
+    case 'noteEffectEnabled':
+    case 'noteAutoYCorrection':
+    case 'noteGlowEnabled':
+      return elementType === 'key' && typeof value === 'boolean';
+    case 'noteGlowSize':
+      return (
+        elementType === 'key' &&
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= 50
+      );
+    case 'notePaint':
+    case 'noteGlowPaint':
+      return elementType === 'key' && isNotePaintValuePatchV1(value);
+    case 'noteBorderPaint':
+      return elementType === 'key' && isNoteBorderPaintValueV1(value);
+    case 'noteOffsetX':
+    case 'noteOffsetY':
+      return (
+        elementType === 'key' &&
+        (value === null ||
+          (typeof value === 'number' &&
+            Number.isFinite(value) &&
+            value >= -500 &&
+            value <= 500))
+      );
+    case 'noteWidth':
+      return (
+        elementType === 'key' &&
+        (value === null ||
+          (typeof value === 'number' && Number.isFinite(value) && value > 0))
+      );
+    case 'noteBorderWidth':
+      return (
+        elementType === 'key' &&
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= 20
+      );
+    case 'noteBorderRadius':
+      return (
+        elementType === 'key' &&
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
+        value >= 1 &&
+        value <= 100
+      );
+    case 'noteAlignment':
+      return (
+        elementType === 'key' &&
+        ['left', 'center', 'right'].includes(value as string)
+      );
+    case 'noteBorderSide':
+      return (
+        elementType === 'key' &&
+        ['all', 'vertical', 'horizontal'].includes(value as string)
+      );
+    default: {
+      const exhaustive: never = property;
+      return exhaustive;
+    }
+  }
+};
+
+// op wire의 { property, value } 판별 유니온 전체 검증 (구조 + 값 + 대상 타입)
+export const isEditorElementPropertyPatchV1 = (
+  value: unknown,
+  elementType: EditorElementTypeV1,
+): value is EditorElementPropertyPatchV1 => {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).length !== 2 ||
+    !('property' in value) ||
+    !('value' in value) ||
+    typeof value.property !== 'string' ||
+    !EDITOR_ELEMENT_PROPERTY_KEY_SET.has(value.property)
+  ) {
+    return false;
+  }
+  return isEditorElementPropertyValueValid(
+    value.property as EditorElementPropertyKeyV1,
+    value.value,
+    elementType,
+  );
+};
+
 export function assertEditorOpsV1(
   value: unknown,
   label = 'editor ops',
@@ -1320,364 +1718,12 @@ export function assertEditorOpsV1(
         throw new EditorProtocolError(`${opLabel} target is invalid`);
       }
       assertUniqueDirectTarget(op.id, opLabel);
-      const patchKeys = Object.keys(op.patch);
-      const notePaintPatchValid = (
-        isNotePaintPropertyPatchV1 as (value: unknown) => boolean
-      )(op.patch);
-      const counterFillPatchValid = (
-        isCounterFillPropertyPatchV1 as (value: unknown) => boolean
-      )(op.patch);
-      const fontColorPatchValid = (
-        isFontColorPropertyPatchV1 as (value: unknown) => boolean
-      )(op.patch);
-      const counterAnimationPreset = op.patch.counterAnimationPreset;
-      const counterAnimationPresetValid = (() => {
-        if (!isRecord(counterAnimationPreset)) return false;
-        const keys = Object.keys(counterAnimationPreset);
-        if (
-          !keys.includes('presetId') ||
-          keys.some(
-            (key) =>
-              ![
-                'presetId',
-                'applyPresetId',
-                'bezier',
-                'scale',
-                'durationMs',
-              ].includes(key),
-          ) ||
-          typeof counterAnimationPreset.presetId !== 'string' ||
-          counterAnimationPreset.presetId.length === 0
-        ) {
-          return false;
-        }
-        if (
-          'applyPresetId' in counterAnimationPreset &&
-          counterAnimationPreset.applyPresetId !== true
-        ) {
-          return false;
-        }
-        if (
-          'bezier' in counterAnimationPreset &&
-          (!Array.isArray(counterAnimationPreset.bezier) ||
-            counterAnimationPreset.bezier.length !== 4 ||
-            !counterAnimationPreset.bezier.every(
-              (value, index) =>
-                typeof value === 'number' &&
-                Number.isFinite(value) &&
-                (index === 0 || index === 2
-                  ? value >= 0 && value <= 1
-                  : value >= -2 && value <= 2),
-            ))
-        ) {
-          return false;
-        }
-        if (
-          'scale' in counterAnimationPreset &&
-          (typeof counterAnimationPreset.scale !== 'number' ||
-            !Number.isFinite(counterAnimationPreset.scale))
-        ) {
-          return false;
-        }
-        if (
-          'durationMs' in counterAnimationPreset &&
-          (!Number.isSafeInteger(counterAnimationPreset.durationMs) ||
-            (counterAnimationPreset.durationMs as number) < 1 ||
-            (counterAnimationPreset.durationMs as number) > 5000)
-        ) {
-          return false;
-        }
-        return true;
-      })();
-      const patchIsValid =
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'hidden' &&
-          typeof op.patch.hidden === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'layerName' &&
-          (typeof op.patch.layerName === 'string' ||
-            op.patch.layerName === null)) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'graphType' &&
-          op.elementType === 'graph' &&
-          (op.patch.graphType === 'line' || op.patch.graphType === 'bar')) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'graphColor' &&
-          op.elementType === 'graph' &&
-          typeof op.patch.graphColor === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'showAvgLine' &&
-          op.elementType === 'graph' &&
-          typeof op.patch.showAvgLine === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'graphAnimationEnabled' &&
-          op.elementType === 'graph' &&
-          typeof op.patch.graphAnimationEnabled === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'graphSpeed' &&
-          op.elementType === 'graph' &&
-          Number.isSafeInteger(op.patch.graphSpeed) &&
-          (op.patch.graphSpeed as number) >= 0 &&
-          (op.patch.graphSpeed as number) <= 4_294_967_295) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'reverse' &&
-          op.elementType === 'knob' &&
-          typeof op.patch.reverse === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'sensitivity' &&
-          op.elementType === 'knob' &&
-          typeof op.patch.sensitivity === 'number' &&
-          Number.isFinite(op.patch.sensitivity)) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'axisId' &&
-          op.elementType === 'knob' &&
-          typeof op.patch.axisId === 'string') ||
-        (isEditorPaintPropertyPatchV1(op.patch) &&
-          (!('activeBackgroundPaint' in op.patch) &&
-          !('activeBorderPaint' in op.patch)
-            ? true
-            : op.elementType === 'key' || op.elementType === 'knob')) ||
-        (isEditorShadowPropertyPatchV1(op.patch) &&
-          op.elementType !== 'graph' &&
-          (!('activeShadow' in op.patch) ||
-            op.elementType === 'key' ||
-            op.elementType === 'knob')) ||
-        (notePaintPatchValid && op.elementType === 'key') ||
-        (counterFillPatchValid &&
-          (op.elementType === 'key' ||
-            (!('counterFillActive' in op.patch) &&
-              op.elementType === 'stat'))) ||
-        (fontColorPatchValid &&
-          (!('activeFontColor' in op.patch) ||
-            op.elementType === 'key' ||
-            op.elementType === 'knob')) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'displayText' &&
-          typeof op.patch.displayText === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'className' &&
-          typeof op.patch.className === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'borderWidth' &&
-          typeof op.patch.borderWidth === 'number' &&
-          Number.isFinite(op.patch.borderWidth) &&
-          op.patch.borderWidth >= 0 &&
-          op.patch.borderWidth <= 20) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'borderRadius' &&
-          typeof op.patch.borderRadius === 'number' &&
-          Number.isFinite(op.patch.borderRadius) &&
-          op.patch.borderRadius >= 0 &&
-          op.patch.borderRadius <= (op.elementType === 'knob' ? 999 : 100)) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'fontSize' &&
-          typeof op.patch.fontSize === 'number' &&
-          Number.isFinite(op.patch.fontSize) &&
-          op.patch.fontSize >= 8 &&
-          op.patch.fontSize <= 72) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteGlowSize' &&
-          op.elementType === 'key' &&
-          typeof op.patch.noteGlowSize === 'number' &&
-          Number.isFinite(op.patch.noteGlowSize) &&
-          op.patch.noteGlowSize >= 0 &&
-          op.patch.noteGlowSize <= 50) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteOffsetX' &&
-          op.elementType === 'key' &&
-          (op.patch.noteOffsetX === null ||
-            (typeof op.patch.noteOffsetX === 'number' &&
-              Number.isFinite(op.patch.noteOffsetX) &&
-              op.patch.noteOffsetX >= -500 &&
-              op.patch.noteOffsetX <= 500))) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteOffsetY' &&
-          op.elementType === 'key' &&
-          (op.patch.noteOffsetY === null ||
-            (typeof op.patch.noteOffsetY === 'number' &&
-              Number.isFinite(op.patch.noteOffsetY) &&
-              op.patch.noteOffsetY >= -500 &&
-              op.patch.noteOffsetY <= 500))) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteWidth' &&
-          op.elementType === 'key' &&
-          (op.patch.noteWidth === null ||
-            (typeof op.patch.noteWidth === 'number' &&
-              Number.isFinite(op.patch.noteWidth) &&
-              op.patch.noteWidth > 0))) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteBorderWidth' &&
-          op.elementType === 'key' &&
-          typeof op.patch.noteBorderWidth === 'number' &&
-          Number.isFinite(op.patch.noteBorderWidth) &&
-          op.patch.noteBorderWidth >= 0 &&
-          op.patch.noteBorderWidth <= 20) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteBorderRadius' &&
-          op.elementType === 'key' &&
-          typeof op.patch.noteBorderRadius === 'number' &&
-          Number.isFinite(op.patch.noteBorderRadius) &&
-          op.patch.noteBorderRadius >= 1 &&
-          op.patch.noteBorderRadius <= 100) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'soundEnabled' &&
-          op.elementType === 'key' &&
-          typeof op.patch.soundEnabled === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'soundPath' &&
-          op.elementType === 'key' &&
-          typeof op.patch.soundPath === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'soundVolume' &&
-          op.elementType === 'key' &&
-          typeof op.patch.soundVolume === 'number' &&
-          Number.isFinite(op.patch.soundVolume) &&
-          op.patch.soundVolume >= 0 &&
-          op.patch.soundVolume <= 200) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'inactiveImage' &&
-          typeof op.patch.inactiveImage === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'activeImage' &&
-          (op.elementType === 'key' || op.elementType === 'knob') &&
-          typeof op.patch.activeImage === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'idleTransparent' &&
-          typeof op.patch.idleTransparent === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'activeTransparent' &&
-          (op.elementType === 'key' || op.elementType === 'knob') &&
-          typeof op.patch.activeTransparent === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'idleImageFit' &&
-          ['cover', 'contain', 'fill', 'none'].includes(
-            op.patch.idleImageFit as string,
-          )) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'activeImageFit' &&
-          (op.elementType === 'key' || op.elementType === 'knob') &&
-          ['cover', 'contain', 'fill', 'none'].includes(
-            op.patch.activeImageFit as string,
-          )) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterEnabled' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          typeof op.patch.counterEnabled === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterAnimationEnabled' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          typeof op.patch.counterAnimationEnabled === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterPlacement' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          (op.patch.counterPlacement === 'inside' ||
-            op.patch.counterPlacement === 'outside')) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterAlign' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          ['top', 'bottom', 'left', 'right'].includes(
-            op.patch.counterAlign as string,
-          )) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterAlignMode' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          (op.patch.counterAlignMode === 'center' ||
-            op.patch.counterAlignMode === 'between')) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterGap' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          Number.isSafeInteger(op.patch.counterGap) &&
-          (op.patch.counterGap as number) >= 0 &&
-          (op.patch.counterGap as number) <= 4_294_967_295) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterFontSize' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          Number.isSafeInteger(op.patch.counterFontSize) &&
-          (op.patch.counterFontSize as number) >= 8 &&
-          (op.patch.counterFontSize as number) <= 72) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterFontWeight' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          Number.isSafeInteger(op.patch.counterFontWeight) &&
-          (op.patch.counterFontWeight as number) >= 100 &&
-          (op.patch.counterFontWeight as number) <= 900) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterFontItalic' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          typeof op.patch.counterFontItalic === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterFontUnderline' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          typeof op.patch.counterFontUnderline === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterFontStrikethrough' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          typeof op.patch.counterFontStrikethrough === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterFontFamily' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          typeof op.patch.counterFontFamily === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterStrokeIdle' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          typeof op.patch.counterStrokeIdle === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterStrokeActive' &&
-          op.elementType === 'key' &&
-          typeof op.patch.counterStrokeActive === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'counterAnimationPreset' &&
-          (op.elementType === 'key' || op.elementType === 'stat') &&
-          counterAnimationPresetValid) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'useInlineStyles' &&
-          typeof op.patch.useInlineStyles === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'fontWeight' &&
-          Number.isSafeInteger(op.patch.fontWeight) &&
-          (op.patch.fontWeight as number) >= 0 &&
-          (op.patch.fontWeight as number) <= 4_294_967_295) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'fontItalic' &&
-          typeof op.patch.fontItalic === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'fontUnderline' &&
-          typeof op.patch.fontUnderline === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'fontStrikethrough' &&
-          typeof op.patch.fontStrikethrough === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'fontFamily' &&
-          typeof op.patch.fontFamily === 'string') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteEffectEnabled' &&
-          op.elementType === 'key' &&
-          typeof op.patch.noteEffectEnabled === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteAutoYCorrection' &&
-          op.elementType === 'key' &&
-          typeof op.patch.noteAutoYCorrection === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteGlowEnabled' &&
-          op.elementType === 'key' &&
-          typeof op.patch.noteGlowEnabled === 'boolean') ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteAlignment' &&
-          op.elementType === 'key' &&
-          ['left', 'center', 'right'].includes(
-            op.patch.noteAlignment as string,
-          )) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'noteBorderSide' &&
-          op.elementType === 'key' &&
-          ['all', 'vertical', 'horizontal'].includes(
-            op.patch.noteBorderSide as string,
-          )) ||
-        (patchKeys.length === 1 &&
-          patchKeys[0] === 'statType' &&
-          op.elementType === 'stat' &&
-          STAT_TYPES.has(op.patch.statType as string));
-      if (!patchIsValid) {
+      if (
+        !isEditorElementPropertyPatchV1(
+          op.patch,
+          op.elementType as EditorElementTypeV1,
+        )
+      ) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }
       return;

@@ -51,14 +51,12 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
-import { resolveElementShadowForPosition } from '@src/types/key/shadows';
+import {
+  elementShadowLeafFromPartial,
+  resolveElementShadowForPosition,
+} from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-import type {
-  EditorFontColorPropertyPatchV1,
-  EditorShadowPropertyPatchV1,
-} from '@src/types/editor';
-
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
 const SOUND_PAGE_KEY = 'single-style:sound';
@@ -424,9 +422,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
     if (target === 'fontColor') {
       onFontColorCommit?.(
-        (prop === 'activeFontColor'
-          ? { activeFontColor: color }
-          : { fontColor: color }) as EditorFontColorPropertyPatchV1,
+        prop === 'activeFontColor'
+          ? { property: 'activeFontColor', value: color }
+          : { property: 'fontColor', value: color },
       );
     }
   };
@@ -468,7 +466,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         ? 'backgroundPaint'
         : 'borderPaint';
     setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-    onPaintCommit?.({ [paintField]: descriptor } as never);
+    onPaintCommit?.({ property: paintField, value: descriptor } as never);
   };
 
   const gradientState = useGradientColorState({
@@ -530,10 +528,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     ) {
       onStylePropertyPreview(
         property === 'borderWidth'
-          ? { borderWidth: value }
+          ? { property: 'borderWidth', value }
           : property === 'borderRadius'
-          ? { borderRadius: value }
-          : { fontSize: value },
+          ? { property: 'borderRadius', value }
+          : { property: 'fontSize', value },
       );
       return;
     }
@@ -561,10 +559,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     ) {
       onStylePropertyCommit(
         property === 'borderWidth'
-          ? { borderWidth: value }
+          ? { property: 'borderWidth', value }
           : property === 'borderRadius'
-          ? { borderRadius: value }
-          : { fontSize: value },
+          ? { property: 'borderRadius', value }
+          : { property: 'fontSize', value },
       );
       return;
     }
@@ -606,20 +604,20 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
-    onStylePropertyPreview?.({ displayText: value });
+    onStylePropertyPreview?.({ property: 'displayText', value: value });
   };
 
   const handleDisplayTextBlur = (value: string) => {
-    onStylePropertyCommit?.({ displayText: value });
+    onStylePropertyCommit?.({ property: 'displayText', value: value });
   };
 
   // 클래스명 핸들러
   const handleClassNameChange = (value: string) => {
-    onStylePropertyPreview?.({ className: value });
+    onStylePropertyPreview?.({ property: 'className', value: value });
   };
 
   const handleClassNameBlur = (value: string) => {
-    onStylePropertyCommit?.({ className: value });
+    onStylePropertyCommit?.({ property: 'className', value: value });
   };
 
   // 이미지 피커 열림 상태 (외부 또는 내부)
@@ -894,12 +892,16 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         activeShadow={activeShadow}
         showActiveState={shadowActiveState}
         onChange={(state, _shadow, patch) => {
-          onShadowCommit?.({
-            [state === 'active' ? 'activeShadow' : 'shadow']: patch,
-          } as EditorShadowPropertyPatchV1);
+          const leaf = elementShadowLeafFromPartial(patch);
+          if (!leaf) return;
+          onShadowCommit?.(
+            state === 'active'
+              ? { property: 'activeShadow', value: leaf }
+              : { property: 'shadow', value: leaf },
+          );
         }}
         onEnabledChange={(enabled) => {
-          onShadowCommit?.({ shadowEnabled: enabled });
+          onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
         }}
         panelElement={panelElement}
         t={t}
