@@ -5003,20 +5003,32 @@ describe('commitSemanticOpsInternal', () => {
     const id = '00000000-0000-4000-8000-000000000089';
     const harness = createHarness(withStableId(id));
     await harness.coordinator.start();
-    harness.transport.commitMock.mockResolvedValueOnce({
-      revision: 1,
-      changedFields: [],
-      opResults: [{ status: 'applied' }],
-    });
+    harness.transport.commitMock
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'applied' }],
+      })
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'applied' }],
+      });
     await expect(
       harness.coordinator.commitSemanticOpsInternal([reorderKeyOp(id, 14)]),
     ).rejects.toBeInstanceOf(EditorProtocolError);
 
-    harness.transport.commitMock.mockResolvedValueOnce({
-      revision: 1,
-      changedFields: [],
-      opResults: [{ status: 'targetMissing' }],
-    });
+    harness.transport.commitMock
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'targetMissing' }],
+      })
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'targetMissing' }],
+      });
     await expect(
       harness.coordinator.commitSemanticOpsInternal([reorderKeyOp(id, 14)]),
     ).rejects.toBeInstanceOf(EditorProtocolError);
@@ -5162,11 +5174,17 @@ describe('commitSemanticOpsInternal', () => {
     base.layerGroups = { '4key': [{ id: 'group-a', name: 'Group A' }] };
     const harness = createHarness(base);
     await harness.coordinator.start();
-    harness.transport.commitMock.mockResolvedValueOnce({
-      revision: 1,
-      changedFields: ['keys', 'keyPositions', 'layerGroups'],
-      opResults: [{ status: 'applied' }],
-    });
+    harness.transport.commitMock
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: ['keys', 'keyPositions', 'layerGroups'],
+        opResults: [{ status: 'applied' }],
+      })
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: ['keys', 'keyPositions', 'layerGroups'],
+        opResults: [{ status: 'applied' }],
+      });
 
     await expect(
       harness.coordinator.commitSemanticOpsInternal([deleteElementOp(id)]),
@@ -5671,11 +5689,11 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
-  it('opResults의 applied 집합과 다른 changedFields를 영구 protocol 오류로 거절한다', async () => {
+  it('opResults의 applied 집합과 다른 changedFields는 재전송 후 transient protocol 오류로 남긴다', async () => {
     const id = '00000000-0000-4000-8000-000000000107';
     const harness = createHarness(withStableId(id));
     await harness.coordinator.start();
-    harness.transport.commitMock.mockResolvedValueOnce({
+    harness.transport.commitMock.mockResolvedValue({
       revision: 1,
       changedFields: [],
       opResults: [{ status: 'applied', bounds: setBoundsOp(id).bounds }],
@@ -5684,11 +5702,251 @@ describe('commitSemanticOpsInternal', () => {
     await expect(
       harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)]),
     ).rejects.toBeInstanceOf(EditorProtocolError);
-    expect(harness.transport.commitMock).toHaveBeenCalledOnce();
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
     expect(harness.coordinator.getState()).toMatchObject({
       phase: 'error',
-      failureKind: 'permanent',
+      failureKind: 'transient',
     });
+    harness.coordinator.stop();
+  });
+
+  it('두 번의 protocol 응답 실패 후 canonical 조회도 실패하면 재시도 상태와 게스처를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000116';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const protocolError = new EditorProtocolError('malformed commit response');
+    harness.transport.commitMock.mockRejectedValue(protocolError);
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('canonical unavailable'),
+    );
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'unconfirmed-preview',
+      }),
+    ).rejects.toBe(protocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    expect(harness.applications).not.toContainEqual(
+      expect.objectContaining({ reason: 'rejected' }),
+    );
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'error',
+      failureKind: 'transient',
+    });
+    expect(onGestureIdsDiscarded).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('canonical에 semantic 의도가 없으면 영구 실패 대신 재시도 상태로 남긴다', async () => {
+    const id = '00000000-0000-4000-8000-000000000117';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValue(
+      new EditorProtocolError('malformed commit response'),
+    );
+    harness.transport.canonical.revision = 1;
+    harness.transport.canonical.document.keys['4key'][0] = 'external';
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'mismatch-preview',
+      }),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal()).toMatchObject({
+      keys: { '4key': ['external'] },
+      keyPositions: {
+        '4key': [expect.not.objectContaining(setBoundsOp(id).bounds)],
+      },
+    });
+    expect(harness.applications.at(-1)).toMatchObject({ reason: 'resync' });
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'error',
+      failureKind: 'transient',
+    });
+    expect(onGestureIdsDiscarded).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('저장 후 응답 검증이 실패하면 같은 mutation을 재전송해 정상 ack으로 정산한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000112';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    let acknowledged: EditorCommitResult | null = null;
+    harness.transport.commitMock
+      .mockImplementationOnce(async (request) => {
+        acknowledged = await original(request);
+        throw new EditorProtocolError('malformed commit response');
+      })
+      .mockImplementationOnce(async () => structuredClone(acknowledged!));
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(
+      [setBoundsOp(id)],
+      {
+        gestureId: 'protocol-preview',
+      },
+    );
+
+    expect(outcome.opResults).toEqual([
+      { status: 'applied', bounds: setBoundsOp(id).bounds },
+    ]);
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    expect(harness.transport.getMock).toHaveBeenCalledOnce();
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      failureKind: null,
+      error: null,
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('두 번의 changedFields 교차 검증이 실패해도 canonical에 의도가 반영됐으면 거짓 영구 실패를 남기지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000113';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    let malformed: EditorCommitResult | null = null;
+    harness.transport.commitMock.mockImplementation(async (request) => {
+      if (!malformed) {
+        const result = await original(request);
+        malformed = { ...result, changedFields: [] };
+      }
+      return structuredClone(malformed);
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'changed-fields-preview',
+      }),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    expect(harness.applications.at(-1)).toMatchObject({ reason: 'resync' });
+    expect(harness.applications).not.toContainEqual(
+      expect.objectContaining({ reason: 'rejected' }),
+    );
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      failureKind: null,
+      error: null,
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith([
+      'changed-fields-preview',
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('동일 revision의 noChange 의도도 canonical으로 확인해 거짓 영구 실패를 막는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000114';
+    const onGestureIdsDiscarded = vi.fn();
+    const base = withStableId(id);
+    Object.assign(base.keyPositions['4key'][0], setBoundsOp(id).bounds);
+    const harness = createHarness(base, {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValue({
+      revision: 0,
+      changedFields: ['keyPositions'],
+      opResults: [{ status: 'noChange', bounds: setBoundsOp(id).bounds }],
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'no-change-preview',
+      }),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.applications.at(-1)).toMatchObject({ reason: 'resync' });
+    expect(harness.applications).not.toContainEqual(
+      expect.objectContaining({ reason: 'rejected' }),
+    );
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      failureKind: null,
+      error: null,
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['no-change-preview']);
+    harness.coordinator.stop();
+  });
+
+  it('다른 필드의 동시 커밋을 보존하면서 semantic 의도 반영을 확인한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000115';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    let malformed: EditorCommitResult | null = null;
+    harness.transport.commitMock.mockImplementation(async (request) => {
+      if (!malformed) {
+        const result = await original(request);
+        harness.transport.canonical.revision = result.revision + 1;
+        harness.transport.canonical.document.keys['4key'][0] = 'external';
+        malformed = { ...result, changedFields: [] };
+      }
+      return structuredClone(malformed);
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'concurrent-preview',
+      }),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal()).toMatchObject({
+      keys: { '4key': ['external'] },
+      keyPositions: {
+        '4key': [expect.objectContaining(setBoundsOp(id).bounds)],
+      },
+    });
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      failureKind: null,
+      error: null,
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['concurrent-preview']);
     harness.coordinator.stop();
   });
 

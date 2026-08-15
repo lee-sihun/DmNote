@@ -1482,27 +1482,31 @@ export class EditorSaveCoordinator {
         }
       }
 
-      let ioRetryCount = 0;
+      let outcomeUnknownRetryCount = 0;
       try {
         let result: EditorCommitResult;
+        let opResults: EditorOpResultV1[];
         while (true) {
           try {
             result = await this.transport.commit(request);
+            assertEditorOpCommitResult(result, ops);
+            opResults = clone(result.opResults!);
+            this.assertSemanticChangedFields(
+              baseDocument,
+              ops,
+              opResults,
+              result,
+            );
             break;
           } catch (error) {
             const outcomeUnknown =
-              (!isEditorCommitError(error) &&
-                !(error instanceof EditorProtocolError)) ||
-              (isEditorCommitError(error) && error.errorCode === 'IO_ERROR');
-            if (!outcomeUnknown || ioRetryCount >= 1) throw error;
-            ioRetryCount += 1;
+              !isEditorCommitError(error) || error.errorCode === 'IO_ERROR';
+            if (!outcomeUnknown || outcomeUnknownRetryCount >= 1) throw error;
+            outcomeUnknownRetryCount += 1;
             totalRetryCount += 1;
           }
         }
 
-        assertEditorOpCommitResult(result, ops);
-        const opResults = clone(result.opResults!);
-        this.assertSemanticChangedFields(baseDocument, ops, opResults, result);
         const hasMissing = opResults.some(
           (opResult) => opResult.status === 'targetMissing',
         );
@@ -1560,16 +1564,40 @@ export class EditorSaveCoordinator {
         if (!isEditorCommitError(error) || error.errorCode !== 'IO_ERROR') {
           this.ownMutations.delete(mutationId);
         }
+        let canonical: CanonicalEditorGetResult | null = null;
         try {
-          await this.syncSemanticCanonical();
+          canonical = await this.syncSemanticCanonical();
         } catch {
           // 원래 커밋 오류를 유지
-          this.applyDocument(clone(this.requireLastAck()), 'rejected');
+          if (!(error instanceof EditorProtocolError)) {
+            this.applyDocument(clone(this.requireLastAck()), 'rejected');
+          }
+        }
+        const protocolOutcomeReflected =
+          error instanceof EditorProtocolError &&
+          canonical !== null &&
+          getChangedEditorFields(
+            canonical.document,
+            applySemanticOps(canonical.document, ops),
+          ).length === 0;
+        if (protocolOutcomeReflected) {
+          if (inFlight.gestureIds.length > 0) {
+            this.onGestureIdsDiscarded?.(inFlight.gestureIds);
+          }
+          this.error = null;
+          this.failureKind = null;
+          this.phase = 'idle';
+          this.notify();
+          throw error;
         }
         const retryable =
+          error instanceof EditorProtocolError ||
+          !isEditorCommitError(error) ||
+          error.retryable === true;
+        if (
           !(error instanceof EditorProtocolError) &&
-          (!isEditorCommitError(error) || error.retryable === true);
-        if (inFlight.gestureIds.length > 0) {
+          inFlight.gestureIds.length > 0
+        ) {
           this.onGestureIdsDiscarded?.(inFlight.gestureIds);
         }
         this.error = error;
