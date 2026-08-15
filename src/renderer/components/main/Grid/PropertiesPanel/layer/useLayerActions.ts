@@ -349,9 +349,11 @@ export function useLayerActions({
     ];
 
     if (selectedElements.length >= 2 && !contextMenuItem?.groupId) {
+      // 플러그인만 선택이면 그룹화 비활성
       items.push({
         id: 'groupSelected',
         label: t('contextMenu.groupSelected') || 'Group',
+        disabled: !selectedElements.some((el) => el.type !== 'plugin'),
       });
     }
 
@@ -503,8 +505,9 @@ export function useLayerActions({
       if (!stableGroup.stable) return;
       const singleGroupId = stableGroup.groupId;
 
+      let changed = false;
       if (singleGroupId) {
-        await setGroupIdOnSelected(singleGroupId);
+        changed = await setGroupIdOnSelected(singleGroupId);
       } else {
         const groupId = crypto.randomUUID();
         const groupName = buildNextLayerGroupName(
@@ -516,10 +519,18 @@ export function useLayerActions({
           [selectedKeyType]: [...modeGroups, { id: groupId, name: groupName }],
         };
 
-        await setGroupIdOnSelected(groupId, undefined, {
+        changed = await setGroupIdOnSelected(groupId, undefined, {
           historyLayerGroups: currentGroups,
           layerGroupsForNormalization: nextGroups,
         });
+      }
+
+      // 플러그인은 groupId 스키마가 없어 그룹 대상에서 제외 - 혼합 선택 성공 시 1회 알림
+      if (
+        changed &&
+        selectedElements.some((element) => element.type === 'plugin')
+      ) {
+        window.__dmn_showAlert?.(t('layerGroup.pluginNotIncluded'));
       }
 
       setContextMenuOpen(false);

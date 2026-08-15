@@ -40,6 +40,7 @@ interface UseGridKeyboardParams {
   onMoveForward?: () => void | Promise<void>;
   onMoveBackward?: () => void | Promise<void>;
   newGroupLabel?: string;
+  pluginExclusionNotice?: string;
   continuousInputStrategy?: 'sync' | 'frame';
 }
 
@@ -58,6 +59,7 @@ export function useGridKeyboard({
   onMoveForward,
   onMoveBackward,
   newGroupLabel = 'New Group',
+  pluginExclusionNotice,
   continuousInputStrategy = 'frame',
 }: UseGridKeyboardParams): void {
   const lastArrowKeyTime = useRef(0);
@@ -138,7 +140,12 @@ export function useGridKeyboard({
         if (selectedElements.length < 2) return;
 
         const selectedKeyType = useKeyStore.getState().selectedKeyType;
-        groupSelectedElements(selectedKeyType, selectedElements, newGroupLabel);
+        groupSelectedElements(
+          selectedKeyType,
+          selectedElements,
+          newGroupLabel,
+          pluginExclusionNotice,
+        );
         return;
       }
 
@@ -266,6 +273,7 @@ export function useGridKeyboard({
     onMoveForward,
     onMoveBackward,
     newGroupLabel,
+    pluginExclusionNotice,
     selectionSignature,
     continuousInputStrategy,
   ]);

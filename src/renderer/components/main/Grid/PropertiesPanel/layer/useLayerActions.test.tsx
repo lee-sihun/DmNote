@@ -483,6 +483,34 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
+  it('plugin-only 다중 선택은 groupSelected 메뉴 항목을 비활성화한다', async () => {
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'plugin', id: 'plugin-a:item' },
+        { type: 'plugin', id: 'plugin-b:item' },
+      ],
+    });
+    await exposeWithItems([]);
+
+    const pluginOnlyItem = actions.contextMenuItems.find(
+      (item) => item.id === 'groupSelected',
+    );
+    expect(pluginOnlyItem?.disabled).toBe(true);
+
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: STABLE_ID, index: 0 },
+        { type: 'plugin', id: 'plugin-a:item' },
+      ],
+    });
+    await exposeWithItems([]);
+
+    const mixedItem = actions.contextMenuItems.find(
+      (item) => item.id === 'groupSelected',
+    );
+    expect(mixedItem?.disabled).toBe(false);
+  });
+
   it('group rename은 main과 panel dedicated semantic route를 쓴다', async () => {
     useLayerGroupStore.setState({
       layerGroups: { '4key': [{ id: 'group-a', name: 'Before' }] },

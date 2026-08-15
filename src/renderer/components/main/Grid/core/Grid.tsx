@@ -25,7 +25,7 @@ import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
-import ListPopup from '../../Modal/ListPopup';
+import ListPopup, { type ListItem } from '../../Modal/ListPopup';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -419,6 +419,7 @@ const Grid = ({
     onMoveForward: handleSelectedMoveForward,
     onMoveBackward: handleSelectedMoveBackward,
     newGroupLabel: t('layerGroup.newGroup') || 'New Group',
+    pluginExclusionNotice: t('layerGroup.pluginNotIncluded'),
   });
 
   // 키 컨텍스트 메뉴
@@ -446,7 +447,7 @@ const Grid = ({
   } | null>(null);
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const mixedSelectionMenuItems = (() => {
-    const items = [
+    const items: ListItem[] = [
       { id: 'delete', label: t('contextMenu.deleteSelected') },
       { id: 'duplicate', label: t('contextMenu.duplicateSelected') },
     ];
@@ -488,10 +489,11 @@ const Grid = ({
         // 모두 같은 그룹 → 그룹 해제만
         items.push({ id: 'ungroupSelected', label: t('contextMenu.ungroup') });
       } else if (!anyInGroup) {
-        // 그룹 없음 → 그룹화만
+        // 그룹 없음 → 그룹화만 (플러그인만 선택이면 비활성)
         items.push({
           id: 'groupSelected',
           label: t('contextMenu.groupSelected'),
+          disabled: !selectedElements.some((el) => el.type !== 'plugin'),
         });
       } else {
         // 혼합 → 둘 다
@@ -1782,6 +1784,7 @@ const Grid = ({
                   selectedKeyType,
                   selectedElements,
                   t('layerGroup.newGroup') || 'New Group',
+                  t('layerGroup.pluginNotIncluded'),
                 );
               } else if (id === 'ungroupSelected') {
                 await ungroupSelectedElements(

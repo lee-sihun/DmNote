@@ -357,7 +357,8 @@
   },
   "layerGroup": {
     "defaultName": "Group",
-    "newGroup": "New Group"
+    "newGroup": "New Group",
+    "pluginNotIncluded": "Plugin elements were not included in the group."
   },
   "noteColor": {
     "color": "Color",

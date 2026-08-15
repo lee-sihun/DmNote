@@ -53,12 +53,14 @@ const currentGroupId = (
 
 /**
  * 선택된 요소들을 그룹화
+ * @param pluginExclusionNotice 혼합 선택 성공 시 플러그인 제외 알림 문구 (미전달 시 무알림)
  * @returns 변경이 있었는지 여부
  */
 export async function groupSelectedElements(
   selectedKeyType: string,
   selectedElements: SelectedElement[],
   newGroupLabel: string,
+  pluginExclusionNotice?: string,
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
 
@@ -82,9 +84,18 @@ export async function groupSelectedElements(
           currentLayerGroups[selectedKeyType] ?? [],
         ),
       } as const);
-  return window.__dmn_window_type === 'panel'
+  const changed = await (window.__dmn_window_type === 'panel'
     ? setElementGroupsViaAuthority(selectedKeyType, stableTargets, targetGroup)
-    : setElementGroupsByTargets(selectedKeyType, stableTargets, targetGroup);
+    : setElementGroupsByTargets(selectedKeyType, stableTargets, targetGroup));
+  // 플러그인은 groupId 스키마가 없어 그룹 대상에서 제외 - 혼합 선택 성공 시 1회 알림
+  if (
+    changed &&
+    pluginExclusionNotice &&
+    selectedElements.some((element) => element.type === 'plugin')
+  ) {
+    window.__dmn_showAlert?.(pluginExclusionNotice);
+  }
+  return changed;
 }
 
 /**

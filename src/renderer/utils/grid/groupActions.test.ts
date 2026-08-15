@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
@@ -141,5 +142,73 @@ describe('grid group structural routes', () => {
     expect(mocks.setElementGroups).not.toHaveBeenCalled();
     expect(mocks.setElementGroupsViaAuthority).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  describe('plugin exclusion notice', () => {
+    const NOTICE = 'Plugin elements were not included in the group.';
+    const showAlert = vi.fn();
+    const mixedSelection: SelectedElement[] = [
+      { type: 'key', id: ID_A, index: 0 },
+      { type: 'plugin', id: 'plugin-a:item' },
+    ];
+
+    beforeEach(() => {
+      showAlert.mockClear();
+      window.__dmn_showAlert = showAlert;
+    });
+
+    afterEach(() => {
+      delete window.__dmn_showAlert;
+    });
+
+    it('혼합 선택 그룹화 성공 시 전달된 문구로 알림을 1회 호출한다', async () => {
+      await expect(
+        groupSelectedElements('4key', mixedSelection, 'New Group', NOTICE),
+      ).resolves.toBe(true);
+
+      expect(showAlert).toHaveBeenCalledTimes(1);
+      expect(showAlert).toHaveBeenCalledWith(NOTICE);
+    });
+
+    it('writer가 false를 반환하면 알림을 호출하지 않는다', async () => {
+      mocks.setElementGroups.mockResolvedValue(false);
+
+      await expect(
+        groupSelectedElements('4key', mixedSelection, 'New Group', NOTICE),
+      ).resolves.toBe(false);
+
+      expect(showAlert).not.toHaveBeenCalled();
+    });
+
+    it('notice 미전달이면 혼합 성공에도 알림이 없다', async () => {
+      await expect(
+        groupSelectedElements('4key', mixedSelection, 'New Group'),
+      ).resolves.toBe(true);
+
+      expect(showAlert).not.toHaveBeenCalled();
+    });
+
+    it('plugin-only 선택은 writer와 알림 모두 호출하지 않는다', async () => {
+      await expect(
+        groupSelectedElements(
+          '4key',
+          [{ type: 'plugin', id: 'plugin-a:item' }],
+          'New Group',
+          NOTICE,
+        ),
+      ).resolves.toBe(false);
+
+      expect(mocks.setElementGroups).not.toHaveBeenCalled();
+      expect(mocks.setElementGroupsViaAuthority).not.toHaveBeenCalled();
+      expect(showAlert).not.toHaveBeenCalled();
+    });
+
+    it('ungroup은 혼합 선택이어도 알림이 없다', async () => {
+      await expect(
+        ungroupSelectedElements('4key', mixedSelection),
+      ).resolves.toBe(true);
+
+      expect(showAlert).not.toHaveBeenCalled();
+    });
   });
 });
