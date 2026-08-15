@@ -13,7 +13,10 @@ import {
   registerDisplayElementInstance,
   unregisterDisplayElementInstance,
 } from './instanceRegistry';
-import { rotatePluginInstancesEditSession } from './instancesCommitQueue';
+import {
+  flushPluginInstancesEditSession,
+  rotatePluginInstancesEditSession,
+} from './instancesCommitQueue';
 import {
   resolveFullId,
   resolveInstance,
@@ -205,6 +208,8 @@ export const displayElementApi = {
       removeElement: (targetId) => {
         rotatePluginInstancesEditSession(pluginId);
         removeDisplayElementInternal(targetId);
+        // 삭제는 discrete 편집 - debounce 대기 없이 즉시 커밋
+        flushPluginInstancesEditSession(pluginId);
       },
       locale: currentLocale,
       t,
@@ -364,6 +369,8 @@ export const displayElementApi = {
       .elements.find((candidate) => candidate.fullId === fullId);
     if (element) rotatePluginInstancesEditSession(element.pluginId);
     removeDisplayElementInternal(fullId);
+    // 삭제는 discrete 편집 - debounce 대기 없이 즉시 커밋
+    if (element) flushPluginInstancesEditSession(element.pluginId);
   },
 
   /**
@@ -392,6 +399,8 @@ export const displayElementApi = {
     elements.forEach((element) => {
       removeDisplayElementInternal(element.fullId);
     });
+    // 일괄 삭제도 discrete 편집 - 마지막에 1회만 즉시 커밋
+    flushPluginInstancesEditSession(pluginId);
   },
 };
 

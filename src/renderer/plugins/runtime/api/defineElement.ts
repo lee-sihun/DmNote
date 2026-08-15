@@ -14,6 +14,7 @@ import {
   type InternalDisplayElementConfig,
 } from '../displayElement/displayElementApi';
 import {
+  applyCanonicalPluginInstances,
   notePluginInstancesMutation,
   registerPluginInstancesReapplier,
 } from '../displayElement/instancesUndoSync';
@@ -21,6 +22,9 @@ import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
 import {
   createPluginInstancesSaveDebounce,
   enqueuePluginInstancesCommit,
+  flushPluginInstancesEditSession,
+  hasActivePluginInstancesEditContext,
+  hasConflictingPluginInstancesGesture,
   isPluginInstancesGestureStaged,
   registerPluginInstancesEditSessionFlush,
   registerPluginInstancesStagedRelease,
@@ -161,6 +165,25 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         ),
       );
 
+    const isHistoryRejection = (error: unknown): boolean => {
+      const message = String(error);
+      return (
+        message.includes('HISTORY_EPOCH_CONFLICT') ||
+        message.includes('HISTORY_IN_PROGRESS')
+      );
+    };
+
+    // barrier 거절 복구 - 큐 잔여 스냅샷을 먼저 폐기해 canonical 되덮기 방지
+    const reapplyCanonicalAfterRejection = async () => {
+      cancelPendingInstanceSave();
+      await applyCanonicalPluginInstances(pluginId, true).catch((pullError) => {
+        console.error(
+          `[Plugin ${pluginId}] Failed to reapply canonical instances:`,
+          pullError,
+        );
+      });
+    };
+
     const commitInstancesInner = async (
       instances: SavedInstance[],
       gestureId: string,
@@ -189,12 +212,16 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         }
       } catch (error) {
         // 낡은 epoch 관측 = barrier(undo·프리셋 복원)와 경합 - barrier가 이긴다
-        // 캡처값 재시도는 undo 직전 상태를 되살리므로 폐기하고 status만 재동기화
-        if (String(error).includes('HISTORY_EPOCH_CONFLICT')) {
+        // 캡처값 재시도는 undo 직전 상태를 되살리므로 폐기하고, 다른 gesture가
+        // 소유 중이 아니면 canonical 재주입으로 메모리와 저장을 재수렴
+        if (isHistoryRejection(error)) {
           console.warn(
             `[Plugin ${pluginId}] Instance save dropped by history barrier`,
           );
           await syncHistoryStatus();
+          if (!hasConflictingPluginInstancesGesture(pluginId, gestureId)) {
+            await reapplyCanonicalAfterRejection();
+          }
           return;
         }
         throw error;
@@ -242,8 +269,11 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                   });
                   noteBackendPluginRevision(result.modelRevision);
                 } catch (error) {
-                  if (String(error).includes('HISTORY_EPOCH_CONFLICT')) {
+                  if (isHistoryRejection(error)) {
                     await syncHistoryStatus();
+                    if (!hasActivePluginInstancesEditContext(pluginId)) {
+                      await reapplyCanonicalAfterRejection();
+                    }
                     return;
                   }
                   throw error;
@@ -345,16 +375,47 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         delayMs: INSTANCE_SAVE_DEBOUNCE_MS,
         save: ({ gestureId, captureCurrentSnapshot }) =>
           saveInstances({ gestureId, captureCurrentSnapshot }),
-        onError: (error) => {
+        // 실패한 스냅샷을 메모리에 방치하면 저장과 화면이 갈라진다 -
+        // 다른 gesture 소유 중이 아니면 canonical로 롤백 (pendingWrite
+        // reject는 debounce가 유지해 종료 drain 실패 전파 계약 보존)
+        onError: (error, { gestureId }) => {
           console.error(
             `[Plugin ${pluginId}] Failed to save instances:`,
             error,
           );
+          if (
+            gestureId !== undefined &&
+            hasConflictingPluginInstancesGesture(pluginId, gestureId)
+          ) {
+            return;
+          }
+          void applyCanonicalPluginInstances(pluginId, true).catch(
+            (pullError) => {
+              console.error(
+                `[Plugin ${pluginId}] Failed to reapply canonical instances:`,
+                pullError,
+              );
+            },
+          );
         },
       });
       let stagedSavePending = false;
+      // staged 중 삼킨 변경도 barrier가 관측하도록 release까지 tracked write 유지
+      let settleStagedPendingWrite: (() => void) | null = null;
+      const noteStagedSavePending = () => {
+        if (stagedSavePending) return;
+        stagedSavePending = true;
+        const pending = new Promise<void>((resolve) => {
+          settleStagedPendingWrite = () => {
+            settleStagedPendingWrite = null;
+            resolve();
+          };
+        });
+        void trackEditorWrite(pending);
+      };
       cancelPendingInstanceSave = () => {
         stagedSavePending = false;
+        settleStagedPendingWrite?.();
         instanceSaveDebounce.cancel();
         instanceSaveGeneration += 1;
       };
@@ -365,12 +426,15 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         }),
       );
       registerCleanup(
-        registerPluginInstancesStagedRelease(pluginId, () => {
+        registerPluginInstancesStagedRelease(pluginId, (gestureId) => {
           if (!stagedSavePending) return;
           stagedSavePending = false;
+          // staged gestureId 계승 + 즉시 flush - release 후 새 세션 분열 방지
           instanceSaveDebounce.schedule(
-            touchPluginInstancesEditSession(pluginId),
+            touchPluginInstancesEditSession(pluginId, gestureId),
           );
+          instanceSaveDebounce.flush();
+          settleStagedPendingWrite?.();
         }),
       );
 
@@ -387,7 +451,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             // 변경 시점 기준으로 edit-session TTL 갱신 - debounce가 세션을 쪼개지 않게
             const gestureId = touchPluginInstancesEditSession(pluginId);
             if (isPluginInstancesGestureStaged(pluginId)) {
-              stagedSavePending = true;
+              noteStagedSavePending();
               return;
             }
             instanceSaveDebounce.schedule(gestureId);
@@ -822,6 +886,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             settings: originalSettings,
           });
         }
+        // 모달 정산은 확정 경계 - 확정·취소 revert 모두 즉시 커밋
+        flushPluginInstancesEditSession(pluginId);
       } finally {
         modalHandlers.dispose();
       }
@@ -889,6 +955,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               customItems: buildCustomContextMenuItems(),
             },
           } as unknown as PluginDisplayElementConfig);
+          // 생성은 discrete 편집 - debounce 대기 없이 즉시 커밋
+          flushPluginInstancesEditSession(pluginId);
         },
       });
 

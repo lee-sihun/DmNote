@@ -1,6 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+interface CapturedSaveRequest {
+  gestureId?: string;
+  captureCurrentSnapshot: boolean;
+}
+
+interface CapturedSaveDebounceOptions {
+  delayMs: number;
+  save: (request: CapturedSaveRequest) => Promise<void>;
+  onError: (error: unknown, request: CapturedSaveRequest) => void;
+}
+
 const mocks = vi.hoisted(() => ({
   instancesCommit: vi.fn(() =>
     Promise.resolve({ modelRevision: 1, changed: false }),
@@ -10,6 +21,15 @@ const mocks = vi.hoisted(() => ({
   ),
   instancesGet: vi.fn(),
   debounceSchedule: vi.fn(),
+  debounceFlush: vi.fn(),
+  debounceCancel: vi.fn(),
+  saveDebounces: [] as CapturedSaveDebounceOptions[],
+  isStaged: vi.fn(() => false),
+  hasConflicting: vi.fn(() => false),
+  hasActiveContext: vi.fn(() => false),
+  flushEditSession: vi.fn(),
+  stagedReleaseListeners: new Map<string, (gestureId: string) => void>(),
+  syncHistoryStatus: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('@api/modules/pluginInstancesApi', () => ({
@@ -22,20 +42,37 @@ vi.mock('@api/modules/pluginInstancesApi', () => ({
 }));
 
 vi.mock('../displayElement/instancesCommitQueue', () => ({
-  createPluginInstancesSaveDebounce: () => ({
-    schedule: mocks.debounceSchedule,
-    flush: vi.fn(),
-    cancel: vi.fn(),
-  }),
+  createPluginInstancesSaveDebounce: (options: CapturedSaveDebounceOptions) => {
+    mocks.saveDebounces.push(options);
+    return {
+      schedule: mocks.debounceSchedule,
+      flush: mocks.debounceFlush,
+      cancel: mocks.debounceCancel,
+    };
+  },
   enqueuePluginInstancesCommit: (
     _pluginId: string,
     task: () => Promise<unknown>,
   ) => task(),
-  isPluginInstancesGestureStaged: () => false,
+  flushPluginInstancesEditSession: mocks.flushEditSession,
+  hasActivePluginInstancesEditContext: mocks.hasActiveContext,
+  hasConflictingPluginInstancesGesture: mocks.hasConflicting,
+  isPluginInstancesGestureStaged: mocks.isStaged,
   registerPluginInstancesEditSessionFlush: () => () => undefined,
-  registerPluginInstancesStagedRelease: () => () => undefined,
+  registerPluginInstancesStagedRelease: (
+    pluginId: string,
+    listener: (gestureId: string) => void,
+  ) => {
+    mocks.stagedReleaseListeners.set(pluginId, listener);
+    return () => {
+      mocks.stagedReleaseListeners.delete(pluginId);
+    };
+  },
   rotatePluginInstancesEditSession: vi.fn(),
-  touchPluginInstancesEditSession: () => 'gesture-token',
+  touchPluginInstancesEditSession: (
+    _pluginId: string,
+    preferredGestureId?: string,
+  ) => preferredGestureId ?? 'gesture-token',
 }));
 
 vi.mock('@plugins/rpc/pluginRpcClient', () => ({
@@ -56,13 +93,17 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
 
 vi.mock('@stores/data/useHistoryStatusStore', () => ({
   useHistoryStatusStore: { getState: () => ({ historyEpoch: 1 }) },
-  syncHistoryStatus: vi.fn(),
+  syncHistoryStatus: mocks.syncHistoryStatus,
 }));
 
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { applyCanonicalPluginInstances } from '../displayElement/instancesUndoSync';
+import { drainEditorWrites } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import {
+  applyCanonicalPluginInstances,
+  applyCommittedPluginInstancesProjection,
+} from '../displayElement/instancesUndoSync';
 import {
   displayElementInstanceRegistry,
   getDisplayElementInstance,
@@ -151,7 +192,17 @@ describe('plugin instance reapply diff-patch', () => {
     window.__dmn_window_type = 'main';
     mocks.instancesCommit.mockClear();
     mocks.instancesReconcile.mockClear();
+    mocks.instancesGet.mockReset();
     mocks.debounceSchedule.mockClear();
+    mocks.debounceFlush.mockClear();
+    mocks.debounceCancel.mockClear();
+    mocks.saveDebounces.length = 0;
+    mocks.isStaged.mockReset().mockReturnValue(false);
+    mocks.hasConflicting.mockReset().mockReturnValue(false);
+    mocks.hasActiveContext.mockReset().mockReturnValue(false);
+    mocks.flushEditSession.mockClear();
+    mocks.stagedReleaseListeners.clear();
+    mocks.syncHistoryStatus.mockClear();
     useKeyStore.setState({
       isBootstrapped: true,
       customTabs: [],
@@ -387,5 +438,251 @@ describe('plugin instance reapply diff-patch', () => {
     await reapply(pluginId, 5, [saved(ID_A), saved(ID_B)]);
     expect(mocks.debounceSchedule).not.toHaveBeenCalled();
     expect(mocks.instancesCommit).not.toHaveBeenCalled();
+  });
+
+  describe('staged 저장 배리어', () => {
+    const stagedMutation = async (pluginId: string) => {
+      defineFor(pluginId, [saved(ID_A)]);
+      await vi.waitFor(() => expect(defElements(pluginId)).toHaveLength(1));
+      // 복원 tracked write 정산 후 staged 변경만 남긴다
+      await drainEditorWrites();
+
+      mocks.isStaged.mockReturnValue(true);
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement(`${pluginId}::${ID_A}`, { position: { x: 5, y: 5 } });
+      expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+    };
+
+    const startDrainProbe = async () => {
+      let drained = false;
+      const draining = drainEditorWrites().then((result) => {
+        drained = true;
+        return result;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      return { draining, isDrained: () => drained };
+    };
+
+    it('staged 중 삼킨 변경은 drain을 pending으로 유지하고 release가 해제한다', async () => {
+      const pluginId = 'plugin-staged-barrier';
+      await stagedMutation(pluginId);
+
+      const probe = await startDrainProbe();
+      expect(probe.isDrained()).toBe(false);
+
+      mocks.isStaged.mockReturnValue(false);
+      mocks.stagedReleaseListeners.get(pluginId)?.('gesture-release');
+      await expect(probe.draining).resolves.toBe(true);
+    });
+
+    it('release는 staged gestureId를 계승해 디바운스 없이 즉시 커밋을 개시한다', async () => {
+      const pluginId = 'plugin-staged-release';
+      await stagedMutation(pluginId);
+
+      mocks.isStaged.mockReturnValue(false);
+      mocks.stagedReleaseListeners.get(pluginId)?.('gesture-staged-owner');
+
+      expect(mocks.debounceSchedule).toHaveBeenCalledTimes(1);
+      expect(mocks.debounceSchedule).toHaveBeenCalledWith(
+        'gesture-staged-owner',
+      );
+      expect(mocks.debounceFlush).toHaveBeenCalledTimes(1);
+      expect(mocks.debounceSchedule.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.debounceFlush.mock.invocationCallOrder[0],
+      );
+
+      // pending 없는 재release는 no-op
+      mocks.stagedReleaseListeners.get(pluginId)?.('gesture-staged-owner');
+      expect(mocks.debounceSchedule).toHaveBeenCalledTimes(1);
+    });
+
+    it('staged pending 폐기 경로에서도 drain이 해제된다', async () => {
+      const pluginId = 'plugin-staged-cancel';
+      await stagedMutation(pluginId);
+
+      const probe = await startDrainProbe();
+      expect(probe.isDrained()).toBe(false);
+
+      // undo 재결합과 동일한 cancelPendingSave 경로
+      applyCommittedPluginInstancesProjection(pluginId, () => undefined);
+      await expect(probe.draining).resolves.toBe(true);
+      expect(mocks.debounceCancel).toHaveBeenCalled();
+
+      // 폐기 후 release는 저장을 예약하지 않는다
+      mocks.isStaged.mockReturnValue(false);
+      mocks.stagedReleaseListeners.get(pluginId)?.('gesture-any');
+      expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('거절·실패 canonical 복구', () => {
+    const canonical = (positionX: number) => [
+      saved(ID_A, { position: { x: positionX, y: 1 } }),
+    ];
+
+    const defineWithLocalEdit = async (pluginId: string) => {
+      defineFor(pluginId, canonical(1));
+      await vi.waitFor(() => expect(defElements(pluginId)).toHaveLength(1));
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement(`${pluginId}::${ID_A}`, { position: { x: 50, y: 50 } });
+      return mocks.saveDebounces[0];
+    };
+
+    const mockCanonicalPull = (pluginId: string, revision: number) => {
+      mocks.instancesGet.mockResolvedValue({
+        pluginId,
+        instances: canonical(1),
+        modelRevision: revision,
+        authorityGeneration: 1,
+      });
+    };
+
+    it('history 거절 시 canonical을 강제 재주입하고 저장 호출은 성공 정산한다', async () => {
+      const pluginId = 'plugin-conflict-reinject';
+      const debounce = await defineWithLocalEdit(pluginId);
+      mocks.instancesCommit.mockRejectedValueOnce(
+        new Error('HISTORY_EPOCH_CONFLICT: history barrier'),
+      );
+      mockCanonicalPull(pluginId, 7);
+      const warn = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      await expect(
+        debounce.save({
+          gestureId: 'gesture-token',
+          captureCurrentSnapshot: false,
+        }),
+      ).resolves.toBeUndefined();
+      warn.mockRestore();
+
+      expect(mocks.syncHistoryStatus).toHaveBeenCalled();
+      // 재주입 전 큐 잔여 스냅샷 폐기 - canonical 되덮기 방지
+      expect(mocks.debounceCancel).toHaveBeenCalled();
+      expect(mocks.instancesGet).toHaveBeenCalledWith(pluginId);
+      expect(findElement(`${pluginId}::${ID_A}`)!.position).toEqual({
+        x: 1,
+        y: 1,
+      });
+    });
+
+    it('다른 gesture가 소유 중이면 거절 복구 재주입을 건너뛴다', async () => {
+      const pluginId = 'plugin-conflict-skip';
+      const debounce = await defineWithLocalEdit(pluginId);
+      mocks.instancesCommit.mockRejectedValueOnce(
+        new Error('HISTORY_EPOCH_CONFLICT: history barrier'),
+      );
+      mocks.hasConflicting.mockReturnValue(true);
+      const warn = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      await expect(
+        debounce.save({
+          gestureId: 'gesture-token',
+          captureCurrentSnapshot: false,
+        }),
+      ).resolves.toBeUndefined();
+      warn.mockRestore();
+
+      expect(mocks.hasConflicting).toHaveBeenCalledWith(
+        pluginId,
+        'gesture-token',
+      );
+      expect(mocks.syncHistoryStatus).toHaveBeenCalled();
+      expect(mocks.instancesGet).not.toHaveBeenCalled();
+      expect(mocks.debounceCancel).not.toHaveBeenCalled();
+      // 소유 gesture의 로컬 편집은 그대로 유지
+      expect(findElement(`${pluginId}::${ID_A}`)!.position).toEqual({
+        x: 50,
+        y: 50,
+      });
+    });
+
+    it('재주입 후 trailing save는 1회 no-op으로 수렴한다', async () => {
+      const pluginId = 'plugin-conflict-converge';
+      const debounce = await defineWithLocalEdit(pluginId);
+      mocks.instancesCommit.mockRejectedValueOnce(
+        new Error('HISTORY_EPOCH_CONFLICT: history barrier'),
+      );
+      mockCanonicalPull(pluginId, 7);
+      const warn = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      await debounce.save({
+        gestureId: 'gesture-token',
+        captureCurrentSnapshot: false,
+      });
+      // 재주입 직후 잔여 trailing save - canonical과 같은 상태를 커밋
+      await debounce.save({
+        gestureId: 'gesture-token',
+        captureCurrentSnapshot: false,
+      });
+      warn.mockRestore();
+
+      expect(mocks.instancesCommit).toHaveBeenCalledTimes(2);
+      expect(mocks.instancesGet).toHaveBeenCalledTimes(1);
+      const [trailingRequest] = mocks.instancesCommit.mock
+        .calls[1] as unknown as [{ instances: SavedInstance[] }];
+      expect(trailingRequest.instances[0].position).toEqual({ x: 1, y: 1 });
+      expect(findElement(`${pluginId}::${ID_A}`)!.position).toEqual({
+        x: 1,
+        y: 1,
+      });
+    });
+
+    it('디바운스 저장 실패는 canonical 롤백을 수행한다', async () => {
+      const pluginId = 'plugin-save-error-rollback';
+      const debounce = await defineWithLocalEdit(pluginId);
+      mockCanonicalPull(pluginId, 9);
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      debounce.onError(new Error('save failed'), {
+        gestureId: 'gesture-token',
+        captureCurrentSnapshot: false,
+      });
+      await vi.waitFor(() =>
+        expect(findElement(`${pluginId}::${ID_A}`)!.position).toEqual({
+          x: 1,
+          y: 1,
+        }),
+      );
+
+      // 다른 gesture 소유 중이면 롤백 스킵
+      mocks.instancesGet.mockClear();
+      mocks.hasConflicting.mockReturnValue(true);
+      debounce.onError(new Error('save failed'), {
+        gestureId: 'gesture-token',
+        captureCurrentSnapshot: false,
+      });
+      await Promise.resolve();
+      consoleError.mockRestore();
+      expect(mocks.instancesGet).not.toHaveBeenCalled();
+    });
+
+    it('플러그인 self update 스트림은 여전히 200ms 디바운스 예약만 한다', async () => {
+      const pluginId = 'plugin-update-stream';
+      defineFor(pluginId, [saved(ID_A)]);
+      await vi.waitFor(() => expect(defElements(pluginId)).toHaveLength(1));
+
+      expect(mocks.saveDebounces[0].delayMs).toBe(200);
+
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement(`${pluginId}::${ID_A}`, { position: { x: 2, y: 2 } });
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement(`${pluginId}::${ID_A}`, { position: { x: 3, y: 3 } });
+
+      expect(mocks.debounceSchedule).toHaveBeenCalledTimes(2);
+      expect(mocks.debounceFlush).not.toHaveBeenCalled();
+      expect(mocks.flushEditSession).not.toHaveBeenCalled();
+    });
   });
 });

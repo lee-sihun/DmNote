@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   addElement: vi.fn(),
   removeElement: vi.fn(),
   rotateEditSession: vi.fn(),
+  flushEditSession: vi.fn(),
   unregisterInstance: vi.fn(),
 }));
 
@@ -66,6 +67,7 @@ vi.mock('./templateBuilder', () => ({
   buildDisplayElementTemplate: vi.fn(),
 }));
 vi.mock('./instancesCommitQueue', () => ({
+  flushPluginInstancesEditSession: mocks.flushEditSession,
   rotatePluginInstancesEditSession: mocks.rotateEditSession,
 }));
 
@@ -88,6 +90,7 @@ describe('display element discrete edit boundaries', () => {
       );
     });
     mocks.rotateEditSession.mockReset();
+    mocks.flushEditSession.mockReset();
     mocks.unregisterInstance.mockReset();
   });
 
@@ -103,6 +106,8 @@ describe('display element discrete edit boundaries', () => {
     expect(mocks.rotateEditSession).toHaveBeenCalledOnce();
     expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
     expect(mocks.addElement).toHaveBeenCalledTimes(2);
+    // 플러그인 루프 add 스팸 방지 - add 경로는 debounce 유지
+    expect(mocks.flushEditSession).not.toHaveBeenCalled();
   });
 
   it('사용자 remove는 mutation 전에 대상 플러그인 세션을 분리한다', () => {
@@ -126,8 +131,51 @@ describe('display element discrete edit boundaries', () => {
     displayElementApi.remove('plugin-a::missing');
 
     expect(mocks.rotateEditSession).not.toHaveBeenCalled();
+    expect(mocks.flushEditSession).not.toHaveBeenCalled();
     expect(mocks.unregisterInstance).toHaveBeenCalledWith('plugin-a::missing');
     expect(mocks.removeElement).toHaveBeenCalledWith('plugin-a::missing');
+  });
+
+  it('사용자 remove는 제거 후 대상 플러그인 세션을 즉시 flush한다', () => {
+    mocks.elements = [
+      {
+        fullId: 'plugin-a::element-one',
+        pluginId: 'plugin-a',
+        position: { x: 10, y: 20 },
+      },
+    ];
+
+    displayElementApi.remove('plugin-a::element-one');
+
+    expect(mocks.flushEditSession).toHaveBeenCalledOnce();
+    expect(mocks.flushEditSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.flushEditSession.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.removeElement.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('clearMyElements는 일괄 제거 후 flush를 1회만 호출한다', () => {
+    mocks.elements = [
+      {
+        fullId: 'plugin-a::element-one',
+        pluginId: 'plugin-a',
+        position: { x: 10, y: 20 },
+      },
+      {
+        fullId: 'plugin-a::element-two',
+        pluginId: 'plugin-a',
+        position: { x: 30, y: 40 },
+      },
+    ];
+
+    displayElementApi.clearMyElements();
+
+    expect(mocks.removeElement).toHaveBeenCalledTimes(2);
+    expect(mocks.flushEditSession).toHaveBeenCalledOnce();
+    expect(mocks.flushEditSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.flushEditSession.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.removeElement.mock.invocationCallOrder[1],
+    );
   });
 });
 

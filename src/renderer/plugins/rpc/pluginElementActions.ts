@@ -11,7 +11,10 @@ import {
   PANEL_MODEL_REQUEST_MESSAGE,
   getPluginPanelModelRevision,
 } from '@utils/plugin/panelModelSync';
-import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import {
+  flushPluginInstancesEditSession,
+  rotatePluginInstancesEditSession,
+} from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import type { BatchGeometryDescriptor } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -116,7 +119,7 @@ const isPanelWindow = () => window.__dmn_window_type === 'panel';
 const rotateTargetPluginSessions = (
   fullIds: string[],
   gestureId?: string,
-): void => {
+): Set<string> => {
   const targetIds = new Set(fullIds);
   const pluginIds = new Set(
     usePluginDisplayElementStore
@@ -131,6 +134,7 @@ const rotateTargetPluginSessions = (
       rotatePluginInstancesEditSession(pluginId);
     }
   });
+  return pluginIds;
 };
 
 // 패널 미러의 마지막 수신 backend revision - RPC expectedModelRevision 토큰
@@ -1116,11 +1120,15 @@ export const setPluginElementsHidden = (
       void ensureQueueDrain();
     });
   }
-  rotateTargetPluginSessions(targets.map(({ fullId }) => fullId));
+  const pluginIds = rotateTargetPluginSessions(
+    targets.map(({ fullId }) => fullId),
+  );
   const store = usePluginDisplayElementStore.getState();
   targets.forEach(({ fullId, hidden }) => {
     store.updateElement(fullId, { hidden });
   });
+  // 가시성 토글은 discrete 편집 - debounce 대기 없이 즉시 커밋
+  pluginIds.forEach((pluginId) => flushPluginInstancesEditSession(pluginId));
   return Promise.resolve(true);
 };
 

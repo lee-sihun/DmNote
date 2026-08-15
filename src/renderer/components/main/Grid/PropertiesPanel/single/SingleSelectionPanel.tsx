@@ -4,6 +4,7 @@ import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { patchNativeLayerPropertyViaAuthority } from '@plugins/rpc/pluginElementActions';
+import { flushPluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
   STAT_BASE_OPTIONS,
@@ -230,6 +231,13 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
         <div
           ref={setPluginScrollRef}
           className="properties-panel-overlay-viewport"
+          // blur가 확정 경계 - keystroke 단위가 아니라 포커스 이탈 시 즉시 커밋
+          onBlurCapture={() => {
+            const pluginId =
+              selectedPluginElement?.pluginId ??
+              selectedPluginDefinition?.pluginId;
+            if (pluginId) flushPluginInstancesEditSession(pluginId);
+          }}
         >
           <EditSessionBoundary>
             {isPluginResizable && (

@@ -33,6 +33,9 @@ vi.mock('../displayElement/instancesCommitQueue', () => ({
     _pluginId: string,
     task: () => Promise<unknown>,
   ) => task(),
+  flushPluginInstancesEditSession: vi.fn(),
+  hasActivePluginInstancesEditContext: () => false,
+  hasConflictingPluginInstancesGesture: () => false,
   isPluginInstancesGestureStaged: () => false,
   registerPluginInstancesEditSessionFlush: () => () => undefined,
   registerPluginInstancesStagedRelease: () => () => undefined,
@@ -41,6 +44,7 @@ vi.mock('../displayElement/instancesCommitQueue', () => ({
 }));
 
 vi.mock('../displayElement/instancesUndoSync', () => ({
+  applyCanonicalPluginInstances: vi.fn(() => Promise.resolve()),
   notePluginInstancesMutation: vi.fn(),
   registerPluginInstancesReapplier: (
     _pluginId: string,

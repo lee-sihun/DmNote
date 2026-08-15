@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   updateElement: vi.fn(),
   setElements: vi.fn(),
   rotateEditSession: vi.fn(),
+  flushEditSession: vi.fn(),
   authorityGeneration: 7,
   elements: [] as Array<{
     fullId: string;
@@ -44,6 +45,7 @@ vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
 }));
 
 vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
+  flushPluginInstancesEditSession: mocks.flushEditSession,
   rotatePluginInstancesEditSession: mocks.rotateEditSession,
 }));
 
@@ -57,6 +59,7 @@ describe('plugin element panel queue', () => {
     mocks.updateElement.mockReset();
     mocks.setElements.mockReset();
     mocks.rotateEditSession.mockReset();
+    mocks.flushEditSession.mockReset();
     mocks.authorityGeneration = 7;
     mocks.elements = [];
     window.__dmn_window_type = 'panel';
@@ -2621,6 +2624,30 @@ describe('plugin element panel queue', () => {
     expect(mocks.updateElement).toHaveBeenCalledTimes(3);
   });
 
+  it('main의 가시성 변경은 변이 후 대상 플러그인별로 즉시 flush한다', async () => {
+    window.__dmn_window_type = 'main';
+    mocks.elements = [
+      { fullId: 'plugin-a:one', pluginId: 'plugin-a' },
+      { fullId: 'plugin-a:two', pluginId: 'plugin-a' },
+      { fullId: 'plugin-b:one', pluginId: 'plugin-b' },
+    ];
+
+    await expect(
+      actions.setPluginElementsHidden([
+        { fullId: 'plugin-a:one', hidden: true },
+        { fullId: 'plugin-a:two', hidden: true },
+        { fullId: 'plugin-b:one', hidden: false },
+      ]),
+    ).resolves.toBe(true);
+
+    expect(mocks.flushEditSession).toHaveBeenCalledTimes(2);
+    expect(mocks.flushEditSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.flushEditSession).toHaveBeenCalledWith('plugin-b');
+    expect(mocks.flushEditSession.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.updateElement.mock.invocationCallOrder[2]!,
+    );
+  });
+
   it('main의 레이어 순서 변경은 대상 플러그인별 세션을 먼저 분리한다', () => {
     window.__dmn_window_type = 'main';
     mocks.elements = [
@@ -2640,5 +2667,7 @@ describe('plugin element panel queue', () => {
       mocks.updateElement.mock.invocationCallOrder[0]!,
     );
     expect(mocks.updateElement).toHaveBeenCalledTimes(2);
+    // z-order는 제스처 경계(rotate)만 유지 - flush 경로 아님
+    expect(mocks.flushEditSession).not.toHaveBeenCalled();
   });
 });
