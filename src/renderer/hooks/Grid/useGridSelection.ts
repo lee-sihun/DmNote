@@ -32,7 +32,7 @@ import {
   applySealedSliceMutation,
   combineReceipts,
   createPropertyReceipt,
-  generatePropertyIntentPatch,
+  generateGeometryIntentOps,
   reportElementOpSkipped,
   type ElementIntentReceipt,
   type PropertyIntents,
@@ -40,7 +40,6 @@ import {
 } from '@src/renderer/editor/runtime/elementIntent';
 import {
   applyPluginAdditionEagerly,
-  runMixedElementIntent,
   runMixedGestureElementIntent,
 } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { stableStringify } from '@utils/core/stableStringify';
@@ -220,12 +219,20 @@ export function useGridSelection({
             }
           }
         }
-        void runMixedElementIntent({
+        void runMixedGestureElementIntent({
           gestureId,
-          pluginIds,
-          applyEager: () => createPropertyReceipt(receiptEntries),
-          generate: (base) =>
-            generatePropertyIntentPatch(base, geometryIntents),
+          initialPluginIds: pluginIds,
+          // 이동 정산은 plugin 요소를 추가·제거하지 않아 scope가 고정이다
+          pluginScope: () => pluginIds,
+          receipt: createPropertyReceipt(receiptEntries),
+          generate: ({ base }) => {
+            const ops = generateGeometryIntentOps(base, geometryIntents);
+            // 전량 소실은 무커밋 - abort가 receipt 복원과 skip 관측을 소유한다
+            if (ops.length === 0) {
+              throw new ElementIntentAbort('mixed selection settlement');
+            }
+            return { kind: 'ops', ops };
+          },
           skipContext: 'mixed selection settlement',
         }).catch((error: Error) => {
           console.error('Failed to persist selected element positions', error);

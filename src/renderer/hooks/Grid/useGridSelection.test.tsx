@@ -14,6 +14,7 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 import { useGridSelection } from './useGridSelection';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
+import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
 
 const mocks = vi.hoisted(() => ({
   commitGeometry: vi.fn(() => Promise.resolve(1)),
@@ -455,9 +456,8 @@ describe('useGridSelection compound history gesture', () => {
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
-  // 혼합 이동 정산 wire 계약 - 이관 전 현행 동작을 고정한다.
-  // mock 호출 인자만 보는 라우팅 테스트와 달리 generate를 실제로 실행해
-  // 슬롯 base에 어떤 값이 실려 나가는지 검증한다
+  // 혼합 이동 정산 wire 계약. mock 호출 인자만 보는 라우팅 테스트와 달리
+  // generate를 실제로 실행해 슬롯 base에 어떤 op이 실려 나가는지 검증한다
   const settleMixedMove = async () => {
     await act(async () => {
       useGridSelectionStore.getState().setSelectedElements([
@@ -466,15 +466,24 @@ describe('useGridSelection compound history gesture', () => {
       ]);
     });
     api.syncSelectedElementsToOverlay(gestureId);
-    expect(mocks.runMixedIntent).toHaveBeenCalledTimes(1);
-    return (mocks.runMixedIntent.mock.calls[0] as unknown[])[0] as {
+    expect(mocks.runMixedGestureIntent).toHaveBeenCalledTimes(1);
+    return (mocks.runMixedGestureIntent.mock.calls[0] as unknown[])[0] as {
       gestureId: string;
-      pluginIds: readonly string[];
+      initialPluginIds: readonly string[];
+      pluginScope: (elements: unknown) => readonly string[];
       skipContext: string;
-      applyEager: () => { rollback: () => void } | null;
-      generate: (base: unknown) => unknown;
+      receipt: { rollback: () => void } | null;
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        kind: string;
+        ops?: Array<Record<string, unknown>>;
+      };
     };
   };
+
+  const generateFrom = (
+    options: Awaited<ReturnType<typeof settleMixedMove>>,
+    position: Record<string, unknown>,
+  ) => options.generate({ base: baseWith(position), pluginProjection: [] });
 
   const baseWith = (position: Record<string, unknown>) => ({
     schemaVersion: 1,
@@ -490,13 +499,15 @@ describe('useGridSelection compound history gesture', () => {
     const options = await settleMixedMove();
 
     expect(options.gestureId).toBe(gestureId);
-    expect(options.pluginIds).toEqual(['plugin-a']);
+    expect(options.initialPluginIds).toEqual(['plugin-a']);
+    // 이동은 plugin 요소를 추가·제거하지 않아 scope가 고정이다
+    expect(options.pluginScope([])).toEqual(['plugin-a']);
     expect(options.skipContext).toBe('mixed selection settlement');
     expect(mocks.commitGeometry).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
-  it('혼합 이동 정산 wire는 dx·dy만 의도로 싣고 크기는 슬롯 base 값을 따른다', async () => {
+  it('혼합 이동 정산 op은 dx·dy만 의도로 싣고 크기는 슬롯 base 값을 따른다', async () => {
     act(() => {
       useKeyStore.setState({
         positions: { '4key': [{ ...keyPosition, dx: 111, dy: 222 }] },
@@ -506,33 +517,78 @@ describe('useGridSelection compound history gesture', () => {
     const options = await settleMixedMove();
 
     // 병행 리사이즈가 슬롯 안에서 먼저 착지한 상황
-    const patch = options.generate(
-      baseWith({ ...keyPosition, dx: 0, dy: 0, width: 999, height: 888 }),
-    ) as { keyPositions: Record<string, unknown[]> } | null;
+    const generation = generateFrom(options, {
+      ...keyPosition,
+      dx: 0,
+      dy: 0,
+      width: 999,
+      height: 888,
+    });
 
-    const settled = patch?.keyPositions['4key'][0] as Record<string, unknown>;
-    expect(settled.dx).toBe(111);
-    expect(settled.dy).toBe(222);
-    // 이동 정산이 병행 리사이즈 결과를 되돌리지 않는다
-    expect(settled.width).toBe(999);
-    expect(settled.height).toBe(888);
-    expect(settled.id).toBe(STABLE_KEY_ID);
+    expect(generation.kind).toBe('ops');
+    expect(generation.ops).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: STABLE_KEY_ID,
+        // 이동 정산이 병행 리사이즈 결과를 되돌리지 않는다
+        bounds: { dx: 111, dy: 222, width: 999, height: 888 },
+      },
+    ]);
   });
 
-  it('혼합 이동 정산은 슬롯 base에서 대상이 사라지면 무커밋으로 종료한다', async () => {
+  it('혼합 이동 정산은 슬롯 base에서 대상이 사라지면 중단으로 종료한다', async () => {
     const options = await settleMixedMove();
 
     // 정산 대기 중 대상이 삭제된 상황 - 남은 요소를 건드리면 안 된다
-    const patch = options.generate(
-      baseWith({
+    expect(() =>
+      generateFrom(options, {
         ...keyPosition,
         id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         dx: 7,
         dy: 8,
       }),
-    );
+    ).toThrow(ElementIntentAbort);
+  });
 
-    expect(patch).toBeNull();
+  it('혼합 이동 정산은 base에 남은 대상만 op으로 싣는다', async () => {
+    const secondId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    act(() => {
+      useKeyStore.setState({
+        positions: {
+          '4key': [
+            { ...keyPosition, dx: 11, dy: 12 },
+            { ...keyPosition, id: secondId, dx: 21, dy: 22 },
+          ],
+        },
+        canonicalPositions: {
+          '4key': [
+            { ...keyPosition, dx: 11, dy: 12 },
+            { ...keyPosition, id: secondId, dx: 21, dy: 22 },
+          ],
+        },
+      });
+    });
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([
+        { type: 'key', id: STABLE_KEY_ID, index: 0 },
+        { type: 'key', id: secondId, index: 1 },
+        { type: 'plugin', id: 'plugin-a:element' },
+      ]);
+    });
+    api.syncSelectedElementsToOverlay(gestureId);
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as Awaited<ReturnType<typeof settleMixedMove>>;
+
+    // 두 대상 중 하나만 base에 남은 상황
+    const generation = options.generate({
+      base: baseWith({ ...keyPosition, id: secondId, dx: 0, dy: 0 }),
+      pluginProjection: [],
+    });
+
+    expect(generation.ops).toHaveLength(1);
+    expect(generation.ops?.[0]).toMatchObject({ id: secondId });
   });
 
   it('혼합 이동 정산 receipt는 lastAck 값을 before로 잡는다', async () => {
@@ -545,11 +601,10 @@ describe('useGridSelection compound history gesture', () => {
     });
     const options = await settleMixedMove();
 
-    const receipt = options.applyEager();
-    expect(receipt).not.toBeNull();
+    expect(options.receipt).not.toBeNull();
 
     // eager 값이 그대로면 롤백은 lastAck 값으로 되돌린다
-    receipt?.rollback();
+    options.receipt?.rollback();
     const restored = useKeyStore.getState().positions['4key'][0];
     expect(restored.dx).toBe(1);
     expect(restored.dy).toBe(2);
@@ -558,8 +613,8 @@ describe('useGridSelection compound history gesture', () => {
   it('lastAck가 없으면 이동 정산 receipt는 복원 대상을 만들지 않는다', async () => {
     const options = await settleMixedMove();
 
-    const receipt = options.applyEager();
-    receipt?.rollback();
+    expect(options.receipt).toBeNull();
+    options.receipt?.rollback();
     const kept = useKeyStore.getState().positions['4key'][0];
     expect(kept.dx).toBe(keyPosition.dx);
     expect(kept.dy).toBe(keyPosition.dy);

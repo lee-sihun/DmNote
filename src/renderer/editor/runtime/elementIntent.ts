@@ -11,6 +11,7 @@ import { editorCoordinator } from './editorStateCoordinator';
 
 import type {
   CanonicalEditorDocumentV1,
+  EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
 
@@ -256,24 +257,59 @@ export const applyPropertyIntentsEagerly = (
   return createPropertyReceipt(entries);
 };
 
+const GEOMETRY_FIELD_BY_TYPE: Record<
+  NativeElementType,
+  'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+> = {
+  key: 'keyPositions',
+  stat: 'statPositions',
+  graph: 'graphPositions',
+  knob: 'knobPositions',
+};
+
+// 최신 base에서 기하 의도를 setBounds op으로 재생성한다. 크기는 base 값을
+// 그대로 실어 슬롯 안에서 먼저 착지한 병행 리사이즈를 되돌리지 않는다.
+// base에 없는 대상은 건너뛴다 - 전량 소실이면 빈 배열이라 호출자가 중단한다
+export const generateGeometryIntentOps = (
+  base: CanonicalEditorDocumentV1,
+  intents: PropertyIntents,
+): EditorOpV1[] => {
+  const ops: EditorOpV1[] = [];
+  for (const [type, byId] of intents) {
+    if (byId.size === 0) continue;
+    const record = base[GEOMETRY_FIELD_BY_TYPE[type]] as unknown as LooseRecord;
+    for (const list of Object.values(record)) {
+      for (const position of list) {
+        const id = position.id;
+        if (typeof id !== 'string') continue;
+        const intent = byId.get(id);
+        if (!intent) continue;
+        ops.push({
+          kind: 'setBounds',
+          elementType: type,
+          id,
+          bounds: {
+            dx: Number(intent.dx ?? position.dx ?? 0),
+            dy: Number(intent.dy ?? position.dy ?? 0),
+            width: Number(position.width ?? 0),
+            height: Number(position.height ?? 0),
+          },
+        });
+      }
+    }
+  }
+  return ops;
+};
+
 // 최신 base에서 속성 의도를 재적용하는 표준 generator
 export const generatePropertyIntentPatch = (
   base: CanonicalEditorDocumentV1,
   intents: PropertyIntents,
 ): EditorPatchV1 | null => {
-  const FIELD_BY_TYPE: Record<
-    NativeElementType,
-    'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
-  > = {
-    key: 'keyPositions',
-    stat: 'statPositions',
-    graph: 'graphPositions',
-    knob: 'knobPositions',
-  };
   const patch: EditorPatchV1 = { schemaVersion: 1 };
   let touchedAny = false;
   for (const [type, byId] of intents) {
-    const field = FIELD_BY_TYPE[type];
+    const field = GEOMETRY_FIELD_BY_TYPE[type];
     const record = base[field] as unknown as LooseRecord;
     let touched = 0;
     const next: LooseRecord = {};
