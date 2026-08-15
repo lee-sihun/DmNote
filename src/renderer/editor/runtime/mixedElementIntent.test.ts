@@ -26,7 +26,7 @@ vi.mock('@plugins/rpc/pluginRpcClient', () => ({
 }));
 
 import {
-  runMixedElementBoundsIntent,
+  runMixedElementOpsIntent,
   runMixedElementDeleteIntent,
   runMixedElementIntent,
 } from './mixedElementIntent';
@@ -174,7 +174,7 @@ describe('runMixedElementIntent receipt 소유권', () => {
       },
     );
 
-    await runMixedElementBoundsIntent({
+    await runMixedElementOpsIntent({
       gestureId: 'gesture-1',
       pluginIds: ['plugin-a'],
       ops: [
@@ -196,7 +196,7 @@ describe('runMixedElementIntent receipt 소유권', () => {
     mocks.commitMixed.mockRejectedValueOnce(new Error('setup failed'));
 
     await expect(
-      runMixedElementBoundsIntent({
+      runMixedElementOpsIntent({
         gestureId: 'gesture-1',
         pluginIds: ['plugin-a'],
         ops: [],
@@ -217,7 +217,7 @@ describe('runMixedElementIntent receipt 소유권', () => {
     );
 
     await expect(
-      runMixedElementBoundsIntent({
+      runMixedElementOpsIntent({
         gestureId: 'gesture-1',
         pluginIds: ['plugin-a'],
         ops: [],
@@ -243,7 +243,7 @@ describe('runMixedElementIntent receipt 소유권', () => {
       },
     ];
 
-    await runMixedElementBoundsIntent({
+    await runMixedElementOpsIntent({
       gestureId: 'gesture-editor-only',
       pluginIds: [],
       ops,
@@ -266,7 +266,7 @@ describe('runMixedElementIntent receipt 소유권', () => {
     mocks.commitSemantic.mockRejectedValueOnce(new Error('setup failed'));
 
     await expect(
-      runMixedElementBoundsIntent({
+      runMixedElementOpsIntent({
         gestureId: 'gesture-editor-only',
         pluginIds: [],
         ops: [],

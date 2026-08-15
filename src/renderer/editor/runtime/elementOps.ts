@@ -61,7 +61,6 @@ import type {
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
-  EditorStatTypePropertyPatchV1,
   EditorElementGroupTargetV1,
   EditorTargetLayerGroupV1,
   EditorOpV1,
@@ -597,146 +596,19 @@ export const placeDuplicatedKnob = (
 // 새 zIndex를 선택 순서대로 할당하는 단일 트랜잭션. 루프-await로 요소마다
 // 따로 커밋하면 렌더 클로저 base가 서로를 덮는다 (플러그인 없이 재현되는
 // lost update). 플러그인 요소는 편집 문서 밖이라 이 op에 결합하지 않는다
-export interface ZOrderTarget {
+interface ZOrderTarget {
   type: NativeElementType;
   id: string;
 }
 
-const Z_ORDER_FIELDS = [
-  'keyPositions',
-  'statPositions',
-  'graphPositions',
-  'knobPositions',
-] as const;
-
-const zOrderRecords = (
-  base: CanonicalEditorDocumentV1,
-): Record<(typeof Z_ORDER_FIELDS)[number], LooseRecord> => ({
-  keyPositions: base.keyPositions as unknown as LooseRecord,
-  statPositions: base.statPositions as unknown as LooseRecord,
-  graphPositions: base.graphPositions as unknown as LooseRecord,
-  knobPositions: base.knobPositions as unknown as LooseRecord,
-});
-
 const FIELD_BY_TYPE: Record<
   NativeElementType,
-  (typeof Z_ORDER_FIELDS)[number]
+  'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
 > = {
   key: 'keyPositions',
   stat: 'statPositions',
   graph: 'graphPositions',
   knob: 'knobPositions',
-};
-
-const computeZOrderPatch = (
-  base: CanonicalEditorDocumentV1,
-  targets: readonly ZOrderTarget[],
-  direction: 'front' | 'back',
-  externalZIndexes: readonly number[],
-): { patch: EditorPatchV1 | null; applied: number } => {
-  const records = zOrderRecords(base);
-  const located: Array<{
-    field: (typeof Z_ORDER_FIELDS)[number];
-    mode: string;
-    index: number;
-  }> = [];
-  for (const target of targets) {
-    if (!target.id) continue;
-    const field = FIELD_BY_TYPE[target.type];
-    const found = findInRecord(records[field], target.id);
-    if (!found) continue;
-    located.push({ field, ...found });
-  }
-  if (located.length === 0) return { patch: null, applied: 0 };
-
-  // 대상 모드들의 전역 z 범위 (컬렉션 4개 + 외부)
-  const modes = new Set(located.map((entry) => entry.mode));
-  const zValues: number[] = [...externalZIndexes];
-  for (const field of Z_ORDER_FIELDS) {
-    for (const mode of modes) {
-      (records[field][mode] ?? []).forEach((position, i) => {
-        zValues.push(typeof position.zIndex === 'number' ? position.zIndex : i);
-      });
-    }
-  }
-  const maxZ = Math.max(0, ...zValues);
-  const minZ = Math.min(0, ...zValues);
-
-  const next: Partial<Record<(typeof Z_ORDER_FIELDS)[number], LooseRecord>> =
-    {};
-  located.forEach((entry, order) => {
-    const zIndex = direction === 'front' ? maxZ + 1 + order : minZ - 1 - order;
-    const record = next[entry.field] ?? {
-      ...records[entry.field],
-    };
-    record[entry.mode] = (record[entry.mode] ?? []).map((position, i) =>
-      i === entry.index ? { ...position, zIndex } : position,
-    );
-    next[entry.field] = record;
-  });
-
-  const patch: EditorPatchV1 = { schemaVersion: 1 };
-  for (const field of Z_ORDER_FIELDS) {
-    if (next[field]) patch[field] = next[field] as never;
-  }
-  return { patch, applied: located.length };
-};
-
-const storeDocumentSnapshot = (): CanonicalEditorDocumentV1 => ({
-  schemaVersion: 1,
-  keys: useKeyStore.getState().keyMappings,
-  keyPositions: useKeyStore.getState().canonicalPositions,
-  statPositions: useStatItemStore.getState().positions,
-  graphPositions: useGraphItemStore.getState().positions,
-  knobPositions: useKnobItemStore.getState().positions,
-  layerGroups: {},
-});
-
-export const applyZOrderByIds = (
-  targets: readonly ZOrderTarget[],
-  direction: 'front' | 'back',
-  externalZIndexes: readonly number[] = [],
-): Promise<number> => {
-  let applied = 0;
-  return runElementIntent({
-    applyEager: () => {
-      // eager z를 id별 속성 의도로 변환해 receipt CAS 복원을 얻는다
-      const eager = computeZOrderPatch(
-        storeDocumentSnapshot(),
-        targets,
-        direction,
-        externalZIndexes,
-      );
-      if (!eager.patch) return null;
-      const intents = new Map<
-        NativeElementType,
-        Map<string, Record<string, unknown>>
-      >();
-      for (const target of targets) {
-        if (!target.id) continue;
-        const field = FIELD_BY_TYPE[target.type];
-        const record = eager.patch[field] as unknown as LooseRecord | undefined;
-        if (!record) continue;
-        const located = findInRecord(record, target.id);
-        if (!located) continue;
-        const zIndex = record[located.mode][located.index].zIndex;
-        const byId = intents.get(target.type) ?? new Map();
-        byId.set(target.id, { zIndex });
-        intents.set(target.type, byId);
-      }
-      return applyPropertyIntentsEagerly(intents);
-    },
-    generate: (base) => {
-      const generated = computeZOrderPatch(
-        base,
-        targets,
-        direction,
-        externalZIndexes,
-      );
-      applied = generated.applied;
-      return intentPatch(generated.patch);
-    },
-  }).then((result) => (result.committed ? applied : 0));
 };
 
 // 키 슬롯 재바인딩: keys만 바꾸되 대상은 paired 위치의 안정 id로 재결합한다.
@@ -1030,88 +902,6 @@ export const setLayerGroupHidden = (
     });
 };
 
-export const setLayerGroupHiddenLegacy = (
-  mode: string,
-  groupId: string,
-  hidden: boolean,
-): Promise<boolean> => {
-  const initial = captureEditorDocument();
-  const expectedByType = new Map<NativeElementType, LooseRecord>();
-  const writeTypeRecord = (type: NativeElementType, record: LooseRecord) => {
-    if (type === 'key') useKeyStore.getState().setPositions(record as never);
-    else if (type === 'stat')
-      useStatItemStore.getState().setPositions(record as never);
-    else if (type === 'graph')
-      useGraphItemStore.getState().setPositions(record as never);
-    else useKnobItemStore.getState().setPositions(record as never);
-  };
-  const currentTypeRecord = (type: NativeElementType): LooseRecord =>
-    (type === 'key'
-      ? useKeyStore.getState().canonicalPositions
-      : type === 'stat'
-      ? useStatItemStore.getState().positions
-      : type === 'graph'
-      ? useGraphItemStore.getState().positions
-      : useKnobItemStore.getState().positions) as unknown as LooseRecord;
-  const reconcile = (base: CanonicalEditorDocumentV1) => {
-    for (const [type, expected] of expectedByType) {
-      if (currentTypeRecord(type) !== expected) continue;
-      writeTypeRecord(
-        type,
-        base[FIELD_BY_TYPE[type]] as unknown as LooseRecord,
-      );
-    }
-  };
-  return runElementIntent({
-    applyEager: () => {
-      for (const type of Object.keys(FIELD_BY_TYPE) as NativeElementType[]) {
-        const record = initial[FIELD_BY_TYPE[type]] as unknown as LooseRecord;
-        if (
-          !(record[mode] ?? []).some((position) => position.groupId === groupId)
-        ) {
-          continue;
-        }
-        const expected = {
-          ...record,
-          [mode]: record[mode].map((position) =>
-            position.groupId === groupId ? { ...position, hidden } : position,
-          ),
-        };
-        expectedByType.set(type, expected);
-        writeTypeRecord(type, expected);
-      }
-      return {
-        rollback: () =>
-          reconcile(editorCoordinator.getState().lastAck ?? initial),
-      };
-    },
-    generate: (latest) => {
-      reconcile(latest);
-      const patch: EditorPatchV1 = { schemaVersion: 1 };
-      let found = false;
-      let changed = false;
-      for (const type of Object.keys(FIELD_BY_TYPE) as NativeElementType[]) {
-        const field = FIELD_BY_TYPE[type];
-        const record = latest[field] as unknown as LooseRecord;
-        const nextMode = (record[mode] ?? []).map((position) => {
-          if (position.groupId !== groupId) return position;
-          found = true;
-          if (position.hidden === hidden) return position;
-          changed = true;
-          return { ...position, hidden };
-        });
-        if (
-          nextMode.some((position, index) => position !== record[mode]?.[index])
-        ) {
-          patch[field] = { ...record, [mode]: nextMode } as never;
-        }
-      }
-      if (!found) return { kind: 'targetLost' };
-      return changed ? intentPatch(patch) : { kind: 'satisfied' };
-    },
-  }).then(({ committed, satisfied }) => committed || satisfied);
-};
-
 const validStructuralText = (value: string, maxBytes: number): boolean =>
   value.length > 0 && new TextEncoder().encode(value).length <= maxBytes;
 
@@ -1269,14 +1059,6 @@ export const patchElementLayerNameById = (
   return patchElementPropertyById(type, id, { layerName }, options);
 };
 
-export const patchGraphTypeById = (
-  id: string,
-  graphType: 'line' | 'bar',
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById('graph', id, { graphType }, options);
-};
-
 export const patchGraphTypesByIds = (
   ids: readonly string[],
   graphType: 'line' | 'bar',
@@ -1293,14 +1075,6 @@ export const patchGraphTypesByIds = (
     ids.map((id) => ({ type: 'graph', id, patch: { graphType } })),
     options,
   );
-};
-
-export const patchGraphColorById = (
-  id: string,
-  graphColor: string,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById('graph', id, { graphColor }, options);
 };
 
 export const patchGraphColorsByIds = (
@@ -1321,14 +1095,6 @@ export const patchGraphColorsByIds = (
   );
 };
 
-export const patchGraphPropertyById = (
-  id: string,
-  patch: EditorGraphRuntimePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById('graph', id, patch, options);
-};
-
 export const patchGraphPropertiesByIds = (
   ids: readonly string[],
   patch: EditorGraphRuntimePropertyPatchV1,
@@ -1345,14 +1111,6 @@ export const patchGraphPropertiesByIds = (
     ids.map((id) => ({ type: 'graph', id, patch })),
     options,
   );
-};
-
-export const patchKnobPropertyById = (
-  id: string,
-  patch: EditorKnobRuntimePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById('knob', id, patch, options);
 };
 
 export const patchKnobAxisIdById = (
@@ -2178,15 +1936,6 @@ export const patchKnobPropertiesByIds = (
   );
 };
 
-export const patchUseInlineStylesById = (
-  type: NativeElementType,
-  id: string,
-  useInlineStyles: boolean,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById(type, id, { useInlineStyles }, options);
-};
-
 export const patchUseInlineStylesByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   useInlineStyles: boolean,
@@ -2209,15 +1958,6 @@ export const patchUseInlineStylesByTargets = (
   );
 };
 
-export const patchFontStyleById = (
-  type: NativeElementType,
-  id: string,
-  patch: EditorFontStylePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById(type, id, patch, options);
-};
-
 export const patchFontStyleByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   patch: EditorFontStylePropertyPatchV1,
@@ -2238,15 +1978,6 @@ export const patchFontStyleByTargets = (
     })),
     options,
   );
-};
-
-export const patchFontFamilyById = (
-  type: NativeElementType,
-  id: string,
-  fontFamily: string,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById(type, id, { fontFamily }, options);
 };
 
 export const patchFontFamilyByTargets = (
@@ -2831,14 +2562,6 @@ export const patchStylePropertyByTargets = (
   );
 };
 
-export const patchNotePropertyById = (
-  id: string,
-  patch: EditorNotePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById('key', id, patch, options);
-};
-
 export const patchNotePropertiesByIds = (
   ids: readonly string[],
   patch: EditorNotePropertyPatchV1,
@@ -2857,20 +2580,12 @@ export const patchNotePropertiesByIds = (
   );
 };
 
-export const patchStatTypeById = (
-  id: string,
-  patch: EditorStatTypePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById('stat', id, patch, options);
-};
-
 // 다중 선택 정산: 대상 id들의 현재 canonical 기하(dx·dy)를 의도로 캡처해
 // 슬롯 안에서 id 재해석으로 적용한다. 4컬렉션 full-record 캡처는 배타
 // mutation(카운터 프리셋 삭제 등)의 IPC 창과 겹치면 직렬화 때문에 그 직후에
 // 확정적으로 착지해 무관 필드 재작성을 되돌린다 - 기하만 실어 그 결합을 끊는다
 export type GeometryField = 'dx' | 'dy' | 'width' | 'height';
-export type GeometryPatch = Partial<Record<GeometryField, number>>;
+type GeometryPatch = Partial<Record<GeometryField, number>>;
 
 export interface BatchGeometryTarget {
   type: NativeElementType;

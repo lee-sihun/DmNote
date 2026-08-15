@@ -37,7 +37,6 @@ import {
   addKeyAt,
   addKnobAt,
   addStatAt,
-  applyZOrderByIds,
   commitBatchGeometryByIds,
   commitElementGeometryById,
   commitElementBoundsById,
@@ -50,13 +49,10 @@ import {
   placeDuplicatedStat,
   patchElementHiddenById,
   setLayerGroupHidden,
-  setLayerGroupHiddenLegacy,
   setElementGroupsByTargets,
   renameLayerGroupById,
   patchElementLayerNameById,
-  patchFontStyleById,
   patchFontStyleByTargets,
-  patchFontFamilyById,
   patchFontFamilyByTargets,
   patchStylePropertyById,
   patchStylePropertyByTargets,
@@ -64,14 +60,9 @@ import {
   patchShadowByTargets,
   patchNotePaintById,
   patchNotePaintByIds,
-  patchGraphColorById,
-  patchGraphColorsByIds,
   patchGraphPropertiesByIds,
-  patchGraphPropertyById,
-  patchGraphTypeById,
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
-  patchKnobPropertyById,
   patchKnobAxisIdById,
   patchSoundEnabledById,
   patchSoundEnabledByIds,
@@ -98,9 +89,6 @@ import {
   patchIdleImageFitById,
   patchActiveImageFitById,
   patchNotePropertiesByIds,
-  patchNotePropertyById,
-  patchStatTypeById,
-  patchUseInlineStylesById,
   patchUseInlineStylesByTargets,
   rebindKeySlotById,
 } from './elementOps';
@@ -460,56 +448,6 @@ describe('elementOps', () => {
     expect(second.position.groupId).toBeUndefined();
   });
 
-  it('z-order는 대상 id들에 단일 트랜잭션으로 새 z를 배정한다', async () => {
-    useKeyStore.setState({
-      canonicalPositions: {
-        '4key': [keyAt(ID_A, 1), keyAt(ID_B, 5)],
-      },
-      positions: { '4key': [keyAt(ID_A, 1), keyAt(ID_B, 5)] },
-    });
-
-    const pre = documentFromStores();
-    slotBase = () => pre;
-    const applied = await applyZOrderByIds(
-      [
-        { type: 'key', id: ID_A },
-        { type: 'key', id: ID_B },
-      ],
-      'front',
-      [9],
-    );
-
-    expect(applied).toBe(2);
-    expect(api.commitGeneratedPatch).toHaveBeenCalledOnce();
-    const record = generatedPatches[0]?.keyPositions?.['4key'];
-    // 외부(9) 포함 max=9, 선택 순서대로 10, 11
-    expect(record?.find((p) => p.id === ID_A)?.zIndex).toBe(10);
-    expect(record?.find((p) => p.id === ID_B)?.zIndex).toBe(11);
-  });
-
-  it('z-order 확정 시점 재정렬에도 id를 따라간다', async () => {
-    useKeyStore.setState({
-      canonicalPositions: {
-        '4key': [keyAt(ID_A, 1), keyAt(ID_B, 5)],
-      },
-      positions: { '4key': [keyAt(ID_A, 1), keyAt(ID_B, 5)] },
-    });
-    slotBase = () => {
-      const base = documentFromStores();
-      base.keyPositions = {
-        '4key': [keyAt(ID_B, 5), keyAt(ID_A, 1)],
-      } as never;
-      return base;
-    };
-
-    await applyZOrderByIds([{ type: 'key', id: ID_A }], 'front', []);
-
-    const record = generatedPatches[0]?.keyPositions?.['4key'];
-    expect(record?.[1].id).toBe(ID_A);
-    expect(record?.[1].zIndex).toBe(6);
-    expect(record?.[0].zIndex).toBe(5);
-  });
-
   it('슬롯 재바인딩은 위치 id와 새 slot만 semantic op로 보낸다', async () => {
     const applied = await rebindKeySlotById(ID_A, 'Z');
 
@@ -579,31 +517,6 @@ describe('elementOps', () => {
         bounds: { dx: 50, dy: 77, width: 123, height: 91 },
       },
     ]);
-  });
-
-  it('statType은 stat 안정 ID에 exact one-leaf op를 보낸다', async () => {
-    useStatItemStore.setState({
-      positions: {
-        '4key': [{ ...keyAt(ID_A), statType: 'kps' }] as never,
-      },
-    });
-
-    await patchStatTypeById(ID_A, { statType: 'kpsMax' });
-
-    expect(api.commitSemanticOps).toHaveBeenCalledWith(
-      [
-        {
-          kind: 'patchElement',
-          elementType: 'stat',
-          id: ID_A,
-          patch: { statType: 'kpsMax' },
-        },
-      ],
-      expect.objectContaining({ onEnrolled: expect.any(Function) }),
-    );
-    expect(useStatItemStore.getState().positions['4key'][0].statType).toBe(
-      'kpsMax',
-    );
   });
 
   it('단일 축 기하는 호출 뒤 patch 변조와 무관하게 최초 intent를 유지한다', async () => {
@@ -1213,56 +1126,6 @@ describe('elementOps', () => {
     await expect(setLayerGroupHidden('4key', 'group-a', true)).rejects.toThrow(
       'preflight stale',
     );
-
-    expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
-      true,
-    );
-  });
-
-  it('synthetic group legacy는 idless 멤버도 즉시 eager 적용한다', async () => {
-    const idless = { ...keyAt(ID_A), groupId: 'group-a', hidden: false };
-    delete (idless as { id?: string }).id;
-    useKeyStore.setState({
-      canonicalPositions: { '4key': [idless] } as never,
-      positions: { '4key': [idless] } as never,
-    });
-    let resolveCommit!: (value: EditorDocumentV1) => void;
-    api.commitGeneratedPatch.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveCommit = resolve;
-      }),
-    );
-
-    const pending = setLayerGroupHiddenLegacy('4key', 'group-a', true);
-    await vi.waitFor(() =>
-      expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
-        true,
-      ),
-    );
-    resolveCommit(documentFromStores());
-    await pending;
-  });
-
-  it('synthetic group legacy satisfied는 latest desired를 local store에 보존한다', async () => {
-    const idless = { ...keyAt(ID_A), groupId: 'group-a', hidden: false };
-    delete (idless as { id?: string }).id;
-    useKeyStore.setState({
-      canonicalPositions: { '4key': [idless] } as never,
-      positions: { '4key': [idless] } as never,
-    });
-    api.commitGeneratedPatch.mockImplementationOnce(async (generate) => {
-      const latest = documentFromStores();
-      latest.keyPositions = {
-        '4key': [{ ...idless, hidden: true }],
-      } as never;
-      const patch = generate(latest);
-      expect(patch).toBeNull();
-      return latest;
-    });
-
-    await expect(
-      setLayerGroupHiddenLegacy('4key', 'group-a', true),
-    ).resolves.toBe(true);
 
     expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
       true,
@@ -2068,41 +1931,6 @@ describe('elementOps', () => {
     );
   });
 
-  it('graphType single과 batch는 좁은 op를 한 커밋으로 전송한다', async () => {
-    const graphB = '00000000-0000-4000-8000-00000000008e';
-    useGraphItemStore.setState({
-      positions: {
-        '4key': [
-          graphAt(ID_A, { graphType: 'line' }),
-          graphAt(graphB, { graphType: 'line' }),
-        ],
-      },
-    });
-
-    await patchGraphTypeById(ID_A, 'bar');
-    expect(useGraphItemStore.getState().positions['4key'][0].graphType).toBe(
-      'bar',
-    );
-
-    api.commitSemanticOps.mockClear();
-    await patchGraphTypesByIds([ID_A, graphB], 'bar');
-    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
-    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
-      {
-        kind: 'patchElement',
-        elementType: 'graph',
-        id: ID_A,
-        patch: { graphType: 'bar' },
-      },
-      {
-        kind: 'patchElement',
-        elementType: 'graph',
-        id: graphB,
-        patch: { graphType: 'bar' },
-      },
-    ]);
-  });
-
   it('graphType batch 편입 전 실패는 모든 eager leaf를 복원한다', async () => {
     const graphB = '00000000-0000-4000-8000-00000000008f';
     useGraphItemStore.setState({
@@ -2146,92 +1974,6 @@ describe('elementOps', () => {
 
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
-
-  it('graphColor single과 batch는 raw literal을 좁은 op 한 커밋으로 보낸다', async () => {
-    const graphB = '00000000-0000-4000-8000-000000000092';
-    useGraphItemStore.setState({
-      positions: {
-        '4key': [graphAt(ID_A), graphAt(graphB)],
-      },
-    });
-
-    await patchGraphColorById(ID_A, '  custom  ');
-    expect(useGraphItemStore.getState().positions['4key'][0].graphColor).toBe(
-      '  custom  ',
-    );
-
-    api.commitSemanticOps.mockClear();
-    await patchGraphColorsByIds([ID_A, graphB], '#123456');
-    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
-    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
-      {
-        kind: 'patchElement',
-        elementType: 'graph',
-        id: ID_A,
-        patch: { graphColor: '#123456' },
-      },
-      {
-        kind: 'patchElement',
-        elementType: 'graph',
-        id: graphB,
-        patch: { graphColor: '#123456' },
-      },
-    ]);
-  });
-
-  it('graphColor batch 편입 전 실패는 모든 eager leaf를 복원한다', async () => {
-    const graphB = '00000000-0000-4000-8000-000000000093';
-    useGraphItemStore.setState({
-      positions: {
-        '4key': [graphAt(ID_A), graphAt(graphB)],
-      },
-    });
-    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
-
-    await expect(
-      patchGraphColorsByIds([ID_A, graphB], '#abcdef'),
-    ).rejects.toThrow('start failed');
-    expect(
-      useGraphItemStore
-        .getState()
-        .positions['4key'].map((position) => position.graphColor),
-    ).toEqual(['#86EFAC', '#86EFAC']);
-  });
-
-  it.each([
-    [{ showAvgLine: true }],
-    [{ graphAnimationEnabled: false }],
-    [{ graphSpeed: 2400 }],
-  ] as const)(
-    'graph runtime leaf %j는 single과 batch를 좁은 op 한 커밋으로 보낸다',
-    async (patch) => {
-      const graphB = '00000000-0000-4000-8000-000000000094';
-      useGraphItemStore.setState({
-        positions: { '4key': [graphAt(ID_A), graphAt(graphB)] },
-      });
-
-      await patchGraphPropertyById(ID_A, patch);
-      expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
-        [
-          {
-            kind: 'patchElement',
-            elementType: 'graph',
-            id: ID_A,
-            patch,
-          },
-        ],
-        expect.objectContaining({ onEnrolled: expect.any(Function) }),
-      );
-
-      api.commitSemanticOps.mockClear();
-      await patchGraphPropertiesByIds([ID_A, graphB], patch);
-      expect(api.commitSemanticOps).toHaveBeenCalledOnce();
-      expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
-        expect.objectContaining({ id: ID_A, patch }),
-        expect.objectContaining({ id: graphB, patch }),
-      ]);
-    },
-  );
 
   it('idle font color는 key와 knob의 비어 있던 active를 pre-edit idle raw로 materialize한다', async () => {
     const key = {
@@ -2299,44 +2041,6 @@ describe('elementOps', () => {
     },
   );
 
-  it.each([[{ reverse: true }], [{ sensitivity: 2.5 }]] as const)(
-    'knob runtime leaf %j는 single과 batch를 좁은 op 한 커밋으로 보낸다',
-    async (patch) => {
-      const knobB = '00000000-0000-4000-8000-000000000095';
-      const knob = (id: string) => ({
-        ...createDefaultKeyPosition(),
-        id,
-        axisId: 'HIDA:test',
-        sensitivity: 1,
-        reverse: false,
-      });
-      useKnobItemStore.setState({
-        positions: { '4key': [knob(ID_A), knob(knobB)] },
-      });
-
-      await patchKnobPropertyById(ID_A, patch);
-      expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
-        [
-          {
-            kind: 'patchElement',
-            elementType: 'knob',
-            id: ID_A,
-            patch,
-          },
-        ],
-        expect.objectContaining({ onEnrolled: expect.any(Function) }),
-      );
-
-      api.commitSemanticOps.mockClear();
-      await patchKnobPropertiesByIds([ID_A, knobB], patch);
-      expect(api.commitSemanticOps).toHaveBeenCalledOnce();
-      expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
-        expect.objectContaining({ id: ID_A, patch }),
-        expect.objectContaining({ id: knobB, patch }),
-      ]);
-    },
-  );
-
   it('runtime leaf batch 편입 전 실패는 graph와 knob eager를 각각 복원한다', async () => {
     const otherId = '00000000-0000-4000-8000-000000000096';
     useGraphItemStore.setState({
@@ -2376,46 +2080,6 @@ describe('elementOps', () => {
     ).toEqual([1, 1]);
   });
 
-  it('useInlineStyles는 4타입 target을 한 semantic commit으로 보낸다', async () => {
-    const targets = [
-      { elementType: 'key' as const, id: ID_A },
-      { elementType: 'stat' as const, id: ID_B },
-      {
-        elementType: 'graph' as const,
-        id: '00000000-0000-4000-8000-0000000000b1',
-      },
-      {
-        elementType: 'knob' as const,
-        id: '00000000-0000-4000-8000-0000000000b2',
-      },
-    ];
-
-    await patchUseInlineStylesById('key', ID_A, true);
-    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
-      [
-        {
-          kind: 'patchElement',
-          elementType: 'key',
-          id: ID_A,
-          patch: { useInlineStyles: true },
-        },
-      ],
-      expect.objectContaining({ onEnrolled: expect.any(Function) }),
-    );
-
-    api.commitSemanticOps.mockClear();
-    await patchUseInlineStylesByTargets(targets, false);
-    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
-    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
-      targets.map(({ elementType, id }) => ({
-        kind: 'patchElement',
-        elementType,
-        id,
-        patch: { useInlineStyles: false },
-      })),
-    );
-  });
-
   it('useInlineStyles batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
     await expect(
       patchUseInlineStylesByTargets(
@@ -2430,58 +2094,6 @@ describe('elementOps', () => {
       patchUseInlineStylesByTargets([{ elementType: 'graph', id: '' }], true),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
-  });
-
-  it('useInlineStyles 편입 전 실패는 자기 eager leaf를 복원한다', async () => {
-    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
-
-    await expect(patchUseInlineStylesById('key', ID_A, false)).rejects.toThrow(
-      'start failed',
-    );
-
-    expect(
-      useKeyStore.getState().canonicalPositions['4key'][0].useInlineStyles,
-    ).toBeUndefined();
-  });
-
-  it('font style은 단일과 혼합 4타입 target을 exact leaf 한 commit으로 보낸다', async () => {
-    const targets = [
-      { elementType: 'key' as const, id: ID_A },
-      { elementType: 'stat' as const, id: ID_B },
-      {
-        elementType: 'graph' as const,
-        id: '00000000-0000-4000-8000-0000000000c1',
-      },
-      {
-        elementType: 'knob' as const,
-        id: '00000000-0000-4000-8000-0000000000c2',
-      },
-    ];
-
-    await patchFontStyleById('key', ID_A, { fontWeight: 700 });
-    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
-      [
-        {
-          kind: 'patchElement',
-          elementType: 'key',
-          id: ID_A,
-          patch: { fontWeight: 700 },
-        },
-      ],
-      expect.objectContaining({ onEnrolled: expect.any(Function) }),
-    );
-
-    api.commitSemanticOps.mockClear();
-    await patchFontStyleByTargets(targets, { fontItalic: false });
-    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
-    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
-      targets.map(({ elementType, id }) => ({
-        kind: 'patchElement',
-        elementType,
-        id,
-        patch: { fontItalic: false },
-      })),
-    );
   });
 
   it('font style batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
@@ -2502,67 +2114,6 @@ describe('elementOps', () => {
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 
-  it('font style 편입 전 실패는 자기 eager leaf만 복원한다', async () => {
-    useKeyStore.setState((state) => ({
-      canonicalPositions: {
-        ...state.canonicalPositions,
-        '4key': state.canonicalPositions['4key'].map((position) => ({
-          ...position,
-          fontItalic: false,
-        })),
-      },
-    }));
-    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
-
-    await expect(
-      patchFontStyleById('key', ID_A, { fontItalic: true }),
-    ).rejects.toThrow('start failed');
-
-    expect(
-      useKeyStore.getState().canonicalPositions['4key'][0].fontItalic,
-    ).toBe(false);
-  });
-
-  it('fontFamily는 raw string을 single과 혼합 4타입 한 commit으로 보낸다', async () => {
-    const targets = [
-      { elementType: 'key' as const, id: ID_A },
-      { elementType: 'stat' as const, id: ID_B },
-      {
-        elementType: 'graph' as const,
-        id: '00000000-0000-4000-8000-0000000000c3',
-      },
-      {
-        elementType: 'knob' as const,
-        id: '00000000-0000-4000-8000-0000000000c4',
-      },
-    ];
-
-    await patchFontFamilyById('key', ID_A, '  Raw Family  ');
-    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
-      [
-        {
-          kind: 'patchElement',
-          elementType: 'key',
-          id: ID_A,
-          patch: { fontFamily: '  Raw Family  ' },
-        },
-      ],
-      expect.objectContaining({ onEnrolled: expect.any(Function) }),
-    );
-
-    api.commitSemanticOps.mockClear();
-    await patchFontFamilyByTargets(targets, { fontFamily: 'Family One' });
-    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
-    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
-      targets.map(({ elementType, id }) => ({
-        kind: 'patchElement',
-        elementType,
-        id,
-        patch: { fontFamily: 'Family One' },
-      })),
-    );
-  });
-
   it('fontFamily batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
     await expect(
       patchFontFamilyByTargets(
@@ -2579,37 +2130,6 @@ describe('elementOps', () => {
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
-  });
-
-  it('fontFamily 편입 전 실패는 top-level eager leaf만 복원한다', async () => {
-    useKeyStore.setState((state) => ({
-      canonicalPositions: {
-        ...state.canonicalPositions,
-        '4key': state.canonicalPositions['4key'].map((position) => ({
-          ...position,
-          fontFamily: 'Before',
-          counter: { ...position.counter, fontFamily: 'Counter Family' },
-        })),
-      },
-      positions: {
-        ...state.positions,
-        '4key': state.positions['4key'].map((position) => ({
-          ...position,
-          fontFamily: 'Before',
-          counter: { ...position.counter, fontFamily: 'Counter Family' },
-        })),
-      },
-    }));
-    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
-
-    await expect(patchFontFamilyById('key', ID_A, 'After')).rejects.toThrow(
-      'start failed',
-    );
-
-    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
-      fontFamily: 'Before',
-      counter: { fontFamily: 'Counter Family' },
-    });
   });
 
   it('displayText는 raw common-4 leaf와 gesture를 N ops 한 commit으로 보낸다', async () => {
@@ -3176,41 +2696,6 @@ describe('elementOps', () => {
     expect(
       useKeyStore.getState().canonicalPositions['4key'][0].displayText,
     ).toBeUndefined();
-  });
-
-  it('note literal은 single과 key batch를 exact leaf 한 commit으로 보낸다', async () => {
-    await patchNotePropertyById(ID_A, { noteEffectEnabled: false });
-    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
-      [
-        {
-          kind: 'patchElement',
-          elementType: 'key',
-          id: ID_A,
-          patch: { noteEffectEnabled: false },
-        },
-      ],
-      expect.objectContaining({ onEnrolled: expect.any(Function) }),
-    );
-
-    api.commitSemanticOps.mockClear();
-    await patchNotePropertiesByIds([ID_A, ID_B], {
-      noteBorderSide: 'vertical',
-    });
-    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
-    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
-      {
-        kind: 'patchElement',
-        elementType: 'key',
-        id: ID_A,
-        patch: { noteBorderSide: 'vertical' },
-      },
-      {
-        kind: 'patchElement',
-        elementType: 'key',
-        id: ID_B,
-        patch: { noteBorderSide: 'vertical' },
-      },
-    ]);
   });
 
   it('note batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
@@ -4323,26 +3808,5 @@ describe('elementOps', () => {
       patchActiveImageFitById('key', 'key-0', 'contain'),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
-  });
-
-  it('note 편입 전 실패는 자기 eager leaf만 복원한다', async () => {
-    useKeyStore.setState((state) => ({
-      canonicalPositions: {
-        ...state.canonicalPositions,
-        '4key': state.canonicalPositions['4key'].map((position) => ({
-          ...position,
-          noteAlignment: 'left' as const,
-        })),
-      },
-    }));
-    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
-
-    await expect(
-      patchNotePropertyById(ID_A, { noteAlignment: 'right' }),
-    ).rejects.toThrow('start failed');
-
-    expect(
-      useKeyStore.getState().canonicalPositions['4key'][0].noteAlignment,
-    ).toBe('left');
   });
 });

@@ -7,7 +7,7 @@ import {
   type PropertyIntents,
 } from '@src/renderer/editor/runtime/elementIntent';
 import type { EditorOpV1 } from '@src/types/editor';
-import { runMixedElementBoundsIntent } from '@src/renderer/editor/runtime/mixedElementIntent';
+import { runMixedElementOpsIntent } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
   commitElementBoundsById,
@@ -1025,7 +1025,7 @@ export function useGridResize({
             });
           }
         }
-        void runMixedElementBoundsIntent({
+        void runMixedElementOpsIntent({
           gestureId: settlementGestureId,
           pluginIds: frozenPluginIds,
           ops,

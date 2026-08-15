@@ -93,8 +93,6 @@ export const runMixedElementOpsIntent = async (options: {
   }
 };
 
-export const runMixedElementBoundsIntent = runMixedElementOpsIntent;
-
 export const runMixedElementDeleteIntent = async (options: {
   gestureId: string;
   pluginIds: readonly string[];

@@ -31,11 +31,7 @@ import {
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
-import type {
-  CanonicalEditorDocumentV1,
-  EditorOpV1,
-  EditorPatchV1,
-} from '@src/types/editor';
+import type { EditorOpV1 } from '@src/types/editor';
 
 type NativeType = 'key' | 'stat' | 'graph' | 'knob';
 
@@ -309,44 +305,6 @@ export const deleteFrozenSelection = async (
       return;
     }
 
-    const generatePatch = (
-      base: CanonicalEditorDocumentV1,
-    ): { patch: EditorPatchV1 | null; satisfied: boolean } => {
-      const plan = collectRemoval({
-        keys: base.keys as never,
-        keyPositions: base.keyPositions as never,
-        statPositions: base.statPositions as never,
-        graphPositions: base.graphPositions as never,
-        knobPositions: base.knobPositions as never,
-        layerGroups: base.layerGroups as never,
-      });
-      if (plan.found === 0) return { patch: null, satisfied: true };
-      const applied = applyRemoval(
-        {
-          keys: base.keys as never,
-          keyPositions: base.keyPositions as never,
-          statPositions: base.statPositions as never,
-          graphPositions: base.graphPositions as never,
-          knobPositions: base.knobPositions as never,
-          layerGroups: base.layerGroups as never,
-        },
-        plan.removal,
-      );
-      return {
-        satisfied: false,
-        patch: {
-          schemaVersion: 1,
-          keys: applied.next.keys as never,
-          keyPositions: applied.next.keyPositions as never,
-          statPositions: applied.next.statPositions as never,
-          graphPositions: applied.next.graphPositions as never,
-          knobPositions: applied.next.knobPositions as never,
-          ...(applied.groupsChanged
-            ? { layerGroups: applied.layerGroups as never }
-            : {}),
-        },
-      };
-    };
     try {
       if (pluginFullIds.length > 0) {
         const deleted = new Set(pluginFullIds);
@@ -355,20 +313,18 @@ export const deleteFrozenSelection = async (
           initialPluginIds: pluginIds,
           pluginScope: () => pluginIds,
           receipt,
-          generate: ({ base, pluginProjection }) => {
-            const result = generatePatch(base);
+          // 여기는 stableTargets가 빈 plugin 전용 경로다. native 삭제 대상이
+          // 없어 editor patch는 항상 비고, plugin projection만 정산한다
+          generate: ({ pluginProjection }) => {
             const desired = pluginProjection.filter(
               (element) => !deleted.has(element.fullId),
             );
-            if (
-              result.satisfied &&
-              desired.length === pluginProjection.length
-            ) {
+            if (desired.length === pluginProjection.length) {
               return { kind: 'satisfied' };
             }
             return {
               kind: 'patch',
-              patch: result.patch,
+              patch: null,
               desiredPluginProjection: desired,
             };
           },
