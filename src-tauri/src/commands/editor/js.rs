@@ -75,8 +75,16 @@ pub struct JsPluginUpdateResponse {
     pub error: Option<String>,
 }
 
-fn emit_js_state(app: &AppHandle, script: &CustomJs) -> CmdResult<()> {
-    app.emit("js:content", script)?;
+// forced: 내용이 같아도 재주입이 필요한 명시 리로드 표시
+#[derive(Serialize, Clone)]
+struct JsStatePayload<'a> {
+    #[serde(flatten)]
+    script: &'a CustomJs,
+    forced: bool,
+}
+
+fn emit_js_state(app: &AppHandle, script: &CustomJs, forced: bool) -> CmdResult<()> {
+    app.emit("js:content", JsStatePayload { script, forced })?;
     Ok(())
 }
 
@@ -125,7 +133,7 @@ pub fn js_toggle(
     app.emit("js:use", &JsToggleResponse { enabled })?;
 
     if enabled {
-        emit_js_state(&app, &transaction.value)?;
+        emit_js_state(&app, &transaction.value, false)?;
     }
 
     Ok(JsToggleResponse { enabled })
@@ -151,7 +159,7 @@ pub fn js_reset(
 
     emit_history_status(&app, &transaction);
     app.emit("js:use", &JsToggleResponse { enabled: false })?;
-    emit_js_state(&app, &default)?;
+    emit_js_state(&app, &default, false)?;
     Ok(())
 }
 
@@ -181,7 +189,7 @@ pub fn js_set_content(
                 Ok(script.clone())
             })?;
     emit_history_status(&app, &transaction);
-    emit_js_state(&app, &transaction.value)?;
+    emit_js_state(&app, &transaction.value, false)?;
 
     Ok(JsSetContentResponse {
         success: true,
@@ -261,7 +269,7 @@ pub fn js_load(
                 Ok(script.clone())
             })?;
     emit_history_status(&app, &transaction);
-    emit_js_state(&app, &transaction.value)?;
+    emit_js_state(&app, &transaction.value, false)?;
 
     Ok(JsLoadResponse {
         success: true,
@@ -310,7 +318,7 @@ pub fn js_reload(
                 Ok((script.clone(), updated_plugins))
             })?;
     emit_history_status(&app, &transaction);
-    emit_js_state(&app, &transaction.value.0)?;
+    emit_js_state(&app, &transaction.value.0, false)?;
 
     Ok(JsReloadResponse {
         updated: transaction.value.1.clone(),
@@ -359,7 +367,7 @@ pub fn js_remove_plugin(
         });
     }
 
-    emit_js_state(&app, &transaction.value.0)?;
+    emit_js_state(&app, &transaction.value.0, false)?;
 
     Ok(JsRemoveResponse {
         success: true,
@@ -429,7 +437,7 @@ pub fn js_set_plugin_enabled(
         });
     };
 
-    emit_js_state(&app, &transaction.value.0)?;
+    emit_js_state(&app, &transaction.value.0, false)?;
 
     Ok(JsPluginUpdateResponse {
         success: true,
