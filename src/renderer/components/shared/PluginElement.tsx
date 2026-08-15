@@ -481,6 +481,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
   const {
     handlePointerDown: handleSelectionDragPointerDown,
     movedDuringPressRef,
+    pressMovedRef,
   } = useSelectionDrag({
     enabled: windowType === 'main' && isSelectionMode,
     zoom,
@@ -1158,6 +1159,15 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
     // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화
     if (isMac() && e.ctrlKey) return;
+
+    // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 지우개 삭제·
+    // 수식키 토글·범위 선택·선택+패널 열기로 새지 않게 흡수
+    // (네이티브 요소와 동일 계약. 개별 드래그는 wasMoved, 선택 모드
+    // 다중 드래그는 pressMovedRef가 판별)
+    if (draggable.wasMoved || pressMovedRef.current) {
+      e.stopPropagation();
+      return;
+    }
 
     if (windowType === 'main' && activeTool === 'eraser') {
       e.stopPropagation();

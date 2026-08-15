@@ -36,6 +36,10 @@ interface UseSelectionDragOptions {
 interface UseSelectionDragReturn {
   handlePointerDown: (event: React.PointerEvent<HTMLElement>) => void;
   movedDuringPressRef: RefObject<boolean>;
+  // 이번 press에서 실이동 발생 - 다음 pointerdown에서 리셋되므로 드래그
+  // 직후 trailing click 판별 전용. 두 press를 걸치는 movedDuringPressRef를
+  // 클릭 가드에 쓰면 드래그 다음번 클릭까지 삼킨다
+  pressMovedRef: RefObject<boolean>;
 }
 
 // movedDuringPressRef는 "이번 또는 직전 press에서 실이동 발생"을 뜻한다 —
@@ -315,5 +319,9 @@ export const useSelectionDrag = ({
     return () => activeCleanupRef.current?.();
   }, []);
 
-  return { handlePointerDown, movedDuringPressRef };
+  return {
+    handlePointerDown,
+    movedDuringPressRef,
+    pressMovedRef: lastPressMovedRef,
+  };
 };

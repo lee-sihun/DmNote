@@ -64,6 +64,7 @@ vi.mock('@utils/grid/smartGuides', async (importOriginal) => {
 interface HarnessProps {
   onClick: () => void;
   onMovedCheck: (moved: boolean) => void;
+  onPressMovedCheck?: (moved: boolean) => void;
   onMultiDragStart: () => void | (() => void);
   onMultiDrag: (dx: number, dy: number) => void;
   onMultiDragEnd: () => void;
@@ -72,30 +73,35 @@ interface HarnessProps {
 const Harness = ({
   onClick,
   onMovedCheck,
+  onPressMovedCheck,
   onMultiDragStart,
   onMultiDrag,
   onMultiDragEnd,
 }: HarnessProps) => {
-  const { handlePointerDown, movedDuringPressRef } = useSelectionDrag({
-    enabled: true,
-    zoom: 1,
-    startX: 0,
-    startY: 0,
-    elementId: 'key-0',
-    elementWidth: 60,
-    elementHeight: 60,
-    selectedElements: [{ id: 'key-0', type: 'key', index: 0 }],
-    getOtherElements: () => [],
-    onMultiDragStart,
-    onMultiDrag,
-    onMultiDragEnd,
-  });
+  const { handlePointerDown, movedDuringPressRef, pressMovedRef } =
+    useSelectionDrag({
+      enabled: true,
+      zoom: 1,
+      startX: 0,
+      startY: 0,
+      elementId: 'key-0',
+      elementWidth: 60,
+      elementHeight: 60,
+      selectedElements: [{ id: 'key-0', type: 'key', index: 0 }],
+      getOtherElements: () => [],
+      onMultiDragStart,
+      onMultiDrag,
+      onMultiDragEnd,
+    });
 
   return (
     <div
       data-testid="selection-drag"
       onPointerDown={handlePointerDown}
-      onClick={onClick}
+      onClick={() => {
+        onPressMovedCheck?.(pressMovedRef.current);
+        onClick();
+      }}
       onDoubleClick={() => onMovedCheck(movedDuringPressRef.current)}
     />
   );
@@ -520,5 +526,91 @@ describe('useSelectionDrag', () => {
       root2.unmount();
     });
     host2.remove();
+  });
+});
+
+describe('pressMovedRef 클릭 가드 계약', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  let rafCallbacks: Map<number, FrameRequestCallback>;
+  let nextRafId: number;
+
+  const pointerEvent = (type: string, init: PointerEventInit = {}) =>
+    new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      pointerId: 1,
+      pointerType: 'mouse',
+      isPrimary: true,
+      ...init,
+    });
+
+  const flushRaf = () => {
+    const callbacks = [...rafCallbacks.values()];
+    rafCallbacks.clear();
+    callbacks.forEach((callback) => callback(performance.now()));
+  };
+
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    rafCallbacks = new Map();
+    nextRafId = 1;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      const id = nextRafId++;
+      rafCallbacks.set(id, callback);
+      return id;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+      rafCallbacks.delete(id);
+    });
+    releaseDragSession();
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  it('드래그 press의 trailing click에서 참, 다음 일반 press에서 거짓', async () => {
+    const pressMovedChecks: boolean[] = [];
+    await act(async () => {
+      root.render(
+        <Harness
+          onClick={() => {}}
+          onMovedCheck={() => {}}
+          onPressMovedCheck={(moved) => pressMovedChecks.push(moved)}
+          onMultiDragStart={() => {}}
+          onMultiDrag={() => {}}
+          onMultiDragEnd={() => {}}
+        />,
+      );
+    });
+    const element = host.querySelector<HTMLElement>(
+      '[data-testid="selection-drag"]',
+    )!;
+
+    // 드래그로 끝난 press - click 시점에 참이어야 가드가 삼킬 수 있다
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 8 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 8 }));
+    });
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // 이동 없는 다음 press - 거짓이어야 정상 클릭이 통과한다
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointerup'));
+    });
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(pressMovedChecks).toEqual([true, false]);
   });
 });

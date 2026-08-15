@@ -175,20 +175,21 @@ const GraphItem = ({
     disabled: isSelectionMode,
   });
 
-  const { handlePointerDown, movedDuringPressRef } = useSelectionDrag({
-    enabled: isSelectionMode,
-    zoom,
-    startX: dx,
-    startY: dy,
-    elementId: effectiveElementId,
-    elementWidth: width || 200,
-    elementHeight: height || 100,
-    selectedElements,
-    getOtherElements,
-    onMultiDragStart,
-    onMultiDrag,
-    onMultiDragEnd,
-  });
+  const { handlePointerDown, movedDuringPressRef, pressMovedRef } =
+    useSelectionDrag({
+      enabled: isSelectionMode,
+      zoom,
+      startX: dx,
+      startY: dy,
+      elementId: effectiveElementId,
+      elementWidth: width || 200,
+      elementHeight: height || 100,
+      selectedElements,
+      getOtherElements,
+      onMultiDragStart,
+      onMultiDrag,
+      onMultiDragEnd,
+    });
 
   if (position?.hidden) return null;
 
@@ -196,6 +197,14 @@ const GraphItem = ({
     // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
     // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
     if (macOS && e.ctrlKey) return;
+    // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 수식키 토글·
+    // 범위 선택·지우개로 새지 않게 흡수. 개별 드래그는 wasMoved,
+    // 선택 모드 다중 드래그는 pressMovedRef가 판별 (선택 모드에서는
+    // 개별 draggable이 disabled라 wasMoved가 항상 false)
+    if (draggable.wasMoved || pressMovedRef.current) {
+      e.stopPropagation();
+      return;
+    }
     const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
 
