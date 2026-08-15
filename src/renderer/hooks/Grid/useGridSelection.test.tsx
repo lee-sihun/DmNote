@@ -18,6 +18,7 @@ import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozen
 const mocks = vi.hoisted(() => ({
   commitGeometry: vi.fn(() => Promise.resolve(1)),
   runMixedIntent: vi.fn(() => Promise.resolve()),
+  lastAck: null as unknown,
   pluginAdditionThrows: false,
   commitGeneratedPatch: vi.fn(
     (
@@ -51,7 +52,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   editorCoordinator: {
     commitPatch: mocks.commitPatch,
     commitGeneratedPatch: mocks.commitGeneratedPatch,
-    getState: () => ({ lastAck: null }),
+    getState: () => ({ lastAck: mocks.lastAck }),
   },
 }));
 
@@ -167,6 +168,7 @@ describe('useGridSelection compound history gesture', () => {
     mocks.runMixedIntent.mockClear();
     mocks.commitGeneratedPatch.mockClear();
     mocks.pluginAdditionThrows = false;
+    mocks.lastAck = null;
     mocks.runMixedGestureIntent.mockClear();
     mocks.runMixedDeleteIntent.mockClear();
     mocks.deletePluginElements.mockClear();
@@ -451,6 +453,116 @@ describe('useGridSelection compound history gesture', () => {
       gestureId,
     );
     expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  // 혼합 이동 정산 wire 계약 - 이관 전 현행 동작을 고정한다.
+  // mock 호출 인자만 보는 라우팅 테스트와 달리 generate를 실제로 실행해
+  // 슬롯 base에 어떤 값이 실려 나가는지 검증한다
+  const settleMixedMove = async () => {
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([
+        { type: 'key', id: STABLE_KEY_ID, index: 0 },
+        { type: 'plugin', id: 'plugin-a:element' },
+      ]);
+    });
+    api.syncSelectedElementsToOverlay(gestureId);
+    expect(mocks.runMixedIntent).toHaveBeenCalledTimes(1);
+    return (mocks.runMixedIntent.mock.calls[0] as unknown[])[0] as {
+      gestureId: string;
+      pluginIds: readonly string[];
+      skipContext: string;
+      applyEager: () => { rollback: () => void } | null;
+      generate: (base: unknown) => unknown;
+    };
+  };
+
+  const baseWith = (position: Record<string, unknown>) => ({
+    schemaVersion: 1,
+    keys: { '4key': ['KeyA'] },
+    keyPositions: { '4key': [position] },
+    statPositions: {},
+    graphPositions: {},
+    knobPositions: {},
+    layerGroups: {},
+  });
+
+  it('혼합 이동 정산은 같은 gestureId와 plugin scope로 한 transaction에 실린다', async () => {
+    const options = await settleMixedMove();
+
+    expect(options.gestureId).toBe(gestureId);
+    expect(options.pluginIds).toEqual(['plugin-a']);
+    expect(options.skipContext).toBe('mixed selection settlement');
+    expect(mocks.commitGeometry).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('혼합 이동 정산 wire는 dx·dy만 의도로 싣고 크기는 슬롯 base 값을 따른다', async () => {
+    act(() => {
+      useKeyStore.setState({
+        positions: { '4key': [{ ...keyPosition, dx: 111, dy: 222 }] },
+        canonicalPositions: { '4key': [{ ...keyPosition, dx: 111, dy: 222 }] },
+      });
+    });
+    const options = await settleMixedMove();
+
+    // 병행 리사이즈가 슬롯 안에서 먼저 착지한 상황
+    const patch = options.generate(
+      baseWith({ ...keyPosition, dx: 0, dy: 0, width: 999, height: 888 }),
+    ) as { keyPositions: Record<string, unknown[]> } | null;
+
+    const settled = patch?.keyPositions['4key'][0] as Record<string, unknown>;
+    expect(settled.dx).toBe(111);
+    expect(settled.dy).toBe(222);
+    // 이동 정산이 병행 리사이즈 결과를 되돌리지 않는다
+    expect(settled.width).toBe(999);
+    expect(settled.height).toBe(888);
+    expect(settled.id).toBe(STABLE_KEY_ID);
+  });
+
+  it('혼합 이동 정산은 슬롯 base에서 대상이 사라지면 무커밋으로 종료한다', async () => {
+    const options = await settleMixedMove();
+
+    // 정산 대기 중 대상이 삭제된 상황 - 남은 요소를 건드리면 안 된다
+    const patch = options.generate(
+      baseWith({
+        ...keyPosition,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        dx: 7,
+        dy: 8,
+      }),
+    );
+
+    expect(patch).toBeNull();
+  });
+
+  it('혼합 이동 정산 receipt는 lastAck 값을 before로 잡는다', async () => {
+    mocks.lastAck = baseWith({ ...keyPosition, dx: 1, dy: 2 });
+    act(() => {
+      useKeyStore.setState({
+        positions: { '4key': [{ ...keyPosition, dx: 55, dy: 66 }] },
+        canonicalPositions: { '4key': [{ ...keyPosition, dx: 55, dy: 66 }] },
+      });
+    });
+    const options = await settleMixedMove();
+
+    const receipt = options.applyEager();
+    expect(receipt).not.toBeNull();
+
+    // eager 값이 그대로면 롤백은 lastAck 값으로 되돌린다
+    receipt?.rollback();
+    const restored = useKeyStore.getState().positions['4key'][0];
+    expect(restored.dx).toBe(1);
+    expect(restored.dy).toBe(2);
+  });
+
+  it('lastAck가 없으면 이동 정산 receipt는 복원 대상을 만들지 않는다', async () => {
+    const options = await settleMixedMove();
+
+    const receipt = options.applyEager();
+    receipt?.rollback();
+    const kept = useKeyStore.getState().positions['4key'][0];
+    expect(kept.dx).toBe(keyPosition.dx);
+    expect(kept.dy).toBe(keyPosition.dy);
   });
 
   it('빈 선택 정산은 editor를 커밋하지 않는다', () => {
