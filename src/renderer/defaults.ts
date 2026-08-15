@@ -12,6 +12,7 @@ import {
   DEFAULT_COUNTER_FONT_SIZE,
   DEFAULT_COUNTER_FONT_WEIGHT,
 } from '@utils/core/elementDefaults';
+import { isMac } from '@utils/core/platform';
 
 export interface DefaultsPayload {
   settings: SettingsState;
@@ -151,15 +152,18 @@ function FALLBACK_GRID_SETTINGS(): GridSettings {
   };
 }
 
+// 백엔드 SettingsState 기본과 동일 규칙 - macOS는 Cmd, 그 외는 Ctrl
+const primaryModifierShortcut = (key: string, shift = false) => ({
+  key,
+  ctrl: !isMac(),
+  shift,
+  alt: false,
+  meta: isMac(),
+});
+
 function FALLBACK_SHORTCUTS(): ShortcutsState {
   return {
-    toggleOverlay: {
-      key: 'KeyO',
-      ctrl: true,
-      shift: true,
-      alt: false,
-      meta: false,
-    },
+    toggleOverlay: primaryModifierShortcut('KeyO', true),
     toggleOverlayLock: { key: '' },
     toggleAlwaysOnTop: { key: '' },
     switchKeyMode: {
@@ -169,28 +173,10 @@ function FALLBACK_SHORTCUTS(): ShortcutsState {
       alt: false,
       meta: false,
     },
-    toggleSettingsPanel: {
-      key: 'KeyB',
-      ctrl: true,
-      shift: false,
-      alt: false,
-      meta: false,
-    },
-    zoomIn: { key: 'Equal', ctrl: true, shift: false, alt: false, meta: false },
-    zoomOut: {
-      key: 'Minus',
-      ctrl: true,
-      shift: false,
-      alt: false,
-      meta: false,
-    },
-    resetZoom: {
-      key: 'Digit0',
-      ctrl: true,
-      shift: false,
-      alt: false,
-      meta: false,
-    },
+    toggleSettingsPanel: primaryModifierShortcut('KeyB'),
+    zoomIn: primaryModifierShortcut('Equal'),
+    zoomOut: primaryModifierShortcut('Minus'),
+    resetZoom: primaryModifierShortcut('Digit0'),
   };
 }
 
@@ -202,7 +188,7 @@ function FALLBACK_SETTINGS_STATE(): SettingsState {
     noteEffect: false,
     noteSettings: FALLBACK_NOTE_SETTINGS(),
     fontSettings: { customFonts: [] },
-    angleMode: 'd3d11',
+    angleMode: isMac() ? 'metal' : 'd3d11',
     language: 'ko',
     laboratoryEnabled: false,
     developerModeEnabled: false,
