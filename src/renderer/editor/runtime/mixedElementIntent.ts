@@ -10,58 +10,10 @@ import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
-import type {
-  CanonicalEditorDocumentV1,
-  EditorOpV1,
-  EditorPatchV1,
-} from '@src/types/editor';
+import type { CanonicalEditorDocumentV1, EditorOpV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 import type { ElementIntentReceipt } from './elementIntent';
-
-// 혼합 게스처용 러너: runElementIntent의 편입 3상태 계약을 mixed
-// transaction에 적용한다. generator는 coordinator 직렬 슬롯 안에서 최신
-// base로 평가되고, null은 editorChanges 없음(plugin 변경만 커밋)이다.
-//
-// 복원 판정은 generatedNull이 enrolled보다 우선한다 - editor 의도가
-// fail-closed로 무커밋된 뒤 plugin callback이 실패해도 eager 잔존은
-// 이 러너가 복원해야 한다
-export const runMixedElementIntent = async (options: {
-  gestureId: string;
-  pluginIds: readonly string[];
-  applyEager: () => ElementIntentReceipt | null;
-  generate: (base: CanonicalEditorDocumentV1) => EditorPatchV1 | null;
-  skipContext: string;
-  // 의도적으로 editor를 생략하는 호출자(plugin만 커밋)는 skip 관측 생략
-  expectNull?: boolean;
-}): Promise<void> => {
-  const receipt = options.applyEager();
-  let generatedNull = false;
-  let enrolled = false;
-  try {
-    await commitMixedGestureTransaction(
-      options.gestureId,
-      (base) => {
-        const patch = options.generate(base);
-        if (patch === null) generatedNull = true;
-        return patch;
-      },
-      options.pluginIds,
-      {
-        onEnrolled: () => {
-          enrolled = true;
-        },
-      },
-    );
-    if (generatedNull) {
-      receipt?.rollback();
-      if (!options.expectNull) reportElementOpSkipped(options.skipContext);
-    }
-  } catch (error) {
-    if (generatedNull || !enrolled) receipt?.rollback();
-    throw error;
-  }
-};
 
 export const runMixedElementOpsIntent = async (options: {
   gestureId: string;

@@ -51,13 +51,10 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
-  runMixedElementIntent: vi.fn(
-    (options: { gestureId: string; applyEager: () => unknown }) => {
-      options.applyEager();
-      commitPatchMock({ schemaVersion: 1 }, { gestureId: options.gestureId });
-      return Promise.resolve();
-    },
-  ),
+  runMixedGestureElementIntent: vi.fn((options: { gestureId: string }) => {
+    commitPatchMock({ schemaVersion: 1 }, { gestureId: options.gestureId });
+    return Promise.resolve({ committed: true, satisfied: true });
+  }),
 }));
 
 vi.mock('@utils/plugin/bridgeMessages', () => ({

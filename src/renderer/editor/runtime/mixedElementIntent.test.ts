@@ -17,8 +17,17 @@ vi.mock('./editorSemanticOps', () => ({
   commitSemanticOps: mocks.commitSemantic,
 }));
 
+class TestIntentAbort extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'ElementIntentAbort';
+  }
+}
+
 vi.mock('./elementIntent', () => ({
   reportElementOpSkipped: mocks.reportSkipped,
+  isElementIntentAbort: (error: unknown) =>
+    error instanceof Error && error.name === 'ElementIntentAbort',
 }));
 
 vi.mock('@plugins/rpc/pluginRpcClient', () => ({
@@ -28,131 +37,21 @@ vi.mock('@plugins/rpc/pluginRpcClient', () => ({
 import {
   runMixedElementOpsIntent,
   runMixedElementDeleteIntent,
-  runMixedElementIntent,
+  runMixedGestureElementIntent,
 } from './mixedElementIntent';
 
-import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import type { EditorDocumentV1 } from '@src/types/editor';
+import type { MixedIntentGeneration } from '@plugins/runtime/displayElement/gestureTransaction';
 
-type Generate = (base: EditorDocumentV1) => EditorPatchV1 | null;
 type Meta = { onEnrolled?: () => void; preflight?: () => void };
 
-const baseOptions = (rollback: () => void, generate: Generate) => ({
-  gestureId: 'gesture-1',
-  pluginIds: ['plugin-a'],
-  applyEager: () => ({ rollback }),
-  generate,
-  skipContext: 'test settlement',
-});
-
-describe('runMixedElementIntent receipt 소유권', () => {
+describe('혼합 의도 러너 receipt 소유권', () => {
   beforeEach(() => {
     mocks.commitMixed.mockReset();
     mocks.commitMixedIntent.mockReset();
     mocks.commitSemantic.mockReset();
     mocks.reportSkipped.mockClear();
     mocks.authorityGeneration = 7;
-  });
-
-  it('generatedNull은 성공해도 receipt를 복원하고 skip을 관측한다', async () => {
-    const rollback = vi.fn();
-    mocks.commitMixed.mockImplementation(
-      async (
-        _gestureId: string,
-        generate: Generate,
-        _ids: unknown,
-        meta: Meta,
-      ) => {
-        generate({} as EditorDocumentV1);
-        meta.onEnrolled?.();
-      },
-    );
-
-    await runMixedElementIntent(baseOptions(rollback, () => null));
-
-    expect(rollback).toHaveBeenCalledTimes(1);
-    expect(mocks.reportSkipped).toHaveBeenCalledWith('test settlement');
-  });
-
-  it('expectNull은 복원하되 skip 관측을 생략한다', async () => {
-    const rollback = vi.fn();
-    mocks.commitMixed.mockImplementation(
-      async (
-        _gestureId: string,
-        generate: Generate,
-        _ids: unknown,
-        meta: Meta,
-      ) => {
-        generate({} as EditorDocumentV1);
-        meta.onEnrolled?.();
-      },
-    );
-
-    await runMixedElementIntent({
-      ...baseOptions(rollback, () => null),
-      expectNull: true,
-    });
-
-    expect(rollback).toHaveBeenCalledTimes(1);
-    expect(mocks.reportSkipped).not.toHaveBeenCalled();
-  });
-
-  it('편입 전 실패는 receipt를 복원하고 원 오류를 전파한다', async () => {
-    const rollback = vi.fn();
-    mocks.commitMixed.mockRejectedValue(new Error('drain failed'));
-
-    await expect(
-      runMixedElementIntent(
-        baseOptions(rollback, () => ({ schemaVersion: 1 })),
-      ),
-    ).rejects.toThrow('drain failed');
-
-    expect(rollback).toHaveBeenCalledTimes(1);
-  });
-
-  it('편입 후 실패는 gesture 실패 경로가 소유한다 - 복원 금지', async () => {
-    const rollback = vi.fn();
-    mocks.commitMixed.mockImplementation(
-      async (
-        _gestureId: string,
-        generate: Generate,
-        _ids: unknown,
-        meta: Meta,
-      ) => {
-        generate({} as EditorDocumentV1);
-        meta.onEnrolled?.();
-        throw new Error('transaction failed');
-      },
-    );
-
-    await expect(
-      runMixedElementIntent(
-        baseOptions(rollback, () => ({ schemaVersion: 1 })),
-      ),
-    ).rejects.toThrow('transaction failed');
-
-    expect(rollback).not.toHaveBeenCalled();
-  });
-
-  it('generatedNull 후 plugin 실패도 receipt를 복원한다 - null 판정 우선', async () => {
-    const rollback = vi.fn();
-    mocks.commitMixed.mockImplementation(
-      async (
-        _gestureId: string,
-        generate: Generate,
-        _ids: unknown,
-        meta: Meta,
-      ) => {
-        generate({} as EditorDocumentV1);
-        meta.onEnrolled?.();
-        throw new Error('plugin commit failed');
-      },
-    );
-
-    await expect(
-      runMixedElementIntent(baseOptions(rollback, () => null)),
-    ).rejects.toThrow('plugin commit failed');
-
-    expect(rollback).toHaveBeenCalledTimes(1);
   });
 
   it('안정 bounds 혼합 의도는 ordered ops를 같은 transaction에 전달한다', async () => {
@@ -413,5 +312,124 @@ describe('runMixedElementIntent receipt 소유권', () => {
       }),
     ).rejects.toThrow('plugin authority generation changed');
     expect(rollback).toHaveBeenCalledOnce();
+  });
+});
+
+describe('runMixedGestureElementIntent receipt 소유권', () => {
+  beforeEach(() => {
+    mocks.commitMixed.mockReset();
+    mocks.commitMixedIntent.mockReset();
+    mocks.commitSemantic.mockReset();
+    mocks.reportSkipped.mockClear();
+    mocks.authorityGeneration = 7;
+  });
+
+  const gestureOptions = (
+    rollback: () => void,
+    generate: () => MixedIntentGeneration,
+  ) => ({
+    gestureId: 'gesture-1',
+    initialPluginIds: ['plugin-a'],
+    pluginScope: () => ['plugin-a'],
+    receipt: { rollback },
+    generate,
+    skipContext: 'test settlement',
+  });
+
+  it('ops generation은 receipt를 복원하지 않고 커밋한다', async () => {
+    const rollback = vi.fn();
+    mocks.commitMixedIntent.mockImplementation(
+      async (options: { generate: (context: unknown) => unknown }) => {
+        expect(
+          options.generate({ base: {}, pluginProjection: [] }),
+        ).toMatchObject({ kind: 'ops' });
+      },
+    );
+
+    const result = await runMixedGestureElementIntent(
+      gestureOptions(rollback, () => ({ kind: 'ops' as const, ops: [] })),
+    );
+
+    expect(result).toEqual({ committed: true, satisfied: true });
+    expect(rollback).not.toHaveBeenCalled();
+  });
+
+  it('generate가 중단하면 receipt를 복원하고 skip을 관측한다', async () => {
+    const rollback = vi.fn();
+    const abort = new TestIntentAbort('nothing to settle');
+    mocks.commitMixedIntent.mockImplementation(
+      async (options: {
+        generate: (context: unknown) => unknown;
+        onFailureBeforeSettle?: (error: unknown) => void;
+      }) => {
+        try {
+          options.generate({ base: {}, pluginProjection: [] });
+        } catch (error) {
+          options.onFailureBeforeSettle?.(error);
+          throw error;
+        }
+      },
+    );
+
+    const result = await runMixedGestureElementIntent(
+      gestureOptions(rollback, () => {
+        throw abort;
+      }),
+    );
+
+    expect(result).toEqual({ committed: false, satisfied: false });
+    expect(rollback).toHaveBeenCalledTimes(1);
+    expect(mocks.reportSkipped).toHaveBeenCalledWith('test settlement');
+  });
+
+  it('편입 전 실패는 receipt를 복원하고 원 오류를 전파한다', async () => {
+    const rollback = vi.fn();
+    const failure = new Error('setup failed');
+    mocks.commitMixedIntent.mockImplementation(
+      async (options: { onFailureBeforeSettle?: (e: unknown) => void }) => {
+        options.onFailureBeforeSettle?.(failure);
+        throw failure;
+      },
+    );
+
+    await expect(
+      runMixedGestureElementIntent(
+        gestureOptions(rollback, () => ({ kind: 'ops' as const, ops: [] })),
+      ),
+    ).rejects.toThrow('setup failed');
+    expect(rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it('편입 후 실패는 gesture 실패 경로가 소유한다 - 복원 금지', async () => {
+    const rollback = vi.fn();
+    mocks.commitMixedIntent.mockImplementation(
+      async (options: { onEnrolled?: () => void }) => {
+        options.onEnrolled?.();
+        throw new Error('commit failed');
+      },
+    );
+
+    await expect(
+      runMixedGestureElementIntent(
+        gestureOptions(rollback, () => ({ kind: 'ops' as const, ops: [] })),
+      ),
+    ).rejects.toThrow('commit failed');
+    expect(rollback).not.toHaveBeenCalled();
+  });
+
+  it('satisfied generation은 커밋 없이 종료한다', async () => {
+    const rollback = vi.fn();
+    mocks.commitMixedIntent.mockImplementation(
+      async (options: { generate: (context: unknown) => unknown }) => {
+        options.generate({ base: {}, pluginProjection: [] });
+      },
+    );
+
+    const result = await runMixedGestureElementIntent(
+      gestureOptions(rollback, () => ({ kind: 'satisfied' as const })),
+    );
+
+    expect(result).toEqual({ committed: false, satisfied: true });
+    expect(rollback).not.toHaveBeenCalled();
   });
 });
