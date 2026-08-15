@@ -52,6 +52,8 @@ vi.mock('@stores/useSettingsStore', () => ({
 
 interface HarnessProps {
   activeTool?: 'select' | 'eraser';
+  initialX?: number;
+  initialY?: number;
   onClick: () => void;
   onDoubleClick: () => void;
   onDragStart: () => void | (() => void);
@@ -60,14 +62,16 @@ interface HarnessProps {
 
 const Harness = ({
   activeTool = 'select',
+  initialX = 0,
+  initialY = 0,
   onClick,
   onDoubleClick,
   onDragStart,
   onPositionChange,
 }: HarnessProps) => {
   const draggable = useDraggable({
-    initialX: 0,
-    initialY: 0,
+    initialX,
+    initialY,
     elementId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     onDragStart,
     onPositionChange,
@@ -77,6 +81,8 @@ const Harness = ({
     <div
       ref={draggable.ref}
       data-testid="draggable"
+      data-dx={draggable.dx}
+      data-dy={draggable.dy}
       onClick={() => {
         if (!draggable.wasMoved) onClick();
       }}
@@ -100,11 +106,16 @@ describe('useDraggable pointer contract', () => {
   let onDragStart: Mock<() => void | (() => void)>;
   let onPositionChange: Mock<(x: number, y: number) => void>;
 
-  const renderHarness = async (activeTool: 'select' | 'eraser' = 'select') => {
+  const renderHarness = async (
+    activeTool: 'select' | 'eraser' = 'select',
+    initial: { x: number; y: number } = { x: 0, y: 0 },
+  ) => {
     await act(async () => {
       root.render(
         <Harness
           activeTool={activeTool}
+          initialX={initial.x}
+          initialY={initial.y}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
           onDragStart={onDragStart}
@@ -400,5 +411,46 @@ describe('useDraggable pointer contract', () => {
     expect(
       setDraggingOrResizing.mock.calls.filter(([value]) => value === false),
     ).toHaveLength(1);
+  });
+
+  it('드래그 중 외부 initial 변경이 시작 좌표를 오염시키지 않는다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      flushRaf();
+    });
+    // 드래그 중 외부 store 변경 (다른 창 커밋, undo 등)
+    await renderHarness('select', { x: 100, y: 50 });
+    expect(element.dataset.dx).toBe('10');
+    expect(element.dataset.dy).toBe('0');
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerup', { clientX: 11 });
+    });
+
+    // 릴리즈 커밋은 드래그 결과 좌표, 외부 값이 아니다
+    expect(onPositionChange).toHaveBeenCalledTimes(1);
+    expect(onPositionChange).toHaveBeenCalledWith(10, 0);
+    expect(element.dataset.dx).toBe('10');
+    expect(element.dataset.dy).toBe('0');
+  });
+
+  it('정지 press 중 도착한 외부 initial 변경은 릴리즈 후 반영된다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+    });
+    await renderHarness('select', { x: 70, y: 30 });
+    await act(async () => {
+      dispatchPointer(element, 'pointerup');
+    });
+
+    // 커밋 없이 종료된 press는 유예된 외부 동기화를 정산한다
+    expect(onPositionChange).not.toHaveBeenCalled();
+    expect(element.dataset.dx).toBe('70');
+    expect(element.dataset.dy).toBe('30');
   });
 });

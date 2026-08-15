@@ -6074,3 +6074,213 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 });
+
+// 정산 슬롯의 동결 의도 낙관 재적용이 슬롯 대기 중 시작된 2차 eager 편집을
+// 덮지 않는지의 CAS 계약. 지연은 선행 in-flight 커밋으로 만든다
+describe('정산 슬롯 낙관 재적용 CAS', () => {
+  const SECOND_KEY_ID = '22222222-2222-4222-8222-222222222222';
+  const frozenBounds = { dx: 100, dy: 110, width: 60, height: 60 };
+
+  const setBoundsOp = (id: string): EditorSetBoundsOpV1 => ({
+    kind: 'setBounds',
+    elementType: 'key',
+    id,
+    bounds: { ...frozenBounds },
+  });
+
+  const withMovedKey = (
+    document: CanonicalEditorDocumentV1,
+    index: number,
+    dx: number,
+    dy: number,
+  ): CanonicalEditorDocumentV1 => {
+    const next = structuredClone(document);
+    next.keyPositions['4key'][index] = {
+      ...next.keyPositions['4key'][index],
+      dx,
+      dy,
+    };
+    return next;
+  };
+
+  // 선행 in-flight 커밋으로 다음 슬롯의 drain을 지연시킨다
+  const holdSlotOpen = async (
+    harness: ReturnType<typeof createHarness>,
+    keys: KeySlot[],
+  ) => {
+    const gate = deferred<EditorCommitResult>();
+    harness.transport.commitMock.mockReturnValueOnce(gate.promise);
+    const blocking = harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keys: { '4key': keys },
+    });
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledOnce(),
+    );
+    return {
+      release: async () => {
+        gate.resolve({ revision: 1, changedFields: ['keys'] });
+        await blocking;
+      },
+    };
+  };
+
+  it('정산 슬롯 대기 중 2차 편집(eager)이 착지에 덮이지 않는다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const hold = await holdSlotOpen(harness, ['B']);
+
+    // 1차 드래그 종료 정산이 동결 좌표를 들고 슬롯에 줄을 선다
+    const settlement = harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(DEFAULT_KEY_ID),
+    ]);
+
+    // 슬롯 대기 중 같은 요소를 다시 잡은 2차 드래그의 eager 쓰기
+    harness.setLocal(withMovedKey(harness.getLocal(), 0, 30, 40));
+
+    await hold.release();
+    await settlement;
+
+    // 착지가 2차 eager 값을 동결값으로 되돌리지 않는다
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+      dx: 30,
+      dy: 40,
+    });
+    // wire에는 동결값이 그대로 실린다
+    const request = harness.transport.commitMock.mock.calls.at(-1)?.[0];
+    expect(request).toMatchObject({ ops: [setBoundsOp(DEFAULT_KEY_ID)] });
+    harness.coordinator.stop();
+  });
+
+  it('요소 단위 CAS: 대상 요소는 재적용되고 2차 편집 요소는 보존된다', async () => {
+    const base = makeDocument();
+    base.keys = { '4key': ['A', 'B'] };
+    base.keyPositions['4key'].push({
+      ...createDefaultKeyPosition(20, 0),
+      id: SECOND_KEY_ID,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const hold = await holdSlotOpen(harness, ['C', 'B']);
+
+    const settlement = harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(DEFAULT_KEY_ID),
+    ]);
+    // 2차 편집은 다른 요소를 잡는다
+    harness.setLocal(withMovedKey(harness.getLocal(), 1, 99, 88));
+
+    await hold.release();
+    await settlement;
+
+    const positions = harness.getLocal().keyPositions['4key'];
+    expect(positions[0]).toMatchObject({
+      dx: frozenBounds.dx,
+      dy: frozenBounds.dy,
+    });
+    expect(positions[1]).toMatchObject({ dx: 99, dy: 88 });
+    harness.coordinator.stop();
+  });
+
+  it('2차 편집이 없으면 동결값이 그대로 재적용된다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(DEFAULT_KEY_ID),
+    ]);
+
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+      dx: frozenBounds.dx,
+      dy: frozenBounds.dy,
+    });
+    expect(
+      harness.applications.some(({ reason }) => reason === 'localPatch'),
+    ).toBe(true);
+    harness.coordinator.stop();
+  });
+
+  it('생성 patch 착지가 2차 편집 중인 필드를 덮지 않는다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const hold = await holdSlotOpen(harness, ['B']);
+
+    const generated = harness.coordinator.commitGeneratedPatch((latest) => {
+      const record = structuredClone(latest.keyPositions);
+      record['4key'][0] = {
+        ...record['4key'][0],
+        inactiveImage: 'generated.png',
+      };
+      return { schemaVersion: 1, keyPositions: record };
+    });
+
+    harness.setLocal(withMovedKey(harness.getLocal(), 0, 30, 40));
+
+    await hold.release();
+    await generated;
+
+    // 스토어의 eager 좌표는 보존되고 동결 생성 값은 wire로만 나간다
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+      dx: 30,
+      dy: 40,
+      inactiveImage: '',
+    });
+    expect(
+      harness.transport.canonical.document.keyPositions['4key'][0]
+        .inactiveImage,
+    ).toBe('generated.png');
+    harness.coordinator.stop();
+  });
+
+  it('2차 편집이 없으면 생성 patch 필드가 로컬에 재적용된다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitGeneratedPatch((latest) => {
+      const record = structuredClone(latest.keyPositions);
+      record['4key'][0] = {
+        ...record['4key'][0],
+        inactiveImage: 'generated.png',
+      };
+      return { schemaVersion: 1, keyPositions: record };
+    });
+
+    expect(harness.getLocal().keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('ops 게스처 착지도 2차 편집(eager)을 덮지 않는다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const hold = await holdSlotOpen(harness, ['B']);
+
+    const gesture = harness.coordinator.commitGesture(
+      { opsVersion: 1, ops: [setBoundsOp(DEFAULT_KEY_ID)] },
+      'gesture-cas',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          opsVersion: 1,
+          ops: context.editorOps!,
+        }),
+    );
+
+    harness.setLocal(withMovedKey(harness.getLocal(), 0, 30, 40));
+
+    await hold.release();
+    await gesture;
+
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+      dx: 30,
+      dy: 40,
+    });
+    harness.coordinator.stop();
+  });
+});

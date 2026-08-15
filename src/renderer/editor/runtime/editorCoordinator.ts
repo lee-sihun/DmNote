@@ -298,6 +298,10 @@ const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
   return op.elementType === 'key' ? ['keys', 'keyPositions'] : [positionField];
 };
 
+// 그룹 normalize의 플러그인 멤버 소스는 plugin store가 등록한 제공자 -
+// 백엔드가 store 인스턴스를 쓰는 것의 미러. 낙관 replay의 근사이며
+// 드리프트는 커밋 이벤트의 canonical patch가 정정한다
+
 const applySemanticOps = (
   base: CanonicalEditorDocumentV1,
   ops: readonly EditorOpV1[],
@@ -1028,6 +1032,89 @@ const applySemanticOps = (
   return next;
 };
 
+// 위치 필드에서 id로 요소 항목 탐색
+const findPositionEntryById = (
+  document: CanonicalEditorDocumentV1,
+  elementType: EditorElementTypeV1,
+  id: string,
+): Record<string, unknown> | null => {
+  const record = document[SEMANTIC_POSITION_FIELDS[elementType]] as Record<
+    string,
+    Array<Record<string, unknown> & { id: string }>
+  >;
+  for (const positions of Object.values(record)) {
+    const match = positions.find((position) => position.id === id);
+    if (match) return match;
+  }
+  return null;
+};
+
+// CAS 판정을 건너뛰는 op 표식
+const FROZEN_OP_CAS_EXEMPT = Symbol('frozenOpCasExempt');
+
+// 동결 op가 낙관 재적용에서 되쓰는 대상 조각. setBounds는 기하 필드만,
+// patchElement는 대상 항목, setKeySlot은 결합 인덱스의 슬롯. 값 되돌림
+// 위험이 없는 구조 op(삽입·삭제·정렬 등)는 CAS 비대상으로 항상 재적용
+const frozenOpCasUnit = (
+  document: CanonicalEditorDocumentV1,
+  op: EditorOpV1,
+): unknown => {
+  if (op.kind === 'setBounds') {
+    const entry = findPositionEntryById(document, op.elementType, op.id);
+    if (!entry) return null;
+    return {
+      dx: entry.dx,
+      dy: entry.dy,
+      width: entry.width,
+      height: entry.height,
+    };
+  }
+  if (op.kind === 'patchElement') {
+    return findPositionEntryById(document, op.elementType, op.id);
+  }
+  if (op.kind === 'setKeySlot') {
+    for (const [mode, positions] of Object.entries(document.keyPositions)) {
+      const index = positions.findIndex((position) => position.id === op.id);
+      if (index < 0) continue;
+      return document.keys[mode]?.[index] ?? null;
+    }
+    return null;
+  }
+  return FROZEN_OP_CAS_EXEMPT;
+};
+
+// 동결 op 재적용 소유 판정: 동결 시점 base와 현재 스토어의 대상 조각이
+// 같을 때만 재적용. 다르면 슬롯 대기 중의 2차 편집이 소유한 값이라 보존
+const canReapplyFrozenOp = (
+  op: EditorOpV1,
+  base: CanonicalEditorDocumentV1,
+  current: CanonicalEditorDocumentV1,
+): boolean => {
+  const baseUnit = frozenOpCasUnit(base, op);
+  if (baseUnit === FROZEN_OP_CAS_EXEMPT) return true;
+  const currentUnit = frozenOpCasUnit(current, op);
+  return stableStringify(currentUnit) === stableStringify(baseUnit);
+};
+
+// patch 재적용은 필드 통째 교체라 필드 단위 CAS: 현재 스토어 필드가 동결
+// 시점 base와 같을 때만(소유 증명) 동결 필드를 되쓴다. 다르면 슬롯 대기
+// 중의 2차 편집이 소유한 필드라 보존. wire 커밋 내용에는 영향 없음
+const frozenPatchOwnedFields = (
+  changes: EditorPatchV1,
+  base: CanonicalEditorDocumentV1,
+  current: CanonicalEditorDocumentV1,
+): EditorPatchV1 => {
+  const owned: EditorPatchV1 = { schemaVersion: changes.schemaVersion };
+  EDITOR_FIELDS.forEach((field) => {
+    if (changes[field] === undefined) return;
+    if (stableStringify(current[field]) !== stableStringify(base[field])) {
+      return;
+    }
+    Object.assign(owned, { [field]: changes[field] });
+  });
+  return owned;
+};
+
 export function getChangedEditorFields(
   base: EditorDocumentV1,
   next: EditorDocumentV1,
@@ -1292,6 +1379,37 @@ export class EditorSaveCoordinator {
     return this.commitPatchSettled(changes, meta?.gestureId);
   }
 
+  // 정산 착지 시 동결 의도의 낙관 재적용. 선행 커밋(격리 plugin 쓰기 등)의
+  // canonical 적용이 호출 시점의 eager 값을 지운 경우 스토어를 복구하는
+  // 경로다. 다만 슬롯 대기 중 시작된 2차 eager 편집이 같은 대상을 이미
+  // 덮었을 수 있어 무조건 되쓰면 진행 중 편집이 동결값으로 되돌아간다.
+  // gestureTransaction의 PERSISTED_FIELDS CAS와 같은 규약으로, 현재 값이
+  // 동결 시점 base와 같아 소유가 증명된 조각만 되쓴다
+  // (ops는 대상 요소 조각 단위, patch는 필드 단위)
+  private reapplyFrozenIntent(
+    base: CanonicalEditorDocumentV1,
+    mutation: { ops?: readonly EditorOpV1[]; changes?: EditorPatchV1 },
+  ): void {
+    const currentDocument = this.readDocument();
+    assertCanonicalEditorDocument(currentDocument, 'current editor document');
+    const optimisticDocument = mutation.ops
+      ? applySemanticOps(
+          currentDocument,
+          mutation.ops.filter((op) =>
+            canReapplyFrozenOp(op, base, currentDocument),
+          ),
+        )
+      : applyEditorPatch(
+          currentDocument,
+          frozenPatchOwnedFields(mutation.changes!, base, currentDocument),
+        );
+    if (
+      getChangedEditorFields(currentDocument, optimisticDocument).length > 0
+    ) {
+      this.applyDocument(clone(optimisticDocument), 'localPatch');
+    }
+  }
+
   // 대기 이후 공통 본문. 슬롯 안에서 재사용하므로 여기서 tail을 다시
   // 기다리면 자기 슬롯 교착이 된다
   private commitPatchSettled(
@@ -1310,17 +1428,7 @@ export class EditorSaveCoordinator {
     const requestFields = EDITOR_FIELDS.filter(
       (field) => canonicalChanges[field] !== undefined,
     );
-    const currentDocument = this.readDocument();
-    assertCanonicalEditorDocument(currentDocument, 'current editor document');
-    const optimisticDocument = applyEditorPatch(
-      currentDocument,
-      canonicalChanges,
-    );
-    if (
-      getChangedEditorFields(currentDocument, optimisticDocument).length > 0
-    ) {
-      this.applyDocument(clone(optimisticDocument), 'localPatch');
-    }
+    this.reapplyFrozenIntent(projected, { changes: canonicalChanges });
     return this.queueSnapshot(
       target,
       newIntentFields,
@@ -1459,14 +1567,7 @@ export class EditorSaveCoordinator {
       };
       const target = applySemanticOps(baseDocument, ops);
       assertCanonicalEditorDocument(target, 'semantic target document');
-      const currentDocument = this.readDocument();
-      assertCanonicalEditorDocument(currentDocument, 'current editor document');
-      const optimisticDocument = applySemanticOps(currentDocument, ops);
-      if (
-        getChangedEditorFields(currentDocument, optimisticDocument).length > 0
-      ) {
-        this.applyDocument(clone(optimisticDocument), 'localPatch');
-      }
+      this.reapplyFrozenIntent(baseDocument, { ops });
       const requestFields = [...new Set(ops.flatMap(fieldsForSemanticOp))];
       const inFlight: InFlightCommit = {
         mutationId,
@@ -2192,20 +2293,12 @@ export class EditorSaveCoordinator {
       ? EDITOR_FIELDS.filter((field) => canonicalChanges[field] !== undefined)
       : [];
     const localFields = getChangedEditorFields(baseDocument, target);
-    // 슬롯 내 로컬 낙관 재적용 - 선행 커밋(격리 plugin 쓰기 등)이 호출
-    // 시점의 eager 값을 canonical 적용으로 지웠을 수 있다. wire만 고치면
-    // 백엔드는 맞고 UI 스토어는 옛 값에 남는다
-    if (ops || canonicalChanges) {
-      const currentDocument = this.readDocument();
-      assertCanonicalEditorDocument(currentDocument, 'current editor document');
-      const optimisticDocument = ops
-        ? applySemanticOps(currentDocument, ops)
-        : applyEditorPatch(currentDocument, canonicalChanges!);
-      if (
-        getChangedEditorFields(currentDocument, optimisticDocument).length > 0
-      ) {
-        this.applyDocument(clone(optimisticDocument), 'localPatch');
-      }
+    // 슬롯 내 로컬 낙관 재적용 - wire만 고치면 백엔드는 맞고 UI 스토어는
+    // 옛 값에 남는 경우가 있어 CAS 통과분만 되쓴다
+    if (ops) {
+      this.reapplyFrozenIntent(baseDocument, { ops });
+    } else if (canonicalChanges) {
+      this.reapplyFrozenIntent(baseDocument, { changes: canonicalChanges });
     }
     const mutationId = this.createMutationId();
     const inFlight: InFlightCommit = {

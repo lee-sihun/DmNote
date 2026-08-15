@@ -120,6 +120,8 @@ export const useDraggable = ({
   // 드래그(제자리 복귀 포함) 직후의 빠른 재클릭이 편집 진입으로 새지 않음
   const movedThisPressRef = useRef(false);
   const recentPressMovedRef = useRef(false);
+  // 드래그 중 도착한 외부 initial 동기화의 유예 버퍼 (세션 종료 시 정산)
+  const pendingInitialSyncRef = useRef<{ dx: number; dy: number } | null>(null);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -137,6 +139,13 @@ export const useDraggable = ({
 
   // initialX, initialY 변경 시 동기화
   useEffect(() => {
+    // 드래그 중 외부 store 변경이 시작 좌표를 오염시키면 릴리즈 시 옛 값이
+    // 커밋된다 - 세션이 끝날 때까지 유예
+    if (activeDragRef.current) {
+      pendingInitialSyncRef.current = { dx: initialX, dy: initialY };
+      return;
+    }
+    pendingInitialSyncRef.current = null;
     setOffset({ dx: initialX, dy: initialY });
     lastSnappedRef.current = { dx: initialX, dy: initialY };
   }, [initialX, initialY]);
@@ -449,10 +458,20 @@ export const useDraggable = ({
         } finally {
           finishGesture?.();
           finishGesture = null;
+          // 드래그 결과가 최신 의도 - 유예된 외부 동기화는 폐기하고 커밋
+          // 이후의 props 재동기화에 맡긴다
+          pendingInitialSyncRef.current = null;
         }
       } else {
         // 클릭만 했을 경우 커서만 복구
         dragTarget.style.cursor = '';
+        // 커밋이 없으므로 드래그 중 유예된 외부 동기화를 지금 반영
+        const pendingSync = pendingInitialSyncRef.current;
+        if (pendingSync) {
+          pendingInitialSyncRef.current = null;
+          lastSnappedRef.current = pendingSync;
+          setOffset(pendingSync);
+        }
       }
     };
 
