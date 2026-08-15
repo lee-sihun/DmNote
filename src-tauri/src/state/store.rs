@@ -15529,6 +15529,264 @@ mod tests {
     }
 
     #[test]
+    fn editor_ops_with_the_same_gesture_merge_into_one_history_entry() {
+        let dir = test_directory("editor-ops-history-gesture-merge-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target = store.editor_get().document.key_positions["4key"][0].clone();
+        let initial_bounds = bounds(&target);
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let mut first = editor_ops_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            vec![set_bounds_op(
+                EditorElementTypeV1::Key,
+                &target.id,
+                EditorBoundsV1 {
+                    dx: initial_bounds.dx + 4.0,
+                    ..initial_bounds
+                },
+            )],
+        );
+        first.gesture_id = Some(gesture_id.clone());
+        let first = store.commit_editor_document(first).unwrap();
+        assert_eq!(first.history_status.unwrap().history_revision, 1);
+
+        let mut second = editor_ops_request(
+            1,
+            uuid::Uuid::new_v4().to_string(),
+            vec![set_bounds_op(
+                EditorElementTypeV1::Key,
+                &target.id,
+                EditorBoundsV1 {
+                    dx: initial_bounds.dx + 8.0,
+                    ..initial_bounds
+                },
+            )],
+        );
+        second.gesture_id = Some(gesture_id);
+        let second = store.commit_editor_document(second).unwrap();
+        assert_eq!(second.history_status.unwrap().history_revision, 1);
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+
+        assert_eq!(
+            bounds(&store.editor_get().document.key_positions["4key"][0]),
+            initial_bounds
+        );
+        assert!(!undo.status.can_undo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_ops_net_zero_gesture_removes_its_history_entry() {
+        let dir = test_directory("editor-ops-history-net-zero-gesture-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target = store.editor_get().document.key_positions["4key"][0].clone();
+        let initial_bounds = bounds(&target);
+        let gesture_base = EditorBoundsV1 {
+            dx: initial_bounds.dx + 10.0,
+            ..initial_bounds
+        };
+
+        store
+            .commit_editor_document(editor_ops_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                vec![set_bounds_op(
+                    EditorElementTypeV1::Key,
+                    &target.id,
+                    gesture_base,
+                )],
+            ))
+            .unwrap();
+
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let mut outward = editor_ops_request(
+            1,
+            uuid::Uuid::new_v4().to_string(),
+            vec![set_bounds_op(
+                EditorElementTypeV1::Key,
+                &target.id,
+                EditorBoundsV1 {
+                    dx: gesture_base.dx + 5.0,
+                    ..gesture_base
+                },
+            )],
+        );
+        outward.gesture_id = Some(gesture_id.clone());
+        store.commit_editor_document(outward).unwrap();
+
+        let mut returned = editor_ops_request(
+            2,
+            uuid::Uuid::new_v4().to_string(),
+            vec![set_bounds_op(
+                EditorElementTypeV1::Key,
+                &target.id,
+                gesture_base,
+            )],
+        );
+        returned.gesture_id = Some(gesture_id);
+        let returned = store.commit_editor_document(returned).unwrap();
+        let status = returned.history_status.unwrap();
+        assert_eq!(status.history_revision, 3);
+        assert!(status.can_undo);
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+
+        assert_eq!(
+            bounds(&store.editor_get().document.key_positions["4key"][0]),
+            initial_bounds
+        );
+        assert!(!undo.status.can_undo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn oversized_editor_op_clears_history_after_persisting_mutation() {
+        let dir = test_directory("editor-ops-history-truncation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target = store.editor_get().document.key_positions["4key"][0].clone();
+        let initial_bounds = bounds(&target);
+
+        store
+            .commit_editor_document(editor_ops_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                vec![set_bounds_op(
+                    EditorElementTypeV1::Key,
+                    &target.id,
+                    EditorBoundsV1 {
+                        dx: initial_bounds.dx + 1.0,
+                        ..initial_bounds
+                    },
+                )],
+            ))
+            .unwrap();
+        store
+            .state
+            .write()
+            .history
+            .set_limits_for_test(1, 32 * 1024 * 1024, 50);
+
+        let expected_bounds = EditorBoundsV1 {
+            dx: initial_bounds.dx + 2.0,
+            ..initial_bounds
+        };
+        let change = store
+            .commit_editor_document(editor_ops_request(
+                1,
+                uuid::Uuid::new_v4().to_string(),
+                vec![set_bounds_op(
+                    EditorElementTypeV1::Key,
+                    &target.id,
+                    expected_bounds,
+                )],
+            ))
+            .unwrap();
+        let status = change.history_status.unwrap();
+
+        assert_eq!(change.result.revision, 2);
+        assert_eq!(
+            change.result.op_results.unwrap()[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(
+            bounds(&store.editor_get().document.key_positions["4key"][0]),
+            expected_bounds
+        );
+        assert_eq!(status.history_revision, 2);
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        assert_eq!(status.truncated.unwrap().reason, HISTORY_ENTRY_TOO_LARGE);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn oversized_editor_op_plugin_gesture_rejects_the_whole_transaction() {
+        let dir = test_directory("gesture-editor-op-history-size-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .state
+            .write()
+            .history
+            .set_limits_for_test(1, 32 * 1024 * 1024, 50);
+        let before = store.snapshot();
+        let target = store.editor_get().document.key_positions["4key"][0].clone();
+        let before_plugin_revision = store.plugin_model_revision();
+        let before_history_revision = store.history_status().history_revision;
+        let persist_count = store.writer.persist_count();
+
+        let error = store
+            .commit_gesture(gesture_ops_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                vec![set_bounds_op(
+                    EditorElementTypeV1::Key,
+                    &target.id,
+                    EditorBoundsV1 {
+                        dx: target.dx + 25.0,
+                        ..bounds(&target)
+                    },
+                )],
+                "demo-plugin",
+                vec![saved_plugin_instance(25.0)],
+            ))
+            .unwrap_err();
+
+        assert_eq!(error.error_code, EditorCommitErrorCode::ValidationFailed);
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some(HISTORY_ENTRY_TOO_LARGE)
+        );
+        assert_eq!(store.snapshot(), before);
+        assert_eq!(store.plugin_model_revision(), before_plugin_revision);
+        assert_eq!(
+            store.history_status().history_revision,
+            before_history_revision
+        );
+        assert_eq!(store.writer.persist_count(), persist_count);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn unrecorded_preset_overlap_mutations_clear_redo_only_when_overlap_changes() {
         let dir = test_directory("history-overlap-redo-invalidation-test");
         std::fs::create_dir_all(&dir).unwrap();
