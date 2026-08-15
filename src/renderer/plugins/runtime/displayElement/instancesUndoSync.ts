@@ -9,6 +9,8 @@ import {
   type SavedPluginInstanceWire,
 } from '@api/modules/pluginInstancesApi';
 import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
+import { pruneStalePluginSelection } from '@stores/grid/useGridSelectionStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
 export interface PluginInstancesRebindHandlers {
   // 이벤트 도착 즉시 - 낡은 메모리를 커밋할 pending 저장 차단
@@ -87,6 +89,14 @@ export const applyCanonicalPluginInstances = async (
   for (const handlers of byDef.values()) {
     handlers.reapply(snapshot.instances);
   }
+  // 재주입은 fullId를 새로 발급 - 옛 fullId를 쥔 선택은 죽은 참조가 됨
+  pruneStalePluginSelection(
+    new Set(
+      usePluginDisplayElementStore
+        .getState()
+        .elements.map((element) => element.fullId),
+    ),
+  );
 };
 
 /** main 창 bootstrap에서 1회 호출 */

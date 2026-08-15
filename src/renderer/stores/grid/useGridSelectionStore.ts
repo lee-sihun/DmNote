@@ -339,6 +339,17 @@ export function invalidateSelectionForChangedIndexedElementArrays(
   if (changed) selection.setSelectedElements(selectedElements);
 }
 
+// 재주입으로 fullId가 갈린 플러그인 선택 제거. 현존 fullId 집합 기준
+export function pruneStalePluginSelection(liveFullIds: ReadonlySet<string>) {
+  const selection = useGridSelectionStore.getState();
+  if (selection.selectedElements.length === 0) return;
+  const kept = selection.selectedElements.filter(
+    (element) => element.type !== 'plugin' || liveFullIds.has(element.id),
+  );
+  if (kept.length === selection.selectedElements.length) return;
+  selection.setSelectedElements(kept);
+}
+
 /**
  * 마퀴 영역 계산 헬퍼
  */
