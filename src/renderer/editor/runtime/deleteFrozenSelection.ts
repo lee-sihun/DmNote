@@ -111,6 +111,13 @@ export const deleteFrozenSelection = async (
   const pluginFullIds = selectedElements
     .filter((element) => element.type === 'plugin')
     .map((element) => element.id);
+  // eager 제거 전 스토어의 전체 fullId - 정산 시점 projection에 이 집합에
+  // 없는 fullId가 보이면 재주입(undo·재로드)으로 신원이 갈린 것이다
+  const sealedKnownFullIds = new Set(
+    usePluginDisplayElementStore
+      .getState()
+      .elements.map((element) => element.fullId),
+  );
   const pluginIds = [
     ...new Set(
       usePluginDisplayElementStore
@@ -316,6 +323,15 @@ export const deleteFrozenSelection = async (
           // 여기는 stableTargets가 빈 plugin 전용 경로다. native 삭제 대상이
           // 없어 editor patch는 항상 비고, plugin projection만 정산한다
           generate: ({ pluginProjection }) => {
+            // 동결 이후 재주입으로 신원이 갈렸으면 삭제 대상 매칭 자체가
+            // 무의미하다 - 성공 위장 대신 중단해 skip 관측에 맡긴다
+            if (
+              pluginProjection.some(
+                (element) => !sealedKnownFullIds.has(element.fullId),
+              )
+            ) {
+              throw new ElementIntentAbort('batch delete settlement');
+            }
             const desired = pluginProjection.filter(
               (element) => !deleted.has(element.fullId),
             );

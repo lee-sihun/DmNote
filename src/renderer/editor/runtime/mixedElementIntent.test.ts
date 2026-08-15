@@ -35,12 +35,14 @@ vi.mock('@plugins/rpc/pluginRpcClient', () => ({
 }));
 
 import {
+  applyPluginRemovalEagerly,
   runMixedElementOpsIntent,
   runMixedElementDeleteIntent,
   runMixedGestureElementIntent,
 } from './mixedElementIntent';
 
 import type { EditorDocumentV1 } from '@src/types/editor';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import type { MixedIntentGeneration } from '@plugins/runtime/displayElement/gestureTransaction';
 
 type Meta = { onEnrolled?: () => void; preflight?: () => void };
@@ -431,5 +433,98 @@ describe('runMixedGestureElementIntent receipt 소유권', () => {
 
     expect(result).toEqual({ committed: false, satisfied: true });
     expect(rollback).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyPluginRemovalEagerly 유령 복원 방지', () => {
+  const elementOf = (fullId: string, definitionId: string) =>
+    ({
+      id: fullId.split('::')[1] ?? fullId,
+      fullId,
+      pluginId: definitionId,
+      definitionId,
+      html: '<div />',
+      position: { x: 0, y: 0 },
+    } as never);
+
+  beforeEach(() => {
+    usePluginDisplayElementStore.setState({
+      elements: [
+        elementOf('plugin-a::element-1', 'plugin-a'),
+        elementOf('plugin-a::element-2', 'plugin-a'),
+      ],
+    });
+  });
+
+  it('외부 개입이 없으면 캡처 index에 제거분을 복원한다', () => {
+    const receipt = applyPluginRemovalEagerly(['plugin-a::element-1'], () => {
+      const store = usePluginDisplayElementStore.getState();
+      store.setElements(
+        store.elements.filter(
+          (element) => element.fullId !== 'plugin-a::element-1',
+        ),
+        { skipSync: true } as never,
+      );
+    });
+
+    receipt?.rollback();
+
+    expect(
+      usePluginDisplayElementStore.getState().elements.map((e) => e.fullId),
+    ).toEqual(['plugin-a::element-1', 'plugin-a::element-2']);
+  });
+
+  it('같은 definition에 낯선 fullId가 보이면 복원을 포기한다', () => {
+    const receipt = applyPluginRemovalEagerly(['plugin-a::element-1'], () => {
+      const store = usePluginDisplayElementStore.getState();
+      store.setElements(
+        store.elements.filter(
+          (element) => element.fullId !== 'plugin-a::element-1',
+        ),
+        { skipSync: true } as never,
+      );
+    });
+
+    // undo 재주입이 전 요소를 새 fullId로 갈아끼운 상황
+    usePluginDisplayElementStore.setState({
+      elements: [
+        elementOf('plugin-a::element-9', 'plugin-a'),
+        elementOf('plugin-a::element-10', 'plugin-a'),
+      ],
+    });
+
+    receipt?.rollback();
+
+    // 캡처본이 되살아나 두 벌이 되면 안 된다
+    expect(
+      usePluginDisplayElementStore.getState().elements.map((e) => e.fullId),
+    ).toEqual(['plugin-a::element-9', 'plugin-a::element-10']);
+  });
+
+  it('다른 definition의 신규 요소는 복원을 막지 않는다', () => {
+    const receipt = applyPluginRemovalEagerly(['plugin-a::element-1'], () => {
+      const store = usePluginDisplayElementStore.getState();
+      store.setElements(
+        store.elements.filter(
+          (element) => element.fullId !== 'plugin-a::element-1',
+        ),
+        { skipSync: true } as never,
+      );
+    });
+
+    // 무관한 플러그인이 자기 요소를 추가한 상황
+    const store = usePluginDisplayElementStore.getState();
+    usePluginDisplayElementStore.setState({
+      elements: [
+        ...store.elements,
+        elementOf('plugin-b::element-1', 'plugin-b'),
+      ],
+    });
+
+    receipt?.rollback();
+
+    expect(
+      usePluginDisplayElementStore.getState().elements.map((e) => e.fullId),
+    ).toContain('plugin-a::element-1');
   });
 });

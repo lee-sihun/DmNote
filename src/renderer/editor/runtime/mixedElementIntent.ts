@@ -188,9 +188,15 @@ export const applyPluginRemovalEagerly = (
     return null;
   }
   const before = usePluginDisplayElementStore.getState().elements;
+  const beforeIds = new Set(before.map((element) => element.fullId));
   const removed = before
     .map((element, index) => ({ element, index }))
     .filter(({ element }) => wanted.has(element.fullId));
+  const removedDefinitionIds = new Set(
+    removed
+      .map(({ element }) => element.definitionId)
+      .filter((definitionId): definitionId is string => Boolean(definitionId)),
+  );
   try {
     mutate();
   } catch (error) {
@@ -206,6 +212,16 @@ export const applyPluginRemovalEagerly = (
       const store = usePluginDisplayElementStore.getState();
       const current = [...store.elements];
       const present = new Set(current.map((element) => element.fullId));
+      // 재주입(undo·재로드)은 같은 definition에 캡처 시점에 없던 fullId를
+      // 만든다. 그 위에 캡처본을 되살리면 같은 논리 요소가 두 벌이 되므로
+      // 외부 개입 감지 시 복원을 포기한다 - canonical이 진실을 소유
+      const reinjected = current.some(
+        (element) =>
+          element.definitionId &&
+          removedDefinitionIds.has(element.definitionId) &&
+          !beforeIds.has(element.fullId),
+      );
+      if (reinjected) return;
       let touched = false;
       for (const { element, index } of removed) {
         if (present.has(element.fullId)) continue;

@@ -620,6 +620,38 @@ describe('useGridSelection compound history gesture', () => {
     expect(kept.dy).toBe(keyPosition.dy);
   });
 
+  it('플러그인 전용 삭제 정산은 재주입된 projection에서 중단한다', async () => {
+    await act(async () => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'plugin', id: 'plugin-a:element' }]);
+    });
+    await act(async () => api.deleteSelectedElements());
+
+    expect(mocks.runMixedGestureIntent).toHaveBeenCalledTimes(1);
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: {
+        base: unknown;
+        pluginProjection: Array<Record<string, unknown>>;
+      }) => { kind: string };
+    };
+
+    // 동결 시점에 알던 요소가 그대로면 정상 정산
+    expect(
+      options.generate({ base: {}, pluginProjection: [pluginElement()] }).kind,
+    ).toBe('patch');
+
+    // 재주입으로 낯선 fullId가 보이면 성공 위장 대신 중단한다
+    expect(() =>
+      options.generate({
+        base: {},
+        pluginProjection: [{ ...pluginElement(), fullId: 'plugin-a::regen-1' }],
+      }),
+    ).toThrow(ElementIntentAbort);
+  });
+
   it('빈 선택 정산은 editor를 커밋하지 않는다', () => {
     api.syncSelectedElementsToOverlay(gestureId);
 
