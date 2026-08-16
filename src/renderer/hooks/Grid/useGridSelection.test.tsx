@@ -16,6 +16,7 @@ import type {
 } from '@src/types/plugin/api';
 import { handlerRegistry } from '@plugins/runtime/handlers';
 
+import { PASTE_OFFSET } from './constants';
 import { useGridSelection } from './useGridSelection';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
 import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
@@ -91,10 +92,6 @@ vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
     mutate();
     return null;
   },
-  applySealedMixedMutation: (options: { mutate: () => void }) => {
-    options.mutate();
-    return { rollback: vi.fn() };
-  },
   runMixedGestureElementIntent: mocks.runMixedGestureIntent,
   runMixedElementDeleteIntent: mocks.runMixedDeleteIntent,
 }));
@@ -124,6 +121,9 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
 
 const gestureId = '00000000-0000-4000-8000-0000000000f4';
 const STABLE_KEY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const STABLE_STAT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const STABLE_GRAPH_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const STABLE_KNOB_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const keyPosition = {
   id: STABLE_KEY_ID,
   dx: 10,
@@ -1327,6 +1327,10 @@ describe('useGridSelection compound history gesture', () => {
     const pastedPosition = result.ops![0].elements[0].position;
     const pastedId = pastedPosition.id as string;
 
+    // 사본은 원본에서 PASTE_OFFSET만큼 어긋나야 겹치지 않는다
+    expect(pastedPosition.dx).toBe(keyPosition.dx + PASTE_OFFSET);
+    expect(pastedPosition.dy).toBe(keyPosition.dy + PASTE_OFFSET);
+
     // 멱등 재시도: whole plan을 보내 backend noChange로 판정
     const appliedBase = {
       ...emptyBase,
@@ -1349,6 +1353,64 @@ describe('useGridSelection compound history gesture', () => {
     expect(() =>
       options.generate({ base: conflictedBase, pluginProjection: [] }),
     ).toThrowError(/paste id collision/);
+  });
+
+  it('paste는 key 외 네이티브 종류에도 같은 PASTE_OFFSET을 적용한다', async () => {
+    act(() => {
+      useGridSelectionStore.getState().setClipboard([
+        {
+          type: 'stat',
+          position: { id: STABLE_STAT_ID, dx: 11, dy: 21 },
+        },
+        {
+          type: 'graph',
+          position: { id: STABLE_GRAPH_ID, dx: 12, dy: 22 },
+        },
+        {
+          type: 'knob',
+          position: { id: STABLE_KNOB_ID, dx: 13, dy: 23 },
+        },
+      ] as never);
+    });
+    await act(async () => api.pasteElements());
+
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        ops?: Array<{
+          elements: Array<{
+            elementType: string;
+            position: Record<string, unknown>;
+          }>;
+        }>;
+      };
+    };
+    const result = options.generate({
+      base: {
+        schemaVersion: 1,
+        keys: { '4key': [] },
+        keyPositions: { '4key': [] },
+        statPositions: { '4key': [] },
+        graphPositions: { '4key': [] },
+        knobPositions: { '4key': [] },
+        layerGroups: {},
+      },
+      pluginProjection: [],
+    });
+
+    const pasted = new Map(
+      result.ops![0].elements.map((element) => [
+        element.elementType,
+        element.position,
+      ]),
+    );
+    expect(pasted.get('stat')?.dx).toBe(11 + PASTE_OFFSET);
+    expect(pasted.get('stat')?.dy).toBe(21 + PASTE_OFFSET);
+    expect(pasted.get('graph')?.dx).toBe(12 + PASTE_OFFSET);
+    expect(pasted.get('graph')?.dy).toBe(22 + PASTE_OFFSET);
+    expect(pasted.get('knob')?.dx).toBe(13 + PASTE_OFFSET);
+    expect(pasted.get('knob')?.dy).toBe(23 + PASTE_OFFSET);
   });
 
   it('paste batch의 일부 ID나 신규 group만 이미 있으면 전체를 중단한다', async () => {

@@ -114,7 +114,7 @@ const Alert = ({
             dangerouslySetInnerHTML={{ __html: message }}
           />
         ) : (
-          <div className="max-w-[236px] self-center text-center text-fg text-label px-[8px] py-[8px]">
+          <div className="max-w-[236px] self-center whitespace-pre-line text-center text-fg text-label px-[8px] py-[8px]">
             {message}
           </div>
         )}
