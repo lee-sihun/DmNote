@@ -897,6 +897,15 @@ export default function App() {
       displayKnobPositions={displayKnobPositions}
       selectedKeyType={selectedKeyType}
       noteEffect={noteEffect}
+      contentSize={
+        bounds
+          ? {
+              width: bounds.maxX - bounds.minX + overlayPadding * 2,
+              height:
+                bounds.maxY - bounds.minY + overlayPadding * 2 + trackHeight,
+            }
+          : null
+      }
       noteSettings={noteSettings}
       webglTracks={webglTracks}
       notesRef={notesRef}
