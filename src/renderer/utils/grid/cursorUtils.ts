@@ -48,6 +48,7 @@ interface CursorOverlayState {
   lastPointer: { x: number; y: number } | null;
   rafId: number | null;
   listenerAttached: boolean;
+  hoverSuspended: boolean;
 }
 
 const overlayState: CursorOverlayState = {
@@ -60,7 +61,11 @@ const overlayState: CursorOverlayState = {
   lastPointer: null,
   rafId: null,
   listenerAttached: false,
+  hoverSuspended: false,
 };
+
+// 억제 해제 지연 타이머
+let hoverResumeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const getDefaultCursorSettings = (): CursorSettings => ({
   size: 1.0,
@@ -344,8 +349,46 @@ export function setCustomCursorHover(
   event?: MouseEvent | PointerEvent,
 ): void {
   if (!isMac()) return;
+  // 억제 중에는 잔여 boundary 이벤트의 호버 설정을 무시 (해제는 항상 허용)
+  if (overlayState.hoverSuspended && cursorType !== null) return;
   overlayState.hoverType = cursorType;
   updateOverlay(event);
+}
+
+/**
+ * 이동 드래그 세션 동안 호버 커서 갱신을 중단합니다.
+ * 시작 시점에 남아 있던 호버 상태도 함께 지웁니다.
+ */
+export function suspendCustomCursorHover(): void {
+  if (hoverResumeTimer !== null) {
+    clearTimeout(hoverResumeTimer);
+    hoverResumeTimer = null;
+  }
+  overlayState.hoverSuspended = true;
+  overlayState.hoverType = null;
+  updateOverlay();
+}
+
+/**
+ * 호버 커서 갱신 중단을 해제합니다.
+ * 세션 해제 직후 같은 태스크로 도착하는 boundary 이벤트 잔여분을
+ * 걸러내기 위해 실제 해제는 한 태스크 뒤로 미룹니다.
+ */
+export function resumeCustomCursorHover(): void {
+  if (!overlayState.hoverSuspended || hoverResumeTimer !== null) return;
+  hoverResumeTimer = setTimeout(() => {
+    hoverResumeTimer = null;
+    overlayState.hoverSuspended = false;
+    overlayState.hoverType = null;
+    updateOverlay();
+  }, 0);
+}
+
+/**
+ * 호버 커서 갱신이 중단된 상태인지 반환합니다.
+ */
+export function isCustomCursorHoverSuspended(): boolean {
+  return overlayState.hoverSuspended;
 }
 
 /**

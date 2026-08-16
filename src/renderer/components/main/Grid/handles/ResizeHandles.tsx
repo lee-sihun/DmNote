@@ -1,8 +1,9 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   CursorType,
   getCursor,
+  isCustomCursorHoverSuspended,
   lockCustomCursor,
   setCustomCursorHover,
   unlockCustomCursor,
@@ -171,6 +172,19 @@ const getHandleStyle = (
 // 개별 핸들 컴포넌트 (호버 상태 관리)
 const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const hoveredRef = useRef(false);
+
+  // 호버 중 unmount로 leave가 유실되면 남는 커서 오버레이 정리
+  useEffect(() => {
+    return () => {
+      if (hoveredRef.current) setCustomCursorHover(null);
+    };
+  }, []);
+
+  const setHovered = (next: boolean) => {
+    hoveredRef.current = next;
+    setIsHovered(next);
+  };
 
   const hitX = centerX - HANDLE_HIT_HALF;
   const hitY = centerY - HANDLE_HIT_HALF;
@@ -195,12 +209,14 @@ const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
         justifyContent: 'center',
       }}
       onMouseDown={(e) => onMouseDown(e, handle)}
-      onMouseEnter={(e) => {
-        setIsHovered(true);
+      onPointerEnter={(e) => {
+        // 드래그 세션 잔여 enter가 호버를 되살리지 않게 차단
+        if (isCustomCursorHoverSuspended()) return;
+        setHovered(true);
         setCustomCursorHover(handle.cursor, e.nativeEvent);
       }}
-      onMouseLeave={(e) => {
-        setIsHovered(false);
+      onPointerLeave={(e) => {
+        setHovered(false);
         setCustomCursorHover(null, e.nativeEvent);
       }}
     >

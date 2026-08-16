@@ -12,6 +12,15 @@ import {
 } from 'vitest';
 import { useDraggable } from './useDraggable';
 import { releaseDragSession } from './dragSession';
+import {
+  isCustomCursorHoverSuspended,
+  setCustomCursorHover,
+} from '@utils/grid/cursorUtils';
+
+// macOS 커스텀 커서 경로 강제 (호버 억제 계약 검증용)
+vi.mock('@utils/core/platform', () => ({
+  isMac: () => true,
+}));
 
 const { clearGuides, setDraggingOrResizing } = vi.hoisted(() => ({
   clearGuides: vi.fn(),
@@ -516,5 +525,42 @@ describe('useDraggable pointer contract', () => {
     expect(onPositionChange).not.toHaveBeenCalled();
     expect(element.dataset.dx).toBe('70');
     expect(element.dataset.dy).toBe('30');
+  });
+
+  it('press가 기존 호버 커서를 걷어내고 세션 해제 한 태스크 뒤까지 호버 갱신을 막는다', async () => {
+    const CURSOR_BODY_CLASS = 'dmn-custom-cursor';
+    const element = await renderHarness();
+
+    // 이전 테스트 세션의 resume 지연 타이머 정산
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    setCustomCursorHover('ns-resize');
+    expect(document.body.classList.contains(CURSOR_BODY_CLASS)).toBe(true);
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+    });
+    // 세션 시작 시 잔여 호버 강제 클리어
+    expect(document.body.classList.contains(CURSOR_BODY_CLASS)).toBe(false);
+    expect(isCustomCursorHoverSuspended()).toBe(true);
+
+    // 세션 중 도착한 enter성 호버 설정 무시
+    setCustomCursorHover('ew-resize');
+    expect(document.body.classList.contains(CURSOR_BODY_CLASS)).toBe(false);
+
+    // 해제와 같은 태스크로 도착하는 boundary 잔여분 재현을 위해 동기 act 사용
+    act(() => {
+      dispatchPointer(element, 'pointerup');
+      setCustomCursorHover('ew-resize');
+    });
+    expect(document.body.classList.contains(CURSOR_BODY_CLASS)).toBe(false);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(isCustomCursorHoverSuspended()).toBe(false);
+
+    // 억제 해제 후에는 정상 호버 복귀
+    setCustomCursorHover('ns-resize');
+    expect(document.body.classList.contains(CURSOR_BODY_CLASS)).toBe(true);
+    setCustomCursorHover(null);
   });
 });

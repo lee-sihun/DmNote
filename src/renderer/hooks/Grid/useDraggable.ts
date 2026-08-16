@@ -7,6 +7,10 @@ import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { calculateBounds, calculateSnapPoints } from '@utils/grid/smartGuides';
+import {
+  resumeCustomCursorHover,
+  suspendCustomCursorHover,
+} from '@utils/grid/cursorUtils';
 import { DRAG_THRESHOLD } from './constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
 
@@ -163,6 +167,8 @@ export const useDraggable = ({
     if (dragCursorAppliedRef.current) return;
     document.body.classList.add(DRAG_CURSOR_CLASS);
     dragCursorAppliedRef.current = true;
+    // 세션 동안 핸들 호버 커서 갱신 중단 (시작 시 잔여 호버 클리어 포함)
+    suspendCustomCursorHover();
   };
 
   const clearDragCursor = () => {
@@ -170,6 +176,7 @@ export const useDraggable = ({
     if (!dragCursorAppliedRef.current) return;
     document.body.classList.remove(DRAG_CURSOR_CLASS);
     dragCursorAppliedRef.current = false;
+    resumeCustomCursorHover();
   };
 
   const handlePointerDown = (e: PointerEvent) => {
