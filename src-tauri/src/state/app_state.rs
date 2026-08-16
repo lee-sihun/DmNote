@@ -1188,8 +1188,6 @@ impl AppState {
 
     pub fn bootstrap_payload(&self) -> BootstrapPayload {
         let state = self.store.snapshot();
-        let mut custom_js = state.custom_js.clone();
-        let _ = custom_js.normalize();
         let (current_mode, active_keys) = bootstrap_keyboard_state(&self.keyboard);
         let (key_counters, key_counters_revision) = {
             let counters = self.key_counters.read();
@@ -1203,30 +1201,7 @@ impl AppState {
                 settings: SettingsState::default(),
                 counter_settings: KeyCounterSettings::default(),
             },
-            settings: SettingsState {
-                hardware_acceleration: state.hardware_acceleration,
-                always_on_top: state.always_on_top,
-                overlay_locked: state.overlay_locked,
-                note_effect: state.note_effect,
-                note_settings: state.note_settings.clone(),
-                angle_mode: state.angle_mode.clone(),
-                language: state.language.clone(),
-                laboratory_enabled: state.laboratory_enabled,
-                developer_mode_enabled: state.developer_mode_enabled,
-                tray_enabled: state.tray_enabled,
-                auto_update_enabled: state.auto_update_enabled,
-                background_color: state.background_color.clone(),
-                use_custom_css: state.use_custom_css,
-                custom_css: state.custom_css.clone(),
-                font_settings: state.font_settings.clone(),
-                use_custom_js: state.use_custom_js,
-                custom_js,
-                overlay_resize_anchor: state.overlay_resize_anchor.clone(),
-                key_counter_enabled: state.key_counter_enabled,
-                grid_settings: state.grid_settings.clone(),
-                shortcuts: state.shortcuts.clone(),
-                obs_mode_enabled: state.obs_mode_enabled,
-            },
+            settings: state.settings_state(),
             keys: state.keys.clone(),
             positions: state.key_positions.clone(),
             stat_positions: state.stat_positions.clone(),

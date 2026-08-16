@@ -10,7 +10,7 @@ use crate::{
     models::{
         AppStoreData, CommittedEditorChange, CustomCssPatch, CustomTab, EditorCommitOrigin,
         EditorDocumentV1, EditorField, KeyCounters, KeyMappings, KeyPositions, LayerGroups,
-        NoteSettings, NoteSettingsPatch, SettingsPatchInput,
+        NoteSettings, NoteSettingsPatch, SettingsPatchInput, SettingsState,
     },
     services::settings::apply_patch_to_store,
     state::{editor::validate_history_restore_metadata, history::HistoryScope, AppState},
@@ -323,17 +323,19 @@ pub fn keys_reset_all(
     note_patch.short_note_threshold_ms = Some(defaults.short_note_threshold_ms);
     note_patch.short_note_min_length_px = Some(defaults.short_note_min_length_px);
     note_patch.key_display_delay_ms = Some(defaults.key_display_delay_ms);
+    // 초기화 값은 설정 기본값 단일 원천에서 유도
+    let setting_defaults = SettingsState::default();
     let settings_patch = SettingsPatchInput {
-        background_color: Some("transparent".to_string()),
+        background_color: Some(setting_defaults.background_color.clone()),
         note_settings: Some(note_patch),
-        laboratory_enabled: Some(false),
-        use_custom_css: Some(false),
+        laboratory_enabled: Some(setting_defaults.laboratory_enabled),
+        use_custom_css: Some(setting_defaults.use_custom_css),
         custom_css: Some(CustomCssPatch {
-            path: Some(None),
-            content: Some(String::new()),
+            path: Some(setting_defaults.custom_css.path.clone()),
+            content: Some(setting_defaults.custom_css.content.clone()),
         }),
-        note_effect: Some(false),
-        overlay_locked: Some(false),
+        note_effect: Some(setting_defaults.note_effect),
+        overlay_locked: Some(setting_defaults.overlay_locked),
         ..SettingsPatchInput::default()
     };
     let css_operation_guard = state.lock_css_operation();

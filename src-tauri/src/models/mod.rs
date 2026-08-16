@@ -1801,6 +1801,15 @@ fn default_auto_update_enabled() -> bool {
     true
 }
 
+// 렌더러 백엔드 기본값, macOS는 metal 고정 그 외는 d3d11
+pub(crate) fn default_angle_mode() -> String {
+    if cfg!(target_os = "macos") {
+        "metal".to_string()
+    } else {
+        "d3d11".to_string()
+    }
+}
+
 fn default_obs_port() -> u16 {
     obs::DEFAULT_OBS_PORT
 }
@@ -1994,11 +2003,7 @@ impl Default for AppStoreData {
             note_settings: NoteSettings::default(),
             selected_key_type: "4key".to_string(),
             custom_tabs: Vec::new(),
-            angle_mode: if cfg!(target_os = "macos") {
-                "metal".to_string()
-            } else {
-                "d3d11".to_string()
-            },
+            angle_mode: default_angle_mode(),
             language: "ko".to_string(),
             laboratory_enabled: false,
             developer_mode_enabled: false,
@@ -2039,6 +2044,39 @@ impl Default for AppStoreData {
             obs_port: default_obs_port(),
             obs_token: None,
             plugin_data: HashMap::new(),
+        }
+    }
+}
+
+impl AppStoreData {
+    /// 설정 사영, store 필드가 설정 기본값의 단일 원천이고 SettingsState는 파생 뷰
+    pub(crate) fn settings_state(&self) -> SettingsState {
+        let mut custom_js = self.custom_js.clone();
+        let _ = custom_js.normalize();
+
+        SettingsState {
+            hardware_acceleration: self.hardware_acceleration,
+            always_on_top: self.always_on_top,
+            overlay_locked: self.overlay_locked,
+            note_effect: self.note_effect,
+            note_settings: self.note_settings.clone(),
+            angle_mode: self.angle_mode.clone(),
+            language: self.language.clone(),
+            laboratory_enabled: self.laboratory_enabled,
+            developer_mode_enabled: self.developer_mode_enabled,
+            tray_enabled: self.tray_enabled,
+            auto_update_enabled: self.auto_update_enabled,
+            background_color: self.background_color.clone(),
+            use_custom_css: self.use_custom_css,
+            custom_css: self.custom_css.clone(),
+            font_settings: self.font_settings.clone(),
+            use_custom_js: self.use_custom_js,
+            custom_js,
+            overlay_resize_anchor: self.overlay_resize_anchor.clone(),
+            key_counter_enabled: self.key_counter_enabled,
+            grid_settings: self.grid_settings.clone(),
+            shortcuts: self.shortcuts.clone(),
+            obs_mode_enabled: self.obs_mode_enabled,
         }
     }
 }
@@ -2318,34 +2356,8 @@ pub struct SettingsState {
 
 impl Default for SettingsState {
     fn default() -> Self {
-        Self {
-            hardware_acceleration: true,
-            always_on_top: true,
-            overlay_locked: false,
-            note_effect: false,
-            note_settings: NoteSettings::default(),
-            angle_mode: if cfg!(target_os = "macos") {
-                "metal".to_string()
-            } else {
-                "d3d11".to_string()
-            },
-            language: "ko".to_string(),
-            laboratory_enabled: false,
-            developer_mode_enabled: false,
-            tray_enabled: false,
-            auto_update_enabled: default_auto_update_enabled(),
-            background_color: "transparent".to_string(),
-            use_custom_css: false,
-            custom_css: CustomCss::default(),
-            font_settings: FontSettings::default(),
-            use_custom_js: false,
-            custom_js: CustomJs::default(),
-            overlay_resize_anchor: OverlayResizeAnchor::TopLeft,
-            key_counter_enabled: false,
-            grid_settings: GridSettings::default(),
-            shortcuts: ShortcutsState::default(),
-            obs_mode_enabled: false,
-        }
+        // 설정 기본값의 단일 원천은 AppStoreData::default, 빈 store 사영으로 유도
+        AppStoreData::default().settings_state()
     }
 }
 

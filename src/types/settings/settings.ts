@@ -9,10 +9,6 @@ import {
 import { type CustomCss } from '@src/types/plugin/css';
 import { type CustomJs } from '@src/types/plugin/js';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
-import {
-  getDefaultSettingsState,
-  getDefaultGridSettings,
-} from '@src/renderer/defaults';
 
 export type OverlayResizeAnchor =
   | 'top-left'
@@ -30,9 +26,6 @@ export interface GridSettings {
   gridSnapSize: number; // 그리드 스냅 크기 (1-10px)
   overlayPadding: number; // 오버레이 여백 (0-30px)
 }
-
-/** @deprecated Use getDefaultGridSettings() from @src/renderer/defaults */
-export const DEFAULT_GRID_SETTINGS: GridSettings = getDefaultGridSettings();
 
 export interface SettingsState {
   hardwareAcceleration: boolean;
@@ -58,9 +51,6 @@ export interface SettingsState {
   shortcuts: ShortcutsState;
   obsModeEnabled: boolean;
 }
-
-/** @deprecated Use getDefaultSettingsState() from @src/renderer/defaults */
-export const DEFAULT_SETTINGS_STATE: SettingsState = getDefaultSettingsState();
 
 export type SettingsPatchInput = Partial<
   Omit<
