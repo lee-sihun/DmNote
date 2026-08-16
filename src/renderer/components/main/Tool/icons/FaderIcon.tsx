@@ -9,7 +9,7 @@ const KNOBS = [
   { cx: 12.5, cy: 5.625, ride: '2.2px' },
 ];
 
-// 트랙 설정 아이콘 — 세 노브가 시차를 두고 움직여 잠깐 머물렀다 돌아온다.
+// 트랙 설정 아이콘 - 세 노브가 시차를 두고 움직여 잠깐 머물렀다 돌아온다.
 // 모션은 main.css의 dmnIconRide
 const FaderIcon = () => {
   return (

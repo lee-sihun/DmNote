@@ -248,7 +248,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       let htmlContent = '';
       try {
         const normalizedSections = getNormalizedSections();
-        // 패널(renderPluginSettingsForm)과 동일한 섹션 카드 구조·토큰 — section이
+        // 패널(renderPluginSettingsForm)과 동일한 섹션 카드 구조·토큰 - section이
         // 없어도 암시적 카드 하나로 렌더 (모달-패널 외형 통합, 2026-07-12 결정)
         htmlContent = '<div class="flex flex-col gap-[12px] w-full text-left">';
 

@@ -116,7 +116,7 @@ SettingToolProps) => {
     overlayApi
       .setVisible(next)
       .catch((error) => {
-        // 실패 시 낙관적 갱신 롤백 — 백엔드 상태는 무변경이므로 이전 값이 진실
+        // 실패 시 낙관적 갱신 롤백 - 백엔드 상태는 무변경이므로 이전 값이 진실
         setIsOverlayVisible(!next);
         console.error('Failed to toggle overlay', error);
       })

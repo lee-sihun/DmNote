@@ -432,7 +432,7 @@ const GradientAxisOverlay = ({
   const handleWindowMove = (e: PointerEvent) => {
     const drag = ownedDrag(e);
     if (!drag) return;
-    // 창 밖에서 버튼이 이미 떼졌으면 stale 드래그 — 커밋 없이 종료
+    // 창 밖에서 버튼이 이미 떼졌으면 stale 드래그 - 커밋 없이 종료
     if (e.buttons === 0) {
       cancelActiveDrag();
       return;

@@ -781,7 +781,7 @@ body.dmn-dragging * {
   /* 평상시에도 합성 레이어를 유지한다. 없으면 transform: none 상태와
      애니메이션 사이를 오갈 때마다 레이어가 승격·해제되고, 그 경계에서
      14px 아이콘의 래스터가 다시 스냅돼 첫 프레임이 세로로 튄다
-     (WebKit 가속 합성 계열 — tasks/lessons.md 2026-07-12 참고).
+     (WebKit 가속 합성 계열 - tasks/lessons.md 2026-07-12 참고).
      .dmn-icon-swap과 달리 여기서는 will-change를 켠다 -
      대상이 툴바 아이콘 11개로 고정이라 레이어가 늘어날 여지가 없다 */
   will-change: transform;
