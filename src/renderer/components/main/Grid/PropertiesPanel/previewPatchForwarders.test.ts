@@ -21,6 +21,9 @@ import {
 
 const KEY_ID = '00000000-0000-4000-8000-000000000501';
 const KNOB_ID = '00000000-0000-4000-8000-000000000502';
+const KEY_ID_A = '00000000-0000-4000-8000-000000000511';
+const KEY_ID_B = '00000000-0000-4000-8000-000000000512';
+const KEY_ID_C = '00000000-0000-4000-8000-000000000513';
 
 vi.mock('@api/modules/previewApi', () => ({
   previewApi: {
@@ -182,6 +185,64 @@ describe('preview patch forwarders (forwarder → overlay 실경로)', () => {
     expect(composed.activeFontColor).toBe('#new-active');
     expect(composed.fontColor).toBe('#old-idle');
     expectNoWirePollution(composed);
+  });
+
+  it('배치 프리뷰 중 비대상 삭제로 index가 밀려도 요소별 patch가 제 요소에 누적된다', () => {
+    // [C, A, B] - A·B만 선택, idle 색이 달라 active fallback이 요소별 상이값
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      canonicalPositions: {
+        '4key': [
+          { ...createDefaultKeyPosition(), id: KEY_ID_C, fontColor: '#c-idle' },
+          { ...createDefaultKeyPosition(), id: KEY_ID_A, fontColor: '#a-idle' },
+          { ...createDefaultKeyPosition(), id: KEY_ID_B, fontColor: '#b-idle' },
+        ],
+      } as CanonicalEditorDocumentV1['keyPositions'],
+      positions: {
+        '4key': [
+          { ...createDefaultKeyPosition(), id: KEY_ID_C, fontColor: '#c-idle' },
+          { ...createDefaultKeyPosition(), id: KEY_ID_A, fontColor: '#a-idle' },
+          { ...createDefaultKeyPosition(), id: KEY_ID_B, fontColor: '#b-idle' },
+        ],
+      } as CanonicalEditorDocumentV1['keyPositions'],
+    });
+    const targets = [
+      { elementType: 'key' as const, id: KEY_ID_A },
+      { elementType: 'key' as const, id: KEY_ID_B },
+    ];
+
+    previewBatchFontColor(targets, '4key', {
+      property: 'fontColor',
+      value: '#new-1',
+    });
+
+    // 게스처와 미배타인 격리 커밋이 비선택 C를 삭제 - A·B live index가 당겨진다
+    const [, ...rest] = useKeyStore.getState().canonicalPositions['4key'];
+    useKeyStore.getState().setPositions({
+      '4key': rest,
+    } as CanonicalEditorDocumentV1['keyPositions']);
+
+    // 드래그 계속 - forwarder가 live index를 재해석해 전달하는 두 번째 이벤트
+    previewBatchFontColor(targets, '4key', {
+      property: 'fontColor',
+      value: '#new-2',
+    });
+
+    const rendered = composePreviewPositions(
+      'keyPosition',
+      useKeyStore.getState().canonicalPositions,
+    )['4key'] as Array<Record<string, unknown>>;
+    // 요소별 상이값(active fallback)이 제 요소에 유지 - B의 patch가 A를 덮지 않는다
+    expect(rendered[0]).toMatchObject({
+      id: KEY_ID_A,
+      fontColor: '#new-2',
+      activeFontColor: '#a-idle',
+    });
+    expect(rendered[1]).toMatchObject({
+      id: KEY_ID_B,
+      fontColor: '#new-2',
+      activeFontColor: '#b-idle',
+    });
   });
 });
 

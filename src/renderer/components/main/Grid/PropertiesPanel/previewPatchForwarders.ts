@@ -45,9 +45,16 @@ export const previewSingleStyleProperty = (
 ): void => {
   const locator = resolveElementById(type, id);
   if (!locator) return;
+  // index는 locator hint - 동결 신원은 id로 전달
   editGestureController.preview(
     locator.mode,
-    [{ index: locator.index, patch: projectPreviewStylePropertyPatch(patch) }],
+    [
+      {
+        index: locator.index,
+        id,
+        patch: projectPreviewStylePropertyPatch(patch),
+      },
+    ],
     { domain: previewDomainOf(type) },
   );
 };
@@ -59,7 +66,7 @@ export const previewBatchStyleProperty = (
 ): void => {
   const grouped = new Map<
     PreviewTargetType,
-    Array<{ index: number; patch: Record<string, unknown> }>
+    Array<{ index: number; id: string; patch: Record<string, unknown> }>
   >();
   for (const target of targets) {
     const locator = resolveElementById(target.elementType, target.id);
@@ -67,6 +74,7 @@ export const previewBatchStyleProperty = (
     const entries = grouped.get(target.elementType) ?? [];
     entries.push({
       index: locator.index,
+      id: target.id,
       patch: projectPreviewStylePropertyPatch(patch),
     });
     grouped.set(target.elementType, entries);
@@ -86,7 +94,7 @@ export const previewBatchFontColor = (
   const document = captureEditorDocument();
   const grouped = new Map<
     PreviewTargetType,
-    Array<{ index: number; patch: Record<string, unknown> }>
+    Array<{ index: number; id: string; patch: Record<string, unknown> }>
   >();
   for (const target of targets) {
     const locator = resolveElementById(target.elementType, target.id);
@@ -107,6 +115,7 @@ export const previewBatchFontColor = (
     // commit의 eager intent와 동일하게 active fallback 보존을 포함해 투영
     entries.push({
       index: locator.index,
+      id: target.id,
       patch: projectFontColorPatch(current, target.elementType, patch),
     });
     grouped.set(target.elementType, entries);

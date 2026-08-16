@@ -11,6 +11,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { PREVIEW_SCHEMA_VERSION, type PreviewDomain } from '@src/types/preview';
+import { stableStringify } from '@utils/core/stableStringify';
 import { isNativeElementId } from '../model/elementId';
 
 import { previewOverlay } from './previewOverlay';
@@ -30,7 +31,10 @@ import {
 } from './gestureSessionLifecycle';
 
 interface PreviewEntry {
+  // locator hint. id가 없을 때만 동결 폴백으로 사용
   index: number;
+  // 요소 안정 id. 호출부가 알고 있으면 반드시 전달 - index 재해석 오염 차단
+  id?: string;
   patch: Record<string, unknown>;
 }
 
@@ -50,8 +54,7 @@ interface ActiveGesture {
   // 값이 연속으로 바뀌는 편집(드래그, 방향키 꾹 누르기)에서 중간값마다 그룹이 하나씩 생기고,
   // in-flight 하나가 도는 동안 쌓인 그룹이 전부 순차 발행돼 이미 무의미해진 값까지 IPC를 탄다
   pendingPatches: Map<PreviewDomain, Map<string, Record<string, unknown>>>;
-  // 호출부가 넘기는 index는 locator hint일 뿐이다. 게스처 첫 입력에서 ID를
-  // 동결하고 이후 reorder에도 같은 ID의 현재 index를 다시 찾는다
+  // 무ID 호출 전용 index → 동결 id. id를 넘기는 호출부는 이 맵을 거치지 않는다
   frozenTargets: Map<PreviewDomain, Map<number, string>>;
   flushScheduled: boolean;
   publishInFlight: boolean;
@@ -80,22 +83,32 @@ const currentIndexForId = (
     (position) => position.id === id,
   );
 
+// 동결 대상 결정. 호출부가 id를 주면 그 id가 곧 동결 신원이다 (index 불사용).
+// 무ID 호출은 첫 입력에서 index 점유자를 동결하되, 캐시 히트 시 현점유자가
+// 동결 id와 다르면 재정렬로 index가 밀린 것이므로 fail-closed로 버린다 -
+// 다른 요소의 patch가 동결 요소에 누적되는 오염 차단
 const frozenTargetFor = (
   gesture: ActiveGesture,
   domain: PreviewDomain,
-  index: number,
+  entry: PreviewEntry,
 ): string | null => {
+  if (entry.id !== undefined) {
+    return isNativeElementId(entry.id) ? entry.id : null;
+  }
   let targets = gesture.frozenTargets.get(domain);
   if (!targets) {
     targets = new Map();
     gesture.frozenTargets.set(domain, targets);
   }
-  const frozen = targets.get(index);
-  if (frozen) return frozen;
-  const id = authorityRecordFor(domain)[gesture.mode]?.[index]?.id;
-  if (typeof id !== 'string' || !isNativeElementId(id)) return null;
-  targets.set(index, id);
-  return id;
+  const occupantId =
+    authorityRecordFor(domain)[gesture.mode]?.[entry.index]?.id;
+  const frozen = targets.get(entry.index);
+  if (frozen) return frozen === occupantId ? frozen : null;
+  if (typeof occupantId !== 'string' || !isNativeElementId(occupantId)) {
+    return null;
+  }
+  targets.set(entry.index, occupantId);
+  return occupantId;
 };
 
 let active: ActiveGesture | null = null;
@@ -217,7 +230,7 @@ export const editGestureController = {
       active.appliedPatches.set(domain, domainPatches);
     }
     for (const entry of entries) {
-      const intentKey = frozenTargetFor(active, domain, entry.index);
+      const intentKey = frozenTargetFor(active, domain, entry);
       if (!intentKey) continue;
       const currentIndex = currentIndexForId(domain, mode, intentKey);
       if (currentIndex < 0) continue;
@@ -372,19 +385,26 @@ export const editGestureController = {
 };
 
 // 선택 대상 변경 시 진행 중 게스처 취소 (barrier)
+// 지문은 구조 직렬화 - 이어붙이기는 플러그인 fullId의 구분자와 충돌해
+// 서로 다른 선택이 같은 지문이 된다. index는 제외해 재정렬만으로는 미발화
 if (typeof window !== 'undefined') {
-  const identityFingerprint = () =>
-    useGridSelectionStore
-      .getState()
-      .selectedElements.map((element) => `${element.type}:${element.id}`)
-      .sort()
-      .join('|');
-  let lastSelectionFingerprint = identityFingerprint();
+  const identityFingerprint = (
+    elements: ReadonlyArray<{ type: string; id: string }>,
+  ): string =>
+    stableStringify(
+      elements
+        .map((element) => [element.type, element.id] as const)
+        .sort(([leftType, leftId], [rightType, rightId]) => {
+          if (leftType !== rightType) return leftType < rightType ? -1 : 1;
+          if (leftId === rightId) return 0;
+          return leftId < rightId ? -1 : 1;
+        }),
+    );
+  let lastSelectionFingerprint = identityFingerprint(
+    useGridSelectionStore.getState().selectedElements,
+  );
   useGridSelectionStore.subscribe((state) => {
-    const nextFingerprint = state.selectedElements
-      .map((element) => `${element.type}:${element.id}`)
-      .sort()
-      .join('|');
+    const nextFingerprint = identityFingerprint(state.selectedElements);
     if (nextFingerprint !== lastSelectionFingerprint) {
       lastSelectionFingerprint = nextFingerprint;
       editGestureController.cancel();
