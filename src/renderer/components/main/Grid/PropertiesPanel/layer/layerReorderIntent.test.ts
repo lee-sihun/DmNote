@@ -281,6 +281,51 @@ describe('layer reorder slot generation', () => {
     ]);
   });
 
+  it.each([
+    ['펼침', [] as string[]],
+    ['접힘', ['group-a']],
+  ])(
+    '헤더 진입 드롭은 %s 상태에서도 그룹 처음에 삽입한다',
+    async (_label, collapsedGroupIds) => {
+      const doc = () =>
+        documentWith(
+          [
+            { id: ID_A, zIndex: 2 },
+            { id: ID_B, zIndex: 1, groupId: 'group-a' },
+            { id: ID_C, zIndex: 0, groupId: 'group-a' },
+          ],
+          [{ id: 'group-a', name: 'A' }],
+        );
+      installDocument(doc());
+      await commitLayerDropIntent({
+        kind: 'items',
+        mode: '4key',
+        collapsedGroupIds,
+        draggedIds: [ID_A],
+        anchors: {
+          toDisplayIndex: 2,
+          targetGroupId: 'group-a',
+          anchorHeaderGroupId: 'group-a',
+        },
+        preserveFullGroups: false,
+      });
+      const options = mocks.runMixed.mock.calls[0]?.[0];
+      const generation = options.generate({
+        base: doc(),
+        pluginProjection: [],
+      });
+      // 진입 = 그룹 처음: A가 기존 멤버 B·C 위(z 최대)로 들어간다
+      expect(generation.ops[0].zUpdates).toEqual([
+        { elementType: 'key', id: ID_A, zIndex: 2 },
+        { elementType: 'key', id: ID_B, zIndex: 1 },
+        { elementType: 'key', id: ID_C, zIndex: 0 },
+      ]);
+      expect(generation.ops[0].groupUpdates).toEqual([
+        { elementType: 'key', id: ID_A, groupId: 'group-a' },
+      ]);
+    },
+  );
+
   it('그룹 드래그는 슬롯 시점에 새로 들어온 그룹 멤버까지 함께 옮긴다', async () => {
     installDocument(
       documentWith(

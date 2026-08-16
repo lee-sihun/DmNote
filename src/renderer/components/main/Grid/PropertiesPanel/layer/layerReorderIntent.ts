@@ -132,7 +132,9 @@ export const resolveDropIndexFromAnchors = (
   if (afterCaptured) return afterIndex === -1 ? null : afterIndex;
   if (target.boundary === 'top') return 0;
   if (target.boundary === 'bottom') return display.length;
-  return target.toDisplayIndex;
+  // 앵커도 경계도 없는 타깃은 무커밋 - 앱 내부에선 항상 앵커가 채워지므로
+  // wire의 all-null 앵커만 도달하며 숫자 index로 fail-open하지 않는다
+  return null;
 };
 
 interface ReorderPlan {
@@ -148,6 +150,7 @@ const reorderAtDisplayIndex = (
   displayIndex: number,
   targetGroupId: string | undefined,
   preserveFullGroups: boolean,
+  intoGroupId?: string,
 ): ReorderPlan | null => {
   const moving = items.filter((item) => movingIds.has(item.id));
   if (moving.length !== movingIds.size) return null;
@@ -205,7 +208,15 @@ const reorderAtDisplayIndex = (
     if (!added.has(item.id)) orderedRemaining.push(item);
   });
   let insertionIndex = orderedRemaining.length;
-  if (filteredIndex < filteredDisplay.length) {
+  // 헤더 진입은 접힘 여부와 무관하게 그룹 처음 삽입 - 접힌 그룹은 자식 행이
+  // 없어 슬롯 치환이 그룹 다음을 가리키므로 남은 멤버 기준으로 직접 해석
+  const intoFirstIndex =
+    intoGroupId != null
+      ? orderedRemaining.findIndex((item) => item.groupId === intoGroupId)
+      : -1;
+  if (intoFirstIndex !== -1) {
+    insertionIndex = intoFirstIndex;
+  } else if (filteredIndex < filteredDisplay.length) {
     const target = filteredDisplay[filteredIndex];
     if (target.displayType === 'layer') {
       const index = orderedRemaining.findIndex(
@@ -335,6 +346,7 @@ const resolvePlan = (
     displayIndex,
     targetGroupId,
     preserveFullGroups,
+    descriptor.anchors.anchorHeaderGroupId ?? undefined,
   );
   if (!plan) throw new ElementIntentAbort('dragged elements changed');
   return plan;

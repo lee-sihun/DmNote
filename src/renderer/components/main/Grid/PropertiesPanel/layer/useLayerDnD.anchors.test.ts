@@ -194,13 +194,40 @@ describe('resolveDropIndexFromAnchors', () => {
     ).toBeNull();
   });
 
-  it('앵커가 원래 없던 경계는 캡처 index를 유지한다', () => {
+  it('경계 드롭은 앵커 없이 top/bottom으로 해석한다', () => {
+    const display = [layer('a')];
+    expect(
+      resolveDropIndexFromAnchors(
+        { toDisplayIndex: 5, targetGroupId: undefined, boundary: 'top' },
+        NO_DRAG,
+        display,
+      ),
+    ).toBe(0);
+    expect(
+      resolveDropIndexFromAnchors(
+        { toDisplayIndex: 0, targetGroupId: undefined, boundary: 'bottom' },
+        NO_DRAG,
+        display,
+      ),
+    ).toBe(1);
+  });
+
+  it('앵커도 경계도 없는 all-null 타깃은 무커밋한다', () => {
+    // 앱 내부에선 도달 불가 - wire의 all-null 앵커가 숫자 index로
+    // fail-open하지 않도록 fail-closed를 고정한다
+    expect(
+      resolveDropIndexFromAnchors(
+        { toDisplayIndex: 0, targetGroupId: undefined },
+        NO_DRAG,
+        [layer('a')],
+      ),
+    ).toBeNull();
     expect(
       resolveDropIndexFromAnchors(
         { toDisplayIndex: 0, targetGroupId: undefined },
         NO_DRAG,
         [],
       ),
-    ).toBe(0);
+    ).toBeNull();
   });
 });

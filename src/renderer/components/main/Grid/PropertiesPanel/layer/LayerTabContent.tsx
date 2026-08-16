@@ -66,6 +66,11 @@ const LayerGroupDisclosure = ({
         type="button"
         aria-expanded={!visualCollapsed}
         className="absolute left-0 top-0 bottom-0 w-[34px] flex items-center pl-[1px] cursor-pointer z-[1]"
+        onMouseDown={(event) => {
+          // 행 드래그 시작 억제 (press 동안 grabbing 커서 방지)
+          event.preventDefault();
+          event.stopPropagation();
+        }}
         onClick={(event) => {
           event.stopPropagation();
           toggle();
@@ -308,6 +313,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   // 선택 상태 (렌더링용)
   const selectedElementIdSet = new Set(selectedElements.map((el) => el.id));
   const selectedGroupIdSet = new Set(selectedGroupIds);
+
+  // 그룹 안 삽입 인디케이터는 멤버 행과 같은 인덴트로 그룹 밖 삽입과 구분
+  const itemIndicatorIndentClass = dnd.dragOverTargetGroupId
+    ? 'left-[28px]'
+    : 'left-0';
   const isItemSelected = (item: LayerItem) => selectedElementIdSet.has(item.id);
   const isGroupHeaderSelected = (groupId: string) =>
     selectedGroupIdSet.has(groupId);
@@ -661,7 +671,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     {/* 아이템 드래그 드롭 인디케이터 */}
                     {dnd.draggedItemId &&
                       dnd.dragOverItemDisplayIndex === displayIndex && (
-                        <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
+                        <div
+                          className={`absolute ${itemIndicatorIndentClass} right-0 top-0 h-[2px] bg-accent z-10`}
+                        />
                       )}
                     {/* 그룹 드래그 드롭 인디케이터 */}
                     {dnd.draggedGroupId &&
@@ -758,7 +770,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   {dnd.draggedItemId &&
                     dnd.dragOverItemDisplayIndex === displayIndex &&
                     !dnd.draggedItemIdsRef.current.includes(item.id) && (
-                      <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
+                      <div
+                        className={`absolute ${itemIndicatorIndentClass} right-0 top-0 h-[2px] bg-accent z-10`}
+                      />
                     )}
                   {dnd.draggedGroupId &&
                     dnd.dragOverDisplayIndex === displayIndex &&
@@ -866,7 +880,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             {/* 마지막 아이템 뒤 드롭 인디케이터 */}
             {dnd.draggedItemId &&
               dnd.dragOverItemDisplayIndex === displayItems.length && (
-                <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent z-10" />
+                <div
+                  className={`absolute ${itemIndicatorIndentClass} right-0 bottom-0 h-[2px] bg-accent z-10`}
+                />
               )}
             {dnd.draggedGroupId &&
               dnd.dragOverDisplayIndex === displayItems.length && (

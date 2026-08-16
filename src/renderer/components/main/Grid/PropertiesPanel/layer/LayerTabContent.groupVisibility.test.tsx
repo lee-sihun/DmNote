@@ -161,4 +161,28 @@ describe('LayerTab 행 커서 정책', () => {
     expect(eyeButton?.className).toContain('cursor-pointer');
     expect(groupEyeButton?.className).toContain('cursor-pointer');
   });
+
+  it('접기 화살표 press는 행 드래그 grabbing 커서를 켜지 않는다', async () => {
+    const disclosure = host.querySelector<HTMLButtonElement>(
+      'button[aria-expanded]',
+    )!;
+
+    await act(async () => {
+      disclosure.dispatchEvent(
+        new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }),
+      );
+    });
+
+    // 버튼 press가 행으로 전파되면 body에 dmn-dragging이 붙는다
+    expect(document.body.classList.contains('dmn-dragging')).toBe(false);
+
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent('mouseup'));
+    });
+    expect(document.body.classList.contains('dmn-dragging')).toBe(false);
+  });
 });

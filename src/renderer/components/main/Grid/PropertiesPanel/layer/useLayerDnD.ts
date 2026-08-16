@@ -97,6 +97,10 @@ export function useLayerDnD({
   const [dragOverIntoGroupId, setDragOverIntoGroupId] = useState<string | null>(
     null,
   );
+  // 삽입 위치의 그룹 소속 - 그룹 안 삽입 인디케이터 인덴트 표시용
+  const [dragOverTargetGroupId, setDragOverTargetGroupId] = useState<
+    string | null
+  >(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [dragOverDisplayIndex, setDragOverDisplayIndex] = useState<
@@ -386,6 +390,7 @@ export function useLayerDnD({
       };
       setDragOverItemDisplayIndex(dropTarget.indicatorDisplayIndex);
       setDragOverIntoGroupId(dropTarget.intoGroupId);
+      setDragOverTargetGroupId(dropTarget.targetGroupId ?? null);
     };
     const moveScheduler = createRafLatestScheduler(applyMouseMove);
     const handleMouseMove = (moveEvent: MouseEvent) =>
@@ -430,6 +435,7 @@ export function useLayerDnD({
       setDraggedItemId(null);
       setDragOverItemDisplayIndex(null);
       setDragOverIntoGroupId(null);
+      setDragOverTargetGroupId(null);
       setIsDragging(false);
 
       document.removeEventListener('mousemove', handleMouseMove);
@@ -660,6 +666,7 @@ export function useLayerDnD({
     draggedGroupId,
     dragOverItemDisplayIndex,
     dragOverIntoGroupId,
+    dragOverTargetGroupId,
     dragOverDisplayIndex,
 
     // Ref 접근자 (외부 핸들러에서 참조)

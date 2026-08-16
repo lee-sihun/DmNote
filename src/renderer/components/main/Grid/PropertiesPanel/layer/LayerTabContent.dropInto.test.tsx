@@ -176,4 +176,22 @@ describe('LayerTab 그룹 진입 존 하이라이트', () => {
     await release();
     expect(hasIntoHighlight()).toBe(false);
   });
+
+  it('그룹 안 삽입 인디케이터는 멤버 인덴트로 그룹 밖과 구분된다', async () => {
+    await pressFirstItem();
+
+    // 마지막 멤버 행 [68,102) 하단 절반 - 그룹 안 끝 삽입
+    await moveTo(ROW * 2 + 20);
+    let indicator = host.querySelector<HTMLElement>('.bg-accent')!;
+    expect(indicator.classList.contains('left-[28px]')).toBe(true);
+    expect(indicator.classList.contains('left-0')).toBe(false);
+
+    // 최하단 빈 영역 - 같은 위치의 바지만 그룹 밖 삽입
+    await moveTo(ROW * 3 + 40);
+    indicator = host.querySelector<HTMLElement>('.bg-accent')!;
+    expect(indicator.classList.contains('left-0')).toBe(true);
+    expect(indicator.classList.contains('left-[28px]')).toBe(false);
+
+    await release();
+  });
 });
