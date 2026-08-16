@@ -314,7 +314,6 @@ const seedStores = (target: Target) => {
     selectedGroupIds: [],
     lastSelectedKeyBounds: null,
     isDraggingOrResizing: false,
-    _skipPanelModeSwitch: false,
   });
   usePropertiesPanelStore.setState({
     isCanvasPanelOpen: false,

@@ -63,6 +63,7 @@ interface HarnessProps {
   activeTool?: 'select' | 'eraser';
   initialX?: number;
   initialY?: number;
+  disabled?: boolean;
   onClick: () => void;
   onDoubleClick: () => void;
   onDragStart: () => void | (() => void);
@@ -73,6 +74,7 @@ const Harness = ({
   activeTool = 'select',
   initialX = 0,
   initialY = 0,
+  disabled = false,
   onClick,
   onDoubleClick,
   onDragStart,
@@ -84,6 +86,7 @@ const Harness = ({
     elementId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     onDragStart,
     onPositionChange,
+    disabled,
   });
 
   return (
@@ -121,6 +124,7 @@ describe('useDraggable pointer contract', () => {
   const renderHarness = async (
     activeTool: 'select' | 'eraser' = 'select',
     initial: { x: number; y: number } = { x: 0, y: 0 },
+    disabled = false,
   ) => {
     await act(async () => {
       root.render(
@@ -128,6 +132,7 @@ describe('useDraggable pointer contract', () => {
           activeTool={activeTool}
           initialX={initial.x}
           initialY={initial.y}
+          disabled={disabled}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
           onDragStart={onDragStart}
@@ -461,6 +466,82 @@ describe('useDraggable pointer contract', () => {
     });
     element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 
+    expect(onDoubleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('드래그 직후 press 없는 disabled 전이가 표식을 청소한다', async () => {
+    let element = await renderHarness();
+
+    // 개별 드래그로 wasMoved·recentPressMovedRef 오염
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      flushRaf();
+      dispatchPointer(element, 'pointerup', { clientX: 11 });
+    });
+    expect(onPositionChange).toHaveBeenCalledTimes(1);
+
+    // press 없이 선택 편입 (마퀴·레이어 탭) - disabled 전이만 발생
+    element = await renderHarness('select', { x: 0, y: 0 }, true);
+
+    // wasMoved 리셋 - 클릭 가드가 수식키 클릭을 삼키지 않는다
+    await act(async () => {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    // recentPressMovedRef 리셋 - 더블클릭 편집 진입이 막히지 않는다
+    await act(async () => {
+      element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    expect(onDoubleClick).toHaveBeenCalledTimes(1);
+
+    // movedThisPressRef 리셋 - 재활성화 후 정지 press 쌍의 더블클릭 허용 유지
+    element = await renderHarness('select', { x: 0, y: 0 }, false);
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointerup');
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointerup');
+    });
+    element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    expect(onDoubleClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('드래그 도중 disabled 전이는 trailing click을 흡수하고 한 태스크 뒤 청소한다', async () => {
+    let element = await renderHarness();
+
+    // 드래그 진행 중 (릴리즈 전)
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      flushRaf();
+    });
+
+    // 릴리즈 전 disabled flip - 표식 청소는 세션 종료 후로 보류된다
+    element = await renderHarness('select', { x: 0, y: 0 }, true);
+
+    // 릴리즈 + trailing click - 실드래그이므로 여전히 흡수돼야 한다
+    await act(async () => {
+      dispatchPointer(element, 'pointerup', { clientX: 11 });
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onPositionChange).toHaveBeenCalledTimes(1);
+
+    // 한 태스크 뒤 보류된 청소가 정산되어 다음 클릭은 통과한다
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    // recentPressMovedRef도 함께 정산되어 더블클릭 편집 진입이 막히지 않는다
+    await act(async () => {
+      element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
     expect(onDoubleClick).toHaveBeenCalledTimes(1);
   });
 

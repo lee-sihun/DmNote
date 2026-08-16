@@ -9,6 +9,7 @@ import {
   calculateSnapPoints,
   type ElementBounds,
 } from '@utils/grid/smartGuides';
+import { DRAG_THRESHOLD } from './constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
 
 interface SelectedElementLike {
@@ -67,9 +68,16 @@ export const useSelectionDrag = ({
 
   // 소비자는 enabled와 같은 조건으로 handlePointerDown을 조건부 부착한다 -
   // 비활성화(선택 해제)되면 press가 훅을 거치지 않아 표식 소비가 끊기므로,
-  // 여기서 청소하지 않으면 낡은 표식이 이후 클릭을 계속 삼킨다
+  // 여기서 청소하지 않으면 낡은 표식이 이후 클릭을 계속 삼킨다.
+  // 드래그 도중 비활성화(Escape 선택 해제 등)면 DOM 리스너가 살아남아
+  // 이후 pointermove가 표식을 재오염시키고 빈 선택에 onMultiDrag가 계속
+  // 발화하므로, 진행 중 세션도 unmount와 동일 계약으로 종료한다
+  // (finishDrag는 dragEnded 가드로 이중 종료에 안전)
   useEffect(() => {
-    if (!enabled) lastPressMovedRef.current = false;
+    if (enabled) return;
+    activeCleanupRef.current?.();
+    lastPressMovedRef.current = false;
+    movedDuringPressRef.current = false;
   }, [enabled]);
 
   const beginPointerDrag = (
@@ -109,6 +117,9 @@ export const useSelectionDrag = ({
     let pendingFrameCallback: (() => void) | null = null;
     let dragEnded = false;
     let actuallyDragging = false;
+    // 개별 드래그(useDraggable)와 동일한 시작 임계값 래치 - off-grid 시작
+    // 좌표에서 1px 손떨림이 스냅 점프와 클릭 흡수로 번지는 것을 차단
+    let passedThreshold = false;
     let finishGesture: (() => void) | null = null;
 
     activePointerIdRef.current = pointerId;
@@ -120,6 +131,19 @@ export const useSelectionDrag = ({
     const handlePointerMove = (moveEvent: PointerEvent) => {
       if (dragEnded || moveEvent.pointerId !== activePointerIdRef.current) {
         return;
+      }
+      // 임계 판정은 개별 드래그와 동일하게 화면 px 기준, 돌파 후에는 시작
+      // 좌표 기준 delta로 기존 스냅 로직을 그대로 태운다
+      if (!passedThreshold) {
+        const thresholdDeltaX = Math.abs(moveEvent.clientX - startClientX);
+        const thresholdDeltaY = Math.abs(moveEvent.clientY - startClientY);
+        if (
+          thresholdDeltaX <= DRAG_THRESHOLD &&
+          thresholdDeltaY <= DRAG_THRESHOLD
+        ) {
+          return;
+        }
+        passedThreshold = true;
       }
       latestMoveEvent = moveEvent;
       if (rafId !== null) return;

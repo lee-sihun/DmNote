@@ -63,6 +63,8 @@ vi.mock('@utils/grid/smartGuides', async (importOriginal) => {
 
 interface HarnessProps {
   enabled?: boolean;
+  startX?: number;
+  startY?: number;
   onClick: () => void;
   onMovedCheck: (moved: boolean) => void;
   onPressMovedCheck?: (moved: boolean) => void;
@@ -73,6 +75,8 @@ interface HarnessProps {
 
 const Harness = ({
   enabled = true,
+  startX = 0,
+  startY = 0,
   onClick,
   onMovedCheck,
   onPressMovedCheck,
@@ -84,8 +88,8 @@ const Harness = ({
     useSelectionDrag({
       enabled,
       zoom: 1,
-      startX: 0,
-      startY: 0,
+      startX,
+      startY,
       elementId: 'key-0',
       elementWidth: 60,
       elementHeight: 60,
@@ -183,7 +187,11 @@ describe('useSelectionDrag', () => {
   let onMultiDrag: Mock<(dx: number, dy: number) => void>;
   let onMultiDragEnd: Mock<() => void>;
 
-  const renderHarness = async () => {
+  const renderHarness = async (
+    props: Partial<
+      Pick<HarnessProps, 'enabled' | 'startX' | 'startY' | 'onPressMovedCheck'>
+    > = {},
+  ) => {
     await act(async () => {
       root.render(
         <Harness
@@ -192,6 +200,7 @@ describe('useSelectionDrag', () => {
           onMultiDragStart={onMultiDragStart}
           onMultiDrag={onMultiDrag}
           onMultiDragEnd={onMultiDragEnd}
+          {...props}
         />,
       );
     });
@@ -247,7 +256,7 @@ describe('useSelectionDrag', () => {
     vi.restoreAllMocks();
   });
 
-  it('moves on the first valid snapped delta without a 5px threshold', async () => {
+  it('임계값 이하 이동은 드래그를 발동하지 않는다', async () => {
     const element = await renderHarness();
 
     await act(async () => {
@@ -255,6 +264,23 @@ describe('useSelectionDrag', () => {
       element.dispatchEvent(pointerEvent('pointermove', { clientX: 3 }));
       flushRaf();
       element.dispatchEvent(pointerEvent('pointerup', { clientX: 3 }));
+    });
+    element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+
+    expect(onMultiDragStart).not.toHaveBeenCalled();
+    expect(onMultiDrag).not.toHaveBeenCalled();
+    expect(onMultiDragEnd).not.toHaveBeenCalled();
+    expect(onMovedCheck).toHaveBeenCalledWith(false);
+  });
+
+  it('임계 돌파 후 시작 좌표 기준 스냅 delta로 이동한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 7 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 7 }));
     });
     element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 
@@ -369,6 +395,88 @@ describe('useSelectionDrag', () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it('드래그 도중 enabled가 꺼지면 세션을 종료하고 이후 이동을 무시한다', async () => {
+    let element = await renderHarness({ enabled: true });
+
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 8 }));
+      flushRaf();
+    });
+    expect(onMultiDragStart).toHaveBeenCalledTimes(1);
+    expect(onMultiDrag).toHaveBeenCalledTimes(1);
+
+    // 릴리즈 전 선택 해제 (Escape) - 진행 중 세션이 즉시 끝나야 한다
+    element = await renderHarness({ enabled: false });
+    expect(onMultiDragEnd).toHaveBeenCalledTimes(1);
+
+    // 리스너 제거로 이후 pointermove가 빈 선택에 onMultiDrag를 발화하지 않는다
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 40 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 40 }));
+    });
+    expect(onMultiDrag).toHaveBeenCalledTimes(1);
+    expect(onMultiDragEnd).toHaveBeenCalledTimes(1);
+
+    // 세션 소유권이 풀려 재활성화 후 새 드래그가 정상 시작된다
+    element = await renderHarness({ enabled: true });
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 8 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 8 }));
+    });
+    expect(onMultiDragStart).toHaveBeenCalledTimes(2);
+    expect(onMultiDragEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it('off-grid 시작 좌표에서 임계값 미만 이동은 무이동·무표식이다', async () => {
+    const pressMovedChecks: boolean[] = [];
+    const element = await renderHarness({
+      startX: 3,
+      onPressMovedCheck: (moved) => pressMovedChecks.push(moved),
+    });
+
+    // 4px 손떨림 - 임계 미만이라 스냅 점프도 표식도 없어야 한다
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 4 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 4 }));
+    });
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(onMultiDragStart).not.toHaveBeenCalled();
+    expect(onMultiDrag).not.toHaveBeenCalled();
+    expect(onMultiDragEnd).not.toHaveBeenCalled();
+    expect(pressMovedChecks).toEqual([false]);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('off-grid 시작 좌표에서 임계값 초과 이동은 발동한다', async () => {
+    const pressMovedChecks: boolean[] = [];
+    const element = await renderHarness({
+      startX: 3,
+      onPressMovedCheck: (moved) => pressMovedChecks.push(moved),
+    });
+
+    // 6px 이동 - 임계 돌파, newX 9가 10으로 스냅되어 delta 7
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 6 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 6 }));
+    });
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(onMultiDragStart).toHaveBeenCalledTimes(1);
+    expect(onMultiDrag).toHaveBeenCalledTimes(1);
+    expect(onMultiDrag).toHaveBeenCalledWith(7, 0);
+    expect(onMultiDragEnd).toHaveBeenCalledTimes(1);
+    expect(pressMovedChecks).toEqual([true]);
+  });
+
   it('keeps the double-click guard across the second stationary press', async () => {
     const element = await renderHarness();
 
@@ -444,7 +552,7 @@ describe('useSelectionDrag', () => {
 
     await act(async () => {
       element.dispatchEvent(pointerEvent('pointerdown'));
-      element.dispatchEvent(pointerEvent('pointermove', { clientX: 5 }));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 6 }));
       flushRaf();
     });
     const firstFrameBounds = vi
@@ -452,19 +560,19 @@ describe('useSelectionDrag', () => {
       .mock.calls.at(-1)?.[0];
     expect(
       firstFrameBounds?.find((bounds) => bounds.id === 'plugin-b')?.left,
-    ).toBe(205);
+    ).toBe(206);
 
     await act(async () => {
-      element.dispatchEvent(pointerEvent('pointermove', { clientX: 10 }));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 11 }));
       flushRaf();
-      element.dispatchEvent(pointerEvent('pointerup', { clientX: 10 }));
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 11 }));
     });
     const secondFrameBounds = vi
       .mocked(calculateGroupBounds)
       .mock.calls.at(-1)?.[0];
     expect(
       secondFrameBounds?.find((bounds) => bounds.id === 'plugin-b')?.left,
-    ).toBe(210);
+    ).toBe(211);
     expect(updateStorePosition).toHaveBeenNthCalledWith(1, 5, 0);
     expect(updateStorePosition).toHaveBeenNthCalledWith(2, 5, 0);
   });
@@ -657,5 +765,56 @@ describe('pressMovedRef 클릭 가드 계약', () => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(pressMovedChecks).toEqual([true, false]);
+  });
+
+  it('드래그 도중 enabled가 꺼지면 이후 pointermove가 표식을 재오염하지 않는다', async () => {
+    const pressMovedChecks: boolean[] = [];
+    const movedChecks: boolean[] = [];
+    const renderWith = async (enabled: boolean) => {
+      await act(async () => {
+        root.render(
+          <Harness
+            enabled={enabled}
+            onClick={() => {}}
+            onMovedCheck={(moved) => movedChecks.push(moved)}
+            onPressMovedCheck={(moved) => pressMovedChecks.push(moved)}
+            onMultiDragStart={() => {}}
+            onMultiDrag={() => {}}
+            onMultiDragEnd={() => {}}
+          />,
+        );
+      });
+      return host.querySelector<HTMLElement>('[data-testid="selection-drag"]')!;
+    };
+
+    // 선택 모드 드래그 진행 중 (릴리즈 전) 표식이 참으로 오염된 상태
+    let element = await renderWith(true);
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 8 }));
+      flushRaf();
+    });
+
+    // 릴리즈 없이 선택 해제 - 청소가 세션과 표식을 함께 정리해야 한다
+    element = await renderWith(false);
+
+    // 리스너가 살아 있었다면 이 이동이 lastPressMovedRef를 재오염시킨다
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 40 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 40 }));
+    });
+
+    // enabled=false라 press가 훅을 거치지 않아도 클릭이 삼켜지지 않는다
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointerup'));
+    });
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+
+    expect(pressMovedChecks).toEqual([false]);
+    // movedDuringPressRef도 함께 청소되어 더블클릭 편집 진입이 막히지 않는다
+    expect(movedChecks).toEqual([false]);
   });
 });

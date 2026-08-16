@@ -252,12 +252,12 @@ describe('혼합 선택 드래그 정산 전 구간', () => {
       '[data-testid="drag-target"]',
     )!;
 
-    // 실제 포인터 제스처
+    // 실제 포인터 제스처 - 임계 돌파 후 7px 이동은 5로 스냅된다
     await act(async () => {
       target.dispatchEvent(pointerEvent('pointerdown'));
-      target.dispatchEvent(pointerEvent('pointermove', { clientX: 5 }));
+      target.dispatchEvent(pointerEvent('pointermove', { clientX: 7 }));
       flushRaf();
-      target.dispatchEvent(pointerEvent('pointerup', { clientX: 5 }));
+      target.dispatchEvent(pointerEvent('pointerup', { clientX: 7 }));
     });
     await act(async () => {
       await Promise.resolve();

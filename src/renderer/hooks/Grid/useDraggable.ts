@@ -130,6 +130,9 @@ export const useDraggable = ({
   const recentPressMovedRef = useRef(false);
   // 드래그 중 도착한 외부 initial 동기화의 유예 버퍼 (세션 종료 시 정산)
   const pendingInitialSyncRef = useRef<{ dx: number; dy: number } | null>(null);
+  // 드래그 세션 중 disabled 전이가 오면 표식 청소를 세션 종료 후로 보류
+  const pendingDisabledResetRef = useRef(false);
+  const disabledResetTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -144,6 +147,26 @@ export const useDraggable = ({
     getOtherElementsRef.current = getOtherElements;
     disabledRef.current = disabled;
   }, [elementId, elementWidth, elementHeight, getOtherElements, disabled]);
+
+  // press 없이 선택에 편입(마퀴·레이어 탭)되어 disabled가 되면 표식을
+  // 리셋할 pointerdown 경로가 끊긴다 - 낡은 표식이 수식키 클릭·더블클릭을
+  // 계속 삼키지 않게 여기서 청소 (useSelectionDrag의 enabled 청소와 대칭).
+  // 드래그 세션 중이면 즉시 지우지 않고 세션 종료 후로 보류 - 릴리즈
+  // trailing click까지는 가드가 살아 있어야 실드래그 직후 클릭이 새지 않는다
+  useEffect(() => {
+    if (!disabled) {
+      // 보류 취소 - 재활성화 후에는 다음 pointerdown이 어차피 리셋한다
+      pendingDisabledResetRef.current = false;
+      return;
+    }
+    if (activeDragRef.current) {
+      pendingDisabledResetRef.current = true;
+      return;
+    }
+    setWasMoved(false);
+    movedThisPressRef.current = false;
+    recentPressMovedRef.current = false;
+  }, [disabled]);
 
   // initialX, initialY 변경 시 동기화
   useEffect(() => {
@@ -479,6 +502,22 @@ export const useDraggable = ({
           setOffset(pendingSync);
         }
       }
+
+      // 세션 중 보류된 disabled 표식 청소 정산 - trailing click이
+      // pointerup과 같은 시퀀스로 발화하므로 한 태스크 뒤에 리셋한다
+      if (pendingDisabledResetRef.current) {
+        pendingDisabledResetRef.current = false;
+        disabledResetTimerRef.current = window.setTimeout(() => {
+          disabledResetTimerRef.current = null;
+          // 그 사이 재활성화됐으면 취소 - 다음 pointerdown이 리셋한다
+          if (!disabledRef.current) return;
+          // 새 세션이 시작됐으면 취소 - 그 세션의 종료 정산이 다시 스케줄한다
+          if (activeDragRef.current) return;
+          setWasMoved(false);
+          movedThisPressRef.current = false;
+          recentPressMovedRef.current = false;
+        }, 0);
+      }
     };
 
     const handlePointerEnd = (endEvent: PointerEvent) => {
@@ -510,6 +549,11 @@ export const useDraggable = ({
     return () => {
       activeDragCleanupRef.current?.();
       clearDragCursor();
+      // unmount 시 보류 리셋 타이머 정리 (cleanup이 방금 걸었을 수도 있음)
+      if (disabledResetTimerRef.current !== null) {
+        window.clearTimeout(disabledResetTimerRef.current);
+        disabledResetTimerRef.current = null;
+      }
     };
   }, []);
 
