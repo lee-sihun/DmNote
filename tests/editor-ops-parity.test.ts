@@ -41,6 +41,19 @@ interface OpsParityFixture {
 const fixture = (): OpsParityFixture =>
   JSON.parse(readFileSync(FIXTURE_PATH, 'utf8')) as OpsParityFixture;
 
+// EditorOpV1 전체 kind 목록 - satisfies 검사가 유니온 변경을 컴파일 오류로
+// 잡으므로 신규 op 추가 시 이 목록과 fixture 케이스를 함께 늘려야 한다
+const ALL_OP_KINDS = {
+  setBounds: true,
+  deleteElement: true,
+  insertFrozenElements: true,
+  reorderElements: true,
+  setElementGroups: true,
+  renameLayerGroup: true,
+  patchElement: true,
+  setKeySlot: true,
+} satisfies Record<EditorOpV1['kind'], true>;
+
 // 낙관 적용이 끝난 로컬 문서를 그대로 승인하는 echo 백엔드. 커밋 결과가
 // 프론트 projection과 항상 일치하므로 outcome.document는 순수한
 // applySemanticOps(base, ops) 산출물이 된다
@@ -95,6 +108,15 @@ describe('editor ops result parity', () => {
   it('fixture 버전은 ops wire 버전과 일치한다', () => {
     expect(fixture().version).toBe(EDITOR_OPS_VERSION);
     expect(fixture().cases.length).toBeGreaterThan(0);
+  });
+
+  it('fixture 케이스가 모든 op kind를 빠짐없이 사용한다', () => {
+    const seenKinds = new Set(
+      fixture().cases.flatMap((parityCase) =>
+        parityCase.ops.map((op) => op.kind),
+      ),
+    );
+    expect([...seenKinds].sort()).toEqual(Object.keys(ALL_OP_KINDS).sort());
   });
 
   for (const parityCase of fixture().cases) {

@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use serde::Deserialize;
 
 use crate::models::{AppStoreData, EditorDocumentV1, EditorOpV1, EDITOR_OPS_VERSION};
@@ -37,9 +39,49 @@ fn document_json(document: &EditorDocumentV1) -> String {
     serde_json::to_string_pretty(document).expect("editor document serializes")
 }
 
+// EditorOpV1 wire kind 전수 목록 - 신규 op variant를 추가하면 아래 match가
+// 컴파일 오류를 내므로 이 목록과 fixture 케이스를 함께 늘린다
+const ALL_OP_KINDS: [&str; 8] = [
+    "setBounds",
+    "deleteElement",
+    "patchElement",
+    "setKeySlot",
+    "insertFrozenElements",
+    "reorderElements",
+    "setElementGroups",
+    "renameLayerGroup",
+];
+
+fn op_kind(op: &EditorOpV1) -> &'static str {
+    match op {
+        EditorOpV1::SetBounds { .. } => "setBounds",
+        EditorOpV1::DeleteElement { .. } => "deleteElement",
+        EditorOpV1::PatchElement { .. } => "patchElement",
+        EditorOpV1::SetKeySlot { .. } => "setKeySlot",
+        EditorOpV1::InsertFrozenElements { .. } => "insertFrozenElements",
+        EditorOpV1::ReorderElements { .. } => "reorderElements",
+        EditorOpV1::SetElementGroups { .. } => "setElementGroups",
+        EditorOpV1::RenameLayerGroup { .. } => "renameLayerGroup",
+    }
+}
+
 #[test]
 fn fixture_version_matches_ops_version() {
     assert_eq!(parity_fixture().version, EDITOR_OPS_VERSION);
+}
+
+#[test]
+fn fixture_covers_every_op_kind() {
+    let expected: BTreeSet<&str> = ALL_OP_KINDS.into_iter().collect();
+    let seen: BTreeSet<&str> = parity_fixture()
+        .cases
+        .iter()
+        .flat_map(|case| case.ops.iter().map(op_kind))
+        .collect();
+    assert_eq!(
+        seen, expected,
+        "fixture must exercise every EditorOpV1 kind"
+    );
 }
 
 #[test]
