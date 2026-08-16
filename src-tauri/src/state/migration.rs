@@ -962,7 +962,7 @@ pub(crate) fn canonicalize_gradient_pairs(data: &mut AppStoreData) -> (bool, boo
 }
 
 fn repair_editor_revision(data: &mut AppStoreData) -> bool {
-    if data.editor_revision <= super::editor::MAX_SAFE_EDITOR_REVISION {
+    if data.editor_revision <= super::editor::MAX_SAFE_WIRE_REVISION {
         return false;
     }
 
@@ -3012,7 +3012,7 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         });
-        data.editor_revision = crate::state::editor::MAX_SAFE_EDITOR_REVISION + 1;
+        data.editor_revision = crate::state::editor::MAX_SAFE_WIRE_REVISION + 1;
         data.key_positions.get_mut("4key").unwrap()[0].dx = 12_345.0;
         crate::state::native_element_id::backfill_store_element_ids(&mut data);
         let expected_keys = data.keys.clone();
@@ -3040,14 +3040,14 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         });
-        data.editor_revision = crate::state::editor::MAX_SAFE_EDITOR_REVISION;
+        data.editor_revision = crate::state::editor::MAX_SAFE_WIRE_REVISION;
         std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
 
         assert_eq!(
             loaded.data.editor_revision,
-            crate::state::editor::MAX_SAFE_EDITOR_REVISION
+            crate::state::editor::MAX_SAFE_WIRE_REVISION
         );
         assert!(!loaded.repaired);
         let _ = std::fs::remove_file(path);

@@ -8,19 +8,19 @@ use crate::models::{
     AppStoreData, PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginRpcRequest,
     PluginRpcRequestEnvelope, PluginRpcResponse, SavedPluginInstance,
 };
-use crate::state::editor::MAX_GROUP_ID_BYTES;
+use crate::state::editor::{is_valid_gesture_id, is_valid_group_id_shape, MAX_SAFE_WIRE_REVISION};
 use crate::state::native_element_id::{is_valid_element_id, new_unique_id, BackfillOutcome};
 
 pub(crate) const PLUGIN_RPC_PROTOCOL_VERSION: u32 = 1;
 pub(crate) const MAX_PLUGIN_RPC_BYTES: usize = 256 * 1024;
 pub(crate) const MAX_PLUGIN_INSTANCES_REQUEST_BYTES: usize = 8 * 1024 * 1024;
+// 플러그인 스토리지 키 네임스페이스 - storage 커맨드와 canonical 헬퍼의 단일 원천
+pub(crate) const PLUGIN_DATA_KEY_PREFIX: &str = "plugin_data_";
 const PLUGIN_RPC_ROUTE_CAPACITY: usize = 512;
-const MAX_SAFE_WIRE_REVISION: u64 = 9_007_199_254_740_991;
 const MAX_PLUGIN_ID_BYTES: usize = 128;
 const MAX_PLUGIN_INSTANCES: usize = 4_096;
 const MAX_PLUGIN_RECONCILE_TAB_IDS: usize = 64;
 const MAX_TAB_ID_BYTES: usize = 128;
-const MAX_GESTURE_ID_BYTES: usize = 64;
 const MAX_SETTING_FIELDS: usize = 1_024;
 const MAX_SETTING_KEY_BYTES: usize = 256;
 const MAX_SETTING_STRING_BYTES: usize = 64 * 1024;
@@ -273,10 +273,11 @@ pub(crate) fn validate_plugin_instances_request(
 ) -> Result<usize, String> {
     validate_plugin_id(&request.plugin_id)?;
     validate_plugin_mutation_id(&request.mutation_id)?;
+    // editor 커밋과 동일한 gestureId 규칙 공유 - UUID + 길이 상한
     if request
         .gesture_id
-        .as_ref()
-        .is_some_and(|gesture_id| gesture_id.len() > MAX_GESTURE_ID_BYTES)
+        .as_deref()
+        .is_some_and(|gesture_id| !is_valid_gesture_id(gesture_id))
     {
         return Err("INVALID_PLUGIN_GESTURE_ID".to_string());
     }
@@ -399,7 +400,7 @@ pub(crate) fn validate_saved_plugin_instances(
         if instance
             .group_id
             .as_deref()
-            .is_some_and(|group_id| group_id.is_empty() || group_id.len() > MAX_GROUP_ID_BYTES)
+            .is_some_and(|group_id| !is_valid_group_id_shape(group_id))
         {
             return Err(format!("INVALID_PLUGIN_INSTANCE_GROUP_ID:{index}"));
         }
@@ -497,11 +498,11 @@ pub(crate) fn plugin_group_refs_from_store(
 }
 
 pub(crate) fn plugin_instances_storage_key(plugin_id: &str) -> String {
-    format!("plugin_data_{plugin_id}/instances")
+    format!("{PLUGIN_DATA_KEY_PREFIX}{plugin_id}/instances")
 }
 
 pub(crate) fn plugin_id_from_instances_storage_key(key: &str) -> Option<&str> {
-    key.strip_prefix("plugin_data_")
+    key.strip_prefix(PLUGIN_DATA_KEY_PREFIX)
         .and_then(|key| key.strip_suffix("/instances"))
         .filter(|plugin_id| !plugin_id.is_empty())
 }
@@ -645,6 +646,7 @@ mod tests {
         PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint, PluginRpcError,
         PluginSettingValue,
     };
+    use crate::state::editor::MAX_GROUP_ID_BYTES;
 
     fn rpc_request(payload: Value) -> PluginRpcRequest {
         PluginRpcRequest {
@@ -1072,6 +1074,48 @@ mod tests {
             validate_plugin_instances_request(&request).unwrap_err(),
             "PLUGIN_INSTANCES_REQUEST_TOO_LARGE"
         );
+    }
+
+    #[test]
+    fn plugin_instances_request_shares_editor_gesture_id_rules() {
+        let mut request = PluginInstancesCommitRequest {
+            plugin_id: "demo".to_string(),
+            instances: vec![saved_instance()],
+            mutation_id: uuid::Uuid::new_v4().to_string(),
+            gesture_id: None,
+            observed_history_epoch: None,
+            expected_model_revision: None,
+            authority_generation: 1,
+        };
+
+        // 프론트 crypto.randomUUID() 발급분은 통과
+        request.gesture_id = Some(uuid::Uuid::new_v4().to_string());
+        validate_plugin_instances_request(&request).unwrap();
+
+        // 비UUID 형식 거절 - editor 경로와 동일 규칙 (길이 상한은 UUID 파싱이
+        // 먼저 걸러 독립 관측 불가, 방어층으로만 존재)
+        for invalid_gesture_id in ["not-a-uuid".to_string(), "가".repeat(22)] {
+            request.gesture_id = Some(invalid_gesture_id);
+            assert_eq!(
+                validate_plugin_instances_request(&request).unwrap_err(),
+                "INVALID_PLUGIN_GESTURE_ID"
+            );
+        }
+    }
+
+    #[test]
+    fn plugin_storage_key_wire_bytes_are_stable() {
+        assert_eq!(
+            plugin_instances_storage_key("demo"),
+            "plugin_data_demo/instances"
+        );
+        assert_eq!(
+            plugin_id_from_instances_storage_key("plugin_data_demo/instances"),
+            Some("demo")
+        );
+        assert!(is_plugin_instances_storage_key(
+            "plugin_data_demo/instances"
+        ));
     }
 
     #[test]

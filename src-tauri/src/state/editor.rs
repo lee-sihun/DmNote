@@ -15,7 +15,8 @@ use crate::{
     },
 };
 
-pub(crate) const MAX_SAFE_EDITOR_REVISION: u64 = 9_007_199_254_740_991;
+// JS Number.MAX_SAFE_INTEGER - 프론트와 오가는 모든 u64 리비전의 공통 wire 상한
+pub(crate) const MAX_SAFE_WIRE_REVISION: u64 = 9_007_199_254_740_991;
 pub(crate) const MUTATION_ACK_CAPACITY: usize = 32;
 pub(crate) const MAX_CUSTOM_TABS: usize = 30;
 pub(crate) const MAX_SLOTS_PER_MEMBER: usize = 16;
@@ -42,6 +43,16 @@ use crate::models::{
 };
 const REQUEST_WARNING_BYTES: usize = 1_024 * 1_024;
 const MAX_REQUEST_BYTES: usize = 8 * 1_024 * 1_024;
+
+// gestureId 규칙 단일 원천 - 프론트는 crypto.randomUUID()로 발급, editor/plugin 커밋 경로 공유
+pub(crate) fn is_valid_gesture_id(gesture_id: &str) -> bool {
+    gesture_id.len() <= MAX_GESTURE_ID_BYTES && Uuid::parse_str(gesture_id).is_ok()
+}
+
+// group_id 형상 규칙 단일 원천 - 비어있지 않고 바이트 상한 이내, plugin 인스턴스 검증도 공유
+pub(crate) fn is_valid_group_id_shape(group_id: &str) -> bool {
+    !group_id.is_empty() && group_id.len() <= MAX_GROUP_ID_BYTES
+}
 
 pub(crate) type RequestFingerprint = [u8; 32];
 
@@ -428,9 +439,7 @@ pub(crate) fn validate_request_envelope(
         .gesture_id
         .iter()
         .chain(request.gesture_ids.iter())
-        .any(|gesture_id| {
-            gesture_id.len() > MAX_GESTURE_ID_BYTES || Uuid::parse_str(gesture_id).is_err()
-        })
+        .any(|gesture_id| !is_valid_gesture_id(gesture_id))
     {
         return Err(EditorCommitError::invalid_gesture_id());
     }
@@ -499,7 +508,7 @@ fn validate_frozen_insert_envelope(
 
     let mut group_ids = HashSet::with_capacity(groups.len());
     for group in groups {
-        if group.id.is_empty() || group.id.len() > MAX_GROUP_ID_BYTES {
+        if !is_valid_group_id_shape(&group.id) {
             return Err(EditorCommitError::validation(
                 "INVALID_GROUP_ID",
                 "insertFrozenElements group ID is empty or exceeds its limit",
@@ -655,7 +664,7 @@ fn validate_reorder_envelope(op: &crate::models::EditorOpV1) -> Result<(), Edito
         if update
             .group_id
             .as_ref()
-            .is_some_and(|group_id| group_id.is_empty() || group_id.len() > MAX_GROUP_ID_BYTES)
+            .is_some_and(|group_id| !is_valid_group_id_shape(group_id))
         {
             return Err(EditorCommitError::validation(
                 "INVALID_REORDER_GROUP_ID",
@@ -682,7 +691,7 @@ fn validate_group_structural_envelope(
         }
     };
     let validate_group_id = |group_id: &str| {
-        if group_id.is_empty() || group_id.len() > MAX_GROUP_ID_BYTES {
+        if !is_valid_group_id_shape(group_id) {
             Err(EditorCommitError::validation(
                 "INVALID_GROUP_ID",
                 "group ID must be non-empty and within its limit",
@@ -793,7 +802,7 @@ fn validate_key_slot(
 }
 
 pub(crate) fn validate_revision(revision: u64) -> Result<(), EditorCommitError> {
-    if revision > MAX_SAFE_EDITOR_REVISION {
+    if revision > MAX_SAFE_WIRE_REVISION {
         return Err(EditorCommitError::validation(
             "REVISION_OUT_OF_RANGE",
             "editor revision exceeds JavaScript's safe integer range",
@@ -806,7 +815,7 @@ pub(crate) fn next_revision(current: u64) -> Result<u64, EditorCommitError> {
     validate_revision(current)?;
     current
         .checked_add(1)
-        .filter(|revision| *revision <= MAX_SAFE_EDITOR_REVISION)
+        .filter(|revision| *revision <= MAX_SAFE_WIRE_REVISION)
         .ok_or_else(|| {
             EditorCommitError::validation(
                 "REVISION_OUT_OF_RANGE",
@@ -4929,9 +4938,9 @@ mod tests {
 
     #[test]
     fn revision_and_request_id_wire_limits_are_enforced() {
-        assert!(validate_revision(MAX_SAFE_EDITOR_REVISION).is_ok());
-        assert!(validate_revision(MAX_SAFE_EDITOR_REVISION + 1).is_err());
-        assert!(next_revision(MAX_SAFE_EDITOR_REVISION).is_err());
+        assert!(validate_revision(MAX_SAFE_WIRE_REVISION).is_ok());
+        assert!(validate_revision(MAX_SAFE_WIRE_REVISION + 1).is_err());
+        assert!(next_revision(MAX_SAFE_WIRE_REVISION).is_err());
 
         let invalid = EditorCommitRequest {
             base_revision: 0,

@@ -103,7 +103,7 @@ src-tauri/src/
 
 - `#[tauri::command]` 사용 (permission 속성 생략 — build.rs가 자동 생성)
 - 동기 `fn` 기본, `async fn`은 실제 await가 필요한 경우만 사용
-- 에러 타입: `Result<T, String>` (향후 `CmdResult<T>` 전환 예정)
+- 에러 타입: `CmdResult<T>` 사용 (전환 완료)
 
 ### OBS 모드 (WebSocket 브릿지)
 

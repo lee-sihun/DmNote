@@ -2993,7 +2993,7 @@ fn plugin_elements_snapshot(
 fn next_plugin_model_revision(current: u64) -> Result<u64, String> {
     current
         .checked_add(1)
-        .filter(|revision| *revision <= crate::state::editor::MAX_SAFE_EDITOR_REVISION)
+        .filter(|revision| *revision <= crate::state::editor::MAX_SAFE_WIRE_REVISION)
         .ok_or_else(|| "PLUGIN_MODEL_REVISION_OUT_OF_RANGE".to_string())
 }
 
@@ -18002,7 +18002,7 @@ mod tests {
         let dir = test_directory("editor-revision-load-recovery-test");
         std::fs::create_dir_all(&dir).unwrap();
         let mut data = super::initialize_default_state();
-        data.editor_revision = crate::state::editor::MAX_SAFE_EDITOR_REVISION + 1;
+        data.editor_revision = crate::state::editor::MAX_SAFE_WIRE_REVISION + 1;
         data.key_positions.get_mut("4key").unwrap()[0].dx = 12_345.0;
         std::fs::write(
             dir.join("store.json"),

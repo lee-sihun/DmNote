@@ -18,6 +18,7 @@ use crate::{
 use super::editor::{
     validate_document_transition, validate_editor_op_bounds, validate_editor_op_target_type,
 };
+use super::native_element_id::DUPLICATE_ELEMENT_ID;
 use super::plugin::{plugin_group_refs_from_store, PluginGroupRefs};
 
 #[derive(Debug)]
@@ -301,41 +302,27 @@ fn patch_counter_fill(
 }
 
 fn validate_shadow_leaf(patch: &EditorShadowLeafPatchV1) -> Result<(), EditorCommitError> {
-    match patch {
-        EditorShadowLeafPatchV1::Color(color) if color.is_empty() => {
-            Err(EditorCommitError::validation(
-                "INVALID_ELEMENT_SHADOW",
-                "shadow color must be a non-empty string",
-            ))
-        }
-        EditorShadowLeafPatchV1::OffsetX(offset_x)
-            if !offset_x.is_finite()
-                || !(SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(offset_x) =>
-        {
-            Err(EditorCommitError::validation(
-                "INVALID_ELEMENT_SHADOW",
-                "shadow offset X must be finite and between -100 and 100",
-            ))
-        }
-        EditorShadowLeafPatchV1::OffsetY(offset_y)
-            if !offset_y.is_finite()
-                || !(SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(offset_y) =>
-        {
-            Err(EditorCommitError::validation(
-                "INVALID_ELEMENT_SHADOW",
-                "shadow offset Y must be finite and between -100 and 100",
-            ))
-        }
-        EditorShadowLeafPatchV1::Blur(blur)
-            if !blur.is_finite() || !(SHADOW_BLUR_MIN..=SHADOW_BLUR_MAX).contains(blur) =>
-        {
-            Err(EditorCommitError::validation(
-                "INVALID_ELEMENT_SHADOW",
-                "shadow blur must be finite and between 0 and 100",
-            ))
-        }
-        _ => Ok(()),
-    }
+    let valid_offset =
+        |value: f64| value.is_finite() && (SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(&value);
+    // 닫힌 enum 전수 나열 - 신규 leaf가 검증 없이 통과하면 컴파일 에러로 드러나게
+    let violation = match patch {
+        EditorShadowLeafPatchV1::Color(color) => color
+            .is_empty()
+            .then_some("shadow color must be a non-empty string"),
+        EditorShadowLeafPatchV1::OffsetX(offset_x) => (!valid_offset(*offset_x))
+            .then_some("shadow offset X must be finite and between -100 and 100"),
+        EditorShadowLeafPatchV1::OffsetY(offset_y) => (!valid_offset(*offset_y))
+            .then_some("shadow offset Y must be finite and between -100 and 100"),
+        EditorShadowLeafPatchV1::Blur(blur) => (!blur.is_finite()
+            || !(SHADOW_BLUR_MIN..=SHADOW_BLUR_MAX).contains(blur))
+        .then_some("shadow blur must be finite and between 0 and 100"),
+    };
+    violation.map_or(Ok(()), |message| {
+        Err(EditorCommitError::validation(
+            "INVALID_ELEMENT_SHADOW",
+            message,
+        ))
+    })
 }
 
 fn default_shadow_spec(
@@ -592,7 +579,7 @@ fn insert_location(
         .is_some()
     {
         return Err(EditorCommitError::validation(
-            "DUPLICATE_ELEMENT_ID",
+            DUPLICATE_ELEMENT_ID,
             format!("native element ID {} is not globally unique", position.id),
         ));
     }
