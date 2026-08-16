@@ -84,7 +84,7 @@ fn main() {
 
     let context = tauri::generate_context!();
 
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .on_page_load(|webview, payload| {
             if matches!(payload.event(), PageLoadEvent::Finished) {
                 let zoom = compute_compensating_zoom();
@@ -112,7 +112,13 @@ fn main() {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-        }))
+        }));
+
+    // macOS ProMotion 디스플레이 대응: 웹뷰 60fps 캡 해제
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(state::macos_frame_rate::init());
+
+    let app = builder
         .setup(move |app| {
             // dev 빌드에서만 remote URL capability 등록 (릴리즈에서는 local:true만 사용)
             if cfg!(debug_assertions) {

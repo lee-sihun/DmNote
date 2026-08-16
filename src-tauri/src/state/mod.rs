@@ -6,6 +6,8 @@ pub(crate) mod gesture;
 pub(crate) mod history;
 pub(crate) mod local_asset_path;
 #[cfg(target_os = "macos")]
+pub(crate) mod macos_frame_rate;
+#[cfg(target_os = "macos")]
 pub(crate) mod macos_termination;
 pub(crate) mod migration;
 pub(crate) mod plugin;
