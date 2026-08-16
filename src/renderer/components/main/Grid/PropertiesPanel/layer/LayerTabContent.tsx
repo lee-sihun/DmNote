@@ -627,6 +627,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   actions.renamingItemId === `group:${gh.groupId}`;
                 const isBeingDragged = dnd.draggedGroupId === gh.groupId;
                 const isSelected = isGroupHeaderSelected(gh.groupId);
+                // 그룹 진입 존 - 행 전체를 hover 토큰으로 하이라이트
+                const isDropInto =
+                  dnd.draggedItemId != null &&
+                  dnd.dragOverIntoGroupId === gh.groupId;
 
                 return (
                   <div
@@ -644,7 +648,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       ${gh.allHidden && !isBeingDragged ? 'opacity-60' : ''}
                       ${isBeingDragged ? 'opacity-30' : ''}
                       ${
-                        isSelected
+                        isDropInto
+                          ? 'bg-surface-hover text-fg-muted'
+                          : isSelected
                           ? 'bg-accent-muted text-fg'
                           : dnd.isDragging
                           ? 'text-fg-muted'
@@ -656,10 +662,6 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     {dnd.draggedItemId &&
                       dnd.dragOverItemDisplayIndex === displayIndex && (
                         <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
-                      )}
-                    {dnd.draggedItemId &&
-                      dnd.dragOverHeaderBottomGroupId === gh.groupId && (
-                        <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent z-10" />
                       )}
                     {/* 그룹 드래그 드롭 인디케이터 */}
                     {dnd.draggedGroupId &&

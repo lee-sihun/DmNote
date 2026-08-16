@@ -22,8 +22,10 @@ import {
   suspendCustomCursorHover,
 } from '@utils/grid/cursorUtils';
 import { commitLayerDropIntent, type DropAnchors } from './layerReorderIntent';
+import { resolveLayerDropZone } from './layerDropZone';
 
 export { resolveDropIndexFromAnchors } from './layerReorderIntent';
+export { resolveLayerDropZone } from './layerDropZone';
 
 const toReorderWire = (
   descriptor: import('./layerReorderIntent').LayerDropIntent,
@@ -92,8 +94,9 @@ export function useLayerDnD({
   const [dragOverItemDisplayIndex, setDragOverItemDisplayIndex] = useState<
     number | null
   >(null);
-  const [dragOverHeaderBottomGroupId, setDragOverHeaderBottomGroupId] =
-    useState<string | null>(null);
+  const [dragOverIntoGroupId, setDragOverIntoGroupId] = useState<string | null>(
+    null,
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [dragOverDisplayIndex, setDragOverDisplayIndex] = useState<
@@ -142,170 +145,96 @@ export function useLayerDnD({
   // 아이템 드롭 타깃 계산
   // ──────────────────────────────────────────────────────────────────────────
 
-  const resolveItemDropTarget = (
-    displaySlotIndex: number,
-    draggingItemIds: ReadonlySet<string>,
-    model?: { layerItems: LayerItem[]; displayItems: DisplayItem[] },
-  ) => {
-    // 커밋 판정은 mouseup의 live 모델을 받는다 - ref는 드래그 중 프리뷰 전용
-    const items = model?.layerItems ?? layerItemsRef.current;
-    const currentDisplay = model?.displayItems ?? displayItemsRef.current;
+  // 표시 슬롯 → 평면 배열 삽입 index (커밋은 앵커 기준, 이 값은 fallback 보조)
+  const resolveItemInsertIndex = (displaySlotIndex: number): number => {
+    const items = layerItemsRef.current;
+    const currentDisplay = displayItemsRef.current;
     const safeSlotIndex = Math.max(
       0,
       Math.min(currentDisplay.length, displaySlotIndex),
     );
-
-    let toIndex = items.length;
-    if (safeSlotIndex < currentDisplay.length) {
-      const targetDisplayItem = currentDisplay[safeSlotIndex];
-      if (targetDisplayItem.displayType === 'layer') {
-        toIndex = targetDisplayItem.flatIndex;
-      } else {
-        const firstChildIndex = items.findIndex(
-          (item) => item.groupId === targetDisplayItem.groupId,
-        );
-        toIndex = firstChildIndex === -1 ? items.length : firstChildIndex;
-      }
+    if (safeSlotIndex >= currentDisplay.length) return items.length;
+    const targetDisplayItem = currentDisplay[safeSlotIndex];
+    if (targetDisplayItem.displayType === 'layer') {
+      return targetDisplayItem.flatIndex;
     }
-
-    const getDisplayItem = (index: number): DisplayItem | undefined =>
-      index >= 0 && index < currentDisplay.length
-        ? currentDisplay[index]
-        : undefined;
-
-    let prevIdx = safeSlotIndex - 1;
-    while (prevIdx >= 0) {
-      const di = getDisplayItem(prevIdx);
-      if (di?.displayType !== 'layer' || !draggingItemIds.has(di.item.id))
-        break;
-      prevIdx--;
-    }
-    const prevDisplayItem = getDisplayItem(prevIdx);
-
-    let nextIdx = safeSlotIndex;
-    while (nextIdx < currentDisplay.length) {
-      const di = getDisplayItem(nextIdx);
-      if (di?.displayType !== 'layer' || !draggingItemIds.has(di.item.id))
-        break;
-      nextIdx++;
-    }
-    const nextDisplayItem = getDisplayItem(nextIdx);
-
-    let targetGroupId: string | undefined;
-    if (prevDisplayItem?.displayType === 'group-header') {
-      const prevHeaderGroupId = prevDisplayItem.groupId;
-      if (
-        nextDisplayItem?.displayType === 'layer' &&
-        nextDisplayItem.item.groupId === prevHeaderGroupId
-      ) {
-        targetGroupId = prevHeaderGroupId;
-      } else if (!nextDisplayItem) {
-        targetGroupId = prevHeaderGroupId;
-      } else {
-        targetGroupId = undefined;
-      }
-    } else {
-      const prevGroupId =
-        prevDisplayItem?.displayType === 'layer'
-          ? prevDisplayItem.item.groupId
-          : undefined;
-
-      if (prevGroupId) {
-        targetGroupId = prevGroupId;
-      } else {
-        targetGroupId = undefined;
-      }
-    }
-
-    return { toIndex, targetGroupId };
+    const firstChildIndex = items.findIndex(
+      (item) => item.groupId === targetDisplayItem.groupId,
+    );
+    return firstChildIndex === -1 ? items.length : firstChildIndex;
   };
 
   // 포인터 위치 기반 드롭 타깃 계산
   const resolveItemDropTargetFromPointer = (
     relativeY: number,
     itemHeight: number,
-    draggingIds: ReadonlySet<string>,
   ) => {
     const currentDisplay = displayItemsRef.current;
     const displayCount = currentDisplay.length;
 
-    if (displayCount === 0) {
-      const target = resolveItemDropTarget(0, draggingIds);
+    // 목록 위아래 밖은 최상/최하 삽입 - 소속 없음
+    if (displayCount === 0 || relativeY <= 0) {
       return {
-        ...target,
+        toIndex: resolveItemInsertIndex(0),
+        targetGroupId: undefined,
         indicatorDisplayIndex: 0,
-        indicatorHeaderBottomGroupId: null,
+        intoGroupId: null,
       };
     }
-
-    if (relativeY <= 0) {
-      const target = resolveItemDropTarget(0, draggingIds);
-      return {
-        ...target,
-        indicatorDisplayIndex: 0,
-        indicatorHeaderBottomGroupId: null,
-      };
-    }
-
     const totalHeight = displayCount * itemHeight;
     if (relativeY >= totalHeight) {
-      const target = resolveItemDropTarget(displayCount, draggingIds);
       return {
-        ...target,
+        toIndex: resolveItemInsertIndex(displayCount),
+        targetGroupId: undefined,
         indicatorDisplayIndex: displayCount,
-        indicatorHeaderBottomGroupId: null,
+        intoGroupId: null,
       };
     }
 
-    const clampedY = relativeY;
     const rowIndex = Math.min(
       displayCount - 1,
-      Math.floor(clampedY / itemHeight),
+      Math.floor(relativeY / itemHeight),
     );
-    const rowTop = rowIndex * itemHeight;
-    const offsetInRow = clampedY - rowTop;
-    const isBottomHalf = offsetInRow >= itemHeight / 2;
+    const offsetInRow = relativeY - rowIndex * itemHeight;
     const row = currentDisplay[rowIndex];
+    const zone = resolveLayerDropZone(
+      row.displayType === 'group-header' ? 'group-header' : 'layer',
+      itemHeight,
+      offsetInRow,
+    );
 
-    if (row.displayType === 'group-header' && isBottomHalf) {
-      if (row.isCollapsed) {
-        const firstChildIndex = layerItemsRef.current.findIndex(
-          (item) => item.groupId === row.groupId,
-        );
-        const toIndex =
+    // 헤더 중앙 존은 그룹 진입 - 인디케이터 대신 행 전체 하이라이트
+    if (row.displayType === 'group-header' && zone === 'into') {
+      const firstChildIndex = layerItemsRef.current.findIndex(
+        (item) => item.groupId === row.groupId,
+      );
+      return {
+        toIndex:
           firstChildIndex === -1
             ? layerItemsRef.current.length
-            : firstChildIndex;
-
-        return {
-          toIndex,
-          targetGroupId: row.groupId,
-          indicatorDisplayIndex: null,
-          indicatorHeaderBottomGroupId: row.groupId,
-        };
-      }
-
-      const expandedGroupSlotIndex = rowIndex + 1;
-      const target = resolveItemDropTarget(expandedGroupSlotIndex, draggingIds);
-      return {
-        ...target,
-        indicatorDisplayIndex: expandedGroupSlotIndex,
-        indicatorHeaderBottomGroupId: null,
+            : firstChildIndex,
+        targetGroupId: row.groupId,
+        indicatorDisplayIndex: null,
+        intoGroupId: row.groupId,
       };
     }
 
-    const displaySlotIndex =
+    const displaySlotIndex = zone === 'after' ? rowIndex + 1 : rowIndex;
+    // 소속은 포인터가 올라간 행 기준 - 그룹 마지막 행 아래 경계에서 위쪽
+    // 행(그룹 안)과 아래쪽 행(그룹 밖)을 구분한다. 헤더 하단 가장자리는
+    // 펼친 그룹이면 그룹 안 첫 위치, 접힌 그룹이면 그룹 전체 다음 바깥
+    const targetGroupId =
       row.displayType === 'group-header'
-        ? rowIndex
-        : isBottomHalf
-        ? rowIndex + 1
-        : rowIndex;
-    const target = resolveItemDropTarget(displaySlotIndex, draggingIds);
+        ? zone === 'after' && !row.isCollapsed
+          ? row.groupId
+          : undefined
+        : row.item.groupId;
 
     return {
-      ...target,
+      toIndex: resolveItemInsertIndex(displaySlotIndex),
+      targetGroupId,
       indicatorDisplayIndex: displaySlotIndex,
-      indicatorHeaderBottomGroupId: null,
+      intoGroupId: null,
     };
   };
 
@@ -391,15 +320,14 @@ export function useLayerDnD({
       const dropTarget = resolveItemDropTargetFromPointer(
         relativeY,
         dragStateRef.current.itemHeight,
-        draggingSet,
       );
 
       let dropDisplayIndex = dropTarget.indicatorDisplayIndex;
-      if (dropDisplayIndex == null && dropTarget.indicatorHeaderBottomGroupId) {
+      if (dropDisplayIndex == null && dropTarget.intoGroupId) {
         const headerIdx = displayItemsRef.current.findIndex(
           (di) =>
             di.displayType === 'group-header' &&
-            di.groupId === dropTarget.indicatorHeaderBottomGroupId,
+            di.groupId === dropTarget.intoGroupId,
         );
         dropDisplayIndex =
           headerIdx !== -1 ? headerIdx + 1 : dropTarget.toIndex;
@@ -442,14 +370,14 @@ export function useLayerDnD({
         targetGroupId: dropTarget.targetGroupId,
         anchorBeforeId,
         anchorAfterId,
-        anchorHeaderGroupId: dropTarget.indicatorHeaderBottomGroupId ?? null,
+        anchorHeaderGroupId: dropTarget.intoGroupId ?? null,
         anchorBeforeHeaderGroupId,
         anchorAfterHeaderGroupId,
         ...(!anchorBeforeId &&
         !anchorAfterId &&
         !anchorBeforeHeaderGroupId &&
         !anchorAfterHeaderGroupId &&
-        !dropTarget.indicatorHeaderBottomGroupId
+        !dropTarget.intoGroupId
           ? {
               boundary:
                 dropDisplayIndex <= 0 ? ('top' as const) : ('bottom' as const),
@@ -457,7 +385,7 @@ export function useLayerDnD({
           : {}),
       };
       setDragOverItemDisplayIndex(dropTarget.indicatorDisplayIndex);
-      setDragOverHeaderBottomGroupId(dropTarget.indicatorHeaderBottomGroupId);
+      setDragOverIntoGroupId(dropTarget.intoGroupId);
     };
     const moveScheduler = createRafLatestScheduler(applyMouseMove);
     const handleMouseMove = (moveEvent: MouseEvent) =>
@@ -501,7 +429,7 @@ export function useLayerDnD({
       draggedItemIdsRef.current = [];
       setDraggedItemId(null);
       setDragOverItemDisplayIndex(null);
-      setDragOverHeaderBottomGroupId(null);
+      setDragOverIntoGroupId(null);
       setIsDragging(false);
 
       document.removeEventListener('mousemove', handleMouseMove);
@@ -731,7 +659,7 @@ export function useLayerDnD({
     isDragging,
     draggedGroupId,
     dragOverItemDisplayIndex,
-    dragOverHeaderBottomGroupId,
+    dragOverIntoGroupId,
     dragOverDisplayIndex,
 
     // Ref 접근자 (외부 핸들러에서 참조)

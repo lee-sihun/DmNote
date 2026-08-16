@@ -147,11 +147,15 @@ const nativeItem = (
   ...(groupId ? { groupId } : {}),
 });
 
-const headerRow = (groupId: string, childCount: number): DisplayItem => ({
+const headerRow = (
+  groupId: string,
+  childCount: number,
+  isCollapsed = false,
+): DisplayItem => ({
   displayType: 'group-header',
   groupId,
   groupName: groupId,
-  isCollapsed: false,
+  isCollapsed,
   childCount,
   allHidden: false,
 });
@@ -721,6 +725,124 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       document.dispatchEvent(new MouseEvent('mouseup'));
     });
     expect(document.body.classList.contains('dmn-dragging')).toBe(false);
+  });
+
+  it('헤더 중앙 존 드롭은 그룹 진입으로 커밋한다', async () => {
+    // 행 높이 24 - 헤더 행 [24,48), 중앙 존 [30,42)
+    const itemA = nativeItem(ID_A, 0, 1);
+    const itemM = nativeItem(ID_M1, 1, 0, 'G');
+    const items = [itemA, itemM];
+    const display: DisplayItem[] = [
+      { displayType: 'layer', item: itemA, groupDepth: 0, flatIndex: 0 },
+      headerRow('G', 1, true),
+    ];
+    await renderDnD({
+      layerItems: items,
+      displayItems: display,
+      liveModel: { layerItems: items, displayItems: display },
+    });
+
+    await finishDrag(() => api.handleMouseDown(mouseDownEvent(), itemA, 0), 36);
+
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'items',
+        draggedIds: [ID_A],
+        anchors: expect.objectContaining({
+          targetGroupId: 'G',
+          anchorHeaderGroupId: 'G',
+        }),
+      }),
+    );
+  });
+
+  it('펼친 헤더 하단 가장자리 드롭은 그룹 안 첫 위치 삽입으로 커밋한다', async () => {
+    // 헤더 행 [24,48), 하단 가장자리 존 [42,48)
+    const itemA = nativeItem(ID_A, 0, 2);
+    const itemM = nativeItem(ID_M1, 1, 1, 'G');
+    const items = [itemA, itemM];
+    const display: DisplayItem[] = [
+      { displayType: 'layer', item: itemA, groupDepth: 0, flatIndex: 0 },
+      headerRow('G', 1),
+      { displayType: 'layer', item: itemM, groupDepth: 1, flatIndex: 1 },
+    ];
+    await renderDnD({
+      layerItems: items,
+      displayItems: display,
+      liveModel: { layerItems: items, displayItems: display },
+    });
+
+    await finishDrag(() => api.handleMouseDown(mouseDownEvent(), itemA, 0), 45);
+
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anchors: expect.objectContaining({
+          targetGroupId: 'G',
+          anchorHeaderGroupId: null,
+          anchorBeforeHeaderGroupId: 'G',
+        }),
+      }),
+    );
+  });
+
+  it('접힌 헤더 하단 가장자리 드롭은 그룹 밖 다음 위치로 커밋한다', async () => {
+    const itemA = nativeItem(ID_A, 0, 1);
+    const itemM = nativeItem(ID_M1, 1, 0, 'G');
+    const items = [itemA, itemM];
+    const display: DisplayItem[] = [
+      { displayType: 'layer', item: itemA, groupDepth: 0, flatIndex: 0 },
+      headerRow('G', 1, true),
+    ];
+    await renderDnD({
+      layerItems: items,
+      displayItems: display,
+      liveModel: { layerItems: items, displayItems: display },
+    });
+
+    await finishDrag(() => api.handleMouseDown(mouseDownEvent(), itemA, 0), 45);
+
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anchors: expect.objectContaining({
+          targetGroupId: undefined,
+          anchorHeaderGroupId: null,
+          anchorBeforeHeaderGroupId: 'G',
+        }),
+      }),
+    );
+  });
+
+  it('그룹 마지막 행 아래 경계는 포인터 행에 따라 그룹 안팎을 구분한다', async () => {
+    // 같은 삽입 슬롯이라도 위 행(그룹 멤버) 하단은 그룹 안,
+    // 아래 행(그룹 밖) 상단은 그룹 밖으로 판정한다
+    const itemM = nativeItem(ID_M1, 0, 3, 'G');
+    const itemX = nativeItem(ID_X, 1, 2);
+    const itemA = nativeItem(ID_A, 2, 1);
+    const items = [itemM, itemX, itemA];
+    const display: DisplayItem[] = [
+      headerRow('G', 1),
+      { displayType: 'layer', item: itemM, groupDepth: 1, flatIndex: 0 },
+      { displayType: 'layer', item: itemX, groupDepth: 0, flatIndex: 1 },
+      { displayType: 'layer', item: itemA, groupDepth: 0, flatIndex: 2 },
+    ];
+    await renderDnD({
+      layerItems: items,
+      displayItems: display,
+      liveModel: { layerItems: items, displayItems: display },
+    });
+
+    // 멤버 M 행 [24,48) 하단 절반 → 그룹 안 삽입
+    await finishDrag(() => api.handleMouseDown(mouseDownEvent(), itemA, 2), 40);
+    // 바깥 행 X [48,72) 상단 절반 → 같은 슬롯이지만 그룹 밖 삽입
+    await finishDrag(() => api.handleMouseDown(mouseDownEvent(), itemA, 2), 50);
+
+    const [firstCall, secondCall] = mocks.commitLayerDropIntent.mock
+      .calls as unknown as [
+      [{ anchors: { targetGroupId?: string } }],
+      [{ anchors: { targetGroupId?: string } }],
+    ];
+    expect(firstCall[0].anchors.targetGroupId).toBe('G');
+    expect(secondCall[0].anchors.targetGroupId).toBeUndefined();
   });
 
   it('드롭 대상 그룹 소실 판정을 stable semantic helper에 위임한다', async () => {
