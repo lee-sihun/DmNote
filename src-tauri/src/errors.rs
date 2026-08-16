@@ -208,3 +208,78 @@ impl Serialize for CommandError {
 
 /// 커맨드 반환 타입 별칭
 pub type CmdResult<T> = Result<T, CommandError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // TS 재시도 정책 테이블(src/types/editor.ts)과 공유하는 fixture
+    const RETRY_FIXTURE: &str = include_str!("../../tests/fixtures/editor-error-retry.json");
+
+    // 생성자 표본, variant 추가 시 match가 컴파일 에러로 등록을 강제한다
+    fn sample(code: EditorCommitErrorCode) -> EditorCommitError {
+        match code {
+            EditorCommitErrorCode::RevisionConflict => EditorCommitError::revision_conflict(1),
+            EditorCommitErrorCode::PluginRevisionConflict => {
+                EditorCommitError::plugin_revision_conflict(1)
+            }
+            EditorCommitErrorCode::ValidationFailed => {
+                EditorCommitError::validation("SAMPLE", "sample")
+            }
+            EditorCommitErrorCode::TooManyGestureIds => EditorCommitError::too_many_gesture_ids(4),
+            EditorCommitErrorCode::InvalidGestureId => EditorCommitError::invalid_gesture_id(),
+            EditorCommitErrorCode::PairedUpdateRequired => {
+                EditorCommitError::paired_update_required("keys")
+            }
+            EditorCommitErrorCode::MultiKeyUnsupported => {
+                EditorCommitError::multi_key_unsupported()
+            }
+            EditorCommitErrorCode::MutationIdReused => EditorCommitError::mutation_id_reused(),
+            EditorCommitErrorCode::HistoryInProgress => EditorCommitError::history_in_progress(),
+            EditorCommitErrorCode::HistoryEpochConflict => {
+                EditorCommitError::history_epoch_conflict(1)
+            }
+            EditorCommitErrorCode::IoError => EditorCommitError::io("io failure"),
+        }
+    }
+
+    const ALL_CODES: [EditorCommitErrorCode; 11] = [
+        EditorCommitErrorCode::RevisionConflict,
+        EditorCommitErrorCode::PluginRevisionConflict,
+        EditorCommitErrorCode::ValidationFailed,
+        EditorCommitErrorCode::TooManyGestureIds,
+        EditorCommitErrorCode::InvalidGestureId,
+        EditorCommitErrorCode::PairedUpdateRequired,
+        EditorCommitErrorCode::MultiKeyUnsupported,
+        EditorCommitErrorCode::MutationIdReused,
+        EditorCommitErrorCode::HistoryInProgress,
+        EditorCommitErrorCode::HistoryEpochConflict,
+        EditorCommitErrorCode::IoError,
+    ];
+
+    #[test]
+    fn retry_fixture_matches_every_error_constructor() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(RETRY_FIXTURE).expect("fixture must be valid json");
+        let fixture = fixture.as_object().expect("fixture must be an object");
+        assert_eq!(
+            fixture.len(),
+            ALL_CODES.len(),
+            "fixture code count must match enum variants"
+        );
+        for code in ALL_CODES {
+            let error = sample(code);
+            let wire = serde_json::to_value(&error).expect("error must serialize");
+            let wire_code = wire["errorCode"]
+                .as_str()
+                .expect("errorCode must be a string");
+            let expected = fixture
+                .get(wire_code)
+                .unwrap_or_else(|| panic!("fixture is missing {wire_code}"))
+                .as_bool()
+                .expect("fixture value must be a bool");
+            assert_eq!(error.retryable, expected, "retryable drift for {wire_code}");
+            assert_eq!(wire["retryable"], serde_json::json!(expected));
+        }
+    }
+}

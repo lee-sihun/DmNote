@@ -625,19 +625,37 @@ export interface EditorCommitError {
   retryable: boolean;
 }
 
-const EDITOR_ERROR_CODES = new Set<EditorCommitErrorCode>([
-  'REVISION_CONFLICT',
-  'PLUGIN_REVISION_CONFLICT',
-  'VALIDATION_FAILED',
-  'TOO_MANY_GESTURE_IDS',
-  'INVALID_GESTURE_ID',
-  'PAIRED_UPDATE_REQUIRED',
-  'MUTATION_ID_REUSED',
-  'IO_ERROR',
-  'HISTORY_IN_PROGRESS',
-  'HISTORY_EPOCH_CONFLICT',
-  'MULTI_KEY_UNSUPPORTED',
-]);
+export type EditorCommitErrorRetryPolicy = 'transient' | 'permanent' | 'rebase';
+
+// 오류 코드별 재시도 정책 단일 테이블. 백엔드 errors.rs 생성자의 retryable
+// 상수와 파리티 (tests/fixtures/editor-error-retry.json 대조 테스트로 고정).
+// rebase는 base 재동기화 후 재시도 - 소비처에서는 transient와 같은 재시도군.
+// 코드를 추가할 때는 여기에 정책과 함께 등록한다 (인식 집합도 이 키에서 파생)
+export const EDITOR_COMMIT_ERROR_RETRY_POLICY = {
+  REVISION_CONFLICT: 'rebase',
+  PLUGIN_REVISION_CONFLICT: 'transient',
+  VALIDATION_FAILED: 'permanent',
+  TOO_MANY_GESTURE_IDS: 'permanent',
+  INVALID_GESTURE_ID: 'permanent',
+  PAIRED_UPDATE_REQUIRED: 'permanent',
+  MUTATION_ID_REUSED: 'permanent',
+  IO_ERROR: 'transient',
+  HISTORY_IN_PROGRESS: 'transient',
+  HISTORY_EPOCH_CONFLICT: 'transient',
+  MULTI_KEY_UNSUPPORTED: 'permanent',
+} as const satisfies Record<
+  EditorCommitErrorCode,
+  EditorCommitErrorRetryPolicy
+>;
+
+// 재시도 판단은 wire의 retryable 플래그가 아니라 이 테이블이 결정한다
+export const isRetryableEditorCommitError = (
+  error: EditorCommitError,
+): boolean => EDITOR_COMMIT_ERROR_RETRY_POLICY[error.errorCode] !== 'permanent';
+
+const EDITOR_ERROR_CODES = new Set<EditorCommitErrorCode>(
+  Object.keys(EDITOR_COMMIT_ERROR_RETRY_POLICY) as EditorCommitErrorCode[],
+);
 
 const EDITOR_FIELD_SET = new Set<string>(EDITOR_FIELDS);
 const EDITOR_PATCH_KEYS = new Set<string>(['schemaVersion', ...EDITOR_FIELDS]);

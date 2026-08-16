@@ -44,6 +44,7 @@ import {
   assertEditorPatch,
   canonicalizeEditorGradients,
   isEditorCommitError,
+  isRetryableEditorCommitError,
 } from '@src/types/editor';
 
 import type {
@@ -1702,7 +1703,7 @@ export class EditorSaveCoordinator {
         const retryable =
           error instanceof EditorProtocolError ||
           !isEditorCommitError(error) ||
-          error.retryable === true;
+          isRetryableEditorCommitError(error);
         if (
           !(error instanceof EditorProtocolError) &&
           inFlight.gestureIds.length > 0
@@ -2210,7 +2211,10 @@ export class EditorSaveCoordinator {
             rebaseAttempts += 1;
             continue;
           }
-        } else if (isEditorCommitError(error) && error.retryable) {
+        } else if (
+          isEditorCommitError(error) &&
+          isRetryableEditorCommitError(error)
+        ) {
           this.preservePending(
             inFlight.target,
             inFlight.localFields,
@@ -2358,7 +2362,8 @@ export class EditorSaveCoordinator {
       return clone(this.requireLastAck());
     } catch (error) {
       this.ownMutations.delete(mutationId);
-      const retryable = isEditorCommitError(error) && error.retryable;
+      const retryable =
+        isEditorCommitError(error) && isRetryableEditorCommitError(error);
       const reconcileEditorIntent =
         retryable && meta?.reconcileRetryableEditorIntent?.() === true;
       if (reconcileEditorIntent) {
