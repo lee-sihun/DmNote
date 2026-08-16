@@ -10,8 +10,9 @@ use crate::{
     errors::EditorCommitError,
     models::{
         AppStoreData, CustomTab, EditorBoundsV1, EditorCommitRequest, EditorDocumentV1,
-        EditorElementTypeV1, EditorField, ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition,
-        KeySlot, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
+        EditorElementTypeV1, EditorField, ElementShadowSpec, GraphPosition, KeyCounters,
+        KeyMappings, KeyPosition, KeySlot, KnobPosition, StatPosition,
+        EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
     },
 };
 
@@ -1046,12 +1047,37 @@ fn key_position_id_order(
     order
 }
 
+// 관용의 신원 기준. 평상시에는 안정 ID로 요소를 짝지어, 새 요소가 남의 관용을
+// 물려받지 못하게 한다. 프리셋 트랜잭션은 커밋 직전 모든 id를 재발급하므로
+// ID 짝짓기가 성립하지 않아 (모드, index)로 되돌린다
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GrandfatherKeying {
+    ById,
+    ByModeIndex,
+}
+
 /// 기존 store에 있던 손실 없는 비정상 데이터는 유지하되 새 비정상 상태는 만들지 않음
 pub(crate) fn validate_document_transition(
     current: &EditorDocumentV1,
     candidate: &EditorDocumentV1,
     current_store: &AppStoreData,
     candidate_store: &AppStoreData,
+) -> Result<(), EditorCommitError> {
+    validate_document_transition_with_keying(
+        current,
+        candidate,
+        current_store,
+        candidate_store,
+        GrandfatherKeying::ById,
+    )
+}
+
+pub(crate) fn validate_document_transition_with_keying(
+    current: &EditorDocumentV1,
+    candidate: &EditorDocumentV1,
+    current_store: &AppStoreData,
+    candidate_store: &AppStoreData,
+    keying: GrandfatherKeying,
 ) -> Result<(), EditorCommitError> {
     if candidate.schema_version != EDITOR_SCHEMA_VERSION {
         return Err(EditorCommitError::validation(
@@ -1069,11 +1095,15 @@ pub(crate) fn validate_document_transition(
         .iter()
         .map(|violation| violation.key.clone())
         .collect::<BTreeSet<_>>();
-    validate_metric_limits(current, candidate)?;
+    validate_metric_limits(current, candidate, keying)?;
 
+    let native_id_alias = match keying {
+        GrandfatherKeying::ById => HashMap::new(),
+        GrandfatherKeying::ByModeIndex => native_id_alias_by_slot(current, candidate),
+    };
     if let Some(violation) = candidate_violations.iter().find(|violation| {
         is_unconditional_structural_violation(violation.code())
-            || !is_grandfathered(&current_violation_keys, violation)
+            || !is_grandfathered(&current_violation_keys, violation, &native_id_alias)
     }) {
         return Err(EditorCommitError::validation(
             violation.code(),
@@ -1084,11 +1114,129 @@ pub(crate) fn validate_document_transition(
     Ok(())
 }
 
+// 후보 요소 id → 같은 (모드, 자리)의 현재 요소 id. 프리셋 트랜잭션은 커밋
+// 직전 id를 재발급하므로 신원으로는 관용 상대를 찾을 수 없다
+fn native_id_alias_by_slot(
+    current: &EditorDocumentV1,
+    candidate: &EditorDocumentV1,
+) -> HashMap<String, String> {
+    let mut alias = HashMap::new();
+    let mut collect = |current_ids: Vec<(&String, Vec<&str>)>,
+                       candidate_ids: Vec<(&String, Vec<&str>)>| {
+        let current_by_mode = current_ids.into_iter().collect::<HashMap<_, _>>();
+        for (mode, ids) in candidate_ids {
+            let Some(current_mode_ids) = current_by_mode.get(mode) else {
+                continue;
+            };
+            for (index, id) in ids.into_iter().enumerate() {
+                if let Some(current_id) = current_mode_ids.get(index) {
+                    alias.insert(id.to_string(), current_id.to_string());
+                }
+            }
+        }
+    };
+
+    collect(
+        key_position_ids(&current.key_positions),
+        key_position_ids(&candidate.key_positions),
+    );
+    collect(
+        nested_position_ids(&current.stat_positions),
+        nested_position_ids(&candidate.stat_positions),
+    );
+    collect(
+        nested_position_ids(&current.graph_positions),
+        nested_position_ids(&candidate.graph_positions),
+    );
+    collect(
+        nested_position_ids(&current.knob_positions),
+        nested_position_ids(&candidate.knob_positions),
+    );
+    alias
+}
+
+fn key_position_ids(collection: &HashMap<String, Vec<KeyPosition>>) -> Vec<(&String, Vec<&str>)> {
+    collection
+        .iter()
+        .map(|(mode, positions)| {
+            (
+                mode,
+                positions
+                    .iter()
+                    .map(|position| position.id.as_str())
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn nested_position_ids<T: HasKeyPosition>(
+    collection: &HashMap<String, Vec<T>>,
+) -> Vec<(&String, Vec<&str>)> {
+    collection
+        .iter()
+        .map(|(mode, positions)| {
+            (
+                mode,
+                positions
+                    .iter()
+                    .map(|element| element.key_position().id.as_str())
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+trait HasKeyPosition {
+    fn key_position(&self) -> &KeyPosition;
+}
+
+impl HasKeyPosition for StatPosition {
+    fn key_position(&self) -> &KeyPosition {
+        &self.position
+    }
+}
+
+impl HasKeyPosition for GraphPosition {
+    fn key_position(&self) -> &KeyPosition {
+        &self.position
+    }
+}
+
+impl HasKeyPosition for KnobPosition {
+    fn key_position(&self) -> &KeyPosition {
+        &self.position
+    }
+}
+
 fn is_grandfathered(
     current_violation_keys: &BTreeSet<ViolationKey>,
     candidate: &ValidationViolation,
+    native_id_alias: &HashMap<String, String>,
 ) -> bool {
-    current_violation_keys.contains(&candidate.key)
+    if current_violation_keys.contains(&candidate.key) {
+        return true;
+    }
+    if native_id_alias.is_empty() {
+        return false;
+    }
+    // 재발급된 id는 같은 자리의 이전 신원으로 바꿔 한 번 더 대조한다
+    let ViolationOwner::NativeElement { kind, id } = &candidate.key.owner else {
+        return false;
+    };
+    let Some(current_id) = native_id_alias.get(id) else {
+        return false;
+    };
+    let aliased = ViolationKey {
+        owner: ViolationOwner::NativeElement {
+            kind: *kind,
+            id: current_id.clone(),
+        },
+        code: candidate.key.code,
+        property_path: candidate.key.property_path.clone(),
+        invalid_value: candidate.key.invalid_value.clone(),
+    };
+    current_violation_keys.contains(&aliased)
 }
 
 fn is_unconditional_structural_violation(code: &str) -> bool {
@@ -1422,10 +1570,11 @@ fn collect_collection_violations<T>(
 fn validate_metric_limits(
     current: &EditorDocumentV1,
     candidate: &EditorDocumentV1,
+    keying: GrandfatherKeying,
 ) -> Result<(), EditorCommitError> {
     validate_aggregate_metric_limits(current, candidate)?;
     validate_mode_metric_limits(current, candidate)?;
-    validate_per_owner_metric_limits(current, candidate)
+    validate_per_owner_metric_limits(current, candidate, keying)
 }
 
 fn validate_aggregate_metric_limits(
@@ -1507,9 +1656,30 @@ fn validate_mode_metric_limits(
     Ok(())
 }
 
+// keying에 따라 관용 상대를 찾는다. ById는 안정 ID로, ByModeIndex는 같은
+// 모드의 같은 자리로 짝짓는다
+fn grandfather_counterpart<'a, T>(
+    keying: GrandfatherKeying,
+    by_id: &HashMap<&str, &'a T>,
+    current_collection: &'a HashMap<String, Vec<T>>,
+    mode: &str,
+    index: usize,
+    id: &str,
+    position_of: impl Fn(&'a T) -> &'a KeyPosition,
+) -> Option<&'a KeyPosition> {
+    match keying {
+        GrandfatherKeying::ById => by_id.get(id).map(|element| position_of(element)),
+        GrandfatherKeying::ByModeIndex => current_collection
+            .get(mode)
+            .and_then(|elements| elements.get(index))
+            .map(position_of),
+    }
+}
+
 fn validate_per_owner_metric_limits(
     current: &EditorDocumentV1,
     candidate: &EditorDocumentV1,
+    keying: GrandfatherKeying,
 ) -> Result<(), EditorCommitError> {
     let mut current_key_slots = HashMap::new();
     for (mode, positions) in &current.key_positions {
@@ -1523,12 +1693,18 @@ fn validate_per_owner_metric_limits(
 
     for (mode, keys) in &candidate.keys {
         for (slot_index, slot) in keys.iter().enumerate() {
-            let current_slot = candidate
-                .key_positions
-                .get(mode)
-                .and_then(|positions| positions.get(slot_index))
-                .and_then(|position| current_key_slots.get(position.id.as_str()))
-                .copied();
+            let current_slot = match keying {
+                GrandfatherKeying::ById => candidate
+                    .key_positions
+                    .get(mode)
+                    .and_then(|positions| positions.get(slot_index))
+                    .and_then(|position| current_key_slots.get(position.id.as_str()))
+                    .copied(),
+                GrandfatherKeying::ByModeIndex => current
+                    .keys
+                    .get(mode)
+                    .and_then(|slots| slots.get(slot_index)),
+            };
             validate_key_slot_label_limits(mode, slot_index, current_slot, slot)?;
         }
     }
@@ -1576,7 +1752,15 @@ fn validate_per_owner_metric_limits(
                 "keyPositions",
                 mode,
                 index,
-                current_key_positions.get(position.id.as_str()).copied(),
+                grandfather_counterpart(
+                    keying,
+                    &current_key_positions,
+                    &current.key_positions,
+                    mode,
+                    index,
+                    &position.id,
+                    |position| position,
+                ),
                 position,
             )?;
         }
@@ -1586,7 +1770,7 @@ fn validate_per_owner_metric_limits(
         .stat_positions
         .values()
         .flatten()
-        .map(|position| (position.position.id.as_str(), &position.position))
+        .map(|position| (position.position.id.as_str(), position))
         .collect::<HashMap<_, _>>();
     for (mode, positions) in &candidate.stat_positions {
         for (index, position) in positions.iter().enumerate() {
@@ -1594,9 +1778,15 @@ fn validate_per_owner_metric_limits(
                 "statPositions",
                 mode,
                 index,
-                current_stat_positions
-                    .get(position.position.id.as_str())
-                    .copied(),
+                grandfather_counterpart(
+                    keying,
+                    &current_stat_positions,
+                    &current.stat_positions,
+                    mode,
+                    index,
+                    &position.position.id,
+                    |element| &element.position,
+                ),
                 &position.position,
             )?;
         }
@@ -1606,7 +1796,7 @@ fn validate_per_owner_metric_limits(
         .graph_positions
         .values()
         .flatten()
-        .map(|position| (position.position.id.as_str(), &position.position))
+        .map(|position| (position.position.id.as_str(), position))
         .collect::<HashMap<_, _>>();
     for (mode, positions) in &candidate.graph_positions {
         for (index, position) in positions.iter().enumerate() {
@@ -1614,9 +1804,15 @@ fn validate_per_owner_metric_limits(
                 "graphPositions",
                 mode,
                 index,
-                current_graph_positions
-                    .get(position.position.id.as_str())
-                    .copied(),
+                grandfather_counterpart(
+                    keying,
+                    &current_graph_positions,
+                    &current.graph_positions,
+                    mode,
+                    index,
+                    &position.position.id,
+                    |element| &element.position,
+                ),
                 &position.position,
             )?;
         }
@@ -1626,7 +1822,7 @@ fn validate_per_owner_metric_limits(
         .knob_positions
         .values()
         .flatten()
-        .map(|position| (position.position.id.as_str(), &position.position))
+        .map(|position| (position.position.id.as_str(), position))
         .collect::<HashMap<_, _>>();
     for (mode, positions) in &candidate.knob_positions {
         for (index, position) in positions.iter().enumerate() {
@@ -1634,9 +1830,15 @@ fn validate_per_owner_metric_limits(
                 "knobPositions",
                 mode,
                 index,
-                current_knob_positions
-                    .get(position.position.id.as_str())
-                    .copied(),
+                grandfather_counterpart(
+                    keying,
+                    &current_knob_positions,
+                    &current.knob_positions,
+                    mode,
+                    index,
+                    &position.position.id,
+                    |element| &element.position,
+                ),
                 &position.position,
             )?;
         }
@@ -4327,7 +4529,8 @@ mod tests {
 
         assert!(is_grandfathered(
             &current,
-            &ValidationViolation::new(key, "different diagnostic message")
+            &ValidationViolation::new(key, "different diagnostic message"),
+            &HashMap::new()
         ));
     }
 
@@ -4393,6 +4596,93 @@ mod tests {
         assert_eq!(
             error.details.unwrap().validation_code.as_deref(),
             Some("INVALID_ELEMENT_SHADOW")
+        );
+    }
+
+    #[test]
+    fn preset_keying_grandfathers_rekeyed_elements_by_mode_and_index() {
+        let mut store = default_editor_store();
+        store.key_positions.get_mut("4key").unwrap()[0].dx = MAX_ABS_COORDINATE + 1.0;
+        let current = EditorDocumentV1::from_store(&store);
+
+        // 프리셋 로드는 검증 전에 모든 요소의 id를 재발급한다 - 값이 그대로여도
+        // id 조회로는 관용 대상을 찾을 수 없다
+        let mut candidate_store = store.clone();
+        crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+        let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+        let error = validate_document_transition(&current, &candidate, &store, &candidate_store)
+            .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("COORDINATE_OUT_OF_RANGE")
+        );
+
+        validate_document_transition_with_keying(
+            &current,
+            &candidate,
+            &store,
+            &candidate_store,
+            GrandfatherKeying::ByModeIndex,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn preset_keying_grandfathers_structural_and_label_violations_too() {
+        let mut store = default_editor_store();
+        // 그림자 위반과 과길이 라벨을 함께 가진 관용 store
+        store.key_positions.get_mut("4key").unwrap()[0].shadow = Some(ElementShadowSpec {
+            color: String::new(),
+            ..valid_shadow()
+        });
+        store.keys.get_mut("4key").unwrap()[0] = KeySlot::from("x".repeat(MAX_KEY_LABEL_BYTES + 1));
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut candidate_store = store.clone();
+        crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+        let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+        // ID 기준으로는 관용 상대를 못 찾아 거부된다
+        assert!(
+            validate_document_transition(&current, &candidate, &store, &candidate_store).is_err()
+        );
+
+        // 자리 기준이면 그림자·라벨 관용이 모두 유지된다
+        validate_document_transition_with_keying(
+            &current,
+            &candidate,
+            &store,
+            &candidate_store,
+            GrandfatherKeying::ByModeIndex,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn preset_keying_still_rejects_newly_raised_metrics() {
+        let mut store = default_editor_store();
+        store.key_positions.get_mut("4key").unwrap()[0].dx = MAX_ABS_COORDINATE + 1.0;
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut candidate_store = store.clone();
+        crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+        candidate_store.key_positions.get_mut("4key").unwrap()[1].dx = MAX_ABS_COORDINATE + 1.0;
+        let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+        // (mode,index) 관용은 같은 자리의 기존 위반만 물려받는다 - 멀쩡하던
+        // 자리가 새로 초과되면 프리셋 경로에서도 거부한다
+        let error = validate_document_transition_with_keying(
+            &current,
+            &candidate,
+            &store,
+            &candidate_store,
+            GrandfatherKeying::ByModeIndex,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("COORDINATE_OUT_OF_RANGE")
         );
     }
 

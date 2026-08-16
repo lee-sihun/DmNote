@@ -28,8 +28,9 @@ use super::builtin_sounds::seed_builtin_sounds;
 use super::editor::{
     canonical_request_fingerprint, next_revision, repair_selected_mode, request_fingerprint,
     request_payload_size, sync_key_counters, touched_pair, validate_document_transition,
-    validate_history_restore_metadata, validate_paired_update, validate_request_envelope,
-    RequestFingerprint, MUTATION_ACK_CAPACITY,
+    validate_document_transition_with_keying, validate_history_restore_metadata,
+    validate_paired_update, validate_request_envelope, GrandfatherKeying, RequestFingerprint,
+    MUTATION_ACK_CAPACITY,
 };
 use super::editor_ops::{
     prepare_editor_ops_transition, prepare_editor_ops_transition_with_plugin_refs,
@@ -1553,7 +1554,14 @@ impl AppStore {
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
-        validate_document_transition(&current, &candidate, &current_store, &scratch)?;
+        // 프리셋 스냅샷은 현재 store와 id 세대가 달라 ID 짝짓기가 성립하지 않는다
+        validate_document_transition_with_keying(
+            &current,
+            &candidate,
+            &current_store,
+            &scratch,
+            GrandfatherKeying::ByModeIndex,
+        )?;
 
         let changed_fields = current.changed_fields(&candidate);
         let revision = if changed_fields.is_empty() {
@@ -1880,7 +1888,20 @@ impl AppStore {
 
         let (keys_touched, key_positions_touched) = touched_pair(touched_fields);
         validate_paired_update(&current, &candidate, keys_touched, key_positions_touched)?;
-        validate_document_transition(&current, &candidate, &current_store, &scratch)?;
+        // 프리셋 로드는 커밋 직전 모든 요소의 id를 재발급하므로 ID로는 관용
+        // 상대를 찾을 수 없다 - 그 트랜잭션만 (모드, index) 짝짓기를 쓴다
+        let keying = if history_options.scope == Some(HistoryScope::PresetFull) {
+            GrandfatherKeying::ByModeIndex
+        } else {
+            GrandfatherKeying::ById
+        };
+        validate_document_transition_with_keying(
+            &current,
+            &candidate,
+            &current_store,
+            &scratch,
+            keying,
+        )?;
 
         if changed_fields.contains(&EditorField::Keys) {
             sync_key_counters(&mut scratch.key_counters, &candidate.keys);
