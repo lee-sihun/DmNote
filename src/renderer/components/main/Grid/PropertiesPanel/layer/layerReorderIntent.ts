@@ -143,14 +143,19 @@ interface ReorderPlan {
   groupIdByMovedId: Map<string, string | undefined>;
 }
 
+// 그룹 id 성격 인자 2개가 positional로 섞이지 않도록 옵션 객체로 전달
+interface ReorderGroupOptions {
+  targetGroupId: string | undefined;
+  preserveFullGroups: boolean;
+  intoGroupId?: string;
+}
+
 const reorderAtDisplayIndex = (
   items: LayerItem[],
   display: DisplayItem[],
   movingIds: Set<string>,
   displayIndex: number,
-  targetGroupId: string | undefined,
-  preserveFullGroups: boolean,
-  intoGroupId?: string,
+  { targetGroupId, preserveFullGroups, intoGroupId }: ReorderGroupOptions,
 ): ReorderPlan | null => {
   const moving = items.filter((item) => movingIds.has(item.id));
   if (moving.length !== movingIds.size) return null;
@@ -344,9 +349,11 @@ const resolvePlan = (
     model.display,
     movingIds,
     displayIndex,
-    targetGroupId,
-    preserveFullGroups,
-    descriptor.anchors.anchorHeaderGroupId ?? undefined,
+    {
+      targetGroupId,
+      preserveFullGroups,
+      intoGroupId: descriptor.anchors.anchorHeaderGroupId ?? undefined,
+    },
   );
   if (!plan) throw new ElementIntentAbort('dragged elements changed');
   return plan;
