@@ -37,7 +37,7 @@ export interface ElementIntentReceipt {
 // 생성 결과 3상태: patch = 커밋할 변경 / satisfied = 의도가 이미 canonical에
 // 반영됨(다른 writer가 먼저 달성 - 롤백하면 lastAck와 반대로 발산) /
 // targetLost = 대상 소실(커밋·이벤트가 없어 eager 잔존 - 복원)
-export type ElementIntentGeneration =
+type ElementIntentGeneration =
   | { kind: 'patch'; patch: EditorPatchV1 }
   | { kind: 'satisfied' }
   | { kind: 'targetLost' };
@@ -47,7 +47,7 @@ export const intentPatch = (
 ): ElementIntentGeneration =>
   patch === null ? { kind: 'targetLost' } : { kind: 'patch', patch };
 
-export interface ElementIntentResult {
+interface ElementIntentResult {
   committed: boolean;
   // satisfied = 커밋 없이 의도 달성 (호출자 성공 판정용)
   satisfied: boolean;
@@ -343,7 +343,7 @@ export const reportElementOpSkipped = (context: string): void => {
   console.warn('Element operation skipped (fail-closed)', context);
 };
 
-export type SealedSliceField =
+type SealedSliceField =
   | 'keys'
   | 'keyPositions'
   | 'statPositions'
@@ -358,9 +358,7 @@ export type SealedSliceField =
 // 캡처본을 통복원한다. 외부 개입 시 복원 포기(보수적 소유권)
 // ---------------------------------------------------------------------------
 
-export const readFieldRecord = (
-  field: SealedSliceField,
-): Record<string, unknown> =>
+const readFieldRecord = (field: SealedSliceField): Record<string, unknown> =>
   (field === 'keys'
     ? useKeyStore.getState().keyMappings
     : field === 'keyPositions'
@@ -373,7 +371,7 @@ export const readFieldRecord = (
     ? useKnobItemStore.getState().positions
     : useLayerGroupStore.getState().layerGroups) as Record<string, unknown>;
 
-export const writeFieldModeSlices = (
+const writeFieldModeSlices = (
   field: SealedSliceField,
   slices: ReadonlyMap<string, unknown>,
 ): void => {
@@ -400,7 +398,7 @@ export const writeFieldModeSlices = (
   }
 };
 
-export const editorSliceFingerprint = (
+const editorSliceFingerprint = (
   modes: readonly string[],
   fields: readonly SealedSliceField[],
 ): string =>

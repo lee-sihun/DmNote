@@ -86,4 +86,3 @@ class PluginHandlerRegistry {
 }
 
 export const handlerRegistry = new PluginHandlerRegistry();
-export type { HandlerFunction };

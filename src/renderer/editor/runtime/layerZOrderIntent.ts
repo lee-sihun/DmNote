@@ -31,7 +31,7 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 type NativeType = EditorElementTypeV1;
 type ZOrderAction = 'front' | 'back' | 'forward' | 'backward';
 
-export type StableLayerTarget =
+type StableLayerTarget =
   | { type: NativeType; id: string }
   | { type: 'plugin'; id: string };
 

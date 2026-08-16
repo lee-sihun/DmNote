@@ -12,10 +12,8 @@ export const fontApi = {
 
 export const imageApi = {
   load: () =>
-    runLegacyEditorMutation(
-      () =>
-        invoke<import('@src/types/plugin/api').ImageLoadResult>('image_load'),
-      { syncAfter: false },
+    runLegacyEditorMutation(() =>
+      invoke<import('@src/types/plugin/api').ImageLoadResult>('image_load'),
     ),
 };
 

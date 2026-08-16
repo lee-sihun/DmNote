@@ -21,10 +21,7 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { handlerRegistry } from './handlers';
-import {
-  displayElementInstanceRegistry,
-  setInitialLoading,
-} from './displayElement';
+import { displayElementInstanceRegistry } from './displayElement';
 import { createPluginApiProxy, createPluginWindowProxy } from './api';
 import type { JsPlugin } from '@src/types/plugin/js';
 
@@ -308,7 +305,6 @@ ${plugin.content}
 
   const injectAll = () => {
     setReloading(true);
-    setInitialLoading(true);
     removeAll();
     injectGeneration += 1;
     const generation = injectGeneration;
@@ -319,12 +315,10 @@ ${plugin.content}
         // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
         console.error('Skipping plugin injection: authority reset failed');
         setReloading(false);
-        setInitialLoading(false);
         return;
       }
       if (!enabled) {
         setReloading(false);
-        setInitialLoading(false);
         return;
       }
 
@@ -339,7 +333,6 @@ ${plugin.content}
       setTimeout(() => {
         if (generation !== injectGeneration) return;
         setReloading(false);
-        setInitialLoading(false);
       }, 100);
     });
   };

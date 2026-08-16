@@ -26,12 +26,12 @@ export interface BatchGeometryLayoutElement {
   height: number;
 }
 
-export interface BatchGeometryUpdate {
+interface BatchGeometryUpdate {
   key: string;
   patch: Partial<EditorBoundsV1>;
 }
 
-export interface BatchGeometryPlan {
+interface BatchGeometryPlan {
   updates: BatchGeometryUpdate[];
   bounds: Array<{ key: string; bounds: EditorBoundsV1 }>;
 }

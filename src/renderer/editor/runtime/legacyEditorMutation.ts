@@ -2,41 +2,13 @@ import { editGestureController } from './editGestureController';
 import { enqueueEditorCompatibilityOperation } from './editorCompatibilityQueue';
 import { editorCoordinator } from './editorStateCoordinator';
 
-interface LegacyEditorMutationCoordinator {
-  start: () => Promise<unknown>;
-  sync: (options?: { reapply?: boolean }) => Promise<void>;
-}
-
-interface LegacyEditorMutationOptions {
-  syncAfter?: boolean;
-}
-
-export const runLegacyEditorMutationWith = async <T>(
-  coordinator: LegacyEditorMutationCoordinator,
+export const runLegacyEditorMutation = async <T>(
   mutation: () => Promise<T>,
-  options: LegacyEditorMutationOptions = {},
 ): Promise<T> => {
   // committed 구독 없이 백엔드만 변경되는 상태를 차단
-  await coordinator.start();
-  const result = await mutation();
-
-  if (options.syncAfter === false) return result;
-
-  try {
-    await coordinator.sync();
-  } catch (error) {
-    // 구독은 이미 살아 있으므로 명령 성공을 실패로 뒤집지 않음
-    console.error('레거시 편집 상태 재동기화 실패', error);
-  }
-
-  return result;
+  await editorCoordinator.start();
+  return mutation();
 };
-
-export const runLegacyEditorMutation = <T>(
-  mutation: () => Promise<T>,
-  options?: LegacyEditorMutationOptions,
-): Promise<T> =>
-  runLegacyEditorMutationWith(editorCoordinator, mutation, options);
 
 // 백엔드가 편집 문서를 직접 바꾸는 legacy 커맨드(프리셋 로드, 리셋, 커스텀 탭,
 // 카운터 애니메이션 사용처 재작성, 사운드 삭제) 전용. 호환 큐와 coordinator

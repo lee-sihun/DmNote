@@ -12,7 +12,7 @@ import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
 import { pruneStalePluginSelection } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
-export interface PluginInstancesRebindHandlers {
+interface PluginInstancesRebindHandlers {
   // 이벤트 도착 즉시 - 낡은 메모리를 커밋할 pending 저장 차단
   cancelPendingSave: () => void;
   reapply: (instances: SavedPluginInstanceWire[]) => void;

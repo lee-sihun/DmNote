@@ -67,7 +67,7 @@ export const runMixedElementDeleteIntent = async (options: {
       throw new Error('plugin authority generation changed');
     }
   };
-  assertAuthorityGeneration();
+  // 진입 동기 프레임 재검증은 중복 - preflight·post-commit assert가 보호
   const deleted = new Set(options.deletedPluginFullIds);
   let enrolled = false;
   let rolledBack = false;

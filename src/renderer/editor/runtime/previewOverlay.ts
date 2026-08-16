@@ -229,10 +229,6 @@ export const previewOverlay = {
     if (changed) refreshRenderedState();
   },
 
-  hasSession(sessionId: string): boolean {
-    return sessions.has(sessionId);
-  },
-
   /** 테스트·리셋용 전체 정리 */
   clearAll(): void {
     sessions.clear();

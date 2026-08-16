@@ -2,20 +2,8 @@ import { trackEditorWrite } from './editorWriteBarrier';
 
 let compatibilityWriteQueue: Promise<void> = Promise.resolve();
 
-export const enqueueEditorCompatibilityWrite = <T>(
-  write: () => Promise<unknown>,
-  result: () => T,
-): Promise<T> => {
-  const operation = compatibilityWriteQueue.then(write);
-  compatibilityWriteQueue = operation.then(
-    () => undefined,
-    () => undefined,
-  );
-  return trackEditorWrite(operation.then(result));
-};
-
-// 작업의 실제 반환값을 보존하는 variant. 큐 합류와 write barrier 추적은
-// 동일하고, 실패는 원 오류 그대로 전파되며 큐는 계속 진행된다
+// 큐 합류와 write barrier 추적을 수행하며, 실패는 원 오류 그대로
+// 전파되고 큐는 계속 진행된다
 export const enqueueEditorCompatibilityOperation = <T>(
   operation: () => Promise<T>,
 ): Promise<T> => {
@@ -26,3 +14,10 @@ export const enqueueEditorCompatibilityOperation = <T>(
   );
   return trackEditorWrite(run);
 };
+
+// 쓰기 완료 후 result()로 반환값을 사상하는 variant
+export const enqueueEditorCompatibilityWrite = <T>(
+  write: () => Promise<unknown>,
+  result: () => T,
+): Promise<T> =>
+  enqueueEditorCompatibilityOperation(() => write().then(result));

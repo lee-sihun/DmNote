@@ -244,7 +244,7 @@ export const drainPluginInstancesCommitQueues = async (
   }
 };
 
-export interface PluginInstancesSaveRequest {
+interface PluginInstancesSaveRequest {
   gestureId?: string;
   captureCurrentSnapshot: boolean;
 }
