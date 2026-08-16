@@ -122,7 +122,7 @@ interface OverlaySceneProps {
   // 선택적
   // 배경·클리핑 박스 크기 - 미지정 시 뷰포트 전체
   // 데스크톱 창은 콘텐츠 박스와 크기가 같아 동일하고, OBS 소스에서는 남는 영역이 투명으로 남는다
-  contentSize?: { width: number; height: number } | null;
+  contentSize?: { width: number; height: number };
   positionOffset?: { x: number; y: number };
   onMouseDownCapture?: (e: React.MouseEvent<HTMLDivElement>) => void;
   /** PluginElementsRenderer 표시 여부 (Tauri 컨텍스트에서만 true) */
@@ -157,9 +157,7 @@ const OverlayScene = ({
     <div
       className="relative w-full h-screen m-0 overflow-hidden"
       style={{
-        ...(contentSize
-          ? { width: contentSize.width, height: contentSize.height }
-          : undefined),
+        ...contentSize,
         backgroundColor:
           backgroundColor === 'transparent' ? 'transparent' : backgroundColor,
         ...(macOS

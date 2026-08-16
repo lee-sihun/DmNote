@@ -57,7 +57,7 @@ pub fn overlay_set_anchor(
 }
 
 #[tauri::command]
-pub fn overlay_transition_fade(app: AppHandle, alpha: f64, duration_ms: u64) -> CmdResult<()> {
+pub fn overlay_transition_fade(app: AppHandle, alpha: f64, duration_ms: u64) -> CmdResult<bool> {
     Ok(crate::state::app_state::fade_overlay_window(
         &app,
         alpha,

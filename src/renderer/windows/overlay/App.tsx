@@ -807,6 +807,19 @@ export default function App() {
     ],
   );
 
+  // 창 크기와 배경 박스가 같은 공식을 공유 (창 == 콘텐츠 박스 불변식)
+  const contentSize = useMemo(
+    () =>
+      bounds
+        ? {
+            width: bounds.maxX - bounds.minX + overlayPadding * 2,
+            height:
+              bounds.maxY - bounds.minY + overlayPadding * 2 + trackHeight,
+          }
+        : undefined,
+    [bounds, overlayPadding, trackHeight],
+  );
+
   // updateTrackLayouts는 useNoteSystem이 마운트 1회 고정 참조를 보장하므로
   // deps 포함이 재실행을 유발하지 않으며, 훅이 updater를 교체하는 미래 변경에도 안전
   useEffect(() => {
@@ -824,14 +837,11 @@ export default function App() {
   } | null>(null);
 
   useEffect(() => {
-    if (!bounds) return;
+    if (!bounds || !contentSize) return;
 
-    const keyAreaWidth = bounds.maxX - bounds.minX;
-    const keyAreaHeight = bounds.maxY - bounds.minY;
-    const extraTop = trackHeight;
-    const totalWidth = keyAreaWidth + overlayPadding * 2;
-    const totalHeight = keyAreaHeight + overlayPadding * 2 + extraTop;
-    const contentTopOffset = extraTop + overlayPadding;
+    const totalWidth = contentSize.width;
+    const totalHeight = contentSize.height;
+    const contentTopOffset = trackHeight + overlayPadding;
     const currentMinX = bounds.minX;
     const currentMinY = bounds.minY;
 
@@ -884,7 +894,7 @@ export default function App() {
       .catch((error) => {
         console.error('Failed to resize overlay window', error);
       });
-  }, [bounds, trackHeight, overlayAnchor, overlayPadding]);
+  }, [bounds, contentSize, trackHeight, overlayAnchor, overlayPadding]);
 
   return (
     <OverlayScene
@@ -897,15 +907,7 @@ export default function App() {
       displayKnobPositions={displayKnobPositions}
       selectedKeyType={selectedKeyType}
       noteEffect={noteEffect}
-      contentSize={
-        bounds
-          ? {
-              width: bounds.maxX - bounds.minX + overlayPadding * 2,
-              height:
-                bounds.maxY - bounds.minY + overlayPadding * 2 + trackHeight,
-            }
-          : null
-      }
+      contentSize={contentSize}
       noteSettings={noteSettings}
       webglTracks={webglTracks}
       notesRef={notesRef}

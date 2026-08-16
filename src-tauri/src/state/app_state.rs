@@ -4263,17 +4263,18 @@ fn shutdown_application(app_handle: AppHandle) {
 
 /// 오버레이 창 알파를 페이드 - 트랙 예약 토글처럼 창 프레임과 콘텐츠가 함께 바뀌는 전환을 가린다
 /// 창 프레임 변경과 웹뷰 리페인트는 프로세스 경계라 같은 프레임에 커밋될 수 없음
-pub(crate) fn fade_overlay_window(app: &AppHandle, alpha: f64, duration_ms: u64) -> Result<()> {
+/// 반환값은 페이드 적용 여부 - false면 호출부가 가림 없이 즉시 전환해야 한다
+pub(crate) fn fade_overlay_window(app: &AppHandle, alpha: f64, duration_ms: u64) -> Result<bool> {
     let Some(window) = app.get_webview_window(OVERLAY_LABEL) else {
         // OBS 모드 등 창 미존재 시 무시
-        return Ok(());
+        return Ok(false);
     };
     #[cfg(target_os = "macos")]
     {
         let alpha = alpha.clamp(0.0, 1.0);
         let duration = (duration_ms as f64 / 1000.0).max(0.0);
         let target = window.clone();
-        window.app_handle().run_on_main_thread(move || {
+        app.run_on_main_thread(move || {
             use objc::{class, msg_send, sel, sel_impl};
 
             match target.ns_window() {
@@ -4294,13 +4295,14 @@ pub(crate) fn fade_overlay_window(app: &AppHandle, alpha: f64, duration_ms: u64)
                 Err(err) => log::warn!("overlay fade: failed to get NSWindow handle: {err}"),
             }
         })?;
+        Ok(true)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        // Windows는 레이어드 창 검증 전까지 페이드 생략 (전환 시퀀스만 유지)
+        // Windows는 레이어드 창 검증 전까지 페이드 생략 - 호출부가 즉시 전환하도록 false 반환
         let _ = (alpha, duration_ms, window);
+        Ok(false)
     }
-    Ok(())
 }
 
 /// 오버레이 크기와 위치를 한 번의 네이티브 호출로 적용
@@ -4352,7 +4354,7 @@ fn apply_overlay_frame_macos(window: &WebviewWindow, x: f64, y: f64, width: f64,
     use cocoa::foundation::{NSPoint, NSRect, NSSize};
     use objc::{class, msg_send, sel, sel_impl};
 
-    let fallback = |window: &WebviewWindow| {
+    let fallback = || {
         let _ = window.set_size(LogicalSize::new(width, height));
         let _ = window.set_position(LogicalPosition::new(x, y));
     };
@@ -4364,7 +4366,7 @@ fn apply_overlay_frame_macos(window: &WebviewWindow, x: f64, y: f64, width: f64,
             let screens: *mut objc::runtime::Object = msg_send![class!(NSScreen), screens];
             let count: usize = msg_send![screens, count];
             if count == 0 {
-                fallback(window);
+                fallback();
                 return;
             }
             let primary: *mut objc::runtime::Object = msg_send![screens, objectAtIndex: 0usize];
@@ -4376,7 +4378,7 @@ fn apply_overlay_frame_macos(window: &WebviewWindow, x: f64, y: f64, width: f64,
         },
         Err(err) => {
             log::warn!("overlay frame: failed to get NSWindow handle: {err}");
-            fallback(window);
+            fallback();
         }
     }
 }

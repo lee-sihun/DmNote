@@ -16,22 +16,34 @@ export function useTrackReserveTransition(target: number): number {
   const [applied, setApplied] = useState(target);
   const runIdRef = useRef(0);
 
+  // 예약이 유지되는 값 변경(트랙 높이 조절)은 같은 렌더 패스에서 즉시 반영
+  const inReserveAdjust = target !== applied && target > 0 && applied > 0;
+  if (inReserveAdjust) {
+    setApplied(target);
+  }
+
   useEffect(() => {
     if (target === applied) return;
-
-    // 예약이 유지되는 값 변경(트랙 높이 조절)은 즉시 반영
-    if (target > 0 && applied > 0) {
-      setApplied(target);
-      return;
-    }
 
     const runId = ++runIdRef.current;
     let disposed = false;
     (async () => {
+      // 반환값이 페이드 적용 여부 - 창이 없거나(OBS) 미지원 플랫폼이면 가림 없이 즉시 전환
+      let faded = false;
       try {
-        await overlayApi.transitionFade(0, FADE_OUT_MS);
+        faded = (await overlayApi.transitionFade(0, FADE_OUT_MS)) === true;
+      } catch {
+        faded = false;
+      }
+      if (!faded) {
+        if (!disposed) {
+          setApplied(target);
+        }
+        return;
+      }
+      try {
         await sleep(FADE_OUT_MS + 20);
-        if (disposed || runId !== runIdRef.current) return;
+        if (disposed) return;
         setApplied(target);
         await sleep(RESIZE_SETTLE_MS);
       } finally {
@@ -40,14 +52,12 @@ export function useTrackReserveTransition(target: number): number {
           overlayApi.transitionFade(1, FADE_IN_MS).catch(() => {});
         }
       }
-    })().catch(() => {
-      overlayApi.transitionFade(1, 0).catch(() => {});
-    });
+    })();
 
     return () => {
       disposed = true;
     };
   }, [target, applied]);
 
-  return applied;
+  return inReserveAdjust ? target : applied;
 }
