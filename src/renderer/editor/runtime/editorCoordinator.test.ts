@@ -1095,6 +1095,47 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('flush는 내부 대기 중 착지한 병행 커밋을 되돌리지 않는다', async () => {
+    const base = makeDocument('A');
+    let startCalls = 0;
+    let releaseStart: (() => void) | null = null;
+    const harness = createHarness(base, {
+      // 두 번째 start(flush의 commitEditorState 내부 대기)만 게이트로 붙잡는다
+      onStartSucceeded: () => {
+        startCalls += 1;
+        if (startCalls !== 2) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          releaseStart = resolve;
+        });
+      },
+    });
+    await harness.coordinator.start();
+
+    const flushed = harness.coordinator.flush();
+    await vi.waitFor(() => expect(releaseStart).not.toBeNull());
+
+    // 대기 사이 다른 창의 격리 커밋이 착지한다
+    const external = structuredClone(base);
+    external.keys['4key'] = ['B'];
+    harness.transport.canonical = {
+      revision: 1,
+      document: structuredClone(external),
+    };
+    harness.transport.emit(eventFor(1, 'external-plugin-1', base, external));
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keys['4key']).toEqual(['B']),
+    );
+
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    releaseStart!();
+    await flushed;
+
+    // 착지한 변경이 flush 커밋으로 되돌려지지 않는다
+    expect(harness.transport.canonical.document.keys['4key']).toEqual(['B']);
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    harness.coordinator.stop();
+  });
+
   it('recovers the local store when the own event lands before the failed read', async () => {
     const base = makeDocument('A');
     const harness = createHarness(base);

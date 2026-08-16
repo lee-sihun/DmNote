@@ -74,10 +74,10 @@ export type EditorApplyReason =
   | 'keepLocal'
   | 'acceptCanonical';
 
-export type EditorConflictReason = 'overlap' | 'rebaseLimit';
-export type EditorConflictResolution = 'keepLocal' | 'acceptCanonical';
+type EditorConflictReason = 'overlap' | 'rebaseLimit';
+type EditorConflictResolution = 'keepLocal' | 'acceptCanonical';
 
-export interface EditorConflictState {
+interface EditorConflictState {
   lastAck: CanonicalEditorDocumentV1;
   pendingLocal: CanonicalEditorDocumentV1;
   canonical: CanonicalEditorDocumentV1;
@@ -87,7 +87,7 @@ export interface EditorConflictState {
   reason: EditorConflictReason;
 }
 
-export type EditorCoordinatorPhase =
+type EditorCoordinatorPhase =
   | 'idle'
   | 'initializing'
   | 'saving'
@@ -124,7 +124,7 @@ type EditorGestureMutationGenerator = (
   base: CanonicalEditorDocumentV1,
 ) => EditorPatchV1 | EditorGestureOpsMutation | null;
 
-export type EditorGestureMutation =
+type EditorGestureMutation =
   | EditorPatchV1
   | EditorGestureMutationGenerator
   | EditorGestureOpsMutation
@@ -169,7 +169,7 @@ export interface EditorCoordinatorOptions {
   onStartSucceeded?: () => void | Promise<void>;
 }
 
-export interface EditorSyncOptions {
+interface EditorSyncOptions {
   reapply?: boolean;
 }
 
@@ -1165,7 +1165,7 @@ const applyIsolatedPluginPatch = (
   return next;
 };
 
-export function rebaseEditorDocument(
+function rebaseEditorDocument(
   canonical: CanonicalEditorDocumentV1,
   pendingLocal: CanonicalEditorDocumentV1,
   localFields: readonly EditorField[],
@@ -1173,7 +1173,7 @@ export function rebaseEditorDocument(
   return applyEditorPatch(canonical, patchForFields(pendingLocal, localFields));
 }
 
-export class EditorSaveCoordinator {
+class EditorSaveCoordinator {
   private readonly transport: EditorCoordinatorTransport;
   private readonly readDocument: () => CanonicalEditorDocumentV1;
   private readonly applyDocument: EditorCoordinatorOptions['applyDocument'];
@@ -2036,7 +2036,8 @@ export class EditorSaveCoordinator {
       await this.eventQueue;
       return clone(this.requireLastAck());
     }
-    await this.commitEditorState(this.readDocument());
+    // 인자 없이 호출해 내부 대기 후 캡처 - 대기 사이 착지한 병행 커밋 보존
+    await this.commitEditorState();
     if (this.drainPromise) await this.drainPromise;
     await this.eventQueue;
     return clone(this.requireLastAck());
