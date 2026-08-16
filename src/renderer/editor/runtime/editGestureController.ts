@@ -177,6 +177,10 @@ export const editGestureController = {
     if (active && active.mode !== mode) {
       this.cancel();
     }
+    // 신원은 호출부가 전달한 안정 id가 결정한다. 비 native id는 fail-closed
+    const validEntries = entries.filter((entry) => isNativeElementId(entry.id));
+    // 전 항목 skip이면 빈 게스처를 만들지 않는다. 활성 게스처는 세션 유지
+    if (validEntries.length === 0 && !active) return;
     if (!active) {
       const sessionId = crypto.randomUUID();
       active = {
@@ -196,9 +200,7 @@ export const editGestureController = {
       domainPatches = new Map();
       active.appliedPatches.set(domain, domainPatches);
     }
-    for (const entry of entries) {
-      // 신원은 호출부가 전달한 안정 id가 결정한다. 비 native id는 fail-closed
-      if (!isNativeElementId(entry.id)) continue;
+    for (const entry of validEntries) {
       const intentKey = entry.id;
       const currentIndex = currentIndexForId(domain, mode, intentKey);
       if (currentIndex < 0) continue;

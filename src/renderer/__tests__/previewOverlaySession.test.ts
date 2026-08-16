@@ -771,7 +771,7 @@ describe('editGestureController', () => {
     });
   });
 
-  it('비 native id 항목은 스토어에 점유자가 있어도 fail-closed로 무시된다', () => {
+  it('비 native id 항목은 스토어에 점유자가 있어도 fail-closed로 무시된다', async () => {
     // 손상·레거시 상태로 비 native id가 스토어에 남아 있어도 신원으로 승격 금지
     useKeyStore.setState({
       canonicalPositions: {
@@ -790,6 +790,49 @@ describe('editGestureController', () => {
     const rendered = useKeyStore.getState().positions['4key'];
     expect((rendered[0] as Record<string, unknown>).fontColor).toBeUndefined();
     expect(rendered[1]).toMatchObject({ id: KEY_ID_A, fontColor: '#aa0000' });
+
+    // skip은 정산까지 이어진다 - wire patch에 legacy 점유자 변경이 실리지 않는다
+    await expect(editGestureController.commitPendingAsync()).resolves.toBe(
+      true,
+    );
+    const patch = generatedPatches[0] as {
+      keyPositions?: Record<string, Array<Record<string, unknown>>>;
+    };
+    expect(patch.keyPositions?.['4key'][0].id).toBe('legacy-key');
+    expect(patch.keyPositions?.['4key'][0].fontColor).toBeUndefined();
+    expect(patch.keyPositions?.['4key'][1]).toMatchObject({
+      id: KEY_ID_A,
+      fontColor: '#aa0000',
+    });
+  });
+
+  it('비 native 전용 preview는 게스처 세션을 만들지 않는다', async () => {
+    editGestureController.preview('4key', [
+      { id: 'legacy-key', patch: { fontColor: '#poison' } },
+    ]);
+    await flushPromises();
+
+    expect(editGestureController.hasActiveGesture()).toBe(false);
+    expect(editGestureController.activeGestureId()).toBeNull();
+    expect(previewApi.publish).not.toHaveBeenCalled();
+  });
+
+  it('활성 세션 중 비 native 전용 preview는 세션을 죽이지 않는다', () => {
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { fontColor: '#aa0000' } },
+    ]);
+    const sessionId = editGestureController.activeGestureId();
+    expect(sessionId).not.toBeNull();
+
+    editGestureController.preview('4key', [
+      { id: 'legacy-key', patch: { fontColor: '#poison' } },
+    ]);
+
+    expect(editGestureController.activeGestureId()).toBe(sessionId);
+    expect(useKeyStore.getState().positions['4key'][0]).toMatchObject({
+      id: KEY_ID_A,
+      fontColor: '#aa0000',
+    });
   });
 
   it('정산 대기 중 대상이 삭제되면 커밋하지 않는다', async () => {
