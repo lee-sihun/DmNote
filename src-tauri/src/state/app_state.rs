@@ -4299,10 +4299,27 @@ pub(crate) fn fade_overlay_window(app: &AppHandle, alpha: f64, duration_ms: u64)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        // Windows는 레이어드 창 검증 전까지 페이드 생략 - 호출부가 즉시 전환하도록 false 반환
+        // 네이티브 창 알파 미지원 - false를 돌려 렌더러가 콘텐츠 페이드로 대체한다
         let _ = (alpha, duration_ms, window);
         Ok(false)
     }
+}
+
+/// 오버레이 표시 시 알파를 1로 복원 - 페이드 도중 종료된 전환이 남긴 투명 상태의 마지막 방어선
+#[cfg(target_os = "macos")]
+fn reset_overlay_alpha(window: &WebviewWindow) {
+    let app = window.app_handle().clone();
+    let target = window.clone();
+    let _ = app.run_on_main_thread(move || {
+        use objc::{msg_send, sel, sel_impl};
+
+        if let Ok(ns_window) = target.ns_window() {
+            let ns_window = ns_window as *mut objc::runtime::Object;
+            unsafe {
+                let _: () = msg_send![ns_window, setAlphaValue: 1.0f64];
+            }
+        }
+    });
 }
 
 /// 오버레이 크기와 위치를 한 번의 네이티브 호출로 적용
@@ -4399,6 +4416,7 @@ fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<(
     }
     #[cfg(target_os = "macos")]
     {
+        reset_overlay_alpha(window);
         // 오버레이 표시 시 key/main 윈도우 전환 방지
         let _ = window.set_focusable(false);
         apply_macos_overlay_fullscreen_behavior(window, _always_on_top);

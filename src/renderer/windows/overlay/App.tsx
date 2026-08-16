@@ -397,7 +397,11 @@ export default function App() {
     ? noteSettings?.trackHeight ?? DEFAULT_NOTE_SETTINGS.trackHeight
     : 0;
   // 토글 전환은 창 페이드로 감싸 리사이즈 순간의 덜컥거림을 가린다
-  const trackHeight = useTrackReserveTransition(targetTrackReserve);
+  // 하이드레이션 전 초기값 반영은 전환 없이 즉시 채택
+  const { trackHeight, contentFade } = useTrackReserveTransition(
+    targetTrackReserve,
+    isBootstrapped,
+  );
 
   // 키 딜레이 설정
   const keyDisplayDelayMs = Number(noteSettings?.keyDisplayDelayMs ?? 0);
@@ -908,6 +912,7 @@ export default function App() {
       selectedKeyType={selectedKeyType}
       noteEffect={noteEffect}
       contentSize={contentSize}
+      contentFade={contentFade}
       noteSettings={noteSettings}
       webglTracks={webglTracks}
       notesRef={notesRef}

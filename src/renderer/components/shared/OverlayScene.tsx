@@ -120,9 +120,11 @@ interface OverlaySceneProps {
   keyCounterEnabled: boolean;
 
   // 선택적
-  // 배경·클리핑 박스 크기 - 미지정 시 뷰포트 전체
+  // 배경 박스 크기 - 미지정 시 뷰포트 전체
   // 데스크톱 창은 콘텐츠 박스와 크기가 같아 동일하고, OBS 소스에서는 남는 영역이 투명으로 남는다
   contentSize?: { width: number; height: number };
+  // 전환 중 콘텐츠 페이드 - 네이티브 창 알파 미지원 환경에서 리사이즈 아티팩트를 가린다
+  contentFade?: { opacity: number; durationMs: number } | null;
   positionOffset?: { x: number; y: number };
   onMouseDownCapture?: (e: React.MouseEvent<HTMLDivElement>) => void;
   /** PluginElementsRenderer 표시 여부 (Tauri 컨텍스트에서만 true) */
@@ -147,6 +149,7 @@ const OverlayScene = ({
   backgroundColor,
   keyCounterEnabled,
   contentSize,
+  contentFade,
   positionOffset,
   onMouseDownCapture,
   showPluginElements = true,
@@ -157,9 +160,10 @@ const OverlayScene = ({
     <div
       className="relative w-full h-screen m-0 overflow-hidden"
       style={{
-        ...contentSize,
-        backgroundColor:
-          backgroundColor === 'transparent' ? 'transparent' : backgroundColor,
+        ...(contentFade && {
+          opacity: contentFade.opacity,
+          transition: `opacity ${contentFade.durationMs}ms linear`,
+        }),
         ...(macOS
           ? { willChange: 'background-color' }
           : {
@@ -169,6 +173,18 @@ const OverlayScene = ({
       }}
       onMouseDownCapture={onMouseDownCapture}
     >
+      {/* 배경은 콘텐츠 박스에만 - 데스크톱은 창==콘텐츠라 동일하고 OBS 소스에서는 남는 영역이 투명 */}
+      <div
+        aria-hidden
+        className="dmn-overlay-background pointer-events-none absolute left-0 top-0"
+        style={{
+          width: contentSize?.width ?? '100%',
+          height: contentSize?.height ?? '100%',
+          zIndex: 0,
+          backgroundColor:
+            backgroundColor === 'transparent' ? 'transparent' : backgroundColor,
+        }}
+      />
       {noteEffect && (
         <Suspense fallback={null}>
           <Tracks
