@@ -318,7 +318,8 @@ pub fn js_reload(
                 Ok((script.clone(), updated_plugins))
             })?;
     emit_history_status(&app, &transaction);
-    emit_js_state(&app, &transaction.value.0, false)?;
+    // 디스크 재읽기는 내용이 같아도 재주입 필요 - forced 고정
+    emit_js_state(&app, &transaction.value.0, true)?;
 
     Ok(JsReloadResponse {
         updated: transaction.value.1.clone(),
@@ -444,4 +445,34 @@ pub fn js_set_plugin_enabled(
         plugin: Some(plugin),
         error: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // js_reload의 forced=true 방출이 전제하는 js:content payload 계약 고정
+    #[test]
+    fn js_state_payload_flattens_script_and_carries_forced_flag() {
+        let script = CustomJs {
+            path: None,
+            content: "console.log('reload')".to_string(),
+            plugins: Vec::new(),
+        };
+
+        let reload = serde_json::to_value(JsStatePayload {
+            script: &script,
+            forced: true,
+        })
+        .unwrap();
+        assert_eq!(reload["forced"], true);
+        assert_eq!(reload["content"], "console.log('reload')");
+
+        let broadcast = serde_json::to_value(JsStatePayload {
+            script: &script,
+            forced: false,
+        })
+        .unwrap();
+        assert_eq!(broadcast["forced"], false);
+    }
 }
