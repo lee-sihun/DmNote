@@ -252,6 +252,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     host.remove();
+    document.body.classList.remove('dmn-dragging');
     vi.unstubAllGlobals();
   });
 
@@ -671,6 +672,55 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
 
     expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('아이템 press는 전역 드래그 커서 클래스를 붙이고 릴리즈에 제거한다', async () => {
+    const items = [nativeItem(ID_A, 0, 1), nativeItem(ID_B, 1, 0)];
+    await renderDnD({
+      layerItems: items,
+      liveModel: { layerItems: items, displayItems: toDisplay(items) },
+    });
+
+    await act(async () => {
+      api.handleMouseDown(mouseDownEvent(), items[0], 0);
+    });
+    expect(document.body.classList.contains('dmn-dragging')).toBe(true);
+
+    // 드래그 중에도 유지 - :active가 풀리는 커스텀 포인터 드래그 커버
+    await act(async () => {
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 0, clientY: 200 }),
+      );
+    });
+    expect(document.body.classList.contains('dmn-dragging')).toBe(true);
+
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent('mouseup'));
+    });
+    expect(document.body.classList.contains('dmn-dragging')).toBe(false);
+  });
+
+  it('그룹 press는 무이동 릴리즈에도 전역 드래그 커서 클래스를 회수한다', async () => {
+    const grouped = nativeItem(ID_A, 0, 1, 'G');
+    const display: DisplayItem[] = [
+      headerRow('G', 1),
+      { displayType: 'layer', item: grouped, groupDepth: 1, flatIndex: 0 },
+    ];
+    await renderDnD({
+      layerItems: [grouped],
+      displayItems: display,
+      liveModel: { layerItems: [grouped], displayItems: display },
+    });
+
+    await act(async () => {
+      api.handleGroupMouseDown(mouseDownEvent(), 'G');
+    });
+    expect(document.body.classList.contains('dmn-dragging')).toBe(true);
+
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent('mouseup'));
+    });
+    expect(document.body.classList.contains('dmn-dragging')).toBe(false);
   });
 
   it('드롭 대상 그룹 소실 판정을 stable semantic helper에 위임한다', async () => {

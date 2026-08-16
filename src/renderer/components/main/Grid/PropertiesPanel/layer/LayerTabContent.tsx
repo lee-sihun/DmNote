@@ -640,7 +640,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     }}
                     className={`
                       group relative flex items-center gap-[8px] pl-[12px] pr-[4px] h-[34px]
-                      select-none cursor-grab
+                      select-none dmn-row-grabbable
                       ${gh.allHidden && !isBeingDragged ? 'opacity-60' : ''}
                       ${isBeingDragged ? 'opacity-30' : ''}
                       ${
@@ -740,7 +740,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   style={{ paddingLeft }}
                   className={`
                     group relative flex items-center gap-[8px] pr-[4px] h-[34px]
-                    select-none cursor-grab
+                    select-none dmn-row-grabbable
                     ${item.hidden && !isInDraggedGroup ? 'opacity-60' : ''}
                     ${isInDraggedGroup ? 'opacity-30' : ''}
                     ${

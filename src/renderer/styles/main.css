@@ -66,7 +66,18 @@ body.dmn-custom-cursor * {
   cursor: grabbing !important;
 }
 
-/* 드래그 세션 전역 grabbing, useDraggable이 press부터 세션 종료까지 토글 */
+/* 패널 레이어 행 드래그 커서 - 호버 무변화, 잡는 동안만 grabbing
+   행 내부 버튼·입력은 자체 커서 선언을 유지해야 하므로 상속 강제 없음 */
+.dmn-row-grabbable {
+  cursor: default;
+}
+
+.dmn-row-grabbable:active {
+  cursor: -webkit-grabbing;
+  cursor: grabbing;
+}
+
+/* 드래그 세션 전역 grabbing, useDraggable·useLayerDnD가 press부터 세션 종료까지 토글 */
 body.dmn-dragging,
 body.dmn-dragging * {
   cursor: -webkit-grabbing !important;

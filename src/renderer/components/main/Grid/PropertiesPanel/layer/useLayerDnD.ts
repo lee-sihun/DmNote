@@ -17,6 +17,10 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import type { LayerItem, DisplayItem } from '../types';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
+import {
+  resumeCustomCursorHover,
+  suspendCustomCursorHover,
+} from '@utils/grid/cursorUtils';
 import { commitLayerDropIntent, type DropAnchors } from './layerReorderIntent';
 
 export { resolveDropIndexFromAnchors } from './layerReorderIntent';
@@ -51,6 +55,9 @@ const commitLayerDropFromCurrentWindow = (
     },
   );
 };
+
+// 드래그 세션 동안 body에 붙는 전역 grabbing 클래스 (main.css) - 캔버스와 동일 정책
+const DRAG_CURSOR_CLASS = 'dmn-dragging';
 
 // ============================================================================
 // 파라미터 타입
@@ -110,6 +117,26 @@ export function useLayerDnD({
     // 앵커 후보에서 제외한 id들 - mouseup의 이동 집합과 대조해 축소 감지
     excludedIds: string[];
   } | null>(null);
+  const dragCursorAppliedRef = useRef(false);
+
+  // press부터 세션 종료까지 전역 grabbing - WKWebView가 hover 중 CSS :active
+  // 커서 갱신을 놓치는 문제로 캔버스 useDraggable과 같은 JS 토글 병행
+  const applyDragCursor = () => {
+    if (typeof document === 'undefined') return;
+    if (dragCursorAppliedRef.current) return;
+    document.body.classList.add(DRAG_CURSOR_CLASS);
+    dragCursorAppliedRef.current = true;
+    // 세션 동안 핸들 호버 커서 갱신 중단 (시작 시 잔여 호버 클리어 포함)
+    suspendCustomCursorHover();
+  };
+
+  const clearDragCursor = () => {
+    if (typeof document === 'undefined') return;
+    if (!dragCursorAppliedRef.current) return;
+    document.body.classList.remove(DRAG_CURSOR_CLASS);
+    dragCursorAppliedRef.current = false;
+    resumeCustomCursorHover();
+  };
 
   // ──────────────────────────────────────────────────────────────────────────
   // 아이템 드롭 타깃 계산
@@ -303,6 +330,7 @@ export function useLayerDnD({
     };
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
+    applyDragCursor();
 
     const applyMouseMove = (moveEvent: MouseEvent) => {
       if (
@@ -466,6 +494,7 @@ export function useLayerDnD({
         }
       }
 
+      clearDragCursor();
       dragStateRef.current = null;
       dragStartRef.current = null;
       isDraggingRef.current = false;
@@ -503,6 +532,7 @@ export function useLayerDnD({
     };
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
+    applyDragCursor();
 
     const applyMouseMove = (moveEvent: MouseEvent) => {
       if (
@@ -679,6 +709,7 @@ export function useLayerDnD({
         }
       }
 
+      clearDragCursor();
       groupDragStateRef.current = null;
       dragStartRef.current = null;
       isDraggingRef.current = false;
