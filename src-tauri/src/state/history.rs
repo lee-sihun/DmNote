@@ -23,6 +23,11 @@ const HISTORY_GATE_CLOSED_BIT: u64 = 1;
 
 pub(crate) const HISTORY_IN_PROGRESS: &str = "HISTORY_IN_PROGRESS";
 pub(crate) const HISTORY_ENTRY_TOO_LARGE: &str = "HISTORY_ENTRY_TOO_LARGE";
+pub(crate) const INVALID_HISTORY_OPERATION_ID: &str = "INVALID_HISTORY_OPERATION_ID";
+pub(crate) const HISTORY_OPERATION_ID_REUSED: &str = "HISTORY_OPERATION_ID_REUSED";
+pub(crate) const HISTORY_SCOPE_MISMATCH: &str = "HISTORY_SCOPE_MISMATCH";
+pub(crate) const HISTORY_TARGET_ALREADY_APPLIED: &str = "HISTORY_TARGET_ALREADY_APPLIED";
+pub(crate) const HISTORY_INVALID_OPPOSITE_ENTRY: &str = "HISTORY_INVALID_OPPOSITE_ENTRY";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -983,7 +988,7 @@ impl HistoryService {
             return Ok(false);
         };
         if ack.direction != direction {
-            return Err("HISTORY_OPERATION_ID_REUSED".to_string());
+            return Err(HISTORY_OPERATION_ID_REUSED.to_string());
         }
         Ok(true)
     }

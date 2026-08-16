@@ -39,7 +39,8 @@ use super::history::{
     CustomTabsHistorySnapshot, HistoryAdmissionGate, HistoryAdmissionLease, HistoryDirection,
     HistoryEntry, HistoryRecordPlan, HistoryScope, HistoryService, HistorySnapshot,
     PluginElementsHistorySnapshot, PresetFullHistorySnapshot, PresetHistorySettingsSnapshot,
-    HISTORY_ENTRY_TOO_LARGE, HISTORY_IN_PROGRESS,
+    HISTORY_ENTRY_TOO_LARGE, HISTORY_INVALID_OPPOSITE_ENTRY, HISTORY_IN_PROGRESS,
+    HISTORY_SCOPE_MISMATCH, HISTORY_TARGET_ALREADY_APPLIED, INVALID_HISTORY_OPERATION_ID,
 };
 use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 use super::migration::{
@@ -502,7 +503,7 @@ impl AppStore {
         cancel_previews: impl FnOnce(),
     ) -> Result<HistoryOperationResult, String> {
         if operation_id.len() > 64 || uuid::Uuid::parse_str(operation_id).is_err() {
-            return Err("INVALID_HISTORY_OPERATION_ID".to_string());
+            return Err(INVALID_HISTORY_OPERATION_ID.to_string());
         }
 
         let mut guard = self.lock_for_update().map_err(|error| error.to_string())?;
@@ -524,7 +525,7 @@ impl AppStore {
                 .cloned()
                 .ok_or_else(|| direction.empty_error().to_string())?;
             if target.scope != target.before.scope() {
-                return Err("HISTORY_SCOPE_MISMATCH".to_string());
+                return Err(HISTORY_SCOPE_MISMATCH.to_string());
             }
             let target_gesture_id = target.gesture_id.clone();
             let target_gesture_ids = target.gesture_ids.clone();
@@ -563,7 +564,7 @@ impl AppStore {
                         )
                         .map_err(editor_history_error)?;
                     if change.result.changed_fields.is_empty() {
-                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                        return Err(HISTORY_TARGET_ALREADY_APPLIED.to_string());
                     }
                     (opposite, Some(change), None)
                 }
@@ -599,7 +600,7 @@ impl AppStore {
                         PresetFullHistorySnapshot::from_store(&current_store);
                     current_snapshot.key_counters = current_key_counters.clone();
                     if current_snapshot == *before {
-                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                        return Err(HISTORY_TARGET_ALREADY_APPLIED.to_string());
                     }
                     let changed_tab_css_ids = changed_map_ids(
                         &current_store.tab_css_overrides,
@@ -633,7 +634,7 @@ impl AppStore {
                             .prepare_mode_entry(current_store.selected_key_type.clone())?,
                     )?;
                     if current_store.selected_key_type == before {
-                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                        return Err(HISTORY_TARGET_ALREADY_APPLIED.to_string());
                     }
                     let mut scratch = current_store;
                     scratch.selected_key_type = before.clone();
@@ -648,7 +649,7 @@ impl AppStore {
                             .prepare_counters_entry(current_key_counters.clone())?,
                     )?;
                     if current_store.key_counters == before {
-                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                        return Err(HISTORY_TARGET_ALREADY_APPLIED.to_string());
                     }
                     let mut scratch = current_store;
                     scratch.key_counters = before.clone();
@@ -660,7 +661,7 @@ impl AppStore {
                     let current_snapshot =
                         plugin_elements_snapshot(&current_store, &before.plugin_id)?;
                     if current_snapshot == before {
-                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                        return Err(HISTORY_TARGET_ALREADY_APPLIED.to_string());
                     }
                     let opposite = require_history_entry(
                         guard
@@ -2972,7 +2973,7 @@ fn prepare_editor_patch_transition(
 fn require_history_entry(plan: HistoryRecordPlan) -> Result<HistoryEntry, String> {
     match plan {
         HistoryRecordPlan::Entry(entry) => Ok(*entry),
-        HistoryRecordPlan::Merge { .. } => Err("HISTORY_INVALID_OPPOSITE_ENTRY".to_string()),
+        HistoryRecordPlan::Merge { .. } => Err(HISTORY_INVALID_OPPOSITE_ENTRY.to_string()),
         HistoryRecordPlan::Truncate => Err(HISTORY_ENTRY_TOO_LARGE.to_string()),
     }
 }
