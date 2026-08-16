@@ -295,6 +295,7 @@ fn main() {
             commands::layout::overlay::overlay_set_lock,
             commands::layout::overlay::overlay_set_anchor,
             commands::layout::overlay::overlay_resize,
+            commands::layout::overlay::overlay_transition_fade,
             commands::layout::panel::panel_window_show,
             commands::layout::panel::panel_window_close,
             commands::layout::panel::panel_window_take_view_state,

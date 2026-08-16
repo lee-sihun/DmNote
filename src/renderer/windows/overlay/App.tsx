@@ -14,6 +14,7 @@ import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
+import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransition';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { obsApi } from '@api/modules/obsApi';
 import { useBuiltinStatsSubscription } from '@hooks/overlay/useBuiltinStatsSubscription';
@@ -392,9 +393,11 @@ export default function App() {
   });
 
   // 노트 이펙트 꺼짐 시 트랙 예약 공간 제거 - 창 높이와 키 오프셋이 함께 줄어든다
-  const trackHeight = noteEffect
+  const targetTrackReserve = noteEffect
     ? noteSettings?.trackHeight ?? DEFAULT_NOTE_SETTINGS.trackHeight
     : 0;
+  // 토글 전환은 창 페이드로 감싸 리사이즈 순간의 덜컥거림을 가린다
+  const trackHeight = useTrackReserveTransition(targetTrackReserve);
 
   // 키 딜레이 설정
   const keyDisplayDelayMs = Number(noteSettings?.keyDisplayDelayMs ?? 0);

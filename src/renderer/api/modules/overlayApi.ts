@@ -25,6 +25,8 @@ export const overlayApi = {
     fixedPositionDeltaX?: number;
     fixedPositionDeltaY?: number;
   }) => invoke<OverlayBounds>('overlay_resize', { payload }),
+  transitionFade: (alpha: number, durationMs: number) =>
+    invoke<void>('overlay_transition_fade', { alpha, durationMs }),
   onVisibility: (listener: (payload: OverlayVisibilityPayload) => void) =>
     subscribe<OverlayVisibilityPayload>('overlay:visibility', listener),
   onLock: (listener: (payload: OverlayLockPayload) => void) =>
