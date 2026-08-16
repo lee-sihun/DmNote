@@ -1695,17 +1695,27 @@ const commitPersistedElementUpdates = async (
 
   for (const [pluginId, { persisted, sessionOnly }] of updatesByPlugin) {
     if (persisted.length === 0) {
-      // 세션 전용 요소만 대상 - 커밋·projection 없이 스토어 반영만
-      if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
-      const liveStore = usePluginDisplayElementStore.getState();
-      // 선행 플러그인 커밋 대기 중 소실된 대상은 거절 (큐 경로 재검증과 동일 계약)
-      const liveFullIds = new Set(liveStore.elements.map((el) => el.fullId));
-      if (sessionOnly.some(({ fullId }) => !liveFullIds.has(fullId))) {
-        return 'ELEMENT_NOT_FOUND';
-      }
-      sessionOnly.forEach(({ fullId, patch }) => {
-        liveStore.updateElement(fullId, patch);
-      });
+      // 세션 전용 요소만 대상 - 커밋·projection 없이 스토어 반영만. 단건·혼합
+      // 경로와 순서 일관성을 위해 스토어 쓰기도 같은 플러그인 큐 슬롯에서 수행
+      const errorCode = await enqueuePluginInstancesCommit(
+        pluginId,
+        async () => {
+          if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
+          const liveStore = usePluginDisplayElementStore.getState();
+          // 선행 플러그인 커밋 대기 중 소실된 대상은 거절 (영속 경로 재검증과 동일 계약)
+          const liveFullIds = new Set(
+            liveStore.elements.map((el) => el.fullId),
+          );
+          if (sessionOnly.some(({ fullId }) => !liveFullIds.has(fullId))) {
+            return 'ELEMENT_NOT_FOUND';
+          }
+          sessionOnly.forEach(({ fullId, patch }) => {
+            liveStore.updateElement(fullId, patch);
+          });
+          return null;
+        },
+      );
+      if (errorCode) return errorCode;
       continue;
     }
     const pluginUpdates = [...persisted, ...sessionOnly];
@@ -1856,11 +1866,12 @@ const executePersistedOperation = async (
         liveStore.updateElement(fullId, materializedPatch);
         return null;
       }
+      // live.definitionId는 위 분기로 defined가 보장되어 undefined 요소와
+      // 매칭될 수 없다
       const prospective = liveStore.elements
         .filter(
           (el) =>
             el.pluginId === live.pluginId &&
-            el.definitionId !== undefined &&
             el.definitionId === live.definitionId,
         )
         .map((el) =>
