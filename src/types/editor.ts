@@ -653,6 +653,37 @@ export const isRetryableEditorCommitError = (
   error: EditorCommitError,
 ): boolean => EDITOR_COMMIT_ERROR_RETRY_POLICY[error.errorCode] !== 'permanent';
 
+// 백엔드가 VALIDATION_FAILED의 details.validationCode로 싣는 코드 중 "저장 한도
+// 초과" 계열. 목록에서 빠진 코드는 한도 안내 대신 일반 오류 안내로 새어 나가므로
+// 오류 코드 동기화 규칙 대상이 되도록 여기에 둔다 (tests/fixtures 공유 fixture로 고정)
+export const EDITOR_CAPACITY_VALIDATION_CODES: ReadonlySet<string> = new Set([
+  'COLLECTION_TOO_LARGE',
+  'TOO_MANY_RENDER_ITEMS',
+  'TOO_MANY_LAYER_GROUPS',
+  'TOO_MANY_SLOTS_PER_MEMBER',
+  'REQUEST_TOO_LARGE',
+  'HISTORY_ENTRY_TOO_LARGE',
+  // validate_count_limit 계열인데 위 셋과 달리 빠져 있던 코드
+  'TOO_MANY_MODES',
+  'TOO_MANY_CUSTOM_TABS',
+  // validate_saved_plugin_instances -> gesture 커밋에서 validationCode로 승격
+  'TOO_MANY_PLUGIN_INSTANCES',
+]);
+
+export const isEditorCapacityFailure = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'errorCode' in error &&
+  error.errorCode === 'VALIDATION_FAILED' &&
+  'retryable' in error &&
+  error.retryable === false &&
+  'details' in error &&
+  typeof error.details === 'object' &&
+  error.details !== null &&
+  'validationCode' in error.details &&
+  typeof error.details.validationCode === 'string' &&
+  EDITOR_CAPACITY_VALIDATION_CODES.has(error.details.validationCode);
+
 const EDITOR_ERROR_CODES = new Set<EditorCommitErrorCode>(
   Object.keys(EDITOR_COMMIT_ERROR_RETRY_POLICY) as EditorCommitErrorCode[],
 );

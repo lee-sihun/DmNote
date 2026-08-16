@@ -216,6 +216,48 @@ mod tests {
     // TS 재시도 정책 테이블(src/types/editor.ts)과 공유하는 fixture
     const RETRY_FIXTURE: &str = include_str!("../../tests/fixtures/editor-error-retry.json");
 
+    // TS 용량 코드 집합(src/types/editor.ts)과 공유하는 fixture
+    const CAPACITY_FIXTURE: &str = include_str!("../../tests/fixtures/editor-capacity-codes.json");
+
+    // VALIDATION_FAILED의 details.validationCode 중 "저장 한도 초과" 계열 전수.
+    // 여기 없는 코드는 프론트에서 한도 안내 대신 일반 오류 안내로 표시된다
+    const CAPACITY_VALIDATION_CODES: &[&str] = &[
+        "COLLECTION_TOO_LARGE",
+        "HISTORY_ENTRY_TOO_LARGE",
+        "REQUEST_TOO_LARGE",
+        "TOO_MANY_CUSTOM_TABS",
+        "TOO_MANY_LAYER_GROUPS",
+        "TOO_MANY_MODES",
+        "TOO_MANY_PLUGIN_INSTANCES",
+        "TOO_MANY_RENDER_ITEMS",
+        "TOO_MANY_SLOTS_PER_MEMBER",
+    ];
+
+    #[test]
+    fn capacity_fixture_matches_backend_capacity_codes() {
+        let fixture: Vec<String> =
+            serde_json::from_str(CAPACITY_FIXTURE).expect("fixture must be valid json");
+        let mut expected: Vec<String> = CAPACITY_VALIDATION_CODES
+            .iter()
+            .map(|code| (*code).to_string())
+            .collect();
+        expected.sort();
+        let mut actual = fixture;
+        actual.sort();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn capacity_codes_serialize_as_validation_failed_with_their_code() {
+        for code in CAPACITY_VALIDATION_CODES {
+            let wire = serde_json::to_value(EditorCommitError::validation(*code, "sample"))
+                .expect("error must serialize");
+            assert_eq!(wire["errorCode"], "VALIDATION_FAILED");
+            assert_eq!(wire["retryable"], false);
+            assert_eq!(wire["details"]["validationCode"], *code);
+        }
+    }
+
     // 생성자 표본, variant 추가 시 match가 컴파일 에러로 등록을 강제한다
     fn sample(code: EditorCommitErrorCode) -> EditorCommitError {
         match code {

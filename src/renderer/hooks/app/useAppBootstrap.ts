@@ -74,30 +74,8 @@ import {
   initializeCursorSystem,
   refreshCursorSettings,
 } from '@utils/grid/cursorUtils';
+import { isEditorCapacityFailure } from '@src/types/editor';
 import type { CustomJs, JsPlugin } from '@src/types/plugin/js';
-
-const CAPACITY_VALIDATION_CODES = new Set([
-  'COLLECTION_TOO_LARGE',
-  'TOO_MANY_RENDER_ITEMS',
-  'TOO_MANY_LAYER_GROUPS',
-  'TOO_MANY_SLOTS_PER_MEMBER',
-  'REQUEST_TOO_LARGE',
-  'HISTORY_ENTRY_TOO_LARGE',
-]);
-
-const isEditorCapacityFailure = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'errorCode' in error &&
-  error.errorCode === 'VALIDATION_FAILED' &&
-  'retryable' in error &&
-  error.retryable === false &&
-  'details' in error &&
-  typeof error.details === 'object' &&
-  error.details !== null &&
-  'validationCode' in error.details &&
-  typeof error.details.validationCode === 'string' &&
-  CAPACITY_VALIDATION_CODES.has(error.details.validationCode);
 
 function clonePlugins(source?: CustomJs | null): JsPlugin[] {
   if (!source) return [];
