@@ -55,9 +55,10 @@ type EditorPatchV1 = {
   위치 컬렉션(`keyPositions`, `statPositions`, `graphPositions`,
   `knobPositions`)의 모든 요소는 앱이 발급·소유하는 안정 `id`(UUID)를
   가집니다. 불투명 값으로 다루세요. 읽은 값을 그대로 되돌려 보내고, 직접
-  만들거나 중복시키지 마세요. `id`가 없거나 미확인인 요소를 쓰면 백엔드가 새
-  값을 발급합니다. 신원 규칙은 [Keys API](/docs/api-reference/keys)를
-  참고하세요.
+  만들지 마세요. `id`가 없거나 미확인인 요소를 쓰면 백엔드가 새 값을
+  발급합니다. 읽은 요소를 복사해 배열에 덧붙이는 경우처럼 같은 `id`가 여러 번
+  나오면, 원래 자리의 요소가 신원을 지키고 나머지 사본이 새 값을 받습니다.
+  신원 규칙은 [Keys API](/docs/api-reference/keys)를 참고하세요.
 </Callout>
 
 ## 현재 문서 조회

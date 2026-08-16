@@ -296,10 +296,13 @@ interface ElementShadowSpec {
 
 Every element position (`keyPositions`, `statPositions`, `graphPositions`,
 `knobPositions`) carries a stable `id`. Treat it as opaque: echo back the value
-you read, never invent one, and never copy an `id` onto another element. A
-write whose `id` is missing or unknown gets a fresh one assigned by the
-backend, and loading a preset re-issues every `id`. Use `id` to track an
-element across reorders instead of its array index.
+you read and never invent one. A write whose `id` is missing or unknown gets a
+fresh one assigned by the backend. When the same `id` appears more than once,
+for example when you copy an element you read and append it, the element in
+its original slot keeps the identity and the remaining copies get fresh ones.
+Loading a full preset re-issues every `id`; a tab preset re-issues only the
+collections that preset supplies positions for. Use `id` to track an element
+across reorders instead of its array index.
 
 When a gradient field is present it takes priority over the matching solid
 field, and the solid field is kept in sync with the first stop color on save.

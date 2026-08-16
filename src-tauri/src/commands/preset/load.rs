@@ -611,6 +611,7 @@ pub fn preset_load_tab(
             admission,
             move |store| {
                 let previous_tab_css_overrides = store.tab_css_overrides.clone();
+                let key_positions_written = imported_key_positions.is_some();
                 let stat_positions_written = imported_stat_positions.is_some();
                 let graph_positions_written = imported_graph_positions.is_some();
                 let knob_positions_written = imported_knob_positions.is_some();
@@ -633,6 +634,7 @@ pub fn preset_load_tab(
                 rekey_tab_preset_elements(
                     store,
                     &current_tab_id,
+                    key_positions_written,
                     stat_positions_written,
                     graph_positions_written,
                     knob_positions_written,
@@ -908,6 +910,7 @@ fn rekey_full_preset_elements(store: &mut AppStoreData) {
 fn rekey_tab_preset_elements(
     store: &mut AppStoreData,
     tab_id: &str,
+    key_positions_written: bool,
     stat_positions_written: bool,
     graph_positions_written: bool,
     knob_positions_written: bool,
@@ -915,10 +918,20 @@ fn rekey_tab_preset_elements(
     crate::state::native_element_id::rekey_mode_element_ids_for_collections(
         store,
         tab_id,
-        true,
+        key_positions_written,
         stat_positions_written,
         graph_positions_written,
         knob_positions_written,
+    );
+    // 프리셋이 위치를 주지 않은 컬렉션은 기존 요소가 값 그대로 남는다 -
+    // 신원을 회전시키지 않고 정렬이 덧붙인 빈 항목만 채운다
+    crate::state::native_element_id::backfill_mode_element_ids_for_collections(
+        store,
+        tab_id,
+        !key_positions_written,
+        !stat_positions_written,
+        !graph_positions_written,
+        !knob_positions_written,
     );
 }
 
@@ -2365,9 +2378,9 @@ mod tests {
         let untouched_id = store.key_positions["untouched"][0].id.clone();
         let original_ids = target_preset_ids(&store);
 
-        rekey_tab_preset_elements(&mut store, "target", true, true, false);
+        rekey_tab_preset_elements(&mut store, "target", true, true, true, false);
         let first_ids = target_preset_ids(&store);
-        rekey_tab_preset_elements(&mut store, "target", true, true, false);
+        rekey_tab_preset_elements(&mut store, "target", true, true, true, false);
         let second_ids = target_preset_ids(&store);
 
         assert!(original_ids[..3]
@@ -2381,6 +2394,35 @@ mod tests {
         assert_eq!(first_ids[3], original_ids[3]);
         assert_eq!(second_ids[3], original_ids[3]);
         assert_eq!(store.key_positions["untouched"][0].id, untouched_id);
+        crate::state::native_element_id::validate_document_element_ids(
+            &crate::models::EditorDocumentV1::from_store(&store),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn tab_preset_without_key_positions_keeps_existing_key_ids() {
+        let mut store = old_preset_store();
+        crate::state::native_element_id::backfill_store_element_ids(&mut store);
+        let original_ids = target_preset_ids(&store);
+        // keys만 담긴 탭 프리셋: merge가 기존 위치를 값 그대로 되삽입하고
+        // 슬롯 정렬이 빈 위치 하나를 덧붙인 상태
+        store
+            .key_positions
+            .get_mut("target")
+            .unwrap()
+            .push(KeyPosition::default());
+
+        rekey_tab_preset_elements(&mut store, "target", false, false, false, false);
+
+        // 값이 그대로인 기존 키는 신원을 지키고, 덧붙은 슬롯만 새 id를 받는다
+        assert_eq!(store.key_positions["target"][0].id, original_ids[0]);
+        let appended = &store.key_positions["target"][1].id;
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            appended
+        ));
+        assert_ne!(appended, &original_ids[0]);
+        assert_eq!(target_preset_ids(&store)[1..], original_ids[1..]);
         crate::state::native_element_id::validate_document_element_ids(
             &crate::models::EditorDocumentV1::from_store(&store),
         )

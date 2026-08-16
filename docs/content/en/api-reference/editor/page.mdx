@@ -56,8 +56,10 @@ that top-level collection. It is not an item-level diff.
   Every element in the position collections (`keyPositions`, `statPositions`,
   `graphPositions`, `knobPositions`) carries a stable `id` (UUID) assigned and
   owned by the app. Treat it as opaque: echo back the value you read and never
-  invent or duplicate one. A written element with a missing or unknown `id`
-  gets a fresh one from the backend. See the
+  invent one. A written element with a missing or unknown `id` gets a fresh one
+  from the backend. If the same `id` appears more than once, for example when
+  you copy an element you read and append it, the element in its original slot
+  keeps the identity and the remaining copies get fresh ones. See the
   [Keys API](/docs/api-reference/keys) for the identity rules.
 </Callout>
 

@@ -226,6 +226,108 @@ pub(crate) fn rekey_mode_element_ids_for_collections(
     }
 }
 
+fn backfill_collection_mode<T: NativeElement>(
+    collection: &mut HashMap<String, Vec<T>>,
+    mode: &str,
+    seen: &mut HashSet<String>,
+    reserved: &mut HashSet<String>,
+    outcome: &mut BackfillOutcome,
+) {
+    let Some(elements) = collection.get_mut(mode) else {
+        return;
+    };
+    for element in elements {
+        let id = &element.position().id;
+        let valid = is_valid_element_id(id);
+        if valid && seen.insert(id.clone()) {
+            continue;
+        }
+
+        if !id.is_empty() || valid {
+            outcome.repaired = true;
+        }
+        let id = new_unique_id(reserved);
+        seen.insert(id.clone());
+        element.position_mut().id = id;
+        outcome.changed = true;
+    }
+}
+
+// 한 모드의 선택된 컬렉션만 채운다. 대상 밖 요소의 id를 seen에 먼저 담아
+// 대상 안의 중복도 복구되고 새 id가 문서 전체에서 유일하도록 유지한다
+pub(crate) fn backfill_mode_element_ids_for_collections(
+    store: &mut AppStoreData,
+    mode: &str,
+    key_positions: bool,
+    stat_positions: bool,
+    graph_positions: bool,
+    knob_positions: bool,
+) -> BackfillOutcome {
+    let mut seen = HashSet::new();
+    collect_collection_ids_outside_target(&store.key_positions, mode, key_positions, &mut seen);
+    collect_collection_ids_outside_target(&store.stat_positions, mode, stat_positions, &mut seen);
+    collect_collection_ids_outside_target(&store.graph_positions, mode, graph_positions, &mut seen);
+    collect_collection_ids_outside_target(&store.knob_positions, mode, knob_positions, &mut seen);
+    let mut reserved = collect_store_ids(store);
+    let mut outcome = BackfillOutcome::default();
+    if key_positions {
+        backfill_collection_mode(
+            &mut store.key_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if stat_positions {
+        backfill_collection_mode(
+            &mut store.stat_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if graph_positions {
+        backfill_collection_mode(
+            &mut store.graph_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if knob_positions {
+        backfill_collection_mode(
+            &mut store.knob_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    outcome
+}
+
+// 백필 대상(선택된 컬렉션 × 대상 모드) 밖의 id만 모은다
+fn collect_collection_ids_outside_target<T: NativeElement>(
+    collection: &HashMap<String, Vec<T>>,
+    target_mode: &str,
+    targeted: bool,
+    ids: &mut HashSet<String>,
+) {
+    for (mode, elements) in collection {
+        if targeted && mode == target_mode {
+            continue;
+        }
+        for element in elements {
+            if is_valid_element_id(&element.position().id) {
+                ids.insert(element.position().id.clone());
+            }
+        }
+    }
+}
+
 fn validate_supplied_collection_ids<T: NativeElement>(
     collection: &HashMap<String, Vec<T>>,
     require_id: bool,
@@ -283,6 +385,99 @@ fn validate_supplied_patch_ids(
     Ok(seen)
 }
 
+// v1은 id를 모르는 입력을 계속 받는 계약이라, 형식이 유효한데 소유가 어긋나거나
+// (다른 컬렉션·삭제된 신원) 패치 안에서 중복된 id는 거부 대신 비워서 뒤의 승계·
+// 신규 발급 경로로 넘긴다. 중복은 canonical 자리를 원본으로 보고 사본만 비운다
+fn sanitize_v1_supplied_collection_ids<T: NativeElement>(
+    candidate: &mut HashMap<String, Vec<T>>,
+    current: &HashMap<String, Vec<T>>,
+) -> Result<(), EditorCommitError> {
+    let mut owned = HashMap::new();
+    for mode in sorted_modes(current) {
+        let Some(elements) = current.get(&mode) else {
+            continue;
+        };
+        for (index, element) in elements.iter().enumerate() {
+            let id = &element.position().id;
+            if !id.is_empty() {
+                owned.insert(id.clone(), (mode.clone(), index));
+            }
+        }
+    }
+
+    let mut occurrences: HashMap<String, Vec<(String, usize)>> = HashMap::new();
+    for mode in sorted_modes(candidate) {
+        let Some(elements) = candidate.get(&mode) else {
+            continue;
+        };
+        for (index, element) in elements.iter().enumerate() {
+            let id = &element.position().id;
+            if id.is_empty() {
+                continue;
+            }
+            if !is_valid_element_id(id) {
+                return Err(EditorCommitError::validation(
+                    INVALID_ELEMENT_ID,
+                    format!("native element {mode}[{index}] has an invalid ID"),
+                ));
+            }
+            occurrences
+                .entry(id.clone())
+                .or_default()
+                .push((mode.clone(), index));
+        }
+    }
+
+    let mut cleared = HashSet::new();
+    for (id, slots) in &occurrences {
+        let Some(canonical_slot) = owned.get(id) else {
+            cleared.extend(slots.iter().cloned());
+            continue;
+        };
+        if slots.len() == 1 {
+            continue;
+        }
+        let keeper = slots
+            .iter()
+            .find(|slot| *slot == canonical_slot)
+            .unwrap_or(&slots[0]);
+        for slot in slots {
+            if slot != keeper {
+                cleared.insert(slot.clone());
+            }
+        }
+    }
+
+    for (mode, index) in cleared {
+        if let Some(element) = candidate
+            .get_mut(&mode)
+            .and_then(|elements| elements.get_mut(index))
+        {
+            element.position_mut().id.clear();
+        }
+    }
+    Ok(())
+}
+
+fn sanitize_v1_supplied_patch_ids(
+    store: &AppStoreData,
+    patch: &mut EditorPatchV1,
+) -> Result<(), EditorCommitError> {
+    if let Some(collection) = patch.key_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.key_positions)?;
+    }
+    if let Some(collection) = patch.stat_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.stat_positions)?;
+    }
+    if let Some(collection) = patch.graph_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.graph_positions)?;
+    }
+    if let Some(collection) = patch.knob_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.knob_positions)?;
+    }
+    Ok(())
+}
+
 fn same_value_without_id<T: NativeElement>(left: &T, right: &T) -> bool {
     let mut left = left.clone();
     let mut right = right.clone();
@@ -325,6 +520,38 @@ fn keep_or_rekey_supplied_ids<T: NativeElement>(
     }
 }
 
+// 같은 모드 안에서 빈 ID를 값으로 승계한다. 모드를 넘는 승계는 무관한 모드의
+// 신원을 빼앗으므로 이 패스에서 제외한다
+fn inherit_ids_by_value_within_mode<T: NativeElement>(
+    current: &HashMap<String, Vec<T>>,
+    candidate: &mut HashMap<String, Vec<T>>,
+    consumed_current_ids: &mut HashSet<String>,
+) {
+    for mode in sorted_modes(candidate) {
+        let Some(elements) = candidate.get_mut(&mode) else {
+            continue;
+        };
+        let Some(current_elements) = current.get(&mode) else {
+            continue;
+        };
+        for element in elements {
+            if !element.position().id.is_empty() {
+                continue;
+            }
+            let inherited = current_elements.iter().find(|current_element| {
+                let current_id = &current_element.position().id;
+                !consumed_current_ids.contains(current_id)
+                    && same_value_without_id(*current_element, &*element)
+            });
+            if let Some(current_element) = inherited {
+                let id = current_element.position().id.clone();
+                consumed_current_ids.insert(id.clone());
+                element.position_mut().id = id;
+            }
+        }
+    }
+}
+
 fn inherit_ids_by_value<T: NativeElement>(
     current_elements: &[T],
     candidate: &mut HashMap<String, Vec<T>>,
@@ -355,6 +582,40 @@ fn inherit_ids_by_value<T: NativeElement>(
     }
 }
 
+// keys를 동반하지 않는 keyPositions 패치에서만 쓴다. 그 경우 candidate는
+// validate_paired_update가 형태 불변을 강제하므로 같은 길이 = 같은 슬롯 집합의
+// 제자리 편집이고, index가 곧 신원이다(master 의미론). 형태 제약이 없는
+// stat/graph/knob에 쓰면 같은 길이의 삭제+추가에서 새 요소가 삭제된 요소의
+// 신원을 물려받는다
+fn inherit_ids_by_index(
+    current: &HashMap<String, Vec<KeyPosition>>,
+    candidate: &mut HashMap<String, Vec<KeyPosition>>,
+    consumed_current_ids: &mut HashSet<String>,
+) {
+    for mode in sorted_modes(candidate) {
+        let Some(elements) = candidate.get_mut(&mode) else {
+            continue;
+        };
+        let Some(current_elements) = current.get(&mode) else {
+            continue;
+        };
+        if current_elements.len() != elements.len() {
+            continue;
+        }
+        for (element, current_element) in elements.iter_mut().zip(current_elements) {
+            if !element.id.is_empty() {
+                continue;
+            }
+            let id = current_element.id.clone();
+            if id.is_empty() || consumed_current_ids.contains(&id) {
+                continue;
+            }
+            consumed_current_ids.insert(id.clone());
+            element.id = id;
+        }
+    }
+}
+
 fn adapt_v1_collection<T: NativeElement>(
     current: &HashMap<String, Vec<T>>,
     candidate: &mut HashMap<String, Vec<T>>,
@@ -363,6 +624,9 @@ fn adapt_v1_collection<T: NativeElement>(
     reserved: &mut HashSet<String>,
 ) {
     keep_or_rekey_supplied_ids(candidate, canonical_ids, consumed_current_ids, reserved);
+    // 승계 순서: 같은 모드 값 → 전역 값 폴백. index 승계는 형태가 고정된
+    // keyPositions 단독 패치 전용이라 여기서는 쓰지 않는다
+    inherit_ids_by_value_within_mode(current, candidate, consumed_current_ids);
     inherit_ids_by_value(
         &ordered_current_elements(current),
         candidate,
@@ -373,6 +637,7 @@ fn adapt_v1_collection<T: NativeElement>(
 
 struct SlotPairedPosition {
     mode: String,
+    index: usize,
     slot: Option<KeySlot>,
     position: KeyPosition,
 }
@@ -390,6 +655,7 @@ fn slot_paired_current_positions(
         for (index, element) in elements.iter().enumerate() {
             pairs.push(SlotPairedPosition {
                 mode: mode.clone(),
+                index,
                 slot: slots.and_then(|slots| slots.get(index)).cloned(),
                 position: element.clone(),
             });
@@ -438,6 +704,42 @@ fn consume_slot_paired_ids(
     }
 }
 
+// 값을 무시하고 같은 모드·같은 index의 슬롯 일치만으로 승계한다. 값 일치를
+// 요구하는 앞 웨이브들이 모두 실패하는 경우 - 슬롯은 그대로인데 위치 값만
+// 바뀐 이동 - 를 담당한다. index를 고정해 중복 슬롯끼리 교차 승계하지 않는다
+fn consume_slot_only_ids(
+    candidate: &mut HashMap<String, Vec<KeyPosition>>,
+    patch_keys: &KeyMappings,
+    current_pairs: &[SlotPairedPosition],
+    consumed_current_ids: &mut HashSet<String>,
+) {
+    for mode in sorted_modes(candidate) {
+        let Some(elements) = candidate.get_mut(&mode) else {
+            continue;
+        };
+        let slots = patch_keys.get(&mode);
+        for (index, element) in elements.iter_mut().enumerate() {
+            if !element.id.is_empty() {
+                continue;
+            }
+            let Some(slot) = slots.and_then(|slots| slots.get(index)) else {
+                continue;
+            };
+            let inherited = current_pairs.iter().find(|pair| {
+                pair.mode == mode
+                    && pair.index == index
+                    && pair.slot.as_ref() == Some(slot)
+                    && !consumed_current_ids.contains(&pair.position.id)
+            });
+            if let Some(pair) = inherited {
+                let id = pair.position.id.clone();
+                consumed_current_ids.insert(id.clone());
+                element.id = id;
+            }
+        }
+    }
+}
+
 // v1 paired patch는 keys[i]-keyPositions[i] 결합이 신원 단서다. 값이 같은
 // 위치가 여럿일 때 값만으로 승계하면 재정렬에서 ID가 다른 키 슬롯에 붙으므로
 // 같은 모드의 (슬롯, 값) 정확 일치부터 소진하고, 모드 이동·재바인딩은
@@ -451,10 +753,14 @@ fn adapt_v1_key_position_ids(
     reserved: &mut HashSet<String>,
 ) {
     let Some(patch_keys) = patch_keys else {
-        adapt_v1_collection(
-            &store.key_positions,
+        // keys 미동반 패치는 형태가 고정된다 - index가 신원이므로 값 승계보다
+        // 먼저 제자리 id를 확정해 값 편집이 신원 회전으로 번지지 않게 한다
+        keep_or_rekey_supplied_ids(candidate, canonical_ids, consumed_current_ids, reserved);
+        inherit_ids_by_index(&store.key_positions, candidate, consumed_current_ids);
+        inherit_ids_by_value_within_mode(&store.key_positions, candidate, consumed_current_ids);
+        inherit_ids_by_value(
+            &ordered_current_elements(&store.key_positions),
             candidate,
-            canonical_ids,
             consumed_current_ids,
             reserved,
         );
@@ -465,8 +771,12 @@ fn adapt_v1_key_position_ids(
 
     let current_pairs = slot_paired_current_positions(&store.keys, &store.key_positions);
     // 웨이브 순서: 같은 모드 슬롯+값 → 모드 간 슬롯+값(모드 이동) →
-    // 같은 모드 값(재바인딩) → 마지막 전역 값 폴백과 신규 발급
-    for (match_slot, same_mode_only) in [(true, true), (true, false), (false, true)] {
+    // 같은 모드 index 슬롯(값 변경 이동) → 같은 모드 값(재바인딩) →
+    // 마지막 전역 값 폴백과 신규 발급.
+    // 슬롯 고정이 우연한 값 일치보다 강한 신원 단서라 값 웨이브보다 앞선다 -
+    // 그래야 두 키의 좌표를 맞바꾸는 패치가 keys 동반 여부와 무관하게 같은
+    // 결과(제자리 값 편집)를 낸다
+    for (match_slot, same_mode_only) in [(true, true), (true, false)] {
         consume_slot_paired_ids(
             candidate,
             patch_keys,
@@ -476,7 +786,17 @@ fn adapt_v1_key_position_ids(
             same_mode_only,
         );
     }
+    consume_slot_only_ids(candidate, patch_keys, &current_pairs, consumed_current_ids);
+    consume_slot_paired_ids(
+        candidate,
+        patch_keys,
+        &current_pairs,
+        consumed_current_ids,
+        false,
+        true,
+    );
 
+    inherit_ids_by_value_within_mode(&store.key_positions, candidate, consumed_current_ids);
     inherit_ids_by_value(
         &ordered_current_elements(&store.key_positions),
         candidate,
@@ -489,6 +809,9 @@ fn adapt_v1_patch_ids(
     store: &AppStoreData,
     patch: &mut EditorPatchV1,
 ) -> Result<(), EditorCommitError> {
+    sanitize_v1_supplied_patch_ids(store, patch)?;
+    // 정화 후에는 남은 id가 모두 자기 컬렉션 소유이자 유일 - 이 호출은 수집과
+    // 불변식 확인을 겸한다
     let supplied_ids = validate_supplied_patch_ids(patch, false)?;
     let canonical_ids = collect_store_ids(store);
     let mut consumed_current_ids = supplied_ids
@@ -631,6 +954,13 @@ mod tests {
         KeyPosition {
             dx,
             ..KeyPosition::default()
+        }
+    }
+
+    fn stat_position(stat_type: StatType, dx: f64) -> StatPosition {
+        StatPosition {
+            stat_type,
+            position: position(dx),
         }
     }
 
@@ -917,6 +1247,164 @@ mod tests {
         assert_ne!(positions[2].id, second_id);
     }
 
+    #[test]
+    fn v1_idless_positions_only_value_change_keeps_ids_by_index() {
+        let store = store_with_all_collections();
+        let original = store.key_positions["mode"]
+            .iter()
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let mut patch = EditorPatchV1 {
+            key_positions: Some(HashMap::from([(
+                "mode".to_string(),
+                vec![position(50.0), position(2.0)],
+            )])),
+            ..EditorPatchV1::default()
+        };
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 같은 길이 positions 단독 패치는 index가 신원 - 값이 바뀐 요소도 ID를
+        // 유지해 id 순서가 보존되고 paired id-order 검사와 충돌하지 않는다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, original[0]);
+        assert_eq!(positions[1].id, original[1]);
+    }
+
+    #[test]
+    fn v1_idless_positions_only_swap_is_treated_as_in_place_edits() {
+        let store = store_with_all_collections();
+        let original = store.key_positions["mode"]
+            .iter()
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let mut patch = EditorPatchV1 {
+            key_positions: Some(HashMap::from([(
+                "mode".to_string(),
+                vec![position(2.0), position(1.0)],
+            )])),
+            ..EditorPatchV1::default()
+        };
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 같은 길이 값 스왑은 두 건의 제자리 값 편집으로 해석 - keys 미동반
+        // 패치가 신원 재배열로 번지지 않는다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, original[0]);
+        assert_eq!(positions[1].id, original[1]);
+    }
+
+    #[test]
+    fn v1_idless_equal_length_delete_and_append_does_not_reuse_the_deleted_id() {
+        let mut store = AppStoreData {
+            stat_positions: HashMap::from([(
+                "mode".to_string(),
+                vec![
+                    stat_position(StatType::Kps, 1.0),
+                    stat_position(StatType::Kps, 2.0),
+                    stat_position(StatType::Kps, 3.0),
+                ],
+            )]),
+            ..AppStoreData::default()
+        };
+        rekey_store_element_ids(&mut store);
+        let ids = store.stat_positions["mode"]
+            .iter()
+            .map(|element| element.position.id.clone())
+            .collect::<Vec<_>>();
+        // 가운데를 지우고 새 요소를 덧붙인다 - 길이는 그대로다
+        let mut patch = EditorPatchV1 {
+            stat_positions: Some(HashMap::from([(
+                "mode".to_string(),
+                vec![
+                    stat_position(StatType::Kps, 1.0),
+                    stat_position(StatType::Kps, 3.0),
+                    stat_position(StatType::Kps, 9.0),
+                ],
+            )])),
+            ..EditorPatchV1::default()
+        };
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 살아남은 요소는 값으로 자기 신원을 지키고, 신규 요소는 삭제된
+        // 요소의 신원을 물려받지 않는다
+        let positions = &patch.stat_positions.unwrap()["mode"];
+        assert_eq!(positions[0].position.id, ids[0]);
+        assert_eq!(positions[1].position.id, ids[2]);
+        assert!(!ids.contains(&positions[2].position.id));
+        assert!(is_valid_element_id(&positions[2].position.id));
+    }
+
+    #[test]
+    fn v1_paired_value_swap_keeps_ids_with_their_slots() {
+        let store = keyed_store(
+            vec![KeySlot::from("A"), KeySlot::from("B")],
+            vec![position(1.0), position(2.0)],
+        );
+        let id_a = store.key_positions["mode"][0].id.clone();
+        let id_b = store.key_positions["mode"][1].id.clone();
+        let mut patch = paired_patch(
+            vec![KeySlot::from("A"), KeySlot::from("B")],
+            vec![position(2.0), position(1.0)],
+        );
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 슬롯이 그대로면 좌표 맞바꿈은 제자리 값 편집이다 - keys 미동반
+        // 패치와 같은 결과를 낸다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, id_a);
+        assert_eq!(positions[1].id, id_b);
+    }
+
+    #[test]
+    fn v1_idless_patch_prefers_same_mode_and_never_steals_across_modes() {
+        let mut store = AppStoreData {
+            stat_positions: HashMap::from([
+                ("modeA".to_string(), Vec::new()),
+                (
+                    "modeB".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: position(10.0),
+                    }],
+                ),
+            ]),
+            ..AppStoreData::default()
+        };
+        rekey_store_element_ids(&mut store);
+        let id_b = store.stat_positions["modeB"][0].position.id.clone();
+        let mut patch = EditorPatchV1 {
+            stat_positions: Some(HashMap::from([
+                (
+                    "modeA".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: position(10.0),
+                    }],
+                ),
+                (
+                    "modeB".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: position(10.0),
+                    }],
+                ),
+            ])),
+            ..EditorPatchV1::default()
+        };
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 레이아웃을 다른 모드로 복사해도 원본 모드가 자기 ID를 지킨다
+        let positions = patch.stat_positions.unwrap();
+        assert_eq!(positions["modeB"][0].position.id, id_b);
+        assert_ne!(positions["modeA"][0].position.id, id_b);
+        assert!(is_valid_element_id(&positions["modeA"][0].position.id));
+    }
+
     fn keyed_store(slots: Vec<KeySlot>, positions: Vec<KeyPosition>) -> AppStoreData {
         let mut store = AppStoreData {
             keys: HashMap::from([("mode".to_string(), slots)]),
@@ -994,6 +1482,49 @@ mod tests {
         let positions = &patch.key_positions.unwrap()["mode"];
         assert_eq!(positions[1].id, id_a);
         assert_eq!(positions[0].id, id_b);
+    }
+
+    #[test]
+    fn v1_paired_slot_keeps_id_when_only_the_position_value_changes() {
+        let store = keyed_store(
+            vec![KeySlot::from("A"), KeySlot::from("B")],
+            vec![position(1.0), position(2.0)],
+        );
+        let id_a = store.key_positions["mode"][0].id.clone();
+        let id_b = store.key_positions["mode"][1].id.clone();
+        let mut patch = paired_patch(
+            vec![KeySlot::from("A"), KeySlot::from("B")],
+            vec![position(50.0), position(2.0)],
+        );
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 슬롯이 그대로면 위치 값이 바뀌어도 신원이 유지된다 - 이동은 신원
+        // 회전이 아니다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, id_a);
+        assert_eq!(positions[1].id, id_b);
+    }
+
+    #[test]
+    fn v1_paired_duplicate_slots_keep_their_own_ids_by_index() {
+        let store = keyed_store(
+            vec![KeySlot::from("A"), KeySlot::from("A")],
+            vec![position(1.0), position(2.0)],
+        );
+        let first = store.key_positions["mode"][0].id.clone();
+        let second = store.key_positions["mode"][1].id.clone();
+        let mut patch = paired_patch(
+            vec![KeySlot::from("A"), KeySlot::from("A")],
+            vec![position(10.0), position(20.0)],
+        );
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 슬롯이 겹쳐도 index 정렬로 각자 자기 ID를 지킨다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, first);
+        assert_eq!(positions[1].id, second);
     }
 
     #[test]
@@ -1080,7 +1611,7 @@ mod tests {
     }
 
     #[test]
-    fn v1_rejects_nil_non_uuid_and_duplicate_supplied_ids() {
+    fn v1_rejects_nil_and_non_uuid_supplied_ids() {
         let store = store_with_all_collections();
         for invalid_id in [Uuid::nil().to_string(), "not-a-uuid".to_string()] {
             let mut positions = store.key_positions.clone();
@@ -1094,17 +1625,46 @@ mod tests {
                 INVALID_ELEMENT_ID
             );
         }
+    }
 
+    #[test]
+    fn v1_duplicating_a_read_element_rekeys_the_copy_instead_of_failing() {
+        let store = store_with_all_collections();
+        let original = store.key_positions["mode"][0].id.clone();
+        // 플러그인의 관용 패턴: 읽어온 위치 객체를 펼쳐 복사해 배열에 덧붙인다
         let mut positions = store.key_positions.clone();
-        let duplicate = positions["mode"][0].id.clone();
-        positions.get_mut("mode").unwrap()[1].id = duplicate;
+        let mut copy = positions["mode"][0].clone();
+        copy.dx = 300.0;
+        positions.get_mut("mode").unwrap().push(copy);
         let mut patch = EditorPatchV1 {
             key_positions: Some(positions),
             ..EditorPatchV1::default()
         };
-        assert_eq!(
-            validation_code(prepare_commit_patch_element_ids(&store, &mut patch).unwrap_err()),
-            DUPLICATE_ELEMENT_ID
-        );
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, original);
+        assert_ne!(positions[2].id, original);
+        assert!(is_valid_element_id(&positions[2].id));
+    }
+
+    #[test]
+    fn v1_supplied_id_from_another_collection_is_rekeyed() {
+        let store = store_with_all_collections();
+        let stat_id = store.stat_positions["mode"][0].position.id.clone();
+        let mut positions = store.key_positions.clone();
+        positions.get_mut("mode").unwrap()[0].id = stat_id.clone();
+        let mut patch = EditorPatchV1 {
+            key_positions: Some(positions),
+            ..EditorPatchV1::default()
+        };
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 다른 컬렉션의 신원을 키 위치로 이식할 수 없다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_ne!(positions[0].id, stat_id);
+        assert!(is_valid_element_id(&positions[0].id));
     }
 }
