@@ -63,6 +63,23 @@ import {
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
 
+// 붙여넣기 블록의 스택 순서 결정. 배열 위치가 곧 최종 z이므로 원본의 상대
+// 스택(동결 payload zIndex 내림차순)을 따르고, 동률은 payload 순서로 안정
+// 정렬한다. zIndex 없는 레거시 항목은 직전 항목의 z를 이어받아 payload 내
+// 원본 상대 순서를 지킨다 - append 후 배열 위치를 쓰면 블록 최상단으로 튄다
+const orderPastedItemsByFrozenZ = <T>(
+  entries: ReadonlyArray<{ item: T; zIndex: number | undefined }>,
+): T[] => {
+  let carry = Number.POSITIVE_INFINITY;
+  return entries
+    .map(({ item, zIndex }, order) => {
+      carry = zIndex ?? carry;
+      return { item, order, z: carry };
+    })
+    .sort((a, b) => b.z - a.z || a.order - b.order)
+    .map((entry) => entry.item);
+};
+
 interface UseGridSelectionParams {
   selectedElements: SelectedElement[];
   selectedKeyType: string;
@@ -1041,14 +1058,31 @@ export function useGridSelection({
           .filter((item) => newIdSet.has(item.id))
           .map((item) => [item.id, item]),
       );
-      // 붙여넣기 블록 내부 순서는 동결 payload 순서 유지
-      const pastedOrdered = [
-        ...keysToAdd.map((entry) => entry.position.id),
-        ...statsToAdd.map((entry) => entry.position.id),
-        ...graphsToAdd.map((entry) => entry.position.id),
-        ...knobsToAdd.map((entry) => entry.position.id),
-        ...frozenPluginElements.map((element) => element.fullId),
-      ]
+      // 블록 내부는 원본의 상대 스택을 따른다 - payload는 타입별로 묶인
+      // 순서라 그대로 쓰면 복사본의 위아래가 뒤집힌다. 정렬 키는 동결
+      // payload의 zIndex 원본값 (append 후 대체값이 아니라)
+      const pastedOrdered = orderPastedItemsByFrozenZ([
+        ...keysToAdd.map((entry) => ({
+          item: entry.position.id,
+          zIndex: entry.position.zIndex,
+        })),
+        ...statsToAdd.map((entry) => ({
+          item: entry.position.id,
+          zIndex: entry.position.zIndex,
+        })),
+        ...graphsToAdd.map((entry) => ({
+          item: entry.position.id,
+          zIndex: entry.position.zIndex,
+        })),
+        ...knobsToAdd.map((entry) => ({
+          item: entry.position.id,
+          zIndex: entry.position.zIndex,
+        })),
+        ...frozenPluginElements.map((element) => ({
+          item: element.fullId,
+          zIndex: element.zIndex,
+        })),
+      ])
         .map((id) => pastedById.get(id))
         .filter((item): item is NonNullable<typeof item> => Boolean(item));
       let anchorIndex = 0;
@@ -1308,9 +1342,116 @@ export function useGridSelection({
         }
       }
 
-      let result: { committed: boolean; satisfied: boolean };
+      // 선택 이동은 eager 직후 동기 구간에서 - await 뒤로 미루면 라운드트립
+      // 동안 선택이 원본에 남아 Delete 같은 후속 조작이 원본을 지운다.
+      // 편입 전 abort로 롤백되면 정산 뒤 pruneRolledBackPasteSelection이 정리한다
+      const newSelectedElements: SelectedElement[] = [];
+      const collect = (
+        type: 'key' | 'stat' | 'graph' | 'knob',
+        record: Record<string, Array<{ id: string }>>,
+        ids: readonly string[],
+      ) => {
+        const list = record[selectedKeyType] ?? [];
+        for (const id of ids) {
+          const index = list.findIndex((position) => position.id === id);
+          if (index !== -1) {
+            newSelectedElements.push({ type, id, index });
+          }
+        }
+      };
+      collect(
+        'key',
+        useKeyStore.getState().canonicalPositions as never,
+        keysToAdd.map((entry) => entry.position.id),
+      );
+      collect(
+        'stat',
+        useStatItemStore.getState().positions as never,
+        statsToAdd.map((entry) => entry.position.id),
+      );
+      collect(
+        'graph',
+        useGraphItemStore.getState().positions as never,
+        graphsToAdd.map((entry) => entry.position.id),
+      );
+      collect(
+        'knob',
+        useKnobItemStore.getState().positions as never,
+        knobsToAdd.map((entry) => entry.position.id),
+      );
+      const presentPluginIds = new Set(
+        usePluginDisplayElementStore
+          .getState()
+          .elements.map((element) => element.fullId),
+      );
+      for (const element of frozenPluginElements) {
+        if (presentPluginIds.has(element.fullId)) {
+          newSelectedElements.push({ type: 'plugin', id: element.fullId });
+        }
+      }
+      if (newSelectedElements.length > 0) {
+        if (groupIdMap.size > 0) {
+          useGridSelectionStore
+            .getState()
+            .setFullSelection(newSelectedElements, [...groupIdMap.values()]);
+        } else {
+          setSelectedElements(newSelectedElements);
+        }
+      }
+
+      // 편입 전 abort는 문서 적용 없이 eager만 되돌아가 선택 재조정이 없다 -
+      // 이번 paste가 발급한 id 중 스토어에서 사라진 것만 선택에서 걷어낸다
+      // (편입 후 실패의 eager 유지분은 스토어에 살아 있으므로 그대로 유지)
+      const pruneRolledBackPasteSelection = () => {
+        const newElementIds = new Set([
+          ...keysToAdd.map((entry) => entry.position.id),
+          ...statsToAdd.map((entry) => entry.position.id),
+          ...graphsToAdd.map((entry) => entry.position.id),
+          ...knobsToAdd.map((entry) => entry.position.id),
+          ...frozenPluginElements.map((element) => element.fullId),
+        ]);
+        const presentIds = new Set<string>([
+          ...(
+            useKeyStore.getState().canonicalPositions[selectedKeyType] ?? []
+          ).map((position) => position.id),
+          ...(useStatItemStore.getState().positions[selectedKeyType] ?? []).map(
+            (position) => position.id,
+          ),
+          ...(
+            useGraphItemStore.getState().positions[selectedKeyType] ?? []
+          ).map((position) => position.id),
+          ...(useKnobItemStore.getState().positions[selectedKeyType] ?? []).map(
+            (position) => position.id,
+          ),
+          ...usePluginDisplayElementStore
+            .getState()
+            .elements.map((element) => element.fullId),
+        ]);
+        const selection = useGridSelectionStore.getState();
+        const keptElements = selection.selectedElements.filter(
+          (element) =>
+            !newElementIds.has(element.id) || presentIds.has(element.id),
+        );
+        const newGroupIds = new Set(groupIdMap.values());
+        const presentGroupIds = new Set(
+          (
+            useLayerGroupStore.getState().layerGroups[selectedKeyType] ?? []
+          ).map((group) => group.id),
+        );
+        const keptGroupIds = selection.selectedGroupIds.filter(
+          (groupId) =>
+            !newGroupIds.has(groupId) || presentGroupIds.has(groupId),
+        );
+        if (
+          keptElements.length !== selection.selectedElements.length ||
+          keptGroupIds.length !== selection.selectedGroupIds.length
+        ) {
+          selection.setFullSelection(keptElements, keptGroupIds);
+        }
+      };
+
       try {
-        result = await runMixedGestureElementIntent({
+        const result = await runMixedGestureElementIntent({
           gestureId,
           initialPluginIds: pluginScope(
             usePluginDisplayElementStore.getState().elements,
@@ -1356,68 +1497,14 @@ export function useGridSelection({
           },
           skipContext: 'paste settlement',
         });
+        if (!result.committed && !result.satisfied) {
+          pruneRolledBackPasteSelection();
+        }
       } catch (error) {
         // 편입 후 실패의 상태 정합은 projection·canonical pull이 소유 -
         // 호출부 경계에서는 기록만 (삭제 경로와 대칭)
         console.error('Failed to persist pasted elements', error);
-        result = { committed: false, satisfied: false };
-      }
-
-      if (result.committed || result.satisfied) {
-        // 선택 이동은 성공 후 - eager 유지 대신 단순화(수렴 결정)
-        const newSelectedElements: SelectedElement[] = [];
-        const collect = (
-          type: 'key' | 'stat' | 'graph' | 'knob',
-          record: Record<string, Array<{ id: string }>>,
-          ids: readonly string[],
-        ) => {
-          const list = record[selectedKeyType] ?? [];
-          for (const id of ids) {
-            const index = list.findIndex((position) => position.id === id);
-            if (index !== -1) {
-              newSelectedElements.push({ type, id, index });
-            }
-          }
-        };
-        collect(
-          'key',
-          useKeyStore.getState().canonicalPositions as never,
-          keysToAdd.map((entry) => entry.position.id),
-        );
-        collect(
-          'stat',
-          useStatItemStore.getState().positions as never,
-          statsToAdd.map((entry) => entry.position.id),
-        );
-        collect(
-          'graph',
-          useGraphItemStore.getState().positions as never,
-          graphsToAdd.map((entry) => entry.position.id),
-        );
-        collect(
-          'knob',
-          useKnobItemStore.getState().positions as never,
-          knobsToAdd.map((entry) => entry.position.id),
-        );
-        const presentPluginIds = new Set(
-          usePluginDisplayElementStore
-            .getState()
-            .elements.map((element) => element.fullId),
-        );
-        for (const element of frozenPluginElements) {
-          if (presentPluginIds.has(element.fullId)) {
-            newSelectedElements.push({ type: 'plugin', id: element.fullId });
-          }
-        }
-        if (newSelectedElements.length > 0) {
-          if (groupIdMap.size > 0) {
-            useGridSelectionStore
-              .getState()
-              .setFullSelection(newSelectedElements, [...groupIdMap.values()]);
-          } else {
-            setSelectedElements(newSelectedElements);
-          }
-        }
+        pruneRolledBackPasteSelection();
       }
 
       sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {

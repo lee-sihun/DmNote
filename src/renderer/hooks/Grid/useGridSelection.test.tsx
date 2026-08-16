@@ -41,7 +41,7 @@ const mocks = vi.hoisted(() => ({
       return Promise.resolve({});
     },
   ),
-  runMixedGestureIntent: vi.fn(() =>
+  runMixedGestureIntent: vi.fn((_options?: unknown) =>
     Promise.resolve({ committed: true, satisfied: true }),
   ),
   runMixedDeleteIntent: vi.fn(
@@ -418,6 +418,237 @@ describe('useGridSelection compound history gesture', () => {
     expect(pasteOptions.gestureId).toBe(gestureId);
     expect(pasteOptions.initialPluginIds).toEqual(['plugin-a']);
     expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('붙여넣기 선택은 커밋 정산을 기다리지 않고 옮겨간다', async () => {
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+      useGridSelectionStore
+        .getState()
+        .setClipboard([
+          { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        ]);
+    });
+    // 커밋 정산을 붙잡아 라운드트립 중 상태를 관찰한다
+    let settle: (value: {
+      committed: boolean;
+      satisfied: boolean;
+    }) => void = () => {};
+    mocks.runMixedGestureIntent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+    );
+
+    let pasting: Promise<void>;
+    await act(async () => {
+      pasting = api.pasteElements();
+      await Promise.resolve();
+    });
+
+    // 정산 전에 이미 사본을 가리켜야 한다 - 원본에 남아 있으면 라운드트립
+    // 중의 Delete가 원본을 지운다
+    const duringRoundTrip = useGridSelectionStore.getState().selectedElements;
+    expect(duringRoundTrip).toHaveLength(1);
+    expect(duringRoundTrip[0].id).not.toBe(STABLE_KEY_ID);
+    expect(duringRoundTrip[0].index).toBe(1);
+
+    await act(async () => {
+      settle({ committed: true, satisfied: true });
+      await pasting;
+    });
+  });
+
+  it('붙여넣기 블록은 payload 타입 순서가 아니라 원본 스택 순서를 따른다', async () => {
+    const keyCopyId = '20000000-0000-4000-8000-000000000001';
+    const statCopyId = '20000000-0000-4000-8000-000000000002';
+    randomUUID
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(keyCopyId)
+      .mockReturnValueOnce(statCopyId);
+    act(() => {
+      // 마퀴 선택은 key를 먼저 담으므로 payload는 [key, stat]이지만
+      // 원본에서는 stat(z5)이 key(z1) 위에 있다
+      useGridSelectionStore.getState().setClipboard([
+        {
+          type: 'key',
+          keyCode: 'KeyB',
+          position: { ...keyPosition, zIndex: 1 },
+        },
+        {
+          type: 'stat',
+          position: { ...keyPosition, statType: 'kps', zIndex: 5 },
+        },
+      ]);
+    });
+
+    await act(async () => api.pasteElements());
+
+    const keyCopy = useKeyStore
+      .getState()
+      .canonicalPositions['4key'].find((position) => position.id === keyCopyId);
+    const statCopy = useStatItemStore
+      .getState()
+      .positions['4key'].find((position) => position.id === statCopyId);
+    expect(statCopy!.zIndex!).toBeGreaterThan(keyCopy!.zIndex!);
+  });
+
+  it('같은 타입 복사본도 동결 z 내림차순, 동률은 payload 순서를 지킨다', async () => {
+    const ids = [
+      '20000000-0000-4000-8000-000000000011',
+      '20000000-0000-4000-8000-000000000012',
+      '20000000-0000-4000-8000-000000000013',
+    ];
+    randomUUID
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(ids[0])
+      .mockReturnValueOnce(ids[1])
+      .mockReturnValueOnce(ids[2]);
+    act(() => {
+      // 마퀴 payload는 배열 인덱스 순 [B(z1), C(z9), D(z9)]
+      useGridSelectionStore.getState().setClipboard([
+        {
+          type: 'key',
+          keyCode: 'KeyB',
+          position: { ...keyPosition, zIndex: 1 },
+        },
+        {
+          type: 'key',
+          keyCode: 'KeyC',
+          position: { ...keyPosition, zIndex: 9 },
+        },
+        {
+          type: 'key',
+          keyCode: 'KeyD',
+          position: { ...keyPosition, zIndex: 9 },
+        },
+      ]);
+    });
+
+    await act(async () => api.pasteElements());
+
+    const zById = new Map(
+      useKeyStore
+        .getState()
+        .canonicalPositions['4key'].map((position) => [
+          position.id,
+          position.zIndex,
+        ]),
+    );
+    // 동률 C·D는 payload 순서, B는 두 복사본 아래
+    expect(zById.get(ids[1])!).toBeGreaterThan(zById.get(ids[2])!);
+    expect(zById.get(ids[2])!).toBeGreaterThan(zById.get(ids[0])!);
+  });
+
+  it('zIndex 없는 레거시 항목은 payload 내 상대 순서를 지킨다', async () => {
+    const ids = [
+      '20000000-0000-4000-8000-000000000021',
+      '20000000-0000-4000-8000-000000000022',
+      '20000000-0000-4000-8000-000000000023',
+    ];
+    randomUUID
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(ids[0])
+      .mockReturnValueOnce(ids[1])
+      .mockReturnValueOnce(ids[2]);
+    act(() => {
+      // C는 zIndex 없는 레거시 payload - append 위치로 대체되면 블록
+      // 최상단으로 튄다. B(9)와 D(5) 사이 원본 상대 순서를 지켜야 한다
+      useGridSelectionStore.getState().setClipboard([
+        {
+          type: 'key',
+          keyCode: 'KeyB',
+          position: { ...keyPosition, zIndex: 9 },
+        },
+        { type: 'key', keyCode: 'KeyC', position: keyPosition },
+        {
+          type: 'key',
+          keyCode: 'KeyD',
+          position: { ...keyPosition, zIndex: 5 },
+        },
+      ]);
+    });
+
+    await act(async () => api.pasteElements());
+
+    const zById = new Map(
+      useKeyStore
+        .getState()
+        .canonicalPositions['4key'].map((position) => [
+          position.id,
+          position.zIndex,
+        ]),
+    );
+    expect(zById.get(ids[0])!).toBeGreaterThan(zById.get(ids[1])!);
+    expect(zById.get(ids[1])!).toBeGreaterThan(zById.get(ids[2])!);
+  });
+
+  it('편입 전 실패로 사라진 사본만 선택에서 정리하고 살아남은 항목은 유지한다', async () => {
+    const keyCopyId = '30000000-0000-4000-8000-000000000001';
+    const pluginInstanceId = '30000000-0000-4000-8000-000000000002';
+    randomUUID
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(keyCopyId)
+      .mockReturnValueOnce(pluginInstanceId);
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+      useGridSelectionStore.getState().setClipboard([
+        { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        { type: 'plugin', element: pluginClipboardElement() },
+      ]);
+    });
+    // 러너의 skip 경로처럼 receipt를 되돌리고 fail-closed로 끝난 상황 -
+    // 이 하네스의 plugin eager receipt는 no-op이라 plugin 사본만 남는다
+    mocks.runMixedGestureIntent.mockImplementationOnce(
+      async (rawOptions?: unknown) => {
+        (
+          rawOptions as { receipt?: { rollback: () => void } | null }
+        ).receipt?.rollback();
+        return { committed: false, satisfied: false };
+      },
+    );
+
+    await act(async () => api.pasteElements());
+
+    // key 사본은 롤백으로 죽어 선택에서 빠지고, 살아남은 plugin 사본은 유지
+    expect(useKeyStore.getState().canonicalPositions['4key']).toHaveLength(1);
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([
+      { type: 'plugin', id: `plugin-a::${pluginInstanceId}` },
+    ]);
+  });
+
+  it('편입 전 예외로 eager가 모두 롤백되면 선택에 죽은 사본이 남지 않는다', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const keyCopyId = '30000000-0000-4000-8000-000000000003';
+    randomUUID.mockReturnValueOnce(gestureId).mockReturnValueOnce(keyCopyId);
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+      useGridSelectionStore
+        .getState()
+        .setClipboard([
+          { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        ]);
+    });
+    mocks.runMixedGestureIntent.mockImplementationOnce(
+      async (rawOptions?: unknown) => {
+        (
+          rawOptions as { receipt?: { rollback: () => void } | null }
+        ).receipt?.rollback();
+        throw new Error('paste enroll failed');
+      },
+    );
+
+    await act(async () => api.pasteElements());
+
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
+    error.mockRestore();
   });
 
   it('혼합 붙여넣기 중 동기 예외가 나도 staged transaction을 정산한다', async () => {
@@ -1400,7 +1631,7 @@ describe('useGridSelection compound history gesture', () => {
     ).toThrow('paste source document is not canonical');
   });
 
-  it('paste 선택은 성공 뒤 신규 ID로 이동하고 실패하면 기존 선택을 유지한다', async () => {
+  it('paste 선택은 정산 결과와 무관하게 신규 ID로 이동한다', async () => {
     const pastedId = '10000000-0000-4000-8000-000000000021';
     randomUUID.mockReturnValueOnce(gestureId).mockReturnValueOnce(pastedId);
     act(() => {
@@ -1418,6 +1649,8 @@ describe('useGridSelection compound history gesture', () => {
       { type: 'key', id: pastedId, index: 1 },
     ]);
 
+    // 실패해도 선택은 eager로 보이는 사본에 있다 - 롤백 뒤 정리는 다음 문서
+    // 적용의 선택 재조정 몫 (이 하네스는 롤백이 no-op이라 사본이 남는다)
     mocks.runMixedGestureIntent.mockRejectedValueOnce(
       new Error('paste failed'),
     );
@@ -1428,7 +1661,7 @@ describe('useGridSelection compound history gesture', () => {
       .mockReturnValueOnce(nextId);
     await act(async () => api.pasteElements());
     expect(useGridSelectionStore.getState().selectedElements).toEqual([
-      { type: 'key', id: pastedId, index: 1 },
+      { type: 'key', id: nextId, index: 2 },
     ]);
   });
 
