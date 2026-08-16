@@ -391,8 +391,10 @@ export default function App() {
     noteSettings,
   });
 
-  const trackHeight =
-    noteSettings?.trackHeight ?? DEFAULT_NOTE_SETTINGS.trackHeight;
+  // 노트 이펙트 꺼짐 시 트랙 예약 공간 제거 - 창 높이와 키 오프셋이 함께 줄어든다
+  const trackHeight = noteEffect
+    ? noteSettings?.trackHeight ?? DEFAULT_NOTE_SETTINGS.trackHeight
+    : 0;
 
   // 키 딜레이 설정
   const keyDisplayDelayMs = Number(noteSettings?.keyDisplayDelayMs ?? 0);
