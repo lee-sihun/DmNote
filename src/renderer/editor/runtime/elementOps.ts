@@ -696,13 +696,28 @@ interface ElementPropertyPatchTarget {
   patch: EditorElementPropertyPatchV1;
 }
 
-const patchElementPropertiesByIds = (
-  targets: readonly ElementPropertyPatchTarget[],
-  options: { gestureId?: string; preflight?: () => void } = {},
+interface ElementPropertyTarget {
+  elementType: NativeElementType;
+  id: string;
+}
+
+interface PropertyCommitOptions {
+  gestureId?: string;
+  preflight?: () => void;
+}
+
+// 공용 다건 경로: 빈 목록·비 native id·중복 id를 거르고 같은 property patch를
+// 전 대상에 eager+wire로 커밋한다. 속성별 기계적 래퍼는 전부 여기로 위임하고
+// value 타입은 판별 유니온 patch가 컴파일 타임에 강제한다
+const patchElementPropertyByTargets = (
+  targets: readonly ElementPropertyTarget[],
+  patch: EditorElementPropertyPatchV1,
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => {
   if (
     targets.length === 0 ||
-    targets.some((target) => !isNativeElementId(target.id))
+    targets.some(({ id }) => !isNativeElementId(id)) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
   ) {
     return Promise.resolve(false);
   }
@@ -710,21 +725,18 @@ const patchElementPropertiesByIds = (
     NativeElementType,
     Map<string, Record<string, unknown>>
   >();
-  for (const target of targets) {
+  for (const { elementType, id } of targets) {
     // nullable leaf의 null은 위치 조각에서 undefined로, 나머지는 1:1 투영
-    const eagerPatch = {
-      [target.patch.property]: target.patch.value ?? undefined,
-    };
-    const byId = mutableIntents.get(target.type) ?? new Map();
-    byId.set(target.id, eagerPatch);
-    mutableIntents.set(target.type, byId);
+    const byId = mutableIntents.get(elementType) ?? new Map();
+    byId.set(id, { [patch.property]: patch.value ?? undefined });
+    mutableIntents.set(elementType, byId);
   }
   const receipt = applyPropertyIntentsEagerly(mutableIntents);
   let enrolled = false;
   return commitSemanticOps(
-    targets.map(({ type, id, patch }) => ({
+    targets.map(({ elementType, id }) => ({
       kind: 'patchElement' as const,
-      elementType: type,
+      elementType,
       id,
       patch,
     })),
@@ -744,6 +756,11 @@ const patchElementPropertiesByIds = (
       throw error;
     });
 };
+
+const idTargets = (
+  elementType: NativeElementType,
+  ids: readonly string[],
+): ElementPropertyTarget[] => ids.map((id) => ({ elementType, id }));
 
 export const patchElementHiddenById = (
   type: NativeElementType,
@@ -1033,208 +1050,130 @@ export const patchElementLayerNameById = (
   id: string,
   layerName: string | null,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     type,
     id,
     { property: 'layerName', value: layerName },
     options,
   );
-};
 
 export const patchGraphTypesByIds = (
   ids: readonly string[],
   graphType: 'line' | 'bar',
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    ids.length === 0 ||
-    ids.some((id) => id.length === 0) ||
-    new Set(ids).size !== ids.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    ids.map((id) => ({
-      type: 'graph',
-      id,
-      patch: { property: 'graphType', value: graphType },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    idTargets('graph', ids),
+    { property: 'graphType', value: graphType },
     options,
   );
-};
 
 export const patchGraphColorsByIds = (
   ids: readonly string[],
   graphColor: string,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    ids.length === 0 ||
-    ids.some((id) => id.length === 0) ||
-    new Set(ids).size !== ids.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    ids.map((id) => ({
-      type: 'graph',
-      id,
-      patch: { property: 'graphColor', value: graphColor },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    idTargets('graph', ids),
+    { property: 'graphColor', value: graphColor },
     options,
   );
-};
 
 export const patchGraphPropertiesByIds = (
   ids: readonly string[],
   patch: EditorGraphRuntimePropertyPatchV1,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    ids.length === 0 ||
-    ids.some((id) => id.length === 0) ||
-    new Set(ids).size !== ids.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    ids.map((id) => ({ type: 'graph', id, patch })),
-    options,
-  );
-};
+): Promise<boolean> =>
+  patchElementPropertyByTargets(idTargets('graph', ids), patch, options);
 
 export const patchKnobAxisIdById = (
   id: string,
   axisId: string,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     'knob',
     id,
     { property: 'axisId', value: axisId },
     options,
   );
-};
 
 export const patchSoundPathById = (
   id: string,
   soundPath: string,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     'key',
     id,
     { property: 'soundPath', value: soundPath },
     options,
   );
-};
 
 export const patchSoundEnabledById = (
   id: string,
   soundEnabled: boolean,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     'key',
     id,
     { property: 'soundEnabled', value: soundEnabled },
     options,
   );
-};
 
 export const patchSoundEnabledByIds = (
   ids: readonly string[],
   soundEnabled: boolean,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    ids.length === 0 ||
-    ids.some((id) => id.length === 0 || !isNativeElementId(id)) ||
-    new Set(ids).size !== ids.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    ids.map((id) => ({
-      type: 'key',
-      id,
-      patch: { property: 'soundEnabled', value: soundEnabled },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    idTargets('key', ids),
+    { property: 'soundEnabled', value: soundEnabled },
     options,
   );
-};
+
+const validSoundVolume = (soundVolume: number): boolean =>
+  Number.isFinite(soundVolume) && soundVolume >= 0 && soundVolume <= 200;
 
 export const patchSoundVolumeById = (
   id: string,
   soundVolume: number,
   options: { gestureId?: string; preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    !id ||
-    !isNativeElementId(id) ||
-    !Number.isFinite(soundVolume) ||
-    soundVolume < 0 ||
-    soundVolume > 200
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertyById(
-    'key',
-    id,
-    { property: 'soundVolume', value: soundVolume },
-    options,
-  );
-};
+): Promise<boolean> =>
+  validSoundVolume(soundVolume)
+    ? patchElementPropertyById(
+        'key',
+        id,
+        { property: 'soundVolume', value: soundVolume },
+        options,
+      )
+    : Promise.resolve(false);
 
 export const patchSoundVolumeByIds = (
   ids: readonly string[],
   soundVolume: number,
   options: { gestureId?: string; preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    ids.length === 0 ||
-    ids.some((id) => id.length === 0 || !isNativeElementId(id)) ||
-    new Set(ids).size !== ids.length ||
-    !Number.isFinite(soundVolume) ||
-    soundVolume < 0 ||
-    soundVolume > 200
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    ids.map((id) => ({
-      type: 'key',
-      id,
-      patch: { property: 'soundVolume', value: soundVolume },
-    })),
-    options,
-  );
-};
+): Promise<boolean> =>
+  validSoundVolume(soundVolume)
+    ? patchElementPropertyByTargets(
+        idTargets('key', ids),
+        { property: 'soundVolume', value: soundVolume },
+        options,
+      )
+    : Promise.resolve(false);
 
 export const patchSoundPathByIds = (
   ids: readonly string[],
   soundPath: string,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    ids.length === 0 ||
-    ids.some((id) => id.length === 0 || !isNativeElementId(id)) ||
-    new Set(ids).size !== ids.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    ids.map((id) => ({
-      type: 'key',
-      id,
-      patch: { property: 'soundPath', value: soundPath },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    idTargets('key', ids),
+    { property: 'soundPath', value: soundPath },
     options,
   );
-};
 
 type CounterAnimationTarget = {
   elementType: 'key' | 'stat';
@@ -1791,156 +1730,96 @@ export const patchInactiveImageById = (
   id: string,
   inactiveImage: string,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     type,
     id,
     { property: 'inactiveImage', value: inactiveImage },
     options,
   );
-};
 
 export const patchInactiveImageByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   inactiveImage: string,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    targets.length === 0 ||
-    targets.some(
-      (target) => target.id.length === 0 || !isNativeElementId(target.id),
-    ) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    targets.map(({ elementType, id }) => ({
-      type: elementType,
-      id,
-      patch: { property: 'inactiveImage', value: inactiveImage },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    targets,
+    { property: 'inactiveImage', value: inactiveImage },
     options,
   );
-};
 
 export const patchActiveImageById = (
   type: 'key' | 'knob',
   id: string,
   activeImage: string,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     type,
     id,
     { property: 'activeImage', value: activeImage },
     options,
   );
-};
 
 export const patchActiveImageByTargets = (
   targets: readonly { elementType: 'key' | 'knob'; id: string }[],
   activeImage: string,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    targets.length === 0 ||
-    targets.some(
-      (target) => target.id.length === 0 || !isNativeElementId(target.id),
-    ) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    targets.map(({ elementType, id }) => ({
-      type: elementType,
-      id,
-      patch: { property: 'activeImage', value: activeImage },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    targets,
+    { property: 'activeImage', value: activeImage },
     options,
   );
-};
 
 export const patchIdleTransparentById = (
   type: NativeElementType,
   id: string,
   idleTransparent: boolean,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     type,
     id,
     { property: 'idleTransparent', value: idleTransparent },
     options,
   );
-};
 
 export const patchIdleTransparentByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   idleTransparent: boolean,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    targets.length === 0 ||
-    targets.some(
-      (target) => target.id.length === 0 || !isNativeElementId(target.id),
-    ) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    targets.map(({ elementType, id }) => ({
-      type: elementType,
-      id,
-      patch: { property: 'idleTransparent', value: idleTransparent },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    targets,
+    { property: 'idleTransparent', value: idleTransparent },
     options,
   );
-};
 
 export const patchActiveTransparentById = (
   type: 'key' | 'knob',
   id: string,
   activeTransparent: boolean,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     type,
     id,
     { property: 'activeTransparent', value: activeTransparent },
     options,
   );
-};
 
 export const patchActiveTransparentByTargets = (
   targets: readonly { elementType: 'key' | 'knob'; id: string }[],
   activeTransparent: boolean,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    targets.length === 0 ||
-    targets.some(
-      (target) => target.id.length === 0 || !isNativeElementId(target.id),
-    ) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    targets.map(({ elementType, id }) => ({
-      type: elementType,
-      id,
-      patch: { property: 'activeTransparent', value: activeTransparent },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    targets,
+    { property: 'activeTransparent', value: activeTransparent },
     options,
   );
-};
 
 type ImageFit = 'cover' | 'contain' | 'fill' | 'none';
 
@@ -1949,114 +1828,56 @@ export const patchIdleImageFitById = (
   id: string,
   idleImageFit: ImageFit,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     type,
     id,
     { property: 'idleImageFit', value: idleImageFit },
     options,
   );
-};
 
 export const patchActiveImageFitById = (
   type: 'key' | 'knob',
   id: string,
   activeImageFit: ImageFit,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(
+): Promise<boolean> =>
+  patchElementPropertyById(
     type,
     id,
     { property: 'activeImageFit', value: activeImageFit },
     options,
   );
-};
 
 export const patchKnobPropertiesByIds = (
   ids: readonly string[],
   patch: EditorKnobRuntimePropertyPatchV1,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    ids.length === 0 ||
-    ids.some((id) => id.length === 0) ||
-    new Set(ids).size !== ids.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    ids.map((id) => ({ type: 'knob', id, patch })),
-    options,
-  );
-};
+): Promise<boolean> =>
+  patchElementPropertyByTargets(idTargets('knob', ids), patch, options);
 
 export const patchUseInlineStylesByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   useInlineStyles: boolean,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    targets.length === 0 ||
-    targets.some((target) => target.id.length === 0) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    targets.map(({ elementType, id }) => ({
-      type: elementType,
-      id,
-      patch: { property: 'useInlineStyles', value: useInlineStyles },
-    })),
+): Promise<boolean> =>
+  patchElementPropertyByTargets(
+    targets,
+    { property: 'useInlineStyles', value: useInlineStyles },
     options,
   );
-};
 
 export const patchFontStyleByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   patch: EditorFontStylePropertyPatchV1,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    targets.length === 0 ||
-    targets.some((target) => target.id.length === 0) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    targets.map(({ elementType, id }) => ({
-      type: elementType,
-      id,
-      patch,
-    })),
-    options,
-  );
-};
+): Promise<boolean> => patchElementPropertyByTargets(targets, patch, options);
 
 export const patchFontFamilyByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   patch: EditorFontFamilyPropertyPatchV1,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    targets.length === 0 ||
-    targets.some((target) => target.id.length === 0) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    targets.map(({ elementType, id }) => ({
-      type: elementType,
-      id,
-      patch,
-    })),
-    options,
-  );
-};
+): Promise<boolean> => patchElementPropertyByTargets(targets, patch, options);
 
 type PaintTarget = { elementType: NativeElementType; id: string };
 
@@ -2511,131 +2332,71 @@ export const patchNotePaintById = (
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => patchNotePaintByIds([id], patch, options);
 
+// note* 계열 수치 한계 검증, 대상에 key 외 타입이 있으면 즉시 무효
+const invalidNoteStylePatch = (
+  patch: EditorPreviewStylePropertyPatchV1,
+  hasNonKeyTarget: boolean,
+): boolean =>
+  (patch.property === 'noteGlowSize' &&
+    (hasNonKeyTarget ||
+      !Number.isFinite(patch.value) ||
+      patch.value < 0 ||
+      patch.value > 50)) ||
+  (patch.property === 'noteOffsetX' &&
+    (hasNonKeyTarget ||
+      (patch.value !== null &&
+        (!Number.isFinite(patch.value) ||
+          patch.value < -500 ||
+          patch.value > 500)))) ||
+  (patch.property === 'noteOffsetY' &&
+    (hasNonKeyTarget ||
+      (patch.value !== null &&
+        (!Number.isFinite(patch.value) ||
+          patch.value < -500 ||
+          patch.value > 500)))) ||
+  (patch.property === 'noteWidth' &&
+    (hasNonKeyTarget ||
+      (patch.value !== null &&
+        (!Number.isFinite(patch.value) || patch.value <= 0)))) ||
+  (patch.property === 'noteBorderWidth' &&
+    (hasNonKeyTarget ||
+      !Number.isFinite(patch.value) ||
+      patch.value < 0 ||
+      patch.value > 20)) ||
+  (patch.property === 'noteBorderRadius' &&
+    (hasNonKeyTarget ||
+      !Number.isFinite(patch.value) ||
+      patch.value < 1 ||
+      patch.value > 100));
+
 export const patchStylePropertyById = (
   type: NativeElementType,
   id: string,
   patch: EditorPreviewStylePropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
-): Promise<boolean> => {
-  const noteNumericInvalid =
-    (patch.property === 'noteOffsetX' &&
-      (type !== 'key' ||
-        (patch.value !== null &&
-          (!Number.isFinite(patch.value) ||
-            patch.value < -500 ||
-            patch.value > 500)))) ||
-    (patch.property === 'noteOffsetY' &&
-      (type !== 'key' ||
-        (patch.value !== null &&
-          (!Number.isFinite(patch.value) ||
-            patch.value < -500 ||
-            patch.value > 500)))) ||
-    (patch.property === 'noteWidth' &&
-      (type !== 'key' ||
-        (patch.value !== null &&
-          (!Number.isFinite(patch.value) || patch.value <= 0)))) ||
-    (patch.property === 'noteBorderWidth' &&
-      (type !== 'key' ||
-        !Number.isFinite(patch.value) ||
-        patch.value < 0 ||
-        patch.value > 20)) ||
-    (patch.property === 'noteBorderRadius' &&
-      (type !== 'key' ||
-        !Number.isFinite(patch.value) ||
-        patch.value < 1 ||
-        patch.value > 100));
-  if (
-    !id ||
-    !isNativeElementId(id) ||
-    (patch.property === 'noteGlowSize' &&
-      (type !== 'key' ||
-        !Number.isFinite(patch.value) ||
-        patch.value < 0 ||
-        patch.value > 50)) ||
-    noteNumericInvalid
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertyById(type, id, patch, options);
-};
+): Promise<boolean> =>
+  invalidNoteStylePatch(patch, type !== 'key')
+    ? Promise.resolve(false)
+    : patchElementPropertyById(type, id, patch, options);
 
 export const patchStylePropertyByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   patch: EditorPreviewStylePropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
-): Promise<boolean> => {
-  const hasNonKeyTarget = targets.some(
-    (target) => target.elementType !== 'key',
-  );
-  const noteNumericInvalid =
-    (patch.property === 'noteOffsetX' &&
-      (hasNonKeyTarget ||
-        (patch.value !== null &&
-          (!Number.isFinite(patch.value) ||
-            patch.value < -500 ||
-            patch.value > 500)))) ||
-    (patch.property === 'noteOffsetY' &&
-      (hasNonKeyTarget ||
-        (patch.value !== null &&
-          (!Number.isFinite(patch.value) ||
-            patch.value < -500 ||
-            patch.value > 500)))) ||
-    (patch.property === 'noteWidth' &&
-      (hasNonKeyTarget ||
-        (patch.value !== null &&
-          (!Number.isFinite(patch.value) || patch.value <= 0)))) ||
-    (patch.property === 'noteBorderWidth' &&
-      (hasNonKeyTarget ||
-        !Number.isFinite(patch.value) ||
-        patch.value < 0 ||
-        patch.value > 20)) ||
-    (patch.property === 'noteBorderRadius' &&
-      (hasNonKeyTarget ||
-        !Number.isFinite(patch.value) ||
-        patch.value < 1 ||
-        patch.value > 100));
-  if (
-    targets.length === 0 ||
-    targets.some(
-      (target) => target.id.length === 0 || !isNativeElementId(target.id),
-    ) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length ||
-    (patch.property === 'noteGlowSize' &&
-      (targets.some((target) => target.elementType !== 'key') ||
-        !Number.isFinite(patch.value) ||
-        patch.value < 0 ||
-        patch.value > 50)) ||
-    noteNumericInvalid
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    targets.map(({ elementType, id }) => ({
-      type: elementType,
-      id,
-      patch,
-    })),
-    options,
-  );
-};
+): Promise<boolean> =>
+  invalidNoteStylePatch(
+    patch,
+    targets.some((target) => target.elementType !== 'key'),
+  )
+    ? Promise.resolve(false)
+    : patchElementPropertyByTargets(targets, patch, options);
 
 export const patchNotePropertiesByIds = (
   ids: readonly string[],
   patch: EditorNotePropertyPatchV1,
   options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  if (
-    ids.length === 0 ||
-    ids.some((id) => id.length === 0) ||
-    new Set(ids).size !== ids.length
-  ) {
-    return Promise.resolve(false);
-  }
-  return patchElementPropertiesByIds(
-    ids.map((id) => ({ type: 'key', id, patch })),
-    options,
-  );
-};
+): Promise<boolean> =>
+  patchElementPropertyByTargets(idTargets('key', ids), patch, options);
 
 // 다중 선택 정산: 대상 id들의 현재 canonical 기하(dx·dy)를 의도로 캡처해
 // 슬롯 안에서 id 재해석으로 적용한다. 4컬렉션 full-record 캡처는 배타
