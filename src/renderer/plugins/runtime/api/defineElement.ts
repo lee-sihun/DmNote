@@ -155,16 +155,6 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       void trackEditorWrite(pending);
     });
 
-    // canonical commit (C4) - admission·epoch·dedupe·no-op·gesture 병합은 백엔드 규율
-    // 패널 RPC commit과의 stale full-snapshot 경합 방지를 위해 플러그인별 큐로 직렬화
-    const commitInstances = (instances: SavedInstance[]) =>
-      enqueuePluginInstancesCommit(pluginId, () =>
-        commitInstancesInner(
-          instances,
-          touchPluginInstancesEditSession(pluginId),
-        ),
-      );
-
     const isHistoryRejection = (error: unknown): boolean => {
       const message = String(error);
       return (
@@ -184,6 +174,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       });
     };
 
+    // canonical commit (C4) - admission·epoch·dedupe·no-op·gesture 병합은 백엔드 규율
     const commitInstancesInner = async (
       instances: SavedInstance[],
       gestureId: string,
@@ -247,7 +238,6 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               const stored = await namespacedStorage.get(INSTANCES_KEY);
               return Array.isArray(stored) ? (stored as SavedInstance[]) : null;
             },
-            persistInstances: (instances) => commitInstances(instances),
             // 탭 정리는 백엔드 단일 write-lock에서 원자 수행 - get과 commit
             // 사이에 bulk clear 등이 끼어 지워진 인스턴스가 부활하지 않음.
             // 유효 탭은 큐 실행 시점 파생, invoke 비행 중 탭 undo는 epoch가 거절
@@ -678,7 +668,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       let htmlContent = '';
       try {
         const normalizedSections = getNormalizedSections();
-        // 패널(renderPluginSettingsForm)과 동일한 섹션 카드 구조·토큰 — section이
+        // 패널(renderPluginSettingsForm)과 동일한 섹션 카드 구조·토큰 - section이
         // 없어도 암시적 카드 하나로 렌더 (모달-패널 외형 통합, 2026-07-12 결정)
         htmlContent = '<div class="flex flex-col gap-[12px] w-full text-left">';
 
@@ -982,18 +972,16 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         let instancesToRestore = savedInstances;
 
         if (maxInstances && maxInstances > 0) {
-          const instancesByTab = new Map<string, SavedInstance[]>();
-          savedInstances.forEach((instance) => {
+          // 캡은 탭별 수용 카운터로 원배열 순서를 보존하며 적용.
+          // 탭별 재그룹은 canonical 순서를 깨 undo 직후 echo 저장이
+          // 실변경 커밋이 되고 redo 스택을 소거한다
+          const acceptedByTab = new Map<string, number>();
+          instancesToRestore = savedInstances.filter((instance) => {
             const tabId = normalizePluginInstanceTabId(instance.tabId);
-            if (!instancesByTab.has(tabId)) {
-              instancesByTab.set(tabId, []);
-            }
-            instancesByTab.get(tabId)!.push(instance);
-          });
-
-          instancesToRestore = [];
-          instancesByTab.forEach((instances) => {
-            instancesToRestore.push(...instances.slice(0, maxInstances));
+            const accepted = acceptedByTab.get(tabId) ?? 0;
+            if (accepted >= maxInstances) return false;
+            acceptedByTab.set(tabId, accepted + 1);
+            return true;
           });
         }
 

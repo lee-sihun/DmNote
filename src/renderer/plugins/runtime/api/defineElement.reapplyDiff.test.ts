@@ -120,6 +120,7 @@ import {
 
 const ID_A = '50000000-0000-4000-8000-000000000001';
 const ID_B = '50000000-0000-4000-8000-000000000002';
+const ID_C = '50000000-0000-4000-8000-000000000003';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -138,7 +139,11 @@ const saved = (
 describe('plugin instance reapply diff-patch', () => {
   const cleanups: Array<() => void> = [];
 
-  const defineFor = (pluginId: string, stored: SavedInstance[] | null) => {
+  const defineFor = (
+    pluginId: string,
+    stored: SavedInstance[] | null,
+    definitionOverrides: Record<string, unknown> = {},
+  ) => {
     window.__dmn_current_plugin_id = pluginId;
     createDefineElement({
       pluginId,
@@ -160,6 +165,7 @@ describe('plugin instance reapply diff-patch', () => {
     } as never)({
       name: 'Example',
       template: () => '',
+      ...definitionOverrides,
     });
   };
 
@@ -424,6 +430,58 @@ describe('plugin instance reapply diff-patch', () => {
         pluginId,
       ),
     ).toEqual(snapshot);
+  });
+
+  it('maxInstances 캡은 탭별로 적용하되 canonical 순서를 보존한다', async () => {
+    const pluginId = 'plugin-cap-order';
+    // 탭이 섞인 canonical 순서 - 탭별 재그룹이 있었다면 [A, C, B]로 어긋난다
+    const snapshot = [
+      saved(ID_A, { tabId: '4key', settings: { volume: 1 } }),
+      saved(ID_B, { tabId: '5key', settings: { volume: 2 } }),
+      saved(ID_C, { tabId: '4key', settings: { volume: 3 } }),
+    ];
+    defineFor(pluginId, snapshot, { maxInstances: 2 });
+    await vi.waitFor(() => expect(defElements(pluginId)).toHaveLength(3));
+    expect(defElements(pluginId).map((element) => element.id)).toEqual([
+      ID_A,
+      ID_B,
+      ID_C,
+    ]);
+
+    // undo 재결합도 동일 순서 - trailing echo 저장이 no-op으로 수렴하는 전제
+    await reapply(pluginId, 5, snapshot);
+    expect(defElements(pluginId).map((element) => element.id)).toEqual([
+      ID_A,
+      ID_B,
+      ID_C,
+    ]);
+    expect(
+      buildSavedPluginInstances(
+        usePluginDisplayElementStore.getState().elements,
+        pluginId,
+      ),
+    ).toEqual(snapshot);
+    // 재배열 diff가 없어 echo가 실변경 커밋으로 이어지지 않는다
+    expect(mocks.debounceSchedule).not.toHaveBeenCalled();
+    expect(mocks.instancesCommit).not.toHaveBeenCalled();
+  });
+
+  it('maxInstances 초과분은 탭별로 잘라내고 원순서를 보존한다', async () => {
+    const pluginId = 'plugin-cap-trim';
+    defineFor(
+      pluginId,
+      [
+        saved(ID_A, { tabId: '4key' }),
+        saved(ID_B, { tabId: '5key' }),
+        saved(ID_C, { tabId: '4key' }),
+      ],
+      { maxInstances: 1 },
+    );
+    await vi.waitFor(() => expect(defElements(pluginId)).toHaveLength(2));
+    expect(defElements(pluginId).map((element) => element.id)).toEqual([
+      ID_A,
+      ID_B,
+    ]);
   });
 
   it('diff 적용 변이는 저장을 예약하지 않는다', async () => {
