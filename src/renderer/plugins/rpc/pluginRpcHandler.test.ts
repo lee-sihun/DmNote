@@ -1060,6 +1060,281 @@ describe('plugin panel persisted element mutations', () => {
     });
   });
 
+  it('세션 전용(무def) 요소 update는 commit 없이 스토어에만 반영한다', async () => {
+    mocks.elements = [
+      ...mocks.elements,
+      {
+        fullId: 'plugin-a:free',
+        pluginId: 'plugin-a',
+        position: { x: 1, y: 2 },
+        settings: {},
+        tabId: '4key',
+        hidden: false,
+        zIndex: 1,
+      },
+    ];
+
+    mocks.requestListener?.(
+      envelope('elements:update', {
+        fullId: 'plugin-a:free',
+        patch: { position: { x: 99 } },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.applyProjection).not.toHaveBeenCalled();
+    expect(mocks.updateElement).toHaveBeenCalledWith('plugin-a:free', {
+      position: { x: 99, y: 2 },
+    });
+  });
+
+  it('def 요소 update 커밋 모집단은 같은 플러그인 def 요소로 한정된다', async () => {
+    const instanceId = '50000000-0000-4000-8000-000000000011';
+    mocks.elements = [
+      { ...mocks.elements[0], id: instanceId },
+      {
+        // 무def 세션 요소 - 모집단 편입 금지
+        fullId: 'plugin-a:free',
+        pluginId: 'plugin-a',
+        position: { x: 1, y: 2 },
+        tabId: '4key',
+      },
+      {
+        // 타 플러그인이 같은 definitionId를 주장해도 모집단 편입 금지
+        fullId: 'plugin-b:forged',
+        id: '50000000-0000-4000-8000-000000000012',
+        definitionId: 'plugin-a',
+        pluginId: 'plugin-b',
+        position: { x: 3, y: 4 },
+        tabId: '4key',
+      },
+    ];
+    mocks.commit.mockResolvedValue({ modelRevision: 12, changed: true });
+
+    mocks.requestListener?.(
+      envelope('elements:update', {
+        fullId: 'plugin-a:one',
+        patch: { position: { x: 55 } },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    const request = mocks.commit.mock.calls[0]?.[0] as {
+      pluginId: string;
+      instances: Array<{ instanceId?: string }>;
+    };
+    expect(request.pluginId).toBe('plugin-a');
+    expect(request.instances).toHaveLength(1);
+    expect(request.instances[0]?.instanceId).toBe(instanceId);
+  });
+
+  it('서로 다른 플러그인의 세션 전용 요소 동시 삭제는 commit 없이 스토어 제거만 한다', async () => {
+    mocks.elements = [
+      ...mocks.elements,
+      {
+        fullId: 'plugin-a:free',
+        pluginId: 'plugin-a',
+        position: { x: 1, y: 2 },
+        tabId: '4key',
+      },
+      {
+        fullId: 'plugin-b:free',
+        pluginId: 'plugin-b',
+        position: { x: 3, y: 4 },
+        tabId: '4key',
+      },
+    ];
+
+    mocks.requestListener?.(
+      envelope('elements:delete', {
+        fullIds: ['plugin-a:free', 'plugin-b:free'],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.rotateEditSession).not.toHaveBeenCalled();
+    expect(mocks.setElements).toHaveBeenCalledOnce();
+    expect(mocks.elements).toEqual([
+      expect.objectContaining({ fullId: 'plugin-a:one' }),
+    ]);
+  });
+
+  it('세션 전용 요소와 def 요소 혼합 삭제는 def 요소만 commit에 실린다', async () => {
+    const survivorInstanceId = '50000000-0000-4000-8000-000000000021';
+    mocks.elements = [
+      mocks.elements[0],
+      {
+        fullId: 'plugin-a:two',
+        id: survivorInstanceId,
+        definitionId: 'plugin-a',
+        pluginId: 'plugin-a',
+        position: { x: 30, y: 40 },
+        tabId: '4key',
+        hidden: false,
+        zIndex: 2,
+      },
+      {
+        fullId: 'plugin-a:free',
+        pluginId: 'plugin-a',
+        position: { x: 1, y: 2 },
+        tabId: '4key',
+      },
+    ];
+    mocks.commit.mockResolvedValue({ modelRevision: 12, changed: true });
+
+    mocks.requestListener?.(
+      envelope('elements:delete', {
+        fullIds: ['plugin-a:one', 'plugin-a:free'],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(mocks.commit.mock.calls[0]?.[0]).toMatchObject({
+      pluginId: 'plugin-a',
+      instances: [{ instanceId: survivorInstanceId }],
+    });
+    expect(mocks.elements).toEqual([
+      expect.objectContaining({ fullId: 'plugin-a:two' }),
+    ]);
+  });
+
+  it.each([
+    [
+      'elements:setHidden',
+      {
+        targets: [
+          { fullId: 'plugin-a:one', hidden: true },
+          { fullId: 'plugin-a:free', hidden: true },
+        ],
+      },
+      { hidden: true },
+    ],
+    [
+      'elements:setZIndexes',
+      {
+        entries: [
+          { fullId: 'plugin-a:one', zIndex: 9 },
+          { fullId: 'plugin-a:free', zIndex: 10 },
+        ],
+      },
+      { zIndex: 10 },
+    ],
+  ])(
+    '%s 커밋 payload에 세션 전용 요소를 싣지 않는다',
+    async (operation, payload, expectedSessionPatch) => {
+      const instanceId = '50000000-0000-4000-8000-000000000031';
+      mocks.elements = [
+        { ...mocks.elements[0], id: instanceId },
+        {
+          fullId: 'plugin-a:free',
+          pluginId: 'plugin-a',
+          position: { x: 1, y: 2 },
+          tabId: '4key',
+          hidden: false,
+          zIndex: 1,
+        },
+      ];
+      mocks.commit.mockResolvedValue({ modelRevision: 12, changed: true });
+
+      mocks.requestListener?.(envelope(operation, payload));
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+      expect(mocks.commit).toHaveBeenCalledOnce();
+      const request = mocks.commit.mock.calls[0]?.[0] as {
+        pluginId: string;
+        instances: Array<{ instanceId?: string }>;
+      };
+      expect(request.pluginId).toBe('plugin-a');
+      expect(request.instances).toHaveLength(1);
+      expect(request.instances[0]?.instanceId).toBe(instanceId);
+      // 세션 요소의 스토어 반영은 유지
+      expect(mocks.updateElement).toHaveBeenCalledWith(
+        'plugin-a:free',
+        expectedSessionPatch,
+      );
+    },
+  );
+
+  it('세션 전용 요소만 대상인 setHidden은 commit 없이 스토어에만 반영한다', async () => {
+    mocks.elements = [
+      ...mocks.elements,
+      {
+        fullId: 'plugin-a:free',
+        pluginId: 'plugin-a',
+        position: { x: 1, y: 2 },
+        tabId: '4key',
+        hidden: false,
+        zIndex: 1,
+      },
+    ];
+
+    mocks.requestListener?.(
+      envelope('elements:setHidden', {
+        targets: [{ fullId: 'plugin-a:free', hidden: true }],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.rotateEditSession).not.toHaveBeenCalled();
+    expect(mocks.applyProjection).not.toHaveBeenCalled();
+    expect(mocks.updateElement).toHaveBeenCalledWith('plugin-a:free', {
+      hidden: true,
+    });
+  });
+
+  it('선행 플러그인 커밋 대기 중 소실된 세션 전용 대상은 거절한다', async () => {
+    const instanceId = '50000000-0000-4000-8000-000000000032';
+    mocks.elements = [
+      { ...mocks.elements[0], id: instanceId },
+      {
+        fullId: 'plugin-b:free',
+        pluginId: 'plugin-b',
+        position: { x: 1, y: 2 },
+        tabId: '4key',
+        hidden: false,
+        zIndex: 1,
+      },
+    ];
+    // plugin-a 커밋 대기 중 plugin-b 세션 요소가 재주입으로 소실되는 경합
+    mocks.commit.mockImplementation(async () => {
+      mocks.elements = mocks.elements.filter(
+        (el) => el.fullId !== 'plugin-b:free',
+      );
+      return { modelRevision: 12, changed: true };
+    });
+
+    mocks.requestListener?.(
+      envelope('elements:setHidden', {
+        targets: [
+          { fullId: 'plugin-a:one', hidden: true },
+          { fullId: 'plugin-b:free', hidden: true },
+        ],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'ELEMENT_NOT_FOUND' },
+    });
+    // 소실된 세션 요소에 대한 무음 no-op 반영은 없어야 한다
+    expect(mocks.updateElement).not.toHaveBeenCalledWith(
+      'plugin-b:free',
+      expect.anything(),
+    );
+  });
+
   it('레이어 삭제는 stable descriptor만 공용 main 실행기에 전달한다', async () => {
     mocks.requestListener?.(
       envelope('layers:deleteSelection', {
@@ -1084,7 +1359,6 @@ describe('plugin panel persisted element mutations', () => {
         },
         { type: 'plugin', id: 'plugin-a:one' },
       ],
-      '4key',
       {
         expectedAuthorityGeneration: 7,
         propagateErrors: true,

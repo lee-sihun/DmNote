@@ -11,7 +11,6 @@ import {
 } from '@api/modules/pluginRpcApi';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useKeyStore } from '@stores/data/useKeyStore';
 import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
 import {
   applyCommittedPluginInstancesProjection,
@@ -1661,25 +1660,55 @@ const commitPersistedElementUpdates = async (
   sharedGestureId: string,
 ): Promise<string | null> => {
   const store = usePluginDisplayElementStore.getState();
-  const updatesByPlugin = new Map<string, PersistedElementUpdate[]>();
+  const updatesByPlugin = new Map<
+    string,
+    {
+      persisted: PersistedElementUpdate[];
+      sessionOnly: PersistedElementUpdate[];
+    }
+  >();
   // 대상 소실은 부분 적용 대신 전체 거절 - update 경로와 동일 계약
   for (const update of updates) {
     const target = store.elements.find((el) => el.fullId === update.fullId);
     if (!target) return 'ELEMENT_NOT_FOUND';
-    const pluginUpdates = updatesByPlugin.get(target.pluginId) ?? [];
-    pluginUpdates.push(update);
-    updatesByPlugin.set(target.pluginId, pluginUpdates);
+    let pluginUpdates = updatesByPlugin.get(target.pluginId);
+    if (!pluginUpdates) {
+      pluginUpdates = { persisted: [], sessionOnly: [] };
+      updatesByPlugin.set(target.pluginId, pluginUpdates);
+    }
+    // 세션 전용(무def) 요소는 영속 커밋 대상에서 제외 - 스토어 반영만 유지
+    (target.definitionId === undefined
+      ? pluginUpdates.sessionOnly
+      : pluginUpdates.persisted
+    ).push(update);
   }
 
   const gestureIds = new Map<string, string>();
-  updatesByPlugin.forEach((_, pluginId) => {
+  updatesByPlugin.forEach(({ persisted }, pluginId) => {
+    // 커밋 없는 세션 전용 플러그인은 편집 세션 회전 불필요
+    if (persisted.length === 0) return;
     gestureIds.set(
       pluginId,
       rotatePluginInstancesEditSession(pluginId, sharedGestureId),
     );
   });
 
-  for (const [pluginId, pluginUpdates] of updatesByPlugin) {
+  for (const [pluginId, { persisted, sessionOnly }] of updatesByPlugin) {
+    if (persisted.length === 0) {
+      // 세션 전용 요소만 대상 - 커밋·projection 없이 스토어 반영만
+      if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
+      const liveStore = usePluginDisplayElementStore.getState();
+      // 선행 플러그인 커밋 대기 중 소실된 대상은 거절 (큐 경로 재검증과 동일 계약)
+      const liveFullIds = new Set(liveStore.elements.map((el) => el.fullId));
+      if (sessionOnly.some(({ fullId }) => !liveFullIds.has(fullId))) {
+        return 'ELEMENT_NOT_FOUND';
+      }
+      sessionOnly.forEach(({ fullId, patch }) => {
+        liveStore.updateElement(fullId, patch);
+      });
+      continue;
+    }
+    const pluginUpdates = [...persisted, ...sessionOnly];
     const errorCode = await enqueuePluginInstancesCommit(pluginId, async () => {
       if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
       const liveStore = usePluginDisplayElementStore.getState();
@@ -1689,10 +1718,14 @@ const commitPersistedElementUpdates = async (
         return 'ELEMENT_NOT_FOUND';
       }
       const patchesById = new Map(
-        pluginUpdates.map(({ fullId, patch }) => [fullId, patch]),
+        persisted.map(({ fullId, patch }) => [fullId, patch]),
       );
+      // 영속 모집단은 def 요소만 - 세션 전용 요소가 커밋에 실려 재시작 시
+      // 환생하는 것을 차단
       const prospective = liveStore.elements
-        .filter((el) => el.pluginId === pluginId)
+        .filter(
+          (el) => el.pluginId === pluginId && el.definitionId !== undefined,
+        )
         .map((el) => {
           const patch = patchesById.get(el.fullId);
           return patch ? { ...el, ...patch } : el;
@@ -1816,8 +1849,20 @@ const executePersistedOperation = async (
         live,
         typedPatch,
       );
+      // 세션 전용(무def) 요소는 영속 모집단 밖 - 커밋 없이 스토어 반영만.
+      // definitionId 단독 술어로 모으면 undefined끼리 매칭돼 타 플러그인
+      // 세션 요소까지 이 플러그인 인스턴스로 치환 커밋되는 오염이 생긴다
+      if (live.definitionId === undefined) {
+        liveStore.updateElement(fullId, materializedPatch);
+        return null;
+      }
       const prospective = liveStore.elements
-        .filter((el) => el.definitionId === live.definitionId)
+        .filter(
+          (el) =>
+            el.pluginId === live.pluginId &&
+            el.definitionId !== undefined &&
+            el.definitionId === live.definitionId,
+        )
         .map((el) =>
           el.fullId === fullId ? { ...el, ...materializedPatch } : el,
         );
@@ -1849,12 +1894,35 @@ const executePersistedOperation = async (
       if (!target) return 'ELEMENT_NOT_FOUND';
       targets.push(target);
     }
-    const byDefinition = new Map<string, string>();
-    targets.forEach((el) => byDefinition.set(el.definitionId, el.pluginId));
+    // 세션 전용(무def) 요소는 영속 커밋 없이 스토어 제거만
+    const sessionRemovalIds = new Set(
+      targets
+        .filter((el) => el.definitionId === undefined)
+        .map((el) => el.fullId),
+    );
+    // 영속 그룹은 (pluginId, definitionId) 쌍 기준 - definitionId 단독 키는
+    // undefined끼리 병합돼 마지막 요소의 pluginId로 커밋되는 오염이 생긴다
+    const persistedGroups = new Map<
+      string,
+      { pluginId: string; definitionId: string }
+    >();
+    targets.forEach((el) => {
+      if (el.definitionId === undefined) return;
+      persistedGroups.set(`${el.pluginId}\u0000${el.definitionId}`, {
+        pluginId: el.pluginId,
+        definitionId: el.definitionId,
+      });
+    });
+    if (sessionRemovalIds.size > 0) {
+      if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
+      store.setElements(
+        store.elements.filter((el) => !sessionRemovalIds.has(el.fullId)),
+      );
+    }
     // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
     const sharedGestureId = crypto.randomUUID();
     const gestureIds = new Map<string, string>();
-    byDefinition.forEach((pluginId) => {
+    persistedGroups.forEach(({ pluginId }) => {
       if (!gestureIds.has(pluginId)) {
         gestureIds.set(
           pluginId,
@@ -1864,9 +1932,11 @@ const executePersistedOperation = async (
     });
 
     // 플러그인 단위로 commit 성공 직후 projection 적용 - 부분 실패도 플러그인별 정합 유지
-    for (const [definitionId, pluginId] of byDefinition) {
+    for (const { pluginId, definitionId } of persistedGroups.values()) {
       const defTargetIds = targets
-        .filter((el) => el.definitionId === definitionId)
+        .filter(
+          (el) => el.pluginId === pluginId && el.definitionId === definitionId,
+        )
         .map((el) => el.fullId);
       const errorCode = await enqueuePluginInstancesCommit(
         pluginId,
@@ -1882,7 +1952,9 @@ const executePersistedOperation = async (
           }
           const remainingForDef = currentStore.elements.filter(
             (el) =>
-              el.definitionId === definitionId && !fullIds.includes(el.fullId),
+              el.pluginId === pluginId &&
+              el.definitionId === definitionId &&
+              !fullIds.includes(el.fullId),
           );
           const committed = await commitPluginInstances(
             pluginId,
@@ -1900,6 +1972,7 @@ const executePersistedOperation = async (
             storeNow.setElements(
               storeNow.elements.filter(
                 (el) =>
+                  el.pluginId !== pluginId ||
                   el.definitionId !== definitionId ||
                   !fullIds.includes(el.fullId),
               ),
@@ -2018,14 +2091,10 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
       return;
     }
-    void deleteFrozenSelection(
-      targets,
-      useKeyStore.getState().selectedKeyType,
-      {
-        expectedAuthorityGeneration: requestGeneration,
-        propagateErrors: true,
-      },
-    )
+    void deleteFrozenSelection(targets, {
+      expectedAuthorityGeneration: requestGeneration,
+      propagateErrors: true,
+    })
       .then(() => {
         if (!generationLive()) {
           respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));

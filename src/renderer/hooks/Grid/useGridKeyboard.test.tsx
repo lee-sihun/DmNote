@@ -15,12 +15,17 @@ import { useGridSelection } from './useGridSelection';
 
 import type { CanonicalKeyPosition } from '@src/types/editor';
 
-const { commitPatchMock, rotateSessionMock, sendBridgeMessageMock } =
-  vi.hoisted(() => ({
-    commitPatchMock: vi.fn().mockResolvedValue(undefined),
-    rotateSessionMock: vi.fn(),
-    sendBridgeMessageMock: vi.fn(),
-  }));
+const {
+  commitPatchMock,
+  rotateSessionMock,
+  sendBridgeMessageMock,
+  recordedGenerates,
+} = vi.hoisted(() => ({
+  commitPatchMock: vi.fn().mockResolvedValue(undefined),
+  rotateSessionMock: vi.fn(),
+  sendBridgeMessageMock: vi.fn(),
+  recordedGenerates: [] as Array<(base: unknown) => unknown>,
+}));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   editorCoordinator: {
@@ -30,13 +35,15 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorSemanticOps', () => ({
-  // 게스처 버스트 검증 대상은 gestureId 운반 - 동기 recorder로 기록
+  // 게스처 버스트 검증 대상은 gestureId 운반 - 동기 recorder로 기록.
+  // generate 클로저도 보관해 정산 의도가 어느 요소를 실었는지 검증 가능
   commitGeneratedSemanticOps: vi.fn(
     (
-      _generate: unknown,
+      generate: (base: unknown) => unknown,
       meta?: { gestureId?: string; onEnrolled?: () => void },
     ) => {
       meta?.onEnrolled?.();
+      recordedGenerates.push(generate);
       commitPatchMock({ schemaVersion: 1 }, { gestureId: meta?.gestureId });
       return Promise.resolve({ document: null, opResults: [] });
     },
@@ -138,6 +145,7 @@ describe('useGridKeyboard arrow history burst', () => {
     commitPatchMock.mockClear();
     rotateSessionMock.mockClear();
     sendBridgeMessageMock.mockClear();
+    recordedGenerates.length = 0;
     randomUUIDMock = vi
       .spyOn(crypto, 'randomUUID')
       .mockReturnValueOnce(firstGestureId)
@@ -293,6 +301,53 @@ describe('useGridKeyboard arrow history burst', () => {
       dx: 2,
       dy: 1,
     });
+    vi.unstubAllGlobals();
+  });
+
+  it('pending 중 선택이 바뀌어도 flush는 옛 대상 이동을 wire에 커밋한다', async () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 1;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = nextFrameId++;
+      callbacks.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+    await act(async () => {
+      root.render(<Harness continuousInputStrategy="frame" />);
+    });
+
+    pressArrow('ArrowRight');
+    expect(commitPatchMock).not.toHaveBeenCalled();
+
+    // flush 전에 선택이 A → B로 넘어간다 - cleanup flush가 옛 클로저로 실행
+    await act(async () => {
+      root.render(
+        <Harness continuousInputStrategy="frame" selectedIndex={1} />,
+      );
+    });
+
+    expect(commitPatchMock).toHaveBeenCalledOnce();
+    expect(committedGestureIds()).toEqual([firstGestureId]);
+    // 정산 커밋은 eager를 적용한 옛 대상(A)의 이동을 실어야 한다 -
+    // 현재 선택(B)을 재독하면 A의 이동이 wire에 실리지 않아 소실된다
+    const ops = recordedGenerates.at(-1)?.({
+      schemaVersion: 1,
+      keys: {},
+      keyPositions: structuredClone(useKeyStore.getState().canonicalPositions),
+      statPositions: {},
+      graphPositions: {},
+      knobPositions: {},
+      layerGroups: {},
+    });
+    expect(ops).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: STABLE_IDS[0],
+        bounds: { dx: 1, dy: 0, width: 40, height: 40 },
+      },
+    ]);
     vi.unstubAllGlobals();
   });
 

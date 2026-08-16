@@ -1188,13 +1188,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       selectedKeyElements.length > 0 || selectedElements.length > 0;
     const hadSelection = prevHasSelectionRef.current;
 
-    const skipFromKeyboard =
-      useGridSelectionStore.getState()._skipPanelModeSwitch;
-
     if (pluginSettingsPanel) {
       prevHasSelectionRef.current = hasSelection;
-      if (skipFromKeyboard)
-        useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
       return;
     }
 
@@ -1227,8 +1222,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     prevHasSelectionRef.current = hasSelection;
     selectionFromLayerPanelRef.current = false;
     keyTypeChangedRef.current = false;
-    if (skipFromKeyboard)
-      useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
 
     setShowImagePicker(false);
     setShowGraphImagePicker(false);
@@ -1247,13 +1240,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setPanelMode,
     closePage,
   ]);
-
-  // 언마운트 시 키보드 플래그 오염 방지
-  useEffect(() => {
-    return () => {
-      useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
-    };
-  }, []);
 
   // 빈 선택 폴백으로 레이어 목록이 표시되는 동안 내부 모드도 layer로 정규화 —
   // property로 남아 있으면 다음 캔버스 클릭이 목록을 건너뛰고 편집으로 점프함
@@ -1542,7 +1528,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           if (!locator) return;
           editGestureController.preview(
             locator.mode,
-            [{ index: locator.index, patch: geometryAxisPatch(field, value) }],
+            [
+              {
+                id,
+                index: locator.index,
+                patch: geometryAxisPatch(field, value),
+              },
+            ],
             {
               domain:
                 type === 'key'
@@ -1852,7 +1844,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           if (!locator) return;
           editGestureController.preview(
             locator.mode,
-            [{ index: locator.index, patch: projectNotePaintPatch(patch) }],
+            [{ id, index: locator.index, patch: projectNotePaintPatch(patch) }],
             { domain: 'keyPosition' },
           );
         }
@@ -2293,7 +2285,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (!plan) return;
       const byType = new Map<
         EditorElementTypeV1,
-        Array<{ index: number; patch: Record<string, unknown> }>
+        Array<{ id: string; index: number; patch: Record<string, unknown> }>
       >();
       for (const update of plan.updates) {
         if (update.key.startsWith('plugin:')) continue;
@@ -2301,6 +2293,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         if (!target) return;
         const entries = byType.get(target.type) ?? [];
         entries.push({
+          id: target.position.id,
           index: target.locator.index,
           patch: update.patch,
         });
@@ -3051,7 +3044,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 렌더링
   // ============================================================================
 
-  // 캔버스 선택에 묶인 구상 패널 — 프레임(글래스) 안의 루트 페이지 콘텐츠
+  // 캔버스 선택에 묶인 구상 패널 - 프레임(글래스) 안의 루트 페이지 콘텐츠
   // 혼합 선택(네이티브+플러그인)은 총요소 기준으로 native 구성별 배치 패널에,
   // 플러그인 단독 다중은 경량 기하 배치 패널에 라우트
   const renderSelectionPanelBody = () => {

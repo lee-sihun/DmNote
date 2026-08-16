@@ -601,7 +601,7 @@ export function useLayerActions({
         useGridSelectionStore.getState().selectedElements;
       if (selectedElements.length === 0) return;
       onSelectionFromPanel?.();
-      await deleteFrozenSelection(selectedElements, selectedKeyType);
+      await deleteFrozenSelection(selectedElements);
     }
 
     setContextMenuOpen(false);

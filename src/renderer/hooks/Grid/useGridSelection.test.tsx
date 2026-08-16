@@ -351,7 +351,7 @@ describe('useGridSelection compound history gesture', () => {
       options.receipt?.rollback();
     });
 
-    await deleteFrozenSelection([{ type: 'key', id: STABLE_KEY_ID }], '7key');
+    await deleteFrozenSelection([{ type: 'key', id: STABLE_KEY_ID }]);
 
     expect(useKeyStore.getState().keyMappings['4key']).toEqual(['KeyA']);
     expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([

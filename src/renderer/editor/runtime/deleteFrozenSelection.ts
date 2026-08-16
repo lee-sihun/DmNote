@@ -10,7 +10,6 @@ import {
   deletePluginElements,
   type LayerDeleteTarget,
 } from '@plugins/rpc/pluginElementActions';
-import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
@@ -55,21 +54,12 @@ const storeView = (): DeleteDocumentView => ({
 
 export const deleteFrozenSelection = async (
   selectedElements: readonly SelectedElement[],
-  _selectedKeyType: string,
   options: {
     expectedAuthorityGeneration?: number;
     propagateErrors?: boolean;
   } = {},
 ): Promise<void> => {
   if (selectedElements.length === 0) return;
-  const assertExpectedAuthorityGeneration = () => {
-    if (
-      options.expectedAuthorityGeneration !== undefined &&
-      options.expectedAuthorityGeneration !== getPluginAuthorityGeneration()
-    ) {
-      throw new ElementIntentAbort('plugin authority generation changed');
-    }
-  };
   if (window.__dmn_window_type === 'panel') {
     const targets: LayerDeleteTarget[] = [];
     const seen = new Set<string>();
@@ -94,7 +84,7 @@ export const deleteFrozenSelection = async (
     if (!deleted) reportElementOpSkipped('panel batch delete');
     return;
   }
-  assertExpectedAuthorityGeneration();
+  // 동기 프레임 내 authority 세대 재검증은 중복 - 실제 보호는 await 경계 assert가 수행
   const gestureId = crypto.randomUUID();
   const stableTargets: Array<{ type: NativeType; id: string }> = [];
   const seenNativeIds = new Set<string>();

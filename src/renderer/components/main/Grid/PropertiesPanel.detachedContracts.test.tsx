@@ -559,7 +559,6 @@ const resetStores = () => {
   useGridSelectionStore.setState({
     selectedElements: [],
     selectedGroupIds: [],
-    _skipPanelModeSwitch: false,
   });
 };
 
@@ -725,7 +724,7 @@ describe('PropertiesPanel canonical native contract', () => {
 
     expect(previewMock).toHaveBeenCalledWith(
       '4key',
-      [{ index: 1, patch: { dx: 17 } }],
+      [{ id, index: 1, patch: { dx: 17 } }],
       { domain: 'keyPosition' },
     );
   });

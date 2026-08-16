@@ -346,4 +346,41 @@ describe('display element instance id issuance', () => {
     const element = addedElement() as Record<string, unknown>;
     expect(element.groupId).toBe('group-a');
   });
+
+  it('플러그인 공개 add가 넘긴 타 플러그인 definitionId는 무시한다', () => {
+    displayElementApi.add({
+      html: '<div />',
+      position: { x: 0, y: 0 },
+      definitionId: 'plugin-b',
+    } as Parameters<typeof displayElementApi.add>[0]);
+
+    // 위조 definitionId가 타 플러그인 저장 모집단에 편입되는 것을 차단 -
+    // 속성 자체를 남기지 않는다
+    const element = addedElement() as Record<string, unknown>;
+    expect('definitionId' in element).toBe(false);
+  });
+
+  it('공개 add의 자기 플러그인 definitionId(defId === pluginId)는 수용한다', () => {
+    // 그리드 컨텍스트 메뉴 생성 경로가 공개 add로 자기 defId를 넘긴다
+    displayElementApi.add({
+      html: '<div />',
+      position: { x: 0, y: 0 },
+      definitionId: 'plugin-a',
+    } as Parameters<typeof displayElementApi.add>[0]);
+
+    const element = addedElement() as Record<string, unknown>;
+    expect(element.definitionId).toBe('plugin-a');
+  });
+
+  it('내부 복원 add는 저장된 definitionId를 그대로 통과시킨다', () => {
+    addDisplayElementInternal({
+      html: '<div />',
+      position: { x: 0, y: 0 },
+      instanceId: SAVED_INSTANCE_ID,
+      definitionId: 'legacy-def',
+    } as Parameters<typeof addDisplayElementInternal>[0]);
+
+    const element = addedElement() as Record<string, unknown>;
+    expect(element.definitionId).toBe('legacy-def');
+  });
 });

@@ -168,6 +168,7 @@ export const displayElementApi = {
       html: initialHtml,
       instanceId,
       groupId,
+      definitionId,
       ...elementOptions
     } = element as InternalDisplayElementConfig;
 
@@ -217,6 +218,13 @@ export const displayElementApi = {
       // 그룹 소속 지정 수용도 내부 복원 경로만 - 공개 add의 임의 groupId는
       // 저장 규칙 밖 dangling 소속이 되므로 무시
       ...(internalAddDepth > 0 && groupId !== undefined ? { groupId } : {}),
+      // definitionId 수용은 내부 복원 경로와 자기 플러그인 definition(defId ===
+      // pluginId) 지정만 - 타 플러그인 definitionId 위조가 그 플러그인의 저장
+      // 모집단에 편입되는 것을 차단
+      ...(definitionId !== undefined &&
+      (internalAddDepth > 0 || definitionId === pluginId)
+        ? { definitionId }
+        : {}),
       html: htmlContent,
       id,
       pluginId,
@@ -469,8 +477,4 @@ const addDisplayElementInternal = (
   }
 };
 
-export {
-  addDisplayElementInternal,
-  removeDisplayElementInternal,
-  removeDisplayElementsInternal,
-};
+export { addDisplayElementInternal, removeDisplayElementsInternal };

@@ -109,9 +109,6 @@ interface GridSelectionState {
   // 드래그/리사이즈 중인 상태 (CSS 애니메이션 비활성화용)
   isDraggingOrResizing: boolean;
 
-  // 키보드 동작(paste 등)에서 선택 변경 시 패널 모드 전환 건너뛰기
-  _skipPanelModeSwitch: boolean;
-
   // 액션
   selectElement: (element: SelectedElement, addToSelection?: boolean) => void;
   toggleSelection: (element: SelectedElement) => void;
@@ -142,9 +139,6 @@ interface GridSelectionState {
   // 드래그/리사이즈 상태 설정
   setDraggingOrResizing: (isDragging: boolean) => void;
 
-  // 패널 모드 전환 건너뛰기 설정
-  setSkipPanelModeSwitch: (skip: boolean) => void;
-
   // 선택된 요소들 일괄 이동
   moveSelectedElements: (deltaX: number, deltaY: number) => void;
 }
@@ -160,7 +154,6 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   marqueeEnd: null,
   isMiddleButtonDragging: false,
   isDraggingOrResizing: false,
-  _skipPanelModeSwitch: false,
 
   selectElement: (element, addToSelection = false) => {
     set((state) => {
@@ -286,10 +279,6 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
 
   setDraggingOrResizing: (isDragging) => {
     set({ isDraggingOrResizing: isDragging });
-  },
-
-  setSkipPanelModeSwitch: (skip) => {
-    set({ _skipPanelModeSwitch: skip });
   },
 
   moveSelectedElements: (_deltaX, _deltaY) => {

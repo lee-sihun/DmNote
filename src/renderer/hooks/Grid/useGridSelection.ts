@@ -80,7 +80,10 @@ interface UseGridSelectionReturn {
   deleteSelectedElements: () => Promise<void>;
   copySelectedElements: () => void;
   pasteElements: () => Promise<void>;
-  syncSelectedElementsToOverlay: (gestureId?: string) => void;
+  syncSelectedElementsToOverlay: (
+    gestureId?: string,
+    frozenTargets?: readonly SelectedElement[],
+  ) => void;
   clipboard: ClipboardItem[];
 }
 
@@ -101,12 +104,18 @@ export function useGridSelection({
 
   // 선택된 요소들의 최종 위치를 한 번에 저장
   // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-  const syncSelectedElementsToOverlay = (gestureId?: string) => {
+  // 정산 대상은 호출부가 동결한 집합 우선 - eager를 적용한 집합과 커밋 대상이
+  // 어긋나면 옛 대상의 이동이 wire에 실리지 않아 다음 canonical 적용에서 소실
+  const syncSelectedElementsToOverlay = (
+    gestureId?: string,
+    frozenTargets?: readonly SelectedElement[],
+  ) => {
     const currentPositions = useKeyStore.getState().canonicalPositions;
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentKnobPositions = useKnobItemStore.getState().positions;
-    const currentSelection = useGridSelectionStore.getState().selectedElements;
+    const currentSelection =
+      frozenTargets ?? useGridSelectionStore.getState().selectedElements;
     const selectedPluginElementIds = new Set(
       currentSelection
         .filter((element) => element.type === 'plugin')
@@ -455,7 +464,9 @@ export function useGridSelection({
     }
 
     if (syncToOverlay) {
-      syncSelectedElementsToOverlay(gestureId);
+      // 정산은 이 호출이 eager를 적용한 클로저의 선택 집합으로 - RAF flush가
+      // 선택 변경 뒤에 돌아도 옛 대상 이동이 그대로 커밋된다
+      syncSelectedElementsToOverlay(gestureId, selectedElements);
       // settle이 mixed 커밋을 시작하지 못한 경로의 사전 staging 정산 -
       // 커밋이 소유권을 가져간 staged는 건드리지 않는다
       if (stagedBeforeEagerWrite && gestureId) {
@@ -469,7 +480,7 @@ export function useGridSelection({
   // wire는 슬롯 base에서 재생성. full-record 캡처 커밋 금지 - 대기 중
   // 정산된 다른 커밋을 되돌린다
   const deleteSelectedElements = async () => {
-    await deleteFrozenSelection(selectedElements, selectedKeyType);
+    await deleteFrozenSelection(selectedElements);
   };
 
   // 선택된 요소들 복사
@@ -1399,7 +1410,6 @@ export function useGridSelection({
           }
         }
         if (newSelectedElements.length > 0) {
-          useGridSelectionStore.getState().setSkipPanelModeSwitch(true);
           if (groupIdMap.size > 0) {
             useGridSelectionStore
               .getState()
