@@ -752,7 +752,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     ? (patch: EditorNotePaintPropertyPatchV1) => {
         const entries: Array<{
           id: string;
-          index: number;
           patch: Partial<KeyPosition>;
         }> = [];
         for (const id of stableNotePaintIds) {
@@ -760,7 +759,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
           if (!locator || locator.mode !== selectedKeyType) return;
           entries.push({
             id,
-            index: locator.index,
             patch: projectNotePaintPatch(patch),
           });
         }

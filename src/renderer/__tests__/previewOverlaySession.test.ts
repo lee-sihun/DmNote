@@ -315,7 +315,7 @@ describe('editGestureController', () => {
 
   it('첫 preview에서 게스처 시작', () => {
     editGestureController.preview('4key', [
-      { index: 0, patch: { backgroundColor: '#abcdef' } },
+      { id: KEY_ID_A, patch: { backgroundColor: '#abcdef' } },
     ]);
 
     expect(editGestureController.hasActiveGesture()).toBe(true);
@@ -326,7 +326,7 @@ describe('editGestureController', () => {
 
   it('preview는 coalescing 후 채널로 발행됨', async () => {
     editGestureController.preview('4key', [
-      { index: 0, patch: { backgroundColor: '#111111' } },
+      { id: KEY_ID_A, patch: { backgroundColor: '#111111' } },
     ]);
     await flushPromises();
 
@@ -346,13 +346,17 @@ describe('editGestureController', () => {
       }),
     );
 
-    editGestureController.preview('4key', [{ index: 0, patch: { width: 1 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 1 } },
+    ]);
     await flushPromises();
     expect(previewApi.publish).toHaveBeenCalledTimes(1);
 
     // in-flight 하나가 도는 동안 값이 계속 바뀐다 (드래그, 방향키 꾹 누르기)
     for (const width of [2, 3, 4, 5]) {
-      editGestureController.preview('4key', [{ index: 0, patch: { width } }]);
+      editGestureController.preview('4key', [
+        { id: KEY_ID_A, patch: { width } },
+      ]);
       await flushPromises();
     }
     expect(previewApi.publish).toHaveBeenCalledTimes(1);
@@ -377,13 +381,15 @@ describe('editGestureController', () => {
     );
 
     editGestureController.preview('4key', [
-      { index: 0, patch: { width: 10 } },
-      { index: 1, patch: { width: 20 } },
+      { id: KEY_ID_A, patch: { width: 10 } },
+      { id: KEY_ID_B, patch: { width: 20 } },
     ]);
     await flushPromises();
     expect(previewApi.publish).toHaveBeenCalledTimes(1);
 
-    editGestureController.preview('4key', [{ index: 1, patch: { width: 30 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_B, patch: { width: 30 } },
+    ]);
     await flushPromises();
 
     release();
@@ -400,8 +406,8 @@ describe('editGestureController', () => {
 
   it('같은 patch를 쓰는 여러 대상은 한 번에 발행됨', async () => {
     editGestureController.preview('4key', [
-      { index: 0, patch: { width: 42 } },
-      { index: 1, patch: { width: 42 } },
+      { id: KEY_ID_A, patch: { width: 42 } },
+      { id: KEY_ID_B, patch: { width: 42 } },
     ]);
     await flushPromises();
 
@@ -413,7 +419,7 @@ describe('editGestureController', () => {
 
   it('settleCommit 성공 시 로컬 세션 종료 + 보조 cancel 브로드캐스트', async () => {
     editGestureController.preview('4key', [
-      { index: 0, patch: { width: 100 } },
+      { id: KEY_ID_A, patch: { width: 100 } },
     ]);
     const sessionId = editGestureController.activeGestureId();
 
@@ -431,7 +437,7 @@ describe('editGestureController', () => {
   it('settleCommit 실패 시 세션 유지', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     editGestureController.preview('4key', [
-      { index: 0, patch: { width: 100 } },
+      { id: KEY_ID_A, patch: { width: 100 } },
     ]);
 
     editGestureController.settleCommit(Promise.reject(new Error('io')));
@@ -447,7 +453,7 @@ describe('editGestureController', () => {
       selectedElements: [{ type: 'key', id: 'key-0', index: 0 }],
     });
     editGestureController.preview('4key', [
-      { index: 0, patch: { width: 100 } },
+      { id: KEY_ID_A, patch: { width: 100 } },
     ]);
 
     editGestureController.settleCommit(Promise.reject(new Error('io')));
@@ -457,13 +463,13 @@ describe('editGestureController', () => {
     });
     await flushPromises();
 
-    // 되살리면 index 0 patch가 다음 커밋 경계에서 남의 값을 덮는다
+    // 되살리면 이미 떠난 대상의 patch가 다음 커밋 경계에 실린다
     expect(editGestureController.hasActiveGesture()).toBe(false);
   });
 
   it('cancel은 canonical을 건드리지 않고 오버레이만 제거', () => {
     editGestureController.preview('4key', [
-      { index: 0, patch: { width: 150 } },
+      { id: KEY_ID_A, patch: { width: 150 } },
     ]);
     editGestureController.cancel();
 
@@ -476,7 +482,7 @@ describe('editGestureController', () => {
   it('stat 프리뷰 Escape 취소는 canonical 값으로 원복', () => {
     editGestureController.preview(
       '4key',
-      [{ index: 0, patch: { width: 150 } }],
+      [{ id: STAT_ID_A, patch: { width: 150 } }],
       { domain: 'statPosition' },
     );
 
@@ -499,10 +505,12 @@ describe('editGestureController', () => {
   });
 
   it('서로 다른 도메인의 같은 patch를 별도 채널 메시지로 발행', async () => {
-    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 90 } },
+    ]);
     editGestureController.preview(
       '4key',
-      [{ index: 0, patch: { width: 90 } }],
+      [{ id: STAT_ID_A, patch: { width: 90 } }],
       { domain: 'statPosition' },
     );
 
@@ -517,20 +525,22 @@ describe('editGestureController', () => {
   });
 
   it('commitPending은 네 도메인 누적 patch를 한 editor commit으로 승격', async () => {
-    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 90 } },
+    ]);
     editGestureController.preview(
       '4key',
-      [{ index: 0, patch: { width: 100 } }],
+      [{ id: STAT_ID_A, patch: { width: 100 } }],
       { domain: 'statPosition' },
     );
     editGestureController.preview(
       '4key',
-      [{ index: 0, patch: { width: 110 } }],
+      [{ id: GRAPH_ID_A, patch: { width: 110 } }],
       { domain: 'graphPosition' },
     );
     editGestureController.preview(
       '4key',
-      [{ index: 0, patch: { width: 120 } }],
+      [{ id: KNOB_ID_A, patch: { width: 120 } }],
       { domain: 'knobPosition' },
     );
     const sessionId = editGestureController.activeGestureId();
@@ -562,7 +572,9 @@ describe('editGestureController', () => {
   });
 
   it('정산은 스토어에 즉시 반영된다 - 후행 full-record 캡처 자가 치유', () => {
-    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 90 } },
+    ]);
 
     void editGestureController.commitPendingAsync();
 
@@ -570,7 +582,9 @@ describe('editGestureController', () => {
   });
 
   it('정산 대기 중 재정렬돼도 생성 patch가 같은 id를 따라간다', async () => {
-    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 90 } },
+    ]);
 
     // 슬롯 진입 전 재정렬 시뮬레이션: base가 뒤집힌 상태로 생성됨
     const [a, b] = useKeyStore.getState().canonicalPositions['4key'];
@@ -596,7 +610,7 @@ describe('editGestureController', () => {
 
   it('활성 gesture 중 reorder돼도 preview와 commit이 시작 ID를 따라간다', async () => {
     editGestureController.preview('4key', [
-      { index: 0, id: KEY_ID_A, patch: { width: 80 } },
+      { id: KEY_ID_A, patch: { width: 80 } },
     ]);
 
     const [a, b] = useKeyStore.getState().canonicalPositions['4key'];
@@ -604,9 +618,9 @@ describe('editGestureController', () => {
       canonicalPositions: { '4key': [b, a] } as never,
       positions: { '4key': [b, a] } as never,
     });
-    // 호출부는 live index를 재해석해 전달 - 신원은 id가 결정한다
+    // 재정렬로 live index가 밀려도 신원은 id가 결정한다
     editGestureController.preview('4key', [
-      { index: 1, id: KEY_ID_A, patch: { width: 95 } },
+      { id: KEY_ID_A, patch: { width: 95 } },
     ]);
     await flushPromises();
 
@@ -665,19 +679,19 @@ describe('editGestureController', () => {
   it('게스처 중 비대상 삭제로 index가 밀려도 id 전달 patch는 제 요소에 누적·커밋된다', async () => {
     setThreeKeyState();
 
-    // A·B 배치 프리뷰: 요소별 상이 patch (live index 1·2)
+    // A·B 배치 프리뷰: 요소별 상이 patch
     editGestureController.preview('4key', [
-      { index: 1, id: KEY_ID_A, patch: { fontColor: '#aa0000' } },
-      { index: 2, id: KEY_ID_B, patch: { fontColor: '#bb0000' } },
+      { id: KEY_ID_A, patch: { fontColor: '#aa0000' } },
+      { id: KEY_ID_B, patch: { fontColor: '#bb0000' } },
     ]);
 
     // 게스처와 미배타인 격리 커밋이 비선택 C를 삭제 - A·B index가 당겨진다
     dropFirstKey();
 
-    // 호출부는 매 이벤트 live index를 재해석해 전달 (B의 새 index는 1)
+    // 드래그 계속 - 밀린 index와 무관하게 id가 제 요소를 가리킨다
     editGestureController.preview('4key', [
-      { index: 0, id: KEY_ID_A, patch: { fontColor: '#aa1111' } },
-      { index: 1, id: KEY_ID_B, patch: { fontColor: '#bb1111' } },
+      { id: KEY_ID_A, patch: { fontColor: '#aa1111' } },
+      { id: KEY_ID_B, patch: { fontColor: '#bb1111' } },
     ]);
 
     const rendered = useKeyStore.getState().positions['4key'];
@@ -718,17 +732,17 @@ describe('editGestureController', () => {
     });
 
     editGestureController.preview('4key', [
-      { index: 1, id: KEY_ID_A, patch: { fontColor: '#aa0000' } },
-      { index: 2, id: KEY_ID_B, patch: { fontColor: '#bb0000' } },
+      { id: KEY_ID_A, patch: { fontColor: '#aa0000' } },
+      { id: KEY_ID_B, patch: { fontColor: '#bb0000' } },
     ]);
     editGestureController.settleCommit(Promise.reject(new Error('io')));
     await flushPromises();
     expect(editGestureController.hasActiveGesture()).toBe(true);
 
-    // 부활한 세션이 stale 동결 상태를 승계한 채 C 삭제로 index가 밀린다
+    // 부활한 세션에서 C 삭제로 index가 밀려도 id가 신원을 유지한다
     dropFirstKey();
     editGestureController.preview('4key', [
-      { index: 1, id: KEY_ID_B, patch: { fontColor: '#bb1111' } },
+      { id: KEY_ID_B, patch: { fontColor: '#bb1111' } },
     ]);
 
     const rendered = useKeyStore.getState().positions['4key'];
@@ -757,38 +771,31 @@ describe('editGestureController', () => {
     });
   });
 
-  it('무ID index 폴백은 현점유가 동결 id와 다르면 patch를 버린다', async () => {
-    setThreeKeyState();
-    editGestureController.preview('4key', [
-      { index: 1, patch: { fontColor: '#aa0000' } },
-    ]);
-
-    // C 삭제로 index가 밀려 index 1 현점유는 B가 된다
-    dropFirstKey();
-    editGestureController.preview('4key', [
-      { index: 1, patch: { fontColor: '#poison' } },
-    ]);
-
-    // 동결 A에도 현점유 B에도 실리지 않는다 (fail-closed)
-    const rendered = useKeyStore.getState().positions['4key'];
-    expect(rendered[0]).toMatchObject({ id: KEY_ID_A, fontColor: '#aa0000' });
-    expect((rendered[1] as Record<string, unknown>).fontColor).toBeUndefined();
-
-    await expect(editGestureController.commitPendingAsync()).resolves.toBe(
-      true,
-    );
-    const patch = generatedPatches[0] as {
-      keyPositions?: Record<string, Array<Record<string, unknown>>>;
-    };
-    expect(patch.keyPositions?.['4key'][0]).toMatchObject({
-      id: KEY_ID_A,
-      fontColor: '#aa0000',
+  it('비 native id 항목은 스토어에 점유자가 있어도 fail-closed로 무시된다', () => {
+    // 손상·레거시 상태로 비 native id가 스토어에 남아 있어도 신원으로 승격 금지
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [basePosition(0, 'legacy-key'), basePosition(70, KEY_ID_A)],
+      } as never,
+      positions: {
+        '4key': [basePosition(0, 'legacy-key'), basePosition(70, KEY_ID_A)],
+      } as never,
     });
-    expect(patch.keyPositions?.['4key'][1].fontColor).toBeUndefined();
+
+    editGestureController.preview('4key', [
+      { id: 'legacy-key', patch: { fontColor: '#poison' } },
+      { id: KEY_ID_A, patch: { fontColor: '#aa0000' } },
+    ]);
+
+    const rendered = useKeyStore.getState().positions['4key'];
+    expect((rendered[0] as Record<string, unknown>).fontColor).toBeUndefined();
+    expect(rendered[1]).toMatchObject({ id: KEY_ID_A, fontColor: '#aa0000' });
   });
 
   it('정산 대기 중 대상이 삭제되면 커밋하지 않는다', async () => {
-    editGestureController.preview('4key', [{ index: 1, patch: { width: 90 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_B, patch: { width: 90 } },
+    ]);
 
     const [a] = useKeyStore.getState().canonicalPositions['4key'];
     useKeyStore.setState({
@@ -815,7 +822,9 @@ describe('editGestureController', () => {
         }),
     );
 
-    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 90 } },
+    ]);
     const gestureA = editGestureController.activeGestureId();
 
     const run = runExclusiveLegacyMutation(async () => 'done');
@@ -823,7 +832,7 @@ describe('editGestureController', () => {
     await Promise.resolve();
     await Promise.resolve();
     editGestureController.preview('4key', [
-      { index: 1, patch: { width: 120 } },
+      { id: KEY_ID_B, patch: { width: 120 } },
     ]);
     const gestureB = editGestureController.activeGestureId();
     expect(gestureB).not.toBe(gestureA);
@@ -836,10 +845,14 @@ describe('editGestureController', () => {
   });
 
   it('모드가 바뀌면 이전 게스처를 취소하고 새로 시작', () => {
-    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+    editGestureController.preview('4key', [
+      { id: KEY_ID_A, patch: { width: 90 } },
+    ]);
     const first = editGestureController.activeGestureId();
 
-    editGestureController.preview('5key', [{ index: 0, patch: { width: 95 } }]);
+    editGestureController.preview('5key', [
+      { id: KEY_ID_A, patch: { width: 95 } },
+    ]);
 
     expect(editGestureController.activeGestureId()).not.toBe(first);
     expect(previewApi.cancel).toHaveBeenCalledWith(first);
@@ -850,7 +863,7 @@ describe('editGestureController', () => {
       selectedElements: [{ type: 'plugin', id: 'a|plugin:b' }],
     });
     editGestureController.preview('4key', [
-      { index: 0, id: KEY_ID_A, patch: { width: 90 } },
+      { id: KEY_ID_A, patch: { width: 90 } },
     ]);
     expect(editGestureController.hasActiveGesture()).toBe(true);
 

@@ -980,7 +980,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           [
             {
               id: keyId,
-              index: 1,
               patch: { displayText: '  Preview label  ' },
             },
           ],
@@ -991,7 +990,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           [
             {
               id: statId,
-              index: 0,
               patch: { displayText: '  Preview label  ' },
             },
           ],
@@ -1002,7 +1000,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           [
             {
               id: graphId,
-              index: 0,
               patch: { displayText: '  Preview label  ' },
             },
           ],
@@ -1013,7 +1010,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           [
             {
               id: knobId,
-              index: 0,
               patch: { displayText: '  Preview label  ' },
             },
           ],

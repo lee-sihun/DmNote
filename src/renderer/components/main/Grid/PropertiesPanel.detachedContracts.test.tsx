@@ -715,7 +715,7 @@ describe('PropertiesPanel canonical native contract', () => {
     },
   );
 
-  it('single key preview는 선택 ID를 현재 locator로 다시 해석한다', () => {
+  it('single key preview는 선택 ID를 신원으로 전달한다', () => {
     const id = '61111111-1111-4111-8111-111111111111';
     installSingle('key', id);
     mounted = mountPanel(true);
@@ -724,7 +724,7 @@ describe('PropertiesPanel canonical native contract', () => {
 
     expect(previewMock).toHaveBeenCalledWith(
       '4key',
-      [{ id, index: 1, patch: { dx: 17 } }],
+      [{ id, patch: { dx: 17 } }],
       { domain: 'keyPosition' },
     );
   });

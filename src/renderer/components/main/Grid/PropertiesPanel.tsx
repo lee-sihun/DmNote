@@ -1531,7 +1531,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             [
               {
                 id,
-                index: locator.index,
                 patch: geometryAxisPatch(field, value),
               },
             ],
@@ -1844,7 +1843,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           if (!locator) return;
           editGestureController.preview(
             locator.mode,
-            [{ id, index: locator.index, patch: projectNotePaintPatch(patch) }],
+            [{ id, patch: projectNotePaintPatch(patch) }],
             { domain: 'keyPosition' },
           );
         }
@@ -2235,7 +2234,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         string,
         {
           type: EditorElementTypeV1;
-          locator: { index: number };
           position: KeyPosition;
         }
       >();
@@ -2254,7 +2252,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         if (!position || position.id !== target.id) return;
         targetsByKey.set(`${target.type}:${target.id}`, {
           type: target.type,
-          locator,
           position,
         });
       }
@@ -2285,7 +2282,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (!plan) return;
       const byType = new Map<
         EditorElementTypeV1,
-        Array<{ id: string; index: number; patch: Record<string, unknown> }>
+        Array<{ id: string; patch: Record<string, unknown> }>
       >();
       for (const update of plan.updates) {
         if (update.key.startsWith('plugin:')) continue;
@@ -2294,7 +2291,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const entries = byType.get(target.type) ?? [];
         entries.push({
           id: target.position.id,
-          index: target.locator.index,
           patch: update.patch,
         });
         byType.set(target.type, entries);

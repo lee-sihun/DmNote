@@ -45,12 +45,11 @@ export const previewSingleStyleProperty = (
 ): void => {
   const locator = resolveElementById(type, id);
   if (!locator) return;
-  // index는 locator hint - 동결 신원은 id로 전달
+  // locator는 mode 해석·존재 확인 전용 - 신원은 id가 결정
   editGestureController.preview(
     locator.mode,
     [
       {
-        index: locator.index,
         id,
         patch: projectPreviewStylePropertyPatch(patch),
       },
@@ -66,14 +65,13 @@ export const previewBatchStyleProperty = (
 ): void => {
   const grouped = new Map<
     PreviewTargetType,
-    Array<{ index: number; id: string; patch: Record<string, unknown> }>
+    Array<{ id: string; patch: Record<string, unknown> }>
   >();
   for (const target of targets) {
     const locator = resolveElementById(target.elementType, target.id);
     if (!locator || locator.mode !== selectedKeyType) return;
     const entries = grouped.get(target.elementType) ?? [];
     entries.push({
-      index: locator.index,
       id: target.id,
       patch: projectPreviewStylePropertyPatch(patch),
     });
@@ -94,7 +92,7 @@ export const previewBatchFontColor = (
   const document = captureEditorDocument();
   const grouped = new Map<
     PreviewTargetType,
-    Array<{ index: number; id: string; patch: Record<string, unknown> }>
+    Array<{ id: string; patch: Record<string, unknown> }>
   >();
   for (const target of targets) {
     const locator = resolveElementById(target.elementType, target.id);
@@ -114,7 +112,6 @@ export const previewBatchFontColor = (
     const entries = grouped.get(target.elementType) ?? [];
     // commit의 eager intent와 동일하게 active fallback 보존을 포함해 투영
     entries.push({
-      index: locator.index,
       id: target.id,
       patch: projectFontColorPatch(current, target.elementType, patch),
     });
