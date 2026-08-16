@@ -558,6 +558,60 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(mocks.commitMixedGesture).not.toHaveBeenCalled();
   });
 
+  it('합성 native 단일 resize의 무커밋 보고는 정확히 1회다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await renderHarness([keySelection()]);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResize({ x: 10, y: 20, width: 120, height: 80 });
+      api.handleResizeComplete();
+    });
+
+    const skips = warn.mock.calls.filter(
+      (call) => call[1] === 'resize settlement (invalid native id)',
+    );
+    expect(skips).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('프리뷰 없이 끝난 단일 resize도 무커밋을 보고한다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await renderHarness([stableKeySelection(STABLE_A)]);
+
+    // handleResize 없이 종료 - finalBounds가 한 번도 계산되지 않은 경로
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResizeComplete();
+    });
+
+    expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+    const skips = warn.mock.calls.filter(
+      (call) => call[1] === 'resize settlement (no preview bounds)',
+    );
+    expect(skips).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('그룹 resize가 프리뷰 없이 끝나면 단일 경로 보고를 내지 않는다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await renderHarness([
+      stableKeySelection(STABLE_A),
+      stableKeySelection(STABLE_B, 1),
+    ]);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResizeComplete();
+    });
+
+    const skips = warn.mock.calls.filter(
+      (call) => typeof call[1] === 'string' && call[1].startsWith('resize '),
+    );
+    expect(skips).toHaveLength(0);
+    warn.mockRestore();
+  });
+
   it('active resize 중 unmount하면 보관한 token을 종료한다', async () => {
     mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
     await renderHarness([pluginSelection('plugin-a:one')]);

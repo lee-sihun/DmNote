@@ -817,12 +817,19 @@ export function useGridResize({
     const finalBounds = finalBoundsRef.current;
     const frozenTargets = frozenResizeTargetsRef.current;
     frozenResizeTargetsRef.current = [];
-    if (
-      frozenTargets.length === 1 &&
-      frozenTargets[0].type !== 'plugin' &&
-      !isNativeElementId(frozenTargets[0].id)
-    ) {
+    // 단일 native 정산의 무커밋 사유를 상호배타로 판정해 정확히 1회만 보고한다.
+    // 그룹 정산은 handleGroupResizeComplete 소관이라 여기서 보고하지 않는다
+    const singleNative =
+      frozenTargets.length === 1 && frozenTargets[0].type !== 'plugin'
+        ? frozenTargets[0]
+        : null;
+    if (singleNative && !isNativeElementId(singleNative.id)) {
+      // 합성 id는 시작 fingerprint 배관이 없어 fail-closed 무커밋.
+      // handleResize도 같은 이유로 프리뷰를 만들지 않아 finalBounds가 없다
       reportElementOpSkipped('resize settlement (invalid native id)');
+    } else if (singleNative && !finalBounds) {
+      // 프리뷰가 한 번도 계산되지 않아 적용할 bounds가 없다
+      reportElementOpSkipped('resize settlement (no preview bounds)');
     }
     if (finalBounds && frozenTargets.length === 1) {
       const element = frozenTargets[0] as {
@@ -845,8 +852,6 @@ export function useGridResize({
           },
           resizeGestureIdRef.current ?? undefined,
         ).catch(reportElementOpError);
-      } else if (element.type !== 'plugin') {
-        reportElementOpSkipped('resize settlement (invalid native id)');
       } else if (element.type === 'plugin') {
         // 플러그인 요소에 최종 크기 적용
         const pluginStore = usePluginDisplayElementStore.getState();
