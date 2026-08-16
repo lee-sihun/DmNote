@@ -39,8 +39,8 @@ fn document_json(document: &EditorDocumentV1) -> String {
     serde_json::to_string_pretty(document).expect("editor document serializes")
 }
 
-// EditorOpV1 wire kind 전수 목록 - 신규 op variant를 추가하면 아래 match가
-// 컴파일 오류를 내므로 이 목록과 fixture 케이스를 함께 늘린다
+// EditorOpV1 wire kind 기대 목록 - op_kind가 serde 실태그를 돌려주므로
+// 집합 동등 테스트(fixture_covers_every_op_kind)가 이 목록의 오타도 잡는다
 const ALL_OP_KINDS: [&str; 8] = [
     "setBounds",
     "deleteElement",
@@ -52,17 +52,24 @@ const ALL_OP_KINDS: [&str; 8] = [
     "renameLayerGroup",
 ];
 
-fn op_kind(op: &EditorOpV1) -> &'static str {
+fn op_kind(op: &EditorOpV1) -> String {
+    // 전수성 강제 전용 match - 신규 variant 추가 시 컴파일 오류를 내
+    // ALL_OP_KINDS와 fixture 케이스 갱신을 강제한다. kind 문자열의
+    // 단일 원천은 serde 태그라 여기서 문자열을 복제하지 않는다
     match op {
-        EditorOpV1::SetBounds { .. } => "setBounds",
-        EditorOpV1::DeleteElement { .. } => "deleteElement",
-        EditorOpV1::PatchElement { .. } => "patchElement",
-        EditorOpV1::SetKeySlot { .. } => "setKeySlot",
-        EditorOpV1::InsertFrozenElements { .. } => "insertFrozenElements",
-        EditorOpV1::ReorderElements { .. } => "reorderElements",
-        EditorOpV1::SetElementGroups { .. } => "setElementGroups",
-        EditorOpV1::RenameLayerGroup { .. } => "renameLayerGroup",
+        EditorOpV1::SetBounds { .. } => {}
+        EditorOpV1::DeleteElement { .. } => {}
+        EditorOpV1::PatchElement { .. } => {}
+        EditorOpV1::SetKeySlot { .. } => {}
+        EditorOpV1::InsertFrozenElements { .. } => {}
+        EditorOpV1::ReorderElements { .. } => {}
+        EditorOpV1::SetElementGroups { .. } => {}
+        EditorOpV1::RenameLayerGroup { .. } => {}
     }
+    serde_json::to_value(op)
+        .ok()
+        .and_then(|value| Some(value.get("kind")?.as_str()?.to_owned()))
+        .expect("EditorOpV1 must serialize with a kind tag")
 }
 
 #[test]
@@ -72,8 +79,8 @@ fn fixture_version_matches_ops_version() {
 
 #[test]
 fn fixture_covers_every_op_kind() {
-    let expected: BTreeSet<&str> = ALL_OP_KINDS.into_iter().collect();
-    let seen: BTreeSet<&str> = parity_fixture()
+    let expected: BTreeSet<String> = ALL_OP_KINDS.into_iter().map(str::to_owned).collect();
+    let seen: BTreeSet<String> = parity_fixture()
         .cases
         .iter()
         .flat_map(|case| case.ops.iter().map(op_kind))
