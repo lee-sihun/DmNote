@@ -7,9 +7,11 @@ vi.mock('../core/platform', () => ({
 }));
 
 import {
+  clearPendingCustomCursorHover,
   isCustomCursorHoverSuspended,
   resumeCustomCursorHover,
   setCustomCursorHover,
+  setPendingCustomCursorHover,
   suspendCustomCursorHover,
 } from './cursorUtils';
 
@@ -84,5 +86,86 @@ describe('커스텀 커서 호버 억제 (드래그 세션)', () => {
 
     setCustomCursorHover('ns-resize');
     expect(hasCursorBodyClass()).toBe(false);
+  });
+
+  it('억제 중 보류된 enter는 resume 시 hover로 적용된다', () => {
+    suspendCustomCursorHover();
+    const apply = vi.fn();
+    setPendingCustomCursorHover('ns-resize', apply);
+    expect(hasCursorBodyClass()).toBe(false);
+
+    resumeCustomCursorHover();
+    vi.runAllTimers();
+
+    expect(apply).toHaveBeenCalledOnce();
+    expect(hasCursorBodyClass()).toBe(true);
+  });
+
+  it('대응 leave가 오면 보류 기록을 지운다', () => {
+    suspendCustomCursorHover();
+    const apply = vi.fn();
+    setPendingCustomCursorHover('ns-resize', apply);
+    // 핸들 leave 시퀀스: 자기 보류 소거 후 hover 해제
+    clearPendingCustomCursorHover(apply);
+    setCustomCursorHover(null);
+
+    resumeCustomCursorHover();
+    vi.runAllTimers();
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(hasCursorBodyClass()).toBe(false);
+  });
+
+  it('hover 해제는 다른 소유자의 보류 기록을 지우지 않는다', () => {
+    suspendCustomCursorHover();
+    const apply = vi.fn();
+    setPendingCustomCursorHover('ns-resize', apply);
+    // 다른 핸들의 unmount 정리가 hover만 걷는 경우
+    setCustomCursorHover(null);
+
+    resumeCustomCursorHover();
+    vi.runAllTimers();
+
+    expect(apply).toHaveBeenCalledOnce();
+    expect(hasCursorBodyClass()).toBe(true);
+  });
+
+  it('재억제는 이전 보류 기록을 초기화한다', () => {
+    suspendCustomCursorHover();
+    const apply = vi.fn();
+    setPendingCustomCursorHover('ns-resize', apply);
+    suspendCustomCursorHover();
+
+    resumeCustomCursorHover();
+    vi.runAllTimers();
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(hasCursorBodyClass()).toBe(false);
+  });
+
+  it('억제 중이 아니면 보류 기록을 받지 않는다', () => {
+    const apply = vi.fn();
+    setPendingCustomCursorHover('ns-resize', apply);
+
+    suspendCustomCursorHover();
+    resumeCustomCursorHover();
+    vi.runAllTimers();
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(hasCursorBodyClass()).toBe(false);
+  });
+
+  it('보류 해제는 같은 기록일 때만 지운다', () => {
+    suspendCustomCursorHover();
+    const apply = vi.fn();
+    setPendingCustomCursorHover('ns-resize', apply);
+    // 다른 소유자의 정리 요청은 무시된다
+    clearPendingCustomCursorHover(vi.fn());
+
+    resumeCustomCursorHover();
+    vi.runAllTimers();
+
+    expect(apply).toHaveBeenCalledOnce();
+    expect(hasCursorBodyClass()).toBe(true);
   });
 });

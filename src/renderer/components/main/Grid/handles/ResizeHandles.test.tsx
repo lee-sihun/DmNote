@@ -193,6 +193,66 @@ describe('ResizeHandles 핸들 호버 생명주기', () => {
     expect(visual.style.backgroundColor).toBe('white');
   });
 
+  it('억제 중 enter는 resume 시 hover로 적용된다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="s"]')!;
+
+    suspendCustomCursorHover();
+    await act(async () => {
+      dispatchEnter(handle);
+    });
+    expect(hasCursorBodyClass()).toBe(false);
+
+    resumeCustomCursorHover();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // 포인터가 핸들 안에 머문 릴리즈 - 커서와 하이라이트 모두 복원
+    expect(hasCursorBodyClass()).toBe(true);
+    const visual = handle.firstElementChild as HTMLElement;
+    expect(visual.style.backgroundColor).not.toBe('white');
+  });
+
+  it('억제 중 enter 후 leave가 오면 resume에도 hover가 없다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="s"]')!;
+
+    suspendCustomCursorHover();
+    await act(async () => {
+      dispatchEnter(handle);
+      dispatchLeave(handle);
+    });
+
+    resumeCustomCursorHover();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(hasCursorBodyClass()).toBe(false);
+    const visual = handle.firstElementChild as HTMLElement;
+    expect(visual.style.backgroundColor).toBe('white');
+  });
+
+  it('보류 중 핸들이 unmount되면 pending도 정리한다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="s"]')!;
+
+    suspendCustomCursorHover();
+    await act(async () => {
+      dispatchEnter(handle);
+    });
+
+    // bounds 제거로 핸들 unmount (leave 이벤트 없음)
+    await renderHandles(null);
+    resumeCustomCursorHover();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(hasCursorBodyClass()).toBe(false);
+  });
+
   it('호버 중 핸들이 unmount되면 커서 오버레이를 정리한다', async () => {
     await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
     const handle = host.querySelector<HTMLElement>('[data-resize-handle="n"]')!;

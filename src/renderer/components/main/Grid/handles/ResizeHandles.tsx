@@ -1,11 +1,13 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
+  clearPendingCustomCursorHover,
   CursorType,
   getCursor,
   isCustomCursorHoverSuspended,
   lockCustomCursor,
   setCustomCursorHover,
+  setPendingCustomCursorHover,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
 import {
@@ -173,10 +175,15 @@ const getHandleStyle = (
 const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const hoveredRef = useRef(false);
+  const pendingApplyRef = useRef<(() => void) | null>(null);
 
-  // 호버 중 unmount로 leave가 유실되면 남는 커서 오버레이 정리
+  // 호버 중 unmount로 leave가 유실되면 남는 커서 오버레이·보류 기록 정리
   useEffect(() => {
     return () => {
+      if (pendingApplyRef.current) {
+        clearPendingCustomCursorHover(pendingApplyRef.current);
+        pendingApplyRef.current = null;
+      }
       if (hoveredRef.current) setCustomCursorHover(null);
     };
   }, []);
@@ -210,12 +217,26 @@ const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
       }}
       onMouseDown={(e) => onMouseDown(e, handle)}
       onPointerEnter={(e) => {
-        // 드래그 세션 잔여 enter가 호버를 되살리지 않게 차단
-        if (isCustomCursorHoverSuspended()) return;
+        // 드래그 세션 중 enter는 즉시 적용하지 않고 보류 기록 - 릴리즈 후
+        // resume 시점에 포인터가 핸들 안이면 그 hover를 적용한다
+        if (isCustomCursorHoverSuspended()) {
+          const apply = () => {
+            pendingApplyRef.current = null;
+            setHovered(true);
+          };
+          pendingApplyRef.current = apply;
+          setPendingCustomCursorHover(handle.cursor, apply, e.nativeEvent);
+          return;
+        }
         setHovered(true);
         setCustomCursorHover(handle.cursor, e.nativeEvent);
       }}
       onPointerLeave={(e) => {
+        // 자기 보류 기록만 소거 - 다른 핸들의 pending은 건드리지 않는다
+        if (pendingApplyRef.current) {
+          clearPendingCustomCursorHover(pendingApplyRef.current);
+          pendingApplyRef.current = null;
+        }
         setHovered(false);
         setCustomCursorHover(null, e.nativeEvent);
       }}
