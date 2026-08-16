@@ -297,6 +297,62 @@ const modelFrom = (
   };
 };
 
+// 슬롯 위 이웃이 허용하는 소속 - 펼친 헤더 바로 아래는 그룹 처음,
+// 접힌 헤더 아래는 그룹 전체 다음 바깥이라 무소속
+const membershipFromAbove = (
+  row: DisplayItem | undefined,
+): string | undefined => {
+  if (!row) return undefined;
+  if (row.displayType === 'group-header') {
+    return row.isCollapsed ? undefined : row.groupId;
+  }
+  return row.item.groupId;
+};
+
+const membershipFromBelow = (
+  row: DisplayItem | undefined,
+): string | undefined =>
+  row?.displayType === 'layer' ? row.item.groupId : undefined;
+
+// 이동 집합을 제외한 슬롯 이웃 판독 - 드래그 중인 layer 행 자신을 이웃으로
+// 읽으면 낡은 소속이 판독된다 (앵커 캡처와 같은 규약). 전 멤버가 이동하는
+// 그룹의 헤더도 드롭 후 그 자리에 남지 않으므로 함께 건너뛴다
+const scanDropNeighbor = (
+  display: DisplayItem[],
+  start: number,
+  step: -1 | 1,
+  movingIds: ReadonlySet<string>,
+  isFullGroupMoved: (groupId: string) => boolean,
+): DisplayItem | undefined => {
+  for (let index = start; index >= 0 && index < display.length; index += step) {
+    const row = display[index];
+    if (row.displayType === 'layer') {
+      if (!movingIds.has(row.item.id)) return row;
+      continue;
+    }
+    if (!isFullGroupMoved(row.groupId)) return row;
+  }
+  return undefined;
+};
+
+// 아이템 드롭의 그룹 판정을 live 모델로 재유도. 캡처는 포인터가 올라간 행
+// 기준이라 같은 슬롯에서도 안·밖 의도가 갈리므로, 슬롯 이웃이 여전히
+// 허용하는 소속이면 캡처 의도를 유지한다. 앵커 행이 그 사이 그룹을 떠나
+// 캡처 값이 이웃과 어긋나면 위 이웃 기준으로 다시 유도해 사용자가 넣은 적
+// 없는 그룹 편입을 막는다
+const rederiveItemTargetGroupId = (
+  above: DisplayItem | undefined,
+  below: DisplayItem | undefined,
+  captured: string | undefined,
+): string | undefined => {
+  const aboveMembership = membershipFromAbove(above);
+  const belowMembership = membershipFromBelow(below);
+  if (captured === aboveMembership || captured === belowMembership) {
+    return captured;
+  }
+  return aboveMembership;
+};
+
 const resolvePlan = (
   descriptor: LayerDropIntent,
   document: CanonicalEditorDocumentV1,
@@ -332,9 +388,29 @@ const resolvePlan = (
     model.display,
   );
   if (displayIndex === null) throw new ElementIntentAbort('drop anchors stale');
+  const isFullGroupMoved = (groupId: string): boolean => {
+    const members = model.items.filter((item) => item.groupId === groupId);
+    return (
+      members.length > 0 && members.every((item) => movingIds.has(item.id))
+    );
+  };
+  const neighborAbove = scanDropNeighbor(
+    model.display,
+    displayIndex - 1,
+    -1,
+    movingIds,
+    isFullGroupMoved,
+  );
+  const neighborBelow = scanDropNeighbor(
+    model.display,
+    displayIndex,
+    1,
+    movingIds,
+    isFullGroupMoved,
+  );
   if (descriptor.kind === 'group' && descriptor.extraIds.length > 0) {
-    const before = model.display[displayIndex - 1];
-    const after = model.display[displayIndex];
+    const before = neighborAbove;
+    const after = neighborBelow;
     targetGroupId =
       before?.displayType === 'group-header'
         ? before.groupId
@@ -343,6 +419,17 @@ const resolvePlan = (
         : after?.displayType === 'layer'
         ? after.item.groupId
         : undefined;
+  } else if (
+    descriptor.kind === 'items' &&
+    !descriptor.anchors.anchorHeaderGroupId
+  ) {
+    // 헤더 진입은 그룹 편입이 명시적 의도라 재유도에서 제외 - 헤더 생존은
+    // 앵커 해석이 이미 확인했다
+    targetGroupId = rederiveItemTargetGroupId(
+      neighborAbove,
+      neighborBelow,
+      targetGroupId,
+    );
   }
   const plan = reorderAtDisplayIndex(
     model.items,

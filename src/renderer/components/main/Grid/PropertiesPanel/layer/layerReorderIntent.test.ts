@@ -326,6 +326,270 @@ describe('layer reorder slot generation', () => {
     },
   );
 
+  it('앵커 행이 드롭 전에 그룹을 떠나면 아이템 소속을 live 모델로 재유도한다', async () => {
+    const ID_D = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    installDocument(
+      documentWith(
+        [
+          { id: ID_A, zIndex: 4 },
+          { id: ID_D, zIndex: 3, groupId: 'group-a' },
+          { id: ID_B, zIndex: 2, groupId: 'group-a' },
+          { id: ID_C, zIndex: 1 },
+        ],
+        [{ id: 'group-a', name: 'A' }],
+      ),
+    );
+    // 캡처: 그룹 마지막 행 B 아래 드롭 - 당시 소속은 group-a
+    await commitLayerDropIntent({
+      kind: 'items',
+      mode: '4key',
+      collapsedGroupIds: [],
+      draggedIds: [ID_A],
+      anchors: {
+        toDisplayIndex: 4,
+        targetGroupId: 'group-a',
+        anchorBeforeId: ID_B,
+        anchorAfterId: ID_C,
+      },
+      preserveFullGroups: false,
+    });
+    const options = mocks.runMixed.mock.calls[0]?.[0];
+    // 정산 슬롯에서 B가 그룹을 떠남 - 캡처 소속을 그대로 쓰면 A가 드롭한 적
+    // 없는 group-a에 편입되어 드롭 위치보다 위로 튀어 오른다
+    const generation = options.generate({
+      base: documentWith(
+        [
+          { id: ID_A, zIndex: 4 },
+          { id: ID_D, zIndex: 3, groupId: 'group-a' },
+          { id: ID_B, zIndex: 2 },
+          { id: ID_C, zIndex: 1 },
+        ],
+        [{ id: 'group-a', name: 'A' }],
+      ),
+      pluginProjection: [],
+    });
+    expect(generation.ops[0].groupUpdates).toEqual([
+      { elementType: 'key', id: ID_A, groupId: null },
+    ]);
+    // 드롭 위치는 유지 - B 아래, C 위
+    expect(
+      generation.ops[0].zUpdates.map((update: { id: string }) => update.id),
+    ).toEqual([ID_D, ID_B, ID_A, ID_C]);
+  });
+
+  it('그룹 마지막 행 아래 바깥 드롭 의도는 재유도가 덮어쓰지 않는다', async () => {
+    const doc = () =>
+      documentWith(
+        [
+          { id: ID_A, zIndex: 2 },
+          { id: ID_B, zIndex: 1, groupId: 'group-a' },
+          { id: ID_C, zIndex: 0 },
+        ],
+        [{ id: 'group-a', name: 'A' }],
+      );
+    installDocument(doc());
+    // 같은 슬롯이라도 아래 행 C에 진입한 드롭은 그룹 밖 - 캡처 의도 유지
+    await commitLayerDropIntent({
+      kind: 'items',
+      mode: '4key',
+      collapsedGroupIds: [],
+      draggedIds: [ID_A],
+      anchors: {
+        toDisplayIndex: 3,
+        targetGroupId: undefined,
+        anchorBeforeId: ID_B,
+        anchorAfterId: ID_C,
+      },
+      preserveFullGroups: false,
+    });
+    const generation = mocks.runMixed.mock.calls[0]?.[0].generate({
+      base: doc(),
+      pluginProjection: [],
+    });
+    expect(generation.ops[0].groupUpdates).toEqual([
+      { elementType: 'key', id: ID_A, groupId: null },
+    ]);
+  });
+
+  it('그룹 마지막 행 아래 안쪽 드롭 의도도 재유도가 유지한다', async () => {
+    const doc = () =>
+      documentWith(
+        [
+          { id: ID_A, zIndex: 2 },
+          { id: ID_B, zIndex: 1, groupId: 'group-a' },
+          { id: ID_C, zIndex: 0 },
+        ],
+        [{ id: 'group-a', name: 'A' }],
+      );
+    installDocument(doc());
+    // 위 행 B에서 내려온 드롭은 그룹 마지막 자리 - 캡처 의도 유지
+    await commitLayerDropIntent({
+      kind: 'items',
+      mode: '4key',
+      collapsedGroupIds: [],
+      draggedIds: [ID_A],
+      anchors: {
+        toDisplayIndex: 3,
+        targetGroupId: 'group-a',
+        anchorBeforeId: ID_B,
+        anchorAfterId: ID_C,
+      },
+      preserveFullGroups: false,
+    });
+    const generation = mocks.runMixed.mock.calls[0]?.[0].generate({
+      base: doc(),
+      pluginProjection: [],
+    });
+    expect(generation.ops[0].groupUpdates).toEqual([
+      { elementType: 'key', id: ID_A, groupId: 'group-a' },
+    ]);
+  });
+
+  it('접힌 그룹 헤더 하단 바깥 드롭은 재유도 후에도 그룹에 편입되지 않는다', async () => {
+    const doc = () =>
+      documentWith(
+        [
+          { id: ID_A, zIndex: 2 },
+          { id: ID_B, zIndex: 1, groupId: 'group-a' },
+          { id: ID_C, zIndex: 0 },
+        ],
+        [{ id: 'group-a', name: 'A' }],
+      );
+    installDocument(doc());
+    // 접힌 헤더 하단 존은 그룹 전체 다음 바깥 삽입
+    await commitLayerDropIntent({
+      kind: 'items',
+      mode: '4key',
+      collapsedGroupIds: ['group-a'],
+      draggedIds: [ID_A],
+      anchors: {
+        toDisplayIndex: 2,
+        targetGroupId: undefined,
+        anchorBeforeHeaderGroupId: 'group-a',
+        anchorAfterId: ID_C,
+      },
+      preserveFullGroups: false,
+    });
+    const generation = mocks.runMixed.mock.calls[0]?.[0].generate({
+      base: doc(),
+      pluginProjection: [],
+    });
+    expect(generation.ops[0].groupUpdates).toEqual([
+      { elementType: 'key', id: ID_A, groupId: null },
+    ]);
+    expect(
+      generation.ops[0].zUpdates.map((update: { id: string }) => update.id),
+    ).toEqual([ID_B, ID_A, ID_C]);
+  });
+
+  it('그룹 마지막 멤버의 제자리 pull-out은 그룹 밖으로 커밋된다', async () => {
+    const doc = () =>
+      documentWith(
+        [
+          { id: ID_A, zIndex: 2, groupId: 'group-a' },
+          { id: ID_B, zIndex: 1, groupId: 'group-a' },
+          { id: ID_C, zIndex: 0 },
+        ],
+        [{ id: 'group-a', name: 'A' }],
+      );
+    installDocument(doc());
+    // 마지막 멤버 B를 바로 아래 바깥 행 C 상단으로 pull-out - 이웃 판독이
+    // 드래그 중인 B 자신을 읽으면 낡은 소속 group-a가 캡처 의도를 덮는다
+    await commitLayerDropIntent({
+      kind: 'items',
+      mode: '4key',
+      collapsedGroupIds: [],
+      draggedIds: [ID_B],
+      anchors: {
+        toDisplayIndex: 3,
+        targetGroupId: undefined,
+        anchorBeforeId: ID_A,
+        anchorAfterId: ID_C,
+      },
+      preserveFullGroups: false,
+    });
+    const generation = mocks.runMixed.mock.calls[0]?.[0].generate({
+      base: doc(),
+      pluginProjection: [],
+    });
+    expect(generation.ops[0].groupUpdates).toEqual([
+      { elementType: 'key', id: ID_B, groupId: null },
+    ]);
+  });
+
+  it('그룹 블록이 최하단일 때 맨 아래 드롭은 그룹 밖이다', async () => {
+    const doc = () =>
+      documentWith(
+        [
+          { id: ID_C, zIndex: 2 },
+          { id: ID_A, zIndex: 1, groupId: 'group-a' },
+          { id: ID_B, zIndex: 0, groupId: 'group-a' },
+        ],
+        [{ id: 'group-a', name: 'A' }],
+      );
+    installDocument(doc());
+    // 목록 최하단 = 밖 계약 - 아래 이웃이 드래그 중인 B 자신뿐이어도
+    // 낡은 소속을 읽지 않는다
+    await commitLayerDropIntent({
+      kind: 'items',
+      mode: '4key',
+      collapsedGroupIds: [],
+      draggedIds: [ID_B],
+      anchors: {
+        toDisplayIndex: 4,
+        targetGroupId: undefined,
+        anchorBeforeId: ID_A,
+      },
+      preserveFullGroups: false,
+    });
+    const generation = mocks.runMixed.mock.calls[0]?.[0].generate({
+      base: doc(),
+      pluginProjection: [],
+    });
+    expect(generation.ops[0].groupUpdates).toEqual([
+      { elementType: 'key', id: ID_B, groupId: null },
+    ]);
+    expect(
+      generation.ops[0].zUpdates.map((update: { id: string }) => update.id),
+    ).toEqual([ID_C, ID_A, ID_B]);
+  });
+
+  it('그룹 드래그의 최하단 드롭에서 추가 선택이 드래그 그룹에 편입되지 않는다', async () => {
+    const doc = () =>
+      documentWith(
+        [
+          { id: ID_C, zIndex: 2 },
+          { id: ID_A, zIndex: 1, groupId: 'group-a' },
+          { id: ID_B, zIndex: 0, groupId: 'group-a' },
+        ],
+        [{ id: 'group-a', name: 'A' }],
+      );
+    installDocument(doc());
+    // 이웃 판독이 이동 중인 그룹 멤버·헤더를 읽으면 추가 선택 C가 드래그
+    // 그룹에 강제 편입된다 - 최하단 = 밖 계약 유지
+    await commitLayerDropIntent({
+      kind: 'group',
+      mode: '4key',
+      collapsedGroupIds: [],
+      groupId: 'group-a',
+      extraIds: [ID_C],
+      anchors: {
+        toDisplayIndex: 4,
+        targetGroupId: undefined,
+        boundary: 'bottom',
+      },
+    });
+    const generation = mocks.runMixed.mock.calls[0]?.[0].generate({
+      base: doc(),
+      pluginProjection: [],
+    });
+    expect(generation.ops[0].groupUpdates).toEqual([
+      { elementType: 'key', id: ID_C, groupId: null },
+      { elementType: 'key', id: ID_A, groupId: 'group-a' },
+      { elementType: 'key', id: ID_B, groupId: 'group-a' },
+    ]);
+  });
+
   it('그룹 드래그는 슬롯 시점에 새로 들어온 그룹 멤버까지 함께 옮긴다', async () => {
     installDocument(
       documentWith(
