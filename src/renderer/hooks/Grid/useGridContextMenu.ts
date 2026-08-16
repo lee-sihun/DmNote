@@ -48,7 +48,10 @@ interface UseGridContextMenuParams {
 }
 
 interface UseGridContextMenuReturn {
-  getKeyMenuItems: (contextIndex: number | null) => MenuItem[];
+  getKeyMenuItems: (
+    contextIndex: number | null,
+    contextElementId?: string | null,
+  ) => MenuItem[];
   getStatMenuItems: (contextIndex: number | null) => MenuItem[];
   getGraphMenuItems: (contextIndex: number | null) => MenuItem[];
   getKnobMenuItems: (contextIndex: number | null) => MenuItem[];
@@ -102,7 +105,10 @@ export function useGridContextMenu({
     });
 
   // 키 메뉴 아이템 생성 (기본 + 플러그인)
-  const getKeyMenuItems = (contextIndex: number | null): MenuItem[] => {
+  const getKeyMenuItems = (
+    contextIndex: number | null,
+    contextElementId?: string | null,
+  ): MenuItem[] => {
     const baseItems: MenuItem[] = [
       { id: 'delete', label: t('contextMenu.deleteKey') },
       { id: 'duplicate', label: t('contextMenu.duplicateKey') },
@@ -114,19 +120,30 @@ export function useGridContextMenu({
     ];
 
     // 플러그인 메뉴 필터링 (조건부 표시)
+    // 예측자 context는 열림 시점 index가 아니라 요소 id로 재해석.
+    // 메뉴가 열린 동안 재정렬돼도 원래 요소를 따라가고, 소실 시 fail-closed
+    const modePositions = positions[selectedKeyType] ?? [];
+    let resolvedIndex = contextIndex;
+    if (contextElementId !== undefined) {
+      const found =
+        contextElementId === null
+          ? -1
+          : modePositions.findIndex(
+              (position) => position.id === contextElementId,
+            );
+      resolvedIndex = found >= 0 ? found : null;
+    }
     const keyPosition =
-      contextIndex !== null
-        ? positions[selectedKeyType]?.[contextIndex]
-        : undefined;
+      resolvedIndex !== null ? modePositions[resolvedIndex] : undefined;
     const context: KeyContext | null =
-      contextIndex !== null && keyPosition
+      resolvedIndex !== null && keyPosition
         ? {
             // 플러그인 메뉴 표면은 canonical 문자열 유지
             keyCode: slotCanonical(
-              keyMappings[selectedKeyType]?.[contextIndex] ?? '',
+              keyMappings[selectedKeyType]?.[resolvedIndex] ?? '',
             ),
             id: keyPosition.id,
-            index: contextIndex,
+            index: resolvedIndex,
             position: keyPosition,
             mode: selectedKeyType,
           }

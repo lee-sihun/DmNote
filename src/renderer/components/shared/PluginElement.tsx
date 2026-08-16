@@ -384,6 +384,12 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     x: 0,
     y: 0,
   });
+  // 열림 시점 커스텀 항목 동결. 열림 중 플러그인이 customItems를 교체해도
+  // 표시와 index 디스패치가 같은 배열을 본다
+  const frozenCustomItemsRef =
+    useRef<
+      NonNullable<PluginDisplayElementInternal['contextMenu']>['customItems']
+    >(undefined);
 
   // 앵커 기반 위치 계산
   const calculatedPosition = (() => {
@@ -1120,6 +1126,8 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     // (contextMenu 설정이 없으면 메뉴만 열지 않고 종료)
     if (!element.contextMenu) return;
 
+    // 열림 시점 항목 동결 - 열림 중 교체가 index 디스패치를 어긋내지 않게
+    frozenCustomItemsRef.current = element.contextMenu.customItems ?? [];
     setContextMenuPosition({ x: e.clientX, y: e.clientY });
     setContextMenuOpen(true);
   };
@@ -1414,11 +1422,10 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     // 닫히는 중에도 항목을 유지해야 잔상이 빈 메뉴로 보이지 않는다
     if (!contextMenuPresence.mounted || !element.contextMenu) return [];
 
-    const {
-      enableDelete = true,
-      deleteLabel = '삭제',
-      customItems = [],
-    } = element.contextMenu;
+    const { enableDelete = true, deleteLabel = '삭제' } = element.contextMenu;
+    // 동결 참조 우선 - 표시 항목과 클릭 디스패치가 같은 배열에서 나온다
+    const customItems =
+      frozenCustomItemsRef.current ?? element.contextMenu.customItems ?? [];
 
     // predicate가 보는 element.state에는 contextMenuStateKeys로 선언된
     // 오버레이 런타임 값만 병합 — 프리뷰용 state 자체는 불변
@@ -1502,7 +1509,8 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       }).catch(reportElementOpError);
     } else if (itemId.startsWith('custom-')) {
       const index = parseInt(itemId.replace('custom-', ''), 10);
-      const customItem = element.contextMenu?.customItems?.[index];
+      // 동결 배열로만 역참조 - 항목 id의 index와 같은 배열임을 보장
+      const customItem = frozenCustomItemsRef.current?.[index];
       if (customItem) {
         // 커스텀 메뉴 실행 (자동 래핑되어 있음)
         try {

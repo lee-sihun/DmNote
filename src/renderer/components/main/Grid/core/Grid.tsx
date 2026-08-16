@@ -1777,7 +1777,7 @@ const Grid = ({
               ? getGraphMenuItems(contextIndex)
               : contextType === 'knob'
               ? getKnobMenuItems(contextIndex)
-              : getKeyMenuItems(contextIndex)
+              : getKeyMenuItems(contextIndex, contextElementId)
           }
           onSelect={async (id: string) => {
             if (contextType === 'mixed') {
