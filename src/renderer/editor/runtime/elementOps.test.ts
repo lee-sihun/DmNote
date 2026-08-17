@@ -30,6 +30,10 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import {
+  registerLoadedPluginIdsProvider,
+  registerStoredPluginGroupRefsProvider,
+} from './pluginGroupMembers';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
@@ -198,6 +202,8 @@ describe('elementOps', () => {
     useKnobItemStore.setState({ positions: {} });
     useLayerGroupStore.setState({ layerGroups: {} });
     useGridSelectionStore.setState({ selectedElements: [] });
+    registerLoadedPluginIdsProvider(() => new Set());
+    registerStoredPluginGroupRefsProvider(() => ({}));
   });
 
   it('키 삭제는 keys와 keyPositions를 함께 제거하고 즉시 스토어에 반영한다', async () => {
@@ -250,6 +256,32 @@ describe('elementOps', () => {
     await deleteElementById('key', ID_A);
 
     expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([]);
+  });
+
+  it('미로드 플러그인이 유일 잔존 멤버면 그룹을 유지한다', async () => {
+    // 백엔드 생존 판정은 store의 전 plugin_data 인스턴스를 보므로, eager 모집단이
+    // 런타임 요소만 보면 로컬에서만 그룹이 사라지고 종료 시 flush가 그 드리프트를
+    // 영속화한다 (그룹 무음 영구 소실)
+    registerLoadedPluginIdsProvider(() => new Set());
+    registerStoredPluginGroupRefsProvider(() => ({
+      'idle-plugin': { '4key': ['group-a'] },
+    }));
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }],
+      },
+      positions: { '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }] },
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+
+    await deleteElementById('key', ID_A);
+
+    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([
+      { id: 'group-a', name: 'Group A' },
+    ]);
   });
 
   it('확정 시점에 이미 삭제된 대상은 커밋하지 않는다', async () => {

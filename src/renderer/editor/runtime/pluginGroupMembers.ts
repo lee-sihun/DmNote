@@ -39,9 +39,14 @@ export const registerStoredPluginGroupRefsProvider = (
   storedRefsProvider = next;
 };
 
-export const currentPluginGroupMembers =
+/**
+ * 미로드 플러그인의 그룹 참조만 반환한다. 런타임 요소를 자체 가공하는
+ * eager 투영(삭제분 제외, desired 소속 반영)이 모집단을 백엔드와 맞출 때
+ * 자기 가공 결과에 이것만 덧붙이면 된다
+ */
+export const unloadedPluginGroupMembers =
   (): readonly PluginGroupMemberLike[] => {
-    const members: PluginGroupMemberLike[] = [...provider()];
+    const members: PluginGroupMemberLike[] = [];
     const loaded = loadedPluginIdsProvider();
     for (const [pluginId, byMode] of Object.entries(storedRefsProvider())) {
       if (loaded.has(pluginId)) continue;
@@ -54,3 +59,9 @@ export const currentPluginGroupMembers =
     }
     return members;
   };
+
+export const currentPluginGroupMembers =
+  (): readonly PluginGroupMemberLike[] => [
+    ...provider(),
+    ...unloadedPluginGroupMembers(),
+  ];

@@ -18,6 +18,7 @@ import {
   projectStableElementGroups,
 } from '@utils/layerGroupUtils';
 import { isNativeElementId } from '../model/elementId';
+import { unloadedPluginGroupMembers } from './pluginGroupMembers';
 import {
   ElementIntentAbort,
   applyPropertyIntentsEagerly,
@@ -191,9 +192,12 @@ export const setMixedElementGroups = (
         targets: nativeTargets,
         targetGroup,
         ...before,
-        pluginElements: projectDesiredPlugins(
-          usePluginDisplayElementStore.getState().elements,
-        ),
+        pluginElements: [
+          ...projectDesiredPlugins(
+            usePluginDisplayElementStore.getState().elements,
+          ),
+          ...unloadedPluginGroupMembers(),
+        ],
       });
       if (!projected) return false;
       let nativeReceipt: ElementIntentReceipt | null = null;

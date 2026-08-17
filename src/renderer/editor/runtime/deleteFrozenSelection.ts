@@ -15,6 +15,7 @@ import {
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
 import { isNativeElementId } from '../model/elementId';
+import { unloadedPluginGroupMembers } from './pluginGroupMembers';
 import {
   ElementIntentAbort,
   applySealedSliceMutation,
@@ -202,9 +203,14 @@ export const deleteFrozenSelection = async (
     // 삭제 후 남는 플러그인만 그룹 생존에 기여 - 삭제 대상 포함 집계는
     // 백엔드(plugin_changes 반영)와 어긋나 빈 그룹을 되살린다
     const deletedPluginIds = new Set(pluginFullIds);
-    const remainingPluginElements = usePluginDisplayElementStore
-      .getState()
-      .elements.filter((element) => !deletedPluginIds.has(element.fullId));
+    // 삭제분을 뺀 런타임 멤버 + 미로드 플러그인의 미러 참조.
+    // 백엔드 생존 판정은 전 plugin_data 인스턴스를 보므로 모집단을 맞춘다
+    const remainingPluginElements = [
+      ...usePluginDisplayElementStore
+        .getState()
+        .elements.filter((element) => !deletedPluginIds.has(element.fullId)),
+      ...unloadedPluginGroupMembers(),
+    ];
     for (const mode of affectedModes) {
       const normalized = normalizeLayerGroupsForMode({
         mode,
