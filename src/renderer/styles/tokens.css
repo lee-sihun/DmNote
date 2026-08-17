@@ -175,6 +175,24 @@
   --ui-toggle-press-ease: cubic-bezier(0.33, 1, 0.68, 1);
   --ui-toggle-release-duration: var(--ui-duration-base);
 
+  /* 세그먼트 인디케이터 - 전역 base(180ms)+ease-out-expo를 쓰면 이동의 70%가
+     첫 프레임 안에 끝나 "움직였다"가 아니라 "이미 가 있다"로 읽힌다.
+     실측: 클릭 후 첫 프레임에서 진행률 63~75%.
+     커브를 완만하게 펴서 이동 구간을 프레임에 나눠 준다 - 90% 지점이
+     duration의 33%(expo)에서 54%로 밀린다. 업계도 이 대역이다
+     (Material Web 250ms cubic-bezier(.3,0,0,1), Fluent 300ms, MUI 300ms).
+
+     오버슈트는 keyframe이 아니라 커브의 y값이 소유한다 - 토글 노브(--ui-toggle-ease)와
+     같은 원칙. 1.2는 한 칸 이동(69px)에서 0.9px, 두 칸(139px)에서 1.7px 넘어간다.
+     트랙 안쪽 여백이 2px이라 넘어간 만큼이 트랙 밖으로 새지 않는다.
+     조사한 디자인 시스템 15곳 중 세그먼트에 오버슈트를 쓰는 곳은 없다 - 의도적 일탈이고,
+     이 저장소가 토글에서 이미 같은 선택을 한 것과 문법을 맞춘 것이다.
+     이전에는 translate 소수 픽셀이 정착 시 반올림되며 1px 튀는 아티팩트가 이 역할을
+     대신했는데, translate 0%인 첫 탭에서만 안 나타나고 트랙 폭에 따라 사라져서
+     방향 비대칭으로 읽혔다 */
+  --ui-segment-duration: 220ms;
+  --ui-segment-ease: cubic-bezier(0.34, 1.2, 0.64, 1);
+
   /* 팝업 등퇴장 - 드롭다운, 팝오버, 피커 공통 다이얼.
      닫힘이 열림보다 짧은 건 의도, 사라지는 걸 기다릴 이유가 없음 */
   --ui-popup-enter-duration: var(--ui-duration-base);

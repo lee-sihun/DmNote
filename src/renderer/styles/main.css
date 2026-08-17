@@ -405,6 +405,22 @@ body.dmn-dragging * {
     height: var(--ui-toggle-thumb-size);
     margin-top: 0;
   }
+
+  /* 세그먼트 인디케이터 — 토글 노브와 같은 성격의 슬라이딩이라 함께 끈다.
+     전이를 소유한 .dmn-segment-thumb 규칙이 이 블록보다 아래에 있어 같은 특이도로는
+     밀린다. 속성 선택자로 한 단계 올려 순서와 무관하게 이기게 한다.
+     승격(will-change)은 유지 — 모션을 끄는 것과 레이어 승격은 별개고,
+     끈 상태에서도 페인트 비용은 낮은 쪽이 낫다 */
+  .dmn-segment-thumb[aria-hidden] {
+    transition: none;
+  }
+}
+
+/* 세그먼트 인디케이터 — 전역 모션 다이얼과 분리. 근거는 tokens.css 참조.
+   전이 선언은 여기가 소유한다 — 컴포넌트에 transition-* 유틸을 다시 붙이면
+   같은 특이도로 뒤에서 덮어써 이 커브가 죽는다 */
+.dmn-segment-thumb {
+  transition: transform var(--ui-segment-duration) var(--ui-segment-ease);
 }
 
 /* 눈 토글의 사선 드로우 모션은 EyeToggleIcon.tsx에서 WAAPI로 처리 —
