@@ -840,6 +840,7 @@ fn apply_frozen_insert(
     elements: &[EditorFrozenElementV1],
     groups: &[crate::models::EditorFrozenGroupV1],
     z_updates: &[EditorZUpdateV1],
+    plugin_group_refs: &PluginGroupRefs,
 ) -> Result<(EditorDocumentV1, EditorOpResultStatusV1), EditorCommitError> {
     let existing_elements = elements
         .iter()
@@ -856,14 +857,18 @@ fn apply_frozen_insert(
         .iter()
         .filter_map(frozen_element_group_id)
         .collect::<HashSet<_>>();
-    if let Some(group) = groups
-        .iter()
-        .find(|group| !inserted_group_refs.contains(group.id.as_str()))
-    {
+    // 플러그인 멤버만 든 그룹도 생존 - 참조 집합은 커밋 후 상태 기준이라
+    // gesture가 동봉한 plugin_changes의 소속이 이미 반영되어 있다
+    // (apply_reorder·remove_empty_layer_groups와 같은 규칙)
+    let plugin_refs = plugin_group_refs.get(mode);
+    if let Some(group) = groups.iter().find(|group| {
+        !inserted_group_refs.contains(group.id.as_str())
+            && !plugin_refs.is_some_and(|refs| refs.contains(&group.id))
+    }) {
         return Err(EditorCommitError::validation(
             "UNREFERENCED_FROZEN_GROUP",
             format!(
-                "insertFrozenElements group '{}' has no inserted native member",
+                "insertFrozenElements group '{}' has no inserted native or plugin member",
                 group.id
             ),
         ));
@@ -2504,8 +2509,15 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 groups,
                 z_updates,
             } => {
-                let (next, status) =
-                    apply_frozen_insert(&candidate, &locations, mode, elements, groups, z_updates)?;
+                let (next, status) = apply_frozen_insert(
+                    &candidate,
+                    &locations,
+                    mode,
+                    elements,
+                    groups,
+                    z_updates,
+                    plugin_group_refs,
+                )?;
                 candidate = next;
                 op_results.push(EditorOpResultV1 {
                     status,
@@ -3201,6 +3213,55 @@ mod tests {
         assert_eq!(
             replay.op_results[0].status,
             EditorOpResultStatusV1::NoChange
+        );
+    }
+
+    #[test]
+    fn frozen_insert_group_needs_a_native_or_plugin_member() {
+        let store = base_store();
+        // 삽입 요소가 그룹을 참조하지 않으면 거절
+        let orphan = EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![],
+            groups: vec![EditorFrozenGroupV1 {
+                id: "plugin-only-group".to_string(),
+                name: "Plugin Only".to_string(),
+            }],
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: store.key_positions["4key"][0].id.clone(),
+                z_index: 1,
+            }],
+        };
+        let error =
+            prepare_editor_ops_transition(&store, std::slice::from_ref(&orphan)).unwrap_err();
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|details| details.validation_code.as_deref()),
+            Some("UNREFERENCED_FROZEN_GROUP")
+        );
+
+        // 동봉 plugin_changes가 그 그룹의 멤버를 실었다면 생존해야 한다.
+        // 구조 op는 단독 배치가 강제되므로 setElementGroups로 분리할 수 없다
+        let mut plugin_refs = PluginGroupRefs::new();
+        plugin_refs
+            .entry("4key".to_string())
+            .or_default()
+            .insert("plugin-only-group".to_string());
+        let transition = prepare_editor_ops_transition_with_plugin_refs(
+            &store,
+            std::slice::from_ref(&orphan),
+            &plugin_refs,
+        )
+        .unwrap();
+        assert_eq!(
+            transition.candidate.layer_groups["4key"]
+                .iter()
+                .map(|group| group.id.as_str())
+                .collect::<Vec<_>>(),
+            ["plugin-only-group"]
         );
     }
 
