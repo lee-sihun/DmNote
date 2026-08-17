@@ -349,6 +349,13 @@ describe('editorCommitRaw semantic op protocol', () => {
     };
     expect(() => assertEditorOpsV1([set])).not.toThrow();
     expect(() => assertEditorOpsV1([rename])).not.toThrow();
+    // plugin-only 그룹 편집은 native 대상 없이 def 생성·정리만 운반한다.
+    // 백엔드(editor.rs validate)와 생성부(mixedElementGroups)가 모두 허용하므로
+    // 프론트 검증도 빈 targets를 통과시켜야 한다
+    expect(() => assertEditorOpsV1([{ ...set, targets: [] }])).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([{ ...set, targets: [], targetGroup: null }]),
+    ).not.toThrow();
     expect(() =>
       assertEditorOpsV1([
         set,
@@ -360,7 +367,6 @@ describe('editorCommitRaw semantic op protocol', () => {
       ]),
     ).toThrow(EditorProtocolError);
     for (const invalid of [
-      { ...set, targets: [] },
       { ...set, targets: [{ elementType: 'key', id: 'key-0' }] },
       { ...set, targets: [...set.targets, set.targets[0]] },
       {

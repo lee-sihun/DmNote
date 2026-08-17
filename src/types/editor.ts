@@ -1779,12 +1779,14 @@ export function assertEditorOpsV1(
     }
     if (op.kind === 'setElementGroups') {
       assertExactKeys(op, ['kind', 'mode', 'targets', 'targetGroup'], opLabel);
+      // 빈 targets 허용 - plugin-only 그룹 편집은 native 대상 없이 그룹 def
+      // 생성·정리를 op에 실어야 한다 (백엔드 validate_editor_op와 동일 계약).
+      // 플러그인 소속 자체는 동반 plugin_changes가 운반한다
       if (
         typeof op.mode !== 'string' ||
         op.mode.length === 0 ||
         new TextEncoder().encode(op.mode).length > 128 ||
         !Array.isArray(op.targets) ||
-        op.targets.length === 0 ||
         op.targets.length > 4096
       ) {
         throw new EditorProtocolError(`${opLabel} is invalid`);
