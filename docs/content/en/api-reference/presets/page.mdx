@@ -69,6 +69,8 @@ const result = await dmn.presets.loadTab();
 
 Subscribes to preset load completions. Receives the full snapshot of applied data (key mappings, positions, tabs, mode, etc.) in a single event.
 
+Position collections in the snapshot carry element `id` values that were freshly issued during this load. Applying a preset rekeys every element with new UUIDs, so IDs from the preset file or from a previous load never survive into the applied state, and loading the same preset twice produces two different ID sets. Re-resolve any cached element IDs from this snapshot.
+
 ```typescript
 interface PresetSnapshot {
   // Entries use the KeySlot union (string | MultiKeySlot)

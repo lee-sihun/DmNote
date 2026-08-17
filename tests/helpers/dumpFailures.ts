@@ -19,7 +19,9 @@ for (const file of collect(docsRoot)) {
     const failure = checkFence(fence);
     if (failure) {
       console.log(
-        `${relative(root, file)}:${failure.line} [${failure.lang}] ${failure.message}`,
+        `${relative(root, file)}:${failure.line} [${failure.lang}] ${
+          failure.message
+        }`,
       );
     }
   }

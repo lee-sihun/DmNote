@@ -127,14 +127,12 @@
   },
   "keySetting": {
     "title": "按鍵設定",
-    "tabKey": "按鍵",
     "tabNote": "音符",
     "tabCounter": "計數器",
     "keyMapping": "按鍵綁定",
     "key": "按鍵",
     "pressAnyKey": "按下任意鍵",
     "clickToSet": "單擊設定按鍵",
-    "keySize": "按鍵大小",
     "size": "大小",
     "noteColor": "音符顏色",
     "noteWidth": "音符寬度",
@@ -144,7 +142,6 @@
     "noteGlowOpacity": "發光不透明度",
     "noteGlow": "發光效果",
     "inactiveState": "閒置",
-    "activeState": "按下",
     "customImage": "自定義圖像",
     "configure": "配置",
     "className": "類名",
@@ -205,7 +202,8 @@
     "acceptExternal": "接受外部變更"
   },
   "editorSave": {
-    "permanentFailure": "此編輯無法儲存，編輯器已還原到上次儲存的狀態。請檢查您剛剛變更的值。"
+    "permanentFailure": "無法儲存，已復原這次變更。\n請檢查剛才變更的值。",
+    "capacityFailure": "超過儲存上限，已復原這次變更。\n請刪除部分元素後再試。"
   },
   "common": {
     "confirm": "確認",
@@ -278,12 +276,7 @@
     "resetCurrentTab": "重置此標籤頁的設定?",
     "resetCountersCurrentTab": "重置此標籤頁的計數器?",
     "resetKeyCounter": "重置 [{{name}}] 鍵的計數器?",
-    "reset": "重置",
-    "removeKey": "移除 [{{name}}] 鍵?",
-    "removeStat": "移除 [{{name}}] 統計?",
-    "removeGraph": "移除 [{{name}}] 圖表?",
-    "removeKnob": "移除 [{{name}}] 旋鈕?",
-    "remove": "移除"
+    "reset": "重置"
   },
   "tabs": {
     "title": "自訂標籤頁",
@@ -367,10 +360,8 @@
     "color": "顏色",
     "solid": "純色",
     "gradient": "漸變",
-    "gradientBottom": "漸變底部顏色",
     "opacity": "不透明度",
     "glow": "發光效果",
-    "glowSize": "大小",
     "glowOpacity": "不透明度",
     "glowColor": "顏色"
   },
@@ -450,7 +441,6 @@
     "loadFailed": "CSS 檔案載入失敗"
   },
   "unifiedSetting": {
-    "tabKey": "按鍵",
     "tabNote": "音符",
     "tabCounter": "計數器"
   },

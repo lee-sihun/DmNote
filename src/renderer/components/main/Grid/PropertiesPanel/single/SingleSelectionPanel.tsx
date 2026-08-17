@@ -1,5 +1,10 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
+import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { patchNativeLayerPropertyViaAuthority } from '@plugins/rpc/pluginElementActions';
+import { flushPluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
   STAT_BASE_OPTIONS,
@@ -12,10 +17,13 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import type { SizeCommit } from '../types';
+import type {
+  CounterTabContentProps,
+  NoteTabContentProps,
+  StyleTabContentProps,
+} from '../types';
 import {
-  getActivePairPreservation,
-  gradientPairPatch,
+  paintDescriptor,
   gradientToCss,
   type ColorModeValue,
   type GradientSpec,
@@ -32,7 +40,10 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
-import { resolveElementShadow } from '@src/types/key/shadows';
+import {
+  elementShadowLeafFromPartial,
+  resolveElementShadowForPosition,
+} from '@src/types/key/shadows';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -67,6 +78,13 @@ import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorS
 import ShadowControls from '../ShadowControls';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
+import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
+import type {
+  EditorPaintPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+  EditorElementPropertyPatchV1,
+} from '@src/types/editor';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -216,6 +234,13 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
         <div
           ref={setPluginScrollRef}
           className="properties-panel-overlay-viewport"
+          // blur가 확정 경계 - keystroke 단위가 아니라 포커스 이탈 시 즉시 커밋
+          onBlurCapture={() => {
+            const pluginId =
+              selectedPluginElement?.pluginId ??
+              selectedPluginDefinition?.pluginId;
+            if (pluginId) flushPluginInstancesEditSession(pluginId);
+          }}
         >
           <EditSessionBoundary>
             {isPluginResizable && (
@@ -300,8 +325,8 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
 
 interface SingleGraphPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // 혼합 선택 시 패널 본문 상단에 표시할 플러그인 개수 안내
   singleGraphPosition: GraphItemPosition;
-  singleGraphIndex: number;
   selectedKeyType: string;
   isRenaming: boolean;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
@@ -311,9 +336,13 @@ interface SingleGraphPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleGraphUpdate: (
-    data: Partial<GraphItemPosition> & { index: number },
-  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onInactiveImageCommit?: (inactiveImage: string) => void;
+  onIdleTransparentCommit?: (idleTransparent: boolean) => void;
+  onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
   setShowGraphImagePicker: (value: boolean) => void;
@@ -328,7 +357,6 @@ interface SingleGraphPanelProps {
 export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   setPanelElement,
   singleGraphPosition,
-  singleGraphIndex,
   selectedKeyType,
   isRenaming,
   renameInputRef,
@@ -338,7 +366,13 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleGraphUpdate,
+  onElementPropertyCommit,
+  onInactiveImageCommit,
+  onIdleTransparentCommit,
+  onIdleImageFitCommit,
+  onStylePropertyCommit,
+  onPaintCommit,
+  handleGeometryCommit,
   singleScrollRefFor,
   showGraphImagePicker,
   setShowGraphImagePicker,
@@ -414,12 +448,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
                   value={Math.round(singleGraphPosition.dx || 0)}
-                  onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      dx: value,
-                    })
-                  }
+                  onChange={(value) => {
+                    handleGeometryCommit?.('dx', value);
+                  }}
                   prefix="X"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -427,12 +458,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 />
                 <NumberInput
                   value={Math.round(singleGraphPosition.dy || 0)}
-                  onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      dy: value,
-                    })
-                  }
+                  onChange={(value) => {
+                    handleGeometryCommit?.('dy', value);
+                  }}
                   prefix="Y"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -443,12 +471,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
                 <NumberInput
                   value={Math.round(singleGraphPosition.width || 200)}
-                  onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      width: Math.max(20, value),
-                    })
-                  }
+                  onChange={(value) => {
+                    const width = Math.max(20, value);
+                    handleGeometryCommit?.('width', width);
+                  }}
                   prefix="W"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -456,12 +482,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 />
                 <NumberInput
                   value={Math.round(singleGraphPosition.height || 100)}
-                  onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      height: Math.max(20, value),
-                    })
-                  }
+                  onChange={(value) => {
+                    const height = Math.max(20, value);
+                    handleGeometryCommit?.('height', height);
+                  }}
                   prefix="H"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -479,9 +503,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   options={graphShapeOptions}
                   value={singleGraphPosition.graphType || 'line'}
                   onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      graphType: value as GraphItemType,
+                    onElementPropertyCommit?.({
+                      property: 'graphType',
+                      value: value as GraphItemType,
                     })
                   }
                 />
@@ -497,9 +521,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     commitStrategy="after-paint"
                     checked={singleGraphPosition.showAvgLine ?? true}
                     onChange={() =>
-                      handleGraphUpdate({
-                        index: singleGraphIndex,
-                        showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
+                      onElementPropertyCommit?.({
+                        property: 'showAvgLine',
+                        value: !(singleGraphPosition.showAvgLine ?? true),
                       })
                     }
                   />
@@ -515,9 +539,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   onChange={(value) => {
                     const clamped = Math.max(500, Math.min(5000, value));
                     const snapped = Math.round(clamped / 100) * 100;
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      graphSpeed: snapped,
+                    onElementPropertyCommit?.({
+                      property: 'graphSpeed',
+                      value: snapped,
                     });
                   }}
                   min={500}
@@ -533,12 +557,12 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   value={singleGraphPosition.graphColor || '#86EFAC'}
                   onChange={() => {}}
                   onChangeComplete={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      graphColor: value,
+                    onElementPropertyCommit?.({
+                      property: 'graphColor',
+                      value: value,
                     })
                   }
-                  colorId={`graph-color-${selectedKeyType}-${singleGraphIndex}`}
+                  colorId={`graph-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   panelElement={panelElement}
                 />
               </PropertyRow>
@@ -551,9 +575,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   commitStrategy="after-paint"
                   checked={singleGraphPosition.graphAnimationEnabled ?? true}
                   onChange={() =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      graphAnimationEnabled: !(
+                    onElementPropertyCommit?.({
+                      property: 'graphAnimationEnabled',
+                      value: !(
                         singleGraphPosition.graphAnimationEnabled ?? true
                       ),
                     })
@@ -573,21 +597,21 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     singleGraphPosition.backgroundColor || DEFAULT_ELEMENT_BG
                   }
                   onChange={() => {}}
-                  onChangeComplete={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      backgroundColor: value,
-                    })
-                  }
+                  onChangeComplete={() => {}}
                   gradientValue={singleGraphPosition.backgroundGradient ?? null}
-                  canvasAnchor={{ kind: 'graph', index: singleGraphIndex }}
+                  canvasAnchor={
+                    singleGraphPosition.id &&
+                    isNativeElementId(singleGraphPosition.id)
+                      ? { kind: 'graph', id: singleGraphPosition.id }
+                      : undefined
+                  }
                   onModeCommit={(_state, modeValue) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      ...gradientPairPatch('backgroundColor', modeValue),
+                    onPaintCommit?.({
+                      property: 'backgroundPaint',
+                      value: paintDescriptor(modeValue),
                     })
                   }
-                  colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
+                  colorId={`graph-bg-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   panelElement={panelElement}
                 />
               </PropertyRow>
@@ -600,21 +624,21 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     singleGraphPosition.borderColor || DEFAULT_ELEMENT_HAIRLINE
                   }
                   onChange={() => {}}
-                  onChangeComplete={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      borderColor: value,
-                    })
-                  }
+                  onChangeComplete={() => {}}
                   gradientValue={singleGraphPosition.borderGradient ?? null}
-                  canvasAnchor={{ kind: 'graph', index: singleGraphIndex }}
+                  canvasAnchor={
+                    singleGraphPosition.id &&
+                    isNativeElementId(singleGraphPosition.id)
+                      ? { kind: 'graph', id: singleGraphPosition.id }
+                      : undefined
+                  }
                   onModeCommit={(_state, modeValue) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      ...gradientPairPatch('borderColor', modeValue),
+                    onPaintCommit?.({
+                      property: 'borderPaint',
+                      value: paintDescriptor(modeValue),
                     })
                   }
-                  colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
+                  colorId={`graph-border-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   gradientSurface="border"
                   panelElement={panelElement}
                 />
@@ -626,9 +650,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleGraphPosition.borderWidth ?? 1)}
                   onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      borderWidth: Math.max(0, Math.min(20, value)),
+                    onStylePropertyCommit?.({
+                      property: 'borderWidth',
+                      value: Math.max(0, Math.min(20, value)),
                     })
                   }
                   min={0}
@@ -645,9 +669,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     singleGraphPosition.borderRadius ?? DEFAULT_ELEMENT_RADIUS,
                   )}
                   onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      borderRadius: Math.max(0, Math.min(100, value)),
+                    onStylePropertyCommit?.({
+                      property: 'borderRadius',
+                      value: Math.max(0, Math.min(100, value)),
                     })
                   }
                   min={0}
@@ -683,11 +707,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     commitStrategy="after-paint"
                     checked={singleGraphPosition.useInlineStyles ?? false}
                     onChange={() =>
-                      handleGraphUpdate({
-                        index: singleGraphIndex,
-                        useInlineStyles: !(
-                          singleGraphPosition.useInlineStyles ?? false
-                        ),
+                      onElementPropertyCommit?.({
+                        property: 'useInlineStyles',
+                        value: !(singleGraphPosition.useInlineStyles ?? false),
                       })
                     }
                   />
@@ -698,9 +720,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     value={graphClassNameDraft}
                     onChange={setGraphClassNameDraft}
                     onBlur={(value) =>
-                      handleGraphUpdate({
-                        index: singleGraphIndex,
-                        className: value,
+                      onStylePropertyCommit?.({
+                        property: 'className',
+                        value: value,
                       })
                     }
                     placeholder="className"
@@ -720,9 +742,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             referenceRef={graphImageButtonRef}
             panelElement={panelElement}
             showActiveState={false}
+            completionBinding="element-id"
             idleImage={singleGraphPosition.inactiveImage || ''}
             activeImage={singleGraphPosition.activeImage || ''}
-            idleTransparent={false}
+            idleTransparent={singleGraphPosition.idleTransparent ?? false}
             activeTransparent={false}
             idleImageFit={
               singleGraphPosition.idleImageFit ||
@@ -735,53 +758,15 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               'cover'
             }
             onIdleImageChange={(imageUrl: string) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                inactiveImage: imageUrl,
-              })
-            }
-            onActiveImageChange={(imageUrl: string) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                activeImage: imageUrl,
-              })
+              onInactiveImageCommit?.(imageUrl)
             }
             onIdleTransparentChange={(value: boolean) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                idleTransparent: value,
-              })
-            }
-            onActiveTransparentChange={(value: boolean) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                activeTransparent: value,
-              })
+              onIdleTransparentCommit?.(value)
             }
             onIdleImageFitChange={(fit: string) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                idleImageFit: fit as ImageFit,
-              })
+              onIdleImageFitCommit?.(fit as ImageFit)
             }
-            onActiveImageFitChange={(fit: string) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                activeImageFit: fit as ImageFit,
-              })
-            }
-            onIdleImageReset={() =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                inactiveImage: '',
-              })
-            }
-            onActiveImageReset={() =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                activeImage: '',
-              })
-            }
+            onIdleImageReset={() => onInactiveImageCommit?.('')}
             onClose={() => setShowGraphImagePicker(false)}
           />
         ) : null}
@@ -796,8 +781,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
 
 interface SingleKnobPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // 혼합 선택 시 패널 본문 상단에 표시할 플러그인 개수 안내
   singleKnobPosition: KnobItemPosition;
-  singleKnobIndex: number;
   selectedKeyType: string;
   isRenaming: boolean;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
@@ -807,9 +792,17 @@ interface SingleKnobPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleKnobUpdate: (
-    data: Partial<KnobItemPosition> & { index: number },
-  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onInactiveImageCommit?: (inactiveImage: string) => void;
+  onActiveImageCommit?: (activeImage: string) => void;
+  onIdleTransparentCommit?: (idleTransparent: boolean) => void;
+  onActiveTransparentCommit?: (activeTransparent: boolean) => void;
+  onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
+  handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
@@ -819,7 +812,6 @@ interface SingleKnobPanelProps {
 export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   setPanelElement,
   singleKnobPosition,
-  singleKnobIndex,
   selectedKeyType,
   isRenaming,
   renameInputRef,
@@ -829,7 +821,17 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleKnobUpdate,
+  onElementPropertyCommit,
+  onInactiveImageCommit,
+  onActiveImageCommit,
+  onIdleTransparentCommit,
+  onActiveTransparentCommit,
+  onIdleImageFitCommit,
+  onActiveImageFitCommit,
+  onStylePropertyCommit,
+  onPaintCommit,
+  onShadowCommit,
+  handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
   useCustomCSS,
@@ -838,18 +840,24 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const imageButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showImagePicker, setShowImagePicker] = useState(false);
-  const [capturing, setCapturing] = useState(false);
+  const [axisCaptureTarget, setAxisCaptureTarget] = useState<string | null>(
+    null,
+  );
   const [classNameDraft, setClassNameDraft] = useState(
     singleKnobPosition.className || '',
   );
+  // 캡처는 시작 ID를 동결해 그 노브에 완료를 적용한다. 표시도 소유권 기준이어야
+  // 한다 - truthiness로 그리면 대상이 바뀐 뒤 현재 노브 행에 "감지 중"이 뜨고,
+  // 사용자가 노브를 돌리면 화면에 없는 옛 노브에 축이 바인딩된다
+  const capturingThisKnob = axisCaptureTarget === singleKnobPosition.id;
 
   useEffect(() => {
     setClassNameDraft(singleKnobPosition.className || '');
-  }, [singleKnobIndex, selectedKeyType, singleKnobPosition.className]);
+  }, [selectedKeyType, singleKnobPosition.className, singleKnobPosition.id]);
 
   // 회전 감지 바인딩: 노브를 돌리면 가장 많이 움직인 축을 자동 바인딩
   useEffect(() => {
-    if (!capturing) return;
+    if (!axisCaptureTarget) return;
     axisEventBus.initialize();
     const counts = new Map<string, number>();
     let bound = false;
@@ -859,16 +867,24 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       counts.set(axisId, c);
       if (c >= 3) {
         bound = true;
-        handleKnobUpdate({ index: singleKnobIndex, axisId });
-        setCapturing(false);
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchNativeLayerPropertyViaAuthority({
+                elementType: 'knob',
+                id: axisCaptureTarget,
+                patch: { property: 'axisId', value: axisId },
+              })
+            : patchKnobAxisIdById(axisCaptureTarget, axisId);
+        void persisted.catch(reportElementOpError);
+        setAxisCaptureTarget(null);
       }
     });
-    const timer = window.setTimeout(() => setCapturing(false), 6000);
+    const timer = window.setTimeout(() => setAxisCaptureTarget(null), 6000);
     return () => {
       unsub();
       window.clearTimeout(timer);
     };
-  }, [capturing, singleKnobIndex, handleKnobUpdate]);
+  }, [axisCaptureTarget]);
 
   const setRef = (node: HTMLDivElement | null) => {
     panelRef.current = node;
@@ -913,15 +929,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
   });
 
-  // 이 패널은 편집 트리 경계 위에서 피커와 캡처 세션을 소유한다.
-  // 대상이 갈려도 살아남으면 열린 피커가 옛 노브에서 떠 온 색을 그대로 쥐고
-  // 있고, 축 캡처 대기는 다음 회전을 새 노브에 바인딩한다.
-  // 피커를 닫으면 아래 동기화가 새 노브 색을 다시 떠 온다
+  // 피커는 대상 변경 시 닫는다. 축 캡처는 시작 ID를 별도로 동결하므로
+  // 재정렬이나 모드 전환 뒤에도 시작 대상을 유지한다
   useEffect(() => {
     setPickerFor(null);
     setShowImagePicker(false);
-    setCapturing(false);
-  }, [singleKnobIndex, selectedKeyType]);
+  }, [selectedKeyType, singleKnobPosition.id]);
 
   // 피커가 닫혀있을 때만 외부 prop과 동기화
   useEffect(() => {
@@ -1009,44 +1022,17 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   const handleGradientCommit = (value: ColorModeValue) => {
     if (!pickerFor) return;
     const prop = resolveColorProperty(pickerFor);
-    const patch = gradientPairPatch(
-      prop as Parameters<typeof gradientPairPatch>[0],
-      value,
-    ) as Partial<KnobItemPosition>;
-
-    const baseColor = patch[prop];
-    if (typeof baseColor === 'string') {
-      setLocalColors((prev) => ({ ...prev, [prop]: baseColor }));
-    }
-
-    const updates: Partial<KnobItemPosition> = { ...patch };
-
-    // idle 편집 전 사용자 저장값 기준 active 쌍 보존
-    if (colorState !== 'active') {
-      const activeProp = activeColorPropertyFor(pickerFor);
-      const preservation = getActivePairPreservation(
-        {
-          color: singleKnobPosition[pickerFor],
-          gradient: storedGradientOf(pickerFor),
-        },
-        {
-          color: singleKnobPosition[activeProp],
-          gradient: storedGradientOf(activeProp),
-        },
-      );
-      if (preservation?.color !== undefined) {
-        updates[activeProp] = preservation.color;
-      }
-      if (preservation?.gradient !== undefined) {
-        const activeSibling =
-          pickerFor === 'backgroundColor'
-            ? 'activeBackgroundGradient'
-            : 'activeBorderGradient';
-        updates[activeSibling] = preservation.gradient;
-      }
-    }
-
-    handleKnobUpdate({ index: singleKnobIndex, ...updates });
+    const descriptor = paintDescriptor(value);
+    const paintField =
+      colorState === 'active'
+        ? pickerFor === 'backgroundColor'
+          ? 'activeBackgroundPaint'
+          : 'activeBorderPaint'
+        : pickerFor === 'backgroundColor'
+        ? 'backgroundPaint'
+        : 'borderPaint';
+    setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+    onPaintCommit?.({ property: paintField, value: descriptor } as never);
   };
 
   const knobGradientState = useGradientColorState({
@@ -1057,11 +1043,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         }
       : {},
     fallbackColor: '#ffffff',
-    contextKey: `knob:${selectedKeyType}:${singleKnobIndex}:${
+    contextKey: `knob:${selectedKeyType}:${singleKnobPosition.id}:${
       pickerFor ?? 'none'
     }:${colorState}`,
     canvasAnchor: pickerFor
-      ? { kind: 'knob', index: singleKnobIndex }
+      ? singleKnobPosition.id && isNativeElementId(singleKnobPosition.id)
+        ? { kind: 'knob', id: singleKnobPosition.id }
+        : undefined
       : undefined,
     canvasSurface: pickerFor === 'borderColor' ? 'border' : 'background',
     canvasState: colorState,
@@ -1086,33 +1074,19 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         singleKnobPosition.height || 60,
       ) / 2,
     );
-  const knobHasIdleImage = Boolean(singleKnobPosition.inactiveImage?.trim());
-  const knobHasActiveImage = Boolean(
-    singleKnobPosition.activeImage?.trim() ||
-      singleKnobPosition.inactiveImage?.trim(),
-  );
-  const suppressKnobDefaultShadow = (singleKnobPosition.borderWidth ?? 0) > 0;
-  const knobIdleShadow = resolveElementShadow({
+  const knobIdleShadow = resolveElementShadowForPosition({
+    position: singleKnobPosition,
+    elementType: 'knob',
     active: false,
-    shadow: singleKnobPosition.shadow,
-    activeShadow: singleKnobPosition.activeShadow,
     defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
     defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    suppressDefault:
-      knobHasIdleImage ||
-      singleKnobPosition.idleTransparent === true ||
-      suppressKnobDefaultShadow,
   });
-  const knobActiveShadow = resolveElementShadow({
+  const knobActiveShadow = resolveElementShadowForPosition({
+    position: singleKnobPosition,
+    elementType: 'knob',
     active: true,
-    shadow: singleKnobPosition.shadow,
-    activeShadow: singleKnobPosition.activeShadow,
     defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
     defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    suppressDefault:
-      knobHasActiveImage ||
-      singleKnobPosition.activeTransparent === true ||
-      suppressKnobDefaultShadow,
   });
 
   return (
@@ -1172,14 +1146,25 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
                 <button
                   type="button"
-                  onClick={() => setCapturing((v) => !v)}
+                  onClick={() =>
+                    setAxisCaptureTarget((current) =>
+                      // 이 노브가 대기 중일 때만 토글 해제. 다른 노브의 잔여
+                      // 대기는 취소가 아니라 이 노브로 옮겨야 한다
+                      current === singleKnobPosition.id
+                        ? null
+                        : singleKnobPosition.id &&
+                          isNativeElementId(singleKnobPosition.id)
+                        ? singleKnobPosition.id
+                        : null,
+                    )
+                  }
                   className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
-                    capturing ? 'shadow-focus-ring' : ''
+                    capturingThisKnob ? 'shadow-focus-ring' : ''
                   } text-fg text-label`}
                   title={singleKnobPosition.axisId || ''}
                 >
                   <span className="truncate max-w-[120px]">
-                    {capturing
+                    {capturingThisKnob
                       ? t('propertiesPanel.knobCapturing') || '감지 중…'
                       : singleKnobPosition.axisId
                       ? axisLabel
@@ -1193,9 +1178,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
                   value={Math.round(singleKnobPosition.dx || 0)}
-                  onChange={(value) =>
-                    handleKnobUpdate({ index: singleKnobIndex, dx: value })
-                  }
+                  onChange={(value) => {
+                    handleGeometryCommit?.('dx', value);
+                  }}
                   prefix="X"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -1203,9 +1188,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 />
                 <NumberInput
                   value={Math.round(singleKnobPosition.dy || 0)}
-                  onChange={(value) =>
-                    handleKnobUpdate({ index: singleKnobIndex, dy: value })
-                  }
+                  onChange={(value) => {
+                    handleGeometryCommit?.('dy', value);
+                  }}
                   prefix="Y"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -1216,12 +1201,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
                 <NumberInput
                   value={Math.round(singleKnobPosition.width || 60)}
-                  onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      width: Math.max(20, value),
-                    })
-                  }
+                  onChange={(value) => {
+                    const width = Math.max(20, value);
+                    handleGeometryCommit?.('width', width);
+                  }}
                   prefix="W"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -1229,12 +1212,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 />
                 <NumberInput
                   value={Math.round(singleKnobPosition.height || 60)}
-                  onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      height: Math.max(20, value),
-                    })
-                  }
+                  onChange={(value) => {
+                    const height = Math.max(20, value);
+                    handleGeometryCommit?.('height', height);
+                  }}
                   prefix="H"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -1251,9 +1232,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={Number(singleKnobPosition.sensitivity ?? 1)}
                   onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      sensitivity: Math.max(0, value),
+                    onElementPropertyCommit?.({
+                      property: 'sensitivity',
+                      value: Math.max(0, value),
                     })
                   }
                   suffix="×"
@@ -1272,9 +1253,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   commitStrategy="after-paint"
                   checked={singleKnobPosition.reverse ?? false}
                   onChange={() =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      reverse: !(singleKnobPosition.reverse ?? false),
+                    onElementPropertyCommit?.({
+                      property: 'reverse',
+                      value: !(singleKnobPosition.reverse ?? false),
                     })
                   }
                 />
@@ -1327,9 +1308,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={singleKnobPosition.borderWidth ?? 0}
                   onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      borderWidth: value,
+                    onStylePropertyCommit?.({
+                      property: 'borderWidth',
+                      value: value,
                     })
                   }
                   suffix="px"
@@ -1345,9 +1326,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={effectiveBorderRadius}
                   onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      borderRadius: value,
+                    onStylePropertyCommit?.({
+                      property: 'borderRadius',
+                      value: value,
                     })
                   }
                   suffix="px"
@@ -1382,11 +1363,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                       commitStrategy="after-paint"
                       checked={singleKnobPosition.useInlineStyles ?? false}
                       onChange={() =>
-                        handleKnobUpdate({
-                          index: singleKnobIndex,
-                          useInlineStyles: !(
-                            singleKnobPosition.useInlineStyles ?? false
-                          ),
+                        onElementPropertyCommit?.({
+                          property: 'useInlineStyles',
+                          value: !(singleKnobPosition.useInlineStyles ?? false),
                         })
                       }
                     />
@@ -1399,9 +1378,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                       value={classNameDraft}
                       onChange={setClassNameDraft}
                       onBlur={(value) =>
-                        handleKnobUpdate({
-                          index: singleKnobIndex,
-                          className: value,
+                        onStylePropertyCommit?.({
+                          property: 'className',
+                          value: value,
                         })
                       }
                       placeholder="className"
@@ -1415,19 +1394,18 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             <ShadowControls
               idleShadow={knobIdleShadow}
               activeShadow={knobActiveShadow}
-              onChange={(state, shadow) =>
-                handleKnobUpdate({
-                  index: singleKnobIndex,
-                  [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
-                })
-              }
-              onEnabledChange={(enabled) =>
-                handleKnobUpdate({
-                  index: singleKnobIndex,
-                  shadow: { ...knobIdleShadow, enabled },
-                  activeShadow: { ...knobActiveShadow, enabled },
-                })
-              }
+              onChange={(state, _shadow, patch) => {
+                const leaf = elementShadowLeafFromPartial(patch);
+                if (!leaf) return;
+                onShadowCommit?.(
+                  state === 'active'
+                    ? { property: 'activeShadow', value: leaf }
+                    : { property: 'shadow', value: leaf },
+                );
+              }}
+              onEnabledChange={(enabled) => {
+                onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
+              }}
               panelElement={panelElement}
               t={t}
             />
@@ -1441,6 +1419,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             open={showImagePicker}
             referenceRef={imageButtonRef}
             panelElement={panelRef.current}
+            completionBinding="element-id"
             idleImage={singleKnobPosition.inactiveImage || ''}
             activeImage={singleKnobPosition.activeImage || ''}
             idleTransparent={singleKnobPosition.idleTransparent ?? false}
@@ -1456,47 +1435,25 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               'cover'
             }
             onIdleImageChange={(imageUrl: string) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                inactiveImage: imageUrl,
-              })
+              onInactiveImageCommit?.(imageUrl)
             }
             onActiveImageChange={(imageUrl: string) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                activeImage: imageUrl,
-              })
+              onActiveImageCommit?.(imageUrl)
             }
             onIdleTransparentChange={(value: boolean) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                idleTransparent: value,
-              })
+              onIdleTransparentCommit?.(value)
             }
             onActiveTransparentChange={(value: boolean) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                activeTransparent: value,
-              })
+              onActiveTransparentCommit?.(value)
             }
             onIdleImageFitChange={(fit: string) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                idleImageFit: fit as ImageFit,
-              })
+              onIdleImageFitCommit?.(fit as ImageFit)
             }
             onActiveImageFitChange={(fit: string) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                activeImageFit: fit as ImageFit,
-              })
+              onActiveImageFitCommit?.(fit as ImageFit)
             }
-            onIdleImageReset={() =>
-              handleKnobUpdate({ index: singleKnobIndex, inactiveImage: '' })
-            }
-            onActiveImageReset={() =>
-              handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
-            }
+            onIdleImageReset={() => onInactiveImageCommit?.('')}
+            onActiveImageReset={() => onActiveImageCommit?.('')}
             onClose={() => setShowImagePicker(false)}
           />
         ) : null}
@@ -1542,6 +1499,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
 interface SingleKeyStatPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // 혼합 선택 시 패널 본문 상단에 표시할 플러그인 개수 안내
   isSingleStat: boolean;
   isSingleKey: boolean;
   singleKeyIndex: number | null;
@@ -1562,22 +1520,37 @@ interface SingleKeyStatPanelProps {
   handleRenameStart: () => void;
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
-  onPositionChange: (index: number, dx: number, dy: number) => void;
-  onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
-  onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
-  handleStatUpdate: (
-    data: Partial<StatItemPosition> & { index: number },
-  ) => void;
-  handleStatPreview: (
-    index: number,
-    updates: Partial<StatItemPosition>,
-  ) => void;
   localState: Partial<KeyPosition> & { dx?: number; dy?: number };
   setLocalState: React.Dispatch<
     React.SetStateAction<Partial<KeyPosition> & { dx?: number; dy?: number }>
   >;
-  handleSizeBlur: (committed?: SizeCommit) => void;
+  handleGeometryPreview?: (field: GeometryField, value: number) => void;
+  handleGeometryCommit?: (field: GeometryField, value: number) => void;
+  onElementPropertyCommit?: StyleTabContentProps['onElementPropertyCommit'];
+  onInactiveImageCommit?: (inactiveImage: string) => void;
+  onActiveImageCommit?: (activeImage: string) => void;
+  onIdleTransparentCommit?: (idleTransparent: boolean) => void;
+  onActiveTransparentCommit?: (activeTransparent: boolean) => void;
+  onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
+  onSoundPathCommit?: (soundPath: string) => void;
+  onSoundEnabledCommit?: (soundEnabled: boolean) => void;
+  onSoundVolumeCommit?: (soundVolume: number) => void;
+  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onFontColorCommit?: StyleTabContentProps['onFontColorCommit'];
+  onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
+  onNotePaintCommit?: NoteTabContentProps['onNotePaintCommit'];
+  onNotePaintPreview?: NoteTabContentProps['onNotePaintPreview'];
+  onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
+  onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
+  onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
+  onCounterLayoutCommit?: CounterTabContentProps['onCounterLayoutCommit'];
+  onCounterTypographyCommit?: CounterTabContentProps['onCounterTypographyCommit'];
+  onCounterStrokeCommit?: CounterTabContentProps['onCounterStrokeCommit'];
+  onCounterFillCommit?: CounterTabContentProps['onCounterFillCommit'];
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1609,15 +1582,35 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   handleRenameStart,
   activeTab,
   setActiveTab,
-  onPositionChange,
-  onKeyUpdate,
-  onKeyPreview,
   onKeyMappingChange,
-  handleStatUpdate,
-  handleStatPreview,
   localState,
   setLocalState,
-  handleSizeBlur,
+  handleGeometryPreview,
+  handleGeometryCommit,
+  onElementPropertyCommit,
+  onInactiveImageCommit,
+  onActiveImageCommit,
+  onIdleTransparentCommit,
+  onActiveTransparentCommit,
+  onIdleImageFitCommit,
+  onActiveImageFitCommit,
+  onSoundPathCommit,
+  onSoundEnabledCommit,
+  onSoundVolumeCommit,
+  onStylePropertyPreview,
+  onStylePropertyCommit,
+  onPaintCommit,
+  onFontColorCommit,
+  onShadowCommit,
+  onNotePaintCommit,
+  onNotePaintPreview,
+  onCounterAnimationPresetCommit,
+  onCounterEnabledCommit,
+  onCounterAnimationEnabledCommit,
+  onCounterLayoutCommit,
+  onCounterTypographyCommit,
+  onCounterStrokeCommit,
+  onCounterFillCommit,
   showImagePicker,
   setShowImagePicker,
   imageButtonRef,
@@ -1654,21 +1647,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
       }
     : singleKeyInfo;
 
-  const handleKeyLikePositionChange = isSingleStat
-    ? (index: number, dx: number, dy: number) =>
-        handleStatUpdate({ index, dx, dy })
-    : onPositionChange;
-
-  const handleKeyLikeUpdate = isSingleStat
-    ? (data: Partial<KeyPosition> & { index: number }) =>
-        handleStatUpdate(data as Partial<StatItemPosition> & { index: number })
-    : onKeyUpdate;
-
-  const handleKeyLikePreview = isSingleStat
-    ? (index: number, updates: Partial<KeyPosition>) =>
-        handleStatPreview(index, updates as Partial<StatItemPosition>)
-    : onKeyPreview;
-
   const mappingControlLayout = isSingleStat ? (
     <>
       <PropertyRow label={t('propertiesPanel.statType') || 'Stat Type'}>
@@ -1678,15 +1656,15 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
           value={statBaseValue}
           onChange={(value) => {
             if (value === 'total') {
-              handleStatUpdate({
-                index: singleStatIndex!,
-                statType: 'total',
+              onElementPropertyCommit?.({
+                property: 'statType',
+                value: 'total',
               });
               return;
             }
-            handleStatUpdate({
-              index: singleStatIndex!,
-              statType: resolvedStatType === 'total' ? 'kps' : resolvedStatType,
+            onElementPropertyCommit?.({
+              property: 'statType',
+              value: resolvedStatType === 'total' ? 'kps' : resolvedStatType,
             });
           }}
         />
@@ -1698,9 +1676,9 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             options={STAT_KPS_OPTIONS}
             value={resolvedStatType}
             onChange={(value) =>
-              handleStatUpdate({
-                index: singleStatIndex!,
-                statType: value as StatItemType,
+              onElementPropertyCommit?.({
+                property: 'statType',
+                value: value as StatItemType,
               })
             }
           />
@@ -1784,13 +1762,17 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               keyPosition={keyLikePosition}
               keyCode={keyLikeCode}
               keyInfo={keyLikeInfo}
-              onPositionChange={handleKeyLikePositionChange}
-              onKeyUpdate={handleKeyLikeUpdate}
-              onKeyPreview={handleKeyLikePreview}
-              canvasAnchor={{
-                kind: isSingleStat ? 'stat' : 'key',
-                index: keyLikeIndex,
-              }}
+              onGeometryPreview={handleGeometryPreview}
+              onGeometryCommit={handleGeometryCommit}
+              onElementPropertyCommit={onElementPropertyCommit}
+              canvasAnchor={
+                keyLikePosition.id && isNativeElementId(keyLikePosition.id)
+                  ? {
+                      kind: isSingleStat ? 'stat' : 'key',
+                      id: keyLikePosition.id,
+                    }
+                  : undefined
+              }
               onKeyMappingChange={isSingleStat ? undefined : onKeyMappingChange}
               keySlot={isSingleStat ? undefined : singleKeySlot}
               mappingControlLayout={mappingControlLayout}
@@ -1803,6 +1785,20 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               shadowActiveState={!isSingleStat}
               showImagePicker={showImagePicker}
               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
+              onInactiveImageCommit={onInactiveImageCommit}
+              onActiveImageCommit={onActiveImageCommit}
+              onIdleTransparentCommit={onIdleTransparentCommit}
+              onActiveTransparentCommit={onActiveTransparentCommit}
+              onIdleImageFitCommit={onIdleImageFitCommit}
+              onActiveImageFitCommit={onActiveImageFitCommit}
+              onSoundPathCommit={onSoundPathCommit}
+              onSoundEnabledCommit={onSoundEnabledCommit}
+              onSoundVolumeCommit={onSoundVolumeCommit}
+              onStylePropertyPreview={onStylePropertyPreview}
+              onStylePropertyCommit={onStylePropertyCommit}
+              onPaintCommit={onPaintCommit}
+              onFontColorCommit={onFontColorCommit}
+              onShadowCommit={onShadowCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}
@@ -1823,7 +1819,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onLocalHeightChange={(value) =>
                 setLocalState((prev) => ({ ...prev, height: value }))
               }
-              onSizeBlur={handleSizeBlur}
             />
           </EditSessionBoundary>
         </div>
@@ -1838,10 +1833,12 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
           >
             <EditSessionBoundary>
               <NoteTabContent
-                keyIndex={singleKeyIndex!}
                 keyPosition={singleKeyPosition!}
-                onKeyUpdate={onKeyUpdate}
-                onKeyPreview={onKeyPreview}
+                onElementPropertyCommit={onElementPropertyCommit}
+                onStylePropertyPreview={onStylePropertyPreview}
+                onStylePropertyCommit={onStylePropertyCommit}
+                onNotePaintPreview={onNotePaintPreview}
+                onNotePaintCommit={onNotePaintCommit}
                 panelElement={panelElement}
                 t={t}
               />
@@ -1858,11 +1855,16 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
         >
           <EditSessionBoundary>
             <CounterTabContent
-              keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}
               keyDisplayName={keyLikeInfo?.displayName}
               isStat={isSingleStat}
-              onKeyUpdate={handleKeyLikeUpdate}
+              onCounterEnabledCommit={onCounterEnabledCommit}
+              onCounterAnimationEnabledCommit={onCounterAnimationEnabledCommit}
+              onCounterLayoutCommit={onCounterLayoutCommit}
+              onCounterTypographyCommit={onCounterTypographyCommit}
+              onCounterStrokeCommit={onCounterStrokeCommit}
+              onCounterFillCommit={onCounterFillCommit}
+              onCounterAnimationPresetCommit={onCounterAnimationPresetCommit}
               panelElement={panelElement}
               t={t}
             />

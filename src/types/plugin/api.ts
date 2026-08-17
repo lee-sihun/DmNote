@@ -13,10 +13,10 @@ import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type {
-  EditorCommitRequest,
-  EditorCommitResult,
+  EditorPluginCommitResult,
   EditorCommittedV1,
   EditorGetResult,
+  PluginEditorCommitRequest,
 } from '@src/types/editor';
 import {
   SettingsDiff,
@@ -350,6 +350,9 @@ export type WindowTarget = 'main' | 'overlay';
 // UI Plugin 컨텍스트 메뉴 types
 export type KeyMenuContext = {
   keyCode: string;
+  /** 요소 안정 ID (UUID). 재정렬·모드 전환에도 유지된다 */
+  id: string;
+  /** @deprecated 현재 스냅샷에서만 유효한 위치 locator - 신원은 id 사용 */
   index: number;
   position: KeyPosition;
   mode: string;
@@ -691,6 +694,7 @@ export type PluginPanelElementView = Pick<
   | 'width'
   | 'height'
   | 'tabId'
+  | 'groupId'
 >;
 
 /**
@@ -910,7 +914,9 @@ export interface DMNoteAPI {
   };
   editor: {
     get(): Promise<EditorGetResult>;
-    commit(request: EditorCommitRequest): Promise<EditorCommitResult>;
+    commit(
+      request: PluginEditorCommitRequest,
+    ): Promise<EditorPluginCommitResult>;
     onCommitted(listener: (event: EditorCommittedV1) => void): ReadyUnsubscribe;
   };
   keys: {

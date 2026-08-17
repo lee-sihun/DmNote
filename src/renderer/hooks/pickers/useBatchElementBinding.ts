@@ -1,0 +1,79 @@
+import { useEffect, useRef, useState } from 'react';
+
+import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
+
+export interface ElementIdSelection {
+  key?: readonly string[];
+  stat?: readonly string[];
+  graph?: readonly string[];
+  knob?: readonly string[];
+}
+
+// 배치 피커의 비동기 완료가 결합할 시작 시점 대상
+export interface BatchElementBinding {
+  binding: CompletionBinding;
+  selection: ElementIdSelection;
+}
+
+export const EMPTY_BATCH_ELEMENT_BINDING: BatchElementBinding = {
+  binding: 'element-id',
+  selection: {},
+};
+
+type SelectionGroups = Partial<
+  Record<NativeElementType, readonly { id: string }[]>
+>;
+
+const NATIVE_ELEMENT_TYPES: readonly NativeElementType[] = [
+  'key',
+  'stat',
+  'graph',
+  'knob',
+];
+
+// 선택 요소의 안정 ID를 그대로 캡처한다. index는 스냅샷 한정 locator라
+// 신원 재추론에 쓰지 않는다
+export const captureBatchElementBinding = (
+  groups: SelectionGroups,
+): BatchElementBinding => {
+  const selection: { [K in NativeElementType]?: string[] } = {};
+  const seen = new Set<string>();
+  for (const type of NATIVE_ELEMENT_TYPES) {
+    const elements = groups[type];
+    if (!elements || elements.length === 0) continue;
+    const ids: string[] = [];
+    for (const element of elements) {
+      if (!isNativeElementId(element.id) || seen.has(element.id)) {
+        return EMPTY_BATCH_ELEMENT_BINDING;
+      }
+      seen.add(element.id);
+      ids.push(element.id);
+    }
+    selection[type] = ids;
+  }
+  return { binding: 'element-id', selection };
+};
+
+// 피커 open 전환 시 1회 캡처해 close까지 불변으로 유지한다.
+// 배치 피커는 선택 변경에도 언마운트되지 않으므로, 렌더 스코프 계산으로는
+// 시작 시점 결합을 고정할 수 없다. 이 훅의 소유자는 선택 변경 리마운트
+// 경계(EditSessionBoundary) 밖에 있어야 한다 - 경계 안이면 같은 개수 선택
+// 교체 시 새 인스턴스가 open 상태로 마운트되어 재캡처된다
+export const useBatchElementBinding = (
+  open: boolean,
+  capture: () => BatchElementBinding,
+): BatchElementBinding => {
+  const [bound, setBound] = useState<BatchElementBinding>(
+    EMPTY_BATCH_ELEMENT_BINDING,
+  );
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    // open 전환에서만 1회 실행되는 의도적 동기 캡처 - 연쇄 렌더 없음
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (open && !wasOpen.current) setBound(capture());
+    wasOpen.current = open;
+  }, [open, capture]);
+  return bound;
+};

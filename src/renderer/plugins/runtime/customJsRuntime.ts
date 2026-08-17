@@ -13,6 +13,7 @@
  */
 
 import { pluginRpcApi } from '@api/modules/pluginRpcApi';
+import { internalApi } from '@api/internalApi';
 import { setPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
@@ -20,10 +21,7 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { handlerRegistry } from './handlers';
-import {
-  displayElementInstanceRegistry,
-  setInitialLoading,
-} from './displayElement';
+import { displayElementInstanceRegistry } from './displayElement';
 import { createPluginApiProxy, createPluginWindowProxy } from './api';
 import type { JsPlugin } from '@src/types/plugin/js';
 
@@ -45,6 +43,19 @@ export function createCustomJsRuntime(): CustomJsRuntime {
   let enabled = false;
   let disposed = false;
   let currentPlugins: JsPlugin[] = [];
+  // 마지막 주입 완료 시그니처 - 미주입·해제·주입 실패 시 null
+  let appliedSignature: string | null = null;
+
+  const pluginsSignature = (plugins: JsPlugin[]): string =>
+    JSON.stringify(
+      plugins.map((plugin) => [
+        plugin.id,
+        plugin.name,
+        plugin.path,
+        plugin.content,
+        plugin.enabled,
+      ]),
+    );
 
   // 전역 플래그: removeAll/injectAll 실행 중에는 저장 비활성화
   let isReloading = false;
@@ -119,6 +130,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
       }
     }
     activeElements.clear();
+    appliedSignature = null;
 
     if (window.__dmn_window_type === 'main') {
       try {
@@ -168,6 +180,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
       // 플러그인용 API 프록시 생성
       const proxiedApi = createPluginApiProxy({
         pluginId,
+        sourceApi: internalApi,
         registerCleanup: (cleanup) => registerCleanup(pluginId, cleanup),
         isReloading: getIsReloading,
         waitForReloadEnd,
@@ -182,11 +195,8 @@ export function createCustomJsRuntime(): CustomJsRuntime {
   'use strict';
   const __PLUGIN_ID__ = "${pluginId}";
   
-  // dmn을 전역 변수로 추가 (window. 없이 바로 접근 가능)
+  // 플러그인 스코프에 dmn 별칭 추가 (window. 없이 바로 접근 가능)
   const dmn = window.api;
-  if (typeof globalThis !== 'undefined') {
-    globalThis.dmn = window.api;
-  }
   
   const __autoWrapAsync__ = () => {
     const globalWindow = typeof window !== 'undefined' ? window : globalThis;
@@ -295,7 +305,6 @@ ${plugin.content}
 
   const injectAll = () => {
     setReloading(true);
-    setInitialLoading(true);
     removeAll();
     injectGeneration += 1;
     const generation = injectGeneration;
@@ -306,31 +315,36 @@ ${plugin.content}
         // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
         console.error('Skipping plugin injection: authority reset failed');
         setReloading(false);
-        setInitialLoading(false);
         return;
       }
       if (!enabled) {
         setReloading(false);
-        setInitialLoading(false);
         return;
       }
 
       currentPlugins
         .filter((plugin) => plugin.enabled && plugin.content)
         .forEach((plugin) => injectPlugin(plugin));
+      // 주입이 실제 실행된 시점에만 기록 - reset 실패로 중단된 뒤 같은
+      // 내용이 다시 오면 재시도가 가능해야 한다
+      appliedSignature = pluginsSignature(currentPlugins);
 
       // 모든 플러그인의 복원이 완료될 때까지 딜레이 후 리로드 플래그 해제
       setTimeout(() => {
         if (generation !== injectGeneration) return;
         setReloading(false);
-        setInitialLoading(false);
       }, 100);
     });
   };
 
-  const syncPlugins = (next: JsPlugin[]) => {
+  const syncPlugins = (next: JsPlugin[], options?: { forced?: boolean }) => {
+    const nextSignature = pluginsSignature(next);
     currentPlugins = next.map((plugin) => ({ ...plugin }));
     if (enabled) {
+      // 내용 불변 재발행(프리셋 로드, JS 무관 undo 등)은 재주입 생략 -
+      // 전 플러그인 teardown이 런타임 state·핸들을 파괴하는 것을 방지.
+      // forced(명시 리로드)와 js:use 토글 경로는 가드를 타지 않는다
+      if (!options?.forced && appliedSignature === nextSignature) return;
       injectAll();
     } else {
       removeAll();
@@ -339,7 +353,7 @@ ${plugin.content}
   };
 
   const fetchInitialState = () => {
-    window.api.js
+    internalApi.js
       .get()
       .then((data) => {
         if (disposed) return;
@@ -349,7 +363,7 @@ ${plugin.content}
         console.error('Failed to fetch JS plugins', error);
       });
 
-    window.api.js
+    internalApi.js
       .getUse()
       .then((value) => {
         if (disposed) return;
@@ -367,7 +381,7 @@ ${plugin.content}
   };
 
   const setupListeners = () => {
-    const unsubUse = window.api.js.onUse(({ enabled: next }) => {
+    const unsubUse = internalApi.js.onUse(({ enabled: next }) => {
       enabled = next;
       if (enabled) {
         injectAll();
@@ -377,8 +391,10 @@ ${plugin.content}
       }
     });
 
-    const unsubState = window.api.js.onState((payload) => {
-      syncPlugins(Array.isArray(payload.plugins) ? payload.plugins : []);
+    const unsubState = internalApi.js.onState((payload) => {
+      syncPlugins(Array.isArray(payload.plugins) ? payload.plugins : [], {
+        forced: payload.forced === true,
+      });
     });
 
     unsubscribers.push(unsubUse, unsubState);

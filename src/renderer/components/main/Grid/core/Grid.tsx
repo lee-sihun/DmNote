@@ -5,6 +5,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
+import { keysApi } from '@api/modules/keysApi';
 
 declare global {
   interface Window {
@@ -13,18 +14,34 @@ declare global {
 }
 import { useTranslation } from '@contexts/useTranslation';
 import DraggableKey from '@components/shared/Key';
-import GridKeySettingModal from './GridKeySettingModal';
+import { commitElementPosition } from '@src/renderer/hooks/Grid/elementPositionCommit';
+import { deleteElementById } from '@src/renderer/editor/runtime/elementOps';
+import {
+  commitStableLayerZOrder,
+  orderStableZTargetsForBatch,
+} from '@src/renderer/editor/runtime/layerZOrderIntent';
+import {
+  reportElementOpError,
+  reportElementOpSkipped,
+} from '@src/renderer/editor/runtime/elementIntent';
+import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
-import ListPopup from '../../Modal/ListPopup';
+import ListPopup, { type ListItem } from '../../Modal/ListPopup';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
-import { useGridCanvasActions } from '@hooks/Grid/useGridCanvasActions';
+import {
+  addCanvasElementAt,
+  placeFrozenDuplicateAt,
+  useGridCanvasActions,
+} from '@hooks/Grid/useGridCanvasActions';
 import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
 import GridMinimap from './GridMinimap';
 import GridBackground from './GridBackground';
@@ -34,7 +51,10 @@ import ResizeHandles from '../handles/ResizeHandles';
 import GradientAxisOverlay from '../handles/GradientAxisHandle';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import GroupResizeHandles from '../handles/GroupResizeHandles';
-import { isElementResizable } from '../handles/groupResizeUtils';
+import {
+  getElementBounds,
+  isElementResizable,
+} from '../handles/groupResizeUtils';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
@@ -42,7 +62,6 @@ import KnobItem from '../layers/KnobItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
-  type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
 import { useUIStore } from '@stores/useUIStore';
@@ -60,19 +79,12 @@ import {
 import { createDefaultCounterSettings } from '@src/types/key/keys';
 import type {
   KeyMappings,
-  KeyPositions,
   KeyPosition,
-  KeySlot,
-  NoteColor,
   KeyCounterSettings,
   CounterAnimationBezier,
-  ImageFit,
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import type { StatItemPosition } from '@src/types/key/statItems';
-import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { KnobItemPosition } from '@src/types/key/knobs';
-import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
@@ -92,6 +104,7 @@ import {
   groupSelectedElements,
   ungroupSelectedElements,
 } from '@utils/grid/groupActions';
+import { expandGroupSelection } from '@utils/grid/groupSelection';
 import {
   composePreviewPositions,
   getPreviewOverlayVersion,
@@ -100,48 +113,22 @@ import {
 import {
   beginPluginInstancesEditSession,
   endPluginInstancesEditSession,
-  rotatePluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
+import {
+  commitStableHandlerSlots,
+  getStableHandlers,
+  type PendingHandlerSlotMap,
+  type StableHandlerSlotMap,
+} from './stableHandlerSlots';
 
 type ToolbarAddRequest = {
   id: number;
   type: 'key' | 'stat' | 'graph' | 'knob';
 } | null;
-
-interface SelectedKeyInfo {
-  key: KeySlot;
-  index: number;
-}
-
-type KeyPreviewUpdates = Partial<{
-  activeImage: string;
-  inactiveImage: string;
-  soundPath: string;
-  soundVolume: number;
-  activeTransparent: boolean;
-  idleTransparent: boolean;
-  width: number;
-  height: number;
-  className: string;
-  backgroundColor: string;
-  activeBackgroundColor: string;
-  borderColor: string;
-  activeBorderColor: string;
-  borderWidth: number;
-  borderRadius: number;
-  fontSize: number;
-  fontColor: string;
-  activeFontColor: string;
-  idleImageFit: ImageFit;
-  activeImageFit: ImageFit;
-  imageFit: ImageFit;
-  useInlineStyles: boolean;
-  displayText: string;
-}>;
 
 interface GridProps {
   showConfirm: (
@@ -155,47 +142,10 @@ interface GridProps {
     },
   ) => void;
   showAlert: (message: string, confirmText?: string) => void;
-  selectedKey: SelectedKeyInfo | null;
-  setSelectedKey: (key: SelectedKeyInfo | null) => void;
   keyMappings: KeyMappings;
-  positions: KeyPositions;
-  onPositionChange: (index: number, dx: number, dy: number) => void;
-  onKeyUpdate: (data: Omit<SaveData, 'counter'>) => void;
-  onKeyPreview: (index: number, updates: KeyPreviewUpdates) => void;
-  onNoteColorUpdate: (
-    index: number,
-    noteColor: NoteColor,
-    noteOpacity: number,
-    noteGlowEnabled: boolean,
-    noteGlowSize: number,
-    noteGlowOpacity: number,
-    noteGlowColor: NoteColor,
-    noteAutoYCorrection: boolean,
-    noteEffectEnabled: boolean,
-  ) => void;
-  onNoteColorPreview: (
-    index: number,
-    noteColor: NoteColor,
-    noteOpacity: number,
-    noteGlowEnabled: boolean,
-    noteGlowSize: number,
-    noteGlowOpacity: number,
-    noteGlowColor: NoteColor,
-    noteAutoYCorrection: boolean,
-    noteEffectEnabled: boolean,
-  ) => void;
-  onCounterPreview: (index: number, payload: KeyCounterSettings) => void;
-  onKeyDelete: (index: number) => void;
-  onAddKeyAt: (dx: number, dy: number) => void;
-  onKeyDuplicate: (sourceIndex: number, dx: number, dy: number) => void;
-  onMoveToFront: (index: number) => void | Promise<void>;
-  onMoveToBack: (index: number) => void | Promise<void>;
-  onMoveForward: (index: number) => void | Promise<void>;
-  onMoveBackward: (index: number) => void | Promise<void>;
+  positions: ReturnType<typeof useKeyStore.getState>['positions'];
   color: string;
   activeTool: string;
-  shouldSkipModalAnimation: boolean;
-  onModalAnimationConsumed: (() => void) | undefined;
   onUndo: () => void;
   onRedo: () => void;
   toolbarAddRequest: ToolbarAddRequest;
@@ -215,27 +165,10 @@ function getStatTypeLabel(type: string): string {
 const Grid = ({
   showConfirm,
   showAlert,
-  selectedKey,
-  setSelectedKey,
   keyMappings,
   positions,
-  onPositionChange,
-  onKeyUpdate,
-  onKeyPreview,
-  onNoteColorUpdate: _onNoteColorUpdate,
-  onNoteColorPreview,
-  onCounterPreview,
-  onKeyDelete,
-  onAddKeyAt,
-  onKeyDuplicate,
-  onMoveToFront,
-  onMoveToBack,
-  onMoveForward,
-  onMoveBackward,
   color,
   activeTool,
-  shouldSkipModalAnimation,
-  onModalAnimationConsumed,
   onUndo,
   onRedo,
   toolbarAddRequest,
@@ -333,26 +266,14 @@ const Grid = ({
   );
   const selectedDragGestureIdRef = useRef<string | null>(null);
 
-  const rotatePluginElementSessions = (fullIds: string[]) => {
-    const selectedPluginIds = new Set(fullIds);
-    const pluginIds = new Set(
-      usePluginDisplayElementStore
-        .getState()
-        .elements.filter((element) => selectedPluginIds.has(element.fullId))
-        .map((element) => element.pluginId),
-    );
-    pluginIds.forEach((pluginId) => {
-      rotatePluginInstancesEditSession(pluginId);
-    });
-  };
-
   const beginSelectedPluginInstancesDrag = () => {
     const gestureId = crypto.randomUUID();
     selectedDragGestureIdRef.current = gestureId;
+    freezeSelectionForGesture();
+    const frozenSelection = useGridSelectionStore.getState().selectedElements;
     const selectedPluginElementIds = new Set(
-      useGridSelectionStore
-        .getState()
-        .selectedElements.filter((element) => element.type === 'plugin')
+      frozenSelection
+        .filter((element) => element.type === 'plugin')
         .map((element) => element.id),
     );
     const tokens = new Map<string, string>();
@@ -419,6 +340,7 @@ const Grid = ({
     copySelectedElements,
     pasteElements,
     syncSelectedElementsToOverlay,
+    freezeSelectionForGesture,
   } = useGridSelection({
     selectedElements,
     selectedKeyType,
@@ -426,6 +348,8 @@ const Grid = ({
     positions,
   });
   const commitSelectedElementsDrag = () => {
+    // 동결 집합은 훅이 소유한다 - 여기서 인자를 넘기지 않아도 시작 시점
+    // 대상으로 정산된다
     syncSelectedElementsToOverlay(
       selectedDragGestureIdRef.current ?? undefined,
     );
@@ -460,7 +384,6 @@ const Grid = ({
   } = useGridResize({
     selectedElements,
     selectedKeyType,
-    onResizeEnd: syncSelectedElementsToOverlay,
     getOtherElements,
   });
 
@@ -468,17 +391,12 @@ const Grid = ({
   const handleSelectedMoveForward = async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
-    if (selected.type === 'key') {
-      await onMoveForward(selected.index);
-    } else if (selected.type === 'stat') {
-      await moveStatForward(selected.index);
-    } else if (selected.type === 'plugin') {
-      rotatePluginElementSessions([selected.id]);
-      usePluginDisplayElementStore.getState().bringForward(selected.id);
-    } else if (selected.type === 'graph') {
-      await moveGraphForward(selected.index);
-    } else if (selected.type === 'knob') {
-      await moveKnobForward(selected.index);
+    if (selected.type === 'plugin' || isNativeElementId(selected.id)) {
+      await commitStableLayerZOrder({
+        mode: selectedKeyType,
+        targets: [{ type: selected.type, id: selected.id }],
+        action: 'forward',
+      });
     }
     syncSelectedElementsToOverlay();
   };
@@ -486,17 +404,12 @@ const Grid = ({
   const handleSelectedMoveBackward = async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
-    if (selected.type === 'key') {
-      await onMoveBackward(selected.index);
-    } else if (selected.type === 'stat') {
-      await moveStatBackward(selected.index);
-    } else if (selected.type === 'plugin') {
-      rotatePluginElementSessions([selected.id]);
-      usePluginDisplayElementStore.getState().sendBackward(selected.id);
-    } else if (selected.type === 'graph') {
-      await moveGraphBackward(selected.index);
-    } else if (selected.type === 'knob') {
-      await moveKnobBackward(selected.index);
+    if (selected.type === 'plugin' || isNativeElementId(selected.id)) {
+      await commitStableLayerZOrder({
+        mode: selectedKeyType,
+        targets: [{ type: selected.type, id: selected.id }],
+        action: 'backward',
+      });
     }
     syncSelectedElementsToOverlay();
   };
@@ -519,6 +432,8 @@ const Grid = ({
   // 키 컨텍스트 메뉴
   const [isContextOpen, setIsContextOpen] = useState<boolean>(false);
   const [contextIndex, setContextIndex] = useState<number | null>(null);
+  // 메뉴 대상의 안정 신원 - 열림 동안 재정렬돼도 액션이 같은 요소를 향한다
+  const [contextElementId, setContextElementId] = useState<string | null>(null);
   const [contextType, setContextType] = useState<string>('key');
   const contextRef = useRef<HTMLElement | null>(null);
   const [contextPosition, setContextPosition] = useState<{
@@ -539,7 +454,7 @@ const Grid = ({
   } | null>(null);
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const mixedSelectionMenuItems = (() => {
-    const items = [
+    const items: ListItem[] = [
       { id: 'delete', label: t('contextMenu.deleteSelected') },
       { id: 'duplicate', label: t('contextMenu.duplicateSelected') },
     ];
@@ -559,16 +474,30 @@ const Grid = ({
       let firstGroupId;
       let first = true;
 
+      const modeGroupIds = new Set(
+        (useLayerGroupStore.getState().layerGroups[selectedKeyType] || []).map(
+          (group) => group.id,
+        ),
+      );
       selectedElements.forEach((el) => {
         let gid;
-        if (el.type === 'key' && el.index !== undefined) {
-          gid = modeKeyPos[el.index]?.groupId;
-        } else if (el.type === 'stat' && el.index !== undefined) {
-          gid = modeStatPos[el.index]?.groupId;
-        } else if (el.type === 'graph' && el.index !== undefined) {
-          gid = modeGraphPos[el.index]?.groupId;
-        } else if (el.type === 'knob' && el.index !== undefined) {
-          gid = modeKnobPos[el.index]?.groupId;
+        if (el.type === 'key') {
+          gid = modeKeyPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'stat') {
+          gid = modeStatPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'graph') {
+          gid = modeGraphPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'knob') {
+          gid = modeKnobPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'plugin') {
+          // 플러그인 소속도 그룹 메뉴 판정에 포함 - 모드 def가 있는 것만 유효
+          const pluginGroupId = usePluginDisplayElementStore
+            .getState()
+            .elements.find((candidate) => candidate.fullId === el.id)?.groupId;
+          gid =
+            pluginGroupId && modeGroupIds.has(pluginGroupId)
+              ? pluginGroupId
+              : undefined;
         }
         if (gid) anyInGroup = true;
         if (first) {
@@ -627,31 +556,6 @@ const Grid = ({
     return snapCursorToGrid(gridCoords.x, gridCoords.y);
   };
 
-  // 캔버스 요소 액션 (useGridCanvasActions에서 위임)
-  const {
-    deleteStatAtIndex,
-    moveStatToFront,
-    moveStatToBack,
-    moveStatForward,
-    moveStatBackward,
-    addStatAtPosition,
-    placeDuplicateStat,
-    deleteGraphAtIndex,
-    moveGraphToFront,
-    moveGraphToBack,
-    moveGraphForward,
-    moveGraphBackward,
-    addGraphAtPosition,
-    placeDuplicateGraph,
-    deleteKnobAtIndex,
-    moveKnobToFront,
-    moveKnobToBack,
-    moveKnobForward,
-    moveKnobBackward,
-    addKnobAtPosition,
-    placeDuplicateKnob,
-  } = canvasActions;
-
   // 복제 시작은 로컬 UI 상태(duplicateState) 설정이 필요하므로 래퍼 사용
   const beginDuplicateStat = (sourceIndex: number) => {
     const result = canvasActions.beginDuplicateStat(sourceIndex);
@@ -676,69 +580,70 @@ const Grid = ({
 
   const duplicateSelectedFromContextMenu = async () => {
     copySelectedElements();
-    await pasteElements();
+    await pasteElements().catch(reportElementOpError);
   };
+
+  // 외부 선택 입력도 canonical native id 경계에서 재검증
+  const isStableNativeSelection = (el: {
+    type: string;
+    id: string;
+  }): el is { type: 'key' | 'stat' | 'graph' | 'knob'; id: string } =>
+    (el.type === 'key' ||
+      el.type === 'stat' ||
+      el.type === 'graph' ||
+      el.type === 'knob') &&
+    el.id.length > 0 &&
+    isNativeElementId(el.id);
 
   const moveSelectedToFront = async () => {
     if (selectedElements.length === 0) return;
 
-    rotatePluginElementSessions(
-      selectedElements
-        .filter((element) => element.type === 'plugin')
-        .map((element) => element.id),
-    );
-
-    for (const el of selectedElements) {
-      if (el.type === 'key' && el.index !== undefined) {
-        if (typeof onMoveToFront === 'function') {
-          await onMoveToFront(el.index);
-        }
-      } else if (el.type === 'stat' && el.index !== undefined) {
-        moveStatToFront(el.index);
-      } else if (el.type === 'graph' && el.index !== undefined) {
-        moveGraphToFront(el.index);
-      } else if (el.type === 'knob' && el.index !== undefined) {
-        moveKnobToFront(el.index);
-      } else if (el.type === 'plugin') {
-        usePluginDisplayElementStore.getState().bringToFront(el.id);
-      }
+    if (
+      selectedElements.every(
+        (element) =>
+          element.type === 'plugin' || isStableNativeSelection(element),
+      )
+    ) {
+      await commitStableLayerZOrder({
+        mode: selectedKeyType,
+        targets: orderStableZTargetsForBatch(
+          selectedElements.map((element) => ({
+            type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'plugin',
+            id: element.id,
+          })),
+        ),
+        action: 'front',
+      }).catch(reportElementOpError);
+      syncSelectedElementsToOverlay();
+      return;
     }
-
-    syncSelectedElementsToOverlay();
+    reportElementOpError(new Error('Invalid native selection ID'));
   };
 
   const moveSelectedToBack = async () => {
     if (selectedElements.length === 0) return;
 
-    rotatePluginElementSessions(
-      selectedElements
-        .filter((element) => element.type === 'plugin')
-        .map((element) => element.id),
-    );
-
-    for (const el of selectedElements) {
-      if (el.type === 'key' && el.index !== undefined) {
-        if (typeof onMoveToBack === 'function') {
-          await onMoveToBack(el.index);
-        }
-      } else if (el.type === 'stat' && el.index !== undefined) {
-        moveStatToBack(el.index);
-      } else if (el.type === 'graph' && el.index !== undefined) {
-        moveGraphToBack(el.index);
-      } else if (el.type === 'knob' && el.index !== undefined) {
-        moveKnobToBack(el.index);
-      } else if (el.type === 'plugin') {
-        usePluginDisplayElementStore.getState().sendToBack(el.id);
-      }
+    if (
+      selectedElements.every(
+        (element) =>
+          element.type === 'plugin' || isStableNativeSelection(element),
+      )
+    ) {
+      await commitStableLayerZOrder({
+        mode: selectedKeyType,
+        targets: orderStableZTargetsForBatch(
+          selectedElements.map((element) => ({
+            type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'plugin',
+            id: element.id,
+          })),
+        ),
+        action: 'back',
+      }).catch(reportElementOpError);
+      syncSelectedElementsToOverlay();
+      return;
     }
 
-    syncSelectedElementsToOverlay();
-  };
-
-  const addKeyAtPosition = (dx: number, dy: number) => {
-    if (typeof onAddKeyAt === 'function') {
-      onAddKeyAt(dx, dy);
-    }
+    reportElementOpError(new Error('Invalid native selection ID'));
   };
 
   useEffect(() => {
@@ -773,15 +678,12 @@ const Grid = ({
       defaultSize.height,
     );
     if (targetPos) {
-      if (toolbarAddRequest.type === 'key') {
-        addKeyAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === 'stat') {
-        addStatAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === 'graph') {
-        addGraphAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === 'knob') {
-        addKnobAtPosition(targetPos.dx, targetPos.dy);
-      }
+      addCanvasElementAt(
+        canvasActions,
+        toolbarAddRequest.type,
+        targetPos.dx,
+        targetPos.dy,
+      );
     }
 
     onToolbarAddConsumed?.();
@@ -846,57 +748,34 @@ const Grid = ({
       setIsContextOpen(false);
       setContextPosition(null);
     }
-    const nextSelection: SelectedElement[] = [
-      { type, id: `${type}-${index}`, index },
-    ];
+    const collections = {
+      key: positions[selectedKeyType] || [],
+      stat: useStatItemStore.getState().positions[selectedKeyType] || [],
+      graph: useGraphItemStore.getState().positions[selectedKeyType] || [],
+      knob: useKnobItemStore.getState().positions[selectedKeyType] || [],
+    } as const;
 
-    // 그룹 ID 조회
-    let groupId: string | undefined;
-    if (type === 'key') {
-      groupId = positions[selectedKeyType]?.[index]?.groupId;
-    } else if (type === 'stat') {
-      groupId =
-        useStatItemStore.getState().positions[selectedKeyType]?.[index]
-          ?.groupId;
-    } else if (type === 'graph') {
-      groupId =
-        useGraphItemStore.getState().positions[selectedKeyType]?.[index]
-          ?.groupId;
-    } else {
-      groupId =
-        useKnobItemStore.getState().positions[selectedKeyType]?.[index]
-          ?.groupId;
+    const clicked = collections[type][index];
+    // stat·graph·knob은 렌더 클로저가 아니라 live 스토어를 읽는다. 렌더와
+    // 클릭 사이에 배열이 줄면 대상이 없을 수 있어 fail-closed로 닫는다
+    if (!clicked) {
+      reportElementOpSkipped('group selection (target missing)');
+      return;
     }
-
-    if (groupId) {
-      // 같은 그룹의 모든 요소 선택
-      (positions[selectedKeyType] || []).forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'key' && i === index)) {
-          nextSelection.push({ type: 'key', id: `key-${i}`, index: i });
-        }
-      });
-      const statPos =
-        useStatItemStore.getState().positions[selectedKeyType] || [];
-      statPos.forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'stat' && i === index)) {
-          nextSelection.push({ type: 'stat', id: `stat-${i}`, index: i });
-        }
-      });
-      const graphPos =
-        useGraphItemStore.getState().positions[selectedKeyType] || [];
-      graphPos.forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'graph' && i === index)) {
-          nextSelection.push({ type: 'graph', id: `graph-${i}`, index: i });
-        }
-      });
-      const knobPos =
-        useKnobItemStore.getState().positions[selectedKeyType] || [];
-      knobPos.forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'knob' && i === index)) {
-          nextSelection.push({ type: 'knob', id: `knob-${i}`, index: i });
-        }
-      });
-    }
+    // 같은 그룹의 native·플러그인 멤버 전체 확장 (공용 헬퍼)
+    const nextSelection = expandGroupSelection(
+      { type, id: clicked.id, index },
+      {
+        mode: selectedKeyType,
+        keyPositions: collections.key,
+        statPositions: collections.stat,
+        graphPositions: collections.graph,
+        knobPositions: collections.knob,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+        modeGroups:
+          useLayerGroupStore.getState().layerGroups[selectedKeyType] || [],
+      },
+    );
     // 그룹 멤버 수와 무관하게 선택 Store 알림·React render를 1회로 유지
     setSelectedElements(nextSelection);
   };
@@ -909,9 +788,19 @@ const Grid = ({
   ) => {
     const { selectedElements: currentSelection } =
       useGridSelectionStore.getState();
+    const positionsForType =
+      type === 'key'
+        ? positions[selectedKeyType]
+        : type === 'stat'
+        ? statPositions[selectedKeyType]
+        : type === 'graph'
+        ? graphPositions[selectedKeyType]
+        : knobPositions[selectedKeyType];
+    const targetId = positionsForType?.[index]?.id;
     const isMultiMember =
       currentSelection.length > 1 &&
-      currentSelection.some((el) => el.id === `${type}-${index}`);
+      typeof targetId === 'string' &&
+      currentSelection.some((el) => el.type === type && el.id === targetId);
     if (!isMultiMember) {
       selectElementWithGroup(type, index);
     }
@@ -930,13 +819,26 @@ const Grid = ({
       setDuplicateState(null);
       setDuplicateCursor(null);
     }
-    const clickedId = `${type}-${index}`;
+    const clickedPosition =
+      type === 'key'
+        ? positions[selectedKeyType]?.[index]
+        : type === 'stat'
+        ? useStatItemStore.getState().positions[selectedKeyType]?.[index]
+        : type === 'graph'
+        ? useGraphItemStore.getState().positions[selectedKeyType]?.[index]
+        : useKnobItemStore.getState().positions[selectedKeyType]?.[index];
+    const clickedId = clickedPosition.id;
     if (shouldOpenMixedSelectionMenu(clickedId)) {
       openMixedSelectionContextMenu(clientX, clientY, ref);
       return;
     }
     setContextType(type);
     setContextIndex(index);
+    setContextElementId(
+      typeof clickedPosition?.id === 'string' && clickedPosition.id.length > 0
+        ? clickedPosition.id
+        : null,
+    );
     contextRef.current = ref;
     setContextPosition({ x: clientX, y: clientY });
     setIsContextOpen(true);
@@ -948,21 +850,11 @@ const Grid = ({
   // 항상 깨진다. 그러면 값 하나가 바뀌는 프리뷰에도 화면의 모든 요소가 다시 그려진다
   // (실측 키 100개 기준 3.13ms -> 0.35ms, 200개 7.32ms -> 0.62ms).
   // 참조는 고정하고 실제 동작은 매 렌더 최신 구현으로 갈아끼워 값은 항상 최신을 본다
-  const handlerSlotsRef = useRef(
-    new Map<
-      string,
-      {
-        impl: Record<string, (...args: never[]) => unknown>;
-        props: Record<string, (...args: never[]) => unknown>;
-      }
-    >(),
-  );
+  const handlerSlotsRef = useRef<StableHandlerSlotMap>(new Map());
 
   // 최신 구현 교체는 커밋 시점에만. 렌더 중에 바꾸면 React가 그 렌더를 버렸을 때
   // 화면에는 이전 트리가 붙어 있는데 이벤트만 폐기된 렌더의 클로저를 호출한다
-  const pendingImplRef = useRef(
-    new Map<string, Record<string, (...args: never[]) => unknown>>(),
-  );
+  const pendingImplRef = useRef<PendingHandlerSlotMap>(new Map());
   pendingImplRef.current.clear();
 
   const stableHandlers = <
@@ -970,34 +862,16 @@ const Grid = ({
   >(
     id: string,
     impl: T,
-  ): T => {
-    pendingImplRef.current.set(id, impl);
-
-    const slots = handlerSlotsRef.current;
-    const found = slots.get(id);
-    // 첫 등록은 커밋 전이라 이벤트가 들어올 수 없다. 바로 채워도 안전하다
-    if (found) return found.props as T;
-
-    const slot = {
-      impl: impl as Record<string, (...args: never[]) => unknown>,
-      props: {} as Record<string, (...args: never[]) => unknown>,
-    };
-    Object.keys(impl).forEach((name) => {
-      slot.props[name] = ((...args: unknown[]) =>
-        (slot.impl[name] as (...a: unknown[]) => unknown)(...args)) as (
-        ...args: never[]
-      ) => unknown;
-    });
-    slots.set(id, slot);
-    return slot.props as T;
-  };
+  ): T =>
+    getStableHandlers(
+      handlerSlotsRef.current,
+      pendingImplRef.current,
+      id,
+      impl,
+    );
 
   useLayoutEffect(() => {
-    const slots = handlerSlotsRef.current;
-    pendingImplRef.current.forEach((impl, id) => {
-      const slot = slots.get(id);
-      if (slot) slot.impl = impl;
-    });
+    commitStableHandlerSlots(handlerSlotsRef.current, pendingImplRef.current);
   });
 
   const renderKeys = () => {
@@ -1005,8 +879,13 @@ const Grid = ({
 
     return positions[selectedKeyType].map(
       (position: KeyPosition, index: number) => {
-        const handlers = stableHandlers(`key-${index}`, {
-          onPositionChange: onPositionChange,
+        const handlers = stableHandlers(position.id, {
+          onPositionChange: (
+            _targetIndex: number,
+            dx: number,
+            dy: number,
+            elementId: string,
+          ) => commitElementPosition('key', elementId, dx, dy),
           onClick: () => {
             selectElementWithGroup('key', index);
             // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
@@ -1023,7 +902,11 @@ const Grid = ({
           onDoubleClick: () => openElementEditor('key', index),
           onCtrlClick: () => {
             // 다중 선택: 기존 선택 유지하면서 추가/제거
-            toggleSelection({ type: 'key', id: `key-${index}`, index });
+            toggleSelection({
+              type: 'key',
+              id: positions[selectedKeyType][index].id,
+              index,
+            });
             // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
             const pos = positions[selectedKeyType]?.[index];
             if (pos) {
@@ -1040,7 +923,11 @@ const Grid = ({
             if (!lastSelectedKeyBounds) {
               // 이전 선택이 없으면 단일 선택처럼 동작
               clearSelection();
-              toggleSelection({ type: 'key', id: `key-${index}`, index });
+              toggleSelection({
+                type: 'key',
+                id: positions[selectedKeyType][index].id,
+                index,
+              });
               const pos = positions[selectedKeyType]?.[index];
               if (pos) {
                 setLastSelectedKeyBounds({
@@ -1094,7 +981,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'key',
-                  id: `key-${i}`,
+                  id: pos.id,
                   index: i,
                 });
               }
@@ -1132,7 +1019,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'stat',
-                  id: `stat-${i}`,
+                  id: pos.id,
                   index: i,
                 });
               }
@@ -1150,7 +1037,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'graph',
-                  id: `graph-${i}`,
+                  id: pos.id,
                   index: i,
                 });
               }
@@ -1168,7 +1055,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'knob',
-                  id: `knob-${i}`,
+                  id: pos.id,
                   index: i,
                 });
               }
@@ -1181,12 +1068,8 @@ const Grid = ({
           onMultiDragStart: beginSelectedPluginInstancesDrag,
           onMultiDragEnd: commitSelectedElementsDrag,
           onEraserClick: () => {
-            const slot = keyMappings[selectedKeyType]?.[index] ?? '';
-            const displayName = slotDisplayName(slot);
-            showConfirm(
-              t('confirm.removeKey', { name: displayName }),
-              () => onKeyDelete(index),
-              { confirmText: t('confirm.remove') },
+            void deleteElementById('key', position.id).catch(
+              reportElementOpError,
             );
           },
           onContextMenu: (e: React.MouseEvent) => {
@@ -1205,15 +1088,16 @@ const Grid = ({
 
         return (
           <DraggableKey
-            key={`${selectedKeyType}-${index}`}
+            key={position.id}
             index={index}
+            elementId={position.id}
             position={position}
             keyName={slotDisplayName(
               keyMappings[selectedKeyType]?.[index] ?? '',
             )}
             zIndex={position.zIndex ?? index}
             isSelected={selectedElements.some(
-              (el) => el.type === 'key' && el.index === index,
+              (el) => el.type === 'key' && el.id === position.id,
             )}
             selectedElements={selectedElements}
             activeTool={activeTool}
@@ -1238,48 +1122,42 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
+      elementId: string,
     ) => {
-      const current = useStatItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const prev = tabPositions[index];
-      if (!prev) return;
-      if (prev.dx === dx && prev.dy === dy) return;
-
-      const nextTabPositions = tabPositions.map((pos, i) =>
-        i === index ? { ...pos, dx, dy } : pos,
-      );
-      const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
-
-      useStatItemStore.getState().setPositions(nextPositions);
-      window.api.statItems.updatePositions(nextPositions).catch((error) => {
-        console.error('Failed to update stat item positions', error);
-      });
+      commitElementPosition('stat', elementId, dx, dy);
     };
 
     return items.map((position: StatItemPosition, index: number) => {
-      const handlers = stableHandlers(`stat-${index}`, {
+      const handlers = stableHandlers(position.id, {
         onPositionChange: handleStatPositionChange,
         onClick: () => {
           selectElementWithGroup('stat', index);
         },
         onDoubleClick: () => openElementEditor('stat', index),
         onCtrlClick: () => {
-          toggleSelection({ type: 'stat', id: `stat-${index}`, index });
+          toggleSelection({
+            type: 'stat',
+            id: useStatItemStore.getState().positions[selectedKeyType][index]
+              .id,
+            index,
+          });
         },
         onShiftClick: () => {
           // 통계 요소는 범위 선택 대상이 아니므로 Ctrl+클릭과 동일하게 처리
-          toggleSelection({ type: 'stat', id: `stat-${index}`, index });
+          toggleSelection({
+            type: 'stat',
+            id: useStatItemStore.getState().positions[selectedKeyType][index]
+              .id,
+            index,
+          });
         },
         onMultiDrag: (deltaX: number, deltaY: number) =>
           moveSelectedElements(deltaX, deltaY, undefined, false),
         onMultiDragStart: beginSelectedPluginInstancesDrag,
         onMultiDragEnd: commitSelectedElementsDrag,
         onEraserClick: () => {
-          const displayName = getStatTypeLabel(position.statType);
-          showConfirm(
-            t('confirm.removeStat', { name: displayName }),
-            () => deleteStatAtIndex(index),
-            { confirmText: t('confirm.remove') },
+          void deleteElementById('stat', position.id).catch(
+            reportElementOpError,
           );
         },
         onContextMenu: (e: React.MouseEvent) => {
@@ -1298,14 +1176,15 @@ const Grid = ({
 
       return (
         <DraggableKey
-          key={`stat-${selectedKeyType}-${index}`}
+          key={position.id}
           index={index}
-          elementId={`stat-${index}`}
+          elementId={position.id}
+          anchorKind="stat"
           position={position}
           keyName={getStatTypeLabel(position.statType)}
           zIndex={position.zIndex ?? index}
           isSelected={selectedElements.some(
-            (el) => el.type === 'stat' && el.index === index,
+            (el) => el.type === 'stat' && el.id === position.id,
           )}
           selectedElements={selectedElements}
           activeTool={activeTool}
@@ -1329,29 +1208,16 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
+      elementId: string,
     ) => {
-      const current = useGraphItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const prev = tabPositions[index];
-      if (!prev) return;
-      if (prev.dx === dx && prev.dy === dy) return;
-
-      const nextTabPositions = tabPositions.map((pos, i) =>
-        i === index ? { ...pos, dx, dy } : pos,
-      );
-      const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
-
-      useGraphItemStore.getState().setPositions(nextPositions);
-      window.api.graphItems.updatePositions(nextPositions).catch((error) => {
-        console.error('Failed to update graph item positions', error);
-      });
+      commitElementPosition('graph', elementId, dx, dy);
     };
 
     return items.map((position, index) => (
       <GraphItem
-        key={`graph-${selectedKeyType}-${index}`}
+        key={position.id}
         index={index}
-        elementId={`graph-${index}`}
+        elementId={position.id}
         position={position}
         onPositionChange={handleGraphPositionChange}
         zIndex={position.zIndex ?? index}
@@ -1360,13 +1226,23 @@ const Grid = ({
         }}
         onDoubleClick={() => openElementEditor('graph', index)}
         onCtrlClick={() => {
-          toggleSelection({ type: 'graph', id: `graph-${index}`, index });
+          toggleSelection({
+            type: 'graph',
+            id: useGraphItemStore.getState().positions[selectedKeyType][index]
+              .id,
+            index,
+          });
         }}
         onShiftClick={() => {
-          toggleSelection({ type: 'graph', id: `graph-${index}`, index });
+          toggleSelection({
+            type: 'graph',
+            id: useGraphItemStore.getState().positions[selectedKeyType][index]
+              .id,
+            index,
+          });
         }}
         isSelected={selectedElements.some(
-          (el) => el.type === 'graph' && el.index === index,
+          (el) => el.type === 'graph' && el.id === position.id,
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
@@ -1376,11 +1252,8 @@ const Grid = ({
         onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
-          const displayName = getStatTypeLabel(position.statType);
-          showConfirm(
-            t('confirm.removeGraph', { name: displayName }),
-            () => deleteGraphAtIndex(index),
-            { confirmText: t('confirm.remove') },
+          void deleteElementById('graph', position.id).catch(
+            reportElementOpError,
           );
         }}
         onContextMenu={(e) => {
@@ -1411,29 +1284,16 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
+      elementId: string,
     ) => {
-      const current = useKnobItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const prev = tabPositions[index];
-      if (!prev) return;
-      if (prev.dx === dx && prev.dy === dy) return;
-
-      const nextTabPositions = tabPositions.map((pos, i) =>
-        i === index ? { ...pos, dx, dy } : pos,
-      );
-      const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
-
-      useKnobItemStore.getState().setPositions(nextPositions);
-      window.api.knobItems.updatePositions(nextPositions).catch((error) => {
-        console.error('Failed to update knob item positions', error);
-      });
+      commitElementPosition('knob', elementId, dx, dy);
     };
 
     return items.map((position, index) => (
       <KnobItem
-        key={`knob-${selectedKeyType}-${index}`}
+        key={position.id}
         index={index}
-        elementId={`knob-${index}`}
+        elementId={position.id}
         position={position}
         onPositionChange={handleKnobPositionChange}
         zIndex={position.zIndex ?? index}
@@ -1442,13 +1302,23 @@ const Grid = ({
         }}
         onDoubleClick={() => openElementEditor('knob', index)}
         onCtrlClick={() => {
-          toggleSelection({ type: 'knob', id: `knob-${index}`, index });
+          toggleSelection({
+            type: 'knob',
+            id: useKnobItemStore.getState().positions[selectedKeyType][index]
+              .id,
+            index,
+          });
         }}
         onShiftClick={() => {
-          toggleSelection({ type: 'knob', id: `knob-${index}`, index });
+          toggleSelection({
+            type: 'knob',
+            id: useKnobItemStore.getState().positions[selectedKeyType][index]
+              .id,
+            index,
+          });
         }}
         isSelected={selectedElements.some(
-          (el) => el.type === 'knob' && el.index === index,
+          (el) => el.type === 'knob' && el.id === position.id,
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
@@ -1458,10 +1328,8 @@ const Grid = ({
         onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
-          showConfirm(
-            t('confirm.removeKnob', { name: 'Knob' }),
-            () => deleteKnobAtIndex(index),
-            { confirmText: t('confirm.remove') },
+          void deleteElementById('knob', position.id).catch(
+            reportElementOpError,
           );
         }}
         onContextMenu={(e) => {
@@ -1667,33 +1535,12 @@ const Grid = ({
           // 마우스 위치에서 키의 중심이 배치되도록 조정
           const width = duplicateState.position.width || 60;
           const height = duplicateState.position.height || 60;
-          const type = duplicateState.elementType || 'key';
-
-          if (type === 'key' && typeof onKeyDuplicate === 'function') {
-            onKeyDuplicate(
-              duplicateState.sourceIndex,
-              snapped.x - width / 2,
-              snapped.y - height / 2,
-            );
-          } else if (type === 'stat') {
-            placeDuplicateStat(
-              duplicateState.position as StatItemPosition,
-              snapped.x - width / 2,
-              snapped.y - height / 2,
-            );
-          } else if (type === 'graph') {
-            placeDuplicateGraph(
-              duplicateState.position as GraphItemPosition,
-              snapped.x - width / 2,
-              snapped.y - height / 2,
-            );
-          } else if (type === 'knob') {
-            placeDuplicateKnob(
-              duplicateState.position as KnobItemPosition,
-              snapped.x - width / 2,
-              snapped.y - height / 2,
-            );
-          }
+          placeFrozenDuplicateAt(
+            canvasActions,
+            duplicateState,
+            snapped.x - width / 2,
+            snapped.y - height / 2,
+          );
         }
         setDuplicateState(null);
         setDuplicateCursor(null);
@@ -1795,58 +1642,15 @@ const Grid = ({
           }
         }
 
-        let bounds = null;
-        if (el.type === 'key' && el.index !== undefined) {
-          const pos = positions[selectedKeyType]?.[el.index];
-          if (pos) {
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-          }
-        } else if (el.type === 'stat' && el.index !== undefined) {
-          const pos = statPositions?.[selectedKeyType]?.[el.index];
-          if (pos) {
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-          }
-        } else if (el.type === 'graph' && el.index !== undefined) {
-          const pos = graphPositions?.[selectedKeyType]?.[el.index];
-          if (pos) {
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 200,
-              height: pos.height || 100,
-            };
-          }
-        } else if (el.type === 'knob' && el.index !== undefined) {
-          const pos = knobPositions?.[selectedKeyType]?.[el.index];
-          if (pos) {
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-          }
-        } else if (el.type === 'plugin') {
-          const pluginEl = pluginElements.find((p) => p.fullId === el.id);
-          if (pluginEl && pluginEl.measuredSize) {
-            bounds = {
-              x: pluginEl.position.x,
-              y: pluginEl.position.y,
-              width: pluginEl.measuredSize.width,
-              height: pluginEl.measuredSize.height,
-            };
-          }
-        }
+        const bounds = getElementBounds(
+          el,
+          positions,
+          statPositions,
+          graphPositions,
+          knobPositions,
+          selectedKeyType,
+          pluginElements,
+        );
         if (!bounds) return null;
 
         // 단일 선택이고 프리뷰 bounds가 있으면 프리뷰 bounds 사용 (드래그 중 파란 선도 함께 이동)
@@ -1876,55 +1680,18 @@ const Grid = ({
       {selectedElements.length === 1 &&
         (() => {
           const el = selectedElements[0];
-          let bounds = null;
-          let elementId = null;
+          let bounds = getElementBounds(
+            el,
+            positions,
+            statPositions,
+            graphPositions,
+            knobPositions,
+            selectedKeyType,
+            pluginElements,
+          );
+          const elementId = el.id;
 
-          if (el.type === 'key' && el.index !== undefined) {
-            // 키 요소
-            const pos = positions[selectedKeyType]?.[el.index];
-            if (!pos) return null;
-
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-            elementId = `key-${el.index}`;
-          } else if (el.type === 'stat' && el.index !== undefined) {
-            const pos = statPositions?.[selectedKeyType]?.[el.index];
-            if (!pos) return null;
-
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-            elementId = `stat-${el.index}`;
-          } else if (el.type === 'graph' && el.index !== undefined) {
-            const pos = graphPositions?.[selectedKeyType]?.[el.index];
-            if (!pos) return null;
-
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 200,
-              height: pos.height || 100,
-            };
-            elementId = `graph-${el.index}`;
-          } else if (el.type === 'knob' && el.index !== undefined) {
-            const pos = knobPositions?.[selectedKeyType]?.[el.index];
-            if (!pos) return null;
-
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-            elementId = `knob-${el.index}`;
-          } else if (el.type === 'plugin') {
+          if (el.type === 'plugin') {
             // 플러그인 요소 - resizable 속성 확인
             const pluginEl = pluginElements.find((p) => p.fullId === el.id);
             if (!pluginEl || !pluginEl.measuredSize) {
@@ -1941,13 +1708,15 @@ const Grid = ({
             // resizable이 true인 경우에만 리사이즈 핸들 표시
             if (!definition?.resizable) return null;
 
-            bounds = {
-              x: pluginEl.position.x,
-              y: pluginEl.position.y,
-              width: pluginEl.measuredSize.width,
-              height: pluginEl.measuredSize.height,
-            };
-            elementId = el.id;
+            bounds = getElementBounds(
+              el,
+              positions,
+              statPositions,
+              graphPositions,
+              knobPositions,
+              selectedKeyType,
+              pluginElements,
+            );
           }
 
           if (!bounds || !elementId) return null;
@@ -2021,12 +1790,12 @@ const Grid = ({
               ? getGraphMenuItems(contextIndex)
               : contextType === 'knob'
               ? getKnobMenuItems(contextIndex)
-              : getKeyMenuItems(contextIndex)
+              : getKeyMenuItems(contextIndex, contextElementId)
           }
           onSelect={async (id: string) => {
             if (contextType === 'mixed') {
               if (id === 'delete') {
-                await deleteSelectedElements();
+                await deleteSelectedElements().catch(reportElementOpError);
               } else if (id === 'duplicate') {
                 await duplicateSelectedFromContextMenu();
               } else if (id === 'bringToFront') {
@@ -2053,25 +1822,45 @@ const Grid = ({
 
             if (contextIndex == null) return;
 
+            // 메뉴가 열린 동안의 재정렬·삭제를 액션 시점에 재해석.
+            // 모드 밖으로 이동한 대상은 소실로 취급한다
+            const resolveContextTarget = (
+              targetType: 'key' | 'stat' | 'graph' | 'knob',
+            ): number | null => {
+              if (!contextElementId) return null;
+              const locator = resolveElementById(targetType, contextElementId);
+              return locator && locator.mode === selectedKeyType
+                ? locator.index
+                : null;
+            };
+
             if (contextType === 'stat') {
-              const pos =
-                useStatItemStore.getState().positions?.[selectedKeyType]?.[
-                  contextIndex
-                ] || null;
-              const displayName = pos ? getStatTypeLabel(pos.statType) : '';
+              const statIndex = resolveContextTarget('stat');
 
               if (id === 'delete') {
-                showConfirm(
-                  t('confirm.removeStat', { name: displayName }),
-                  () => deleteStatAtIndex(contextIndex),
-                  { confirmText: t('confirm.remove') },
-                );
+                if (contextElementId) {
+                  void deleteElementById('stat', contextElementId).catch(
+                    reportElementOpError,
+                  );
+                }
               } else if (id === 'duplicate') {
-                beginDuplicateStat(contextIndex);
+                if (statIndex != null) beginDuplicateStat(statIndex);
               } else if (id === 'bringToFront') {
-                moveStatToFront(contextIndex);
+                if (contextElementId) {
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'stat', id: contextElementId }],
+                    action: 'front',
+                  }).catch(reportElementOpError);
+                }
               } else if (id === 'sendToBack') {
-                moveStatToBack(contextIndex);
+                if (contextElementId) {
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'stat', id: contextElementId }],
+                    action: 'back',
+                  }).catch(reportElementOpError);
+                }
               }
 
               setIsContextOpen(false);
@@ -2080,24 +1869,32 @@ const Grid = ({
             }
 
             if (contextType === 'graph') {
-              const pos =
-                useGraphItemStore.getState().positions?.[selectedKeyType]?.[
-                  contextIndex
-                ] || null;
-              const displayName = pos ? getStatTypeLabel(pos.statType) : '';
+              const graphIndex = resolveContextTarget('graph');
 
               if (id === 'delete') {
-                showConfirm(
-                  t('confirm.removeGraph', { name: displayName }),
-                  () => deleteGraphAtIndex(contextIndex),
-                  { confirmText: t('confirm.remove') },
-                );
+                if (contextElementId) {
+                  void deleteElementById('graph', contextElementId).catch(
+                    reportElementOpError,
+                  );
+                }
               } else if (id === 'duplicate') {
-                beginDuplicateGraph(contextIndex);
+                if (graphIndex != null) beginDuplicateGraph(graphIndex);
               } else if (id === 'bringToFront') {
-                moveGraphToFront(contextIndex);
+                if (contextElementId) {
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'graph', id: contextElementId }],
+                    action: 'front',
+                  }).catch(reportElementOpError);
+                }
               } else if (id === 'sendToBack') {
-                moveGraphToBack(contextIndex);
+                if (contextElementId) {
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'graph', id: contextElementId }],
+                    action: 'back',
+                  }).catch(reportElementOpError);
+                }
               }
 
               setIsContextOpen(false);
@@ -2106,18 +1903,31 @@ const Grid = ({
             }
 
             if (contextType === 'knob') {
+              const knobIndex = resolveContextTarget('knob');
               if (id === 'delete') {
-                showConfirm(
-                  t('confirm.removeKnob', { name: 'Knob' }),
-                  () => deleteKnobAtIndex(contextIndex),
-                  { confirmText: t('confirm.remove') },
-                );
+                if (contextElementId) {
+                  void deleteElementById('knob', contextElementId).catch(
+                    reportElementOpError,
+                  );
+                }
               } else if (id === 'duplicate') {
-                beginDuplicateKnob(contextIndex);
+                if (knobIndex != null) beginDuplicateKnob(knobIndex);
               } else if (id === 'bringToFront') {
-                moveKnobToFront(contextIndex);
+                if (contextElementId) {
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'knob', id: contextElementId }],
+                    action: 'front',
+                  }).catch(reportElementOpError);
+                }
               } else if (id === 'sendToBack') {
-                moveKnobToBack(contextIndex);
+                if (contextElementId) {
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'knob', id: contextElementId }],
+                    action: 'back',
+                  }).catch(reportElementOpError);
+                }
               }
 
               setIsContextOpen(false);
@@ -2130,15 +1940,22 @@ const Grid = ({
               (item) => item.fullId === id,
             );
             if (pluginItem) {
+              const keyIndex = resolveContextTarget('key');
+              if (keyIndex == null) return;
               const positionForContext =
-                positions[selectedKeyType]?.[contextIndex];
+                useKeyStore.getState().canonicalPositions[selectedKeyType]?.[
+                  keyIndex
+                ];
               if (!positionForContext) return;
               const context = {
                 // 플러그인 메뉴 표면은 canonical 문자열 유지
                 keyCode: slotCanonical(
-                  keyMappings[selectedKeyType]?.[contextIndex] ?? '',
+                  useKeyStore.getState().keyMappings[selectedKeyType]?.[
+                    keyIndex
+                  ] ?? '',
                 ),
-                index: contextIndex,
+                id: positionForContext.id,
+                index: keyIndex,
                 position: positionForContext,
                 mode: selectedKeyType,
               };
@@ -2167,20 +1984,27 @@ const Grid = ({
 
             // 기본 메뉴 처리
             if (id === 'delete') {
-              const slot = keyMappings[selectedKeyType]?.[contextIndex] ?? '';
-              const displayName = slotDisplayName(slot);
-              showConfirm(
-                t('confirm.removeKey', { name: displayName }),
-                () => onKeyDelete(contextIndex),
-                { confirmText: t('confirm.remove') },
-              );
+              if (contextElementId) {
+                void deleteElementById('key', contextElementId).catch(
+                  reportElementOpError,
+                );
+              }
             } else if (id === 'duplicate') {
-              const displayLabel = slotDisplayName(
-                keyMappings[selectedKeyType]?.[contextIndex] ?? '',
-              );
+              const keyIndex = resolveContextTarget('key');
+              const sourceSlot =
+                keyIndex != null
+                  ? useKeyStore.getState().keyMappings[selectedKeyType]?.[
+                      keyIndex
+                    ]
+                  : undefined;
+              const displayLabel = slotDisplayName(sourceSlot ?? '');
               const position =
-                positions[selectedKeyType]?.[contextIndex] || null;
-              if (position) {
+                keyIndex != null
+                  ? useKeyStore.getState().canonicalPositions[
+                      selectedKeyType
+                    ]?.[keyIndex] || null
+                  : null;
+              if (position && typeof sourceSlot !== 'undefined') {
                 const clonedNoteColor =
                   position.noteColor &&
                   typeof position.noteColor === 'object' &&
@@ -2214,7 +2038,10 @@ const Grid = ({
                 );
                 setDuplicateState({
                   elementType: 'key',
-                  sourceIndex: contextIndex,
+                  sourceIndex: keyIndex,
+                  // 배치 시 재조회 금지 - 고스트를 따라다니는 동안의 재정렬이
+                  // 다른 키를 복제하게 만든다
+                  slot: sourceSlot,
                   keyName: displayLabel,
                   position: {
                     ...position,
@@ -2225,15 +2052,26 @@ const Grid = ({
                 setDuplicateCursor(initialCursor);
               }
             } else if (id === 'counterReset') {
-              const slot = keyMappings[selectedKeyType]?.[contextIndex] ?? '';
-              // 카운터 리셋 커맨드의 key 인자 = canonical (계약 §7)
-              const globalKey = slotCanonical(slot);
+              const menuIndex = resolveContextTarget('key');
+              const slot =
+                menuIndex != null
+                  ? keyMappings[selectedKeyType]?.[menuIndex] ?? ''
+                  : '';
               const displayName = slotDisplayName(slot);
               showConfirm(
                 t('confirm.resetKeyCounter', { name: displayName }),
                 async () => {
+                  // 확인 시점 재해석 - 모달이 떠 있는 동안의 재바인딩 반영
+                  const confirmIndex = resolveContextTarget('key');
+                  if (confirmIndex == null) return;
+                  // 카운터 리셋 커맨드의 key 인자 = canonical (계약 §7)
+                  const globalKey = slotCanonical(
+                    useKeyStore.getState().keyMappings[selectedKeyType]?.[
+                      confirmIndex
+                    ] ?? '',
+                  );
                   try {
-                    await window.api.keys.resetSingleCounter(
+                    await keysApi.resetSingleCounter(
                       selectedKeyType,
                       globalKey,
                     );
@@ -2244,20 +2082,36 @@ const Grid = ({
                 { confirmText: t('confirm.reset') },
               );
             } else if (id === 'bringToFront') {
-              if (typeof onMoveToFront === 'function') {
-                onMoveToFront(contextIndex);
+              if (contextElementId) {
+                void commitStableLayerZOrder({
+                  mode: selectedKeyType,
+                  targets: [{ type: 'key', id: contextElementId }],
+                  action: 'front',
+                }).catch(reportElementOpError);
               }
             } else if (id === 'bringForward') {
-              if (typeof onMoveForward === 'function') {
-                onMoveForward(contextIndex);
+              if (contextElementId) {
+                void commitStableLayerZOrder({
+                  mode: selectedKeyType,
+                  targets: [{ type: 'key', id: contextElementId }],
+                  action: 'forward',
+                }).catch(reportElementOpError);
               }
             } else if (id === 'sendBackward') {
-              if (typeof onMoveBackward === 'function') {
-                onMoveBackward(contextIndex);
+              if (contextElementId) {
+                void commitStableLayerZOrder({
+                  mode: selectedKeyType,
+                  targets: [{ type: 'key', id: contextElementId }],
+                  action: 'backward',
+                }).catch(reportElementOpError);
               }
             } else if (id === 'sendToBack') {
-              if (typeof onMoveToBack === 'function') {
-                onMoveToBack(contextIndex);
+              if (contextElementId) {
+                void commitStableLayerZOrder({
+                  mode: selectedKeyType,
+                  targets: [{ type: 'key', id: contextElementId }],
+                  action: 'back',
+                }).catch(reportElementOpError);
               }
             }
             setIsContextOpen(false);
@@ -2326,14 +2180,23 @@ const Grid = ({
             }
 
             // 기본 메뉴 처리
-            if (id === 'add' && gridAddLocalPos) {
-              addKeyAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === 'addStat' && gridAddLocalPos) {
-              addStatAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === 'addGraph' && gridAddLocalPos) {
-              addGraphAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === 'addKnob' && gridAddLocalPos) {
-              addKnobAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
+            const addType =
+              id === 'add'
+                ? 'key'
+                : id === 'addStat'
+                ? 'stat'
+                : id === 'addGraph'
+                ? 'graph'
+                : id === 'addKnob'
+                ? 'knob'
+                : null;
+            if (addType && gridAddLocalPos) {
+              addCanvasElementAt(
+                canvasActions,
+                addType,
+                gridAddLocalPos.dx,
+                gridAddLocalPos.dy,
+              );
             } else if (id === 'tabCss') {
               setIsTabCssModalOpen(true);
             } else if (id === 'tabNote') {
@@ -2346,21 +2209,6 @@ const Grid = ({
           }}
         />
       </div>
-      <GridKeySettingModal
-        selectedKey={selectedKey}
-        setSelectedKey={setSelectedKey}
-        currentKeyPosition={
-          selectedKey
-            ? positions[selectedKeyType]?.[selectedKey.index]
-            : undefined
-        }
-        onKeyUpdate={onKeyUpdate}
-        onKeyPreview={onKeyPreview}
-        onNoteColorPreview={onNoteColorPreview}
-        onCounterPreview={onCounterPreview}
-        shouldSkipModalAnimation={shouldSkipModalAnimation}
-        onModalAnimationConsumed={onModalAnimationConsumed}
-      />
       {/* 미니맵 */}
       {minimapEnabled && (
         <GridMinimap

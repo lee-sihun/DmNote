@@ -223,8 +223,12 @@ async function shimInvoke(
   }
 
   // 2. allow 체크 (hello_ack에서 수신한 리스트)
+  // 차단은 거절로 알린다. undefined resolve는 호출자에게 성공으로 보여
+  // 예컨대 dmn.plugin.storage.clear()가 아무것도 지우지 않고 성공한다
   if (!isAllowed(cmd)) {
-    return;
+    return Promise.reject(
+      new Error(`[IPC Shim] command is not available in OBS mode: ${cmd}`),
+    );
   }
 
   // 3. WS RPC (백엔드가 처리)

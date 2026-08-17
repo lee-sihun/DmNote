@@ -257,6 +257,8 @@ export const imageFitSchema = z.union([
 export type ImageFit = z.infer<typeof imageFitSchema>;
 
 export const keyPositionSchema = z.object({
+  // 요소 안정 신원. 백엔드가 발급·검증하는 UUID, 프론트는 보존과 신규 발급만 한다
+  id: z.string().optional(),
   dx: z.number(),
   dy: z.number(),
   width: z.number().positive(),

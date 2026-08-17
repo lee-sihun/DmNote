@@ -9,16 +9,101 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import {
-  applyGroupIdToSelectedElements,
-  buildNextLayerGroupName,
-  normalizeLayerGroupsForMode,
-  resolveSingleGroupIdFromSelection,
-} from '@utils/layerGroupUtils';
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
+import { setMixedElementGroups } from '@src/renderer/editor/runtime/mixedElementGroups';
+import { setElementGroupsViaAuthority } from '@plugins/rpc/pluginElementActions';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import { buildNextLayerGroupName } from '@utils/layerGroupUtils';
+import type { EditorElementGroupTargetV1 } from '@src/types/editor';
+
+interface SplitGroupTargets {
+  native: EditorElementGroupTargetV1[];
+  // 플러그인은 fullId 대상 - 소속 저장은 pluginChanges가 운반
+  plugin: string[];
+}
+
+// 대상 분리만 담당 - 소실·모드 이탈 검증은 커밋 진입점이 fail-closed로 수행
+const splitGroupTargets = (
+  elements: readonly SelectedElement[],
+): SplitGroupTargets | null => {
+  const native = elements.flatMap((element) =>
+    element.type === 'key' ||
+    element.type === 'stat' ||
+    element.type === 'graph' ||
+    element.type === 'knob'
+      ? [{ elementType: element.type, id: element.id }]
+      : [],
+  );
+  const plugin = elements
+    .filter((element) => element.type === 'plugin')
+    .map((element) => element.id);
+  if (
+    !native.every(({ id }) => isNativeElementId(id)) ||
+    new Set(native.map(({ id }) => id)).size !== native.length ||
+    new Set(plugin).size !== plugin.length
+  ) {
+    return null;
+  }
+  return { native, plugin };
+};
+
+const currentNativeGroupId = (
+  mode: string,
+  target: EditorElementGroupTargetV1,
+): string | undefined => {
+  const locator = resolveElementById(target.elementType, target.id);
+  if (!locator || locator.mode !== mode) return undefined;
+  const record =
+    target.elementType === 'key'
+      ? useKeyStore.getState().canonicalPositions
+      : target.elementType === 'stat'
+      ? useStatItemStore.getState().positions
+      : target.elementType === 'graph'
+      ? useGraphItemStore.getState().positions
+      : useKnobItemStore.getState().positions;
+  return record[mode]?.[locator.index]?.groupId;
+};
+
+const currentPluginGroupId = (
+  mode: string,
+  fullId: string,
+): string | undefined => {
+  // 패널 창의 elements는 항상 비어 있으므로 창별 미러 셀렉터를 경유한다
+  const element = selectPropertyPanelPluginElements(
+    usePluginDisplayElementStore.getState(),
+  ).find((candidate) => candidate.fullId === fullId);
+  if (!element?.groupId) return undefined;
+  // 현재 모드에 def가 있는 groupId만 유효 (읽기 가드와 동일 규칙)
+  return (useLayerGroupStore.getState().layerGroups[mode] ?? []).some(
+    (group) => group.id === element.groupId,
+  )
+    ? element.groupId
+    : undefined;
+};
+
+const dispatchGroupChange = (
+  mode: string,
+  targets: SplitGroupTargets,
+  targetGroup:
+    | { kind: 'existing'; id: string }
+    | { kind: 'create'; id: string; name: string }
+    | null,
+): Promise<boolean> =>
+  window.__dmn_window_type === 'panel'
+    ? setElementGroupsViaAuthority(
+        mode,
+        targets.native,
+        targetGroup,
+        targets.plugin,
+      )
+    : setMixedElementGroups(mode, targets.native, targets.plugin, targetGroup);
 
 /**
- * 선택된 요소들을 그룹화
+ * 선택된 요소들을 그룹화 (native+plugin 혼합 지원)
  * @returns 변경이 있었는지 여부
  */
 export async function groupSelectedElements(
@@ -28,88 +113,32 @@ export async function groupSelectedElements(
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
 
-  // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-  const { canonicalPositions: positions } = useKeyStore.getState();
-  const statPos = useStatItemStore.getState().positions;
-  const graphPos = useGraphItemStore.getState().positions;
-  const knobPos = useKnobItemStore.getState().positions;
+  const targets = splitGroupTargets(selectedElements);
+  if (!targets || (targets.native.length === 0 && targets.plugin.length === 0))
+    return false;
   const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-  const modeGroups = currentLayerGroups[selectedKeyType] || [];
-
-  const singleGroupId = resolveSingleGroupIdFromSelection(
-    selectedKeyType,
-    selectedElements,
-    positions,
-    statPos,
-    graphPos,
-    knobPos,
+  const groupIds = new Set(
+    [
+      ...targets.native.map((target) =>
+        currentNativeGroupId(selectedKeyType, target),
+      ),
+      ...targets.plugin.map((fullId) =>
+        currentPluginGroupId(selectedKeyType, fullId),
+      ),
+    ].filter((id): id is string => typeof id === 'string' && id.length > 0),
   );
-
-  let targetGroupId = singleGroupId;
-  let nextLayerGroups = currentLayerGroups;
-  let createdGroup = false;
-
-  if (!targetGroupId) {
-    targetGroupId = crypto.randomUUID();
-    const groupName = buildNextLayerGroupName(newGroupLabel, modeGroups);
-    nextLayerGroups = {
-      ...currentLayerGroups,
-      [selectedKeyType]: [
-        ...modeGroups,
-        { id: targetGroupId, name: groupName },
-      ],
-    };
-    createdGroup = true;
-  }
-
-  const grouped = applyGroupIdToSelectedElements({
-    mode: selectedKeyType,
-    selectedElements,
-    keyPositions: positions,
-    statPositions: statPos,
-    graphPositions: graphPos,
-    knobPositions: knobPos,
-    targetGroupId,
-  });
-
-  const normalized = normalizeLayerGroupsForMode({
-    mode: selectedKeyType,
-    keyPositions: grouped.keyPositions,
-    statPositions: grouped.statPositions,
-    graphPositions: grouped.graphPositions,
-    knobPositions: grouped.knobPositions,
-    layerGroups: nextLayerGroups,
-  });
-
-  const hasChange =
-    grouped.changed ||
-    normalized.positionsChanged ||
-    createdGroup ||
-    normalized.groupsChanged;
-  if (!hasChange) return false;
-
-  // 스토어 반영
-  useKeyStore.getState().setPositions(normalized.keyPositions);
-  useStatItemStore.getState().setPositions(normalized.statPositions);
-  useGraphItemStore.getState().setPositions(normalized.graphPositions);
-  useKnobItemStore.getState().setPositions(normalized.knobPositions);
-  if (createdGroup || normalized.groupsChanged) {
-    useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-  }
-
-  // 참조와 그룹 정의를 같은 revision으로 저장
-  await editorCoordinator
-    .commitPatch({
-      schemaVersion: 1,
-      keyPositions: normalized.keyPositions,
-      statPositions: normalized.statPositions,
-      graphPositions: normalized.graphPositions,
-      knobPositions: normalized.knobPositions,
-      layerGroups: normalized.layerGroups,
-    })
-    .catch(() => {});
-
-  return true;
+  const existingId = groupIds.size === 1 ? [...groupIds][0] : undefined;
+  const targetGroup = existingId
+    ? ({ kind: 'existing', id: existingId } as const)
+    : ({
+        kind: 'create',
+        id: crypto.randomUUID(),
+        name: buildNextLayerGroupName(
+          newGroupLabel,
+          currentLayerGroups[selectedKeyType] ?? [],
+        ),
+      } as const);
+  return dispatchGroupChange(selectedKeyType, targets, targetGroup);
 }
 
 /**
@@ -122,53 +151,8 @@ export async function ungroupSelectedElements(
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
 
-  const { canonicalPositions: positions } = useKeyStore.getState();
-  const statPos = useStatItemStore.getState().positions;
-  const graphPos = useGraphItemStore.getState().positions;
-  const knobPos = useKnobItemStore.getState().positions;
-  const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-
-  const ungrouped = applyGroupIdToSelectedElements({
-    mode: selectedKeyType,
-    selectedElements,
-    keyPositions: positions,
-    statPositions: statPos,
-    graphPositions: graphPos,
-    knobPositions: knobPos,
-    targetGroupId: undefined,
-  });
-
-  const normalized = normalizeLayerGroupsForMode({
-    mode: selectedKeyType,
-    keyPositions: ungrouped.keyPositions,
-    statPositions: ungrouped.statPositions,
-    graphPositions: ungrouped.graphPositions,
-    knobPositions: ungrouped.knobPositions,
-    layerGroups: currentLayerGroups,
-  });
-
-  const hasChange = ungrouped.changed || normalized.groupsChanged;
-  if (!hasChange) return false;
-
-  // 스토어 반영
-  useKeyStore.getState().setPositions(normalized.keyPositions);
-  useStatItemStore.getState().setPositions(normalized.statPositions);
-  useGraphItemStore.getState().setPositions(normalized.graphPositions);
-  useKnobItemStore.getState().setPositions(normalized.knobPositions);
-  if (normalized.groupsChanged) {
-    useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-  }
-
-  await editorCoordinator
-    .commitPatch({
-      schemaVersion: 1,
-      keyPositions: normalized.keyPositions,
-      statPositions: normalized.statPositions,
-      graphPositions: normalized.graphPositions,
-      knobPositions: normalized.knobPositions,
-      layerGroups: normalized.layerGroups,
-    })
-    .catch(() => {});
-
-  return true;
+  const targets = splitGroupTargets(selectedElements);
+  if (!targets || (targets.native.length === 0 && targets.plugin.length === 0))
+    return false;
+  return dispatchGroupChange(selectedKeyType, targets, null);
 }

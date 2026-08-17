@@ -65,9 +65,14 @@ interface SelectedElement {
 
 interface KnobItemProps {
   index: number;
-  elementId?: string;
+  elementId: string;
   position: KnobPosition;
-  onPositionChange: (index: number, dx: number, dy: number) => void;
+  onPositionChange: (
+    index: number,
+    dx: number,
+    dy: number,
+    elementId: string,
+  ) => void;
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
@@ -143,7 +148,11 @@ const KnobItem = ({
   const useInline = useInlineStyles === true;
 
   // 편집 세션 일시 페인트 — 대상 spec과 대기/입력 상태를 한 묶음으로 렌더
-  const previewSession = useGradientPreviewSession('knob', index, isSelected);
+  const previewSession = useGradientPreviewSession(
+    'knob',
+    elementId,
+    isSelected,
+  );
   const previewActive = previewSession?.stateMode === 'active';
   const bgPair = resolveStatePair(
     previewActive,
@@ -190,7 +199,7 @@ const KnobItem = ({
   );
 
   const isSelectionMode = isSelected;
-  const effectiveElementId = elementId || `knob-${index}`;
+  const effectiveElementId = elementId;
 
   const inactiveImageSrc = resolveImageSource(inactiveImage);
   const activeImageSrc = resolveImageSource(activeImage);
@@ -226,7 +235,8 @@ const KnobItem = ({
     initialY: dy,
     onPositionChange: (newDx: number, newDy: number) => {
       if (!isSelectionMode) {
-        onPositionChange(index, newDx, newDy);
+        // 프리즈된 index의 재해석은 수신 측이 elementId로 수행
+        onPositionChange(index, newDx, newDy, elementId);
       }
     },
     zoom,
@@ -242,6 +252,7 @@ const KnobItem = ({
   const {
     handlePointerDown: handleSelectionDragPointerDown,
     movedDuringPressRef,
+    pressMovedRef,
   } = useSelectionDrag({
     enabled: isSelectionMode,
     zoom,
@@ -250,8 +261,6 @@ const KnobItem = ({
     elementId: effectiveElementId,
     elementWidth: width || 60,
     elementHeight: height || 60,
-    elementType: 'knob',
-    elementIndex: index,
     selectedElements,
     getOtherElements,
     onMultiDragStart,
@@ -265,6 +274,14 @@ const KnobItem = ({
     // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
     // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
     if (macOS && e.ctrlKey) return;
+    // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 수식키 토글·
+    // 범위 선택·지우개로 새지 않게 흡수. 개별 드래그는 wasMoved,
+    // 선택 모드 다중 드래그는 pressMovedRef가 판별 (선택 모드에서는
+    // 개별 draggable이 disabled라 wasMoved가 항상 false)
+    if (draggable.wasMoved || pressMovedRef.current) {
+      e.stopPropagation();
+      return;
+    }
     const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
 

@@ -3,6 +3,16 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// macOS 커스텀 커서 경로 강제
+vi.mock('@utils/core/platform', () => ({
+  isMac: () => true,
+}));
+
+import {
+  resumeCustomCursorHover,
+  setCustomCursorHover,
+  suspendCustomCursorHover,
+} from '@utils/grid/cursorUtils';
 import ResizeHandles from './ResizeHandles';
 
 describe('ResizeHandles frame coalescing', () => {
@@ -105,5 +115,155 @@ describe('ResizeHandles frame coalescing', () => {
     expect(callbacks.size).toBe(0);
     expect(onResize).toHaveBeenCalledTimes(1);
     expect(onResizeEnd).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ResizeHandles 핸들 호버 생명주기', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  const CURSOR_BODY_CLASS = 'dmn-custom-cursor';
+
+  const hasCursorBodyClass = () =>
+    document.body.classList.contains(CURSOR_BODY_CLASS);
+
+  // React의 enter/leave 합성은 over/out 이벤트에서 파생됨
+  const dispatchEnter = (target: Element) =>
+    target.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+
+  const dispatchLeave = (target: Element) =>
+    target.dispatchEvent(
+      new PointerEvent('pointerout', {
+        bubbles: true,
+        relatedTarget: document.body,
+      }),
+    );
+
+  const renderHandles = async (
+    bounds: { x: number; y: number; width: number; height: number } | null,
+  ) => {
+    await act(async () => {
+      root.render(<ResizeHandles bounds={bounds} />);
+    });
+  };
+
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    // 억제 상태와 호버 잔여분 원복 (resume은 한 태스크 뒤 해제)
+    resumeCustomCursorHover();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    setCustomCursorHover(null);
+  });
+
+  it('pointer enter가 호버 커서를 켜고 leave가 끈다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="n"]')!;
+
+    await act(async () => {
+      dispatchEnter(handle);
+    });
+    expect(hasCursorBodyClass()).toBe(true);
+
+    await act(async () => {
+      dispatchLeave(handle);
+    });
+    expect(hasCursorBodyClass()).toBe(false);
+  });
+
+  it('드래그 세션 억제 중에는 enter가 무시된다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="s"]')!;
+
+    suspendCustomCursorHover();
+    await act(async () => {
+      dispatchEnter(handle);
+    });
+
+    expect(hasCursorBodyClass()).toBe(false);
+    // 시각적 호버 상태도 켜지지 않음
+    const visual = handle.firstElementChild as HTMLElement;
+    expect(visual.style.backgroundColor).toBe('white');
+  });
+
+  it('억제 중 enter는 resume 시 hover로 적용된다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="s"]')!;
+
+    suspendCustomCursorHover();
+    await act(async () => {
+      dispatchEnter(handle);
+    });
+    expect(hasCursorBodyClass()).toBe(false);
+
+    resumeCustomCursorHover();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // 포인터가 핸들 안에 머문 릴리즈 - 커서와 하이라이트 모두 복원
+    expect(hasCursorBodyClass()).toBe(true);
+    const visual = handle.firstElementChild as HTMLElement;
+    expect(visual.style.backgroundColor).not.toBe('white');
+  });
+
+  it('억제 중 enter 후 leave가 오면 resume에도 hover가 없다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="s"]')!;
+
+    suspendCustomCursorHover();
+    await act(async () => {
+      dispatchEnter(handle);
+      dispatchLeave(handle);
+    });
+
+    resumeCustomCursorHover();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(hasCursorBodyClass()).toBe(false);
+    const visual = handle.firstElementChild as HTMLElement;
+    expect(visual.style.backgroundColor).toBe('white');
+  });
+
+  it('보류 중 핸들이 unmount되면 pending도 정리한다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="s"]')!;
+
+    suspendCustomCursorHover();
+    await act(async () => {
+      dispatchEnter(handle);
+    });
+
+    // bounds 제거로 핸들 unmount (leave 이벤트 없음)
+    await renderHandles(null);
+    resumeCustomCursorHover();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(hasCursorBodyClass()).toBe(false);
+  });
+
+  it('호버 중 핸들이 unmount되면 커서 오버레이를 정리한다', async () => {
+    await renderHandles({ x: 0, y: 0, width: 100, height: 100 });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="n"]')!;
+
+    await act(async () => {
+      dispatchEnter(handle);
+    });
+    expect(hasCursorBodyClass()).toBe(true);
+
+    // bounds 제거로 핸들 unmount (leave 이벤트 없음)
+    await renderHandles(null);
+    expect(hasCursorBodyClass()).toBe(false);
   });
 });

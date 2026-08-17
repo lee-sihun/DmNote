@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { isMac } from '@utils/core/platform';
 import { slotCanonical } from '@utils/keySlot';
@@ -44,11 +44,15 @@ import {
 import {
   beginPluginInstancesEditSession,
   endPluginInstancesEditSession,
-  rotatePluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/layerZOrderIntent';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { expandGroupSelectionFromStores } from '@utils/grid/groupSelection';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
+// scoped 플러그인 shadow tree에 주입되는 커서 정책 스타일 식별자
+const SHADOW_CURSOR_STYLE_ATTR = 'data-dmn-cursor-policy';
 
 /**
  * 리사이즈 앵커에 따라 크기 변경 시 위치 보정값 계산
@@ -380,6 +384,12 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     x: 0,
     y: 0,
   });
+  // 열림 시점 커스텀 항목 동결. 열림 중 플러그인이 customItems를 교체해도
+  // 표시와 index 디스패치가 같은 배열을 본다
+  const frozenCustomItemsRef =
+    useRef<
+      NonNullable<PluginDisplayElementInternal['contextMenu']>['customItems']
+    >(undefined);
 
   // 앵커 기반 위치 계산
   const calculatedPosition = (() => {
@@ -480,6 +490,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
   const {
     handlePointerDown: handleSelectionDragPointerDown,
     movedDuringPressRef,
+    pressMovedRef,
   } = useSelectionDrag({
     enabled: windowType === 'main' && isSelectionMode,
     zoom,
@@ -490,13 +501,9 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       element.measuredSize?.width ?? element.estimatedSize?.width ?? 200,
     elementHeight:
       element.measuredSize?.height ?? element.estimatedSize?.height ?? 150,
-    elementType: 'plugin',
     selectedElements,
     getOtherElements,
-    getSelectedElementIds: (selectedElement) =>
-      selectedElement.type === 'key'
-        ? [selectedElement.id, `key-${selectedElement.index}`]
-        : [selectedElement.id],
+    getSelectedElementIds: (selectedElement) => [selectedElement.id],
     onMultiDragStart,
     onMultiDrag,
     onMultiDragEnd,
@@ -524,6 +531,17 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       }
     }
   }, [element.scoped, element.fullId, shadowRoot]);
+
+  // 메인 창 한정 shadow tree 커서 정책 주입
+  // 문서 규칙(.dmn-grabbable *)은 shadow 경계를 못 넘으므로 내부에서 상속을 강제
+  useEffect(() => {
+    if (windowType !== 'main' || !shadowRoot) return;
+    if (shadowRoot.querySelector(`style[${SHADOW_CURSOR_STYLE_ATTR}]`)) return;
+    const style = document.createElement('style');
+    style.setAttribute(SHADOW_CURSOR_STYLE_ATTR, '');
+    style.textContent = '* { cursor: inherit !important; }';
+    shadowRoot.prepend(style);
+  }, [windowType, shadowRoot]);
 
   // 템플릿 렌더링 결과 계산
   const renderedContent = (() => {
@@ -1108,6 +1126,8 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     // (contextMenu 설정이 없으면 메뉴만 열지 않고 종료)
     if (!element.contextMenu) return;
 
+    // 열림 시점 항목 동결 - 열림 중 교체가 index 디스패치를 어긋내지 않게
+    frozenCustomItemsRef.current = element.contextMenu.customItems ?? [];
     setContextMenuPosition({ x: e.clientX, y: e.clientY });
     setContextMenuOpen(true);
   };
@@ -1161,6 +1181,15 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
     // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화
     if (isMac() && e.ctrlKey) return;
+
+    // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 지우개 삭제·
+    // 수식키 토글·범위 선택·선택+패널 열기로 새지 않게 흡수
+    // (네이티브 요소와 동일 계약. 개별 드래그는 wasMoved, 선택 모드
+    // 다중 드래그는 pressMovedRef가 판별)
+    if (draggable.wasMoved || pressMovedRef.current) {
+      e.stopPropagation();
+      return;
+    }
 
     if (windowType === 'main' && activeTool === 'eraser') {
       e.stopPropagation();
@@ -1255,7 +1284,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
         if (isElementInMarquee(elementBounds, rangeRect)) {
           newSelectedElements.push({
             type: 'key',
-            id: `key-${i}`,
+            id: pos.id,
             index: i,
           });
         }
@@ -1295,10 +1324,15 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     const settingsUI = definition?.settingsUI ?? 'panel';
     if (windowType === 'main' && settingsUI !== 'modal') {
       e.stopPropagation();
-      useGridSelectionStore.getState().selectElement({
-        type: 'plugin',
-        id: element.fullId,
-      });
+      // 그룹 멤버면 그룹 전체 선택 (native 클릭과 동일 의미론)
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements(
+          expandGroupSelectionFromStores(
+            { type: 'plugin', id: element.fullId },
+            useKeyStore.getState().selectedKeyType,
+          ),
+        );
       // 마지막 선택 요소 좌표 저장
       if (element.measuredSize) {
         useGridSelectionStore.getState().setLastSelectedKeyBounds({
@@ -1345,10 +1379,15 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       currentSelection.length > 1 &&
       currentSelection.some((el) => el.id === element.fullId);
     if (!isMultiMember) {
-      useGridSelectionStore.getState().selectElement({
-        type: 'plugin',
-        id: element.fullId,
-      });
+      // native 더블클릭과 동일하게 그룹 멤버 전체 선택 후 편집 진입
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements(
+          expandGroupSelectionFromStores(
+            { type: 'plugin', id: element.fullId },
+            useKeyStore.getState().selectedKeyType,
+          ),
+        );
     }
     openPropertiesPanelForSelection();
   };
@@ -1383,11 +1422,10 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     // 닫히는 중에도 항목을 유지해야 잔상이 빈 메뉴로 보이지 않는다
     if (!contextMenuPresence.mounted || !element.contextMenu) return [];
 
-    const {
-      enableDelete = true,
-      deleteLabel = '삭제',
-      customItems = [],
-    } = element.contextMenu;
+    const { enableDelete = true, deleteLabel = '삭제' } = element.contextMenu;
+    // 동결 참조 우선 - 표시 항목과 클릭 디스패치가 같은 배열에서 나온다
+    const customItems =
+      frozenCustomItemsRef.current ?? element.contextMenu.customItems ?? [];
 
     // predicate가 보는 element.state에는 contextMenuStateKeys로 선언된
     // 오버레이 런타임 값만 병합 — 프리뷰용 state 자체는 불변
@@ -1446,20 +1484,33 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     if (itemId === 'delete') {
       deletePluginElement();
     } else if (itemId === 'bringToFront') {
-      rotatePluginInstancesEditSession(element.pluginId);
-      usePluginDisplayElementStore.getState().bringToFront(element.fullId);
+      void commitStableLayerZOrder({
+        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
+        targets: [{ type: 'plugin', id: element.fullId }],
+        action: 'front',
+      }).catch(reportElementOpError);
     } else if (itemId === 'bringForward') {
-      rotatePluginInstancesEditSession(element.pluginId);
-      usePluginDisplayElementStore.getState().bringForward(element.fullId);
+      void commitStableLayerZOrder({
+        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
+        targets: [{ type: 'plugin', id: element.fullId }],
+        action: 'forward',
+      }).catch(reportElementOpError);
     } else if (itemId === 'sendBackward') {
-      rotatePluginInstancesEditSession(element.pluginId);
-      usePluginDisplayElementStore.getState().sendBackward(element.fullId);
+      void commitStableLayerZOrder({
+        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
+        targets: [{ type: 'plugin', id: element.fullId }],
+        action: 'backward',
+      }).catch(reportElementOpError);
     } else if (itemId === 'sendToBack') {
-      rotatePluginInstancesEditSession(element.pluginId);
-      usePluginDisplayElementStore.getState().sendToBack(element.fullId);
+      void commitStableLayerZOrder({
+        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
+        targets: [{ type: 'plugin', id: element.fullId }],
+        action: 'back',
+      }).catch(reportElementOpError);
     } else if (itemId.startsWith('custom-')) {
       const index = parseInt(itemId.replace('custom-', ''), 10);
-      const customItem = element.contextMenu?.customItems?.[index];
+      // 동결 배열로만 역참조 - 항목 id의 index와 같은 배열임을 보장
+      const customItem = frozenCustomItemsRef.current?.[index];
       if (customItem) {
         // 커스텀 메뉴 실행 (자동 래핑되어 있음)
         try {
@@ -1480,20 +1531,34 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     }
   };
 
+  // 문자열 템플릿(레거시) __html 래퍼를 값 기준으로 고정.
+  // React 19는 {__html} 객체 identity가 바뀌면 내용이 같아도 innerHTML을 다시 설정해
+  // 내부 노드를 전부 교체한다 - 프레스 중 재렌더(isDragging 등)가 클릭 대상 노드를
+  // detach시켜 브라우저가 click 디스패치를 포기하고 선택 클릭이 유실되는 것을 차단
+  const legacyHtml = renderedContent
+    ? typeof renderedContent === 'string'
+      ? renderedContent
+      : null
+    : element.html || null;
+  const legacyHtmlProp = useMemo(
+    () => (legacyHtml === null ? null : { __html: legacyHtml }),
+    [legacyHtml],
+  );
+
   // 렌더링 로직
   const renderContent = (): React.ReactNode => {
     if (renderedContent) {
       // 템플릿 결과가 문자열인 경우 (레거시)
-      if (typeof renderedContent === 'string') {
-        return <div dangerouslySetInnerHTML={{ __html: renderedContent }} />;
+      if (legacyHtmlProp) {
+        return <div dangerouslySetInnerHTML={legacyHtmlProp} />;
       }
       // React Element인 경우 (DisplayElementTemplateResult -> ReactNode)
       return renderedContent as unknown as React.ReactNode;
     }
 
     // 템플릿이 없고 html 속성만 있는 경우 (레거시)
-    if (element.html) {
-      return <div dangerouslySetInnerHTML={{ __html: element.html }} />;
+    if (legacyHtmlProp) {
+      return <div dangerouslySetInnerHTML={legacyHtmlProp} />;
     }
 
     return null;

@@ -91,6 +91,7 @@ export const sendPluginRpc = async (
   operation: string,
   payload: Record<string, unknown>,
   expectedModelRevision: number,
+  authorityGeneration = currentAuthorityGeneration,
 ): Promise<PluginRpcOutcome> => {
   ensureResponseListener();
   if (pending.size >= MAX_PENDING) {
@@ -109,7 +110,7 @@ export const sendPluginRpc = async (
     await pluginRpcApi.send('main', {
       protocolVersion: PLUGIN_RPC_PROTOCOL_VERSION,
       requestId,
-      authorityGeneration: currentAuthorityGeneration,
+      authorityGeneration,
       expectedModelRevision,
       operation,
       payload,

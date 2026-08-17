@@ -1,12 +1,19 @@
+use std::collections::{BTreeMap, HashMap};
+
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use crate::{
     commands::editor::state::emit_best_effort,
+    errors::{CmdResult, CommandError},
     models::{
-        PluginInstancesChangedPayload, PluginInstancesCommitRequest, PluginInstancesCommitResult,
-        PluginInstancesReconcileRequest, PluginInstancesSnapshot,
+        PluginGroupRefsSnapshot, PluginInstancesChangedPayload, PluginInstancesCommitRequest,
+        PluginInstancesCommitResult, PluginInstancesReconcileRequest, PluginInstancesSnapshot,
     },
-    state::{plugin::PluginRpcRouter, store::AdmittedPluginInstancesCommit, AppState},
+    state::{
+        plugin::{PluginGroupRefs, PluginRpcRouter},
+        store::AdmittedPluginInstancesCommit,
+        AppState,
+    },
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -17,7 +24,7 @@ fn plugin_mutation_source<'a>(
     authority_generation: u64,
     rpc_request_id: Option<&str>,
     direct_window_label: &'a str,
-) -> Result<&'a str, String> {
+) -> CmdResult<&'a str> {
     let Some(request_id) = rpc_request_id else {
         return Ok(direct_window_label);
     };
@@ -29,7 +36,7 @@ fn plugin_mutation_source<'a>(
             authority_generation,
         )
     {
-        return Err("PLUGIN_RPC_REQUEST_NOT_FOUND".to_string());
+        return Err(CommandError::msg("PLUGIN_RPC_REQUEST_NOT_FOUND"));
     }
     Ok(PANEL_WINDOW_LABEL)
 }
@@ -101,8 +108,11 @@ fn finish_plugin_instances_commit(
 pub fn plugin_instances_get(
     state: State<'_, AppState>,
     plugin_id: String,
-) -> Result<PluginInstancesSnapshot, String> {
-    let (instances, model_revision) = state.store.plugin_instances_get(&plugin_id)?;
+) -> CmdResult<PluginInstancesSnapshot> {
+    let (instances, model_revision) = state
+        .store
+        .plugin_instances_get(&plugin_id)
+        .map_err(CommandError::msg)?;
     let snapshot = PluginInstancesSnapshot {
         plugin_id,
         instances,
@@ -110,13 +120,46 @@ pub fn plugin_instances_get(
         authority_generation: state.plugin_authority().generation(),
     };
     if serde_json::to_vec(&snapshot)
-        .map_err(|error| format!("INVALID_PLUGIN_INSTANCES_SNAPSHOT:{error}"))?
+        .map_err(|error| CommandError::msg(format!("INVALID_PLUGIN_INSTANCES_SNAPSHOT:{error}")))?
         .len()
         > crate::state::plugin::MAX_PLUGIN_INSTANCES_REQUEST_BYTES
     {
-        return Err("PLUGIN_INSTANCES_SNAPSHOT_TOO_LARGE".to_string());
+        return Err(CommandError::msg("PLUGIN_INSTANCES_SNAPSHOT_TOO_LARGE"));
     }
     Ok(snapshot)
+}
+
+// wire 정렬 변환 - HashSet 비결정 순서를 결정적 스냅샷으로 고정
+fn plugin_group_refs_snapshot(
+    refs_by_plugin: HashMap<String, PluginGroupRefs>,
+    model_revision: u64,
+) -> PluginGroupRefsSnapshot {
+    let refs = refs_by_plugin
+        .into_iter()
+        .map(|(plugin_id, modes)| {
+            let modes = modes
+                .into_iter()
+                .map(|(mode, group_ids)| {
+                    let mut group_ids = group_ids.into_iter().collect::<Vec<_>>();
+                    group_ids.sort_unstable();
+                    (mode, group_ids)
+                })
+                .collect::<BTreeMap<_, _>>();
+            (plugin_id, modes)
+        })
+        .collect();
+    PluginGroupRefsSnapshot {
+        refs,
+        model_revision,
+    }
+}
+
+// editor 단독 커밋의 normalize 그룹 생존 판정 모집단 미러용 - 미로드·데이터만
+// 남은 플러그인의 저장 인스턴스까지 포함해 프론트 replay와 백엔드 판정을 일치시킨다
+#[tauri::command]
+pub fn plugin_group_refs_get(state: State<'_, AppState>) -> CmdResult<PluginGroupRefsSnapshot> {
+    let (refs_by_plugin, model_revision) = state.store.plugin_group_refs_by_plugin();
+    Ok(plugin_group_refs_snapshot(refs_by_plugin, model_revision))
 }
 
 #[tauri::command]
@@ -126,14 +169,15 @@ pub fn plugin_instances_commit(
     window: WebviewWindow,
     request: PluginInstancesCommitRequest,
     rpc_request_id: Option<String>,
-) -> Result<PluginInstancesCommitResult, String> {
-    crate::state::plugin::validate_plugin_instances_request(&request)?;
+) -> CmdResult<PluginInstancesCommitResult> {
+    crate::state::plugin::validate_plugin_instances_request(&request).map_err(CommandError::msg)?;
     if window.label() != MAIN_WINDOW_LABEL {
-        return Err("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED".to_string());
+        return Err(CommandError::msg("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED"));
     }
     let authority = state
         .plugin_authority()
-        .admit(request.authority_generation)?;
+        .admit(request.authority_generation)
+        .map_err(CommandError::msg)?;
     let source_window_label = plugin_mutation_source(
         state.plugin_rpc_router(),
         authority.generation(),
@@ -142,11 +186,12 @@ pub fn plugin_instances_commit(
     )?;
     let admission = state
         .admit_frontend_history_mutation(source_window_label)
-        .map_err(|_| "HISTORY_IN_PROGRESS".to_string())?;
+        .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
     let mutation_id = request.mutation_id.clone();
     let committed = state
         .store
-        .commit_plugin_instances_with_admission(request, admission)?;
+        .commit_plugin_instances_with_admission(request, admission)
+        .map_err(CommandError::msg)?;
     Ok(finish_plugin_instances_commit(
         &app,
         mutation_id,
@@ -161,21 +206,24 @@ pub fn plugin_instances_reconcile(
     app: AppHandle,
     window: WebviewWindow,
     request: PluginInstancesReconcileRequest,
-) -> Result<PluginInstancesCommitResult, String> {
-    crate::state::plugin::validate_plugin_instances_reconcile_request(&request)?;
+) -> CmdResult<PluginInstancesCommitResult> {
+    crate::state::plugin::validate_plugin_instances_reconcile_request(&request)
+        .map_err(CommandError::msg)?;
     if window.label() != MAIN_WINDOW_LABEL {
-        return Err("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED".to_string());
+        return Err(CommandError::msg("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED"));
     }
     let authority = state
         .plugin_authority()
-        .admit(request.authority_generation)?;
+        .admit(request.authority_generation)
+        .map_err(CommandError::msg)?;
     let admission = state
         .admit_frontend_history_mutation(window.label())
-        .map_err(|_| "HISTORY_IN_PROGRESS".to_string())?;
+        .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
     let mutation_id = request.mutation_id.clone();
     let committed = state
         .store
-        .reconcile_plugin_instances_with_admission(request, admission)?;
+        .reconcile_plugin_instances_with_admission(request, admission)
+        .map_err(CommandError::msg)?;
     Ok(finish_plugin_instances_commit(
         &app,
         mutation_id,
@@ -254,6 +302,39 @@ mod tests {
     }
 
     #[test]
+    fn group_refs_snapshot_sorts_group_ids_and_serializes_camel_case() {
+        let mut refs_by_plugin: HashMap<String, PluginGroupRefs> = HashMap::new();
+        let mut beta_modes = PluginGroupRefs::new();
+        beta_modes
+            .entry("6key".to_string())
+            .or_default()
+            .extend(["g-b".to_string(), "g-a".to_string()]);
+        beta_modes
+            .entry("4key".to_string())
+            .or_default()
+            .insert("g-c".to_string());
+        refs_by_plugin.insert("beta".to_string(), beta_modes);
+        let mut alpha_modes = PluginGroupRefs::new();
+        alpha_modes
+            .entry("4key".to_string())
+            .or_default()
+            .insert("g-z".to_string());
+        refs_by_plugin.insert("alpha".to_string(), alpha_modes);
+
+        let snapshot = plugin_group_refs_snapshot(refs_by_plugin, 7);
+        assert_eq!(
+            serde_json::to_value(snapshot).unwrap(),
+            serde_json::json!({
+                "refs": {
+                    "alpha": { "4key": ["g-z"] },
+                    "beta": { "4key": ["g-c"], "6key": ["g-a", "g-b"] },
+                },
+                "modelRevision": 7,
+            })
+        );
+    }
+
+    #[test]
     fn routed_commit_uses_pending_panel_provenance_until_response() {
         let router = PluginRpcRouter::default();
         let request_id = "00000000-0000-0000-0000-000000000001".to_string();
@@ -289,7 +370,8 @@ mod tests {
                 Some("00000000-0000-0000-0000-000000000002"),
                 MAIN_WINDOW_LABEL,
             )
-            .unwrap_err(),
+            .unwrap_err()
+            .to_string(),
             "PLUGIN_RPC_REQUEST_NOT_FOUND"
         );
 
@@ -307,7 +389,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            plugin_mutation_source(&router, 7, Some(&request_id), MAIN_WINDOW_LABEL).unwrap_err(),
+            plugin_mutation_source(&router, 7, Some(&request_id), MAIN_WINDOW_LABEL)
+                .unwrap_err()
+                .to_string(),
             "PLUGIN_RPC_REQUEST_NOT_FOUND"
         );
     }

@@ -16,3 +16,6 @@ export const customJsSchema = z.object({
 
 export type JsPlugin = z.infer<typeof jsPluginSchema>;
 export type CustomJs = z.infer<typeof customJsSchema>;
+
+// js:content 이벤트 payload - forced는 내용이 같아도 재주입하는 명시 리로드 표시
+export type JsStatePayload = CustomJs & { forced?: boolean };

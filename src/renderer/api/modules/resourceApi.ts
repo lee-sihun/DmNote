@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
-import { runLegacyEditorMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
+import {
+  runExclusiveLegacyMutation,
+  runLegacyEditorMutation,
+} from '@src/renderer/editor/runtime/legacyEditorMutation';
 
 export const fontApi = {
   load: () =>
@@ -9,10 +12,8 @@ export const fontApi = {
 
 export const imageApi = {
   load: () =>
-    runLegacyEditorMutation(
-      () =>
-        invoke<import('@src/types/plugin/api').ImageLoadResult>('image_load'),
-      { syncAfter: false },
+    runLegacyEditorMutation(() =>
+      invoke<import('@src/types/plugin/api').ImageLoadResult>('image_load'),
     ),
 };
 
@@ -27,7 +28,7 @@ export const soundApi = {
       displayName,
     }),
   remove: (soundPath: string) =>
-    runLegacyEditorMutation(() =>
+    runExclusiveLegacyMutation(() =>
       invoke<import('@src/types/plugin/api').SoundDeleteResult>(
         'sound_delete',
         {
@@ -141,20 +142,21 @@ export const counterAnimationApi = {
     ),
   update: (
     request: import('@src/types/plugin/api').CounterAnimationUpdateRequest,
+    options: { preflight?: () => void } = {},
   ) =>
-    runLegacyEditorMutation(() =>
-      invoke<import('@src/types/plugin/api').CounterAnimationUpsertResponse>(
-        'counter_animation_update',
-        { request },
-      ),
-    ),
-  remove: (id: string) =>
-    runLegacyEditorMutation(() =>
-      invoke<import('@src/types/plugin/api').CounterAnimationDeleteResponse>(
-        'counter_animation_delete',
-        { id },
-      ),
-    ),
+    runExclusiveLegacyMutation(() => {
+      options.preflight?.();
+      return invoke<
+        import('@src/types/plugin/api').CounterAnimationUpsertResponse
+      >('counter_animation_update', { request });
+    }),
+  remove: (id: string, options: { preflight?: () => void } = {}) =>
+    runExclusiveLegacyMutation(() => {
+      options.preflight?.();
+      return invoke<
+        import('@src/types/plugin/api').CounterAnimationDeleteResponse
+      >('counter_animation_delete', { id });
+    }),
   onChanged: (
     listener: (
       payload: import('@src/types/plugin/api').CounterAnimationListResponse,

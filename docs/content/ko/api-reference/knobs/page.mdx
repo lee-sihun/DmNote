@@ -36,6 +36,8 @@ DmNote는 HID 입력에 고정 문자열 식별자를 부여합니다:
 
 ```typescript
 // KeyPosition의 스타일 필드를 상속 (위치, 크기, 색상, 이미지 등)
+// 요소 안정 id(UUID)도 포함: 재정렬·모드 전환에도 같은 노브를 가리키며,
+// 전체 프리셋 로드 시에는 새 ID가 발급됩니다 (탭 프리셋은 담긴 컬렉션만)
 type KnobItemPosition = KeyPosition & {
   axisId: string; // 바인딩된 HID 축("HIDA:..."), 미바인딩이면 빈 문자열
   sensitivity: number; // 회전 배율 (기본 1)

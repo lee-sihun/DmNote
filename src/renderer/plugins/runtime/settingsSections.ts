@@ -4,7 +4,7 @@ import type {
   PluginValueSettingType,
 } from '@src/types/plugin/api';
 
-export const VALUE_SETTING_TYPES = new Set<PluginValueSettingType>([
+const VALUE_SETTING_TYPES = new Set<PluginValueSettingType>([
   'boolean',
   'color',
   'number',
@@ -17,13 +17,13 @@ export type PluginValueSettingSchema = Extract<
   { type: PluginValueSettingType }
 >;
 
-export interface NormalizedSettingEntry {
+interface NormalizedSettingEntry {
   key: string;
   schema: PluginValueSettingSchema;
   renderVisible: boolean;
 }
 
-export interface NormalizedSection {
+interface NormalizedSection {
   key: string | null;
   label?: string;
   markerVisible: boolean;
@@ -32,7 +32,7 @@ export interface NormalizedSection {
 }
 
 export type SettingsNormalizationErrorKind = 'visibility' | 'unsupported-type';
-export type SettingsNormalizationErrorHandler = (
+type SettingsNormalizationErrorHandler = (
   key: string,
   error: unknown,
   kind: SettingsNormalizationErrorKind,

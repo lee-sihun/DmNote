@@ -1,6 +1,6 @@
 export type PluginRestoreReadiness = 'pending' | 'ready' | 'failed';
 
-export interface PersistedPluginInstance {
+interface PersistedPluginInstance {
   tabId?: string;
 }
 
@@ -15,12 +15,10 @@ interface PluginInstanceLifecycleDependencies<
   isBootstrapped: () => boolean;
   subscribeBootstrap: (listener: () => void) => () => void;
   loadInstances: () => Promise<Instance[] | null>;
-  persistInstances: (instances: Instance[]) => Promise<void>;
   /** 탭 정리 persist - 큐 실행 시점에 유효 탭과 canonical을 모두 재파생 */
   reconcilePersist: () => Promise<void>;
   getMemoryInstances: () => RuntimePluginInstance[];
   releaseMemoryInstances: (fullIds: readonly string[]) => void;
-  timeoutMs?: number;
 }
 
 const DEFAULT_BOOTSTRAP_TIMEOUT_MS = 10_000;
@@ -79,6 +77,7 @@ export const createPluginInstanceSaveBarrier = (
     cancelRestoration,
     failRestoration,
     finishRestoration,
+    isRestoring: () => isRestoring,
     runRestoreMutation,
     shouldSave,
   };
@@ -101,11 +100,9 @@ export const createPluginInstanceLifecycle = <
     isBootstrapped,
     subscribeBootstrap,
     loadInstances,
-    persistInstances,
     reconcilePersist,
     getMemoryInstances,
     releaseMemoryInstances,
-    timeoutMs = DEFAULT_BOOTSTRAP_TIMEOUT_MS,
   } = dependencies;
 
   let readiness: PluginRestoreReadiness = 'pending';
@@ -138,20 +135,6 @@ export const createPluginInstanceLifecycle = <
       clearTimeout(bootstrapTimeout);
       bootstrapTimeout = null;
     }
-  };
-
-  const saveInstances = (
-    instances: readonly Instance[],
-    stillValid?: () => boolean,
-  ) => {
-    if (disposed) return Promise.resolve();
-    const normalized = normalizeInstances(instances);
-    return enqueueStorageTask(async () => {
-      if (disposed) return;
-      // undo/redo 재결합이 끼어든 뒤 실행되는 큐 잔여 스냅샷은 폐기 (barrier 승리)
-      if (stillValid && !stillValid()) return;
-      await persistInstances(normalized);
-    });
   };
 
   const releaseStaleMemoryInstances = (validTabIds: ReadonlySet<string>) => {
@@ -249,7 +232,7 @@ export const createPluginInstanceLifecycle = <
       } else {
         bootstrapTimeout = setTimeout(() => {
           settle('failed');
-        }, timeoutMs);
+        }, DEFAULT_BOOTSTRAP_TIMEOUT_MS);
       }
     }
 
@@ -269,7 +252,6 @@ export const createPluginInstanceLifecycle = <
     dispose,
     getReadiness: () => readiness,
     reconcile,
-    saveInstances,
     startRestore,
   };
 };

@@ -32,7 +32,9 @@ describe('docs code blocks', () => {
       const failures = fences
         .map((fence) => checkFence(fence))
         .filter((failure) => failure !== null)
-        .map((failure) => `L${failure.line} [${failure.lang}] ${failure.message}`);
+        .map(
+          (failure) => `L${failure.line} [${failure.lang}] ${failure.message}`,
+        );
 
       expect(failures).toEqual([]);
     });

@@ -127,14 +127,12 @@
   },
   "keySetting": {
     "title": "按键设置",
-    "tabKey": "按键",
     "tabNote": "音符",
     "tabCounter": "计数器",
     "keyMapping": "按键绑定",
     "key": "按键",
     "pressAnyKey": "按下任意键",
     "clickToSet": "点击设置按键",
-    "keySize": "按键大小",
     "size": "大小",
     "noteColor": "音符颜色",
     "noteWidth": "音符宽度",
@@ -144,7 +142,6 @@
     "noteGlowOpacity": "发光不透明度",
     "noteGlow": "发光效果",
     "inactiveState": "闲置",
-    "activeState": "按下",
     "customImage": "自定义图像",
     "configure": "配置",
     "className": "类名",
@@ -205,7 +202,8 @@
     "acceptExternal": "接受外部更改"
   },
   "editorSave": {
-    "permanentFailure": "此编辑无法保存，编辑器已恢复到上次保存的状态。请检查您刚刚更改的值。"
+    "permanentFailure": "无法保存，已撤销这次更改。\n请检查刚才更改的值。",
+    "capacityFailure": "超出保存上限，已撤销这次更改。\n请删除部分元素后重试。"
   },
   "common": {
     "confirm": "确认",
@@ -278,12 +276,7 @@
     "resetCurrentTab": "重置此标签页的设置?",
     "resetCountersCurrentTab": "重置此标签页的计数器?",
     "resetKeyCounter": "重置 [{{name}}] 键的计数器?",
-    "reset": "重置",
-    "removeKey": "移除 [{{name}}] 键?",
-    "removeStat": "移除 [{{name}}] 统计?",
-    "removeGraph": "移除 [{{name}}] 图表?",
-    "removeKnob": "移除 [{{name}}] 旋钮?",
-    "remove": "移除"
+    "reset": "重置"
   },
   "tabs": {
     "title": "自定义标签页",
@@ -367,10 +360,8 @@
     "color": "颜色",
     "solid": "纯色",
     "gradient": "渐变",
-    "gradientBottom": "渐变底部颜色",
     "opacity": "不透明度",
     "glow": "发光效果",
-    "glowSize": "大小",
     "glowOpacity": "不透明度",
     "glowColor": "颜色"
   },
@@ -450,7 +441,6 @@
     "loadFailed": "CSS 文件加载失败"
   },
   "unifiedSetting": {
-    "tabKey": "按键",
     "tabNote": "音符",
     "tabCounter": "计数器"
   },

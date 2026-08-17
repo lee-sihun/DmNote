@@ -7,7 +7,7 @@ import type { GradientSpec } from '@src/types/color';
  */
 
 export type GradientCanvasAnchor =
-  | { kind: 'key' | 'stat' | 'graph' | 'knob'; index: number }
+  | { kind: 'key' | 'stat' | 'graph' | 'knob'; id: string }
   | { kind: 'batch' };
 
 /** 편집 중인 표면 — 캔버스 일시 페인트가 어느 필드를 덮을지 결정 */
@@ -89,11 +89,11 @@ export const useGradientEditStore = create<GradientEditState>((set) => ({
  */
 export function useGradientPreviewSpec(
   kind: 'key' | 'stat' | 'graph' | 'knob',
-  index: number,
+  id: string,
   surface: GradientPreviewSurface,
   isInBatchSelection = false,
 ): GradientSpec | null {
-  const session = useGradientPreviewSession(kind, index, isInBatchSelection);
+  const session = useGradientPreviewSession(kind, id, isInBatchSelection);
   return session?.surface === surface ? session.spec : null;
 }
 
@@ -103,7 +103,7 @@ export function useGradientPreviewSpec(
  */
 export function useGradientPreviewSession(
   kind: 'key' | 'stat' | 'graph' | 'knob',
-  index: number,
+  id: string,
   isInBatchSelection = false,
 ): GradientEditSession | null {
   return useGradientEditStore((state) => {
@@ -115,7 +115,7 @@ export function useGradientPreviewSession(
         ? session
         : null;
     }
-    if (session.anchor.kind !== kind || session.anchor.index !== index) {
+    if (session.anchor.kind !== kind || session.anchor.id !== id) {
       return null;
     }
     return session;

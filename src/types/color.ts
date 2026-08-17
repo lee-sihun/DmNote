@@ -241,32 +241,69 @@ export interface ColorPair {
   gradient?: GradientSpec | null;
 }
 
+export interface PaintDescriptorV1 {
+  color: string;
+  gradient: GradientSpec | null;
+}
+
+export type PaintPropertyNameV1 =
+  | 'backgroundPaint'
+  | 'activeBackgroundPaint'
+  | 'borderPaint'
+  | 'activeBorderPaint';
+
+export function paintPropertyFields(field: PaintPropertyNameV1) {
+  const active =
+    field === 'activeBackgroundPaint' || field === 'activeBorderPaint';
+  const background =
+    field === 'backgroundPaint' || field === 'activeBackgroundPaint';
+  return {
+    active,
+    background,
+    colorField: active
+      ? background
+        ? 'activeBackgroundColor'
+        : 'activeBorderColor'
+      : background
+      ? 'backgroundColor'
+      : 'borderColor',
+    gradientField: active
+      ? background
+        ? 'activeBackgroundGradient'
+        : 'activeBorderGradient'
+      : background
+      ? 'backgroundGradient'
+      : 'borderGradient',
+    activeColorField: background
+      ? 'activeBackgroundColor'
+      : 'activeBorderColor',
+    activeGradientField: background
+      ? 'activeBackgroundGradient'
+      : 'activeBorderGradient',
+  } as const;
+}
+
+export function inheritedPaintMaterialization(
+  idlePair: ColorPair,
+  activePair: ColorPair,
+): PaintDescriptorV1 | null {
+  if (hasStoredPairValue(activePair)) return null;
+  const gradient = idlePair.gradient ?? null;
+  if (gradient) {
+    return {
+      color: gradient.stops[0]?.color ?? '#ffffff',
+      gradient: structuredClone(gradient),
+    };
+  }
+  if (typeof idlePair.color === 'string' && idlePair.color.trim().length > 0) {
+    return { color: idlePair.color, gradient: null };
+  }
+  return null;
+}
+
 const hasStoredPairValue = (pair: ColorPair): boolean =>
   (typeof pair.color === 'string' && pair.color.trim().length > 0) ||
   pair.gradient != null;
-
-/**
- * idle 편집 전 active 모습 보존값 — 저장된 사용자 값만 대상으로 판정
- * active 쌍이 비어 있고 idle 쌍에 저장값이 있을 때만 복사값 반환
- */
-export function getActivePairPreservation(
-  idlePair: ColorPair,
-  activePair: ColorPair,
-): ColorPair | null {
-  if (hasStoredPairValue(activePair)) return null;
-
-  const color =
-    typeof idlePair.color === 'string' && idlePair.color.trim().length > 0
-      ? idlePair.color
-      : undefined;
-  const gradient = idlePair.gradient ?? undefined;
-  if (color === undefined && gradient === undefined) return null;
-
-  return {
-    ...(color !== undefined ? { color } : {}),
-    ...(gradient !== undefined ? { gradient } : {}),
-  };
-}
 
 /**
  * 상태별 색 쌍 해석 — active 쌍에 유효한 저장값이 있으면 active 쌍 전체를,
@@ -327,6 +364,17 @@ export function gradientPairPatch(
   return {
     [baseField]: spec.stops[0]?.color ?? '#ffffff',
     [siblingField]: spec,
+  };
+}
+
+export function paintDescriptor(value: ColorModeValue): PaintDescriptorV1 {
+  if (value.mode === 'solid') {
+    return { color: value.color, gradient: null };
+  }
+  const gradient = toCanonicalGradient(value.spec);
+  return {
+    color: gradient.stops[0]?.color ?? '#ffffff',
+    gradient,
   };
 }
 

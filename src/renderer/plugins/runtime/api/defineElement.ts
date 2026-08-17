@@ -11,8 +11,10 @@ import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
   addDisplayElementInternal,
   removeDisplayElementsInternal,
+  type InternalDisplayElementConfig,
 } from '../displayElement/displayElementApi';
 import {
+  applyCanonicalPluginInstances,
   notePluginInstancesMutation,
   registerPluginInstancesReapplier,
 } from '../displayElement/instancesUndoSync';
@@ -20,6 +22,9 @@ import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
 import {
   createPluginInstancesSaveDebounce,
   enqueuePluginInstancesCommit,
+  flushPluginInstancesEditSession,
+  hasActivePluginInstancesEditContext,
+  hasConflictingPluginInstancesGesture,
   isPluginInstancesGestureStaged,
   registerPluginInstancesEditSessionFlush,
   registerPluginInstancesStagedRelease,
@@ -46,6 +51,7 @@ import {
   FORM_LABEL_CLASS,
 } from '@utils/cardRecipes';
 import { handlerRegistry } from '../handlers';
+import { createPluginDialogHandlerScope } from './pluginDialogHandlers';
 import {
   coerceSettingValue,
   getDefaultSettings,
@@ -59,17 +65,22 @@ import type {
   PluginDisplayElementInternal,
   PluginDisplayElementActionContext,
   PluginDisplayElementConfig,
+  DMNoteAPI,
 } from '@src/types/plugin/api';
 import type { SettingsState } from '@src/types/settings/settings';
 import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
 
 export interface SavedInstance {
+  // 영구 인스턴스 ID - backfill 전 구데이터는 없을 수 있음
+  instanceId?: string;
   position: { x: number; y: number };
   settings?: Record<string, string | number | boolean>;
   measuredSize?: { width: number; height: number };
   tabId?: string;
   hidden?: boolean;
   zIndex?: number;
+  // 레이어 그룹 소속 - normalize된 tabId 모드의 그룹만 유효
+  groupId?: string;
 }
 
 export const buildSavedPluginInstances = (
@@ -79,16 +90,19 @@ export const buildSavedPluginInstances = (
   elements
     .filter((element) => element.definitionId === definitionId)
     .map((element) => ({
+      instanceId: element.id,
       position: element.position,
       settings: element.settings as SavedInstance['settings'],
       measuredSize: element.measuredSize,
       tabId: normalizePluginInstanceTabId(element.tabId),
       hidden: element.hidden === true,
       zIndex: element.zIndex,
+      groupId: element.groupId,
     }));
 
 interface DefineElementDependencies {
   pluginId: string;
+  api: DMNoteAPI;
   namespacedStorage: NamespacedStorage;
   registerCleanup: (cleanup: () => void) => void;
   wrapFunctionWithContext: (
@@ -104,6 +118,7 @@ interface DefineElementDependencies {
 export const createDefineElement = (deps: DefineElementDependencies) => {
   const {
     pluginId,
+    api,
     namespacedStorage,
     registerCleanup,
     wrapFunctionWithContext,
@@ -140,16 +155,26 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       void trackEditorWrite(pending);
     });
 
-    // canonical commit (C4) - admission·epoch·dedupe·no-op·gesture 병합은 백엔드 규율
-    // 패널 RPC commit과의 stale full-snapshot 경합 방지를 위해 플러그인별 큐로 직렬화
-    const commitInstances = (instances: SavedInstance[]) =>
-      enqueuePluginInstancesCommit(pluginId, () =>
-        commitInstancesInner(
-          instances,
-          touchPluginInstancesEditSession(pluginId),
-        ),
+    const isHistoryRejection = (error: unknown): boolean => {
+      const message = String(error);
+      return (
+        message.includes('HISTORY_EPOCH_CONFLICT') ||
+        message.includes('HISTORY_IN_PROGRESS')
       );
+    };
 
+    // barrier 거절 복구 - 큐 잔여 스냅샷을 먼저 폐기해 canonical 되덮기 방지
+    const reapplyCanonicalAfterRejection = async () => {
+      cancelPendingInstanceSave();
+      await applyCanonicalPluginInstances(pluginId, true).catch((pullError) => {
+        console.error(
+          `[Plugin ${pluginId}] Failed to reapply canonical instances:`,
+          pullError,
+        );
+      });
+    };
+
+    // canonical commit (C4) - admission·epoch·dedupe·no-op·gesture 병합은 백엔드 규율
     const commitInstancesInner = async (
       instances: SavedInstance[],
       gestureId: string,
@@ -178,12 +203,16 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         }
       } catch (error) {
         // 낡은 epoch 관측 = barrier(undo·프리셋 복원)와 경합 - barrier가 이긴다
-        // 캡처값 재시도는 undo 직전 상태를 되살리므로 폐기하고 status만 재동기화
-        if (String(error).includes('HISTORY_EPOCH_CONFLICT')) {
+        // 캡처값 재시도는 undo 직전 상태를 되살리므로 폐기하고, 다른 gesture가
+        // 소유 중이 아니면 canonical 재주입으로 메모리와 저장을 재수렴
+        if (isHistoryRejection(error)) {
           console.warn(
             `[Plugin ${pluginId}] Instance save dropped by history barrier`,
           );
           await syncHistoryStatus();
+          if (!hasConflictingPluginInstancesGesture(pluginId, gestureId)) {
+            await reapplyCanonicalAfterRejection();
+          }
           return;
         }
         throw error;
@@ -209,7 +238,6 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               const stored = await namespacedStorage.get(INSTANCES_KEY);
               return Array.isArray(stored) ? (stored as SavedInstance[]) : null;
             },
-            persistInstances: (instances) => commitInstances(instances),
             // 탭 정리는 백엔드 단일 write-lock에서 원자 수행 - get과 commit
             // 사이에 bulk clear 등이 끼어 지워진 인스턴스가 부활하지 않음.
             // 유효 탭은 큐 실행 시점 파생, invoke 비행 중 탭 undo는 epoch가 거절
@@ -231,8 +259,11 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                   });
                   noteBackendPluginRevision(result.modelRevision);
                 } catch (error) {
-                  if (String(error).includes('HISTORY_EPOCH_CONFLICT')) {
+                  if (isHistoryRejection(error)) {
                     await syncHistoryStatus();
+                    if (!hasActivePluginInstancesEditContext(pluginId)) {
+                      await reapplyCanonicalAfterRejection();
+                    }
                     return;
                   }
                   throw error;
@@ -334,16 +365,47 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         delayMs: INSTANCE_SAVE_DEBOUNCE_MS,
         save: ({ gestureId, captureCurrentSnapshot }) =>
           saveInstances({ gestureId, captureCurrentSnapshot }),
-        onError: (error) => {
+        // 실패한 스냅샷을 메모리에 방치하면 저장과 화면이 갈라진다 -
+        // 다른 gesture 소유 중이 아니면 canonical로 롤백 (pendingWrite
+        // reject는 debounce가 유지해 종료 drain 실패 전파 계약 보존)
+        onError: (error, { gestureId }) => {
           console.error(
             `[Plugin ${pluginId}] Failed to save instances:`,
             error,
           );
+          if (
+            gestureId !== undefined &&
+            hasConflictingPluginInstancesGesture(pluginId, gestureId)
+          ) {
+            return;
+          }
+          void applyCanonicalPluginInstances(pluginId, true).catch(
+            (pullError) => {
+              console.error(
+                `[Plugin ${pluginId}] Failed to reapply canonical instances:`,
+                pullError,
+              );
+            },
+          );
         },
       });
       let stagedSavePending = false;
+      // staged 중 삼킨 변경도 barrier가 관측하도록 release까지 tracked write 유지
+      let settleStagedPendingWrite: (() => void) | null = null;
+      const noteStagedSavePending = () => {
+        if (stagedSavePending) return;
+        stagedSavePending = true;
+        const pending = new Promise<void>((resolve) => {
+          settleStagedPendingWrite = () => {
+            settleStagedPendingWrite = null;
+            resolve();
+          };
+        });
+        void trackEditorWrite(pending);
+      };
       cancelPendingInstanceSave = () => {
         stagedSavePending = false;
+        settleStagedPendingWrite?.();
         instanceSaveDebounce.cancel();
         instanceSaveGeneration += 1;
       };
@@ -354,12 +416,15 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         }),
       );
       registerCleanup(
-        registerPluginInstancesStagedRelease(pluginId, () => {
+        registerPluginInstancesStagedRelease(pluginId, (gestureId) => {
           if (!stagedSavePending) return;
           stagedSavePending = false;
+          // staged gestureId 계승 + 즉시 flush - release 후 새 세션 분열 방지
           instanceSaveDebounce.schedule(
-            touchPluginInstancesEditSession(pluginId),
+            touchPluginInstancesEditSession(pluginId, gestureId),
           );
+          instanceSaveDebounce.flush();
+          settleStagedPendingWrite?.();
         }),
       );
 
@@ -376,7 +441,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             // 변경 시점 기준으로 edit-session TTL 갱신 - debounce가 세션을 쪼개지 않게
             const gestureId = touchPluginInstancesEditSession(pluginId);
             if (isPluginInstancesGestureStaged(pluginId)) {
-              stagedSavePending = true;
+              noteStagedSavePending();
               return;
             }
             instanceSaveDebounce.schedule(gestureId);
@@ -420,21 +485,21 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       }
     };
 
-    if (window.api?.i18n?.getLocale) {
-      window.api.i18n
+    if (api.i18n?.getLocale) {
+      api.i18n
         .getLocale()
         .then(applyLocale)
         .catch(() => undefined);
-    } else if (window.api?.settings?.get) {
-      window.api.settings
+    } else if (api.settings?.get) {
+      api.settings
         .get()
         .then((settings) => applyLocale((settings as SettingsState)?.language))
         .catch(() => undefined);
     }
 
     let localeCleanup: (() => void) | null = null;
-    if (window.api?.i18n?.onLocaleChange) {
-      localeCleanup = window.api.i18n.onLocaleChange(applyLocale);
+    if (api.i18n?.onLocaleChange) {
+      localeCleanup = api.i18n.onLocaleChange(applyLocale);
       if (localeCleanup) {
         registerCleanup(() => {
           try {
@@ -593,112 +658,119 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         newValue: string | number | boolean,
       ) => {
         currentSettings[key] = newValue;
-        window.api.ui.displayElement.update(instanceId, {
+        api.ui.displayElement.update(instanceId, {
           settings: { ...currentSettings },
         });
         updateVisibility();
       };
 
-      const normalizedSections = getNormalizedSections();
-      // 패널(renderPluginSettingsForm)과 동일한 섹션 카드 구조·토큰 — section이
-      // 없어도 암시적 카드 하나로 렌더 (모달-패널 외형 통합, 2026-07-12 결정)
-      let htmlContent =
-        '<div class="flex flex-col gap-[12px] w-full text-left">';
+      const modalHandlers = createPluginDialogHandlerScope();
+      let htmlContent = '';
+      try {
+        const normalizedSections = getNormalizedSections();
+        // 패널(renderPluginSettingsForm)과 동일한 섹션 카드 구조·토큰 - section이
+        // 없어도 암시적 카드 하나로 렌더 (모달-패널 외형 통합, 2026-07-12 결정)
+        htmlContent = '<div class="flex flex-col gap-[12px] w-full text-left">';
 
-      for (const [sectionIndex, section] of normalizedSections.entries()) {
-        htmlContent += `<div data-settings-section="${modalScope}-${sectionIndex}" style="${
-          section.renderVisible ? '' : 'display:none'
-        }" class="${SECTION_WRAPPER_CLASS}">`;
-        if (section.label) {
-          const sectionLabel = translate(
-            section.label,
-            undefined,
-            section.label,
-          );
-          htmlContent += `<p class="${SECTION_LABEL_CLASS}">${sectionLabel}</p>`;
-        }
-        htmlContent += `<div class="${SECTION_CARD_CLASS}">`;
-        for (const [entryIndex, entry] of section.entries.entries()) {
-          const { key, schema } = entry;
-          const entryAttributes = `data-settings-entry="${modalScope}-${sectionIndex}-${entryIndex}" style="${
-            entry.renderVisible ? '' : 'display:none'
-          }"`;
-          {
-            const value =
-              currentSettings[key] !== undefined
-                ? currentSettings[key]
-                : schema.default;
-            let componentHtml = '';
-            const labelText = translate(schema.label, undefined, schema.label);
-            const placeholderText =
-              typeof schema.placeholder === 'string'
-                ? translate(schema.placeholder, undefined, schema.placeholder)
-                : schema.placeholder;
-
-            const wrappedChange = wrapFunctionWithContext((newValue) => {
-              // DOM 문자열을 스키마 타입으로 복원, 복원 불가면 커밋 스킵
-              const coerced = coerceSettingValue(schema, newValue);
-              if (coerced === null) return;
-              return commitSettingValue(key, coerced);
-            });
-
-            if (schema.type === 'boolean') {
-              componentHtml = window.api.ui.components.checkbox({
-                checked: !!value,
-                onChange: wrappedChange as unknown as (
-                  checked: boolean,
-                ) => void | Promise<void>,
-              });
-            } else if (schema.type === 'color') {
-              const handleColorClick = (e: Event) => {
-                const target = (e.target as HTMLElement).closest('button');
-                if (!target) return;
-
-                const pickerId = `plugin-${pluginId}-${instanceId}-${key}`;
-
-                if (
-                  window.__dmn_showColorPicker &&
-                  window.__dmn_getColorPickerState
-                ) {
-                  const state = window.__dmn_getColorPickerState();
-                  if (state?.isOpen && state.id === pickerId) {
-                    window.__dmn_showColorPicker({
-                      initialColor: state.color,
-                      id: pickerId,
-                    });
-                    return;
-                  }
-                }
-
-                target.classList.add('shadow-focus-ring');
-
-                window.api.ui.pickColor({
-                  initialColor: String(currentSettings[key] ?? ''),
-                  id: pickerId,
-                  referenceElement: target as HTMLElement,
-                  onColorChange: (newColor) => {
-                    // 스와치(버튼 자체) 미리보기 업데이트
-                    target.style.setProperty(
-                      '--dmn-color-swatch-color',
-                      newColor,
-                    );
-                  },
-                  onColorChangeComplete: (newColor) => {
-                    wrappedChange(newColor);
-                  },
-                  onClose: () => {
-                    target.classList.remove('shadow-focus-ring');
-                  },
-                });
-              };
-
-              const handlerId = handlerRegistry.register(
-                pluginId,
-                handleColorClick,
+        for (const [sectionIndex, section] of normalizedSections.entries()) {
+          htmlContent += `<div data-settings-section="${modalScope}-${sectionIndex}" style="${
+            section.renderVisible ? '' : 'display:none'
+          }" class="${SECTION_WRAPPER_CLASS}">`;
+          if (section.label) {
+            const sectionLabel = translate(
+              section.label,
+              undefined,
+              section.label,
+            );
+            htmlContent += `<p class="${SECTION_LABEL_CLASS}">${sectionLabel}</p>`;
+          }
+          htmlContent += `<div class="${SECTION_CARD_CLASS}">`;
+          for (const [entryIndex, entry] of section.entries.entries()) {
+            const { key, schema } = entry;
+            const entryAttributes = `data-settings-entry="${modalScope}-${sectionIndex}-${entryIndex}" style="${
+              entry.renderVisible ? '' : 'display:none'
+            }"`;
+            {
+              const value =
+                currentSettings[key] !== undefined
+                  ? currentSettings[key]
+                  : schema.default;
+              let componentHtml = '';
+              const labelText = translate(
+                schema.label,
+                undefined,
+                schema.label,
               );
+              const placeholderText =
+                typeof schema.placeholder === 'string'
+                  ? translate(schema.placeholder, undefined, schema.placeholder)
+                  : schema.placeholder;
 
-              // 패널 ColorInput과 동일한 스와치 단독 버튼
-              componentHtml = `
+              const wrappedChange = wrapFunctionWithContext((newValue) => {
+                // DOM 문자열을 스키마 타입으로 복원, 복원 불가면 커밋 스킵
+                const coerced = coerceSettingValue(schema, newValue);
+                if (coerced === null) return;
+                return commitSettingValue(key, coerced);
+              });
+
+              if (schema.type === 'boolean') {
+                componentHtml = modalHandlers.capture(() =>
+                  api.ui.components.checkbox({
+                    checked: !!value,
+                    onChange: wrappedChange as unknown as (
+                      checked: boolean,
+                    ) => void | Promise<void>,
+                  }),
+                );
+              } else if (schema.type === 'color') {
+                const handleColorClick = (e: Event) => {
+                  const target = (e.target as HTMLElement).closest('button');
+                  if (!target) return;
+
+                  const pickerId = `plugin-${pluginId}-${instanceId}-${key}`;
+
+                  if (
+                    window.__dmn_showColorPicker &&
+                    window.__dmn_getColorPickerState
+                  ) {
+                    const state = window.__dmn_getColorPickerState();
+                    if (state?.isOpen && state.id === pickerId) {
+                      window.__dmn_showColorPicker({
+                        initialColor: state.color,
+                        id: pickerId,
+                      });
+                      return;
+                    }
+                  }
+
+                  target.classList.add('shadow-focus-ring');
+
+                  api.ui.pickColor({
+                    initialColor: String(currentSettings[key] ?? ''),
+                    id: pickerId,
+                    referenceElement: target as HTMLElement,
+                    onColorChange: (newColor) => {
+                      // 스와치(버튼 자체) 미리보기 업데이트
+                      target.style.setProperty(
+                        '--dmn-color-swatch-color',
+                        newColor,
+                      );
+                    },
+                    onColorChangeComplete: (newColor) => {
+                      wrappedChange(newColor);
+                    },
+                    onClose: () => {
+                      target.classList.remove('shadow-focus-ring');
+                    },
+                  });
+                };
+
+                const handlerId = modalHandlers.trackRegistryHandler(
+                  handlerRegistry.register(pluginId, handleColorClick),
+                );
+
+                // 패널 ColorInput과 동일한 스와치 단독 버튼
+                componentHtml = `
               <button type="button"
                 class="dmn-color-swatch-button w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
                 style="--dmn-color-swatch-color: ${value}"
@@ -710,93 +782,104 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                 </span>
               </button>
             `;
-            } else if (schema.type === 'string' || schema.type === 'number') {
-              const strVal = String(value);
-              let inputWidth: number;
+              } else if (schema.type === 'string' || schema.type === 'number') {
+                const strVal = String(value);
+                let inputWidth: number;
 
-              if (schema.type === 'number') {
-                inputWidth = 60;
-              } else {
-                if (strVal.length <= 4) inputWidth = 60;
-                else if (strVal.length <= 10) inputWidth = 100;
-                else inputWidth = 200;
+                if (schema.type === 'number') {
+                  inputWidth = 60;
+                } else {
+                  if (strVal.length <= 4) inputWidth = 60;
+                  else if (strVal.length <= 10) inputWidth = 100;
+                  else inputWidth = 200;
+                }
+
+                componentHtml = modalHandlers.capture(() =>
+                  api.ui.components.input({
+                    type:
+                      schema.type === 'string'
+                        ? 'text'
+                        : (schema.type as 'number'),
+                    value: value as string | number,
+                    onChange: wrappedChange as unknown as (
+                      value: string,
+                    ) => void | Promise<void>,
+                    min: schema.min,
+                    max: schema.max,
+                    step: schema.step,
+                    placeholder: placeholderText,
+                    width: inputWidth,
+                  }),
+                );
+              } else if (schema.type === 'select') {
+                const translatedOptions = (schema.options || []).map(
+                  (option: { label: string; value: string }) => ({
+                    ...option,
+                    label: translate(option.label, undefined, option.label),
+                  }),
+                );
+                componentHtml = modalHandlers.capture(() =>
+                  api.ui.components.dropdown({
+                    options: translatedOptions,
+                    selected: value as string,
+                    onChange: wrappedChange as unknown as (
+                      value: string,
+                    ) => void | Promise<void>,
+                  }),
+                );
               }
 
-              componentHtml = window.api.ui.components.input({
-                type:
-                  schema.type === 'string' ? 'text' : (schema.type as 'number'),
-                value: value as string | number,
-                onChange: wrappedChange as unknown as (
-                  value: string,
-                ) => void | Promise<void>,
-                min: schema.min,
-                max: schema.max,
-                step: schema.step,
-                placeholder: placeholderText,
-                width: inputWidth,
-              });
-            } else if (schema.type === 'select') {
-              const translatedOptions = (schema.options || []).map(
-                (option: { label: string; value: string }) => ({
-                  ...option,
-                  label: translate(option.label, undefined, option.label),
-                }),
-              );
-              componentHtml = window.api.ui.components.dropdown({
-                options: translatedOptions,
-                selected: value as string,
-                onChange: wrappedChange as unknown as (
-                  value: string,
-                ) => void | Promise<void>,
-              });
-            }
-
-            htmlContent += `
+              htmlContent += `
             <div ${entryAttributes} class="${FORM_ROW_CLASS}">
               <p class="${FORM_LABEL_CLASS}">${labelText}</p>
               ${componentHtml}
             </div>
           `;
+            }
           }
+          htmlContent += '</div></div>';
         }
-        htmlContent += '</div></div>';
-      }
 
-      const noSettingsText = await window.api.settings
-        .get()
-        .then((s) => {
-          const locale = s.language || 'ko';
-          return locale === 'en'
-            ? 'No settings available.'
-            : '설정할 항목이 없습니다.';
-        })
-        .catch(() => '설정할 항목이 없습니다.');
-      htmlContent += `<div data-settings-empty="${modalScope}" style="${
-        normalizedSections.some((section) => section.renderVisible)
-          ? 'display:none'
-          : ''
-      }" class="text-fg-faint text-body text-center">${noSettingsText}</div>`;
+        const noSettingsText = await api.settings
+          .get()
+          .then((s) => {
+            const locale = s.language || 'ko';
+            return locale === 'en'
+              ? 'No settings available.'
+              : '설정할 항목이 없습니다.';
+          })
+          .catch(() => '설정할 항목이 없습니다.');
+        htmlContent += `<div data-settings-empty="${modalScope}" style="${
+          normalizedSections.some((section) => section.renderVisible)
+            ? 'display:none'
+            : ''
+        }" class="text-fg-faint text-body text-center">${noSettingsText}</div>`;
 
-      htmlContent += '</div>';
+        htmlContent += '</div>';
 
-      const [saveText, cancelText] = await window.api.settings
-        .get()
-        .then((s) => {
-          const locale = s.language || 'ko';
-          return locale === 'en' ? ['Apply', 'Cancel'] : ['저장', '취소'];
-        })
-        .catch(() => ['저장', '취소']);
+        const [saveText, cancelText] = await api.settings
+          .get()
+          .then((s) => {
+            const locale = s.language || 'ko';
+            return locale === 'en' ? ['Apply', 'Cancel'] : ['저장', '취소'];
+          })
+          .catch(() => ['저장', '취소']);
 
-      const confirmed = await window.api.ui.dialog.custom(htmlContent, {
-        showCancel: true,
-        confirmText: saveText,
-        cancelText: cancelText,
-      });
-
-      if (!confirmed) {
-        window.api.ui.displayElement.update(instanceId, {
-          settings: originalSettings,
+        const confirmed = await api.ui.dialog.custom(htmlContent, {
+          showCancel: true,
+          confirmText: saveText,
+          cancelText: cancelText,
         });
+
+        if (!confirmed) {
+          api.ui.displayElement.update(instanceId, {
+            settings: originalSettings,
+          });
+        }
+        // 모달 정산은 확정 경계 - 확정·취소 revert 모두 즉시 커밋
+        flushPluginInstancesEditSession(pluginId);
+      } finally {
+        modalHandlers.dispose();
       }
     };
 
@@ -805,7 +888,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       const target = e.currentTarget as HTMLElement;
       const instanceId = target.getAttribute('data-plugin-element');
       if (instanceId) {
-        openInstanceSettings(instanceId);
+        return openInstanceSettings(instanceId);
       }
     };
 
@@ -822,7 +905,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           ).length;
       };
 
-      const menuId = window.api.ui.contextMenu.addGridMenuItem({
+      const menuId = api.ui.contextMenu.addGridMenuItem({
         id: `create-${defId}`,
         label: createLabel,
         // maxInstances 제한 도달 시 메뉴 비활성화 (현재 탭 기준)
@@ -845,7 +928,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             }
           }
 
-          window.api.ui.displayElement.add({
+          api.ui.displayElement.add({
             html: '<!-- plugin-element -->',
             position: {
               x: context.position.dx,
@@ -862,55 +945,18 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               customItems: buildCustomContextMenuItems(),
             },
           } as unknown as PluginDisplayElementConfig);
+          // 생성은 discrete 편집 - debounce 대기 없이 즉시 커밋
+          flushPluginInstancesEditSession(pluginId);
         },
       });
 
       registerCleanup(() => {
-        window.api.ui.contextMenu.removeMenuItem(menuId);
+        api.ui.contextMenu.removeMenuItem(menuId);
       });
     }
 
-    // Undo/Redo를 위한 요소 복원 함수 등록
-    const restoreElementForUndo = (
-      savedElement: PluginDisplayElementInternal,
-    ) => {
-      const previousPluginId = window.__dmn_current_plugin_id;
-      window.__dmn_current_plugin_id = pluginId;
-
-      try {
-        const onClickId = useModalSettings
-          ? handlerRegistry.register(pluginId, handleElementClick)
-          : undefined;
-
-        const restoredElement = {
-          ...savedElement,
-          onClick: onClickId,
-          _onClickId: onClickId,
-          contextMenu: {
-            enableDelete: true,
-            deleteLabel: definition.contextMenu?.delete || '삭제',
-            customItems: buildCustomContextMenuItems(),
-          },
-        };
-
-        return restoredElement;
-      } finally {
-        window.__dmn_current_plugin_id = previousPluginId;
-      }
-    };
-
-    // 전역에 복원 함수 등록
-    if (!window.__dmn_element_restorers) {
-      window.__dmn_element_restorers = new Map();
-    }
-    window.__dmn_element_restorers.set(defId, restoreElementForUndo);
-
-    // 플러그인 클린업 시 복원 함수 제거
-    registerCleanup(() => {
-      window.__dmn_element_restorers?.delete(defId);
-    });
-
-    // 저장 스냅샷을 화면 요소로 재주입 - 초기 복원과 undo 재결합이 공유
+    // 저장 스냅샷을 화면 요소에 diff 적용 - 초기 복원과 undo 재결합이 공유.
+    // 생존 fullId는 canonical 소유 필드만 갱신하므로 핸들·모달·선택이 유지됨
     const applyInstancesSnapshot = (
       savedInstances: SavedInstance[],
       readiness: 'ready' | 'failed',
@@ -926,66 +972,148 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         let instancesToRestore = savedInstances;
 
         if (maxInstances && maxInstances > 0) {
-          const instancesByTab = new Map<string, SavedInstance[]>();
-          savedInstances.forEach((instance) => {
+          // 캡은 탭별 수용 카운터로 원배열 순서를 보존하며 적용.
+          // 탭별 재그룹은 canonical 순서를 깨 undo 직후 echo 저장이
+          // 실변경 커밋이 되고 redo 스택을 소거한다
+          const acceptedByTab = new Map<string, number>();
+          instancesToRestore = savedInstances.filter((instance) => {
             const tabId = normalizePluginInstanceTabId(instance.tabId);
-            if (!instancesByTab.has(tabId)) {
-              instancesByTab.set(tabId, []);
-            }
-            instancesByTab.get(tabId)!.push(instance);
-          });
-
-          instancesToRestore = [];
-          instancesByTab.forEach((instances) => {
-            instancesToRestore.push(...instances.slice(0, maxInstances));
+            const accepted = acceptedByTab.get(tabId) ?? 0;
+            if (accepted >= maxInstances) return false;
+            acceptedByTab.set(tabId, accepted + 1);
+            return true;
           });
         }
 
-        instancesToRestore.forEach((instance) => {
-          // 비동기 복원 중 플러그인 컨텍스트 재설정
-          window.__dmn_current_plugin_id = pluginId;
+        // backfill 전 무ID 항목은 diff 신원이 없음 - 그 스냅샷만 전량 재주입 폴백
+        const canDiff = instancesToRestore.every(
+          (instance) =>
+            typeof instance.instanceId === 'string' &&
+            instance.instanceId.length > 0,
+        );
 
-          addDisplayElementInternal({
-            html: '<!-- plugin-element -->',
+        // 기대 fullId 집합 - 폴백은 빈 집합이라 소멸 단계가 전량 제거
+        const expectedFullIds = new Set(
+          canDiff
+            ? instancesToRestore.map(
+                (instance) => `${pluginId}::${instance.instanceId}`,
+              )
+            : [],
+        );
+
+        // 소멸: 이 definition 요소 중 기대 밖 fullId 제거.
+        // 초기 복원 창(barrier 복원 완료 전)에서는 스킵 - define 직후 추가된
+        // 요소(barrier가 flush 대기 중인 편집)를 지우면 flush 커밋에서 조용히
+        // 소실된다. 복원 완료 후 reapply와 실패 복원은 canonical이 진실이라
+        // 소멸 유지
+        const preserveRestoreWindowAdds =
+          readiness === 'ready' && instanceSaveBarrier.isRestoring();
+        if (!preserveRestoreWindowAdds) {
+          const staleFullIds = usePluginDisplayElementStore
+            .getState()
+            .elements.filter(
+              (element) =>
+                element.definitionId === defId &&
+                !expectedFullIds.has(element.fullId),
+            )
+            .map((element) => element.fullId);
+          if (staleFullIds.length > 0) {
+            removeDisplayElementsInternal(staleFullIds);
+          }
+        }
+
+        const survivingFullIds = new Set(
+          usePluginDisplayElementStore
+            .getState()
+            .elements.filter((element) => element.definitionId === defId)
+            .map((element) => element.fullId),
+        );
+
+        instancesToRestore.forEach((instance) => {
+          const fullId = canDiff ? `${pluginId}::${instance.instanceId}` : null;
+          // canonical 소유 7필드 (PERSISTED_FIELDS와 동일 범위)
+          const persistedFields = {
             position: instance.position,
-            draggable: true,
-            definitionId: defId,
             settings: omitLayoutSettingValues(
               definition.settings,
               instance.settings || { ...defaultSettings },
             ) as Record<string, string | number | boolean>,
-            state: definition.previewState || {},
             measuredSize: instance.measuredSize,
             tabId: normalizePluginInstanceTabId(instance.tabId),
             hidden: instance.hidden ?? false,
             zIndex: instance.zIndex,
+            groupId: instance.groupId,
+          };
+
+          if (fullId && survivingFullIds.has(fullId)) {
+            // 생존: 소유 필드만 갱신 - html·state·핸들러는 렌더러 소유라 불변
+            usePluginDisplayElementStore
+              .getState()
+              .updateElement(fullId, persistedFields);
+            return;
+          }
+
+          // 비동기 복원 중 플러그인 컨텍스트 재설정
+          window.__dmn_current_plugin_id = pluginId;
+
+          // 신규: 저장된 영구 ID로 재주입 (무ID는 새 UUID 발급)
+          addDisplayElementInternal({
+            html: '<!-- plugin-element -->',
+            instanceId: instance.instanceId,
+            draggable: true,
+            definitionId: defId,
+            state: definition.previewState || {},
             onClick: useModalSettings ? handleElementClick : undefined,
             contextMenu: {
               enableDelete: true,
               deleteLabel: definition.contextMenu?.delete || '삭제',
               customItems: buildCustomContextMenuItems(),
             },
-          } as unknown as PluginDisplayElementConfig);
+            ...persistedFields,
+          } as unknown as InternalDisplayElementConfig);
         });
+
+        // buildSavedPluginInstances가 순서 민감 - def 블록을 스냅샷 순서로 재배열
+        if (canDiff) {
+          const state = usePluginDisplayElementStore.getState();
+          const byFullId = new Map(
+            state.elements
+              .filter((element) => element.definitionId === defId)
+              .map((element) => [element.fullId, element]),
+          );
+          const ordered = instancesToRestore
+            .map((instance) =>
+              byFullId.get(`${pluginId}::${instance.instanceId}`),
+            )
+            .filter(
+              (element): element is PluginDisplayElementInternal =>
+                element !== undefined,
+            );
+          let cursor = 0;
+          let orderChanged = false;
+          const reordered = state.elements.map((element) => {
+            if (element.definitionId !== defId) return element;
+            // 복원 창에서 소멸을 스킵한 기대 밖 요소는 제자리 유지
+            if (!expectedFullIds.has(element.fullId)) return element;
+            const replacement = ordered[cursor] ?? element;
+            cursor += 1;
+            if (replacement !== element) orderChanged = true;
+            return replacement;
+          });
+          if (orderChanged) {
+            state.setElements(reordered);
+          }
+        }
       });
     };
 
     if (window.__dmn_window_type === 'main') {
-      // undo/redo의 canonical 재결합 - 현 요소 제거 후 스냅샷 재주입
+      // undo/redo의 canonical 재결합 - diff 적용기가 소멸·생존·신규를 정산
       registerCleanup(
         registerPluginInstancesReapplier(pluginId, defId, {
           // 이벤트 도착 즉시 호출 - 낡은 메모리를 커밋할 pending 저장 차단
           cancelPendingSave: () => cancelPendingInstanceSave(),
           reapply: (instances) => {
-            instanceSaveBarrier.runRestoreMutation(() => {
-              const currentIds = usePluginDisplayElementStore
-                .getState()
-                .elements.filter((el) => el.definitionId === defId)
-                .map((el) => el.fullId);
-              if (currentIds.length > 0) {
-                removeDisplayElementsInternal(currentIds);
-              }
-            });
             applyInstancesSnapshot(instances as SavedInstance[], 'ready');
           },
         }),

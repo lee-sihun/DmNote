@@ -10,6 +10,7 @@ import FloatingTooltip from '../Modal/FloatingTooltip';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import { useIconMotion } from '@hooks/useIconMotion';
+import { appApi } from '@api/modules/appApi';
 
 interface ToolBarProps {
   onAddItem: (type: 'key' | 'stat' | 'graph' | 'knob') => void;
@@ -44,7 +45,7 @@ const ToolBar = ({
 }: ToolBarProps) => {
   const { t } = useTranslation();
   const { run: openExternal, pending: isOpeningExternal } =
-    useSingleFlightAction((link: string) => window.api.app.openExternal(link));
+    useSingleFlightAction((link: string) => appApi.openExternal(link));
   const handleExternal = (link: string) => {
     void openExternal(link).catch((error) =>
       console.error('Failed to open external link', error),

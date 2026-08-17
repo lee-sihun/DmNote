@@ -19,10 +19,12 @@ import {
 } from '@stores/signals/keyCounterCache';
 import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
 import { obsApi } from '@api/modules/obsApi';
+import { overlayApi } from '@api/modules/overlayApi';
 import { notifyLocaleChanged, subscribe } from '@api/modules/shared';
 import {
   acknowledgeLifecycleAfterEditorFlush,
   cancelLifecycleEditorFlush,
+  windowApi,
 } from '@api/modules/appApi';
 import { stableStringify } from '@utils/core/stableStringify';
 import { useTranslation } from '@contexts/useTranslation';
@@ -40,6 +42,7 @@ import {
   notePanelVisibilityForSettingsSession,
 } from '@plugins/rpc/pluginSettingsSession';
 import { initPluginInstancesUndoSync } from '@plugins/runtime/displayElement/instancesUndoSync';
+import { initPluginGroupRefsMirror } from '@plugins/runtime/pluginGroupRefsMirror';
 import { historyApi } from '@api/modules/historyApi';
 import {
   useHistoryStatusStore,
@@ -51,7 +54,7 @@ import {
   releaseHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
 } from '@src/renderer/editor/runtime/historyEditorFlushLock';
-import type { BootstrapPayload } from '@src/types/app';
+import type { CanonicalBootstrapPayload } from '@src/types/app';
 import type { CustomTab, KeyCounters } from '@src/types/key/keys';
 import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
 import {
@@ -71,6 +74,7 @@ import {
   initializeCursorSystem,
   refreshCursorSettings,
 } from '@utils/grid/cursorUtils';
+import { isEditorCapacityFailure } from '@src/types/editor';
 import type { CustomJs, JsPlugin } from '@src/types/plugin/js';
 
 function clonePlugins(source?: CustomJs | null): JsPlugin[] {
@@ -100,7 +104,7 @@ function clonePlugins(source?: CustomJs | null): JsPlugin[] {
 
 // bootstrap payload → 설정 스토어 스냅샷 구성 (초기 적용/재동기화 공용)
 function buildSettingsSnapshot(
-  bootstrap: BootstrapPayload,
+  bootstrap: CanonicalBootstrapPayload,
   tabNoteOverrides: TabNoteOverrides,
 ): SettingsStateSnapshot {
   return {
@@ -424,17 +428,21 @@ export function useAppBootstrap() {
         '저장할 수 없는 편집 내용을 마지막 저장 상태로 되돌렸습니다',
         state.error,
       );
-      void window.api.ui.dialog
-        .alert(
-          getEditorCopy(
+      const message = isEditorCapacityFailure(state.error)
+        ? getEditorCopy(
+            'editorSave.capacityFailure',
+            '저장 한도를 넘어 변경을 되돌렸습니다.\n일부 요소를 줄이고 다시 시도해 주세요.',
+            'This edit exceeded the save limit and was undone.\nRemove some elements and try again.',
+          )
+        : getEditorCopy(
             'editorSave.permanentFailure',
-            '저장할 수 없는 편집 내용이라 마지막으로 저장된 상태로 되돌렸습니다. 방금 변경한 값을 확인해 주세요.',
-            'This edit could not be saved, so the editor was restored to the last saved state. Please check the value you just changed.',
-          ),
-          {
-            confirmText: getEditorCopy('common.ok', '확인', 'OK'),
-          },
-        )
+            '저장하지 못해 변경 내용을 되돌렸습니다.\n방금 바꾼 값을 확인해 주세요.',
+            "Couldn't save this edit, so it was undone.\nCheck the value you just changed.",
+          );
+      void window.api.ui.dialog
+        .alert(message, {
+          confirmText: getEditorCopy('common.ok', '확인', 'OK'),
+        })
         .catch((error) => {
           console.error('편집 저장 실패 안내를 표시하지 못했습니다', error);
         });
@@ -608,7 +616,7 @@ export function useAppBootstrap() {
     // 변경이 overlay 키 이벤트 effect 재실행(키 하이라이트 리셋) 등 시각적
     // 부작용을 유발하는 것을 방지
     const applyResyncSnapshot = (
-      bootstrap: BootstrapPayload,
+      bootstrap: CanonicalBootstrapPayload,
       counterContext: CounterResyncContext,
     ) => {
       initDefaults(bootstrap.defaults);
@@ -846,6 +854,11 @@ export function useAppBootstrap() {
       window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
         ? initPluginInstancesUndoSync()
         : null;
+    // 미로드 플러그인 저장 인스턴스의 그룹 참조 미러 - normalize 모집단 정합
+    const stopPluginGroupRefsMirror =
+      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
+        ? initPluginGroupRefsMirror()
+        : null;
 
     const unsubscribers = [
       editorCoordinator.subscribe(handleEditorCoordinatorState),
@@ -909,9 +922,9 @@ export function useAppBootstrap() {
             );
             if (action === 'history') return;
             const overlay = await window.api.overlay.get().catch(() => null);
-            await window.api.window.showMain();
+            await windowApi.showMain();
             if (overlay?.visible) {
-              await window.api.overlay.setVisible(true);
+              await overlayApi.setVisible(true);
             }
           })().catch((showError) => {
             console.error('종료 취소 후 창 복원 실패', showError);
@@ -1096,6 +1109,7 @@ export function useAppBootstrap() {
       stopPluginRpcHandler?.();
       stopPluginSettingsSessionHost?.();
       stopPluginInstancesUndoSync?.();
+      stopPluginGroupRefsMirror?.();
       unsubscribers.forEach((unsubscribe) => {
         try {
           unsubscribe();

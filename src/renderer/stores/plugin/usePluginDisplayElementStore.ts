@@ -7,6 +7,10 @@ import {
 } from '@src/types/plugin/api';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
+import {
+  registerLoadedPluginIdsProvider,
+  registerPluginGroupMemberProvider,
+} from '@src/renderer/editor/runtime/pluginGroupMembers';
 import { useKeyStore } from '../data/useKeyStore';
 
 // syncToOverlay 쓰로틀링을 위한 변수
@@ -427,3 +431,14 @@ function syncToOverlayThrottled(elements: PluginDisplayElementInternal[]) {
     }
   }, SYNC_THROTTLE_MS);
 }
+
+// 그룹 normalize 재생의 플러그인 멤버 소스 등록 - coordinator가 store를
+// 직접 import하면 순환 참조가 생기므로 여기서 주입한다
+registerPluginGroupMemberProvider(
+  () => usePluginDisplayElementStore.getState().elements,
+);
+// 로드 판별 - definitions에 등록된 플러그인은 런타임 요소가 그룹 멤버 원본이고
+// (defineElement가 저장 인스턴스를 요소로 복원), 미등록 플러그인은 store 미러가 보충
+registerLoadedPluginIdsProvider(
+  () => new Set(usePluginDisplayElementStore.getState().definitions.keys()),
+);

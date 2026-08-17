@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { appApi } from '@api/modules/appApi';
 
 const GITHUB_REPO = 'DmNote-App/DmNote';
 const STORAGE_KEY = 'dmnote:skipped-version';
@@ -305,7 +306,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     setPostUpdateNoticeVersion(normalizedTag);
 
     try {
-      await window.api.app.autoUpdate(normalizedTag);
+      await appApi.autoUpdate(normalizedTag);
       set({ isAutoUpdating: false });
     } catch (e) {
       clearPendingPostUpdateReleaseNotice();

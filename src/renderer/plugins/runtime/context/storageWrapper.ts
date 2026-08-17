@@ -3,12 +3,14 @@
  * 플러그인별로 네임스페이스가 적용된 스토리지를 제공합니다.
  */
 
+import type { DMNoteAPI } from '@src/types/plugin/api';
+
 /**
  * 원본 스토리지 API를 플러그인 네임스페이스로 래핑합니다.
  */
 export const createNamespacedStorage = (
   pluginId: string,
-  originalStorage: typeof window.api.plugin.storage,
+  originalStorage: DMNoteAPI['plugin']['storage'],
 ) => {
   return {
     get: async <T = unknown>(key: string) => {

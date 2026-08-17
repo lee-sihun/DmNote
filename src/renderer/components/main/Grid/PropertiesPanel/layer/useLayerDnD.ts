@@ -3,18 +3,63 @@
  * 아이템/그룹 드래그, 드롭 타깃 계산, 순서 재배치
  */
 
-import { setPluginElementZIndexes } from '@plugins/rpc/pluginElementActions';
-import { useState, useRef } from 'react';
-import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useKnobItemStore } from '@stores/data/useKnobItemStore';
-import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import {
+  reportElementOpError,
+  reportElementOpSkipped,
+} from '@src/renderer/editor/runtime/elementIntent';
+import {
+  reorderLayerSelectionViaAuthority,
+  type LayerReorderIntentWire,
+} from '@plugins/rpc/pluginElementActions';
+import { useState, useRef, useEffect } from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import type { LayerItem, DisplayItem } from '../types';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
+import {
+  resumeCustomCursorHover,
+  suspendCustomCursorHover,
+} from '@utils/grid/cursorUtils';
+import { commitLayerDropIntent, type DropAnchors } from './layerReorderIntent';
+import { resolveLayerDropZone } from './layerDropZone';
+
+export { resolveDropIndexFromAnchors } from './layerReorderIntent';
+export { resolveLayerDropZone } from './layerDropZone';
+
+const toReorderWire = (
+  descriptor: import('./layerReorderIntent').LayerDropIntent,
+): LayerReorderIntentWire => ({
+  ...descriptor,
+  anchors: {
+    toDisplayIndex: descriptor.anchors.toDisplayIndex,
+    targetGroupId: descriptor.anchors.targetGroupId ?? null,
+    anchorBeforeId: descriptor.anchors.anchorBeforeId ?? null,
+    anchorAfterId: descriptor.anchors.anchorAfterId ?? null,
+    anchorHeaderGroupId: descriptor.anchors.anchorHeaderGroupId ?? null,
+    anchorBeforeHeaderGroupId:
+      descriptor.anchors.anchorBeforeHeaderGroupId ?? null,
+    anchorAfterHeaderGroupId:
+      descriptor.anchors.anchorAfterHeaderGroupId ?? null,
+    boundary: descriptor.anchors.boundary ?? null,
+  },
+});
+
+const commitLayerDropFromCurrentWindow = (
+  descriptor: import('./layerReorderIntent').LayerDropIntent,
+): Promise<void> => {
+  if (window.__dmn_window_type !== 'panel') {
+    return commitLayerDropIntent(descriptor);
+  }
+  return reorderLayerSelectionViaAuthority(toReorderWire(descriptor)).then(
+    (succeeded) => {
+      if (!succeeded) reportElementOpSkipped('panel layer drop settlement');
+    },
+  );
+};
+
+// 드래그 세션 동안 body에 붙는 전역 grabbing 클래스 (main.css) - 캔버스와 동일 정책
+const DRAG_CURSOR_CLASS = 'dmn-dragging';
 
 // ============================================================================
 // 파라미터 타입
@@ -24,6 +69,10 @@ interface UseLayerDnDParams {
   selectedKeyType: string;
   layerItemsRef: React.MutableRefObject<LayerItem[]>;
   displayItemsRef: React.MutableRefObject<DisplayItem[]>;
+  buildLiveLayerModel: () => {
+    layerItems: LayerItem[];
+    displayItems: DisplayItem[];
+  };
   scrollElementRef: React.MutableRefObject<HTMLDivElement | null>;
   clearPendingDeselect: () => void;
 }
@@ -36,6 +85,7 @@ export function useLayerDnD({
   selectedKeyType,
   layerItemsRef,
   displayItemsRef,
+  buildLiveLayerModel,
   scrollElementRef,
   clearPendingDeselect,
 }: UseLayerDnDParams) {
@@ -44,8 +94,13 @@ export function useLayerDnD({
   const [dragOverItemDisplayIndex, setDragOverItemDisplayIndex] = useState<
     number | null
   >(null);
-  const [dragOverHeaderBottomGroupId, setDragOverHeaderBottomGroupId] =
-    useState<string | null>(null);
+  const [dragOverIntoGroupId, setDragOverIntoGroupId] = useState<string | null>(
+    null,
+  );
+  // 삽입 위치의 그룹 소속 - 그룹 안 삽입 인디케이터 인덴트 표시용
+  const [dragOverTargetGroupId, setDragOverTargetGroupId] = useState<
+    string | null
+  >(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [dragOverDisplayIndex, setDragOverDisplayIndex] = useState<
@@ -56,613 +111,146 @@ export function useLayerDnD({
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
   const didDragRef = useRef(false);
+  const didDragResetTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (didDragResetTimerRef.current !== null) {
+        window.clearTimeout(didDragResetTimerRef.current);
+      }
+    },
+    [],
+  );
   const dragStateRef = useRef<{
     itemHeight: number;
-    currentDropTarget: {
-      toDisplayIndex: number;
-      targetGroupId: string | undefined;
-    } | null;
+    currentDropTarget: DropAnchors | null;
   } | null>(null);
   const draggedItemIdsRef = useRef<string[]>([]);
   const groupDragStateRef = useRef<{
     groupId: string;
     itemHeight: number;
     currentOverIndex: number | null;
+    anchors: DropAnchors | null;
+    // 앵커 후보에서 제외한 id들 - mouseup의 이동 집합과 대조해 축소 감지
+    excludedIds: string[];
   } | null>(null);
+  const dragCursorAppliedRef = useRef(false);
+
+  // press부터 세션 종료까지 전역 grabbing - WKWebView가 hover 중 CSS :active
+  // 커서 갱신을 놓치는 문제로 캔버스 useDraggable과 같은 JS 토글 병행
+  const applyDragCursor = () => {
+    if (typeof document === 'undefined') return;
+    if (dragCursorAppliedRef.current) return;
+    document.body.classList.add(DRAG_CURSOR_CLASS);
+    dragCursorAppliedRef.current = true;
+    // 세션 동안 핸들 호버 커서 갱신 중단 (시작 시 잔여 호버 클리어 포함)
+    suspendCustomCursorHover();
+  };
+
+  const clearDragCursor = () => {
+    if (typeof document === 'undefined') return;
+    if (!dragCursorAppliedRef.current) return;
+    document.body.classList.remove(DRAG_CURSOR_CLASS);
+    dragCursorAppliedRef.current = false;
+    resumeCustomCursorHover();
+  };
 
   // ──────────────────────────────────────────────────────────────────────────
   // 아이템 드롭 타깃 계산
   // ──────────────────────────────────────────────────────────────────────────
 
-  const resolveItemDropTarget = (
-    displaySlotIndex: number,
-    draggingItemIds: ReadonlySet<string>,
-  ) => {
+  // 표시 슬롯 → 평면 배열 삽입 index (커밋은 앵커 기준, 이 값은 fallback 보조)
+  const resolveItemInsertIndex = (displaySlotIndex: number): number => {
     const items = layerItemsRef.current;
     const currentDisplay = displayItemsRef.current;
     const safeSlotIndex = Math.max(
       0,
       Math.min(currentDisplay.length, displaySlotIndex),
     );
-
-    let toIndex = items.length;
-    if (safeSlotIndex < currentDisplay.length) {
-      const targetDisplayItem = currentDisplay[safeSlotIndex];
-      if (targetDisplayItem.displayType === 'layer') {
-        toIndex = targetDisplayItem.flatIndex;
-      } else {
-        const firstChildIndex = items.findIndex(
-          (item) => item.groupId === targetDisplayItem.groupId,
-        );
-        toIndex = firstChildIndex === -1 ? items.length : firstChildIndex;
-      }
+    if (safeSlotIndex >= currentDisplay.length) return items.length;
+    const targetDisplayItem = currentDisplay[safeSlotIndex];
+    if (targetDisplayItem.displayType === 'layer') {
+      return targetDisplayItem.flatIndex;
     }
-
-    const getDisplayItem = (index: number): DisplayItem | undefined =>
-      index >= 0 && index < currentDisplay.length
-        ? currentDisplay[index]
-        : undefined;
-
-    let prevIdx = safeSlotIndex - 1;
-    while (prevIdx >= 0) {
-      const di = getDisplayItem(prevIdx);
-      if (di?.displayType !== 'layer' || !draggingItemIds.has(di.item.id))
-        break;
-      prevIdx--;
-    }
-    const prevDisplayItem = getDisplayItem(prevIdx);
-
-    let nextIdx = safeSlotIndex;
-    while (nextIdx < currentDisplay.length) {
-      const di = getDisplayItem(nextIdx);
-      if (di?.displayType !== 'layer' || !draggingItemIds.has(di.item.id))
-        break;
-      nextIdx++;
-    }
-    const nextDisplayItem = getDisplayItem(nextIdx);
-
-    let targetGroupId: string | undefined;
-    if (prevDisplayItem?.displayType === 'group-header') {
-      const prevHeaderGroupId = prevDisplayItem.groupId;
-      if (
-        nextDisplayItem?.displayType === 'layer' &&
-        nextDisplayItem.item.groupId === prevHeaderGroupId
-      ) {
-        targetGroupId = prevHeaderGroupId;
-      } else if (!nextDisplayItem) {
-        targetGroupId = prevHeaderGroupId;
-      } else {
-        targetGroupId = undefined;
-      }
-    } else {
-      const prevGroupId =
-        prevDisplayItem?.displayType === 'layer'
-          ? prevDisplayItem.item.groupId
-          : undefined;
-
-      if (prevGroupId) {
-        targetGroupId = prevGroupId;
-      } else {
-        targetGroupId = undefined;
-      }
-    }
-
-    return { toIndex, targetGroupId };
+    const firstChildIndex = items.findIndex(
+      (item) => item.groupId === targetDisplayItem.groupId,
+    );
+    return firstChildIndex === -1 ? items.length : firstChildIndex;
   };
 
   // 포인터 위치 기반 드롭 타깃 계산
   const resolveItemDropTargetFromPointer = (
     relativeY: number,
     itemHeight: number,
-    draggingIds: ReadonlySet<string>,
   ) => {
     const currentDisplay = displayItemsRef.current;
     const displayCount = currentDisplay.length;
 
-    if (displayCount === 0) {
-      const target = resolveItemDropTarget(0, draggingIds);
+    // 목록 위아래 밖은 최상/최하 삽입 - 소속 없음
+    if (displayCount === 0 || relativeY <= 0) {
       return {
-        ...target,
+        toIndex: resolveItemInsertIndex(0),
+        targetGroupId: undefined,
         indicatorDisplayIndex: 0,
-        indicatorHeaderBottomGroupId: null,
+        intoGroupId: null,
       };
     }
-
-    if (relativeY <= 0) {
-      const target = resolveItemDropTarget(0, draggingIds);
-      return {
-        ...target,
-        indicatorDisplayIndex: 0,
-        indicatorHeaderBottomGroupId: null,
-      };
-    }
-
     const totalHeight = displayCount * itemHeight;
     if (relativeY >= totalHeight) {
-      const target = resolveItemDropTarget(displayCount, draggingIds);
       return {
-        ...target,
+        toIndex: resolveItemInsertIndex(displayCount),
+        targetGroupId: undefined,
         indicatorDisplayIndex: displayCount,
-        indicatorHeaderBottomGroupId: null,
+        intoGroupId: null,
       };
     }
 
-    const clampedY = relativeY;
     const rowIndex = Math.min(
       displayCount - 1,
-      Math.floor(clampedY / itemHeight),
+      Math.floor(relativeY / itemHeight),
     );
-    const rowTop = rowIndex * itemHeight;
-    const offsetInRow = clampedY - rowTop;
-    const isBottomHalf = offsetInRow >= itemHeight / 2;
+    const offsetInRow = relativeY - rowIndex * itemHeight;
     const row = currentDisplay[rowIndex];
+    const zone = resolveLayerDropZone(
+      row.displayType === 'group-header' ? 'group-header' : 'layer',
+      itemHeight,
+      offsetInRow,
+    );
 
-    if (row.displayType === 'group-header' && isBottomHalf) {
-      if (row.isCollapsed) {
-        const firstChildIndex = layerItemsRef.current.findIndex(
-          (item) => item.groupId === row.groupId,
-        );
-        const toIndex =
+    // 헤더 중앙 존은 그룹 진입 - 인디케이터 대신 행 전체 하이라이트
+    if (row.displayType === 'group-header' && zone === 'into') {
+      const firstChildIndex = layerItemsRef.current.findIndex(
+        (item) => item.groupId === row.groupId,
+      );
+      return {
+        toIndex:
           firstChildIndex === -1
             ? layerItemsRef.current.length
-            : firstChildIndex;
-
-        return {
-          toIndex,
-          targetGroupId: row.groupId,
-          indicatorDisplayIndex: null,
-          indicatorHeaderBottomGroupId: row.groupId,
-        };
-      }
-
-      const expandedGroupSlotIndex = rowIndex + 1;
-      const target = resolveItemDropTarget(expandedGroupSlotIndex, draggingIds);
-      return {
-        ...target,
-        indicatorDisplayIndex: expandedGroupSlotIndex,
-        indicatorHeaderBottomGroupId: null,
+            : firstChildIndex,
+        targetGroupId: row.groupId,
+        indicatorDisplayIndex: null,
+        intoGroupId: row.groupId,
       };
     }
 
-    const displaySlotIndex =
+    const displaySlotIndex = zone === 'after' ? rowIndex + 1 : rowIndex;
+    // 소속은 포인터가 올라간 행 기준 - 그룹 마지막 행 아래 경계에서 위쪽
+    // 행(그룹 안)과 아래쪽 행(그룹 밖)을 구분한다. 헤더 하단 가장자리는
+    // 펼친 그룹이면 그룹 안 첫 위치, 접힌 그룹이면 그룹 전체 다음 바깥
+    const targetGroupId =
       row.displayType === 'group-header'
-        ? rowIndex
-        : isBottomHalf
-        ? rowIndex + 1
-        : rowIndex;
-    const target = resolveItemDropTarget(displaySlotIndex, draggingIds);
+        ? zone === 'after' && !row.isCollapsed
+          ? row.groupId
+          : undefined
+        : row.item.groupId;
 
     return {
-      ...target,
+      toIndex: resolveItemInsertIndex(displaySlotIndex),
+      targetGroupId,
       indicatorDisplayIndex: displaySlotIndex,
-      indicatorHeaderBottomGroupId: null,
+      intoGroupId: null,
     };
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // 다중 아이템 드롭 처리
-  // ──────────────────────────────────────────────────────────────────────────
-
-  const performMultiDrop = async (
-    draggedIds: string[],
-    toDisplayIndex: number,
-    dropContext?: {
-      targetGroupId: string | undefined;
-      preserveFullGroups?: boolean;
-    },
-  ) => {
-    const items = [...layerItemsRef.current];
-    const currentDisplay = displayItemsRef.current;
-    const draggedIdSet = new Set(draggedIds);
-
-    const draggedItems = items.filter((item) => draggedIdSet.has(item.id));
-    const remainingItems = items.filter((item) => !draggedIdSet.has(item.id));
-
-    if (draggedItems.length === 0) return;
-
-    // 그룹별 멤버 맵
-    const groupMemberIds = new Map<string, Set<string>>();
-    for (const item of items) {
-      if (item.groupId) {
-        let memberSet = groupMemberIds.get(item.groupId);
-        if (!memberSet) {
-          memberSet = new Set();
-          groupMemberIds.set(item.groupId, memberSet);
-        }
-        memberSet.add(item.id);
-      }
-    }
-
-    const isFullGroupDragged = (groupId: string): boolean => {
-      const members = groupMemberIds.get(groupId);
-      if (!members) return false;
-      for (const id of members) {
-        if (!draggedIdSet.has(id)) return false;
-      }
-      return true;
-    };
-
-    // 필터 타겟 인덱스 계산
-    let offset = 0;
-    for (let i = 0; i < toDisplayIndex && i < currentDisplay.length; i++) {
-      const di = currentDisplay[i];
-      if (di.displayType === 'layer' && draggedIdSet.has(di.item.id)) {
-        offset++;
-      } else if (
-        di.displayType === 'group-header' &&
-        isFullGroupDragged(di.groupId)
-      ) {
-        offset++;
-      }
-    }
-    const filteredTargetIndex = toDisplayIndex - offset;
-
-    // 필터 디스플레이 목록
-    const filteredDisplay = currentDisplay.filter((di) => {
-      if (di.displayType === 'layer' && draggedIdSet.has(di.item.id))
-        return false;
-      if (di.displayType === 'group-header' && isFullGroupDragged(di.groupId))
-        return false;
-      return true;
-    });
-
-    // remainingItems를 display 순서로 재정렬
-    const orderedRemaining: LayerItem[] = [];
-    const addedIds = new Set<string>();
-    for (const di of filteredDisplay) {
-      if (di.displayType === 'layer') {
-        const item = remainingItems.find((ri) => ri.id === di.item.id);
-        if (item && !addedIds.has(item.id)) {
-          orderedRemaining.push(item);
-          addedIds.add(item.id);
-        }
-      } else if (di.displayType === 'group-header') {
-        for (const item of remainingItems) {
-          if (item.groupId === di.groupId && !addedIds.has(item.id)) {
-            orderedRemaining.push(item);
-            addedIds.add(item.id);
-          }
-        }
-      }
-    }
-    for (const item of remainingItems) {
-      if (!addedIds.has(item.id)) {
-        orderedRemaining.push(item);
-        addedIds.add(item.id);
-      }
-    }
-
-    // 삽입 위치 결정
-    let insertionIndex = orderedRemaining.length;
-    if (filteredTargetIndex < filteredDisplay.length) {
-      const targetDI = filteredDisplay[filteredTargetIndex];
-      if (targetDI.displayType === 'layer') {
-        const idx = orderedRemaining.findIndex(
-          (i) => i.id === targetDI.item.id,
-        );
-        if (idx !== -1) insertionIndex = idx;
-      } else if (targetDI.displayType === 'group-header') {
-        const firstChild = orderedRemaining.find(
-          (i) => i.groupId === targetDI.groupId,
-        );
-        if (firstChild) {
-          const idx = orderedRemaining.indexOf(firstChild);
-          if (idx !== -1) insertionIndex = idx;
-        }
-      }
-    }
-
-    // 새 groupId 결정
-    let newGroupId: string | undefined;
-    if (dropContext) {
-      newGroupId = dropContext.targetGroupId;
-    } else {
-      const prevItem = orderedRemaining[insertionIndex - 1];
-      const nextItem = orderedRemaining[insertionIndex];
-      if (
-        prevItem?.groupId &&
-        nextItem?.groupId &&
-        prevItem.groupId === nextItem.groupId
-      ) {
-        newGroupId = prevItem.groupId;
-      } else if (prevItem?.groupId && !nextItem?.groupId) {
-        newGroupId = prevItem.groupId;
-      } else {
-        newGroupId = undefined;
-      }
-    }
-
-    // 전체 그룹 드래그 시 groupId 보존
-    const preserveGroupIds = new Set<string>();
-    if (dropContext?.preserveFullGroups) {
-      for (const item of draggedItems) {
-        if (item.groupId && isFullGroupDragged(item.groupId)) {
-          preserveGroupIds.add(item.id);
-        }
-      }
-    }
-
-    // 드래그 아이템에 groupId 적용
-    const updatedDraggedItems = draggedItems.map((item) => {
-      if (item.type === 'plugin') return item;
-      if (preserveGroupIds.has(item.id)) return item;
-      return { ...item, groupId: newGroupId };
-    });
-
-    // 새 순서 구성
-    const newItems = [
-      ...orderedRemaining.slice(0, insertionIndex),
-      ...updatedDraggedItems,
-      ...orderedRemaining.slice(insertionIndex),
-    ];
-
-    // 변경 여부 확인
-    const orderChanged = newItems.some(
-      (item, idx) => item.id !== items[idx]?.id,
-    );
-    const groupChanged = draggedItems.some(
-      (orig, i) => orig.groupId !== updatedDraggedItems[i].groupId,
-    );
-    if (!orderChanged && !groupChanged) return;
-
-    // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-    const currentPositions = useKeyStore.getState().canonicalPositions;
-    const currentStatPositions = useStatItemStore.getState().positions;
-    const currentGraphPositions = useGraphItemStore.getState().positions;
-    const currentKnobPositions = useKnobItemStore.getState().positions;
-    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-
-    // z-index 재계산 및 적용
-    const maxZIndex = newItems.length - 1;
-
-    const updatedPositions = { ...currentPositions };
-    const currentModePositions = [...(updatedPositions[selectedKeyType] || [])];
-    const updatedStatPositions = { ...currentStatPositions };
-    const currentStatModePositions = [
-      ...(updatedStatPositions[selectedKeyType] || []),
-    ];
-    const updatedGraphPositions = { ...currentGraphPositions };
-    const currentGraphModePositions = [
-      ...(updatedGraphPositions[selectedKeyType] || []),
-    ];
-    const updatedKnobPositions = { ...currentKnobPositions };
-    const currentKnobModePositions = [
-      ...(updatedKnobPositions[selectedKeyType] || []),
-    ];
-
-    const pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }> = [];
-    newItems.forEach((item, idx) => {
-      const newZIndex = maxZIndex - idx;
-      const isDraggedItem = draggedIdSet.has(item.id);
-
-      if (item.type === 'key' && item.index !== undefined) {
-        if (currentModePositions[item.index]) {
-          currentModePositions[item.index] = {
-            ...currentModePositions[item.index],
-            zIndex: newZIndex,
-            ...(isDraggedItem && !preserveGroupIds.has(item.id)
-              ? { groupId: newGroupId }
-              : {}),
-          };
-        }
-      } else if (item.type === 'stat' && item.index !== undefined) {
-        if (currentStatModePositions[item.index]) {
-          currentStatModePositions[item.index] = {
-            ...currentStatModePositions[item.index],
-            zIndex: newZIndex,
-            ...(isDraggedItem && !preserveGroupIds.has(item.id)
-              ? { groupId: newGroupId }
-              : {}),
-          };
-        }
-      } else if (item.type === 'graph' && item.index !== undefined) {
-        if (currentGraphModePositions[item.index]) {
-          currentGraphModePositions[item.index] = {
-            ...currentGraphModePositions[item.index],
-            zIndex: newZIndex,
-            ...(isDraggedItem && !preserveGroupIds.has(item.id)
-              ? { groupId: newGroupId }
-              : {}),
-          };
-        }
-      } else if (item.type === 'knob' && item.index !== undefined) {
-        if (currentKnobModePositions[item.index]) {
-          currentKnobModePositions[item.index] = {
-            ...currentKnobModePositions[item.index],
-            zIndex: newZIndex,
-            ...(isDraggedItem && !preserveGroupIds.has(item.id)
-              ? { groupId: newGroupId }
-              : {}),
-          };
-        }
-      } else if (item.type === 'plugin') {
-        pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
-      }
-    });
-
-    updatedPositions[selectedKeyType] = currentModePositions;
-    updatedStatPositions[selectedKeyType] = currentStatModePositions;
-    updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
-    updatedKnobPositions[selectedKeyType] = currentKnobModePositions;
-
-    const normalized = normalizeLayerGroupsForMode({
-      mode: selectedKeyType,
-      keyPositions: updatedPositions,
-      statPositions: updatedStatPositions,
-      graphPositions: updatedGraphPositions,
-      knobPositions: updatedKnobPositions,
-      layerGroups: currentLayerGroups,
-    });
-
-    useGraphItemStore.getState().setPositions(normalized.graphPositions);
-    useKeyStore.getState().setPositions(normalized.keyPositions);
-    useStatItemStore.getState().setPositions(normalized.statPositions);
-    useKnobItemStore.getState().setPositions(normalized.knobPositions);
-    setPluginElementZIndexes(pluginZIndexUpdates);
-    if (normalized.groupsChanged) {
-      useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-    }
-
-    try {
-      await editorCoordinator.commitPatch({
-        schemaVersion: 1,
-        keyPositions: normalized.keyPositions,
-        statPositions: normalized.statPositions,
-        graphPositions: normalized.graphPositions,
-        knobPositions: normalized.knobPositions,
-        layerGroups: normalized.layerGroups,
-      });
-    } catch (error) {
-      console.error('Failed to reorder layers', error);
-    }
-  };
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 그룹 드롭 처리
-  // ──────────────────────────────────────────────────────────────────────────
-
-  const performGroupDrop = async (
-    groupId: string,
-    targetDisplayIndex: number,
-  ) => {
-    const items = [...layerItemsRef.current];
-    const currentDisplay = displayItemsRef.current;
-
-    const groupChildren = items.filter((item) => item.groupId === groupId);
-    const remainingItems = items.filter((item) => item.groupId !== groupId);
-
-    if (groupChildren.length === 0) return;
-
-    let offset = 0;
-    for (let i = 0; i < targetDisplayIndex && i < currentDisplay.length; i++) {
-      const di = currentDisplay[i];
-      if (di.displayType === 'group-header' && di.groupId === groupId) offset++;
-      else if (di.displayType === 'layer' && di.item.groupId === groupId)
-        offset++;
-    }
-    const filteredTargetIndex = targetDisplayIndex - offset;
-
-    const filteredDisplay = currentDisplay.filter((di) => {
-      if (di.displayType === 'group-header' && di.groupId === groupId)
-        return false;
-      if (di.displayType === 'layer' && di.item.groupId === groupId)
-        return false;
-      return true;
-    });
-
-    let insertionIndex = remainingItems.length;
-
-    if (filteredTargetIndex < filteredDisplay.length) {
-      const targetDI = filteredDisplay[filteredTargetIndex];
-      if (targetDI.displayType === 'layer') {
-        const idx = remainingItems.findIndex((i) => i.id === targetDI.item.id);
-        if (idx !== -1) insertionIndex = idx;
-      } else if (targetDI.displayType === 'group-header') {
-        const firstChild = remainingItems.find(
-          (i) => i.groupId === targetDI.groupId,
-        );
-        if (firstChild) {
-          const idx = remainingItems.indexOf(firstChild);
-          if (idx !== -1) insertionIndex = idx;
-        }
-      }
-    }
-
-    const newItems = [
-      ...remainingItems.slice(0, insertionIndex),
-      ...groupChildren,
-      ...remainingItems.slice(insertionIndex),
-    ];
-
-    const orderChanged = newItems.some(
-      (item, idx) => item.id !== items[idx]?.id,
-    );
-    if (!orderChanged) return;
-
-    // z-index 재계산
-    const maxZIndex = newItems.length - 1;
-
-    const updatedPositions = { ...useKeyStore.getState().canonicalPositions };
-    const currentModePositions = [...(updatedPositions[selectedKeyType] || [])];
-    const updatedStatPositions = {
-      ...useStatItemStore.getState().positions,
-    };
-    const currentStatModePositions = [
-      ...(updatedStatPositions[selectedKeyType] || []),
-    ];
-    const updatedGraphPositions = {
-      ...useGraphItemStore.getState().positions,
-    };
-    const currentGraphModePositions = [
-      ...(updatedGraphPositions[selectedKeyType] || []),
-    ];
-    const updatedKnobPositions = {
-      ...useKnobItemStore.getState().positions,
-    };
-    const currentKnobModePositions = [
-      ...(updatedKnobPositions[selectedKeyType] || []),
-    ];
-
-    const pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }> = [];
-    newItems.forEach((item, idx) => {
-      const newZIndex = maxZIndex - idx;
-      if (item.type === 'key' && item.index !== undefined) {
-        if (currentModePositions[item.index]) {
-          currentModePositions[item.index] = {
-            ...currentModePositions[item.index],
-            zIndex: newZIndex,
-          };
-        }
-      } else if (item.type === 'stat' && item.index !== undefined) {
-        if (currentStatModePositions[item.index]) {
-          currentStatModePositions[item.index] = {
-            ...currentStatModePositions[item.index],
-            zIndex: newZIndex,
-          };
-        }
-      } else if (item.type === 'graph' && item.index !== undefined) {
-        if (currentGraphModePositions[item.index]) {
-          currentGraphModePositions[item.index] = {
-            ...currentGraphModePositions[item.index],
-            zIndex: newZIndex,
-          };
-        }
-      } else if (item.type === 'knob' && item.index !== undefined) {
-        if (currentKnobModePositions[item.index]) {
-          currentKnobModePositions[item.index] = {
-            ...currentKnobModePositions[item.index],
-            zIndex: newZIndex,
-          };
-        }
-      } else if (item.type === 'plugin') {
-        pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
-      }
-    });
-
-    updatedPositions[selectedKeyType] = currentModePositions;
-    useKeyStore.getState().setPositions(updatedPositions);
-    updatedStatPositions[selectedKeyType] = currentStatModePositions;
-    useStatItemStore.getState().setPositions(updatedStatPositions);
-    updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
-    useGraphItemStore.getState().setPositions(updatedGraphPositions);
-    updatedKnobPositions[selectedKeyType] = currentKnobModePositions;
-    useKnobItemStore.getState().setPositions(updatedKnobPositions);
-    setPluginElementZIndexes(pluginZIndexUpdates);
-
-    try {
-      await editorCoordinator.commitPatch({
-        schemaVersion: 1,
-        keyPositions: updatedPositions,
-        statPositions: updatedStatPositions,
-        graphPositions: updatedGraphPositions,
-        knobPositions: updatedKnobPositions,
-      });
-    } catch (error) {
-      console.error('Failed to reorder group', error);
-    }
-  };
-
-  // ──────────────────────────────────────────────────────────────────────────
   // 아이템 드래그 시작
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -684,6 +272,7 @@ export function useLayerDnD({
     };
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
+    applyDragCursor();
 
     const applyMouseMove = (moveEvent: MouseEvent) => {
       if (
@@ -700,7 +289,6 @@ export function useLayerDnD({
         if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
         isDraggingRef.current = true;
         didDragRef.current = true;
-
         const currentSel = useGridSelectionStore.getState().selectedElements;
         const isInSelection = currentSel.some((el) => el.id === item.id);
         if (isInSelection && currentSel.length > 1) {
@@ -745,27 +333,73 @@ export function useLayerDnD({
       const dropTarget = resolveItemDropTargetFromPointer(
         relativeY,
         dragStateRef.current.itemHeight,
-        draggingSet,
       );
 
       let dropDisplayIndex = dropTarget.indicatorDisplayIndex;
-      if (dropDisplayIndex == null && dropTarget.indicatorHeaderBottomGroupId) {
+      if (dropDisplayIndex == null && dropTarget.intoGroupId) {
         const headerIdx = displayItemsRef.current.findIndex(
           (di) =>
             di.displayType === 'group-header' &&
-            di.groupId === dropTarget.indicatorHeaderBottomGroupId,
+            di.groupId === dropTarget.intoGroupId,
         );
         dropDisplayIndex =
           headerIdx !== -1 ? headerIdx + 1 : dropTarget.toIndex;
       } else if (dropDisplayIndex == null) {
         dropDisplayIndex = dropTarget.toIndex;
       }
+      // 드롭 위치를 숫자 index가 아니라 이웃 앵커 id로도 캡처 - mouseup까지
+      // 외부 재정렬이 끼면 index는 다른 슬롯을 가리킨다 (그룹 헤더 아래는
+      // 명시적 그룹 앵커로 별도 보존)
+      const display = displayItemsRef.current;
+      let anchorBeforeId: string | null = null;
+      let anchorAfterId: string | null = null;
+      let anchorBeforeHeaderGroupId: string | null = null;
+      let anchorAfterHeaderGroupId: string | null = null;
+      for (let i = dropDisplayIndex - 1; i >= 0; i--) {
+        const di = display[i];
+        if (di.displayType === 'group-header') {
+          // 그룹 경계 자체를 앵커로 - 그룹 사이 빈 슬롯의 숫자 fallback 방지
+          anchorBeforeHeaderGroupId = di.groupId;
+          break;
+        }
+        if (di.displayType === 'layer' && !draggingSet.has(di.item.id)) {
+          anchorBeforeId = di.item.id;
+          break;
+        }
+      }
+      for (let i = dropDisplayIndex; i < display.length; i++) {
+        const di = display[i];
+        if (di.displayType === 'group-header') {
+          anchorAfterHeaderGroupId = di.groupId;
+          break;
+        }
+        if (di.displayType === 'layer' && !draggingSet.has(di.item.id)) {
+          anchorAfterId = di.item.id;
+          break;
+        }
+      }
       dragStateRef.current.currentDropTarget = {
         toDisplayIndex: dropDisplayIndex,
         targetGroupId: dropTarget.targetGroupId,
+        anchorBeforeId,
+        anchorAfterId,
+        anchorHeaderGroupId: dropTarget.intoGroupId ?? null,
+        anchorBeforeHeaderGroupId,
+        anchorAfterHeaderGroupId,
+        ...(!anchorBeforeId &&
+        !anchorAfterId &&
+        !anchorBeforeHeaderGroupId &&
+        !anchorAfterHeaderGroupId &&
+        !dropTarget.intoGroupId
+          ? {
+              boundary:
+                dropDisplayIndex <= 0 ? ('top' as const) : ('bottom' as const),
+            }
+          : {}),
       };
       setDragOverItemDisplayIndex(dropTarget.indicatorDisplayIndex);
-      setDragOverHeaderBottomGroupId(dropTarget.indicatorHeaderBottomGroupId);
+      setDragOverIntoGroupId(dropTarget.intoGroupId);
+      setDragOverTargetGroupId(dropTarget.targetGroupId ?? null);
     };
     const moveScheduler = createRafLatestScheduler(applyMouseMove);
     const handleMouseMove = (moveEvent: MouseEvent) =>
@@ -779,23 +413,59 @@ export function useLayerDnD({
 
         if (target) {
           const draggedIds = draggedItemIdsRef.current;
-          performMultiDrop(draggedIds, target.toDisplayIndex, {
-            targetGroupId: target.targetGroupId,
-          });
+          // authoritative 재구성 목록에서 앵커를 재해석 - effect 지연 ref는
+          // 외부 재정렬을 한 렌더 늦게 본다. 소실·역전·비인접이면 무커밋
+          const liveModel = buildLiveLayerModel();
+          const hasInvalidNative = liveModel.layerItems.some(
+            (item) => item.type !== 'plugin' && !isNativeElementId(item.id),
+          );
+          if (!hasInvalidNative) {
+            void commitLayerDropFromCurrentWindow({
+              kind: 'items',
+              mode: selectedKeyType,
+              draggedIds: [...draggedIds],
+              anchors: target,
+              preserveFullGroups: false,
+              collapsedGroupIds: [
+                ...useLayerGroupStore.getState().collapsedGroups,
+              ],
+            }).catch(reportElementOpError);
+          } else {
+            reportElementOpSkipped('layer drop (invalid native id)');
+          }
         }
       }
 
+      clearDragCursor();
       dragStateRef.current = null;
       dragStartRef.current = null;
       isDraggingRef.current = false;
       draggedItemIdsRef.current = [];
       setDraggedItemId(null);
       setDragOverItemDisplayIndex(null);
-      setDragOverHeaderBottomGroupId(null);
+      setDragOverIntoGroupId(null);
+      setDragOverTargetGroupId(null);
       setIsDragging(false);
 
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+
+      // 드래그 표식은 trailing click 한 번만 흡수한다. mousedown 행과 mouseup
+      // 행이 다르면 행 onClick이 발화하지 않아 소비자가 리셋할 기회가 없고,
+      // 그 뒤 아무 행이나 클릭하면 그 클릭이 대신 삼켜진다.
+      // trailing click은 mouseup과 같은 시퀀스라 한 태스크 뒤에 리셋한다
+      // (useDraggable의 보류 청소와 동일 계약)
+      if (didDragRef.current) {
+        if (didDragResetTimerRef.current !== null) {
+          window.clearTimeout(didDragResetTimerRef.current);
+        }
+        didDragResetTimerRef.current = window.setTimeout(() => {
+          didDragResetTimerRef.current = null;
+          // 새 드래그가 시작됐으면 그 세션의 종료가 다시 스케줄한다
+          if (isDraggingRef.current) return;
+          didDragRef.current = false;
+        }, 0);
+      }
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -817,9 +487,12 @@ export function useLayerDnD({
       groupId,
       itemHeight: rect.height,
       currentOverIndex: null,
+      anchors: null,
+      excludedIds: [],
     };
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
+    applyDragCursor();
 
     const applyMouseMove = (moveEvent: MouseEvent) => {
       if (
@@ -864,6 +537,74 @@ export function useLayerDnD({
       );
 
       groupDragStateRef.current.currentOverIndex = newIndex;
+      // 그룹 드래그도 이웃 앵커를 캡처 - 숫자 index는 mouseup까지의 외부
+      // 재정렬을 모른다. 그룹이 선택된 상태면 함께 이동할 추가 선택도
+      // 앵커 후보에서 제외 (이동 요소는 고정 기준점이 될 수 없다)
+      const groupDraggingSet = new Set(
+        layerItemsRef.current
+          .filter((item) => item.groupId === groupDragStateRef.current!.groupId)
+          .map((item) => item.id),
+      );
+      const captureSelection = useGridSelectionStore.getState();
+      if (
+        captureSelection.selectedGroupIds.includes(
+          groupDragStateRef.current.groupId,
+        )
+      ) {
+        for (const el of captureSelection.selectedElements) {
+          groupDraggingSet.add(el.id);
+        }
+      }
+      const groupDisplay = displayItemsRef.current;
+      let groupAnchorBeforeId: string | null = null;
+      let groupAnchorAfterId: string | null = null;
+      let groupAnchorBeforeHeaderId: string | null = null;
+      let groupAnchorAfterHeaderId: string | null = null;
+      const draggedHeaderGroupId = groupDragStateRef.current.groupId;
+      for (let i = newIndex - 1; i >= 0; i--) {
+        const di = groupDisplay[i];
+        if (di.displayType === 'group-header') {
+          if (di.groupId !== draggedHeaderGroupId) {
+            groupAnchorBeforeHeaderId = di.groupId;
+          }
+          break;
+        }
+        if (di.displayType === 'layer' && !groupDraggingSet.has(di.item.id)) {
+          groupAnchorBeforeId = di.item.id;
+          break;
+        }
+      }
+      for (let i = newIndex; i < groupDisplay.length; i++) {
+        const di = groupDisplay[i];
+        if (di.displayType === 'group-header') {
+          if (di.groupId !== draggedHeaderGroupId) {
+            groupAnchorAfterHeaderId = di.groupId;
+          }
+          break;
+        }
+        if (di.displayType === 'layer' && !groupDraggingSet.has(di.item.id)) {
+          groupAnchorAfterId = di.item.id;
+          break;
+        }
+      }
+      groupDragStateRef.current.anchors = {
+        toDisplayIndex: newIndex,
+        targetGroupId: undefined,
+        anchorBeforeId: groupAnchorBeforeId,
+        anchorAfterId: groupAnchorAfterId,
+        anchorHeaderGroupId: null,
+        anchorBeforeHeaderGroupId: groupAnchorBeforeHeaderId,
+        anchorAfterHeaderGroupId: groupAnchorAfterHeaderId,
+        ...(!groupAnchorBeforeId &&
+        !groupAnchorAfterId &&
+        !groupAnchorBeforeHeaderId &&
+        !groupAnchorAfterHeaderId
+          ? {
+              boundary: newIndex <= 0 ? ('top' as const) : ('bottom' as const),
+            }
+          : {}),
+      };
+      groupDragStateRef.current.excludedIds = [...groupDraggingSet];
       setDragOverDisplayIndex(newIndex);
     };
     const moveScheduler = createRafLatestScheduler(applyMouseMove);
@@ -874,49 +615,61 @@ export function useLayerDnD({
       moveScheduler.flush();
       moveScheduler.cancel();
       if (groupDragStateRef.current && isDraggingRef.current) {
-        const targetIdx = groupDragStateRef.current.currentOverIndex;
-        if (targetIdx !== null) {
+        const anchors = groupDragStateRef.current.anchors;
+        // 커밋 판정 순서: live 모델 → 그룹 생존 검증 → 이동 집합 확정 →
+        // 그 집합으로 앵커 해석. 앵커를 그룹 구성원만으로 먼저 풀면 함께
+        // 이동하는 추가 선택이 고정 기준점으로 해석된다
+        const liveModel = buildLiveLayerModel();
+        const liveGroupMemberIds = new Set(
+          liveModel.layerItems
+            .filter((item) => item.groupId === groupId)
+            .map((item) => item.id),
+        );
+        // 드래그 손잡이였던 그룹이 소실됐으면 무커밋 - 잔존 추가 선택만
+        // 단독 이동시키지 않는다
+        if (liveGroupMemberIds.size > 0) {
           const currentSel = useGridSelectionStore.getState().selectedElements;
           const currentGroupIds =
             useGridSelectionStore.getState().selectedGroupIds;
           const isGroupSelected = currentGroupIds.includes(groupId);
-
-          if (isGroupSelected && currentSel.length > 0) {
-            const groupChildIds = new Set(
-              layerItemsRef.current
-                .filter((item) => item.groupId === groupId)
-                .map((c) => c.id),
-            );
-            const hasExtraSelection = currentSel.some(
-              (el) => !groupChildIds.has(el.id),
-            );
-
-            if (hasExtraSelection) {
-              const allIds = [
-                ...layerItemsRef.current
-                  .filter((item) => item.groupId === groupId)
-                  .map((c) => c.id),
-                ...currentSel
-                  .filter((el) => !groupChildIds.has(el.id))
-                  .map((el) => el.id),
-              ];
-              const dropTarget = resolveItemDropTarget(
-                targetIdx,
-                new Set(allIds),
-              );
-              performMultiDrop(allIds, targetIdx, {
-                targetGroupId: dropTarget.targetGroupId,
-                preserveFullGroups: true,
-              });
-            } else {
-              performGroupDrop(groupId, targetIdx);
-            }
-          } else {
-            performGroupDrop(groupId, targetIdx);
+          const extraIds =
+            isGroupSelected && currentSel.length > 0
+              ? currentSel
+                  .filter((el) => !liveGroupMemberIds.has(el.id))
+                  .map((el) => el.id)
+              : [];
+          const movingIds = [...liveGroupMemberIds, ...extraIds];
+          const movingSet = new Set(movingIds);
+          // 캡처 때 이동 예정이라 앵커에서 제외했지만 mouseup에 이동 집합에서
+          // 빠진(선택 축소) 생존 요소가 있으면 무커밋 - 앵커가 그 요소의
+          // 잔류를 모르는 채 해석돼 단일 앵커 경로에서 오배치가 된다
+          const liveIdSet = new Set(
+            liveModel.layerItems.map((item) => item.id),
+          );
+          const excludedShrank = groupDragStateRef.current.excludedIds.some(
+            (id) => liveIdSet.has(id) && !movingSet.has(id),
+          );
+          const hasInvalidNative = liveModel.layerItems.some(
+            (item) => item.type !== 'plugin' && !isNativeElementId(item.id),
+          );
+          if (!excludedShrank && anchors && !hasInvalidNative) {
+            void commitLayerDropFromCurrentWindow({
+              kind: 'group',
+              mode: selectedKeyType,
+              groupId,
+              extraIds,
+              anchors,
+              collapsedGroupIds: [
+                ...useLayerGroupStore.getState().collapsedGroups,
+              ],
+            }).catch(reportElementOpError);
+          } else if (hasInvalidNative) {
+            reportElementOpSkipped('group drop (invalid native id)');
           }
         }
       }
 
+      clearDragCursor();
       groupDragStateRef.current = null;
       dragStartRef.current = null;
       isDraggingRef.current = false;
@@ -938,7 +691,8 @@ export function useLayerDnD({
     isDragging,
     draggedGroupId,
     dragOverItemDisplayIndex,
-    dragOverHeaderBottomGroupId,
+    dragOverIntoGroupId,
+    dragOverTargetGroupId,
     dragOverDisplayIndex,
 
     // Ref 접근자 (외부 핸들러에서 참조)

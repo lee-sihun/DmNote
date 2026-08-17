@@ -175,7 +175,8 @@ vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
   releaseHistoryEditorFlushLock: vi.fn(),
   resetHistoryEditorFlushLock: vi.fn(),
 }));
-vi.mock('@src/renderer/defaults', () => ({
+vi.mock('@src/renderer/defaults', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@src/renderer/defaults')>()),
   initDefaults: vi.fn(),
   getDefaultNoteSettings: vi.fn(() => ({
     frameLimit: 0,

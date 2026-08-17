@@ -9,8 +9,10 @@ import {
   type SavedPluginInstanceWire,
 } from '@api/modules/pluginInstancesApi';
 import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
+import { pruneStalePluginSelection } from '@stores/grid/useGridSelectionStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
-export interface PluginInstancesRebindHandlers {
+interface PluginInstancesRebindHandlers {
   // 이벤트 도착 즉시 - 낡은 메모리를 커밋할 pending 저장 차단
   cancelPendingSave: () => void;
   reapply: (instances: SavedPluginInstanceWire[]) => void;
@@ -71,7 +73,7 @@ export const applyCommittedPluginInstancesProjection = (
 // plugin별 적용 revision 단조 - 연속 undo/redo에서 늦은 pull의 역행 방지
 const appliedRevisions = new Map<string, number>();
 
-/** canonical pull 후 등록된 정의별 재주입 - undo 재결합과 실패 복구가 공유 */
+/** canonical pull 후 등록된 정의별 diff 적용 - undo 재결합과 실패 복구가 공유 */
 export const applyCanonicalPluginInstances = async (
   pluginId: string,
   force = false,
@@ -87,6 +89,16 @@ export const applyCanonicalPluginInstances = async (
   for (const handlers of byDef.values()) {
     handlers.reapply(snapshot.instances);
   }
+  // diff-patch 재주입은 생존 fullId를 보존한다 - prune은 스냅샷 밖으로
+  // 소멸한 fullId를 쥔 선택만 정밀 정리하고 생존 선택은 그대로 유지된다
+  pruneStalePluginSelection(
+    new Set(
+      usePluginDisplayElementStore
+        .getState()
+        .elements.map((element) => element.fullId),
+    ),
+    pluginId,
+  );
 };
 
 /** main 창 bootstrap에서 1회 호출 */

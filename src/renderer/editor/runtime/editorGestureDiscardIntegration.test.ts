@@ -48,10 +48,12 @@ import { editGestureController } from './editGestureController';
 import { editorCoordinator } from './editorStateCoordinator';
 import { previewOverlay } from './previewOverlay';
 
+const KEY_ID = '00000000-0000-4000-8000-000000000601';
+
 const makeDocument = (): EditorDocumentV1 => ({
   schemaVersion: 1,
   keys: { '4key': ['A'] },
-  keyPositions: { '4key': [createDefaultKeyPosition()] },
+  keyPositions: { '4key': [{ ...createDefaultKeyPosition(), id: KEY_ID }] },
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
@@ -87,7 +89,7 @@ describe('discarded editor gesture integration', () => {
     const commits: Array<Promise<EditorDocumentV1>> = [];
     const queueGesture = (index: number) => {
       const width = 61 + index;
-      editGestureController.preview('4key', [{ index: 0, patch: { width } }]);
+      editGestureController.preview('4key', [{ id: KEY_ID, patch: { width } }]);
       const sessionId = editGestureController.activeGestureId();
       expect(sessionId).not.toBeNull();
       sessionIds.push(sessionId!);

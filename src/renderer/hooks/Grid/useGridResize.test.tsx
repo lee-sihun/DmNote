@@ -1,16 +1,10 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  type Mock,
-  vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import type { ElementBounds } from '@utils/grid/smartGuides';
 import { useGridResize } from './useGridResize';
 
 const mocks = vi.hoisted(() => ({
@@ -21,8 +15,24 @@ const mocks = vi.hoisted(() => ({
   clearGuides: vi.fn(),
   commitPatch: vi.fn(() => Promise.resolve()),
   beginMixedGesture: vi.fn(),
+  commitMixedGesture: vi.fn(() => Promise.resolve()),
   cancelMixedGesture: vi.fn(),
+  sendBridge: vi.fn(),
+  commitGroupBounds: vi.fn(() => Promise.resolve(true)),
+  commitSingleBounds: vi.fn(() => Promise.resolve(true)),
   elements: [] as Array<{ fullId: string; pluginId: string }>,
+  keyPositions: [{ dx: 0, dy: 0, width: 40, height: 40 }] as Array<{
+    id?: string;
+    dx: number;
+    dy: number;
+    width: number;
+    height: number;
+  }>,
+  gridSettings: {
+    alignmentGuides: false,
+    spacingGuides: false,
+    sizeMatchGuides: false,
+  },
 }));
 
 vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
@@ -32,8 +42,18 @@ vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
 
 vi.mock('@plugins/runtime/displayElement/gestureTransaction', () => ({
   beginMixedGestureTransaction: mocks.beginMixedGesture,
+  commitMixedGestureTransaction: mocks.commitMixedGesture,
   cancelMixedGestureTransaction: mocks.cancelMixedGesture,
   cancelUncommittedMixedGestureTransaction: mocks.cancelMixedGesture,
+}));
+
+vi.mock('@utils/plugin/bridgeMessages', () => ({
+  sendBridgeMessageBestEffort: mocks.sendBridge,
+}));
+
+vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  commitElementBoundsById: mocks.commitGroupBounds,
+  commitSingleElementBoundsById: mocks.commitSingleBounds,
 }));
 
 vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
@@ -58,6 +78,11 @@ vi.mock('@stores/grid/useSmartGuidesStore', () => ({
 }));
 
 vi.mock('@stores/grid/useGridSelectionStore', () => ({
+  selectionElementId: (
+    type: string,
+    position: { id?: string } | undefined,
+    index: number,
+  ) => position?.id || `${type}-${index}`,
   useGridSelectionStore: {
     getState: () => ({
       setDraggingOrResizing: mocks.setDraggingOrResizing,
@@ -68,11 +93,7 @@ vi.mock('@stores/grid/useGridSelectionStore', () => ({
 vi.mock('@stores/useSettingsStore', () => ({
   useSettingsStore: {
     getState: () => ({
-      gridSettings: {
-        alignmentGuides: false,
-        spacingGuides: false,
-        sizeMatchGuides: false,
-      },
+      gridSettings: mocks.gridSettings,
     }),
   },
 }));
@@ -81,10 +102,10 @@ vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: {
     getState: () => ({
       positions: {
-        '4key': [{ dx: 0, dy: 0, width: 40, height: 40 }],
+        '4key': mocks.keyPositions,
       },
       canonicalPositions: {
-        '4key': [{ dx: 0, dy: 0, width: 40, height: 40 }],
+        '4key': mocks.keyPositions,
       },
       setPositions: vi.fn(),
     }),
@@ -107,22 +128,29 @@ vi.mock('@stores/data/useKnobItemStore', () => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch: mocks.commitPatch },
+  editorCoordinator: {
+    commitPatch: mocks.commitPatch,
+    getState: () => ({ lastAck: null }),
+  },
 }));
 
 type ResizeApi = ReturnType<typeof useGridResize>;
 
 interface HarnessProps {
   selectedElements: SelectedElement[];
-  onResizeEnd: (gestureId?: string) => void;
   expose: (api: ResizeApi) => void;
+  getOtherElements?: (excludeId: string) => ElementBounds[];
 }
 
-const Harness = ({ selectedElements, onResizeEnd, expose }: HarnessProps) => {
+const Harness = ({
+  selectedElements,
+  expose,
+  getOtherElements,
+}: HarnessProps) => {
   const api = useGridResize({
     selectedElements,
     selectedKeyType: '4key',
-    onResizeEnd,
+    getOtherElements,
   });
   expose(api);
   return null;
@@ -139,21 +167,32 @@ const keySelection = (): SelectedElement => ({
   index: 0,
 });
 
+const STABLE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const STABLE_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+const stableKeySelection = (id: string, index = 0): SelectedElement => ({
+  id,
+  type: 'key',
+  index,
+});
+
 describe('useGridResize plugin gesture lifecycle', () => {
   let host: HTMLDivElement;
   let root: Root;
   let api: ResizeApi;
   let tokenSequence: number;
   let events: string[];
-  let onResizeEnd: Mock<(gestureId?: string) => void>;
   let pluginGestureIds: string[];
 
-  const renderHarness = async (selectedElements: SelectedElement[]) => {
+  const renderHarness = async (
+    selectedElements: SelectedElement[],
+    getOtherElements?: (excludeId: string) => ElementBounds[],
+  ) => {
     await act(async () => {
       root.render(
         <Harness
           selectedElements={selectedElements}
-          onResizeEnd={onResizeEnd}
+          getOtherElements={getOtherElements}
           expose={(nextApi) => {
             api = nextApi;
           }}
@@ -176,9 +215,19 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.setDraggingOrResizing.mockReset();
     mocks.clearGuides.mockReset();
     mocks.commitPatch.mockClear();
+    mocks.commitGroupBounds.mockClear();
+    mocks.commitSingleBounds.mockClear();
+    mocks.commitMixedGesture.mockClear();
+    mocks.sendBridge.mockClear();
     mocks.beginMixedGesture.mockClear();
     mocks.cancelMixedGesture.mockClear();
     mocks.elements = [];
+    mocks.keyPositions = [{ dx: 0, dy: 0, width: 40, height: 40 }];
+    mocks.gridSettings = {
+      alignmentGuides: false,
+      spacingGuides: false,
+      sizeMatchGuides: false,
+    };
     mocks.begin.mockImplementation((pluginId: string, gestureId: string) => {
       const token = `token-${++tokenSequence}`;
       pluginGestureIds.push(gestureId);
@@ -190,9 +239,6 @@ describe('useGridResize plugin gesture lifecycle', () => {
     });
     mocks.end.mockImplementation((pluginId: string, token: string) => {
       events.push(`end:${pluginId}:${token}`);
-    });
-    onResizeEnd = vi.fn(() => {
-      events.push('editor-end');
     });
   });
 
@@ -220,11 +266,9 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(events).toEqual([
       'begin:plugin-a:token-1',
       'update:plugin-a:one',
-      'editor-end',
       'end:plugin-a:token-1',
       'begin:plugin-a:token-2',
       'update:plugin-a:one',
-      'editor-end',
       'end:plugin-a:token-2',
     ]);
   });
@@ -258,16 +302,65 @@ describe('useGridResize plugin gesture lifecycle', () => {
       'begin:plugin-b:token-2',
       'update:plugin-a:one',
       'update:plugin-b:one',
-      'editor-end',
       'end:plugin-a:token-1',
       'end:plugin-b:token-2',
     ]);
     expect(new Set(pluginGestureIds).size).toBe(1);
-    expect(onResizeEnd).toHaveBeenCalledWith(pluginGestureIds[0]);
+    // plugin-only는 editor 무커밋 계약 - 오버레이 동기화만 수행
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
     expect(mocks.beginMixedGesture).not.toHaveBeenCalled();
+    expect(mocks.sendBridge).toHaveBeenCalledWith(
+      'overlay',
+      'plugin:displayElements:sync',
+      { elements: mocks.elements },
+    );
   });
 
   it('혼합 그룹 resize는 중복 commit 없이 공유 gesture를 종료 callback에 전달한다', async () => {
+    mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
+    const selected = [
+      stableKeySelection(STABLE_A),
+      pluginSelection('plugin-a:one'),
+    ];
+    await renderHarness(selected);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleGroupResize({
+        groupBounds: { x: 10, y: 20, width: 200, height: 80 },
+        elementBounds: selected.map((element, index) => ({
+          element,
+          bounds: { x: 10 + index * 100, y: 20, width: 80, height: 80 },
+        })),
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+      api.handleGroupResizeComplete();
+    });
+
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    // 정산은 훅 내부에서 시작 시점 plugin ID 집합으로 완결된다
+    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(pluginGestureIds[0], [
+      'plugin-a',
+    ]);
+    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
+      pluginGestureIds[0],
+      {
+        opsVersion: EDITOR_OPS_VERSION,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id: STABLE_A,
+            bounds: { dx: 10, dy: 20, width: 80, height: 80 },
+          },
+        ],
+      },
+      ['plugin-a'],
+      expect.anything(),
+    );
+  });
+
+  it('혼합 그룹의 native ID가 비정규면 plugin까지 함께 fail-close한다', async () => {
     mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
     const selected = [keySelection(), pluginSelection('plugin-a:one')];
     await renderHarness(selected);
@@ -285,13 +378,238 @@ describe('useGridResize plugin gesture lifecycle', () => {
       api.handleGroupResizeComplete();
     });
 
-    expect(mocks.commitPatch).not.toHaveBeenCalled();
-    expect(onResizeEnd).toHaveBeenCalledTimes(1);
-    expect(onResizeEnd).toHaveBeenCalledWith(pluginGestureIds[0]);
-    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(pluginGestureIds[0], [
-      'plugin-a',
+    expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+    expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+    expect(mocks.commitMixedGesture).not.toHaveBeenCalled();
+    expect(mocks.updateElement).not.toHaveBeenCalled();
+    expect(mocks.sendBridge).not.toHaveBeenCalled();
+  });
+
+  it('혼합 그룹 resize 중 선택이 바뀌어도 시작 구성으로 정산한다', async () => {
+    mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
+    const selected = [
+      stableKeySelection(STABLE_A),
+      pluginSelection('plugin-a:one'),
+    ];
+    await renderHarness(selected);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleGroupResize({
+        groupBounds: { x: 10, y: 20, width: 200, height: 80 },
+        elementBounds: selected.map((element, index) => ({
+          element,
+          bounds: { x: 10 + index * 100, y: 20, width: 80, height: 80 },
+        })),
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+    });
+    // 대기 중 다른 혼합 선택으로 교체
+    mocks.elements = [{ fullId: 'plugin-b:one', pluginId: 'plugin-b' }];
+    await renderHarness([
+      stableKeySelection(STABLE_B),
+      pluginSelection('plugin-b:one'),
     ]);
-    expect(mocks.cancelMixedGesture).toHaveBeenCalledWith(pluginGestureIds[0]);
+    await act(async () => {
+      api.handleGroupResizeComplete();
+    });
+
+    // 정산은 시작 gesture와 시작 plugin ID 집합만 사용
+    expect(mocks.commitMixedGesture).toHaveBeenCalledTimes(1);
+    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
+      pluginGestureIds[0],
+      {
+        opsVersion: EDITOR_OPS_VERSION,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id: STABLE_A,
+            bounds: { dx: 10, dy: 20, width: 80, height: 80 },
+          },
+        ],
+      },
+      ['plugin-a'],
+      expect.anything(),
+    );
+    expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+    expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('그룹 resize 완료는 시작 시점 entries의 안정 id별로 bounds를 커밋한다', async () => {
+    const selected = [
+      stableKeySelection(STABLE_A, 0),
+      stableKeySelection(STABLE_B, 1),
+    ];
+    await renderHarness(selected);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleGroupResize({
+        groupBounds: { x: 10, y: 20, width: 210, height: 80 },
+        elementBounds: [
+          {
+            element: selected[0],
+            bounds: { x: 10, y: 20, width: 100, height: 80 },
+          },
+          {
+            element: selected[1],
+            bounds: { x: 120, y: 20, width: 90, height: 70 },
+          },
+        ],
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+    });
+    // 대기 중 선택 교체 (외부 재정렬·분리 패널 동기화)
+    await renderHarness([stableKeySelection(STABLE_B)]);
+    await act(async () => {
+      api.handleGroupResizeComplete();
+    });
+
+    expect(mocks.commitGroupBounds).toHaveBeenCalledTimes(1);
+    const [intents] = mocks.commitGroupBounds.mock.calls[0] as unknown as [
+      Map<string, Map<string, Record<string, number>>>,
+    ];
+    const byId = intents.get('key')!;
+    expect([...byId.keys()].sort()).toEqual([STABLE_A, STABLE_B]);
+    expect(byId.get(STABLE_A)).toMatchObject({
+      dx: 10,
+      dy: 20,
+      width: 100,
+      height: 80,
+    });
+    expect(byId.get(STABLE_B)).toMatchObject({
+      dx: 120,
+      dy: 20,
+      width: 90,
+      height: 70,
+    });
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(mocks.commitMixedGesture).not.toHaveBeenCalled();
+  });
+
+  it('리사이즈 중 선택이 바뀌어도 시작 시점 동결 대상에 bounds를 커밋한다', async () => {
+    await renderHarness([stableKeySelection(STABLE_A)]);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResize({ x: 10, y: 20, width: 120, height: 80 });
+    });
+    // 대기 중 같은 개수의 다른 선택으로 교체 (분리 패널 동기화 등)
+    await renderHarness([stableKeySelection(STABLE_B)]);
+    await act(async () => {
+      api.handleResizeComplete();
+    });
+
+    expect(mocks.commitSingleBounds).toHaveBeenCalledWith(
+      'key',
+      STABLE_A,
+      { dx: 10, dy: 20, width: 120, height: 80 },
+      expect.any(String),
+    );
+    expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+  });
+
+  it('리사이즈 중 재정렬돼도 프리뷰 가이드는 시작 요소를 제외한다', async () => {
+    const getOtherElements = vi.fn(() => [] as ElementBounds[]);
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: true,
+      sizeMatchGuides: true,
+    };
+    mocks.keyPositions = [
+      { id: STABLE_A, dx: 0, dy: 0, width: 120, height: 60 },
+      { id: STABLE_B, dx: 200, dy: 0, width: 120, height: 60 },
+    ];
+    await renderHarness([stableKeySelection(STABLE_A)], getOtherElements);
+    const activeResizeApi = api;
+
+    await act(async () => {
+      activeResizeApi.handleResizeStart();
+    });
+    mocks.keyPositions = [mocks.keyPositions[1], mocks.keyPositions[0]];
+    await renderHarness([stableKeySelection(STABLE_A, 1)], getOtherElements);
+    await act(async () => {
+      activeResizeApi.handleResize({
+        x: 0,
+        y: 0,
+        width: 118,
+        height: 60,
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+    });
+
+    expect(getOtherElements).toHaveBeenLastCalledWith(STABLE_A);
+  });
+
+  it('합성 native 단일 resize는 로컬과 wire를 모두 무커밋한다', async () => {
+    await renderHarness([keySelection()]);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResize({ x: 10, y: 20, width: 120, height: 80 });
+      api.handleResizeComplete();
+    });
+
+    expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+    expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(mocks.commitMixedGesture).not.toHaveBeenCalled();
+  });
+
+  it('합성 native 단일 resize의 무커밋 보고는 정확히 1회다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await renderHarness([keySelection()]);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResize({ x: 10, y: 20, width: 120, height: 80 });
+      api.handleResizeComplete();
+    });
+
+    const skips = warn.mock.calls.filter(
+      (call) => call[1] === 'resize settlement (invalid native id)',
+    );
+    expect(skips).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('프리뷰 없이 끝난 단일 resize도 무커밋을 보고한다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await renderHarness([stableKeySelection(STABLE_A)]);
+
+    // handleResize 없이 종료 - finalBounds가 한 번도 계산되지 않은 경로
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResizeComplete();
+    });
+
+    expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+    const skips = warn.mock.calls.filter(
+      (call) => call[1] === 'resize settlement (no preview bounds)',
+    );
+    expect(skips).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it('그룹 resize가 프리뷰 없이 끝나면 단일 경로 보고를 내지 않는다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await renderHarness([
+      stableKeySelection(STABLE_A),
+      stableKeySelection(STABLE_B, 1),
+    ]);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleResizeComplete();
+    });
+
+    const skips = warn.mock.calls.filter(
+      (call) => typeof call[1] === 'string' && call[1].startsWith('resize '),
+    );
+    expect(skips).toHaveLength(0);
+    warn.mockRestore();
   });
 
   it('active resize 중 unmount하면 보관한 token을 종료한다', async () => {

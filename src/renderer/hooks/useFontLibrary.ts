@@ -7,6 +7,8 @@ import {
   generateFontId,
   normalizeFontFamilyName,
 } from '@src/types/settings/fonts';
+import { settingsApi } from '@api/modules/settingsApi';
+import { fontApi } from '@api/modules/resourceApi';
 
 // 폰트 라이브러리 CRUD — 낙관적 스토어 갱신 + 설정 영속화
 // CSS 반영은 settings:changed 라운드트립(useAppBootstrap의 syncFontCSS)이 담당
@@ -28,7 +30,7 @@ export const useFontLibrary = () => {
         const pending = pendingFontsRef.current;
         pendingFontsRef.current = null;
         try {
-          await window.api.settings.update({
+          await settingsApi.update({
             fontSettings: { customFonts: pending },
           });
         } catch (error) {
@@ -92,7 +94,7 @@ export const useFontLibrary = () => {
     if (isAddingRef.current) return;
     isAddingRef.current = true;
     try {
-      const result = await window.api.font.load();
+      const result = await fontApi.load();
 
       if (result.success && result.fontName && result.fontPath) {
         if (isDuplicateFontFamily(result.fontName)) {

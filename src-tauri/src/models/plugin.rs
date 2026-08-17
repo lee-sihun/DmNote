@@ -28,6 +28,9 @@ pub enum PluginSettingValue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SavedPluginInstance {
+    // 영구 인스턴스 ID (재시작·undo 생존), backfill 전 구데이터는 None
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<String>,
     pub position: PluginPoint,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings: Option<BTreeMap<String, PluginSettingValue>>,
@@ -39,6 +42,9 @@ pub struct SavedPluginInstance {
     pub hidden: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub z_index: Option<f64>,
+    // 레이어 그룹 소속
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -74,6 +80,15 @@ pub struct PluginInstancesSnapshot {
     pub instances: Vec<SavedPluginInstance>,
     pub model_revision: u64,
     pub authority_generation: u64,
+}
+
+// 전 플러그인 저장 인스턴스의 그룹 참조 - pluginId → normalize 모드 → 그룹 id (정렬).
+// 미로드 플러그인 포함이 목적이라 pluginId 구분을 유지한다
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginGroupRefsSnapshot {
+    pub refs: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+    pub model_revision: u64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

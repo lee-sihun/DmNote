@@ -38,9 +38,8 @@ describe('editor API compatibility adapters', () => {
 
   it('routes key writers through editor_commit and preserves return shapes', async () => {
     const mappings = { '4key': ['A'] };
-    const positions = {
-      '4key': [createDefaultKeyPosition()],
-    } as KeyPositions;
+    // 입력 echo와 canonical fixture가 값 비교되므로 id까지 같은 사본을 쓴다
+    const positions = structuredClone(document.keyPositions) as KeyPositions;
 
     await expect(keysApi.update(mappings)).resolves.toEqual(document.keys);
     await expect(keysApi.updatePositions(positions)).resolves.toEqual(

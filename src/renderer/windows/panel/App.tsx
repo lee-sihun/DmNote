@@ -94,16 +94,7 @@ const App = ({ initialViewState }: AppProps) => {
       clearTimeout(fallback);
     };
   }, [initialViewState]);
-  const {
-    handlePositionChange,
-    handleKeyStyleUpdate,
-    handleKeyBatchStyleUpdate,
-    handleKeyPreview,
-    handleKeyBatchPreview,
-    handleKeyMappingChange,
-    handleUndo,
-    handleRedo,
-  } = useKeyManager();
+  const { handleKeyMappingChange, handleUndo, handleRedo } = useKeyManager();
 
   useHistoryShortcuts({
     onUndo: handleUndo,
@@ -175,14 +166,6 @@ const App = ({ initialViewState }: AppProps) => {
             effect가 발화해 핸드오프의 property 모드를 덮음 - 동기화 후 마운트 */}
         {showPanel && (
           <PropertiesPanel
-            onPositionChange={handlePositionChange}
-            onKeyUpdate={(data) => {
-              const { index, ...updates } = data;
-              handleKeyStyleUpdate(index, updates);
-            }}
-            onKeyBatchUpdate={handleKeyBatchStyleUpdate}
-            onKeyPreview={handleKeyPreview}
-            onKeyBatchPreview={handleKeyBatchPreview}
             onKeyMappingChange={handleKeyMappingChange}
             detachAction="reattach"
             onDetachAction={() => void reattachPropertiesPanel()}

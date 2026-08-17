@@ -1,17 +1,12 @@
 /* eslint-disable react-hooks/refs */
 import React from 'react';
-import type {
-  KeyPosition,
-  NoteColor,
-  KeyCounterSettings,
-} from '@src/types/key/keys';
+import type { KeyPosition, NoteColor } from '@src/types/key/keys';
 import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import type { ElementShadowSpec } from '@src/types/key/shadows';
-import type { ColorModeValue } from '@src/types/color';
+import { paintPropertyFields } from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
@@ -20,6 +15,7 @@ import {
 } from '@src/types/key/keys';
 import {
   PropertyRow,
+  PropertySection,
   NumberInput,
   ColorInput,
   Tabs,
@@ -29,12 +25,308 @@ import {
   TABS,
   TabType,
 } from '../index';
+import BatchGeometrySection from './BatchGeometrySection';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
+import type { ElementIdSelection } from '@hooks/pickers/useBatchElementBinding';
+import {
+  patchActiveImageByTargets,
+  patchActiveTransparentByTargets,
+  patchCounterAnimationEnabledByTargets,
+  patchCounterEnabledByTargets,
+  patchCounterLayoutByTargets,
+  patchCounterTypographyByTargets,
+  patchPaintByTargets,
+  patchShadowByTargets,
+  patchNotePaintByIds,
+  patchCounterFillByTargets,
+  patchFontColorByTargets,
+  patchStylePropertyByTargets,
+  patchInactiveImageByTargets,
+  patchIdleTransparentByTargets,
+  patchSoundEnabledByIds,
+  patchSoundVolumeByIds,
+  patchSoundPathByIds,
+} from '@src/renderer/editor/runtime/elementOps';
+import {
+  patchActiveImageViaAuthority,
+  patchActiveTransparentViaAuthority,
+  patchCounterAnimationEnabledViaAuthority,
+  patchCounterEnabledViaAuthority,
+  patchCounterLayoutViaAuthority,
+  patchCounterTypographyViaAuthority,
+  patchPaintViaAuthority,
+  patchShadowViaAuthority,
+  patchNotePaintViaAuthority,
+  patchCounterFillViaAuthority,
+  patchFontColorViaAuthority,
+  patchStylePropertyViaAuthority,
+  patchInactiveImageViaAuthority,
+  patchIdleTransparentViaAuthority,
+  patchSoundEnabledViaAuthority,
+  patchSoundVolumeViaAuthority,
+  patchSoundPathViaAuthority,
+} from '@plugins/rpc/pluginElementActions';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import {
+  captureBatchElementBinding,
+  useBatchElementBinding,
+} from '@hooks/pickers/useBatchElementBinding';
+import { usePanelNav } from '../PanelNavContext';
+import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
+import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
+import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import type {
+  EditorPaintPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+  EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
+  EditorElementPropertyPatchV1,
+} from '@src/types/editor';
+import { projectNotePaintPatch } from '@src/types/key/notePaint';
+import {
+  previewBatchFontColor,
+  previewBatchStyleProperty,
+} from '../previewPatchForwarders';
+import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
+
+const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
+
+const createStylePropertyHandlers = (
+  targets: readonly {
+    elementType: 'key' | 'stat' | 'graph' | 'knob';
+    id: string;
+  }[],
+  selectedKeyType: string,
+  options: { settleGesture?: boolean } = { settleGesture: true },
+) => {
+  const stableTargets =
+    targets.length > 0 &&
+    targets.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
+    new Set(targets.map(({ id }) => id)).size === targets.length
+      ? targets
+      : null;
+  if (!stableTargets) {
+    return {
+      previewStyleProperty: undefined,
+      commitStyleProperty: undefined,
+    };
+  }
+  return {
+    previewStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) =>
+      previewBatchStyleProperty(stableTargets, selectedKeyType, patch),
+    commitStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) => {
+      const gestureId = options.settleGesture
+        ? editGestureController.activeGestureId() ?? undefined
+        : undefined;
+      const persisted =
+        window.__dmn_window_type === 'panel'
+          ? patchStylePropertyViaAuthority(stableTargets, patch, gestureId)
+          : patchStylePropertyByTargets(stableTargets, patch, { gestureId });
+      if (options.settleGesture) {
+        editGestureController.settleCommit(persisted);
+      }
+      void persisted.catch(reportElementOpError);
+    },
+  };
+};
+
+const paintPatchDetails = (patch: EditorPaintPropertyPatchV1) => {
+  const field = patch.property;
+  const descriptor = patch.value;
+  const { active, background } = paintPropertyFields(field);
+  return {
+    field,
+    descriptor,
+    active,
+    target: background
+      ? ('backgroundColor' as const)
+      : ('borderColor' as const),
+  };
+};
+
+const createPaintCommitHandler =
+  (
+    targets: readonly {
+      elementType: 'key' | 'stat' | 'graph' | 'knob';
+      id: string;
+    }[],
+  ) =>
+  (patch: EditorPaintPropertyPatchV1) => {
+    const details = paintPatchDetails(patch);
+    const relevant = details.active
+      ? targets.filter(
+          ({ elementType }) => elementType === 'key' || elementType === 'knob',
+        )
+      : targets;
+    const stable =
+      relevant.length > 0 &&
+      relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
+      new Set(relevant.map(({ id }) => id)).size === relevant.length;
+    if (!stable) {
+      return;
+    }
+    const persisted =
+      window.__dmn_window_type === 'panel'
+        ? patchPaintViaAuthority(relevant, patch)
+        : patchPaintByTargets(relevant, patch);
+    void persisted.catch(reportElementOpError);
+  };
+
+const createFontColorHandlers = (
+  targets: readonly {
+    elementType: 'key' | 'stat' | 'graph' | 'knob';
+    id: string;
+  }[],
+  selectedKeyType: string,
+) => {
+  const relevantTargets = (patch: EditorFontColorPropertyPatchV1) =>
+    patch.property === 'activeFontColor'
+      ? targets.filter(
+          ({ elementType }) => elementType === 'key' || elementType === 'knob',
+        )
+      : targets;
+  const stableTargets = (patch: EditorFontColorPropertyPatchV1) => {
+    const relevant = relevantTargets(patch);
+    return relevant.length > 0 &&
+      relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
+      new Set(relevant.map(({ id }) => id)).size === relevant.length
+      ? relevant
+      : null;
+  };
+  return {
+    previewFontColor: (patch: EditorFontColorPropertyPatchV1) => {
+      const stable = stableTargets(patch);
+      if (!stable) return;
+      previewBatchFontColor(stable, selectedKeyType, patch);
+    },
+    commitFontColor: (patch: EditorFontColorPropertyPatchV1) => {
+      const stable = stableTargets(patch);
+      if (!stable) return;
+      const active = patch.property === 'activeFontColor';
+      const gestureId = active
+        ? undefined
+        : editGestureController.activeGestureId() ?? undefined;
+      const persisted =
+        window.__dmn_window_type === 'panel'
+          ? patchFontColorViaAuthority(stable, patch, gestureId)
+          : patchFontColorByTargets(
+              stable,
+              patch,
+              gestureId ? { gestureId } : {},
+            );
+      if (!active) editGestureController.settleCommit(persisted);
+      void persisted.catch(reportElementOpError);
+    },
+  };
+};
+
+const createShadowCommitHandler =
+  (
+    targets: readonly {
+      elementType: 'key' | 'stat' | 'knob';
+      id: string;
+    }[],
+  ) =>
+  (patch: EditorShadowPropertyPatchV1) => {
+    const relevant =
+      patch.property === 'activeShadow'
+        ? targets.filter(({ elementType }) => elementType !== 'stat')
+        : targets;
+    const stable =
+      relevant.length > 0 &&
+      relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
+      new Set(relevant.map(({ id }) => id)).size === relevant.length;
+    if (!stable) {
+      return;
+    }
+    const persisted =
+      window.__dmn_window_type === 'panel'
+        ? patchShadowViaAuthority(relevant, patch)
+        : patchShadowByTargets(relevant, patch);
+    void persisted.catch(reportElementOpError);
+  };
+
+const commitBoundInactiveImage = (
+  selection: ElementIdSelection,
+  inactiveImage: string,
+) => {
+  const targets = NATIVE_IMAGE_TYPES.flatMap((elementType) =>
+    (selection[elementType] ?? []).map((id) => ({ elementType, id })),
+  );
+  if (targets.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchInactiveImageViaAuthority(targets, inactiveImage)
+      : patchInactiveImageByTargets(targets, inactiveImage);
+  void persisted.catch(reportElementOpError);
+};
+
+const commitBoundActiveImage = (
+  selection: ElementIdSelection,
+  activeImage: string,
+) => {
+  const targets = (['key', 'knob'] as const).flatMap((elementType) =>
+    (selection[elementType] ?? []).map((id) => ({ elementType, id })),
+  );
+  if (targets.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchActiveImageViaAuthority(targets, activeImage)
+      : patchActiveImageByTargets(targets, activeImage);
+  void persisted.catch(reportElementOpError);
+};
+
+const commitBoundIdleTransparent = (
+  selection: ElementIdSelection,
+  idleTransparent: boolean,
+) => {
+  const targets = NATIVE_IMAGE_TYPES.flatMap((elementType) =>
+    (selection[elementType] ?? []).map((id) => ({ elementType, id })),
+  );
+  if (targets.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchIdleTransparentViaAuthority(targets, idleTransparent)
+      : patchIdleTransparentByTargets(targets, idleTransparent);
+  void persisted.catch(reportElementOpError);
+};
+
+const commitBoundActiveTransparent = (
+  selection: ElementIdSelection,
+  activeTransparent: boolean,
+) => {
+  const targets = (['key', 'knob'] as const).flatMap((elementType) =>
+    (selection[elementType] ?? []).map((id) => ({ elementType, id })),
+  );
+  if (targets.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchActiveTransparentViaAuthority(targets, activeTransparent)
+      : patchActiveTransparentByTargets(targets, activeTransparent);
+  void persisted.catch(reportElementOpError);
+};
+
+const commitBoundSoundPath = (
+  selection: ElementIdSelection,
+  soundPath: string,
+) => {
+  const ids = selection.key ?? [];
+  if (ids.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchSoundPathViaAuthority(ids, soundPath)
+      : patchSoundPathByIds(ids, soundPath);
+  void persisted.catch(reportElementOpError);
+};
 
 const RenameIcon: React.FC = () => (
   <svg
@@ -59,6 +351,94 @@ const RenameIcon: React.FC = () => (
       strokeLinejoin="round"
     />
   </svg>
+);
+
+// ============================================================================
+// Shared batch panel header (group rename + summed count)
+// ============================================================================
+
+interface BatchPanelHeaderProps {
+  // native+plugin 합산 표시 개수
+  totalCount: number;
+  selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
+  t: (key: string) => string | undefined;
+}
+
+const BatchPanelHeader: React.FC<BatchPanelHeaderProps> = ({
+  totalCount,
+  selectedGroupInfo,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
+  t,
+}) => (
+  <div className={PANEL_HEADER_CLASS}>
+    <div className="flex items-center gap-[8px]">
+      {selectedGroupInfo ? (
+        isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={() => {
+              if (!renameCancelledRef.current) {
+                handleRenameCommit(renameValue);
+              }
+              renameCancelledRef.current = false;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                handleRenameCancel();
+              }
+            }}
+          />
+        ) : (
+          <div className="flex items-center gap-[4px] min-w-0">
+            <span
+              className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
+              onDoubleClick={handleRenameStart}
+              title={selectedGroupInfo.name}
+            >
+              {selectedGroupInfo.name}
+            </span>
+            <button
+              onClick={handleRenameStart}
+              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+              title={t('contextMenu.rename') || 'Rename'}
+            >
+              <RenameIcon />
+            </button>
+          </div>
+        )
+      ) : (
+        <span className="text-fg text-label leading-none">
+          {t('propertiesPanel.multiSelection') || '다중 선택'}
+        </span>
+      )}
+      {!selectedGroupInfo && (
+        <span className="text-fg-faint text-body">({totalCount})</span>
+      )}
+    </div>
+  </div>
 );
 
 // ============================================================================
@@ -99,6 +479,8 @@ interface BatchLocalColors {
 
 interface BatchKeyLikePanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // native+plugin 합산 개수 - 헤더 표시·분배 게이트 (미전달 시 native 개수)
+  totalCount?: number;
   selectedBatchStyleElements: SelectedElement[];
   selectedKeyElements: SelectedElement[];
   selectedStatElements: SelectedElement[];
@@ -132,36 +514,12 @@ interface BatchKeyLikePanelProps {
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
-  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
-  handleBatchStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: unknown,
+  handleBatchResizePreview: (
+    dimension: 'width' | 'height',
+    value: number,
   ) => void;
-  handleBatchShadowChangeComplete: (
-    state: 'idle' | 'active',
-    patch: Partial<ElementShadowSpec>,
-  ) => void;
-  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
-  handleBatchGradientCommit?: (
-    target: 'backgroundColor' | 'borderColor',
-    state: 'idle' | 'active',
-    value: ColorModeValue,
-  ) => void;
-  handleKeyOnlyStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => void;
-  handleBatchCounterUpdate: (
-    updates: Partial<KeyCounterSettings>,
-    options?: {
-      activeStateOnly?: boolean;
-      colorState?: 'idle' | 'active';
-    },
-  ) => void;
-  handleBatchNoteColorChange: (value: NoteColor) => void;
-  handleBatchNoteColorChangeComplete: (value: NoteColor) => void;
-  handleBatchGlowColorChange: (value: NoteColor) => void;
-  handleBatchGlowColorChangeComplete: (value: NoteColor) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onNoteElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
   getMixedValue: MixedValueGetter<KeyPosition>;
@@ -170,23 +528,10 @@ interface BatchKeyLikePanelProps {
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getMixedValueKeysOnly: MixedValueGetter<KeyPosition>;
   getMixedValueActiveCapable: MixedValueGetter<KeyPosition>;
-  handleActiveCapableStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => void;
   getSelectedKeysData: () => KeyData[];
   getSelectedGraphsData: () => KeyData[];
   getSelectedBatchStyleData: () => KeyData[];
   getSelectedKeyOnlyPositions: () => { index: number; position: KeyPosition }[];
-  // batch key-only handlers
-  handleBatchKeyOnlyStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => void;
-  handleBatchNoteColorChangeKeysOnly: (value: NoteColor) => void;
-  handleBatchNoteColorChangeCompleteKeysOnly: (value: NoteColor) => void;
-  handleBatchGlowColorChangeKeysOnly: (value: NoteColor) => void;
-  handleBatchGlowColorChangeCompleteKeysOnly: (value: NoteColor) => void;
   // refs
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchNoteColorButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -211,6 +556,14 @@ interface BatchKeyLikePanelProps {
   handleBatchPickerToggle: (target: BatchPickerTarget) => void;
   handleBatchPickerColorChange: (newColor: NoteColor) => void;
   handleBatchPickerColorChangeComplete: (newColor: NoteColor) => void;
+  handleBatchNotePickerColorChangeComplete: (
+    newColor: NoteColor,
+    onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
+  ) => void;
+  handleBatchFillPickerColorChangeComplete: (
+    newColor: string,
+    onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
+  ) => void;
   getBatchPickerColor: () => NoteColor | string;
   getBatchPickerRef: () => React.RefObject<HTMLButtonElement | null> | null;
   batchColorPickerInteractiveRefs: React.RefObject<HTMLButtonElement | null>[];
@@ -222,9 +575,10 @@ interface BatchKeyLikePanelProps {
 
 export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   setPanelElement,
+  totalCount,
   selectedBatchStyleElements,
   selectedKeyElements,
-  selectedStatElements: _selectedStatElements,
+  selectedStatElements,
   selectedKnobElements,
   selectedGraphElements,
   selectedKeyLikeElements,
@@ -246,35 +600,19 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchSpacingCommit,
   getBatchSpacingValue,
   handleBatchResize,
-  handleBatchStyleChange,
-  handleBatchStyleChangeComplete,
-  handleBatchShadowChangeComplete,
-  handleBatchShadowEnabledChange,
-  handleBatchGradientCommit,
-  handleKeyOnlyStyleChangeComplete,
-  handleBatchCounterUpdate,
+  handleBatchResizePreview,
+  onElementPropertyCommit,
+  onNoteElementPropertyCommit,
   handleGraphBatchSharedSetting,
   getMixedValue,
   getMixedValueBatch,
   getMixedValueGraphs,
   getMixedValueKeysOnly,
   getMixedValueActiveCapable,
-  handleActiveCapableStyleChangeComplete,
   getSelectedKeysData,
   getSelectedGraphsData,
   getSelectedBatchStyleData,
   getSelectedKeyOnlyPositions,
-  handleBatchKeyOnlyStyleChangeComplete,
-  handleBatchNoteColorChangeKeysOnly: _handleBatchNoteColorChangeKeysOnly,
-  handleBatchNoteColorChangeCompleteKeysOnly:
-    _handleBatchNoteColorChangeCompleteKeysOnly,
-  handleBatchGlowColorChangeKeysOnly: _handleBatchGlowColorChangeKeysOnly,
-  handleBatchGlowColorChangeCompleteKeysOnly:
-    _handleBatchGlowColorChangeCompleteKeysOnly,
-  handleBatchNoteColorChange: _handleBatchNoteColorChange,
-  handleBatchNoteColorChangeComplete: _handleBatchNoteColorChangeComplete,
-  handleBatchGlowColorChange: _handleBatchGlowColorChange,
-  handleBatchGlowColorChangeComplete: _handleBatchGlowColorChangeComplete,
   batchScrollRefFor,
   batchNoteColorButtonRef,
   batchGlowColorButtonRef,
@@ -295,6 +633,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchPickerToggle,
   handleBatchPickerColorChange,
   handleBatchPickerColorChangeComplete,
+  handleBatchNotePickerColorChangeComplete,
+  handleBatchFillPickerColorChangeComplete,
   getBatchPickerColor,
   getBatchPickerRef,
   batchColorPickerInteractiveRefs,
@@ -303,6 +643,235 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   selectedKeyType,
   t,
 }) => {
+  // 피커 open 시점의 선택을 ID로 고정 - 대기 중 재정렬·모드 전환에도
+  // 완료가 시작 시점 요소들에 적용된다
+  // 결합 소유자는 이 패널이다 - EditSessionBoundary 안(탭 컴포넌트)에 두면
+  // 같은 개수 선택 교체 시 리마운트로 open 중 재캡처가 일어난다
+  const batchImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
+    captureBatchElementBinding({
+      key: selectedKeyElements,
+      stat: selectedStatElements,
+      graph: selectedGraphElements,
+      knob: selectedKnobElements,
+    }),
+  );
+  const idleTransparencyBinding = captureBatchElementBinding({
+    key: selectedKeyElements,
+    stat: selectedStatElements,
+    graph: selectedGraphElements,
+    knob: selectedKnobElements,
+  });
+  const activeTransparencyBinding = captureBatchElementBinding({
+    key: selectedKeyElements,
+    knob: selectedKnobElements,
+  });
+
+  // open 판정은 activePageKey다. renderPageKey는 exit 애니메이션 동안
+  // 유지되는 마운트 상태라, 닫고 250ms 안에 재열면 전환이 감지되지 않아
+  // 이전 결합이 재사용된다 (닫히는 동안의 옛 완료는 유지된 bound가 담당)
+  const { activePageKey } = usePanelNav();
+  const animationBinding = useBatchElementBinding(
+    activePageKey === BATCH_COUNTER_ANIMATION_PAGE_KEY,
+    () =>
+      captureBatchElementBinding({
+        key: selectedKeyElements,
+        stat: selectedStatElements,
+      }),
+  );
+  const counterTargets = [
+    ...selectedKeyElements.map(({ id }) => ({
+      elementType: 'key' as const,
+      id,
+    })),
+    ...selectedStatElements.map(({ id }) => ({
+      elementType: 'stat' as const,
+      id,
+    })),
+  ];
+  const stableCounterTargets =
+    counterTargets.length > 0 &&
+    counterTargets.every(({ id }) => id.length > 0 && isNativeElementId(id))
+      ? counterTargets
+      : null;
+  const textPropertyTargets = selectedBatchStyleElements.map(
+    ({ type, id }) => ({
+      elementType: type as 'key' | 'stat' | 'graph' | 'knob',
+      id,
+    }),
+  );
+  const { previewStyleProperty, commitStyleProperty } =
+    createStylePropertyHandlers(textPropertyTargets, selectedKeyType);
+  const commitPaint = createPaintCommitHandler(textPropertyTargets);
+  const { previewFontColor, commitFontColor } = createFontColorHandlers(
+    textPropertyTargets,
+    selectedKeyType,
+  );
+  const shadowTargets = [
+    ...selectedKeyElements.map(({ id }) => ({
+      elementType: 'key' as const,
+      id,
+    })),
+    ...selectedStatElements.map(({ id }) => ({
+      elementType: 'stat' as const,
+      id,
+    })),
+    ...selectedKnobElements.map(({ id }) => ({
+      elementType: 'knob' as const,
+      id,
+    })),
+  ];
+  const commitShadow = createShadowCommitHandler(shadowTargets);
+  const { commitStyleProperty: commitNoteStyleProperty } =
+    createStylePropertyHandlers(
+      selectedKeyElements.map(({ id }) => ({
+        elementType: 'key',
+        id,
+      })),
+      selectedKeyType,
+      { settleGesture: false },
+    );
+  const notePaintIds = selectedKeyElements.map(({ id }) => id);
+  const stableNotePaintIds =
+    notePaintIds.length > 0 &&
+    notePaintIds.every((id) => id.length > 0 && isNativeElementId(id)) &&
+    new Set(notePaintIds).size === notePaintIds.length
+      ? notePaintIds
+      : null;
+  const commitNotePaint = stableNotePaintIds
+    ? (patch: EditorNotePaintPropertyPatchV1) => {
+        const gestureId = editGestureController.activeGestureId() ?? undefined;
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchNotePaintViaAuthority(stableNotePaintIds, patch, gestureId)
+            : patchNotePaintByIds(stableNotePaintIds, patch, { gestureId });
+        editGestureController.settleCommit(persisted);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const previewNotePaint = stableNotePaintIds
+    ? (patch: EditorNotePaintPropertyPatchV1) => {
+        const entries: Array<{
+          id: string;
+          patch: Partial<KeyPosition>;
+        }> = [];
+        for (const id of stableNotePaintIds) {
+          const locator = resolveElementById('key', id);
+          if (!locator || locator.mode !== selectedKeyType) return;
+          entries.push({
+            id,
+            patch: projectNotePaintPatch(patch),
+          });
+        }
+        editGestureController.preview(selectedKeyType, entries, {
+          domain: 'keyPosition',
+        });
+      }
+    : undefined;
+  const counterFillTargets = [
+    ...selectedKeyElements.map(({ id }) => ({
+      elementType: 'key' as const,
+      id,
+    })),
+    ...(batchCounterColorState === 'active'
+      ? []
+      : selectedStatElements.map(({ id }) => ({
+          elementType: 'stat' as const,
+          id,
+        }))),
+  ];
+  const stableCounterFillTargets =
+    counterFillTargets.length > 0 &&
+    counterFillTargets.every(
+      ({ id }) => id.length > 0 && isNativeElementId(id),
+    ) &&
+    new Set(counterFillTargets.map(({ id }) => id)).size ===
+      counterFillTargets.length
+      ? counterFillTargets
+      : null;
+  const commitCounterFill = stableCounterFillTargets
+    ? (patch: EditorCounterFillPropertyPatchV1) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterFillViaAuthority(stableCounterFillTargets, patch)
+            : patchCounterFillByTargets(stableCounterFillTargets, patch);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const soundTargets = selectedKeyElements.map(({ id }) => id);
+  const stableSoundTargets =
+    soundTargets.length > 0 &&
+    soundTargets.every((id) => id.length > 0 && isNativeElementId(id))
+      ? soundTargets
+      : null;
+  const commitSoundEnabled = stableSoundTargets
+    ? (soundEnabled: boolean) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchSoundEnabledViaAuthority(stableSoundTargets, soundEnabled)
+            : patchSoundEnabledByIds(stableSoundTargets, soundEnabled);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitSoundVolume = stableSoundTargets
+    ? (soundVolume: number) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchSoundVolumeViaAuthority(stableSoundTargets, soundVolume)
+            : patchSoundVolumeByIds(stableSoundTargets, soundVolume);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitCounterEnabled = stableCounterTargets
+    ? (enabled: boolean) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterEnabledViaAuthority(stableCounterTargets, enabled)
+            : patchCounterEnabledByTargets(stableCounterTargets, enabled);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitCounterAnimationEnabled = stableCounterTargets
+    ? (enabled: boolean) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterAnimationEnabledViaAuthority(
+                stableCounterTargets,
+                enabled,
+              )
+            : patchCounterAnimationEnabledByTargets(
+                stableCounterTargets,
+                enabled,
+              );
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitCounterLayout = stableCounterTargets
+    ? (
+        patch: import('@src/types/editor').EditorCounterLayoutPropertyPatchV1,
+      ) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterLayoutViaAuthority(stableCounterTargets, patch)
+            : patchCounterLayoutByTargets(stableCounterTargets, patch);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitCounterTypography = stableCounterTargets
+    ? (
+        patch: import('@src/types/editor').EditorCounterTypographyPropertyPatchV1,
+      ) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterTypographyViaAuthority(stableCounterTargets, patch)
+            : patchCounterTypographyByTargets(stableCounterTargets, patch);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const soundBinding = useBatchElementBinding(
+    activePageKey === BATCH_STYLE_SOUND_PAGE_KEY,
+    () => captureBatchElementBinding({ key: selectedKeyElements }),
+  );
+
   const hasGraphSelection = selectedGraphElements.length > 0;
   const styleMixedValueGetter = hasGraphSelection
     ? getMixedValueBatch
@@ -576,63 +1145,19 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
-        {/* 헤더 */}
-        <div className={PANEL_HEADER_CLASS}>
-          <div className="flex items-center gap-[8px]">
-            {selectedGroupInfo ? (
-              isRenaming ? (
-                <input
-                  ref={renameInputRef}
-                  type="text"
-                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => {
-                    if (!renameCancelledRef.current) {
-                      handleRenameCommit(renameValue);
-                    }
-                    renameCancelledRef.current = false;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      (e.target as HTMLInputElement).blur();
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleRenameCancel();
-                    }
-                  }}
-                />
-              ) : (
-                <div className="flex items-center gap-[4px] min-w-0">
-                  <span
-                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
-                    onDoubleClick={handleRenameStart}
-                    title={selectedGroupInfo.name}
-                  >
-                    {selectedGroupInfo.name}
-                  </span>
-                  <button
-                    onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
-                    title={t('contextMenu.rename') || 'Rename'}
-                  >
-                    <RenameIcon />
-                  </button>
-                </div>
-              )
-            ) : (
-              <span className="text-fg text-label leading-none">
-                {t('propertiesPanel.multiSelection') || '다중 선택'}
-              </span>
-            )}
-            {!selectedGroupInfo && (
-              <span className="text-fg-faint text-body">
-                ({selectedBatchStyleElements.length})
-              </span>
-            )}
-          </div>
-        </div>
+        <BatchPanelHeader
+          totalCount={totalCount ?? selectedBatchStyleElements.length}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          t={t}
+        />
 
         {/* 탭 */}
         <div className="px-[12px] pb-[12px]">
@@ -661,6 +1186,19 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             <EditSessionBoundary>
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
+                totalCount={totalCount ?? selectedBatchStyleElements.length}
+                soundBinding={soundBinding}
+                onSoundPathCommit={(soundPath) =>
+                  commitBoundSoundPath(soundBinding.selection, soundPath)
+                }
+                onSoundEnabledCommit={commitSoundEnabled}
+                onSoundVolumeCommit={commitSoundVolume}
+                onStylePropertyPreview={previewStyleProperty}
+                onStylePropertyCommit={commitStyleProperty}
+                onPaintCommit={commitPaint}
+                onFontColorPreview={previewFontColor}
+                onFontColorCommit={commitFontColor}
+                onShadowCommit={commitShadow}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={
@@ -792,21 +1330,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 handleBatchSpacingCommit={handleBatchSpacingCommit}
                 batchSpacing={batchSpacing}
                 handleBatchResize={handleBatchResize}
-                handleBatchStyleChange={handleBatchStyleChange}
-                handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-                handleBatchShadowChangeComplete={
-                  handleBatchShadowChangeComplete
-                }
-                handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
-                handleBatchGradientCommit={handleBatchGradientCommit}
+                handleBatchResizePreview={handleBatchResizePreview}
+                onElementPropertyCommit={onElementPropertyCommit}
                 getKeyOnlyMixedValue={getMixedValueKeysOnly}
                 getActiveCapableMixedValue={getMixedValueActiveCapable}
-                handleActiveCapableStyleChangeComplete={
-                  handleActiveCapableStyleChangeComplete
-                }
-                handleKeyOnlyStyleChangeComplete={
-                  handleKeyOnlyStyleChangeComplete
-                }
                 showBatchImagePicker={showBatchImagePicker}
                 onToggleBatchImagePicker={() =>
                   setShowBatchImagePicker(!showBatchImagePicker)
@@ -830,9 +1357,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               <EditSessionBoundary>
                 <BatchNoteTabContent
                   getMixedValue={getMixedValueKeysOnly}
-                  handleBatchStyleChangeComplete={
-                    handleBatchKeyOnlyStyleChangeComplete
-                  }
+                  onElementPropertyCommit={onNoteElementPropertyCommit}
+                  onStylePropertyCommit={commitNoteStyleProperty}
                   getBatchNoteColorDisplay={getBatchNoteColorDisplay}
                   getBatchGlowColorDisplay={getBatchGlowColorDisplay}
                   getBatchBorderColorDisplay={getBatchBorderColorDisplay}
@@ -868,7 +1394,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               <BatchCounterTabContent
                 batchCounterSettings={batchCounterSettings}
                 keyVisual={batchKeyVisual}
-                handleBatchCounterUpdate={handleBatchCounterUpdate}
+                onCounterEnabledCommit={commitCounterEnabled}
+                onCounterAnimationEnabledCommit={commitCounterAnimationEnabled}
+                onCounterLayoutCommit={commitCounterLayout}
+                onCounterTypographyCommit={commitCounterTypography}
                 colorState={batchCounterColorState}
                 getCounterColorDisplay={getCounterColorDisplay}
                 onFillPickerToggle={() => handleBatchPickerToggle('fill')}
@@ -877,6 +1406,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
                 isFillPickerOpen={batchPickerFor === 'fill'}
                 isStrokePickerOpen={batchPickerFor === 'stroke'}
+                animationBinding={animationBinding}
                 t={t}
               />
             </EditSessionBoundary>
@@ -891,8 +1421,68 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               referenceRef={getBatchPickerRef()}
               panelElement={panelElement}
               color={getBatchPickerColor()}
-              onColorChange={handleBatchPickerColorChange}
-              onColorChangeComplete={handleBatchPickerColorChangeComplete}
+              onColorChange={(color) => {
+                handleBatchPickerColorChange(color);
+                if (!previewNotePaint) return;
+                if (
+                  batchPickerFor === 'noteColor' &&
+                  typeof color === 'string'
+                ) {
+                  previewNotePaint({ property: 'notePaint', value: { color } });
+                } else if (
+                  batchPickerFor === 'glowColor' &&
+                  typeof color === 'string'
+                ) {
+                  previewNotePaint({
+                    property: 'noteGlowPaint',
+                    value: { color },
+                  });
+                } else if (batchPickerFor === 'borderColor') {
+                  const raw = typeof color === 'string' ? color : undefined;
+                  previewNotePaint({
+                    property: 'noteBorderPaint',
+                    value: {
+                      color: toRgbHexColor(raw),
+                      opacity: parseAlphaPercent(
+                        raw,
+                        batchLocalColors.borderOpacity,
+                      ),
+                    },
+                  });
+                }
+              }}
+              onColorChangeComplete={(color) => {
+                if (
+                  commitNotePaint &&
+                  (batchPickerFor === 'noteColor' ||
+                    batchPickerFor === 'glowColor' ||
+                    batchPickerFor === 'borderColor')
+                ) {
+                  handleBatchNotePickerColorChangeComplete(
+                    color,
+                    commitNotePaint,
+                  );
+                  return;
+                }
+                if (
+                  commitCounterFill &&
+                  batchPickerFor === 'fill' &&
+                  typeof color === 'string'
+                ) {
+                  handleBatchFillPickerColorChangeComplete(
+                    color,
+                    commitCounterFill,
+                  );
+                  return;
+                }
+                if (
+                  batchPickerFor === 'fill' &&
+                  counterFillTargets.length === 0
+                ) {
+                  return;
+                }
+                handleBatchPickerColorChangeComplete(color);
+              }}
               onClose={() => setBatchPickerFor(null)}
               interactiveRefs={batchColorPickerInteractiveRefs}
               solidOnly={
@@ -923,13 +1513,19 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     ...prev,
                     noteOpacity: value,
                   }));
-                  handleBatchStyleChange('noteOpacity', value);
+                  previewNotePaint?.({
+                    property: 'notePaint',
+                    value: { opacity: value },
+                  });
                 } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     glowOpacity: value,
                   }));
-                  handleBatchStyleChange('noteGlowOpacity', value);
+                  previewNotePaint?.({
+                    property: 'noteGlowPaint',
+                    value: { opacity: value },
+                  });
                 }
               }}
               onOpacityPercentChangeComplete={(value: number) => {
@@ -938,13 +1534,23 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     ...prev,
                     noteOpacity: value,
                   }));
-                  handleBatchStyleChangeComplete('noteOpacity', value);
+                  if (commitNotePaint) {
+                    commitNotePaint({
+                      property: 'notePaint',
+                      value: { opacity: value },
+                    });
+                  }
                 } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     glowOpacity: value,
                   }));
-                  handleBatchStyleChangeComplete('noteGlowOpacity', value);
+                  if (commitNotePaint) {
+                    commitNotePaint({
+                      property: 'noteGlowPaint',
+                      value: { opacity: value },
+                    });
+                  }
                 }
               }}
               opacityPercentLabel={
@@ -992,26 +1598,30 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   false,
                 ).value
               }
+              completionBinding={batchImageBinding.binding}
               onIdleImageChange={(imageUrl: string) => {
-                handleBatchStyleChangeComplete('inactiveImage', imageUrl);
+                commitBoundInactiveImage(batchImageBinding.selection, imageUrl);
               }}
               onActiveImageChange={(imageUrl: string) => {
-                handleActiveCapableStyleChangeComplete('activeImage', imageUrl);
+                commitBoundActiveImage(batchImageBinding.selection, imageUrl);
               }}
               onIdleTransparentChange={(value: boolean) => {
-                handleBatchStyleChangeComplete('idleTransparent', value);
+                commitBoundIdleTransparent(
+                  idleTransparencyBinding.selection,
+                  value,
+                );
               }}
               onActiveTransparentChange={(value: boolean) => {
-                handleActiveCapableStyleChangeComplete(
-                  'activeTransparent',
+                commitBoundActiveTransparent(
+                  activeTransparencyBinding.selection,
                   value,
                 );
               }}
               onIdleImageReset={() => {
-                handleBatchStyleChangeComplete('inactiveImage', '');
+                commitBoundInactiveImage(batchImageBinding.selection, '');
               }}
               onActiveImageReset={() => {
-                handleActiveCapableStyleChangeComplete('activeImage', '');
+                commitBoundActiveImage(batchImageBinding.selection, '');
               }}
               onClose={() => setShowBatchImagePicker(false)}
               showActiveState={
@@ -1032,6 +1642,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
 
 interface BatchGraphOnlyPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // native+plugin 합산 개수 - 헤더 표시·분배 게이트 (미전달 시 native 개수)
+  totalCount?: number;
   selectedGraphElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
@@ -1057,16 +1669,11 @@ interface BatchGraphOnlyPanelProps {
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
-  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
-  handleBatchStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: unknown,
+  handleBatchResizePreview: (
+    dimension: 'width' | 'height',
+    value: number,
   ) => void;
-  handleBatchGradientCommit?: (
-    target: 'backgroundColor' | 'borderColor',
-    state: 'idle' | 'active',
-    value: ColorModeValue,
-  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -1083,6 +1690,7 @@ interface BatchGraphOnlyPanelProps {
 
 export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   setPanelElement,
+  totalCount,
   selectedGraphElements,
   selectedGroupInfo,
   isRenaming,
@@ -1100,9 +1708,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   handleBatchSpacingCommit,
   getBatchSpacingValue,
   handleBatchResize,
-  handleBatchStyleChange,
-  handleBatchStyleChangeComplete,
-  handleBatchGradientCommit,
+  handleBatchResizePreview,
+  onElementPropertyCommit,
   handleGraphBatchSharedSetting,
   getMixedValueGraphs,
   getMixedValueGraphsAsKey,
@@ -1116,6 +1723,28 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   selectedKeyType,
   t,
 }) => {
+  // 이미지 피커 open 시점의 그래프 선택을 ID로 고정
+  const graphImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
+    captureBatchElementBinding({ graph: selectedGraphElements }),
+  );
+  const graphTransparencyBinding = captureBatchElementBinding({
+    graph: selectedGraphElements,
+  });
+  const { previewStyleProperty, commitStyleProperty } =
+    createStylePropertyHandlers(
+      selectedGraphElements.map(({ id }) => ({
+        elementType: 'graph',
+        id,
+      })),
+      selectedKeyType,
+    );
+  const commitPaint = createPaintCommitHandler(
+    selectedGraphElements.map(({ id }) => ({
+      elementType: 'graph',
+      id,
+    })),
+  );
+
   const graphShapeOptions = [
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
     { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
@@ -1150,62 +1779,19 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className={PANEL_HEADER_CLASS}>
-          <div className="flex items-center gap-[8px]">
-            {selectedGroupInfo ? (
-              isRenaming ? (
-                <input
-                  ref={renameInputRef}
-                  type="text"
-                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => {
-                    if (!renameCancelledRef.current) {
-                      handleRenameCommit(renameValue);
-                    }
-                    renameCancelledRef.current = false;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      (e.target as HTMLInputElement).blur();
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleRenameCancel();
-                    }
-                  }}
-                />
-              ) : (
-                <div className="flex items-center gap-[4px] min-w-0">
-                  <span
-                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
-                    onDoubleClick={handleRenameStart}
-                    title={selectedGroupInfo.name}
-                  >
-                    {selectedGroupInfo.name}
-                  </span>
-                  <button
-                    onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
-                    title={t('contextMenu.rename') || 'Rename'}
-                  >
-                    <RenameIcon />
-                  </button>
-                </div>
-              )
-            ) : (
-              <span className="text-fg text-label leading-none">
-                {t('propertiesPanel.multiSelection') || '다중 선택'}
-              </span>
-            )}
-            {!selectedGroupInfo && (
-              <span className="text-fg-faint text-body">
-                ({selectedGraphElements.length})
-              </span>
-            )}
-          </div>
-        </div>
+        <BatchPanelHeader
+          totalCount={totalCount ?? selectedGraphElements.length}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          t={t}
+        />
       </div>
 
       <div className="flex-1 properties-panel-overlay-scroll">
@@ -1216,6 +1802,10 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           <EditSessionBoundary>
             <BatchStyleTabContent
               selectedCount={selectedGraphElements.length}
+              totalCount={totalCount ?? selectedGraphElements.length}
+              onStylePropertyPreview={previewStyleProperty}
+              onStylePropertyCommit={commitStyleProperty}
+              onPaintCommit={commitPaint}
               hideDisplayText
               hideFontControls
               showSoundControls={false}
@@ -1337,9 +1927,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               handleBatchSpacingCommit={handleBatchSpacingCommit}
               batchSpacing={batchGraphSpacing}
               handleBatchResize={handleBatchResize}
-              handleBatchStyleChange={handleBatchStyleChange}
-              handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-              handleBatchGradientCommit={handleBatchGradientCommit}
+              handleBatchResizePreview={handleBatchResizePreview}
+              onElementPropertyCommit={onElementPropertyCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>
                 setShowBatchImagePicker(!showBatchImagePicker)
@@ -1376,23 +1965,18 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
             activeTransparent={
               getMixedValueGraphs((pos) => pos.activeTransparent, false).value
             }
+            completionBinding={graphImageBinding.binding}
             onIdleImageChange={(imageUrl: string) => {
-              handleGraphBatchSharedSetting({ inactiveImage: imageUrl });
-            }}
-            onActiveImageChange={(imageUrl: string) => {
-              handleGraphBatchSharedSetting({ activeImage: imageUrl });
+              commitBoundInactiveImage(graphImageBinding.selection, imageUrl);
             }}
             onIdleTransparentChange={(value: boolean) => {
-              handleGraphBatchSharedSetting({ idleTransparent: value });
-            }}
-            onActiveTransparentChange={(value: boolean) => {
-              handleGraphBatchSharedSetting({ activeTransparent: value });
+              commitBoundIdleTransparent(
+                graphTransparencyBinding.selection,
+                value,
+              );
             }}
             onIdleImageReset={() => {
-              handleGraphBatchSharedSetting({ inactiveImage: '' });
-            }}
-            onActiveImageReset={() => {
-              handleGraphBatchSharedSetting({ activeImage: '' });
+              commitBoundInactiveImage(graphImageBinding.selection, '');
             }}
             onClose={() => setShowBatchImagePicker(false)}
           />
@@ -1408,6 +1992,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
 
 interface BatchKnobOnlyPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // native+plugin 합산 개수 - 헤더 표시·분배 게이트 (미전달 시 native 개수)
+  totalCount?: number;
   selectedKnobElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
@@ -1433,21 +2019,11 @@ interface BatchKnobOnlyPanelProps {
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
-  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
-  handleBatchStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: unknown,
+  handleBatchResizePreview: (
+    dimension: 'width' | 'height',
+    value: number,
   ) => void;
-  handleBatchShadowChangeComplete: (
-    state: 'idle' | 'active',
-    patch: Partial<ElementShadowSpec>,
-  ) => void;
-  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
-  handleBatchGradientCommit?: (
-    target: 'backgroundColor' | 'borderColor',
-    state: 'idle' | 'active',
-    value: ColorModeValue,
-  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
@@ -1464,6 +2040,7 @@ interface BatchKnobOnlyPanelProps {
 
 export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   setPanelElement,
+  totalCount,
   selectedKnobElements,
   selectedGroupInfo,
   isRenaming,
@@ -1481,11 +2058,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   handleBatchSpacingCommit,
   getBatchSpacingValue,
   handleBatchResize,
-  handleBatchStyleChange,
-  handleBatchStyleChangeComplete,
-  handleBatchShadowChangeComplete,
-  handleBatchShadowEnabledChange,
-  handleBatchGradientCommit,
+  handleBatchResizePreview,
+  onElementPropertyCommit,
   handleKnobBatchSharedSetting,
   getMixedValueKnobs,
   getMixedValueKnobsAsKey,
@@ -1496,8 +2070,37 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   setShowBatchImagePicker,
   panelElement,
   useCustomCSS,
+  selectedKeyType,
   t,
 }) => {
+  // 이미지 피커 open 시점의 노브 선택을 ID로 고정
+  const knobImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
+    captureBatchElementBinding({ knob: selectedKnobElements }),
+  );
+  const knobTransparencyBinding = captureBatchElementBinding({
+    knob: selectedKnobElements,
+  });
+  const { previewStyleProperty, commitStyleProperty } =
+    createStylePropertyHandlers(
+      selectedKnobElements.map(({ id }) => ({
+        elementType: 'knob',
+        id,
+      })),
+      selectedKeyType,
+    );
+  const commitPaint = createPaintCommitHandler(
+    selectedKnobElements.map(({ id }) => ({
+      elementType: 'knob',
+      id,
+    })),
+  );
+  const commitShadow = createShadowCommitHandler(
+    selectedKnobElements.map(({ id }) => ({
+      elementType: 'knob',
+      id,
+    })),
+  );
+
   const sensitivityState = getMixedValueKnobs(
     (pos) => Number(pos.sensitivity ?? 1),
     1,
@@ -1508,62 +2111,19 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className={PANEL_HEADER_CLASS}>
-          <div className="flex items-center gap-[8px]">
-            {selectedGroupInfo ? (
-              isRenaming ? (
-                <input
-                  ref={renameInputRef}
-                  type="text"
-                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => {
-                    if (!renameCancelledRef.current) {
-                      handleRenameCommit(renameValue);
-                    }
-                    renameCancelledRef.current = false;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      (e.target as HTMLInputElement).blur();
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleRenameCancel();
-                    }
-                  }}
-                />
-              ) : (
-                <div className="flex items-center gap-[4px] min-w-0">
-                  <span
-                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
-                    onDoubleClick={handleRenameStart}
-                    title={selectedGroupInfo.name}
-                  >
-                    {selectedGroupInfo.name}
-                  </span>
-                  <button
-                    onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
-                    title={t('contextMenu.rename') || 'Rename'}
-                  >
-                    <RenameIcon />
-                  </button>
-                </div>
-              )
-            ) : (
-              <span className="text-fg text-label leading-none">
-                {t('propertiesPanel.multiSelection') || '다중 선택'}
-              </span>
-            )}
-            {!selectedGroupInfo && (
-              <span className="text-fg-faint text-body">
-                ({selectedKnobElements.length})
-              </span>
-            )}
-          </div>
-        </div>
+        <BatchPanelHeader
+          totalCount={totalCount ?? selectedKnobElements.length}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          t={t}
+        />
       </div>
 
       <div className="flex-1 properties-panel-overlay-scroll">
@@ -1574,6 +2134,11 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           <EditSessionBoundary>
             <BatchStyleTabContent
               selectedCount={selectedKnobElements.length}
+              totalCount={totalCount ?? selectedKnobElements.length}
+              onStylePropertyPreview={previewStyleProperty}
+              onStylePropertyCommit={commitStyleProperty}
+              onPaintCommit={commitPaint}
+              onShadowCommit={commitShadow}
               hideDisplayText
               hideFontControls
               showSoundControls={false}
@@ -1636,11 +2201,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               handleBatchSpacingCommit={handleBatchSpacingCommit}
               batchSpacing={batchKnobSpacing}
               handleBatchResize={handleBatchResize}
-              handleBatchStyleChange={handleBatchStyleChange}
-              handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-              handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
-              handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
-              handleBatchGradientCommit={handleBatchGradientCommit}
+              handleBatchResizePreview={handleBatchResizePreview}
+              onElementPropertyCommit={onElementPropertyCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>
                 setShowBatchImagePicker(!showBatchImagePicker)
@@ -1676,28 +2238,135 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
             activeTransparent={
               getMixedValueKnobs((pos) => pos.activeTransparent, false).value
             }
+            completionBinding={knobImageBinding.binding}
             onIdleImageChange={(imageUrl: string) => {
-              handleKnobBatchSharedSetting({ inactiveImage: imageUrl });
+              commitBoundInactiveImage(knobImageBinding.selection, imageUrl);
             }}
             onActiveImageChange={(imageUrl: string) => {
-              handleKnobBatchSharedSetting({ activeImage: imageUrl });
+              commitBoundActiveImage(knobImageBinding.selection, imageUrl);
             }}
             onIdleTransparentChange={(value: boolean) => {
-              handleKnobBatchSharedSetting({ idleTransparent: value });
+              commitBoundIdleTransparent(
+                knobTransparencyBinding.selection,
+                value,
+              );
             }}
             onActiveTransparentChange={(value: boolean) => {
-              handleKnobBatchSharedSetting({ activeTransparent: value });
+              commitBoundActiveTransparent(
+                knobTransparencyBinding.selection,
+                value,
+              );
             }}
             onIdleImageReset={() => {
-              handleKnobBatchSharedSetting({ inactiveImage: '' });
+              commitBoundInactiveImage(knobImageBinding.selection, '');
             }}
             onActiveImageReset={() => {
-              handleKnobBatchSharedSetting({ activeImage: '' });
+              commitBoundActiveImage(knobImageBinding.selection, '');
             }}
             onClose={() => setShowBatchImagePicker(false)}
           />
         ) : null}
       </PopupExit>
+    </div>
+  );
+};
+
+// ============================================================================
+// Plugin-only batch selection panel (lightweight geometry)
+// ============================================================================
+
+interface BatchPluginOnlyPanelProps {
+  setPanelElement: (el: HTMLDivElement | null) => void;
+  // 플러그인 단독 다중 선택 개수
+  totalCount: number;
+  selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
+  handleBatchAlign: (
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
+  ) => void;
+  handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
+  handleBatchSpacing: (
+    spacing: number,
+    options?: { gestureId?: string; deferSave?: boolean },
+  ) => void;
+  handleBatchSpacingCommit: (
+    spacing: number,
+    options?: { gestureId?: string; deferSave?: boolean },
+  ) => void;
+  getBatchSpacingValue: () => MixedValueResult<number>;
+  batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  t: (key: string) => string | undefined;
+}
+
+// 플러그인 크기는 content-driven이라 resize 없이 정렬·분배·간격만 노출.
+// 스타일 필드는 플러그인 스키마 소유라 배치 편집 대상이 아니다
+export const BatchPluginOnlyPanel: React.FC<BatchPluginOnlyPanelProps> = ({
+  setPanelElement,
+  totalCount,
+  selectedGroupInfo,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
+  handleBatchAlign,
+  handleBatchDistribute,
+  handleBatchSpacing,
+  handleBatchSpacingCommit,
+  getBatchSpacingValue,
+  batchScrollRefFor,
+  t,
+}) => {
+  const batchPluginSpacing = getBatchSpacingValue();
+
+  return (
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
+      <div className="flex-shrink-0">
+        <BatchPanelHeader
+          totalCount={totalCount}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          t={t}
+        />
+      </div>
+
+      <div className="flex-1 properties-panel-overlay-scroll">
+        <div
+          ref={batchScrollRefFor(TABS.STYLE)}
+          className="properties-panel-overlay-viewport"
+        >
+          <EditSessionBoundary>
+            <PropertySection>
+              <BatchGeometrySection
+                totalCount={totalCount}
+                handleBatchAlign={handleBatchAlign}
+                handleBatchDistribute={handleBatchDistribute}
+                handleBatchSpacing={handleBatchSpacing}
+                handleBatchSpacingCommit={handleBatchSpacingCommit}
+                batchSpacing={batchPluginSpacing}
+                t={t}
+              />
+            </PropertySection>
+          </EditSessionBoundary>
+        </div>
+      </div>
     </div>
   );
 };

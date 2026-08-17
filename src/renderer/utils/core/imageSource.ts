@@ -1,6 +1,7 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 const imageSrcCache = new Map<string, string>();
+const IMAGE_SRC_CACHE_LIMIT = 256;
 
 const PASSTHROUGH_PREFIX = /^(?:https?:|data:|blob:|asset:|tauri:|file:)/i;
 const WINDOWS_ABSOLUTE_PATH = /^[a-zA-Z]:[\\/]/;
@@ -46,19 +47,34 @@ export function resolveImageSource(value?: string | null): string | null {
   }
 
   const cached = imageSrcCache.get(raw);
-  if (cached) {
+  if (cached !== undefined) {
+    imageSrcCache.delete(raw);
+    imageSrcCache.set(raw, cached);
     return cached;
   }
 
   // Tauri API 시도 → 실패 시 OBS HTTP fallback
   try {
     const converted = convertFileSrc(raw);
-    imageSrcCache.set(raw, converted);
+    cacheImageSource(raw, converted);
     return converted;
   } catch {
     // OBS 환경 (Tauri API 없음): HTTP /media/ 경로로 서빙
     const url = resolveForObs(raw);
-    imageSrcCache.set(raw, url);
+    cacheImageSource(raw, url);
     return url;
   }
+}
+
+function cacheImageSource(path: string, src: string): void {
+  imageSrcCache.set(path, src);
+  while (imageSrcCache.size > IMAGE_SRC_CACHE_LIMIT) {
+    const oldest = imageSrcCache.keys().next().value;
+    if (oldest === undefined) break;
+    imageSrcCache.delete(oldest);
+  }
+}
+
+export function clearImageSourceCache(): void {
+  imageSrcCache.clear();
 }

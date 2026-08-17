@@ -219,6 +219,8 @@ type JsLoadResult = {
 ### `dmn.js.reload(): Promise<JsReloadResult>`
 
 Re-reads all plugin files from disk and returns `{ updated, errors? }`.
+Plugins are always torn down and re-run, even if the file contents are
+unchanged, so an explicit reload can be used to reset plugin state.
 
 ### `dmn.js.remove(id: string): Promise<JsRemoveResult>`
 

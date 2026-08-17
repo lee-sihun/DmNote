@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { SizeCommit, StyleTabContentProps } from '../types';
+import type { StyleTabContentProps } from '../types';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
   slotMembers,
@@ -20,6 +20,7 @@ import {
   TextInput,
   FontStyleToggle,
 } from '../PropertyInputs';
+import { createFontStyleToggleHandlers } from '../fontStyleToggleHandlers';
 import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
@@ -32,8 +33,7 @@ import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import {
-  getActivePairPreservation,
-  gradientPairPatch,
+  paintDescriptor,
   gradientToCss,
   type ColorModeValue,
   type GradientSpec,
@@ -51,10 +51,12 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
-import { resolveElementShadow } from '@src/types/key/shadows';
+import {
+  elementShadowLeafFromPartial,
+  resolveElementShadowForPosition,
+} from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
 const SOUND_PAGE_KEY = 'single-style:sound';
@@ -90,7 +92,6 @@ interface StyleTabContentInternalProps extends StyleTabContentProps {
   onLocalDyChange?: (value: number) => void;
   onLocalWidthChange?: (value: number) => void;
   onLocalHeightChange?: (value: number) => void;
-  onSizeBlur?: (committed?: SizeCommit) => void;
 }
 
 const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
@@ -98,9 +99,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   keyPosition,
   keyCode: _keyCode,
   keyInfo,
-  onPositionChange,
-  onKeyUpdate,
-  onKeyPreview,
+  onGeometryPreview,
+  onGeometryCommit,
+  onElementPropertyCommit,
   onKeyMappingChange,
   keySlot,
   mappingControl,
@@ -111,6 +112,20 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   shadowActiveState = true,
   showImagePicker = false,
   onToggleImagePicker,
+  onInactiveImageCommit,
+  onActiveImageCommit,
+  onIdleTransparentCommit,
+  onActiveTransparentCommit,
+  onIdleImageFitCommit,
+  onActiveImageFitCommit,
+  onSoundPathCommit,
+  onSoundEnabledCommit,
+  onSoundVolumeCommit,
+  onStylePropertyPreview,
+  onStylePropertyCommit,
+  onPaintCommit,
+  onFontColorCommit,
+  onShadowCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -125,7 +140,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onLocalDyChange,
   onLocalWidthChange,
   onLocalHeightChange,
-  onSizeBlur,
 }) => {
   const DEFAULT_KEY_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
   const DEFAULT_KEY_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
@@ -209,25 +223,20 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       }
     },
   });
-  const hasIdleImage = Boolean(keyPosition.inactiveImage?.trim());
-  const hasActiveImage = Boolean(
-    keyPosition.activeImage?.trim() || keyPosition.inactiveImage?.trim(),
-  );
-  const idleShadow = resolveElementShadow({
+  const shadowElementType = shadowActiveState ? 'key' : 'stat';
+  const idleShadow = resolveElementShadowForPosition({
+    position: keyPosition,
+    elementType: shadowElementType,
     active: false,
-    shadow: keyPosition.shadow,
-    activeShadow: keyPosition.activeShadow,
     defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
     defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    suppressDefault: hasIdleImage,
   });
-  const activeShadow = resolveElementShadow({
+  const activeShadow = resolveElementShadowForPosition({
+    position: keyPosition,
+    elementType: shadowElementType,
     active: true,
-    shadow: keyPosition.shadow,
-    activeShadow: keyPosition.activeShadow,
     defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
     defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    suppressDefault: hasActiveImage,
   });
 
   // 통합 피커 상태
@@ -411,36 +420,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     const prop = resolveColorProperty(target);
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
 
-    const updates: Partial<KeyPosition> = {
-      [prop]: color,
-    } as Partial<KeyPosition>;
-
-    // idle 편집 전 사용자 저장값 기준 active 모습 보존
-    if (shadowActiveState && effectiveColorState !== 'active') {
-      const activeProp = activeColorPropertyFor(target);
-      const preservation = getActivePairPreservation(
-        {
-          color: keyPosition[target],
-          gradient: storedGradientOf(target),
-        },
-        {
-          color: keyPosition[activeProp],
-          gradient: storedGradientOf(activeProp),
-        },
+    if (target === 'fontColor') {
+      onFontColorCommit?.(
+        prop === 'activeFontColor'
+          ? { property: 'activeFontColor', value: color }
+          : { property: 'fontColor', value: color },
       );
-      if (preservation?.color !== undefined) {
-        updates[activeProp] = preservation.color;
-      }
-      if (target !== 'fontColor' && preservation?.gradient !== undefined) {
-        const activeSibling =
-          target === 'backgroundColor'
-            ? 'activeBackgroundGradient'
-            : 'activeBorderGradient';
-        updates[activeSibling] = preservation.gradient;
-      }
     }
-
-    onKeyUpdate({ index: keyIndex, ...updates });
   };
 
   // ── 그라데이션 배선 (배경·테두리 전용, 글꼴 색상은 단색 유지) ──
@@ -470,44 +456,17 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const handleGradientCommit = (value: ColorModeValue) => {
     if (!gradientTarget) return;
     const prop = resolveColorProperty(gradientTarget);
-    const patch = gradientPairPatch(
-      prop as Parameters<typeof gradientPairPatch>[0],
-      value,
-    ) as Partial<KeyPosition>;
-
-    const baseColor = patch[prop];
-    if (typeof baseColor === 'string') {
-      setLocalColors((prev) => ({ ...prev, [prop]: baseColor }));
-    }
-
-    const updates: Partial<KeyPosition> = { ...patch };
-
-    // idle 편집 전 사용자 저장값 기준 active 쌍 보존
-    if (shadowActiveState && effectiveColorState !== 'active') {
-      const activeProp = activeColorPropertyFor(gradientTarget);
-      const preservation = getActivePairPreservation(
-        {
-          color: keyPosition[gradientTarget],
-          gradient: storedGradientOf(gradientTarget),
-        },
-        {
-          color: keyPosition[activeProp],
-          gradient: storedGradientOf(activeProp),
-        },
-      );
-      if (preservation?.color !== undefined) {
-        updates[activeProp] = preservation.color;
-      }
-      if (preservation?.gradient !== undefined) {
-        const activeSibling =
-          gradientTarget === 'backgroundColor'
-            ? 'activeBackgroundGradient'
-            : 'activeBorderGradient';
-        updates[activeSibling] = preservation.gradient;
-      }
-    }
-
-    onKeyUpdate({ index: keyIndex, ...updates });
+    const descriptor = paintDescriptor(value);
+    const paintField =
+      effectiveColorState === 'active'
+        ? gradientTarget === 'backgroundColor'
+          ? 'activeBackgroundPaint'
+          : 'activeBorderPaint'
+        : gradientTarget === 'backgroundColor'
+        ? 'backgroundPaint'
+        : 'borderPaint';
+    setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+    onPaintCommit?.({ property: paintField, value: descriptor } as never);
   };
 
   const gradientState = useGradientColorState({
@@ -519,11 +478,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       : {},
     fallbackColor: '#ffffff',
     // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
-    contextKey: `${
-      canvasAnchor?.kind ?? 'key'
-    }:${selectedKeyType}:${keyIndex}:${
-      pickerFor ?? 'none'
-    }:${effectiveColorState}`,
+    contextKey: `${canvasAnchor?.kind ?? 'key'}:${selectedKeyType}:${
+      canvasAnchor?.kind === 'batch' ? 'batch' : canvasAnchor?.id
+    }:${pickerFor ?? 'none'}:${effectiveColorState}`,
     canvasAnchor: gradientTarget ? canvasAnchor : undefined,
     canvasSurface: gradientTarget === 'borderColor' ? 'border' : 'background',
     canvasState: effectiveColorState,
@@ -536,33 +493,25 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     if (onLocalDxChange) {
       onLocalDxChange(value);
     }
-    onPositionChange(keyIndex, value, localDy ?? keyPosition.dy);
+    onGeometryCommit?.('dx', value);
   };
 
   const handlePositionYChange = (value: number) => {
     if (onLocalDyChange) {
       onLocalDyChange(value);
     }
-    onPositionChange(keyIndex, localDx ?? keyPosition.dx, value);
+    onGeometryCommit?.('dy', value);
   };
 
   // 크기 변경 핸들러
   const handleWidthChange = (value: number) => {
-    if (onLocalWidthChange) {
-      onLocalWidthChange(value);
-      onKeyPreview?.(keyIndex, { width: value });
-    } else {
-      onKeyUpdate({ index: keyIndex, width: value });
-    }
+    onLocalWidthChange?.(value);
+    onGeometryCommit?.('width', value);
   };
 
   const handleHeightChange = (value: number) => {
-    if (onLocalHeightChange) {
-      onLocalHeightChange(value);
-      onKeyPreview?.(keyIndex, { height: value });
-    } else {
-      onKeyUpdate({ index: keyIndex, height: value });
-    }
+    onLocalHeightChange?.(value);
+    onGeometryCommit?.('height', value);
   };
 
   // 타이핑 중 스타일 프리뷰
@@ -570,76 +519,105 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => {
-    onKeyPreview?.(keyIndex, { [property]: value });
+    if (
+      onStylePropertyPreview &&
+      (property === 'borderWidth' ||
+        property === 'borderRadius' ||
+        property === 'fontSize') &&
+      typeof value === 'number'
+    ) {
+      onStylePropertyPreview(
+        property === 'borderWidth'
+          ? { property: 'borderWidth', value }
+          : property === 'borderRadius'
+          ? { property: 'borderRadius', value }
+          : { property: 'fontSize', value },
+      );
+      return;
+    }
+    if (
+      (property === 'dx' ||
+        property === 'dy' ||
+        property === 'width' ||
+        property === 'height') &&
+      typeof value === 'number'
+    ) {
+      onGeometryPreview?.(property, value);
+    }
   };
 
   const handleStyleChangeComplete = (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => {
-    onKeyUpdate({ index: keyIndex, [property]: value });
+    if (
+      onStylePropertyCommit &&
+      (property === 'borderWidth' ||
+        property === 'borderRadius' ||
+        property === 'fontSize') &&
+      typeof value === 'number'
+    ) {
+      onStylePropertyCommit(
+        property === 'borderWidth'
+          ? { property: 'borderWidth', value }
+          : property === 'borderRadius'
+          ? { property: 'borderRadius', value }
+          : { property: 'fontSize', value },
+      );
+      return;
+    }
+    onElementPropertyCommit?.({ [property]: value } as never);
   };
 
   // 이미지 변경 핸들러
   const handleIdleImageChange = (imageUrl: string) => {
-    onKeyPreview?.(keyIndex, { inactiveImage: imageUrl });
-    onKeyUpdate({ index: keyIndex, inactiveImage: imageUrl });
+    onInactiveImageCommit?.(imageUrl);
   };
 
   const handleActiveImageChange = (imageUrl: string) => {
-    onKeyPreview?.(keyIndex, { activeImage: imageUrl });
-    onKeyUpdate({ index: keyIndex, activeImage: imageUrl });
+    onActiveImageCommit?.(imageUrl);
   };
 
   const handleIdleTransparentChange = (checked: boolean) => {
-    onKeyPreview?.(keyIndex, { idleTransparent: checked });
-    onKeyUpdate({ index: keyIndex, idleTransparent: checked });
+    onIdleTransparentCommit?.(checked);
   };
 
   const handleActiveTransparentChange = (checked: boolean) => {
-    onKeyPreview?.(keyIndex, { activeTransparent: checked });
-    onKeyUpdate({ index: keyIndex, activeTransparent: checked });
+    onActiveTransparentCommit?.(checked);
   };
 
   const handleIdleImageReset = () => {
-    onKeyPreview?.(keyIndex, { inactiveImage: '' });
-    onKeyUpdate({ index: keyIndex, inactiveImage: '' });
+    onInactiveImageCommit?.('');
   };
 
   const handleActiveImageReset = () => {
-    onKeyPreview?.(keyIndex, { activeImage: '' });
-    onKeyUpdate({ index: keyIndex, activeImage: '' });
+    onActiveImageCommit?.('');
   };
 
   const handleIdleImageFitChange = (fit: ImageFit) => {
-    onKeyPreview?.(keyIndex, { idleImageFit: fit });
-    onKeyUpdate({ index: keyIndex, idleImageFit: fit });
+    onIdleImageFitCommit?.(fit);
   };
 
   const handleActiveImageFitChange = (fit: ImageFit) => {
-    onKeyPreview?.(keyIndex, { activeImageFit: fit });
-    onKeyUpdate({ index: keyIndex, activeImageFit: fit });
+    onActiveImageFitCommit?.(fit);
   };
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
-    onKeyPreview?.(keyIndex, { displayText: value });
+    onStylePropertyPreview?.({ property: 'displayText', value: value });
   };
 
   const handleDisplayTextBlur = (value: string) => {
-    onKeyUpdate({
-      index: keyIndex,
-      displayText: value,
-    });
+    onStylePropertyCommit?.({ property: 'displayText', value: value });
   };
 
   // 클래스명 핸들러
   const handleClassNameChange = (value: string) => {
-    onKeyPreview?.(keyIndex, { className: value });
+    onStylePropertyPreview?.({ property: 'className', value: value });
   };
 
   const handleClassNameBlur = (value: string) => {
-    onKeyUpdate({ index: keyIndex, className: value });
+    onStylePropertyCommit?.({ property: 'className', value: value });
   };
 
   // 이미지 피커 열림 상태 (외부 또는 내부)
@@ -786,7 +764,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 : localWidth ?? keyPosition.width ?? 60
             }
             onChange={handleWidthChange}
-            onBlur={(width) => onSizeBlur?.({ width })}
+            onPreview={(width) => {
+              onLocalWidthChange?.(width);
+              onGeometryPreview?.('width', width);
+            }}
             onCancel={() => editGestureController.cancel()}
             prefix="W"
             width={AXIS_FIELD_WIDTH}
@@ -802,7 +783,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 : localHeight ?? keyPosition.height ?? 60
             }
             onChange={handleHeightChange}
-            onBlur={(height) => onSizeBlur?.({ height })}
+            onPreview={(height) => {
+              onLocalHeightChange?.(height);
+              onGeometryPreview?.('height', height);
+            }}
             onCancel={() => editGestureController.cancel()}
             prefix="H"
             width={AXIS_FIELD_WIDTH}
@@ -907,22 +891,18 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         idleShadow={idleShadow}
         activeShadow={activeShadow}
         showActiveState={shadowActiveState}
-        onChange={(state, shadow) =>
-          onKeyUpdate({
-            index: keyIndex,
-            [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
-          })
-        }
-        onEnabledChange={(enabled) =>
-          onKeyUpdate({
-            index: keyIndex,
-            shadow: { ...idleShadow, enabled },
-            // 눌림 상태가 없는 요소는 activeShadow를 기록하지 않음
-            ...(shadowActiveState
-              ? { activeShadow: { ...activeShadow, enabled } }
-              : {}),
-          })
-        }
+        onChange={(state, _shadow, patch) => {
+          const leaf = elementShadowLeafFromPartial(patch);
+          if (!leaf) return;
+          onShadowCommit?.(
+            state === 'active'
+              ? { property: 'activeShadow', value: leaf }
+              : { property: 'shadow', value: leaf },
+          );
+        }}
+        onEnabledChange={(enabled) => {
+          onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
+        }}
         panelElement={panelElement}
         t={t}
       />
@@ -999,18 +979,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             isItalic={keyPosition.fontItalic ?? false}
             isUnderline={keyPosition.fontUnderline ?? false}
             isStrikethrough={keyPosition.fontStrikethrough ?? false}
-            onBoldChange={(value) =>
-              handleStyleChangeComplete('fontWeight', value ? 700 : 400)
-            }
-            onItalicChange={(value) =>
-              handleStyleChangeComplete('fontItalic', value)
-            }
-            onUnderlineChange={(value) =>
-              handleStyleChangeComplete('fontUnderline', value)
-            }
-            onStrikethroughChange={(value) =>
-              handleStyleChangeComplete('fontStrikethrough', value)
-            }
+            {...createFontStyleToggleHandlers(handleStyleChangeComplete)}
           />
         </PropertyRow>
       </PropertySection>
@@ -1059,8 +1028,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               checked={keyPosition.soundEnabled ?? false}
               onChange={() => {
                 const nextEnabled = !(keyPosition.soundEnabled ?? false);
-                onKeyPreview?.(keyIndex, { soundEnabled: nextEnabled });
-                onKeyUpdate({ index: keyIndex, soundEnabled: nextEnabled });
+                onSoundEnabledCommit?.(nextEnabled);
               }}
             />
           </PropertyRow>
@@ -1086,12 +1054,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           >
             <NumberInput
               value={keyPosition.soundVolume ?? 100}
-              onChange={(value) =>
-                handleStyleChangeComplete(
-                  'soundVolume',
-                  Math.max(0, Math.min(200, value)),
-                )
-              }
+              onChange={(value) => {
+                const soundVolume = Math.max(0, Math.min(200, value));
+                if (onSoundVolumeCommit) {
+                  onSoundVolumeCommit(soundVolume);
+                } else {
+                  handleStyleChangeComplete('soundVolume', soundVolume);
+                }
+              }}
               onPreview={(value) =>
                 handleStylePreview(
                   'soundVolume',
@@ -1114,6 +1084,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             open={showImagePicker}
             referenceRef={imageButtonRef}
             panelElement={panelElement}
+            completionBinding="element-id"
             idleImage={keyPosition.inactiveImage || ''}
             activeImage={keyPosition.activeImage || ''}
             idleTransparent={keyPosition.idleTransparent ?? false}
@@ -1208,11 +1179,11 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         createPortal(
           <SoundPicker
             open
+            completionBinding="element-id"
             selectedSound={keyPosition.soundPath || null}
             onSoundSelect={(soundPath) => {
               const nextPath = soundPath || '';
-              onKeyPreview?.(keyIndex, { soundPath: nextPath });
-              onKeyUpdate({ index: keyIndex, soundPath: nextPath });
+              onSoundPathCommit?.(nextPath);
             }}
             previewVolume={keyPosition.soundVolume ?? 100}
             pageTitle={t('propertiesPanel.keySound') || '키 사운드'}

@@ -3,8 +3,10 @@ import { subscribe } from './shared';
 
 import {
   assertEditorCommitResult,
+  assertEditorOpCommitResult,
   assertEditorCommittedEvent,
   assertEditorGetResult,
+  assertEditorOpsV1,
   assertSafeEditorRevision,
 } from '@src/types/editor';
 import { EditorReadOnlyError } from '@src/renderer/editor/runtime/editorCoordinator';
@@ -13,6 +15,7 @@ import type {
   EditorCommitRequest,
   EditorCommitResult,
   EditorCommittedV1,
+  CanonicalEditorGetResult,
   EditorGetResult,
 } from '@src/types/editor';
 
@@ -23,18 +26,20 @@ export const editorCommitRaw = async (
 ): Promise<EditorCommitResult> => {
   if (window.__dmn_runtime === 'obs') throw new EditorReadOnlyError();
   assertSafeEditorRevision(request.baseRevision, 'baseRevision');
+  if (request.ops) assertEditorOpsV1(request.ops);
   const result = await invoke<EditorCommitResult>('editor_commit', {
     request,
   });
-  assertEditorCommitResult(result);
+  if (request.ops) assertEditorOpCommitResult(result, request.ops);
+  else assertEditorCommitResult(result);
   return result;
 };
 
 export const editorApi = {
-  get: async (): Promise<EditorGetResult> => {
+  get: async (): Promise<CanonicalEditorGetResult> => {
     const result = await invoke<EditorGetResult>('editor_get');
     assertEditorGetResult(result);
-    return result;
+    return result as CanonicalEditorGetResult;
   },
   // 자사 표면: 멀티 키 지원을 항상 선언 (명시값이 있으면 그 값 우선, 계약 §10)
   commit: (request: EditorCommitRequest): Promise<EditorCommitResult> =>

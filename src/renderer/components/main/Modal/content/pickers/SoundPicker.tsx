@@ -12,7 +12,10 @@ import {
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import SoundTrimModal from '../managers/SoundTrimModal';
-import { useEditSessionModeGuard } from '@src/renderer/contexts/EditSessionScope';
+import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
+
+import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
+import { soundApi } from '@api/modules/resourceApi';
 
 interface SoundPickerProps {
   open: boolean;
@@ -21,6 +24,8 @@ interface SoundPickerProps {
   pageTitle: string;
   onBack: () => void;
   previewVolume?: number;
+  /** 비동기 완료 콜백이 안정 ID applier로 라우팅되면 element-id */
+  completionBinding?: CompletionBinding;
 }
 
 type TrimState =
@@ -36,6 +41,7 @@ const SoundPicker = ({
   pageTitle,
   onBack,
   previewVolume,
+  completionBinding = 'session-mode',
 }: SoundPickerProps) => {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,7 +54,7 @@ const SoundPicker = ({
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [trimState, setTrimState] = useState<TrimState | null>(null);
-  const isSameEditSessionMode = useEditSessionModeGuard();
+  const canBindCompletion = useEditSessionCompletionGuard(completionBinding);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -210,15 +216,9 @@ const SoundPicker = ({
         soundListCache = next;
         return next;
       });
-      await window.api.sound.remove(item.soundPath);
-      // 백엔드가 이미 모든 요소에서 이 사운드를 해제했다. 대상이 갈렸으면
-      // 여기서 한 번 더 비우는 건 새 모드의 다른 사운드를 지우는 일이 된다
-      if (
-        normalizedSelectedSound === item.soundPath &&
-        isSameEditSessionMode()
-      ) {
-        onSoundSelect(null);
-      }
+      await soundApi.remove(item.soundPath);
+      // 백엔드가 참조 해제와 canonical 동기화를 소유
+      // 응답 대기 중 새로 선택한 사운드를 예전 선택으로 재판단해 지우지 않는다
       await loadSounds();
     } catch (error) {
       console.error('Failed to delete sound', error);
@@ -247,7 +247,7 @@ const SoundPicker = ({
         soundListCache = next;
         return next;
       });
-      await window.api.sound.rename(item.soundPath, trimmed);
+      await soundApi.rename(item.soundPath, trimmed);
       await loadSounds();
     } catch (error) {
       console.error('Failed to rename sound', error);
@@ -274,7 +274,7 @@ const SoundPicker = ({
         soundListCache = next;
         return next;
       });
-      await window.api.sound.setHidden(item.soundPath, nextHidden);
+      await soundApi.setHidden(item.soundPath, nextHidden);
       await loadSounds();
     } catch (error) {
       console.error('Failed to toggle sound hidden', error);
@@ -288,7 +288,8 @@ const SoundPicker = ({
 
   const handleTrimSaved = (soundPath: string) => {
     // 사운드 파일은 이미 저장됐다. 대상이 갈렸으면 연결만 하지 않는다
-    if (isSameEditSessionMode()) onSoundSelect(soundPath);
+    // (element-id 결합이면 ID applier가 유효성을 판정하므로 통과)
+    if (canBindCompletion()) onSoundSelect(soundPath);
     setTrimState(null);
     void loadSounds();
   };

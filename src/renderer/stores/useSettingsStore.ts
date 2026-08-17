@@ -7,12 +7,7 @@ import type { FontSettings } from '@src/types/settings/fonts';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 import type { JsPlugin } from '@src/types/plugin/js';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
-import {
-  getDefaultNoteSettings,
-  getDefaultFontSettings,
-  getDefaultGridSettings,
-  getDefaultShortcuts,
-} from '@src/renderer/defaults';
+import { getDefaultSettingsState } from '@src/renderer/defaults';
 import { stableStringify } from '@utils/core/stableStringify';
 
 export interface GridSettings {
@@ -109,31 +104,34 @@ export type SettingsStateSnapshot = Omit<
   | 'setObsModeEnabled'
 >;
 
+// 초기 상태는 canonical 기본값에서 유도, 부트스트랩 sync 전까지의 폴백
+const settingsDefaults = getDefaultSettingsState();
+
 const initialState: SettingsStateSnapshot = {
-  hardwareAcceleration: true,
-  alwaysOnTop: true,
-  overlayLocked: false,
-  angleMode: 'd3d11',
-  noteEffect: false,
-  noteSettings: getDefaultNoteSettings(),
+  hardwareAcceleration: settingsDefaults.hardwareAcceleration,
+  alwaysOnTop: settingsDefaults.alwaysOnTop,
+  overlayLocked: settingsDefaults.overlayLocked,
+  angleMode: settingsDefaults.angleMode,
+  noteEffect: settingsDefaults.noteEffect,
+  noteSettings: settingsDefaults.noteSettings,
   tabNoteOverrides: {},
-  fontSettings: getDefaultFontSettings(),
-  useCustomCSS: false,
-  customCSSContent: '',
-  customCSSPath: null,
-  useCustomJS: false,
-  jsPlugins: [],
-  backgroundColor: 'transparent',
-  language: 'ko',
-  laboratoryEnabled: false,
-  developerModeEnabled: false,
-  trayEnabled: false,
-  autoUpdateEnabled: true,
-  overlayResizeAnchor: 'top-left',
-  keyCounterEnabled: false,
-  gridSettings: getDefaultGridSettings(),
-  shortcuts: getDefaultShortcuts(),
-  obsModeEnabled: false,
+  fontSettings: settingsDefaults.fontSettings,
+  useCustomCSS: settingsDefaults.useCustomCSS,
+  customCSSContent: settingsDefaults.customCSS.content,
+  customCSSPath: settingsDefaults.customCSS.path,
+  useCustomJS: settingsDefaults.useCustomJS,
+  jsPlugins: settingsDefaults.customJS.plugins,
+  backgroundColor: settingsDefaults.backgroundColor,
+  language: settingsDefaults.language,
+  laboratoryEnabled: settingsDefaults.laboratoryEnabled,
+  developerModeEnabled: settingsDefaults.developerModeEnabled,
+  trayEnabled: settingsDefaults.trayEnabled,
+  autoUpdateEnabled: settingsDefaults.autoUpdateEnabled,
+  overlayResizeAnchor: settingsDefaults.overlayResizeAnchor,
+  keyCounterEnabled: settingsDefaults.keyCounterEnabled,
+  gridSettings: settingsDefaults.gridSettings,
+  shortcuts: settingsDefaults.shortcuts,
+  obsModeEnabled: settingsDefaults.obsModeEnabled,
 };
 
 function mergeSnapshot(

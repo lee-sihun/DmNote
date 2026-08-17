@@ -1,15 +1,17 @@
 import { create } from 'zustand';
-import type { StatItemPositions } from '@src/types/key/statItems';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
+
+type CanonicalStatItemPositions = CanonicalEditorDocumentV1['statPositions'];
 
 interface StatItemStoreState {
-  positions: StatItemPositions;
+  positions: CanonicalStatItemPositions;
   isLocalUpdateInProgress: boolean;
-  setPositions: (positions: StatItemPositions) => void;
+  setPositions: (positions: CanonicalStatItemPositions) => void;
   setLocalUpdateInProgress: (value: boolean) => void;
 }
 
 export const useStatItemStore = create<StatItemStoreState>((set) => ({
-  positions: {} as StatItemPositions,
+  positions: {},
   isLocalUpdateInProgress: false,
   setPositions: (positions) => set({ positions }),
   setLocalUpdateInProgress: (value) => set({ isLocalUpdateInProgress: value }),

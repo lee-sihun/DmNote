@@ -51,12 +51,37 @@ body.dmn-custom-cursor * {
 
 /* 캔버스 아이템 드래그 커서 — 호버 무변화, 잡는 동안만 grabbing (전 요소 동일 정책) */
 .dmn-grabbable {
+  cursor: default !important;
+}
+
+/* 자식이 자체 커서를 선언해도(플러그인 콘텐츠 인라인 커서 등) 래퍼 정책을 상속
+   리사이즈·회전 핸들은 그리드 레벨 형제 요소라 이 규칙에 걸리지 않음 */
+.dmn-grabbable * {
+  cursor: inherit !important;
+}
+
+.dmn-grabbable:active,
+.dmn-grabbable:active * {
+  cursor: -webkit-grabbing !important;
+  cursor: grabbing !important;
+}
+
+/* 패널 레이어 행 드래그 커서 - 호버 무변화, 잡는 동안만 grabbing
+   행 내부 버튼·입력은 자체 커서 선언을 유지해야 하므로 상속 강제 없음 */
+.dmn-row-grabbable {
   cursor: default;
 }
 
-.dmn-grabbable:active {
+.dmn-row-grabbable:active {
   cursor: -webkit-grabbing;
   cursor: grabbing;
+}
+
+/* 드래그 세션 전역 grabbing, useDraggable·useLayerDnD가 press부터 세션 종료까지 토글 */
+body.dmn-dragging,
+body.dmn-dragging * {
+  cursor: -webkit-grabbing !important;
+  cursor: grabbing !important;
 }
 
 /* ===== 글래스 백드롭 ===== */
@@ -756,7 +781,7 @@ body.dmn-custom-cursor * {
   /* 평상시에도 합성 레이어를 유지한다. 없으면 transform: none 상태와
      애니메이션 사이를 오갈 때마다 레이어가 승격·해제되고, 그 경계에서
      14px 아이콘의 래스터가 다시 스냅돼 첫 프레임이 세로로 튄다
-     (WebKit 가속 합성 계열 — tasks/lessons.md 2026-07-12 참고).
+     (WebKit 가속 합성 계열 - tasks/lessons.md 2026-07-12 참고).
      .dmn-icon-swap과 달리 여기서는 will-change를 켠다 -
      대상이 툴바 아이콘 11개로 고정이라 레이어가 늘어날 여지가 없다 */
   will-change: transform;

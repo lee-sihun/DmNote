@@ -7,21 +7,54 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 
 import { useGridKeyboard } from './useGridKeyboard';
 import { useGridSelection } from './useGridSelection';
 
-import type { KeyPosition } from '@src/types/key/keys';
+import type { CanonicalKeyPosition } from '@src/types/editor';
 
-const { commitPatchMock, rotateSessionMock, sendBridgeMessageMock } =
-  vi.hoisted(() => ({
-    commitPatchMock: vi.fn().mockResolvedValue(undefined),
-    rotateSessionMock: vi.fn(),
-    sendBridgeMessageMock: vi.fn(),
-  }));
+const {
+  commitPatchMock,
+  rotateSessionMock,
+  sendBridgeMessageMock,
+  recordedGenerates,
+} = vi.hoisted(() => ({
+  commitPatchMock: vi.fn().mockResolvedValue(undefined),
+  rotateSessionMock: vi.fn(),
+  sendBridgeMessageMock: vi.fn(),
+  recordedGenerates: [] as Array<(base: unknown) => unknown>,
+}));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch: commitPatchMock },
+  editorCoordinator: {
+    commitPatch: commitPatchMock,
+    getState: () => ({ lastAck: null }),
+  },
+}));
+
+vi.mock('@src/renderer/editor/runtime/editorSemanticOps', () => ({
+  // 게스처 버스트 검증 대상은 gestureId 운반 - 동기 recorder로 기록.
+  // generate 클로저도 보관해 정산 의도가 어느 요소를 실었는지 검증 가능
+  commitGeneratedSemanticOps: vi.fn(
+    (
+      generate: (base: unknown) => unknown,
+      meta?: { gestureId?: string; onEnrolled?: () => void },
+    ) => {
+      meta?.onEnrolled?.();
+      recordedGenerates.push(generate);
+      commitPatchMock({ schemaVersion: 1 }, { gestureId: meta?.gestureId });
+      return Promise.resolve({ document: null, opResults: [] });
+    },
+  ),
+}));
+
+vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
+  runMixedGestureElementIntent: vi.fn((options: { gestureId: string }) => {
+    commitPatchMock({ schemaVersion: 1 }, { gestureId: options.gestureId });
+    return Promise.resolve({ committed: true, satisfied: true });
+  }),
 }));
 
 vi.mock('@utils/plugin/bridgeMessages', () => ({
@@ -30,6 +63,10 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
 
 vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
   rotatePluginInstancesEditSession: rotateSessionMock,
+  // 혼합 이동의 사전 staging이 실제 gestureTransaction을 타는 경로용 무상태 stub
+  getStagedPluginInstancesGestureId: () => undefined,
+  stagePluginInstancesGesture: vi.fn(),
+  unstagePluginInstancesGesture: vi.fn(),
 }));
 
 vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
@@ -37,31 +74,50 @@ vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
 const firstGestureId = '00000000-0000-4000-8000-000000000001';
 const secondGestureId = '00000000-0000-4000-8000-000000000002';
 
-const position = (): KeyPosition =>
-  ({ dx: 0, dy: 0, width: 40, height: 40 } as KeyPosition);
+const STABLE_IDS = [
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+];
+
+const position = (index = 0): CanonicalKeyPosition =>
+  ({
+    id: STABLE_IDS[index],
+    dx: 0,
+    dy: 0,
+    width: 40,
+    height: 40,
+  } as CanonicalKeyPosition);
 
 interface HarnessProps {
   includePlugin?: boolean;
   selectedIndex?: number;
+  locatorIndex?: number;
   continuousInputStrategy?: 'sync' | 'frame';
 }
 
 const Harness = ({
   includePlugin = false,
   selectedIndex = 0,
+  locatorIndex = selectedIndex,
   continuousInputStrategy = 'sync',
 }: HarnessProps) => {
-  const selectedElements = [
-    { type: 'key' as const, id: `key-${selectedIndex}`, index: selectedIndex },
+  const selectedElements: SelectedElement[] = [
+    {
+      type: 'key' as const,
+      id: STABLE_IDS[selectedIndex],
+      index: locatorIndex,
+    },
     ...(includePlugin
       ? [{ type: 'plugin' as const, id: 'plugin-a:element' }]
       : []),
   ];
+  // 정산 라우팅은 선택 스토어를 읽는다 - 하네스 선택과 동기화
+  useGridSelectionStore.setState({ selectedElements });
   const { moveSelectedElements } = useGridSelection({
     selectedElements,
     selectedKeyType: '4key',
     keyMappings: { '4key': ['KeyA', 'KeyB'] },
-    positions: { '4key': [position(), position()] },
+    positions: { '4key': [position(0), position(1)] },
   });
 
   useGridKeyboard({
@@ -89,6 +145,7 @@ describe('useGridKeyboard arrow history burst', () => {
     commitPatchMock.mockClear();
     rotateSessionMock.mockClear();
     sendBridgeMessageMock.mockClear();
+    recordedGenerates.length = 0;
     randomUUIDMock = vi
       .spyOn(crypto, 'randomUUID')
       .mockReturnValueOnce(firstGestureId)
@@ -97,8 +154,8 @@ describe('useGridKeyboard arrow history burst', () => {
     useKeyStore.setState({
       selectedKeyType: '4key',
       keyMappings: { '4key': ['KeyA', 'KeyB'] },
-      positions: { '4key': [position(), position()] },
-      canonicalPositions: { '4key': [position(), position()] },
+      positions: { '4key': [position(0), position(1)] },
+      canonicalPositions: { '4key': [position(0), position(1)] },
     });
     useStatItemStore.setState({ positions: {} });
     useGraphItemStore.setState({ positions: {} });
@@ -181,6 +238,18 @@ describe('useGridKeyboard arrow history burst', () => {
     expect(randomUUIDMock).toHaveBeenCalledTimes(2);
   });
 
+  it('같은 ID의 locator index만 바뀌면 기존 gesture를 유지한다', async () => {
+    pressArrow('ArrowRight');
+    vi.advanceTimersByTime(100);
+    await act(async () => {
+      root.render(<Harness locatorIndex={1} />);
+    });
+    pressArrow('ArrowRight');
+
+    expect(committedGestureIds()).toEqual([firstGestureId, firstGestureId]);
+    expect(randomUUIDMock).toHaveBeenCalledOnce();
+  });
+
   it('혼합 선택 방향키 이동은 editor와 plugin에 같은 gesture를 전달한다', async () => {
     usePluginDisplayElementStore.setState({
       elements: [
@@ -232,6 +301,53 @@ describe('useGridKeyboard arrow history burst', () => {
       dx: 2,
       dy: 1,
     });
+    vi.unstubAllGlobals();
+  });
+
+  it('pending 중 선택이 바뀌어도 flush는 옛 대상 이동을 wire에 커밋한다', async () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 1;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = nextFrameId++;
+      callbacks.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+    await act(async () => {
+      root.render(<Harness continuousInputStrategy="frame" />);
+    });
+
+    pressArrow('ArrowRight');
+    expect(commitPatchMock).not.toHaveBeenCalled();
+
+    // flush 전에 선택이 A → B로 넘어간다 - cleanup flush가 옛 클로저로 실행
+    await act(async () => {
+      root.render(
+        <Harness continuousInputStrategy="frame" selectedIndex={1} />,
+      );
+    });
+
+    expect(commitPatchMock).toHaveBeenCalledOnce();
+    expect(committedGestureIds()).toEqual([firstGestureId]);
+    // 정산 커밋은 eager를 적용한 옛 대상(A)의 이동을 실어야 한다 -
+    // 현재 선택(B)을 재독하면 A의 이동이 wire에 실리지 않아 소실된다
+    const ops = recordedGenerates.at(-1)?.({
+      schemaVersion: 1,
+      keys: {},
+      keyPositions: structuredClone(useKeyStore.getState().canonicalPositions),
+      statPositions: {},
+      graphPositions: {},
+      knobPositions: {},
+      layerGroups: {},
+    });
+    expect(ops).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: STABLE_IDS[0],
+        bounds: { dx: 1, dy: 0, width: 40, height: 40 },
+      },
+    ]);
     vi.unstubAllGlobals();
   });
 

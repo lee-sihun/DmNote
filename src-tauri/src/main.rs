@@ -321,6 +321,7 @@ fn main() {
             commands::plugin::instances::plugin_instances_commit,
             commands::plugin::instances::plugin_instances_get,
             commands::plugin::instances::plugin_instances_reconcile,
+            commands::plugin::instances::plugin_group_refs_get,
             commands::plugin::storage::plugin_storage_get,
             commands::plugin::storage::plugin_storage_set,
             commands::plugin::storage::plugin_storage_remove,
@@ -410,9 +411,9 @@ fn apply_renderer_settings() {
     let store_path = get_store_path();
 
     let angle_mode = if let Some(path) = store_path {
-        read_angle_mode_from_store(&path).unwrap_or_else(|| "d3d11".to_string())
+        read_angle_mode_from_store(&path).unwrap_or_else(models::default_angle_mode)
     } else {
-        "d3d11".to_string()
+        models::default_angle_mode()
     };
 
     // ANGLE 백엔드 또는 Skia 렌더러 설정 적용

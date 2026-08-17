@@ -46,7 +46,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
 
     // 키 요소 bounds
     const keyPositions = positions[selectedKeyType] || [];
-    keyPositions.forEach((pos, index) => {
+    keyPositions.forEach((pos) => {
       if (pos.hidden) return;
       bounds.push(
         calculateBounds(
@@ -54,7 +54,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
           pos.dy,
           pos.width || 60,
           pos.height || 60,
-          `key-${index}`,
+          pos.id,
         ),
       );
     });

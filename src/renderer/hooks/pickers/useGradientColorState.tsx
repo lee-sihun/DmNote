@@ -75,8 +75,8 @@ export function useGradientColorState({
   );
   const lastGradientSpecsRef = useRef(new Map<string, GradientSpec>());
 
-  // 형식 왕복 기억은 연속 선택 안에서만 유효. 삭제·재선택으로 같은 인덱스를
-  // 다른 요소가 차지하면 이전 요소의 spec을 재사용하지 않는다
+  // 형식 왕복 기억은 연속 선택 안에서만 유효. 삭제·재선택으로 대상이
+  // 바뀌면 이전 요소의 spec을 재사용하지 않는다
   useEffect(() => {
     lastGradientSpecsRef.current.clear();
   }, [selectedElements]);
@@ -191,12 +191,17 @@ export function useGradientColorState({
   selectedStopRef.current = selectedStop;
 
   const anchorKey = canvasAnchor
-    ? `${canvasAnchor.kind}:${
-        'index' in canvasAnchor ? canvasAnchor.index : ''
-      }`
+    ? canvasAnchor.kind === 'batch'
+      ? 'batch'
+      : `${canvasAnchor.kind}:${canvasAnchor.id}`
     : null;
-  // contextKey가 요소·필드·상태를 모두 담는 편집 식별자 — 없으면 앵커로 폴백
-  const sessionKeyValue = contextKey ?? anchorKey ?? '';
+  // 단일 세션은 안정 ID를 항상 소유권 키에 포함해 재정렬 뒤에도 대상을 유지
+  const sessionKeyValue =
+    canvasAnchor?.kind === 'batch'
+      ? contextKey ?? 'batch'
+      : anchorKey
+      ? `${anchorKey}:${contextKey ?? ''}`
+      : contextKey ?? '';
   const hasSession = Boolean(canvasAnchor && workingSpec);
 
   useEffect(() => {

@@ -620,7 +620,7 @@ prefix 매칭은 없다 — 명시된 커맨드 이름만 허용된다.
       "plugin_bridge_send", "plugin_bridge_send_to",
       "raw_input_subscribe", "raw_input_unsubscribe",
       "plugin_storage_get", "plugin_storage_set", "plugin_storage_remove",
-      "plugin_storage_keys", "plugin_storage_has_data", "plugin_storage_clear_by_prefix"
+      "plugin_storage_keys", "plugin_storage_has_data"
     ]
   }
 }
@@ -655,9 +655,10 @@ function onHelloAck(payload: HelloAckPayload) {
 | 위치·카운터 읽기 | `keys_get`, `keys_get_counters`, `positions_get`, `stat_positions_get`, `graph_positions_get`, `knob_positions_get`, `custom_tabs_list`, `counter_animation_list` | 배치·통계 읽기 |
 | 커서 | `get_cursor_settings` | macOS 커서 처리 |
 | 플러그인 브릿지·구독 | `plugin_bridge_send`, `plugin_bridge_send_to`, `raw_input_subscribe`, `raw_input_unsubscribe` | 오버레이 플러그인 동기화·입력 구독 |
-| 플러그인 storage | `plugin_storage_get`, `plugin_storage_set`, `plugin_storage_remove`, `plugin_storage_keys`, `plugin_storage_has_data`, `plugin_storage_clear_by_prefix` | 플러그인 네임스페이스 저장소 |
+| 플러그인 storage | `plugin_storage_get`, `plugin_storage_set`, `plugin_storage_remove`, `plugin_storage_keys`, `plugin_storage_has_data` | 플러그인 네임스페이스 저장소 |
 
 `settings_update`, `sound_delete`, `js_set_content`, `preset_save` 등 **변이·파일 커맨드는 allowlist에 없어 원격 차단**.
+`plugin_storage_clear`, `plugin_storage_clear_by_prefix` 같은 파괴적 bulk 삭제 커맨드도 같은 이유로 원격 차단된다.
 `plugin:window|`, `plugin:menu|` 등 네이티브 창/메뉴 커맨드도 allowlist에 없으므로 자동 no-op 처리된다.
 
 ### 12.5 WS ↔ Tauri 이벤트 매핑
@@ -853,7 +854,7 @@ const ALLOWED_WS_COMMANDS: &[&str] = &[
     "plugin_bridge_send", "plugin_bridge_send_to",
     "raw_input_subscribe", "raw_input_unsubscribe",
     "plugin_storage_get", "plugin_storage_set", "plugin_storage_remove",
-    "plugin_storage_keys", "plugin_storage_has_data", "plugin_storage_clear_by_prefix",
+    "plugin_storage_keys", "plugin_storage_has_data",
 ];
 
 fn is_allowed_command(cmd: &str) -> bool {

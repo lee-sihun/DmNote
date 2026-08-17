@@ -16,7 +16,8 @@ import { createEditorCoordinator } from './editorCoordinator';
 import { markGestureSessionsDiscarded } from './gestureSessionLifecycle';
 import { previewOverlay } from './previewOverlay';
 
-import type { EditorDocumentV1 } from '@src/types/editor';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
+import { assertCanonicalEditorDocument } from '@src/types/editor';
 
 const hasChanged = (current: unknown, next: unknown) =>
   stableStringify(current) !== stableStringify(next);
@@ -45,9 +46,10 @@ const ensurePreviewSubscription = (): Promise<void> => {
   return previewSubscriptionInFlight;
 };
 
-export const captureEditorDocument = (): EditorDocumentV1 => {
+export const captureEditorDocument = (): CanonicalEditorDocumentV1 => {
   const keyState = useKeyStore.getState();
   return {
+    // 문서 스키마는 v1 유지. v2는 쓰기(commit) 전용 버전이다
     schemaVersion: 1,
     keys: keyState.keyMappings,
     // 프리뷰가 섞이지 않은 canonical만 문서로 캡처
@@ -59,7 +61,9 @@ export const captureEditorDocument = (): EditorDocumentV1 => {
   };
 };
 
-export const applyEditorDocument = (document: EditorDocumentV1): void => {
+export const applyEditorDocument = (
+  document: CanonicalEditorDocumentV1,
+): void => {
   unstable_batchedUpdates(() => {
     const keyState = useKeyStore.getState();
     const mode = keyState.selectedKeyType;
@@ -131,6 +135,7 @@ export const editorCoordinator = createEditorCoordinator({
   applyDocument: (document, reason) => {
     // OBS는 읽기 전용이므로 차단될 쓰기를 화면에 낙관 적용하지 않음
     if (reason === 'localPatch' && window.__dmn_runtime === 'obs') return;
+    assertCanonicalEditorDocument(document, 'editor coordinator document');
     applyEditorDocument(document);
   },
   // canonical 반영과 같은 처리 단위에서 해당 게스처의 프리뷰 오버레이 정리

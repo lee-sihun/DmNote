@@ -15,7 +15,7 @@ type CompiledTemplateChunk =
   | { type: 'fn'; fn: DisplayElementTemplateValueResolver }
   | { type: 'value'; value: DisplayElementTemplateFactoryValue };
 
-export const displayElementTemplateHelpers: DisplayElementTemplateHelpers = {
+const displayElementTemplateHelpers: DisplayElementTemplateHelpers = {
   html: html as unknown as DisplayElementTemplateHelpers['html'],
   styleMap,
   css,

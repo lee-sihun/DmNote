@@ -1,0 +1,2692 @@
+{
+  "version": 2,
+  "comment": "semantic op 결과 동등성 파리티 fixture. 소비자: src-tauri/src/state/editor_ops_parity.rs (canonical 적용기), tests/editor-ops-parity.test.ts (프론트 낙관 적용기). 각 케이스는 같은 initialDocument에 같은 ops를 적용했을 때 양측이 만드는 문서가 expectedDocument와 일치함을 고정한다. 플러그인 그룹 멤버 원천(양측 근사 지점)은 양쪽 모두 비어 있는 상태를 전제한다.",
+  "cases": [
+    {
+      "name": "setbounds-basic",
+      "comment": "기하 setBounds 단건. 프론트 {...position, ...bounds}와 백엔드 apply_bounds의 정확 일치",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "setBounds",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "bounds": { "dx": 24, "dy": 36, "width": 96, "height": 48 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 24,
+              "dy": 36,
+              "width": 96,
+              "height": 48,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "setbounds-no-change",
+      "comment": "동일 bounds 재전송 경계. 양측 모두 문서가 그대로여야 한다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "setBounds",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "bounds": { "dx": 0, "dy": 0, "width": 60, "height": 60 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "setbounds-multi-target",
+      "comment": "다중 target 경계. key, stat, knob 세 컬렉션에 걸친 setBounds 시퀀스",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {
+          "4key": [
+            {
+              "axisId": "axis-0",
+              "sensitivity": 1,
+              "reverse": false,
+              "id": "66666666-6666-4666-8666-666666666666",
+              "dx": 240,
+              "dy": 0,
+              "width": 64,
+              "height": 64,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "setBounds",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "bounds": { "dx": 10, "dy": 20, "width": 70, "height": 55 }
+        },
+        {
+          "kind": "setBounds",
+          "elementType": "stat",
+          "id": "44444444-4444-4444-8444-444444444444",
+          "bounds": { "dx": 5, "dy": 5, "width": 40, "height": 40 }
+        },
+        {
+          "kind": "setBounds",
+          "elementType": "knob",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "bounds": { "dx": -30, "dy": 12, "width": 64, "height": 64 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 10,
+              "dy": 20,
+              "width": 70,
+              "height": 55,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 5,
+              "dy": 5,
+              "width": 40,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {
+          "4key": [
+            {
+              "axisId": "axis-0",
+              "sensitivity": 1,
+              "reverse": false,
+              "id": "66666666-6666-4666-8666-666666666666",
+              "dx": -30,
+              "dy": 12,
+              "width": 64,
+              "height": 64,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-scalar-batch",
+      "comment": "patchElement 스칼라 속성류. 4개 요소 타입 전부에 대해 속성 하나씩",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "graphType": "line",
+              "graphSpeed": 60,
+              "graphColor": "#888888",
+              "showAvgLine": false,
+              "id": "55555555-5555-4555-8555-555555555555",
+              "dx": 20,
+              "dy": 200,
+              "width": 180,
+              "height": 80,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "knobPositions": {
+          "4key": [
+            {
+              "axisId": "axis-0",
+              "sensitivity": 1,
+              "reverse": false,
+              "id": "66666666-6666-4666-8666-666666666666",
+              "dx": 240,
+              "dy": 0,
+              "width": 64,
+              "height": 64,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": { "property": "hidden", "value": true }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "patch": { "property": "displayText", "value": "ALT" }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "stat",
+          "id": "44444444-4444-4444-8444-444444444444",
+          "patch": { "property": "statType", "value": "kpsMax" }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "graph",
+          "id": "55555555-5555-4555-8555-555555555555",
+          "patch": { "property": "graphColor", "value": "#ABCDEF" }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "knob",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "patch": { "property": "sensitivity", "value": 2.5 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "hidden": true
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "displayText": "ALT"
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kpsMax",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "graphType": "line",
+              "graphSpeed": 60,
+              "graphColor": "#ABCDEF",
+              "showAvgLine": false,
+              "id": "55555555-5555-4555-8555-555555555555",
+              "dx": 20,
+              "dy": 200,
+              "width": 180,
+              "height": 80,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "knobPositions": {
+          "4key": [
+            {
+              "axisId": "axis-0",
+              "sensitivity": 2.5,
+              "reverse": false,
+              "id": "66666666-6666-4666-8666-666666666666",
+              "dx": 240,
+              "dy": 0,
+              "width": 64,
+              "height": 64,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-layer-name-set-and-clear",
+      "comment": "nullable layerName의 설정과 null 해제(필드 제거). 프론트 delete와 백엔드 None 직렬화 생략의 동등성",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "layerName": "Old"
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": { "property": "layerName", "value": "Left Cluster" }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "patch": { "property": "layerName", "value": null }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "layerName": "Left Cluster"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-counter-nested",
+      "comment": "counter 중첩 속성. key 2개와 stat 1개에서 gap, enabled, fontSize를 각각 수정",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": { "property": "counterGap", "value": 8 }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "patch": { "property": "counterEnabled", "value": false }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "stat",
+          "id": "44444444-4444-4444-8444-444444444444",
+          "patch": { "property": "counterFontSize", "value": 20 }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 8,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": false,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 20,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-counter-animation-preset",
+      "comment": "counterAnimationPreset intent. 백엔드는 store 기준 프리셋 존재와 값 일치를 추가 검증하므로(서버 발급 값 영역) fixture는 builtin-ease-out의 실제 값을 사용한다. 유효 입력에서 결과 문서는 정확 일치",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": true,
+                  "presetId": "builtin-linear",
+                  "bezier": [0.3, 0.1, 0.7, 0.9],
+                  "scale": 1.3,
+                  "durationMs": 260
+                }
+              }
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": {
+            "property": "counterAnimationPreset",
+            "value": {
+              "presetId": "builtin-ease-out",
+              "applyPresetId": true,
+              "bezier": [0.25, 0.46, 0.45, 0.94],
+              "scale": 1.1,
+              "durationMs": 300
+            }
+          }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": true,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-idle-paint-materializes-active",
+      "comment": "idle paint 변경 시 active 물질화 보존 규칙. 프론트 inheritedPaintMaterialization과 백엔드 preserve_active_paint_fallback의 정확 일치. 단색 상속, 상속 없음, gradient 상속 세 갈래",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "backgroundColor": "#0A0B0C"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {
+          "4key": [
+            {
+              "axisId": "axis-0",
+              "sensitivity": 1,
+              "reverse": false,
+              "id": "66666666-6666-4666-8666-666666666666",
+              "dx": 240,
+              "dy": 0,
+              "width": 64,
+              "height": 64,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "backgroundColor": "#334455",
+              "backgroundGradient": {
+                "angle": 90,
+                "stops": [
+                  { "color": "#334455", "pos": 0 },
+                  { "color": "#667788", "pos": 1 }
+                ]
+              }
+            }
+          ]
+        },
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": {
+            "property": "backgroundPaint",
+            "value": { "color": "#123456", "gradient": null }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "patch": {
+            "property": "borderPaint",
+            "value": {
+              "color": "#111111",
+              "gradient": {
+                "angle": 45,
+                "stops": [
+                  { "color": "#111111", "pos": 0 },
+                  { "color": "#222222", "pos": 1 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "knob",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "patch": {
+            "property": "backgroundPaint",
+            "value": { "color": "#AA0000", "gradient": null }
+          }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "backgroundColor": "#123456",
+              "activeBackgroundColor": "#0A0B0C"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "borderColor": "#111111",
+              "borderGradient": {
+                "angle": 45,
+                "stops": [
+                  { "color": "#111111", "pos": 0 },
+                  { "color": "#222222", "pos": 1 }
+                ]
+              }
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {
+          "4key": [
+            {
+              "axisId": "axis-0",
+              "sensitivity": 1,
+              "reverse": false,
+              "id": "66666666-6666-4666-8666-666666666666",
+              "dx": 240,
+              "dy": 0,
+              "width": 64,
+              "height": 64,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "backgroundColor": "#AA0000",
+              "activeBackgroundColor": "#334455",
+              "activeBackgroundGradient": {
+                "angle": 90,
+                "stops": [
+                  { "color": "#334455", "pos": 0 },
+                  { "color": "#667788", "pos": 1 }
+                ]
+              }
+            }
+          ]
+        },
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-font-color-fallback",
+      "comment": "fontColor 변경 시 active fallback 물질화. key는 직전 idle 값을 activeFontColor로 보존, stat은 보존 없음",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#DDDDDD"
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#101010"
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": { "property": "fontColor", "value": "#EEEEEE" }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "stat",
+          "id": "44444444-4444-4444-8444-444444444444",
+          "patch": { "property": "fontColor", "value": "#123123" }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#EEEEEE",
+              "activeFontColor": "#DDDDDD"
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#123123"
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-shadow-seed",
+      "comment": "shadow leaf와 shadowEnabled의 기본 시드 물질화. 이미지 보유 key는 시드 enabled false, knob active 시드는 투명/보더 없음이라 enabled true",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "inactiveImage": "images/key.png"
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {
+          "4key": [
+            {
+              "axisId": "axis-0",
+              "sensitivity": 1,
+              "reverse": false,
+              "id": "66666666-6666-4666-8666-666666666666",
+              "dx": 240,
+              "dy": 0,
+              "width": 64,
+              "height": 64,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": {
+            "property": "shadow",
+            "value": { "leaf": "blur", "value": 24 }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "patch": { "property": "shadowEnabled", "value": false }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "knob",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "patch": {
+            "property": "activeShadow",
+            "value": { "leaf": "offsetY", "value": 6 }
+          }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "shadow": {
+                "enabled": true,
+                "color": "rgba(0, 0, 0, 0.28)",
+                "offsetX": 0,
+                "offsetY": 4,
+                "blur": 24
+              }
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "inactiveImage": "images/key.png",
+              "shadow": {
+                "enabled": false,
+                "color": "rgba(0, 0, 0, 0.28)",
+                "offsetX": 0,
+                "offsetY": 4,
+                "blur": 10
+              },
+              "activeShadow": {
+                "enabled": false,
+                "color": "rgba(0, 0, 0, 0.32)",
+                "offsetX": 0,
+                "offsetY": 3,
+                "blur": 8
+              }
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {
+          "4key": [
+            {
+              "axisId": "axis-0",
+              "sensitivity": 1,
+              "reverse": false,
+              "id": "66666666-6666-4666-8666-666666666666",
+              "dx": 240,
+              "dy": 0,
+              "width": 64,
+              "height": 64,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "activeShadow": {
+                "enabled": true,
+                "color": "rgba(0, 0, 0, 0.32)",
+                "offsetX": 0,
+                "offsetY": 6,
+                "blur": 8
+              }
+            }
+          ]
+        },
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-note-paint",
+      "comment": "notePaint 계열. gradient 색, gradient 투명도 3필드 세트, noteBorderPaint. 멀티 모드 문서에서 5key 대상 포함",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"], "5key": ["C"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ],
+          "5key": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": {
+            "property": "notePaint",
+            "value": {
+              "color": {
+                "type": "gradient",
+                "top": "#FF0000",
+                "bottom": "#00FF00"
+              }
+            }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "patch": {
+            "property": "notePaint",
+            "value": { "opacity": 55, "opacityTop": 70, "opacityBottom": 40 }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "33333333-3333-4333-8333-333333333333",
+          "patch": {
+            "property": "noteBorderPaint",
+            "value": { "color": "#0F0F0F", "opacity": 80 }
+          }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"], "5key": ["C"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": {
+                "type": "gradient",
+                "top": "#FF0000",
+                "bottom": "#00FF00"
+              },
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 55,
+              "noteOpacityTop": 70,
+              "noteOpacityBottom": 40
+            }
+          ],
+          "5key": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "noteBorderColor": "#0F0F0F",
+              "noteBorderOpacity": 80
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-counter-fill-solid",
+      "comment": "counterFill idle과 active의 단색 교체",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": {
+            "property": "counterFillIdle",
+            "value": { "color": "#334455" }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "patch": {
+            "property": "counterFillActive",
+            "value": { "color": "#556677" }
+          }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "#334455",
+                  "active": "rgba(20, 20, 24, 0.9)"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "counter": {
+                "enabled": true,
+                "placement": "inside",
+                "align": "bottom",
+                "alignMode": "center",
+                "fill": {
+                  "idle": "rgba(237, 238, 242, 0.78)",
+                  "active": "#556677"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 4,
+                "fontSize": 11,
+                "fontWeight": 500,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false,
+                "animation": {
+                  "enabled": false,
+                  "presetId": "builtin-ease-out",
+                  "bezier": [0.25, 0.46, 0.45, 0.94],
+                  "scale": 1.1,
+                  "durationMs": 300
+                }
+              }
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "set-key-slot",
+      "comment": "keys와 keyPositions의 인덱스 결합. keyPositions에서 id로 찾은 인덱스의 슬롯만 교체하며 멀티 모드와 멀티 키 슬롯을 포함",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"], "5key": ["C"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ],
+          "5key": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "setKeySlot",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "slot": { "keys": ["A", "S"], "match": "any" }
+        },
+        {
+          "kind": "setKeySlot",
+          "id": "33333333-3333-4333-8333-333333333333",
+          "slot": "D"
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": {
+          "4key": [{ "keys": ["A", "S"], "match": "any" }, "B"],
+          "5key": ["D"]
+        },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ],
+          "5key": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "delete-key-and-group-cleanup",
+      "comment": "key 삭제 시 keys와 keyPositions 인덱스 동반 제거, stat 삭제, 비게 된 그룹 정리. 그룹 정리의 플러그인 멤버 원천은 양측 모두 빈 상태 전제",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+      },
+      "ops": [
+        {
+          "kind": "deleteElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "kind": "deleteElement",
+          "elementType": "stat",
+          "id": "44444444-4444-4444-8444-444444444444"
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": { "4key": [] },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [] }
+      }
+    },
+    {
+      "name": "insert-frozen-elements",
+      "comment": "동결 삽입의 클린 경로. 새 그룹 선언 + key와 stat 삽입 + 기존 요소 zUpdate. 충돌/부분 실현 경로는 설계상 양측이 다르게 처리하므로(백엔드 오류, 프론트 관용 재적용) 커버 대상이 아니다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "insertFrozenElements",
+          "mode": "4key",
+          "elements": [
+            {
+              "elementType": "key",
+              "slot": "N",
+              "position": {
+                "id": "77777777-7777-4777-8777-777777777777",
+                "dx": 120,
+                "dy": 40,
+                "width": 60,
+                "height": 60,
+                "count": 0,
+                "noteColor": "#FFFFFF",
+                "noteOpacity": 90,
+                "zIndex": 5,
+                "groupId": "group-new"
+              }
+            },
+            {
+              "elementType": "stat",
+              "position": {
+                "statType": "kps",
+                "id": "88888888-8888-4888-8888-888888888888",
+                "dx": 200,
+                "dy": 10,
+                "width": 120,
+                "height": 40,
+                "count": 0,
+                "noteColor": "#FFFFFF",
+                "noteOpacity": 90,
+                "zIndex": 6
+              }
+            }
+          ],
+          "groups": [{ "id": "group-new", "name": "New Group" }],
+          "zUpdates": [
+            {
+              "elementType": "key",
+              "id": "11111111-1111-4111-8111-111111111111",
+              "zIndex": 1
+            }
+          ]
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "N"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 1
+            },
+            {
+              "id": "77777777-7777-4777-8777-777777777777",
+              "dx": 120,
+              "dy": 40,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 5,
+              "groupId": "group-new"
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "88888888-8888-4888-8888-888888888888",
+              "dx": 200,
+              "dy": 10,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 6
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [{ "id": "group-new", "name": "New Group" }] }
+      }
+    },
+    {
+      "name": "insert-z-only",
+      "comment": "elements와 groups가 빈 배열인 zUpdate 전용 삽입 경계. key와 stat의 zIndex만 갱신된다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "insertFrozenElements",
+          "mode": "4key",
+          "elements": [],
+          "groups": [],
+          "zUpdates": [
+            {
+              "elementType": "key",
+              "id": "22222222-2222-4222-8222-222222222222",
+              "zIndex": 3
+            },
+            {
+              "elementType": "stat",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "zIndex": 4
+            }
+          ]
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 3
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 4
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "reorder-z-and-groups",
+      "comment": "완전 재정렬과 그룹 재배정의 상호작용. z 갱신, 그룹 편입, null 해제가 한 op에서 함께 일어나며 두 그룹 모두 참조가 남아 생존한다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-b"
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {
+          "4key": [
+            { "id": "group-a", "name": "Group A" },
+            { "id": "group-b", "name": "Group B" }
+          ]
+        }
+      },
+      "ops": [
+        {
+          "kind": "reorderElements",
+          "mode": "4key",
+          "completeModeOrder": true,
+          "zUpdates": [
+            {
+              "elementType": "key",
+              "id": "11111111-1111-4111-8111-111111111111",
+              "zIndex": 2
+            },
+            {
+              "elementType": "key",
+              "id": "22222222-2222-4222-8222-222222222222",
+              "zIndex": 0
+            },
+            {
+              "elementType": "stat",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "zIndex": 1
+            }
+          ],
+          "groupUpdates": [
+            {
+              "elementType": "key",
+              "id": "11111111-1111-4111-8111-111111111111",
+              "groupId": "group-a"
+            },
+            {
+              "elementType": "key",
+              "id": "22222222-2222-4222-8222-222222222222",
+              "groupId": null
+            }
+          ]
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 2,
+              "groupId": "group-a"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 0
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 1,
+              "groupId": "group-b"
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {
+          "4key": [
+            { "id": "group-a", "name": "Group A" },
+            { "id": "group-b", "name": "Group B" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "reorder-empties-group",
+      "comment": "완전 재정렬에서 그룹 null 해제로 비게 된 그룹의 정리. 프론트 normalize와 백엔드 remove_empty_layer_groups의 동등성 (플러그인 멤버 없음 전제)",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+      },
+      "ops": [
+        {
+          "kind": "reorderElements",
+          "mode": "4key",
+          "completeModeOrder": true,
+          "zUpdates": [
+            {
+              "elementType": "key",
+              "id": "11111111-1111-4111-8111-111111111111",
+              "zIndex": 1
+            },
+            {
+              "elementType": "key",
+              "id": "22222222-2222-4222-8222-222222222222",
+              "zIndex": 0
+            }
+          ],
+          "groupUpdates": [
+            {
+              "elementType": "key",
+              "id": "11111111-1111-4111-8111-111111111111",
+              "groupId": null
+            }
+          ]
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 1
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "zIndex": 0
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [] }
+      }
+    },
+    {
+      "name": "set-element-groups-create",
+      "comment": "그룹 생성과 다중 target 편입. 이전 그룹이 비면서 정리되고 새 그룹만 남는다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+      },
+      "ops": [
+        {
+          "kind": "setElementGroups",
+          "mode": "4key",
+          "targets": [
+            {
+              "elementType": "key",
+              "id": "11111111-1111-4111-8111-111111111111"
+            },
+            {
+              "elementType": "stat",
+              "id": "44444444-4444-4444-8444-444444444444"
+            }
+          ],
+          "targetGroup": {
+            "kind": "create",
+            "id": "group-new",
+            "name": "Fresh"
+          }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-new"
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-new"
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [{ "id": "group-new", "name": "Fresh" }] }
+      }
+    },
+    {
+      "name": "set-element-groups-existing",
+      "comment": "기존 그룹으로 편입. 그룹 선언 목록은 그대로 유지된다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-b"
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {
+          "4key": [
+            { "id": "group-a", "name": "Group A" },
+            { "id": "group-b", "name": "Group B" }
+          ]
+        }
+      },
+      "ops": [
+        {
+          "kind": "setElementGroups",
+          "mode": "4key",
+          "targets": [
+            {
+              "elementType": "key",
+              "id": "22222222-2222-4222-8222-222222222222"
+            }
+          ],
+          "targetGroup": { "kind": "existing", "id": "group-b" }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A", "B"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-b"
+            }
+          ]
+        },
+        "statPositions": {
+          "4key": [
+            {
+              "statType": "kps",
+              "id": "44444444-4444-4444-8444-444444444444",
+              "dx": 10,
+              "dy": 120,
+              "width": 120,
+              "height": 40,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-b"
+            }
+          ]
+        },
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {
+          "4key": [
+            { "id": "group-a", "name": "Group A" },
+            { "id": "group-b", "name": "Group B" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "set-element-groups-ungroup",
+      "comment": "그룹 해제. 마지막 멤버가 빠지면서 그룹 선언도 정리된다",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+      },
+      "ops": [
+        {
+          "kind": "setElementGroups",
+          "mode": "4key",
+          "targets": [
+            {
+              "elementType": "key",
+              "id": "11111111-1111-4111-8111-111111111111"
+            }
+          ],
+          "targetGroup": null
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [] }
+      }
+    },
+    {
+      "name": "rename-layer-group",
+      "comment": "그룹 이름 변경",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Group A" }] }
+      },
+      "ops": [
+        {
+          "kind": "renameLayerGroup",
+          "mode": "4key",
+          "groupId": "group-a",
+          "name": "Renamed"
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "groupId": "group-a"
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": { "4key": [{ "id": "group-a", "name": "Renamed" }] }
+      }
+    }
+  ]
+}

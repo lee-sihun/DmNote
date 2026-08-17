@@ -5,16 +5,23 @@ use crate::{
     commands::{
         keys::keys::CustomTabChangePayload, plugin::instances::publish_plugin_instances_changed,
     },
+    errors::{CmdResult, CommandError},
     models::{AppStoreData, CustomCss, CustomJs, HistoryStatus, PluginInstancesChangedPayload},
     services::preview_broker::PreviewBroker,
     state::{
-        history::{HistoryBarrierLease, HistoryDirection, PresetFullHistorySnapshot},
+        history::{
+            HistoryBarrierLease, HistoryDirection, PresetFullHistorySnapshot,
+            INVALID_HISTORY_OPERATION_ID,
+        },
         store::HistoryAuxChange,
         AppState,
     },
 };
 
 use super::state::{emit_best_effort, publish_history_editor_change};
+
+// 프론트가 문자열 매칭하는 undo/redo wire 오류 토큰
+const HISTORY_FRONTEND_FLUSH_DROPPED: &str = "HISTORY_FRONTEND_FLUSH_DROPPED";
 
 #[tauri::command]
 pub fn history_status(state: State<'_, AppState>) -> HistoryStatus {
@@ -27,12 +34,15 @@ pub async fn history_undo(
     broker: State<'_, PreviewBroker>,
     app: AppHandle,
     operation_id: String,
-) -> Result<HistoryStatus, String> {
+) -> CmdResult<HistoryStatus> {
     validate_history_operation_id(&operation_id)?;
-    let flush = state.request_frontend_history_flush(app.clone(), &operation_id)?;
+    let flush = state
+        .request_frontend_history_flush(app.clone(), &operation_id)
+        .map_err(CommandError::msg)?;
     let mut flush = flush
         .await
-        .map_err(|_| "HISTORY_FRONTEND_FLUSH_DROPPED".to_string())??;
+        .map_err(|_| CommandError::msg(HISTORY_FRONTEND_FLUSH_DROPPED))?
+        .map_err(CommandError::msg)?;
     let result = run_history_operation(
         state.inner(),
         broker.inner(),
@@ -51,12 +61,15 @@ pub async fn history_redo(
     broker: State<'_, PreviewBroker>,
     app: AppHandle,
     operation_id: String,
-) -> Result<HistoryStatus, String> {
+) -> CmdResult<HistoryStatus> {
     validate_history_operation_id(&operation_id)?;
-    let flush = state.request_frontend_history_flush(app.clone(), &operation_id)?;
+    let flush = state
+        .request_frontend_history_flush(app.clone(), &operation_id)
+        .map_err(CommandError::msg)?;
     let mut flush = flush
         .await
-        .map_err(|_| "HISTORY_FRONTEND_FLUSH_DROPPED".to_string())??;
+        .map_err(|_| CommandError::msg(HISTORY_FRONTEND_FLUSH_DROPPED))?
+        .map_err(CommandError::msg)?;
     let result = run_history_operation(
         state.inner(),
         broker.inner(),
@@ -69,9 +82,9 @@ pub async fn history_redo(
     result
 }
 
-fn validate_history_operation_id(operation_id: &str) -> Result<(), String> {
+fn validate_history_operation_id(operation_id: &str) -> CmdResult<()> {
     if operation_id.len() > 64 || uuid::Uuid::parse_str(operation_id).is_err() {
-        return Err("INVALID_HISTORY_OPERATION_ID".to_string());
+        return Err(CommandError::msg(INVALID_HISTORY_OPERATION_ID));
     }
     Ok(())
 }
@@ -83,7 +96,7 @@ fn run_history_operation(
     operation_id: &str,
     direction: HistoryDirection,
     barrier: HistoryBarrierLease,
-) -> Result<HistoryStatus, String> {
+) -> CmdResult<HistoryStatus> {
     let busy_status = state.store.history_status();
     emit_best_effort(app, "history:status", &busy_status);
     state.begin_counter_history_barrier();
@@ -219,7 +232,7 @@ fn run_history_operation(
         Err(error) => {
             let status = state.store.history_status();
             emit_best_effort(app, "history:status", &status);
-            Err(error)
+            Err(CommandError::msg(error))
         }
     }
 }
@@ -452,6 +465,86 @@ mod tests {
         assert_eq!(
             projection.tab_css_changes[0].css,
             restored.tab_css_overrides.get("4key").cloned()
+        );
+    }
+
+    // undo/redo 커맨드가 wire로 내보내는 고정 오류 토큰 전수.
+    // 프론트(useKeyManager 등)가 문자열 매칭하는 계약이라 값 변경 금지
+    #[test]
+    fn history_wire_error_strings_are_fixed() {
+        use crate::state::app_state::{
+            HISTORY_FRONTEND_FLUSH_BUSY, HISTORY_FRONTEND_FLUSH_CANCELED,
+            HISTORY_FRONTEND_FLUSH_EMIT_FAILED, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+            HISTORY_FRONTEND_FLUSH_TIMEOUT,
+        };
+        use crate::state::history::{
+            HISTORY_ENTRY_TOO_LARGE, HISTORY_INVALID_OPPOSITE_ENTRY, HISTORY_IN_PROGRESS,
+            HISTORY_OPERATION_ID_REUSED, HISTORY_SCOPE_MISMATCH, HISTORY_TARGET_ALREADY_APPLIED,
+        };
+
+        assert_eq!(INVALID_HISTORY_OPERATION_ID, "INVALID_HISTORY_OPERATION_ID");
+        assert_eq!(
+            HISTORY_FRONTEND_FLUSH_DROPPED,
+            "HISTORY_FRONTEND_FLUSH_DROPPED"
+        );
+        assert_eq!(HISTORY_FRONTEND_FLUSH_BUSY, "HISTORY_FRONTEND_FLUSH_BUSY");
+        assert_eq!(
+            HISTORY_FRONTEND_FLUSH_CANCELED,
+            "HISTORY_FRONTEND_FLUSH_CANCELED"
+        );
+        assert_eq!(
+            HISTORY_FRONTEND_FLUSH_EMIT_FAILED,
+            "HISTORY_FRONTEND_FLUSH_EMIT_FAILED"
+        );
+        assert_eq!(
+            HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+            "HISTORY_FRONTEND_FLUSH_INTERRUPTED"
+        );
+        assert_eq!(
+            HISTORY_FRONTEND_FLUSH_TIMEOUT,
+            "HISTORY_FRONTEND_FLUSH_TIMEOUT"
+        );
+        assert_eq!(
+            HistoryDirection::Undo.empty_error(),
+            "HISTORY_NOTHING_TO_UNDO"
+        );
+        assert_eq!(
+            HistoryDirection::Redo.empty_error(),
+            "HISTORY_NOTHING_TO_REDO"
+        );
+        assert_eq!(HISTORY_OPERATION_ID_REUSED, "HISTORY_OPERATION_ID_REUSED");
+        assert_eq!(HISTORY_SCOPE_MISMATCH, "HISTORY_SCOPE_MISMATCH");
+        assert_eq!(
+            HISTORY_TARGET_ALREADY_APPLIED,
+            "HISTORY_TARGET_ALREADY_APPLIED"
+        );
+        assert_eq!(
+            HISTORY_INVALID_OPPOSITE_ENTRY,
+            "HISTORY_INVALID_OPPOSITE_ENTRY"
+        );
+        assert_eq!(HISTORY_ENTRY_TOO_LARGE, "HISTORY_ENTRY_TOO_LARGE");
+        assert_eq!(HISTORY_IN_PROGRESS, "HISTORY_IN_PROGRESS");
+    }
+
+    #[test]
+    fn invalid_operation_id_rejects_with_wire_string() {
+        let error = validate_history_operation_id("not-a-uuid").unwrap_err();
+        assert_eq!(
+            serde_json::to_value(&error).unwrap(),
+            serde_json::json!("INVALID_HISTORY_OPERATION_ID")
+        );
+        let over_length = "a".repeat(65);
+        assert!(validate_history_operation_id(&over_length).is_err());
+        assert!(validate_history_operation_id("123e4567-e89b-12d3-a456-426614174000").is_ok());
+    }
+
+    #[test]
+    fn message_errors_serialize_as_bare_wire_strings() {
+        // undo/redo의 store 오류는 CommandError::msg로 감싸 문자열 그대로 나간다
+        let wrapped = CommandError::msg(HistoryDirection::Undo.empty_error());
+        assert_eq!(
+            serde_json::to_value(&wrapped).unwrap(),
+            serde_json::json!("HISTORY_NOTHING_TO_UNDO")
         );
     }
 }

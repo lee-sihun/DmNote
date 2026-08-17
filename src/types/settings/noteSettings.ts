@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { NOTE_SETTINGS_CONSTRAINTS } from './noteSettingsConstraints';
-import { getDefaultNoteSettings } from '@src/renderer/defaults';
+import {
+  getDefaultNoteSettings,
+  NOTE_SETTINGS_FALLBACK,
+} from '@src/renderer/defaults';
 
 export const fadePositionSchema = z.union([
   z.literal('auto'),
@@ -28,7 +31,9 @@ export const noteSettingsSchema = z.object({
     .max(NOTE_SETTINGS_CONSTRAINTS.trackHeight.max),
   reverse: z.boolean(),
   // 하위 호환: 기존 store.json에 fadePosition이 있을 수 있음
-  fadePosition: fadePositionSchema.optional().default('auto'),
+  fadePosition: fadePositionSchema
+    .optional()
+    .default(NOTE_SETTINGS_FALLBACK.fadePosition),
   fadeTopPx: z
     .number()
     .int()
@@ -68,23 +73,6 @@ export const noteSettingsSchema = z.object({
 });
 
 export type NoteSettings = z.infer<typeof noteSettingsSchema>;
-
-/** @deprecated Use getDefaultNoteSettings() from @src/renderer/defaults */
-export const NOTE_SETTINGS_DEFAULTS: NoteSettings = Object.freeze({
-  frameLimit: NOTE_SETTINGS_CONSTRAINTS.frameLimit.default,
-  speed: NOTE_SETTINGS_CONSTRAINTS.speed.default,
-  trackHeight: NOTE_SETTINGS_CONSTRAINTS.trackHeight.default,
-  reverse: false,
-  fadePosition: 'auto',
-  fadeTopPx: NOTE_SETTINGS_CONSTRAINTS.fadeTopPx.default,
-  fadeBottomPx: NOTE_SETTINGS_CONSTRAINTS.fadeBottomPx.default,
-  reverseFadeTopPx: NOTE_SETTINGS_CONSTRAINTS.reverseFadeTopPx.default,
-  reverseFadeBottomPx: NOTE_SETTINGS_CONSTRAINTS.reverseFadeBottomPx.default,
-  delayedNoteEnabled: false,
-  shortNoteThresholdMs: NOTE_SETTINGS_CONSTRAINTS.shortNoteThresholdMs.default,
-  shortNoteMinLengthPx: NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.default,
-  keyDisplayDelayMs: NOTE_SETTINGS_CONSTRAINTS.keyDisplayDelayMs.default,
-});
 
 /** 현재 reverse 상태에 따라 활성 페이드 값 반환 */
 export function resolvedFadeValues(noteSettings: NoteSettings): {

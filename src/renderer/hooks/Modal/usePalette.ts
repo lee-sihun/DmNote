@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '@stores/useSettingsStore';
+import { settingsApi } from '@api/modules/settingsApi';
 
 export function usePalette() {
   const [palette, setPalette] = useState(false);
@@ -16,7 +17,7 @@ export function usePalette() {
   const handleColorChange = (newColor: string) => {
     setColor(newColor);
     setBackgroundColor(newColor);
-    window.api.settings.update({ backgroundColor: newColor }).catch((error) => {
+    settingsApi.update({ backgroundColor: newColor }).catch((error) => {
       console.error('Failed to update background color', error);
     });
   };

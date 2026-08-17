@@ -10,6 +10,7 @@ type HandlerFunction = (...args: unknown[]) => void | Promise<void>;
 class PluginHandlerRegistry {
   private handlers: Map<string, HandlerFunction> = new Map();
   private pluginHandlers: Map<string, Set<string>> = new Map();
+  private handlerOwners: Map<string, string> = new Map();
 
   /**
    * 핸들러를 등록하고 고유 ID를 반환합니다.
@@ -25,6 +26,7 @@ class PluginHandlerRegistry {
       this.pluginHandlers.set(pluginId, new Set());
     }
     this.pluginHandlers.get(pluginId)!.add(handlerId);
+    this.handlerOwners.set(handlerId, pluginId);
 
     window[handlerId as `__dmn_handler_${string}`] = handler;
 
@@ -43,6 +45,13 @@ class PluginHandlerRegistry {
    */
   unregister(handlerId: string): void {
     this.handlers.delete(handlerId);
+    const pluginId = this.handlerOwners.get(handlerId);
+    if (pluginId) {
+      const handlerIds = this.pluginHandlers.get(pluginId);
+      handlerIds?.delete(handlerId);
+      if (handlerIds?.size === 0) this.pluginHandlers.delete(pluginId);
+      this.handlerOwners.delete(handlerId);
+    }
     delete window[handlerId as `__dmn_handler_${string}`];
   }
 
@@ -54,6 +63,7 @@ class PluginHandlerRegistry {
     if (handlerIds) {
       handlerIds.forEach((id) => {
         this.handlers.delete(id);
+        this.handlerOwners.delete(id);
         delete window[id as `__dmn_handler_${string}`];
       });
       this.pluginHandlers.delete(pluginId);
@@ -71,8 +81,8 @@ class PluginHandlerRegistry {
     });
     this.handlers.clear();
     this.pluginHandlers.clear();
+    this.handlerOwners.clear();
   }
 }
 
 export const handlerRegistry = new PluginHandlerRegistry();
-export type { HandlerFunction };

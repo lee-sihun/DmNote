@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
-import { resolveStatePair, type ColorModeValue } from '@src/types/color';
+import { paintDescriptor, resolveStatePair } from '@src/types/color';
 import {
   PropertyRow,
   NumberInput,
@@ -9,6 +9,7 @@ import {
   TextInput,
   PropertySection,
   FontStyleToggle,
+  createFontStyleToggleHandlers,
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -28,21 +29,33 @@ import {
 } from '@utils/core/elementDefaults';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
+import {
+  EMPTY_BATCH_ELEMENT_BINDING,
+  type BatchElementBinding,
+} from '@hooks/pickers/useBatchElementBinding';
 import { usePanelNav } from '../PanelNavContext';
+import BatchGeometrySection from './BatchGeometrySection';
 import ShadowControls from '../ShadowControls';
 import {
-  resolveElementShadow,
+  elementShadowLeafFromPartial,
+  resolveElementShadowForPosition,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import type {
+  EditorPaintPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+  EditorShadowPropertyPatchV1,
+  EditorElementPropertyPatchV1,
+} from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
-const SOUND_PAGE_KEY = 'batch-style:sound';
-
-const SPACING_COMMIT_DEBOUNCE_MS = 80;
-const SPACING_COMMIT_EPSILON = 0.0001;
+// 결합 캡처 소유자(리마운트 경계 밖)가 open 판정에 쓰도록 export
+export const BATCH_STYLE_SOUND_PAGE_KEY = 'batch-style:sound';
+const SOUND_PAGE_KEY = BATCH_STYLE_SOUND_PAGE_KEY;
 
 interface KeyData {
   index: number;
@@ -54,6 +67,20 @@ interface KeyData {
 interface BatchStyleTabContentProps {
   // 다중 선택 정보
   selectedCount: number;
+  // native+plugin 합산 개수 - 분배 게이트 판정용 (미전달 시 selectedCount)
+  totalCount?: number;
+  // 사운드 완료의 시작 시점 결합. 소유자는 EditSessionBoundary 밖 부모다 -
+  // 이 컴포넌트는 선택 변경 시 리마운트되어 open 중 재캡처가 일어난다
+  soundBinding?: BatchElementBinding;
+  onSoundPathCommit?: (soundPath: string) => void;
+  onSoundEnabledCommit?: (soundEnabled: boolean) => void;
+  onSoundVolumeCommit?: (soundVolume: number) => void;
+  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onFontColorPreview?: (patch: EditorFontColorPropertyPatchV1) => void;
+  onFontColorCommit?: (patch: EditorFontColorPropertyPatchV1) => void;
+  onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -85,39 +112,21 @@ interface BatchStyleTabContentProps {
   ) => void;
   batchSpacing: { isMixed: boolean; value: number };
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
-  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
-  handleBatchStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: unknown,
+  handleBatchResizePreview: (
+    dimension: 'width' | 'height',
+    value: number,
   ) => void;
-  handleBatchShadowChangeComplete?: (
-    state: 'idle' | 'active',
-    patch: Partial<ElementShadowSpec>,
-  ) => void;
-  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
-  handleBatchGradientCommit?: (
-    target: 'backgroundColor' | 'borderColor',
-    state: 'idle' | 'active',
-    value: ColorModeValue,
-  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   // 키 전용 (사운드 등)
   getKeyOnlyMixedValue?: <T>(
     getter: (pos: KeyPosition) => T | undefined,
     defaultValue: T,
   ) => { isMixed: boolean; value: T };
-  handleKeyOnlyStyleChangeComplete?: (
-    property: keyof KeyPosition,
-    value: unknown,
-  ) => void;
   // 눌림 가능(키·노브) — active 상태 집계·쓰기가 통계만 제외
   getActiveCapableMixedValue?: <T>(
     getter: (pos: KeyPosition) => T | undefined,
     defaultValue: T,
   ) => { isMixed: boolean; value: T };
-  handleActiveCapableStyleChangeComplete?: (
-    property: keyof KeyPosition,
-    value: unknown,
-  ) => void;
   // 이미지 피커
   showBatchImagePicker: boolean;
   onToggleBatchImagePicker: () => void;
@@ -130,8 +139,19 @@ interface BatchStyleTabContentProps {
 
 const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   selectedCount,
+  totalCount,
   hideDisplayText = false,
   hideFontControls = false,
+  soundBinding = EMPTY_BATCH_ELEMENT_BINDING,
+  onSoundPathCommit,
+  onSoundEnabledCommit,
+  onSoundVolumeCommit,
+  onStylePropertyPreview,
+  onStylePropertyCommit,
+  onPaintCommit,
+  onFontColorPreview,
+  onFontColorCommit,
+  onShadowCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -145,15 +165,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   handleBatchSpacingCommit,
   batchSpacing,
   handleBatchResize,
-  handleBatchStyleChange,
-  handleBatchStyleChangeComplete,
-  handleBatchShadowChangeComplete,
-  handleBatchShadowEnabledChange,
-  handleBatchGradientCommit,
+  handleBatchResizePreview,
+  onElementPropertyCommit,
   getKeyOnlyMixedValue,
-  handleKeyOnlyStyleChangeComplete,
   getActiveCapableMixedValue,
-  handleActiveCapableStyleChangeComplete,
   showBatchImagePicker,
   onToggleBatchImagePicker,
   batchImageButtonRef,
@@ -165,10 +180,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   const effectiveColorState = shadowActiveState ? colorState : 'idle';
   const activeMixedValue =
     getActiveCapableMixedValue ?? getKeyOnlyMixedValue ?? getMixedValue;
-  const handleActiveStyleChangeComplete =
-    handleActiveCapableStyleChangeComplete ??
-    handleKeyOnlyStyleChangeComplete ??
-    handleBatchStyleChangeComplete;
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
@@ -188,6 +199,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     usePanelNav();
 
   useEffect(() => {
+    // 눌림 상태 편집 능력이 사라지면 저장된 active 탭 선택도 리셋
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!shadowActiveState) setColorState('idle');
   }, [shadowActiveState]);
 
@@ -228,25 +241,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   };
 
   const resolvedShadowFor = (position: KeyPosition, active: boolean) => {
-    const hasImage = Boolean(
-      active
-        ? position.activeImage?.trim() || position.inactiveImage?.trim()
-        : position.inactiveImage?.trim(),
-    );
-    const suppressDefault =
-      hasImage ||
-      (shadowKind === 'knob' &&
-        ((active
-          ? position.activeTransparent === true
-          : position.idleTransparent === true) ||
-          (position.borderWidth ?? 0) > 0));
-    return resolveElementShadow({
+    return resolveElementShadowForPosition({
+      position,
+      elementType: shadowKind,
       active,
-      shadow: position.shadow,
-      activeShadow: position.activeShadow,
       defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
       defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-      suppressDefault,
     });
   };
 
@@ -303,95 +303,18 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     _shadow: ElementShadowSpec,
     patch: Partial<ElementShadowSpec>,
   ) => {
-    handleBatchShadowChangeComplete?.(state, patch);
+    const leaf = elementShadowLeafFromPartial(patch);
+    if (!leaf) return;
+    onShadowCommit?.(
+      state === 'active'
+        ? { property: 'activeShadow', value: leaf }
+        : { property: 'shadow', value: leaf },
+    );
   };
 
   const handleShadowEnabledChange = (enabled: boolean) => {
-    handleBatchShadowEnabledChange?.(enabled);
+    onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
   };
-
-  // 간격 입력 세션의 debounce 커밋들을 같은 gestureId로 묶어 백엔드가 한 entry로 병합
-  const lastSpacingRef = useRef<number | null>(null);
-  const lastCommittedSpacingRef = useRef<number | null>(null);
-  const spacingDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const spacingGestureIdRef = useRef<string | null>(null);
-
-  const isSameSpacingValue = (a: number | null, b: number | null): boolean => {
-    if (a === null || b === null) return false;
-    return Math.abs(a - b) < SPACING_COMMIT_EPSILON;
-  };
-
-  const commitSpacing = (spacing: number) => {
-    spacingGestureIdRef.current ??= crypto.randomUUID();
-    const options = { gestureId: spacingGestureIdRef.current };
-
-    if (handleBatchSpacingCommit) {
-      handleBatchSpacingCommit(spacing, options);
-    } else {
-      handleBatchSpacing(spacing, options);
-    }
-
-    lastCommittedSpacingRef.current = spacing;
-  };
-
-  const onSpacingChange = (value: number) => {
-    lastSpacingRef.current = value;
-    if (spacingDebounceTimerRef.current) {
-      clearTimeout(spacingDebounceTimerRef.current);
-    }
-    spacingDebounceTimerRef.current = setTimeout(() => {
-      spacingDebounceTimerRef.current = null;
-      const spacing = lastSpacingRef.current;
-      if (spacing === null) return;
-      if (isSameSpacingValue(lastCommittedSpacingRef.current, spacing)) return;
-      commitSpacing(spacing);
-    }, SPACING_COMMIT_DEBOUNCE_MS);
-  };
-
-  const onSpacingBlur = () => {
-    if (spacingDebounceTimerRef.current) {
-      clearTimeout(spacingDebounceTimerRef.current);
-      spacingDebounceTimerRef.current = null;
-    }
-    if (
-      !isSameSpacingValue(
-        lastCommittedSpacingRef.current,
-        lastSpacingRef.current,
-      )
-    ) {
-      const spacing = lastSpacingRef.current;
-      if (spacing !== null) {
-        commitSpacing(spacing);
-      }
-    }
-
-    lastSpacingRef.current = null;
-    lastCommittedSpacingRef.current = null;
-    spacingGestureIdRef.current = null;
-  };
-
-  // Escape는 onBlur를 타지 않는다. 예약만 되고 아직 안 나간 커밋을 걷지 않으면
-  // 취소한 값이 80ms 뒤에 그대로 적용된다. 이미 나간 커밋은 되돌리지 않는다 -
-  // 항목별 원래 간격은 이 컴포넌트가 갖고 있지 않다
-  const onSpacingCancel = () => {
-    if (spacingDebounceTimerRef.current) {
-      clearTimeout(spacingDebounceTimerRef.current);
-      spacingDebounceTimerRef.current = null;
-    }
-    lastSpacingRef.current = null;
-    lastCommittedSpacingRef.current = null;
-    spacingGestureIdRef.current = null;
-  };
-
-  useEffect(() => {
-    return () => {
-      if (spacingDebounceTimerRef.current) {
-        clearTimeout(spacingDebounceTimerRef.current);
-      }
-    };
-  }, []);
 
   // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
   const getDisplayTextMixed = (): { isMixed: boolean; value: string } => {
@@ -415,308 +338,23 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   return (
     <>
       <PropertySection>
-        {/* 정렬 */}
-        <PropertyRow label={t('propertiesPanel.alignment') || '정렬'}>
-          <div className="flex gap-[4px]">
-            {/* 수평 정렬 */}
-            <div className="flex">
-              <button
-                type="button"
-                onClick={() => handleBatchAlign('left')}
-                className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
-                title={t('propertiesPanel.alignLeft') || '왼쪽 정렬'}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path
-                    d="M1 1V9"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <rect
-                    x="2.5"
-                    y="2.5"
-                    width="6"
-                    height="1.5"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                  <rect
-                    x="2.5"
-                    y="6"
-                    width="4"
-                    height="1.5"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBatchAlign('centerH')}
-                className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
-                title={t('propertiesPanel.alignCenterH') || '수평 중앙 정렬'}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path
-                    d="M5 1V9"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <rect
-                    x="1.5"
-                    y="2.5"
-                    width="7"
-                    height="1.5"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                  <rect
-                    x="2.5"
-                    y="6"
-                    width="5"
-                    height="1.5"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBatchAlign('right')}
-                className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
-                title={t('propertiesPanel.alignRight') || '오른쪽 정렬'}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path
-                    d="M9 1V9"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <rect
-                    x="1.5"
-                    y="2.5"
-                    width="6"
-                    height="1.5"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                  <rect
-                    x="3.5"
-                    y="6"
-                    width="4"
-                    height="1.5"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-            </div>
-            {/* 수직 정렬 */}
-            <div className="flex">
-              <button
-                type="button"
-                onClick={() => handleBatchAlign('top')}
-                className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
-                title={t('propertiesPanel.alignTop') || '위쪽 정렬'}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path
-                    d="M1 1H9"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <rect
-                    x="2.5"
-                    y="2.5"
-                    width="1.5"
-                    height="6"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                  <rect
-                    x="6"
-                    y="2.5"
-                    width="1.5"
-                    height="4"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBatchAlign('centerV')}
-                className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
-                title={t('propertiesPanel.alignCenterV') || '수직 중앙 정렬'}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path
-                    d="M1 5H9"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <rect
-                    x="2.5"
-                    y="1.5"
-                    width="1.5"
-                    height="7"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                  <rect
-                    x="6"
-                    y="2.5"
-                    width="1.5"
-                    height="5"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBatchAlign('bottom')}
-                className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
-                title={t('propertiesPanel.alignBottom') || '아래쪽 정렬'}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path
-                    d="M1 9H9"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <rect
-                    x="2.5"
-                    y="1.5"
-                    width="1.5"
-                    height="6"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                  <rect
-                    x="6"
-                    y="3.5"
-                    width="1.5"
-                    height="4"
-                    rx="0.5"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </PropertyRow>
-
-        {/* 분배 */}
-        <PropertyRow label={t('propertiesPanel.distribution') || '분배'}>
-          <div className="flex gap-[4px]">
-            <button
-              type="button"
-              onClick={() => handleBatchDistribute('horizontal')}
-              disabled={selectedCount < 3}
-              className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
-                selectedCount < 3
-                  ? 'opacity-40 cursor-not-allowed'
-                  : 'hover:bg-surface-hover'
-              }`}
-              title={t('propertiesPanel.distributeH') || '수평 분배'}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <rect
-                  x="0.5"
-                  y="2.5"
-                  width="1.5"
-                  height="5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-                <rect
-                  x="4.25"
-                  y="2.5"
-                  width="1.5"
-                  height="5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-                <rect
-                  x="8"
-                  y="2.5"
-                  width="1.5"
-                  height="5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBatchDistribute('vertical')}
-              disabled={selectedCount < 3}
-              className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
-                selectedCount < 3
-                  ? 'opacity-40 cursor-not-allowed'
-                  : 'hover:bg-surface-hover'
-              }`}
-              title={t('propertiesPanel.distributeV') || '수직 분배'}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <rect
-                  x="2.5"
-                  y="0.5"
-                  width="5"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-                <rect
-                  x="2.5"
-                  y="4.25"
-                  width="5"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-                <rect
-                  x="2.5"
-                  y="8"
-                  width="5"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
-          </div>
-        </PropertyRow>
-
-        {/* 간격 */}
-        <PropertyRow label={t('propertiesPanel.spacing') || '간격'}>
-          <NumberInput
-            value={batchSpacing.value}
-            onChange={onSpacingChange}
-            onBlur={onSpacingBlur}
-            onCancel={onSpacingCancel}
-            suffix="px"
-            min={0}
-            max={500}
-            allowDecimal
-            decimalScale={1}
-            isMixed={batchSpacing.isMixed}
-          />
-        </PropertyRow>
+        {/* 정렬·분배·간격 - 공통 기하 섹션 */}
+        <BatchGeometrySection
+          totalCount={totalCount ?? selectedCount}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          batchSpacing={batchSpacing}
+          t={t}
+        />
 
         {/* 크기 */}
         <PropertyRow label={t('propertiesPanel.size') || '크기'}>
           <NumberInput
             value={getMixedValue((pos) => pos.width, 60).value}
             onChange={(value) => handleBatchResize('width', value)}
-            onPreview={(value) => handleBatchStyleChange('width', value)}
+            onPreview={(value) => handleBatchResizePreview('width', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="W"
             width={AXIS_FIELD_WIDTH}
@@ -729,7 +367,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           <NumberInput
             value={getMixedValue((pos) => pos.height, 60).value}
             onChange={(value) => handleBatchResize('height', value)}
-            onPreview={(value) => handleBatchStyleChange('height', value)}
+            onPreview={(value) => handleBatchResizePreview('height', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="H"
             width={AXIS_FIELD_WIDTH}
@@ -779,15 +417,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             showStateTabs={shadowActiveState}
             stateMode={effectiveColorState}
             onStateModeChange={setColorState}
-            onChange={(color) =>
-              handleBatchStyleChange('backgroundColor', color)
-            }
-            onChangeComplete={(color) =>
-              handleBatchStyleChangeComplete('backgroundColor', color)
-            }
-            onActiveChangeComplete={(color) =>
-              handleActiveStyleChangeComplete('activeBackgroundColor', color)
-            }
+            onChange={() => {}}
+            onChangeComplete={() => {}}
+            onActiveChangeComplete={() => {}}
             panelElement={panelElement}
             canvasAnchor={{ kind: 'batch' }}
             gradientValue={
@@ -804,15 +436,18 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 null,
               ).value
             }
-            onModeCommit={
-              handleBatchGradientCommit
-                ? (state, modeValue) =>
-                    handleBatchGradientCommit(
-                      'backgroundColor',
-                      state,
-                      modeValue,
-                    )
-                : undefined
+            onModeCommit={(state, modeValue) =>
+              onPaintCommit?.(
+                state === 'active'
+                  ? {
+                      property: 'activeBackgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    }
+                  : {
+                      property: 'backgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    },
+              )
             }
           />
         </PropertyRow>
@@ -850,13 +485,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             showStateTabs={shadowActiveState}
             stateMode={effectiveColorState}
             onStateModeChange={setColorState}
-            onChange={(color) => handleBatchStyleChange('borderColor', color)}
-            onChangeComplete={(color) =>
-              handleBatchStyleChangeComplete('borderColor', color)
-            }
-            onActiveChangeComplete={(color) =>
-              handleActiveStyleChangeComplete('activeBorderColor', color)
-            }
+            onChange={() => {}}
+            onChangeComplete={() => {}}
+            onActiveChangeComplete={() => {}}
             panelElement={panelElement}
             canvasAnchor={{ kind: 'batch' }}
             gradientValue={
@@ -873,11 +504,18 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 null,
               ).value
             }
-            onModeCommit={
-              handleBatchGradientCommit
-                ? (state, modeValue) =>
-                    handleBatchGradientCommit('borderColor', state, modeValue)
-                : undefined
+            onModeCommit={(state, modeValue) =>
+              onPaintCommit?.(
+                state === 'active'
+                  ? {
+                      property: 'activeBorderPaint',
+                      value: paintDescriptor(modeValue),
+                    }
+                  : {
+                      property: 'borderPaint',
+                      value: paintDescriptor(modeValue),
+                    },
+              )
             }
           />
         </PropertyRow>
@@ -898,9 +536,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value
             }
             onChange={(value) =>
-              handleBatchStyleChangeComplete('borderWidth', value)
+              onStylePropertyCommit?.({ property: 'borderWidth', value: value })
             }
-            onPreview={(value) => handleBatchStyleChange('borderWidth', value)}
+            onPreview={(value) =>
+              onStylePropertyPreview?.({
+                property: 'borderWidth',
+                value: value,
+              })
+            }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
@@ -922,9 +565,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 .value
             }
             onChange={(value) =>
-              handleBatchStyleChangeComplete('borderRadius', value)
+              onStylePropertyCommit?.({
+                property: 'borderRadius',
+                value: value,
+              })
             }
-            onPreview={(value) => handleBatchStyleChange('borderRadius', value)}
+            onPreview={(value) =>
+              onStylePropertyPreview?.({
+                property: 'borderRadius',
+                value: value,
+              })
+            }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
@@ -987,9 +638,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <TextInput
                     value={isMixed ? '' : displayTextValue}
                     onChange={(v) =>
-                      handleBatchStyleChangeComplete('displayText', v)
+                      onStylePropertyCommit?.({
+                        property: 'displayText',
+                        value: v,
+                      })
                     }
-                    onPreview={(v) => handleBatchStyleChange('displayText', v)}
+                    onPreview={(v) =>
+                      onStylePropertyPreview?.({
+                        property: 'displayText',
+                        value: v,
+                      })
+                    }
                     onCancel={() => editGestureController.cancel()}
                     placeholder={isMixed ? 'Mixed' : value}
                     width="54px"
@@ -1029,10 +688,16 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 <NumberInput
                   value={getMixedValue((pos) => pos.fontSize, 14).value}
                   onChange={(value) =>
-                    handleBatchStyleChangeComplete('fontSize', value)
+                    onStylePropertyCommit?.({
+                      property: 'fontSize',
+                      value: value,
+                    })
                   }
                   onPreview={(value) =>
-                    handleBatchStyleChange('fontSize', value)
+                    onStylePropertyPreview?.({
+                      property: 'fontSize',
+                      value: value,
+                    })
                   }
                   onCancel={() => editGestureController.cancel()}
                   suffix="px"
@@ -1077,13 +742,20 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   stateMode={effectiveColorState}
                   onStateModeChange={setColorState}
                   onChange={(color) =>
-                    handleBatchStyleChange('fontColor', color)
+                    onFontColorPreview?.(
+                      effectiveColorState === 'active'
+                        ? { property: 'activeFontColor', value: color }
+                        : { property: 'fontColor', value: color },
+                    )
                   }
                   onChangeComplete={(color) =>
-                    handleBatchStyleChangeComplete('fontColor', color)
+                    onFontColorCommit?.({ property: 'fontColor', value: color })
                   }
                   onActiveChangeComplete={(color) =>
-                    handleActiveStyleChangeComplete('activeFontColor', color)
+                    onFontColorCommit?.({
+                      property: 'activeFontColor',
+                      value: color,
+                    })
                   }
                   panelElement={panelElement}
                 />
@@ -1108,21 +780,11 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   isStrikethrough={
                     getMixedValue((pos) => pos.fontStrikethrough, false).value
                   }
-                  onBoldChange={(value) =>
-                    handleBatchStyleChangeComplete(
-                      'fontWeight',
-                      value ? 700 : 400,
-                    )
-                  }
-                  onItalicChange={(value) =>
-                    handleBatchStyleChangeComplete('fontItalic', value)
-                  }
-                  onUnderlineChange={(value) =>
-                    handleBatchStyleChangeComplete('fontUnderline', value)
-                  }
-                  onStrikethroughChange={(value) =>
-                    handleBatchStyleChangeComplete('fontStrikethrough', value)
-                  }
+                  {...createFontStyleToggleHandlers((property, value) =>
+                    onElementPropertyCommit?.({
+                      [property]: value,
+                    } as never),
+                  )}
                 />
               </PropertyRow>
             </>
@@ -1146,10 +808,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   (pos) => pos.useInlineStyles,
                   false,
                 ).value;
-                handleBatchStyleChangeComplete(
-                  'useInlineStyles',
-                  !currentValue,
-                );
+                onElementPropertyCommit?.({
+                  property: 'useInlineStyles',
+                  value: !currentValue,
+                });
               }}
             />
           </div>
@@ -1162,10 +824,15 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   ? ''
                   : getMixedValue((pos) => pos.className, '').value
               }
-              onChange={(value) => {
-                handleBatchStyleChangeComplete('className', value);
-              }}
-              onPreview={(value) => handleBatchStyleChange('className', value)}
+              onChange={(value) =>
+                onStylePropertyCommit?.({ property: 'className', value: value })
+              }
+              onPreview={(value) =>
+                onStylePropertyPreview?.({
+                  property: 'className',
+                  value: value,
+                })
+              }
               onCancel={() => editGestureController.cancel()}
               placeholder={
                 getMixedValue((pos) => pos.className, '').isMixed
@@ -1182,8 +849,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       {showSoundControls &&
         (() => {
           const soundMixedValue = getKeyOnlyMixedValue ?? getMixedValue;
-          const soundChangeComplete =
-            handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete;
           return (
             <PropertySection>
               <PropertyRow
@@ -1204,7 +869,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                       (pos) => pos.soundEnabled,
                       false,
                     ).value;
-                    soundChangeComplete('soundEnabled', !current);
+                    const nextEnabled = !current;
+                    onSoundEnabledCommit?.(nextEnabled);
                   }}
                 />
               </PropertyRow>
@@ -1235,12 +901,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 ) : null}
                 <NumberInput
                   value={soundMixedValue((pos) => pos.soundVolume, 100).value}
-                  onChange={(value) =>
-                    soundChangeComplete(
-                      'soundVolume',
-                      Math.max(0, Math.min(200, value)),
-                    )
-                  }
+                  onChange={(value) => {
+                    const soundVolume = Math.max(0, Math.min(200, value));
+                    onSoundVolumeCommit?.(soundVolume);
+                  }}
                   suffix="%"
                   min={0}
                   max={200}
@@ -1262,7 +926,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             open
             selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
             onFontSelect={(fontName) => {
-              handleBatchStyleChangeComplete('fontFamily', fontName);
+              if (fontName !== null) {
+                onElementPropertyCommit?.({
+                  property: 'fontFamily',
+                  value: fontName,
+                });
+              }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}
             onBack={closePage}
@@ -1277,6 +946,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         createPortal(
           <SoundPicker
             open={true}
+            completionBinding={soundBinding.binding}
             selectedSound={
               (getKeyOnlyMixedValue ?? getMixedValue)(
                 (pos) => pos.soundPath,
@@ -1284,10 +954,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value || null
             }
             onSoundSelect={(soundPath) => {
-              (
-                handleKeyOnlyStyleChangeComplete ??
-                handleBatchStyleChangeComplete
-              )('soundPath', soundPath || '');
+              const nextPath = soundPath || '';
+              onSoundPathCommit?.(nextPath);
             }}
             previewVolume={
               (getKeyOnlyMixedValue ?? getMixedValue)(

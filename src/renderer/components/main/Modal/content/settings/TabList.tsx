@@ -7,6 +7,7 @@ import SearchField from '@components/main/common/SearchField';
 import AddIconButton from '@components/main/common/AddIconButton';
 import Alert from '../dialogs/Alert.jsx';
 import TabNameModal from '../editors/TabNameModal';
+import { keysApi } from '@api/modules/keysApi';
 
 const MAX_CUSTOM_TABS = 30;
 const VISIBLE_TAB_COUNT = 5;
@@ -49,7 +50,7 @@ const TabList = () => {
   }, [visibleTabs.length, lenisInstance]);
 
   const handleCreate = async (name: string) => {
-    const result = await window.api.keys.customTabs.create(name);
+    const result = await keysApi.customTabs.create(name);
     return result;
   };
 
@@ -68,7 +69,7 @@ const TabList = () => {
     const previousTabs = useKeyStore.getState().customTabs;
     setCustomTabs(previousTabs.filter((tab) => tab.id !== id));
     try {
-      const result = await window.api.keys.customTabs.delete(id);
+      const result = await keysApi.customTabs.delete(id);
       if (!result?.success) {
         console.warn('Failed to delete custom tab', result?.error);
         setCustomTabs(previousTabs);
