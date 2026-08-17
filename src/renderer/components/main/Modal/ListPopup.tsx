@@ -41,6 +41,8 @@ interface ListPopupProps {
   placement?: string;
   /** 트리거 폭 정렬용 최소 폭 */
   minWidth?: number;
+  /** 앵커와의 간격 */
+  offset?: number;
   /** 스크롤·contain 조상 안에서 열릴 때 필요 */
   portalToBody?: boolean;
 }
@@ -496,6 +498,7 @@ const ListPopup = ({
   contentMountStrategy = 'after-paint',
   placement = 'top',
   minWidth,
+  offset = 25,
   portalToBody = false,
 }: ListPopupProps) => {
   const openerRef = useRef<HTMLElement | null>(null);
@@ -513,9 +516,13 @@ const ListPopup = ({
   };
 
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
+  // z는 호출부가 덮을 수 있어야 한다. 기본값을 클래스로 박으면 두 클래스가
+  // 같은 특이도로 충돌해 CSS 생성 순서에 따라 결과가 달라진다
   const defaultClassName =
-    'dmn-motion z-40 bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
-  const effectiveClassName = `${defaultClassName} ${className}`.trim();
+    'dmn-motion bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
+  const zClassName = /(^|\s)z-/.test(className) ? '' : 'z-40';
+  const effectiveClassName =
+    `${defaultClassName} ${zClassName} ${className}`.trim();
 
   const { height: viewportHeight } = useViewportSize();
   const { needsScroll, maxHeight } = getListScrollMetrics(
@@ -544,7 +551,7 @@ const ListPopup = ({
       placement={placement}
       minWidth={minWidth}
       portalToBody={portalToBody}
-      offset={25}
+      offset={offset}
       offsetX={offsetX}
       offsetY={offsetY}
       fixedX={position?.x}

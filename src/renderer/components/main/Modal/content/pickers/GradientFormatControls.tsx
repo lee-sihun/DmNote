@@ -84,6 +84,8 @@ export const FormatSelectBar = ({
         referenceRef={triggerRef as React.RefObject<HTMLElement>}
         placement="bottom-start"
         minWidth={triggerWidth}
+        offset={4}
+        className="z-[60]"
         portalToBody
         onClose={() => setOpen(false)}
         items={(['solid', 'gradient'] as ColorFormat[]).map((f) => ({
