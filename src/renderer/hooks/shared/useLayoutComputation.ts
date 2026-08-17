@@ -270,6 +270,8 @@ export function computeLayout(input: LayoutInput) {
     displayGraphPositions,
     displayKnobPositions,
     positionOffset,
+    // 창 높이·배경 박스가 같은 값을 쓰도록 노출 (창 == 콘텐츠 박스 불변식)
+    topOffset,
     topMostY,
     webglTracks,
   };
