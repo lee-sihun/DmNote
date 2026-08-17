@@ -127,14 +127,12 @@
   },
   "keySetting": {
     "title": "Key Settings",
-    "tabKey": "Key",
     "tabNote": "Note",
     "tabCounter": "Counter",
     "keyMapping": "Key Binding",
     "key": "Key",
     "pressAnyKey": "Press any key",
     "clickToSet": "Click to set key",
-    "keySize": "Key Size",
     "size": "Size",
     "noteColor": "Note Color",
     "noteWidth": "Note Width",
@@ -144,7 +142,6 @@
     "noteGlowOpacity": "Glow Opacity",
     "noteGlow": "Glow Effect",
     "inactiveState": "Idle",
-    "activeState": "Pressed",
     "customImage": "Custom Image",
     "configure": "Configure",
     "className": "Class",
@@ -363,10 +360,8 @@
     "color": "Color",
     "solid": "Solid",
     "gradient": "Gradient",
-    "gradientBottom": "Gradient Bottom Color",
     "opacity": "Opacity",
     "glow": "Glow Effect",
-    "glowSize": "Size",
     "glowOpacity": "Opacity",
     "glowColor": "Color"
   },
@@ -446,7 +441,6 @@
     "loadFailed": "CSS file load failed"
   },
   "unifiedSetting": {
-    "tabKey": "Key",
     "tabNote": "Note",
     "tabCounter": "Counter"
   },

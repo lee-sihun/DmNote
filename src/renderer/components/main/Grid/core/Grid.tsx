@@ -20,7 +20,10 @@ import {
   commitStableLayerZOrder,
   orderStableZTargetsForBatch,
 } from '@src/renderer/editor/runtime/layerZOrderIntent';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import {
+  reportElementOpError,
+  reportElementOpSkipped,
+} from '@src/renderer/editor/runtime/elementIntent';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
@@ -759,6 +762,12 @@ const Grid = ({
     } as const;
 
     const clicked = collections[type][index];
+    // stat·graph·knob은 렌더 클로저가 아니라 live 스토어를 읽는다. 렌더와
+    // 클릭 사이에 배열이 줄면 대상이 없을 수 있어 fail-closed로 닫는다
+    if (!clicked) {
+      reportElementOpSkipped('group selection (target missing)');
+      return;
+    }
     // 같은 그룹의 native·플러그인 멤버 전체 확장 (공용 헬퍼)
     const nextSelection = expandGroupSelection(
       { type, id: clicked.id, index },

@@ -127,14 +127,12 @@
   },
   "keySetting": {
     "title": "Настройка клавиш",
-    "tabKey": "Клавиша",
     "tabNote": "Нота",
     "tabCounter": "Счётчик",
     "keyMapping": "Привязка клавиш",
     "key": "Ключ",
     "pressAnyKey": "Нажмите клавишу",
     "clickToSet": "Нажмите для выбора",
-    "keySize": "Размер клавиши",
     "size": "Размер",
     "noteColor": "Цвет ноты",
     "noteWidth": "Ширина ноты",
@@ -144,7 +142,6 @@
     "noteGlowOpacity": "Непрозр. свечения",
     "noteGlow": "Свечение",
     "inactiveState": "Покой",
-    "activeState": "Нажатие",
     "customImage": "Своё изображение",
     "configure": "Настроить",
     "className": "Класс",
@@ -363,10 +360,8 @@
     "color": "Цвет",
     "solid": "Тон",
     "gradient": "Градиент",
-    "gradientBottom": "Нижний цвет",
     "opacity": "Непрозр.",
     "glow": "Свечение",
-    "glowSize": "Размер",
     "glowOpacity": "Непрозр. свечения",
     "glowColor": "Цвет"
   },
@@ -446,7 +441,6 @@
     "loadFailed": "Ошибка загрузки CSS"
   },
   "unifiedSetting": {
-    "tabKey": "Клавиша",
     "tabNote": "Нота",
     "tabCounter": "Счётчик"
   },

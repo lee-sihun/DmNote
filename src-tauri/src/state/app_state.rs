@@ -2935,6 +2935,14 @@ impl AppState {
             }
             if let Err(error) = window.destroy() {
                 self.clear_panel_destroy_reason(reason);
+                // 창이 살아 있으면 여전히 분리 상태다. 도킹 기록을 되돌리지
+                // 않으면 다음 기동에서 분리 패널이 복원되지 않는다
+                if let Err(err) = self
+                    .store
+                    .update_deferred(|data| data.panel_detached = true)
+                {
+                    log::warn!("failed to restore detached panel state: {err}");
+                }
                 return Err(error.into());
             }
         }

@@ -127,14 +127,12 @@
   },
   "keySetting": {
     "title": "按键设置",
-    "tabKey": "按键",
     "tabNote": "音符",
     "tabCounter": "计数器",
     "keyMapping": "按键绑定",
     "key": "按键",
     "pressAnyKey": "按下任意键",
     "clickToSet": "点击设置按键",
-    "keySize": "按键大小",
     "size": "大小",
     "noteColor": "音符颜色",
     "noteWidth": "音符宽度",
@@ -144,7 +142,6 @@
     "noteGlowOpacity": "发光不透明度",
     "noteGlow": "发光效果",
     "inactiveState": "闲置",
-    "activeState": "按下",
     "customImage": "自定义图像",
     "configure": "配置",
     "className": "类名",
@@ -363,10 +360,8 @@
     "color": "颜色",
     "solid": "纯色",
     "gradient": "渐变",
-    "gradientBottom": "渐变底部颜色",
     "opacity": "不透明度",
     "glow": "发光效果",
-    "glowSize": "大小",
     "glowOpacity": "不透明度",
     "glowColor": "颜色"
   },
@@ -446,7 +441,6 @@
     "loadFailed": "CSS 文件加载失败"
   },
   "unifiedSetting": {
-    "tabKey": "按键",
     "tabNote": "音符",
     "tabCounter": "计数器"
   },
