@@ -4,6 +4,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import {
   isTopmostPopupLayer,
   registerPopupLayer,
+  clampToViewport,
 } from '@components/main/Modal/popupLayer';
 import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { usePointerSession } from './colorPickerPrimitives';
@@ -64,8 +65,13 @@ export const FormatSelectBar = ({
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     setAnchorRect(rect);
-    // 아래 공간이 부족하면 위로 열기 — 팔레트 아래 푸터 배치 대응
-    setOpenUp(rect.bottom + 4 + FORMAT_MENU_HEIGHT > window.innerHeight);
+    // 아래 공간이 부족하면 위로 열기 — 팔레트 아래 푸터 배치 대응.
+    // 위로도 자리가 없으면 아래로 두고 경계 보정에 맡긴다
+    const spaceBelow = window.innerHeight - rect.bottom - 4;
+    const spaceAbove = rect.top - 4;
+    setOpenUp(
+      spaceBelow < FORMAT_MENU_HEIGHT && spaceAbove >= FORMAT_MENU_HEIGHT,
+    );
     setOpen(true);
   };
 
@@ -158,10 +164,18 @@ export const FormatSelectBar = ({
             aria-label={labels[format]}
             className="dmn-motion fixed z-[60] flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2"
             style={{
-              left: anchorRect.left,
-              top: openUp
-                ? anchorRect.top - 4 - FORMAT_MENU_HEIGHT
-                : anchorRect.bottom + 4,
+              left: clampToViewport(
+                anchorRect.left,
+                anchorRect.width,
+                window.innerWidth,
+              ),
+              top: clampToViewport(
+                openUp
+                  ? anchorRect.top - 4 - FORMAT_MENU_HEIGHT
+                  : anchorRect.bottom + 4,
+                FORMAT_MENU_HEIGHT,
+                window.innerHeight,
+              ),
               width: anchorRect.width,
             }}
           >
