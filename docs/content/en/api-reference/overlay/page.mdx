@@ -41,6 +41,15 @@ Resets overlay position and size.
 await dmn.overlay.reset();
 ```
 
+### `dmn.overlay.resetPosition(): Promise<OverlayBounds>`
+
+Moves the overlay back to the center of the current monitor work area. Use it when the overlay ends up off-screen. Returns the applied bounds. The OBS overlay has no window, so the call is rejected there.
+
+```javascript
+const bounds = await dmn.overlay.resetPosition();
+console.log("restored bounds:", bounds);
+```
+
 ---
 
 ## Visibility Events

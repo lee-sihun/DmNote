@@ -84,6 +84,7 @@ import type {
   CounterAnimationBezier,
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
+import { overlayApi } from '@api/modules/overlayApi';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
@@ -2202,6 +2203,10 @@ const Grid = ({
             } else if (id === 'tabNote') {
               setIsNoteSettingOpen(false);
               setIsTabNoteModalOpen(true);
+            } else if (id === 'resetOverlayPosition') {
+              void overlayApi.resetPosition().catch((error) => {
+                console.error('Failed to reset overlay position', error);
+              });
             }
             setIsGridContextOpen(false);
             setGridContextClientPos(null);

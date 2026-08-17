@@ -92,6 +92,7 @@
           "obs_status",
           "obs_stop",
           "overlay_get",
+          "overlay_reset_position",
           "overlay_resize",
           "overlay_set_anchor",
           "overlay_set_lock",

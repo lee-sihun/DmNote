@@ -76,6 +76,8 @@ export function useGridContextMenu({
 }: UseGridContextMenuParams): UseGridContextMenuReturn {
   // 전역 CSS 활성화 여부
   const useCustomCSS = useSettingsStore((state) => state.useCustomCSS);
+  // OBS 모드는 데스크톱 오버레이 창을 파괴하고 위치를 OBS가 잡는다
+  const obsModeEnabled = useSettingsStore((state) => state.obsModeEnabled);
 
   // 플러그인 메뉴 아이템
   const pluginKeyMenuItems = usePluginMenuStore((state) => state.keyMenuItems);
@@ -225,6 +227,13 @@ export function useGridContextMenu({
         disabled: !noteEffect,
       },
     ];
+    // 오버레이가 화면 밖이거나 잠겨 있어도 닿을 수 있게 메인 창에도 노출
+    if (!obsModeEnabled) {
+      bottomBaseItems.push({
+        id: 'resetOverlayPosition',
+        label: t('contextMenu.resetOverlayPosition'),
+      });
+    }
 
     // 플러그인 메뉴 필터링
     const context: GridContext | null = gridAddLocalPos
