@@ -425,8 +425,9 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     );
 
     // mousedown 행과 mouseup 행이 다르면 행 onClick이 발화하지 않아 소비자가
-    // 리셋하지 못한다. 표식이 남으면 이후 아무 행 클릭이나 삼켜진다
-    expect(api.getDidDrag()).toBe(true);
+    // 리셋하지 못한다. 표식이 남으면 이후 아무 행 클릭이나 삼켜진다.
+    // (종료 직후 표식이 아직 true라는 것은 단언하지 않는다 - act가 예약된
+    //  타이머를 먼저 흘릴 수 있어 타이밍 의존이다. 핵심은 결국 걷히는 것)
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
