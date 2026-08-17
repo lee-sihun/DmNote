@@ -81,7 +81,6 @@ interface ColorPickerWrapperProps {
   position?: { x: number; y: number } | string;
   offsetY?: number;
   placement?: string;
-  portalToBody?: boolean;
   closeOnScroll?: boolean;
 }
 
@@ -129,7 +128,6 @@ const ColorPickerWrapper = ({
   position = undefined,
   offsetY = -80,
   placement = 'right-start',
-  portalToBody = false,
   closeOnScroll = false,
 }: ColorPickerWrapperProps) => {
   const { t } = useTranslation();
@@ -770,7 +768,6 @@ const ColorPickerWrapper = ({
       fallbackFixedX={typeof position === 'object' ? position?.x : undefined}
       fallbackFixedY={typeof position === 'object' ? position?.y : undefined}
       closeOnScroll={closeOnScroll}
-      portalToBody={portalToBody}
       interactiveRefs={interactiveRefs}
       onClose={handleClose}
     >

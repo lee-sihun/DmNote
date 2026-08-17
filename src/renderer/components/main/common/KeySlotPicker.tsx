@@ -18,8 +18,6 @@ interface KeySlotPickerProps {
   open: boolean;
   referenceRef: React.RefObject<HTMLElement | null>;
   panelElement?: HTMLElement | null;
-  // 스크롤·contain 조상 안에서 열릴 때 필요 - 인라인이면 그 박스에 잘린다
-  portalToBody?: boolean;
   onClose: () => void;
   members: string[];
   mode: KeySlotUiMode;
@@ -37,7 +35,6 @@ const KeySlotPicker = ({
   open,
   referenceRef,
   panelElement = null,
-  portalToBody = false,
   onClose,
   members,
   mode,
@@ -60,7 +57,6 @@ const KeySlotPicker = ({
       ariaLabel={labels.title}
       referenceRef={referenceRef as React.RefObject<HTMLElement>}
       panelElement={panelElement}
-      portalToBody={portalToBody}
       fallbackWidth={172}
       fallbackHeight={150}
       cardClassName="flex flex-col p-[8px] gap-[8px] w-[172px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
