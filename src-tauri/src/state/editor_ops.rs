@@ -760,6 +760,11 @@ fn frozen_element_matches(
     }
 }
 
+/// z_index의 None ↔ 0 판정은 op마다 다르다. 멱등 비교와 frozen insert는
+/// `unwrap_or_default()`로 None을 0과 같게 보고, reorder는 `Option` 그대로
+/// 비교해 None에 0을 쓰면 Applied로 잡는다. 프론트 낙관 적용기가 이 비대칭을
+/// 그대로 미러하므로(editorCoordinator의 z 반영 분기) 한쪽만 바꾸면 두
+/// 표현이 어긋난다. 통일하려면 양쪽을 함께 고쳐야 한다
 fn z_update_matches(
     document: &EditorDocumentV1,
     location: &ElementLocation,
@@ -893,6 +898,10 @@ fn apply_frozen_insert(
                 format!("insertFrozenElements z target '{}' is missing", update.id),
             ));
         };
+        // op_index 0 고정 - 구조 op는 envelope가 ops.len() == 1을 강제한다
+        // (INVALID_FROZEN_INSERT_BATCH / INVALID_REORDER_BATCH /
+        //  INVALID_GROUP_STRUCTURAL_BATCH). 그 전제가 완화되면 잘못된 인덱스를
+        //  보고하게 되므로 함께 고쳐야 한다
         validate_editor_op_target_type(0, update.element_type, location.element_type)?;
         if location.mode != mode {
             return Err(EditorCommitError::validation(

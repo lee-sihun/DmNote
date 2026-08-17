@@ -223,9 +223,12 @@ mod tests {
     // 여기 없는 코드는 프론트에서 한도 안내 대신 일반 오류 안내로 표시된다
     const CAPACITY_VALIDATION_CODES: &[&str] = &[
         "COLLECTION_TOO_LARGE",
+        "FROZEN_INSERT_BATCH_TOO_LARGE",
         "HISTORY_ENTRY_TOO_LARGE",
+        "REORDER_BATCH_TOO_LARGE",
         "REQUEST_TOO_LARGE",
         "TOO_MANY_CUSTOM_TABS",
+        "TOO_MANY_EDITOR_OPS",
         "TOO_MANY_LAYER_GROUPS",
         "TOO_MANY_MODES",
         "TOO_MANY_PLUGIN_INSTANCES",
