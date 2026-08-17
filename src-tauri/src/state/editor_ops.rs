@@ -3145,8 +3145,34 @@ mod tests {
         };
         let rows = patch_target_type_matrix();
 
-        // 전수 고정 - 중복 없는 71개 variant (신규 variant는 본문 match 컴파일 에러가 강제)
-        assert_eq!(rows.len(), 71);
+        // 전수 고정. 개수 리터럴은 강제가 아니다 - variant를 추가하고 매트릭스
+        // 행을 빠뜨리면 개수만 맞춰도 통과한다. wire 태그 집합과 대조해
+        // "모든 variant가 매트릭스에 있다"를 실제로 강제한다
+        let row_tags = rows
+            .iter()
+            .map(|row| {
+                serde_json::to_value(&row.patch).expect("patch must serialize")["property"]
+                    .as_str()
+                    .expect("adjacently tagged patch must carry property")
+                    .to_string()
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/editor-property-tags.json"
+        ))
+        .expect("property tag fixture must be valid json");
+        let wire_tags = fixture["properties"]
+            .as_array()
+            .expect("fixture.properties must be an array")
+            .iter()
+            .map(|tag| {
+                tag.as_str()
+                    .expect("property tag must be a string")
+                    .to_string()
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(row_tags, wire_tags, "매트릭스 행과 wire 태그 집합이 다르다");
+        assert_eq!(rows.len(), row_tags.len(), "매트릭스에 중복 variant가 있다");
         let distinct = rows
             .iter()
             .map(|row| std::mem::discriminant(&row.patch))
