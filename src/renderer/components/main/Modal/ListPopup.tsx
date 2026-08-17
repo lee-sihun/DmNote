@@ -37,6 +37,12 @@ interface ListPopupProps {
   offsetX?: number;
   offsetY?: number;
   contentMountStrategy?: CommitStrategy;
+  /** 앵커 기준 배치 방향 (referenceRef를 쓸 때만 의미) */
+  placement?: string;
+  /** 트리거 폭 정렬용 최소 폭 */
+  minWidth?: number;
+  /** 스크롤·contain 조상 안에서 열릴 때 필요 */
+  portalToBody?: boolean;
 }
 
 const DOCUMENT_FOCUSABLE_SELECTOR = [
@@ -488,6 +494,9 @@ const ListPopup = ({
   offsetX = 0,
   offsetY = 0,
   contentMountStrategy = 'after-paint',
+  placement = 'top',
+  minWidth,
+  portalToBody = false,
 }: ListPopupProps) => {
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -532,7 +541,9 @@ const ListPopup = ({
       onMenuTab={handleMenuTab}
       focusOriginRef={openerRef}
       referenceRef={referenceRef}
-      placement="top"
+      placement={placement}
+      minWidth={minWidth}
+      portalToBody={portalToBody}
       offset={25}
       offsetX={offsetX}
       offsetY={offsetY}

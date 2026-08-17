@@ -51,6 +51,8 @@ interface FloatingPopupBaseProps {
   autoClose?: boolean;
   closeOnScroll?: boolean; // 스크롤 시 닫을지 여부
   portalToBody?: boolean;
+  /** 트리거 폭에 맞추는 메뉴용 - 내용이 더 넓으면 내용을 따른다 */
+  minWidth?: number;
   /** 모션 전면 차단 - 등퇴장이 없어야 하는 표면과 테스트용 탈출구 */
   animate?: boolean;
   /** 좌표 실측이 끝나기 전에는 false - 감춰진 프레임에 등장 모션이 소비되는 걸 막는다 */
@@ -235,6 +237,7 @@ const FloatingPopup = ({
   autoClose = true,
   closeOnScroll = false,
   portalToBody = false,
+  minWidth,
   animate = true,
   motionReady = true,
   onKeyDown,
@@ -582,6 +585,7 @@ const FloatingPopup = ({
         position: isFixedMode ? 'fixed' : strategy,
         left,
         top,
+        minWidth,
       }}
       className={className}
       active={open}
