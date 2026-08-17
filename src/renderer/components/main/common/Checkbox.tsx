@@ -37,7 +37,7 @@ const Checkbox = ({
       role="switch"
       aria-checked={visualChecked}
       className={`dmn-toggle-track relative w-[28px] h-[16px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${
-        visualChecked ? 'bg-accent' : 'bg-line-strong hover:bg-white/[0.18]'
+        visualChecked ? 'bg-accent' : 'bg-line-strong hover:bg-white/[0.19]'
       }`}
       onClick={handleClick}
     >

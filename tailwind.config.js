@@ -14,13 +14,11 @@ module.exports = {
       colors: {
         app: 'var(--ui-bg-app)',
         panel: 'var(--ui-bg-panel)',
-        surface: {
-          DEFAULT: 'var(--ui-bg-surface)',
-          hover: 'var(--ui-bg-surface-hover)',
-          active: 'var(--ui-bg-surface-active)',
-        },
+        'panel-detached': 'var(--ui-bg-panel-detached)',
+        surface: 'var(--ui-bg-surface)',
         elevated: 'var(--ui-bg-elevated)',
         inset: 'var(--ui-bg-inset)',
+        'inset-solid': 'var(--ui-bg-inset-solid)',
         glass: 'var(--ui-glass)',
         'glass-heavy': 'var(--ui-glass-heavy)',
         'glass-dim': 'var(--ui-glass-dim)',
