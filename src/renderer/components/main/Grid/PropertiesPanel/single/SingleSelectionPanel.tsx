@@ -846,6 +846,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   const [classNameDraft, setClassNameDraft] = useState(
     singleKnobPosition.className || '',
   );
+  // 캡처는 시작 ID를 동결해 그 노브에 완료를 적용한다. 표시도 소유권 기준이어야
+  // 한다 - truthiness로 그리면 대상이 바뀐 뒤 현재 노브 행에 "감지 중"이 뜨고,
+  // 사용자가 노브를 돌리면 화면에 없는 옛 노브에 축이 바인딩된다
+  const capturingThisKnob = axisCaptureTarget === singleKnobPosition.id;
 
   useEffect(() => {
     setClassNameDraft(singleKnobPosition.className || '');
@@ -1144,7 +1148,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   type="button"
                   onClick={() =>
                     setAxisCaptureTarget((current) =>
-                      current
+                      // 이 노브가 대기 중일 때만 토글 해제. 다른 노브의 잔여
+                      // 대기는 취소가 아니라 이 노브로 옮겨야 한다
+                      current === singleKnobPosition.id
                         ? null
                         : singleKnobPosition.id &&
                           isNativeElementId(singleKnobPosition.id)
@@ -1153,12 +1159,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     )
                   }
                   className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
-                    axisCaptureTarget ? 'shadow-focus-ring' : ''
+                    capturingThisKnob ? 'shadow-focus-ring' : ''
                   } text-fg text-label`}
                   title={singleKnobPosition.axisId || ''}
                 >
                   <span className="truncate max-w-[120px]">
-                    {axisCaptureTarget
+                    {capturingThisKnob
                       ? t('propertiesPanel.knobCapturing') || '감지 중…'
                       : singleKnobPosition.axisId
                       ? axisLabel

@@ -147,6 +147,41 @@ describe('SingleKnobPanel 대상 전환 세션 정리', () => {
     expect(mocks.patchAxis).toHaveBeenCalledWith(knobPosition.id, 'HIDA:mode');
   });
 
+  it('다른 노브로 바뀌면 그 행에 감지 중을 표시하지 않는다', () => {
+    act(() => captureButton().click());
+    expect(captureButton().textContent).toBe('propertiesPanel.knobCapturing');
+
+    render({
+      ...knobPosition,
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+
+    // 쓰기는 동결된 시작 ID로 가므로, 새 노브 행에 감지 중이 뜨면 사용자는
+    // 이 노브가 대기 중이라 읽고 돌렸다가 옛 노브에 축이 바인딩된다
+    expect(captureButton().textContent).not.toBe(
+      'propertiesPanel.knobCapturing',
+    );
+  });
+
+  it('다른 노브의 잔여 대기는 첫 클릭이 취소가 아니라 대상 이전이다', () => {
+    act(() => captureButton().click());
+    render({
+      ...knobPosition,
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
+
+    act(() => captureButton().click());
+
+    expect(captureButton().textContent).toBe('propertiesPanel.knobCapturing');
+    emitAxis('HIDA:moved');
+    emitAxis('HIDA:moved');
+    emitAxis('HIDA:moved');
+    expect(mocks.patchAxis).toHaveBeenCalledWith(
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'HIDA:moved',
+    );
+  });
+
   it('같은 대상이면 캡처 대기를 유지한다', () => {
     act(() => captureButton().click());
 
