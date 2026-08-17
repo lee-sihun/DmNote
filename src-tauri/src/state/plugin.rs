@@ -525,6 +525,11 @@ pub(crate) fn backfill_plugin_instance_ids(data: &mut AppStoreData) -> BackfillO
         .collect::<Vec<_>>();
     keys.sort_unstable();
 
+    // 부수효과: 형태가 깨져 skip된 버킷은 for_each_stored_plugin_instances에서도
+    // 빠지므로 plugin_group_refs에 잡히지 않는다. 그 플러그인 인스턴스만 들어
+    // 있던 layer group은 다음 complete_mode_order reorder에서 빈 그룹으로 정리되고,
+    // 나중에 버킷이 복구돼도 그룹 def는 돌아오지 않는다 (인스턴스 데이터 자체는
+    // 원본 보존으로 살아남는다)
     // 1차 패스: 전 플러그인의 유효 기존 instanceId 수집 (재발급 충돌 예약)
     // decode_plugin_instances 대신 관대한 decode 사용 - decode_plugin_instances는
     // validate를 경유하므로 invalid ID가 남은 store가 여기서 decode 실패로

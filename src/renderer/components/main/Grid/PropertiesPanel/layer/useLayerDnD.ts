@@ -12,7 +12,7 @@ import {
   reorderLayerSelectionViaAuthority,
   type LayerReorderIntentWire,
 } from '@plugins/rpc/pluginElementActions';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import type { LayerItem, DisplayItem } from '../types';
@@ -112,6 +112,14 @@ export function useLayerDnD({
   const isDraggingRef = useRef(false);
   const didDragRef = useRef(false);
   const didDragResetTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (didDragResetTimerRef.current !== null) {
+        window.clearTimeout(didDragResetTimerRef.current);
+      }
+    },
+    [],
+  );
   const dragStateRef = useRef<{
     itemHeight: number;
     currentDropTarget: DropAnchors | null;

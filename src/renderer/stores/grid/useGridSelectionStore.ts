@@ -338,8 +338,9 @@ export function pruneStalePluginSelection(
 ) {
   const selection = useGridSelectionStore.getState();
   if (selection.selectedElements.length === 0) return;
-  // fullId는 `${pluginId}:${id}`와 `${pluginId}::${id}`가 혼재한다. 콜론 1개
-  // 접두사가 둘 다 덮으면서 plugin-a ↔ plugin-ab 오탐도 막는다
+  // 표시 요소 fullId는 `${pluginId}::${id}`다. pluginId에는 콜론이 들어갈 수
+  // 없으므로(백엔드 validate_plugin_id: 영숫자·하이픈·언더스코어) 콜론 1개
+  // 접두사로 충분하고, plugin-a ↔ plugin-ab 오탐도 막힌다
   const ownedByPull = (fullId: string) =>
     ownerPluginId === undefined || fullId.startsWith(`${ownerPluginId}:`);
   const kept = selection.selectedElements.filter(

@@ -363,14 +363,16 @@ export const deleteFrozenSelection = async (
           expectedAuthorityGeneration: options.expectedAuthorityGeneration,
         });
         // 정산이 중단됐는데(abort 흡수) 반환값을 버리면 패널 RPC 경계에서
-        // 성공으로 응답한다. 형제 op(remove·setHidden)가 대상 소실을
-        // ELEMENT_NOT_FOUND로 거절하는 계약과 맞춘다
+        // 성공으로 응답한다. 형제 op(remove·setHidden)가 대상 소실을 거절하는
+        // 것과 같은 취지로 실패를 전파한다 (RPC는 DELETE_SELECTION_FAILED로 응답)
         if (!settlement.committed && !settlement.satisfied) {
           throw new ElementIntentAbort('batch delete settlement');
         }
       }
     } catch (error) {
       if (options.propagateErrors) throw error;
+      // abort도 여기서 남긴다. 러너의 skip 보고는 컨텍스트 문자열뿐이라
+      // 중단 원인(error)을 잃는다
       console.error('Failed to persist selected element deletion', error);
     }
   } finally {

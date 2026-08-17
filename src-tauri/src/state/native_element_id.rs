@@ -66,6 +66,14 @@ impl NativeElement for KnobPosition {
     }
 }
 
+/// 파서가 하이픈형·무하이픈형·`{...}`·`urn:uuid:`·대소문자 혼용을 모두 받는다.
+/// 파싱 결과를 버리고 raw를 그대로 두는 것이 계약이다 - store.rs의
+/// `alternate_uuid_spellings_remain_raw_distinct_through_load_bootstrap_and_event`가
+/// 로드·bootstrap·이벤트 전 구간에서 raw 보존을 고정한다.
+///
+/// **element id에 `Uuid::parse_str(..).to_string()` 같은 정규화를 적용하지 말 것.**
+/// 유일성 판정이 문자열 기준이라, 어디선가 정규화가 끼면 같은 UUID의 다른 표기를
+/// 쓰던 두 요소가 하나로 붕괴한다
 pub(crate) fn is_valid_element_id(id: &str) -> bool {
     Uuid::parse_str(id).is_ok_and(|id| !id.is_nil())
 }
@@ -486,10 +494,6 @@ fn value_without_id<T: NativeElement>(element: &T) -> T {
     copy
 }
 
-fn same_value_without_id<T: NativeElement>(left: &T, right: &T) -> bool {
-    value_without_id(left) == value_without_id(right)
-}
-
 fn ordered_current_elements<T: NativeElement>(collection: &HashMap<String, Vec<T>>) -> Vec<T> {
     let mut elements = Vec::new();
     for mode in sorted_modes(collection) {
@@ -690,6 +694,10 @@ fn consume_slot_paired_ids(
     match_slot: bool,
     same_mode_only: bool,
 ) {
+    let normalized_pairs: Vec<KeyPosition> = current_pairs
+        .iter()
+        .map(|pair| value_without_id(&pair.position))
+        .collect();
     for mode in sorted_modes(candidate) {
         let Some(elements) = candidate.get_mut(&mode) else {
             continue;
@@ -703,12 +711,17 @@ fn consume_slot_paired_ids(
             if match_slot && slot.is_none() {
                 continue;
             }
-            let inherited = current_pairs.iter().find(|pair| {
-                (!same_mode_only || pair.mode == mode)
-                    && (!match_slot || pair.slot.as_ref() == slot)
-                    && !consumed_current_ids.contains(&pair.position.id)
-                    && same_value_without_id(&pair.position, &*element)
-            });
+            let target = value_without_id(&*element);
+            let inherited = current_pairs
+                .iter()
+                .zip(&normalized_pairs)
+                .find(|(pair, normalized)| {
+                    (!same_mode_only || pair.mode == mode)
+                        && (!match_slot || pair.slot.as_ref() == slot)
+                        && !consumed_current_ids.contains(&pair.position.id)
+                        && **normalized == target
+                })
+                .map(|(pair, _)| pair);
             if let Some(pair) = inherited {
                 let id = pair.position.id.clone();
                 consumed_current_ids.insert(id.clone());
