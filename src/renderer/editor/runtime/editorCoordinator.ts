@@ -899,22 +899,19 @@ const applySemanticOps = (
               return { ...position, noteGlowSize: op.patch.value };
             }
             if (op.patch.property === 'noteOffsetX') {
-              return {
-                ...position,
-                noteOffsetX: op.patch.value ?? undefined,
-              };
+              // null 보존 - 백엔드가 이 필드를 null로 직렬화하므로 undefined로
+              // 바꾸면 의미가 같은데도 getChangedEditorFields가 변경으로 잡는다
+              return { ...position, noteOffsetX: op.patch.value };
             }
             if (op.patch.property === 'noteOffsetY') {
-              return {
-                ...position,
-                noteOffsetY: op.patch.value ?? undefined,
-              };
+              // null 보존 - 백엔드가 이 필드를 null로 직렬화하므로 undefined로
+              // 바꾸면 의미가 같은데도 getChangedEditorFields가 변경으로 잡는다
+              return { ...position, noteOffsetY: op.patch.value };
             }
             if (op.patch.property === 'noteWidth') {
-              return {
-                ...position,
-                noteWidth: op.patch.value ?? undefined,
-              };
+              // null 보존 - 백엔드가 이 필드를 null로 직렬화하므로 undefined로
+              // 바꾸면 의미가 같은데도 getChangedEditorFields가 변경으로 잡는다
+              return { ...position, noteWidth: op.patch.value };
             }
             if (op.patch.property === 'noteBorderWidth') {
               return {

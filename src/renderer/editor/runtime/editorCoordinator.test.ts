@@ -4635,13 +4635,42 @@ describe('commitSemanticOpsInternal', () => {
     const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
 
     expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    // clear는 null을 보존한다. 백엔드가 이 필드를 null로 직렬화하므로
+    // undefined로 바꾸면 의미가 같은데도 getChangedEditorFields가 변경으로
+    // 잡아 가짜 diff가 난다 (noteBorderWidth 등 형제 필드와 같은 규칙)
     expect(outcome.document.keyPositions['4key']).toMatchObject([
-      { noteOffsetX: undefined, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteOffsetX: null, noteColor: '#sentinel', noteGlowSize: 17.5 },
       { noteOffsetY: 0, noteColor: '#sentinel', noteGlowSize: 17.5 },
-      { noteWidth: undefined, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteWidth: null, noteColor: '#sentinel', noteGlowSize: 17.5 },
       { noteBorderWidth: 3.5, noteColor: '#sentinel', noteGlowSize: 17.5 },
       { noteBorderRadius: 12.5, noteColor: '#sentinel', noteGlowSize: 17.5 },
     ]);
+    harness.coordinator.stop();
+  });
+
+  it('nullable clear 뒤 문서는 백엔드 표현과 동일해 가짜 diff를 만들지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001b0';
+    const base = makeDocument();
+    base.keys = { '4key': ['A'] };
+    base.keyPositions = {
+      '4key': [{ ...createDefaultKeyPosition(), id, noteOffsetX: 7.5 }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'noteOffsetX', value: null },
+      },
+    ]);
+
+    // 백엔드는 Option::None을 null로 실어 보낸다 (skip_serializing_if 없음)
+    const backend = structuredClone(outcome.document);
+    backend.keyPositions['4key'][0].noteOffsetX = null;
+    expect(getChangedEditorFields(outcome.document, backend)).toEqual([]);
     harness.coordinator.stop();
   });
 
