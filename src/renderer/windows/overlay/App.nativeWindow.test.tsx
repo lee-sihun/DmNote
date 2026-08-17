@@ -135,6 +135,7 @@ const flushAsync = () =>
 let container: HTMLDivElement;
 let root: Root;
 let originalApi: Window['api'];
+let originalRuntime: Window['__dmn_runtime'];
 
 const mount = async () => {
   container = document.createElement('div');
@@ -148,6 +149,7 @@ const mount = async () => {
 
 const setupOverlay = () => {
   originalApi = window.api;
+  originalRuntime = window.__dmn_runtime;
   mocks.bootstrap.mockReset().mockResolvedValue({ activeKeys: [] });
   mocks.resize.mockReset().mockResolvedValue(undefined);
   mocks.currentMonitor.mockReset().mockResolvedValue(null);
@@ -174,6 +176,8 @@ const teardownOverlay = () => {
   container.remove();
   resetAllKeySignals();
   window.api = originalApi;
+  if (originalRuntime === undefined) delete window.__dmn_runtime;
+  else window.__dmn_runtime = originalRuntime;
   vi.restoreAllMocks();
 };
 
@@ -257,5 +261,25 @@ describe('모서리 스냅', () => {
 
     // 보정 전에는 1080 - 1600 = -520으로 화면 위로 사라졌다
     expect(applied).toMatchObject({ x: 0, y: 0 });
+  });
+});
+
+describe('OBS 오버레이', () => {
+  beforeEach(setupOverlay);
+  afterEach(teardownOverlay);
+
+  it('네이티브 창이 없으므로 리사이즈를 호출하지 않는다', async () => {
+    window.__dmn_runtime = 'obs';
+
+    await mount();
+
+    // allowlist 밖이라 호출은 어차피 거부되고, 실패 처리가 기준선을 지워 반복된다
+    expect(mocks.resize).not.toHaveBeenCalled();
+  });
+
+  it('네이티브 런타임에서는 리사이즈를 호출한다', async () => {
+    await mount();
+
+    expect(mocks.resize).toHaveBeenCalled();
   });
 });

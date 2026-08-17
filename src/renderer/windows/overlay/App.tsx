@@ -851,6 +851,9 @@ export default function App() {
 
   useEffect(() => {
     if (!bounds || !contentSize) return;
+    // OBS 오버레이에는 네이티브 창이 없다 - allowlist 밖이라 호출이 항상 거부되고,
+    // 기준선을 지우는 실패 처리와 맞물려 레이아웃이 바뀔 때마다 헛호출이 반복된다
+    if (window.__dmn_runtime === 'obs') return;
 
     const totalWidth = contentSize.width;
     const totalHeight = contentSize.height;
