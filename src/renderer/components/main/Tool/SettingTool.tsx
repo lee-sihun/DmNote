@@ -223,7 +223,7 @@ SettingToolProps) => {
     <div className="flex gap-[8px]">
       {!isSettingsOpen && (
         <TooltipGroup>
-          <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[0px]">
+          <div className="flex items-center h-[40px] p-[5px] bg-fill-faint rounded-surface gap-[0px]">
             <FloatingTooltip content={t('tooltip.exportPreset')}>
               <Button
                 icon={
@@ -287,7 +287,7 @@ SettingToolProps) => {
         </TooltipGroup>
       )}
       <TooltipGroup>
-        <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[4px]">
+        <div className="flex items-center h-[40px] p-[5px] bg-fill-faint rounded-surface gap-[4px]">
           <FloatingTooltip
             content={
               isObsModeActive
@@ -390,7 +390,7 @@ const Button = ({
           ? 'opacity-40 cursor-not-allowed text-fg-muted'
           : `active:bg-fill-hover ${
               isSelected
-                ? 'bg-surface-active text-fg'
+                ? 'bg-fill-hover text-fg'
                 : 'text-fg-muted hover:bg-fill hover:text-fg'
             }`
       }`}
@@ -416,7 +416,7 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
         type="button"
         className={`flex items-center justify-center h-[30px] w-[14px] rounded-md transition-colors duration-fast active:bg-fill-hover ${
           isSelected
-            ? 'bg-surface-active text-fg'
+            ? 'bg-fill-hover text-fg'
             : 'text-fg-muted hover:bg-fill hover:text-fg'
         }`}
         onClick={onClick}

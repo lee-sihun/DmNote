@@ -127,7 +127,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('left')}
-              className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-fill transition-colors"
               title={t('propertiesPanel.alignLeft') || '왼쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -158,7 +158,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('centerH')}
-              className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-fill transition-colors"
               title={t('propertiesPanel.alignCenterH') || '수평 중앙 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -189,7 +189,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('right')}
-              className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-fill transition-colors"
               title={t('propertiesPanel.alignRight') || '오른쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -223,7 +223,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('top')}
-              className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-fill transition-colors"
               title={t('propertiesPanel.alignTop') || '위쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -254,7 +254,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('centerV')}
-              className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-fill transition-colors"
               title={t('propertiesPanel.alignCenterV') || '수직 중앙 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -285,7 +285,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('bottom')}
-              className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-fill transition-colors"
               title={t('propertiesPanel.alignBottom') || '아래쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -325,9 +325,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
             onClick={() => handleBatchDistribute('horizontal')}
             disabled={totalCount < 3}
             className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
-              totalCount < 3
-                ? 'opacity-40 cursor-not-allowed'
-                : 'hover:bg-surface-hover'
+              totalCount < 3 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-fill'
             }`}
             title={t('propertiesPanel.distributeH') || '수평 분배'}
           >
@@ -363,9 +361,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
             onClick={() => handleBatchDistribute('vertical')}
             disabled={totalCount < 3}
             className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
-              totalCount < 3
-                ? 'opacity-40 cursor-not-allowed'
-                : 'hover:bg-surface-hover'
+              totalCount < 3 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-fill'
             }`}
             title={t('propertiesPanel.distributeV') || '수직 분배'}
           >

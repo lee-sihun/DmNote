@@ -175,7 +175,7 @@ export const FormatSelectBar = ({
                   setOpen(false);
                   onFormatChange(f);
                 }}
-                className="w-full h-[26px] px-[8px] rounded-md flex items-center gap-[6px] hover:bg-surface-hover active:bg-surface-active cursor-pointer transition-colors duration-fast"
+                className="w-full h-[26px] px-[8px] rounded-md flex items-center gap-[6px] hover:bg-fill active:bg-fill-active cursor-pointer transition-colors duration-fast"
               >
                 <span className="flex-1 text-body text-fg whitespace-nowrap text-left">
                   {labels[f]}

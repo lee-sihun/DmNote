@@ -147,9 +147,8 @@ describe('LayerTab 그룹 진입 존 하이라이트', () => {
     });
   };
 
-  // hover:bg-surface-hover 토큰과의 부분 문자열 오탐을 피해 classList로 검사
-  const hasIntoHighlight = () =>
-    headerEl().classList.contains('bg-surface-hover');
+  // 클래스 문자열 부분 검사는 hover: 접두 유틸까지 잡으므로 classList 정확 일치로 검사
+  const hasIntoHighlight = () => headerEl().classList.contains('bg-fill-hover');
 
   it('헤더 중앙 존에서 행 전체에 hover 토큰을 붙이고 벗어나면 뗀다', async () => {
     await pressFirstItem();

@@ -423,8 +423,8 @@ const Dropdown: React.FC<DropdownProps> = ({
                   tabIndex={-1}
                   className={`text-left w-full h-[23px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
                     visualValue === opt.value
-                      ? 'bg-surface-active text-fg pointer-events-none'
-                      : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
+                      ? 'bg-fill-hover text-fg pointer-events-none'
+                      : 'text-fg-muted hover:bg-fill hover:text-fg'
                   }`}
                   onFocus={() => setActiveIndex(index)}
                   onKeyDown={(event) => handleOptionKeyDown(event, index)}

@@ -350,10 +350,10 @@ const FontPicker = ({
               }
               className={`${pickerRowClass} ${
                 isSelected
-                  ? 'bg-surface-active text-fg cursor-pointer'
+                  ? 'bg-fill-hover text-fg cursor-pointer'
                   : isDisabled
-                  ? 'text-fg-faint hover:bg-surface-hover cursor-default'
-                  : 'text-fg hover:bg-surface-hover cursor-pointer'
+                  ? 'text-fg-faint hover:bg-fill cursor-default'
+                  : 'text-fg hover:bg-fill cursor-pointer'
               }`}
               title={font.displayName}
             >
