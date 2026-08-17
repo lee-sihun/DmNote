@@ -588,7 +588,8 @@ export interface EditorCommittedV1 {
   mutationId: string;
   origin?: string;
   changedFields: EditorField[];
-  patch: EditorPatchV1;
+  // 이벤트는 v1 고정 - 커밋 요청 전용 v2를 타입에서 배제한다
+  patch: EditorLegacyPatchV1;
   // 커밋 요청의 gestureId echo, 수신 창의 프리뷰 오버레이 정리 신호
   gestureId?: string | null;
   // 합쳐진 커밋에 포함된 모든 프리뷰 세션 정리 신호
@@ -2294,6 +2295,17 @@ export function assertEditorCommittedEvent(value: EditorCommittedV1): void {
     throw new EditorProtocolError('editor:committed gestureIds is invalid');
   }
   assertEditorFields(value.changedFields, 'editor:committed changedFields');
+  // 이벤트 patch는 v1 고정이다. 백엔드는 patch_for_fields로만 만들고 그것은
+  // 항상 EDITOR_SCHEMA_VERSION이다. assertEditorPatch는 커밋 요청과 공용이라
+  // v2를 통과시키므로, 이벤트 경계에서는 먼저 v1을 강제한다
+  if (
+    !isRecord(value.patch) ||
+    value.patch.schemaVersion !== EDITOR_SCHEMA_VERSION
+  ) {
+    throw new EditorProtocolError(
+      'editor:committed patch has an unsupported schema version',
+    );
+  }
   assertEditorPatch(value.patch, 'editor:committed patch');
   const suppliedIds = new Set<string>();
   for (const field of POSITION_COLLECTION_FIELDS) {

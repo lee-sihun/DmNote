@@ -62,6 +62,7 @@ import type {
   EditorOpResultV1,
   EditorOpV1,
   EditorPatchV1,
+  EditorLegacyPatchV1,
 } from '@src/types/editor';
 
 export type EditorApplyReason =
@@ -1122,11 +1123,16 @@ export function getChangedEditorFields(
   );
 }
 
+// 버전 인자 없이 patchForFields를 부르므로 항상 v1이다. 이벤트 patch 타입과
+// 맞도록 반환도 v1로 좁힌다
 export function createEditorPatch(
   base: EditorDocumentV1,
   next: EditorDocumentV1,
-): EditorPatchV1 {
-  return patchForFields(next, getChangedEditorFields(base, next));
+): EditorLegacyPatchV1 {
+  return patchForFields(
+    next,
+    getChangedEditorFields(base, next),
+  ) as EditorLegacyPatchV1;
 }
 
 export function applyEditorPatch(

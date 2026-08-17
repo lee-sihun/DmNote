@@ -1207,6 +1207,32 @@ describe('editor canonical ID ingress', () => {
     );
   });
 
+  it('committed patch는 커밋 전용 v2 스키마를 거절한다', () => {
+    // 백엔드는 이벤트 patch를 항상 v1로 낸다(patch_for_fields). 커밋 요청과
+    // 공용인 assertEditorPatch가 v2를 통과시키므로 이벤트 경계에서 막아야 한다
+    const event = {
+      schemaVersion: 1,
+      revision: 1,
+      mutationId: 'external-v2-patch',
+      changedFields: ['keyPositions'],
+      patch: {
+        schemaVersion: 2,
+        keyPositions: {
+          '4key': [
+            {
+              ...createDefaultKeyPosition(),
+              id: '00000000-0000-4000-8000-000000000009',
+            },
+          ],
+        },
+      },
+    } as unknown as EditorCommittedV1;
+
+    expect(() => assertEditorCommittedEvent(event)).toThrow(
+      EditorProtocolError,
+    );
+  });
+
   it('committed patch는 collection 사이 raw ID 중복을 거절한다', () => {
     const id = '00000000-0000-4000-8000-000000000001';
     const event: EditorCommittedV1 = {
