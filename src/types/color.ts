@@ -306,29 +306,6 @@ const hasStoredPairValue = (pair: ColorPair): boolean =>
   pair.gradient != null;
 
 /**
- * idle 편집 전 active 모습 보존값 — 저장된 사용자 값만 대상으로 판정
- * active 쌍이 비어 있고 idle 쌍에 저장값이 있을 때만 복사값 반환
- */
-export function getActivePairPreservation(
-  idlePair: ColorPair,
-  activePair: ColorPair,
-): ColorPair | null {
-  if (hasStoredPairValue(activePair)) return null;
-
-  const color =
-    typeof idlePair.color === 'string' && idlePair.color.trim().length > 0
-      ? idlePair.color
-      : undefined;
-  const gradient = idlePair.gradient ?? undefined;
-  if (color === undefined && gradient === undefined) return null;
-
-  return {
-    ...(color !== undefined ? { color } : {}),
-    ...(gradient !== undefined ? { gradient } : {}),
-  };
-}
-
-/**
  * 상태별 색 쌍 해석 — active 쌍에 유효한 저장값이 있으면 active 쌍 전체를,
  * 없으면 idle 쌍 전체를 사용 (색/그라데이션이 상태 간에 섞여 새지 않도록 쌍 단위 폴백)
  */

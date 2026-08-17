@@ -243,33 +243,6 @@ export function updateKeyStyle(
   };
 }
 
-/** 배치 키 스타일 업데이트 후 새 positions 반환 */
-export function batchUpdateKeyStyle<T extends KeyPositions>(
-  positions: T,
-  mode: string,
-  updates: Array<{ index: number } & Partial<KeyPosition>>,
-): T {
-  if (updates.length === 0) return positions;
-
-  const current = positions[mode] || [];
-  const updateMap = new Map<number, Partial<KeyPosition>>();
-  for (const { index, ...rest } of updates) {
-    if (current[index]) {
-      updateMap.set(index, rest);
-    }
-  }
-
-  if (updateMap.size === 0) return positions;
-
-  return {
-    ...positions,
-    [mode]: current.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? { ...pos, ...update } : pos;
-    }),
-  } as T;
-}
-
 // ----------------------------------------------------------------------------
 // 노트 색상 업데이트
 // ----------------------------------------------------------------------------
