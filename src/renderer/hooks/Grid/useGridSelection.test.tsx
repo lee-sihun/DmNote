@@ -859,6 +859,36 @@ describe('useGridSelection compound history gesture', () => {
     ).not.toThrow();
   });
 
+  it('동결 대상을 넘기면 대기 중 선택이 비어도 시작 대상에 정산한다', async () => {
+    const frozen = [
+      { type: 'key' as const, id: STABLE_KEY_ID, index: 0 },
+    ] as never;
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([]);
+    });
+
+    api.syncSelectedElementsToOverlay('gesture-frozen', frozen);
+
+    expect(mocks.commitGeneratedSemanticOps).toHaveBeenCalledTimes(1);
+  });
+
+  it('동결 대상 없이 정산했는데 선택이 비었으면 무커밋을 보고한다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([]);
+    });
+
+    api.syncSelectedElementsToOverlay('gesture-live');
+
+    expect(mocks.commitGeneratedSemanticOps).not.toHaveBeenCalled();
+    expect(
+      warn.mock.calls.filter(
+        (call) => call[1] === 'drag settlement without frozen targets',
+      ),
+    ).toHaveLength(1);
+    warn.mockRestore();
+  });
+
   // native 단독 이동 정산 계약. 전환 고정: 레거시 슬롯 재생성(runElementIntent
   // 경유 commitGeneratedPatch)이 아니라 semantic ops 경로로만 나감을 단언한다
   const settleNativeMove = async (settleGestureId?: string) => {

@@ -167,6 +167,12 @@ export function useGridSelection({
       nativeTargets.every(
         (target) => target.id.length > 0 && isNativeElementId(target.id),
       );
+    // 게스처 정산인데 대상이 하나도 없다 - 호출부가 시작 시점 대상을 동결하지
+    // 않아 대기 중 선택 해제가 eager 이동을 통째로 삼킨 경우다. plugin-only
+    // 선택(editor 무커밋 계약)과 구분해 관측 가능하게 남긴다
+    if (gestureId && currentSelection.length === 0) {
+      reportElementOpSkipped('drag settlement without frozen targets');
+    }
     // plugin-only 선택은 editor 의도가 없다 - editor 무커밋
     if (nativeTargets.length > 0) {
       if (!allStableIds) {
