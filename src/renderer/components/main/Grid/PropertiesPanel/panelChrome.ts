@@ -15,5 +15,7 @@ export const PANEL_HEADER_CLASS =
 
 // 분리 창 전용 프레임, 창 자체가 240px라 inset 채움, OS 그림자가 깊이 담당
 // 글래스 대신 같은 색상의 불투명 표면 (분리 창은 뒤 비침이 무의미)
+// 도킹된 사이드 패널과 같은 L*에 서도록 솔리드 토큰을 쓴다 - 리터럴을 박으면
+// 램프를 옮길 때 분리 창만 옛 색으로 남는다
 export const WINDOW_PANEL_FRAME_CLASS =
-  'absolute inset-0 bg-[rgb(14,14,17)] z-30 rounded-[12px] overflow-hidden';
+  'absolute inset-0 bg-panel-detached z-30 rounded-[12px] overflow-hidden';

@@ -614,7 +614,8 @@ body.dmn-dragging * {
   height: 100%;
 }
 
-/* 크롬 색은 사이드 패널과 같은 토큰 — 웰(bg-inset)이 배경을 소유, 에디터는 투명 */
+/* 크롬 색은 사이드 패널과 같은 토큰 — 웰(bg-inset-solid)이 배경을 소유, 에디터는 투명.
+   웰이 알파면 모달 카드 밝기를 그대로 물려받아 신택스 팔레트 대비가 무너진다 */
 .webfont-cm-editor .cm-editor {
   height: 100%;
   background: transparent;

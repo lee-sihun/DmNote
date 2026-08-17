@@ -60,7 +60,7 @@ const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
       e.stopPropagation();
       onClick();
     }}
-    className="flex-1 flex items-center justify-center h-full text-white/45 hover:text-white/90 cursor-pointer"
+    className="flex-1 flex items-center justify-center h-full text-fg-faint hover:text-fg cursor-pointer"
     style={{
       backgroundColor: 'transparent',
       transition: 'background-color 150ms, color 150ms',
@@ -479,7 +479,7 @@ const GridMinimap = ({
         </ZoomButton>
         {/* 현재 배율 */}
         <span
-          className="w-[42px] h-full flex items-center justify-center text-white/60 text-xs"
+          className="w-[42px] h-full flex items-center justify-center text-fg-muted text-xs"
           style={{ borderTopRightRadius: 4, borderBottomRightRadius: 4 }}
         >
           {Math.round(zoom * 100)}%

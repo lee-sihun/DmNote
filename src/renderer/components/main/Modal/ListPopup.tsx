@@ -454,7 +454,7 @@ const MenuItemRow = ({
             height="10"
             viewBox="0 0 5 10"
             fill="none"
-            className="flex-shrink-0 text-white/45"
+            className="flex-shrink-0 text-fg-faint"
           >
             <path
               d="M1 1.5L4 5L1 8.5"
