@@ -97,12 +97,12 @@ fn backfill_collection<T: NativeElement>(
         };
         for element in elements {
             let id = &element.position().id;
-            let valid = is_valid_element_id(id);
-            if valid && seen.insert(id.clone()) {
+            if is_valid_element_id(id) && seen.insert(id.clone()) {
                 continue;
             }
 
-            if !id.is_empty() || valid {
+            // valid는 non-empty를 함의하므로 `|| valid`는 죽은 절이었다
+            if !id.is_empty() {
                 outcome.repaired = true;
             }
             let id = new_unique_id(reserved);
@@ -238,12 +238,12 @@ fn backfill_collection_mode<T: NativeElement>(
     };
     for element in elements {
         let id = &element.position().id;
-        let valid = is_valid_element_id(id);
-        if valid && seen.insert(id.clone()) {
+        if is_valid_element_id(id) && seen.insert(id.clone()) {
             continue;
         }
 
-        if !id.is_empty() || valid {
+        // valid는 non-empty를 함의하므로 `|| valid`는 죽은 절이었다
+        if !id.is_empty() {
             outcome.repaired = true;
         }
         let id = new_unique_id(reserved);

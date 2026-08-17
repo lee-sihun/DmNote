@@ -620,6 +620,15 @@ impl EditorFrozenElementV1 {
             Self::Knob { position } => &position.position.id,
         }
     }
+
+    pub(crate) fn position_mut(&mut self) -> &mut KeyPosition {
+        match self {
+            Self::Key { position, .. } => position,
+            Self::Stat { position } => &mut position.position,
+            Self::Graph { position } => &mut position.position,
+            Self::Knob { position } => &mut position.position,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

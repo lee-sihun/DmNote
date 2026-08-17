@@ -842,6 +842,18 @@ fn apply_frozen_insert(
     z_updates: &[EditorZUpdateV1],
     plugin_group_refs: &PluginGroupRefs,
 ) -> Result<(EditorDocumentV1, EditorOpResultStatusV1), EditorCommitError> {
+    // payload의 gradient pair를 먼저 정규화한다. 나머지 위치 쓰기 경로는 전부
+    // 정규화를 거치는데 이 경로만 빠져 base 색과 첫 stop이 어긋난 채 저장될 수
+    // 있었다. 멱등 비교와 삽입이 같은 값을 보도록 비교 이전에 적용한다
+    let normalized: Vec<EditorFrozenElementV1> = elements
+        .iter()
+        .cloned()
+        .map(|mut element| {
+            element.position_mut().canonicalize_gradient_pairs();
+            element
+        })
+        .collect();
+    let elements: &[EditorFrozenElementV1] = &normalized;
     let existing_elements = elements
         .iter()
         .map(|element| locations.get(element.id()))
