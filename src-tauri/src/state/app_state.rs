@@ -2166,8 +2166,8 @@ impl AppState {
             }
         }
 
-        window.set_size(LogicalSize::new(width, height))?;
-        window.set_position(LogicalPosition::new(new_x, new_y))?;
+        // 크기·위치를 단일 네이티브 트랜잭션으로 적용 - 분리 호출은 창이 두 단계로 움직여 덜컥거림 유발
+        apply_overlay_frame(&window, new_x, new_y, width, height, scale_factor)?;
 
         let bounds = OverlayBounds {
             x: new_x,
@@ -4298,6 +4298,145 @@ fn shutdown_application(app_handle: AppHandle) {
     }
 }
 
+/// 오버레이 창 알파를 페이드 - 트랙 예약 토글처럼 창 프레임과 콘텐츠가 함께 바뀌는 전환을 가린다
+/// 창 프레임 변경과 웹뷰 리페인트는 프로세스 경계라 같은 프레임에 커밋될 수 없음
+/// 반환값은 페이드 적용 여부 - false면 호출부가 가림 없이 즉시 전환해야 한다
+pub(crate) fn fade_overlay_window(app: &AppHandle, alpha: f64, duration_ms: u64) -> Result<bool> {
+    let Some(window) = app.get_webview_window(OVERLAY_LABEL) else {
+        // OBS 모드 등 창 미존재 시 무시
+        return Ok(false);
+    };
+    #[cfg(target_os = "macos")]
+    {
+        let alpha = alpha.clamp(0.0, 1.0);
+        let duration = (duration_ms as f64 / 1000.0).max(0.0);
+        let target = window.clone();
+        app.run_on_main_thread(move || {
+            use objc::{class, msg_send, sel, sel_impl};
+
+            match target.ns_window() {
+                Ok(ns_window) => unsafe {
+                    let ns_window = ns_window as *mut objc::runtime::Object;
+                    if duration <= 0.0 {
+                        let _: () = msg_send![ns_window, setAlphaValue: alpha];
+                    } else {
+                        let _: () = msg_send![class!(NSAnimationContext), beginGrouping];
+                        let ctx: *mut objc::runtime::Object =
+                            msg_send![class!(NSAnimationContext), currentContext];
+                        let _: () = msg_send![ctx, setDuration: duration];
+                        let animator: *mut objc::runtime::Object = msg_send![ns_window, animator];
+                        let _: () = msg_send![animator, setAlphaValue: alpha];
+                        let _: () = msg_send![class!(NSAnimationContext), endGrouping];
+                    }
+                },
+                Err(err) => log::warn!("overlay fade: failed to get NSWindow handle: {err}"),
+            }
+        })?;
+        Ok(true)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // 네이티브 창 알파 미지원 - false를 돌려 렌더러가 콘텐츠 페이드로 대체한다
+        let _ = (alpha, duration_ms, window);
+        Ok(false)
+    }
+}
+
+/// 오버레이 표시 시 알파를 1로 복원 - 페이드 도중 종료된 전환이 남긴 투명 상태의 마지막 방어선
+#[cfg(target_os = "macos")]
+fn reset_overlay_alpha(window: &WebviewWindow) {
+    let app = window.app_handle().clone();
+    let target = window.clone();
+    let _ = app.run_on_main_thread(move || {
+        use objc::{msg_send, sel, sel_impl};
+
+        if let Ok(ns_window) = target.ns_window() {
+            let ns_window = ns_window as *mut objc::runtime::Object;
+            unsafe {
+                let _: () = msg_send![ns_window, setAlphaValue: 1.0f64];
+            }
+        }
+    });
+}
+
+/// 오버레이 크기와 위치를 한 번의 네이티브 호출로 적용
+/// set_size와 set_position을 나눠 부르면 창 이동이 두 트랜잭션으로 쪼개져 중간 프레임이 보인다
+fn apply_overlay_frame(
+    window: &WebviewWindow,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    scale_factor: f64,
+) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = scale_factor;
+        let app = window.app_handle().clone();
+        let target = window.clone();
+        app.run_on_main_thread(move || {
+            apply_overlay_frame_macos(&target, x, y, width, height);
+        })?;
+        Ok(())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
+
+        let hwnd = window.hwnd()?;
+        let px = (x * scale_factor).round() as i32;
+        let py = (y * scale_factor).round() as i32;
+        let pw = (width * scale_factor).round() as i32;
+        let ph = (height * scale_factor).round() as i32;
+        unsafe {
+            SetWindowPos(hwnd, None, px, py, pw, ph, SWP_NOZORDER | SWP_NOACTIVATE)?;
+        }
+        Ok(())
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let _ = scale_factor;
+        window.set_size(LogicalSize::new(width, height))?;
+        window.set_position(LogicalPosition::new(x, y))?;
+        Ok(())
+    }
+}
+
+/// tao 좌표(주 모니터 좌상단 원점)를 AppKit 좌표(주 모니터 좌하단 원점)로 변환해 setFrame 적용
+#[cfg(target_os = "macos")]
+fn apply_overlay_frame_macos(window: &WebviewWindow, x: f64, y: f64, width: f64, height: f64) {
+    use cocoa::foundation::{NSPoint, NSRect, NSSize};
+    use objc::{class, msg_send, sel, sel_impl};
+
+    let fallback = || {
+        let _ = window.set_size(LogicalSize::new(width, height));
+        let _ = window.set_position(LogicalPosition::new(x, y));
+    };
+
+    match window.ns_window() {
+        Ok(ns_window) => unsafe {
+            let ns_window = ns_window as *mut objc::runtime::Object;
+
+            let screens: *mut objc::runtime::Object = msg_send![class!(NSScreen), screens];
+            let count: usize = msg_send![screens, count];
+            if count == 0 {
+                fallback();
+                return;
+            }
+            let primary: *mut objc::runtime::Object = msg_send![screens, objectAtIndex: 0usize];
+            let screen_frame: NSRect = msg_send![primary, frame];
+
+            let flipped_y = screen_frame.size.height - (y + height);
+            let frame = NSRect::new(NSPoint::new(x, flipped_y), NSSize::new(width, height));
+            let _: () = msg_send![ns_window, setFrame: frame display: true];
+        },
+        Err(err) => {
+            log::warn!("overlay frame: failed to get NSWindow handle: {err}");
+            fallback();
+        }
+    }
+}
+
 fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
@@ -4314,6 +4453,7 @@ fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<(
     }
     #[cfg(target_os = "macos")]
     {
+        reset_overlay_alpha(window);
         // 오버레이 표시 시 key/main 윈도우 전환 방지
         let _ = window.set_focusable(false);
         apply_macos_overlay_fullscreen_behavior(window, _always_on_top);
