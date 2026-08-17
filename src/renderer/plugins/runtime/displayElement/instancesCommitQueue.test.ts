@@ -8,7 +8,9 @@ import {
   endPluginInstancesEditSession,
   enqueuePluginInstancesCommit,
   drainPluginInstancesCommitQueues,
+  flushPluginInstancesEditSession,
   getPendingPluginInstancesCommitCount,
+  hasActivePluginInstancesEditContext,
   hasConflictingPluginInstancesGesture,
   registerPluginInstancesEditSessionFlush,
   registerPluginInstancesStagedRelease,
@@ -143,6 +145,39 @@ describe('plugin instances commit queue lifecycle', () => {
 
     unstagePluginInstancesGesture('plugin-a', 'gesture-a');
     expect(released).toHaveBeenCalledOnce();
+    // release 후 저장이 staged와 같은 세션으로 이어지도록 소유 id를 전달
+    expect(released).toHaveBeenCalledWith('gesture-a');
+  });
+
+  it('flush 함수는 등록된 flusher만 호출하고 세션 상태를 바꾸지 않는다', () => {
+    const flush = vi.fn();
+    cleanups.push(
+      registerPluginInstancesEditSessionFlush('plugin-flush-only', flush),
+    );
+    const sessionId = touchPluginInstancesEditSession('plugin-flush-only');
+    stagePluginInstancesGesture('plugin-flush-only', 'gesture-staged');
+
+    flushPluginInstancesEditSession('plugin-flush-only');
+
+    expect(flush).toHaveBeenCalledOnce();
+    expect(touchPluginInstancesEditSession('plugin-flush-only')).toBe(
+      sessionId,
+    );
+    expect(
+      isPluginInstancesGestureStaged('plugin-flush-only', 'gesture-staged'),
+    ).toBe(true);
+  });
+
+  it('staged 또는 세션이 있으면 활성 편집 문맥으로 판정한다', () => {
+    expect(hasActivePluginInstancesEditContext('plugin-ctx')).toBe(false);
+
+    stagePluginInstancesGesture('plugin-ctx', 'gesture-a');
+    expect(hasActivePluginInstancesEditContext('plugin-ctx')).toBe(true);
+    unstagePluginInstancesGesture('plugin-ctx', 'gesture-a');
+    expect(hasActivePluginInstancesEditContext('plugin-ctx')).toBe(false);
+
+    touchPluginInstancesEditSession('plugin-ctx');
+    expect(hasActivePluginInstancesEditContext('plugin-ctx')).toBe(true);
   });
 
   it('실패 복구는 같은 plugin의 후속 gesture 소유권을 감지한다', () => {
@@ -395,6 +430,30 @@ describe('plugin instances commit queue lifecycle', () => {
     await vi.advanceTimersByTimeAsync(200);
 
     await expect(draining).resolves.toBe(false);
-    expect(onError).toHaveBeenCalledWith(error);
+    expect(onError).toHaveBeenCalledWith(error, {
+      gestureId: undefined,
+      captureCurrentSnapshot: false,
+    });
+  });
+
+  it('flush 실패도 실패한 요청 컨텍스트를 onError에 전달하고 drain 실패를 유지한다', async () => {
+    const error = new Error('save failed');
+    const onError = vi.fn();
+    const debounce = createPluginInstancesSaveDebounce({
+      delayMs: 200,
+      save: vi.fn().mockRejectedValue(error),
+      onError,
+    });
+
+    debounce.schedule('gesture-fail');
+    const draining = drainEditorWrites();
+    debounce.flush();
+
+    // 롤백을 수행하더라도 pendingWrite reject는 유지 - 종료 drain 실패 전파 계약
+    await expect(draining).resolves.toBe(false);
+    expect(onError).toHaveBeenCalledWith(error, {
+      gestureId: 'gesture-fail',
+      captureCurrentSnapshot: true,
+    });
   });
 });

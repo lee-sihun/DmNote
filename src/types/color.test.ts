@@ -3,7 +3,6 @@ import {
   canonicalGradientOrNull,
   canonicalizePositionGradients,
   counterFillPair,
-  getActivePairPreservation,
   gradientPairPatch,
   gradientToCss,
   resolveStatePair,
@@ -198,39 +197,6 @@ describe('gradientPairPatch / counterFillPair', () => {
     });
     expect(pair.color).toBe('rgba(255,255,255,1)');
     expect(pair.gradient?.angle).toBe(90);
-  });
-});
-
-describe('getActivePairPreservation', () => {
-  it('저장된 idle 값이 없으면 표시 기본값을 active로 만들지 않는다', () => {
-    expect(getActivePairPreservation({}, {})).toBeNull();
-    expect(
-      getActivePairPreservation({ color: '   ', gradient: null }, {}),
-    ).toBeNull();
-  });
-
-  it('active가 비어 있으면 저장된 idle 단색을 동결한다', () => {
-    expect(
-      getActivePairPreservation({ color: '#123456' }, { color: '' }),
-    ).toEqual({ color: '#123456' });
-  });
-
-  it('active가 비어 있으면 저장된 idle 그라데이션 쌍을 동결한다', () => {
-    const gradient = toCanonicalGradient({
-      stops: [c('#123456', 0), c('#abcdef', 1)],
-    });
-    expect(
-      getActivePairPreservation(
-        { color: '#123456', gradient },
-        { gradient: null },
-      ),
-    ).toEqual({ color: '#123456', gradient });
-  });
-
-  it('저장된 active 값이 있으면 기존 값을 건드리지 않는다', () => {
-    expect(
-      getActivePairPreservation({ color: '#123456' }, { color: '#abcdef' }),
-    ).toBeNull();
   });
 });
 

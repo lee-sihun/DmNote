@@ -84,7 +84,7 @@ fn main() {
 
     let context = tauri::generate_context!();
 
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .on_page_load(|webview, payload| {
             if matches!(payload.event(), PageLoadEvent::Finished) {
                 let zoom = compute_compensating_zoom();
@@ -112,7 +112,13 @@ fn main() {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-        }))
+        }));
+
+    // macOS ProMotion 디스플레이 대응: 웹뷰 60fps 캡 해제
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(state::macos_frame_rate::init());
+
+    let app = builder
         .setup(move |app| {
             // dev 빌드에서만 remote URL capability 등록 (릴리즈에서는 local:true만 사용)
             if cfg!(debug_assertions) {
@@ -322,6 +328,7 @@ fn main() {
             commands::plugin::instances::plugin_instances_commit,
             commands::plugin::instances::plugin_instances_get,
             commands::plugin::instances::plugin_instances_reconcile,
+            commands::plugin::instances::plugin_group_refs_get,
             commands::plugin::storage::plugin_storage_get,
             commands::plugin::storage::plugin_storage_set,
             commands::plugin::storage::plugin_storage_remove,
@@ -411,9 +418,9 @@ fn apply_renderer_settings() {
     let store_path = get_store_path();
 
     let angle_mode = if let Some(path) = store_path {
-        read_angle_mode_from_store(&path).unwrap_or_else(|| "d3d11".to_string())
+        read_angle_mode_from_store(&path).unwrap_or_else(models::default_angle_mode)
     } else {
-        "d3d11".to_string()
+        models::default_angle_mode()
     };
 
     // ANGLE 백엔드 또는 Skia 렌더러 설정 적용

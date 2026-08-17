@@ -23,6 +23,11 @@ const HISTORY_GATE_CLOSED_BIT: u64 = 1;
 
 pub(crate) const HISTORY_IN_PROGRESS: &str = "HISTORY_IN_PROGRESS";
 pub(crate) const HISTORY_ENTRY_TOO_LARGE: &str = "HISTORY_ENTRY_TOO_LARGE";
+pub(crate) const INVALID_HISTORY_OPERATION_ID: &str = "INVALID_HISTORY_OPERATION_ID";
+pub(crate) const HISTORY_OPERATION_ID_REUSED: &str = "HISTORY_OPERATION_ID_REUSED";
+pub(crate) const HISTORY_SCOPE_MISMATCH: &str = "HISTORY_SCOPE_MISMATCH";
+pub(crate) const HISTORY_TARGET_ALREADY_APPLIED: &str = "HISTORY_TARGET_ALREADY_APPLIED";
+pub(crate) const HISTORY_INVALID_OPPOSITE_ENTRY: &str = "HISTORY_INVALID_OPPOSITE_ENTRY";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -395,6 +400,26 @@ fn merge_plugin_elements_snapshot(
     }
 }
 
+fn merge_gesture_snapshots(
+    existing: &HistorySnapshot,
+    snapshots: &[HistorySnapshot],
+) -> Result<HistorySnapshot, String> {
+    let mut merged = existing.clone();
+    for snapshot in snapshots {
+        merged = match snapshot {
+            HistorySnapshot::Editor {
+                changed_fields,
+                before,
+            } => merge_editor_snapshot(&merged, changed_fields.clone(), before.clone())?,
+            HistorySnapshot::PluginElements(before) => {
+                merge_plugin_elements_snapshot(&merged, before.clone())?
+            }
+            _ => return Err("gesture history cannot merge this snapshot scope".to_string()),
+        };
+    }
+    Ok(merged)
+}
+
 fn validate_compound_snapshots(snapshots: &[HistorySnapshot]) -> Result<(), String> {
     let mut has_editor = false;
     let mut plugin_ids = HashSet::new();
@@ -754,10 +779,35 @@ impl HistoryService {
         gesture_id: String,
     ) -> Result<HistoryRecordPlan, String> {
         validate_compound_snapshots(&snapshots)?;
+        let gesture_ids = vec![gesture_id];
+        // 같은 gestureId의 선행 엔트리(디바운스 plugin 커밋 선착지·반복 커밋)와
+        // 병합 - 분리 기록은 undo 1회가 제스처의 반쪽만 복원한다
+        if let Some(target) = self
+            .past
+            .iter()
+            .rev()
+            .find(|entry| self.future.is_empty() && entry.matches_any_gesture(&gesture_ids))
+        {
+            let merged = merge_gesture_snapshots(&target.before, &snapshots)?;
+            let mut merged_gesture_ids = target.gesture_ids.clone();
+            merged_gesture_ids.extend(gesture_ids.iter().cloned());
+            let plan = self.prepare_snapshot_with_gesture_ids(
+                merged.scope(),
+                merged,
+                normalize_gesture_ids(merged_gesture_ids),
+                Some(target.access_sequence),
+                Vec::new(),
+            )?;
+            // 병합 결과가 엔트리 한도를 넘으면 독립 엔트리로 폴백 - gesture
+            // 경로의 Truncate는 커밋 거절이라 성공하던 커밋이 실패로 바뀐다
+            if !matches!(plan, HistoryRecordPlan::Truncate) {
+                return Ok(plan);
+            }
+        }
         self.prepare_snapshot_with_gesture_ids(
             HistoryScope::Compound,
             HistorySnapshot::Compound { snapshots },
-            vec![gesture_id],
+            gesture_ids,
             None,
             Vec::new(),
         )
@@ -938,7 +988,7 @@ impl HistoryService {
             return Ok(false);
         };
         if ack.direction != direction {
-            return Err("HISTORY_OPERATION_ID_REUSED".to_string());
+            return Err(HISTORY_OPERATION_ID_REUSED.to_string());
         }
         Ok(true)
     }
@@ -1555,6 +1605,137 @@ mod tests {
             Some(HistorySnapshot::PluginElements(snapshot))
                 if snapshot.plugin_id == "later-plugin"
         ));
+    }
+
+    #[test]
+    fn gesture_entry_merges_with_a_prior_same_gesture_plugin_entry() {
+        let mut history = HistoryService::default();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let plugin = history
+            .prepare_plugin_elements_entry(plugin_snapshot("plugin-a"), Some(gesture_id.clone()))
+            .unwrap();
+        history.apply_record_plan(plugin);
+
+        let gesture = history
+            .prepare_gesture_entry(
+                vec![HistorySnapshot::Editor {
+                    changed_fields: vec![EditorField::Keys],
+                    before: patch("before"),
+                }],
+                gesture_id.clone(),
+            )
+            .unwrap();
+        assert!(matches!(gesture, HistoryRecordPlan::Merge { .. }));
+        history.apply_record_plan(gesture);
+
+        assert_eq!(history.past.len(), 1);
+        let entry = history.past.back().unwrap();
+        assert_eq!(entry.scope, HistoryScope::Compound);
+        assert_eq!(entry.gesture_ids, vec![gesture_id]);
+        let HistorySnapshot::Compound { snapshots } = &entry.before else {
+            panic!("same gesture must merge into one compound entry");
+        };
+        assert!(matches!(
+            snapshots.as_slice(),
+            [
+                HistorySnapshot::PluginElements(plugin),
+                HistorySnapshot::Editor { .. }
+            ] if plugin.plugin_id == "plugin-a"
+        ));
+    }
+
+    #[test]
+    fn repeated_gesture_commits_merge_and_keep_the_first_editor_before() {
+        let mut history = HistoryService::default();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        for text in ["first", "second"] {
+            let plan = history
+                .prepare_gesture_entry(
+                    vec![
+                        HistorySnapshot::Editor {
+                            changed_fields: vec![EditorField::Keys],
+                            before: patch(text),
+                        },
+                        HistorySnapshot::PluginElements(plugin_snapshot("plugin-a")),
+                    ],
+                    gesture_id.clone(),
+                )
+                .unwrap();
+            history.apply_record_plan(plan);
+        }
+
+        assert_eq!(history.past.len(), 1);
+        let HistorySnapshot::Compound { snapshots } = &history.past.back().unwrap().before else {
+            panic!("repeated gesture commits must stay one compound entry");
+        };
+        assert!(matches!(
+            snapshots.as_slice(),
+            [
+                HistorySnapshot::Editor { before, .. },
+                HistorySnapshot::PluginElements(plugin)
+            ] if before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("first")]
+                && plugin.plugin_id == "plugin-a"
+        ));
+    }
+
+    #[test]
+    fn gesture_entry_does_not_merge_across_different_gestures() {
+        let mut history = HistoryService::default();
+        let plugin = history
+            .prepare_plugin_elements_entry(
+                plugin_snapshot("plugin-a"),
+                Some(uuid::Uuid::new_v4().to_string()),
+            )
+            .unwrap();
+        history.apply_record_plan(plugin);
+
+        let gesture = history
+            .prepare_gesture_entry(
+                vec![HistorySnapshot::Editor {
+                    changed_fields: vec![EditorField::Keys],
+                    before: patch("before"),
+                }],
+                uuid::Uuid::new_v4().to_string(),
+            )
+            .unwrap();
+        assert!(matches!(gesture, HistoryRecordPlan::Entry(_)));
+        history.apply_record_plan(gesture);
+
+        assert_eq!(history.past.len(), 2);
+    }
+
+    #[test]
+    fn oversized_gesture_merge_falls_back_to_a_separate_entry() {
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let editor_snapshots = vec![HistorySnapshot::Editor {
+            changed_fields: vec![EditorField::Keys],
+            before: patch("before"),
+        }];
+        let mut probe = HistoryService::default();
+        let plugin = probe
+            .prepare_plugin_elements_entry(plugin_snapshot("plugin-a"), Some(gesture_id.clone()))
+            .unwrap();
+        probe.apply_record_plan(plugin);
+        let merged = probe
+            .prepare_gesture_entry(editor_snapshots.clone(), gesture_id.clone())
+            .unwrap();
+        let HistoryRecordPlan::Merge { entry: merged, .. } = merged else {
+            panic!("same gesture must prepare a compound merge");
+        };
+        let limit = merged.size_bytes - 1;
+
+        let mut history = HistoryService::with_limits(limit, 32 * 1024 * 1024, 50);
+        let plugin = history
+            .prepare_plugin_elements_entry(plugin_snapshot("plugin-a"), Some(gesture_id.clone()))
+            .unwrap();
+        history.apply_record_plan(plugin);
+        let fallback = history
+            .prepare_gesture_entry(editor_snapshots, gesture_id)
+            .unwrap();
+        assert!(matches!(fallback, HistoryRecordPlan::Entry(_)));
+        history.apply_record_plan(fallback);
+
+        assert_eq!(history.past.len(), 2);
     }
 
     #[test]

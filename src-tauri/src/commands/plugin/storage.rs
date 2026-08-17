@@ -8,12 +8,12 @@ use crate::{
     },
     errors::CmdResult,
     models::PluginInstancesChangedPayload,
-    state::{store::PluginInstancesStorageChange, AppState},
+    state::{plugin::PLUGIN_DATA_KEY_PREFIX, store::PluginInstancesStorageChange, AppState},
 };
 
 /// 플러그인 스토리지 키 생성 (네임스페이스 자동 적용)
 fn make_storage_key(key: &str) -> String {
-    format!("plugin_data_{}", key)
+    format!("{PLUGIN_DATA_KEY_PREFIX}{key}")
 }
 
 fn publish_plugin_instances_deletions(
@@ -101,12 +101,15 @@ pub fn plugin_storage_clear(
 pub fn plugin_storage_keys(state: State<'_, AppState>) -> CmdResult<Vec<String>> {
     let all_keys = state.store.get_all_plugin_keys()?;
 
-    // "plugin_data_" 프리픽스 제거하여 반환
-    let prefix = "plugin_data_";
+    // 네임스페이스 프리픽스 제거하여 반환
     let user_keys: Vec<String> = all_keys
         .into_iter()
-        .filter(|k| k.starts_with(prefix))
-        .map(|k| k.strip_prefix(prefix).unwrap_or(&k).to_string())
+        .filter(|k| k.starts_with(PLUGIN_DATA_KEY_PREFIX))
+        .map(|k| {
+            k.strip_prefix(PLUGIN_DATA_KEY_PREFIX)
+                .unwrap_or(&k)
+                .to_string()
+        })
         .collect();
 
     Ok(user_keys)
@@ -117,7 +120,7 @@ pub fn plugin_storage_keys(state: State<'_, AppState>) -> CmdResult<Vec<String>>
 pub fn plugin_storage_has_data(state: State<'_, AppState>, prefix: String) -> CmdResult<bool> {
     let all_keys = state.store.get_all_plugin_keys()?;
 
-    let storage_prefix = format!("plugin_data_{}", prefix);
+    let storage_prefix = make_storage_key(&prefix);
     let has_data = all_keys.iter().any(|k| k.starts_with(&storage_prefix));
 
     Ok(has_data)
@@ -131,7 +134,7 @@ pub fn plugin_storage_clear_by_prefix(
     window: WebviewWindow,
     prefix: String,
 ) -> CmdResult<usize> {
-    let storage_prefix = format!("plugin_data_{}", prefix);
+    let storage_prefix = make_storage_key(&prefix);
     let admission = state.admit_frontend_history_mutation(window.label())?;
     let mutation = state
         .store
@@ -166,6 +169,15 @@ mod tests {
             self.events.lock().push(payload.clone());
             Ok(())
         }
+    }
+
+    // 저장 키 네임스페이스 wire 바이트 고정
+    #[test]
+    fn storage_key_namespace_wire_bytes_are_stable() {
+        assert_eq!(
+            make_storage_key("demo/settings"),
+            "plugin_data_demo/settings"
+        );
     }
 
     #[test]

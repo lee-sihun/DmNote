@@ -8,37 +8,11 @@ import OverlayGraphItemBase from '@components/overlay/counters/OverlayGraphItem'
 import OverlayKnobItemBase from '@components/overlay/counters/OverlayKnobItem';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
-import {
-  createDefaultCounterSettings,
-  type KeyPosition,
-} from '@src/types/key/keys';
+import { type KeyPosition } from '@src/types/key/keys';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { NoteBuffer } from '@stores/signals/noteBuffer';
 import { resolveZIndexFallback } from '@utils/core/zIndexFallback';
-
-const FALLBACK_POSITION: KeyPosition = {
-  dx: 0,
-  dy: 0,
-  width: 60,
-  height: 60,
-  hidden: false,
-  activeImage: '',
-  inactiveImage: '',
-  activeTransparent: false,
-  idleTransparent: false,
-  count: 0,
-  noteColor: '#FFFFFF',
-  noteOpacity: 80,
-  noteAlignment: 'center',
-  noteEffectEnabled: true,
-  noteGlowEnabled: false,
-  noteGlowSize: 20,
-  noteGlowOpacity: 70,
-  noteGlowColor: '#FFFFFF',
-  noteAutoYCorrection: true,
-  className: '',
-  counter: createDefaultCounterSettings(),
-};
 
 // 타입 별칭 (공용)
 interface OverlayKeyProps {
@@ -98,11 +72,11 @@ interface OverlaySceneProps {
   currentKeys: string[];
   // 인덱스 정렬된 표시 라벨 (멀티 슬롯 합성 라벨용)
   currentKeyLabels: string[];
-  displayPositions: KeyPosition[];
-  currentPositions: KeyPosition[];
-  displayStatPositions: Record<string, unknown>[];
-  displayGraphPositions: Record<string, unknown>[];
-  displayKnobPositions: Record<string, unknown>[];
+  displayPositions: CanonicalEditorDocumentV1['keyPositions'][string];
+  currentPositions: CanonicalEditorDocumentV1['keyPositions'][string];
+  displayStatPositions: CanonicalEditorDocumentV1['statPositions'][string];
+  displayGraphPositions: CanonicalEditorDocumentV1['graphPositions'][string];
+  displayKnobPositions: CanonicalEditorDocumentV1['knobPositions'][string];
   selectedKeyType: string;
 
   // 노트 이펙트
@@ -201,16 +175,14 @@ const OverlayScene = ({
         // 멀티 슬롯은 합성 라벨, 라벨 배열이 짧으면 단일 키 displayName 폴백
         const displayName =
           currentKeyLabels[index] ?? getKeyInfoByGlobalKey(key).displayName;
-        const basePosition =
-          displayPositions[index] ??
-          currentPositions[index] ??
-          FALLBACK_POSITION;
+        const basePosition = displayPositions[index] ?? currentPositions[index];
+        if (!basePosition) return null;
 
         const position = resolveZIndexFallback(basePosition, index);
 
         return (
           <OverlayKey
-            key={`${selectedKeyType}-${index}`}
+            key={position.id}
             keyName={displayName}
             globalKey={key}
             position={position}
@@ -242,7 +214,7 @@ const OverlayScene = ({
 
         return (
           <OverlayStatItem
-            key={`stat-${selectedKeyType}-${index}`}
+            key={pos.id}
             statType={statType}
             label={label}
             position={position}
@@ -258,7 +230,7 @@ const OverlayScene = ({
         };
         return (
           <OverlayGraphItem
-            key={`graph-${selectedKeyType}-${index}`}
+            key={pos.id}
             index={index}
             position={graphPosition}
           />
@@ -271,11 +243,7 @@ const OverlayScene = ({
           zIndex: (pos as { zIndex?: number }).zIndex ?? index,
         };
         return (
-          <OverlayKnobItem
-            key={`knob-${selectedKeyType}-${index}`}
-            index={index}
-            position={knobPosition}
-          />
+          <OverlayKnobItem key={pos.id} index={index} position={knobPosition} />
         );
       })}
       {keyCounterEnabled ? (
@@ -299,5 +267,4 @@ const OverlayScene = ({
 };
 
 export default OverlayScene;
-export { FALLBACK_POSITION };
 export type { OverlaySceneProps };

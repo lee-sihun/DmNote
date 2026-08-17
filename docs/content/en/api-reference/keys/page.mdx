@@ -258,6 +258,7 @@ gradient siblings:
 
 ```typescript
 interface KeyPosition {
+  id?: string; // stable element identity (UUID), assigned and owned by the app
   // ...position, image, note, and counter fields...
   backgroundColor?: string;
   activeBackgroundColor?: string;
@@ -293,6 +294,16 @@ interface ElementShadowSpec {
 }
 ```
 
+Every element position (`keyPositions`, `statPositions`, `graphPositions`,
+`knobPositions`) carries a stable `id`. Treat it as opaque: echo back the value
+you read and never invent one. A write whose `id` is missing or unknown gets a
+fresh one assigned by the backend. When the same `id` appears more than once,
+for example when you copy an element you read and append it, the element in
+its original slot keeps the identity and the remaining copies get fresh ones.
+Loading a full preset re-issues every `id`; a tab preset re-issues only the
+collections that preset supplies positions for. Use `id` to track an element
+across reorders instead of its array index.
+
 When a gradient field is present it takes priority over the matching solid
 field, and the solid field is kept in sync with the first stop color on save.
 To return to a solid color, set the gradient field to `null` and update the
@@ -314,6 +325,15 @@ const positions = await dmn.keys.getPositions();
 positions['4key'][0].dx = 100;
 const committed = await dmn.keys.updatePositions(positions);
 ```
+
+Position writes from plugins are serialized on a dedicated queue and settle
+against the committed document: the promise resolves only after the commit and
+the follow-up read complete, and the returned collections carry the stable
+element `id` values the app assigned (elements submitted without an `id` get
+one issued). On failure the original error is rejected as-is; if a commit
+might have succeeded but the follow-up read failed, read the current value
+before retrying instead of resubmitting blindly. The same applies to
+`statItems`, `graphItems`, and `knobItems` `updatePositions`.
 
 <Callout type="warning">
   `keys[mode][i]` and `keyPositions[mode][i]` are coupled by index. A standalone

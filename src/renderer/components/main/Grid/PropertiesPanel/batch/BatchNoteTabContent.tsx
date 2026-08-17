@@ -12,6 +12,11 @@ import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConst
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
+import type {
+  EditorElementPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+} from '@src/types/editor';
 
 interface SwatchDisplay {
   color?: string;
@@ -27,11 +32,8 @@ interface BatchNoteTabContentProps {
     getter: (pos: KeyPosition) => T | undefined,
     defaultValue: T,
   ) => { isMixed: boolean; value: T };
-  // 핸들러
-  handleBatchStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   // 노트/글로우 색상 디스플레이
   getBatchNoteColorDisplay: () => SwatchDisplay;
   getBatchGlowColorDisplay: () => SwatchDisplay;
@@ -52,7 +54,8 @@ interface BatchNoteTabContentProps {
 
 const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   getMixedValue,
-  handleBatchStyleChangeComplete,
+  onElementPropertyCommit,
+  onStylePropertyCommit,
   getBatchNoteColorDisplay,
   getBatchGlowColorDisplay,
   getBatchBorderColorDisplay,
@@ -76,6 +79,17 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   const noteColorDisplay = getBatchNoteColorDisplay();
   const glowColorDisplay = getBatchGlowColorDisplay();
   const borderColorDisplay = getBatchBorderColorDisplay();
+  const noteLiteralHandlers = createNoteLiteralHandlers(
+    {
+      noteEffectEnabled: getMixedValue((pos) => pos.noteEffectEnabled, true)
+        .value,
+      noteAutoYCorrection: getMixedValue((pos) => pos.noteAutoYCorrection, true)
+        .value,
+      noteGlowEnabled: getMixedValue((pos) => pos.noteGlowEnabled, false).value,
+    },
+    (property, value) =>
+      onElementPropertyCommit?.({ [property]: value } as never),
+  );
 
   return (
     <>
@@ -88,16 +102,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={getMixedValue((pos) => pos.noteEffectEnabled, true).value}
-            onChange={() => {
-              const currentValue = getMixedValue(
-                (pos) => pos.noteEffectEnabled,
-                true,
-              ).value;
-              handleBatchStyleChangeComplete(
-                'noteEffectEnabled',
-                !currentValue,
-              );
-            }}
+            onChange={noteLiteralHandlers.toggleEffect}
           />
         </div>
 
@@ -111,16 +116,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             checked={
               getMixedValue((pos) => pos.noteAutoYCorrection, true).value
             }
-            onChange={() => {
-              const currentValue = getMixedValue(
-                (pos) => pos.noteAutoYCorrection,
-                true,
-              ).value;
-              handleBatchStyleChangeComplete(
-                'noteAutoYCorrection',
-                !currentValue,
-              );
-            }}
+            onChange={noteLiteralHandlers.toggleAutoYCorrection}
           />
         </div>
       </PropertySection>
@@ -133,7 +129,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               getMixedValue((pos) => pos.noteOffsetX, 0).value || undefined
             }
             onChange={(value) =>
-              handleBatchStyleChangeComplete('noteOffsetX', value)
+              onStylePropertyCommit?.({
+                property: 'noteOffsetX',
+                value: value ?? null,
+              })
             }
             prefix="X"
             width={AXIS_FIELD_WIDTH}
@@ -150,7 +149,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               getMixedValue((pos) => pos.noteOffsetY, 0).value || undefined
             }
             onChange={(value) =>
-              handleBatchStyleChangeComplete('noteOffsetY', value)
+              onStylePropertyCommit?.({
+                property: 'noteOffsetY',
+                value: value ?? null,
+              })
             }
             prefix="Y"
             width={AXIS_FIELD_WIDTH}
@@ -169,7 +171,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           <OptionalNumberInput
             value={noteWidthMixed.value}
             onChange={(value) =>
-              handleBatchStyleChangeComplete('noteWidth', value)
+              onStylePropertyCommit?.({
+                property: 'noteWidth',
+                value: value ?? null,
+              })
             }
             suffix="px"
             min={1}
@@ -203,8 +208,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             ]}
             value={getMixedValue((pos) => pos.noteAlignment, 'center').value}
             onChange={(value) =>
-              handleBatchStyleChangeComplete(
-                'noteAlignment',
+              noteLiteralHandlers.setAlignment(
                 value as 'left' | 'center' | 'right',
               )
             }
@@ -324,8 +328,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               ]}
               value={getMixedValue((pos) => pos.noteBorderSide, 'all').value}
               onChange={(value) =>
-                handleBatchStyleChangeComplete(
-                  'noteBorderSide',
+                noteLiteralHandlers.setBorderSide(
                   value as 'all' | 'vertical' | 'horizontal',
                 )
               }
@@ -343,7 +346,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               ).value
             }
             onChange={(value) =>
-              handleBatchStyleChangeComplete('noteBorderWidth', value)
+              onStylePropertyCommit?.({
+                property: 'noteBorderWidth',
+                value: value,
+              })
             }
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
@@ -369,7 +375,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               ).value
             }
             onChange={(value) =>
-              handleBatchStyleChangeComplete('noteBorderRadius', value)
+              onStylePropertyCommit?.({
+                property: 'noteBorderRadius',
+                value: value,
+              })
             }
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
@@ -395,13 +404,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={getMixedValue((pos) => pos.noteGlowEnabled, false).value}
-            onChange={() => {
-              const currentValue = getMixedValue(
-                (pos) => pos.noteGlowEnabled,
-                false,
-              ).value;
-              handleBatchStyleChangeComplete('noteGlowEnabled', !currentValue);
-            }}
+            onChange={noteLiteralHandlers.toggleGlow}
           />
         </div>
 
@@ -425,9 +428,12 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         <PropertyRow label={t('keySetting.noteGlowSize') || '글로우 크기'}>
           <NumberInput
             value={getMixedValue((pos) => pos.noteGlowSize, 20).value}
-            onChange={(value) =>
-              handleBatchStyleChangeComplete('noteGlowSize', value)
-            }
+            onChange={(value) => {
+              onStylePropertyCommit?.({
+                property: 'noteGlowSize',
+                value: value,
+              });
+            }}
             suffix="px"
             min={0}
             max={50}

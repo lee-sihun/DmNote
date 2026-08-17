@@ -73,10 +73,11 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
     // 바이트로 읽어 잘못된 UTF-8도 IO 에러 대신 JSON 파싱 실패로 흘려 복구 분기에 합류
     let content = fs::read(path)
         .with_context(|| format!("failed to read store file at {}", path.display()))?;
-    let (state, needs_persist, repaired, seed_active_css_history) =
+    let (state, needs_persist, repaired, seed_active_css_history, explicit_invalid_element_id) =
         match serde_json::from_slice::<Value>(&content) {
             Ok(mut value) => {
                 let seed_active_css_history = value.get("customCssHistory").is_none();
+                let explicit_invalid_element_id = has_explicit_invalid_element_id(&value);
                 let sound_library_migrated = migrate_sound_library_enabled(&mut value);
                 match serde_json::from_value::<AppStoreData>(value.clone()) {
                     Ok(mut data) => {
@@ -126,6 +127,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                                 || editor_revision_repaired
                                 || gradient_pair_repaired,
                             seed_active_css_history,
+                            explicit_invalid_element_id,
                         )
                     }
                     Err(err) => {
@@ -138,6 +140,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                             true,
                             true,
                             seed_active_css_history,
+                            false,
                         )
                     }
                 }
@@ -147,13 +150,14 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                     "[Store] Falling back to default recovery for invalid JSON at {}: {err}",
                     path.display()
                 );
-                (repair_legacy_state(Value::Null), true, true, false)
+                (repair_legacy_state(Value::Null), true, true, false, false)
             }
         };
     // 로드 시점은 정의와 참조가 함께 확정되는 경계 — dangling groupId 정리
     // 정리가 발생하면 마이그레이션과 같은 경로로 디스크에도 영속
     let mut state = state;
     let mut needs_persist = needs_persist;
+    let mut repaired = repaired;
     let active_css_path = seed_active_css_history
         .then(|| {
             state
@@ -177,6 +181,13 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
     if clear_dangling_group_ids(&mut state) {
         needs_persist = true;
     }
+    let id_backfill = super::native_element_id::backfill_store_element_ids(&mut state);
+    needs_persist |= id_backfill.changed;
+    repaired |= id_backfill.repaired || explicit_invalid_element_id;
+    // 플러그인 인스턴스 ID backfill도 recovery 합류 이후에 수행
+    let plugin_id_backfill = super::plugin::backfill_plugin_instance_ids(&mut state);
+    needs_persist |= plugin_id_backfill.changed;
+    repaired |= plugin_id_backfill.repaired;
     if needs_persist {
         log::info!(
             "[Store] Persisting migrated store file at {}",
@@ -187,6 +198,26 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
         data: state,
         needs_persist,
         repaired,
+    })
+}
+
+fn has_explicit_invalid_element_id(value: &Value) -> bool {
+    [
+        "keyPositions",
+        "statPositions",
+        "graphPositions",
+        "knobPositions",
+    ]
+    .into_iter()
+    .filter_map(|field| value.get(field).and_then(Value::as_object))
+    .flat_map(|modes| modes.values())
+    .filter_map(Value::as_array)
+    .flatten()
+    .filter_map(Value::as_object)
+    .filter_map(|element| element.get("id"))
+    .any(|id| {
+        id.as_str()
+            .is_none_or(|id| !super::native_element_id::is_valid_element_id(id))
     })
 }
 
@@ -931,7 +962,7 @@ pub(crate) fn canonicalize_gradient_pairs(data: &mut AppStoreData) -> (bool, boo
 }
 
 fn repair_editor_revision(data: &mut AppStoreData) -> bool {
-    if data.editor_revision <= super::editor::MAX_SAFE_EDITOR_REVISION {
+    if data.editor_revision <= super::editor::MAX_SAFE_WIRE_REVISION {
         return false;
     }
 
@@ -1966,6 +1997,501 @@ mod tests {
         loaded.data
     }
 
+    fn store_with_each_native_collection() -> AppStoreData {
+        let mut data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        data.stat_positions.insert(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: KeyPosition {
+                    dx: 101.0,
+                    ..KeyPosition::default()
+                },
+            }],
+        );
+        data.graph_positions.insert(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 100,
+                graph_color: "#123456".to_string(),
+                show_avg_line: true,
+                position: KeyPosition {
+                    dx: 102.0,
+                    ..KeyPosition::default()
+                },
+            }],
+        );
+        data.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: KeyPosition {
+                    dx: 103.0,
+                    ..KeyPosition::default()
+                },
+            }],
+        );
+        crate::state::native_element_id::backfill_store_element_ids(&mut data);
+        data
+    }
+
+    fn remove_all_native_ids(value: &mut serde_json::Value) {
+        for field in [
+            "keyPositions",
+            "statPositions",
+            "graphPositions",
+            "knobPositions",
+        ] {
+            let Some(modes) = value
+                .get_mut(field)
+                .and_then(serde_json::Value::as_object_mut)
+            else {
+                continue;
+            };
+            for elements in modes
+                .values_mut()
+                .filter_map(serde_json::Value::as_array_mut)
+            {
+                for element in elements {
+                    if let Some(element) = element.as_object_mut() {
+                        element.remove("id");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_store_backfills_all_native_ids_and_reload_preserves_them() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-native-id-backfill-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        remove_all_native_ids(&mut raw);
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let document = crate::models::EditorDocumentV1::from_store(&loaded.data);
+        crate::state::native_element_id::validate_document_element_ids(&document).unwrap();
+        let first_ids = [
+            loaded.data.key_positions["4key"][0].id.clone(),
+            loaded.data.stat_positions["4key"][0].position.id.clone(),
+            loaded.data.graph_positions["4key"][0].position.id.clone(),
+            loaded.data.knob_positions["4key"][0].position.id.clone(),
+        ];
+        assert_eq!(
+            first_ids
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            4
+        );
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        let second_ids = [
+            reloaded.data.key_positions["4key"][0].id.clone(),
+            reloaded.data.stat_positions["4key"][0].position.id.clone(),
+            reloaded.data.graph_positions["4key"][0].position.id.clone(),
+            reloaded.data.knob_positions["4key"][0].position.id.clone(),
+        ];
+        assert_eq!(second_ids, first_ids);
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn invalid_and_duplicate_ids_are_repaired_without_touching_assets() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-native-id-repair-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = store_with_each_native_collection();
+        data.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .active_image = Some("/images/kept.png".to_string());
+        data.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .sound_path = Some("/sounds/kept.wav".to_string());
+        let kept_key_id = data.key_positions["4key"][0].id.clone();
+        let kept_knob_id = data.knob_positions["4key"][0].position.id.clone();
+        let old_stat_id = data.stat_positions["4key"][0].position.id.clone();
+        let old_graph_id = data.graph_positions["4key"][0].position.id.clone();
+        let mut raw = serde_json::to_value(data).unwrap();
+        raw["statPositions"]["4key"][0]["id"] = serde_json::json!(kept_key_id);
+        raw["graphPositions"]["4key"][0]["id"] = serde_json::json!("");
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        assert_eq!(loaded.data.key_positions["4key"][0].id, kept_key_id);
+        assert_eq!(
+            loaded.data.knob_positions["4key"][0].position.id,
+            kept_knob_id
+        );
+        assert_ne!(
+            loaded.data.stat_positions["4key"][0].position.id,
+            old_stat_id
+        );
+        assert_ne!(
+            loaded.data.graph_positions["4key"][0].position.id,
+            old_graph_id
+        );
+        assert_eq!(
+            loaded.data.stat_positions["4key"][0]
+                .position
+                .active_image
+                .as_deref(),
+            Some("/images/kept.png")
+        );
+        assert_eq!(
+            loaded.data.stat_positions["4key"][0]
+                .position
+                .sound_path
+                .as_deref(),
+            Some("/sounds/kept.wav")
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn recovery_and_pair_padding_preserve_surviving_ids_before_backfill() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-native-id-recovery-order-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let data = store_with_each_native_collection();
+        let surviving_key_id = data.key_positions["4key"][0].id.clone();
+        let surviving_stat_id = data.stat_positions["4key"][0].position.id.clone();
+        let original_position_len = data.key_positions["4key"].len();
+        let mut raw = serde_json::to_value(data).unwrap();
+        raw["keys"]["4key"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!("F24"));
+        raw["statPositions"]["4key"][0]["dx"] = serde_json::json!("broken");
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+
+        assert!(loaded.repaired);
+        assert_eq!(
+            loaded.data.key_positions["4key"].len(),
+            original_position_len + 1
+        );
+        assert_eq!(loaded.data.key_positions["4key"][0].id, surviving_key_id);
+        assert_eq!(
+            loaded.data.stat_positions["4key"][0].position.id,
+            surviving_stat_id
+        );
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &loaded.data.key_positions["4key"][original_position_len].id
+        ));
+        crate::state::native_element_id::validate_document_element_ids(
+            &crate::models::EditorDocumentV1::from_store(&loaded.data),
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(path);
+    }
+
+    fn saved_plugin_instance_json(x: f64, instance_id: Option<&str>) -> serde_json::Value {
+        let mut instance = serde_json::json!({
+            "position": { "x": x, "y": 2.0 },
+            "tabId": "4key"
+        });
+        if let Some(id) = instance_id {
+            instance["instanceId"] = serde_json::json!(id);
+        }
+        instance
+    }
+
+    fn stored_plugin_instance_ids(data: &AppStoreData, plugin_id: &str) -> Vec<String> {
+        data.plugin_data[&format!("plugin_data_{plugin_id}/instances")]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|instance| instance["instanceId"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn plugin_backfill_fixture_path(label: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "dmnote-plugin-instance-backfill-{label}-{}.json",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    #[test]
+    fn backfill_plugin_instances_assigns_unique_ids_and_reload_preserves_them() {
+        let path = plugin_backfill_fixture_path("assign");
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([
+                saved_plugin_instance_json(1.0, None),
+                saved_plugin_instance_json(2.0, None)
+            ]),
+        );
+        raw_object.insert(
+            "plugin_data_beta/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(3.0, None)]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        let alpha_ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        let beta_ids = stored_plugin_instance_ids(&loaded.data, "beta");
+        let all_ids = alpha_ids.iter().chain(&beta_ids).collect::<Vec<_>>();
+        assert_eq!(all_ids.len(), 3);
+        assert!(all_ids
+            .iter()
+            .all(|id| crate::state::native_element_id::is_valid_element_id(id)));
+        assert_eq!(
+            all_ids
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            3
+        );
+
+        // 멱등: 영속 후 재로드에서 같은 ID 유지, 추가 변경 없음
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(
+            stored_plugin_instance_ids(&reloaded.data, "alpha"),
+            alpha_ids
+        );
+        assert_eq!(stored_plugin_instance_ids(&reloaded.data, "beta"), beta_ids);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_preserves_existing_valid_ids() {
+        let path = plugin_backfill_fixture_path("partial");
+        let existing_id = uuid::Uuid::new_v4().to_string();
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        raw.as_object_mut().unwrap().insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([
+                saved_plugin_instance_json(1.0, Some(&existing_id)),
+                saved_plugin_instance_json(2.0, None)
+            ]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        let ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        assert_eq!(ids[0], existing_id);
+        assert_ne!(ids[1], existing_id);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &ids[1]
+        ));
+        // 값 필드와 순서 보존
+        let instances = loaded.data.plugin_data["plugin_data_alpha/instances"]
+            .as_array()
+            .unwrap();
+        assert_eq!(instances[0]["position"]["x"], 1.0);
+        assert_eq!(instances[1]["position"]["x"], 2.0);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_reissues_invalid_ids_as_repair() {
+        for invalid_id in ["not-a-uuid".to_string(), uuid::Uuid::nil().to_string()] {
+            let path = plugin_backfill_fixture_path("invalid");
+            let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+            raw.as_object_mut().unwrap().insert(
+                "plugin_data_alpha/instances".to_string(),
+                serde_json::json!([saved_plugin_instance_json(1.0, Some(&invalid_id))]),
+            );
+            std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+            let loaded = load_store_from_path(&path).unwrap();
+            assert!(loaded.needs_persist);
+            assert!(loaded.repaired);
+            let ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+            assert_ne!(ids[0], invalid_id);
+            assert!(crate::state::native_element_id::is_valid_element_id(
+                &ids[0]
+            ));
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn backfill_plugin_instances_repairs_in_plugin_duplicates_only() {
+        let path = plugin_backfill_fixture_path("duplicate");
+        let shared_id = uuid::Uuid::new_v4().to_string();
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([
+                saved_plugin_instance_json(1.0, Some(&shared_id)),
+                saved_plugin_instance_json(2.0, Some(&shared_id))
+            ]),
+        );
+        raw_object.insert(
+            "plugin_data_beta/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(3.0, Some(&shared_id))]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        // 유일성은 커밋 검증과 같은 플러그인 키 단위 - alpha 내 중복만 수리,
+        // 교차 중복인 beta[0]은 합법이라 보존
+        let alpha_ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        let beta_ids = stored_plugin_instance_ids(&loaded.data, "beta");
+        assert_eq!(alpha_ids[0], shared_id);
+        assert_ne!(alpha_ids[1], shared_id);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &alpha_ids[1]
+        ));
+        assert_eq!(beta_ids, vec![shared_id]);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_preserves_cross_plugin_duplicates_untouched() {
+        let path = plugin_backfill_fixture_path("cross");
+        let shared_id = uuid::Uuid::new_v4().to_string();
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(1.0, Some(&shared_id))]),
+        );
+        raw_object.insert(
+            "plugin_data_beta/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(2.0, Some(&shared_id))]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        // 교차 플러그인 중복만으로는 수리 대상이 아니다 - 불필요한 백업과
+        // sweep 스킵을 유발하지 않게 무변경
+        assert!(!loaded.needs_persist);
+        assert!(!loaded.repaired);
+        assert_eq!(
+            stored_plugin_instance_ids(&loaded.data, "alpha"),
+            vec![shared_id.clone()]
+        );
+        assert_eq!(
+            stored_plugin_instance_ids(&loaded.data, "beta"),
+            vec![shared_id]
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_skips_undecodable_values_and_processes_the_rest() {
+        let path = plugin_backfill_fixture_path("undecodable");
+        let not_an_array = serde_json::json!({ "not": "array" });
+        let unknown_field = serde_json::json!([{
+            "position": { "x": 1.0, "y": 2.0 },
+            "tabId": "4key",
+            "handler": true
+        }]);
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(1.0, None)]),
+        );
+        raw_object.insert(
+            "plugin_data_broken/instances".to_string(),
+            not_an_array.clone(),
+        );
+        raw_object.insert(
+            "plugin_data_weird/instances".to_string(),
+            unknown_field.clone(),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        let alpha_ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &alpha_ids[0]
+        ));
+        // decode 불가 키는 원본 Value 그대로 보존 (런타임 read의 fail-closed에 위임)
+        assert_eq!(
+            loaded.data.plugin_data["plugin_data_broken/instances"],
+            not_an_array
+        );
+        assert_eq!(
+            loaded.data.plugin_data["plugin_data_weird/instances"],
+            unknown_field
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_runs_after_field_recovery() {
+        let path = plugin_backfill_fixture_path("recovery");
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        raw["statPositions"]["4key"][0]["dx"] = serde_json::json!("broken");
+        raw.as_object_mut().unwrap().insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(1.0, None)]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        let ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        assert_eq!(ids.len(), 1);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &ids[0]
+        ));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_leaves_empty_arrays_untouched() {
+        let path = plugin_backfill_fixture_path("empty");
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        raw.as_object_mut().unwrap().insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(!loaded.needs_persist);
+        assert!(!loaded.repaired);
+        assert_eq!(
+            loaded.data.plugin_data["plugin_data_alpha/instances"],
+            serde_json::json!([])
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
     #[test]
     fn legacy_panel_detach_setting_is_removed_without_touching_plugin_data() {
         let path = std::env::temp_dir().join(format!(
@@ -2027,18 +2553,18 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         });
-        let original_position = serde_json::to_vec_pretty(&data.key_positions["4key"][0]).unwrap();
+        let original_position = data.key_positions["4key"][0].clone();
         let original = serde_json::to_vec_pretty(&data).unwrap();
         assert!(!String::from_utf8_lossy(&original).contains("Gradient"));
         std::fs::write(&path, &original).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
-        let reserialized_position =
-            serde_json::to_vec_pretty(&loaded.data.key_positions["4key"][0]).unwrap();
+        let mut reloaded_position = loaded.data.key_positions["4key"][0].clone();
+        reloaded_position.id.clear();
 
-        assert!(!loaded.needs_persist);
+        assert!(loaded.needs_persist);
         assert!(!loaded.repaired);
-        assert_eq!(reserialized_position, original_position);
+        assert_eq!(reloaded_position, original_position);
         let _ = std::fs::remove_file(path);
     }
 
@@ -2486,8 +3012,9 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         });
-        data.editor_revision = crate::state::editor::MAX_SAFE_EDITOR_REVISION + 1;
+        data.editor_revision = crate::state::editor::MAX_SAFE_WIRE_REVISION + 1;
         data.key_positions.get_mut("4key").unwrap()[0].dx = 12_345.0;
+        crate::state::native_element_id::backfill_store_element_ids(&mut data);
         let expected_keys = data.keys.clone();
         let expected_positions = data.key_positions.clone();
         std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
@@ -2513,14 +3040,14 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         });
-        data.editor_revision = crate::state::editor::MAX_SAFE_EDITOR_REVISION;
+        data.editor_revision = crate::state::editor::MAX_SAFE_WIRE_REVISION;
         std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
 
         assert_eq!(
             loaded.data.editor_revision,
-            crate::state::editor::MAX_SAFE_EDITOR_REVISION
+            crate::state::editor::MAX_SAFE_WIRE_REVISION
         );
         assert!(!loaded.repaired);
         let _ = std::fs::remove_file(path);
@@ -2620,6 +3147,8 @@ mod tests {
             "positions-only".to_string(),
             vec![preserved_position.clone()],
         );
+        crate::state::native_element_id::backfill_store_element_ids(&mut data);
+        let preserved_position = data.key_positions["5key"].last().unwrap().clone();
         std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
@@ -2629,10 +3158,13 @@ mod tests {
             loaded.data.keys["4key"].last().unwrap(),
             &KeySlot::from("F5")
         );
-        assert_eq!(
-            loaded.data.key_positions["4key"].last().unwrap(),
-            &KeyPosition::default()
-        );
+        let padded_position = loaded.data.key_positions["4key"].last().unwrap();
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &padded_position.id
+        ));
+        let mut padded_without_id = padded_position.clone();
+        padded_without_id.id.clear();
+        assert_eq!(padded_without_id, KeyPosition::default());
         assert_eq!(
             loaded.data.key_positions["5key"].last().unwrap(),
             &preserved_position
@@ -2764,7 +3296,9 @@ mod tests {
             "dmnote-sound-migration-test-{}.json",
             uuid::Uuid::new_v4()
         ));
-        let mut value = serde_json::to_value(AppStoreData::default()).unwrap();
+        let mut data = normalize_state(AppStoreData::default());
+        crate::state::native_element_id::backfill_store_element_ids(&mut data);
+        let mut value = serde_json::to_value(data).unwrap();
         value.as_object_mut().unwrap().insert(
             "soundLibrary".to_string(),
             json!({ TEST_SOUND_PATH: entry }),
@@ -2946,7 +3480,11 @@ mod tests {
         expected = normalize_state(expected);
         assert!(loaded.repaired);
         assert!(loaded.needs_persist);
-        assert_eq!(loaded.data, expected);
+        let mut actual_value = serde_json::to_value(&loaded.data).unwrap();
+        let mut expected_value = serde_json::to_value(&expected).unwrap();
+        remove_all_native_ids(&mut actual_value);
+        remove_all_native_ids(&mut expected_value);
+        assert_eq!(actual_value, expected_value);
     }
 
     #[test]
@@ -3522,10 +4060,13 @@ mod tests {
             loaded.data.keys["positions-damaged"],
             vec![KeySlot::from("A"), KeySlot::from("B"), KeySlot::from("C")]
         );
-        assert_eq!(
-            loaded.data.key_positions["positions-damaged"],
-            vec![KeyPosition::default(); 3]
-        );
+        assert!(loaded.data.key_positions["positions-damaged"]
+            .iter()
+            .all(|position| {
+                let mut position = position.clone();
+                position.id.clear();
+                position == KeyPosition::default()
+            }));
         assert_eq!(
             loaded.data.keys["valid-mismatch"],
             vec![KeySlot::from("Q"), KeySlot::default()]
@@ -4108,7 +4649,9 @@ mod tests {
         assert!(loaded.needs_persist);
         let recovered_key_positions = &loaded.data.key_positions["partial-mode"];
         assert_eq!(recovered_key_positions.len(), 4);
-        assert_eq!(recovered_key_positions[0], position);
+        let mut recovered_first = recovered_key_positions[0].clone();
+        recovered_first.id.clear();
+        assert_eq!(recovered_first, position);
         assert_eq!(recovered_key_positions[1].dx, partial_position.dx);
         assert_eq!(recovered_key_positions[1].width, partial_position.width);
         assert_eq!(
@@ -4123,12 +4666,22 @@ mod tests {
             recovered_key_positions[1].sound_path,
             partial_position.sound_path
         );
-        assert_eq!(recovered_key_positions[2], third_position);
-        assert_eq!(recovered_key_positions[3], KeyPosition::default());
+        let mut recovered_third = recovered_key_positions[2].clone();
+        recovered_third.id.clear();
+        assert_eq!(recovered_third, third_position);
+        let mut recovered_default = recovered_key_positions[3].clone();
+        recovered_default.id.clear();
+        assert_eq!(recovered_default, KeyPosition::default());
         assert_eq!(recovered_key_positions[3].width, 60.0);
-        assert_eq!(loaded.data.stat_positions["partial-mode"], vec![stat]);
-        assert_eq!(loaded.data.graph_positions["partial-mode"], vec![graph]);
-        assert_eq!(loaded.data.knob_positions["partial-mode"], vec![knob]);
+        let mut recovered_stat = loaded.data.stat_positions["partial-mode"][0].clone();
+        recovered_stat.position.id.clear();
+        assert_eq!(recovered_stat, stat);
+        let mut recovered_graph = loaded.data.graph_positions["partial-mode"][0].clone();
+        recovered_graph.position.id.clear();
+        assert_eq!(recovered_graph, graph);
+        let mut recovered_knob = loaded.data.knob_positions["partial-mode"][0].clone();
+        recovered_knob.position.id.clear();
+        assert_eq!(recovered_knob, knob);
         assert!(!loaded.data.key_positions.contains_key("invalid-mode"));
         assert!(!loaded.data.stat_positions.contains_key("invalid-mode"));
         assert!(!loaded.data.graph_positions.contains_key("invalid-mode"));
@@ -4160,7 +4713,11 @@ mod tests {
         std::fs::write(&broken_path, b"{ not json").unwrap();
         let baseline = load_store_from_path(&broken_path).unwrap();
         let _ = std::fs::remove_file(&broken_path);
-        assert_eq!(loaded.data, baseline.data);
+        let mut loaded_value = serde_json::to_value(&loaded.data).unwrap();
+        let mut baseline_value = serde_json::to_value(&baseline.data).unwrap();
+        remove_all_native_ids(&mut loaded_value);
+        remove_all_native_ids(&mut baseline_value);
+        assert_eq!(loaded_value, baseline_value);
     }
 
     #[test]

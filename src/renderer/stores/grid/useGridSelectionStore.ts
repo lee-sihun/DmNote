@@ -4,7 +4,7 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import { stableStringify } from '@utils/core/stableStringify';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
 export type SelectableElementType =
   | 'key'
@@ -20,17 +20,26 @@ export type IndexedSelectableElementType = Exclude<
 
 export interface IndexedElementArrays {
   keyMappings: readonly unknown[];
-  keyPositions: readonly unknown[];
-  stat: readonly unknown[];
-  graph: readonly unknown[];
-  knob: readonly unknown[];
+  keyPositions: readonly CanonicalEditorDocumentV1['keyPositions'][string][number][];
+  stat: readonly CanonicalEditorDocumentV1['statPositions'][string][number][];
+  graph: readonly CanonicalEditorDocumentV1['graphPositions'][string][number][];
+  knob: readonly CanonicalEditorDocumentV1['knobPositions'][string][number][];
 }
 
-export interface SelectedElement {
-  type: SelectableElementType;
-  id: string; // key의 경우 "key-{index}", plugin의 경우 fullId
-  index?: number; // key인 경우 인덱스
+interface NativeSelectedElement {
+  type: IndexedSelectableElementType;
+  id: string;
+  // canonical에서 파생된 locator 캐시. 신원이 아니다 - 문서 적용 시 id로 재계산된다
+  index?: number;
 }
+
+interface PluginSelectedElement {
+  type: 'plugin';
+  id: string;
+  index?: never;
+}
+
+export type SelectedElement = NativeSelectedElement | PluginSelectedElement;
 
 // 클립보드에 저장되는 키 데이터
 export interface ClipboardKeyData {
@@ -100,9 +109,6 @@ interface GridSelectionState {
   // 드래그/리사이즈 중인 상태 (CSS 애니메이션 비활성화용)
   isDraggingOrResizing: boolean;
 
-  // 키보드 동작(paste 등)에서 선택 변경 시 패널 모드 전환 건너뛰기
-  _skipPanelModeSwitch: boolean;
-
   // 액션
   selectElement: (element: SelectedElement, addToSelection?: boolean) => void;
   toggleSelection: (element: SelectedElement) => void;
@@ -133,9 +139,6 @@ interface GridSelectionState {
   // 드래그/리사이즈 상태 설정
   setDraggingOrResizing: (isDragging: boolean) => void;
 
-  // 패널 모드 전환 건너뛰기 설정
-  setSkipPanelModeSwitch: (skip: boolean) => void;
-
   // 선택된 요소들 일괄 이동
   moveSelectedElements: (deltaX: number, deltaY: number) => void;
 }
@@ -151,7 +154,6 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   marqueeEnd: null,
   isMiddleButtonDragging: false,
   isDraggingOrResizing: false,
-  _skipPanelModeSwitch: false,
 
   selectElement: (element, addToSelection = false) => {
     set((state) => {
@@ -279,97 +281,76 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
     set({ isDraggingOrResizing: isDragging });
   },
 
-  setSkipPanelModeSwitch: (skip) => {
-    set({ _skipPanelModeSwitch: skip });
-  },
-
   moveSelectedElements: (_deltaX, _deltaY) => {
     // 실제 이동 로직은 Grid 컴포넌트에서 처리
     // 이 함수는 외부에서 호출될 콜백을 위한 placeholder
   },
 }));
 
-export function reconcileSelectionAfterIndexedElementDeletion(
-  elementType: IndexedSelectableElementType,
-  indexToDelete: number,
+export function invalidateSelectionForChangedIndexedElementArrays(
+  _current: IndexedElementArrays,
+  next: IndexedElementArrays,
 ) {
   const selection = useGridSelectionStore.getState();
-  let changed = false;
-  const selectedElements = selection.selectedElements.flatMap((element) => {
-    if (element.type !== elementType || typeof element.index !== 'number') {
-      return [element];
-    }
-    if (element.index === indexToDelete) {
-      changed = true;
-      return [];
-    }
-    if (element.index < indexToDelete) return [element];
+  if (selection.selectedElements.length === 0) return;
 
-    changed = true;
-    const index = element.index - 1;
-    return [{ ...element, id: `${elementType}-${index}`, index }];
-  });
+  const nextPositionsFor = (
+    type: IndexedSelectableElementType,
+  ): readonly { id: string }[] =>
+    type === 'key' ? next.keyPositions : next[type];
+
+  let changed = false;
+  const selectedElements = selection.selectedElements.reduce<SelectedElement[]>(
+    (resolved, element) => {
+      if (element.type === 'plugin') {
+        resolved.push(element);
+        return resolved;
+      }
+
+      const newIndex = nextPositionsFor(element.type).findIndex(
+        (position) => position?.id === element.id,
+      );
+      if (newIndex === -1) {
+        changed = true;
+        return resolved;
+      }
+      if (newIndex !== element.index) {
+        changed = true;
+        resolved.push({ ...element, index: newIndex });
+        return resolved;
+      }
+      resolved.push(element);
+      return resolved;
+    },
+    [],
+  );
 
   if (changed) selection.setSelectedElements(selectedElements);
 }
 
-export function invalidateSelectionForChangedIndexedElementArrays(
-  current: IndexedElementArrays,
-  next: IndexedElementArrays,
+// 재주입으로 fullId가 갈린 플러그인 선택 제거. 현존 fullId 집합 기준.
+// ownerPluginId를 주면 그 플러그인 소유 선택만 판정한다 - 스토어는 전
+// 플러그인 공용이라, 리로드 공백(요소가 잠시 비는 창)에 있는 다른 플러그인의
+// 정당한 선택까지 죽은 것으로 보고 지우는 것을 막는다
+export function pruneStalePluginSelection(
+  liveFullIds: ReadonlySet<string>,
+  ownerPluginId?: string,
 ) {
-  const firstDifferentIndex = (
-    currentItems: readonly unknown[],
-    nextItems: readonly unknown[],
-  ) => {
-    const sharedLength = Math.min(currentItems.length, nextItems.length);
-    for (let index = 0; index < sharedLength; index += 1) {
-      if (
-        stableStringify(currentItems[index]) !==
-        stableStringify(nextItems[index])
-      ) {
-        return index;
-      }
-    }
-    return sharedLength;
-  };
-
-  const boundaries = new Map<IndexedSelectableElementType, number>();
-  if (current.keyMappings.length !== next.keyMappings.length) {
-    boundaries.set(
-      'key',
-      firstDifferentIndex(current.keyMappings, next.keyMappings),
-    );
-  }
-  if (current.keyPositions.length !== next.keyPositions.length) {
-    const positionBoundary = firstDifferentIndex(
-      current.keyPositions,
-      next.keyPositions,
-    );
-    boundaries.set(
-      'key',
-      Math.min(boundaries.get('key') ?? positionBoundary, positionBoundary),
-    );
-  }
-  for (const elementType of ['stat', 'graph', 'knob'] as const) {
-    if (current[elementType].length !== next[elementType].length) {
-      boundaries.set(
-        elementType,
-        firstDifferentIndex(current[elementType], next[elementType]),
-      );
-    }
-  }
-  if (boundaries.size === 0) return;
-
   const selection = useGridSelectionStore.getState();
-  const selectedElements = selection.selectedElements.filter((element) => {
-    if (element.type === 'plugin') return true;
-    const boundary = boundaries.get(element.type);
-    if (boundary === undefined) return true;
-    return typeof element.index === 'number' && element.index < boundary;
-  });
-  if (selectedElements.length !== selection.selectedElements.length) {
-    selection.setSelectedElements(selectedElements);
-  }
+  if (selection.selectedElements.length === 0) return;
+  // 표시 요소 fullId는 `${pluginId}::${id}`다. pluginId에는 콜론이 들어갈 수
+  // 없으므로(백엔드 validate_plugin_id: 영숫자·하이픈·언더스코어) 콜론 1개
+  // 접두사로 충분하고, plugin-a ↔ plugin-ab 오탐도 막힌다
+  const ownedByPull = (fullId: string) =>
+    ownerPluginId === undefined || fullId.startsWith(`${ownerPluginId}:`);
+  const kept = selection.selectedElements.filter(
+    (element) =>
+      element.type !== 'plugin' ||
+      !ownedByPull(element.id) ||
+      liveFullIds.has(element.id),
+  );
+  if (kept.length === selection.selectedElements.length) return;
+  selection.setSelectedElements(kept);
 }
 
 /**

@@ -5,6 +5,7 @@ import { buildSavedPluginInstances } from './defineElement';
 type PluginElement = Parameters<typeof buildSavedPluginInstances>[0][number];
 
 const baseElement = {
+  id: '20000000-0000-4000-8000-000000000001',
   fullId: 'plugin-a:one',
   definitionId: 'plugin-a',
   position: { x: 10, y: 20 },
@@ -45,6 +46,7 @@ describe('plugin instance persistence projection', () => {
       { tabId: '8key' },
       { hidden: true },
       { zIndex: 9 },
+      { groupId: 'group-a' },
     ];
 
     persistentChanges.forEach((change) => {
@@ -57,9 +59,25 @@ describe('plugin instance persistence projection', () => {
     });
   });
 
+  it('요소 id를 영구 instanceId로 싣는다', () => {
+    const [saved] = buildSavedPluginInstances([baseElement], 'plugin-a');
+
+    expect(saved.instanceId).toBe('20000000-0000-4000-8000-000000000001');
+  });
+
+  it('groupId를 저장 필드로 싣는다', () => {
+    const [saved] = buildSavedPluginInstances(
+      [{ ...baseElement, groupId: 'group-a' } as PluginElement],
+      'plugin-a',
+    );
+
+    expect(saved.groupId).toBe('group-a');
+  });
+
   it('대상 요소의 추가, 삭제, 순서 변경을 보존한다', () => {
     const second = {
       ...baseElement,
+      id: '20000000-0000-4000-8000-000000000002',
       fullId: 'plugin-a:two',
       position: { x: 30, y: 40 },
     } as PluginElement;

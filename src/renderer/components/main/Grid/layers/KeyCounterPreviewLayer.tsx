@@ -11,6 +11,7 @@ import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 import { getCounterTypographyStyle } from '@utils/core/counterStyles';
 
 interface CounterPosition {
+  id: string;
   dx?: number;
   dy?: number;
   width?: number;
@@ -23,7 +24,6 @@ interface CounterPosition {
 
 interface KeyCounterPreviewProps {
   position: CounterPosition;
-  index: number;
   previewValue?: number;
   isInBatchSelection?: boolean;
 }
@@ -42,7 +42,6 @@ interface KeyCounterPreviewLayerProps {
 // 그라디언트 편집 세션은 leaf가 직접 구독하므로 memo가 막지 않는다
 const KeyCounterPreview = React.memo(function KeyCounterPreview({
   position,
-  index,
   previewValue = 0,
   isInBatchSelection = false,
 }: KeyCounterPreviewProps) {
@@ -55,7 +54,7 @@ const KeyCounterPreview = React.memo(function KeyCounterPreview({
   // 편집 세션 일시 페인트 — 다른 표면을 편집해도 같은 대기/입력 상태 유지
   const previewSession = useGradientPreviewSession(
     'key',
-    index,
+    position.id,
     isInBatchSelection,
   );
   const previewActive = previewSession?.stateMode === 'active';
@@ -149,17 +148,16 @@ const KeyCounterPreviewLayer = ({
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 12 }}
     >
-      {positions.map((position, index) => {
+      {positions.map((position) => {
         if (!position) return null;
         if (position.hidden) return null;
         return (
           <KeyCounterPreview
-            key={`counter-preview-${index}`}
+            key={position.id}
             position={position}
-            index={index}
             previewValue={previewValue}
             isInBatchSelection={selectedElements.some(
-              (element) => element.type === 'key' && element.index === index,
+              (element) => element.type === 'key' && element.id === position.id,
             )}
           />
         );

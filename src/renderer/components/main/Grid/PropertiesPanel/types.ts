@@ -1,10 +1,23 @@
-import type { KeyPosition, KeySlot } from '@src/types/key/keys';
+import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { ColorModeValue, GradientSpec } from '@src/types/color';
 import type {
   GradientCanvasAnchor,
   GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
+import type {
+  EditorCounterAnimationPresetIntentV1,
+  EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
+  EditorCounterStrokePropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+  EditorPaintPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
+  EditorElementPropertyPatchV1,
+} from '@src/types/editor';
 
 // ============================================================================
 // 탭 상수
@@ -31,22 +44,9 @@ export type LayerPanelTabType =
 // 컴포넌트 Props 타입
 // ============================================================================
 
-export interface PropertiesPanelProps {
-  onPositionChange: (index: number, dx: number, dy: number) => void;
-  onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
-  onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
-  onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
-}
-
 export interface PropertyRowProps {
   label: string;
   children: React.ReactNode;
-}
-
-/** blur로 방금 확정된 크기. 편집한 축만 담긴다 */
-export interface SizeCommit {
-  width?: number;
-  height?: number;
 }
 
 export interface NumberInputProps {
@@ -170,37 +170,6 @@ export interface FontStyleToggleProps {
 // 단일 키 콘텐츠 Props (단일 선택 및 개별 편집 모드에서 재사용)
 // ============================================================================
 
-export interface SingleKeyContentProps {
-  // 키 데이터
-  keyIndex: number;
-  keyPosition: KeyPosition;
-  keyCode: string | null;
-  keyInfo: { globalKey: string; displayName: string } | null;
-
-  // 탭 상태
-  activeTab: TabType;
-
-  // 핸들러
-  onPositionChange: (index: number, dx: number, dy: number) => void;
-  onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
-  onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
-  onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
-
-  // 편집 대상 슬롯 (칩 에디터용, 개별 편집 모드에서는 미사용)
-  keySlot?: KeySlot | null;
-
-  // 이미지 픽커 상태 (옵션 - 개별 편집 모드에서는 사용하지 않음)
-  showImagePicker?: boolean;
-  onToggleImagePicker?: () => void;
-  imageButtonRef?: React.RefObject<HTMLButtonElement>;
-
-  // 커스텀 CSS 설정
-  useCustomCSS?: boolean;
-
-  // 번역 함수
-  t: (key: string) => string;
-}
-
 // ============================================================================
 // 탭 콘텐츠 공통 Props
 // ============================================================================
@@ -212,9 +181,15 @@ export interface StyleTabContentProps {
   keyPosition: KeyPosition;
   keyCode: string | null;
   keyInfo: { globalKey: string; displayName: string } | null;
-  onPositionChange: (index: number, dx: number, dy: number) => void;
-  onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
-  onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
+  onGeometryPreview?: (
+    field: 'dx' | 'dy' | 'width' | 'height',
+    value: number,
+  ) => void;
+  onGeometryCommit?: (
+    field: 'dx' | 'dy' | 'width' | 'height',
+    value: number,
+  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
   // 편집 대상 슬롯 (칩 에디터용)
   keySlot?: KeySlot | null;
@@ -230,6 +205,20 @@ export interface StyleTabContentProps {
   shadowActiveState?: boolean;
   showImagePicker?: boolean;
   onToggleImagePicker?: () => void;
+  onInactiveImageCommit?: (inactiveImage: string) => void;
+  onActiveImageCommit?: (activeImage: string) => void;
+  onIdleTransparentCommit?: (idleTransparent: boolean) => void;
+  onActiveTransparentCommit?: (activeTransparent: boolean) => void;
+  onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
+  onSoundPathCommit?: (soundPath: string) => void;
+  onSoundEnabledCommit?: (soundEnabled: boolean) => void;
+  onSoundVolumeCommit?: (soundVolume: number) => void;
+  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onFontColorCommit?: (patch: EditorFontColorPropertyPatchV1) => void;
+  onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
   useCustomCSS?: boolean;
@@ -237,20 +226,31 @@ export interface StyleTabContentProps {
 }
 
 export interface NoteTabContentProps {
-  keyIndex: number;
   keyPosition: KeyPosition;
-  onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
-  onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onNotePaintPreview?: (patch: EditorNotePaintPropertyPatchV1) => void;
+  onNotePaintCommit?: (patch: EditorNotePaintPropertyPatchV1) => void;
   panelElement?: HTMLElement | null;
   t: (key: string) => string;
 }
 
 export interface CounterTabContentProps {
-  keyIndex: number;
   keyPosition: KeyPosition;
   keyDisplayName?: string;
   isStat?: boolean;
-  onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
+  onCounterEnabledCommit?: (enabled: boolean) => void;
+  onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
+  onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
+  onCounterTypographyCommit?: (
+    patch: EditorCounterTypographyPropertyPatchV1,
+  ) => void;
+  onCounterStrokeCommit?: (patch: EditorCounterStrokePropertyPatchV1) => void;
+  onCounterFillCommit?: (patch: EditorCounterFillPropertyPatchV1) => void;
+  onCounterAnimationPresetCommit?: (
+    intent: EditorCounterAnimationPresetIntentV1,
+  ) => void;
   panelElement?: HTMLElement | null;
   t: (key: string) => string;
 }

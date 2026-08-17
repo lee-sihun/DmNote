@@ -5,25 +5,194 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
+import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const {
   batchKeyLikePropsMock,
+  batchGraphPropsMock,
+  batchKnobPropsMock,
+  batchPluginPropsMock,
   batchPropsMock,
+  graphUpdatePositionsMock,
+  knobUpdatePositionsMock,
+  keyLegacyUpdateMock,
+  legacyBatchStyleCommitMock,
+  legacyBatchCounterUpdateMock,
+  patchGraphColorMock,
+  patchGraphColorsMock,
+  patchGraphColorsViaAuthorityMock,
+  patchGraphPropertiesMock,
+  patchGraphPropertiesViaAuthorityMock,
+  patchGraphTypeMock,
+  patchGraphTypesMock,
+  patchGraphTypesViaAuthorityMock,
+  patchFontStyleMock,
+  patchFontStyleTargetsMock,
+  patchFontStyleViaAuthorityMock,
+  patchFontFamilyMock,
+  patchFontFamilyTargetsMock,
+  patchFontFamilyViaAuthorityMock,
+  patchDisplayTextMock,
+  patchDisplayTextViaAuthorityMock,
+  patchInactiveImageMock,
+  patchInactiveImageViaAuthorityMock,
+  patchActiveImageMock,
+  patchIdleTransparentMock,
+  patchActiveTransparentMock,
+  patchIdleImageFitMock,
+  patchActiveImageFitMock,
+  patchSoundPathMock,
+  patchSoundPathViaAuthorityMock,
+  patchSoundEnabledMock,
+  patchSoundEnabledViaAuthorityMock,
+  patchSoundVolumeMock,
+  patchSoundVolumeViaAuthorityMock,
+  patchCounterEnabledMock,
+  patchCounterAnimationEnabledMock,
+  patchCounterEnabledViaAuthorityMock,
+  patchCounterAnimationEnabledViaAuthorityMock,
+  patchCounterLayoutMock,
+  patchCounterLayoutViaAuthorityMock,
+  patchCounterTypographyMock,
+  patchCounterTypographyViaAuthorityMock,
+  patchCounterStrokeMock,
+  patchCounterStrokeTargetsMock,
+  patchCounterStrokeViaAuthorityMock,
+  patchCounterFillMock,
+  patchCounterFillViaAuthorityMock,
+  patchFontColorMock,
+  patchFontColorViaAuthorityMock,
+  patchPaintMock,
+  patchPaintViaAuthorityMock,
+  patchShadowMock,
+  patchShadowViaAuthorityMock,
+  patchNotePaintMock,
+  patchNotePaintViaAuthorityMock,
+  patchKnobPropertiesMock,
+  patchKnobPropertiesViaAuthorityMock,
+  patchKnobPropertyMock,
+  patchNotePropertyMock,
+  patchStatTypeMock,
+  patchNotePropertiesMock,
+  patchNotePropertiesViaAuthorityMock,
+  patchUseInlineStylesMock,
+  patchUseInlineStylesTargetsMock,
+  patchUseInlineStylesViaAuthorityMock,
   previewMock,
+  patchLayerNameMock,
+  renameLayerGroupMock,
+  renameLayerGroupViaAuthorityMock,
+  patchPropertyViaAuthorityMock,
+  patchBoundsViaAuthorityMock,
+  patchBatchGeometryViaAuthorityMock,
+  patchBatchGeometryMock,
+  commitMixedBatchGeometryMock,
+  patchGeometryMock,
+  statUpdatePositionsMock,
   settleCommitMock,
+  activeGestureIdMock,
+  singleGraphPropsMock,
   singleKeyStatPropsMock,
+  singleKnobPropsMock,
+  reportElementOpSkippedMock,
 } = vi.hoisted(() => ({
   batchKeyLikePropsMock: vi.fn(),
+  batchGraphPropsMock: vi.fn(),
+  batchKnobPropsMock: vi.fn(),
+  batchPluginPropsMock: vi.fn(),
   batchPropsMock: vi.fn(),
+  graphUpdatePositionsMock: vi.fn(() => Promise.resolve()),
+  knobUpdatePositionsMock: vi.fn(() => Promise.resolve()),
+  keyLegacyUpdateMock: vi.fn(),
+  legacyBatchStyleCommitMock: vi.fn(),
+  legacyBatchCounterUpdateMock: vi.fn(),
+  patchGraphColorMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphColorsMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphColorsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphPropertiesMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphTypeMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphTypesMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphTypesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchFontStyleMock: vi.fn(() => Promise.resolve(true)),
+  patchFontStyleTargetsMock: vi.fn(() => Promise.resolve(true)),
+  patchFontStyleViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchFontFamilyMock: vi.fn(() => Promise.resolve(true)),
+  patchFontFamilyTargetsMock: vi.fn(() => Promise.resolve(true)),
+  patchFontFamilyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchDisplayTextMock: vi.fn(() => Promise.resolve(true)),
+  patchDisplayTextViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchInactiveImageMock: vi.fn(() => Promise.resolve(true)),
+  patchInactiveImageViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchActiveImageMock: vi.fn(() => Promise.resolve(true)),
+  patchIdleTransparentMock: vi.fn(() => Promise.resolve(true)),
+  patchActiveTransparentMock: vi.fn(() => Promise.resolve(true)),
+  patchIdleImageFitMock: vi.fn(() => Promise.resolve(true)),
+  patchActiveImageFitMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundPathMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundPathViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundEnabledMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundEnabledViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundVolumeMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundVolumeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterEnabledMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterAnimationEnabledMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterEnabledViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterAnimationEnabledViaAuthorityMock: vi.fn(() =>
+    Promise.resolve(true),
+  ),
+  patchCounterLayoutMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterLayoutViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterTypographyMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterTypographyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterStrokeMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterStrokeTargetsMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterStrokeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterFillMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterFillViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchFontColorMock: vi.fn(() => Promise.resolve(true)),
+  patchFontColorViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchPaintMock: vi.fn(() => Promise.resolve(true)),
+  patchPaintViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchShadowMock: vi.fn(() => Promise.resolve(true)),
+  patchShadowViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePaintMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePaintViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
+  patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePropertyMock: vi.fn(() => Promise.resolve(true)),
+  patchStatTypeMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePropertiesMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchUseInlineStylesMock: vi.fn(() => Promise.resolve(true)),
+  patchUseInlineStylesTargetsMock: vi.fn(() => Promise.resolve(true)),
+  patchUseInlineStylesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   previewMock: vi.fn(),
+  patchLayerNameMock: vi.fn(() => Promise.resolve(true)),
+  renameLayerGroupMock: vi.fn(() => Promise.resolve(true)),
+  renameLayerGroupViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchPropertyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchBoundsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchBatchGeometryViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchBatchGeometryMock: vi.fn(() => Promise.resolve(true)),
+  commitMixedBatchGeometryMock: vi.fn(() => Promise.resolve(true)),
+  patchGeometryMock: vi.fn(() => Promise.resolve(true)),
+  statUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   settleCommitMock: vi.fn(),
+  activeGestureIdMock: vi.fn(() => null as string | null),
+  singleGraphPropsMock: vi.fn(),
   singleKeyStatPropsMock: vi.fn(),
+  singleKnobPropsMock: vi.fn(),
+  reportElementOpSkippedMock: vi.fn(),
 }));
 
 vi.mock('@contexts/useTranslation', () => ({
@@ -36,10 +205,95 @@ vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  renameLayerGroupViaAuthority: renameLayerGroupViaAuthorityMock,
+  patchGraphColorsViaAuthority: patchGraphColorsViaAuthorityMock,
+  patchGraphPropertiesViaAuthority: patchGraphPropertiesViaAuthorityMock,
+  patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
+  patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
+  patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
+  patchStylePropertyViaAuthority: patchDisplayTextViaAuthorityMock,
+  patchPaintViaAuthority: patchPaintViaAuthorityMock,
+  patchShadowViaAuthority: patchShadowViaAuthorityMock,
+  patchNotePaintViaAuthority: patchNotePaintViaAuthorityMock,
+  patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
+  patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
+  patchSoundEnabledViaAuthority: patchSoundEnabledViaAuthorityMock,
+  patchSoundVolumeViaAuthority: patchSoundVolumeViaAuthorityMock,
+  patchCounterEnabledViaAuthority: patchCounterEnabledViaAuthorityMock,
+  patchCounterAnimationEnabledViaAuthority:
+    patchCounterAnimationEnabledViaAuthorityMock,
+  patchCounterLayoutViaAuthority: patchCounterLayoutViaAuthorityMock,
+  patchCounterTypographyViaAuthority: patchCounterTypographyViaAuthorityMock,
+  patchCounterStrokeViaAuthority: patchCounterStrokeViaAuthorityMock,
+  patchCounterFillViaAuthority: patchCounterFillViaAuthorityMock,
+  patchFontColorViaAuthority: patchFontColorViaAuthorityMock,
+  patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
+  patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
+  patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
+  commitBatchGeometryViaAuthority: patchBatchGeometryViaAuthorityMock,
+  patchNotePropertiesViaAuthority: patchNotePropertiesViaAuthorityMock,
+  patchUseInlineStylesViaAuthority: patchUseInlineStylesViaAuthorityMock,
   updatePluginElement: vi.fn(),
+}));
+vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  renameLayerGroupById: renameLayerGroupMock,
+  commitElementGeometryById: patchGeometryMock,
+  commitBatchGeometryByIds: patchBatchGeometryMock,
+  patchElementLayerNameById: patchLayerNameMock,
+  patchFontStyleById: patchFontStyleMock,
+  patchFontStyleByTargets: patchFontStyleTargetsMock,
+  patchFontFamilyById: patchFontFamilyMock,
+  patchFontFamilyByTargets: patchFontFamilyTargetsMock,
+  patchStylePropertyById: patchDisplayTextMock,
+  patchPaintById: patchPaintMock,
+  patchShadowById: patchShadowMock,
+  patchNotePaintById: patchNotePaintMock,
+  patchInactiveImageById: patchInactiveImageMock,
+  patchActiveImageById: patchActiveImageMock,
+  patchIdleTransparentById: patchIdleTransparentMock,
+  patchActiveTransparentById: patchActiveTransparentMock,
+  patchIdleImageFitById: patchIdleImageFitMock,
+  patchActiveImageFitById: patchActiveImageFitMock,
+  patchSoundPathById: patchSoundPathMock,
+  patchSoundEnabledById: patchSoundEnabledMock,
+  patchSoundVolumeById: patchSoundVolumeMock,
+  patchCounterEnabledById: patchCounterEnabledMock,
+  patchCounterAnimationEnabledById: patchCounterAnimationEnabledMock,
+  patchCounterLayoutById: patchCounterLayoutMock,
+  patchCounterTypographyById: patchCounterTypographyMock,
+  patchCounterStrokeById: patchCounterStrokeMock,
+  patchCounterStrokeByTargets: patchCounterStrokeTargetsMock,
+  patchCounterFillById: patchCounterFillMock,
+  patchFontColorById: patchFontColorMock,
+  patchGraphColorById: patchGraphColorMock,
+  patchGraphColorsByIds: patchGraphColorsMock,
+  patchGraphPropertiesByIds: patchGraphPropertiesMock,
+  patchGraphPropertyById: patchGraphPropertiesMock,
+  patchGraphTypeById: patchGraphTypeMock,
+  patchGraphTypesByIds: patchGraphTypesMock,
+  patchKnobPropertiesByIds: patchKnobPropertiesMock,
+  patchKnobPropertyById: patchKnobPropertyMock,
+  patchNotePropertiesByIds: patchNotePropertiesMock,
+  patchNotePropertyById: patchNotePropertyMock,
+  patchStatTypeById: patchStatTypeMock,
+  patchUseInlineStylesById: patchUseInlineStylesMock,
+  patchUseInlineStylesByTargets: patchUseInlineStylesTargetsMock,
+}));
+vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+  reportElementOpSkipped: reportElementOpSkippedMock,
+}));
+vi.mock('@src/renderer/editor/runtime/mixedBatchGeometry', () => ({
+  commitMixedBatchGeometry: commitMixedBatchGeometryMock,
+}));
+vi.mock('@api/modules/itemsApi', () => ({
+  graphItemsApi: { updatePositions: graphUpdatePositionsMock },
+  knobItemsApi: { updatePositions: knobUpdatePositionsMock },
+  layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
+  statItemsApi: { updatePositions: statUpdatePositionsMock },
 }));
 vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
   editGestureController: {
+    activeGestureId: activeGestureIdMock,
     preview: previewMock,
     settleCommit: settleCommitMock,
   },
@@ -52,6 +306,14 @@ vi.mock('./PropertiesPanel/index', () => {
     singleKeyStatPropsMock(props);
     return <ScopeProbe id="single-key-stat" />;
   };
+  const SingleGraphPanel = (props: Record<string, unknown>) => {
+    singleGraphPropsMock(props);
+    return <div />;
+  };
+  const SingleKnobPanel = (props: Record<string, unknown>) => {
+    singleKnobPropsMock(props);
+    return <div />;
+  };
   return {
     TABS: { STYLE: 'style', NOTE: 'note', COUNTER: 'counter' },
     PropertyRow: Stub,
@@ -61,19 +323,32 @@ vi.mock('./PropertiesPanel/index', () => {
     TextInput: Stub,
     LayerPanel: () => <div data-testid="layer-panel" />,
     PluginSelectionPanel: Stub,
-    SingleGraphPanel: Stub,
-    SingleKnobPanel: Stub,
+    SingleGraphPanel,
+    SingleKnobPanel,
     SingleKeyStatPanel,
     BatchKeyLikePanel: (props: Record<string, unknown>) => {
       batchKeyLikePropsMock(props);
       return <div />;
     },
-    BatchGraphOnlyPanel: Stub,
-    BatchKnobOnlyPanel: Stub,
+    BatchGraphOnlyPanel: (props: Record<string, unknown>) => {
+      batchGraphPropsMock(props);
+      return <div />;
+    },
+    BatchKnobOnlyPanel: (props: Record<string, unknown>) => {
+      batchKnobPropsMock(props);
+      return <div />;
+    },
+    BatchPluginOnlyPanel: (props: Record<string, unknown>) => {
+      batchPluginPropsMock(props);
+      return <div />;
+    },
     PluginSettingsPanelView: () => <ScopeProbe id="plugin-settings" />,
     useBatchHandlers: (props: Record<string, unknown>) => {
       batchPropsMock(props);
-      return {};
+      return {
+        handleBatchStyleChangeComplete: legacyBatchStyleCommitMock,
+        handleBatchCounterUpdate: legacyBatchCounterUpdateMock,
+      };
     },
     usePanelScroll: () => ({
       batchScrollRefFor: () => vi.fn(),
@@ -119,8 +394,6 @@ const mountPanel = (
     act(() => {
       root.render(
         <PropertiesPanel
-          onPositionChange={vi.fn()}
-          onKeyUpdate={vi.fn()}
           onKeyMappingChange={onKeyMappingChange}
           frameVariant="window"
           selectionSyncReady={ready}
@@ -135,9 +408,92 @@ const mountPanel = (
 const resetStores = () => {
   previewMock.mockClear();
   settleCommitMock.mockClear();
+  activeGestureIdMock.mockReset();
+  activeGestureIdMock.mockReturnValue(null);
   singleKeyStatPropsMock.mockClear();
+  singleGraphPropsMock.mockClear();
+  batchGraphPropsMock.mockClear();
+  batchKnobPropsMock.mockClear();
+  batchPluginPropsMock.mockClear();
   batchPropsMock.mockClear();
   batchKeyLikePropsMock.mockClear();
+  patchLayerNameMock.mockClear();
+  patchGraphTypeMock.mockClear();
+  patchGraphColorMock.mockClear();
+  patchGraphColorsMock.mockClear();
+  patchGraphColorsViaAuthorityMock.mockClear();
+  patchGraphPropertiesMock.mockClear();
+  patchGraphPropertiesViaAuthorityMock.mockClear();
+  patchGraphTypesMock.mockClear();
+  patchGraphTypesViaAuthorityMock.mockClear();
+  patchFontStyleMock.mockClear();
+  patchFontStyleTargetsMock.mockClear();
+  patchFontStyleViaAuthorityMock.mockClear();
+  patchFontFamilyMock.mockClear();
+  patchFontFamilyTargetsMock.mockClear();
+  patchFontFamilyViaAuthorityMock.mockClear();
+  patchInactiveImageMock.mockClear();
+  patchInactiveImageViaAuthorityMock.mockClear();
+  patchActiveImageMock.mockClear();
+  patchIdleTransparentMock.mockClear();
+  patchActiveTransparentMock.mockClear();
+  patchIdleImageFitMock.mockClear();
+  patchActiveImageFitMock.mockClear();
+  patchSoundPathMock.mockClear();
+  patchSoundPathViaAuthorityMock.mockClear();
+  patchSoundEnabledMock.mockClear();
+  patchSoundEnabledViaAuthorityMock.mockClear();
+  patchSoundVolumeMock.mockClear();
+  patchSoundVolumeViaAuthorityMock.mockClear();
+  patchDisplayTextMock.mockClear();
+  patchDisplayTextViaAuthorityMock.mockClear();
+  patchPaintMock.mockClear();
+  patchPaintViaAuthorityMock.mockClear();
+  patchShadowMock.mockClear();
+  patchShadowViaAuthorityMock.mockClear();
+  patchNotePaintMock.mockClear();
+  patchNotePaintViaAuthorityMock.mockClear();
+  patchCounterEnabledMock.mockClear();
+  patchCounterAnimationEnabledMock.mockClear();
+  patchCounterEnabledViaAuthorityMock.mockClear();
+  patchCounterAnimationEnabledViaAuthorityMock.mockClear();
+  patchCounterLayoutMock.mockClear();
+  patchCounterLayoutViaAuthorityMock.mockClear();
+  patchCounterTypographyMock.mockClear();
+  patchCounterTypographyViaAuthorityMock.mockClear();
+  patchCounterStrokeMock.mockClear();
+  patchCounterStrokeTargetsMock.mockClear();
+  patchCounterStrokeViaAuthorityMock.mockClear();
+  patchCounterFillMock.mockClear();
+  patchCounterFillViaAuthorityMock.mockClear();
+  patchFontColorMock.mockClear();
+  patchFontColorViaAuthorityMock.mockClear();
+  patchKnobPropertiesMock.mockClear();
+  patchKnobPropertiesViaAuthorityMock.mockClear();
+  patchKnobPropertyMock.mockClear();
+  patchNotePropertyMock.mockClear();
+  patchStatTypeMock.mockClear();
+  patchNotePropertiesMock.mockClear();
+  patchNotePropertiesViaAuthorityMock.mockClear();
+  patchUseInlineStylesMock.mockClear();
+  patchUseInlineStylesTargetsMock.mockClear();
+  patchUseInlineStylesViaAuthorityMock.mockClear();
+  renameLayerGroupMock.mockClear();
+  renameLayerGroupViaAuthorityMock.mockClear();
+  patchPropertyViaAuthorityMock.mockClear();
+  patchBoundsViaAuthorityMock.mockClear();
+  patchBatchGeometryViaAuthorityMock.mockClear();
+  patchBatchGeometryMock.mockClear();
+  commitMixedBatchGeometryMock.mockClear();
+  patchGeometryMock.mockClear();
+  graphUpdatePositionsMock.mockClear();
+  knobUpdatePositionsMock.mockClear();
+  keyLegacyUpdateMock.mockClear();
+  legacyBatchStyleCommitMock.mockClear();
+  legacyBatchCounterUpdateMock.mockClear();
+  singleKnobPropsMock.mockClear();
+  reportElementOpSkippedMock.mockClear();
+  statUpdatePositionsMock.mockClear();
   useKeyStore.setState({
     selectedKeyType: '4key',
     keyMappings: { '4key': [] },
@@ -188,6 +544,11 @@ const resetStores = () => {
       ],
     },
   });
+  useLayerGroupStore.setState({ layerGroups: {} });
+  usePluginDisplayElementStore.setState({
+    elements: [],
+    panelElements: [],
+  } as never);
   usePropertiesPanelStore.setState({
     canvasPanelMode: 'property',
     canvasPanelActiveTab: 'layer',
@@ -198,85 +559,551 @@ const resetStores = () => {
   useGridSelectionStore.setState({
     selectedElements: [],
     selectedGroupIds: [],
-    _skipPanelModeSwitch: false,
   });
 };
 
-describe('PropertiesPanel detached preview contract', () => {
-  let mounted: MountedPanel;
+describe('PropertiesPanel canonical native contract', () => {
+  let mounted: MountedPanel | null;
+  let originalWindowType: typeof window.__dmn_window_type;
+
+  const installSingle = (
+    type: 'key' | 'stat' | 'graph' | 'knob',
+    id: string,
+    staleIndex = 0,
+  ) => {
+    const otherId = '99999999-9999-4999-8999-999999999999';
+    const base = createDefaultKeyPosition();
+    if (type === 'key') {
+      const items = [
+        { ...base, id: otherId },
+        { ...base, id },
+      ];
+      useKeyStore.setState({
+        keyMappings: { '4key': ['B', 'A'] },
+        positions: { '4key': items },
+        canonicalPositions: { '4key': items },
+      });
+    } else if (type === 'stat') {
+      useStatItemStore.setState({
+        positions: {
+          '4key': [
+            { ...base, id: otherId, statType: 'kps' },
+            { ...base, id, statType: 'kps' },
+          ],
+        },
+      });
+    } else if (type === 'graph') {
+      useGraphItemStore.setState({
+        positions: {
+          '4key': [
+            {
+              ...base,
+              id: otherId,
+              statType: 'kps',
+              graphType: 'line',
+              graphSpeed: 1,
+              graphColor: '#ffffff',
+            },
+            {
+              ...base,
+              id,
+              statType: 'kps',
+              graphType: 'line',
+              graphSpeed: 1,
+              graphColor: '#ffffff',
+            },
+          ],
+        },
+      });
+    } else {
+      useKnobItemStore.setState({
+        positions: {
+          '4key': [
+            {
+              ...base,
+              id: otherId,
+              axisId: 'HIDA:other',
+              sensitivity: 1,
+              reverse: false,
+            },
+            {
+              ...base,
+              id,
+              axisId: 'HIDA:test',
+              sensitivity: 1,
+              reverse: false,
+            },
+          ],
+        },
+      });
+    }
+    useGridSelectionStore.setState({
+      selectedElements: [{ type, id, index: staleIndex }],
+      selectedGroupIds: [],
+    });
+  };
+
+  const latestSingleProps = (type: 'key' | 'stat' | 'graph' | 'knob') =>
+    (type === 'key' || type === 'stat'
+      ? singleKeyStatPropsMock
+      : type === 'graph'
+      ? singleGraphPropsMock
+      : singleKnobPropsMock
+    ).mock.lastCall?.[0] as {
+      handleGeometryCommit?: (field: 'dx', value: number) => void;
+      handleGeometryPreview?: (field: 'dx', value: number) => void;
+      onElementPropertyCommit?: (patch: Record<string, unknown>) => void;
+    };
 
   beforeEach(() => {
+    originalWindowType = window.__dmn_window_type;
+    window.__dmn_window_type = 'main';
+    mounted = null;
     resetStores();
   });
 
   afterEach(() => {
-    act(() => mounted.root.unmount());
-    mounted.container.remove();
+    if (mounted) {
+      act(() => mounted?.root.unmount());
+      mounted.container.remove();
+    }
+    window.__dmn_window_type = originalWindowType;
   });
 
-  it('single stat preview는 canonical 변경 없이 stat 도메인으로 전달', () => {
+  it.each([
+    ['key', '11111111-1111-4111-8111-111111111111'],
+    ['stat', '22222222-2222-4222-8222-222222222222'],
+    ['graph', '33333333-3333-4333-8333-333333333333'],
+    ['knob', '44444444-4444-4444-8444-444444444444'],
+  ] as const)(
+    'single stable %s geometry는 stale index가 아니라 선택 ID를 쓴다',
+    (type, id) => {
+      installSingle(type, id);
+      mounted = mountPanel(true);
+
+      act(() => latestSingleProps(type).handleGeometryCommit?.('dx', 42));
+
+      expect(patchGeometryMock).toHaveBeenCalledWith(type, id, { dx: 42 }, {});
+      expect(patchBoundsViaAuthorityMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key', '51111111-1111-4111-8111-111111111111'],
+    ['stat', '52222222-2222-4222-8222-222222222222'],
+    ['graph', '53333333-3333-4333-8333-333333333333'],
+    ['knob', '54444444-4444-4444-8444-444444444444'],
+  ] as const)(
+    'panel single stable %s geometry는 authority만 쓴다',
+    (type, id) => {
+      window.__dmn_window_type = 'panel';
+      installSingle(type, id);
+      mounted = mountPanel(true);
+
+      act(() => latestSingleProps(type).handleGeometryCommit?.('dx', 43));
+
+      expect(patchBoundsViaAuthorityMock).toHaveBeenCalledWith({
+        elementType: type,
+        id,
+        patch: { dx: 43 },
+      });
+      expect(patchGeometryMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('single key preview는 선택 ID를 신원으로 전달한다', () => {
+    const id = '61111111-1111-4111-8111-111111111111';
+    installSingle('key', id);
+    mounted = mountPanel(true);
+
+    act(() => latestSingleProps('key').handleGeometryPreview?.('dx', 17));
+
+    expect(previewMock).toHaveBeenCalledWith(
+      '4key',
+      [{ id, patch: { dx: 17 } }],
+      { domain: 'keyPosition' },
+    );
+  });
+
+  it.each(['key', 'stat', 'graph', 'knob'] as const)(
+    'invalid %s ID는 semantic과 full-record writer를 모두 막는다',
+    (type) => {
+      installSingle(type, `${type}-0`, 1);
+      mounted = mountPanel(true);
+      const props = latestSingleProps(type);
+
+      expect(props?.handleGeometryCommit).toBeUndefined();
+      expect(props?.onElementPropertyCommit).toBeUndefined();
+      expect(patchGeometryMock).not.toHaveBeenCalled();
+      expect(patchBoundsViaAuthorityMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['graph', 'knob'] as const)(
+    '미지원 %s batch 속성은 full-record 저장 없이 fail-closed로 기록한다',
+    (type) => {
+      const ids = [
+        `91111111-1111-4111-8111-11111111111${type === 'graph' ? '1' : '3'}`,
+        `92222222-2222-4222-8222-22222222222${type === 'graph' ? '2' : '4'}`,
+      ];
+      const base = createDefaultKeyPosition();
+      if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': ids.map((id) => ({
+              ...base,
+              id,
+              statType: 'kps',
+              graphType: 'line',
+              graphSpeed: 1,
+              graphColor: '#ffffff',
+            })),
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': ids.map((id, index) => ({
+              ...base,
+              id,
+              axisId: `HIDA:test-${index}`,
+              sensitivity: 1,
+              reverse: false,
+            })),
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: ids.map((id, index) => ({ type, id, index })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = (
+        type === 'graph' ? batchGraphPropsMock : batchKnobPropsMock
+      ).mock.lastCall?.[0] as {
+        handleGraphBatchSharedSetting?: (updates: { dx: number }) => void;
+        handleKnobBatchSharedSetting?: (updates: { dx: number }) => void;
+      };
+
+      act(() => {
+        if (type === 'graph') {
+          props.handleGraphBatchSharedSetting?.({ dx: 17 });
+        } else {
+          props.handleKnobBatchSharedSetting?.({ dx: 17 });
+        }
+      });
+
+      expect(reportElementOpSkippedMock).toHaveBeenCalledWith(
+        `batch ${type} property (unsupported payload or invalid target)`,
+      );
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('batch geometry는 stable ID target만 한 번 커밋한다', () => {
+    const firstId = '71111111-1111-4111-8111-111111111111';
+    const secondId = '72222222-2222-4222-8222-222222222222';
+    const first = { ...createDefaultKeyPosition(), id: firstId };
+    const second = { ...createDefaultKeyPosition(), id: secondId, dx: 80 };
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A', 'B'] },
+      positions: { '4key': [first, second] },
+      canonicalPositions: { '4key': [first, second] },
+    });
     useGridSelectionStore.setState({
-      selectedElements: [{ type: 'stat', id: 'stat-0', index: 0 }],
+      selectedElements: [
+        { type: 'key', id: firstId, index: 1 },
+        { type: 'key', id: secondId, index: 0 },
+      ],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = batchPropsMock.mock.lastCall?.[0] as {
+      onStableGeometryCommit: (
+        operation: Record<string, unknown>,
+        options?: { gestureId?: string },
+      ) => void;
+    };
+
+    act(() =>
+      props.onStableGeometryCommit(
+        { kind: 'resize', dimension: 'width', value: 91 },
+        { gestureId: '73333333-3333-4333-8333-333333333333' },
+      ),
+    );
+
+    expect(patchBatchGeometryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: '4key',
+        targets: [
+          { type: 'key', id: firstId },
+          { type: 'key', id: secondId },
+        ],
+        operation: { kind: 'resize', dimension: 'width', value: 91 },
+      }),
+      { gestureId: '73333333-3333-4333-8333-333333333333' },
+    );
+  });
+
+  it('invalid ID가 섞인 batch는 어떤 writer도 만들지 않는다', () => {
+    const stableId = '81111111-1111-4111-8111-111111111111';
+    const stable = { ...createDefaultKeyPosition(), id: stableId };
+    const invalid = { ...createDefaultKeyPosition(), id: 'key-1' };
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A', 'B'] },
+      positions: { '4key': [stable, invalid] },
+      canonicalPositions: { '4key': [stable, invalid] },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: stableId, index: 0 },
+        { type: 'key', id: 'key-1', index: 1 },
+      ],
       selectedGroupIds: [],
     });
     mounted = mountPanel(true);
 
-    const singleKeyStatProps = singleKeyStatPropsMock.mock.lastCall?.[0] as
-      | Record<string, unknown>
-      | undefined;
-    const handleStatPreview = singleKeyStatProps?.handleStatPreview as (
-      index: number,
-      patch: Record<string, unknown>,
-    ) => void;
-    act(() => handleStatPreview(0, { width: 96 }));
-
-    expect(previewMock).toHaveBeenCalledWith(
-      '4key',
-      [{ index: 0, patch: { width: 96 } }],
-      { domain: 'statPosition' },
-    );
-    expect(useStatItemStore.getState().positions['4key'][0].width).toBe(60);
+    expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+    expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
+    expect(legacyBatchStyleCommitMock).not.toHaveBeenCalled();
+    expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
   });
 
-  it('batch stat, graph, knob preview를 각각의 도메인으로 전달', () => {
-    mounted = mountPanel(true);
-    const batchProps = batchPropsMock.mock.lastCall?.[0] as {
-      onStatBatchPreview: (updates: Array<Record<string, unknown>>) => void;
-      onGraphBatchPreview: (updates: Array<Record<string, unknown>>) => void;
-      onKnobBatchPreview: (updates: Array<Record<string, unknown>>) => void;
-    };
+  describe('혼합 선택 batch geometry pluginTargets 결합', () => {
+    const FIRST_KEY_ID = 'a1111111-1111-4111-8111-111111111111';
+    const SECOND_KEY_ID = 'a2222222-2222-4222-8222-222222222222';
+    const PLUGIN_FULL_ID = 'plugin-a::10000000-0000-4000-8000-000000000001';
 
-    act(() => {
-      batchProps.onStatBatchPreview([{ index: 0, width: 91 }]);
-      batchProps.onGraphBatchPreview([{ index: 0, width: 92 }]);
-      batchProps.onKnobBatchPreview([{ index: 0, width: 93 }]);
+    const pluginElement = () => ({
+      id: '10000000-0000-4000-8000-000000000001',
+      fullId: PLUGIN_FULL_ID,
+      pluginId: 'plugin-a',
+      definitionId: 'plugin-a',
+      position: { x: 200, y: 0 },
+      estimatedSize: { width: 50, height: 50 },
+      tabId: '4key',
+      zIndex: 0,
     });
 
-    expect(previewMock.mock.calls).toEqual([
-      [
-        '4key',
-        [{ index: 0, patch: { width: 91 } }],
-        { domain: 'statPosition' },
-      ],
-      [
-        '4key',
-        [{ index: 0, patch: { width: 92 } }],
-        { domain: 'graphPosition' },
-      ],
-      [
-        '4key',
-        [{ index: 0, patch: { width: 93 } }],
-        { domain: 'knobPosition' },
-      ],
-    ]);
+    const installMixedSelection = (windowType: 'main' | 'panel') => {
+      const first = { ...createDefaultKeyPosition(), id: FIRST_KEY_ID };
+      const second = {
+        ...createDefaultKeyPosition(),
+        id: SECOND_KEY_ID,
+        dx: 80,
+      };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B'] },
+        positions: { '4key': [first, second] },
+        canonicalPositions: { '4key': [first, second] },
+      });
+      usePluginDisplayElementStore.setState(
+        (windowType === 'panel'
+          ? { panelElements: [pluginElement()] }
+          : { elements: [pluginElement()] }) as never,
+      );
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: FIRST_KEY_ID, index: 0 },
+          { type: 'key', id: SECOND_KEY_ID, index: 1 },
+          { type: 'plugin', id: PLUGIN_FULL_ID },
+        ],
+        selectedGroupIds: [],
+      });
+    };
+
+    const commitProps = () =>
+      batchPropsMock.mock.lastCall?.[0] as {
+        onStableGeometryCommit: (
+          operation: Record<string, unknown>,
+          options?: { gestureId?: string },
+        ) => void;
+      };
+
+    it('main 혼합 정렬은 mixed helper에 pluginTargets를 싣는다', () => {
+      installMixedSelection('main');
+      mounted = mountPanel(true);
+
+      act(() =>
+        commitProps().onStableGeometryCommit({
+          kind: 'align',
+          direction: 'left',
+        }),
+      );
+
+      expect(commitMixedBatchGeometryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: '4key',
+          targets: [
+            { type: 'key', id: FIRST_KEY_ID },
+            { type: 'key', id: SECOND_KEY_ID },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        }),
+        [PLUGIN_FULL_ID],
+        {},
+      );
+      expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+      expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
+    });
+
+    it('panel 혼합 커밋은 pluginTargets를 authority payload에 싣는다', () => {
+      window.__dmn_window_type = 'panel';
+      installMixedSelection('panel');
+      mounted = mountPanel(true);
+
+      act(() =>
+        commitProps().onStableGeometryCommit({
+          kind: 'align',
+          direction: 'left',
+        }),
+      );
+
+      expect(patchBatchGeometryViaAuthorityMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: '4key',
+          targets: [
+            { type: 'key', id: FIRST_KEY_ID },
+            { type: 'key', id: SECOND_KEY_ID },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        }),
+        undefined,
+        [PLUGIN_FULL_ID],
+      );
+      expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+      expect(commitMixedBatchGeometryMock).not.toHaveBeenCalled();
+    });
+
+    it('혼합 선택 resize는 native 전용 경로로 남는다', () => {
+      installMixedSelection('main');
+      mounted = mountPanel(true);
+
+      act(() =>
+        commitProps().onStableGeometryCommit(
+          { kind: 'resize', dimension: 'width', value: 91 },
+          { gestureId: 'a3333333-3333-4333-8333-333333333333' },
+        ),
+      );
+
+      expect(patchBatchGeometryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: { kind: 'resize', dimension: 'width', value: 91 },
+        }),
+        { gestureId: 'a3333333-3333-4333-8333-333333333333' },
+      );
+      expect(commitMixedBatchGeometryMock).not.toHaveBeenCalled();
+    });
+
+    it('plugin 대상 미해결(모드 이탈) 혼합 커밋은 fail-closed로 막는다', () => {
+      installMixedSelection('main');
+      const store = usePluginDisplayElementStore.getState();
+      usePluginDisplayElementStore.setState({
+        elements: [{ ...store.elements[0], tabId: '7key' }],
+      } as never);
+      mounted = mountPanel(true);
+
+      act(() =>
+        commitProps().onStableGeometryCommit({
+          kind: 'align',
+          direction: 'left',
+        }),
+      );
+
+      expect(commitMixedBatchGeometryMock).not.toHaveBeenCalled();
+      expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+      expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
+    });
+
+    it('plugin 포함 그룹 선택은 그룹 헤더 정보와 합산 개수를 전달한다', () => {
+      const first = {
+        ...createDefaultKeyPosition(),
+        id: FIRST_KEY_ID,
+        groupId: 'group-a',
+      };
+      const second = {
+        ...createDefaultKeyPosition(),
+        id: SECOND_KEY_ID,
+        dx: 80,
+        groupId: 'group-a',
+      };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B'] },
+        positions: { '4key': [first, second] },
+        canonicalPositions: { '4key': [first, second] },
+      });
+      useLayerGroupStore.setState({
+        layerGroups: { '4key': [{ id: 'group-a', name: '그룹 A' }] },
+      } as never);
+      usePluginDisplayElementStore.setState({
+        elements: [{ ...pluginElement(), groupId: 'group-a' }],
+      } as never);
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: FIRST_KEY_ID, index: 0 },
+          { type: 'key', id: SECOND_KEY_ID, index: 1 },
+          { type: 'plugin', id: PLUGIN_FULL_ID },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        selectedGroupInfo: {
+          id: string;
+          name: string;
+          memberCount: number;
+        } | null;
+        totalCount?: number;
+      };
+      expect(props.selectedGroupInfo).toEqual({
+        id: 'group-a',
+        name: '그룹 A',
+        memberCount: 3,
+      });
+      expect(props.totalCount).toBe(3);
+    });
+
+    it('plugin 단독 다중 선택은 경량 기하 배치 패널로 라우트한다', () => {
+      const secondFullId = 'plugin-a::10000000-0000-4000-8000-000000000002';
+      usePluginDisplayElementStore.setState({
+        elements: [
+          pluginElement(),
+          {
+            ...pluginElement(),
+            id: '10000000-0000-4000-8000-000000000002',
+            fullId: secondFullId,
+            position: { x: 260, y: 0 },
+          },
+        ],
+      } as never);
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'plugin', id: PLUGIN_FULL_ID },
+          { type: 'plugin', id: secondFullId },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+
+      const props = batchPluginPropsMock.mock.lastCall?.[0] as {
+        totalCount: number;
+      };
+      expect(props.totalCount).toBe(2);
+      expect(batchKeyLikePropsMock).not.toHaveBeenCalled();
+    });
   });
 });
 
-// 배치 색상 draft는 피커를 열 때 첫 요소에서 한 번만 떠 온다.
-// 그 상태가 편집 트리 바깥(PropertiesPanel)에 있어 리마운트 경계로는 안 걷힌다
-// 대상 전환 억제는 캔버스 선택 패널에서만 걸려야 한다.
-// 플러그인 설정 세션은 캔버스 선택과 무관한데, 그 폼의 색상 피커까지 억제되면
-// 무관한 선택 변경 뒤 피커가 닫힐 때 멀쩡한 색 편집이 폐기된다
 describe('PropertiesPanel 편집 세션 scope 경계', () => {
   let mounted: MountedPanel;
 
@@ -298,8 +1125,19 @@ describe('PropertiesPanel 편집 세션 scope 경계', () => {
   });
 
   it('캔버스 선택 패널은 편집 세션 scope 안이다', () => {
+    const id = '91111111-1111-4111-8111-111111111111';
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...useStatItemStore.getState().positions['4key'][0],
+            id,
+          },
+        ],
+      },
+    });
     useGridSelectionStore.setState({
-      selectedElements: [{ type: 'stat', id: 'stat-0', index: 0 }],
+      selectedElements: [{ type: 'stat', id, index: 0 }],
       selectedGroupIds: [],
     });
     mounted = mountPanel(true);

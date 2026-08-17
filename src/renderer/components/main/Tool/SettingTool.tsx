@@ -11,6 +11,8 @@ import IconSwap from '../common/IconSwap';
 import EyeToggleIcon from '../common/EyeToggleIcon';
 import { TooltipGroup } from '../Modal/TooltipGroup';
 import { obsApi } from '@api/modules/obsApi';
+import { overlayApi } from '@api/modules/overlayApi';
+import { presetsApi } from '@api/modules/presetsApi';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useIconMotion } from '@hooks/useIconMotion';
 import IconMotion from './icons/IconMotion';
@@ -111,10 +113,10 @@ SettingToolProps) => {
     overlayTogglingRef.current = true;
     const next = !isOverlayVisible;
     setIsOverlayVisible(next);
-    window.api.overlay
+    overlayApi
       .setVisible(next)
       .catch((error) => {
-        // 실패 시 낙관적 갱신 롤백 — 백엔드 상태는 무변경이므로 이전 값이 진실
+        // 실패 시 낙관적 갱신 롤백 - 백엔드 상태는 무변경이므로 이전 값이 진실
         setIsOverlayVisible(!next);
         console.error('Failed to toggle overlay', error);
       })
@@ -135,7 +137,7 @@ SettingToolProps) => {
 
   const handlePresetSave = async () => {
     try {
-      const result = await runPresetAction(() => window.api.presets.save());
+      const result = await runPresetAction(() => presetsApi.save());
       if (!result) return;
       showAlert?.(
         result?.success ? t('preset.saveSuccess') : t('preset.saveFail'),
@@ -148,7 +150,7 @@ SettingToolProps) => {
 
   const handlePresetLoad = async () => {
     try {
-      const result = await runPresetAction(() => window.api.presets.load());
+      const result = await runPresetAction(() => presetsApi.load());
       if (!result) return;
       if (result?.success) {
         useGridSelectionStore.getState().clearSelection();
@@ -164,7 +166,7 @@ SettingToolProps) => {
 
   const handlePresetSaveTab = async () => {
     try {
-      const result = await runPresetAction(() => window.api.presets.saveTab());
+      const result = await runPresetAction(() => presetsApi.saveTab());
       if (!result) return;
       showAlert?.(
         result?.success ? t('preset.saveTabSuccess') : t('preset.saveTabFail'),
@@ -203,7 +205,7 @@ SettingToolProps) => {
 
   const handlePresetLoadTab = async () => {
     try {
-      const result = await runPresetAction(() => window.api.presets.loadTab());
+      const result = await runPresetAction(() => presetsApi.loadTab());
       if (!result) return;
       if (result?.success) {
         useGridSelectionStore.getState().clearSelection();

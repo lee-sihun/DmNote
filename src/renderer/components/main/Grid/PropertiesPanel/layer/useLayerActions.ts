@@ -4,8 +4,11 @@
  */
 
 import {
+  patchNativeLayerPropertyViaAuthority,
+  renameLayerGroupViaAuthority,
+  setElementGroupsViaAuthority,
+  setLayerGroupVisibilityViaAuthority,
   setPluginElementsHidden,
-  deletePluginElements,
 } from '@plugins/rpc/pluginElementActions';
 import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -14,20 +17,36 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import {
-  applyGroupIdToSelectedElements,
-  buildNextLayerGroupName,
-  normalizeLayerGroupsForMode,
-  resolveSingleGroupIdFromSelection,
-} from '@utils/layerGroupUtils';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { stableStringify } from '@utils/core/stableStringify';
-import type { EditorPatchV1 } from '@src/types/editor';
+import { buildNextLayerGroupName } from '@utils/layerGroupUtils';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { ListItem } from '@components/main/Modal/ListPopup';
 import type { LayerItem, DisplayItem } from '../types';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
+import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
+import {
+  patchElementHiddenById,
+  patchElementLayerNameById,
+  renameLayerGroupById,
+} from '@src/renderer/editor/runtime/elementOps';
+import {
+  setMixedElementGroups,
+  setMixedLayerGroupHidden,
+} from '@src/renderer/editor/runtime/mixedElementGroups';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  resolveElementById,
+  type NativeElementType,
+} from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import type {
+  EditorElementGroupTargetV1,
+  EditorTargetLayerGroupV1,
+} from '@src/types/editor';
 
 // ============================================================================
 // 파라미터 / 반환 타입
@@ -45,9 +64,59 @@ interface UseLayerActionsParams {
   t: (key: string) => string;
 }
 
-function hasChanged(current: unknown, next: unknown) {
-  return stableStringify(current) !== stableStringify(next);
-}
+const stableSelectionGroupId = (
+  mode: string,
+  elements: readonly SelectedElement[],
+): { stable: boolean; groupId?: string } => {
+  const native = elements.filter(
+    (element): element is SelectedElement & { type: NativeElementType } =>
+      element.type === 'key' ||
+      element.type === 'stat' ||
+      element.type === 'graph' ||
+      element.type === 'knob',
+  );
+  const plugin = elements.filter((element) => element.type === 'plugin');
+  if (
+    (native.length === 0 && plugin.length === 0) ||
+    native.some(({ id }) => !isNativeElementId(id))
+  ) {
+    return { stable: false };
+  }
+  const modeGroupIds = new Set(
+    (useLayerGroupStore.getState().layerGroups[mode] ?? []).map(
+      (group) => group.id,
+    ),
+  );
+  const groupIds = new Set<string>();
+  for (const element of native) {
+    const locator = resolveElementById(element.type, element.id);
+    if (!locator || locator.mode !== mode) return { stable: true };
+    const record =
+      element.type === 'key'
+        ? useKeyStore.getState().canonicalPositions
+        : element.type === 'stat'
+        ? useStatItemStore.getState().positions
+        : element.type === 'graph'
+        ? useGraphItemStore.getState().positions
+        : useKnobItemStore.getState().positions;
+    const groupId = record[mode]?.[locator.index]?.groupId;
+    if (groupId) groupIds.add(groupId);
+  }
+  // 플러그인 소속도 단일 그룹 판정에 포함 - 모드 def가 있는 groupId만 유효.
+  // 패널 창의 elements는 항상 비어 있으므로 창별 미러 셀렉터를 경유한다
+  const pluginElements = selectPropertyPanelPluginElements(
+    usePluginDisplayElementStore.getState(),
+  );
+  for (const element of plugin) {
+    const groupId = pluginElements.find(
+      (candidate) => candidate.fullId === element.id,
+    )?.groupId;
+    if (groupId && modeGroupIds.has(groupId)) groupIds.add(groupId);
+  }
+  return groupIds.size === 1
+    ? { stable: true, groupId: [...groupIds][0] }
+    : { stable: true };
+};
 
 // ============================================================================
 // 훅
@@ -97,125 +166,37 @@ export function useLayerActions({
     clearPendingDeselect();
     onSelectionFromPanel?.();
 
-    if (item.type === 'key' && item.index !== undefined) {
-      // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-      const pos = useKeyStore.getState().canonicalPositions;
-      const currentPositions = pos[selectedKeyType] || [];
-      const current = currentPositions[item.index];
-      if (!current) return;
-
-      const updatedPositions = { ...pos };
-      const updatedModePositions = [...currentPositions];
-      updatedModePositions[item.index] = {
-        ...current,
-        hidden: !current.hidden,
-      };
-      updatedPositions[selectedKeyType] = updatedModePositions;
-
-      useKeyStore.getState().setLocalUpdateInProgress(true);
-      useKeyStore.getState().setPositions(updatedPositions);
+    if (item.type !== 'plugin' && isNativeElementId(item.id)) {
       try {
-        await window.api.keys.updatePositions(updatedPositions);
-      } catch (error) {
-        if (useKeyStore.getState().canonicalPositions === updatedPositions) {
-          useKeyStore.getState().setPositions(pos);
+        const target = {
+          elementType: item.type,
+          id: item.id,
+          hidden: !item.hidden,
+        };
+        if (window.__dmn_window_type === 'panel') {
+          await patchNativeLayerPropertyViaAuthority({
+            elementType: target.elementType,
+            id: target.id,
+            patch: { property: 'hidden', value: target.hidden },
+          });
+        } else {
+          await patchElementHiddenById(
+            target.elementType,
+            target.id,
+            target.hidden,
+          );
         }
-        console.error('Failed to toggle key visibility', error);
-      } finally {
-        useKeyStore.getState().setLocalUpdateInProgress(false);
-      }
-      return;
-    }
-
-    if (item.type === 'stat' && item.index !== undefined) {
-      const current = useStatItemStore.getState().positions;
-      const currentPositions = current[selectedKeyType] || [];
-      const target = currentPositions[item.index];
-      if (!target) return;
-
-      const updatedPositions = { ...current };
-      const updatedModePositions = [...currentPositions];
-      updatedModePositions[item.index] = {
-        ...target,
-        hidden: !target.hidden,
-      };
-      updatedPositions[selectedKeyType] = updatedModePositions;
-
-      useStatItemStore.getState().setLocalUpdateInProgress(true);
-      useStatItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.statItems.updatePositions(updatedPositions);
       } catch (error) {
-        if (useStatItemStore.getState().positions === updatedPositions) {
-          useStatItemStore.getState().setPositions(current);
-        }
-        console.error('Failed to toggle stat item visibility', error);
-      } finally {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-      }
-      return;
-    }
-
-    if (item.type === 'graph' && item.index !== undefined) {
-      const current = useGraphItemStore.getState().positions;
-      const currentPositions = current[selectedKeyType] || [];
-      const target = currentPositions[item.index];
-      if (!target) return;
-
-      const updatedPositions = { ...current };
-      const updatedModePositions = [...currentPositions];
-      updatedModePositions[item.index] = {
-        ...target,
-        hidden: !target.hidden,
-      };
-      updatedPositions[selectedKeyType] = updatedModePositions;
-
-      useGraphItemStore.getState().setLocalUpdateInProgress(true);
-      useGraphItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.graphItems.updatePositions(updatedPositions);
-      } catch (error) {
-        if (useGraphItemStore.getState().positions === updatedPositions) {
-          useGraphItemStore.getState().setPositions(current);
-        }
-        console.error('Failed to toggle graph item visibility', error);
-      } finally {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      }
-      return;
-    }
-
-    if (item.type === 'knob' && item.index !== undefined) {
-      const current = useKnobItemStore.getState().positions;
-      const currentPositions = current[selectedKeyType] || [];
-      const target = currentPositions[item.index];
-      if (!target) return;
-
-      const updatedPositions = { ...current };
-      const updatedModePositions = [...currentPositions];
-      updatedModePositions[item.index] = {
-        ...target,
-        hidden: !target.hidden,
-      };
-      updatedPositions[selectedKeyType] = updatedModePositions;
-
-      useKnobItemStore.getState().setLocalUpdateInProgress(true);
-      useKnobItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.knobItems.updatePositions(updatedPositions);
-      } catch (error) {
-        if (useKnobItemStore.getState().positions === updatedPositions) {
-          useKnobItemStore.getState().setPositions(current);
-        }
-        console.error('Failed to toggle knob item visibility', error);
-      } finally {
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
+        console.error(`Failed to toggle ${item.type} visibility`, error);
       }
       return;
     }
 
     if (item.type === 'plugin') {
-      setPluginElementsHidden([{ fullId: item.id, hidden: !item.hidden }]);
+      const applied = await setPluginElementsHidden([
+        { fullId: item.id, hidden: !item.hidden },
+      ]);
+      if (!applied) reportElementOpSkipped('panel plugin visibility toggle');
     }
   };
 
@@ -235,141 +216,35 @@ export function useLayerActions({
 
     const allHidden = children.every((c) => c.hidden);
     const newHidden = !allHidden;
+    const nativeChildren = children.filter((child) => child.type !== 'plugin');
+    const pluginTargets = children
+      .filter((child) => child.type === 'plugin')
+      .map((child) => ({ fullId: child.id, hidden: newHidden }));
 
-    const changes: EditorPatchV1 = { schemaVersion: 1 };
-    const previousKeyPositions = useKeyStore.getState().canonicalPositions;
-    const previousStatPositions = useStatItemStore.getState().positions;
-    const previousGraphPositions = useGraphItemStore.getState().positions;
-    const previousKnobPositions = useKnobItemStore.getState().positions;
-
-    // 키 positions
-    const keyChildren = children.filter(
-      (c) => c.type === 'key' && c.index !== undefined,
-    );
-    if (keyChildren.length > 0) {
-      const pos = useKeyStore.getState().canonicalPositions;
-      const updatedPositions = { ...pos };
-      const modePositions = [...(pos[selectedKeyType] || [])];
-      keyChildren.forEach((c) => {
-        if (c.index !== undefined && modePositions[c.index]) {
-          modePositions[c.index] = {
-            ...modePositions[c.index],
-            hidden: newHidden,
-          };
+    try {
+      if (window.__dmn_window_type === 'panel') {
+        if (nativeChildren.length === 0) {
+          // plugin-only 그룹 - editor 변경이 없어 단일 plugin 커밋으로 충분
+          await setPluginElementsHidden(pluginTargets);
+          return;
         }
-      });
-      updatedPositions[selectedKeyType] = modePositions;
-      useKeyStore.getState().setPositions(updatedPositions);
-      changes.keyPositions = updatedPositions;
-    }
-
-    // 통계 positions
-    const statChildren = children.filter(
-      (c) => c.type === 'stat' && c.index !== undefined,
-    );
-    if (statChildren.length > 0) {
-      const current = useStatItemStore.getState().positions;
-      const modePositions = [...(current[selectedKeyType] || [])];
-      statChildren.forEach((c) => {
-        if (c.index !== undefined && modePositions[c.index]) {
-          modePositions[c.index] = {
-            ...modePositions[c.index],
-            hidden: newHidden,
-          };
-        }
-      });
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: modePositions,
-      };
-      useStatItemStore.getState().setPositions(updatedPositions);
-      changes.statPositions = updatedPositions;
-    }
-
-    // 그래프 positions
-    const graphChildren = children.filter(
-      (c) => c.type === 'graph' && c.index !== undefined,
-    );
-    if (graphChildren.length > 0) {
-      const current = useGraphItemStore.getState().positions;
-      const modePositions = [...(current[selectedKeyType] || [])];
-      graphChildren.forEach((c) => {
-        if (c.index !== undefined && modePositions[c.index]) {
-          modePositions[c.index] = {
-            ...modePositions[c.index],
-            hidden: newHidden,
-          };
-        }
-      });
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: modePositions,
-      };
-      useGraphItemStore.getState().setPositions(updatedPositions);
-      changes.graphPositions = updatedPositions;
-    }
-
-    // 노브 positions
-    const knobChildren = children.filter(
-      (c) => c.type === 'knob' && c.index !== undefined,
-    );
-    if (knobChildren.length > 0) {
-      const current = useKnobItemStore.getState().positions;
-      const modePositions = [...(current[selectedKeyType] || [])];
-      knobChildren.forEach((c) => {
-        if (c.index !== undefined && modePositions[c.index]) {
-          modePositions[c.index] = {
-            ...modePositions[c.index],
-            hidden: newHidden,
-          };
-        }
-      });
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: modePositions,
-      };
-      useKnobItemStore.getState().setPositions(updatedPositions);
-      changes.knobPositions = updatedPositions;
-    }
-
-    if (Object.keys(changes).length > 1) {
-      try {
-        await editorCoordinator.commitPatch(changes);
-      } catch (error) {
-        if (
-          changes.keyPositions &&
-          useKeyStore.getState().canonicalPositions === changes.keyPositions
-        ) {
-          useKeyStore.getState().setPositions(previousKeyPositions);
-        }
-        if (
-          changes.statPositions &&
-          useStatItemStore.getState().positions === changes.statPositions
-        ) {
-          useStatItemStore.getState().setPositions(previousStatPositions);
-        }
-        if (
-          changes.graphPositions &&
-          useGraphItemStore.getState().positions === changes.graphPositions
-        ) {
-          useGraphItemStore.getState().setPositions(previousGraphPositions);
-        }
-        if (
-          changes.knobPositions &&
-          useKnobItemStore.getState().positions === changes.knobPositions
-        ) {
-          useKnobItemStore.getState().setPositions(previousKnobPositions);
-        }
-        console.error('Failed to toggle group visibility', error);
+        // native+plugin은 main authority가 단일 게스처로 정산 - 별도
+        // plugin 커밋을 보내면 히스토리가 2엔트리로 갈라진다
+        await setLayerGroupVisibilityViaAuthority(
+          selectedKeyType,
+          groupId,
+          newHidden,
+        );
         return;
       }
+      if (nativeChildren.some((child) => !isNativeElementId(child.id))) {
+        return;
+      }
+      // 혼합·plugin-only 분기는 mixed 진입점이 판정 (native-only는 위임)
+      await setMixedLayerGroupHidden(selectedKeyType, groupId, newHidden);
+    } catch (error) {
+      console.error('Failed to toggle group visibility', error);
     }
-
-    // 플러그인
-    const pluginChildren = children.filter((c) => c.type === 'plugin');
-    setPluginElementsHidden(
-      pluginChildren.map((c) => ({ fullId: c.id, hidden: newHidden })),
-    );
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -379,113 +254,31 @@ export function useLayerActions({
   const handleLayerRenameCommit = async (item: LayerItem, value: string) => {
     setRenamingItemId(null);
     const trimmed = value.trim();
-    const newLayerName = trimmed === '' ? undefined : trimmed;
+    const newLayerName = trimmed === '' ? null : trimmed;
 
-    if (item.type === 'key' && item.index !== undefined) {
-      const { canonicalPositions: pos } = useKeyStore.getState();
-      const currentPositions = pos[selectedKeyType] || [];
-      const current = currentPositions[item.index];
-      if (!current) return;
-
-      const updatedPositions = { ...pos };
-      const updatedModePositions = [...currentPositions];
-      updatedModePositions[item.index] = {
-        ...current,
-        layerName: newLayerName,
-      };
-      updatedPositions[selectedKeyType] = updatedModePositions;
-
-      useKeyStore.getState().setLocalUpdateInProgress(true);
-      useKeyStore.getState().setPositions(updatedPositions);
+    if (item.type !== 'plugin' && isNativeElementId(item.id)) {
       try {
-        await window.api.keys.updatePositions(updatedPositions);
-      } catch (error) {
-        if (useKeyStore.getState().canonicalPositions === updatedPositions) {
-          useKeyStore.getState().setPositions(pos);
+        const target = {
+          elementType: item.type,
+          id: item.id,
+          patch: { property: 'layerName', value: newLayerName },
+        } as const;
+        if (window.__dmn_window_type === 'panel') {
+          await patchNativeLayerPropertyViaAuthority(target);
+        } else {
+          await patchElementLayerNameById(
+            target.elementType,
+            target.id,
+            target.patch.value,
+          );
         }
-        console.error('Failed to rename key layer', error);
-      } finally {
-        useKeyStore.getState().setLocalUpdateInProgress(false);
-      }
-    } else if (item.type === 'stat' && item.index !== undefined) {
-      const current = useStatItemStore.getState().positions;
-      const currentPositions = current[selectedKeyType] || [];
-      const target = currentPositions[item.index];
-      if (!target) return;
-
-      const updatedPositions = { ...current };
-      const updatedModePositions = [...currentPositions];
-      updatedModePositions[item.index] = {
-        ...target,
-        layerName: newLayerName,
-      };
-      updatedPositions[selectedKeyType] = updatedModePositions;
-
-      useStatItemStore.getState().setLocalUpdateInProgress(true);
-      useStatItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.statItems.updatePositions(updatedPositions);
       } catch (error) {
-        if (useStatItemStore.getState().positions === updatedPositions) {
-          useStatItemStore.getState().setPositions(current);
-        }
-        console.error('Failed to rename stat layer', error);
-      } finally {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
+        console.error(`Failed to rename ${item.type} layer`, error);
       }
-    } else if (item.type === 'graph' && item.index !== undefined) {
-      const current = useGraphItemStore.getState().positions;
-      const currentPositions = current[selectedKeyType] || [];
-      const target = currentPositions[item.index];
-      if (!target) return;
-
-      const updatedPositions = { ...current };
-      const updatedModePositions = [...currentPositions];
-      updatedModePositions[item.index] = {
-        ...target,
-        layerName: newLayerName,
-      };
-      updatedPositions[selectedKeyType] = updatedModePositions;
-
-      useGraphItemStore.getState().setLocalUpdateInProgress(true);
-      useGraphItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.graphItems.updatePositions(updatedPositions);
-      } catch (error) {
-        if (useGraphItemStore.getState().positions === updatedPositions) {
-          useGraphItemStore.getState().setPositions(current);
-        }
-        console.error('Failed to rename graph layer', error);
-      } finally {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      }
-    } else if (item.type === 'knob' && item.index !== undefined) {
-      const current = useKnobItemStore.getState().positions;
-      const currentPositions = current[selectedKeyType] || [];
-      const target = currentPositions[item.index];
-      if (!target) return;
-
-      const updatedPositions = { ...current };
-      const updatedModePositions = [...currentPositions];
-      updatedModePositions[item.index] = {
-        ...target,
-        layerName: newLayerName,
-      };
-      updatedPositions[selectedKeyType] = updatedModePositions;
-
-      useKnobItemStore.getState().setLocalUpdateInProgress(true);
-      useKnobItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.knobItems.updatePositions(updatedPositions);
-      } catch (error) {
-        if (useKnobItemStore.getState().positions === updatedPositions) {
-          useKnobItemStore.getState().setPositions(current);
-        }
-        console.error('Failed to rename knob layer', error);
-      } finally {
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      }
+      return;
     }
+
+    // canonical ID가 없는 native layer는 저장 경계에 진입시키지 않는다
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -504,20 +297,11 @@ export function useLayerActions({
     );
     if (!currentGroup || currentGroup.name === trimmed) return;
 
-    const updated: LayerGroups = {
-      ...currentGroups,
-      [selectedKeyType]: currentModeGroups.map((group) =>
-        group.id === groupId ? { ...group, name: trimmed } : group,
-      ),
-    };
-
-    useLayerGroupStore.getState().setLayerGroups(updated);
     try {
-      await window.api.layerGroups.update(updated);
+      await (window.__dmn_window_type === 'panel'
+        ? renameLayerGroupViaAuthority(selectedKeyType, groupId, trimmed)
+        : renameLayerGroupById(selectedKeyType, groupId, trimmed));
     } catch (error) {
-      if (useLayerGroupStore.getState().layerGroups === updated) {
-        useLayerGroupStore.getState().setLayerGroups(currentGroups);
-      }
       console.error('Failed to rename group', error);
     }
   };
@@ -538,95 +322,55 @@ export function useLayerActions({
       elementsOverride ?? useGridSelectionStore.getState().selectedElements;
     if (selectedForUpdate.length === 0) return false;
 
-    const { canonicalPositions: pos } = useKeyStore.getState();
-    const currentStatPositions = useStatItemStore.getState().positions;
-    const currentGraphPositions = useGraphItemStore.getState().positions;
-    const storeLayerGroups = useLayerGroupStore.getState().layerGroups;
-    const layerGroupsForNormalization =
-      options?.layerGroupsForNormalization ?? storeLayerGroups;
-
-    const currentKnobPositions = useKnobItemStore.getState().positions;
-    const grouped = applyGroupIdToSelectedElements({
-      mode: selectedKeyType,
-      selectedElements: selectedForUpdate,
-      keyPositions: pos,
-      statPositions: currentStatPositions,
-      graphPositions: currentGraphPositions,
-      knobPositions: currentKnobPositions,
-      targetGroupId,
-    });
-
-    const normalized = normalizeLayerGroupsForMode({
-      mode: selectedKeyType,
-      keyPositions: grouped.keyPositions,
-      statPositions: grouped.statPositions,
-      graphPositions: grouped.graphPositions,
-      knobPositions: grouped.knobPositions,
-      layerGroups: layerGroupsForNormalization,
-    });
-
-    const shouldPersistGroups =
-      normalized.groupsChanged ||
-      options?.layerGroupsForNormalization !== undefined;
-    const hasChange =
-      grouped.changed || normalized.positionsChanged || shouldPersistGroups;
-    if (!hasChange) return false;
-
-    useKeyStore.getState().setPositions(normalized.keyPositions);
-    useStatItemStore.getState().setPositions(normalized.statPositions);
-    useGraphItemStore.getState().setPositions(normalized.graphPositions);
-    useKnobItemStore.getState().setPositions(normalized.knobPositions);
-
-    if (shouldPersistGroups) {
-      useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-    }
-
-    const changes: EditorPatchV1 = { schemaVersion: 1 };
-    if (hasChanged(pos, normalized.keyPositions)) {
-      changes.keyPositions = normalized.keyPositions;
-    }
-    if (hasChanged(currentStatPositions, normalized.statPositions)) {
-      changes.statPositions = normalized.statPositions;
-    }
-    if (hasChanged(currentGraphPositions, normalized.graphPositions)) {
-      changes.graphPositions = normalized.graphPositions;
-    }
-    if (hasChanged(currentKnobPositions, normalized.knobPositions)) {
-      changes.knobPositions = normalized.knobPositions;
-    }
-    if (hasChanged(storeLayerGroups, normalized.layerGroups)) {
-      changes.layerGroups = normalized.layerGroups;
-    }
-
-    try {
-      await editorCoordinator.commitPatch(changes);
-    } catch (error) {
-      if (
-        useKeyStore.getState().canonicalPositions === normalized.keyPositions
-      ) {
-        useKeyStore.getState().setPositions(pos);
+    const nativeTargets = selectedForUpdate.flatMap(
+      (element): EditorElementGroupTargetV1[] =>
+        element.type === 'key' ||
+        element.type === 'stat' ||
+        element.type === 'graph' ||
+        element.type === 'knob'
+          ? [{ elementType: element.type, id: element.id }]
+          : [],
+    );
+    const pluginTargets = selectedForUpdate
+      .filter((element) => element.type === 'plugin')
+      .map((element) => element.id);
+    if (nativeTargets.length === 0 && pluginTargets.length === 0) return false;
+    const stableTargets =
+      nativeTargets.every(({ id }) => isNativeElementId(id)) &&
+      new Set(nativeTargets.map(({ id }) => id)).size ===
+        nativeTargets.length &&
+      new Set(pluginTargets).size === pluginTargets.length;
+    if (stableTargets) {
+      let targetGroup: EditorTargetLayerGroupV1 | null = null;
+      if (targetGroupId) {
+        const currentGroups = useLayerGroupStore.getState().layerGroups;
+        const currentModeGroups = currentGroups[selectedKeyType] ?? [];
+        const creatingGroup = options?.layerGroupsForNormalization?.[
+          selectedKeyType
+        ]?.find(
+          (group) =>
+            group.id === targetGroupId &&
+            !currentModeGroups.some((current) => current.id === group.id),
+        );
+        targetGroup = creatingGroup
+          ? { kind: 'create', id: creatingGroup.id, name: creatingGroup.name }
+          : { kind: 'existing', id: targetGroupId };
       }
-      if (useStatItemStore.getState().positions === normalized.statPositions) {
-        useStatItemStore.getState().setPositions(currentStatPositions);
-      }
-      if (
-        useGraphItemStore.getState().positions === normalized.graphPositions
-      ) {
-        useGraphItemStore.getState().setPositions(currentGraphPositions);
-      }
-      if (useKnobItemStore.getState().positions === normalized.knobPositions) {
-        useKnobItemStore.getState().setPositions(currentKnobPositions);
-      }
-      if (
-        shouldPersistGroups &&
-        useLayerGroupStore.getState().layerGroups === normalized.layerGroups
-      ) {
-        useLayerGroupStore.getState().setLayerGroups(storeLayerGroups);
-      }
-      throw error;
+      return window.__dmn_window_type === 'panel'
+        ? setElementGroupsViaAuthority(
+            selectedKeyType,
+            nativeTargets,
+            targetGroup,
+            pluginTargets,
+          )
+        : setMixedElementGroups(
+            selectedKeyType,
+            nativeTargets,
+            pluginTargets,
+            targetGroup,
+          );
     }
-
-    return true;
+    return false;
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -754,11 +498,15 @@ export function useLayerActions({
         const children = layerItems.filter(
           (item) => item.groupId === contextMenuGroupId,
         );
-        const elements: SelectedElement[] = children.map((child) => ({
-          type: child.type,
-          id: child.id,
-          index: child.index,
-        }));
+        const elements: SelectedElement[] = children.map((child) =>
+          child.type === 'plugin'
+            ? { type: 'plugin', id: child.id }
+            : {
+                type: child.type,
+                id: child.id,
+                ...(child.index === undefined ? {} : { index: child.index }),
+              },
+        );
         await setGroupIdOnSelected(undefined, elements);
 
         onSelectionFromPanel?.();
@@ -793,19 +541,12 @@ export function useLayerActions({
 
       const currentGroups = useLayerGroupStore.getState().layerGroups;
       const modeGroups = currentGroups[selectedKeyType] || [];
-      const keyPos = useKeyStore.getState().canonicalPositions;
-      const statPos = useStatItemStore.getState().positions;
-      const graphPos = useGraphItemStore.getState().positions;
-      const knobPos = useKnobItemStore.getState().positions;
-
-      const singleGroupId = resolveSingleGroupIdFromSelection(
+      const stableGroup = stableSelectionGroupId(
         selectedKeyType,
         selectedElements,
-        keyPos,
-        statPos,
-        graphPos,
-        knobPos,
       );
+      if (!stableGroup.stable) return;
+      const singleGroupId = stableGroup.groupId;
 
       if (singleGroupId) {
         await setGroupIdOnSelected(singleGroupId);
@@ -833,16 +574,23 @@ export function useLayerActions({
     // 그룹에서 제거
     if (itemId === 'removeFromGroup') {
       if (contextMenuItem) {
-        const elements: SelectedElement[] = [
-          {
-            type: contextMenuItem.type,
-            id: contextMenuItem.id,
-            index: contextMenuItem.index,
-          },
-        ];
-        await setGroupIdOnSelected(undefined, elements);
-        onSelectionFromPanel?.();
-        useGridSelectionStore.getState().clearSelection();
+        const elements: SelectedElement[] =
+          contextMenuItem.type === 'plugin'
+            ? [{ type: 'plugin', id: contextMenuItem.id }]
+            : isNativeElementId(contextMenuItem.id)
+            ? [
+                {
+                  type: contextMenuItem.type,
+                  id: contextMenuItem.id,
+                  index: contextMenuItem.index,
+                },
+              ]
+            : [];
+        if (elements.length > 0) {
+          await setGroupIdOnSelected(undefined, elements);
+          onSelectionFromPanel?.();
+          useGridSelectionStore.getState().clearSelection();
+        }
       }
       setContextMenuOpen(false);
       return;
@@ -852,152 +600,8 @@ export function useLayerActions({
       const selectedElements =
         useGridSelectionStore.getState().selectedElements;
       if (selectedElements.length === 0) return;
-
-      const keysToDelete = selectedElements
-        .filter((el) => el.type === 'key' && el.index !== undefined)
-        .map((el) => el.index as number);
-
-      const statsToDelete = selectedElements
-        .filter((el) => el.type === 'stat' && el.index !== undefined)
-        .map((el) => el.index as number);
-
-      const graphsToDelete = selectedElements
-        .filter((el) => el.type === 'graph' && el.index !== undefined)
-        .map((el) => el.index as number);
-
-      const knobsToDelete = selectedElements
-        .filter((el) => el.type === 'knob' && el.index !== undefined)
-        .map((el) => el.index as number);
-
-      const pluginsToDelete = selectedElements
-        .filter((el) => el.type === 'plugin')
-        .map((el) => el.id);
-
-      // 선택 해제
       onSelectionFromPanel?.();
-      useGridSelectionStore.getState().clearSelection();
-
-      const {
-        keyMappings: currentMappings,
-        canonicalPositions: currentKeyPositions,
-      } = useKeyStore.getState();
-      const currentStatPositions = useStatItemStore.getState().positions;
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      const currentKnobPositions = useKnobItemStore.getState().positions;
-      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-
-      const keyDeleteSet = new Set(keysToDelete);
-      const statDeleteSet = new Set(statsToDelete);
-      const graphDeleteSet = new Set(graphsToDelete);
-      const knobDeleteSet = new Set(knobsToDelete);
-
-      const nextMappings =
-        keysToDelete.length > 0
-          ? {
-              ...currentMappings,
-              [selectedKeyType]: (
-                currentMappings[selectedKeyType] || []
-              ).filter((_, index) => !keyDeleteSet.has(index)),
-            }
-          : currentMappings;
-      const nextKeyPositions =
-        keysToDelete.length > 0
-          ? {
-              ...currentKeyPositions,
-              [selectedKeyType]: (
-                currentKeyPositions[selectedKeyType] || []
-              ).filter((_, index) => !keyDeleteSet.has(index)),
-            }
-          : currentKeyPositions;
-      const nextStatPositions =
-        statsToDelete.length > 0
-          ? {
-              ...currentStatPositions,
-              [selectedKeyType]: (
-                currentStatPositions[selectedKeyType] || []
-              ).filter((_, index) => !statDeleteSet.has(index)),
-            }
-          : currentStatPositions;
-      const nextGraphPositions =
-        graphsToDelete.length > 0
-          ? {
-              ...currentGraphPositions,
-              [selectedKeyType]: (
-                currentGraphPositions[selectedKeyType] || []
-              ).filter((_, index) => !graphDeleteSet.has(index)),
-            }
-          : currentGraphPositions;
-      const nextKnobPositions =
-        knobsToDelete.length > 0
-          ? {
-              ...currentKnobPositions,
-              [selectedKeyType]: (
-                currentKnobPositions[selectedKeyType] || []
-              ).filter((_, index) => !knobDeleteSet.has(index)),
-            }
-          : currentKnobPositions;
-
-      // 플러그인 삭제 - 창 무관 진입점 (패널이면 main으로 RPC 위임)
-      if (pluginsToDelete.length > 0) {
-        deletePluginElements(pluginsToDelete);
-      }
-
-      const normalized = normalizeLayerGroupsForMode({
-        mode: selectedKeyType,
-        keyPositions: nextKeyPositions,
-        statPositions: nextStatPositions,
-        graphPositions: nextGraphPositions,
-        knobPositions: nextKnobPositions,
-        layerGroups: currentLayerGroups,
-      });
-
-      if (hasChanged(currentMappings, nextMappings)) {
-        useKeyStore
-          .getState()
-          .setKeyMappingsAndPositions(nextMappings, normalized.keyPositions);
-      } else if (hasChanged(currentKeyPositions, normalized.keyPositions)) {
-        useKeyStore.getState().setPositions(normalized.keyPositions);
-      }
-      if (hasChanged(currentStatPositions, normalized.statPositions)) {
-        useStatItemStore.getState().setPositions(normalized.statPositions);
-      }
-      if (hasChanged(currentGraphPositions, normalized.graphPositions)) {
-        useGraphItemStore.getState().setPositions(normalized.graphPositions);
-      }
-      if (hasChanged(currentKnobPositions, normalized.knobPositions)) {
-        useKnobItemStore.getState().setPositions(normalized.knobPositions);
-      }
-      if (hasChanged(currentLayerGroups, normalized.layerGroups)) {
-        useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-      }
-
-      const changes: EditorPatchV1 = { schemaVersion: 1 };
-      if (hasChanged(currentMappings, nextMappings)) {
-        changes.keys = nextMappings;
-        changes.keyPositions = normalized.keyPositions;
-      } else if (hasChanged(currentKeyPositions, normalized.keyPositions)) {
-        changes.keyPositions = normalized.keyPositions;
-      }
-      if (hasChanged(currentStatPositions, normalized.statPositions)) {
-        changes.statPositions = normalized.statPositions;
-      }
-      if (hasChanged(currentGraphPositions, normalized.graphPositions)) {
-        changes.graphPositions = normalized.graphPositions;
-      }
-      if (hasChanged(currentKnobPositions, normalized.knobPositions)) {
-        changes.knobPositions = normalized.knobPositions;
-      }
-      if (hasChanged(currentLayerGroups, normalized.layerGroups)) {
-        changes.layerGroups = normalized.layerGroups;
-      }
-
-      if (Object.keys(changes).length > 1) {
-        try {
-          await editorCoordinator.commitPatch(changes);
-        } catch (error) {
-          console.error('Failed to delete layers', error);
-        }
-      }
+      await deleteFrozenSelection(selectedElements);
     }
 
     setContextMenuOpen(false);

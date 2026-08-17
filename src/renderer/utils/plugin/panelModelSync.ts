@@ -81,6 +81,7 @@ export const toPluginPanelElementView = (
   width: element.width,
   height: element.height,
   tabId: element.tabId,
+  groupId: element.groupId,
 });
 
 /** visible 함수를 주어진 values로 평가한 boolean 스키마로 치환 (창 경계 직렬화용) */

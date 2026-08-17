@@ -9,7 +9,7 @@ import type {
   JsRemoveResult,
   JsPluginUpdateResult,
 } from '@src/types/plugin/api';
-import type { CustomJs } from '@src/types/plugin/js';
+import type { CustomJs, JsStatePayload } from '@src/types/plugin/js';
 
 export const jsApi = {
   get: () => invoke<CustomJs>('js_get'),
@@ -26,6 +26,6 @@ export const jsApi = {
   reset: () => invoke<void>('js_reset'),
   onUse: (listener: (payload: JsTogglePayload) => void) =>
     subscribe<JsTogglePayload>('js:use', listener),
-  onState: (listener: (payload: CustomJs) => void) =>
-    subscribe<CustomJs>('js:content', listener),
+  onState: (listener: (payload: JsStatePayload) => void) =>
+    subscribe<JsStatePayload>('js:content', listener),
 };

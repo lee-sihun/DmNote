@@ -22,9 +22,19 @@ const SPEC: GradientSpec = {
     { color: '#0000ff', pos: 1 },
   ],
 };
+const ELEMENT_A_ID = '11111111-1111-4111-8111-111111111111';
+const ELEMENT_B_ID = '22222222-2222-4222-8222-222222222222';
 
 const positions = {
-  '4key': [{ dx: 100, dy: 100, width: 200, height: 100 }],
+  '4key': [
+    {
+      id: ELEMENT_A_ID,
+      dx: 100,
+      dy: 100,
+      width: 200,
+      height: 100,
+    },
+  ],
 } as never;
 
 // jsdom에는 PointerEvent가 없어 MouseEvent 기반으로 합성
@@ -66,7 +76,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     selectStop = vi.fn<(index: number) => void>();
     act(() => {
       useGradientEditStore.getState().setSession({
-        anchor: { kind: 'key', index: 0 },
+        anchor: { kind: 'key', id: ELEMENT_A_ID },
         sessionKey: 'key:4key:0:backgroundColor:idle',
         surface: 'background',
         stateMode: 'idle',
@@ -113,6 +123,91 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     expect(axisAnchor('end')).toBeTruthy();
     expect(stopDot(1)).toBeTruthy();
     expect(stopDot(2)).toBeTruthy();
+  });
+
+  it('같은 모드 재정렬 뒤에도 축과 커밋은 원래 ID의 요소를 가리킨다', () => {
+    act(() => {
+      root.render(
+        <GradientAxisOverlay
+          positions={
+            {
+              '4key': [
+                {
+                  id: ELEMENT_B_ID,
+                  dx: 500,
+                  dy: 400,
+                  width: 60,
+                  height: 60,
+                },
+                {
+                  id: ELEMENT_A_ID,
+                  dx: 100,
+                  dy: 100,
+                  width: 200,
+                  height: 100,
+                },
+              ],
+            } as never
+          }
+          statPositions={{} as never}
+          graphPositions={{} as never}
+          knobPositions={{} as never}
+          selectedElements={[]}
+          selectedKeyType="4key"
+          zoom={1}
+          panX={0}
+          panY={0}
+          continuousInputStrategy="legacy"
+        />,
+      );
+    });
+
+    expect(strip().style.left).toBe('200px');
+    expect(strip().style.top).toBe('150px');
+
+    act(() => {
+      strip().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+      );
+    });
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({ angle: 91 }),
+      true,
+    );
+  });
+
+  it('세션 대상 ID가 사라지면 축 세션을 취소한다', () => {
+    act(() => {
+      root.render(
+        <GradientAxisOverlay
+          positions={
+            {
+              '4key': [
+                {
+                  id: ELEMENT_B_ID,
+                  dx: 500,
+                  dy: 400,
+                  width: 60,
+                  height: 60,
+                },
+              ],
+            } as never
+          }
+          statPositions={{} as never}
+          graphPositions={{} as never}
+          knobPositions={{} as never}
+          selectedElements={[]}
+          selectedKeyType="4key"
+          zoom={1}
+          panX={0}
+          panY={0}
+          continuousInputStrategy="legacy"
+        />,
+      );
+    });
+
+    expect(useGradientEditStore.getState().session).toBeNull();
+    expect(host.querySelector('[data-dmn-gradient-overlay="true"]')).toBeNull();
   });
 
   it('축을 잡고 window에서 움직이면 각도 프리뷰·커밋이 적용된다', () => {
@@ -441,7 +536,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     const activeApply = vi.fn<(spec: GradientSpec, commit: boolean) => void>();
     act(() => {
       useGradientEditStore.getState().setSession({
-        anchor: { kind: 'key', index: 0 },
+        anchor: { kind: 'key', id: ELEMENT_A_ID },
         sessionKey: 'key:4key:0:backgroundColor:active',
         surface: 'background',
         stateMode: 'active',
@@ -483,7 +578,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     const newIdleApply = vi.fn<(spec: GradientSpec, commit: boolean) => void>();
     act(() => {
       useGradientEditStore.getState().setSession({
-        anchor: { kind: 'key', index: 0 },
+        anchor: { kind: 'key', id: ELEMENT_A_ID },
         sessionKey: 'key:4key:0:backgroundColor:active',
         surface: 'background',
         stateMode: 'active',
@@ -493,7 +588,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         apply: vi.fn(),
       });
       useGradientEditStore.getState().setSession({
-        anchor: { kind: 'key', index: 0 },
+        anchor: { kind: 'key', id: ELEMENT_A_ID },
         sessionKey: 'key:4key:0:backgroundColor:idle',
         surface: 'background',
         stateMode: 'idle',
@@ -536,7 +631,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     act(() => {
       useGradientEditStore.getState().setSession(null);
       useGradientEditStore.getState().setSession({
-        anchor: { kind: 'key', index: 0 },
+        anchor: { kind: 'key', id: ELEMENT_A_ID },
         sessionKey: 'key:4key:0:backgroundColor:idle',
         surface: 'background',
         stateMode: 'idle',
@@ -580,14 +675,28 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         <GradientAxisOverlay
           positions={positions}
           statPositions={
-            { '4key': [{ dx: 400, dy: 400, width: 60, height: 60 }] } as never
+            {
+              '4key': [
+                {
+                  id: '33333333-3333-4333-8333-333333333333',
+                  dx: 400,
+                  dy: 400,
+                  width: 60,
+                  height: 60,
+                },
+              ],
+            } as never
           }
           graphPositions={{} as never}
           knobPositions={{} as never}
           selectedElements={
             [
-              { type: 'key', id: 'key-0', index: 0 },
-              { type: 'stat', id: 'stat-0', index: 0 },
+              { type: 'key', id: ELEMENT_A_ID, index: 0 },
+              {
+                type: 'stat',
+                id: '33333333-3333-4333-8333-333333333333',
+                index: 0,
+              },
             ] as never
           }
           selectedKeyType="4key"
@@ -620,14 +729,28 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         <GradientAxisOverlay
           positions={positions}
           statPositions={
-            { '4key': [{ dx: 400, dy: 400, width: 60, height: 60 }] } as never
+            {
+              '4key': [
+                {
+                  id: '33333333-3333-4333-8333-333333333333',
+                  dx: 400,
+                  dy: 400,
+                  width: 60,
+                  height: 60,
+                },
+              ],
+            } as never
           }
           graphPositions={{} as never}
           knobPositions={{} as never}
           selectedElements={
             [
-              { type: 'key', id: 'key-0', index: 0 },
-              { type: 'stat', id: 'stat-0', index: 0 },
+              { type: 'key', id: ELEMENT_A_ID, index: 0 },
+              {
+                type: 'stat',
+                id: '33333333-3333-4333-8333-333333333333',
+                index: 0,
+              },
             ] as never
           }
           selectedKeyType="4key"
@@ -657,7 +780,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     const newIdleApply = vi.fn<(spec: GradientSpec, commit: boolean) => void>();
     act(() => {
       useGradientEditStore.getState().setSession({
-        anchor: { kind: 'key', index: 0 },
+        anchor: { kind: 'key', id: ELEMENT_A_ID },
         sessionKey: 'key:4key:0:backgroundColor:active',
         surface: 'background',
         stateMode: 'active',
@@ -667,7 +790,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         apply: vi.fn(),
       });
       useGradientEditStore.getState().setSession({
-        anchor: { kind: 'key', index: 0 },
+        anchor: { kind: 'key', id: ELEMENT_A_ID },
         sessionKey: 'key:4key:0:backgroundColor:idle',
         surface: 'background',
         stateMode: 'idle',

@@ -54,3 +54,23 @@ export const useEditSessionModeGuard = (): (() => boolean) => {
     [scoped],
   );
 };
+
+// 비동기 완료 콜백의 대상 결합 방식.
+//
+// session-mode: 위 mode guard 그대로 - 완료 writer가 실행 시점 모드를 다시
+// 읽는 레거시 index 경로용 기본값.
+// element-id: 가드를 통과시킨다 - 완료 콜백이 안정 ID applier로 라우팅되어
+// 유효성 판정(현재 mode·index 재결정, 삭제 시 중단)을 resolver가 전담한다.
+// 호출부는 대상 요소에 id가 있을 때만 element-id를 선언해야 한다
+export type CompletionBinding = 'session-mode' | 'element-id';
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const useEditSessionCompletionGuard = (
+  binding: CompletionBinding = 'session-mode',
+): (() => boolean) => {
+  const isSameMode = useEditSessionModeGuard();
+  return useCallback(
+    () => binding === 'element-id' || isSameMode(),
+    [binding, isSameMode],
+  );
+};

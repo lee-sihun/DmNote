@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
 import type { NoteTabContentProps } from '../types';
-import type { NoteColor, KeyPosition } from '@src/types/key/keys';
+import type { NoteColor } from '@src/types/key/keys';
 import {
   PropertyRow,
   PropertySection,
@@ -23,6 +23,7 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
 
@@ -42,10 +43,12 @@ const toGradient = (top: string, bottom: string) => ({
 });
 
 const NoteTabContent: React.FC<NoteTabContentProps> = ({
-  keyIndex,
   keyPosition,
-  onKeyUpdate,
-  onKeyPreview,
+  onElementPropertyCommit,
+  onStylePropertyPreview,
+  onStylePropertyCommit,
+  onNotePaintPreview,
+  onNotePaintCommit,
   panelElement,
   t,
 }) => {
@@ -346,8 +349,12 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         setNoteGradientBottom(solidColor);
         colorValue = newColor;
       }
-      onKeyPreview?.(keyIndex, { noteColor: colorValue });
-      onKeyUpdate({ index: keyIndex, noteColor: colorValue });
+      const patch = {
+        property: 'notePaint',
+        value: { color: colorValue },
+      } as const;
+      onNotePaintPreview?.(patch);
+      onNotePaintCommit?.(patch);
     } else {
       if (
         newColor &&
@@ -369,8 +376,12 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         setGlowGradientBottom(solidColor);
         colorValue = newColor;
       }
-      onKeyPreview?.(keyIndex, { noteGlowColor: colorValue });
-      onKeyUpdate({ index: keyIndex, noteGlowColor: colorValue });
+      const patch = {
+        property: 'noteGlowPaint',
+        value: { color: colorValue },
+      } as const;
+      onNotePaintPreview?.(patch);
+      onNotePaintCommit?.(patch);
     }
   };
 
@@ -395,20 +406,17 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   };
 
   // 스타일 변경 완료 핸들러
-  const handleStyleChangeComplete = (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => {
-    onKeyUpdate({ index: keyIndex, [property]: value });
+  const handleStyleChangeComplete = (property: string, value: unknown) => {
+    onElementPropertyCommit?.({ [property]: value } as never);
   };
-
-  // 타이핑 중 스타일 프리뷰
-  const handleStylePreview = (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => {
-    onKeyPreview?.(keyIndex, { [property]: value });
-  };
+  const noteLiteralHandlers = createNoteLiteralHandlers(
+    {
+      noteEffectEnabled: keyPosition.noteEffectEnabled ?? true,
+      noteAutoYCorrection: keyPosition.noteAutoYCorrection ?? true,
+      noteGlowEnabled: keyPosition.noteGlowEnabled ?? false,
+    },
+    handleStyleChangeComplete,
+  );
 
   return (
     <>
@@ -421,12 +429,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={keyPosition.noteEffectEnabled ?? true}
-            onChange={() =>
-              handleStyleChangeComplete(
-                'noteEffectEnabled',
-                !(keyPosition.noteEffectEnabled ?? true),
-              )
-            }
+            onChange={noteLiteralHandlers.toggleEffect}
           />
         </div>
 
@@ -438,12 +441,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={keyPosition.noteAutoYCorrection ?? true}
-            onChange={() =>
-              handleStyleChangeComplete(
-                'noteAutoYCorrection',
-                !(keyPosition.noteAutoYCorrection ?? true),
-              )
-            }
+            onChange={noteLiteralHandlers.toggleAutoYCorrection}
           />
         </div>
       </PropertySection>
@@ -453,10 +451,18 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         <PropertyRow label={t('keySetting.noteOffset') || '오프셋'}>
           <OptionalNumberInput
             value={keyPosition.noteOffsetX || undefined}
-            onChange={(value) =>
-              handleStyleChangeComplete('noteOffsetX', value)
-            }
-            onPreview={(value) => handleStylePreview('noteOffsetX', value)}
+            onChange={(value) => {
+              onStylePropertyCommit?.({
+                property: 'noteOffsetX',
+                value: value ?? null,
+              });
+            }}
+            onPreview={(value) => {
+              onStylePropertyPreview?.({
+                property: 'noteOffsetX',
+                value: value ?? null,
+              });
+            }}
             onCancel={() => editGestureController.cancel()}
             prefix="X"
             width={AXIS_FIELD_WIDTH}
@@ -469,10 +475,18 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           />
           <OptionalNumberInput
             value={keyPosition.noteOffsetY || undefined}
-            onChange={(value) =>
-              handleStyleChangeComplete('noteOffsetY', value)
-            }
-            onPreview={(value) => handleStylePreview('noteOffsetY', value)}
+            onChange={(value) => {
+              onStylePropertyCommit?.({
+                property: 'noteOffsetY',
+                value: value ?? null,
+              });
+            }}
+            onPreview={(value) => {
+              onStylePropertyPreview?.({
+                property: 'noteOffsetY',
+                value: value ?? null,
+              });
+            }}
             onCancel={() => editGestureController.cancel()}
             prefix="Y"
             width={AXIS_FIELD_WIDTH}
@@ -489,8 +503,18 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         <PropertyRow label={t('keySetting.noteWidth') || '노트 넓이'}>
           <OptionalNumberInput
             value={keyPosition.noteWidth}
-            onChange={(value) => handleStyleChangeComplete('noteWidth', value)}
-            onPreview={(value) => handleStylePreview('noteWidth', value)}
+            onChange={(value) => {
+              onStylePropertyCommit?.({
+                property: 'noteWidth',
+                value: value ?? null,
+              });
+            }}
+            onPreview={(value) => {
+              onStylePropertyPreview?.({
+                property: 'noteWidth',
+                value: value ?? null,
+              });
+            }}
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={1}
@@ -520,8 +544,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             ]}
             value={keyPosition.noteAlignment ?? 'center'}
             onChange={(value) =>
-              handleStyleChangeComplete(
-                'noteAlignment',
+              noteLiteralHandlers.setAlignment(
                 value as 'left' | 'center' | 'right',
               )
             }
@@ -649,8 +672,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               ]}
               value={keyPosition.noteBorderSide ?? 'all'}
               onChange={(value) =>
-                handleStyleChangeComplete(
-                  'noteBorderSide',
+                noteLiteralHandlers.setBorderSide(
                   value as 'all' | 'vertical' | 'horizontal',
                 )
               }
@@ -666,9 +688,17 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.default
             }
             onChange={(value) =>
-              handleStyleChangeComplete('noteBorderWidth', value)
+              onStylePropertyCommit?.({
+                property: 'noteBorderWidth',
+                value: value,
+              })
             }
-            onPreview={(value) => handleStylePreview('noteBorderWidth', value)}
+            onPreview={(value) =>
+              onStylePropertyPreview?.({
+                property: 'noteBorderWidth',
+                value: value,
+              })
+            }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
@@ -686,9 +716,17 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               NOTE_SETTINGS_CONSTRAINTS.borderRadius.default
             }
             onChange={(value) =>
-              handleStyleChangeComplete('noteBorderRadius', value)
+              onStylePropertyCommit?.({
+                property: 'noteBorderRadius',
+                value: value,
+              })
             }
-            onPreview={(value) => handleStylePreview('noteBorderRadius', value)}
+            onPreview={(value) =>
+              onStylePropertyPreview?.({
+                property: 'noteBorderRadius',
+                value: value,
+              })
+            }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
@@ -708,12 +746,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={keyPosition.noteGlowEnabled ?? false}
-            onChange={() =>
-              handleStyleChangeComplete(
-                'noteGlowEnabled',
-                !(keyPosition.noteGlowEnabled ?? false),
-              )
-            }
+            onChange={noteLiteralHandlers.toggleGlow}
           />
         </div>
 
@@ -748,10 +781,18 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         <PropertyRow label={t('keySetting.noteGlowSize') || '글로우 크기'}>
           <NumberInput
             value={keyPosition.noteGlowSize ?? 20}
-            onChange={(value) =>
-              handleStyleChangeComplete('noteGlowSize', value)
-            }
-            onPreview={(value) => handleStylePreview('noteGlowSize', value)}
+            onChange={(value) => {
+              onStylePropertyCommit?.({
+                property: 'noteGlowSize',
+                value: value,
+              });
+            }}
+            onPreview={(value) => {
+              onStylePropertyPreview?.({
+                property: 'noteGlowSize',
+                value: value,
+              });
+            }}
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
@@ -800,15 +841,12 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                 const opacity = parseAlphaPercent(raw, localBorderOpacity);
                 setBorderColor(hex);
                 setLocalBorderOpacity(opacity);
-                onKeyPreview?.(keyIndex, {
-                  noteBorderColor: hex,
-                  noteBorderOpacity: opacity,
-                });
-                onKeyUpdate({
-                  index: keyIndex,
-                  noteBorderColor: hex,
-                  noteBorderOpacity: opacity,
-                });
+                const patch = {
+                  property: 'noteBorderPaint',
+                  value: { color: hex, opacity },
+                } as const;
+                onNotePaintPreview?.(patch);
+                onNotePaintCommit?.(patch);
                 return;
               }
               handleColorChangeComplete(pickerFor, c);
@@ -880,13 +918,16 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                     setLocalNoteOpacity(value);
                     setLocalNoteOpacityTop(value);
                     setLocalNoteOpacityBottom(value);
-                    const payload = {
-                      noteOpacity: value,
-                      noteOpacityTop: value,
-                      noteOpacityBottom: value,
-                    };
-                    onKeyPreview?.(keyIndex, payload);
-                    onKeyUpdate({ index: keyIndex, ...payload });
+                    const patch = {
+                      property: 'notePaint',
+                      value: {
+                        opacity: value,
+                        opacityTop: value,
+                        opacityBottom: value,
+                      },
+                    } as const;
+                    onNotePaintPreview?.(patch);
+                    onNotePaintCommit?.(patch);
                     return;
                   }
 
@@ -899,13 +940,16 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                   if (target === 'top') setLocalNoteOpacityTop(value);
                   else setLocalNoteOpacityBottom(value);
 
-                  const payload = {
-                    noteOpacity: nextBase,
-                    noteOpacityTop: nextTop,
-                    noteOpacityBottom: nextBottom,
-                  };
-                  onKeyPreview?.(keyIndex, payload);
-                  onKeyUpdate({ index: keyIndex, ...payload });
+                  const patch = {
+                    property: 'notePaint',
+                    value: {
+                      opacity: nextBase,
+                      opacityTop: nextTop,
+                      opacityBottom: nextBottom,
+                    },
+                  } as const;
+                  onNotePaintPreview?.(patch);
+                  onNotePaintCommit?.(patch);
                   return;
                 }
 
@@ -913,13 +957,16 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                   setLocalGlowOpacity(value);
                   setLocalGlowOpacityTop(value);
                   setLocalGlowOpacityBottom(value);
-                  const payload = {
-                    noteGlowOpacity: value,
-                    noteGlowOpacityTop: value,
-                    noteGlowOpacityBottom: value,
-                  };
-                  onKeyPreview?.(keyIndex, payload);
-                  onKeyUpdate({ index: keyIndex, ...payload });
+                  const patch = {
+                    property: 'noteGlowPaint',
+                    value: {
+                      opacity: value,
+                      opacityTop: value,
+                      opacityBottom: value,
+                    },
+                  } as const;
+                  onNotePaintPreview?.(patch);
+                  onNotePaintCommit?.(patch);
                   return;
                 }
 
@@ -931,13 +978,16 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                 if (target === 'top') setLocalGlowOpacityTop(value);
                 else setLocalGlowOpacityBottom(value);
 
-                const payload = {
-                  noteGlowOpacity: nextBase,
-                  noteGlowOpacityTop: nextTop,
-                  noteGlowOpacityBottom: nextBottom,
-                };
-                onKeyPreview?.(keyIndex, payload);
-                onKeyUpdate({ index: keyIndex, ...payload });
+                const patch = {
+                  property: 'noteGlowPaint',
+                  value: {
+                    opacity: nextBase,
+                    opacityTop: nextTop,
+                    opacityBottom: nextBottom,
+                  },
+                } as const;
+                onNotePaintPreview?.(patch);
+                onNotePaintCommit?.(patch);
               },
               opacityPercentLabel:
                 pickerFor === 'note'

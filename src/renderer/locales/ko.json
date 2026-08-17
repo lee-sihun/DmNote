@@ -127,14 +127,12 @@
   },
   "keySetting": {
     "title": "키 설정",
-    "tabKey": "키",
     "tabNote": "노트",
     "tabCounter": "카운터",
     "keyMapping": "키 매핑",
     "key": "키",
     "pressAnyKey": "Press any key",
     "clickToSet": "Click to set key",
-    "keySize": "키 사이즈",
     "size": "크기",
     "noteColor": "노트 색상",
     "noteWidth": "노트 넓이",
@@ -143,7 +141,6 @@
     "noteGlowSize": "글로우 범위",
     "noteGlowOpacity": "글로우 투명도",
     "inactiveState": "대기 상태",
-    "activeState": "입력 상태",
     "customImage": "커스텀 이미지",
     "configure": "설정하기",
     "className": "클래스 이름",
@@ -205,7 +202,8 @@
     "acceptExternal": "외부 변경 수용"
   },
   "editorSave": {
-    "permanentFailure": "저장할 수 없는 편집 내용이라 마지막으로 저장된 상태로 되돌렸습니다. 방금 변경한 값을 확인해 주세요."
+    "permanentFailure": "저장하지 못해 변경 내용을 되돌렸습니다.\n방금 바꾼 값을 확인해 주세요.",
+    "capacityFailure": "저장 한도를 넘어 변경을 되돌렸습니다.\n일부 요소를 줄이고 다시 시도해 주세요."
   },
   "common": {
     "confirm": "확인",
@@ -278,12 +276,7 @@
     "resetCurrentTab": "현재 탭의 설정을 초기화하시겠습니까?",
     "resetCountersCurrentTab": "현재 탭의 카운터를 초기화하시겠습니까?",
     "resetKeyCounter": "[{{name}}] 키의 카운터를 초기화하시겠습니까?",
-    "reset": "초기화",
-    "removeKey": "[{{name}}] 키를 제거하시겠습니까?",
-    "removeStat": "[{{name}}] 통계 항목을 제거하시겠습니까?",
-    "removeGraph": "[{{name}}] 그래프를 제거하시겠습니까?",
-    "removeKnob": "[{{name}}] 노브를 제거하시겠습니까?",
-    "remove": "제거하기"
+    "reset": "초기화"
   },
   "tabs": {
     "title": "커스텀 탭",
@@ -367,10 +360,8 @@
     "color": "색상",
     "solid": "단색",
     "gradient": "그라디언트",
-    "gradientBottom": "그라디언트 하단 색상",
     "opacity": "불투명도",
     "glow": "글로우 효과",
-    "glowSize": "크기",
     "glowOpacity": "불투명도",
     "glowColor": "색상"
   },
@@ -450,7 +441,6 @@
     "loadFailed": "CSS 파일 로드 실패"
   },
   "unifiedSetting": {
-    "tabKey": "키",
     "tabNote": "노트",
     "tabCounter": "카운터"
   },

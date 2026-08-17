@@ -17,6 +17,9 @@ import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
 import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransition';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { obsApi } from '@api/modules/obsApi';
+import { overlayApi } from '@api/modules/overlayApi';
+import { settingsApi } from '@api/modules/settingsApi';
+import { appApi, windowApi } from '@api/modules/appApi';
 import { useBuiltinStatsSubscription } from '@hooks/overlay/useBuiltinStatsSubscription';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -202,7 +205,7 @@ export default function App() {
 
   const closeOverlayWindow = async () => {
     try {
-      await window.api.overlay.setVisible(false);
+      await overlayApi.setVisible(false);
     } catch (error) {
       console.error('Failed to close overlay window', error);
     }
@@ -212,7 +215,7 @@ export default function App() {
     const next = !alwaysOnTop;
     setAlwaysOnTop(next);
     try {
-      await window.api.settings.update({ alwaysOnTop: next });
+      await settingsApi.update({ alwaysOnTop: next });
     } catch (error) {
       console.error('Failed to toggle always-on-top', error);
       setAlwaysOnTop(!next);
@@ -221,7 +224,7 @@ export default function App() {
 
   const openSettingsWindow = async () => {
     try {
-      await window.api.window.showMain();
+      await windowApi.showMain();
     } catch (error) {
       console.error('Failed to open settings window', error);
     }
@@ -229,7 +232,7 @@ export default function App() {
 
   const quitApplication = async () => {
     try {
-      await window.api.app.quit();
+      await appApi.quit();
     } catch (error) {
       console.error('Failed to quit application', error);
     }
@@ -882,7 +885,7 @@ export default function App() {
       minY: currentMinY,
     };
 
-    window.api.overlay
+    overlayApi
       .resize({
         width: totalWidth,
         height: totalHeight,

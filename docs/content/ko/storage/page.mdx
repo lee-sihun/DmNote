@@ -66,6 +66,11 @@ await dmn.plugin.storage.remove("settings");
 await dmn.plugin.storage.clear();
 ```
 
+<Callout type="info">
+  OBS 브라우저 소스 런타임에서는 동작하지 않습니다. 파괴적 bulk 삭제는
+  원격에서 차단됩니다.
+</Callout>
+
 ### keys()
 
 이 플러그인이 저장한 모든 키의 목록을 조회합니다.
@@ -92,6 +97,11 @@ console.log("설정 데이터 존재:", hasSettings); // true 또는 false
 const deletedCount = await dmn.plugin.storage.clearByPrefix("cache-");
 console.log("삭제된 항목 수:", deletedCount);
 ```
+
+<Callout type="info">
+  OBS 브라우저 소스 런타임에서는 동작하지 않습니다. 파괴적 bulk 삭제는
+  원격에서 차단됩니다.
+</Callout>
 
 ## 사용 패턴
 

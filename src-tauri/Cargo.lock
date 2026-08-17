@@ -1211,6 +1211,7 @@ dependencies = [
  "notify-debouncer-mini",
  "objc",
  "objc-foundation",
+ "objc2",
  "once_cell",
  "open",
  "parking_lot",

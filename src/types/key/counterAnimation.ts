@@ -2,6 +2,7 @@ import type {
   CounterAnimationBezier,
   KeyCounterAnimationSettings,
 } from '@src/types/key/keys';
+import type { EditorCounterAnimationPresetIntentV1 } from '@src/types/editor';
 
 export type CounterAnimationSource = 'builtin' | 'user';
 
@@ -166,4 +167,26 @@ export function applyPresetToAnimation(
     scale: preset.scale,
     durationMs: preset.durationMs,
   };
+}
+
+export function createCounterAnimationPresetIntent(
+  start: KeyCounterAnimationSettings,
+  next: KeyCounterAnimationSettings,
+  kind: 'single' | 'batch',
+): EditorCounterAnimationPresetIntentV1 {
+  const intent: EditorCounterAnimationPresetIntentV1 = {
+    presetId: next.presetId ?? '',
+  };
+  if (kind === 'batch' || next.presetId !== start.presetId) {
+    intent.applyPresetId = true;
+  }
+  const bezierChanged = next.bezier.some(
+    (value, index) => value !== start.bezier[index as 0 | 1 | 2 | 3],
+  );
+  if (kind === 'batch' || bezierChanged) intent.bezier = [...next.bezier];
+  if (kind === 'batch' || next.scale !== start.scale) intent.scale = next.scale;
+  if (kind === 'batch' || next.durationMs !== start.durationMs) {
+    intent.durationMs = next.durationMs;
+  }
+  return intent;
 }

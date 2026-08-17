@@ -85,11 +85,11 @@ const SHUTDOWN_WATCHDOG_EXIT_CODE: i32 = 1;
 const MAX_INPUT_EVENT_AGE_MS: f64 = 10_000.0;
 const KEYBOARD_DAEMON_STABLE_RUNTIME: Duration = Duration::from_secs(30);
 const KEYBOARD_RECOVERY_DELAYS_MS: [u64; 5] = [250, 500, 1_000, 2_000, 4_000];
-const HISTORY_FRONTEND_FLUSH_BUSY: &str = "HISTORY_FRONTEND_FLUSH_BUSY";
-const HISTORY_FRONTEND_FLUSH_CANCELED: &str = "HISTORY_FRONTEND_FLUSH_CANCELED";
-const HISTORY_FRONTEND_FLUSH_EMIT_FAILED: &str = "HISTORY_FRONTEND_FLUSH_EMIT_FAILED";
-const HISTORY_FRONTEND_FLUSH_INTERRUPTED: &str = "HISTORY_FRONTEND_FLUSH_INTERRUPTED";
-const HISTORY_FRONTEND_FLUSH_TIMEOUT: &str = "HISTORY_FRONTEND_FLUSH_TIMEOUT";
+pub(crate) const HISTORY_FRONTEND_FLUSH_BUSY: &str = "HISTORY_FRONTEND_FLUSH_BUSY";
+pub(crate) const HISTORY_FRONTEND_FLUSH_CANCELED: &str = "HISTORY_FRONTEND_FLUSH_CANCELED";
+pub(crate) const HISTORY_FRONTEND_FLUSH_EMIT_FAILED: &str = "HISTORY_FRONTEND_FLUSH_EMIT_FAILED";
+pub(crate) const HISTORY_FRONTEND_FLUSH_INTERRUPTED: &str = "HISTORY_FRONTEND_FLUSH_INTERRUPTED";
+pub(crate) const HISTORY_FRONTEND_FLUSH_TIMEOUT: &str = "HISTORY_FRONTEND_FLUSH_TIMEOUT";
 
 struct ShutdownWatchdogState {
     armed: bool,
@@ -419,10 +419,7 @@ fn frontend_lifecycle_restore_labels(target_windows: &HashSet<String>) -> Vec<&'
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelectionSessionElement {
     pub element_type: String,
-    #[serde(default)]
-    pub index: Option<u32>,
-    #[serde(default)]
-    pub full_id: Option<String>,
+    pub full_id: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -652,6 +649,16 @@ fn should_create_overlay_on_startup(obs_mode_enabled: bool, overlay_visible: boo
     !obs_mode_enabled && overlay_visible
 }
 
+// 트레이 시작(main_window_hidden)에서는 복원 보류 - 숨은 메인 창 의존 방지(background throttling)
+// 플래그는 유지되므로 다음 정상 기동 때 복원됨
+fn should_restore_panel_on_startup(
+    obs_mode_enabled: bool,
+    main_window_hidden: bool,
+    panel_detached: bool,
+) -> bool {
+    panel_detached && !obs_mode_enabled && !main_window_hidden
+}
+
 fn bootstrap_keyboard_state(keyboard: &KeyboardManager) -> (String, Vec<String>) {
     keyboard.current_mode_and_pressed_keys()
 }
@@ -762,27 +769,34 @@ fn validate_selection_session(snapshot: &SelectionSessionSnapshot) -> Result<(),
             "mode exceeds the {MAX_SELECTION_MODE_BYTES} byte limit"
         ));
     }
+    let mut seen_element_ids = HashSet::new();
     for (index, element) in snapshot.selected_elements.iter().enumerate() {
-        if element.element_type.len() > MAX_SELECTION_ELEMENT_TYPE_BYTES {
-            return Err(format!(
-                "selectedElements[{index}].elementType exceeds the {MAX_SELECTION_ELEMENT_TYPE_BYTES} byte limit"
-            ));
-        }
-        if element
-            .full_id
-            .as_ref()
-            .is_some_and(|full_id| full_id.len() > MAX_SELECTION_FULL_ID_BYTES)
+        if element.element_type.len() > MAX_SELECTION_ELEMENT_TYPE_BYTES
+            || !matches!(
+                element.element_type.as_str(),
+                "key" | "stat" | "graph" | "knob" | "plugin"
+            )
         {
-            return Err(format!(
-                "selectedElements[{index}].fullId exceeds the {MAX_SELECTION_FULL_ID_BYTES} byte limit"
-            ));
+            return Err(format!("selectedElements[{index}].elementType is invalid"));
+        }
+        if element.full_id.is_empty()
+            || element.full_id.len() > MAX_SELECTION_FULL_ID_BYTES
+            || (element.element_type != "plugin"
+                && !crate::state::native_element_id::is_valid_element_id(&element.full_id))
+        {
+            return Err(format!("selectedElements[{index}].fullId is invalid"));
+        }
+        if !seen_element_ids.insert(element.full_id.as_str()) {
+            return Err(format!("selectedElements[{index}].fullId is duplicated"));
         }
     }
+    let mut seen_group_ids = HashSet::new();
     for (index, group_id) in snapshot.selected_group_ids.iter().enumerate() {
-        if group_id.len() > MAX_SELECTION_GROUP_ID_BYTES {
-            return Err(format!(
-                "selectedGroupIds[{index}] exceeds the {MAX_SELECTION_GROUP_ID_BYTES} byte limit"
-            ));
+        if group_id.is_empty()
+            || group_id.len() > MAX_SELECTION_GROUP_ID_BYTES
+            || !seen_group_ids.insert(group_id.as_str())
+        {
+            return Err(format!("selectedGroupIds[{index}] is invalid"));
         }
     }
     Ok(())
@@ -1022,6 +1036,15 @@ impl AppState {
         if should_create_overlay_on_startup(snapshot.obs_mode_enabled, snapshot.overlay_visible) {
             self.ensure_overlay_window(app)?;
         }
+        if should_restore_panel_on_startup(
+            snapshot.obs_mode_enabled,
+            snapshot.main_window_hidden,
+            snapshot.panel_detached,
+        ) {
+            if let Err(err) = self.restore_panel_window_on_startup(app) {
+                log::warn!("failed to restore detached panel window: {err}");
+            }
+        }
         // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         if snapshot.developer_mode_enabled {
             if let Some(main) = app.get_webview_window("main") {
@@ -1165,8 +1188,6 @@ impl AppState {
 
     pub fn bootstrap_payload(&self) -> BootstrapPayload {
         let state = self.store.snapshot();
-        let mut custom_js = state.custom_js.clone();
-        let _ = custom_js.normalize();
         let (current_mode, active_keys) = bootstrap_keyboard_state(&self.keyboard);
         let (key_counters, key_counters_revision) = {
             let counters = self.key_counters.read();
@@ -1180,30 +1201,7 @@ impl AppState {
                 settings: SettingsState::default(),
                 counter_settings: KeyCounterSettings::default(),
             },
-            settings: SettingsState {
-                hardware_acceleration: state.hardware_acceleration,
-                always_on_top: state.always_on_top,
-                overlay_locked: state.overlay_locked,
-                note_effect: state.note_effect,
-                note_settings: state.note_settings.clone(),
-                angle_mode: state.angle_mode.clone(),
-                language: state.language.clone(),
-                laboratory_enabled: state.laboratory_enabled,
-                developer_mode_enabled: state.developer_mode_enabled,
-                tray_enabled: state.tray_enabled,
-                auto_update_enabled: state.auto_update_enabled,
-                background_color: state.background_color.clone(),
-                use_custom_css: state.use_custom_css,
-                custom_css: state.custom_css.clone(),
-                font_settings: state.font_settings.clone(),
-                use_custom_js: state.use_custom_js,
-                custom_js,
-                overlay_resize_anchor: state.overlay_resize_anchor.clone(),
-                key_counter_enabled: state.key_counter_enabled,
-                grid_settings: state.grid_settings.clone(),
-                shortcuts: state.shortcuts.clone(),
-                obs_mode_enabled: state.obs_mode_enabled,
-            },
+            settings: state.settings_state(),
             keys: state.keys.clone(),
             positions: state.key_positions.clone(),
             stat_positions: state.stat_positions.clone(),
@@ -2512,7 +2510,7 @@ impl AppState {
                             // 키음은 물리 다운당 1회: press 기여 슬롯을 병합해
                             // 사운드 활성 첫 슬롯 설정 사용 (오디오 중첩 방지)
                             if is_down && message.device == crate::ipc::InputDeviceKind::Keyboard {
-                                if let Some((sound_canonical, sound_slot_indices)) =
+                                if let Some((_sound_canonical, sound_slot_indices)) =
                                     crate::keyboard::manager::collect_sound_dispatch(&outcome.events)
                                 {
                                     if let Some((sound_path, per_key_volume)) = app_state
@@ -2548,7 +2546,7 @@ impl AppState {
                                             log::debug!(
                                                 "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} volume={:.3} path={}",
                                                 outcome.mode,
-                                                sound_canonical,
+                                                _sound_canonical,
                                                 per_key_volume,
                                                 sound_path
                                             );
@@ -2580,7 +2578,7 @@ impl AppState {
                                             log::debug!(
                                                 "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} source=soundpack",
                                                 outcome.mode,
-                                                sound_canonical
+                                                _sound_canonical
                                             );
                                         }
                                     }
@@ -2862,6 +2860,15 @@ impl AppState {
                 publish_panel_visibility_transition(&self.panel_visible, app, true, None)
             })
         };
+        if result.is_ok() {
+            // 재시작 복원용 분리 상태 기록 (bounds와 같은 deferred 기록 보증 수준)
+            if let Err(err) = self
+                .store
+                .update_deferred(|data| data.panel_detached = true)
+            {
+                log::warn!("failed to record detached panel state: {err}");
+            }
+        }
         if result.is_err() && app.get_webview_window(PANEL_LABEL).is_none() {
             clear_targeted_panel_view_state(
                 &mut self.panel_view_state.lock(),
@@ -2869,6 +2876,19 @@ impl AppState {
             );
         }
         result
+    }
+
+    // 재시작 시 분리 창 재생성: 기동 시점엔 뷰 핸드오프 상태가 없어 show_panel_window를 재사용하지 않음
+    // panel_view_state가 비어 있으면 패널 엔트리가 기본 뷰로 뜨고,
+    // 저장 bounds와 모니터 보정은 create_panel_window의 resolve_panel_window_layout이 처리
+    fn restore_panel_window_on_startup(&self, app: &AppHandle) -> Result<()> {
+        let _creation_guard = self.panel_creation_lock.lock();
+        if app.get_webview_window(PANEL_LABEL).is_some() {
+            return Ok(());
+        }
+        *self.panel_destroy_reason.lock() = None;
+        self.create_panel_window(app)?;
+        publish_panel_visibility_transition(&self.panel_visible, app, true, None)
     }
 
     pub fn take_panel_view_state(&self, window_label: &str) -> Option<PanelViewState> {
@@ -2898,6 +2918,15 @@ impl AppState {
         app: &AppHandle,
         reason: PanelVisibilityReason,
     ) -> Result<()> {
+        // 도킹 상태 기록: 명시 재부착과 close-ack 타임아웃 강제 닫힘이 모두 이 경로를 지남
+        // Destroyed 핸들러에서는 기록 금지 - 종료 시 shutdown_application이 panel.destroy()를
+        // 직접 호출해 같은 핸들러로 들어오므로 분리 채 종료할 때마다 플래그가 지워짐
+        if let Err(err) = self
+            .store
+            .update_deferred(|data| data.panel_detached = false)
+        {
+            log::warn!("failed to record docked panel state: {err}");
+        }
         *self.panel_destroy_reason.lock() = Some(reason);
         let mut bounds_error = None;
         if let Some(window) = app.get_webview_window(PANEL_LABEL) {
@@ -2906,6 +2935,14 @@ impl AppState {
             }
             if let Err(error) = window.destroy() {
                 self.clear_panel_destroy_reason(reason);
+                // 창이 살아 있으면 여전히 분리 상태다. 도킹 기록을 되돌리지
+                // 않으면 다음 기동에서 분리 패널이 복원되지 않는다
+                if let Err(err) = self
+                    .store
+                    .update_deferred(|data| data.panel_detached = true)
+                {
+                    log::warn!("failed to restore detached panel state: {err}");
+                }
                 return Err(error.into());
             }
         }
@@ -5238,17 +5275,18 @@ mod tests {
         panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
         publish_panel_visibility_transition, publish_selection_snapshot, resolve_event_age_ms,
         resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
-        should_recover_keyboard_daemon, take_cancelable_editor_flush_handshake,
-        take_editor_flush_handshake, take_targeted_panel_view_state, validate_selection_session,
-        EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
-        FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
-        FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex,
-        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
-        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab,
-        PanelPropertyTab, PanelViewMode, PanelViewState, PanelViewTarget,
-        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
-        PhysicalPosition, PhysicalSize, SelectionSessionElement, SelectionSessionSnapshot,
-        TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        should_recover_keyboard_daemon, should_restore_panel_on_startup,
+        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
+        take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
+        EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
+        FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
+        LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex, PanelBoundsChange,
+        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
+        PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
+        PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
+        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
+        SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
         MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
         OVERLAY_LABEL, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
@@ -5267,6 +5305,14 @@ mod tests {
         assert!(should_create_overlay_on_startup(false, true));
         assert!(!should_create_overlay_on_startup(true, false));
         assert!(!should_create_overlay_on_startup(true, true));
+    }
+
+    #[test]
+    fn startup_panel_restore_requires_detached_without_obs_or_tray_start() {
+        assert!(should_restore_panel_on_startup(false, false, true));
+        assert!(!should_restore_panel_on_startup(false, false, false));
+        assert!(!should_restore_panel_on_startup(true, false, true));
+        assert!(!should_restore_panel_on_startup(false, true, true));
     }
 
     #[test]
@@ -5685,8 +5731,7 @@ mod tests {
             SelectionSessionSnapshot {
                 selected_elements: vec![SelectionSessionElement {
                     element_type: "key".to_string(),
-                    index: Some(2),
-                    full_id: Some("key-2".to_string()),
+                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
                 }],
                 selected_group_ids: vec!["group-1".to_string()],
                 mode: "4key".to_string(),
@@ -5707,8 +5752,7 @@ mod tests {
             selected_elements: vec![
                 SelectionSessionElement {
                     element_type: "key".to_string(),
-                    index: None,
-                    full_id: None,
+                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
                 };
                 MAX_SELECTION_ELEMENTS + 1
             ],
@@ -5720,16 +5764,14 @@ mod tests {
             SelectionSessionSnapshot {
                 selected_elements: vec![SelectionSessionElement {
                     element_type: "x".repeat(MAX_SELECTION_ELEMENT_TYPE_BYTES + 1),
-                    index: None,
-                    full_id: None,
+                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
                 }],
                 ..SelectionSessionSnapshot::default()
             },
             SelectionSessionSnapshot {
                 selected_elements: vec![SelectionSessionElement {
                     element_type: "key".to_string(),
-                    index: None,
-                    full_id: Some("x".repeat(MAX_SELECTION_FULL_ID_BYTES + 1)),
+                    full_id: "x".repeat(MAX_SELECTION_FULL_ID_BYTES + 1),
                 }],
                 ..SelectionSessionSnapshot::default()
             },

@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import {
+  projectLayerGroupRename,
+  projectStableElementGroups,
+} from '@utils/layerGroupUtils';
 
 import {
+  EDITOR_FIELDS,
+  EDITOR_OPS_VERSION,
   EditorProtocolError,
+  assertCanonicalEditorDocument,
   assertEditorGetResult,
   assertSafeEditorRevision,
   isEditorCommitError,
@@ -15,14 +22,24 @@ import {
   createEditorPatch,
   getChangedEditorFields,
 } from './editorCoordinator';
+import {
+  enqueueEditorCompatibilityOperation,
+  enqueueEditorCompatibilityWrite,
+} from './editorCompatibilityQueue';
+import { registerStoredPluginGroupRefsProvider } from './pluginGroupMembers';
 
 import type {
   EditorCommitError,
   EditorCommitRequest,
   EditorCommitResult,
   EditorCommittedV1,
+  CanonicalEditorDocumentV1,
   EditorDocumentV1,
   EditorGetResult,
+  EditorNotePropertyPatchV1,
+  EditorOpResultV1,
+  EditorOpV1,
+  EditorSetBoundsOpV1,
 } from '@src/types/editor';
 import type { KeySlot } from '@src/types/key/keys';
 import type {
@@ -48,10 +65,14 @@ const deferred = <T>(): Deferred<T> => {
   return { promise, resolve, reject };
 };
 
-const makeDocument = (key = 'A'): EditorDocumentV1 => ({
+const DEFAULT_KEY_ID = '11111111-1111-4111-8111-111111111111';
+
+const makeDocument = (key = 'A'): CanonicalEditorDocumentV1 => ({
   schemaVersion: 1,
   keys: { '4key': [key] },
-  keyPositions: { '4key': [createDefaultKeyPosition()] },
+  keyPositions: {
+    '4key': [{ ...createDefaultKeyPosition(), id: DEFAULT_KEY_ID }],
+  },
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
@@ -59,9 +80,9 @@ const makeDocument = (key = 'A'): EditorDocumentV1 => ({
 });
 
 const withGroups = (
-  document: EditorDocumentV1,
+  document: CanonicalEditorDocumentV1,
   id: string,
-): EditorDocumentV1 => ({
+): CanonicalEditorDocumentV1 => ({
   ...structuredClone(document),
   layerGroups: { '4key': [{ id, name: id }] },
 });
@@ -87,26 +108,45 @@ const validationError = (): EditorCommitError => ({
 });
 
 class FakeTransport implements EditorCoordinatorTransport {
-  canonical: EditorGetResult;
+  canonical: { revision: number; document: CanonicalEditorDocumentV1 };
   readonly getMock = vi.fn<() => Promise<EditorGetResult>>();
   readonly commitMock =
     vi.fn<(request: EditorCommitRequest) => Promise<EditorCommitResult>>();
   private listener: ((event: EditorCommittedV1) => void) | null = null;
 
-  constructor(document: EditorDocumentV1, revision = 0) {
+  constructor(document: CanonicalEditorDocumentV1, revision = 0) {
     this.canonical = { revision, document: structuredClone(document) };
     this.getMock.mockImplementation(async () =>
       structuredClone(this.canonical),
     );
     this.commitMock.mockImplementation(async (request) => {
       const before = this.canonical.document;
-      const next = applyEditorPatch(before, request.changes);
+      const next = request.changes
+        ? applyEditorPatch(before, request.changes)
+        : applyOpsForTest(before, request.ops);
       const changedFields = getChangedEditorFields(before, next);
       if (changedFields.length > 0) this.canonical.revision += 1;
       this.canonical.document = next;
       return {
         revision: this.canonical.revision,
         changedFields,
+        ...(request.ops
+          ? {
+              opResults: request.ops.map(
+                (op): EditorOpResultV1 =>
+                  op.kind === 'setBounds'
+                    ? {
+                        status:
+                          changedFields.length > 0 ? 'applied' : 'noChange',
+                        bounds: op.bounds,
+                      }
+                    : {
+                        status:
+                          changedFields.length > 0 ? 'applied' : 'noChange',
+                      },
+              ),
+            }
+          : {}),
       };
     });
   }
@@ -139,8 +179,8 @@ class FakeTransport implements EditorCoordinatorTransport {
 const eventFor = (
   revision: number,
   mutationId: string,
-  base: EditorDocumentV1,
-  next: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
+  next: CanonicalEditorDocumentV1,
 ): EditorCommittedV1 => ({
   schemaVersion: 1,
   revision,
@@ -151,7 +191,7 @@ const eventFor = (
 });
 
 const createHarness = (
-  initial: EditorDocumentV1,
+  initial: CanonicalEditorDocumentV1,
   options: Partial<
     Pick<
       EditorCoordinatorOptions,
@@ -167,7 +207,7 @@ const createHarness = (
   const transport = new FakeTransport(initial);
   let local = structuredClone(initial);
   const applications: Array<{
-    document: EditorDocumentV1;
+    document: CanonicalEditorDocumentV1;
     reason: EditorApplyReason;
   }> = [];
   let mutationSequence = 0;
@@ -193,10 +233,297 @@ const createHarness = (
     transport,
     applications,
     getLocal: () => structuredClone(local),
-    setLocal: (document: EditorDocumentV1) => {
+    setLocal: (document: CanonicalEditorDocumentV1) => {
       local = structuredClone(document);
     },
   };
+};
+
+const applyOpsForTest = (
+  document: CanonicalEditorDocumentV1,
+  ops: readonly EditorOpV1[],
+): CanonicalEditorDocumentV1 => {
+  const next = structuredClone(document);
+  const fields = {
+    key: 'keyPositions',
+    stat: 'statPositions',
+    graph: 'graphPositions',
+    knob: 'knobPositions',
+  } as const;
+  ops.forEach((op) => {
+    if (op.kind === 'insertFrozenElements') {
+      next.layerGroups[op.mode] = [
+        ...(next.layerGroups[op.mode] ?? []),
+        ...op.groups,
+      ];
+      op.elements.forEach((element) => {
+        if (element.elementType === 'key') {
+          next.keys[op.mode] = [...(next.keys[op.mode] ?? []), element.slot];
+          next.keyPositions[op.mode] = [
+            ...(next.keyPositions[op.mode] ?? []),
+            element.position,
+          ];
+        } else {
+          const field = fields[element.elementType];
+          (next[field] as Record<string, unknown[]>)[op.mode] = [
+            ...((next[field] as Record<string, unknown[]>)[op.mode] ?? []),
+            element.position,
+          ];
+        }
+      });
+      op.zUpdates.forEach((update) => {
+        const record = next[fields[update.elementType]] as Record<
+          string,
+          Array<Record<string, unknown>>
+        >;
+        record[op.mode] = (record[op.mode] ?? []).map((position) =>
+          position.id === update.id
+            ? { ...position, zIndex: update.zIndex }
+            : position,
+        );
+      });
+      return;
+    }
+    if (op.kind === 'reorderElements') {
+      const zById = new Map(
+        op.zUpdates.map((update) => [update.id, update] as const),
+      );
+      const groupById = new Map(
+        op.groupUpdates.map((update) => [update.id, update] as const),
+      );
+      const types = new Set([
+        ...op.zUpdates.map((update) => update.elementType),
+        ...op.groupUpdates.map((update) => update.elementType),
+      ]);
+      types.forEach((elementType) => {
+        const field = fields[elementType];
+        const record = next[field] as Record<
+          string,
+          Array<Record<string, unknown>>
+        >;
+        record[op.mode] = (record[op.mode] ?? []).map((position) => {
+          const id = position.id as string | undefined;
+          if (!id) return position;
+          const z = zById.get(id);
+          const group = groupById.get(id);
+          if (
+            z?.elementType !== elementType &&
+            group?.elementType !== elementType
+          ) {
+            return position;
+          }
+          const updated = { ...position };
+          if (z?.elementType === elementType) updated.zIndex = z.zIndex;
+          if (group?.elementType === elementType) {
+            if (group.groupId === null) delete updated.groupId;
+            else updated.groupId = group.groupId;
+          }
+          return updated;
+        });
+      });
+      return;
+    }
+    if (op.kind === 'setKeySlot') {
+      Object.entries(next.keyPositions).some(([mode, positions]) => {
+        const index = positions.findIndex((position) => position.id === op.id);
+        if (index < 0) return false;
+        next.keys[mode] = (next.keys[mode] ?? []).map((slot, slotIndex) =>
+          slotIndex === index ? structuredClone(op.slot) : slot,
+        );
+        return true;
+      });
+      return;
+    }
+    if (op.kind === 'setElementGroups') {
+      const projected = projectStableElementGroups({
+        mode: op.mode,
+        targets: op.targets,
+        targetGroup: op.targetGroup,
+        keyPositions: next.keyPositions,
+        statPositions: next.statPositions,
+        graphPositions: next.graphPositions,
+        knobPositions: next.knobPositions,
+        layerGroups: next.layerGroups,
+        pluginElements: [],
+      });
+      if (projected) {
+        next.keyPositions = projected.keyPositions;
+        next.statPositions = projected.statPositions;
+        next.graphPositions = projected.graphPositions;
+        next.knobPositions = projected.knobPositions;
+        next.layerGroups = projected.layerGroups;
+      }
+      return;
+    }
+    if (op.kind === 'renameLayerGroup') {
+      const groups = projectLayerGroupRename({
+        mode: op.mode,
+        groupId: op.groupId,
+        name: op.name,
+        layerGroups: next.layerGroups,
+      });
+      if (groups) next.layerGroups = groups;
+      return;
+    }
+    const record = next[fields[op.elementType]] as Record<
+      string,
+      Array<Record<string, unknown>>
+    >;
+    Object.entries(record).some(([mode, positions]) => {
+      const index = positions.findIndex((position) => position.id === op.id);
+      if (index < 0) return false;
+      if (op.kind === 'setBounds') {
+        record[mode] = positions.map((position, positionIndex) =>
+          positionIndex === index ? { ...position, ...op.bounds } : position,
+        );
+      } else if (op.kind === 'patchElement') {
+        record[mode] = positions.map((position, positionIndex) => {
+          if (positionIndex !== index) return position;
+          if (op.patch.property === 'layerName') {
+            const updated = { ...position };
+            if (op.patch.value === null) delete updated.layerName;
+            else updated.layerName = op.patch.value;
+            return updated;
+          }
+          if (op.patch.property === 'graphType') {
+            return { ...position, graphType: op.patch.value };
+          }
+          if (op.patch.property === 'graphColor') {
+            return { ...position, graphColor: op.patch.value };
+          }
+          if (op.patch.property === 'showAvgLine') {
+            return { ...position, showAvgLine: op.patch.value };
+          }
+          if (op.patch.property === 'graphAnimationEnabled') {
+            return {
+              ...position,
+              graphAnimationEnabled: op.patch.value,
+            };
+          }
+          if (op.patch.property === 'graphSpeed') {
+            return { ...position, graphSpeed: op.patch.value };
+          }
+          if (op.patch.property === 'reverse') {
+            return { ...position, reverse: op.patch.value };
+          }
+          if (op.patch.property === 'sensitivity') {
+            return { ...position, sensitivity: op.patch.value };
+          }
+          if (op.patch.property === 'axisId') {
+            return { ...position, axisId: op.patch.value };
+          }
+          if (op.patch.property === 'useInlineStyles') {
+            return { ...position, useInlineStyles: op.patch.value };
+          }
+          if (op.patch.property === 'fontWeight') {
+            return { ...position, fontWeight: op.patch.value };
+          }
+          if (op.patch.property === 'fontItalic') {
+            return { ...position, fontItalic: op.patch.value };
+          }
+          if (op.patch.property === 'fontUnderline') {
+            return { ...position, fontUnderline: op.patch.value };
+          }
+          if (op.patch.property === 'fontStrikethrough') {
+            return {
+              ...position,
+              fontStrikethrough: op.patch.value,
+            };
+          }
+          if (op.patch.property === 'fontFamily') {
+            return { ...position, fontFamily: op.patch.value };
+          }
+          if (op.patch.property === 'counterEnabled') {
+            const counter = position.counter as Record<string, unknown>;
+            return {
+              ...position,
+              counter: { ...counter, enabled: op.patch.value },
+            };
+          }
+          if (op.patch.property === 'counterAnimationEnabled') {
+            const counter = position.counter as Record<string, unknown>;
+            const animation = counter.animation as Record<string, unknown>;
+            return {
+              ...position,
+              counter: {
+                ...counter,
+                animation: {
+                  ...animation,
+                  enabled: op.patch.value,
+                },
+              },
+            };
+          }
+          if (op.patch.property === 'counterAnimationPreset') {
+            const counter = position.counter as Record<string, unknown>;
+            const animation = counter.animation as Record<string, unknown>;
+            const intent = op.patch.value;
+            return {
+              ...position,
+              counter: {
+                ...counter,
+                animation: {
+                  ...animation,
+                  ...('applyPresetId' in intent
+                    ? { presetId: intent.presetId }
+                    : {}),
+                  ...('bezier' in intent ? { bezier: [...intent.bezier] } : {}),
+                  ...('scale' in intent ? { scale: intent.scale } : {}),
+                  ...('durationMs' in intent
+                    ? { durationMs: intent.durationMs }
+                    : {}),
+                },
+              },
+            };
+          }
+          if (op.patch.property === 'noteEffectEnabled') {
+            return {
+              ...position,
+              noteEffectEnabled: op.patch.value,
+            };
+          }
+          if (op.patch.property === 'noteAutoYCorrection') {
+            return {
+              ...position,
+              noteAutoYCorrection: op.patch.value,
+            };
+          }
+          if (op.patch.property === 'noteGlowEnabled') {
+            return {
+              ...position,
+              noteGlowEnabled: op.patch.value,
+            };
+          }
+          if (op.patch.property === 'noteAlignment') {
+            return { ...position, noteAlignment: op.patch.value };
+          }
+          if (op.patch.property === 'noteBorderSide') {
+            return { ...position, noteBorderSide: op.patch.value };
+          }
+          if (op.patch.property === 'statType') {
+            return { ...position, statType: op.patch.value };
+          }
+          // 미열거 속성은 구형 harness와 동일하게 hidden 슬롯만 갱신해
+          // 문서 차이를 만들고 applied 판정을 유지한다
+          return {
+            ...position,
+            hidden: op.patch.property === 'hidden' ? op.patch.value : undefined,
+          };
+        });
+      } else {
+        record[mode] = positions.filter(
+          (_, positionIndex) => positionIndex !== index,
+        );
+        if (op.elementType === 'key') {
+          next.keys[mode] = (next.keys[mode] ?? []).filter(
+            (_, slotIndex) => slotIndex !== index,
+          );
+        }
+      }
+      return true;
+    });
+  });
+  return next;
 };
 
 describe('editor document helpers', () => {
@@ -347,6 +674,98 @@ describe('editor document helpers', () => {
     ).toHaveLength(0);
     harness.coordinator.stop();
   });
+
+  it.each([
+    ['state', 'state'],
+    ['patch', 'patch'],
+    ['semantic', 'semantic'],
+    ['gesture', 'gesture'],
+  ] as const)(
+    'invalid current ID는 %s 경로의 낙관 적용과 wire를 모두 막는다',
+    async (_label, path) => {
+      const base = makeDocument();
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      const invalidCurrent = structuredClone(base);
+      invalidCurrent.keyPositions['4key'][0].id = undefined;
+      harness.setLocal(invalidCurrent);
+      const commitCallback = vi.fn(async () => ({
+        revision: 0,
+        changedFields: [],
+      }));
+
+      const committing =
+        path === 'state'
+          ? harness.coordinator.commitEditorState()
+          : path === 'patch'
+          ? harness.coordinator.commitPatch({
+              schemaVersion: 1,
+              keys: { '4key': ['B'] },
+            })
+          : path === 'semantic'
+          ? harness.coordinator.commitSemanticOpsInternal([
+              {
+                kind: 'patchElement',
+                elementType: 'key',
+                id: base.keyPositions['4key'][0].id!,
+                patch: { property: 'hidden', value: true },
+              },
+            ])
+          : harness.coordinator.commitGesture(
+              { schemaVersion: 1, keys: { '4key': ['B'] } },
+              'canonical-id-gesture',
+              commitCallback,
+            );
+
+      await expect(committing).rejects.toBeInstanceOf(EditorProtocolError);
+      expect(harness.transport.commitMock).not.toHaveBeenCalled();
+      expect(commitCallback).not.toHaveBeenCalled();
+      expect(
+        harness.applications.filter(({ reason }) => reason === 'localPatch'),
+      ).toHaveLength(0);
+      harness.coordinator.stop();
+    },
+  );
+
+  it.each(['state', 'patch', 'gesture'] as const)(
+    'invalid target ID는 %s 경로의 낙관 적용과 wire를 모두 막는다',
+    async (path) => {
+      const base = makeDocument();
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      const invalidPositions = structuredClone(base.keyPositions);
+      invalidPositions['4key'][0].id = 'key-0';
+      const commitCallback = vi.fn(async () => ({
+        revision: 0,
+        changedFields: [],
+      }));
+
+      const committing =
+        path === 'state'
+          ? harness.coordinator.commitEditorState({
+              ...base,
+              keyPositions: invalidPositions,
+            })
+          : path === 'patch'
+          ? harness.coordinator.commitPatch({
+              schemaVersion: 1,
+              keyPositions: invalidPositions,
+            })
+          : harness.coordinator.commitGesture(
+              { schemaVersion: 1, keyPositions: invalidPositions },
+              'canonical-target-gesture',
+              commitCallback,
+            );
+
+      await expect(committing).rejects.toBeInstanceOf(EditorProtocolError);
+      expect(harness.transport.commitMock).not.toHaveBeenCalled();
+      expect(commitCallback).not.toHaveBeenCalled();
+      expect(
+        harness.applications.filter(({ reason }) => reason === 'localPatch'),
+      ).toHaveLength(0);
+      harness.coordinator.stop();
+    },
+  );
 });
 
 describe('EditorSaveCoordinator', () => {
@@ -408,6 +827,567 @@ describe('EditorSaveCoordinator', () => {
         keys: { '4key': ['E'] },
       }),
     ).resolves.toBeTruthy();
+    harness.coordinator.stop();
+  });
+
+  // 백엔드 v1 adapter 흉내 (계약 §3 충실 재현): 무ID 요소는 같은 자리의
+  // 값 일치만 ID를 승계하고, 값이 수정된 요소는 새 ID를 발급한다. stale
+  // baseRevision은 실백엔드처럼 REVISION_CONFLICT로 거절한다. 결과
+  // envelope에는 adapted 값이 없으므로 coordinator는 get으로만 알 수 있다
+  const emulateV1AdapterCommit = (
+    harness: ReturnType<typeof createHarness>,
+  ) => {
+    let issued = 0;
+    const valueWithoutId = (position: Record<string, unknown>) => {
+      const { id: _id, ...rest } = position;
+      return JSON.stringify(rest);
+    };
+    harness.transport.commitMock.mockImplementation(async (request) => {
+      if (request.baseRevision !== harness.transport.canonical.revision) {
+        throw revisionConflict();
+      }
+      if (!request.changes) {
+        throw new Error('expected an isolated patch');
+      }
+      const before = harness.transport.canonical.document;
+      const next = structuredClone(before) as EditorDocumentV1;
+      for (const field of EDITOR_FIELDS) {
+        if (request.changes[field] !== undefined) {
+          Object.assign(next, {
+            [field]: structuredClone(request.changes[field]),
+          });
+        }
+      }
+      for (const [mode, positions] of Object.entries(next.keyPositions)) {
+        positions.forEach((position, index) => {
+          if (position.id) return;
+          const current = before.keyPositions[mode]?.[index];
+          position.id =
+            current?.id && valueWithoutId(current) === valueWithoutId(position)
+              ? current.id
+              : `00000000-0000-4000-8000-${String(++issued).padStart(12, '0')}`;
+        });
+      }
+      assertCanonicalEditorDocument(next, 'adapted plugin document');
+      const changedFields = getChangedEditorFields(before, next);
+      if (changedFields.length > 0) harness.transport.canonical.revision += 1;
+      harness.transport.canonical.document = next;
+      return {
+        revision: harness.transport.canonical.revision,
+        changedFields,
+      };
+    });
+  };
+
+  const strippedIdPositions = (document: EditorDocumentV1) => {
+    const positions = structuredClone(document.keyPositions);
+    Object.values(positions).forEach((list) =>
+      list.forEach((position) => {
+        delete position.id;
+      }),
+    );
+    return positions;
+  };
+
+  it('keeps canonical element ids after a no-op idless plugin commit', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    expect(idBefore).toBeTruthy();
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+
+    const result = await harness.coordinator.commitIsolatedPluginPatch(
+      {
+        schemaVersion: 1,
+        keys: base.keys,
+        keyPositions: strippedIdPositions(base),
+      },
+      { multiKey: false },
+    );
+
+    // 백엔드는 ID를 보존했다 - lastAck가 무ID 요청값으로 덮이면 안 된다
+    expect(result.keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+  });
+
+  it('mirrors adapter-issued ids after a changing idless plugin commit', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    const result = await harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+      { multiKey: false },
+    );
+
+    // 값이 수정된 무ID 요소는 계약(§3)상 새 ID를 받는다. own committed
+    // 이벤트는 revision 선점으로 패치가 무시되므로 커밋 경로 자체가
+    // 백엔드가 발급한 canonical ID를 되찾아 비춰야 한다
+    const adaptedId =
+      harness.transport.canonical.document.keyPositions['4key'][0].id;
+    expect(adaptedId).toBeTruthy();
+    expect(adaptedId).not.toBe(idBefore);
+    expect(result.keyPositions['4key'][0].dx).toBe(moved['4key'][0].dx);
+    expect(result.keyPositions['4key'][0].id).toBe(adaptedId);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(adaptedId);
+  });
+
+  it('삭제 후 stale 재제출로 재발급된 요소에 옛 ID 완료가 닿지 않는다', async () => {
+    // 계약 신뢰 경계 필수 테스트: retired-ID 집합 없이도 이 체인이 안전해야 한다
+    const base = makeDocument('A');
+    const retiredId = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+
+    // 1) 비동기 완료가 retiredId를 캡처해 둔 상태에서 요소 삭제
+    await harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keys: { '4key': [] },
+      keyPositions: { '4key': [] },
+    });
+    expect(harness.transport.canonical.document.keyPositions['4key']).toEqual(
+      [],
+    );
+
+    // 2) 삭제 전 스냅샷을 든 stale v1 클라이언트가 무ID로 재제출 -
+    //    계약(§3)상 삭제된 ID를 승계하지 못하고 새 ID를 발급받는다
+    await harness.coordinator.commitIsolatedPluginPatch(
+      {
+        schemaVersion: 1,
+        keys: base.keys,
+        keyPositions: strippedIdPositions(base),
+      },
+      { multiKey: false },
+    );
+    const reissued =
+      harness.transport.canonical.document.keyPositions['4key'][0];
+    expect(reissued.id).toBeTruthy();
+    expect(reissued.id).not.toBe(retiredId);
+
+    // 3) 옛 ID에 묶인 완료가 실행돼도 재발급 요소를 건드리지 않는다
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    const result = await harness.coordinator.commitGeneratedPatch((latest) => {
+      const record = structuredClone(latest.keyPositions);
+      let touched = false;
+      for (const list of Object.values(record)) {
+        list.forEach((position, index) => {
+          if (position.id !== retiredId) return;
+          list[index] = { ...position, inactiveImage: 'stale.png' };
+          touched = true;
+        });
+      }
+      return touched ? { schemaVersion: 1, keyPositions: record } : null;
+    });
+
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    const finalPosition =
+      harness.transport.canonical.document.keyPositions['4key'][0];
+    expect(finalPosition.id).toBe(reissued.id);
+    expect(finalPosition.inactiveImage ?? '').toBe('');
+    expect(result.keyPositions['4key'][0].inactiveImage ?? '').toBe('');
+    expect(harness.getLocal().keyPositions['4key'][0].inactiveImage ?? '').toBe(
+      '',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('resyncs on retry conflict so plugin retries recover without ui sync', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('ipc unavailable'),
+    );
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    const patch = {
+      schemaVersion: 1 as const,
+      keys: base.keys,
+      keyPositions: moved,
+    };
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(patch, {
+        multiKey: false,
+      }),
+    ).rejects.toThrow('ipc unavailable');
+
+    // 무ID target이 lastAck·스토어를 오염시키지 않는다 (이전 canonical 유지)
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+      base.keyPositions['4key'][0].dx,
+    );
+
+    // revision이 뒤처진 재시도는 실백엔드 계약대로 충돌하되, 격리 경로가
+    // conflict에서 canonical을 재동기화해 둔다 (플러그인은 sync 접근 불가)
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(patch, {
+        multiKey: false,
+      }),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    // 별도 ui sync 없이도 conflict 반환 시점에 이미 복구돼 있다
+    const adaptedId =
+      harness.transport.canonical.document.keyPositions['4key'][0].id;
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(adaptedId);
+    expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+      moved['4key'][0].dx,
+    );
+
+    // 다음 재시도는 정상 완료된다 (값 일치라 승계, no-op)
+    const retried = await harness.coordinator.commitIsolatedPluginPatch(patch, {
+      multiKey: false,
+    });
+    expect(retried.keyPositions['4key'][0].id).toBe(adaptedId);
+    harness.coordinator.stop();
+  });
+
+  it('recovers the local store from the own event after a failed post-commit read', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('ipc unavailable'),
+    );
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(
+        { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+        { multiKey: false },
+      ),
+    ).rejects.toThrow('ipc unavailable');
+
+    // own committed 이벤트가 lastAck뿐 아니라 store까지 복구한다
+    const request = harness.transport.commitMock.mock.calls[0][0];
+    harness.transport.emit(
+      eventFor(
+        harness.transport.canonical.revision,
+        request.mutationId,
+        base,
+        harness.transport.canonical.document,
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+        moved['4key'][0].dx,
+      ),
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(
+      harness.transport.canonical.document.keyPositions['4key'][0].id,
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBeTruthy();
+
+    // 후속 flush가 성공한 플러그인 변경을 낡은 로컬로 되돌리지 않는다
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    await harness.coordinator.commitEditorState();
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    harness.coordinator.stop();
+  });
+
+  it('flush는 내부 대기 중 착지한 병행 커밋을 되돌리지 않는다', async () => {
+    const base = makeDocument('A');
+    let startCalls = 0;
+    let releaseStart: (() => void) | null = null;
+    const harness = createHarness(base, {
+      // 두 번째 start(flush의 commitEditorState 내부 대기)만 게이트로 붙잡는다
+      onStartSucceeded: () => {
+        startCalls += 1;
+        if (startCalls !== 2) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          releaseStart = resolve;
+        });
+      },
+    });
+    await harness.coordinator.start();
+
+    const flushed = harness.coordinator.flush();
+    await vi.waitFor(() => expect(releaseStart).not.toBeNull());
+
+    // 대기 사이 다른 창의 격리 커밋이 착지한다
+    const external = structuredClone(base);
+    external.keys['4key'] = ['B'];
+    harness.transport.canonical = {
+      revision: 1,
+      document: structuredClone(external),
+    };
+    harness.transport.emit(eventFor(1, 'external-plugin-1', base, external));
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keys['4key']).toEqual(['B']),
+    );
+
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    releaseStart!();
+    await flushed;
+
+    // 착지한 변경이 flush 커밋으로 되돌려지지 않는다
+    expect(harness.transport.canonical.document.keys['4key']).toEqual(['B']);
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    harness.coordinator.stop();
+  });
+
+  it('recovers the local store when the own event lands before the failed read', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+    harness.transport.getMock.mockImplementationOnce(async () => {
+      const request = harness.transport.commitMock.mock.calls[0][0];
+      harness.transport.emit(
+        eventFor(
+          harness.transport.canonical.revision,
+          request.mutationId,
+          base,
+          harness.transport.canonical.document,
+        ),
+      );
+      throw new Error('ipc unavailable');
+    });
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(
+        { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+        { multiKey: false },
+      ),
+    ).rejects.toThrow('ipc unavailable');
+
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+        moved['4key'][0].dx,
+      ),
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(
+      harness.transport.canonical.document.keyPositions['4key'][0].id,
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBeTruthy();
+
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    await harness.coordinator.commitEditorState();
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    harness.coordinator.stop();
+  });
+
+  it('does not mistake an isolated in-flight target for pending when an external event lands first', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // 다른 창의 커밋이 먼저 반영됨 - 이벤트가 격리 커밋 in-flight 중 도착하고
+    // 격리 커밋은 실백엔드처럼 stale base로 거절된다
+    const external = structuredClone(base);
+    external.keys['4key'] = ['B'];
+    harness.transport.commitMock.mockImplementationOnce(async () => {
+      harness.transport.canonical = {
+        revision: 1,
+        document: structuredClone(external),
+      };
+      harness.transport.emit(eventFor(1, 'external-1', base, external));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      throw revisionConflict();
+    });
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(
+        { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+        { multiKey: false },
+      ),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    // 화면은 거절된 플러그인 값이 아니라 외부 canonical이어야 한다
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keys['4key']).toEqual(['B']),
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+      base.keyPositions['4key'][0].dx,
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+    harness.coordinator.stop();
+  });
+
+  it('keeps canonical ids when a late own event overlaps a retrying isolated commit', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('ipc unavailable'),
+    );
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    const patch = {
+      schemaVersion: 1 as const,
+      keys: base.keys,
+      keyPositions: moved,
+    };
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(patch, {
+        multiKey: false,
+      }),
+    ).rejects.toThrow('ipc unavailable');
+    const request = harness.transport.commitMock.mock.calls[0][0];
+    const adapted = structuredClone(harness.transport.canonical.document);
+
+    // 재시도가 전송 대기 중일 때 늦은 own 이벤트가 도착한다
+    const gate = deferred<EditorCommitResult>();
+    harness.transport.commitMock.mockImplementationOnce(() => gate.promise);
+    const retry = harness.coordinator.commitIsolatedPluginPatch(patch, {
+      multiKey: false,
+    });
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock.mock.calls.length).toBe(2),
+    );
+    harness.transport.emit(eventFor(1, request.mutationId, base, adapted));
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keyPositions['4key'][0].id).toBe(
+        adapted.keyPositions['4key'][0].id,
+      ),
+    );
+
+    // 재시도는 실백엔드처럼 stale base로 거절되고, canonical UUID는 유지된다
+    gate.reject(revisionConflict());
+    await expect(retry).rejects.toMatchObject({
+      errorCode: 'REVISION_CONFLICT',
+    });
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(
+      adapted.keyPositions['4key'][0].id,
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+      moved['4key'][0].dx,
+    );
+    harness.coordinator.stop();
+  });
+
+  it('keeps first-party commit bases off the isolated in-flight target', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    // start()는 호출마다 이 훅을 기다린다. 자사 호출만 여기서 정지시켜
+    // "빈 tail 통과 -> start 대기 중 격리 커밋이 in-flight" TOCTOU 순서를
+    // 결정적으로 만든다
+    const startGates: Array<Deferred<void>> = [];
+    const harness = createHarness(base, {
+      onStartSucceeded: () => {
+        const gate = deferred<void>();
+        startGates.push(gate);
+        return gate.promise;
+      },
+    });
+    const starting = harness.coordinator.start();
+    await vi.waitFor(() => expect(startGates.length).toBe(1));
+    startGates[0].resolve(undefined);
+    await starting;
+
+    // 자사 커밋이 먼저 진입해 start 훅에서 대기한다
+    const firstParty = harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      layerGroups: { '4key': [{ id: 'group-1', name: 'group-1' }] },
+    });
+    await vi.waitFor(() => expect(startGates.length).toBe(2));
+
+    // 그 사이 격리 커밋이 in-flight가 된다
+    const commitGate = deferred<EditorCommitResult>();
+    harness.transport.commitMock.mockImplementationOnce(
+      () => commitGate.promise,
+    );
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    const isolated = harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+      { multiKey: false },
+    );
+    await vi.waitFor(() => expect(startGates.length).toBe(3));
+    startGates[2].resolve(undefined);
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledOnce(),
+    );
+
+    // 자사 호출이 재개되어 base를 계산한다 - 미승인 격리 target이 base면
+    // 오염은 wire가 아니라 lastAck 승인으로 귀결된다 (아래 단언)
+    startGates[1].resolve(undefined);
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledTimes(2),
+    );
+    const firstPartyRequest = harness.transport.commitMock.mock.calls[1][0];
+    expect(firstPartyRequest.changes.layerGroups).toBeDefined();
+    expect(firstPartyRequest.changes.keyPositions).toBeUndefined();
+
+    // 오염은 wire가 아니라 lastAck로 귀결된다 - base가 격리 target이면
+    // 자사 커밋 성공 시 applyCommitResult가 무ID keyPositions를 lastAck로
+    // 승인하고, 다음 flush가 이를 근거로 플러그인 변경을 되돌린다
+    await firstParty;
+    const acknowledged = harness.coordinator.getState().lastAck!;
+    expect(acknowledged.keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+
+    // 정리: 격리 커밋을 adapted canonical로 완료시킨다
+    const adapted = structuredClone(harness.transport.canonical.document);
+    adapted.keyPositions['4key'][0].dx = moved['4key'][0].dx;
+    harness.transport.canonical = {
+      revision: harness.transport.canonical.revision + 1,
+      document: structuredClone(adapted),
+    };
+    commitGate.resolve({
+      revision: harness.transport.canonical.revision,
+      changedFields: ['keyPositions'],
+    });
+    await isolated;
+    await firstParty;
+    harness.coordinator.stop();
+  });
+
+  it('stamps the wire schema version by transport path', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // 자사 일반 커밋 wire는 v2 - 호출부 패치 버전과 무관하게 경로가 결정
+    await harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keys: { '4key': ['B'] },
+    });
+    expect(
+      harness.transport.commitMock.mock.calls.at(-1)?.[0].changes.schemaVersion,
+    ).toBe(2);
+
+    // 게스처 커밋 wire도 v2
+    let gestureWireVersion: number | undefined;
+    await harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['C'] } },
+      'gesture-wire',
+      async (context) => {
+        gestureWireVersion = context.editorChanges?.schemaVersion;
+        return harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        });
+      },
+    );
+    expect(gestureWireVersion).toBe(2);
+
+    // 플러그인 격리 커밋 wire는 v1 유지 (레거시 패치 수용 경계)
+    await harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: { '4key': ['D'] } },
+      { multiKey: false },
+    );
+    expect(
+      harness.transport.commitMock.mock.calls.at(-1)?.[0].changes.schemaVersion,
+    ).toBe(1);
     harness.coordinator.stop();
   });
 
@@ -473,9 +1453,138 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('혼합 semantic gesture 성공은 ordered 결과로 lastAck를 전진시킨다', async () => {
+    const base = makeDocument('A');
+    const id = base.keyPositions['4key'][0].id!;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitGesture(
+      {
+        opsVersion: EDITOR_OPS_VERSION,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id,
+            bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+          },
+        ],
+      },
+      'gesture-ops',
+      async (context) => {
+        expect(context).toMatchObject({
+          // 프론트만 승격되는 사고를 잡는 anchor - 상수 참조로 바꾸지 말 것
+          editorOpsVersion: 2,
+          editorOps: [expect.objectContaining({ id })],
+        });
+        return {
+          revision: 1,
+          changedFields: ['keyPositions'],
+          opResults: [
+            {
+              status: 'applied',
+              bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+            },
+          ],
+        };
+      },
+    );
+
+    expect(
+      harness.coordinator.getState().lastAck?.keyPositions['4key'][0],
+    ).toMatchObject({ id, dx: 11, dy: 12, width: 60, height: 70 });
+    harness.coordinator.stop();
+  });
+
+  it('혼합 semantic gesture의 targetMissing은 canonical을 한 번 동기화한다', async () => {
+    const base = makeDocument('A');
+    const id = base.keyPositions['4key'][0].id!;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const missing = structuredClone(base);
+    missing.keys['4key'] = [];
+    missing.keyPositions['4key'] = [];
+    harness.transport.canonical = { revision: 1, document: missing };
+
+    await harness.coordinator.commitGesture(
+      {
+        opsVersion: EDITOR_OPS_VERSION,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id,
+            bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+          },
+        ],
+      },
+      'gesture-missing',
+      async () => ({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'targetMissing' }],
+      }),
+    );
+
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.coordinator.getState().lastAck).toEqual(missing);
+    expect(harness.getLocal()).toEqual(missing);
+    harness.coordinator.stop();
+  });
+
+  it('혼합 semantic gesture 진행 중 외부 이벤트의 다른 필드를 보존한다', async () => {
+    const base = makeDocument('A');
+    const id = base.keyPositions['4key'][0].id!;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitGesture(
+      {
+        opsVersion: EDITOR_OPS_VERSION,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id,
+            bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+          },
+        ],
+      },
+      'gesture-external-event',
+      async () => {
+        const external = withGroups(base, 'external-group');
+        harness.transport.emit(eventFor(1, 'external', base, external));
+        await vi.waitFor(() =>
+          expect(harness.coordinator.getState().revision).toBe(1),
+        );
+        return {
+          revision: 2,
+          changedFields: ['keyPositions'],
+          opResults: [
+            {
+              status: 'applied',
+              bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+            },
+          ],
+        };
+      },
+    );
+
+    expect(harness.coordinator.getState().lastAck).toMatchObject({
+      layerGroups: { '4key': [{ id: 'external-group' }] },
+      keyPositions: {
+        '4key': [expect.objectContaining({ id, dx: 11, width: 60 })],
+      },
+    });
+    harness.coordinator.stop();
+  });
+
   it('resyncs canonical state when a gesture result is outcome-unknown', async () => {
     const base = makeDocument('A');
     const target = makeDocument('B');
+    // 키만 다른 문서다. positions id까지 갈리면 resync 판정과 무관한 차이가 섞인다
+    target.keyPositions = structuredClone(base.keyPositions);
     const harness = createHarness(base);
     await harness.coordinator.start();
 
@@ -492,6 +1601,196 @@ describe('EditorSaveCoordinator', () => {
     expect(harness.coordinator.getState().revision).toBe(1);
     expect(harness.coordinator.getState().lastAck).toEqual(target);
     expect(harness.getLocal()).toEqual(target);
+    harness.coordinator.stop();
+  });
+
+  it('editor 전용 gesture의 IO 실패는 최신 문서에서 자동 재시도한다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    const transientError = ioError();
+    harness.transport.commitMock
+      .mockRejectedValueOnce(transientError)
+      .mockResolvedValueOnce({ revision: 1, changedFields: ['keys'] });
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-native-only',
+        (context) =>
+          harness.transport.commit({
+            baseRevision: context.editorBaseRevision,
+            mutationId: context.mutationId,
+            changes: context.editorChanges!,
+          }),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).resolves.toEqual(target);
+
+    expect(harness.getLocal()).toEqual(target);
+    expect(harness.coordinator.getState()).toMatchObject({
+      dirty: false,
+      failureKind: null,
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    harness.coordinator.stop();
+  });
+
+  it('혼합 gesture의 재시도 가능 실패는 editor만 따로 재시도하지 않는다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    const transientError = ioError();
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-mixed',
+        () => Promise.reject(transientError),
+        { reconcileRetryableEditorIntent: () => false },
+      ),
+    ).rejects.toBe(transientError);
+
+    expect(harness.getLocal()).toEqual(base);
+    expect(harness.coordinator.getState()).toMatchObject({
+      dirty: false,
+      pendingLocal: null,
+      failureKind: 'transient',
+    });
+    await expect(harness.coordinator.retryPending()).resolves.toEqual(base);
+    harness.coordinator.stop();
+  });
+
+  it('editor 전용 gesture가 다른 필드의 외부 변경과 안전하게 합쳐진다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const remote = withGroups(base, 'remote');
+    const expected = withGroups(target, 'remote');
+    const harness = createHarness(base);
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 2,
+      changedFields: ['keys'],
+    });
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-unrelated-rebase',
+        () => Promise.reject(revisionConflict()),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).resolves.toEqual(expected);
+
+    expect(harness.getLocal()).toEqual(expected);
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseRevision: 1,
+        gestureId: 'gesture-unrelated-rebase',
+        gestureIds: ['gesture-unrelated-rebase'],
+      }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('editor 전용 gesture와 같은 필드의 외부 변경은 충돌로 전환한다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const remote = makeDocument('C');
+    remote.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-overlap',
+        () => Promise.reject(revisionConflict()),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'conflict',
+      failureKind: null,
+      conflict: {
+        pendingLocal: target,
+        canonical: remote,
+        localFields: ['keys'],
+        overlappingFields: ['keys'],
+      },
+    });
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('editor 전용 gesture 충돌에서 내 편집을 유지하면 같은 gesture ID로 저장한다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const remote = makeDocument('C');
+    remote.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 2,
+      changedFields: ['keys'],
+    });
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-keep-local',
+        () => Promise.reject(revisionConflict()),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    await harness.coordinator.resolveConflict('keepLocal');
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseRevision: 1,
+        gestureId: 'gesture-keep-local',
+        gestureIds: ['gesture-keep-local'],
+      }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('IO 응답 유실 뒤 같은 필드가 더 바뀌면 옛 목표로 덮지 않는다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const remote = makeDocument('C');
+    remote.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 2, document: remote };
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-io-overlap',
+        () => Promise.reject(ioError()),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).rejects.toBeDefined();
+
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'conflict',
+      failureKind: null,
+    });
+    expect(harness.coordinator.getState().conflict?.canonical).toEqual(remote);
     harness.coordinator.stop();
   });
 
@@ -699,7 +1998,7 @@ describe('EditorSaveCoordinator', () => {
       expect(harness.transport.commitMock).toHaveBeenCalledTimes(2),
     );
     expect(harness.transport.commitMock.mock.calls[1][0].changes).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       statPositions,
       graphPositions,
       knobPositions,
@@ -842,6 +2141,43 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('committed patch가 기존 collection과 ID 충돌하면 권위 문서로 재동기화한다', async () => {
+    const base = makeDocument('A');
+    const remote = makeDocument('B');
+    const duplicateId = base.keyPositions['4key'][0].id!;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+    const invalidEvent: EditorCommittedV1 = {
+      schemaVersion: 1,
+      revision: 1,
+      mutationId: 'external-duplicate',
+      changedFields: ['statPositions'],
+      patch: {
+        schemaVersion: 1,
+        statPositions: {
+          '4key': [
+            {
+              ...createDefaultKeyPosition(),
+              id: duplicateId,
+              statType: 'kps',
+            },
+          ],
+        },
+      },
+    };
+
+    harness.transport.emit(invalidEvent);
+    await vi.waitFor(() =>
+      expect(harness.coordinator.getState().revision).toBe(1),
+    );
+
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal()).toEqual(remote);
+    expect(harness.coordinator.getState().lastAck).toEqual(remote);
+    harness.coordinator.stop();
+  });
+
   it('resynchronizes a revision gap and ignores an older event', async () => {
     const base = makeDocument();
     const remote = withGroups({ ...base, keys: { '4key': ['C'] } }, 'remote');
@@ -860,6 +2196,32 @@ describe('EditorSaveCoordinator', () => {
     harness.transport.emit(eventFor(2, 'external-2', base, remote));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    harness.coordinator.stop();
+  });
+
+  it('revision gap의 첫 canonical 응답이 invalid여도 한 번만 preview를 정리한다', async () => {
+    const base = makeDocument('A');
+    const remote = makeDocument('B');
+    const invalid = structuredClone(remote);
+    invalid.keyPositions['4key'][0].id = undefined;
+    const onCommittedApplied = vi.fn();
+    const harness = createHarness(base, { onCommittedApplied });
+    await harness.coordinator.start();
+    harness.transport.getMock
+      .mockResolvedValueOnce({ revision: 3, document: invalid })
+      .mockResolvedValueOnce({ revision: 3, document: remote });
+
+    harness.transport.emit({
+      ...eventFor(3, 'external-invalid-gap', base, remote),
+      gestureIds: ['00000000-0000-4000-8000-000000000001'],
+    });
+
+    await vi.waitFor(() =>
+      expect(harness.coordinator.getState().revision).toBe(3),
+    );
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(3);
+    expect(onCommittedApplied).toHaveBeenCalledOnce();
+    expect(harness.getLocal()).toEqual(remote);
     harness.coordinator.stop();
   });
 
@@ -1018,7 +2380,7 @@ describe('EditorSaveCoordinator', () => {
     const retried = harness.transport.commitMock.mock.calls[1][0];
     expect(retried.baseRevision).toBe(1);
     expect(retried.changes).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       keys: { '4key': ['L'] },
     });
     expect(harness.coordinator.getState().conflict).toBeNull();
@@ -1059,6 +2421,34 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('외부 변경 수용은 충돌한 gesture preview를 폐기한다', async () => {
+    const base = makeDocument('A');
+    const local = makeDocument('B');
+    local.keyPositions = structuredClone(base.keyPositions);
+    const remote = makeDocument('C');
+    remote.keyPositions = structuredClone(base.keyPositions);
+    const onGestureIdsDiscarded =
+      vi.fn<(gestureIds: readonly string[]) => void>();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    harness.transport.commitMock.mockRejectedValueOnce(revisionConflict());
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+
+    await expect(
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, keys: local.keys },
+        { gestureId: 'gesture-accept-external' },
+      ),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    await harness.coordinator.resolveConflict('acceptCanonical');
+    expect(harness.getLocal()).toEqual(remote);
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith([
+      'gesture-accept-external',
+    ]);
+    harness.coordinator.stop();
+  });
+
   it('can keep the local side of an overlap and recommit it on the canonical revision', async () => {
     const base = makeDocument();
     const local = { ...base, keys: { '4key': ['L'] } };
@@ -1083,7 +2473,7 @@ describe('EditorSaveCoordinator', () => {
     expect(harness.getLocal()).toEqual(expected);
     expect(harness.transport.commitMock.mock.calls[1][0]).toMatchObject({
       baseRevision: 1,
-      changes: { schemaVersion: 1, keys: { '4key': ['L'] } },
+      changes: { schemaVersion: 2, keys: { '4key': ['L'] } },
     });
     harness.coordinator.stop();
   });
@@ -1228,6 +2618,54 @@ describe('EditorSaveCoordinator', () => {
     },
   );
 
+  it('영구 거절은 in-flight gesture preview도 함께 폐기한다', async () => {
+    const base = makeDocument();
+    const target = { ...base, keys: { '4key': ['REJECTED'] } };
+    const error = validationError();
+    const onGestureIdsDiscarded =
+      vi.fn<(gestureIds: readonly string[]) => void>();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    harness.transport.commitMock.mockRejectedValueOnce(error);
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, keys: target.keys },
+        { gestureId: 'gesture-rejected-preview' },
+      ),
+    ).rejects.toBe(error);
+
+    expect(harness.getLocal()).toEqual(base);
+    expect(onGestureIdsDiscarded).toHaveBeenCalledOnce();
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith([
+      'gesture-rejected-preview',
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('혼합 gesture의 영구 거절도 editor preview를 폐기한다', async () => {
+    const base = makeDocument();
+    const error = validationError();
+    const onGestureIdsDiscarded =
+      vi.fn<(gestureIds: readonly string[]) => void>();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: { '4key': ['REJECTED'] } },
+        'gesture-mixed-rejected',
+        () => Promise.reject(error),
+      ),
+    ).rejects.toBe(error);
+
+    expect(harness.getLocal()).toEqual(base);
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith([
+      'gesture-mixed-rejected',
+    ]);
+    harness.coordinator.stop();
+  });
+
   it('uses commitPatch as an optimistic compatibility adapter and skips full-state no-ops', async () => {
     const base = makeDocument();
     const target = withGroups(base, 'group-1');
@@ -1265,9 +2703,15 @@ describe('EditorSaveCoordinator', () => {
     expect(result).toEqual(base);
     expect(harness.transport.commitMock).toHaveBeenCalledOnce();
     expect(harness.transport.commitMock.mock.calls[0][0].changes).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       keys: base.keys,
     });
+    expect(harness.transport.commitMock.mock.calls[0][0]).not.toHaveProperty(
+      'ops',
+    );
+    await expect(
+      harness.transport.commitMock.mock.results[0].value,
+    ).resolves.not.toHaveProperty('opResults');
     expect(harness.coordinator.getState()).toMatchObject({
       revision: 0,
       dirty: false,
@@ -1292,13 +2736,3670 @@ describe('EditorSaveCoordinator', () => {
     });
 
     expect(harness.transport.commitMock.mock.calls[0][0].changes).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       keys: { '4key': ['B'] },
     });
     expect(result.graphPositions).toEqual(base.graphPositions);
     expect(harness.getLocal()).toMatchObject({
       keys: { '4key': ['B'] },
       graphPositions: preview.graphPositions,
+    });
+    harness.coordinator.stop();
+  });
+});
+// 지연 생성 커밋: 호출 시점 캡처 patch가 대기 중 정산된 다른 커밋의 같은
+// 컬렉션 값을 되돌리는 lost-update의 방어 경로
+describe('commitGeneratedPatch', () => {
+  const gatedDefaultCommit = (
+    harness: ReturnType<typeof createHarness>,
+    gate: Promise<void>,
+  ) => {
+    harness.transport.commitMock.mockImplementationOnce(async (request) => {
+      await gate;
+      const before = harness.transport.canonical.document;
+      if (!request.changes) {
+        throw new Error('expected a compatibility patch');
+      }
+      const next = applyEditorPatch(before, request.changes);
+      const changedFields = getChangedEditorFields(before, next);
+      if (changedFields.length > 0) harness.transport.canonical.revision += 1;
+      harness.transport.canonical.document = next;
+      return {
+        revision: harness.transport.canonical.revision,
+        changedFields,
+      };
+    });
+  };
+
+  const imageRecordFrom = (base: CanonicalEditorDocumentV1) => {
+    const record = structuredClone(base.keyPositions);
+    record['4key'] = record['4key'].map((position, index) =>
+      index === 0 ? { ...position, inactiveImage: 'generated.png' } : position,
+    );
+    return record;
+  };
+
+  it('게스처 in-flight 완료 후의 base에서 생성해 양쪽 값을 보존한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const gate = deferred<void>();
+    gatedDefaultCommit(harness, gate.promise);
+    const gesture = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['G'] } },
+      'gesture-g',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        }),
+    );
+
+    const generatorSpy = vi.fn((latest: CanonicalEditorDocumentV1) => ({
+      schemaVersion: 1 as const,
+      keyPositions: imageRecordFrom(latest),
+    }));
+    const generated = harness.coordinator.commitGeneratedPatch(generatorSpy);
+
+    // 게스처가 정산되기 전에는 생성하지 않는다
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(generatorSpy).not.toHaveBeenCalled();
+
+    gate.resolve();
+    await gesture;
+    await generated;
+
+    // 생성 base에 게스처 결과가 이미 반영돼 있다
+    expect(generatorSpy.mock.calls[0][0].keys['4key']).toEqual(['G']);
+    const finalDocument = harness.transport.canonical.document;
+    expect(finalDocument.keys['4key']).toEqual(['G']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('격리 플러그인 커밋 선행 시 그 결과 위에서 생성한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const gate = deferred<void>();
+    gatedDefaultCommit(harness, gate.promise);
+    const isolated = harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: { '4key': ['P'] } },
+      { multiKey: false },
+    );
+
+    const generatorSpy = vi.fn((latest: CanonicalEditorDocumentV1) => ({
+      schemaVersion: 1 as const,
+      keyPositions: imageRecordFrom(latest),
+    }));
+    const generated = harness.coordinator.commitGeneratedPatch(generatorSpy);
+
+    gate.resolve();
+    await isolated;
+    await generated;
+
+    expect(generatorSpy.mock.calls[0][0].keys['4key']).toEqual(['P']);
+    const finalDocument = harness.transport.canonical.document;
+    expect(finalDocument.keys['4key']).toEqual(['P']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('compatibility 큐 선행 writer의 stale 레코드와 생성 커밋이 모두 생존한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // C가 큐 점유 - X는 클릭 전 캡처한 full record를 들고 대기
+    const releaseC = deferred<void>();
+    const cDone = enqueueEditorCompatibilityWrite(
+      () => releaseC.promise,
+      () => undefined,
+    );
+    const staleRecord = structuredClone(
+      harness.transport.canonical.document.keyPositions,
+    );
+    staleRecord['4key'] = staleRecord['4key'].map((position, index) =>
+      index === 0 ? { ...position, noteWidth: 222 } : position,
+    );
+    const xDone = enqueueEditorCompatibilityWrite(
+      () =>
+        harness.coordinator.commitPatch({
+          schemaVersion: 1,
+          keyPositions: staleRecord,
+        }),
+      () => undefined,
+    );
+
+    // 생성 커밋도 같은 큐에 합류 - 큐를 건너뛰면 X가 나중에 실행되어
+    // 생성 값을 되돌린다
+    const bDone = enqueueEditorCompatibilityWrite(
+      () =>
+        harness.coordinator.commitGeneratedPatch((latest) => ({
+          schemaVersion: 1,
+          keyPositions: imageRecordFrom(latest),
+        })),
+      () => undefined,
+    );
+
+    releaseC.resolve();
+    await Promise.all([cDone, xDone, bDone]);
+
+    const finalPosition =
+      harness.transport.canonical.document.keyPositions['4key'][0];
+    expect(finalPosition.noteWidth).toBe(222);
+    expect(finalPosition.inactiveImage).toBe('generated.png');
+    harness.coordinator.stop();
+  });
+
+  it('선행 커밋이 대상을 삭제하면 생성이 null로 수렴해 커밋하지 않는다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const targetId =
+      harness.transport.canonical.document.keyPositions['4key'][0].id;
+
+    const gate = deferred<void>();
+    gatedDefaultCommit(harness, gate.promise);
+    const deletion = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': [] }, keyPositions: { '4key': [] } },
+      'gesture-delete',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        }),
+    );
+
+    const generatorSpy = vi.fn((latest: CanonicalEditorDocumentV1) => {
+      const found = latest.keyPositions['4key']?.some(
+        (position) => position.id === targetId,
+      );
+      if (!found) return null;
+      return {
+        schemaVersion: 1 as const,
+        keyPositions: imageRecordFrom(latest),
+      };
+    });
+    const generated = harness.coordinator.commitGeneratedPatch(generatorSpy);
+
+    gate.resolve();
+    await deletion;
+    await generated;
+
+    // 생성은 삭제가 반영된 base를 받아 null로 수렴한다
+    expect(generatorSpy.mock.calls[0][0].keyPositions['4key']).toEqual([]);
+    // wire 커밋은 삭제 1건뿐, revision도 그만큼만 전진
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(1);
+    expect(harness.transport.canonical.revision).toBe(1);
+    expect(harness.transport.canonical.document.keyPositions['4key']).toEqual(
+      [],
+    );
+    harness.coordinator.stop();
+  });
+
+  it('생성 커밋의 gestureId가 wire 요청에 실린다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitGeneratedPatch(
+      (latest) => ({
+        schemaVersion: 1,
+        keyPositions: imageRecordFrom(latest),
+      }),
+      { gestureId: 'gesture-generated' },
+    );
+
+    const request = harness.transport.commitMock.mock.calls.at(-1)?.[0];
+    expect(request?.gestureIds).toEqual(['gesture-generated']);
+    harness.coordinator.stop();
+  });
+
+  it('null 생성은 mutation·낙관 적용·revision 전진이 전부 없다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    const applicationsBefore = harness.applications.length;
+    const revisionBefore = harness.transport.canonical.revision;
+
+    const result = await harness.coordinator.commitGeneratedPatch(() => null);
+
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    expect(harness.applications.length).toBe(applicationsBefore);
+    expect(harness.transport.canonical.revision).toBe(revisionBefore);
+    expect(result).toEqual(base);
+    harness.coordinator.stop();
+  });
+
+  it('생성 후 revision 충돌은 비중첩 rebase로 양쪽을 보존한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    harness.transport.commitMock.mockImplementationOnce(async () => {
+      // 외부 writer가 먼저 revision을 전진시킨 상황
+      harness.transport.canonical.revision += 1;
+      harness.transport.canonical.document = applyEditorPatch(
+        harness.transport.canonical.document,
+        { schemaVersion: 1, keys: { '4key': ['EXT'] } },
+      );
+      throw revisionConflict();
+    });
+
+    await harness.coordinator.commitGeneratedPatch((latest) => ({
+      schemaVersion: 1,
+      keyPositions: imageRecordFrom(latest),
+    }));
+
+    const finalDocument = harness.transport.canonical.document;
+    expect(finalDocument.keys['4key']).toEqual(['EXT']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('배타 legacy mutation은 in-flight 커밋 완료 후 실행되고 canonical을 재동기화한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const gate = deferred<void>();
+    gatedDefaultCommit(harness, gate.promise);
+    const gesture = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['G'] } },
+      'gesture-g',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        }),
+    );
+
+    const mutationSpy = vi.fn(async () => {
+      // 백엔드가 문서를 직접 바꾸는 legacy 커맨드 흉내
+      const before = harness.transport.canonical.document;
+      harness.transport.canonical.document = applyEditorPatch(before, {
+        schemaVersion: 1,
+        keys: { '4key': ['L'] },
+      });
+      harness.transport.canonical.revision += 1;
+      return 'mutated';
+    });
+    const exclusive =
+      harness.coordinator.runExclusiveLegacyMutation(mutationSpy);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mutationSpy).not.toHaveBeenCalled();
+
+    gate.resolve();
+    await gesture;
+    const result = await exclusive;
+
+    expect(result).toBe('mutated');
+    // 슬롯 안 재동기화로 로컬 문서가 mutation 결과를 반영
+    expect(harness.getLocal().keys['4key']).toEqual(['L']);
+
+    // 이후 자사 커밋은 mutation 결과 위에서 진행
+    await harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keyPositions: imageRecordFrom(harness.getLocal()),
+    });
+    const finalDocument = harness.transport.canonical.document;
+    expect(finalDocument.keys['4key']).toEqual(['L']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('선행 stale compat write와 후행 generated가 배타 mutation 결과를 되돌리지 않는다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // 선행 writer: 클릭 시점 캡처된 stale full record (compat 큐 대기)
+    const releaseC = deferred<void>();
+    const gate = enqueueEditorCompatibilityWrite(
+      () => releaseC.promise,
+      () => undefined,
+    );
+    const staleRecord = structuredClone(
+      harness.transport.canonical.document.keyPositions,
+    );
+    staleRecord['4key'] = staleRecord['4key'].map((position, index) =>
+      index === 0 ? { ...position, noteWidth: 111 } : position,
+    );
+    const staleWrite = enqueueEditorCompatibilityWrite(
+      () =>
+        harness.coordinator.commitPatch({
+          schemaVersion: 1,
+          keyPositions: staleRecord,
+        }),
+      () => undefined,
+    );
+
+    // 배타 legacy mutation (compat 큐 + 직렬 tail 점유)
+    const legacy = enqueueEditorCompatibilityOperation(() =>
+      harness.coordinator.runExclusiveLegacyMutation(async () => {
+        harness.transport.canonical.document = applyEditorPatch(
+          harness.transport.canonical.document,
+          { schemaVersion: 1, keys: { '4key': ['L'] } },
+        );
+        harness.transport.canonical.revision += 1;
+        return 'mutated';
+      }),
+    );
+
+    // 후행 generated
+    const generated = enqueueEditorCompatibilityOperation(() =>
+      harness.coordinator.commitGeneratedPatch((latest) => ({
+        schemaVersion: 1,
+        keyPositions: imageRecordFrom(latest),
+      })),
+    );
+
+    releaseC.resolve();
+    await Promise.all([gate, staleWrite, legacy, generated]);
+
+    const finalDocument = harness.transport.canonical.document;
+    // 셋 다 생존: stale write 값, mutation 결과, generated 값
+    expect(finalDocument.keyPositions['4key'][0].noteWidth).toBe(111);
+    expect(finalDocument.keys['4key']).toEqual(['L']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('배타 mutation 실패는 원 오류로 전파되고 tail은 계속 진행된다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.runExclusiveLegacyMutation(async () => {
+        throw new Error('legacy failed');
+      }),
+    ).rejects.toThrow('legacy failed');
+
+    await expect(
+      harness.coordinator.commitPatch({
+        schemaVersion: 1,
+        keys: { '4key': ['N'] },
+      }),
+    ).resolves.toBeTruthy();
+    harness.coordinator.stop();
+  });
+
+  it('배타 mutation 재동기화 실패는 mutation 성공을 뒤집지 않는다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('ipc unavailable'),
+    );
+
+    const result = await harness.coordinator.runExclusiveLegacyMutation(
+      async () => 'ok',
+    );
+
+    expect(result).toBe('ok');
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+    harness.coordinator.stop();
+  });
+
+  it('generator 예외는 해당 커밋만 실패시키고 큐는 계속 진행된다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitGeneratedPatch(() => {
+        throw new Error('generator failed');
+      }),
+    ).rejects.toThrow('generator failed');
+
+    await expect(
+      harness.coordinator.commitPatch({
+        schemaVersion: 1,
+        keys: { '4key': ['N'] },
+      }),
+    ).resolves.toBeTruthy();
+    expect(harness.transport.canonical.document.keys['4key']).toEqual(['N']);
+    harness.coordinator.stop();
+  });
+});
+
+describe('commitSemanticOpsInternal', () => {
+  const withStableId = (id: string): CanonicalEditorDocumentV1 => {
+    const document = makeDocument();
+    document.keyPositions['4key'][0] = {
+      ...document.keyPositions['4key'][0],
+      id,
+    };
+    return document;
+  };
+
+  const setBoundsOp = (id: string): EditorSetBoundsOpV1 => ({
+    kind: 'setBounds',
+    elementType: 'key',
+    id,
+    bounds: { dx: 12, dy: 13, width: 140, height: 150 },
+  });
+
+  const deleteElementOp = (id: string): EditorOpV1 => ({
+    kind: 'deleteElement',
+    elementType: 'key',
+    id,
+  });
+
+  const insertFrozenKeyOp = (id: string, zIndex: number): EditorOpV1 => ({
+    kind: 'insertFrozenElements',
+    mode: '4key',
+    elements: [
+      {
+        elementType: 'key',
+        slot: 'B',
+        position: {
+          ...createDefaultKeyPosition(),
+          id,
+          zIndex,
+          groupId: 'shared-group',
+        },
+      },
+    ],
+    groups: [{ id: 'shared-group', name: 'Shared' }],
+    zUpdates: [],
+  });
+
+  const reorderKeyOp = (id: string, zIndex: number): EditorOpV1 => ({
+    kind: 'reorderElements',
+    mode: '4key',
+    completeModeOrder: false,
+    zUpdates: [{ elementType: 'key', id, zIndex }],
+    groupUpdates: [],
+  });
+
+  const patchHiddenOp = (id: string, hidden: boolean): EditorOpV1 => ({
+    kind: 'patchElement',
+    elementType: 'key',
+    id,
+    patch: { property: 'hidden', value: hidden },
+  });
+
+  it('fixed invalid ops는 Promise로 거절하고 transport start 전에 중단한다', async () => {
+    const harness = createHarness(makeDocument());
+    const invalid = [{ kind: 'setBounds' }] as unknown as EditorOpV1[];
+
+    const committing = harness.coordinator.commitSemanticOpsInternal(invalid);
+
+    await expect(committing).rejects.toBeInstanceOf(EditorProtocolError);
+    expect(harness.transport.getMock).not.toHaveBeenCalled();
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('patchElement는 대상 leaf만 바꾸고 무관 필드를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000088';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].noteWidth = 222;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      patchHiddenOp(id, true),
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      id,
+      hidden: true,
+      noteWidth: 222,
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ops: [patchHiddenOp(id, true)] }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('layerName patch는 literal을 쓰고 null이면 leaf만 제거한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000008c';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].layerName = 'Before';
+    base.keyPositions['4key'][0].noteWidth = 333;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'layerName', value: 'After' },
+      },
+    ]);
+    expect(
+      harness.coordinator.getState().lastAck?.keyPositions['4key'][0],
+    ).toMatchObject({ layerName: 'After', noteWidth: 333 });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'layerName', value: null },
+      },
+    ]);
+    expect(outcome.document.keyPositions['4key'][0]).not.toHaveProperty(
+      'layerName',
+    );
+    expect(outcome.document.keyPositions['4key'][0].noteWidth).toBe(333);
+    harness.coordinator.stop();
+  });
+
+  it('graphType patch는 graph의 해당 leaf만 바꾼다', async () => {
+    const id = '00000000-0000-4000-8000-00000000008d';
+    const base = makeDocument();
+    base.graphPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          noteWidth: 321,
+          statType: 'kps',
+          graphType: 'line',
+          graphSpeed: 1000,
+          graphColor: '#86EFAC',
+        },
+      ],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id,
+        patch: { property: 'graphType', value: 'bar' as const },
+      } satisfies EditorOpV1,
+    ]);
+
+    expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
+      graphType: 'bar',
+      id,
+      noteWidth: 321,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('statType patch는 stat의 해당 leaf만 바꾸고 무관 필드를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000008f';
+    const base = makeDocument();
+    base.statPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          statType: 'kps',
+          noteWidth: 321,
+        },
+      ],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'stat',
+        id,
+        patch: { property: 'statType', value: 'kpsAvg' },
+      },
+    ]);
+
+    expect(outcome.document.statPositions['4key'][0]).toMatchObject({
+      id,
+      statType: 'kpsAvg',
+      noteWidth: 321,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('graphColor patch는 raw literal을 쓰고 다른 graph leaf를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000091';
+    const base = makeDocument();
+    base.graphPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          statType: 'kps',
+          graphType: 'line',
+          graphSpeed: 1234,
+          graphColor: '#before',
+        },
+      ],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id,
+        patch: { property: 'graphColor', value: '  custom  ' },
+      },
+    ]);
+
+    expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
+      id,
+      graphColor: '  custom  ',
+      graphType: 'line',
+      graphSpeed: 1234,
+    });
+    harness.coordinator.stop();
+  });
+
+  it.each([
+    [{ property: 'showAvgLine', value: true }, { showAvgLine: true }],
+    [
+      { property: 'graphAnimationEnabled', value: false },
+      { graphAnimationEnabled: false },
+    ],
+    [{ property: 'graphSpeed', value: 3200 }, { graphSpeed: 3200 }],
+  ] as const)(
+    'graph runtime patch %j는 해당 leaf만 바꾼다',
+    async (patch, expected) => {
+      const id = '00000000-0000-4000-8000-000000000097';
+      const base = makeDocument();
+      base.graphPositions = {
+        '4key': [
+          {
+            ...createDefaultKeyPosition(),
+            id,
+            statType: 'kps',
+            graphType: 'line',
+            graphSpeed: 1000,
+            graphColor: '#before',
+            showAvgLine: false,
+            graphAnimationEnabled: true,
+          },
+        ],
+      };
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+
+      const outcome = await harness.coordinator.commitSemanticOpsInternal([
+        {
+          kind: 'patchElement',
+          elementType: 'graph',
+          id,
+          patch,
+        },
+      ]);
+
+      expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
+        id,
+        graphType: 'line',
+        graphColor: '#before',
+        ...expected,
+      });
+      harness.coordinator.stop();
+    },
+  );
+
+  it.each([
+    [
+      { property: 'reverse', value: true },
+      { sensitivity: 1, reverse: true, axisId: 'HIDA:test' },
+    ],
+    [
+      { property: 'sensitivity', value: 2.5 },
+      { sensitivity: 2.5, reverse: false, axisId: 'HIDA:test' },
+    ],
+    [
+      { property: 'axisId', value: '  HIDA:raw  ' },
+      { sensitivity: 1, reverse: false, axisId: '  HIDA:raw  ' },
+    ],
+  ] as const)(
+    'knob runtime patch %j는 해당 leaf만 바꾼다',
+    async (patch, expectedPosition) => {
+      const id = '00000000-0000-4000-8000-000000000098';
+      const base = makeDocument();
+      base.knobPositions = {
+        '4key': [
+          {
+            ...createDefaultKeyPosition(),
+            id,
+            axisId: 'HIDA:test',
+            sensitivity: 1,
+            reverse: false,
+          },
+        ],
+      };
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+
+      const outcome = await harness.coordinator.commitSemanticOpsInternal([
+        {
+          kind: 'patchElement',
+          elementType: 'knob',
+          id,
+          patch,
+        },
+      ]);
+
+      expect(outcome.document.knobPositions['4key'][0]).toMatchObject({
+        id,
+        ...expectedPosition,
+      });
+      harness.coordinator.stop();
+    },
+  );
+
+  it('graph와 knob runtime leaf 6개를 한 commit에서 순서대로 적용하고 noChange를 보존한다', async () => {
+    const graphIds = [
+      '00000000-0000-4000-8000-0000000000a1',
+      '00000000-0000-4000-8000-0000000000a2',
+      '00000000-0000-4000-8000-0000000000a3',
+    ];
+    const knobIds = [
+      '00000000-0000-4000-8000-0000000000a4',
+      '00000000-0000-4000-8000-0000000000a5',
+      '00000000-0000-4000-8000-0000000000a6',
+    ];
+    const base = makeDocument();
+    base.graphPositions = {
+      '4key': graphIds.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        statType: 'kps' as const,
+        graphType: 'line' as const,
+        graphSpeed: 1000,
+        graphColor: '#before',
+        showAvgLine: false,
+        graphAnimationEnabled: true,
+      })),
+    };
+    base.knobPositions = {
+      '4key': knobIds.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        axisId: 'HIDA:test',
+        sensitivity: 1,
+        reverse: false,
+      })),
+    };
+    const ops: EditorOpV1[] = [
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: graphIds[0],
+        patch: { property: 'showAvgLine', value: true },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: graphIds[1],
+        patch: { property: 'graphAnimationEnabled', value: false },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: graphIds[2],
+        patch: { property: 'graphSpeed', value: 3200 },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'knob',
+        id: knobIds[0],
+        patch: { property: 'reverse', value: true },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'knob',
+        id: knobIds[1],
+        patch: { property: 'sensitivity', value: 2.5 },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'knob',
+        id: knobIds[2],
+        patch: { property: 'axisId', value: '  HIDA:raw  ' },
+      },
+    ];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal(ops);
+    expect(applied.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    expect(applied.document.graphPositions['4key']).toEqual([
+      expect.objectContaining({ showAvgLine: true, graphColor: '#before' }),
+      expect.objectContaining({
+        graphAnimationEnabled: false,
+        graphColor: '#before',
+      }),
+      expect.objectContaining({ graphSpeed: 3200, graphColor: '#before' }),
+    ]);
+    expect(applied.document.knobPositions['4key']).toEqual([
+      expect.objectContaining({ reverse: true, axisId: 'HIDA:test' }),
+      expect.objectContaining({ sensitivity: 2.5, axisId: 'HIDA:test' }),
+      expect.objectContaining({
+        axisId: '  HIDA:raw  ',
+        sensitivity: 1,
+        reverse: false,
+      }),
+    ]);
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: ops.map(() => ({ status: 'noChange' })),
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal(ops);
+    expect(noChange.opResults).toEqual(ops.map(() => ({ status: 'noChange' })));
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('useInlineStyles false는 부재 leaf에도 raw applied로 저장하고 이후 noChange가 된다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b3';
+    const base = withStableId(id);
+    delete base.keyPositions['4key'][0].useInlineStyles;
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'useInlineStyles', value: false },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.opResults).toEqual([{ status: 'applied' }]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      id,
+      useInlineStyles: false,
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document.keyPositions['4key'][0].useInlineStyles).toBe(
+      false,
+    );
+    harness.coordinator.stop();
+  });
+
+  it('font style 4 leaf를 한 commit으로 적용하고 nested counter를 보존한다', async () => {
+    const ids = [
+      '00000000-0000-4000-8000-0000000000c1',
+      '00000000-0000-4000-8000-0000000000c2',
+      '00000000-0000-4000-8000-0000000000c3',
+      '00000000-0000-4000-8000-0000000000c4',
+    ];
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': ids.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        counter: {
+          ...createDefaultKeyPosition().counter,
+          fontWeight: 600,
+          fontItalic: true,
+          fontUnderline: true,
+          fontStrikethrough: true,
+        },
+      })),
+    };
+    base.keys = { '4key': ['A', 'B', 'C', 'D'] };
+    const ops: EditorOpV1[] = [
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[0],
+        patch: { property: 'fontWeight', value: 700 },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[1],
+        patch: { property: 'fontItalic', value: false },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[2],
+        patch: { property: 'fontUnderline', value: false },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[3],
+        patch: { property: 'fontStrikethrough', value: false },
+      },
+    ];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    expect(outcome.document.keyPositions['4key']).toEqual([
+      expect.objectContaining({ fontWeight: 700 }),
+      expect.objectContaining({ fontItalic: false }),
+      expect.objectContaining({ fontUnderline: false }),
+      expect.objectContaining({ fontStrikethrough: false }),
+    ]);
+    for (const position of outcome.document.keyPositions['4key']) {
+      expect(position.counter).toMatchObject({
+        fontWeight: 600,
+        fontItalic: true,
+        fontUnderline: true,
+        fontStrikethrough: true,
+      });
+    }
+    harness.coordinator.stop();
+  });
+
+  it('fontFamily는 top-level raw leaf만 적용하고 nested counter를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000c5';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      fontFamily: 'Before',
+      counter: {
+        ...base.keyPositions['4key'][0].counter,
+        fontFamily: 'Counter Family',
+      },
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'fontFamily', value: '  Raw Family  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.opResults).toEqual([{ status: 'applied' }]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      fontFamily: '  Raw Family  ',
+      counter: { fontFamily: 'Counter Family' },
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document.keyPositions['4key'][0]).toMatchObject({
+      fontFamily: '  Raw Family  ',
+      counter: { fontFamily: 'Counter Family' },
+    });
+    harness.coordinator.stop();
+  });
+
+  it('displayText는 common position leaf만 투영하고 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000d5';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      displayText: undefined,
+      className: 'sibling-class',
+      fontFamily: 'Sibling Family',
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'displayText', value: '  Raw label  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.opResults).toEqual([{ status: 'applied' }]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      displayText: '  Raw label  ',
+      className: 'sibling-class',
+      fontFamily: 'Sibling Family',
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document.keyPositions['4key'][0].displayText).toBe(
+      '  Raw label  ',
+    );
+    harness.coordinator.stop();
+  });
+
+  it.each(['stale', ''])(
+    'idle background paint ack는 gradient 대표색으로 active fallback을 materialize한다 (%j)',
+    async (idleColor) => {
+      const id = '00000000-0000-4000-8000-0000000000a6';
+      const gradient = {
+        angle: 45,
+        stops: [
+          { color: '#first', pos: 0 },
+          { color: '#last', pos: 1 },
+        ],
+      };
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        backgroundColor: idleColor,
+        backgroundGradient: gradient,
+        activeBackgroundColor: undefined,
+        activeBackgroundGradient: undefined,
+        borderColor: '#border-sibling',
+      };
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+
+      const applied = await harness.coordinator.commitSemanticOpsInternal([
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id,
+          patch: {
+            property: 'backgroundPaint',
+            value: { color: '#next', gradient: null },
+          },
+        },
+      ]);
+
+      expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+        backgroundColor: '#next',
+        backgroundGradient: undefined,
+        activeBackgroundColor: '#first',
+        activeBackgroundGradient: gradient,
+        borderColor: '#border-sibling',
+      });
+      harness.coordinator.stop();
+    },
+  );
+
+  it('shadow ack는 None seed와 master state matrix를 투영하고 siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b6';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      id,
+      inactiveImage: 'image.png',
+      shadow: undefined,
+      activeShadow: undefined,
+      borderColor: '#sibling',
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'shadowEnabled', value: true },
+      },
+    ]);
+
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      shadow: {
+        enabled: true,
+        color: 'rgba(0, 0, 0, 0.28)',
+        offsetX: 0,
+        offsetY: 4,
+        blur: 10,
+      },
+      activeShadow: {
+        enabled: true,
+        color: 'rgba(0, 0, 0, 0.32)',
+        offsetX: 0,
+        offsetY: 3,
+        blur: 8,
+      },
+      borderColor: '#sibling',
+    });
+    harness.coordinator.stop();
+  });
+
+  it('className은 common position leaf만 투영하고 displayText sibling을 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000c5';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      className: undefined,
+      displayText: 'Sibling label',
+      fontFamily: 'Sibling Family',
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'className', value: '  Raw class  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.opResults).toEqual([{ status: 'applied' }]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      className: '  Raw class  ',
+      displayText: 'Sibling label',
+      fontFamily: 'Sibling Family',
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document.keyPositions['4key'][0].className).toBe(
+      '  Raw class  ',
+    );
+    harness.coordinator.stop();
+  });
+
+  it.each([
+    ['borderWidth', 12.5],
+    ['borderRadius', 88.5],
+    ['fontSize', 31.5],
+  ] as const)(
+    '%s numeric style은 한 leaf만 투영하고 나머지 style siblings를 보존한다',
+    async (property, value) => {
+      const id = '00000000-0000-4000-8000-0000000000e5';
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        borderWidth: 2.5,
+        borderRadius: 9.5,
+        fontSize: 16.5,
+        className: 'sibling-class',
+      };
+      const op: EditorOpV1 = {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch:
+          property === 'borderWidth'
+            ? { property: 'borderWidth', value }
+            : property === 'borderRadius'
+            ? { property: 'borderRadius', value }
+            : { property: 'fontSize', value },
+      };
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+
+      const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+      expect(applied.opResults).toEqual([{ status: 'applied' }]);
+      expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+        borderWidth: property === 'borderWidth' ? value : 2.5,
+        borderRadius: property === 'borderRadius' ? value : 9.5,
+        fontSize: property === 'fontSize' ? value : 16.5,
+        className: 'sibling-class',
+      });
+      harness.coordinator.stop();
+    },
+  );
+
+  it('inactiveImage는 raw top-level leaf만 적용하고 이미지 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b7';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      inactiveImage: 'before.png',
+      activeImage: 'active.png',
+      idleImageFit: 'contain',
+      idleTransparent: true,
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'inactiveImage', value: '  /tmp/raw.png  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      inactiveImage: '  /tmp/raw.png  ',
+      activeImage: 'active.png',
+      idleImageFit: 'contain',
+      idleTransparent: true,
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('soundPath는 key raw top-level leaf만 적용하고 사운드 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b9';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      soundPath: 'sounds/before.wav',
+      soundEnabled: true,
+      soundVolume: 137,
+      inactiveImage: 'idle.png',
+      counter: { ...base.keyPositions['4key'][0].counter, enabled: true },
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'soundPath', value: '  sounds/raw.wav  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      soundPath: '  sounds/raw.wav  ',
+      soundEnabled: true,
+      soundVolume: 137,
+      inactiveImage: 'idle.png',
+      counter: { enabled: true },
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('soundEnabled는 key bool top-level leaf만 적용하고 사운드 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000ba';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      soundPath: 'sounds/before.wav',
+      soundEnabled: false,
+      soundVolume: 137,
+      inactiveImage: 'idle.png',
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'soundEnabled', value: true },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      soundPath: 'sounds/before.wav',
+      soundEnabled: true,
+      soundVolume: 137,
+      inactiveImage: 'idle.png',
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('soundVolume은 key number top-level leaf만 적용하고 사운드 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000bc';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      soundPath: 'sounds/before.wav',
+      soundEnabled: true,
+      soundVolume: undefined,
+      inactiveImage: 'idle.png',
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'soundVolume', value: 100 },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      soundPath: 'sounds/before.wav',
+      soundEnabled: true,
+      soundVolume: 100,
+      inactiveImage: 'idle.png',
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('activeImage는 key의 raw top-level leaf만 적용하고 이미지 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b8';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      inactiveImage: 'idle.png',
+      activeImage: 'before.png',
+      activeImageFit: 'contain',
+      activeTransparent: true,
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { property: 'activeImage', value: '  /tmp/raw active.png  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      inactiveImage: 'idle.png',
+      activeImage: '  /tmp/raw active.png  ',
+      activeImageFit: 'contain',
+      activeTransparent: true,
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('image transparency projection은 반대 상태와 path/fit 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000bc';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleImageFit: 'contain',
+      activeImageFit: 'cover',
+      idleTransparent: false,
+      activeTransparent: false,
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'idleTransparent', value: true },
+      },
+    ]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleImageFit: 'contain',
+      activeImageFit: 'cover',
+      idleTransparent: true,
+      activeTransparent: false,
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'idleTransparent', value: true },
+      },
+    ]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('image fit projection은 legacy fit과 반대 state/path/transparency를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000bd';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      imageFit: 'none',
+      idleImageFit: 'cover',
+      activeImageFit: 'contain',
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleTransparent: true,
+      activeTransparent: false,
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'activeImageFit', value: 'fill' },
+      },
+    ]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      imageFit: 'none',
+      idleImageFit: 'cover',
+      activeImageFit: 'fill',
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleTransparent: true,
+      activeTransparent: false,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('counter animation preset projection은 apply mask와 nested sibling을 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000ca';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      counter: {
+        ...base.keyPositions['4key'][0].counter,
+        fontFamily: 'Counter Family',
+        animation: {
+          ...base.keyPositions['4key'][0].counter.animation,
+          enabled: false,
+          presetId: 'preset-c',
+          scale: 2,
+          durationMs: 300,
+        },
+      },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const counterToggled = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'counterEnabled', value: false },
+      },
+    ]);
+    const toggled = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'counterAnimationEnabled', value: true },
+      },
+    ]);
+    expect(
+      counterToggled.document.keyPositions['4key'][0].counter.animation,
+    ).toMatchObject({ enabled: false, presetId: 'preset-c', scale: 2 });
+    expect(toggled.document.keyPositions['4key'][0].counter).toMatchObject({
+      enabled: false,
+      fontFamily: 'Counter Family',
+      animation: {
+        enabled: true,
+        presetId: 'preset-c',
+        scale: 2,
+        durationMs: 300,
+      },
+    });
+
+    const preserved = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: {
+          property: 'counterAnimationPreset',
+          value: {
+            presetId: 'preset-a',
+            scale: 1.4,
+          },
+        },
+      },
+    ]);
+    expect(preserved.document.keyPositions['4key'][0].counter).toMatchObject({
+      fontFamily: 'Counter Family',
+      animation: {
+        enabled: true,
+        presetId: 'preset-c',
+        scale: 1.4,
+        durationMs: 300,
+      },
+    });
+
+    const assigned = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: {
+          property: 'counterAnimationPreset',
+          value: {
+            presetId: 'preset-a',
+            applyPresetId: true as const,
+          },
+        },
+      },
+    ]);
+    expect(
+      assigned.document.keyPositions['4key'][0].counter.animation.presetId,
+    ).toBe('preset-a');
+    harness.coordinator.stop();
+  });
+
+  it('counter layout 4 leaf projection은 각 필드만 적용하고 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000cb';
+    for (const [patch, expected] of [
+      [
+        { property: 'counterPlacement', value: 'outside' },
+        { placement: 'outside' },
+      ],
+      [{ property: 'counterAlign', value: 'right' }, { align: 'right' }],
+      [
+        { property: 'counterAlignMode', value: 'center' },
+        { alignMode: 'center' },
+      ],
+      [
+        { property: 'counterGap', value: 4_294_967_295 },
+        { gap: 4_294_967_295 },
+      ],
+    ] as const) {
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        counter: {
+          ...base.keyPositions['4key'][0].counter,
+          placement: 'inside',
+          align: 'top',
+          alignMode: 'between',
+          gap: 3,
+          customSentinel: 'keep-raw',
+        },
+      } as never;
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      await harness.coordinator.commitSemanticOpsInternal([
+        { kind: 'patchElement', elementType: 'key', id, patch },
+      ]);
+      expect(
+        harness.coordinator.getState().lastAck?.keyPositions['4key'][0].counter,
+      ).toMatchObject({ ...expected, customSentinel: 'keep-raw' });
+      harness.coordinator.stop();
+    }
+  });
+
+  it('counter typography 5 leaf projection은 각 필드만 적용하고 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000cc';
+    for (const [patch, expected] of [
+      [{ property: 'counterFontSize', value: 72 }, { fontSize: 72 }],
+      [{ property: 'counterFontWeight', value: 900 }, { fontWeight: 900 }],
+      [{ property: 'counterFontItalic', value: true }, { fontItalic: true }],
+      [
+        { property: 'counterFontUnderline', value: true },
+        { fontUnderline: true },
+      ],
+      [
+        { property: 'counterFontStrikethrough', value: true },
+        { fontStrikethrough: true },
+      ],
+    ] as const) {
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        counter: {
+          ...base.keyPositions['4key'][0].counter,
+          fontSize: 12,
+          fontWeight: 400,
+          fontItalic: false,
+          fontUnderline: false,
+          fontStrikethrough: false,
+          customSentinel: 'keep-raw',
+        },
+      } as never;
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      await harness.coordinator.commitSemanticOpsInternal([
+        { kind: 'patchElement', elementType: 'key', id, patch },
+      ]);
+      expect(
+        harness.coordinator.getState().lastAck?.keyPositions['4key'][0].counter,
+      ).toMatchObject({ ...expected, customSentinel: 'keep-raw' });
+      harness.coordinator.stop();
+    }
+  });
+
+  it('counter fontFamily projection은 nested leaf만 적용하고 top-level과 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000cd';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      fontFamily: 'Top Level Family',
+      counter: {
+        ...base.keyPositions['4key'][0].counter,
+        fontFamily: 'Before Counter Family',
+        fontSize: 18,
+        customSentinel: 'keep-raw',
+      },
+    } as never;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: {
+          property: 'counterFontFamily',
+          value: '  Raw Counter Family  ',
+        },
+      },
+    ]);
+
+    expect(
+      harness.coordinator.getState().lastAck?.keyPositions['4key'][0],
+    ).toMatchObject({
+      fontFamily: 'Top Level Family',
+      counter: {
+        fontFamily: '  Raw Counter Family  ',
+        fontSize: 18,
+        customSentinel: 'keep-raw',
+      },
+    });
+    harness.coordinator.stop();
+  });
+
+  it.each([
+    [
+      { property: 'counterStrokeIdle', value: '  raw idle  ' },
+      { idle: '  raw idle  ' },
+    ],
+    [{ property: 'counterStrokeActive', value: '' }, { active: '' }],
+  ] as const)(
+    'counter stroke projection은 한 nested leaf만 바꾸고 raw siblings를 보존한다',
+    async (patch, expected) => {
+      const id = '00000000-0000-4000-8000-0000000000ce';
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        counter: {
+          ...base.keyPositions['4key'][0].counter,
+          stroke: { idle: 'old-idle', active: 'old-active', custom: 'keep' },
+          fill: { idle: 'fill-idle', active: 'fill-active' },
+          fillIdleGradient: { type: 'linear', angle: 0, stops: [] },
+          customSentinel: 'keep-raw',
+        },
+      } as never;
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      await harness.coordinator.commitSemanticOpsInternal([
+        { kind: 'patchElement', elementType: 'key', id, patch },
+      ]);
+      expect(
+        harness.coordinator.getState().lastAck?.keyPositions['4key'][0].counter,
+      ).toMatchObject({
+        stroke: {
+          idle: 'old-idle',
+          active: 'old-active',
+          custom: 'keep',
+          ...expected,
+        },
+        fill: { idle: 'fill-idle', active: 'fill-active' },
+        customSentinel: 'keep-raw',
+      });
+      harness.coordinator.stop();
+    },
+  );
+
+  it('note 5 leaf를 한 commit으로 적용하고 무관 note 필드를 보존한다', async () => {
+    const ids = [
+      '00000000-0000-4000-8000-0000000000d1',
+      '00000000-0000-4000-8000-0000000000d2',
+      '00000000-0000-4000-8000-0000000000d3',
+      '00000000-0000-4000-8000-0000000000d4',
+      '00000000-0000-4000-8000-0000000000d5',
+    ];
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': ids.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        noteColor: '#sentinel',
+        noteGlowSize: 27,
+      })),
+    };
+    base.keys = { '4key': ['A', 'B', 'C', 'D', 'E'] };
+    const patches: EditorNotePropertyPatchV1[] = [
+      { property: 'noteEffectEnabled', value: false },
+      { property: 'noteAutoYCorrection', value: false },
+      { property: 'noteGlowEnabled', value: true },
+      { property: 'noteAlignment', value: 'right' as const },
+      { property: 'noteBorderSide', value: 'horizontal' as const },
+    ];
+    const ops: EditorOpV1[] = patches.map((patch, index) => ({
+      kind: 'patchElement',
+      elementType: 'key',
+      id: ids[index],
+      patch,
+    }));
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    outcome.document.keyPositions['4key'].forEach((position, index) => {
+      expect(position).toMatchObject({
+        [patches[index].property]: patches[index].value,
+        noteColor: '#sentinel',
+        noteGlowSize: 27,
+      });
+    });
+    harness.coordinator.stop();
+  });
+
+  it('noteGlowSize projection은 required numeric leaf만 바꾼다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000e1';
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          noteGlowSize: 20,
+          noteGlowEnabled: true,
+          noteGlowColor: '#sentinel',
+        },
+      ],
+    };
+    base.keys = { '4key': ['A'] };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'noteGlowSize', value: 20.5 },
+      },
+    ]);
+
+    expect(outcome.opResults).toEqual([{ status: 'applied' }]);
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      noteGlowSize: 20.5,
+      noteGlowEnabled: true,
+      noteGlowColor: '#sentinel',
+    });
+    harness.coordinator.stop();
+  });
+
+  it('note numeric projection은 nullable clear와 0을 구분하고 siblings를 보존한다', async () => {
+    const ids = Array.from(
+      { length: 5 },
+      (_, index) =>
+        `00000000-0000-4000-8000-${String(160 + index).padStart(12, '0')}`,
+    );
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': ids.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        noteOffsetX: 7.5,
+        noteOffsetY: -8.5,
+        noteWidth: 42.5,
+        noteBorderWidth: 2.5,
+        noteBorderRadius: 11.5,
+        noteColor: '#sentinel',
+        noteGlowSize: 17.5,
+      })),
+    };
+    base.keys = { '4key': ids.map(() => 'A') };
+    const patches = [
+      { property: 'noteOffsetX', value: null },
+      { property: 'noteOffsetY', value: 0 },
+      { property: 'noteWidth', value: null },
+      { property: 'noteBorderWidth', value: 3.5 },
+      { property: 'noteBorderRadius', value: 12.5 },
+    ] as const;
+    const ops: EditorOpV1[] = patches.map((patch, index) => ({
+      kind: 'patchElement',
+      elementType: 'key',
+      id: ids[index],
+      patch,
+    }));
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    // clear는 null을 보존한다. 백엔드가 이 필드를 null로 직렬화하므로
+    // undefined로 바꾸면 의미가 같은데도 getChangedEditorFields가 변경으로
+    // 잡아 가짜 diff가 난다 (noteBorderWidth 등 형제 필드와 같은 규칙)
+    expect(outcome.document.keyPositions['4key']).toMatchObject([
+      { noteOffsetX: null, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteOffsetY: 0, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteWidth: null, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteBorderWidth: 3.5, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteBorderRadius: 12.5, noteColor: '#sentinel', noteGlowSize: 17.5 },
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('nullable clear 뒤 문서는 백엔드 표현과 동일해 가짜 diff를 만들지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001b0';
+    const base = makeDocument();
+    base.keys = { '4key': ['A'] };
+    base.keyPositions = {
+      '4key': [{ ...createDefaultKeyPosition(), id, noteOffsetX: 7.5 }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'noteOffsetX', value: null },
+      },
+    ]);
+
+    // 백엔드는 Option::None을 null로 실어 보낸다 (skip_serializing_if 없음)
+    const backend = structuredClone(outcome.document);
+    backend.keyPositions['4key'][0].noteOffsetX = null;
+    expect(getChangedEditorFields(outcome.document, backend)).toEqual([]);
+    harness.coordinator.stop();
+  });
+
+  it('note paint projection은 exact mask마다 fresh siblings를 보존한다', async () => {
+    const ids = [
+      '00000000-0000-4000-8000-0000000001a0',
+      '00000000-0000-4000-8000-0000000001a1',
+      '00000000-0000-4000-8000-0000000001a2',
+    ];
+    const base = makeDocument();
+    base.keys = { '4key': ['A', 'B', 'C'] };
+    base.keyPositions = {
+      '4key': ids.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        noteColor: '#old',
+        noteOpacity: 80,
+        noteOpacityTop: 70,
+        noteOpacityBottom: 60,
+        noteGlowColor: '#glow',
+        noteGlowOpacity: 50,
+        noteGlowOpacityTop: 40,
+        noteGlowOpacityBottom: 30,
+        noteBorderColor: '#112233',
+        noteBorderOpacity: 20,
+        className: 'sibling',
+      })),
+    };
+    const ops: EditorOpV1[] = [
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[0],
+        patch: { property: 'notePaint', value: { opacity: 99 } },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[1],
+        patch: {
+          property: 'noteGlowPaint',
+          value: { opacity: 66, opacityTop: 55, opacityBottom: 44 },
+        },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[2],
+        patch: {
+          property: 'noteBorderPaint',
+          value: { color: '#A0B1C2', opacity: 77 },
+        },
+      },
+    ];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.document.keyPositions['4key']).toMatchObject([
+      {
+        noteColor: '#old',
+        noteOpacity: 99,
+        noteOpacityTop: 70,
+        noteOpacityBottom: 60,
+        noteGlowOpacity: 50,
+        className: 'sibling',
+      },
+      {
+        noteGlowColor: '#glow',
+        noteGlowOpacity: 66,
+        noteGlowOpacityTop: 55,
+        noteGlowOpacityBottom: 44,
+        noteOpacityTop: 70,
+        className: 'sibling',
+      },
+      {
+        noteBorderColor: '#A0B1C2',
+        noteBorderOpacity: 77,
+        noteColor: '#old',
+        noteGlowColor: '#glow',
+        className: 'sibling',
+      },
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('counter fill projection은 solid에서 state gradient만 clear하고 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001b0';
+    const gradient = {
+      angle: 45,
+      stops: [
+        { color: '#112233', pos: 0 },
+        { color: '#445566', pos: 1 },
+      ],
+    };
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      counter: {
+        ...base.keyPositions['4key'][0].counter,
+        fill: { idle: 'idle-before', active: 'active-before' },
+        fillIdleGradient: gradient,
+        fillActiveGradient: gradient,
+        customSibling: 'raw-sibling',
+      },
+    } as never;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: {
+          property: 'counterFillIdle',
+          value: { color: ' solid final ' },
+        },
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0].counter).toMatchObject({
+      fill: { idle: ' solid final ', active: 'active-before' },
+      fillActiveGradient: gradient,
+      customSibling: 'raw-sibling',
+    });
+    expect(
+      outcome.document.keyPositions['4key'][0].counter.fillIdleGradient,
+    ).toBeUndefined();
+    harness.coordinator.stop();
+  });
+
+  it('font color projection은 idle key fallback을 pre-edit raw로 materialize하고 siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001b1';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      fontColor: '  idle raw  ',
+      activeFontColor: ' ',
+      className: 'sibling',
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'fontColor', value: '  idle raw  ' },
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      fontColor: '  idle raw  ',
+      activeFontColor: '  idle raw  ',
+      className: 'sibling',
+    });
+    harness.coordinator.stop();
+  });
+
+  it('font color revision conflict retry는 latest idle raw에서 active fallback을 다시 합성한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001b2';
+    const base = withStableId(id);
+    Object.assign(base.keyPositions['4key'][0], {
+      fontColor: 'old-idle',
+      activeFontColor: undefined,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    const latest = structuredClone(base);
+    Object.assign(latest.keyPositions['4key'][0], {
+      fontColor: 'latest-idle',
+      activeFontColor: ' ',
+    });
+    harness.transport.commitMock
+      .mockImplementationOnce(async () => {
+        harness.transport.canonical = { revision: 1, document: latest };
+        throw revisionConflict();
+      })
+      .mockImplementationOnce(original);
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { property: 'fontColor', value: 'new-idle' },
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      fontColor: 'new-idle',
+      activeFontColor: 'latest-idle',
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    harness.coordinator.stop();
+  });
+
+  it('setElementGroups projection은 membership과 empty definition만 바꾸고 raw siblings를 보존한다', async () => {
+    const keyId = '00000000-0000-4000-8000-0000000001c0';
+    const statId = '00000000-0000-4000-8000-0000000001c1';
+    const base = withStableId(keyId);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      groupId: 'source',
+      zIndex: 55,
+      className: 'key-sibling',
+    };
+    base.statPositions['4key'] = [
+      {
+        ...base.keyPositions['4key'][0],
+        id: statId,
+        statType: 'kps',
+        className: 'stat-sibling',
+      },
+    ] as never;
+    base.layerGroups = {
+      '4key': [{ id: 'source', name: 'Source' }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'setElementGroups',
+        mode: '4key',
+        targets: [
+          { elementType: 'key', id: keyId },
+          { elementType: 'stat', id: statId },
+        ],
+        targetGroup: { kind: 'create', id: 'target', name: 'Target' },
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      groupId: 'target',
+      zIndex: 55,
+      className: 'key-sibling',
+    });
+    expect(outcome.document.statPositions['4key'][0]).toMatchObject({
+      groupId: 'target',
+      className: 'stat-sibling',
+    });
+    expect(outcome.document.layerGroups['4key']).toEqual([
+      { id: 'target', name: 'Target' },
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('renameLayerGroup projection은 해당 mode definition name만 바꾼다', async () => {
+    const base = withStableId('00000000-0000-4000-8000-0000000001c2');
+    base.layerGroups = {
+      '4key': [{ id: 'group-a', name: 'Before' }],
+      '5key': [{ id: 'group-a', name: 'Other Mode' }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'renameLayerGroup',
+        mode: '4key',
+        groupId: 'group-a',
+        name: 'After',
+      },
+    ]);
+
+    expect(outcome.document.layerGroups).toEqual({
+      '4key': [{ id: 'group-a', name: 'After' }],
+      '5key': [{ id: 'group-a', name: 'Other Mode' }],
+    });
+    harness.coordinator.stop();
+  });
+
+  it('frozen header ungroup은 이후 같은 group에 들어온 newcomer와 definition을 보존한다', async () => {
+    const frozenId = '00000000-0000-4000-8000-0000000001c3';
+    const newcomerId = '00000000-0000-4000-8000-0000000001c4';
+    const base = withStableId(frozenId);
+    base.keyPositions['4key'] = [
+      { ...base.keyPositions['4key'][0], id: frozenId, groupId: 'group-a' },
+      {
+        ...base.keyPositions['4key'][0],
+        id: newcomerId,
+        groupId: 'group-a',
+        className: 'newcomer',
+      },
+    ];
+    base.keys['4key'] = ['A', 'B'];
+    base.layerGroups = {
+      '4key': [{ id: 'group-a', name: 'Group A' }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'setElementGroups',
+        mode: '4key',
+        targets: [{ elementType: 'key', id: frozenId }],
+        targetGroup: null,
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0].groupId).toBeUndefined();
+    expect(outcome.document.keyPositions['4key'][1]).toMatchObject({
+      id: newcomerId,
+      groupId: 'group-a',
+      className: 'newcomer',
+    });
+    expect(outcome.document.layerGroups['4key']).toEqual([
+      { id: 'group-a', name: 'Group A' },
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('setElementGroups fixed op는 conflict 최신 문서에도 frozen targets만 다시 적용한다', async () => {
+    const frozenId = '00000000-0000-4000-8000-0000000001c5';
+    const newcomerId = '00000000-0000-4000-8000-0000000001c6';
+    const base = withStableId(frozenId);
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.layerGroups = {
+      '4key': [{ id: 'group-a', name: 'Group A' }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    const latest = structuredClone(base);
+    latest.keys['4key'].push('B');
+    latest.keyPositions['4key'].push({
+      ...latest.keyPositions['4key'][0],
+      id: newcomerId,
+      groupId: 'group-a',
+    });
+    harness.transport.commitMock
+      .mockImplementationOnce(async () => {
+        harness.transport.canonical = { revision: 1, document: latest };
+        throw revisionConflict();
+      })
+      .mockImplementationOnce(original);
+    const op = {
+      kind: 'setElementGroups' as const,
+      mode: '4key',
+      targets: [{ elementType: 'key' as const, id: frozenId }],
+      targetGroup: null,
+    };
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([op]);
+
+    expect(harness.transport.commitMock.mock.calls[0][0].ops).toEqual([op]);
+    expect(harness.transport.commitMock.mock.calls[1][0].ops).toEqual([op]);
+    expect(outcome.document.keyPositions['4key'][1]).toMatchObject({
+      id: newcomerId,
+      groupId: 'group-a',
+    });
+    expect(outcome.document.layerGroups['4key']).toEqual([
+      { id: 'group-a', name: 'Group A' },
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('setElementGroups targetMissing과 noChange는 canonical projection을 유지한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001c7';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.layerGroups = {
+      '4key': [{ id: 'group-a', name: 'Group A' }],
+    };
+    const op = {
+      kind: 'setElementGroups' as const,
+      mode: '4key',
+      targets: [{ elementType: 'key' as const, id }],
+      targetGroup: { kind: 'existing' as const, id: 'group-a' },
+    };
+    const noChangeHarness = createHarness(base);
+    await noChangeHarness.coordinator.start();
+
+    const noChange =
+      await noChangeHarness.coordinator.commitSemanticOpsInternal([op]);
+
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(base);
+    noChangeHarness.coordinator.stop();
+
+    const missingHarness = createHarness(base);
+    await missingHarness.coordinator.start();
+    missingHarness.transport.commitMock.mockResolvedValueOnce({
+      revision: 0,
+      changedFields: [],
+      opResults: [{ status: 'targetMissing' }],
+    });
+
+    const missing = await missingHarness.coordinator.commitSemanticOpsInternal([
+      op,
+    ]);
+
+    expect(missing.opResults).toEqual([{ status: 'targetMissing' }]);
+    expect(missingHarness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(missing.document).toEqual(base);
+    missingHarness.coordinator.stop();
+  });
+
+  it('setKeySlot은 최신 paired ID index의 slot만 바꾼다', async () => {
+    const id = '00000000-0000-4000-8000-000000000087';
+    const otherId = '00000000-0000-4000-8000-000000000086';
+    const base = withStableId(otherId);
+    base.keys['4key'].push('B');
+    base.keyPositions['4key'].push({
+      ...base.keyPositions['4key'][0],
+      id,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      { kind: 'setKeySlot', id, slot: 'Z' },
+    ]);
+
+    expect(outcome.document.keys['4key']).toEqual(['A', 'Z']);
+    expect(
+      outcome.document.keyPositions['4key'].map((position) => position.id),
+    ).toEqual([otherId, id]);
+    harness.coordinator.stop();
+  });
+
+  it('reorder op는 projected changedFields와 lastAck를 exact하게 맞춘다', async () => {
+    const id = '00000000-0000-4000-8000-000000000090';
+    const base = withStableId(id);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keyPositions'],
+      opResults: [{ status: 'applied' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      reorderKeyOp(id, 14),
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0].zIndex).toBe(14);
+    expect(harness.getLocal().keyPositions['4key'][0].zIndex).toBe(14);
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ops: [reorderKeyOp(id, 14)] }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('reorder 응답의 누락 changedField와 targetMissing을 거절한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000089';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    harness.transport.commitMock
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'applied' }],
+      })
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'applied' }],
+      });
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([reorderKeyOp(id, 14)]),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    harness.transport.commitMock
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'targetMissing' }],
+      })
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'targetMissing' }],
+      });
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([reorderKeyOp(id, 14)]),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+    harness.coordinator.stop();
+  });
+
+  it('insert 슬롯 적용은 기존 eager record와 key slot을 final payload로 교체한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000093';
+    const base = makeDocument();
+    const eager = structuredClone(base);
+    eager.keys['4key'].push('OLD');
+    eager.keyPositions['4key'].push({
+      ...createDefaultKeyPosition(),
+      id,
+      zIndex: 1,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.setLocal(eager);
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      insertFrozenKeyOp(id, 9),
+    ]);
+
+    expect(harness.getLocal().keys['4key']).toEqual(['A', 'B']);
+    expect(harness.getLocal().keyPositions['4key'][1]).toMatchObject({
+      id,
+      zIndex: 9,
+      groupId: 'shared-group',
+    });
+    expect(outcome.document).toEqual(harness.getLocal());
+    harness.coordinator.stop();
+  });
+
+  it('다른 모드의 같은 group ID는 target mode 신규 그룹 삽입을 막지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000092';
+    const base = makeDocument();
+    base.keys['5key'] = [];
+    base.keyPositions['5key'] = [];
+    base.layerGroups['5key'] = [{ id: 'shared-group', name: 'Other' }];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      insertFrozenKeyOp(id, 9),
+    ]);
+
+    expect(outcome.document.layerGroups).toEqual({
+      '4key': [{ id: 'shared-group', name: 'Shared' }],
+      '5key': [{ id: 'shared-group', name: 'Other' }],
+    });
+    harness.coordinator.stop();
+  });
+
+  it('zIndex 부재와 0의 canonical 동등성은 noChange에서 local을 갈라놓지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000091';
+    const base = withStableId(id);
+    delete base.keyPositions['4key'][0].zIndex;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 0,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'insertFrozenElements',
+        mode: '4key',
+        elements: [],
+        groups: [],
+        zUpdates: [{ elementType: 'key', id, zIndex: 0 }],
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0].zIndex).toBeUndefined();
+    expect(harness.getLocal().keyPositions['4key'][0].zIndex).toBeUndefined();
+    harness.coordinator.stop();
+  });
+
+  it('delete op는 key pair와 마지막 빈 그룹을 lastAck에서 함께 정리한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000099';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.layerGroups = { '4key': [{ id: 'group-a', name: 'Group A' }] };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions', 'layerGroups'],
+      opResults: [{ status: 'applied' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      deleteElementOp(id),
+    ]);
+
+    expect(outcome.opResults).toEqual([{ status: 'applied' }]);
+    expect(outcome.document).toMatchObject({
+      keys: { '4key': [] },
+      keyPositions: { '4key': [] },
+      layerGroups: { '4key': [] },
+    });
+    expect(harness.getLocal()).toMatchObject({
+      keys: { '4key': [] },
+      keyPositions: { '4key': [] },
+      layerGroups: { '4key': [] },
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ops: [deleteElementOp(id)] }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('delete op의 layerGroups changedField는 실제 정리 시에만 선택적으로 수용한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000098';
+    const base = withStableId(id);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions'],
+      opResults: [{ status: 'applied' }],
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([deleteElementOp(id)]),
+    ).resolves.toMatchObject({ opResults: [{ status: 'applied' }] });
+    harness.coordinator.stop();
+  });
+
+  it('공유 그룹이 생존하는 delete 응답의 가짜 layerGroups를 거절한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000097';
+    const survivorId = '00000000-0000-4000-8000-000000000096';
+    const base = withStableId(id);
+    base.keys['4key'].push('B');
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.keyPositions['4key'].push({
+      ...base.keyPositions['4key'][0],
+      id: survivorId,
+    });
+    base.layerGroups = { '4key': [{ id: 'group-a', name: 'Group A' }] };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: ['keys', 'keyPositions', 'layerGroups'],
+        opResults: [{ status: 'applied' }],
+      })
+      .mockResolvedValueOnce({
+        revision: 1,
+        changedFields: ['keys', 'keyPositions', 'layerGroups'],
+        opResults: [{ status: 'applied' }],
+      });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([deleteElementOp(id)]),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+    harness.coordinator.stop();
+  });
+
+  // F1 재현 회귀: 백엔드는 store의 전 plugin_data 인스턴스로 그룹 생존을 판정하므로
+  // 미로드 플러그인이 유일 멤버로 남는 그룹은 delete 후에도 잔존한다. 프론트 replay가
+  // store 미러 없이 그룹 소멸을 예측하면 changedFields 불일치로 EditorProtocolError
+  it('미로드 플러그인이 유일 멤버로 남는 그룹은 delete replay가 생존을 예측한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000093';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.layerGroups = { '4key': [{ id: 'group-a', name: 'Group A' }] };
+    registerStoredPluginGroupRefsProvider(() => ({
+      'idle-plugin': { '4key': ['group-a'] },
+    }));
+    try {
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      // 백엔드 판정 - store의 플러그인 참조 덕에 그룹 생존, layerGroups 미변경
+      harness.transport.commitMock.mockResolvedValueOnce({
+        revision: 1,
+        changedFields: ['keys', 'keyPositions'],
+        opResults: [{ status: 'applied' }],
+      });
+
+      const outcome = await harness.coordinator.commitSemanticOpsInternal([
+        deleteElementOp(id),
+      ]);
+
+      expect(outcome.opResults).toEqual([{ status: 'applied' }]);
+      expect(outcome.document.layerGroups['4key']).toEqual([
+        { id: 'group-a', name: 'Group A' },
+      ]);
+      expect(harness.getLocal().layerGroups['4key']).toEqual([
+        { id: 'group-a', name: 'Group A' },
+      ]);
+      harness.coordinator.stop();
+    } finally {
+      registerStoredPluginGroupRefsProvider(() => ({}));
+    }
+  });
+
+  it('다중 delete의 targetMissing은 생존 삭제 뒤 canonical로 정렬한다', async () => {
+    const missingId = '00000000-0000-4000-8000-000000000095';
+    const appliedId = '00000000-0000-4000-8000-000000000094';
+    const base = withStableId(missingId);
+    base.keys['4key'].push('B');
+    base.keyPositions['4key'].push({
+      ...base.keyPositions['4key'][0],
+      id: appliedId,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const canonical = structuredClone(base);
+    canonical.keys['4key'] = [];
+    canonical.keyPositions['4key'] = [];
+    harness.transport.canonical = { revision: 1, document: canonical };
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions'],
+      opResults: [{ status: 'targetMissing' }, { status: 'applied' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      deleteElementOp(missingId),
+      deleteElementOp(appliedId),
+    ]);
+
+    expect(outcome.opResults).toEqual([
+      { status: 'targetMissing' },
+      { status: 'applied' },
+    ]);
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(outcome.document).toEqual(canonical);
+    expect(harness.getLocal()).toEqual(canonical);
+    harness.coordinator.stop();
+  });
+
+  it('ordered opResults로 정확한 base의 lastAck를 갱신한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000100';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(id),
+    ]);
+
+    expect(outcome.opResults).toEqual([
+      { status: 'applied', bounds: setBoundsOp(id).bounds },
+    ]);
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    expect(harness.transport.getMock).toHaveBeenCalledOnce();
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        opsVersion: EDITOR_OPS_VERSION,
+        ops: [setBoundsOp(id)],
+      }),
+    );
+    expect(harness.transport.commitMock.mock.calls[0][0]).not.toHaveProperty(
+      'changes',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('직렬 슬롯 선행 커밋이 eager를 지워도 semantic op를 최신 화면에 다시 적용한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000110';
+    const base = withStableId(id);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const gate = deferred<EditorCommitResult>();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    harness.transport.commitMock
+      .mockImplementationOnce(() => gate.promise)
+      .mockImplementation(original);
+
+    const first = harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keys: { '4key': ['B'] },
+    });
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledOnce(),
+    );
+    harness.setLocal(applyOpsForTest(harness.getLocal(), [setBoundsOp(id)]));
+    const semantic = harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(id),
+    ]);
+
+    const firstRequest = harness.transport.commitMock.mock.calls[0][0];
+    const firstResult = await original(firstRequest);
+    const firstCanonical = structuredClone(
+      harness.transport.canonical.document,
+    );
+    harness.setLocal(firstCanonical);
+    expect(harness.getLocal().keyPositions['4key'][0]).not.toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    gate.resolve(firstResult);
+    await first;
+    await semantic;
+
+    expect(harness.getLocal().keys['4key']).toEqual(['B']);
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    harness.coordinator.stop();
+  });
+
+  it('진행 중인 gesture 정산이 끝난 뒤 semantic op를 실행한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000112';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    const gate = deferred<EditorCommitResult>();
+    const gesture = harness.coordinator.commitGesture(
+      undefined,
+      'active-gesture',
+      () => gate.promise,
+    );
+    await Promise.resolve();
+
+    const semantic = harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(id),
+    ]);
+    await Promise.resolve();
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+
+    gate.resolve({ revision: 0, changedFields: [] });
+    await gesture;
+    await semantic;
+
+    expect(harness.transport.commitMock).toHaveBeenCalledOnce();
+    expect(harness.transport.commitMock.mock.calls[0][0]).toMatchObject({
+      opsVersion: EDITOR_OPS_VERSION,
+      ops: [setBoundsOp(id)],
+    });
+    harness.coordinator.stop();
+  });
+
+  it('IO 결과 미상은 같은 envelope로 한 번만 재전송한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000101';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    harness.transport.commitMock
+      .mockRejectedValueOnce(ioError())
+      .mockImplementationOnce(original);
+
+    await harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)]);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    harness.coordinator.stop();
+  });
+
+  it('IO 응답 유실 뒤 replay도 같은 mutationId를 사용한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000105';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    let acknowledged: EditorCommitResult | null = null;
+    harness.transport.commitMock
+      .mockImplementationOnce(async (request) => {
+        acknowledged = await original(request);
+        throw ioError();
+      })
+      .mockImplementationOnce(async () => structuredClone(acknowledged!));
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(id),
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    harness.coordinator.stop();
+  });
+
+  it('두 번째 IO 실패 뒤 canonical을 동기화하고 transient로 끝낸다', async () => {
+    const id = '00000000-0000-4000-8000-000000000106';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValue(ioError());
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'io-preview',
+      }),
+    ).rejects.toMatchObject({ errorCode: 'IO_ERROR' });
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'error',
+      failureKind: 'transient',
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['io-preview']);
+    harness.coordinator.stop();
+  });
+
+  it('revision conflict는 canonical마다 새 mutationId로 최대 두 번 재시도한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000102';
+    const base = withStableId(id);
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValue(revisionConflict());
+    harness.transport.getMock.mockImplementation(async () => {
+      harness.transport.canonical.revision += 1;
+      return structuredClone(harness.transport.canonical);
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'conflict-preview',
+      }),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(3);
+    expect(
+      harness.transport.commitMock.mock.calls.map(
+        ([request]) => request.mutationId,
+      ),
+    ).toEqual([
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000002',
+      '00000000-0000-4000-8000-000000000003',
+    ]);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'error',
+      failureKind: 'transient',
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['conflict-preview']);
+    harness.coordinator.stop();
+  });
+
+  it('generated semantic op는 conflict 뒤 최신 canonical에서 다시 생성한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010c';
+    const base = withStableId(id);
+    Object.assign(base.keyPositions['4key'][0], {
+      dx: 1,
+      dy: 2,
+      width: 60,
+      height: 60,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    harness.transport.commitMock
+      .mockRejectedValueOnce(revisionConflict())
+      .mockImplementationOnce(original);
+    const canonical = structuredClone(base);
+    Object.assign(canonical.keyPositions['4key'][0], {
+      dy: 77,
+      width: 123,
+      height: 91,
+    });
+    harness.transport.canonical = { revision: 1, document: canonical };
+    const generate = vi.fn((document: CanonicalEditorDocumentV1) => {
+      const current = document.keyPositions['4key'][0];
+      return [
+        {
+          kind: 'setBounds' as const,
+          elementType: 'key' as const,
+          id,
+          bounds: {
+            dx: 50,
+            dy: current.dy,
+            width: current.width,
+            height: current.height,
+          },
+        },
+      ];
+    });
+
+    await harness.coordinator.commitGeneratedSemanticOpsInternal(generate);
+
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(
+      harness.transport.commitMock.mock.calls[0][0].ops?.[0],
+    ).toMatchObject({ bounds: { dx: 50, dy: 2, width: 60, height: 60 } });
+    expect(
+      harness.transport.commitMock.mock.calls[1][0].ops?.[0],
+    ).toMatchObject({ bounds: { dx: 50, dy: 77, width: 123, height: 91 } });
+    harness.coordinator.stop();
+  });
+
+  it('generated semantic op의 IO 재전송은 generator를 다시 평가하지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010d';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    harness.transport.commitMock
+      .mockRejectedValueOnce(ioError())
+      .mockImplementationOnce(original);
+    const generate = vi.fn(() => [setBoundsOp(id)]);
+
+    await harness.coordinator.commitGeneratedSemanticOpsInternal(generate);
+
+    expect(generate).toHaveBeenCalledOnce();
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    harness.coordinator.stop();
+  });
+
+  it('generated semantic op 첫 생성이 null이면 편입과 wire 없이 끝낸다', async () => {
+    const harness = createHarness(makeDocument());
+    await harness.coordinator.start();
+    const onEnrolled = vi.fn();
+
+    const outcome =
+      await harness.coordinator.commitGeneratedSemanticOpsInternal(() => null, {
+        onEnrolled,
+      });
+
+    expect(outcome).toBeNull();
+    expect(onEnrolled).not.toHaveBeenCalled();
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    expect(harness.coordinator.getState().phase).toBe('idle');
+    harness.coordinator.stop();
+  });
+
+  it('generated semantic op가 conflict 뒤 target을 잃으면 canonical과 gesture 폐기를 유지한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010e';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValueOnce(revisionConflict());
+    const missing = makeDocument('B');
+    harness.transport.canonical = { revision: 1, document: missing };
+    const generate = vi.fn((document: CanonicalEditorDocumentV1) =>
+      document.keyPositions['4key'].some((position) => position.id === id)
+        ? [setBoundsOp(id)]
+        : null,
+    );
+
+    const outcome =
+      await harness.coordinator.commitGeneratedSemanticOpsInternal(generate, {
+        gestureId: 'geometry-preview',
+      });
+
+    expect(outcome).toBeNull();
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(harness.transport.commitMock).toHaveBeenCalledOnce();
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['geometry-preview']);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      lastAck: missing,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('fixed semantic op는 호출자 변조와 무관하게 최초 intent로 conflict 재시도한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010f';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    const op = setBoundsOp(id);
+    harness.transport.commitMock
+      .mockImplementationOnce(async () => {
+        op.bounds.dx = 999;
+        throw revisionConflict();
+      })
+      .mockImplementationOnce(original);
+
+    await harness.coordinator.commitSemanticOpsInternal([op]);
+
+    expect(
+      harness.transport.commitMock.mock.calls[0][0].ops?.[0],
+    ).toMatchObject({ bounds: { dx: 12 } });
+    expect(
+      harness.transport.commitMock.mock.calls[1][0].ops?.[0],
+    ).toMatchObject({ bounds: { dx: 12 } });
+    harness.coordinator.stop();
+  });
+
+  it('semantic preflight 실패는 편입과 wire 전송 전에 중단한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010a';
+    const base = withStableId(id);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const onEnrolled = vi.fn();
+    const preflightError = new Error('authority changed');
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        preflight: () => {
+          throw preflightError;
+        },
+        onEnrolled,
+      }),
+    ).rejects.toBe(preflightError);
+
+    expect(onEnrolled).not.toHaveBeenCalled();
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      dirty: false,
+      lastAck: base,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('conflict 뒤 preflight 실패는 canonical을 유지하고 편입된 preview를 폐기한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010b';
+    const base = withStableId(id);
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValueOnce(revisionConflict());
+    const canonical = structuredClone(base);
+    canonical.keys['4key'][0] = 'canonical';
+    harness.transport.canonical = { revision: 1, document: canonical };
+    const preflight = vi
+      .fn<() => void>()
+      .mockImplementationOnce(() => undefined)
+      .mockImplementationOnce(() => {
+        throw new Error('authority changed');
+      });
+    const onEnrolled = vi.fn();
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'authority-preview',
+        preflight,
+        onEnrolled,
+      }),
+    ).rejects.toThrow('authority changed');
+
+    expect(preflight).toHaveBeenCalledTimes(2);
+    expect(onEnrolled).toHaveBeenCalledOnce();
+    expect(harness.transport.commitMock).toHaveBeenCalledOnce();
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['authority-preview']);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      dirty: false,
+      lastAck: canonical,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('targetMissing은 성공 후 canonical을 한 번 읽고 정상 결과로 끝낸다', async () => {
+    const id = '00000000-0000-4000-8000-000000000103';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 0,
+      changedFields: [],
+      opResults: [{ status: 'targetMissing' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(id),
+    ]);
+
+    expect(outcome.opResults).toEqual([{ status: 'targetMissing' }]);
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.coordinator.getState().phase).toBe('idle');
+    harness.coordinator.stop();
+  });
+
+  it('noChange는 revision을 올리지 않고 canonical bounds를 반환한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000111';
+    const base = withStableId(id);
+    Object.assign(base.keyPositions['4key'][0], setBoundsOp(id).bounds);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(id),
+    ]);
+
+    expect(outcome.opResults).toEqual([
+      { status: 'noChange', bounds: setBoundsOp(id).bounds },
+    ]);
+    expect(harness.transport.canonical.revision).toBe(0);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      dirty: false,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('opResults의 applied 집합과 다른 changedFields는 재전송 후 transient protocol 오류로 남긴다', async () => {
+    const id = '00000000-0000-4000-8000-000000000107';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValue({
+      revision: 1,
+      changedFields: [],
+      opResults: [{ status: 'applied', bounds: setBoundsOp(id).bounds }],
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)]),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'error',
+      failureKind: 'transient',
+    });
+    harness.coordinator.stop();
+  });
+
+  it('두 번의 protocol 응답 실패 후 canonical 조회도 실패하면 재시도 상태와 게스처를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000116';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const protocolError = new EditorProtocolError('malformed commit response');
+    harness.transport.commitMock.mockRejectedValue(protocolError);
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('canonical unavailable'),
+    );
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'unconfirmed-preview',
+      }),
+    ).rejects.toBe(protocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    expect(harness.applications).not.toContainEqual(
+      expect.objectContaining({ reason: 'rejected' }),
+    );
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'error',
+      failureKind: 'transient',
+    });
+    expect(onGestureIdsDiscarded).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('canonical에 semantic 의도가 없으면 영구 실패 대신 재시도 상태로 남긴다', async () => {
+    const id = '00000000-0000-4000-8000-000000000117';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValue(
+      new EditorProtocolError('malformed commit response'),
+    );
+    harness.transport.canonical.revision = 1;
+    harness.transport.canonical.document.keys['4key'][0] = 'external';
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'mismatch-preview',
+      }),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal()).toMatchObject({
+      keys: { '4key': ['external'] },
+      keyPositions: {
+        '4key': [expect.not.objectContaining(setBoundsOp(id).bounds)],
+      },
+    });
+    expect(harness.applications.at(-1)).toMatchObject({ reason: 'resync' });
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'error',
+      failureKind: 'transient',
+    });
+    expect(onGestureIdsDiscarded).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('저장 후 응답 검증이 실패하면 같은 mutation을 재전송해 정상 ack으로 정산한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000112';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    let acknowledged: EditorCommitResult | null = null;
+    harness.transport.commitMock
+      .mockImplementationOnce(async (request) => {
+        acknowledged = await original(request);
+        throw new EditorProtocolError('malformed commit response');
+      })
+      .mockImplementationOnce(async () => structuredClone(acknowledged!));
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(
+      [setBoundsOp(id)],
+      {
+        gestureId: 'protocol-preview',
+      },
+    );
+
+    expect(outcome.opResults).toEqual([
+      { status: 'applied', bounds: setBoundsOp(id).bounds },
+    ]);
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    expect(harness.transport.getMock).toHaveBeenCalledOnce();
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      failureKind: null,
+      error: null,
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('두 번의 changedFields 교차 검증이 실패해도 canonical에 의도가 반영됐으면 거짓 영구 실패를 남기지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000113';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    let malformed: EditorCommitResult | null = null;
+    harness.transport.commitMock.mockImplementation(async (request) => {
+      if (!malformed) {
+        const result = await original(request);
+        malformed = { ...result, changedFields: [] };
+      }
+      return structuredClone(malformed);
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'changed-fields-preview',
+      }),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject(
+      setBoundsOp(id).bounds,
+    );
+    expect(harness.applications.at(-1)).toMatchObject({ reason: 'resync' });
+    expect(harness.applications).not.toContainEqual(
+      expect.objectContaining({ reason: 'rejected' }),
+    );
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      failureKind: null,
+      error: null,
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith([
+      'changed-fields-preview',
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('동일 revision의 noChange 의도도 canonical으로 확인해 거짓 영구 실패를 막는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000114';
+    const onGestureIdsDiscarded = vi.fn();
+    const base = withStableId(id);
+    Object.assign(base.keyPositions['4key'][0], setBoundsOp(id).bounds);
+    const harness = createHarness(base, {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValue({
+      revision: 0,
+      changedFields: ['keyPositions'],
+      opResults: [{ status: 'noChange', bounds: setBoundsOp(id).bounds }],
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'no-change-preview',
+      }),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.applications.at(-1)).toMatchObject({ reason: 'resync' });
+    expect(harness.applications).not.toContainEqual(
+      expect.objectContaining({ reason: 'rejected' }),
+    );
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      failureKind: null,
+      error: null,
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['no-change-preview']);
+    harness.coordinator.stop();
+  });
+
+  it('다른 필드의 동시 커밋을 보존하면서 semantic 의도 반영을 확인한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000115';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    let malformed: EditorCommitResult | null = null;
+    harness.transport.commitMock.mockImplementation(async (request) => {
+      if (!malformed) {
+        const result = await original(request);
+        harness.transport.canonical.revision = result.revision + 1;
+        harness.transport.canonical.document.keys['4key'][0] = 'external';
+        malformed = { ...result, changedFields: [] };
+      }
+      return structuredClone(malformed);
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'concurrent-preview',
+      }),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal()).toMatchObject({
+      keys: { '4key': ['external'] },
+      keyPositions: {
+        '4key': [expect.objectContaining(setBoundsOp(id).bounds)],
+      },
+    });
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      failureKind: null,
+      error: null,
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['concurrent-preview']);
+    harness.coordinator.stop();
+  });
+
+  it('semantic op 영구 거절은 결합된 preview gesture를 폐기한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000108';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValueOnce(validationError());
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'semantic-preview',
+      }),
+    ).rejects.toMatchObject({ errorCode: 'VALIDATION_FAILED' });
+
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['semantic-preview']);
+    harness.coordinator.stop();
+  });
+
+  it('semantic op 진행 중 외부 이벤트는 일반 pending으로 중복 승격하지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000109';
+    const base = withStableId(id);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const gate = deferred<EditorCommitResult>();
+    harness.transport.commitMock.mockImplementationOnce(() => gate.promise);
+
+    const committing = harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(id),
+    ]);
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledOnce(),
+    );
+
+    const external = structuredClone(base);
+    external.keys['4key'][0] = 'B';
+    harness.transport.canonical = { revision: 1, document: external };
+    harness.transport.emit(eventFor(1, 'external', base, external));
+    await vi.waitFor(() =>
+      expect(harness.coordinator.getState().revision).toBe(1),
+    );
+
+    gate.reject(revisionConflict());
+    await expect(committing).resolves.toMatchObject({
+      document: {
+        keys: { '4key': ['B'] },
+        keyPositions: {
+          '4key': [expect.objectContaining(setBoundsOp(id).bounds)],
+        },
+      },
+    });
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      dirty: false,
+      conflict: null,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('conflict canonical 조회 실패도 transient error로 정산한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000104';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    const syncError = new Error('canonical unavailable');
+    harness.transport.commitMock.mockRejectedValueOnce(revisionConflict());
+    harness.transport.getMock.mockRejectedValueOnce(syncError);
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'sync-preview',
+      }),
+    ).rejects.toBe(syncError);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'error',
+      failureKind: 'transient',
+      dirty: false,
+    });
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['sync-preview']);
+    harness.coordinator.stop();
+  });
+});
+
+// 정산 슬롯의 동결 의도 낙관 재적용이 슬롯 대기 중 시작된 2차 eager 편집을
+// 덮지 않는지의 CAS 계약. 지연은 선행 in-flight 커밋으로 만든다
+describe('정산 슬롯 낙관 재적용 CAS', () => {
+  const SECOND_KEY_ID = '22222222-2222-4222-8222-222222222222';
+  const frozenBounds = { dx: 100, dy: 110, width: 60, height: 60 };
+
+  const setBoundsOp = (id: string): EditorSetBoundsOpV1 => ({
+    kind: 'setBounds',
+    elementType: 'key',
+    id,
+    bounds: { ...frozenBounds },
+  });
+
+  const withMovedKey = (
+    document: CanonicalEditorDocumentV1,
+    index: number,
+    dx: number,
+    dy: number,
+  ): CanonicalEditorDocumentV1 => {
+    const next = structuredClone(document);
+    next.keyPositions['4key'][index] = {
+      ...next.keyPositions['4key'][index],
+      dx,
+      dy,
+    };
+    return next;
+  };
+
+  // 선행 in-flight 커밋으로 다음 슬롯의 drain을 지연시킨다
+  const holdSlotOpen = async (
+    harness: ReturnType<typeof createHarness>,
+    keys: KeySlot[],
+  ) => {
+    const gate = deferred<EditorCommitResult>();
+    harness.transport.commitMock.mockReturnValueOnce(gate.promise);
+    const blocking = harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keys: { '4key': keys },
+    });
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledOnce(),
+    );
+    return {
+      release: async () => {
+        gate.resolve({ revision: 1, changedFields: ['keys'] });
+        await blocking;
+      },
+    };
+  };
+
+  it('정산 슬롯 대기 중 2차 편집(eager)이 착지에 덮이지 않는다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const hold = await holdSlotOpen(harness, ['B']);
+
+    // 1차 드래그 종료 정산이 동결 좌표를 들고 슬롯에 줄을 선다
+    const settlement = harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(DEFAULT_KEY_ID),
+    ]);
+
+    // 슬롯 대기 중 같은 요소를 다시 잡은 2차 드래그의 eager 쓰기
+    harness.setLocal(withMovedKey(harness.getLocal(), 0, 30, 40));
+
+    await hold.release();
+    await settlement;
+
+    // 착지가 2차 eager 값을 동결값으로 되돌리지 않는다
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+      dx: 30,
+      dy: 40,
+    });
+    // wire에는 동결값이 그대로 실린다
+    const request = harness.transport.commitMock.mock.calls.at(-1)?.[0];
+    expect(request).toMatchObject({ ops: [setBoundsOp(DEFAULT_KEY_ID)] });
+    harness.coordinator.stop();
+  });
+
+  it('요소 단위 CAS: 대상 요소는 재적용되고 2차 편집 요소는 보존된다', async () => {
+    const base = makeDocument();
+    base.keys = { '4key': ['A', 'B'] };
+    base.keyPositions['4key'].push({
+      ...createDefaultKeyPosition(20, 0),
+      id: SECOND_KEY_ID,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const hold = await holdSlotOpen(harness, ['C', 'B']);
+
+    const settlement = harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(DEFAULT_KEY_ID),
+    ]);
+    // 2차 편집은 다른 요소를 잡는다
+    harness.setLocal(withMovedKey(harness.getLocal(), 1, 99, 88));
+
+    await hold.release();
+    await settlement;
+
+    const positions = harness.getLocal().keyPositions['4key'];
+    expect(positions[0]).toMatchObject({
+      dx: frozenBounds.dx,
+      dy: frozenBounds.dy,
+    });
+    expect(positions[1]).toMatchObject({ dx: 99, dy: 88 });
+    harness.coordinator.stop();
+  });
+
+  it('2차 편집이 없으면 동결값이 그대로 재적용된다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitSemanticOpsInternal([
+      setBoundsOp(DEFAULT_KEY_ID),
+    ]);
+
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+      dx: frozenBounds.dx,
+      dy: frozenBounds.dy,
+    });
+    expect(
+      harness.applications.some(({ reason }) => reason === 'localPatch'),
+    ).toBe(true);
+    harness.coordinator.stop();
+  });
+
+  it('생성 patch 착지가 2차 편집 중인 필드를 덮지 않는다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const hold = await holdSlotOpen(harness, ['B']);
+
+    const generated = harness.coordinator.commitGeneratedPatch((latest) => {
+      const record = structuredClone(latest.keyPositions);
+      record['4key'][0] = {
+        ...record['4key'][0],
+        inactiveImage: 'generated.png',
+      };
+      return { schemaVersion: 1, keyPositions: record };
+    });
+
+    harness.setLocal(withMovedKey(harness.getLocal(), 0, 30, 40));
+
+    await hold.release();
+    await generated;
+
+    // 스토어의 eager 좌표는 보존되고 동결 생성 값은 wire로만 나간다
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+      dx: 30,
+      dy: 40,
+      inactiveImage: '',
+    });
+    expect(
+      harness.transport.canonical.document.keyPositions['4key'][0]
+        .inactiveImage,
+    ).toBe('generated.png');
+    harness.coordinator.stop();
+  });
+
+  it('2차 편집이 없으면 생성 patch 필드가 로컬에 재적용된다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitGeneratedPatch((latest) => {
+      const record = structuredClone(latest.keyPositions);
+      record['4key'][0] = {
+        ...record['4key'][0],
+        inactiveImage: 'generated.png',
+      };
+      return { schemaVersion: 1, keyPositions: record };
+    });
+
+    expect(harness.getLocal().keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('ops 게스처 착지도 2차 편집(eager)을 덮지 않는다', async () => {
+    const base = makeDocument();
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const hold = await holdSlotOpen(harness, ['B']);
+
+    const gesture = harness.coordinator.commitGesture(
+      { opsVersion: EDITOR_OPS_VERSION, ops: [setBoundsOp(DEFAULT_KEY_ID)] },
+      'gesture-cas',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          opsVersion: EDITOR_OPS_VERSION,
+          ops: context.editorOps!,
+        }),
+    );
+
+    harness.setLocal(withMovedKey(harness.getLocal(), 0, 30, 40));
+
+    await hold.release();
+    await gesture;
+
+    expect(harness.getLocal().keyPositions['4key'][0]).toMatchObject({
+      dx: 30,
+      dy: 40,
     });
     harness.coordinator.stop();
   });

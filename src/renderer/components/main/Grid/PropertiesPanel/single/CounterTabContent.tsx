@@ -2,10 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CounterTabContentProps } from '../types';
-import type {
-  KeyCounterAnimationSettings,
-  KeyCounterSettings,
-} from '@src/types/key/keys';
+import type { KeyCounterAnimationSettings } from '@src/types/key/keys';
 import { normalizeCounterSettings } from '@src/types/key/keys';
 import {
   PropertyRow,
@@ -24,6 +21,8 @@ import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorS
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { createCounterAnimationPresetIntent } from '@src/types/key/counterAnimation';
 import {
   counterFillPair,
   gradientToCss,
@@ -38,11 +37,16 @@ type PickerTarget = 'fill' | 'stroke' | null;
 type ColorState = 'idle' | 'active';
 
 const CounterTabContent: React.FC<CounterTabContentProps> = ({
-  keyIndex,
   keyPosition,
   keyDisplayName,
   isStat,
-  onKeyUpdate,
+  onCounterEnabledCommit,
+  onCounterAnimationEnabledCommit,
+  onCounterLayoutCommit,
+  onCounterTypographyCommit,
+  onCounterStrokeCommit,
+  onCounterFillCommit,
+  onCounterAnimationPresetCommit,
   panelElement,
   t,
 }) => {
@@ -97,16 +101,16 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
   const colorPickerInteractiveRefs = [fillBtnRef, strokeBtnRef];
 
-  const handleCounterUpdate = (updates: Partial<KeyCounterSettings>) => {
-    const currentSettings = normalizeCounterSettings(keyPosition.counter);
-    const newSettings = { ...currentSettings, ...updates };
-    onKeyUpdate({ index: keyIndex, counter: newSettings });
-  };
-
   const handleAnimationUpdate = (
     nextAnimation: KeyCounterAnimationSettings,
   ) => {
-    handleCounterUpdate({ animation: nextAnimation });
+    onCounterAnimationPresetCommit?.(
+      createCounterAnimationPresetIntent(
+        counterSettings.animation,
+        nextAnimation,
+        'single',
+      ),
+    );
   };
 
   const handlePickerToggle = (target: Exclude<PickerTarget, null>) => {
@@ -163,27 +167,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     setLocalColors((prev) => ({ ...prev, [key]: color }));
 
     if (pickerFor === 'fill') {
-      if (effectiveColorState === 'active') {
-        handleCounterUpdate({
-          fill: { ...counterSettings.fill, active: color },
-        });
-      } else {
-        handleCounterUpdate({
-          fill: { ...counterSettings.fill, idle: color },
-        });
-      }
       return;
     }
 
-    if (effectiveColorState === 'active') {
-      handleCounterUpdate({
-        stroke: { ...counterSettings.stroke, active: color },
-      });
-    } else {
-      handleCounterUpdate({
-        stroke: { ...counterSettings.stroke, idle: color },
-      });
-    }
+    onCounterStrokeCommit?.(
+      effectiveColorState === 'active'
+        ? { property: 'counterStrokeActive', value: color }
+        : { property: 'counterStrokeIdle', value: color },
+    );
   };
 
   // ── fill 그라데이션 배선 (stroke는 단색 유지) ──
@@ -197,17 +188,21 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     const pair = counterFillPair(value);
     const key = effectiveColorState === 'active' ? 'fillActive' : 'fillIdle';
     setLocalColors((prev) => ({ ...prev, [key]: pair.color }));
-    if (effectiveColorState === 'active') {
-      handleCounterUpdate({
-        fill: { ...counterSettings.fill, active: pair.color },
-        fillActiveGradient: pair.gradient,
-      });
-    } else {
-      handleCounterUpdate({
-        fill: { ...counterSettings.fill, idle: pair.color },
-        fillIdleGradient: pair.gradient,
-      });
-    }
+    onCounterFillCommit?.(
+      effectiveColorState === 'active'
+        ? {
+            property: 'counterFillActive',
+            value: pair.gradient
+              ? { color: pair.color, gradient: pair.gradient }
+              : { color: pair.color },
+          }
+        : {
+            property: 'counterFillIdle',
+            value: pair.gradient
+              ? { color: pair.color, gradient: pair.gradient }
+              : { color: pair.color },
+          },
+    );
   };
 
   const fillGradientState = useGradientColorState({
@@ -220,12 +215,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         : {},
     fallbackColor: '#ffffff',
     // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
-    contextKey: `${
-      isStat ? 'stat' : 'key'
-    }:${selectedKeyType}:${keyIndex}:fill:${effectiveColorState}`,
+    contextKey: `${isStat ? 'stat' : 'key'}:${selectedKeyType}:${
+      keyPosition.id
+    }:fill:${effectiveColorState}`,
     canvasAnchor:
-      pickerFor === 'fill'
-        ? { kind: isStat ? 'stat' : 'key', index: keyIndex }
+      pickerFor === 'fill' &&
+      keyPosition.id &&
+      isNativeElementId(keyPosition.id)
+        ? { kind: isStat ? 'stat' : 'key', id: keyPosition.id }
         : undefined,
     canvasSurface: 'counterFill',
     canvasState: effectiveColorState,
@@ -246,9 +243,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={counterSettings.enabled}
-            onChange={() =>
-              handleCounterUpdate({ enabled: !counterSettings.enabled })
-            }
+            onChange={() => {
+              const enabled = !counterSettings.enabled;
+              onCounterEnabledCommit?.(enabled);
+            }}
           />
         </div>
       </PropertySection>
@@ -269,9 +267,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
               },
             ]}
             value={counterSettings.placement}
-            onChange={(value) =>
-              handleCounterUpdate({ placement: value as 'inside' | 'outside' })
-            }
+            onChange={(value) => {
+              const placement = value as 'inside' | 'outside';
+              onCounterLayoutCommit?.({
+                property: 'counterPlacement',
+                value: placement,
+              });
+            }}
           />
         </PropertyRow>
 
@@ -292,11 +294,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
               },
             ]}
             value={counterSettings.align}
-            onChange={(value) =>
-              handleCounterUpdate({
-                align: value as 'top' | 'bottom' | 'left' | 'right',
-              })
-            }
+            onChange={(value) => {
+              const align = value as 'top' | 'bottom' | 'left' | 'right';
+              onCounterLayoutCommit?.({
+                property: 'counterAlign',
+                value: align,
+              });
+            }}
           />
         </PropertyRow>
 
@@ -316,11 +320,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
                 },
               ]}
               value={counterSettings.alignMode ?? 'center'}
-              onChange={(value) =>
-                handleCounterUpdate({
-                  alignMode: value as 'center' | 'between',
-                })
-              }
+              onChange={(value) => {
+                const alignMode = value as 'center' | 'between';
+                onCounterLayoutCommit?.({
+                  property: 'counterAlignMode',
+                  value: alignMode,
+                });
+              }}
             />
           </PropertyRow>
         )}
@@ -329,7 +335,9 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         <PropertyRow label={t('counterSetting.gap') || '간격'}>
           <NumberInput
             value={counterSettings.gap}
-            onChange={(value) => handleCounterUpdate({ gap: value })}
+            onChange={(value) => {
+              onCounterLayoutCommit?.({ property: 'counterGap', value: value });
+            }}
             suffix="px"
             min={0}
             max={9999}
@@ -393,7 +401,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         <PropertyRow label={t('counterSetting.fontSize') || '폰트 크기'}>
           <NumberInput
             value={counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}
-            onChange={(value) => handleCounterUpdate({ fontSize: value })}
+            onChange={(value) => {
+              onCounterTypographyCommit?.({
+                property: 'counterFontSize',
+                value: value,
+              });
+            }}
             suffix="px"
             min={8}
             max={72}
@@ -408,18 +421,30 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             isItalic={counterSettings.fontItalic ?? false}
             isUnderline={counterSettings.fontUnderline ?? false}
             isStrikethrough={counterSettings.fontStrikethrough ?? false}
-            onBoldChange={(value) =>
-              handleCounterUpdate({ fontWeight: value ? 700 : 400 })
-            }
-            onItalicChange={(value) =>
-              handleCounterUpdate({ fontItalic: value })
-            }
-            onUnderlineChange={(value) =>
-              handleCounterUpdate({ fontUnderline: value })
-            }
-            onStrikethroughChange={(value) =>
-              handleCounterUpdate({ fontStrikethrough: value })
-            }
+            onBoldChange={(value) => {
+              onCounterTypographyCommit?.({
+                property: 'counterFontWeight',
+                value: value ? 700 : 400,
+              });
+            }}
+            onItalicChange={(value) => {
+              onCounterTypographyCommit?.({
+                property: 'counterFontItalic',
+                value: value,
+              });
+            }}
+            onUnderlineChange={(value) => {
+              onCounterTypographyCommit?.({
+                property: 'counterFontUnderline',
+                value: value,
+              });
+            }}
+            onStrikethroughChange={(value) => {
+              onCounterTypographyCommit?.({
+                property: 'counterFontStrikethrough',
+                value: value,
+              });
+            }}
           />
         </PropertyRow>
       </PropertySection>
@@ -433,14 +458,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={counterSettings.animation.enabled}
-            onChange={() =>
-              handleCounterUpdate({
-                animation: {
-                  ...counterSettings.animation,
-                  enabled: !counterSettings.animation.enabled,
-                },
-              })
-            }
+            onChange={() => {
+              const enabled = !counterSettings.animation.enabled;
+              onCounterAnimationEnabledCommit?.(enabled);
+            }}
           />
         </div>
 
@@ -522,7 +543,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             open
             selectedFont={counterSettings.fontFamily || null}
             onFontSelect={(fontName) => {
-              handleCounterUpdate({ fontFamily: fontName });
+              if (fontName !== null) {
+                onCounterTypographyCommit?.({
+                  property: 'counterFontFamily',
+                  value: fontName,
+                });
+              }
             }}
             pageTitle={t('counterSetting.font') || '폰트'}
             onBack={closePage}
@@ -536,6 +562,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         createPortal(
           <CounterAnimationPicker
             open
+            completionBinding="element-id"
             animation={counterSettings.animation}
             counterSettings={counterSettings}
             keyVisual={{

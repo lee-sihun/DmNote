@@ -6,7 +6,10 @@ import Dropdown from '@components/main/common/Dropdown';
 import TabSwitch from '@components/main/common/TabSwitch';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
-import { useEditSessionModeGuard } from '@src/renderer/contexts/EditSessionScope';
+import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
+
+import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
+import { imageApi } from '@api/modules/resourceApi';
 
 interface ImagePickerProps {
   open: boolean;
@@ -30,6 +33,8 @@ interface ImagePickerProps {
   interactiveRefs?: React.RefObject<HTMLElement>[];
   /** 눌림 상태가 없는 요소는 대기 이미지만 편집 */
   showActiveState?: boolean;
+  /** 비동기 완료 콜백이 안정 ID applier로 라우팅되면 element-id */
+  completionBinding?: CompletionBinding;
 }
 
 const STATE_MODES = {
@@ -58,6 +63,7 @@ const ImagePicker = ({
   onClose,
   interactiveRefs = [],
   showActiveState = true,
+  completionBinding = 'session-mode',
 }: ImagePickerProps) => {
   const { t } = useTranslation();
   const [mode, setMode] = useState<
@@ -65,7 +71,7 @@ const ImagePicker = ({
   >(STATE_MODES.idle);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
   const loadingImageRef = useRef(false);
-  const isSameEditSessionMode = useEditSessionModeGuard();
+  const canBindCompletion = useEditSessionCompletionGuard(completionBinding);
   const effectiveMode = showActiveState ? mode : STATE_MODES.idle;
 
   useEffect(() => {
@@ -77,12 +83,13 @@ const ImagePicker = ({
     loadingImageRef.current = true;
     setIsLoadingImage(true);
     try {
-      const result = await window.api.image.load();
+      const result = await imageApi.load();
       if (!result?.success || !result.imagePath) {
         return;
       }
       // 파일 복사는 이미 끝났다. 대상이 갈렸으면 연결만 하지 않는다
-      if (!isSameEditSessionMode()) return;
+      // (element-id 결합이면 ID applier가 유효성을 판정하므로 통과)
+      if (!canBindCompletion()) return;
       if (stateMode === STATE_MODES.idle) {
         onIdleImageChange?.(result.imagePath);
       } else {

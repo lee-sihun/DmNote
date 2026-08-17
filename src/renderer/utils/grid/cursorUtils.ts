@@ -38,6 +38,13 @@ const CURSOR_BODY_CLASS = 'dmn-custom-cursor';
 const CURSOR_OVERLAY_ID = 'dmn-cursor-overlay';
 const DEFAULT_CURSOR_BASE_SIZE = 24;
 
+// 억제 중 도착한 핸들 enter의 보류 기록 - resume 시점에 적용
+interface PendingCursorHover {
+  type: CursorType;
+  apply: () => void;
+  pointer: { x: number; y: number } | null;
+}
+
 interface CursorOverlayState {
   hoverType: CursorType | null;
   lockedType: CursorType | null;
@@ -48,6 +55,8 @@ interface CursorOverlayState {
   lastPointer: { x: number; y: number } | null;
   rafId: number | null;
   listenerAttached: boolean;
+  hoverSuspended: boolean;
+  pendingHover: PendingCursorHover | null;
 }
 
 const overlayState: CursorOverlayState = {
@@ -60,7 +69,12 @@ const overlayState: CursorOverlayState = {
   lastPointer: null,
   rafId: null,
   listenerAttached: false,
+  hoverSuspended: false,
+  pendingHover: null,
 };
+
+// 억제 해제 지연 타이머
+let hoverResumeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const getDefaultCursorSettings = (): CursorSettings => ({
   size: 1.0,
@@ -343,9 +357,88 @@ export function setCustomCursorHover(
   cursorType: CursorType | null,
   event?: MouseEvent | PointerEvent,
 ): void {
+  // 보류 기록은 여기서 건드리지 않는다 - 소거는 clearPendingCustomCursorHover의
+  // 소유권 기반 경로 단독 책임 (다른 핸들의 해제가 남의 보류를 지우는 것 방지)
   if (!isMac()) return;
+  // 억제 중에는 잔여 boundary 이벤트의 호버 설정을 무시 (해제는 항상 허용)
+  if (overlayState.hoverSuspended && cursorType !== null) return;
   overlayState.hoverType = cursorType;
   updateOverlay(event);
+}
+
+/**
+ * 억제 중 도착한 핸들 enter를 보류로 기록합니다.
+ * 대응 leave가 오면 지워지고, resume 시점에 남아 있으면 적용됩니다.
+ * apply 콜백은 호출 측 하이라이트 복원용으로 함께 실행됩니다.
+ */
+export function setPendingCustomCursorHover(
+  cursorType: CursorType,
+  apply: () => void,
+  event?: MouseEvent | PointerEvent,
+): void {
+  if (!overlayState.hoverSuspended) return;
+  overlayState.pendingHover = {
+    type: cursorType,
+    apply,
+    pointer: event ? { x: event.clientX, y: event.clientY } : null,
+  };
+}
+
+/**
+ * 보류된 hover 기록을 지웁니다.
+ * apply를 주면 같은 기록일 때만 지웁니다 (핸들 unmount 정리용).
+ */
+export function clearPendingCustomCursorHover(apply?: () => void): void {
+  if (!overlayState.pendingHover) return;
+  if (apply && overlayState.pendingHover.apply !== apply) return;
+  overlayState.pendingHover = null;
+}
+
+/**
+ * 이동 드래그 세션 동안 호버 커서 갱신을 중단합니다.
+ * 시작 시점에 남아 있던 호버 상태도 함께 지웁니다.
+ */
+export function suspendCustomCursorHover(): void {
+  if (hoverResumeTimer !== null) {
+    clearTimeout(hoverResumeTimer);
+    hoverResumeTimer = null;
+  }
+  overlayState.hoverSuspended = true;
+  overlayState.pendingHover = null;
+  overlayState.hoverType = null;
+  updateOverlay();
+}
+
+/**
+ * 호버 커서 갱신 중단을 해제합니다.
+ * 세션 해제 직후 같은 태스크로 도착하는 boundary 이벤트 잔여분을
+ * 걸러내기 위해 실제 해제는 한 태스크 뒤로 미룹니다.
+ */
+export function resumeCustomCursorHover(): void {
+  if (!overlayState.hoverSuspended || hoverResumeTimer !== null) return;
+  hoverResumeTimer = setTimeout(() => {
+    hoverResumeTimer = null;
+    overlayState.hoverSuspended = false;
+    const pending = overlayState.pendingHover;
+    overlayState.pendingHover = null;
+    if (pending) {
+      // 릴리즈 순간 억제됐던 enter 적용 - 포인터가 핸들 안에 머물러
+      // enter가 재발생하지 않는 경우의 커서·하이라이트 복원
+      if (pending.pointer) overlayState.lastPointer = pending.pointer;
+      pending.apply();
+      setCustomCursorHover(pending.type);
+    } else {
+      overlayState.hoverType = null;
+      updateOverlay();
+    }
+  }, 0);
+}
+
+/**
+ * 호버 커서 갱신이 중단된 상태인지 반환합니다.
+ */
+export function isCustomCursorHoverSuspended(): boolean {
+  return overlayState.hoverSuspended;
 }
 
 /**

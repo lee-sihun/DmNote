@@ -52,6 +52,17 @@ that top-level collection. It is not an item-level diff.
   identifier rules.
 </Callout>
 
+<Callout>
+  Every element in the position collections (`keyPositions`, `statPositions`,
+  `graphPositions`, `knobPositions`) carries a stable `id` (UUID) assigned and
+  owned by the app. Treat it as opaque: echo back the value you read and never
+  invent one. A written element with a missing or unknown `id` gets a fresh one
+  from the backend. If the same `id` appears more than once, for example when
+  you copy an element you read and append it, the element in its original slot
+  keeps the identity and the remaining copies get fresh ones. See the
+  [Keys API](/docs/api-reference/keys) for the identity rules.
+</Callout>
+
 ## Read the Current Document
 
 ### `dmn.editor.get(): Promise<EditorGetResult>`
@@ -73,7 +84,7 @@ an older snapshot cannot silently overwrite a newer edit.
 
 ## Commit Changes Atomically
 
-### `dmn.editor.commit(request): Promise<EditorCommitResult>`
+### `dmn.editor.commit(request): Promise<EditorPluginCommitResult>`
 
 Merges `changes` into the document at `baseRevision`, validates the completed
 document, and persists all included collections in one atomic replacement. A
@@ -100,7 +111,7 @@ interface EditorCommitRequest {
   changes: EditorPatchV1;
 }
 
-interface EditorCommitResult {
+interface EditorPluginCommitResult {
   revision: number;
   changedFields: EditorField[];
 }
@@ -118,6 +129,13 @@ const result = await dmn.editor.commit({
 
 console.log('Committed revision:', result.revision);
 ```
+
+The request accepts only the six keys shown above: `baseRevision`,
+`mutationId`, `changes`, `gestureId`, `gestureIds`, and `multiKey`. Any other
+key rejects with a `TypeError` before the request reaches the backend, and so
+does a request that is not a plain JSON-serializable object. These rejections
+carry no `errorCode`, so a handler that branches on `errorCode` alone will not
+recognize them.
 
 `mutationId` must be a UUID string no longer than 64 bytes. A recent request
 retried with the same ID in the current app process is deduplicated. This is

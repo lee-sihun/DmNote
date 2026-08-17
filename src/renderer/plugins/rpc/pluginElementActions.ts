@@ -11,23 +11,115 @@ import {
   PANEL_MODEL_REQUEST_MESSAGE,
   getPluginPanelModelRevision,
 } from '@utils/plugin/panelModelSync';
-import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import {
+  flushPluginInstancesEditSession,
+  rotatePluginInstancesEditSession,
+} from '@plugins/runtime/displayElement/instancesCommitQueue';
+import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
+import type { BatchGeometryDescriptor } from '@src/renderer/editor/runtime/elementOps';
+import type {
+  EditorElementPropertyPatchV1,
+  EditorFontFamilyPropertyPatchV1,
+  EditorFontStylePropertyPatchV1,
+  EditorGraphRuntimePropertyPatchV1,
+  EditorKnobRuntimePropertyPatchV1,
+  EditorNotePropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+  EditorCounterStrokePropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
+  EditorPaintPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
+} from '@src/types/editor';
 
-import { sendPluginRpc } from './pluginRpcClient';
+import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
 
 export const PLUGIN_RPC_OPERATIONS = {
   setHidden: 'elements:setHidden',
   remove: 'elements:delete',
   setZIndexes: 'elements:setZIndexes',
   update: 'elements:update',
+  deleteLayerSelection: 'layers:deleteSelection',
+  reorderLayerSelection: 'layers:reorderSelection',
+  patchLayerProperty: 'layers:patchProperty',
+  setLayerBounds: 'layers:setBounds',
+  setLayerBatchGeometry: 'layers:setBatchGeometry',
+  setLayerGroupVisibility: 'layers:setGroupVisibility',
+  setElementGroups: 'layers:setElementGroups',
+  renameLayerGroup: 'layers:renameGroup',
+  updateCounterAnimationPreset: 'counterAnimation:updatePreset',
+  deleteCounterAnimationPreset: 'counterAnimation:deletePreset',
 } as const;
+
+export type LayerDeleteTarget = {
+  elementType: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
+  id: string;
+};
+
+export type ElementGroupTarget = {
+  elementType: NativeElementType;
+  id: string;
+};
+
+export type TargetLayerGroup =
+  | { kind: 'existing'; id: string }
+  | { kind: 'create'; id: string; name: string };
+
+export interface NativeLayerPropertyTarget {
+  elementType: NativeElementType;
+  id: string;
+  patch: EditorElementPropertyPatchV1;
+}
+
+export interface NativeLayerBoundsTarget {
+  elementType: NativeElementType;
+  id: string;
+  patch:
+    | { dx: number; dy?: never; width?: never; height?: never }
+    | { dx?: never; dy: number; width?: never; height?: never }
+    | { dx?: never; dy?: never; width: number; height?: never }
+    | { dx?: never; dy?: never; width?: never; height: number };
+  gestureId?: string;
+}
+
+export type NativeLayerBatchGeometryDescriptor = BatchGeometryDescriptor;
+
+export interface LayerReorderAnchorsWire {
+  toDisplayIndex: number;
+  targetGroupId: string | null;
+  anchorBeforeId: string | null;
+  anchorAfterId: string | null;
+  anchorHeaderGroupId: string | null;
+  anchorBeforeHeaderGroupId: string | null;
+  anchorAfterHeaderGroupId: string | null;
+  boundary: 'top' | 'bottom' | null;
+}
+
+export type LayerReorderIntentWire =
+  | {
+      kind: 'items';
+      mode: string;
+      draggedIds: string[];
+      collapsedGroupIds: string[];
+      anchors: LayerReorderAnchorsWire;
+      preserveFullGroups: boolean;
+    }
+  | {
+      kind: 'group';
+      mode: string;
+      groupId: string;
+      extraIds: string[];
+      collapsedGroupIds: string[];
+      anchors: LayerReorderAnchorsWire;
+    };
 
 const isPanelWindow = () => window.__dmn_window_type === 'panel';
 
 const rotateTargetPluginSessions = (
   fullIds: string[],
   gestureId?: string,
-): void => {
+): Set<string> => {
   const targetIds = new Set(fullIds);
   const pluginIds = new Set(
     usePluginDisplayElementStore
@@ -42,6 +134,7 @@ const rotateTargetPluginSessions = (
       rotatePluginInstancesEditSession(pluginId);
     }
   });
+  return pluginIds;
 };
 
 // 패널 미러의 마지막 수신 backend revision - RPC expectedModelRevision 토큰
@@ -81,6 +174,10 @@ const requestFreshSnapshot = () => {
 interface QueuedElementOp {
   operation: string;
   payload: Record<string, unknown>;
+  authorityGeneration?: number;
+  retryPolicy?: 'default' | 'idempotentDelete' | 'staleOnly' | 'none';
+  resolve?: (succeeded: boolean) => void;
+  resolvePayload?: (payload: Record<string, unknown> | null) => void;
 }
 
 const outboundQueue: QueuedElementOp[] = [];
@@ -89,7 +186,12 @@ let drainPromise: Promise<boolean> | null = null;
 const RECONCILE_WAIT_MS = 1000;
 
 const sendQueuedOp = async (op: QueuedElementOp) => {
-  const outcome = await sendPluginRpc(op.operation, op.payload, mirrorRevision);
+  const outcome = await sendPluginRpc(
+    op.operation,
+    op.payload,
+    mirrorRevision,
+    op.authorityGeneration,
+  );
   // 응답에는 성공·실패 모두 최신 backend revision이 실림
   if (outcome.kind !== 'unknown' && outcome.response) {
     notePluginMirrorRevision(outcome.response.modelRevision);
@@ -102,7 +204,52 @@ const drainQueue = async (): Promise<boolean> => {
   while (outboundQueue.length > 0) {
     const op = outboundQueue.shift()!;
     const outcome = await sendQueuedOp(op);
-    if (outcome.kind === 'ok') continue;
+    if (outcome.kind === 'ok') {
+      op.resolve?.(true);
+      op.resolvePayload?.(outcome.response.payload ?? null);
+      continue;
+    }
+    // 신원 소실은 같은 payload 재전송으로 회복 불가 - 재시도 없이 실패 확정
+    if (outcome.kind === 'error' && outcome.errorCode === 'ELEMENT_NOT_FOUND') {
+      console.error(`Plugin RPC ${op.operation} failed: ${outcome.errorCode}`);
+      succeeded = false;
+      op.resolve?.(false);
+      op.resolvePayload?.(null);
+      requestFreshSnapshot();
+      continue;
+    }
+    if (op.retryPolicy === 'none') {
+      succeeded = false;
+      op.resolve?.(false);
+      op.resolvePayload?.(null);
+      requestFreshSnapshot();
+      continue;
+    }
+    const retryableStaleOutcome =
+      op.retryPolicy === 'staleOnly' &&
+      outcome.kind === 'error' &&
+      (outcome.errorCode === 'MODEL_REVISION_STALE' ||
+        outcome.errorCode === 'PLUGIN_MODEL_REVISION_CONFLICT');
+    if (op.retryPolicy === 'staleOnly' && !retryableStaleOutcome) {
+      succeeded = false;
+      op.resolve?.(false);
+      op.resolvePayload?.(null);
+      requestFreshSnapshot();
+      continue;
+    }
+    const retryableDeleteOutcome =
+      op.retryPolicy === 'idempotentDelete' &&
+      (outcome.kind === 'unknown' ||
+        (outcome.kind === 'error' &&
+          (outcome.errorCode === 'MODEL_REVISION_STALE' ||
+            outcome.errorCode === 'PLUGIN_MODEL_REVISION_CONFLICT')));
+    if (op.retryPolicy === 'idempotentDelete' && !retryableDeleteOutcome) {
+      succeeded = false;
+      op.resolve?.(false);
+      op.resolvePayload?.(null);
+      requestFreshSnapshot();
+      continue;
+    }
     if (outcome.kind === 'error') {
       console.error(`Plugin RPC ${op.operation} failed: ${outcome.errorCode}`);
     }
@@ -110,9 +257,24 @@ const drainQueue = async (): Promise<boolean> => {
     // 거절·불명 - fresh snapshot 수렴 뒤 마지막 의도를 1회 재시도
     requestFreshSnapshot();
     await waitForMirrorRevisionAdvance(RECONCILE_WAIT_MS);
+    if (
+      op.authorityGeneration !== undefined &&
+      op.authorityGeneration !== getPluginAuthorityGeneration()
+    ) {
+      succeeded = false;
+      op.resolve?.(false);
+      op.resolvePayload?.(null);
+      continue;
+    }
     const retry = await sendQueuedOp(op);
-    if (retry.kind === 'ok') continue;
+    if (retry.kind === 'ok') {
+      op.resolve?.(true);
+      op.resolvePayload?.(retry.response.payload ?? null);
+      continue;
+    }
     succeeded = false;
+    op.resolve?.(false);
+    op.resolvePayload?.(null);
     if (retry.kind === 'error') {
       console.error(
         `Plugin RPC ${op.operation} retry failed: ${retry.errorCode}`,
@@ -213,8 +375,738 @@ const delegate = (
       return;
     }
   }
-  outboundQueue.push({ operation, payload });
+  outboundQueue.push({
+    operation,
+    payload,
+    authorityGeneration: getPluginAuthorityGeneration(),
+  });
   void ensureQueueDrain();
+};
+
+export const deleteLayerSelectionViaAuthority = (
+  targets: readonly LayerDeleteTarget[],
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.deleteLayerSelection,
+      payload: { targets: targets.map((target) => ({ ...target })) },
+      authorityGeneration,
+      retryPolicy: 'idempotentDelete',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const reorderLayerSelectionViaAuthority = (
+  descriptor: LayerReorderIntentWire,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.reorderLayerSelection,
+      payload: { descriptor: structuredClone(descriptor) },
+      authorityGeneration,
+      retryPolicy: 'none',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchNativeLayerPropertyViaAuthority = (
+  target: NativeLayerPropertyTarget,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: { target: structuredClone(target) },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchNativeLayerBoundsViaAuthority = (
+  target: NativeLayerBoundsTarget,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.setLayerBounds,
+      payload: { target: structuredClone(target) },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const commitBatchGeometryViaAuthority = (
+  descriptor: NativeLayerBatchGeometryDescriptor,
+  gestureId?: string,
+  // 플러그인 fullId 대상 - 미전달(구 payload)은 native 전용 하위 호환
+  pluginTargets: readonly string[] = [],
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.setLayerBatchGeometry,
+      payload: {
+        descriptor: structuredClone(descriptor),
+        ...(gestureId ? { gestureId } : {}),
+        ...(pluginTargets.length > 0
+          ? { pluginTargets: [...pluginTargets] }
+          : {}),
+      },
+      authorityGeneration,
+      retryPolicy: 'none',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const setLayerGroupVisibilityViaAuthority = (
+  mode: string,
+  groupId: string,
+  hidden: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.setLayerGroupVisibility,
+      payload: { mode, groupId, hidden },
+      authorityGeneration,
+      retryPolicy: 'none',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const setElementGroupsViaAuthority = (
+  mode: string,
+  targets: readonly ElementGroupTarget[],
+  targetGroup: TargetLayerGroup | null,
+  // 플러그인 fullId 대상 - 미전달(구 payload)은 native 전용 하위 호환
+  pluginTargets: readonly string[] = [],
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.setElementGroups,
+      payload: {
+        mode,
+        targets: targets.map((target) => ({ ...target })),
+        targetGroup: targetGroup ? { ...targetGroup } : null,
+        ...(pluginTargets.length > 0
+          ? { pluginTargets: [...pluginTargets] }
+          : {}),
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const renameLayerGroupViaAuthority = (
+  mode: string,
+  groupId: string,
+  name: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.renameLayerGroup,
+      payload: { mode, groupId, name },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+const patchNativeLayerPropertiesViaAuthority = (
+  elementType: 'graph' | 'knob',
+  ids: readonly string[],
+  patch: EditorElementPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType, id })),
+        patch: structuredClone(patch),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchGraphTypesViaAuthority = (
+  ids: readonly string[],
+  graphType: 'line' | 'bar',
+): Promise<boolean> =>
+  patchNativeLayerPropertiesViaAuthority('graph', ids, {
+    property: 'graphType',
+    value: graphType,
+  });
+
+export const patchGraphColorsViaAuthority = (
+  ids: readonly string[],
+  graphColor: string,
+): Promise<boolean> =>
+  patchNativeLayerPropertiesViaAuthority('graph', ids, {
+    property: 'graphColor',
+    value: graphColor,
+  });
+
+export const patchGraphPropertiesViaAuthority = (
+  ids: readonly string[],
+  patch: EditorGraphRuntimePropertyPatchV1,
+): Promise<boolean> =>
+  patchNativeLayerPropertiesViaAuthority('graph', ids, patch);
+
+export const patchKnobPropertiesViaAuthority = (
+  ids: readonly string[],
+  patch: EditorKnobRuntimePropertyPatchV1,
+): Promise<boolean> =>
+  patchNativeLayerPropertiesViaAuthority('knob', ids, patch);
+
+export const patchUseInlineStylesViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  useInlineStyles: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { property: 'useInlineStyles', value: useInlineStyles },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchFontStyleViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorFontStylePropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: structuredClone(patch),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchFontFamilyViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorFontFamilyPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: structuredClone(patch),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchStylePropertyViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorPreviewStylePropertyPatchV1,
+  gestureId?: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: structuredClone(patch),
+        ...(gestureId ? { gestureId } : {}),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchPaintViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorPaintPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: structuredClone(patch),
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchShadowViaAuthority = (
+  targets: readonly {
+    elementType: 'key' | 'stat' | 'knob';
+    id: string;
+  }[],
+  patch: EditorShadowPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: structuredClone(patch),
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchNotePaintViaAuthority = (
+  ids: readonly string[],
+  patch: EditorNotePaintPropertyPatchV1,
+  gestureId?: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key' as const, id })),
+        patch: structuredClone(patch),
+        ...(gestureId ? { gestureId } : {}),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchInactiveImageViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  inactiveImage: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { property: 'inactiveImage', value: inactiveImage },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchSoundPathViaAuthority = (
+  ids: readonly string[],
+  soundPath: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key' as const, id })),
+        patch: { property: 'soundPath', value: soundPath },
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchSoundEnabledViaAuthority = (
+  ids: readonly string[],
+  soundEnabled: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key' as const, id })),
+        patch: { property: 'soundEnabled', value: soundEnabled },
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchSoundVolumeViaAuthority = (
+  ids: readonly string[],
+  soundVolume: number,
+  gestureId?: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key' as const, id })),
+        patch: { property: 'soundVolume', value: soundVolume },
+        ...(gestureId ? { gestureId } : {}),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchCounterAnimationPresetViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  intent: import('@src/types/editor').EditorCounterAnimationPresetIntentV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: {
+          property: 'counterAnimationPreset',
+          value: structuredClone(intent),
+        },
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+const patchCounterBooleanViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch:
+    | { property: 'counterEnabled'; value: boolean }
+    | { property: 'counterAnimationEnabled'; value: boolean },
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchCounterEnabledViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  enabled: boolean,
+): Promise<boolean> =>
+  patchCounterBooleanViaAuthority(targets, {
+    property: 'counterEnabled',
+    value: enabled,
+  });
+
+export const patchCounterAnimationEnabledViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  enabled: boolean,
+): Promise<boolean> =>
+  patchCounterBooleanViaAuthority(targets, {
+    property: 'counterAnimationEnabled',
+    value: enabled,
+  });
+
+export const patchCounterLayoutViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch: import('@src/types/editor').EditorCounterLayoutPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchCounterTypographyViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch: import('@src/types/editor').EditorCounterTypographyPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchCounterStrokeViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch: EditorCounterStrokePropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchCounterFillViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch: EditorCounterFillPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchFontColorViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorFontColorPropertyPatchV1,
+  gestureId?: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+        ...(gestureId ? { gestureId } : {}),
+      },
+      authorityGeneration,
+      retryPolicy:
+        patch.property === 'activeFontColor' ? 'default' : 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const updateCounterAnimationPresetViaAuthority = (
+  request: import('@src/types/key/counterAnimation').CounterAnimationUpdateRequest,
+): Promise<
+  | import('@src/types/key/counterAnimation').CounterAnimationUpsertResponse
+  | null
+> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.updateCounterAnimationPreset,
+      payload: { request: structuredClone(request) },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolvePayload: (payload) =>
+        resolve(
+          payload as unknown as
+            | import('@src/types/key/counterAnimation').CounterAnimationUpsertResponse
+            | null,
+        ),
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const deleteCounterAnimationPresetViaAuthority = (
+  id: string,
+): Promise<
+  | import('@src/types/key/counterAnimation').CounterAnimationDeleteResponse
+  | null
+> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.deleteCounterAnimationPreset,
+      payload: { id },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolvePayload: (payload) =>
+        resolve(
+          payload as unknown as
+            | import('@src/types/key/counterAnimation').CounterAnimationDeleteResponse
+            | null,
+        ),
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchActiveImageViaAuthority = (
+  targets: readonly { elementType: 'key' | 'knob'; id: string }[],
+  activeImage: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { property: 'activeImage', value: activeImage },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchIdleTransparentViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  idleTransparent: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { property: 'idleTransparent', value: idleTransparent },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchActiveTransparentViaAuthority = (
+  targets: readonly { elementType: 'key' | 'knob'; id: string }[],
+  activeTransparent: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { property: 'activeTransparent', value: activeTransparent },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchNotePropertiesViaAuthority = (
+  ids: readonly string[],
+  patch: EditorNotePropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key', id })),
+        patch: structuredClone(patch),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
 };
 
 export const drainPendingPluginElementWrites = async (): Promise<boolean> => {
@@ -229,17 +1121,33 @@ export const drainPendingPluginElementWrites = async (): Promise<boolean> => {
 /** 가시성 일괄 변경 */
 export const setPluginElementsHidden = (
   targets: Array<{ fullId: string; hidden: boolean }>,
-): void => {
-  if (targets.length === 0) return;
+): Promise<boolean> => {
+  if (targets.length === 0) return Promise.resolve(true);
   if (isPanelWindow()) {
-    delegate(PLUGIN_RPC_OPERATIONS.setHidden, { targets });
-    return;
+    const authorityGeneration = getPluginAuthorityGeneration();
+    return new Promise((resolve) => {
+      outboundQueue.push({
+        operation: PLUGIN_RPC_OPERATIONS.setHidden,
+        payload: { targets: targets.map((target) => ({ ...target })) },
+        authorityGeneration,
+        retryPolicy: 'default',
+        resolve,
+      });
+      void ensureQueueDrain();
+    });
   }
-  rotateTargetPluginSessions(targets.map(({ fullId }) => fullId));
+  // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
+  const pluginIds = rotateTargetPluginSessions(
+    targets.map(({ fullId }) => fullId),
+    crypto.randomUUID(),
+  );
   const store = usePluginDisplayElementStore.getState();
   targets.forEach(({ fullId, hidden }) => {
     store.updateElement(fullId, { hidden });
   });
+  // 가시성 토글은 discrete 편집 - debounce 대기 없이 즉시 커밋
+  pluginIds.forEach((pluginId) => flushPluginInstancesEditSession(pluginId));
+  return Promise.resolve(true);
 };
 
 /** 요소 삭제 */
@@ -287,7 +1195,11 @@ export const setPluginElementZIndexes = (
     delegate(PLUGIN_RPC_OPERATIONS.setZIndexes, { entries });
     return;
   }
-  rotateTargetPluginSessions(entries.map(({ fullId }) => fullId));
+  // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
+  rotateTargetPluginSessions(
+    entries.map(({ fullId }) => fullId),
+    crypto.randomUUID(),
+  );
   const store = usePluginDisplayElementStore.getState();
   entries.forEach(({ fullId, zIndex }) => {
     store.updateElement(fullId, { zIndex });

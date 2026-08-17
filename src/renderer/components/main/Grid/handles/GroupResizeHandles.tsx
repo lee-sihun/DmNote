@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -10,25 +10,26 @@ import {
   type SpacingGuide,
 } from '@utils/grid/smartGuides';
 import {
+  clearPendingCustomCursorHover,
   type CursorType,
   getCursor,
+  isCustomCursorHoverSuspended,
   lockCustomCursor,
   setCustomCursorHover,
+  setPendingCustomCursorHover,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
 import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
-import type { KeyPositions } from '@src/types/key/keys';
-import type { StatItemPositions } from '@src/types/key/statItems';
-import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   isElementResizable,
   getElementBounds,
   calculateGroupBounds,
+  elementBoundsChanged,
   type Bounds,
   type SelectedElement,
   type ElementBounds,
@@ -60,10 +61,10 @@ interface HandleProps {
 
 interface GroupResizeHandlesProps {
   selectedElements: SelectedElement[];
-  positions: KeyPositions;
-  statPositions: StatItemPositions;
-  graphPositions: GraphItemPositions;
-  knobPositions: KnobItemPositions;
+  positions: CanonicalEditorDocumentV1['keyPositions'];
+  statPositions: CanonicalEditorDocumentV1['statPositions'];
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'];
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'];
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   zoom?: number;
@@ -185,6 +186,24 @@ const Handle = ({
   onMouseDown,
 }: HandleProps): React.ReactElement => {
   const [isHovered, setIsHovered] = useState<boolean>(false);
+  const hoveredRef = useRef(false);
+  const pendingApplyRef = useRef<(() => void) | null>(null);
+
+  // 호버 중 unmount로 leave가 유실되면 남는 커서 오버레이·보류 기록 정리
+  useEffect(() => {
+    return () => {
+      if (pendingApplyRef.current) {
+        clearPendingCustomCursorHover(pendingApplyRef.current);
+        pendingApplyRef.current = null;
+      }
+      if (hoveredRef.current) setCustomCursorHover(null);
+    };
+  }, []);
+
+  const setHovered = (next: boolean) => {
+    hoveredRef.current = next;
+    setIsHovered(next);
+  };
 
   const hitX = centerX - HANDLE_HIT_HALF;
   const hitY = centerY - HANDLE_HIT_HALF;
@@ -209,12 +228,28 @@ const Handle = ({
         justifyContent: 'center',
       }}
       onMouseDown={(e) => onMouseDown(e, handle)}
-      onMouseEnter={(e) => {
-        setIsHovered(true);
+      onPointerEnter={(e) => {
+        // 드래그 세션 중 enter는 즉시 적용하지 않고 보류 기록 - 릴리즈 후
+        // resume 시점에 포인터가 핸들 안이면 그 hover를 적용한다
+        if (isCustomCursorHoverSuspended()) {
+          const apply = () => {
+            pendingApplyRef.current = null;
+            setHovered(true);
+          };
+          pendingApplyRef.current = apply;
+          setPendingCustomCursorHover(handle.cursor, apply, e.nativeEvent);
+          return;
+        }
+        setHovered(true);
         setCustomCursorHover(handle.cursor, e.nativeEvent);
       }}
-      onMouseLeave={(e) => {
-        setIsHovered(false);
+      onPointerLeave={(e) => {
+        // 자기 보류 기록만 소거 - 다른 핸들의 pending은 건드리지 않는다
+        if (pendingApplyRef.current) {
+          clearPendingCustomCursorHover(pendingApplyRef.current);
+          pendingApplyRef.current = null;
+        }
+        setHovered(false);
         setCustomCursorHover(null, e.nativeEvent);
       }}
     >
@@ -466,10 +501,9 @@ const GroupResizeHandles = ({
       const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
       const sizeMatchGuidesEnabled = gridSettings?.sizeMatchGuides !== false;
 
-      // 선택된 요소들의 ID 수집 (스마트 가이드에서 제외)
-      const selectedIds = selectedElements.map((el) =>
-        el.type === 'key' ? `key-${el.index}` : el.id,
-      );
+      // 선택된 요소들의 ID 수집 (스마트 가이드에서 제외).
+      // 선택 id와 가이드 bounds id가 같은 생성자(position.id)를 쓰므로 그대로 넘긴다
+      const selectedIds = selectedElements.map((el) => el.id);
 
       if (getOtherElements && alignmentGuidesEnabled) {
         const otherElements = getOtherElements(selectedIds);
@@ -725,21 +759,10 @@ const GroupResizeHandles = ({
         elementBounds: newElementBounds,
         handle,
       };
-      const changed = newElementBounds.some(({ element, bounds }) => {
-        const initial = startElementBounds.find(
-          (entry) =>
-            entry.element.id === element.id &&
-            entry.element.type === element.type &&
-            entry.element.index === element.index,
-        );
-        return (
-          !initial ||
-          bounds.x !== initial.bounds.x ||
-          bounds.y !== initial.bounds.y ||
-          bounds.width !== initial.bounds.width ||
-          bounds.height !== initial.bounds.height
-        );
-      });
+      const changed = elementBoundsChanged(
+        startElementBounds,
+        newElementBounds,
+      );
       if (!resizeStarted && changed) {
         resizeStarted = true;
         onGroupResizeStart?.(handle);

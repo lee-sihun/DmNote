@@ -106,6 +106,7 @@ fail-closed 게이트입니다. 같은 규칙이 `updateWithPositions()`와, `ke
 
 ```typescript
 interface KeyPosition {
+  id?: string; // 요소 안정 ID (UUID). 앱이 발급·소유
   dx: number;
   dy: number;
   width: number;
@@ -160,6 +161,15 @@ interface ElementShadowSpec {
 }
 ```
 
+모든 요소 위치(`keyPositions`, `statPositions`, `graphPositions`,
+`knobPositions`)는 안정 `id`를 가집니다. 불투명 값으로 다루세요. 읽은 값을
+그대로 되돌려 보내고, 직접 만들지 마세요. `id`가 없거나 미확인인 쓰기는
+백엔드가 새 값을 발급합니다. 같은 `id`가 여러 번 나오면(읽은 요소를 복사해
+덧붙이는 경우처럼) 원래 자리의 요소가 신원을 지키고 나머지 사본이 새 값을
+받습니다. 전체 프리셋을 불러오면 모든 `id`가 재발급되고, 탭 프리셋은 그
+프리셋이 위치를 준 컬렉션만 재발급됩니다. 재정렬을 가로질러 요소를 추적할
+때는 배열 index 대신 `id`를 사용하세요.
+
 그라데이션 필드가 있으면 렌더에서 대응 단색 필드보다 우선하며, 저장 시
 대응 단색 필드는 첫 스톱 색으로 자동 동기화됩니다. 단색으로 되돌리려면
 그라데이션 필드를 `null`로 두고 단색 필드를 갱신하세요.
@@ -185,6 +195,13 @@ const current = await dmn.keys.getPositions();
 current['4key'][0].dx = 100;
 await dmn.keys.updatePositions(current);
 ```
+
+플러그인의 위치 쓰기는 전용 큐로 직렬화되어 확정 문서 기준으로 정산됩니다.
+promise는 커밋과 후속 조회까지 끝난 뒤 resolve되고, 반환 컬렉션에는 앱이
+부여한 요소 안정 `id`가 담깁니다 (`id` 없이 제출한 요소는 새로 발급됨).
+실패 시 원 오류가 그대로 reject되며, 커밋은 성공했는데 후속 조회만 실패했을
+가능성이 있으면 무작정 재제출하지 말고 현재 값을 먼저 조회해 확인하세요.
+`statItems`·`graphItems`·`knobItems`의 `updatePositions`도 동일합니다.
 
 ### updateWithPositions(mappings, positions, options?)
 

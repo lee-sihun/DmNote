@@ -1,4 +1,5 @@
 import React from 'react';
+import { settingsApi } from '@api/modules/settingsApi';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore, type GridSettings } from '@stores/useSettingsStore';
 import { PropertySection, PropertyRow, NumberInput } from './PropertyInputs';
@@ -39,7 +40,7 @@ const GridTabContent: React.FC = () => {
     };
     setGridSettings(newSettings);
     try {
-      await window.api.settings.update({ gridSettings: newSettings });
+      await settingsApi.update({ gridSettings: newSettings });
     } catch (error) {
       console.error('Failed to update grid settings', error);
     }

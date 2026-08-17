@@ -106,6 +106,7 @@
           "plugin_authority_reset",
           "plugin_bridge_send",
           "plugin_bridge_send_to",
+          "plugin_group_refs_get",
           "plugin_instances_commit",
           "plugin_instances_get",
           "plugin_instances_reconcile",

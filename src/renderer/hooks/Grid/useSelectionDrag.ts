@@ -9,6 +9,7 @@ import {
   calculateSnapPoints,
   type ElementBounds,
 } from '@utils/grid/smartGuides';
+import { DRAG_THRESHOLD } from './constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
 
 interface SelectedElementLike {
@@ -25,8 +26,6 @@ interface UseSelectionDragOptions {
   elementId: string;
   elementWidth: number;
   elementHeight: number;
-  elementType: string;
-  elementIndex?: number;
   selectedElements: SelectedElementLike[];
   getOtherElements: (excludeId: string) => ElementBounds[];
   getSelectedElementIds?: (element: SelectedElementLike) => string[];
@@ -38,6 +37,10 @@ interface UseSelectionDragOptions {
 interface UseSelectionDragReturn {
   handlePointerDown: (event: React.PointerEvent<HTMLElement>) => void;
   movedDuringPressRef: RefObject<boolean>;
+  // 이번 press에서 실이동 발생 - 다음 pointerdown에서 리셋되므로 드래그
+  // 직후 trailing click 판별 전용. 두 press를 걸치는 movedDuringPressRef를
+  // 클릭 가드에 쓰면 드래그 다음번 클릭까지 삼킨다
+  pressMovedRef: RefObject<boolean>;
 }
 
 // movedDuringPressRef는 "이번 또는 직전 press에서 실이동 발생"을 뜻한다 —
@@ -51,8 +54,6 @@ export const useSelectionDrag = ({
   elementId,
   elementWidth,
   elementHeight,
-  elementType,
-  elementIndex,
   selectedElements,
   getOtherElements,
   getSelectedElementIds = (element) => [element.id],
@@ -64,6 +65,20 @@ export const useSelectionDrag = ({
   const lastPressMovedRef = useRef(false);
   const activePointerIdRef = useRef<number | null>(null);
   const activeCleanupRef = useRef<(() => void) | null>(null);
+
+  // 소비자는 enabled와 같은 조건으로 handlePointerDown을 조건부 부착한다 -
+  // 비활성화(선택 해제)되면 press가 훅을 거치지 않아 표식 소비가 끊기므로,
+  // 여기서 청소하지 않으면 낡은 표식이 이후 클릭을 계속 삼킨다.
+  // 드래그 도중 비활성화(Escape 선택 해제 등)면 DOM 리스너가 살아남아
+  // 이후 pointermove가 표식을 재오염시키고 빈 선택에 onMultiDrag가 계속
+  // 발화하므로, 진행 중 세션도 unmount와 동일 계약으로 종료한다
+  // (finishDrag는 dragEnded 가드로 이중 종료에 안전)
+  useEffect(() => {
+    if (enabled) return;
+    activeCleanupRef.current?.();
+    lastPressMovedRef.current = false;
+    movedDuringPressRef.current = false;
+  }, [enabled]);
 
   const beginPointerDrag = (
     event: React.PointerEvent<HTMLElement> | PointerEvent,
@@ -102,11 +117,12 @@ export const useSelectionDrag = ({
     let pendingFrameCallback: (() => void) | null = null;
     let dragEnded = false;
     let actuallyDragging = false;
+    // 개별 드래그(useDraggable)와 동일한 시작 임계값 래치 - off-grid 시작
+    // 좌표에서 1px 손떨림이 스냅 점프와 클릭 흡수로 번지는 것을 차단
+    let passedThreshold = false;
     let finishGesture: (() => void) | null = null;
 
     activePointerIdRef.current = pointerId;
-    movedDuringPressRef.current = lastPressMovedRef.current;
-    lastPressMovedRef.current = false;
     dragTarget.setPointerCapture(pointerId);
     dragTarget.style.userSelect = 'none';
 
@@ -115,6 +131,19 @@ export const useSelectionDrag = ({
     const handlePointerMove = (moveEvent: PointerEvent) => {
       if (dragEnded || moveEvent.pointerId !== activePointerIdRef.current) {
         return;
+      }
+      // 임계 판정은 개별 드래그와 동일하게 화면 px 기준, 돌파 후에는 시작
+      // 좌표 기준 delta로 기존 스냅 로직을 그대로 태운다
+      if (!passedThreshold) {
+        const thresholdDeltaX = Math.abs(moveEvent.clientX - startClientX);
+        const thresholdDeltaY = Math.abs(moveEvent.clientY - startClientY);
+        if (
+          thresholdDeltaX <= DRAG_THRESHOLD &&
+          thresholdDeltaY <= DRAG_THRESHOLD
+        ) {
+          return;
+        }
+        passedThreshold = true;
       }
       latestMoveEvent = moveEvent;
       if (rafId !== null) return;
@@ -149,13 +178,7 @@ export const useSelectionDrag = ({
         if (selectedElements.length > 1) {
           const selectedBounds = selectedElements
             .map((selectedElement) => {
-              // index 보조 비교는 index가 실재할 때만 — 플러그인처럼 index가 없는
-              // 요소끼리 undefined === undefined로 전부 현재 요소로 오인되는 것 방지
-              const isCurrentElement =
-                selectedElement.id === elementId ||
-                (elementIndex !== undefined &&
-                  selectedElement.type === elementType &&
-                  selectedElement.index === elementIndex);
+              const isCurrentElement = selectedElement.id === elementId;
               if (isCurrentElement) return draggedBounds;
 
               const found = getSelectedElementIds(selectedElement)
@@ -318,6 +341,17 @@ export const useSelectionDrag = ({
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    // 직전 press의 실이동 표식은 이번 press가 소비한다. 드래그 세션을 못
+    // 여는 press(선택 해제로 enabled=false 등)에서 남겨두면 표식이 낡은
+    // 채 유지되어 이후 정상 클릭이 가드에 삼켜진다 (선택 씹힘)
+    if (
+      event.button === 0 &&
+      event.isPrimary &&
+      activePointerIdRef.current === null
+    ) {
+      movedDuringPressRef.current = lastPressMovedRef.current;
+      lastPressMovedRef.current = false;
+    }
     beginPointerDrag(event, event.currentTarget);
   };
 
@@ -325,5 +359,9 @@ export const useSelectionDrag = ({
     return () => activeCleanupRef.current?.();
   }, []);
 
-  return { handlePointerDown, movedDuringPressRef };
+  return {
+    handlePointerDown,
+    movedDuringPressRef,
+    pressMovedRef: lastPressMovedRef,
+  };
 };

@@ -12,6 +12,8 @@ import {
   DEFAULT_COUNTER_FONT_SIZE,
   DEFAULT_COUNTER_FONT_WEIGHT,
 } from '@utils/core/elementDefaults';
+import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
+import { isMac } from '@utils/core/platform';
 
 export interface DefaultsPayload {
   settings: SettingsState;
@@ -92,10 +94,14 @@ export function getDefaultSettingsState(): SettingsState {
 }
 
 export function getDefaultCounterAnimationPresetId(): string {
-  return _defaults?.counterSettings.animation.presetId ?? 'builtin-ease-out';
+  return (
+    _defaults?.counterSettings.animation.presetId ?? FALLBACK_COUNTER_PRESET_ID
+  );
 }
 
 // ── Fallback values (used only before bootstrap completes) ──
+
+const FALLBACK_COUNTER_PRESET_ID = 'builtin-ease-out';
 
 function FALLBACK_COUNTER_SETTINGS(): KeyCounterSettings {
   return {
@@ -114,7 +120,7 @@ function FALLBACK_COUNTER_SETTINGS(): KeyCounterSettings {
     fontStrikethrough: false,
     animation: {
       enabled: false,
-      presetId: 'builtin-ease-out',
+      presetId: FALLBACK_COUNTER_PRESET_ID,
       bezier: [0.25, 0.46, 0.45, 0.94],
       scale: 1.1,
       durationMs: 300,
@@ -122,22 +128,27 @@ function FALLBACK_COUNTER_SETTINGS(): KeyCounterSettings {
   };
 }
 
+// 노트 설정 canonical 기본값, Rust NoteSettings::default 미러
+// 숫자 기본값의 원천은 NOTE_SETTINGS_CONSTRAINTS, 나머지는 여기가 유일 선언
+export const NOTE_SETTINGS_FALLBACK = Object.freeze({
+  frameLimit: NOTE_SETTINGS_CONSTRAINTS.frameLimit.default,
+  speed: NOTE_SETTINGS_CONSTRAINTS.speed.default,
+  trackHeight: NOTE_SETTINGS_CONSTRAINTS.trackHeight.default,
+  reverse: false,
+  fadePosition: 'auto',
+  fadeTopPx: NOTE_SETTINGS_CONSTRAINTS.fadeTopPx.default,
+  fadeBottomPx: NOTE_SETTINGS_CONSTRAINTS.fadeBottomPx.default,
+  reverseFadeTopPx: NOTE_SETTINGS_CONSTRAINTS.reverseFadeTopPx.default,
+  reverseFadeBottomPx: NOTE_SETTINGS_CONSTRAINTS.reverseFadeBottomPx.default,
+  delayedNoteEnabled: false,
+  shortNoteThresholdMs: NOTE_SETTINGS_CONSTRAINTS.shortNoteThresholdMs.default,
+  shortNoteMinLengthPx: NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.default,
+  keyDisplayDelayMs: NOTE_SETTINGS_CONSTRAINTS.keyDisplayDelayMs.default,
+} as const);
+
+// 반환 타입 주석이 NOTE_SETTINGS_FALLBACK의 전 필드 포함을 컴파일 타임에 보장
 function FALLBACK_NOTE_SETTINGS(): NoteSettings {
-  return {
-    frameLimit: 0,
-    speed: 400,
-    trackHeight: 300,
-    reverse: false,
-    fadePosition: 'auto',
-    fadeTopPx: 50,
-    fadeBottomPx: 0,
-    reverseFadeTopPx: 0,
-    reverseFadeBottomPx: 50,
-    delayedNoteEnabled: false,
-    shortNoteThresholdMs: 50,
-    shortNoteMinLengthPx: 30,
-    keyDisplayDelayMs: 0,
-  };
+  return { ...NOTE_SETTINGS_FALLBACK };
 }
 
 function FALLBACK_GRID_SETTINGS(): GridSettings {
@@ -151,15 +162,18 @@ function FALLBACK_GRID_SETTINGS(): GridSettings {
   };
 }
 
+// 백엔드 SettingsState 기본과 동일 규칙 - macOS는 Cmd, 그 외는 Ctrl
+const primaryModifierShortcut = (key: string, shift = false) => ({
+  key,
+  ctrl: !isMac(),
+  shift,
+  alt: false,
+  meta: isMac(),
+});
+
 function FALLBACK_SHORTCUTS(): ShortcutsState {
   return {
-    toggleOverlay: {
-      key: 'KeyO',
-      ctrl: true,
-      shift: true,
-      alt: false,
-      meta: false,
-    },
+    toggleOverlay: primaryModifierShortcut('KeyO', true),
     toggleOverlayLock: { key: '' },
     toggleAlwaysOnTop: { key: '' },
     switchKeyMode: {
@@ -169,28 +183,10 @@ function FALLBACK_SHORTCUTS(): ShortcutsState {
       alt: false,
       meta: false,
     },
-    toggleSettingsPanel: {
-      key: 'KeyB',
-      ctrl: true,
-      shift: false,
-      alt: false,
-      meta: false,
-    },
-    zoomIn: { key: 'Equal', ctrl: true, shift: false, alt: false, meta: false },
-    zoomOut: {
-      key: 'Minus',
-      ctrl: true,
-      shift: false,
-      alt: false,
-      meta: false,
-    },
-    resetZoom: {
-      key: 'Digit0',
-      ctrl: true,
-      shift: false,
-      alt: false,
-      meta: false,
-    },
+    toggleSettingsPanel: primaryModifierShortcut('KeyB'),
+    zoomIn: primaryModifierShortcut('Equal'),
+    zoomOut: primaryModifierShortcut('Minus'),
+    resetZoom: primaryModifierShortcut('Digit0'),
   };
 }
 
@@ -202,7 +198,7 @@ function FALLBACK_SETTINGS_STATE(): SettingsState {
     noteEffect: false,
     noteSettings: FALLBACK_NOTE_SETTINGS(),
     fontSettings: { customFonts: [] },
-    angleMode: 'd3d11',
+    angleMode: isMac() ? 'metal' : 'd3d11',
     language: 'ko',
     laboratoryEnabled: false,
     developerModeEnabled: false,

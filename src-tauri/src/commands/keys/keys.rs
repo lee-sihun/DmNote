@@ -10,7 +10,7 @@ use crate::{
     models::{
         AppStoreData, CommittedEditorChange, CustomCssPatch, CustomTab, EditorCommitOrigin,
         EditorDocumentV1, EditorField, KeyCounters, KeyMappings, KeyPositions, LayerGroups,
-        NoteSettings, NoteSettingsPatch, SettingsPatchInput,
+        NoteSettings, NoteSettingsPatch, SettingsPatchInput, SettingsState,
     },
     services::settings::apply_patch_to_store,
     state::{editor::validate_history_restore_metadata, history::HistoryScope, AppState},
@@ -72,6 +72,7 @@ fn reset_all_editor_data(store: &mut AppStoreData, keys: &KeyMappings, positions
     store.selected_key_type = "4key".to_string();
     store.tab_note_overrides.clear();
     store.tab_css_overrides.clear();
+    crate::state::native_element_id::rekey_store_element_ids(store);
 }
 
 fn reset_mode_kind(store: &AppStoreData, mode: &str) -> Option<ModeResetKind> {
@@ -156,6 +157,7 @@ fn reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKind) {
             .map(|key| (key.canonical(), 0))
             .collect(),
     );
+    crate::state::native_element_id::rekey_mode_element_ids(store, mode);
 }
 
 fn plan_custom_tab_delete(store: &AppStoreData, id: &str) -> Option<CustomTabDeletePlan> {
@@ -321,17 +323,19 @@ pub fn keys_reset_all(
     note_patch.short_note_threshold_ms = Some(defaults.short_note_threshold_ms);
     note_patch.short_note_min_length_px = Some(defaults.short_note_min_length_px);
     note_patch.key_display_delay_ms = Some(defaults.key_display_delay_ms);
+    // 초기화 값은 설정 기본값 단일 원천에서 유도
+    let setting_defaults = SettingsState::default();
     let settings_patch = SettingsPatchInput {
-        background_color: Some("transparent".to_string()),
+        background_color: Some(setting_defaults.background_color.clone()),
         note_settings: Some(note_patch),
-        laboratory_enabled: Some(false),
-        use_custom_css: Some(false),
+        laboratory_enabled: Some(setting_defaults.laboratory_enabled),
+        use_custom_css: Some(setting_defaults.use_custom_css),
         custom_css: Some(CustomCssPatch {
-            path: Some(None),
-            content: Some(String::new()),
+            path: Some(setting_defaults.custom_css.path.clone()),
+            content: Some(setting_defaults.custom_css.content.clone()),
         }),
-        note_effect: Some(false),
-        overlay_locked: Some(false),
+        note_effect: Some(setting_defaults.note_effect),
+        overlay_locked: Some(setting_defaults.overlay_locked),
         ..SettingsPatchInput::default()
     };
     let css_operation_guard = state.lock_css_operation();
@@ -950,7 +954,7 @@ mod tests {
             KnobPosition, LayerGroupDef, StatPosition, StatType, TabCss, TabNoteSettings,
         },
     };
-    use std::cell::Cell;
+    use std::{cell::Cell, collections::HashSet};
 
     const TARGET_TAB: &str = "custom-target";
 
@@ -1062,6 +1066,34 @@ mod tests {
             .values()
             .flat_map(|mode| mode.values())
             .all(|count| *count == 0));
+    }
+
+    #[test]
+    fn reset_all_issues_a_fresh_globally_unique_id_generation_each_time() {
+        let mut store = populated_custom_tab_store();
+        reset_all_editor_data(&mut store, default_keys(), default_positions());
+        let first = store
+            .key_positions
+            .values()
+            .flatten()
+            .map(|position| position.id.clone())
+            .collect::<HashSet<_>>();
+        let first_count = store.key_positions.values().map(Vec::len).sum::<usize>();
+
+        reset_all_editor_data(&mut store, default_keys(), default_positions());
+        let second = store
+            .key_positions
+            .values()
+            .flatten()
+            .map(|position| position.id.clone())
+            .collect::<HashSet<_>>();
+
+        assert_eq!(first.len(), first_count);
+        assert_eq!(second.len(), first_count);
+        assert!(first.is_disjoint(&second));
+        assert!(second
+            .iter()
+            .all(|id| crate::state::native_element_id::is_valid_element_id(id)));
     }
 
     #[test]

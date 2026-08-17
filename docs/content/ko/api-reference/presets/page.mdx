@@ -106,6 +106,8 @@ dmn.plugin.registerCleanup(() => {
 
 프리셋 로드 완료 시 적용된 스냅샷 데이터를 수신합니다. 키 매핑, 위치, 탭, 모드 등이 한 번에 전달됩니다.
 
+스냅샷의 위치 컬렉션에는 이번 로드에서 새로 발급된 요소 `id`가 담깁니다. 프리셋 적용은 모든 요소를 새 UUID로 재발급하므로, 프리셋 파일 안의 ID나 이전 로드의 ID는 적용 상태로 이어지지 않고, 같은 프리셋을 두 번 적용하면 서로 다른 ID 집합이 생깁니다. 캐시해 둔 요소 ID는 이 스냅샷에서 다시 조회하세요.
+
 ```typescript
 interface PresetSnapshot {
   // 항목은 KeySlot union(string | MultiKeySlot)

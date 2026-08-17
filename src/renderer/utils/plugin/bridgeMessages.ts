@@ -1,5 +1,6 @@
 import type { WindowTarget } from '@src/types/plugin/api';
 import { emitTo } from '@tauri-apps/api/event';
+import { bridgeApi } from '@api/modules/bridgeApi';
 
 type InternalWindowTarget = WindowTarget | 'panel';
 
@@ -24,7 +25,7 @@ export const sendBridgeMessageBestEffort = (
             type,
             data: data ?? null,
           })
-        : window.api?.bridge?.sendTo(target, type, data);
+        : bridgeApi.sendTo(target, type, data);
     if (!pending) return;
 
     void pending.catch((error: unknown) => {

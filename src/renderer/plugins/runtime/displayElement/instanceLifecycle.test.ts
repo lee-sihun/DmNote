@@ -79,10 +79,6 @@ describe('plugin instance lifecycle', () => {
         return () => bootstrapListeners.delete(listener);
       },
       loadInstances,
-      persistInstances: async (instances) => {
-        stored = cloneInstances(instances);
-        persisted.push(cloneInstances(instances));
-      },
       reconcilePersist: async () => {
         const reconciled = stored
           .map((instance) => ({
@@ -122,10 +118,6 @@ describe('plugin instance lifecycle', () => {
     const warnSpy = vi
       .spyOn(console, 'warn')
       .mockImplementation(() => undefined);
-    const persisted: TestInstance[][] = [];
-    const persistInstances = vi.fn(async (instances: TestInstance[]) => {
-      persisted.push(cloneInstances(instances));
-    });
     const reconcilePersist = vi.fn(async () => {
       throw cleanupError;
     });
@@ -138,7 +130,6 @@ describe('plugin instance lifecycle', () => {
         { id: 'live', tabId: '4key' },
         { id: 'dead', tabId: 'deleted-tab' },
       ],
-      persistInstances,
       reconcilePersist,
       getMemoryInstances: () => [],
       releaseMemoryInstances: () => undefined,
@@ -160,13 +151,9 @@ describe('plugin instance lifecycle', () => {
       '[Plugin] Failed to persist restored instance cleanup:',
       cleanupError,
     );
-    expect(barrier.finishRestoration()).toBe(true);
-
-    await lifecycle.saveInstances([{ id: 'external', tabId: '4key' }]);
-
     expect(reconcilePersist).toHaveBeenCalledOnce();
-    expect(persisted).toEqual([[{ id: 'external', tabId: '4key' }]]);
-    expect(persistInstances).toHaveBeenCalledOnce();
+    expect(barrier.finishRestoration()).toBe(true);
+    expect(barrier.shouldSave()).toBe(true);
   });
 
   it('bootstrap 타임아웃 시 필터 없이 모든 인스턴스를 복원한다', async () => {
@@ -177,7 +164,7 @@ describe('plugin instance lifecycle', () => {
       { id: 'dead', tabId: 'deleted-tab' },
     ];
     const restored: TestInstance[][] = [];
-    const persistInstances = vi.fn(async () => undefined);
+    const reconcilePersist = vi.fn(noopReconcilePersist);
 
     const lifecycle = createPluginInstanceLifecycle<TestInstance>({
       isBootstrapped: () => false,
@@ -186,8 +173,7 @@ describe('plugin instance lifecycle', () => {
         return () => bootstrapListeners.delete(listener);
       },
       loadInstances: async () => cloneInstances(stored),
-      persistInstances,
-      reconcilePersist: noopReconcilePersist,
+      reconcilePersist,
       getMemoryInstances: () => [],
       releaseMemoryInstances: () => undefined,
     });
@@ -201,13 +187,13 @@ describe('plugin instance lifecycle', () => {
 
     expect(lifecycle.getReadiness()).toBe('failed');
     expect(restored).toEqual([stored]);
-    expect(persistInstances).not.toHaveBeenCalled();
+    expect(reconcilePersist).not.toHaveBeenCalled();
     expect(bootstrapListeners.size).toBe(0);
   });
 
   it('복원 읽기 실패 시 메모리 스냅샷을 저장하지 않는다', async () => {
     const loadError = new Error('injected restore read failure');
-    const persistInstances = vi.fn(async () => undefined);
+    const reconcilePersist = vi.fn(noopReconcilePersist);
     const restoreInstances = vi.fn();
     const lifecycle = createPluginInstanceLifecycle<TestInstance>({
       isBootstrapped: () => true,
@@ -215,8 +201,7 @@ describe('plugin instance lifecycle', () => {
       loadInstances: async () => {
         throw loadError;
       },
-      persistInstances,
-      reconcilePersist: noopReconcilePersist,
+      reconcilePersist,
       getMemoryInstances: () => [{ fullId: 'partial', tabId: '4key' }],
       releaseMemoryInstances: () => undefined,
     });
@@ -226,7 +211,7 @@ describe('plugin instance lifecycle', () => {
     ).rejects.toBe(loadError);
 
     expect(restoreInstances).not.toHaveBeenCalled();
-    expect(persistInstances).not.toHaveBeenCalled();
+    expect(reconcilePersist).not.toHaveBeenCalled();
   });
 
   it('실행 중 탭 삭제를 메모리와 storage에서 멱등 정리한다', async () => {
@@ -247,7 +232,6 @@ describe('plugin instance lifecycle', () => {
       isBootstrapped: () => true,
       subscribeBootstrap: () => () => undefined,
       loadInstances: async () => cloneInstances(stored),
-      persistInstances,
       reconcilePersist: async () => {
         const reconciled = stored
           .map((instance) => ({
@@ -281,59 +265,5 @@ describe('plugin instance lifecycle', () => {
       'plugin::restored-dead',
     ]);
     expect(persistInstances).toHaveBeenCalledTimes(1);
-  });
-
-  it('saveInstances storage 쓰기를 직렬 실행한다', async () => {
-    const pendingWrites: Array<() => void> = [];
-    const startedWrites: string[] = [];
-    let activeWrites = 0;
-    let maxActiveWrites = 0;
-
-    const lifecycle = createPluginInstanceLifecycle<TestInstance>({
-      isBootstrapped: () => true,
-      subscribeBootstrap: () => () => undefined,
-      loadInstances: async () => [],
-      persistInstances: async (instances) => {
-        activeWrites += 1;
-        maxActiveWrites = Math.max(maxActiveWrites, activeWrites);
-        startedWrites.push(instances[0].id);
-        await new Promise<void>((resolve) => pendingWrites.push(resolve));
-        activeWrites -= 1;
-      },
-      reconcilePersist: noopReconcilePersist,
-      getMemoryInstances: () => [],
-      releaseMemoryInstances: () => undefined,
-    });
-
-    const firstWrite = lifecycle.saveInstances([{ id: 'first' }]);
-    const secondWrite = lifecycle.saveInstances([{ id: 'second' }]);
-
-    await vi.waitFor(() => expect(startedWrites).toEqual(['first']));
-    pendingWrites.shift()?.();
-    await firstWrite;
-    await vi.waitFor(() => expect(startedWrites).toEqual(['first', 'second']));
-    pendingWrites.shift()?.();
-    await secondWrite;
-
-    expect(maxActiveWrites).toBe(1);
-  });
-
-  it('dispose 후 큐에 남은 saveInstances 저장을 실행하지 않는다', async () => {
-    const persistInstances = vi.fn(async () => undefined);
-    const lifecycle = createPluginInstanceLifecycle<TestInstance>({
-      isBootstrapped: () => true,
-      subscribeBootstrap: () => () => undefined,
-      loadInstances: async () => [],
-      persistInstances,
-      reconcilePersist: noopReconcilePersist,
-      getMemoryInstances: () => [],
-      releaseMemoryInstances: () => undefined,
-    });
-
-    const queuedSave = lifecycle.saveInstances([{ id: 'stale' }]);
-    lifecycle.dispose();
-    await queuedSave;
-
-    expect(persistInstances).not.toHaveBeenCalled();
   });
 });

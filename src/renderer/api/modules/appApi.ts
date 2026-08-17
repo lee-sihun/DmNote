@@ -1,7 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import type { AppAutoUpdateResult } from '@src/types/plugin/api';
-import type { BootstrapPayload } from '@src/types/app';
+import { assertCanonicalEditorDocument } from '@src/types/editor';
+
+import type {
+  BootstrapPayload,
+  CanonicalBootstrapPayload,
+} from '@src/types/app';
 
 interface FlushableEditorCoordinator {
   flush(): Promise<unknown>;
@@ -51,7 +56,22 @@ export const cancelLifecycleEditorFlush = (handshakeId: string) =>
   invoke<void>('app_cancel_editor_flush', { handshakeId });
 
 export const appApi = {
-  bootstrap: () => invoke<BootstrapPayload>('app_bootstrap'),
+  bootstrap: async (): Promise<CanonicalBootstrapPayload> => {
+    const payload = await invoke<BootstrapPayload>('app_bootstrap');
+    assertCanonicalEditorDocument(
+      {
+        schemaVersion: 1,
+        keys: payload.keys,
+        keyPositions: payload.positions,
+        statPositions: payload.statPositions,
+        graphPositions: payload.graphPositions,
+        knobPositions: payload.knobPositions,
+        layerGroups: payload.layerGroups,
+      },
+      'app_bootstrap editor document',
+    );
+    return payload as CanonicalBootstrapPayload;
+  },
   autoUpdate: (tag: string) => {
     if (window.__dmn_window_type !== 'main') {
       return Promise.reject(

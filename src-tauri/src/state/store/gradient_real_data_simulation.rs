@@ -332,6 +332,7 @@ fn import_editor_preset(directory: &Path, preset: PresetFile) -> AppStoreData {
                 data.layer_groups = layer_groups;
                 data.custom_tabs = custom_tabs;
                 data.selected_key_type = selected_key_type;
+                crate::state::native_element_id::rekey_store_element_ids(data);
                 Ok(())
             },
         )

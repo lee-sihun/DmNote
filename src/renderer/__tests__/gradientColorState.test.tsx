@@ -20,6 +20,7 @@ const oldGradient: GradientSpec = {
     { color: 'rgba(255,0,0,0)', pos: 1 },
   ],
 };
+const ELEMENT_A_ID = '11111111-1111-4111-8111-111111111111';
 
 const threeStops: GradientSpec = {
   angle: 90,
@@ -46,8 +47,8 @@ describe('useGradientColorState 편집 수명', () => {
     const state = useGradientColorState({
       pair,
       fallbackColor: '#ffffff',
-      contextKey: 'key:4key:0:backgroundColor:idle',
-      canvasAnchor: canvasOpen ? { kind: 'key', index: 0 } : undefined,
+      contextKey: `key:4key:${ELEMENT_A_ID}:backgroundColor:idle`,
+      canvasAnchor: canvasOpen ? { kind: 'key', id: ELEMENT_A_ID } : undefined,
       onCommit,
     });
     useEffect(() => {
@@ -77,7 +78,7 @@ describe('useGradientColorState 편집 수명', () => {
     act(() => {
       useGridSelectionStore
         .getState()
-        .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
+        .setSelectedElements([{ type: 'key', id: ELEMENT_A_ID, index: 0 }]);
     });
   });
 

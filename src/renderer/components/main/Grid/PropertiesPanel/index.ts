@@ -14,6 +14,7 @@ export {
   CloseIcon,
   ModeToggleIcon,
 } from './PropertyInputs';
+export { createFontStyleToggleHandlers } from './fontStyleToggleHandlers';
 
 // 탭 콘텐츠 컴포넌트 (단일 선택)
 export { default as StyleTabContent } from './single/StyleTabContent';
@@ -39,6 +40,7 @@ export {
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
   BatchKnobOnlyPanel,
+  BatchPluginOnlyPanel,
 } from './batch/BatchSelectionPanel';
 export { default as PluginSettingsPanelView } from './PluginSettingsPanelView';
 

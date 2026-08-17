@@ -204,6 +204,14 @@ impl PartialEq for GradientSpec {
 }
 
 impl GradientSpec {
+    pub(crate) fn from_canonical_parts(angle: f64, stops: Vec<GradientStop>) -> Self {
+        Self {
+            angle,
+            stops,
+            normalized_on_read: false,
+        }
+    }
+
     fn normalize(&mut self) -> bool {
         let previous_angle = self.angle;
         let previous_stops = self.stops.clone();
@@ -475,6 +483,8 @@ pub struct ElementShadowSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyPosition {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
     pub dx: f64,
     pub dy: f64,
     pub width: f64,
@@ -629,6 +639,7 @@ pub struct KeyPosition {
 impl Default for KeyPosition {
     fn default() -> Self {
         Self {
+            id: String::new(),
             dx: 0.0,
             dy: 0.0,
             width: 60.0,
@@ -1287,7 +1298,7 @@ fn canonicalize_counter_gradient_pair(
     (changed, pair_repaired)
 }
 
-fn compact_canonical_rgba(color: &str) -> String {
+pub(crate) fn compact_canonical_rgba(color: &str) -> String {
     let trimmed = color.trim();
     if let Some(hex) = trimmed.strip_prefix('#') {
         if matches!(hex.len(), 3 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
@@ -1790,6 +1801,15 @@ fn default_auto_update_enabled() -> bool {
     true
 }
 
+// 렌더러 백엔드 기본값, macOS는 metal 고정 그 외는 d3d11
+pub(crate) fn default_angle_mode() -> String {
+    if cfg!(target_os = "macos") {
+        "metal".to_string()
+    } else {
+        "d3d11".to_string()
+    }
+}
+
 fn default_obs_port() -> u16 {
     obs::DEFAULT_OBS_PORT
 }
@@ -1936,6 +1956,9 @@ pub struct AppStoreData {
     pub overlay_bounds: Option<OverlayBounds>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_bounds: Option<PanelBounds>,
+    /// 분리 패널 창 존재 여부 (재시작 복원용)
+    #[serde(default)]
+    pub panel_detached: bool,
     pub overlay_last_content_top_offset: Option<f64>,
     #[serde(default)]
     pub overlay_bounds_are_logical: bool,
@@ -1980,11 +2003,7 @@ impl Default for AppStoreData {
             note_settings: NoteSettings::default(),
             selected_key_type: "4key".to_string(),
             custom_tabs: Vec::new(),
-            angle_mode: if cfg!(target_os = "macos") {
-                "metal".to_string()
-            } else {
-                "d3d11".to_string()
-            },
+            angle_mode: default_angle_mode(),
             language: "ko".to_string(),
             laboratory_enabled: false,
             developer_mode_enabled: false,
@@ -2012,6 +2031,7 @@ impl Default for AppStoreData {
             overlay_resize_anchor: OverlayResizeAnchor::TopLeft,
             overlay_bounds: None,
             panel_bounds: None,
+            panel_detached: false,
             overlay_last_content_top_offset: None,
             overlay_bounds_are_logical: false,
             key_counter_enabled: false,
@@ -2024,6 +2044,39 @@ impl Default for AppStoreData {
             obs_port: default_obs_port(),
             obs_token: None,
             plugin_data: HashMap::new(),
+        }
+    }
+}
+
+impl AppStoreData {
+    /// 설정 사영, store 필드가 설정 기본값의 단일 원천이고 SettingsState는 파생 뷰
+    pub(crate) fn settings_state(&self) -> SettingsState {
+        let mut custom_js = self.custom_js.clone();
+        let _ = custom_js.normalize();
+
+        SettingsState {
+            hardware_acceleration: self.hardware_acceleration,
+            always_on_top: self.always_on_top,
+            overlay_locked: self.overlay_locked,
+            note_effect: self.note_effect,
+            note_settings: self.note_settings.clone(),
+            angle_mode: self.angle_mode.clone(),
+            language: self.language.clone(),
+            laboratory_enabled: self.laboratory_enabled,
+            developer_mode_enabled: self.developer_mode_enabled,
+            tray_enabled: self.tray_enabled,
+            auto_update_enabled: self.auto_update_enabled,
+            background_color: self.background_color.clone(),
+            use_custom_css: self.use_custom_css,
+            custom_css: self.custom_css.clone(),
+            font_settings: self.font_settings.clone(),
+            use_custom_js: self.use_custom_js,
+            custom_js,
+            overlay_resize_anchor: self.overlay_resize_anchor.clone(),
+            key_counter_enabled: self.key_counter_enabled,
+            grid_settings: self.grid_settings.clone(),
+            shortcuts: self.shortcuts.clone(),
+            obs_mode_enabled: self.obs_mode_enabled,
         }
     }
 }
@@ -2303,34 +2356,8 @@ pub struct SettingsState {
 
 impl Default for SettingsState {
     fn default() -> Self {
-        Self {
-            hardware_acceleration: true,
-            always_on_top: true,
-            overlay_locked: false,
-            note_effect: false,
-            note_settings: NoteSettings::default(),
-            angle_mode: if cfg!(target_os = "macos") {
-                "metal".to_string()
-            } else {
-                "d3d11".to_string()
-            },
-            language: "ko".to_string(),
-            laboratory_enabled: false,
-            developer_mode_enabled: false,
-            tray_enabled: false,
-            auto_update_enabled: default_auto_update_enabled(),
-            background_color: "transparent".to_string(),
-            use_custom_css: false,
-            custom_css: CustomCss::default(),
-            font_settings: FontSettings::default(),
-            use_custom_js: false,
-            custom_js: CustomJs::default(),
-            overlay_resize_anchor: OverlayResizeAnchor::TopLeft,
-            key_counter_enabled: false,
-            grid_settings: GridSettings::default(),
-            shortcuts: ShortcutsState::default(),
-            obs_mode_enabled: false,
-        }
+        // 설정 기본값의 단일 원천은 AppStoreData::default, 빈 store 사영으로 유도
+        AppStoreData::default().settings_state()
     }
 }
 
@@ -2502,9 +2529,10 @@ pub struct SettingsPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_canonical_rgba, FadePosition, GradientSpec, KeyCounterAlign, KeyCounterAlignMode,
-        KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition,
-        KeySlot, NoteColor, NoteSettings, SlotMatch, StatType, MAX_SLOT_KEYS,
+        compact_canonical_rgba, FadePosition, GradientSpec, GraphPosition, GraphStatType,
+        GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
+        KeyCounterSettings, KeyMappings, KeyPosition, KeySlot, KnobPosition, NoteColor,
+        NoteSettings, SlotMatch, StatPosition, StatType, MAX_SLOT_KEYS,
     };
     use serde::Deserialize;
 
@@ -2517,6 +2545,59 @@ mod tests {
         let mappings: KeyMappings = serde_json::from_value(raw.clone()).unwrap();
 
         assert_eq!(serde_json::to_value(mappings).unwrap(), raw);
+    }
+
+    #[test]
+    fn element_id_defaults_to_empty_and_flattens_into_every_position_type() {
+        let id = uuid::Uuid::new_v4().to_string();
+        let position = KeyPosition {
+            id: id.clone(),
+            ..KeyPosition::default()
+        };
+        let mut values = [
+            serde_json::to_value(&position).unwrap(),
+            serde_json::to_value(StatPosition {
+                stat_type: StatType::Kps,
+                position: position.clone(),
+            })
+            .unwrap(),
+            serde_json::to_value(GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 100,
+                graph_color: "#123456".to_string(),
+                show_avg_line: true,
+                position: position.clone(),
+            })
+            .unwrap(),
+            serde_json::to_value(KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position,
+            })
+            .unwrap(),
+        ];
+
+        assert!(values.iter().all(|value| value["id"] == id));
+        for value in &mut values {
+            value.as_object_mut().unwrap().remove("id");
+        }
+        let stat: StatPosition = serde_json::from_value(values[1].clone()).unwrap();
+        let graph: GraphPosition = serde_json::from_value(values[2].clone()).unwrap();
+        let knob: KnobPosition = serde_json::from_value(values[3].clone()).unwrap();
+        assert!(stat.position.id.is_empty());
+        assert!(graph.position.id.is_empty());
+        assert!(knob.position.id.is_empty());
+
+        let missing: KeyPosition = serde_json::from_value(serde_json::json!({
+            "dx": 0,
+            "dy": 0,
+            "width": 60,
+            "count": 0
+        }))
+        .unwrap();
+        assert!(missing.id.is_empty());
     }
 
     #[test]

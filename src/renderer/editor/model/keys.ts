@@ -16,14 +16,19 @@ import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
 } from '@src/types/key/keys';
+import { newElementId } from './elementId';
 import { cloneSlot } from '@utils/keySlot';
 
 // ----------------------------------------------------------------------------
 // 기본 키 포지션 생성
 // ----------------------------------------------------------------------------
 
-export function createDefaultKeyPosition(dx = 0, dy = 0): KeyPosition {
+export function createDefaultKeyPosition(
+  dx = 0,
+  dy = 0,
+): KeyPosition & { id: string } {
   return {
+    id: newElementId(),
     dx,
     dy,
     width: 60,
@@ -47,7 +52,7 @@ export function createDefaultKeyPosition(dx = 0, dy = 0): KeyPosition {
     noteAutoYCorrection: true,
     className: '',
     counter: createDefaultCounterSettings(),
-  } as KeyPosition;
+  } as KeyPosition & { id: string };
 }
 
 // ----------------------------------------------------------------------------
@@ -112,24 +117,12 @@ export function removeKey(
 // 키 복제
 // ----------------------------------------------------------------------------
 
-/** 키 복제 후 새 mappings/positions 반환 */
-export function duplicateKey(
-  mappings: KeyMappings,
-  positions: KeyPositions,
-  mode: string,
-  sourceIndex: number,
+/** 복제용 위치 클론: 새 신원 발급 + 참조 분리 + 좌표 반올림 + 기본값 백필 */
+export function cloneKeyPositionForDuplicate(
+  sourcePosition: KeyPosition,
   targetDx: number,
   targetDy: number,
-): AddKeyResult | null {
-  const mapping = mappings[mode] || [];
-  const pos = positions[mode] || [];
-  const sourceKey = mapping[sourceIndex];
-  const sourcePosition = pos[sourceIndex];
-
-  if (typeof sourceKey === 'undefined' || !sourcePosition) {
-    return null;
-  }
-
+): KeyPosition & { id: string } {
   const clonedNoteColor =
     sourcePosition.noteColor &&
     typeof sourcePosition.noteColor === 'object' &&
@@ -157,8 +150,10 @@ export function duplicateKey(
     },
   };
 
-  const clonedPosition: KeyPosition = {
+  return {
     ...sourcePosition,
+    // 복제본은 새 신원. source id를 물려받으면 후보 안 중복으로 커밋이 거절된다
+    id: newElementId(),
     dx: Math.round(targetDx),
     dy: Math.round(targetDy),
     counter: clonedCounter,
@@ -169,6 +164,31 @@ export function duplicateKey(
     noteGlowColor: clonedNoteColor,
     noteAutoYCorrection: sourcePosition.noteAutoYCorrection ?? true,
   };
+}
+
+/** 키 복제 후 새 mappings/positions 반환 */
+export function duplicateKey(
+  mappings: KeyMappings,
+  positions: KeyPositions,
+  mode: string,
+  sourceIndex: number,
+  targetDx: number,
+  targetDy: number,
+): AddKeyResult | null {
+  const mapping = mappings[mode] || [];
+  const pos = positions[mode] || [];
+  const sourceKey = mapping[sourceIndex];
+  const sourcePosition = pos[sourceIndex];
+
+  if (typeof sourceKey === 'undefined' || !sourcePosition) {
+    return null;
+  }
+
+  const clonedPosition = cloneKeyPositionForDuplicate(
+    sourcePosition,
+    targetDx,
+    targetDy,
+  );
 
   return {
     mappings: {
@@ -220,33 +240,6 @@ export function updateKeyStyle(
     [mode]: current.map((pos, i) =>
       i === index ? { ...pos, ...updates } : pos,
     ),
-  };
-}
-
-/** 배치 키 스타일 업데이트 후 새 positions 반환 */
-export function batchUpdateKeyStyle(
-  positions: KeyPositions,
-  mode: string,
-  updates: Array<{ index: number } & Partial<KeyPosition>>,
-): KeyPositions {
-  if (updates.length === 0) return positions;
-
-  const current = positions[mode] || [];
-  const updateMap = new Map<number, Partial<KeyPosition>>();
-  for (const { index, ...rest } of updates) {
-    if (current[index]) {
-      updateMap.set(index, rest);
-    }
-  }
-
-  if (updateMap.size === 0) return positions;
-
-  return {
-    ...positions,
-    [mode]: current.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? { ...pos, ...update } : pos;
-    }),
   };
 }
 

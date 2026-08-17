@@ -13,7 +13,10 @@ import {
   registerDisplayElementInstance,
   unregisterDisplayElementInstance,
 } from './instanceRegistry';
-import { rotatePluginInstancesEditSession } from './instancesCommitQueue';
+import {
+  flushPluginInstancesEditSession,
+  rotatePluginInstancesEditSession,
+} from './instancesCommitQueue';
 import {
   resolveFullId,
   resolveInstance,
@@ -26,6 +29,13 @@ import type {
   PluginDisplayElementConfig,
   PluginDisplayElementInternal,
 } from '@src/types/plugin/api';
+
+// 런타임 내부(복원·재주입) 전용 config - 저장된 영구 instanceId를 요소 id로
+// 지정하고 groupId 소속을 함께 복원
+export type InternalDisplayElementConfig = PluginDisplayElementConfig & {
+  instanceId?: string;
+  groupId?: string;
+};
 
 let internalAddDepth = 0;
 
@@ -48,6 +58,60 @@ const removeDisplayElementInternal = (fullId: string): void => {
   const element = store.elements.find((el) => el.fullId === fullId);
   disposeDisplayElementResources(fullId, element);
   store.removeElement(fullId);
+};
+
+// paste 복제 전용 핸들러 재발급 - _onXxxId는 dispose가 등록 해제까지 소유하는
+// 참조라 복제와 공유하면 한쪽 제거가 다른 쪽 핸들러를 죽인다. 같은 함수를
+// 새 id로 재등록해 생명주기를 분리하고, 원본 등록이 이미 해제된 경우는
+// dangling 참조 대신 핸들러 없는 복제로 정리한다
+export const reissueDisplayElementHandlers = <
+  T extends Pick<
+    PluginDisplayElementInternal,
+    | 'pluginId'
+    | 'onClick'
+    | 'onPositionChange'
+    | 'onDelete'
+    | '_onClickId'
+    | '_onPositionChangeId'
+    | '_onDeleteId'
+  >,
+>(
+  element: T,
+): T => {
+  const reissue = <V>(
+    handlerRef: V | string | undefined,
+    ownedId: string | undefined,
+  ): { handlerRef: V | string | undefined; ownedId: string | undefined } => {
+    // 소유 등록이 없으면 재발급 대상 아님 (플러그인이 직접 관리하는 문자열 참조 등)
+    if (!ownedId) return { handlerRef, ownedId };
+    const handler = handlerRegistry.get(ownedId);
+    if (!handler) {
+      return {
+        handlerRef: handlerRef === ownedId ? undefined : handlerRef,
+        ownedId: undefined,
+      };
+    }
+    const newId = handlerRegistry.register(element.pluginId, handler);
+    return {
+      handlerRef: handlerRef === ownedId ? newId : handlerRef,
+      ownedId: newId,
+    };
+  };
+  const onClick = reissue(element.onClick, element._onClickId);
+  const onPositionChange = reissue(
+    element.onPositionChange,
+    element._onPositionChangeId,
+  );
+  const onDelete = reissue(element.onDelete, element._onDeleteId);
+  return {
+    ...element,
+    onClick: onClick.handlerRef,
+    onPositionChange: onPositionChange.handlerRef,
+    onDelete: onDelete.handlerRef,
+    _onClickId: onClick.ownedId,
+    _onPositionChangeId: onPositionChange.ownedId,
+    _onDeleteId: onDelete.ownedId,
+  } as T;
 };
 
 const removeDisplayElementsInternal = (fullIds: readonly string[]): void => {
@@ -98,17 +162,21 @@ export const displayElementApi = {
       rotatePluginInstancesEditSession(pluginId);
     }
 
-    const id = `element-${Date.now()}-${Math.random()
-      .toString(36)
-      .substring(7)}`;
-    const fullId = `${pluginId}::${id}`;
-
     const {
       template,
       state: initialState,
       html: initialHtml,
+      instanceId,
+      groupId,
+      definitionId,
       ...elementOptions
-    } = element;
+    } = element as InternalDisplayElementConfig;
+
+    // 영구 instanceId를 요소 id로 사용 - 지정 수용은 내부 복원 경로만
+    // (플러그인이 넘긴 값은 무시 - 중복·비정형 ID는 백엔드 커밋이 거절됨)
+    const id =
+      internalAddDepth > 0 && instanceId ? instanceId : crypto.randomUUID();
+    const fullId = `${pluginId}::${id}`;
 
     const currentTabId =
       elementOptions.tabId || useKeyStore.getState().selectedKeyType;
@@ -147,6 +215,16 @@ export const displayElementApi = {
 
     const internalElement: PluginDisplayElementInternal = {
       ...elementOptions,
+      // 그룹 소속 지정 수용도 내부 복원 경로만 - 공개 add의 임의 groupId는
+      // 저장 규칙 밖 dangling 소속이 되므로 무시
+      ...(internalAddDepth > 0 && groupId !== undefined ? { groupId } : {}),
+      // definitionId 수용은 내부 복원 경로와 자기 플러그인 definition(defId ===
+      // pluginId) 지정만 - 타 플러그인 definitionId 위조가 그 플러그인의 저장
+      // 모집단에 편입되는 것을 차단
+      ...(definitionId !== undefined &&
+      (internalAddDepth > 0 || definitionId === pluginId)
+        ? { definitionId }
+        : {}),
       html: htmlContent,
       id,
       pluginId,
@@ -192,6 +270,8 @@ export const displayElementApi = {
       removeElement: (targetId) => {
         rotatePluginInstancesEditSession(pluginId);
         removeDisplayElementInternal(targetId);
+        // 삭제는 discrete 편집 - debounce 대기 없이 즉시 커밋
+        flushPluginInstancesEditSession(pluginId);
       },
       locale: currentLocale,
       t,
@@ -351,6 +431,8 @@ export const displayElementApi = {
       .elements.find((candidate) => candidate.fullId === fullId);
     if (element) rotatePluginInstancesEditSession(element.pluginId);
     removeDisplayElementInternal(fullId);
+    // 삭제는 discrete 편집 - debounce 대기 없이 즉시 커밋
+    if (element) flushPluginInstancesEditSession(element.pluginId);
   },
 
   /**
@@ -379,11 +461,13 @@ export const displayElementApi = {
     elements.forEach((element) => {
       removeDisplayElementInternal(element.fullId);
     });
+    // 일괄 삭제도 discrete 편집 - 마지막에 1회만 즉시 커밋
+    flushPluginInstancesEditSession(pluginId);
   },
 };
 
 const addDisplayElementInternal = (
-  element: PluginDisplayElementConfig,
+  element: InternalDisplayElementConfig,
 ): DisplayElementInstance => {
   internalAddDepth += 1;
   try {
@@ -393,8 +477,4 @@ const addDisplayElementInternal = (
   }
 };
 
-export {
-  addDisplayElementInternal,
-  removeDisplayElementInternal,
-  removeDisplayElementsInternal,
-};
+export { addDisplayElementInternal, removeDisplayElementsInternal };

@@ -13,6 +13,7 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
+import { soundApi } from '@api/modules/resourceApi';
 
 interface SoundTrimModalProps {
   isOpen: boolean;
@@ -1024,7 +1025,7 @@ const SoundTrimModal = ({
 
       if (isEditMode && editingSoundPath) {
         // 편집 모드: 기존 사운드 업데이트
-        const response = await window.api.sound.updateProcessedWav(
+        const response = await soundApi.updateProcessedWav(
           editingSoundPath,
           wavBase64,
           startRatio,
@@ -1043,7 +1044,7 @@ const SoundTrimModal = ({
       } else {
         // 생성 모드: 새 사운드 + 원본 저장
         const origData = originalFileDataRef.current;
-        const response = await window.api.sound.saveProcessedWav(
+        const response = await soundApi.saveProcessedWav(
           wavBase64,
           trimmedName,
           origData?.base64,

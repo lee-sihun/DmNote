@@ -23,7 +23,11 @@ import {
 } from './pickerRowClass';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';
 import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
-import { useEditSessionModeGuard } from '@src/renderer/contexts/EditSessionScope';
+import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
+
+import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
+import { counterAnimationApi } from '@api/modules/resourceApi';
+import { deleteCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -34,6 +38,8 @@ interface CounterAnimationPickerProps {
   t: (key: string) => string;
   pageTitle: string;
   onBack: () => void;
+  /** 비동기 완료 콜백이 안정 ID applier로 라우팅되면 element-id */
+  completionBinding?: CompletionBinding;
 }
 
 type FilterType = 'all' | 'builtin' | 'user';
@@ -71,6 +77,7 @@ const CounterAnimationPicker = ({
   t,
   pageTitle,
   onBack,
+  completionBinding = 'session-mode',
 }: CounterAnimationPickerProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -80,7 +87,7 @@ const CounterAnimationPicker = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [editorState, setEditorState] = useState<EditorState | null>(null);
-  const isSameEditSessionMode = useEditSessionModeGuard();
+  const canBindCompletion = useEditSessionCompletionGuard(completionBinding);
   const loadRequestRef = useRef(0);
   const isOpenRef = useRef(open);
   const pendingPresetActionsRef = useRef(new Set<string>());
@@ -205,7 +212,11 @@ const CounterAnimationPicker = ({
         counterAnimationLibraryCache = next;
         return next;
       });
-      await window.api.counterAnimation.remove(preset.id);
+      const removed =
+        window.__dmn_window_type === 'panel'
+          ? await deleteCounterAnimationPresetViaAuthority(preset.id)
+          : await counterAnimationApi.remove(preset.id);
+      if (!removed) throw new Error('counter animation delete failed');
       await loadLibrary();
     } catch (error) {
       console.error('Failed to delete counter animation preset', error);
@@ -253,7 +264,8 @@ const CounterAnimationPicker = ({
   }) => {
     await loadLibrary();
     // preset은 라이브러리에 이미 저장됐다. 대상이 갈렸으면 적용만 하지 않는다
-    if (!isSameEditSessionMode()) return;
+    // (element-id 결합이면 ID applier가 유효성을 판정하므로 통과)
+    if (!canBindCompletion()) return;
     if (mode === 'create' || selectedPresetId === preset.id) {
       onAnimationChange(applyPresetToAnimation(animation, preset));
     }

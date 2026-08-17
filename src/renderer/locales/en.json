@@ -127,14 +127,12 @@
   },
   "keySetting": {
     "title": "Key Settings",
-    "tabKey": "Key",
     "tabNote": "Note",
     "tabCounter": "Counter",
     "keyMapping": "Key Binding",
     "key": "Key",
     "pressAnyKey": "Press any key",
     "clickToSet": "Click to set key",
-    "keySize": "Key Size",
     "size": "Size",
     "noteColor": "Note Color",
     "noteWidth": "Note Width",
@@ -144,7 +142,6 @@
     "noteGlowOpacity": "Glow Opacity",
     "noteGlow": "Glow Effect",
     "inactiveState": "Idle",
-    "activeState": "Pressed",
     "customImage": "Custom Image",
     "configure": "Configure",
     "className": "Class",
@@ -205,7 +202,8 @@
     "acceptExternal": "Accept External Change"
   },
   "editorSave": {
-    "permanentFailure": "This edit could not be saved, so the editor was restored to the last saved state. Please check the value you just changed."
+    "permanentFailure": "Couldn't save this edit, so it was undone.\nCheck the value you just changed.",
+    "capacityFailure": "This edit exceeded the save limit and was undone.\nRemove some elements and try again."
   },
   "common": {
     "confirm": "Confirm",
@@ -278,12 +276,7 @@
     "resetCurrentTab": "Reset settings for this tab?",
     "resetCountersCurrentTab": "Reset counters for this tab?",
     "resetKeyCounter": "Reset counter for [{{name}}] key?",
-    "reset": "Reset",
-    "removeKey": "Remove key [{{name}}]?",
-    "removeStat": "Remove stat [{{name}}]?",
-    "removeGraph": "Remove graph [{{name}}]?",
-    "removeKnob": "Remove knob [{{name}}]?",
-    "remove": "Remove"
+    "reset": "Reset"
   },
   "tabs": {
     "title": "Custom tabs",
@@ -367,10 +360,8 @@
     "color": "Color",
     "solid": "Solid",
     "gradient": "Gradient",
-    "gradientBottom": "Gradient Bottom Color",
     "opacity": "Opacity",
     "glow": "Glow Effect",
-    "glowSize": "Size",
     "glowOpacity": "Opacity",
     "glowColor": "Color"
   },
@@ -450,7 +441,6 @@
     "loadFailed": "CSS file load failed"
   },
   "unifiedSetting": {
-    "tabKey": "Key",
     "tabNote": "Note",
     "tabCounter": "Counter"
   },

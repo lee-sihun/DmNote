@@ -42,9 +42,14 @@ interface SelectedElement {
 
 interface GraphItemProps {
   index: number;
-  elementId?: string;
+  elementId: string;
   position: GraphPosition;
-  onPositionChange: (index: number, dx: number, dy: number) => void;
+  onPositionChange: (
+    index: number,
+    dx: number,
+    dy: number,
+    elementId: string,
+  ) => void;
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
@@ -129,7 +134,11 @@ const GraphItem = ({
   const isSelectionMode = isSelected;
 
   // 편집 세션 일시 페인트 — 저장·히스토리를 거치지 않는 드래그 프리뷰
-  const previewSession = useGradientPreviewSession('graph', index, isSelected);
+  const previewSession = useGradientPreviewSession(
+    'graph',
+    elementId,
+    isSelected,
+  );
   const previewBgSpec =
     previewSession?.surface === 'background' ? previewSession.spec : null;
   const previewBorderSpec =
@@ -137,7 +146,7 @@ const GraphItem = ({
   const [uid] = useState(
     () => `graph-preview-${Math.random().toString(36).slice(2, 11)}`,
   );
-  const effectiveElementId = elementId || `graph-${index}`;
+  const effectiveElementId = elementId;
 
   const previewHistory = [...PREVIEW_HISTORY_BASE];
   const previewImageSrc =
@@ -152,7 +161,8 @@ const GraphItem = ({
     initialY: dy,
     onPositionChange: (newDx: number, newDy: number) => {
       if (!isSelectionMode) {
-        onPositionChange(index, newDx, newDy);
+        // 프리즈된 index의 재해석은 수신 측이 elementId로 수행
+        onPositionChange(index, newDx, newDy, elementId);
       }
     },
     zoom,
@@ -165,22 +175,21 @@ const GraphItem = ({
     disabled: isSelectionMode,
   });
 
-  const { handlePointerDown, movedDuringPressRef } = useSelectionDrag({
-    enabled: isSelectionMode,
-    zoom,
-    startX: dx,
-    startY: dy,
-    elementId: effectiveElementId,
-    elementWidth: width || 200,
-    elementHeight: height || 100,
-    elementType: 'graph',
-    elementIndex: index,
-    selectedElements,
-    getOtherElements,
-    onMultiDragStart,
-    onMultiDrag,
-    onMultiDragEnd,
-  });
+  const { handlePointerDown, movedDuringPressRef, pressMovedRef } =
+    useSelectionDrag({
+      enabled: isSelectionMode,
+      zoom,
+      startX: dx,
+      startY: dy,
+      elementId: effectiveElementId,
+      elementWidth: width || 200,
+      elementHeight: height || 100,
+      selectedElements,
+      getOtherElements,
+      onMultiDragStart,
+      onMultiDrag,
+      onMultiDragEnd,
+    });
 
   if (position?.hidden) return null;
 
@@ -188,6 +197,14 @@ const GraphItem = ({
     // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
     // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
     if (macOS && e.ctrlKey) return;
+    // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 수식키 토글·
+    // 범위 선택·지우개로 새지 않게 흡수. 개별 드래그는 wasMoved,
+    // 선택 모드 다중 드래그는 pressMovedRef가 판별 (선택 모드에서는
+    // 개별 draggable이 disabled라 wasMoved가 항상 false)
+    if (draggable.wasMoved || pressMovedRef.current) {
+      e.stopPropagation();
+      return;
+    }
     const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
 

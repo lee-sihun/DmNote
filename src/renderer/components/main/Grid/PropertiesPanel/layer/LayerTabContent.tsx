@@ -38,6 +38,7 @@ import { useLayerDnD } from './useLayerDnD';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 
 function layerItemToSelectedElement(item: LayerItem): SelectedElement {
+  if (item.type === 'plugin') return { type: 'plugin', id: item.id };
   return {
     type: item.type,
     id: item.id,
@@ -65,6 +66,11 @@ const LayerGroupDisclosure = ({
         type="button"
         aria-expanded={!visualCollapsed}
         className="absolute left-0 top-0 bottom-0 w-[34px] flex items-center pl-[1px] cursor-pointer z-[1]"
+        onMouseDown={(event) => {
+          // 행 드래그 시작 억제 (press 동안 grabbing 커서 방지)
+          event.preventDefault();
+          event.stopPropagation();
+        }}
         onClick={(event) => {
           event.stopPropagation();
           toggle();
@@ -80,6 +86,44 @@ const LayerGroupDisclosure = ({
     </>
   );
 };
+
+interface LayerGroupVisibilityButtonProps {
+  groupId: string;
+  allHidden: boolean;
+  onToggle: (event: React.MouseEvent, groupId: string) => void;
+}
+
+export const LayerGroupVisibilityButton = ({
+  groupId,
+  allHidden,
+  onToggle,
+}: LayerGroupVisibilityButtonProps) => (
+  <button
+    type="button"
+    aria-label="toggle group visibility"
+    onMouseDown={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    }}
+    onDoubleClick={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    }}
+    onClick={(event) => {
+      event.stopPropagation();
+      onToggle(event, groupId);
+    }}
+    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-md cursor-pointer ${
+      allHidden ? '' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+    }`}
+  >
+    <IconSwap
+      active={allHidden}
+      activeIcon={<CloseEyeIcon width={14} height={14} fill="currentColor" />}
+      inactiveIcon={<OpenEyeIcon width={14} height={14} fill="currentColor" />}
+    />
+  </button>
+);
 
 // ============================================================================
 // 레이어 탭 콘텐츠 Props
@@ -154,6 +198,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     lenisRef(node);
   };
 
+  // 레이어 그룹 스토어
+  const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
+  const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
+  const collapsedGroups = useLayerGroupStore((state) => state.collapsedGroups);
+  const toggleCollapsed = useLayerGroupStore((state) => state.toggleCollapsed);
+
   // 레이어 아이템 목록
   const layerItems = buildLayerItems({
     selectedKeyType,
@@ -163,13 +213,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     graphPositions,
     knobPositions,
     pluginElements,
+    layerGroupsForMode,
   });
-
-  // 레이어 그룹 스토어
-  const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
-  const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
-  const collapsedGroups = useLayerGroupStore((state) => state.collapsedGroups);
-  const toggleCollapsed = useLayerGroupStore((state) => state.toggleCollapsed);
 
   // 디스플레이 아이템
   const displayItems = buildDisplayItems({
@@ -228,17 +273,51 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   // DnD 훅
   // ──────────────────────────────────────────────────────────────────────────
 
+  // 드롭 확정 시점의 authoritative 재구성 - effect 지연 ref는 외부
+  // 재정렬을 한 렌더 늦게 본다
+  const buildLiveLayerModel = () => {
+    const keyState = useKeyStore.getState();
+    const liveGroupState = useLayerGroupStore.getState();
+    const liveLayerItems = buildLayerItems({
+      selectedKeyType,
+      positions: keyState.canonicalPositions,
+      keyMappings: keyState.keyMappings,
+      statPositions: useStatItemStore.getState().positions,
+      graphPositions: useGraphItemStore.getState().positions,
+      knobPositions: useKnobItemStore.getState().positions,
+      // 패널 창의 elements는 항상 비어 있으므로 창별 미러 셀렉터를 경유한다
+      pluginElements: selectPropertyPanelPluginElements(
+        usePluginDisplayElementStore.getState(),
+      ),
+      layerGroupsForMode: liveGroupState.layerGroups[selectedKeyType] || [],
+    });
+    const groupState = useLayerGroupStore.getState();
+    const liveDisplayItems = buildDisplayItems({
+      layerItems: liveLayerItems,
+      layerGroupsForMode: groupState.layerGroups[selectedKeyType] || [],
+      collapsedGroups: groupState.collapsedGroups,
+      defaultGroupName: t('layerGroup.defaultName'),
+    });
+    return { layerItems: liveLayerItems, displayItems: liveDisplayItems };
+  };
+
   const dnd = useLayerDnD({
     selectedKeyType,
     layerItemsRef,
     displayItemsRef,
     scrollElementRef,
     clearPendingDeselect,
+    buildLiveLayerModel,
   });
 
   // 선택 상태 (렌더링용)
   const selectedElementIdSet = new Set(selectedElements.map((el) => el.id));
   const selectedGroupIdSet = new Set(selectedGroupIds);
+
+  // 그룹 안 삽입 인디케이터는 멤버 행과 같은 인덴트로 그룹 밖 삽입과 구분
+  const itemIndicatorIndentClass = dnd.dragOverTargetGroupId
+    ? 'left-[28px]'
+    : 'left-0';
   const isItemSelected = (item: LayerItem) => selectedElementIdSet.has(item.id);
   const isGroupHeaderSelected = (groupId: string) =>
     selectedGroupIdSet.has(groupId);
@@ -558,6 +637,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   actions.renamingItemId === `group:${gh.groupId}`;
                 const isBeingDragged = dnd.draggedGroupId === gh.groupId;
                 const isSelected = isGroupHeaderSelected(gh.groupId);
+                // 그룹 진입 존 - 행 전체를 hover 토큰으로 하이라이트
+                const isDropInto =
+                  dnd.draggedItemId != null &&
+                  dnd.dragOverIntoGroupId === gh.groupId;
 
                 return (
                   <div
@@ -571,11 +654,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     }}
                     className={`
                       group relative flex items-center gap-[8px] pl-[12px] pr-[4px] h-[34px]
-                      select-none cursor-grab
+                      select-none dmn-row-grabbable
                       ${gh.allHidden && !isBeingDragged ? 'opacity-60' : ''}
                       ${isBeingDragged ? 'opacity-30' : ''}
                       ${
-                        isSelected
+                        isDropInto
+                          ? 'bg-surface-hover text-fg-muted'
+                          : isSelected
                           ? 'bg-accent-muted text-fg'
                           : dnd.isDragging
                           ? 'text-fg-muted'
@@ -586,11 +671,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     {/* 아이템 드래그 드롭 인디케이터 */}
                     {dnd.draggedItemId &&
                       dnd.dragOverItemDisplayIndex === displayIndex && (
-                        <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
-                      )}
-                    {dnd.draggedItemId &&
-                      dnd.dragOverHeaderBottomGroupId === gh.groupId && (
-                        <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent z-10" />
+                        <div
+                          className={`absolute ${itemIndicatorIndentClass} right-0 top-0 h-[2px] bg-accent z-10`}
+                        />
                       )}
                     {/* 그룹 드래그 드롭 인디케이터 */}
                     {dnd.draggedGroupId &&
@@ -641,44 +724,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     )}
 
                     {/* 그룹 표시/숨김 토글 */}
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDoubleClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        actions.handleToggleGroupVisibility(e, gh.groupId);
-                      }}
-                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-md cursor-pointer ${
-                        gh.allHidden
-                          ? ''
-                          : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
-                      }`}
-                    >
-                      <IconSwap
-                        active={gh.allHidden}
-                        activeIcon={
-                          <CloseEyeIcon
-                            width={14}
-                            height={14}
-                            fill="currentColor"
-                          />
-                        }
-                        inactiveIcon={
-                          <OpenEyeIcon
-                            width={14}
-                            height={14}
-                            fill="currentColor"
-                          />
-                        }
-                      />
-                    </button>
+                    <LayerGroupVisibilityButton
+                      groupId={gh.groupId}
+                      allHidden={gh.allHidden}
+                      onToggle={actions.handleToggleGroupVisibility}
+                    />
                   </div>
                 );
               }
@@ -704,7 +754,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   style={{ paddingLeft }}
                   className={`
                     group relative flex items-center gap-[8px] pr-[4px] h-[34px]
-                    select-none cursor-grab
+                    select-none dmn-row-grabbable
                     ${item.hidden && !isInDraggedGroup ? 'opacity-60' : ''}
                     ${isInDraggedGroup ? 'opacity-30' : ''}
                     ${
@@ -720,7 +770,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   {dnd.draggedItemId &&
                     dnd.dragOverItemDisplayIndex === displayIndex &&
                     !dnd.draggedItemIdsRef.current.includes(item.id) && (
-                      <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
+                      <div
+                        className={`absolute ${itemIndicatorIndentClass} right-0 top-0 h-[2px] bg-accent z-10`}
+                      />
                     )}
                   {dnd.draggedGroupId &&
                     dnd.dragOverDisplayIndex === displayIndex &&
@@ -828,7 +880,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             {/* 마지막 아이템 뒤 드롭 인디케이터 */}
             {dnd.draggedItemId &&
               dnd.dragOverItemDisplayIndex === displayItems.length && (
-                <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent z-10" />
+                <div
+                  className={`absolute ${itemIndicatorIndentClass} right-0 bottom-0 h-[2px] bg-accent z-10`}
+                />
               )}
             {dnd.draggedGroupId &&
               dnd.dragOverDisplayIndex === displayItems.length && (

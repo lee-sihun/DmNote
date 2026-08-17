@@ -4,13 +4,12 @@
  */
 
 import { slotDisplayName } from '@utils/keySlot';
-import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
-import type { StatItemPositions } from '@src/types/key/statItems';
-import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { KeyMappings } from '@src/types/key/keys';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginPanelElementView } from '@src/types/plugin/api';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { LayerItem, DisplayItem } from '../types';
+import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
 
 // ============================================================================
 // layerItems 생성
@@ -18,12 +17,13 @@ import type { LayerItem, DisplayItem } from '../types';
 
 interface BuildLayerItemsParams {
   selectedKeyType: string;
-  positions: KeyPositions;
+  positions: CanonicalEditorDocumentV1['keyPositions'];
   keyMappings: KeyMappings;
-  statPositions: StatItemPositions;
-  graphPositions: GraphItemPositions;
-  knobPositions: KnobItemPositions;
+  statPositions: CanonicalEditorDocumentV1['statPositions'];
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'];
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'];
   pluginElements: PluginPanelElementView[];
+  layerGroupsForMode: LayerGroupDef[];
 }
 
 export function buildLayerItems({
@@ -34,6 +34,7 @@ export function buildLayerItems({
   graphPositions,
   knobPositions,
   pluginElements,
+  layerGroupsForMode,
 }: BuildLayerItemsParams): LayerItem[] {
   const items: LayerItem[] = [];
 
@@ -45,7 +46,7 @@ export function buildLayerItems({
     const defaultName = slotDisplayName(slot) || `Key ${index + 1}`;
     items.push({
       type: 'key',
-      id: `key-${index}`,
+      id: pos.id,
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -67,7 +68,7 @@ export function buildLayerItems({
         : 'KPS';
     items.push({
       type: 'stat',
-      id: `stat-${index}`,
+      id: pos.id,
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -89,7 +90,7 @@ export function buildLayerItems({
         : 'KPS Graph';
     items.push({
       type: 'graph',
-      id: `graph-${index}`,
+      id: pos.id,
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -103,7 +104,7 @@ export function buildLayerItems({
   currentKnobPositions.forEach((pos, index) => {
     items.push({
       type: 'knob',
-      id: `knob-${index}`,
+      id: pos.id,
       index,
       name: pos.layerName || `Knob ${index + 1}`,
       zIndex: pos.zIndex ?? index,
@@ -112,17 +113,22 @@ export function buildLayerItems({
     });
   });
 
-  // 플러그인 아이템
-  pluginElements.forEach((el) => {
-    items.push({
-      type: 'plugin',
-      id: el.fullId,
-      name: el.definitionId || 'Plugin',
-      zIndex: el.zIndex ?? 0,
-      hidden: !!el.hidden,
-      groupId: undefined,
+  // 플러그인 아이템 - 그룹은 모드 스코프라 현재 모드에 def가 있는 groupId만
+  // 노출 (dangling group_id의 유령 헤더 방지)
+  const validGroupIds = new Set(layerGroupsForMode.map((group) => group.id));
+  pluginElements
+    .filter((el) => isPluginVisibleInMode(el, selectedKeyType))
+    .forEach((el) => {
+      items.push({
+        type: 'plugin',
+        id: el.fullId,
+        name: el.definitionId || 'Plugin',
+        zIndex: el.zIndex ?? 0,
+        hidden: !!el.hidden,
+        groupId:
+          el.groupId && validGroupIds.has(el.groupId) ? el.groupId : undefined,
+      });
     });
-  });
 
   // z-index 내림차순 정렬
   items.sort((a, b) => b.zIndex - a.zIndex);

@@ -18,6 +18,14 @@ import ImagePicker from './ImagePicker';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const apiMocks = vi.hoisted(() => ({ imageLoad: vi.fn() }));
+
+vi.mock('@api/modules/resourceApi', () => ({
+  imageApi: {
+    load: (...args: unknown[]) => apiMocks.imageLoad(...args),
+  },
+}));
+
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -39,7 +47,10 @@ describe('ImagePicker 비동기 완료와 대상 전환', () => {
   let onIdleImageChange: Mock<(path: string) => void>;
   let resolveLoad: (value: unknown) => void;
 
-  const mount = (scoped: boolean) => {
+  const mount = (
+    scoped: boolean,
+    completionBinding?: 'session-mode' | 'element-id',
+  ) => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -50,6 +61,7 @@ describe('ImagePicker 비동기 완료와 대상 전환', () => {
         onIdleImageChange={onIdleImageChange}
         onClose={vi.fn()}
         showActiveState={false}
+        completionBinding={completionBinding}
       />
     );
     act(() => {
@@ -77,16 +89,12 @@ describe('ImagePicker 비동기 완료와 대상 전환', () => {
   beforeEach(() => {
     onIdleImageChange = vi.fn();
     useKeyStore.setState({ selectedKeyType: '4key' });
-    window.api = {
-      image: {
-        load: vi.fn(
-          () =>
-            new Promise((resolve) => {
-              resolveLoad = resolve;
-            }),
-        ),
-      },
-    } as never;
+    apiMocks.imageLoad.mockReset().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
   });
 
   afterEach(() => {
@@ -136,6 +144,20 @@ describe('ImagePicker 비동기 완료와 대상 전환', () => {
 
   it('캔버스 대상에 묶이지 않은 피커는 모드가 바뀌어도 연결한다', async () => {
     mount(false);
+    clickPreview();
+
+    act(() => {
+      useKeyStore.setState({ selectedKeyType: '8key' });
+    });
+    await finishLoad();
+
+    expect(onIdleImageChange).toHaveBeenCalledWith('/tmp/picked.png');
+  });
+
+  // element-id 결합은 유효성 판정을 ID applier에 위임한다. 모드가 바뀌어도
+  // 콜백은 호출되고, 원 요소 연결·삭제 중단은 applier가 결정한다
+  it('element-id 결합이면 모드가 바뀌어도 완료를 콜백에 전달한다', async () => {
+    mount(true, 'element-id');
     clickPreview();
 
     act(() => {

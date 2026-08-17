@@ -208,3 +208,206 @@ impl Serialize for CommandError {
 
 /// 커맨드 반환 타입 별칭
 pub type CmdResult<T> = Result<T, CommandError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // TS 재시도 정책 테이블(src/types/editor.ts)과 공유하는 fixture
+    const RETRY_FIXTURE: &str = include_str!("../../tests/fixtures/editor-error-retry.json");
+
+    // TS 용량 코드 집합(src/types/editor.ts)과 공유하는 fixture
+    const CAPACITY_FIXTURE: &str = include_str!("../../tests/fixtures/editor-capacity-codes.json");
+
+    // VALIDATION_FAILED의 details.validationCode 중 "저장 한도 초과" 계열 전수.
+    // 여기 없는 코드는 프론트에서 한도 안내 대신 일반 오류 안내로 표시된다
+    const CAPACITY_VALIDATION_CODES: &[&str] = &[
+        "COLLECTION_TOO_LARGE",
+        "FROZEN_INSERT_BATCH_TOO_LARGE",
+        "HISTORY_ENTRY_TOO_LARGE",
+        "INVALID_ELEMENT_GROUP_TARGET_COUNT",
+        "PLUGIN_INSTANCES_REQUEST_TOO_LARGE",
+        "REORDER_BATCH_TOO_LARGE",
+        "REQUEST_TOO_LARGE",
+        "TOO_MANY_CUSTOM_TABS",
+        "TOO_MANY_EDITOR_OPS",
+        "TOO_MANY_LAYER_GROUPS",
+        "TOO_MANY_MODES",
+        "TOO_MANY_PLUGIN_INSTANCES",
+        "TOO_MANY_RENDER_ITEMS",
+        "TOO_MANY_SLOTS_PER_MEMBER",
+    ];
+
+    // 한도 헬퍼를 쓰는 소스. 손목록끼리만 대조하면 백엔드에 새 한도 코드가
+    // 생겨도 전부 green이라, 실제 호출부를 스캔해 결합한다
+    const EDITOR_SOURCE: &str = include_str!("state/editor.rs");
+    const PLUGIN_SOURCE: &str = include_str!("state/plugin.rs");
+
+    /// 용량 목록에 넣지 않는 한도 코드와 사유. 새 한도 코드는 목록에 넣거나
+    /// 여기에 사유와 함께 등록해야 한다
+    const NON_CAPACITY_LIMIT_CODES: &[(&str, &str)] = &[
+        (
+            "MODE_ID_TOO_LONG",
+            "길이 한도 - 요소를 줄이라는 안내와 무관",
+        ),
+        ("GROUP_ID_TOO_LONG", "길이 한도"),
+        ("GROUP_NAME_TOO_LONG", "길이 한도"),
+        (
+            "PLUGIN_INSTANCES_RECONCILE_REQUEST_TOO_LARGE",
+            "reconcile 경로 - editor 커밋 오류로 승격되지 않음",
+        ),
+        (
+            "STORED_PLUGIN_INSTANCES_TOO_LARGE",
+            "저장 데이터 읽기 - INVALID_GESTURE_PLUGIN으로 덮임",
+        ),
+        (
+            "PLUGIN_RPC_REQUEST_TOO_LARGE",
+            "plugin RPC - CommandError로만 나감",
+        ),
+        (
+            "PLUGIN_RPC_RESPONSE_TOO_LARGE",
+            "plugin RPC - CommandError로만 나감",
+        ),
+    ];
+
+    fn limit_codes_in(source: &str) -> Vec<String> {
+        let mut codes = Vec::new();
+        for helper in ["validate_count_limit(", "validate_compact_size("] {
+            let mut rest = source;
+            while let Some(at) = rest.find(helper) {
+                rest = &rest[at + helper.len()..];
+                let window = &rest[..rest.len().min(400)];
+                if let Some(start) = window.find('"') {
+                    let tail = &window[start + 1..];
+                    if let Some(end) = tail.find('"') {
+                        let literal = &tail[..end];
+                        if !literal.is_empty()
+                            && literal
+                                .chars()
+                                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+                        {
+                            codes.push(literal.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        codes
+    }
+
+    #[test]
+    fn every_limit_helper_code_is_classified() {
+        let mut found = limit_codes_in(EDITOR_SOURCE);
+        found.extend(limit_codes_in(PLUGIN_SOURCE));
+        found.sort();
+        found.dedup();
+        assert!(
+            !found.is_empty(),
+            "한도 헬퍼 호출부를 하나도 찾지 못했다 - 스캐너가 깨졌다"
+        );
+        for code in &found {
+            let classified = CAPACITY_VALIDATION_CODES.contains(&code.as_str())
+                || NON_CAPACITY_LIMIT_CODES
+                    .iter()
+                    .any(|(excluded, _)| excluded == code);
+            assert!(
+                classified,
+                "한도 코드 {code}가 용량 목록에도 제외 목록에도 없다. \
+                 사용자에게 한도 안내가 필요하면 CAPACITY_VALIDATION_CODES에, \
+                 아니면 사유와 함께 NON_CAPACITY_LIMIT_CODES에 등록할 것"
+            );
+        }
+    }
+
+    #[test]
+    fn capacity_fixture_matches_backend_capacity_codes() {
+        let fixture: Vec<String> =
+            serde_json::from_str(CAPACITY_FIXTURE).expect("fixture must be valid json");
+        let mut expected: Vec<String> = CAPACITY_VALIDATION_CODES
+            .iter()
+            .map(|code| (*code).to_string())
+            .collect();
+        expected.sort();
+        let mut actual = fixture;
+        actual.sort();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn capacity_codes_serialize_as_validation_failed_with_their_code() {
+        for code in CAPACITY_VALIDATION_CODES {
+            let wire = serde_json::to_value(EditorCommitError::validation(*code, "sample"))
+                .expect("error must serialize");
+            assert_eq!(wire["errorCode"], "VALIDATION_FAILED");
+            assert_eq!(wire["retryable"], false);
+            assert_eq!(wire["details"]["validationCode"], *code);
+        }
+    }
+
+    // 생성자 표본, variant 추가 시 match가 컴파일 에러로 등록을 강제한다
+    fn sample(code: EditorCommitErrorCode) -> EditorCommitError {
+        match code {
+            EditorCommitErrorCode::RevisionConflict => EditorCommitError::revision_conflict(1),
+            EditorCommitErrorCode::PluginRevisionConflict => {
+                EditorCommitError::plugin_revision_conflict(1)
+            }
+            EditorCommitErrorCode::ValidationFailed => {
+                EditorCommitError::validation("SAMPLE", "sample")
+            }
+            EditorCommitErrorCode::TooManyGestureIds => EditorCommitError::too_many_gesture_ids(4),
+            EditorCommitErrorCode::InvalidGestureId => EditorCommitError::invalid_gesture_id(),
+            EditorCommitErrorCode::PairedUpdateRequired => {
+                EditorCommitError::paired_update_required("keys")
+            }
+            EditorCommitErrorCode::MultiKeyUnsupported => {
+                EditorCommitError::multi_key_unsupported()
+            }
+            EditorCommitErrorCode::MutationIdReused => EditorCommitError::mutation_id_reused(),
+            EditorCommitErrorCode::HistoryInProgress => EditorCommitError::history_in_progress(),
+            EditorCommitErrorCode::HistoryEpochConflict => {
+                EditorCommitError::history_epoch_conflict(1)
+            }
+            EditorCommitErrorCode::IoError => EditorCommitError::io("io failure"),
+        }
+    }
+
+    const ALL_CODES: [EditorCommitErrorCode; 11] = [
+        EditorCommitErrorCode::RevisionConflict,
+        EditorCommitErrorCode::PluginRevisionConflict,
+        EditorCommitErrorCode::ValidationFailed,
+        EditorCommitErrorCode::TooManyGestureIds,
+        EditorCommitErrorCode::InvalidGestureId,
+        EditorCommitErrorCode::PairedUpdateRequired,
+        EditorCommitErrorCode::MultiKeyUnsupported,
+        EditorCommitErrorCode::MutationIdReused,
+        EditorCommitErrorCode::HistoryInProgress,
+        EditorCommitErrorCode::HistoryEpochConflict,
+        EditorCommitErrorCode::IoError,
+    ];
+
+    #[test]
+    fn retry_fixture_matches_every_error_constructor() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(RETRY_FIXTURE).expect("fixture must be valid json");
+        let fixture = fixture.as_object().expect("fixture must be an object");
+        assert_eq!(
+            fixture.len(),
+            ALL_CODES.len(),
+            "fixture code count must match enum variants"
+        );
+        for code in ALL_CODES {
+            let error = sample(code);
+            let wire = serde_json::to_value(&error).expect("error must serialize");
+            let wire_code = wire["errorCode"]
+                .as_str()
+                .expect("errorCode must be a string");
+            let expected = fixture
+                .get(wire_code)
+                .unwrap_or_else(|| panic!("fixture is missing {wire_code}"))
+                .as_bool()
+                .expect("fixture value must be a bool");
+            assert_eq!(error.retryable, expected, "retryable drift for {wire_code}");
+            assert_eq!(wire["retryable"], serde_json::json!(expected));
+        }
+    }
+}

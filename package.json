@@ -67,7 +67,7 @@
     "benchmark:interaction:webview:matrix:macos": "node scripts/run-interaction-webview-matrix-macos.mjs",
     "benchmark:interaction:webview:all:macos": "npm run benchmark:interaction:webview:macos && npm run benchmark:interaction:webview:matrix:macos",
     "benchmark:interaction:all": "npm run benchmark:interaction:pilots && npm run benchmark:interaction:tab-switch && npm run benchmark:interaction:dropdown && npm run benchmark:interaction:number-input && npm run benchmark:interaction:text-input && npm run benchmark:interaction:color-input && npm run benchmark:interaction:floating-popup && npm run benchmark:interaction:modal && npm run benchmark:interaction:grid-continuous-input && npm run benchmark:interaction:grid-marquee && npm run benchmark:interaction:grid-resize && npm run benchmark:interaction:gradient-axis && npm run benchmark:interaction:grid-minimap && npm run benchmark:interaction:color-track && npm run benchmark:interaction:grid-keyboard && npm run benchmark:interaction:panel-toggle && npm run benchmark:interaction:plugin-input",
-    "test:interaction:pilot": "vitest run src/renderer/__tests__/shadowControls.test.tsx src/renderer/__tests__/batchShadowUpdate.test.ts src/renderer/__tests__/elementShadowContract.test.ts --reporter=dot",
+    "test:interaction:pilot": "vitest run src/renderer/__tests__/shadowControls.test.tsx src/renderer/__tests__/elementShadowContract.test.ts --reporter=dot",
     "test:docs": "vitest run tests/docs-code-blocks.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

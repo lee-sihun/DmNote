@@ -26,26 +26,73 @@ import {
   omitLayoutSettingValues,
   type SettingsNormalizationErrorKind,
 } from '@plugins/runtime/settingsSections';
-import { updatePluginElement } from '@plugins/rpc/pluginElementActions';
+import {
+  commitBatchGeometryViaAuthority,
+  patchGraphColorsViaAuthority,
+  patchGraphPropertiesViaAuthority,
+  patchGraphTypesViaAuthority,
+  patchFontFamilyViaAuthority,
+  patchStylePropertyViaAuthority,
+  patchPaintViaAuthority,
+  patchShadowViaAuthority,
+  patchNotePaintViaAuthority,
+  patchFontStyleViaAuthority,
+  patchKnobPropertiesViaAuthority,
+  patchNativeLayerPropertyViaAuthority,
+  patchNativeLayerBoundsViaAuthority,
+  patchNotePropertiesViaAuthority,
+  patchSoundPathViaAuthority,
+  patchSoundEnabledViaAuthority,
+  patchSoundVolumeViaAuthority,
+  patchCounterAnimationEnabledViaAuthority,
+  patchCounterAnimationPresetViaAuthority,
+  patchCounterEnabledViaAuthority,
+  patchCounterLayoutViaAuthority,
+  patchCounterTypographyViaAuthority,
+  patchCounterStrokeViaAuthority,
+  patchCounterFillViaAuthority,
+  patchFontColorViaAuthority,
+  renameLayerGroupViaAuthority,
+  patchUseInlineStylesViaAuthority,
+  updatePluginElement,
+} from '@plugins/rpc/pluginElementActions';
+import type { NativeLayerBoundsTarget } from '@plugins/rpc/pluginElementActions';
 import {
   toRgbHexColor,
   parseAlphaPercent,
   hexWithAlphaPercent,
 } from '@utils/color/colorUtils';
-import type { KeyPosition } from '@src/types/key/keys';
+import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import type { SizeCommit } from './PropertiesPanel/types';
+import type {
+  EditorFontStylePropertyPatchV1,
+  EditorFontFamilyPropertyPatchV1,
+  EditorGraphRuntimePropertyPatchV1,
+  EditorKnobRuntimePropertyPatchV1,
+  EditorNotePropertyPatchV1,
+  EditorElementTypeV1,
+  EditorCounterAnimationPresetIntentV1,
+  EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
+  EditorCounterStrokePropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+  EditorPaintPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
+  EditorElementPropertyPatchV1,
+  CanonicalKeyPosition,
+  CanonicalKnobItemPosition,
+} from '@src/types/editor';
 import type {
   PluginSettingSchema,
   PluginMessages,
   PluginDefinitionInternal,
 } from '@src/types/plugin/api';
-import {
-  createDefaultCounterSettings,
-  normalizeCounterSettings,
-} from '@src/types/key/keys';
+import { normalizeCounterSettings } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { useLenis } from '@hooks/useLenis';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
@@ -55,6 +102,54 @@ import {
   getPreviewOverlayVersion,
   subscribePreviewOverlay,
 } from '@src/renderer/editor/runtime/previewOverlay';
+import {
+  commitBatchGeometryByIds,
+  patchElementLayerNameById,
+  renameLayerGroupById,
+  commitElementGeometryById,
+  patchActiveImageById,
+  patchActiveImageFitById,
+  patchActiveTransparentById,
+  patchFontFamilyByTargets,
+  patchStylePropertyById,
+  patchPaintById,
+  patchShadowById,
+  patchNotePaintById,
+  patchInactiveImageById,
+  patchIdleImageFitById,
+  patchIdleTransparentById,
+  patchSoundPathById,
+  patchSoundEnabledById,
+  patchSoundVolumeById,
+  patchCounterAnimationEnabledById,
+  patchCounterAnimationPresetById,
+  patchCounterEnabledById,
+  patchCounterLayoutById,
+  patchCounterTypographyById,
+  patchCounterStrokeById,
+  patchCounterStrokeByTargets,
+  patchCounterFillById,
+  patchFontColorById,
+  patchFontStyleByTargets,
+  patchGraphColorsByIds,
+  patchGraphPropertiesByIds,
+  patchGraphTypesByIds,
+  patchKnobPropertiesByIds,
+  patchNotePropertiesByIds,
+  patchUseInlineStylesByTargets,
+  patchElementPropertyById,
+} from '@src/renderer/editor/runtime/elementOps';
+import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
+import type {
+  BatchGeometryDescriptor,
+  BatchGeometryTarget,
+} from '@src/renderer/editor/runtime/elementOps';
+import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { computeBatchGeometryPlan } from '@src/renderer/editor/runtime/batchGeometryPlan';
+import { commitMixedBatchGeometry } from '@src/renderer/editor/runtime/mixedBatchGeometry';
+import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
+import { resolveResizablePluginElementSize } from '@utils/plugin/pluginElementMeasurement';
 
 // 분리된 컴포넌트들 및 훅
 import {
@@ -72,6 +167,7 @@ import {
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
   BatchKnobOnlyPanel,
+  BatchPluginOnlyPanel,
   PluginSettingsPanelView,
   useBatchHandlers,
   usePanelScroll,
@@ -80,6 +176,7 @@ import {
   SIDE_PANEL_FRAME_CLASS,
   WINDOW_PANEL_FRAME_CLASS,
 } from './PropertiesPanel/panelChrome';
+import { resolveSelectionPanelRoute } from './PropertiesPanel/selectionPanelRoute';
 import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
 import PanelHeaderActions from './PropertiesPanel/PanelHeaderActions';
 import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
@@ -87,6 +184,9 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
+import { projectNotePaintPatch } from '@src/types/key/notePaint';
+import { previewSingleStyleProperty } from './PropertiesPanel/previewPatchForwarders';
+import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -102,6 +202,22 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
   }
 };
 
+const geometryAxisPatch = (
+  field: GeometryField,
+  value: number,
+): NativeLayerBoundsTarget['patch'] => {
+  switch (field) {
+    case 'dx':
+      return { dx: value };
+    case 'dy':
+      return { dy: value };
+    case 'width':
+      return { width: value };
+    case 'height':
+      return { height: value };
+  }
+};
+
 const shouldNormalizePropertyTabToStyle = (
   elements: Array<{ type: string }>,
   activeTab: (typeof TABS)[keyof typeof TABS],
@@ -110,32 +226,171 @@ const shouldNormalizePropertyTabToStyle = (
   const hasKey = elements.some((element) => element.type === 'key');
   const hasStat = elements.some((element) => element.type === 'stat');
   const hasGraph = elements.some((element) => element.type === 'graph');
-  const hasPlugin = elements.some((element) => element.type === 'plugin');
 
-  if (activeTab === TABS.NOTE && hasStat && !hasKey && !hasPlugin) {
+  // 플러그인 혼합도 native 구성 기준으로 정규화 - stat+plugin에서 NOTE 탭이
+  // 남으면 배치 패널 본문이 비어 보인다
+  if (activeTab === TABS.NOTE && hasStat && !hasKey) {
     return true;
   }
-  return hasGraph && !hasKey && !hasStat && !hasPlugin;
+  return hasGraph && !hasKey && !hasStat;
 };
 
 // 서브 페이지 exit 전환 시간 — --ui-duration-page와 동기
 const PAGE_EXIT_MS = 250;
+
+const getGraphRuntimePropertyPatch = (
+  updates: Partial<GraphItemPosition>,
+): EditorGraphRuntimePropertyPatchV1 | null => {
+  const keys = Object.keys(updates);
+  if (keys.length !== 1) return null;
+  if (keys[0] === 'showAvgLine' && typeof updates.showAvgLine === 'boolean') {
+    return { property: 'showAvgLine', value: updates.showAvgLine };
+  }
+  if (
+    keys[0] === 'graphAnimationEnabled' &&
+    typeof updates.graphAnimationEnabled === 'boolean'
+  ) {
+    return {
+      property: 'graphAnimationEnabled',
+      value: updates.graphAnimationEnabled,
+    };
+  }
+  if (
+    keys[0] === 'graphSpeed' &&
+    Number.isSafeInteger(updates.graphSpeed) &&
+    (updates.graphSpeed as number) >= 0 &&
+    (updates.graphSpeed as number) <= 4_294_967_295
+  ) {
+    return { property: 'graphSpeed', value: updates.graphSpeed as number };
+  }
+  return null;
+};
+
+const getKnobRuntimePropertyPatch = (
+  updates: Partial<KnobItemPosition>,
+): EditorKnobRuntimePropertyPatchV1 | null => {
+  const keys = Object.keys(updates);
+  if (keys.length !== 1) return null;
+  if (keys[0] === 'reverse' && typeof updates.reverse === 'boolean') {
+    return { property: 'reverse', value: updates.reverse };
+  }
+  if (
+    keys[0] === 'sensitivity' &&
+    typeof updates.sensitivity === 'number' &&
+    Number.isFinite(updates.sensitivity)
+  ) {
+    return { property: 'sensitivity', value: updates.sensitivity };
+  }
+  return null;
+};
+
+const getUseInlineStylesPatch = (updates: object): boolean | null => {
+  const values = updates as Record<string, unknown>;
+  const keys = Object.keys(updates);
+  return keys.length === 1 &&
+    keys[0] === 'useInlineStyles' &&
+    typeof values.useInlineStyles === 'boolean'
+    ? values.useInlineStyles
+    : null;
+};
+
+const getFontStylePatch = (
+  updates: object,
+): EditorFontStylePropertyPatchV1 | null => {
+  const values = updates as Record<string, unknown>;
+  const keys = Object.keys(updates);
+  if (keys.length !== 1) return null;
+  if (
+    keys[0] === 'fontWeight' &&
+    Number.isSafeInteger(values.fontWeight) &&
+    (values.fontWeight as number) >= 0 &&
+    (values.fontWeight as number) <= 4_294_967_295
+  ) {
+    return { property: 'fontWeight', value: values.fontWeight as number };
+  }
+  if (keys[0] === 'fontItalic' && typeof values.fontItalic === 'boolean') {
+    return { property: 'fontItalic', value: values.fontItalic };
+  }
+  if (
+    keys[0] === 'fontUnderline' &&
+    typeof values.fontUnderline === 'boolean'
+  ) {
+    return { property: 'fontUnderline', value: values.fontUnderline };
+  }
+  if (
+    keys[0] === 'fontStrikethrough' &&
+    typeof values.fontStrikethrough === 'boolean'
+  ) {
+    return { property: 'fontStrikethrough', value: values.fontStrikethrough };
+  }
+  return null;
+};
+
+const getFontFamilyPatch = (
+  updates: object,
+): EditorFontFamilyPropertyPatchV1 | null => {
+  const values = updates as Record<string, unknown>;
+  const keys = Object.keys(updates);
+  return keys.length === 1 &&
+    keys[0] === 'fontFamily' &&
+    typeof values.fontFamily === 'string'
+    ? { property: 'fontFamily', value: values.fontFamily }
+    : null;
+};
+
+const getNotePropertyPatch = (
+  updates: object,
+): EditorNotePropertyPatchV1 | null => {
+  const values = updates as Record<string, unknown>;
+  const keys = Object.keys(updates);
+  if (keys.length !== 1) return null;
+  if (
+    keys[0] === 'noteEffectEnabled' &&
+    typeof values.noteEffectEnabled === 'boolean'
+  ) {
+    return { property: 'noteEffectEnabled', value: values.noteEffectEnabled };
+  }
+  if (
+    keys[0] === 'noteAutoYCorrection' &&
+    typeof values.noteAutoYCorrection === 'boolean'
+  ) {
+    return {
+      property: 'noteAutoYCorrection',
+      value: values.noteAutoYCorrection,
+    };
+  }
+  if (
+    keys[0] === 'noteGlowEnabled' &&
+    typeof values.noteGlowEnabled === 'boolean'
+  ) {
+    return { property: 'noteGlowEnabled', value: values.noteGlowEnabled };
+  }
+  if (
+    keys[0] === 'noteAlignment' &&
+    ['left', 'center', 'right'].includes(values.noteAlignment as string)
+  ) {
+    return {
+      property: 'noteAlignment',
+      value: values.noteAlignment as 'left' | 'center' | 'right',
+    };
+  }
+  if (
+    keys[0] === 'noteBorderSide' &&
+    ['all', 'vertical', 'horizontal'].includes(values.noteBorderSide as string)
+  ) {
+    return {
+      property: 'noteBorderSide',
+      value: values.noteBorderSide as 'all' | 'vertical' | 'horizontal',
+    };
+  }
+  return null;
+};
 
 // ============================================================================
 // 메인 컴포넌트 Props
 // ============================================================================
 
 interface PropertiesPanelProps {
-  onPositionChange: (index: number, dx: number, dy: number) => void;
-  onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
-  onKeyBatchUpdate?: (
-    updates: Array<{ index: number } & Partial<KeyPosition>>,
-    options?: { deferSave?: boolean },
-  ) => void;
-  onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
-  onKeyBatchPreview?: (
-    updates: Array<{ index: number } & Partial<KeyPosition>>,
-  ) => void;
   onKeyMappingChange?: (index: number, newKey: string) => void;
   // 분리 창 전환 액션 - 메인은 detach, 분리 창은 reattach
   detachAction?: 'detach' | 'reattach';
@@ -151,15 +406,10 @@ interface PropertiesPanelProps {
 // ============================================================================
 
 const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
-  onPositionChange,
-  onKeyUpdate,
   detachAction,
   onDetachAction,
   frameVariant = 'inline',
   selectionSyncReady = true,
-  onKeyBatchUpdate,
-  onKeyPreview,
-  onKeyBatchPreview,
   onKeyMappingChange,
 }) => {
   const { t, i18n } = useTranslation();
@@ -256,6 +506,47 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       null
     );
   })();
+  // plugin 단독 배치는 native 대상 0개(빈 배열)로 성립 - invalid ID가
+  // 하나라도 섞이면 null (fail-closed)
+  const stableBatchGeometryTargets: BatchGeometryTarget[] | null =
+    selectedBatchStyleElements.every(
+      (element) => element.id.length > 0 && isNativeElementId(element.id),
+    )
+      ? selectedBatchStyleElements.map((element) => ({
+          type: element.type as EditorElementTypeV1,
+          id: element.id,
+        }))
+      : null;
+  // 혼합 선택의 plugin 기하 대상 bounds - 소실·모드 이탈이 하나라도 있으면
+  // null (fail-closed). 크기는 캔버스 렌더와 동일한 measured/estimated 폴백
+  const stablePluginGeometryElements = (() => {
+    const resolved: Array<{
+      fullId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }> = [];
+    for (const selected of selectedPluginElements) {
+      const element = pluginElements.find(
+        (candidate) => candidate.fullId === selected.id,
+      );
+      if (!element || !isPluginVisibleInMode(element, selectedKeyType)) {
+        return null;
+      }
+      const size = resolveResizablePluginElementSize(element);
+      resolved.push({
+        fullId: element.fullId,
+        x: element.position.x,
+        y: element.position.y,
+        width: size.width,
+        height: size.height,
+      });
+    }
+    return resolved;
+  })();
+  const stablePluginGeometryTargets: string[] | null =
+    stablePluginGeometryElements?.map((element) => element.fullId) ?? null;
 
   const pluginDefinitionViews = usePluginDisplayElementStore(
     (state) => state.definitionViews,
@@ -315,14 +606,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   })();
 
   // 단일 키 선택인 경우의 데이터
-  const singleKeyIndex =
-    selectedKeyElements.length === 1 ? selectedKeyElements[0].index : null;
+  const singleKeyId =
+    selectedKeyElements.length === 1 ? selectedKeyElements[0].id : null;
+  const singleKeyIndex = singleKeyId
+    ? (positions[selectedKeyType] ?? []).findIndex(
+        (position) => position.id === singleKeyId,
+      )
+    : -1;
   const singleKeyPosition =
-    singleKeyIndex !== null
-      ? positions[selectedKeyType]?.[singleKeyIndex]
-      : null;
+    singleKeyIndex >= 0 ? positions[selectedKeyType]?.[singleKeyIndex] : null;
   const singleKeySlot =
-    singleKeyIndex !== null
+    singleKeyIndex >= 0
       ? keyMappings[selectedKeyType]?.[singleKeyIndex] ?? null
       : null;
   const singleKeyCode =
@@ -339,28 +633,43 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       : null;
 
   // 단일 통계 요소 선택인 경우의 데이터
-  const singleStatIndex =
-    selectedStatElements.length === 1 ? selectedStatElements[0].index : null;
+  const singleStatId =
+    selectedStatElements.length === 1 ? selectedStatElements[0].id : null;
+  const singleStatIndex = singleStatId
+    ? (statItemPositions[selectedKeyType] ?? []).findIndex(
+        (position) => position.id === singleStatId,
+      )
+    : -1;
   const singleStatPosition: StatItemPosition | null =
-    singleStatIndex !== null
+    singleStatIndex >= 0
       ? statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null
       : null;
-  const singleGraphIndex =
-    selectedGraphElements.length === 1 ? selectedGraphElements[0].index : null;
+  const singleGraphId =
+    selectedGraphElements.length === 1 ? selectedGraphElements[0].id : null;
+  const singleGraphIndex = singleGraphId
+    ? (graphItemPositions[selectedKeyType] ?? []).findIndex(
+        (position) => position.id === singleGraphId,
+      )
+    : -1;
   const singleGraphPosition: GraphItemPosition | null =
-    singleGraphIndex !== null
+    singleGraphIndex >= 0
       ? graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null
       : null;
-  const singleKnobIndex =
-    selectedKnobElements.length === 1 ? selectedKnobElements[0].index : null;
+  const singleKnobId =
+    selectedKnobElements.length === 1 ? selectedKnobElements[0].id : null;
+  const singleKnobIndex = singleKnobId
+    ? (knobItemPositions[selectedKeyType] ?? []).findIndex(
+        (position) => position.id === singleKnobId,
+      )
+    : -1;
   const singleKnobPosition: KnobItemPosition | null =
-    singleKnobIndex != null
+    singleKnobIndex >= 0
       ? knobItemPositions[selectedKeyType]?.[singleKnobIndex] ?? null
       : null;
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
   const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
   const selectedGroupInfo = (() => {
-    if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
+    if (selectedElements.length < 2) {
       return null;
     }
 
@@ -368,22 +677,38 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const statModePositions = statItemPositions[selectedKeyType] || [];
     const graphModePositions = graphItemPositions[selectedKeyType] || [];
     const knobModePositions = knobItemPositions[selectedKeyType] || [];
+    // 플러그인 소속은 현재 모드에 def가 있는 groupId만 유효 (레이어 패널과
+    // 동일 규칙)
+    const modeGroupIds = new Set(layerGroupsForMode.map((group) => group.id));
 
     let groupId: string | undefined;
 
     for (const element of selectedElements) {
       let currentGroupId: string | undefined;
-      if (element.type === 'key' && typeof element.index === 'number') {
-        currentGroupId = keyModePositions[element.index]?.groupId;
-      } else if (element.type === 'stat' && typeof element.index === 'number') {
-        currentGroupId = statModePositions[element.index]?.groupId;
-      } else if (
-        element.type === 'graph' &&
-        typeof element.index === 'number'
-      ) {
-        currentGroupId = graphModePositions[element.index]?.groupId;
-      } else if (element.type === 'knob' && typeof element.index === 'number') {
-        currentGroupId = knobModePositions[element.index]?.groupId;
+      if (element.type === 'key') {
+        currentGroupId = keyModePositions.find(
+          (position) => position.id === element.id,
+        )?.groupId;
+      } else if (element.type === 'stat') {
+        currentGroupId = statModePositions.find(
+          (position) => position.id === element.id,
+        )?.groupId;
+      } else if (element.type === 'graph') {
+        currentGroupId = graphModePositions.find(
+          (position) => position.id === element.id,
+        )?.groupId;
+      } else if (element.type === 'knob') {
+        currentGroupId = knobModePositions.find(
+          (position) => position.id === element.id,
+        )?.groupId;
+      } else if (element.type === 'plugin') {
+        const pluginGroupId = pluginElements.find(
+          (candidate) => candidate.fullId === element.id,
+        )?.groupId;
+        currentGroupId =
+          pluginGroupId && modeGroupIds.has(pluginGroupId)
+            ? pluginGroupId
+            : undefined;
       } else {
         return null;
       }
@@ -402,7 +727,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       keyModePositions.filter((pos) => pos?.groupId === groupId).length +
       statModePositions.filter((pos) => pos?.groupId === groupId).length +
       graphModePositions.filter((pos) => pos?.groupId === groupId).length +
-      knobModePositions.filter((pos) => pos?.groupId === groupId).length;
+      knobModePositions.filter((pos) => pos?.groupId === groupId).length +
+      pluginElements.filter(
+        (el) =>
+          isPluginVisibleInMode(el, selectedKeyType) && el.groupId === groupId,
+      ).length;
 
     if (totalMembers < 2 || totalMembers !== selectedElements.length) {
       return null;
@@ -666,16 +995,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
     if (!currentGroup || currentGroup.name === trimmed) return;
 
-    const updated = {
-      ...currentGroups,
-      [selectedKeyType]: currentModeGroups.map((group) =>
-        group.id === groupId ? { ...group, name: trimmed } : group,
-      ),
-    };
-
-    useLayerGroupStore.getState().setLayerGroups(updated);
     try {
-      await window.api.layerGroups.update(updated);
+      await (window.__dmn_window_type === 'panel'
+        ? renameLayerGroupViaAuthority(selectedKeyType, groupId, trimmed)
+        : renameLayerGroupById(selectedKeyType, groupId, trimmed));
     } catch (error) {
       console.error('Failed to rename group', error);
     }
@@ -708,63 +1031,31 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const trimmed = value.trim();
     const defaultTitle = getCurrentDefaultTitle();
     const newLayerName =
-      trimmed === defaultTitle || trimmed === '' ? undefined : trimmed;
+      trimmed === defaultTitle || trimmed === '' ? null : trimmed;
 
-    if (singleKeyIndex !== null && singleKeyPosition) {
-      onKeyUpdate({
-        index: singleKeyIndex,
-        layerName: newLayerName,
-      } as Partial<KeyPosition> & { index: number });
-    } else if (singleStatIndex !== null && singleStatPosition) {
-      const mode = selectedKeyType;
-      const current = useStatItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list[singleStatIndex]) {
-        const nextList = list.map((pos, i) =>
-          i === singleStatIndex ? { ...pos, layerName: newLayerName } : pos,
-        );
-        const nextPositions = { ...current, [mode]: nextList };
-        useStatItemStore.getState().setLocalUpdateInProgress(true);
-        useStatItemStore.getState().setPositions(nextPositions);
-        try {
-          await window.api.statItems.updatePositions(nextPositions);
-        } finally {
-          useStatItemStore.getState().setLocalUpdateInProgress(false);
+    const selectedElement =
+      selectedElements.length === 1 ? selectedElements[0] : null;
+    const stableTarget =
+      selectedElement && selectedElement.type !== 'plugin'
+        ? { elementType: selectedElement.type, id: selectedElement.id }
+        : null;
+    if (stableTarget && isNativeElementId(stableTarget.id)) {
+      const target = {
+        ...stableTarget,
+        patch: { property: 'layerName', value: newLayerName },
+      } as const;
+      try {
+        if (window.__dmn_window_type === 'panel') {
+          await patchNativeLayerPropertyViaAuthority(target);
+        } else {
+          await patchElementLayerNameById(
+            target.elementType,
+            target.id,
+            target.patch.value,
+          );
         }
-      }
-    } else if (singleGraphIndex !== null && singleGraphPosition) {
-      const mode = selectedKeyType;
-      const current = useGraphItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list[singleGraphIndex]) {
-        const nextList = list.map((pos, i) =>
-          i === singleGraphIndex ? { ...pos, layerName: newLayerName } : pos,
-        );
-        const nextPositions = { ...current, [mode]: nextList };
-        useGraphItemStore.getState().setLocalUpdateInProgress(true);
-        useGraphItemStore.getState().setPositions(nextPositions);
-        try {
-          await window.api.graphItems.updatePositions(nextPositions);
-        } finally {
-          useGraphItemStore.getState().setLocalUpdateInProgress(false);
-        }
-      }
-    } else if (singleKnobIndex !== null && singleKnobPosition) {
-      const mode = selectedKeyType;
-      const current = useKnobItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list[singleKnobIndex]) {
-        const nextList = list.map((pos, i) =>
-          i === singleKnobIndex ? { ...pos, layerName: newLayerName } : pos,
-        );
-        const nextPositions = { ...current, [mode]: nextList };
-        useKnobItemStore.getState().setLocalUpdateInProgress(true);
-        useKnobItemStore.getState().setPositions(nextPositions);
-        try {
-          await window.api.knobItems.updatePositions(nextPositions);
-        } finally {
-          useKnobItemStore.getState().setLocalUpdateInProgress(false);
-        }
+      } catch (error) {
+        console.error('Failed to rename layer', error);
       }
     }
   };
@@ -897,13 +1188,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       selectedKeyElements.length > 0 || selectedElements.length > 0;
     const hadSelection = prevHasSelectionRef.current;
 
-    const skipFromKeyboard =
-      useGridSelectionStore.getState()._skipPanelModeSwitch;
-
     if (pluginSettingsPanel) {
       prevHasSelectionRef.current = hasSelection;
-      if (skipFromKeyboard)
-        useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
       return;
     }
 
@@ -936,8 +1222,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     prevHasSelectionRef.current = hasSelection;
     selectionFromLayerPanelRef.current = false;
     keyTypeChangedRef.current = false;
-    if (skipFromKeyboard)
-      useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
 
     setShowImagePicker(false);
     setShowGraphImagePicker(false);
@@ -956,13 +1240,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setPanelMode,
     closePage,
   ]);
-
-  // 언마운트 시 키보드 플래그 오염 방지
-  useEffect(() => {
-    return () => {
-      useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
-    };
-  }, []);
 
   // 빈 선택 폴백으로 레이어 목록이 표시되는 동안 내부 모드도 layer로 정규화 —
   // property로 남아 있으면 다음 캔버스 클릭이 목록을 건너뛰고 편집으로 점프함
@@ -991,10 +1268,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setPanelMode,
   ]);
 
-  // 다중 선택 시 패널 자동 열기
+  // 다중 선택 시 패널 자동 열기 - 개수는 native+plugin 합산
   useEffect(() => {
     if (
-      selectedBatchStyleElements.length > 1 &&
+      selectedBatchStyleElements.length + selectedPluginElements.length > 1 &&
       !isPanelVisible &&
       !manuallyClosedRef.current
     ) {
@@ -1003,6 +1280,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   }, [
     selectedBatchStyleElements.length,
+    selectedPluginElements.length,
     isPanelVisible,
     setIsPanelVisible,
     setPanelMode,
@@ -1205,328 +1483,489 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleTogglePanel();
   });
 
-  const handleStatUpdate = (
-    data: Partial<StatItemPosition> & { index: number },
+  const commitSingleGeometry = (
+    type: EditorElementTypeV1,
+    id: string,
+    field: GeometryField,
+    value: number,
   ) => {
-    const { index, ...updates } = data;
-    const mode = selectedKeyType;
-    const current = useStatItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setPositions(nextPositions);
-    const persisted = window.api.statItems.updatePositions(nextPositions);
-    editGestureController.settleCommit(persisted);
-    void persisted
-      .catch((error) => {
-        console.error('Failed to update stat item', error);
-      })
-      .finally(() => {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  const handleStatPreview = (
-    index: number,
-    updates: Partial<StatItemPosition>,
-  ) => {
-    const mode = selectedKeyType;
-    const current = useStatItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
-      domain: 'statPosition',
+    const patch = geometryAxisPatch(field, value);
+    const ownsPreviewGesture = type === 'key' || type === 'stat';
+    const gestureId = ownsPreviewGesture
+      ? editGestureController.activeGestureId() ?? undefined
+      : undefined;
+    const persisted =
+      window.__dmn_window_type === 'panel'
+        ? patchNativeLayerBoundsViaAuthority({
+            elementType: type,
+            id,
+            patch,
+            ...(gestureId ? { gestureId } : {}),
+          })
+        : commitElementGeometryById(type, id, patch, { gestureId });
+    if (ownsPreviewGesture) editGestureController.settleCommit(persisted);
+    void persisted.catch((error) => {
+      console.error('Failed to update element geometry', error);
     });
   };
 
-  const handleStatBatchPreview = (
-    updates: Array<{ index: number } & Partial<StatItemPosition>>,
-  ) => {
-    if (updates.length === 0) return;
+  const stableGeometryHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (field: GeometryField, value: number) =>
+          commitSingleGeometry(type, id, field, value)
+      : undefined;
 
-    const mode = selectedKeyType;
-    const current = useStatItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
+  const stableGeometryPreviewHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (field: GeometryField, value: number) => {
+          const locator = resolveElementById(type, id);
+          if (!locator) return;
+          editGestureController.preview(
+            locator.mode,
+            [
+              {
+                id,
+                patch: geometryAxisPatch(field, value),
+              },
+            ],
+            {
+              domain:
+                type === 'key'
+                  ? 'keyPosition'
+                  : type === 'stat'
+                  ? 'statPosition'
+                  : type === 'graph'
+                  ? 'graphPosition'
+                  : 'knobPosition',
+            },
+          );
+        }
+      : undefined;
 
-    const entries = updates.flatMap(({ index, ...patch }) =>
-      list[index] ? [{ index, patch: { ...patch } }] : [],
-    );
-    editGestureController.preview(mode, entries, {
-      domain: 'statPosition',
-    });
-  };
+  const stableElementPropertyCommitHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorElementPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch,
+                })
+              : patchElementPropertyById(type, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update element property', error);
+          });
+        }
+      : undefined;
 
-  const handleStatBatchUpdate = (
-    updates: Array<{ index: number } & Partial<StatItemPosition>>,
-    options?: { deferSave?: boolean },
-  ) => {
-    if (updates.length === 0) return;
+  const stableInactiveImageHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (inactiveImage: string) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { property: 'inactiveImage', value: inactiveImage },
+                })
+              : patchInactiveImageById(type, id, inactiveImage);
+          void persisted.catch((error) => {
+            console.error('Failed to update inactive image', error);
+          });
+        }
+      : undefined;
 
-    const mode = selectedKeyType;
-    const current = useStatItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
+  const stableActiveImageHandler = (
+    type: 'key' | 'knob',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (activeImage: string) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { property: 'activeImage', value: activeImage },
+                })
+              : patchActiveImageById(type, id, activeImage);
+          void persisted.catch((error) => {
+            console.error('Failed to update active image', error);
+          });
+        }
+      : undefined;
 
-    const updateMap = new Map<number, Partial<StatItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
+  const stableIdleTransparentHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (idleTransparent: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: {
+                    property: 'idleTransparent',
+                    value: idleTransparent,
+                  },
+                })
+              : patchIdleTransparentById(type, id, idleTransparent);
+          void persisted.catch((error) => {
+            console.error('Failed to update idle transparency', error);
+          });
+        }
+      : undefined;
 
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
-    });
-    const nextPositions = { ...current, [mode]: nextList };
+  const stableActiveTransparentHandler = (
+    type: 'key' | 'knob',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (activeTransparent: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: {
+                    property: 'activeTransparent',
+                    value: activeTransparent,
+                  },
+                })
+              : patchActiveTransparentById(type, id, activeTransparent);
+          void persisted.catch((error) => {
+            console.error('Failed to update active transparency', error);
+          });
+        }
+      : undefined;
 
-    if (options?.deferSave) {
-      useStatItemStore.getState().setPositions(nextPositions);
-      return;
-    }
+  const stableIdleImageFitHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (idleImageFit: ImageFit) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { property: 'idleImageFit', value: idleImageFit },
+                })
+              : patchIdleImageFitById(type, id, idleImageFit);
+          void persisted.catch((error) => {
+            console.error('Failed to update idle image fit', error);
+          });
+        }
+      : undefined;
 
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setPositions(nextPositions);
-    window.api.statItems
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to batch update stat items', error);
-      })
-      .finally(() => {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
+  const stableActiveImageFitHandler = (
+    type: 'key' | 'knob',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (activeImageFit: ImageFit) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { property: 'activeImageFit', value: activeImageFit },
+                })
+              : patchActiveImageFitById(type, id, activeImageFit);
+          void persisted.catch((error) => {
+            console.error('Failed to update active image fit', error);
+          });
+        }
+      : undefined;
 
-  const handleGraphUpdate = (
-    data: Partial<GraphItemPosition> & { index: number },
-  ) => {
-    const { index, ...updates } = data;
-    const mode = selectedKeyType;
-    const current = useGraphItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
+  const stableSoundPathHandler = (id: string | undefined) =>
+    id && isNativeElementId(id)
+      ? (soundPath: string) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchSoundPathViaAuthority([id], soundPath)
+              : patchSoundPathById(id, soundPath);
+          void persisted.catch((error) => {
+            console.error('Failed to update sound path', error);
+          });
+        }
+      : undefined;
 
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
+  const stableSoundEnabledHandler = (id: string | undefined) =>
+    id && isNativeElementId(id)
+      ? (soundEnabled: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchSoundEnabledViaAuthority([id], soundEnabled)
+              : patchSoundEnabledById(id, soundEnabled);
+          void persisted.catch((error) => {
+            console.error('Failed to update sound enabled', error);
+          });
+        }
+      : undefined;
 
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setPositions(nextPositions);
-    window.api.graphItems
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to update graph item', error);
-      })
-      .finally(() => {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
+  const stableSoundVolumeHandler = (id: string | undefined) =>
+    id && isNativeElementId(id)
+      ? (soundVolume: number) => {
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchSoundVolumeViaAuthority([id], soundVolume, gestureId)
+              : patchSoundVolumeById(id, soundVolume, { gestureId });
+          editGestureController.settleCommit(persisted);
+          void persisted.catch((error) => {
+            console.error('Failed to update sound volume', error);
+          });
+        }
+      : undefined;
 
-  const handleKnobUpdate = (
-    data: Partial<KnobItemPosition> & { index: number },
-  ) => {
-    const { index, ...updates } = data;
-    const mode = selectedKeyType;
-    const current = useKnobItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
+  const stableStylePropertyPreviewHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorPreviewStylePropertyPatchV1) =>
+          previewSingleStyleProperty(type, id, patch)
+      : undefined;
 
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as KnobItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
+  const stableStylePropertyCommitHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+    options: { settleGesture?: boolean } = {},
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorPreviewStylePropertyPatchV1) => {
+          const gestureId = options.settleGesture
+            ? editGestureController.activeGestureId() ?? undefined
+            : undefined;
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchStylePropertyViaAuthority(
+                  [{ elementType: type, id }],
+                  patch,
+                  gestureId,
+                )
+              : patchStylePropertyById(type, id, patch, { gestureId });
+          if (options.settleGesture) {
+            editGestureController.settleCommit(persisted);
+          }
+          void persisted.catch((error) => {
+            console.error('Failed to update style property', error);
+          });
+        }
+      : undefined;
 
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setPositions(nextPositions);
-    window.api.knobItems
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to update knob item', error);
-      })
-      .finally(() => {
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
+  const stablePaintCommitHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorPaintPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchPaintViaAuthority([{ elementType: type, id }], patch)
+              : patchPaintById(type, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update paint', error);
+          });
+        }
+      : undefined;
 
-  const handleKnobPreview = (
-    index: number,
-    updates: Partial<KnobItemPosition>,
-  ) => {
-    const mode = selectedKeyType;
-    const current = useKnobItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
+  const stableFontColorCommitHandler = (
+    type: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorFontColorPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchFontColorViaAuthority([{ elementType: type, id }], patch)
+              : patchFontColorById(type, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update font color', error);
+          });
+        }
+      : undefined;
 
-    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
-      domain: 'knobPosition',
-    });
-  };
+  const stableShadowCommitHandler = (
+    type: 'key' | 'stat' | 'knob',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorShadowPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchShadowViaAuthority([{ elementType: type, id }], patch)
+              : patchShadowById(type, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update shadow', error);
+          });
+        }
+      : undefined;
 
-  const handleKnobBatchPreview = (
-    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
-  ) => {
-    if (updates.length === 0) return;
+  const stableNotePaintCommitHandler = (id: string | undefined) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorNotePaintPropertyPatchV1) => {
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNotePaintViaAuthority([id], patch, gestureId)
+              : patchNotePaintById(id, patch, { gestureId });
+          editGestureController.settleCommit(persisted);
+          void persisted.catch((error) => {
+            console.error('Failed to update note paint', error);
+          });
+        }
+      : undefined;
 
-    const mode = selectedKeyType;
-    const current = useKnobItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
+  const stableNotePaintPreviewHandler = (id: string | undefined) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorNotePaintPropertyPatchV1) => {
+          const locator = resolveElementById('key', id);
+          if (!locator) return;
+          editGestureController.preview(
+            locator.mode,
+            [{ id, patch: projectNotePaintPatch(patch) }],
+            { domain: 'keyPosition' },
+          );
+        }
+      : undefined;
 
-    const entries = updates.flatMap(({ index, ...patch }) =>
-      list[index] ? [{ index, patch: { ...patch } }] : [],
-    );
-    editGestureController.preview(mode, entries, {
-      domain: 'knobPosition',
-    });
-  };
+  const stableCounterAnimationPresetHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (intent: EditorCounterAnimationPresetIntentV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterAnimationPresetViaAuthority(
+                  [{ elementType, id }],
+                  intent,
+                )
+              : patchCounterAnimationPresetById(elementType, id, intent);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter animation preset', error);
+          });
+        }
+      : undefined;
 
-  const handleKnobBatchUpdate = (
-    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
-    options?: { deferSave?: boolean },
-  ) => {
-    if (updates.length === 0) return;
+  const stableCounterEnabledHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (enabled: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterEnabledViaAuthority([{ elementType, id }], enabled)
+              : patchCounterEnabledById(elementType, id, enabled);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter enabled', error);
+          });
+        }
+      : undefined;
 
-    const mode = selectedKeyType;
-    const current = useKnobItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
+  const stableCounterAnimationEnabledHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (enabled: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterAnimationEnabledViaAuthority(
+                  [{ elementType, id }],
+                  enabled,
+                )
+              : patchCounterAnimationEnabledById(elementType, id, enabled);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter animation enabled', error);
+          });
+        }
+      : undefined;
 
-    const updateMap = new Map<number, Partial<KnobItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
+  const stableCounterLayoutHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorCounterLayoutPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterLayoutViaAuthority([{ elementType, id }], patch)
+              : patchCounterLayoutById(elementType, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter layout', error);
+          });
+        }
+      : undefined;
 
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as KnobItemPosition) : pos;
-    });
-    const nextPositions = { ...current, [mode]: nextList };
+  const stableCounterTypographyHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorCounterTypographyPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterTypographyViaAuthority([{ elementType, id }], patch)
+              : patchCounterTypographyById(elementType, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter typography', error);
+          });
+        }
+      : undefined;
 
-    if (options?.deferSave) {
-      useKnobItemStore.getState().setPositions(nextPositions);
-      return;
-    }
+  const stableCounterStrokeHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorCounterStrokePropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterStrokeViaAuthority([{ elementType, id }], patch)
+              : patchCounterStrokeById(elementType, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter stroke', error);
+          });
+        }
+      : undefined;
 
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setPositions(nextPositions);
-    window.api.knobItems
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to batch update knob items', error);
-      })
-      .finally(() => {
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  const handleGraphPreview = (
-    index: number,
-    updates: Partial<GraphItemPosition>,
-  ) => {
-    const mode = selectedKeyType;
-    const current = useGraphItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
-      domain: 'graphPosition',
-    });
-  };
-
-  const handleGraphBatchPreview = (
-    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-  ) => {
-    if (updates.length === 0) return;
-
-    const mode = selectedKeyType;
-    const current = useGraphItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
-
-    const entries = updates.flatMap(({ index, ...patch }) =>
-      list[index] ? [{ index, patch: { ...patch } }] : [],
-    );
-    editGestureController.preview(mode, entries, {
-      domain: 'graphPosition',
-    });
-  };
-
-  const handleGraphBatchUpdate = (
-    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-    options?: { deferSave?: boolean },
-  ) => {
-    if (updates.length === 0) return;
-
-    const mode = selectedKeyType;
-    const current = useGraphItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
-
-    const updateMap = new Map<number, Partial<GraphItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
-    });
-    const nextPositions = { ...current, [mode]: nextList };
-
-    if (options?.deferSave) {
-      useGraphItemStore.getState().setPositions(nextPositions);
-      return;
-    }
-
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setPositions(nextPositions);
-    window.api.graphItems
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to batch update graph items', error);
-      })
-      .finally(() => {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  // 크기 변경 완료 (blur 시 저장).
-  // 방금 확정된 값은 입력에서 직접 받는다. onChange가 예약한 localState는
-  // 같은 blur 이벤트 안에서 아직 이전 값이라 밀린 스텝이 유실된다
-  const handleSizeBlur = (committed?: SizeCommit) => {
-    if (singleKeyIndex === null && singleStatIndex === null) return;
-    const width = committed?.width ?? localState.width;
-    const height = committed?.height ?? localState.height;
-    const updates: Partial<KeyPosition> = {};
-    if (width !== undefined) updates.width = width;
-    if (height !== undefined) updates.height = height;
-    if (Object.keys(updates).length > 0) {
-      if (singleKeyIndex !== null) {
-        onKeyUpdate({ index: singleKeyIndex, ...updates });
-      } else if (singleStatIndex !== null) {
-        handleStatUpdate({
-          index: singleStatIndex,
-          ...(updates as Partial<StatItemPosition>),
-        });
-      }
-    }
-  };
+  const stableCounterFillHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorCounterFillPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterFillViaAuthority([{ elementType, id }], patch)
+              : patchCounterFillById(elementType, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter fill', error);
+          });
+        }
+      : undefined;
 
   // ============================================================================
   // 다중 선택 헬퍼 함수들
@@ -1535,8 +1974,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const getSelectedKeysData = () => {
     return selectedKeyLikeElements
       .map((el) => {
-        const index = el.index!;
         if (el.type === 'key') {
+          const index = (positions[selectedKeyType] ?? []).findIndex(
+            (position) => position.id === el.id,
+          );
+          if (index < 0) return null;
           const position = positions[selectedKeyType]?.[index];
           const slot = keyMappings[selectedKeyType]?.[index] ?? null;
           const keyCode = slot != null ? slotCanonical(slot) : null;
@@ -1552,6 +1994,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               : null;
           return { index, position, keyCode, keyInfo };
         }
+        const index = (statItemPositions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return null;
         const position = statItemPositions[selectedKeyType]?.[index];
         const statLabel =
           (position?.displayText || '').trim() ||
@@ -1559,13 +2005,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const keyInfo = { globalKey: statLabel, displayName: statLabel };
         return { index, position, keyCode: null, keyInfo };
       })
-      .filter((data) => data.position !== undefined);
+      .filter(
+        (data): data is NonNullable<typeof data> =>
+          data !== null && data.position !== undefined,
+      );
   };
 
   const getSelectedGraphsData = () => {
     return selectedGraphElements
       .map((el) => {
-        const index = el.index!;
+        const index = (graphItemPositions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return null;
         const position = graphItemPositions[selectedKeyType]?.[index];
         const graphLabel = `${getStatTypeLabel(
           position?.statType ?? null,
@@ -1573,26 +2025,38 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
         return { index, position, keyCode: null, keyInfo };
       })
-      .filter((data) => data.position !== undefined);
+      .filter(
+        (data): data is NonNullable<typeof data> =>
+          data !== null && data.position !== undefined,
+      );
   };
 
   const getSelectedKnobsData = () => {
     return selectedKnobElements
       .map((el) => {
-        const index = el.index!;
+        const index = (knobItemPositions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return null;
         const position = knobItemPositions[selectedKeyType]?.[index];
         const knobLabel = (position?.displayText || '').trim() || 'Knob';
         const keyInfo = { globalKey: knobLabel, displayName: knobLabel };
         return { index, position, keyCode: null, keyInfo };
       })
-      .filter((data) => data.position !== undefined);
+      .filter(
+        (data): data is NonNullable<typeof data> =>
+          data !== null && data.position !== undefined,
+      );
   };
 
   const getSelectedBatchStyleData = () => {
     return selectedBatchStyleElements
       .map((el) => {
-        const index = el.index!;
         if (el.type === 'key') {
+          const index = (positions[selectedKeyType] ?? []).findIndex(
+            (position) => position.id === el.id,
+          );
+          if (index < 0) return null;
           const position = positions[selectedKeyType]?.[index];
           const slot = keyMappings[selectedKeyType]?.[index] ?? null;
           const keyCode = slot != null ? slotCanonical(slot) : null;
@@ -1609,6 +2073,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           return { index, position, keyCode, keyInfo };
         }
         if (el.type === 'stat') {
+          const index = (statItemPositions[selectedKeyType] ?? []).findIndex(
+            (position) => position.id === el.id,
+          );
+          if (index < 0) return null;
           const position = statItemPositions[selectedKeyType]?.[index];
           const statLabel =
             (position?.displayText || '').trim() ||
@@ -1617,11 +2085,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           return { index, position, keyCode: null, keyInfo };
         }
         if (el.type === 'knob') {
+          const index = (knobItemPositions[selectedKeyType] ?? []).findIndex(
+            (position) => position.id === el.id,
+          );
+          if (index < 0) return null;
           const position = knobItemPositions[selectedKeyType]?.[index];
           const knobLabel = (position?.displayText || '').trim() || 'Knob';
           const keyInfo = { globalKey: knobLabel, displayName: knobLabel };
           return { index, position, keyCode: null, keyInfo };
         }
+        const index = (graphItemPositions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return null;
         const position = graphItemPositions[selectedKeyType]?.[index];
         const graphLabel = `${getStatTypeLabel(
           position?.statType ?? null,
@@ -1629,7 +2105,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
         return { index, position, keyCode: null, keyInfo };
       })
-      .filter((data) => data.position !== undefined);
+      .filter(
+        (data): data is NonNullable<typeof data> =>
+          data !== null && data.position !== undefined,
+      );
   };
 
   const getMixedValue = <T,>(
@@ -1728,12 +2207,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // ============================================================================
 
   const {
-    handleBatchStyleChange,
-    handleBatchStyleChangeComplete,
-    handleBatchShadowChangeComplete,
-    handleBatchShadowEnabledChange,
-    handleKeyOnlyStyleChangeComplete,
-    handleActiveCapableStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
     handleBatchSpacing,
@@ -1741,12 +2214,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchSpacingCommit,
     getBatchSpacingValue,
     handleBatchResize,
-    handleBatchCounterUpdate,
-    handleBatchNoteColorChange,
-    handleBatchNoteColorChangeComplete,
-    handleBatchGlowColorChange,
-    handleBatchGlowColorChangeComplete,
-    handleBatchGradientCommit,
+    handleBatchResizePreview,
   } = useBatchHandlers({
     selectedKeyLikeElements: selectedBatchStyleElements as {
       type: 'key' | 'stat' | 'graph' | 'knob';
@@ -1757,34 +2225,196 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     statPositions: statItemPositions,
     graphPositions: graphItemPositions,
     selectedKeyType,
-    onKeyUpdate,
-    onKeyBatchUpdate,
-    onKeyPreview,
-    onKeyBatchPreview,
-    onStatUpdate: handleStatUpdate,
-    onStatBatchUpdate: handleStatBatchUpdate,
-    onStatPreview: handleStatPreview,
-    onStatBatchPreview: handleStatBatchPreview,
-    onGraphUpdate: handleGraphUpdate,
-    onGraphBatchUpdate: handleGraphBatchUpdate,
-    onGraphPreview: handleGraphPreview,
-    onGraphBatchPreview: handleGraphBatchPreview,
     knobPositions: knobItemPositions,
-    onKnobUpdate: handleKnobUpdate,
-    onKnobBatchUpdate: handleKnobBatchUpdate,
-    onKnobPreview: handleKnobPreview,
-    onKnobBatchPreview: handleKnobBatchPreview,
+    pluginLayoutElements: stablePluginGeometryElements,
+    onStableGeometryPreview: (operation) => {
+      if (!stableBatchGeometryTargets) return;
+      if (stablePluginGeometryElements === null) return;
+      const targetsByKey = new Map<
+        string,
+        {
+          type: EditorElementTypeV1;
+          position: KeyPosition;
+        }
+      >();
+      for (const target of stableBatchGeometryTargets) {
+        const locator = resolveElementById(target.type, target.id);
+        if (!locator || locator.mode !== selectedKeyType) return;
+        const record =
+          target.type === 'key'
+            ? positions
+            : target.type === 'stat'
+            ? statItemPositions
+            : target.type === 'graph'
+            ? graphItemPositions
+            : knobItemPositions;
+        const position = record[selectedKeyType]?.[locator.index];
+        if (!position || position.id !== target.id) return;
+        targetsByKey.set(`${target.type}:${target.id}`, {
+          type: target.type,
+          position,
+        });
+      }
+      // 커밋과 같은 기준선을 쓰도록 plan 입력에는 plugin bounds를 합치되,
+      // preview 반영은 native 4 domain 전용 - 플러그인은 dial 중 정지,
+      // 커밋 시 착지 (v1). resize는 native 전용이라 plugin 미합류
+      const pluginPlanInputs =
+        operation.kind === 'resize' ? [] : stablePluginGeometryElements;
+      const plan = computeBatchGeometryPlan(
+        [
+          ...[...targetsByKey].map(([key, { position }]) => ({
+            key,
+            x: position.dx,
+            y: position.dy,
+            width: position.width,
+            height: position.height,
+          })),
+          ...pluginPlanInputs.map((element) => ({
+            key: `plugin:${element.fullId}`,
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+          })),
+        ],
+        operation,
+      );
+      if (!plan) return;
+      const byType = new Map<
+        EditorElementTypeV1,
+        Array<{ id: string; patch: Record<string, unknown> }>
+      >();
+      for (const update of plan.updates) {
+        if (update.key.startsWith('plugin:')) continue;
+        const target = targetsByKey.get(update.key);
+        if (!target) return;
+        const entries = byType.get(target.type) ?? [];
+        entries.push({
+          id: target.position.id,
+          patch: update.patch,
+        });
+        byType.set(target.type, entries);
+      }
+      for (const [type, entries] of byType) {
+        editGestureController.preview(selectedKeyType, entries, {
+          domain:
+            type === 'key'
+              ? 'keyPosition'
+              : type === 'stat'
+              ? 'statPosition'
+              : type === 'graph'
+              ? 'graphPosition'
+              : 'knobPosition',
+        });
+      }
+    },
+    onStableGeometryCommit: (operation, options) => {
+      if (!stableBatchGeometryTargets) return;
+      // plugin 대상 미해결 상태의 커밋은 fail-closed
+      if (stablePluginGeometryTargets === null) return;
+      const descriptor: BatchGeometryDescriptor = {
+        mode: selectedKeyType,
+        targets: stableBatchGeometryTargets,
+        operation,
+      };
+      const gestureId =
+        options?.gestureId ??
+        (operation.kind === 'resize'
+          ? editGestureController.activeGestureId() ?? undefined
+          : undefined);
+      // 크기 일괄은 native 전용 - 플러그인 크기는 content-driven
+      const pluginTargets =
+        operation.kind === 'resize' ? [] : stablePluginGeometryTargets;
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? commitBatchGeometryViaAuthority(
+              descriptor,
+              gestureId,
+              pluginTargets,
+            )
+          : pluginTargets.length > 0
+          ? commitMixedBatchGeometry(descriptor, pluginTargets, {
+              ...(gestureId ? { gestureId } : {}),
+            })
+          : commitBatchGeometryByIds(descriptor, {
+              ...(gestureId ? { gestureId } : {}),
+            });
+      if (operation.kind === 'resize' || operation.kind === 'spacing') {
+        editGestureController.settleCommit(commit);
+      }
+      void commit.catch((error) => {
+        console.error('Failed to commit batch geometry', error);
+      });
+    },
   });
+
+  const handleBatchElementPropertyCommit = (
+    patch: EditorElementPropertyPatchV1,
+  ) => {
+    const fontStylePatch = getFontStylePatch(patch);
+    const fontFamilyPatch = getFontFamilyPatch(patch);
+    const useInlineStyles = getUseInlineStylesPatch(patch);
+    if (!fontStylePatch && !fontFamilyPatch && useInlineStyles === null) return;
+    const targets = selectedBatchStyleElements.map((element) => ({
+      elementType: element.type as EditorElementTypeV1,
+      id: element.id,
+    }));
+    if (
+      targets.length === 0 ||
+      targets.some((target) => !isNativeElementId(target.id))
+    )
+      return;
+    const commit =
+      fontStylePatch !== null
+        ? window.__dmn_window_type === 'panel'
+          ? patchFontStyleViaAuthority(targets, fontStylePatch)
+          : patchFontStyleByTargets(targets, fontStylePatch)
+        : fontFamilyPatch !== null
+        ? window.__dmn_window_type === 'panel'
+          ? patchFontFamilyViaAuthority(targets, fontFamilyPatch)
+          : patchFontFamilyByTargets(targets, fontFamilyPatch)
+        : window.__dmn_window_type === 'panel'
+        ? patchUseInlineStylesViaAuthority(targets, useInlineStyles!)
+        : patchUseInlineStylesByTargets(targets, useInlineStyles!);
+    void commit.catch((error) => {
+      console.error('Failed to batch update element style property', error);
+    });
+  };
+
+  const handleBatchNoteElementPropertyCommit = (
+    patch: EditorElementPropertyPatchV1,
+  ) => {
+    const notePatch = getNotePropertyPatch(patch);
+    if (!notePatch) return;
+    const ids = selectedKeyElements.map((element) => element.id);
+    if (ids.length === 0 || ids.some((id) => !isNativeElementId(id))) return;
+    const commit =
+      window.__dmn_window_type === 'panel'
+        ? patchNotePropertiesViaAuthority(ids, notePatch)
+        : patchNotePropertiesByIds(ids, notePatch);
+    void commit.catch((error) => {
+      console.error('Failed to batch update note property', error);
+    });
+  };
 
   // NOTE 탭은 "키"에만 적용되어야 함
   const getSelectedKeyOnlyPositions = () => {
     return selectedKeyElements
       .map((el) => {
-        const index = el.index ?? -1;
+        const index = (positions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
         const position = positions[selectedKeyType]?.[index];
         return position ? { index, position } : null;
       })
-      .filter((v): v is { index: number; position: KeyPosition } => v !== null);
+      .filter(
+        (
+          v,
+        ): v is {
+          index: number;
+          position: CanonicalKeyPosition;
+        } => v !== null,
+      );
   };
 
   // 눌림 가능(키·노브) 집계 — active 상태 표시가 통계만 제외하고 노브는 포함
@@ -1793,8 +2423,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ({ position }) => position,
     );
     const knobData = selectedKnobElements
-      .map((el) => knobItemPositions?.[selectedKeyType]?.[el.index ?? -1])
-      .filter((v): v is KnobItemPosition => v != null);
+      .map((el) =>
+        knobItemPositions?.[selectedKeyType]?.find(
+          (position) => position.id === el.id,
+        ),
+      )
+      .filter((v): v is CanonicalKnobItemPosition => v != null);
     return [...keyData, ...knobData];
   };
 
@@ -1836,102 +2470,85 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return { isMixed, value: firstValue };
   };
 
-  const dispatchKeyOnlyBatchUpdates = (
-    updates: Array<{ index: number } & Partial<KeyPosition>>,
-    kind: 'preview' | 'commit',
-  ) => {
-    if (updates.length === 0) return;
-    if (kind === 'preview') {
-      if (onKeyBatchPreview) {
-        onKeyBatchPreview(updates);
-        return;
-      }
-      if (onKeyPreview) {
-        updates.forEach(({ index, ...rest }) => onKeyPreview(index, rest));
-        return;
-      }
-      return;
-    }
-
-    if (onKeyBatchUpdate) {
-      onKeyBatchUpdate(updates);
-      return;
-    }
-    updates.forEach((update) => onKeyUpdate(update));
-  };
-
-  const handleBatchKeyOnlyStyleChangeComplete = (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      [property]: value,
-    })) as Array<{ index: number } & Partial<KeyPosition>>;
-    dispatchKeyOnlyBatchUpdates(updates, 'commit');
-  };
-
-  const handleBatchKeyOnlyStyleChange = (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      [property]: value,
-    })) as Array<{ index: number } & Partial<KeyPosition>>;
-    dispatchKeyOnlyBatchUpdates(updates, 'preview');
-  };
-
-  const handleBatchNoteColorChangeKeysOnly = (value: NoteColor) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      noteColor: value,
-    }));
-    dispatchKeyOnlyBatchUpdates(updates, 'preview');
-  };
-
-  const handleBatchNoteColorChangeCompleteKeysOnly = (value: NoteColor) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      noteColor: value,
-    }));
-    dispatchKeyOnlyBatchUpdates(updates, 'commit');
-  };
-
-  const handleBatchGlowColorChangeKeysOnly = (value: NoteColor) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      noteGlowColor: value,
-    }));
-    dispatchKeyOnlyBatchUpdates(updates, 'preview');
-  };
-
-  const handleBatchGlowColorChangeCompleteKeysOnly = (value: NoteColor) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      noteGlowColor: value,
-    }));
-    dispatchKeyOnlyBatchUpdates(updates, 'commit');
-  };
-
   const handleGraphBatchSharedSetting = (
     updates: Partial<GraphItemPosition>,
   ) => {
-    const batchUpdates = selectedGraphElements
-      .filter((el) => el.index !== undefined)
-      .map((el) => ({ index: el.index!, ...updates })) as Array<
-      { index: number } & Partial<GraphItemPosition>
-    >;
-    handleGraphBatchUpdate(batchUpdates);
+    const updateKeys = Object.keys(updates);
+    const graphType = updates.graphType;
+    const graphColor = updates.graphColor;
+    const runtimePatch = getGraphRuntimePropertyPatch(updates);
+    const stableGraphIds = selectedGraphElements.map((element) => element.id);
+    if (
+      updateKeys.length === 1 &&
+      updateKeys[0] === 'graphType' &&
+      (graphType === 'line' || graphType === 'bar') &&
+      stableGraphIds.length > 0 &&
+      stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchGraphTypesViaAuthority(stableGraphIds, graphType)
+          : patchGraphTypesByIds(stableGraphIds, graphType);
+      void commit.catch((error) => {
+        console.error('Failed to batch update graph type', error);
+      });
+      return;
+    }
+    if (
+      runtimePatch &&
+      stableGraphIds.length > 0 &&
+      stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchGraphPropertiesViaAuthority(stableGraphIds, runtimePatch)
+          : patchGraphPropertiesByIds(stableGraphIds, runtimePatch);
+      void commit.catch((error) => {
+        console.error('Failed to batch update graph property', error);
+      });
+      return;
+    }
+    if (
+      updateKeys.length === 1 &&
+      updateKeys[0] === 'graphColor' &&
+      typeof graphColor === 'string' &&
+      stableGraphIds.length > 0 &&
+      stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchGraphColorsViaAuthority(stableGraphIds, graphColor)
+          : patchGraphColorsByIds(stableGraphIds, graphColor);
+      void commit.catch((error) => {
+        console.error('Failed to batch update graph color', error);
+      });
+      return;
+    }
+    reportElementOpSkipped(
+      'batch graph property (unsupported payload or invalid target)',
+    );
   };
 
   const handleKnobBatchSharedSetting = (updates: Partial<KnobItemPosition>) => {
-    const batchUpdates = selectedKnobElements
-      .filter((el) => el.index !== undefined)
-      .map((el) => ({ index: el.index!, ...updates })) as Array<
-      { index: number } & Partial<KnobItemPosition>
-    >;
-    handleKnobBatchUpdate(batchUpdates);
+    const runtimePatch = getKnobRuntimePropertyPatch(updates);
+    const stableKnobIds = selectedKnobElements.map((element) => element.id);
+    if (
+      runtimePatch &&
+      stableKnobIds.length > 0 &&
+      stableKnobIds.every((id) => id.length > 0 && isNativeElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchKnobPropertiesViaAuthority(stableKnobIds, runtimePatch)
+          : patchKnobPropertiesByIds(stableKnobIds, runtimePatch);
+      void commit.catch((error) => {
+        console.error('Failed to batch update knob property', error);
+      });
+      return;
+    }
+    reportElementOpSkipped(
+      'batch knob property (unsupported payload or invalid target)',
+    );
   };
 
   // 정규화 진단 리포터 — 플러그인·키당 1회만 기록, empty-state 단락 경로의
@@ -2305,47 +2922,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         [key]: solidColor,
       }));
     }
-
-    const isGradientNoteLikeColor =
-      !!newColor &&
-      typeof newColor === 'object' &&
-      newColor.type === 'gradient';
-
-    if (
-      isGradientNoteLikeColor &&
-      (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor')
-    ) {
-      return;
-    }
-
-    if (batchPickerFor === 'noteColor') {
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchNoteColorChangeKeysOnly(newColor);
-      } else {
-        handleBatchNoteColorChange(newColor);
-      }
-    } else if (batchPickerFor === 'glowColor') {
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchGlowColorChangeKeysOnly(newColor);
-      } else {
-        handleBatchGlowColorChange(newColor);
-      }
-    } else if (batchPickerFor === 'borderColor') {
-      // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화, 알파는 noteBorderOpacity로 분리
-      const raw = typeof newColor === 'string' ? newColor : undefined;
-      const solidColor = toRgbHexColor(raw);
-      const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchKeyOnlyStyleChange('noteBorderColor', solidColor);
-        handleBatchKeyOnlyStyleChange('noteBorderOpacity', opacity);
-      } else {
-        handleBatchStyleChange('noteBorderColor', solidColor);
-        handleBatchStyleChange('noteBorderOpacity', opacity);
-      }
-    }
   };
 
-  const handleBatchPickerColorChangeComplete = (newColor: NoteColor) => {
+  const completeBatchPickerColorChange = (
+    newColor: NoteColor,
+    onNotePaintCommit?: (patch: EditorNotePaintPropertyPatchV1) => void,
+  ) => {
     if (!batchPickerFor) return;
 
     if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
@@ -2382,93 +2964,105 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }));
     }
 
-    const keysData = getSelectedKeysData();
-    const keyOnlyPositions = getSelectedKeyOnlyPositions();
-    const firstCounterPosition =
-      effectiveBatchCounterColorState === 'active'
-        ? keyOnlyPositions[0]?.position
-        : keysData[0]?.position;
-    const firstCounter = firstCounterPosition
-      ? normalizeCounterSettings(firstCounterPosition.counter)
-      : createDefaultCounterSettings();
-
     if (batchPickerFor === 'noteColor') {
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchNoteColorChangeCompleteKeysOnly(newColor);
-      } else {
-        handleBatchNoteColorChangeComplete(newColor);
-      }
+      onNotePaintCommit?.({
+        property: 'notePaint',
+        value: { color: newColor },
+      });
     } else if (batchPickerFor === 'glowColor') {
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchGlowColorChangeCompleteKeysOnly(newColor);
-      } else {
-        handleBatchGlowColorChangeComplete(newColor);
-      }
+      onNotePaintCommit?.({
+        property: 'noteGlowPaint',
+        value: { color: newColor },
+      });
     } else if (batchPickerFor === 'borderColor') {
       // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화(이슈 #73), 알파는 noteBorderOpacity로 분리
       const raw = typeof newColor === 'string' ? newColor : undefined;
       const solidColor = toRgbHexColor(raw);
       const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchKeyOnlyStyleChangeComplete('noteBorderColor', solidColor);
-        handleBatchKeyOnlyStyleChangeComplete('noteBorderOpacity', opacity);
-      } else {
-        handleBatchStyleChangeComplete('noteBorderColor', solidColor);
-        handleBatchStyleChangeComplete('noteBorderOpacity', opacity);
-      }
+      onNotePaintCommit?.({
+        property: 'noteBorderPaint',
+        value: { color: solidColor, opacity },
+      });
     } else if (batchPickerFor === 'fill') {
-      const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      if (effectiveBatchCounterColorState === 'active') {
-        handleBatchCounterUpdate(
-          {
-            fill: { ...firstCounter.fill, active: fillColor },
-          },
-          { activeStateOnly: true, colorState: 'active' },
-        );
-      } else {
-        handleBatchCounterUpdate(
-          {
-            fill: { ...firstCounter.fill, idle: fillColor },
-          },
-          { colorState: 'idle' },
-        );
-      }
+      return;
     } else if (batchPickerFor === 'stroke') {
       const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      if (effectiveBatchCounterColorState === 'active') {
-        handleBatchCounterUpdate(
-          {
-            stroke: { ...firstCounter.stroke, active: strokeColor },
-          },
-          { activeStateOnly: true, colorState: 'active' },
-        );
-      } else {
-        handleBatchCounterUpdate(
-          {
-            stroke: { ...firstCounter.stroke, idle: strokeColor },
-          },
-          { colorState: 'idle' },
-        );
-      }
+      const active = effectiveBatchCounterColorState === 'active';
+      const targets = [
+        ...selectedKeyElements.map(({ id }) => ({
+          elementType: 'key' as const,
+          id,
+        })),
+        ...(active
+          ? []
+          : selectedStatElements.map(({ id }) => ({
+              elementType: 'stat' as const,
+              id,
+            }))),
+      ];
+      const stableTargets =
+        targets.length > 0 &&
+        targets.every(({ id }) => id.length > 0 && isNativeElementId(id));
+      if (!stableTargets) return;
+      const patch: EditorCounterStrokePropertyPatchV1 = active
+        ? { property: 'counterStrokeActive', value: strokeColor }
+        : { property: 'counterStrokeIdle', value: strokeColor };
+      const persisted =
+        window.__dmn_window_type === 'panel'
+          ? patchCounterStrokeViaAuthority(targets, patch)
+          : patchCounterStrokeByTargets(targets, patch);
+      void persisted.catch((error) => {
+        console.error('Failed to update batch counter stroke', error);
+      });
     }
+  };
+  const handleBatchPickerColorChangeComplete = (newColor: NoteColor) =>
+    completeBatchPickerColorChange(newColor);
+  const handleBatchNotePickerColorChangeComplete = (
+    newColor: NoteColor,
+    onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
+  ) => completeBatchPickerColorChange(newColor, onNotePaintCommit);
+  const handleBatchFillPickerColorChangeComplete = (
+    newColor: string,
+    onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
+  ) => {
+    const key =
+      effectiveBatchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+    setBatchLocalColors((prev) => ({ ...prev, [key]: newColor }));
+    onCounterFillCommit(
+      effectiveBatchCounterColorState === 'active'
+        ? { property: 'counterFillActive', value: { color: newColor } }
+        : { property: 'counterFillIdle', value: { color: newColor } },
+    );
   };
 
   // ============================================================================
   // 렌더링
   // ============================================================================
 
-  // 캔버스 선택에 묶인 구상 패널 — 프레임(글래스) 안의 루트 페이지 콘텐츠
+  // 캔버스 선택에 묶인 구상 패널 - 프레임(글래스) 안의 루트 페이지 콘텐츠
+  // 혼합 선택(네이티브+플러그인)은 총요소 기준으로 native 구성별 배치 패널에,
+  // 플러그인 단독 다중은 경량 기하 배치 패널에 라우트
   const renderSelectionPanelBody = () => {
+    const selectionTotalCount =
+      selectedBatchStyleElements.length + selectedPluginElements.length;
+    const route = resolveSelectionPanelRoute({
+      keyLikeCount: selectedKeyLikeElements.length,
+      graphCount: selectedGraphElements.length,
+      knobCount: selectedKnobElements.length,
+      pluginCount: selectedPluginElements.length,
+      hasSingleKeyPosition: !!singleKeyPosition,
+      hasSingleStatPosition: !!singleStatPosition,
+      hasSingleGraphPosition: !!singleGraphPosition,
+      hasSingleKnobPosition: !!singleKnobPosition,
+    });
+
     // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
-    if (
-      selectedBatchStyleElements.length > 1 &&
-      selectedPluginElements.length === 0 &&
-      (selectedKeyLikeElements.length > 0 ||
-        (selectedGraphElements.length > 0 && selectedKnobElements.length > 0))
-    ) {
+    if (route.kind === 'batchKeyLike') {
       return (
         <BatchKeyLikePanel
           setPanelElement={setPanelElement}
+          totalCount={selectionTotalCount}
           selectedBatchStyleElements={selectedBatchStyleElements}
           selectedKeyElements={selectedKeyElements}
           selectedStatElements={selectedStatElements}
@@ -2493,21 +3087,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchSpacingCommit={handleBatchSpacingCommit}
           getBatchSpacingValue={getBatchSpacingValue}
           handleBatchResize={handleBatchResize}
-          handleBatchStyleChange={handleBatchStyleChange}
-          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-          handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
-          handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
-          handleBatchGradientCommit={handleBatchGradientCommit}
-          handleKeyOnlyStyleChangeComplete={handleKeyOnlyStyleChangeComplete}
-          handleBatchCounterUpdate={handleBatchCounterUpdate}
-          handleBatchNoteColorChange={handleBatchNoteColorChange}
-          handleBatchNoteColorChangeComplete={
-            handleBatchNoteColorChangeComplete
-          }
-          handleBatchGlowColorChange={handleBatchGlowColorChange}
-          handleBatchGlowColorChangeComplete={
-            handleBatchGlowColorChangeComplete
-          }
+          handleBatchResizePreview={handleBatchResizePreview}
+          onElementPropertyCommit={handleBatchElementPropertyCommit}
+          onNoteElementPropertyCommit={handleBatchNoteElementPropertyCommit}
           handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
           getMixedValue={getMixedValue}
           getMixedValueBatch={getMixedValueBatch}
@@ -2515,28 +3097,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
           getMixedValueKeysOnly={getMixedValueKeysOnly}
           getMixedValueActiveCapable={getMixedValueActiveCapable}
-          handleActiveCapableStyleChangeComplete={
-            handleActiveCapableStyleChangeComplete
-          }
           getSelectedKeysData={getSelectedKeysData}
           getSelectedGraphsData={getSelectedGraphsData}
           getSelectedBatchStyleData={getSelectedBatchStyleData}
           getSelectedKeyOnlyPositions={getSelectedKeyOnlyPositions}
-          handleBatchKeyOnlyStyleChangeComplete={
-            handleBatchKeyOnlyStyleChangeComplete
-          }
-          handleBatchNoteColorChangeKeysOnly={
-            handleBatchNoteColorChangeKeysOnly
-          }
-          handleBatchNoteColorChangeCompleteKeysOnly={
-            handleBatchNoteColorChangeCompleteKeysOnly
-          }
-          handleBatchGlowColorChangeKeysOnly={
-            handleBatchGlowColorChangeKeysOnly
-          }
-          handleBatchGlowColorChangeCompleteKeysOnly={
-            handleBatchGlowColorChangeCompleteKeysOnly
-          }
           batchScrollRefFor={batchScrollRefFor}
           batchNoteColorButtonRef={batchNoteColorButtonRef}
           batchGlowColorButtonRef={batchGlowColorButtonRef}
@@ -2559,6 +3123,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchPickerColorChangeComplete={
             handleBatchPickerColorChangeComplete
           }
+          handleBatchNotePickerColorChangeComplete={
+            handleBatchNotePickerColorChangeComplete
+          }
+          handleBatchFillPickerColorChangeComplete={
+            handleBatchFillPickerColorChangeComplete
+          }
           getBatchPickerColor={getBatchPickerColor}
           getBatchPickerRef={getBatchPickerRef}
           batchColorPickerInteractiveRefs={batchColorPickerInteractiveRefs}
@@ -2571,15 +3141,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     // 다중 선택인 경우 (노브 요소만)
-    if (
-      selectedKnobElements.length > 1 &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedGraphElements.length === 0 &&
-      selectedPluginElements.length === 0
-    ) {
+    if (route.kind === 'batchKnobOnly') {
       return (
         <BatchKnobOnlyPanel
           setPanelElement={setPanelElement}
+          totalCount={selectionTotalCount}
           selectedKnobElements={selectedKnobElements}
           selectedGroupInfo={selectedGroupInfo}
           isRenaming={isRenaming}
@@ -2597,11 +3163,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchSpacingCommit={handleBatchSpacingCommit}
           getBatchSpacingValue={getBatchSpacingValue}
           handleBatchResize={handleBatchResize}
-          handleBatchStyleChange={handleBatchStyleChange}
-          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-          handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
-          handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
-          handleBatchGradientCommit={handleBatchGradientCommit}
+          handleBatchResizePreview={handleBatchResizePreview}
+          onElementPropertyCommit={handleBatchElementPropertyCommit}
           handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
           getMixedValueKnobs={getMixedValueKnobs}
           getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
@@ -2619,15 +3182,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     // 다중 선택인 경우 (그래프 요소만)
-    if (
-      selectedGraphElements.length > 1 &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedKnobElements.length === 0 &&
-      selectedPluginElements.length === 0
-    ) {
+    if (route.kind === 'batchGraphOnly') {
       return (
         <BatchGraphOnlyPanel
           setPanelElement={setPanelElement}
+          totalCount={selectionTotalCount}
           selectedGraphElements={selectedGraphElements}
           selectedGroupInfo={selectedGroupInfo}
           isRenaming={isRenaming}
@@ -2645,9 +3204,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchSpacingCommit={handleBatchSpacingCommit}
           getBatchSpacingValue={getBatchSpacingValue}
           handleBatchResize={handleBatchResize}
-          handleBatchStyleChange={handleBatchStyleChange}
-          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-          handleBatchGradientCommit={handleBatchGradientCommit}
+          handleBatchResizePreview={handleBatchResizePreview}
+          onElementPropertyCommit={handleBatchElementPropertyCommit}
           handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
           getMixedValueGraphs={getMixedValueGraphs}
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
@@ -2664,12 +3222,34 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       );
     }
 
-    // 플러그인 요소가 선택된 경우
-    if (
-      selectedPluginElements.length > 0 &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedGraphElements.length === 0
-    ) {
+    // 플러그인 단독 다중 선택 - 정렬·분배·간격만 있는 경량 기하 배치
+    if (route.kind === 'pluginBatch') {
+      return (
+        <BatchPluginOnlyPanel
+          setPanelElement={setPanelElement}
+          totalCount={selectionTotalCount}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          getBatchSpacingValue={getBatchSpacingValue}
+          batchScrollRefFor={batchScrollRefFor}
+          t={t}
+        />
+      );
+    }
+
+    // 플러그인 요소만 선택된 경우
+    if (route.kind === 'plugin') {
       const pluginTitle =
         selectedPluginDefinition?.name ||
         selectedPluginElement?.definitionId ||
@@ -2702,18 +3282,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     // 단일 노브 요소 선택인 경우
-    if (
-      selectedKnobElements.length === 1 &&
-      !!singleKnobPosition &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedGraphElements.length === 0 &&
-      selectedPluginElements.length === 0
-    ) {
+    if (route.kind === 'singleKnob' && singleKnobPosition) {
       return (
         <SingleKnobPanel
           setPanelElement={setPanelElement}
           singleKnobPosition={singleKnobPosition}
-          singleKnobIndex={singleKnobIndex!}
           selectedKeyType={selectedKeyType}
           isRenaming={isRenaming}
           renameInputRef={renameInputRef}
@@ -2723,7 +3296,50 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCommit={handleRenameCommit}
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
-          handleKnobUpdate={handleKnobUpdate}
+          onElementPropertyCommit={stableElementPropertyCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onInactiveImageCommit={stableInactiveImageHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onActiveImageCommit={stableActiveImageHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onIdleTransparentCommit={stableIdleTransparentHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onActiveTransparentCommit={stableActiveTransparentHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onIdleImageFitCommit={stableIdleImageFitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onActiveImageFitCommit={stableActiveImageFitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          handleGeometryCommit={stableGeometryHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onStylePropertyCommit={stableStylePropertyCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onPaintCommit={stablePaintCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onShadowCommit={stableShadowCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           singleScrollRefFor={singleScrollRefFor}
           panelElement={panelElement}
           useCustomCSS={useCustomCSS}
@@ -2733,17 +3349,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     // 단일 그래프 요소 선택인 경우
-    if (
-      selectedGraphElements.length === 1 &&
-      !!singleGraphPosition &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedPluginElements.length === 0
-    ) {
+    if (route.kind === 'singleGraph' && singleGraphPosition) {
       return (
         <SingleGraphPanel
           setPanelElement={setPanelElement}
           singleGraphPosition={singleGraphPosition}
-          singleGraphIndex={singleGraphIndex!}
           selectedKeyType={selectedKeyType}
           isRenaming={isRenaming}
           renameInputRef={renameInputRef}
@@ -2753,7 +3363,34 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCommit={handleRenameCommit}
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
-          handleGraphUpdate={handleGraphUpdate}
+          onElementPropertyCommit={stableElementPropertyCommitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onInactiveImageCommit={stableInactiveImageHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onIdleTransparentCommit={stableIdleTransparentHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onIdleImageFitCommit={stableIdleImageFitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          handleGeometryCommit={stableGeometryHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onStylePropertyCommit={stableStylePropertyCommitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onPaintCommit={stablePaintCommitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
           singleScrollRefFor={singleScrollRefFor}
           showGraphImagePicker={showGraphImagePicker}
           setShowGraphImagePicker={setShowGraphImagePicker}
@@ -2770,7 +3407,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // 단일 키/통계 요소 선택인 경우
     const isSingleStat = !singleKeyPosition && !!singleStatPosition;
     const isSingleKey = !!singleKeyPosition;
-    if (!isSingleKey && !isSingleStat) {
+    if (route.kind !== 'singleKeyStat' || (!isSingleKey && !isSingleStat)) {
       return null;
     }
 
@@ -2797,15 +3434,158 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleRenameStart={handleRenameStart}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onPositionChange={onPositionChange}
-        onKeyUpdate={onKeyUpdate}
-        onKeyPreview={onKeyPreview}
         onKeyMappingChange={onKeyMappingChange}
-        handleStatUpdate={handleStatUpdate}
-        handleStatPreview={handleStatPreview}
         localState={localState}
         setLocalState={setLocalState}
-        handleSizeBlur={handleSizeBlur}
+        handleGeometryPreview={stableGeometryPreviewHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onElementPropertyCommit={stableElementPropertyCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onInactiveImageCommit={stableInactiveImageHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onActiveImageCommit={
+          isSingleKey
+            ? stableActiveImageHandler('key', selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onIdleTransparentCommit={stableIdleTransparentHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onActiveTransparentCommit={
+          isSingleKey
+            ? stableActiveTransparentHandler('key', selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onIdleImageFitCommit={stableIdleImageFitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onActiveImageFitCommit={
+          isSingleKey
+            ? stableActiveImageFitHandler('key', selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onSoundPathCommit={
+          isSingleKey
+            ? stableSoundPathHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onSoundEnabledCommit={
+          isSingleKey
+            ? stableSoundEnabledHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onSoundVolumeCommit={
+          isSingleKey
+            ? stableSoundVolumeHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onStylePropertyPreview={stableStylePropertyPreviewHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onStylePropertyCommit={stableStylePropertyCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+          { settleGesture: true },
+        )}
+        onPaintCommit={stablePaintCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onFontColorCommit={stableFontColorCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onShadowCommit={stableShadowCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onNotePaintCommit={
+          isSingleKey
+            ? stableNotePaintCommitHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onNotePaintPreview={
+          isSingleKey
+            ? stableNotePaintPreviewHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterEnabledCommit={stableCounterEnabledHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterAnimationEnabledCommit={stableCounterAnimationEnabledHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterLayoutCommit={stableCounterLayoutHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterTypographyCommit={stableCounterTypographyHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterStrokeCommit={stableCounterStrokeHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterFillCommit={stableCounterFillHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        handleGeometryCommit={stableGeometryHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
         showImagePicker={showImagePicker}
         setShowImagePicker={setShowImagePicker}
         imageButtonRef={imageButtonRef}

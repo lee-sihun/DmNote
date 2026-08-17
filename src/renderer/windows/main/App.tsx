@@ -1,5 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
+  closeCustomDialogOwnedSurface,
+  replaceCustomDialogCallbacks,
+} from './customDialogCallbacks';
+import {
   usePanelWindowStore,
   detachPropertiesPanel,
   hasInlinePropertiesPanelLease,
@@ -38,6 +42,9 @@ import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
+import { keysApi } from '@api/modules/keysApi';
+import { settingsApi } from '@api/modules/settingsApi';
+import { appApi } from '@api/modules/appApi';
 
 import { useUIStore } from '@stores/useUIStore';
 
@@ -141,27 +148,9 @@ export default function App() {
   const primaryButtonRef = useRef(null);
 
   const {
-    selectedKey,
-    setSelectedKey,
     keyMappings,
     positions,
-    handlePositionChange,
-    handleKeyUpdate,
-    handleKeyPreview,
-    handleKeyBatchPreview,
-    handleKeyStyleUpdate,
-    handleKeyBatchStyleUpdate,
     handleKeyMappingChange,
-    handleNoteColorUpdate,
-    handleNoteColorPreview,
-    handleCounterSettingsPreview,
-    handleAddKeyAt,
-    handleDuplicateKey,
-    handleDeleteKey,
-    handleMoveToFront,
-    handleMoveToBack,
-    handleMoveForward,
-    handleMoveBackward,
     handleResetCurrentMode,
     handleUndo,
     handleRedo,
@@ -177,8 +166,6 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
   const panelWindowStatus = usePanelWindowStore((state) => state.status);
-  const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
-    useState(false);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
   const { value: visualSettingsOpen, toggle: toggleSettingsView } =
     useOptimisticBooleanCommit({
@@ -186,7 +173,6 @@ export default function App() {
       onCommit: (next) => {
         if (next) {
           selectedKeyTypeAtSettingsOpenRef.current = selectedKeyType;
-          if (selectedKey) setSkipModalAnimationOnReturn(true);
         } else if (
           selectedKeyTypeAtSettingsOpenRef.current !== selectedKeyType
         ) {
@@ -399,7 +385,7 @@ export default function App() {
 
     if (!autoUpdateEnabled) {
       try {
-        await window.api.app.openExternal(updateInfo.releaseUrl);
+        await appApi.openExternal(updateInfo.releaseUrl);
       } catch (error) {
         console.error('Failed to open release URL', error);
       }
@@ -501,6 +487,7 @@ export default function App() {
       confirmCallbackRef.current = null;
       cancelCallbackRef.current = null;
       cancel?.();
+      replaceCustomDialogCallbacks(customDialogCallbackRef, {});
     },
     [],
   );
@@ -517,10 +504,16 @@ export default function App() {
       onContentMount?: (element: HTMLElement) => void | (() => void);
     },
   ) => {
-    customDialogCallbackRef.current = {
+    if (colorPickerState.isOpen) {
+      closeCustomDialogOwnedSurface(
+        colorPickerState.referenceElement,
+        closeColorPicker,
+      );
+    }
+    replaceCustomDialogCallbacks(customDialogCallbackRef, {
       onConfirm: options?.onConfirm,
       onCancel: options?.onCancel,
-    };
+    });
     setCustomDialogState({
       isOpen: true,
       html,
@@ -533,11 +526,11 @@ export default function App() {
 
   const closeCustomDialog = () => {
     // 다이얼로그 내부 앵커에 붙은 전역 피커는 다이얼로그와 함께 정리
-    if (
-      colorPickerState.isOpen &&
-      colorPickerState.referenceElement?.closest('[data-plugin-dialog-content]')
-    ) {
-      closeColorPicker();
+    if (colorPickerState.isOpen) {
+      closeCustomDialogOwnedSurface(
+        colorPickerState.referenceElement,
+        closeColorPicker,
+      );
     }
     setCustomDialogState({
       isOpen: false,
@@ -702,31 +695,12 @@ export default function App() {
             onMouseLeave={() => setGridAreaHovered(false)}
           >
             <Grid
-              selectedKey={selectedKey}
-              setSelectedKey={setSelectedKey}
               keyMappings={keyMappings}
               positions={positions}
-              onPositionChange={handlePositionChange}
-              onKeyUpdate={handleKeyUpdate}
-              onKeyPreview={handleKeyPreview}
-              onNoteColorUpdate={handleNoteColorUpdate}
-              onNoteColorPreview={handleNoteColorPreview}
-              onCounterPreview={handleCounterSettingsPreview}
-              onKeyDelete={handleDeleteKey}
-              onAddKeyAt={handleAddKeyAt}
-              onKeyDuplicate={handleDuplicateKey}
-              onMoveToFront={handleMoveToFront}
-              onMoveToBack={handleMoveToBack}
-              onMoveForward={handleMoveForward}
-              onMoveBackward={handleMoveBackward}
               color={color}
               activeTool={activeTool}
               showConfirm={showConfirm}
               showAlert={showAlert}
-              shouldSkipModalAnimation={skipModalAnimationOnReturn}
-              onModalAnimationConsumed={() =>
-                setSkipModalAnimationOnReturn(false)
-              }
               onUndo={handleUndo}
               onRedo={handleRedo}
               toolbarAddRequest={toolbarAddRequest}
@@ -736,14 +710,6 @@ export default function App() {
             />
             {hasInlinePropertiesPanelLease(panelWindowStatus) && (
               <PropertiesPanel
-                onPositionChange={handlePositionChange}
-                onKeyUpdate={(data) => {
-                  const { index, ...updates } = data;
-                  handleKeyStyleUpdate(index, updates);
-                }}
-                onKeyBatchUpdate={handleKeyBatchStyleUpdate}
-                onKeyPreview={handleKeyPreview}
-                onKeyBatchPreview={handleKeyBatchPreview}
                 onKeyMappingChange={handleKeyMappingChange}
                 detachAction="detach"
                 onDetachAction={() => void detachPropertiesPanel()}
@@ -774,7 +740,7 @@ export default function App() {
           showConfirm(
             t('confirm.resetCountersCurrentTab'),
             async () => {
-              await window.api.keys.resetCountersMode(selectedKeyType);
+              await keysApi.resetCountersMode(selectedKeyType);
             },
             { confirmText: t('confirm.reset') },
           )
@@ -810,7 +776,7 @@ export default function App() {
           onClose={() => setIsNoteSettingOpen(false)}
           onSave={async (normalized) => {
             try {
-              await window.api.settings.update({ noteSettings: normalized });
+              await settingsApi.update({ noteSettings: normalized });
               setNoteSettings(normalized);
             } catch (error) {
               console.error('Failed to update note settings', error);

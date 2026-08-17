@@ -10,6 +10,7 @@ import type {
   TabNoteSettings,
 } from '@src/types/settings/noteSettings';
 import { useTranslation } from '@contexts/useTranslation';
+import { noteTabApi } from '@api/modules/noteTabApi';
 
 interface TabNoteSettingModalProps {
   isOpen: boolean;
@@ -70,10 +71,7 @@ const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
       }
       // 모든 값이 전역과 동일하면 오버라이드 제거
       const hasOverride = Object.keys(override).length > 0;
-      await window.api.noteTab.set(
-        selectedKeyType,
-        hasOverride ? override : null,
-      );
+      await noteTabApi.set(selectedKeyType, hasOverride ? override : null);
     } catch (error) {
       console.error('Failed to save tab note settings', error);
     }
