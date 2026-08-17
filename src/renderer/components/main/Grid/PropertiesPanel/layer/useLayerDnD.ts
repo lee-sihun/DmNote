@@ -111,6 +111,7 @@ export function useLayerDnD({
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
   const didDragRef = useRef(false);
+  const didDragResetTimerRef = useRef<number | null>(null);
   const dragStateRef = useRef<{
     itemHeight: number;
     currentDropTarget: DropAnchors | null;
@@ -440,6 +441,23 @@ export function useLayerDnD({
 
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+
+      // 드래그 표식은 trailing click 한 번만 흡수한다. mousedown 행과 mouseup
+      // 행이 다르면 행 onClick이 발화하지 않아 소비자가 리셋할 기회가 없고,
+      // 그 뒤 아무 행이나 클릭하면 그 클릭이 대신 삼켜진다.
+      // trailing click은 mouseup과 같은 시퀀스라 한 태스크 뒤에 리셋한다
+      // (useDraggable의 보류 청소와 동일 계약)
+      if (didDragRef.current) {
+        if (didDragResetTimerRef.current !== null) {
+          window.clearTimeout(didDragResetTimerRef.current);
+        }
+        didDragResetTimerRef.current = window.setTimeout(() => {
+          didDragResetTimerRef.current = null;
+          // 새 드래그가 시작됐으면 그 세션의 종료가 다시 스케줄한다
+          if (isDraggingRef.current) return;
+          didDragRef.current = false;
+        }, 0);
+      }
     };
 
     document.addEventListener('mousemove', handleMouseMove);

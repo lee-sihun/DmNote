@@ -408,6 +408,31 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     });
   };
 
+  it('드래그 표식은 trailing click 한 번만 흡수하고 한 태스크 뒤 걷힌다', async () => {
+    const itemA = nativeItem(ID_A, 0, 1);
+    const itemB = nativeItem(ID_B, 1, 0);
+    await renderDnD({
+      layerItems: [itemA, itemB],
+      liveModel: {
+        layerItems: [itemA, itemB],
+        displayItems: [itemA, itemB],
+      },
+    });
+
+    await finishDrag(
+      () => api.handleMouseDown(mouseDownEvent(), itemA, 0),
+      200,
+    );
+
+    // mousedown 행과 mouseup 행이 다르면 행 onClick이 발화하지 않아 소비자가
+    // 리셋하지 못한다. 표식이 남으면 이후 아무 행 클릭이나 삼켜진다
+    expect(api.getDidDrag()).toBe(true);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(api.getDidDrag()).toBe(false);
+  });
+
   it('main 합성 항목 드래그도 semantic과 legacy writer를 모두 막는다', async () => {
     const syntheticItem: LayerItem = {
       type: 'key',
