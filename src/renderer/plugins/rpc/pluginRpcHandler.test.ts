@@ -1206,6 +1206,34 @@ describe('plugin panel persisted element mutations', () => {
     ]);
   });
 
+  it('영속 커밋이 실패하면 세션 전용 요소도 지우지 않는다', async () => {
+    mocks.elements = [
+      mocks.elements[0],
+      {
+        fullId: 'plugin-a:free',
+        pluginId: 'plugin-a',
+        position: { x: 1, y: 2 },
+        tabId: '4key',
+      },
+    ];
+    // 영속 그룹 커밋 실패 -> 전체 거절. 세션 요소를 선삭제하면 응답은 실패인데
+    // 그 요소만 사라지고 undo·canonical pull로 복구되지 않는다
+    mocks.commit.mockResolvedValue(null);
+
+    mocks.requestListener?.(
+      envelope('elements:delete', {
+        fullIds: ['plugin-a:one', 'plugin-a:free'],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: false });
+    expect(mocks.elements).toEqual([
+      expect.objectContaining({ fullId: 'plugin-a:one' }),
+      expect.objectContaining({ fullId: 'plugin-a:free' }),
+    ]);
+  });
+
   it.each([
     [
       'elements:setHidden',

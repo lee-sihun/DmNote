@@ -1924,12 +1924,6 @@ const executePersistedOperation = async (
         definitionId: el.definitionId,
       });
     });
-    if (sessionRemovalIds.size > 0) {
-      if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
-      store.setElements(
-        store.elements.filter((el) => !sessionRemovalIds.has(el.fullId)),
-      );
-    }
     // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
     const sharedGestureId = crypto.randomUUID();
     const gestureIds = new Map<string, string>();
@@ -1993,6 +1987,17 @@ const executePersistedOperation = async (
         },
       );
       if (errorCode) return errorCode;
+    }
+    // 세션 전용(무def) 요소는 영속 커밋이 없으므로 스토어 제거만 한다.
+    // 영속 그룹이 하나라도 실패하면 전체 거절이므로, 선삭제하면 응답은
+    // 실패인데 세션 요소만 사라진다 - undo·canonical pull로 복구되지 않으니
+    // 모든 영속 그룹이 성공한 뒤에 적용한다 ("부분 적용 대신 전체 거절" 계약)
+    if (sessionRemovalIds.size > 0) {
+      if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
+      const storeNow = usePluginDisplayElementStore.getState();
+      storeNow.setElements(
+        storeNow.elements.filter((el) => !sessionRemovalIds.has(el.fullId)),
+      );
     }
     return null;
   }
