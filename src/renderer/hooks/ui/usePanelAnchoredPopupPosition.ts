@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { clampToViewport } from '@utils/ui/popupGeometry';
 
 interface PanelRect {
   left: number;
@@ -36,7 +37,6 @@ export const getPanelAnchoredPopupPosition = ({
   gap = 5,
   padding = 5,
 }: AnchoredPopupPositionOptions): PopupPosition => {
-  const maxX = Math.max(padding, viewportWidth - popupWidth - padding);
   // 상·하단 모두 가로 도킹과 같은 갭만큼 패널 안쪽에서 멈춤 —
   // 팝업이 패널 세로 범위보다 크면 화면 경계로 폴백
   const panelTopLimit = panelRect.top + gap;
@@ -56,7 +56,12 @@ export const getPanelAnchoredPopupPosition = ({
       : panelRect.top + (panelRect.height - popupHeight) / 2;
 
   return {
-    x: Math.min(Math.max(panelRect.left - popupWidth - gap, padding), maxX),
+    x: clampToViewport(
+      panelRect.left - popupWidth - gap,
+      popupWidth,
+      viewportWidth,
+      padding,
+    ),
     y: Math.min(Math.max(baseY, minY), maxY),
   };
 };
@@ -96,8 +101,7 @@ export const getTriggerAnchoredPopupPosition = ({
   padding = 5,
 }: TriggerAnchoredPositionOptions): TriggerAnchoredPosition => {
   const width = Math.min(sectionRect.width, viewportWidth - padding * 2);
-  const maxX = Math.max(padding, viewportWidth - width - padding);
-  const x = Math.min(Math.max(sectionRect.left, padding), maxX);
+  const x = clampToViewport(sectionRect.left, width, viewportWidth, padding);
 
   const below = triggerRect.bottom + gap;
   const above = triggerRect.top - gap - popupHeight;
@@ -106,7 +110,7 @@ export const getTriggerAnchoredPopupPosition = ({
 
   return {
     x,
-    y: Math.min(Math.max(y, padding), Math.max(padding, maxY)),
+    y: clampToViewport(y, popupHeight, viewportHeight, padding),
     width,
   };
 };

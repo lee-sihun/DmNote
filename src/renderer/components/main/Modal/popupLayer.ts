@@ -39,14 +39,3 @@ export const isInsideHigherPopupLayer = (
     .slice(index + 1)
     .some((layer) => layer.contains(target));
 };
-
-/** 팝업이 화면 가장자리로부터 남겨두는 여백 */
-export const POPUP_EDGE_PADDING = 5;
-
-/** 값을 [padding, extent - size - padding] 안으로 밀어넣는다 */
-export const clampToViewport = (
-  value: number,
-  size: number,
-  extent: number,
-  padding = POPUP_EDGE_PADDING,
-) => Math.max(padding, Math.min(value, extent - size - padding));

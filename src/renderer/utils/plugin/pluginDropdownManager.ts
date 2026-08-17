@@ -1,3 +1,5 @@
+import { clampToViewport } from '@utils/ui/popupGeometry';
+
 type DropdownMenuElement = HTMLElement & {
   __pluginPlaceholder?: HTMLElement | null;
   __pluginDropdown?: HTMLElement | null;
@@ -73,18 +75,18 @@ const measureAndPositionMenu = (
     const buttonRect = toggleBtn.getBoundingClientRect();
     const menuWidth = menu.offsetWidth;
     const menuHeight = menu.offsetHeight;
-    let left = buttonRect.left;
-    if (left + menuWidth > window.innerWidth - VIEWPORT_PADDING) {
-      left = window.innerWidth - menuWidth - VIEWPORT_PADDING;
-    }
-    left = Math.max(VIEWPORT_PADDING, left);
-    let top = buttonRect.bottom + MENU_MARGIN;
-    if (top + menuHeight > window.innerHeight - VIEWPORT_PADDING) {
-      top = Math.max(
-        VIEWPORT_PADDING,
-        buttonRect.top - menuHeight - MENU_MARGIN,
-      );
-    }
+    const left = clampToViewport(
+      buttonRect.left,
+      menuWidth,
+      window.innerWidth,
+      VIEWPORT_PADDING,
+    );
+    // 아래 공간이 부족하면 트리거 위로 펼친다
+    const below = buttonRect.bottom + MENU_MARGIN;
+    const top =
+      below + menuHeight > window.innerHeight - VIEWPORT_PADDING
+        ? Math.max(VIEWPORT_PADDING, buttonRect.top - menuHeight - MENU_MARGIN)
+        : below;
     menu.style.left = `${left}px`;
     menu.style.top = `${top}px`;
   });

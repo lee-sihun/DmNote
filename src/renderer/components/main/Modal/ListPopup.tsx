@@ -8,12 +8,8 @@ import React, {
 import { createPortal, flushSync } from 'react-dom';
 import FloatingPopup from './FloatingPopup';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
-import {
-  clampToViewport,
-  isTopmostPopupLayer,
-  POPUP_EDGE_PADDING,
-  registerPopupLayer,
-} from './popupLayer';
+import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
+import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import { useViewportSize } from '@hooks/ui/useViewportSize';
 import { getListScrollMetrics } from './listScrollMetrics';
 import { useLenis } from '@hooks/useLenis';

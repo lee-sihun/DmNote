@@ -1,4 +1,4 @@
-import { POPUP_EDGE_PADDING } from './popupLayer';
+import { POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 
 // 아이템 26 + 갭 4 리듬 공용 스크롤 계산 — 메인 메뉴·서브메뉴가 함께 사용
 export const ITEM_HEIGHT = 26;

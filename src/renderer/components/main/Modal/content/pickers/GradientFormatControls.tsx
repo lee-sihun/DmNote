@@ -4,8 +4,8 @@ import { useTranslation } from '@contexts/useTranslation';
 import {
   isTopmostPopupLayer,
   registerPopupLayer,
-  clampToViewport,
 } from '@components/main/Modal/popupLayer';
+import { clampToViewport } from '@utils/ui/popupGeometry';
 import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { usePointerSession } from './colorPickerPrimitives';
 import { CHECKER_PATTERN } from './ColorSwatch';

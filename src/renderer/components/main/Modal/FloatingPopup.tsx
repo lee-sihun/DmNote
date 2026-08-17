@@ -27,12 +27,11 @@ import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import { useFocusRestore } from '@hooks/ui/useFocusRestore';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import {
-  clampToViewport,
   isInsideHigherPopupLayer,
   isTopmostPopupLayer,
-  POPUP_EDGE_PADDING,
   registerPopupLayer,
 } from './popupLayer';
+import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface FloatingPopupBaseProps {
