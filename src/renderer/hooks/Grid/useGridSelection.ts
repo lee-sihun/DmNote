@@ -5,6 +5,7 @@
  * - 복사/붙여넣기
  */
 
+import { useRef } from 'react';
 import { newElementId } from '@src/renderer/editor/model/elementId';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -101,6 +102,9 @@ interface UseGridSelectionReturn {
     gestureId?: string,
     frozenTargets?: readonly SelectedElement[],
   ) => void;
+  // 게스처 시작 시점 대상 동결. 정산이 완료 시점 live 선택을 다시 읽으면
+  // 대기 중 선택 해제가 eager 이동을 통째로 삼킨다
+  freezeSelectionForGesture: () => void;
   clipboard: ClipboardItem[];
 }
 
@@ -119,6 +123,16 @@ export function useGridSelection({
   const clipboard = useGridSelectionStore((state) => state.clipboard);
   const setClipboard = useGridSelectionStore((state) => state.setClipboard);
 
+  // 훅이 동결을 소유한다 - 호출부가 정산에 인자를 넘기는 것을 잊어도
+  // live 재조회로 떨어지지 않게 한다
+  const frozenGestureTargetsRef = useRef<readonly SelectedElement[] | null>(
+    null,
+  );
+  const freezeSelectionForGesture = () => {
+    frozenGestureTargetsRef.current =
+      useGridSelectionStore.getState().selectedElements;
+  };
+
   // 선택된 요소들의 최종 위치를 한 번에 저장
   // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
   // 정산 대상은 호출부가 동결한 집합 우선 - eager를 적용한 집합과 커밋 대상이
@@ -131,8 +145,10 @@ export function useGridSelection({
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentKnobPositions = useKnobItemStore.getState().positions;
+    const frozen = frozenTargets ?? frozenGestureTargetsRef.current;
+    frozenGestureTargetsRef.current = null;
     const currentSelection =
-      frozenTargets ?? useGridSelectionStore.getState().selectedElements;
+      frozen ?? useGridSelectionStore.getState().selectedElements;
     const selectedPluginElementIds = new Set(
       currentSelection
         .filter((element) => element.type === 'plugin')
@@ -1525,6 +1541,7 @@ export function useGridSelection({
     copySelectedElements,
     pasteElements,
     syncSelectedElementsToOverlay,
+    freezeSelectionForGesture,
     clipboard,
   };
 }

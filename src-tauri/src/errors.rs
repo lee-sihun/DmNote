@@ -238,6 +238,87 @@ mod tests {
         "TOO_MANY_SLOTS_PER_MEMBER",
     ];
 
+    // 한도 헬퍼를 쓰는 소스. 손목록끼리만 대조하면 백엔드에 새 한도 코드가
+    // 생겨도 전부 green이라, 실제 호출부를 스캔해 결합한다
+    const EDITOR_SOURCE: &str = include_str!("state/editor.rs");
+    const PLUGIN_SOURCE: &str = include_str!("state/plugin.rs");
+
+    /// 용량 목록에 넣지 않는 한도 코드와 사유. 새 한도 코드는 목록에 넣거나
+    /// 여기에 사유와 함께 등록해야 한다
+    const NON_CAPACITY_LIMIT_CODES: &[(&str, &str)] = &[
+        (
+            "MODE_ID_TOO_LONG",
+            "길이 한도 - 요소를 줄이라는 안내와 무관",
+        ),
+        ("GROUP_ID_TOO_LONG", "길이 한도"),
+        ("GROUP_NAME_TOO_LONG", "길이 한도"),
+        (
+            "PLUGIN_INSTANCES_RECONCILE_REQUEST_TOO_LARGE",
+            "reconcile 경로 - editor 커밋 오류로 승격되지 않음",
+        ),
+        (
+            "STORED_PLUGIN_INSTANCES_TOO_LARGE",
+            "저장 데이터 읽기 - INVALID_GESTURE_PLUGIN으로 덮임",
+        ),
+        (
+            "PLUGIN_RPC_REQUEST_TOO_LARGE",
+            "plugin RPC - CommandError로만 나감",
+        ),
+        (
+            "PLUGIN_RPC_RESPONSE_TOO_LARGE",
+            "plugin RPC - CommandError로만 나감",
+        ),
+    ];
+
+    fn limit_codes_in(source: &str) -> Vec<String> {
+        let mut codes = Vec::new();
+        for helper in ["validate_count_limit(", "validate_compact_size("] {
+            let mut rest = source;
+            while let Some(at) = rest.find(helper) {
+                rest = &rest[at + helper.len()..];
+                let window = &rest[..rest.len().min(400)];
+                if let Some(start) = window.find('"') {
+                    let tail = &window[start + 1..];
+                    if let Some(end) = tail.find('"') {
+                        let literal = &tail[..end];
+                        if !literal.is_empty()
+                            && literal
+                                .chars()
+                                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+                        {
+                            codes.push(literal.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        codes
+    }
+
+    #[test]
+    fn every_limit_helper_code_is_classified() {
+        let mut found = limit_codes_in(EDITOR_SOURCE);
+        found.extend(limit_codes_in(PLUGIN_SOURCE));
+        found.sort();
+        found.dedup();
+        assert!(
+            !found.is_empty(),
+            "한도 헬퍼 호출부를 하나도 찾지 못했다 - 스캐너가 깨졌다"
+        );
+        for code in &found {
+            let classified = CAPACITY_VALIDATION_CODES.contains(&code.as_str())
+                || NON_CAPACITY_LIMIT_CODES
+                    .iter()
+                    .any(|(excluded, _)| excluded == code);
+            assert!(
+                classified,
+                "한도 코드 {code}가 용량 목록에도 제외 목록에도 없다. \
+                 사용자에게 한도 안내가 필요하면 CAPACITY_VALIDATION_CODES에, \
+                 아니면 사유와 함께 NON_CAPACITY_LIMIT_CODES에 등록할 것"
+            );
+        }
+    }
+
     #[test]
     fn capacity_fixture_matches_backend_capacity_codes() {
         let fixture: Vec<String> =

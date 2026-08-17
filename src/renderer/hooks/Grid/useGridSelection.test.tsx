@@ -872,6 +872,43 @@ describe('useGridSelection compound history gesture', () => {
     expect(mocks.commitGeneratedSemanticOps).toHaveBeenCalledTimes(1);
   });
 
+  it('게스처 시작에 동결하면 정산이 인자 없이도 시작 대상을 쓴다', async () => {
+    // 배선 누락 방지: 호출부가 정산에 인자를 넘기지 않아도 훅이 소유한 동결
+    // 집합으로 떨어져야 한다 (Grid.tsx는 이 계약에 의존한다)
+    await act(async () => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+    });
+    api.freezeSelectionForGesture();
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([]);
+    });
+
+    api.syncSelectedElementsToOverlay('gesture-hook-frozen');
+
+    expect(mocks.commitGeneratedSemanticOps).toHaveBeenCalledTimes(1);
+  });
+
+  it('동결은 정산 1회만 유효하다 - 다음 정산은 live 선택을 읽는다', async () => {
+    await act(async () => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+    });
+    api.freezeSelectionForGesture();
+    api.syncSelectedElementsToOverlay('gesture-first');
+    mocks.commitGeneratedSemanticOps.mockClear();
+
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([]);
+    });
+    api.syncSelectedElementsToOverlay('gesture-second');
+
+    // 낡은 동결이 남아 있으면 이미 없는 대상에 계속 커밋한다
+    expect(mocks.commitGeneratedSemanticOps).not.toHaveBeenCalled();
+  });
+
   it('동결 대상 없이 정산했는데 선택이 비었으면 무커밋을 보고한다', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await act(async () => {

@@ -62,7 +62,6 @@ import KnobItem from '../layers/KnobItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
-  type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
 import { useUIStore } from '@stores/useUIStore';
@@ -266,17 +265,12 @@ const Grid = ({
     (state) => state.elements,
   );
   const selectedDragGestureIdRef = useRef<string | null>(null);
-  // 드래그 시작 시점 대상 동결 - 완료 시 live 선택을 다시 읽으면 대기 중
-  // 선택이 바뀌었을 때 eager 이동이 무커밋으로 폐기된다 (리사이즈와 동일 규칙)
-  const selectedDragFrozenTargetsRef = useRef<
-    readonly SelectedElement[] | null
-  >(null);
 
   const beginSelectedPluginInstancesDrag = () => {
     const gestureId = crypto.randomUUID();
     selectedDragGestureIdRef.current = gestureId;
+    freezeSelectionForGesture();
     const frozenSelection = useGridSelectionStore.getState().selectedElements;
-    selectedDragFrozenTargetsRef.current = frozenSelection;
     const selectedPluginElementIds = new Set(
       frozenSelection
         .filter((element) => element.type === 'plugin')
@@ -346,6 +340,7 @@ const Grid = ({
     copySelectedElements,
     pasteElements,
     syncSelectedElementsToOverlay,
+    freezeSelectionForGesture,
   } = useGridSelection({
     selectedElements,
     selectedKeyType,
@@ -353,11 +348,10 @@ const Grid = ({
     positions,
   });
   const commitSelectedElementsDrag = () => {
-    const frozenTargets = selectedDragFrozenTargetsRef.current;
-    selectedDragFrozenTargetsRef.current = null;
+    // 동결 집합은 훅이 소유한다 - 여기서 인자를 넘기지 않아도 시작 시점
+    // 대상으로 정산된다
     syncSelectedElementsToOverlay(
       selectedDragGestureIdRef.current ?? undefined,
-      frozenTargets ?? undefined,
     );
   };
 
