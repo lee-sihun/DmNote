@@ -478,12 +478,16 @@ fn sanitize_v1_supplied_patch_ids(
     Ok(())
 }
 
+/// id를 비운 값 사본. 비교마다 양쪽을 clone하지 않도록, 스캔 전에 한 번씩만
+/// 만들어 재사용한다 (승계 웨이브의 순서·우선순위는 그대로 유지)
+fn value_without_id<T: NativeElement>(element: &T) -> T {
+    let mut copy = element.clone();
+    copy.position_mut().id.clear();
+    copy
+}
+
 fn same_value_without_id<T: NativeElement>(left: &T, right: &T) -> bool {
-    let mut left = left.clone();
-    let mut right = right.clone();
-    left.position_mut().id.clear();
-    right.position_mut().id.clear();
-    left == right
+    value_without_id(left) == value_without_id(right)
 }
 
 fn ordered_current_elements<T: NativeElement>(collection: &HashMap<String, Vec<T>>) -> Vec<T> {
@@ -534,15 +538,20 @@ fn inherit_ids_by_value_within_mode<T: NativeElement>(
         let Some(current_elements) = current.get(&mode) else {
             continue;
         };
+        let normalized_current: Vec<T> = current_elements.iter().map(value_without_id).collect();
         for element in elements {
             if !element.position().id.is_empty() {
                 continue;
             }
-            let inherited = current_elements.iter().find(|current_element| {
-                let current_id = &current_element.position().id;
-                !consumed_current_ids.contains(current_id)
-                    && same_value_without_id(*current_element, &*element)
-            });
+            let target = value_without_id(&*element);
+            let inherited = current_elements
+                .iter()
+                .zip(&normalized_current)
+                .find(|(current_element, normalized)| {
+                    let current_id = &current_element.position().id;
+                    !consumed_current_ids.contains(current_id) && **normalized == target
+                })
+                .map(|(current_element, _)| current_element);
             if let Some(current_element) = inherited {
                 let id = current_element.position().id.clone();
                 consumed_current_ids.insert(id.clone());
@@ -558,6 +567,7 @@ fn inherit_ids_by_value<T: NativeElement>(
     consumed_current_ids: &mut HashSet<String>,
     reserved: &mut HashSet<String>,
 ) {
+    let normalized_current: Vec<T> = current_elements.iter().map(value_without_id).collect();
     for mode in sorted_modes(candidate) {
         let Some(elements) = candidate.get_mut(&mode) else {
             continue;
@@ -566,11 +576,15 @@ fn inherit_ids_by_value<T: NativeElement>(
             if !element.position().id.is_empty() {
                 continue;
             }
-            let inherited = current_elements.iter().find(|current_element| {
-                let current_id = &current_element.position().id;
-                !consumed_current_ids.contains(current_id)
-                    && same_value_without_id(*current_element, &*element)
-            });
+            let target = value_without_id(&*element);
+            let inherited = current_elements
+                .iter()
+                .zip(&normalized_current)
+                .find(|(current_element, normalized)| {
+                    let current_id = &current_element.position().id;
+                    !consumed_current_ids.contains(current_id) && **normalized == target
+                })
+                .map(|(current_element, _)| current_element);
             if let Some(current_element) = inherited {
                 let id = current_element.position().id.clone();
                 consumed_current_ids.insert(id.clone());
