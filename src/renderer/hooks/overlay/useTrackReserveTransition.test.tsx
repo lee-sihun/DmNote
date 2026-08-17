@@ -27,7 +27,11 @@ const Harness = ({
   target: number;
   hydrated: boolean;
 }) => {
-  lastResult = useTrackReserveTransition(target, hydrated);
+  // 훅 반환값을 테스트에서 관찰하기 위한 최소 하네스 - 캡처는 커밋 후 effect에서
+  const result = useTrackReserveTransition(target, hydrated);
+  React.useEffect(() => {
+    lastResult = result;
+  });
   return null;
 };
 
