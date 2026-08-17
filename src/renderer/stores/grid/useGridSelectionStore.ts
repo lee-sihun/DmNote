@@ -328,12 +328,25 @@ export function invalidateSelectionForChangedIndexedElementArrays(
   if (changed) selection.setSelectedElements(selectedElements);
 }
 
-// 재주입으로 fullId가 갈린 플러그인 선택 제거. 현존 fullId 집합 기준
-export function pruneStalePluginSelection(liveFullIds: ReadonlySet<string>) {
+// 재주입으로 fullId가 갈린 플러그인 선택 제거. 현존 fullId 집합 기준.
+// ownerPluginId를 주면 그 플러그인 소유 선택만 판정한다 - 스토어는 전
+// 플러그인 공용이라, 리로드 공백(요소가 잠시 비는 창)에 있는 다른 플러그인의
+// 정당한 선택까지 죽은 것으로 보고 지우는 것을 막는다
+export function pruneStalePluginSelection(
+  liveFullIds: ReadonlySet<string>,
+  ownerPluginId?: string,
+) {
   const selection = useGridSelectionStore.getState();
   if (selection.selectedElements.length === 0) return;
+  // fullId는 `${pluginId}:${id}`와 `${pluginId}::${id}`가 혼재한다. 콜론 1개
+  // 접두사가 둘 다 덮으면서 plugin-a ↔ plugin-ab 오탐도 막는다
+  const ownedByPull = (fullId: string) =>
+    ownerPluginId === undefined || fullId.startsWith(`${ownerPluginId}:`);
   const kept = selection.selectedElements.filter(
-    (element) => element.type !== 'plugin' || liveFullIds.has(element.id),
+    (element) =>
+      element.type !== 'plugin' ||
+      !ownedByPull(element.id) ||
+      liveFullIds.has(element.id),
   );
   if (kept.length === selection.selectedElements.length) return;
   selection.setSelectedElements(kept);

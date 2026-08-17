@@ -101,6 +101,37 @@ describe('canonical 재주입 후 선택 정리', () => {
     unregister();
   });
 
+  it('다른 플러그인의 pull은 리로드 공백 중인 플러그인 선택을 지우지 않는다', async () => {
+    const pulled = 'plugin-prune-pulled';
+    const idle = 'plugin-prune-idle';
+    // idle 플러그인은 리로드 공백 - reapplier는 등록됐지만 인스턴스 복원이
+    // setTimeout+비동기 IPC라 요소가 아직 스토어에 없다
+    usePluginDisplayElementStore.setState({
+      elements: [pluginElement(pulled, 'own')],
+    });
+    useGridSelectionStore.getState().setSelectedElements([
+      { type: 'plugin', id: `${idle}:alive` },
+      { type: 'plugin', id: `${pulled}:own` },
+    ]);
+    const unregister = registerPluginInstancesReapplier(pulled, 'def-p', {
+      cancelPendingSave: vi.fn(),
+      reapply: () => {
+        usePluginDisplayElementStore.setState({
+          elements: [pluginElement(pulled, 'own')],
+        });
+      },
+    });
+    instancesGetMock.mockResolvedValue({ modelRevision: 9, instances: [] });
+
+    await applyCanonicalPluginInstances(pulled);
+
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([
+      { type: 'plugin', id: `${idle}:alive` },
+      { type: 'plugin', id: `${pulled}:own` },
+    ]);
+    unregister();
+  });
+
   it('생존 fullId를 보존한 diff 재적용은 선택을 유지한다', async () => {
     const pluginId = 'plugin-prune-kept';
     usePluginDisplayElementStore.setState({

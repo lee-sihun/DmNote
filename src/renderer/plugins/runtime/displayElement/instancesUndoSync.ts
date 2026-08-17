@@ -97,6 +97,7 @@ export const applyCanonicalPluginInstances = async (
         .getState()
         .elements.map((element) => element.fullId),
     ),
+    pluginId,
   );
 };
 

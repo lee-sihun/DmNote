@@ -415,7 +415,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       layerItems: [itemA, itemB],
       liveModel: {
         layerItems: [itemA, itemB],
-        displayItems: [itemA, itemB],
+        displayItems: toDisplay([itemA, itemB]),
       },
     });
 
