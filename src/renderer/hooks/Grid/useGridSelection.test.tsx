@@ -1240,6 +1240,48 @@ describe('useGridSelection compound history gesture', () => {
         ],
       }),
     ).toThrow(ElementIntentAbort);
+
+    // 무관한 플러그인이 정산 대기 창에 요소를 추가한 것은 이 삭제의 신원과
+    // 무관하다 - projection이 스토어 전량이라는 이유로 중단하면 과탐이다
+    expect(
+      options.generate({
+        base: {},
+        pluginProjection: [
+          survivor,
+          {
+            ...pluginElement(),
+            id: 'other',
+            fullId: 'plugin-b:other',
+            pluginId: 'plugin-b',
+          },
+        ],
+      }).kind,
+    ).toBe('satisfied');
+  });
+
+  it('플러그인 전용 삭제 정산이 중단되면 성공으로 위장하지 않는다', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.runMixedGestureIntent.mockResolvedValueOnce({
+      committed: false,
+      satisfied: false,
+    });
+    await act(async () => {
+      usePluginDisplayElementStore.setState({ elements: [pluginElement()] });
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'plugin', id: 'plugin-a:element' }]);
+    });
+
+    await act(async () => api.deleteSelectedElements());
+
+    // 반환값을 버리면 이 경로가 조용히 성공으로 끝나고, 패널 RPC 경계에서는
+    // respond(success)가 나간다. 실패 경로로 흘러야 한다
+    expect(
+      errorLog.mock.calls.some(
+        (call) => call[0] === 'Failed to persist selected element deletion',
+      ),
+    ).toBe(true);
+    errorLog.mockRestore();
   });
 
   it('빈 선택 정산은 editor를 커밋하지 않는다', () => {

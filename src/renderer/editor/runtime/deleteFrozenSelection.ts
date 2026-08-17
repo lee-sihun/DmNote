@@ -318,7 +318,7 @@ export const deleteFrozenSelection = async (
     try {
       if (pluginFullIds.length > 0) {
         const deleted = new Set(pluginFullIds);
-        await runMixedGestureElementIntent({
+        const settlement = await runMixedGestureElementIntent({
           gestureId,
           initialPluginIds: pluginIds,
           pluginScope: () => pluginIds,
@@ -327,10 +327,15 @@ export const deleteFrozenSelection = async (
           // 없어 editor patch는 항상 비고, plugin projection만 정산한다
           generate: ({ pluginProjection }) => {
             // 동결 이후 낯선 fullId 출현(플러그인 리로드 등)은 신원이 갈린
-            // 것이다 - 성공 위장 대신 중단해 skip 관측에 맡긴다 (방어 존치)
+            // 것이다 - 성공 위장 대신 중단해 skip 관측에 맡긴다 (방어 존치).
+            // 게스처 스코프로 좁힌다 - projection은 스토어 전량이라, 무관한
+            // 플러그인이 정산 대기 창에 요소를 추가하면 이 삭제와 상관없이
+            // 전체가 중단됐다
             if (
               pluginProjection.some(
-                (element) => !sealedKnownFullIds.has(element.fullId),
+                (element) =>
+                  pluginIds.includes(element.pluginId) &&
+                  !sealedKnownFullIds.has(element.fullId),
               )
             ) {
               throw new ElementIntentAbort('batch delete settlement');
@@ -357,6 +362,12 @@ export const deleteFrozenSelection = async (
           skipContext: 'batch delete settlement',
           expectedAuthorityGeneration: options.expectedAuthorityGeneration,
         });
+        // 정산이 중단됐는데(abort 흡수) 반환값을 버리면 패널 RPC 경계에서
+        // 성공으로 응답한다. 형제 op(remove·setHidden)가 대상 소실을
+        // ELEMENT_NOT_FOUND로 거절하는 계약과 맞춘다
+        if (!settlement.committed && !settlement.satisfied) {
+          throw new ElementIntentAbort('batch delete settlement');
+        }
       }
     } catch (error) {
       if (options.propagateErrors) throw error;
