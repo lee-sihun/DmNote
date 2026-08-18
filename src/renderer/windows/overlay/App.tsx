@@ -248,6 +248,7 @@ export default function App() {
       ]);
       if (!monitor) return;
 
+      // 화면 끝 기준 - 오버레이는 항상 위 표시라 독·작업 표시줄 위에 그려진다
       const monitorPos = monitor.position;
       const monitorSize = monitor.size;
 
@@ -263,12 +264,16 @@ export default function App() {
       const snapLeft = centerX < monitorCenterX;
       const snapTop = centerY < monitorCenterY;
 
+      // 창이 화면보다 크면 우·하단 정렬 값이 시작점보다 앞서므로 좌·상단으로 고정
       const newX = snapLeft
         ? monitorPos.x
-        : monitorPos.x + monitorSize.width - size.width;
+        : Math.max(monitorPos.x, monitorPos.x + monitorSize.width - size.width);
       const newY = snapTop
         ? monitorPos.y
-        : monitorPos.y + monitorSize.height - size.height;
+        : Math.max(
+            monitorPos.y,
+            monitorPos.y + monitorSize.height - size.height,
+          );
 
       await win.setPosition(new PhysicalPosition(newX, newY));
     } catch (error) {
@@ -785,6 +790,7 @@ export default function App() {
     displayGraphPositions,
     displayKnobPositions,
     positionOffset,
+    topOffset,
     webglTracks,
   } = useMemo(
     () =>
@@ -815,16 +821,16 @@ export default function App() {
   );
 
   // 창 크기와 배경 박스가 같은 공식을 공유 (창 == 콘텐츠 박스 불변식)
+  // 높이는 computeLayout의 topOffset을 그대로 재사용 - 공식이 한 곳에만 있다
   const contentSize = useMemo(
     () =>
       bounds
         ? {
             width: bounds.maxX - bounds.minX + overlayPadding * 2,
-            height:
-              bounds.maxY - bounds.minY + overlayPadding * 2 + trackHeight,
+            height: bounds.maxY - bounds.minY + overlayPadding + topOffset,
           }
         : undefined,
-    [bounds, overlayPadding, trackHeight],
+    [bounds, overlayPadding, topOffset],
   );
 
   // updateTrackLayouts는 useNoteSystem이 마운트 1회 고정 참조를 보장하므로
@@ -845,10 +851,14 @@ export default function App() {
 
   useEffect(() => {
     if (!bounds || !contentSize) return;
+    // OBS 오버레이에는 네이티브 창이 없다 - allowlist 밖이라 호출이 항상 거부되고,
+    // 기준선을 지우는 실패 처리와 맞물려 레이아웃이 바뀔 때마다 헛호출이 반복된다
+    if (window.__dmn_runtime === 'obs') return;
 
     const totalWidth = contentSize.width;
     const totalHeight = contentSize.height;
-    const contentTopOffset = trackHeight + overlayPadding;
+    // computeLayout이 계산한 값을 그대로 - 같은 공식을 여기서 또 쓰지 않는다
+    const contentTopOffset = topOffset;
     const currentMinX = bounds.minX;
     const currentMinY = bounds.minY;
 
@@ -900,8 +910,10 @@ export default function App() {
       })
       .catch((error) => {
         console.error('Failed to resize overlay window', error);
+        // 실패한 요청이 기준선으로 남으면 같은 크기 재시도가 영구히 차단된다
+        lastResizeParams.current = null;
       });
-  }, [bounds, contentSize, trackHeight, overlayAnchor, overlayPadding]);
+  }, [bounds, contentSize, topOffset, overlayAnchor, overlayPadding]);
 
   return (
     <OverlayScene

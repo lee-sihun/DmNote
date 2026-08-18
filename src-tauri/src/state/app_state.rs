@@ -61,6 +61,59 @@ const TRAY_MENU_SETTINGS_ID: &str = "tray-settings";
 const TRAY_MENU_QUIT_ID: &str = "tray-quit";
 const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
+const MIN_OVERLAY_DIMENSION: f64 = 100.0;
+// 넓은 배치에 트랙 높이를 크게 잡으면 이전 상한 2000에서 조용히 잘렸음
+const MAX_OVERLAY_DIMENSION: f64 = 4096.0;
+
+#[cfg(target_os = "macos")]
+const OVERLAY_FRAME_APPLY_TIMEOUT_MS: u64 = 250;
+
+fn clamp_overlay_dimension(value: f64) -> f64 {
+    value
+        .clamp(MIN_OVERLAY_DIMENSION, MAX_OVERLAY_DIMENSION)
+        .round()
+}
+
+/// 창이 없을 때 위치 초기화가 딛고 설 사각형.
+/// 저장된 값이 있으면 그대로 쓰고, 없거나 깨졌으면 기본 크기로 되돌린다.
+/// 구버전 store는 physical 좌표를 담고 있으므로(`overlay_bounds_are_logical == false`)
+/// logical로 환산해야 겹침 판정과 이후 저장되는 마커가 어긋나지 않는다
+fn overlay_reset_fallback_rect(
+    stored: Option<&OverlayBounds>,
+    bounds_are_logical: bool,
+    monitors: &MonitorData,
+) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+    let usable = stored.filter(|bounds| {
+        bounds.x.is_finite()
+            && bounds.y.is_finite()
+            && bounds.width.is_finite()
+            && bounds.height.is_finite()
+            && bounds.width > 0.0
+            && bounds.height > 0.0
+    });
+
+    // 환산에 실패하면 physical 값을 logical로 오인하는 대신 기본 크기로 떨어뜨린다
+    let normalized = match usable {
+        Some(bounds) if !bounds_are_logical => convert_physical_bounds_to_logical(bounds, monitors),
+        Some(bounds) => Some(bounds.clone()),
+        None => None,
+    };
+
+    match normalized {
+        Some(bounds) => (
+            LogicalPosition::new(bounds.x, bounds.y),
+            LogicalSize::new(
+                clamp_overlay_dimension(bounds.width),
+                clamp_overlay_dimension(bounds.height),
+            ),
+        ),
+        None => (
+            LogicalPosition::new(0.0, 0.0),
+            LogicalSize::new(DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT),
+        ),
+    }
+}
+
 const PANEL_WIDTH: f64 = 240.0;
 // 피커가 트리거 행 아래에 그대로 들어갈 세로 여유 - 이보다 낮으면 팝업이
 // 매번 위로 뒤집히거나 창 경계로 클램프됨. 늘리는 것만 허용
@@ -2088,8 +2141,16 @@ impl AppState {
             .and_then(|value| overlay_resize_anchor_from_str(&value))
             .unwrap_or_else(|| self.store.snapshot().overlay_resize_anchor.clone());
 
-        let width = width.clamp(100.0, 2000.0).round();
-        let height = height.clamp(100.0, 2000.0).round();
+        let requested_width = width;
+        let requested_height = height;
+        let width = clamp_overlay_dimension(width);
+        let height = clamp_overlay_dimension(height);
+        // 잘린 경우 콘텐츠 일부가 창 밖에 남으므로 진단용 기록
+        if (requested_width - width).abs() >= 0.5 || (requested_height - height).abs() >= 0.5 {
+            log::warn!(
+                "[overlay] resize clamped: requested {requested_width}x{requested_height} -> {width}x{height}"
+            );
+        }
 
         let scale_factor = window.scale_factor().unwrap_or(1.0);
         let position = window
@@ -2167,14 +2228,7 @@ impl AppState {
         }
 
         // 크기·위치를 단일 네이티브 트랜잭션으로 적용 - 분리 호출은 창이 두 단계로 움직여 덜컥거림 유발
-        apply_overlay_frame(&window, new_x, new_y, width, height, scale_factor)?;
-
-        let bounds = OverlayBounds {
-            x: new_x,
-            y: new_y,
-            width,
-            height,
-        };
+        let bounds = apply_overlay_frame(&window, new_x, new_y, width, height, scale_factor)?;
 
         defer_overlay_bounds(
             &self.store,
@@ -2190,6 +2244,104 @@ impl AppState {
             bounds.x,
             bounds.y
         );
+        app.emit(
+            "overlay:resized",
+            &json!({
+                "x": bounds.x,
+                "y": bounds.y,
+                "width": bounds.width,
+                "height": bounds.height,
+            }),
+        )?;
+
+        Ok(bounds)
+    }
+
+    /// 오버레이를 겹침이 가장 큰 모니터(없으면 주 모니터) 작업 영역 가운데로 되돌린다.
+    /// 창이 화면 밖으로 나가 잡을 수 없을 때의 탈출구이므로 표시 여부도 창 존재 여부도 따지지 않는다.
+    /// 창이 없으면 저장된 위치만 갱신해, 다음에 오버레이를 켰을 때 제자리에 뜬다
+    pub fn reset_overlay_position(&self, app: &AppHandle) -> Result<OverlayBounds> {
+        let window = app.get_webview_window(OVERLAY_LABEL);
+        let snapshot = self.store.snapshot();
+        let stored = snapshot.overlay_bounds;
+        // 저장된 사각형을 해석하려면 모니터 정보가 먼저 필요하다
+        let monitors = MonitorData::gather(app);
+
+        // 창도 모니터 정보도 없으면 착지점을 고를 근거가 전무하다. 임의 좌표로
+        // 덮어써 성공을 보고하느니 실패시켜 저장된 값과 마커를 보존한다
+        if window.is_none() && monitors.is_empty() {
+            return Err(anyhow!("monitor information unavailable"));
+        }
+
+        let scale_factor = window
+            .as_ref()
+            .and_then(|value| value.scale_factor().ok())
+            .unwrap_or(1.0);
+        // 창이 없으면 저장된 값이, 그것도 없으면 기본 크기가 유일한 근거다
+        let (position, size) = match window.as_ref() {
+            Some(window) => (
+                window
+                    .outer_position()
+                    .map(|value| value.to_logical::<f64>(scale_factor))
+                    .unwrap_or_else(|_| LogicalPosition::new(0.0, 0.0)),
+                window
+                    .outer_size()
+                    .map(|value| value.to_logical::<f64>(scale_factor))
+                    .unwrap_or_else(|_| {
+                        LogicalSize::new(DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
+                    }),
+            ),
+            None => overlay_reset_fallback_rect(
+                stored.as_ref(),
+                snapshot.overlay_bounds_are_logical,
+                &monitors,
+            ),
+        };
+
+        let target = monitors
+            .find_best_overlap(position.x, position.y, size.width, size.height)
+            .or_else(|| monitors.primary_spec());
+
+        let placement = match target {
+            Some(spec) => spec.clamp(
+                spec.logical_origin_x + (spec.logical_width - size.width) / 2.0,
+                spec.logical_origin_y + (spec.logical_height - size.height) / 2.0,
+                size.width,
+                size.height,
+            ),
+            // 모니터 정보를 못 얻으면 좌상단 여백 위치가 유일하게 안전한 착지점
+            None => OverlayPosition {
+                x: OVERLAY_MARGIN,
+                y: OVERLAY_MARGIN,
+            },
+        };
+
+        let bounds = match window.as_ref() {
+            Some(window) => apply_overlay_frame(
+                window,
+                placement.x,
+                placement.y,
+                size.width,
+                size.height,
+                scale_factor,
+            )?,
+            None => OverlayBounds {
+                x: placement.x,
+                y: placement.y,
+                width: size.width,
+                height: size.height,
+            },
+        };
+
+        // 크기가 그대로라 창 안에서의 콘텐츠 위치도 그대로 - 기준선을 건드리면
+        // 다음 resize가 이동량을 두 번 반영한다
+        defer_overlay_bounds(
+            &self.store,
+            &self.overlay_bounds_generation,
+            bounds.clone(),
+            None,
+        )?;
+
         app.emit(
             "overlay:resized",
             &json!({
@@ -4368,16 +4520,34 @@ fn apply_overlay_frame(
     width: f64,
     height: f64,
     scale_factor: f64,
-) -> Result<()> {
+) -> Result<OverlayBounds> {
+    let requested = OverlayBounds {
+        x,
+        y,
+        width,
+        height,
+    };
     #[cfg(target_os = "macos")]
     {
+        use objc::{class, msg_send, sel, sel_impl};
+
         let _ = scale_factor;
-        let app = window.app_handle().clone();
+        // 메인 스레드에서 큐잉 후 대기하면 교착하므로 직접 실행
+        let on_main: bool = unsafe { msg_send![class!(NSThread), isMainThread] };
+        if on_main {
+            return Ok(apply_overlay_frame_macos(window, x, y, width, height).unwrap_or(requested));
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel();
         let target = window.clone();
-        app.run_on_main_thread(move || {
-            apply_overlay_frame_macos(&target, x, y, width, height);
+        window.app_handle().run_on_main_thread(move || {
+            let _ = tx.send(apply_overlay_frame_macos(&target, x, y, width, height));
         })?;
-        Ok(())
+        Ok(rx
+            .recv_timeout(Duration::from_millis(OVERLAY_FRAME_APPLY_TIMEOUT_MS))
+            .ok()
+            .flatten()
+            .unwrap_or(requested))
     }
     #[cfg(target_os = "windows")]
     {
@@ -4391,20 +4561,26 @@ fn apply_overlay_frame(
         unsafe {
             SetWindowPos(hwnd, None, px, py, pw, ph, SWP_NOZORDER | SWP_NOACTIVATE)?;
         }
-        Ok(())
+        Ok(requested)
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
         let _ = scale_factor;
         window.set_size(LogicalSize::new(width, height))?;
         window.set_position(LogicalPosition::new(x, y))?;
-        Ok(())
+        Ok(requested)
     }
 }
 
 /// tao 좌표(주 모니터 좌상단 원점)를 AppKit 좌표(주 모니터 좌하단 원점)로 변환해 setFrame 적용
 #[cfg(target_os = "macos")]
-fn apply_overlay_frame_macos(window: &WebviewWindow, x: f64, y: f64, width: f64, height: f64) {
+fn apply_overlay_frame_macos(
+    window: &WebviewWindow,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Option<OverlayBounds> {
     use cocoa::foundation::{NSPoint, NSRect, NSSize};
     use objc::{class, msg_send, sel, sel_impl};
 
@@ -4421,7 +4597,7 @@ fn apply_overlay_frame_macos(window: &WebviewWindow, x: f64, y: f64, width: f64,
             let count: usize = msg_send![screens, count];
             if count == 0 {
                 fallback();
-                return;
+                return None;
             }
             let primary: *mut objc::runtime::Object = msg_send![screens, objectAtIndex: 0usize];
             let screen_frame: NSRect = msg_send![primary, frame];
@@ -4429,10 +4605,20 @@ fn apply_overlay_frame_macos(window: &WebviewWindow, x: f64, y: f64, width: f64,
             let flipped_y = screen_frame.size.height - (y + height);
             let frame = NSRect::new(NSPoint::new(x, flipped_y), NSSize::new(width, height));
             let _: () = msg_send![ns_window, setFrame: frame display: true];
+
+            // AppKit이 창을 화면 안으로 되밀 수 있어 실제 반영된 프레임을 읽는다
+            let applied: NSRect = msg_send![ns_window, frame];
+            Some(OverlayBounds {
+                x: applied.origin.x,
+                y: screen_frame.size.height - (applied.origin.y + applied.size.height),
+                width: applied.size.width,
+                height: applied.size.height,
+            })
         },
         Err(err) => {
             log::warn!("overlay frame: failed to get NSWindow handle: {err}");
             fallback();
+            None
         }
     }
 }
@@ -5268,10 +5454,11 @@ mod tests {
     use super::{
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
         apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
-        canonical_hold_duration_ms, changed_panel_max_height, collect_authorized_css_paths,
-        collect_frontend_lifecycle_targets, frontend_history_mutation_blocked,
-        frontend_lifecycle_restore_labels, global_css_watch_path, install_history_handshake,
-        install_lifecycle_handshake, key_state_payload, next_keyboard_recovery_plan,
+        canonical_hold_duration_ms, changed_panel_max_height, clamp_overlay_dimension,
+        collect_authorized_css_paths, collect_frontend_lifecycle_targets,
+        frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
+        global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
+        key_state_payload, next_keyboard_recovery_plan, overlay_reset_fallback_rect,
         panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
         publish_panel_visibility_transition, publish_selection_snapshot, resolve_event_age_ms,
         resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
@@ -5286,15 +5473,15 @@ mod tests {
         PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
         PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
         SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
-        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-        KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
-        MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
-        OVERLAY_LABEL, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
-        PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
+        DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+        KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS,
+        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
+        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
+        PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
-        models::{AppStoreData, CustomCss, PanelBounds, TabCss},
+        models::{AppStoreData, CustomCss, OverlayBounds, PanelBounds, TabCss},
         state::local_asset_path::path_identity_key,
     };
     use std::path::Path;
@@ -6324,5 +6511,138 @@ mod tests {
         assert!(authorized.contains(&path_identity_key(Path::new("/tmp/global.css"))));
         assert!(authorized.contains(&path_identity_key(Path::new("/tmp/tab.css"))));
         assert_eq!(global_css_watch_path(&state), None);
+    }
+
+    #[test]
+    fn overlay_dimension_clamp_covers_tall_track_layouts() {
+        // 트랙 높이 상한(2000) + 키 영역 + 패딩 조합은 이전 상한 2000을 넘어 잘렸음
+        assert_eq!(clamp_overlay_dimension(2400.0), 2400.0);
+        assert_eq!(clamp_overlay_dimension(4096.0), 4096.0);
+        assert_eq!(clamp_overlay_dimension(5000.0), 4096.0);
+        assert_eq!(clamp_overlay_dimension(10.0), 100.0);
+        assert_eq!(clamp_overlay_dimension(705.4), 705.0);
+    }
+
+    /// physical 3840x2160 단일 모니터 (logical 폭/높이는 scale로 나눈 값)
+    fn reset_test_monitors(scale: f64) -> MonitorData {
+        MonitorData {
+            specs: vec![MonitorSpec {
+                logical_origin_x: 0.0,
+                logical_origin_y: 0.0,
+                logical_width: 3_840.0 / scale,
+                logical_height: 2_160.0 / scale,
+                physical_origin_x: 0.0,
+                physical_origin_y: 0.0,
+                physical_width: 3_840.0,
+                physical_height: 2_160.0,
+                scale_factor: scale,
+            }],
+            primary_index: Some(0),
+        }
+    }
+
+    #[test]
+    fn overlay_reset_falls_back_to_stored_rect_when_window_is_absent() {
+        // 오버레이를 끈 채 재시작하면 창이 없다 - 저장된 위치가 유일한 근거
+        let monitors = reset_test_monitors(1.0);
+        let stored = OverlayBounds {
+            x: -3200.0,
+            y: 980.0,
+            width: 1240.0,
+            height: 620.0,
+        };
+        let (position, size) = overlay_reset_fallback_rect(Some(&stored), true, &monitors);
+        assert_eq!((position.x, position.y), (-3200.0, 980.0));
+        assert_eq!((size.width, size.height), (1240.0, 620.0));
+    }
+
+    #[test]
+    fn overlay_reset_converts_legacy_physical_stored_rect() {
+        // overlay_bounds_are_logical은 serde(default) = false라 구버전 store는 physical px다.
+        // 이를 logical로 오인하면 겹침 판정이 배로 부풀어 엉뚱한 모니터를 고르고,
+        // defer_overlay_bounds가 마커를 true로 굳혀 변환 기회가 영영 사라진다
+        let monitors = reset_test_monitors(2.0);
+        let legacy = OverlayBounds {
+            x: 400.0,
+            y: 200.0,
+            width: 1720.0,
+            height: 640.0,
+        };
+
+        let (position, size) = overlay_reset_fallback_rect(Some(&legacy), false, &monitors);
+        assert_eq!((position.x, position.y), (200.0, 100.0));
+        assert_eq!((size.width, size.height), (860.0, 320.0));
+
+        // 마커가 true면 이미 환산된 값이므로 그대로 쓴다
+        let (position, size) = overlay_reset_fallback_rect(Some(&legacy), true, &monitors);
+        assert_eq!((position.x, position.y), (400.0, 200.0));
+        assert_eq!((size.width, size.height), (1720.0, 640.0));
+    }
+
+    #[test]
+    fn overlay_reset_defaults_when_legacy_rect_cannot_be_converted() {
+        // 모니터 정보를 못 얻으면 physical 값을 logical로 오인하느니 기본 크기가 안전하다
+        let monitors = MonitorData {
+            specs: Vec::new(),
+            primary_index: None,
+        };
+        let legacy = OverlayBounds {
+            x: 400.0,
+            y: 200.0,
+            width: 1720.0,
+            height: 640.0,
+        };
+        let (position, size) = overlay_reset_fallback_rect(Some(&legacy), false, &monitors);
+        assert_eq!((position.x, position.y), (0.0, 0.0));
+        assert_eq!(
+            (size.width, size.height),
+            (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
+        );
+    }
+
+    #[test]
+    fn overlay_reset_fallback_repairs_missing_or_broken_stored_rect() {
+        let monitors = reset_test_monitors(1.0);
+        let (position, size) = overlay_reset_fallback_rect(None, true, &monitors);
+        assert_eq!((position.x, position.y), (0.0, 0.0));
+        assert_eq!(
+            (size.width, size.height),
+            (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
+        );
+
+        // 크기가 0이거나 NaN이면 중앙 정렬 계산이 무의미해진다
+        let collapsed = OverlayBounds {
+            x: 10.0,
+            y: 20.0,
+            width: 0.0,
+            height: 300.0,
+        };
+        let (_, size) = overlay_reset_fallback_rect(Some(&collapsed), true, &monitors);
+        assert_eq!(
+            (size.width, size.height),
+            (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
+        );
+
+        let broken = OverlayBounds {
+            x: f64::NAN,
+            y: 20.0,
+            width: 800.0,
+            height: 300.0,
+        };
+        let (_, size) = overlay_reset_fallback_rect(Some(&broken), true, &monitors);
+        assert_eq!(
+            (size.width, size.height),
+            (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
+        );
+
+        // 저장된 크기가 한계를 넘으면 잘라 쓴다
+        let oversized = OverlayBounds {
+            x: 0.0,
+            y: 0.0,
+            width: 9000.0,
+            height: 40.0,
+        };
+        let (_, size) = overlay_reset_fallback_rect(Some(&oversized), true, &monitors);
+        assert_eq!((size.width, size.height), (4096.0, 100.0));
     }
 }

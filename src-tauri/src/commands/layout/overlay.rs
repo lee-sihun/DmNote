@@ -66,6 +66,14 @@ pub fn overlay_transition_fade(app: AppHandle, alpha: f64, duration_ms: u64) -> 
 }
 
 #[tauri::command]
+pub fn overlay_reset_position(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> CmdResult<OverlayBounds> {
+    Ok(state.reset_overlay_position(&app)?)
+}
+
+#[tauri::command]
 pub fn overlay_resize(
     state: State<'_, AppState>,
     app: AppHandle,

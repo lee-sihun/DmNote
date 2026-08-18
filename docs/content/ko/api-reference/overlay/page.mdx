@@ -83,6 +83,24 @@ const newBounds = await dmn.overlay.resize({
 console.log("새 위치/크기:", newBounds);
 ```
 
+<Callout type="info">
+  반환되는 bounds는 실제로 적용된 값입니다. 요청한 크기가 100~4096 범위를 벗어나면
+  그 범위로 잘립니다. OBS 오버레이에는 창이 없어 호출이 거부됩니다.
+</Callout>
+
+### resetPosition()
+
+오버레이를 현재 모니터 작업 영역 안쪽 중앙으로 되돌립니다. 오버레이가 화면 밖으로 나가 잡을 수 없을 때 사용합니다.
+
+```javascript
+const bounds = await dmn.overlay.resetPosition();
+console.log("복귀 위치:", bounds);
+```
+
+<Callout type="info">
+  OBS 오버레이에는 창이 없어 호출이 거부됩니다.
+</Callout>
+
 ## 이벤트 구독
 
 ### onVisibility(listener)

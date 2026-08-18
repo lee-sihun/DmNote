@@ -998,6 +998,7 @@ export interface DMNoteAPI {
     setVisible(visible: boolean): Promise<void>;
     setLock(locked: boolean): Promise<void>;
     setAnchor(anchor: string): Promise<string>;
+    // 적용된 bounds 반환 - 크기 한계(100~4096)에 걸리면 요청과 다를 수 있다
     resize(payload: {
       width: number;
       height: number;
@@ -1006,6 +1007,7 @@ export interface DMNoteAPI {
       fixedPositionDeltaX?: number;
       fixedPositionDeltaY?: number;
     }): Promise<OverlayBounds>;
+    resetPosition(): Promise<OverlayBounds>;
     onVisibility(
       listener: (payload: OverlayVisibilityPayload) => void,
     ): Unsubscribe;
