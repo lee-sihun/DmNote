@@ -75,9 +75,13 @@ fn clamp_overlay_dimension(value: f64) -> f64 {
 }
 
 /// 창이 없을 때 위치 초기화가 딛고 설 사각형.
-/// 저장된 값이 있으면 그대로 쓰고, 없거나 깨졌으면 기본 크기로 되돌린다
+/// 저장된 값이 있으면 그대로 쓰고, 없거나 깨졌으면 기본 크기로 되돌린다.
+/// 구버전 store는 physical 좌표를 담고 있으므로(`overlay_bounds_are_logical == false`)
+/// logical로 환산해야 겹침 판정과 이후 저장되는 마커가 어긋나지 않는다
 fn overlay_reset_fallback_rect(
     stored: Option<&OverlayBounds>,
+    bounds_are_logical: bool,
+    monitors: &MonitorData,
 ) -> (LogicalPosition<f64>, LogicalSize<f64>) {
     let usable = stored.filter(|bounds| {
         bounds.x.is_finite()
@@ -88,7 +92,14 @@ fn overlay_reset_fallback_rect(
             && bounds.height > 0.0
     });
 
-    match usable {
+    // 환산에 실패하면 physical 값을 logical로 오인하는 대신 기본 크기로 떨어뜨린다
+    let normalized = match usable {
+        Some(bounds) if !bounds_are_logical => convert_physical_bounds_to_logical(bounds, monitors),
+        Some(bounds) => Some(bounds.clone()),
+        None => None,
+    };
+
+    match normalized {
         Some(bounds) => (
             LogicalPosition::new(bounds.x, bounds.y),
             LogicalSize::new(
@@ -2251,7 +2262,16 @@ impl AppState {
     /// 창이 없으면 저장된 위치만 갱신해, 다음에 오버레이를 켰을 때 제자리에 뜬다
     pub fn reset_overlay_position(&self, app: &AppHandle) -> Result<OverlayBounds> {
         let window = app.get_webview_window(OVERLAY_LABEL);
-        let stored = self.store.snapshot().overlay_bounds;
+        let snapshot = self.store.snapshot();
+        let stored = snapshot.overlay_bounds;
+        // 저장된 사각형을 해석하려면 모니터 정보가 먼저 필요하다
+        let monitors = MonitorData::gather(app);
+
+        // 창도 모니터 정보도 없으면 착지점을 고를 근거가 전무하다. 임의 좌표로
+        // 덮어써 성공을 보고하느니 실패시켜 저장된 값과 마커를 보존한다
+        if window.is_none() && monitors.is_empty() {
+            return Err(anyhow!("monitor information unavailable"));
+        }
 
         let scale_factor = window
             .as_ref()
@@ -2271,10 +2291,13 @@ impl AppState {
                         LogicalSize::new(DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
                     }),
             ),
-            None => overlay_reset_fallback_rect(stored.as_ref()),
+            None => overlay_reset_fallback_rect(
+                stored.as_ref(),
+                snapshot.overlay_bounds_are_logical,
+                &monitors,
+            ),
         };
 
-        let monitors = MonitorData::gather(app);
         let target = monitors
             .find_best_overlap(position.x, position.y, size.width, size.height)
             .or_else(|| monitors.primary_spec());
@@ -6500,23 +6523,87 @@ mod tests {
         assert_eq!(clamp_overlay_dimension(705.4), 705.0);
     }
 
+    /// physical 3840x2160 단일 모니터 (logical 폭/높이는 scale로 나눈 값)
+    fn reset_test_monitors(scale: f64) -> MonitorData {
+        MonitorData {
+            specs: vec![MonitorSpec {
+                logical_origin_x: 0.0,
+                logical_origin_y: 0.0,
+                logical_width: 3_840.0 / scale,
+                logical_height: 2_160.0 / scale,
+                physical_origin_x: 0.0,
+                physical_origin_y: 0.0,
+                physical_width: 3_840.0,
+                physical_height: 2_160.0,
+                scale_factor: scale,
+            }],
+            primary_index: Some(0),
+        }
+    }
+
     #[test]
     fn overlay_reset_falls_back_to_stored_rect_when_window_is_absent() {
         // 오버레이를 끈 채 재시작하면 창이 없다 - 저장된 위치가 유일한 근거
+        let monitors = reset_test_monitors(1.0);
         let stored = OverlayBounds {
             x: -3200.0,
             y: 980.0,
             width: 1240.0,
             height: 620.0,
         };
-        let (position, size) = overlay_reset_fallback_rect(Some(&stored));
+        let (position, size) = overlay_reset_fallback_rect(Some(&stored), true, &monitors);
         assert_eq!((position.x, position.y), (-3200.0, 980.0));
         assert_eq!((size.width, size.height), (1240.0, 620.0));
     }
 
     #[test]
+    fn overlay_reset_converts_legacy_physical_stored_rect() {
+        // overlay_bounds_are_logical은 serde(default) = false라 구버전 store는 physical px다.
+        // 이를 logical로 오인하면 겹침 판정이 배로 부풀어 엉뚱한 모니터를 고르고,
+        // defer_overlay_bounds가 마커를 true로 굳혀 변환 기회가 영영 사라진다
+        let monitors = reset_test_monitors(2.0);
+        let legacy = OverlayBounds {
+            x: 400.0,
+            y: 200.0,
+            width: 1720.0,
+            height: 640.0,
+        };
+
+        let (position, size) = overlay_reset_fallback_rect(Some(&legacy), false, &monitors);
+        assert_eq!((position.x, position.y), (200.0, 100.0));
+        assert_eq!((size.width, size.height), (860.0, 320.0));
+
+        // 마커가 true면 이미 환산된 값이므로 그대로 쓴다
+        let (position, size) = overlay_reset_fallback_rect(Some(&legacy), true, &monitors);
+        assert_eq!((position.x, position.y), (400.0, 200.0));
+        assert_eq!((size.width, size.height), (1720.0, 640.0));
+    }
+
+    #[test]
+    fn overlay_reset_defaults_when_legacy_rect_cannot_be_converted() {
+        // 모니터 정보를 못 얻으면 physical 값을 logical로 오인하느니 기본 크기가 안전하다
+        let monitors = MonitorData {
+            specs: Vec::new(),
+            primary_index: None,
+        };
+        let legacy = OverlayBounds {
+            x: 400.0,
+            y: 200.0,
+            width: 1720.0,
+            height: 640.0,
+        };
+        let (position, size) = overlay_reset_fallback_rect(Some(&legacy), false, &monitors);
+        assert_eq!((position.x, position.y), (0.0, 0.0));
+        assert_eq!(
+            (size.width, size.height),
+            (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
+        );
+    }
+
+    #[test]
     fn overlay_reset_fallback_repairs_missing_or_broken_stored_rect() {
-        let (position, size) = overlay_reset_fallback_rect(None);
+        let monitors = reset_test_monitors(1.0);
+        let (position, size) = overlay_reset_fallback_rect(None, true, &monitors);
         assert_eq!((position.x, position.y), (0.0, 0.0));
         assert_eq!(
             (size.width, size.height),
@@ -6530,7 +6617,7 @@ mod tests {
             width: 0.0,
             height: 300.0,
         };
-        let (_, size) = overlay_reset_fallback_rect(Some(&collapsed));
+        let (_, size) = overlay_reset_fallback_rect(Some(&collapsed), true, &monitors);
         assert_eq!(
             (size.width, size.height),
             (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
@@ -6542,7 +6629,7 @@ mod tests {
             width: 800.0,
             height: 300.0,
         };
-        let (_, size) = overlay_reset_fallback_rect(Some(&broken));
+        let (_, size) = overlay_reset_fallback_rect(Some(&broken), true, &monitors);
         assert_eq!(
             (size.width, size.height),
             (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
@@ -6555,7 +6642,7 @@ mod tests {
             width: 9000.0,
             height: 40.0,
         };
-        let (_, size) = overlay_reset_fallback_rect(Some(&oversized));
+        let (_, size) = overlay_reset_fallback_rect(Some(&oversized), true, &monitors);
         assert_eq!((size.width, size.height), (4096.0, 100.0));
     }
 }
