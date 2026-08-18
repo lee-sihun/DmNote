@@ -103,7 +103,10 @@ export const SettingToggleRow = ({
       className={`${SETTINGS_ROW_CLASS} cursor-pointer`}
     >
       <span className={SETTINGS_LABEL_CLASS}>{label}</span>
-      <span aria-hidden="true" className="pointer-events-none">
+      {/* 토글 자체는 포인터를 받아야 노브 드래그가 산다. 스위치 의미는 행 버튼이
+          이미 갖고 있으므로 여기는 aria-hidden으로 남기고, 클릭 이중 발화는
+          Checkbox가 stopPropagation으로 끊는다 */}
+      <span aria-hidden="true">
         <Checkbox checked={visualChecked} onChange={toggle} />
       </span>
     </button>

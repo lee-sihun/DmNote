@@ -355,6 +355,12 @@ body.dmn-dragging * {
   transition: none !important;
 }
 
+/* 노브를 가로로 끄는 제스처가 있으므로 가로 스크롤 제스처는 트랙에서 걷어낸다.
+   세로는 남겨야 패널 안에서 토글 위를 지나며 스크롤할 수 있다 */
+.dmn-toggle-track {
+  touch-action: pan-y;
+}
+
 /* 토글 노브 - 이동은 translate로만. left를 쓰면 매 프레임 레이아웃을 다시 잡는다.
    오버슈트는 keyframe이 아니라 이징 커브가 만든다. 토글은 연타되는 컨트롤이라
    keyframe이면 두 번째 클릭이 0에서 다시 재생돼 노브가 뒤로 튄다.
@@ -387,6 +393,17 @@ body.dmn-dragging * {
   );
   transition: translate var(--ui-toggle-duration) var(--ui-toggle-ease),
     height var(--ui-toggle-press-duration) var(--ui-toggle-press-ease),
+    margin-top var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
+}
+
+/* 노브를 끌고 있는 동안 - 손끝을 그대로 따라가야 하므로 이동 전환만 끈다.
+   data-dmn-instant로 통째 끄면 트랙 색이 계단으로 튀고 누름 캡슐도 같이 죽는다.
+   위 :active 규칙이 transition 숏핸드를 다시 선언하므로 그보다 한 단계 위에서 잡는다.
+   transition-property만 덮으면 안 된다 - 남은 duration·easing 목록이 인덱스로
+   다시 짝지어져 높이가 이동용 스프링 커브를 타고 캡슐이 튄다. 숏핸드로 다시 쓴다 */
+[role='switch'][data-dmn-dragging] .dmn-toggle-thumb,
+[role='switch'][data-dmn-dragging]:active .dmn-toggle-thumb {
+  transition: height var(--ui-toggle-press-duration) var(--ui-toggle-press-ease),
     margin-top var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
 }
 

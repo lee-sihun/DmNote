@@ -76,5 +76,11 @@ export const usePressGatedSwap = <T extends Element>(value: unknown) => {
 
   const isInstant = useCallback(() => instantRef.current, []);
 
-  return { ref, isInstant };
+  // 이벤트로 못 잡는 직접 조작을 직접 찍는다. 드래그처럼 누른 시각과 값이 바뀌는
+  // 시각이 시간창보다 벌어지는 제스처는 이걸 불러야 정착 모션이 산다
+  const markPress = useCallback(() => {
+    lastPressRef.current = performance.now();
+  }, []);
+
+  return { ref, isInstant, markPress };
 };
