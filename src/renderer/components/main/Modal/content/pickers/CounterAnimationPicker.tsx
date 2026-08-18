@@ -28,6 +28,7 @@ import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessio
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import { counterAnimationApi } from '@api/modules/resourceApi';
 import { deleteCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
+import { openRemoteSheet } from '@stores/grid/useRemoteSheetStore';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -230,15 +231,6 @@ const CounterAnimationPicker = ({
     }
   };
 
-  const openCreateModal = () => {
-    setEditorState({ mode: 'create', preset: null });
-  };
-
-  const openEditModal = (preset: CounterAnimationPreset) => {
-    menu.close();
-    setEditorState({ mode: 'edit', preset });
-  };
-
   const menuItems: ListItem[] = [
     {
       id: 'edit',
@@ -269,6 +261,40 @@ const CounterAnimationPicker = ({
     if (mode === 'create' || selectedPresetId === preset.id) {
       onAnimationChange(applyPresetToAnimation(animation, preset));
     }
+  };
+
+  // 분리 패널 창은 시트가 들어갈 폭이 없어 메인 창에 대신 띄운다. 결과는 돌아온 시점의
+  // 최신 핸들러로 적용한다 - 시트가 떠 있는 동안 선택·애니메이션이 바뀔 수 있다
+  const handleEditorSavedRef = useRef(handleEditorSaved);
+  useEffect(() => {
+    handleEditorSavedRef.current = handleEditorSaved;
+  });
+  const openEditor = (state: EditorState) => {
+    if (window.__dmn_window_type === 'panel') {
+      void openRemoteSheet({
+        kind: 'counterAnimation',
+        mode: state.mode,
+        preset: state.preset,
+        counterSettings,
+        keyVisual,
+      }).then((result) => {
+        if (result.status !== 'saved' || result.kind !== 'counterAnimation') {
+          return;
+        }
+        void handleEditorSavedRef.current(result.payload);
+      });
+      return;
+    }
+    setEditorState(state);
+  };
+
+  const openCreateModal = () => {
+    openEditor({ mode: 'create', preset: null });
+  };
+
+  const openEditModal = (preset: CounterAnimationPreset) => {
+    menu.close();
+    openEditor({ mode: 'edit', preset });
   };
 
   return (

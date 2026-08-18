@@ -10,8 +10,9 @@ export const PANEL_ROOT_CLASS = 'absolute inset-0 flex flex-col';
 
 // 패널 헤더 — 48px 고정: 버튼 중심이 우상단 (24, 24) 앵커에 와서
 // PanelToggleButton(48px 컨테이너 센터링)의 아이콘 중심과 같은 지점에 고정
-export const PANEL_HEADER_CLASS =
-  'dmn-panel-header flex items-center justify-between h-[48px] px-[12px] shrink-0';
+// 헤더 높이 - 클래스와 창 드래그 영역이 같은 값을 봐야 한다
+export const PANEL_HEADER_HEIGHT = 48;
+export const PANEL_HEADER_CLASS = `dmn-panel-header flex items-center justify-between h-[${PANEL_HEADER_HEIGHT}px] px-[12px] shrink-0`;
 
 // 분리 창 전용 프레임, 창 자체가 240px라 inset 채움, OS 그림자가 깊이 담당
 // 글래스 대신 같은 색상의 불투명 표면 (분리 창은 뒤 비침이 무의미)

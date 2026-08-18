@@ -567,6 +567,8 @@
     "attachPanel": "将面板附加回主窗口",
     "detachFailed": "无法分离面板。未确认的编辑无法保存，或窗口切换失败。",
     "attachFailed": "无法附加面板。未确认的编辑无法保存，或窗口切换失败。",
+    "remoteSheetActive": "正在主窗口中编辑",
+    "remoteSheetFailed": "无法在主窗口打开编辑器。请确认主窗口已打开。",
     "detachedGradientHint": "画布保留在主窗口中。请重新附加面板以使用画布上的控制点。",
     "switchToLayer": "切换到图层面板",
     "switchToProperty": "切换到属性面板",

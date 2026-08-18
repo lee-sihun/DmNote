@@ -19,6 +19,7 @@ import SettingTab from '@components/main/Settings';
 import { useKeyManager } from '@hooks/useKeyManager';
 import { usePalette } from '@hooks/Modal/usePalette';
 import CustomAlert from '@components/main/Modal/content/dialogs/Alert';
+import RemoteSheetHost from '@components/main/Modal/RemoteSheetHost';
 import NoteSettingModal from '@components/main/Modal/content/settings/NoteSetting';
 import UpdateModal from '@components/main/Modal/content/dialogs/UpdateModal';
 import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
@@ -792,6 +793,8 @@ export default function App() {
           }}
         />
       )}
+      {/* 분리 패널이 요청한 전면 시트 - 패널 창엔 시트가 들어갈 자리가 없다 */}
+      <RemoteSheetHost />
       <CustomAlert
         isOpen={alertState.isOpen}
         message={alertState.message}

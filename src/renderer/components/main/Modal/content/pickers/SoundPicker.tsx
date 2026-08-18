@@ -16,6 +16,7 @@ import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessio
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import { soundApi } from '@api/modules/resourceApi';
+import { openRemoteSheet } from '@stores/grid/useRemoteSheetStore';
 
 interface SoundPickerProps {
   open: boolean;
@@ -294,6 +295,45 @@ const SoundPicker = ({
     void loadSounds();
   };
 
+  // 분리 패널 창은 시트가 들어갈 폭이 없어 메인 창에 대신 띄운다. 파일은 창을 넘지 못하므로
+  // 추가는 시트 안의 불러오기 버튼으로 고른다. 결과는 돌아온 시점의 최신 핸들러로 적용한다
+  const handleTrimSavedRef = useRef(handleTrimSaved);
+  useEffect(() => {
+    handleTrimSavedRef.current = handleTrimSaved;
+  });
+  const openTrimSheet = (
+    request: { mode: 'create' } | { mode: 'edit'; item: SoundListItem },
+  ) => {
+    if (window.__dmn_window_type !== 'panel') {
+      if (request.mode === 'create') {
+        // 시트를 먼저 띄우고 대화상자를 열어 닫힘 순간 캔버스 노출 방지
+        setTrimState({ mode: 'create', file: null });
+        addFileInputRef.current?.click();
+      } else {
+        setTrimState({ mode: 'edit', item: request.item });
+      }
+      return;
+    }
+    void openRemoteSheet(
+      request.mode === 'create'
+        ? { kind: 'soundTrim', mode: 'create', previewVolume }
+        : {
+            kind: 'soundTrim',
+            mode: 'edit',
+            previewVolume,
+            item: {
+              soundPath: request.item.soundPath,
+              trimStartRatio: request.item.trimStartRatio,
+              trimEndRatio: request.item.trimEndRatio,
+              displayName: request.item.displayName,
+            },
+          },
+    ).then((result) => {
+      if (result.status !== 'saved' || result.kind !== 'soundTrim') return;
+      handleTrimSavedRef.current(result.soundPath);
+    });
+  };
+
   return (
     <>
       <CommonListPickerPage<SoundListItem>
@@ -393,11 +433,7 @@ const SoundPicker = ({
         isLoading={isLoading}
         loadingText={t('propertiesPanel.loading') || '로딩...'}
         errorText={loadError}
-        onAdd={() => {
-          // 시트를 먼저 띄우고 대화상자를 열어 닫힘 순간 캔버스 노출 방지
-          setTrimState({ mode: 'create', file: null });
-          addFileInputRef.current?.click();
-        }}
+        onAdd={() => openTrimSheet({ mode: 'create' })}
         addLabel={t('soundPicker.add') || '사운드 추가'}
       />
 
@@ -421,7 +457,7 @@ const SoundPicker = ({
             menu.close();
             if (!item) return;
             if (id === 'edit') {
-              setTrimState({ mode: 'edit', item });
+              openTrimSheet({ mode: 'edit', item });
             } else if (id === 'toggle-hidden') {
               void handleToggleHidden(item);
             } else if (id === 'rename') {

@@ -15,6 +15,12 @@ const mocks = vi.hoisted(() => ({
   ),
   reattach: vi.fn(() => Promise.resolve('done')),
   alert: vi.fn(() => Promise.resolve()),
+  remoteSheetActive: false,
+  remoteSheetFailed: null as null | (() => void),
+  closeRequestedListener: null as
+    | null
+    | ((payload: { requestId: string }) => void),
+  ackClose: vi.fn((_requestId: string) => Promise.resolve(true)),
 }));
 
 vi.mock('@hooks/app/useAppBootstrap', () => ({ useAppBootstrap: vi.fn() }));
@@ -71,15 +77,29 @@ vi.mock('@contexts/useTranslation', () => ({
 }));
 vi.mock('@api/modules/selectionSessionApi', () => ({
   panelWindowApi: {
-    onCloseRequested: () => () => {},
+    onCloseRequested: (listener: (payload: { requestId: string }) => void) => {
+      mocks.closeRequestedListener = listener;
+      return () => {};
+    },
     onPropertyModeRequested: () => () => {},
-    ackClose: vi.fn(() => Promise.resolve()),
+    ackClose: (requestId: string) => mocks.ackClose(requestId),
     applyNativeChrome: vi.fn(() => Promise.resolve(false)),
     startDragging: mocks.startDragging,
   },
 }));
 vi.mock('@stores/grid/usePanelWindowStore', () => ({
   reattachPropertiesPanel: () => mocks.reattach(),
+}));
+vi.mock('@stores/grid/useRemoteSheetStore', () => ({
+  useRemoteSheetStore: (
+    selector: (state: { active: { requestId: string } | null }) => unknown,
+  ) =>
+    selector({ active: mocks.remoteSheetActive ? { requestId: 'r1' } : null }),
+  isRemoteSheetActive: () => mocks.remoteSheetActive,
+  listenRemoteSheetHost: (onFailed: () => void) => {
+    mocks.remoteSheetFailed = onFailed;
+    return () => {};
+  },
 }));
 vi.mock('@stores/grid/panelViewHandoff', () => ({
   applyPanelViewState: mocks.applyPanelViewState,
@@ -119,6 +139,8 @@ describe('detached panel selection sync gate', () => {
     mocks.reattach.mockReset();
     mocks.reattach.mockResolvedValue('done');
     mocks.alert.mockClear();
+    mocks.remoteSheetActive = false;
+    mocks.ackClose.mockClear();
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: { ui: { dialog: { alert: mocks.alert } } },
@@ -284,5 +306,54 @@ describe('detached panel selection sync gate', () => {
     mocks.reattach.mockResolvedValue('busy');
     await act(async () => button.click());
     expect(mocks.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('메인 창 시트가 떠 있으면 패널을 잠그고 재부착 경로를 막는다', async () => {
+    mocks.remoteSheetActive = true;
+    act(() => root.render(<App initialViewState={initialViewState} />));
+    act(() => mocks.readyListener?.());
+
+    const lock = container.querySelector<HTMLElement>(
+      '[data-testid="remote-sheet-lock"]',
+    );
+    expect(lock).not.toBeNull();
+    const panelWrapper = container.querySelector<HTMLElement>(
+      '[data-testid="properties-panel"]',
+    )!.parentElement!;
+    expect(panelWrapper.hasAttribute('inert')).toBe(true);
+
+    // Cmd+W는 무시
+    const closeKey = new KeyboardEvent('keydown', {
+      key: 'w',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => window.dispatchEvent(closeKey));
+    expect(closeKey.defaultPrevented).toBe(false);
+    expect(mocks.reattach).not.toHaveBeenCalled();
+
+    // 닫기 요청은 ack만 하고 재부착은 건너뛴다 - 안 하면 백엔드가 창을 파괴한다
+    await act(async () => mocks.closeRequestedListener?.({ requestId: 'c1' }));
+    expect(mocks.ackClose).toHaveBeenCalledWith('c1');
+    expect(mocks.reattach).not.toHaveBeenCalled();
+  });
+
+  it('메인이 시트 요청을 받지 못하면 안내를 띄운다', async () => {
+    expect(mocks.remoteSheetFailed).not.toBeNull();
+    await act(async () => mocks.remoteSheetFailed?.());
+    expect(mocks.alert).toHaveBeenCalledWith(
+      'propertiesPanel.remoteSheetFailed',
+      {
+        confirmText: 'common.ok',
+      },
+    );
+  });
+
+  it('시트가 없으면 닫기 요청이 ack 뒤 재부착으로 이어진다', async () => {
+    act(() => mocks.readyListener?.());
+    await act(async () => mocks.closeRequestedListener?.({ requestId: 'c2' }));
+    expect(mocks.ackClose).toHaveBeenCalledWith('c2');
+    expect(mocks.reattach).toHaveBeenCalledTimes(1);
   });
 });

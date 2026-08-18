@@ -9,6 +9,7 @@ import {
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import { useRetainedValue } from '@hooks/ui/useRetainedValue';
+import { openRemoteSheet } from '@stores/grid/useRemoteSheetStore';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
   pickerRowClass,
@@ -19,9 +20,9 @@ import {
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { useFontLibrary } from '@hooks/useFontLibrary';
-
 import WebFontEditorSheet from './WebFontEditorSheet';
 import { preloadWebFontEditor } from './webFontEditorLoader';
+
 interface FontPickerProps {
   open: boolean;
   selectedFont: string | null;
@@ -264,7 +265,13 @@ const FontPicker = ({
     fontLibrary.renameFont(font.id, trimmed);
   };
 
+  // 분리 패널 창은 시트가 들어갈 폭이 없어 메인 창에 대신 띄운다. 결과는 기다리지 않는다 -
+  // 저장된 폰트는 설정 변경 이벤트로 이 창에도 들어온다
   const openWebFontModal = (editingId: string | null) => {
+    if (window.__dmn_window_type === 'panel') {
+      void openRemoteSheet({ kind: 'webFont', editingId });
+      return;
+    }
     preloadWebFontEditor();
     startTransition(() => {
       setWebFontModal({ editingId });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type React from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
@@ -9,9 +10,15 @@ import { isMac } from '@utils/core/platform';
 import { usePluginPanelModelMirror } from '@hooks/app/usePluginPanelModelMirror';
 import { useKeyManager } from '@hooks/useKeyManager';
 import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
+import { PANEL_HEADER_HEIGHT } from '@components/main/Grid/PropertiesPanel/panelChrome';
 import PanelDialogHost from './PanelDialogHost';
 import { panelWindowApi } from '@api/modules/selectionSessionApi';
 import { reattachPropertiesPanel } from '@stores/grid/usePanelWindowStore';
+import {
+  isRemoteSheetActive,
+  listenRemoteSheetHost,
+  useRemoteSheetStore,
+} from '@stores/grid/useRemoteSheetStore';
 import { initPluginSettingsMirror } from '@plugins/rpc/pluginSettingsMirror';
 import { startPluginRpcClient } from '@plugins/rpc/pluginRpcClient';
 import { onSelectionSyncReady } from '@src/renderer/editor/runtime/selectionSync';
@@ -139,34 +146,66 @@ const App = ({ initialViewState }: AppProps) => {
   }, [initialViewState]);
   const { handleKeyMappingChange, handleUndo, handleRedo } = useKeyManager();
 
+  // 메인 창에서 대신 띄운 시트가 떠 있는 동안 이 창은 잠근다. 편집이 두 창에서 갈리면 안 된다
+  const remoteSheetActive = useRemoteSheetStore(
+    (state) => state.active !== null,
+  );
+
   useHistoryShortcuts({
-    onUndo: handleUndo,
-    onRedo: handleRedo,
+    onUndo: () => {
+      if (!isRemoteSheetActive()) handleUndo();
+    },
+    onRedo: () => {
+      if (!isRemoteSheetActive()) handleRedo();
+    },
   });
 
-  // 정산 실패로 되돌리지 못하면 알린다. 조용히 끝나면 버튼이 먹통으로 보인다.
-  // 구독 effect가 재등록되지 않도록 문구는 ref로 읽는다
-  const attachFailedMessageRef = useRef({ message: '', confirmText: '' });
+  // 안내 문구는 ref로 읽는다 - 구독 effect가 로케일 변경마다 재등록되지 않게
+  const messagesRef = useRef({
+    attachFailed: '',
+    remoteSheetFailed: '',
+    confirmText: '',
+  });
   useEffect(() => {
-    attachFailedMessageRef.current = {
-      message: t('propertiesPanel.attachFailed'),
+    messagesRef.current = {
+      attachFailed: t('propertiesPanel.attachFailed'),
+      remoteSheetFailed: t('propertiesPanel.remoteSheetFailed'),
       confirmText: t('common.ok'),
     };
   }, [t]);
+
+  // 정산 실패로 되돌리지 못하면 알린다. 조용히 끝나면 버튼이 먹통으로 보인다
   const requestReattach = useCallback(async () => {
     const outcome = await reattachPropertiesPanel();
     if (outcome !== 'blocked' && outcome !== 'failed') return;
-    const { message, confirmText } = attachFailedMessageRef.current;
-    void window.api.ui.dialog.alert(message, { confirmText }).catch(() => {});
+    const { attachFailed, confirmText } = messagesRef.current;
+    void window.api.ui.dialog
+      .alert(attachFailed, { confirmText })
+      .catch(() => {});
   }, []);
 
-  // X 버튼은 닫기가 아니라 재부착 - ack로 백엔드 fallback을 해제하고 게스처 커밋 후 창 반납
+  // 메인이 시트 요청을 받지 못하면(창 없음·응답 없음) 잠금을 풀고 알린다
+  useEffect(
+    () =>
+      listenRemoteSheetHost(() => {
+        const { remoteSheetFailed, confirmText } = messagesRef.current;
+        void window.api.ui.dialog
+          .alert(remoteSheetFailed, { confirmText })
+          .catch(() => {});
+      }),
+    [],
+  );
+
+  // X 버튼은 닫기가 아니라 재부착 - ack로 백엔드 fallback을 해제하고 게스처 커밋 후 창 반납.
+  // ack는 잠금 중에도 해야 한다 - 안 하면 백엔드가 제한 시간 뒤 창을 파괴한다
   useEffect(() => {
     const unsubscribe = panelWindowApi.onCloseRequested(({ requestId }) => {
       void panelWindowApi
         .ackClose(requestId)
         .catch(() => {})
-        .then(() => requestReattach());
+        .then(() => {
+          if (!isRemoteSheetActive()) return requestReattach();
+        });
     });
     return unsubscribe;
   }, [requestReattach]);
@@ -179,7 +218,7 @@ const App = ({ initialViewState }: AppProps) => {
         ? event.metaKey && !event.ctrlKey
         : event.ctrlKey && !event.metaKey;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isHistoryEditorFlushLocked()) return;
+      if (isHistoryEditorFlushLocked() || isRemoteSheetActive()) return;
       if (event.repeat || event.shiftKey || event.altKey) return;
       if (!primaryOnly(event)) return;
       if (event.key.toLowerCase() !== 'w') return;
@@ -215,11 +254,21 @@ const App = ({ initialViewState }: AppProps) => {
     return () => window.removeEventListener('mousedown', handleMouseDown);
   }, []);
 
+  // 잠금 오버레이가 헤더를 덮으므로 창 드래그는 여기서 이어받는다
+  const handleLockOverlayMouseDown = (event: React.MouseEvent) => {
+    if (event.button !== 0 || event.clientY > PANEL_HEADER_HEIGHT) return;
+    event.preventDefault();
+    void panelWindowApi
+      .startDragging(event.clientX, event.clientY)
+      .catch(() => {});
+  };
+
   return (
     <div className="relative w-screen h-screen overflow-hidden rounded-[12px] bg-panel-detached">
       <div
         className="absolute inset-0 transition-opacity duration-fast"
         style={{ opacity: showPanel ? 1 : 0 }}
+        inert={remoteSheetActive || undefined}
       >
         {/* 초기 선택 동기화 전 마운트하면 빈 선택 구간에 "빈 선택→layer 정규화"
             effect가 발화해 핸드오프의 property 모드를 덮음 - 동기화 후 마운트 */}
@@ -233,6 +282,18 @@ const App = ({ initialViewState }: AppProps) => {
           />
         )}
       </div>
+      {remoteSheetActive && (
+        <div
+          role="status"
+          data-testid="remote-sheet-lock"
+          className="absolute inset-0 z-40 flex items-center justify-center backdrop-glass-scrim"
+          onMouseDown={handleLockOverlayMouseDown}
+        >
+          <p className="text-body text-fg-muted">
+            {t('propertiesPanel.remoteSheetActive')}
+          </p>
+        </div>
+      )}
       <PanelDialogHost />
       {/* 프레임리스 창 가장자리 링 - 메인 창의 네이티브 엣지에 대응하는 인셋 라인.
           네이티브 레이어가 같은 라인을 그리면 겹쳐서 진해지므로 여기선 생략 */}
