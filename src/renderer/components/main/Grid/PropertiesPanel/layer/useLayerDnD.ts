@@ -22,10 +22,10 @@ import {
   suspendCustomCursorHover,
 } from '@utils/grid/cursorUtils';
 import { commitLayerDropIntent, type DropAnchors } from './layerReorderIntent';
-import { resolveLayerDropZone } from './layerDropZone';
+import { isNoopLayerDrop, resolveLayerDropZone } from './layerDropZone';
 
 export { resolveDropIndexFromAnchors } from './layerReorderIntent';
-export { resolveLayerDropZone } from './layerDropZone';
+export { isNoopLayerDrop, resolveLayerDropZone } from './layerDropZone';
 
 const toReorderWire = (
   descriptor: import('./layerReorderIntent').LayerDropIntent,
@@ -397,7 +397,19 @@ export function useLayerDnD({
             }
           : {}),
       };
-      setDragOverItemDisplayIndex(dropTarget.indicatorDisplayIndex);
+      // 무변경 자리(자기 블록 위·아래 경계, 소속 동일)는 표식만 생략 - 커밋
+      // 앵커는 그대로 두어 드롭 자체는 정상 정산된다
+      const showIndicator =
+        dropTarget.indicatorDisplayIndex != null &&
+        !isNoopLayerDrop(
+          display,
+          draggingSet,
+          dropTarget.indicatorDisplayIndex,
+          dropTarget.targetGroupId,
+        );
+      setDragOverItemDisplayIndex(
+        showIndicator ? dropTarget.indicatorDisplayIndex : null,
+      );
       setDragOverIntoGroupId(dropTarget.intoGroupId);
       setDragOverTargetGroupId(dropTarget.targetGroupId ?? null);
     };
@@ -696,7 +708,6 @@ export function useLayerDnD({
     dragOverDisplayIndex,
 
     // Ref 접근자 (외부 핸들러에서 참조)
-    draggedItemIdsRef,
     getDidDrag: () => didDragRef.current,
     resetDidDrag: () => {
       didDragRef.current = false;
