@@ -107,7 +107,7 @@ const TabList = () => {
                   className={`group relative w-full h-[28px] shrink-0 flex items-center gap-[4px] px-[8px] rounded-md text-body cursor-pointer transition-colors duration-fast ${
                     isSelected
                       ? 'bg-accent-muted text-fg'
-                      : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
+                      : 'text-fg-muted hover:bg-fill hover:text-fg'
                   }`}
                 >
                   <button

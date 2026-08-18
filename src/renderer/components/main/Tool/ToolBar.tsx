@@ -59,7 +59,7 @@ const ToolBar = ({
       {isSettingsOpen ? (
         <TooltipGroup>
           <div className="flex gap-[8px]">
-            <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[4px]">
+            <div className="flex items-center h-[40px] p-[5px] bg-fill-faint rounded-surface gap-[4px]">
               <FloatingTooltip content={t('tooltip.github')}>
                 <button
                   onClick={() =>
@@ -133,7 +133,7 @@ const TrackSettingButton = ({
 
   return (
     <TooltipGroup>
-      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface">
+      <div className="flex items-center h-[40px] p-[5px] bg-fill-faint rounded-surface">
         <FloatingTooltip content={t('tooltip.trackSettings') || '트랙 설정'}>
           <button
             type="button"

@@ -308,9 +308,7 @@ const CounterAnimationPicker = ({
                 }
               }}
               className={`${pickerRowClass} cursor-pointer ${
-                isSelected
-                  ? 'bg-surface-active text-fg'
-                  : 'text-fg hover:bg-surface-hover'
+                isSelected ? 'bg-fill-hover text-fg' : 'text-fg hover:bg-fill'
               }`}
               title={displayName}
             >

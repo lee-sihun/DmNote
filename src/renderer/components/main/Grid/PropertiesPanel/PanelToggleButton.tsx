@@ -92,7 +92,7 @@ const PanelToggleButton = ({
       <button
         ref={ref}
         {...togglePress}
-        className="dmn-panel-toggle pointer-events-auto relative w-[32px] h-[32px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
+        className="dmn-panel-toggle pointer-events-auto relative w-[32px] h-[32px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors"
         data-open={visualOpen ? 'true' : 'false'}
         title={label}
         aria-label={label}

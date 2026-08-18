@@ -389,7 +389,7 @@ const WebFontInputModal = ({
               {t('webFontInput.cssLabel') || '@font-face CSS'}
             </p>
           </div>
-          <div className="flex-1 min-h-0 rounded-md bg-inset overflow-hidden">
+          <div className="flex-1 min-h-0 rounded-md bg-inset-solid overflow-hidden">
             <div
               ref={editorContainerRef}
               className="h-full webfont-cm-editor"

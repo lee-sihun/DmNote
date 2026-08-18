@@ -957,7 +957,7 @@ const Settings = ({
     <div className="relative w-full h-full">
       <div
         ref={scrollContainerRef}
-        className="settings-content-scroll w-full h-full flex flex-col py-[12px] px-[12px] gap-[12px] overflow-y-auto bg-app"
+        className="settings-content-scroll w-full h-full flex flex-col py-[12px] px-[12px] gap-[12px] overflow-y-auto bg-panel"
       >
         {/* 설정 */}
         <div className="flex flex-row gap-[12px]">

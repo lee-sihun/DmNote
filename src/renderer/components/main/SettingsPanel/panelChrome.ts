@@ -15,11 +15,11 @@ export const FILL_INTERACTIVE_CLASS =
 export const FILL_DISABLED_CLASS =
   'bg-fill-faint text-fg-disabled cursor-not-allowed';
 
-// 꺼짐 알약 - 면을 빼서 상태를 가른다. 켜짐(bg-fill 8%)과 면 있는 꺼짐
-// (bg-fill-faint 6%)은 알파 2% 차이라 긴 목록에서 구분되지 않는다.
+// 꺼짐 알약 - 면을 빼서 상태를 가른다. 켜짐(bg-fill 7.2%)과 면 있는 꺼짐
+// (bg-fill-faint 3.5%)은 알파 3.7%p 차이라 긴 목록에서 구분되지 않는다.
 // 면의 유무는 밝기 단계가 아니라 범주 차이라 스캔 한 번에 잡힌다.
 // 글자는 조작 가능한 컨트롤이라 muted 아래로 못 내린다 - 목록 배경에서
-// faint는 3.99:1, disabled는 2.04:1로 본문 기준 4.5:1에 미달한다.
+// faint와 disabled 모두 본문 기준 4.5:1에 미달한다.
 // 호버에서 면이 깔리면 배경이 밝아지므로 글자도 fg까지 올려야 기준을 지킨다
 export const FILL_QUIET_CLASS =
   'text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover';
@@ -51,7 +51,7 @@ export const PANEL_ROW_NAME_CLASS =
 // 행 이름 밝기 - 평소 한 단계 낮추고 행 호버에서 올려 메뉴가 있음을 알림
 export const PANEL_ROW_NAME_ACTIVE_CLASS = 'text-fg-muted group-hover:text-fg';
 // 꺼짐 행 이름 - 한 단계만 내린다. 더 내리면 목록 배경에서 대비가 무너지는데
-// (disabled 2.04:1) 기준을 지키는 가장 어두운 회색은 muted보다 10%밖에 안 어두워
+// (disabled는 본문 기준 미달) 기준을 지키는 가장 어두운 회색은 muted보다 10%밖에 안 어두워
 // '꺼짐'으로 읽히지도 않는다. 상태 신호는 트레일링 알약의 면이 소유하고
 // 이름은 밝기를 한 칸 낮춰 거드는 역할만 한다
 export const PANEL_ROW_NAME_INACTIVE_CLASS =

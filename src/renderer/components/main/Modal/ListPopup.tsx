@@ -400,7 +400,7 @@ const MenuItemRow = ({
         className={`w-full min-w-[96px] h-[26px] px-[8px] rounded-md flex items-center gap-[6px] transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
-            : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
+            : 'hover:bg-fill active:bg-fill-active cursor-pointer'
         }`}
       >
         {/* 좌측 체크 영역 — 체크 가능한 목록에서만 렌더 */}
@@ -442,7 +442,7 @@ const MenuItemRow = ({
             height="10"
             viewBox="0 0 5 10"
             fill="none"
-            className="flex-shrink-0 text-white/45"
+            className="flex-shrink-0 text-fg-faint"
           >
             <path
               d="M1 1.5L4 5L1 8.5"

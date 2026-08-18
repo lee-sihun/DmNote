@@ -157,7 +157,7 @@ const App = ({ initialViewState }: AppProps) => {
   }, []);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden rounded-[12px] bg-[rgb(14,14,17)]">
+    <div className="relative w-screen h-screen overflow-hidden rounded-[12px] bg-panel-detached">
       <div
         className="absolute inset-0 transition-opacity duration-fast"
         style={{ opacity: showPanel ? 1 : 0 }}

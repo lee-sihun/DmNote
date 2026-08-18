@@ -169,11 +169,8 @@ const ImagePicker = ({
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage:
-              'linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)',
-            backgroundSize: '10px 10px',
-            backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px',
-            backgroundColor: '#fff',
+            background:
+              'var(--ui-checker-pattern) center / var(--ui-checker-size) var(--ui-checker-size) repeat',
           }}
         />
 
@@ -208,7 +205,7 @@ const ImagePicker = ({
               handleReset();
             }}
             title={t('imagePicker.reset')}
-            className="absolute top-[4px] right-[4px] z-10 w-[18px] h-[18px] flex items-center justify-center rounded-[5px] bg-glass-dim backdrop-glass-popup shadow-elevation-chrome text-white/45 hover:text-white/90 opacity-0 group-hover:opacity-100 transition-opacity duration-fast"
+            className="absolute top-[4px] right-[4px] z-10 w-[18px] h-[18px] flex items-center justify-center rounded-[5px] bg-glass-dim backdrop-glass-popup shadow-elevation-chrome text-fg-faint hover:text-fg opacity-0 group-hover:opacity-100 transition-opacity duration-fast"
           >
             <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
               <path

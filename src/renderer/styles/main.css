@@ -111,7 +111,7 @@ body.dmn-dragging * {
    블러는 첫 프레임부터 상수, 틴트만 페이드. Windows에서 모달 연 채
    키 연타 프레임 실측이 유지 조건 */
 .backdrop-glass-scrim {
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.6);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
@@ -137,15 +137,17 @@ body.dmn-dragging * {
 }
 
 /* 투명도 축소 설정 존중 — 남는 라이브 글래스(모달 카드·팝오버)를 고알파 솔리드로 강등
-   틴트 토큰만 요소 스코프에서 승격해 라운딩·인셋 링 재질은 그대로 유지 */
+   틴트 토큰만 요소 스코프에서 승격해 라운딩·인셋 링 재질은 그대로 유지.
+   값은 캔버스 위 라이브 합성 결과 기준 — 고알파 솔리드는 뒷면을 거의 안 받으므로
+   스크림 위 모달에서는 라이브보다 한 톤 밝게 뜬다. blur 없이는 맥락 반영이 불가능 */
 @media (prefers-reduced-transparency: reduce) {
   .backdrop-glass,
   .backdrop-glass-popup {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    --ui-glass: rgba(14, 14, 17, 0.96);
-    --ui-glass-heavy: rgba(14, 14, 17, 0.96);
-    --ui-glass-dim: rgba(12, 12, 14, 0.94);
+    --ui-glass: rgba(26, 26, 30, 0.96);
+    --ui-glass-heavy: rgba(32, 32, 36, 0.96);
+    --ui-glass-dim: rgba(22, 22, 26, 0.94);
   }
 
   /* 스크림은 블러만 끄고 알파 딤으로 폴백 */
@@ -162,7 +164,7 @@ body.dmn-dragging * {
 
   /* backdrop 클래스 없는 글래스 틴트 사용처(패널 토글 칩)도 동일 승격 */
   .bg-glass-panel {
-    --ui-glass-panel: rgba(14, 14, 17, 0.96);
+    --ui-glass-panel: rgba(25, 25, 29, 0.96);
   }
 }
 
@@ -403,6 +405,22 @@ body.dmn-dragging * {
     height: var(--ui-toggle-thumb-size);
     margin-top: 0;
   }
+
+  /* 세그먼트 인디케이터 — 토글 노브와 같은 성격의 슬라이딩이라 함께 끈다.
+     전이를 소유한 .dmn-segment-thumb 규칙이 이 블록보다 아래에 있어 같은 특이도로는
+     밀린다. 속성 선택자로 한 단계 올려 순서와 무관하게 이기게 한다.
+     승격(will-change)은 유지 — 모션을 끄는 것과 레이어 승격은 별개고,
+     끈 상태에서도 페인트 비용은 낮은 쪽이 낫다 */
+  .dmn-segment-thumb[aria-hidden] {
+    transition: none;
+  }
+}
+
+/* 세그먼트 인디케이터 — 전역 모션 다이얼과 분리. 근거는 tokens.css 참조.
+   전이 선언은 여기가 소유한다 — 컴포넌트에 transition-* 유틸을 다시 붙이면
+   같은 특이도로 뒤에서 덮어써 이 커브가 죽는다 */
+.dmn-segment-thumb {
+  transition: transform var(--ui-segment-duration) var(--ui-segment-ease);
 }
 
 /* 눈 토글의 사선 드로우 모션은 EyeToggleIcon.tsx에서 WAAPI로 처리 —
@@ -612,7 +630,8 @@ body.dmn-dragging * {
   height: 100%;
 }
 
-/* 크롬 색은 사이드 패널과 같은 토큰 — 웰(bg-inset)이 배경을 소유, 에디터는 투명 */
+/* 크롬 색은 사이드 패널과 같은 토큰 — 웰(bg-inset-solid)이 배경을 소유, 에디터는 투명.
+   웰이 알파면 모달 카드 밝기를 그대로 물려받아 신택스 팔레트 대비가 무너진다 */
 .webfont-cm-editor .cm-editor {
   height: 100%;
   background: transparent;
@@ -662,10 +681,12 @@ body.dmn-dragging * {
   position: relative;
 }
 
-/* 웰보다 한 톤 어두운 솔리드 스트립 — 기존 인셋 겹침(검정 30%)과 같은 톤이지만
-   불투명이라 가로 스크롤 시 밑을 지나는 텍스트가 비치지 않음 */
+/* 웰보다 한 톤 어두운 솔리드 스트립 — 불투명이라 가로 스크롤 시
+   밑을 지나는 텍스트가 비치지 않음.
+   검정 혼합 대신 앱 배경을 쓴다 — 혼합 비율은 웰이 밝아질수록 낙차가 커져
+   램프를 올릴 때마다 거터만 유독 깊게 파인다 */
 .webfont-cm-editor .cm-gutters {
-  background: color-mix(in srgb, var(--ui-bg-inset-solid) 70%, black);
+  background: var(--ui-bg-app);
   color: var(--ui-fg-faint);
   border: none;
 }

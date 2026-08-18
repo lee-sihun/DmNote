@@ -1031,7 +1031,7 @@ function PaletteSlot({ color, type, onClick }: PaletteSlotProps) {
         ? color
         : `#${color}`
       : isEmpty
-      ? 'var(--ui-bg-surface)'
+      ? 'var(--ui-fill-faint)'
       : undefined;
 
   // 툴팁 텍스트 생성

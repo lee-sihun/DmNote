@@ -1028,7 +1028,7 @@ const CounterAnimationEditorModal = ({
                   y1={startW.y}
                   x2={p1w.x}
                   y2={p1w.y}
-                  stroke="#505058"
+                  stroke="var(--ui-fg-disabled)"
                   strokeWidth="1.2"
                   vectorEffect="non-scaling-stroke"
                 />
@@ -1037,7 +1037,7 @@ const CounterAnimationEditorModal = ({
                   y1={endW.y}
                   x2={p2w.x}
                   y2={p2w.y}
-                  stroke="#505058"
+                  stroke="var(--ui-fg-disabled)"
                   strokeWidth="1.2"
                   vectorEffect="non-scaling-stroke"
                 />

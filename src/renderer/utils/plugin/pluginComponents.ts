@@ -283,8 +283,8 @@ export function createDropdown(options: DropdownOptions): string {
       (opt) => `
     <button type="button" class="text-left w-full h-[23px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
       selected === opt.value
-        ? 'bg-surface-active text-fg pointer-events-none'
-        : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
+        ? 'bg-fill-hover text-fg pointer-events-none'
+        : 'text-fg-muted hover:bg-fill hover:text-fg'
     }" data-value="${opt.value}">
       <span class="truncate">${opt.label}</span>
     </button>

@@ -86,8 +86,8 @@ const KeySlotPicker = ({
             }
             className={`group flex items-center shrink-0 h-[23px] rounded-md transition-colors duration-fast ${
               isListening && listenIndex === index
-                ? 'bg-surface-active'
-                : 'hover:bg-surface-hover'
+                ? 'bg-fill-hover'
+                : 'hover:bg-fill'
             }`}
           >
             <button
@@ -121,8 +121,8 @@ const KeySlotPicker = ({
             }
             className={`flex items-center shrink-0 h-[23px] px-[8px] rounded-md text-body text-left transition-colors duration-fast ${
               isListening && listenIndex === null
-                ? 'bg-surface-active text-fg'
-                : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
+                ? 'bg-fill-hover text-fg'
+                : 'text-fg-muted hover:bg-fill hover:text-fg'
             }`}
           >
             <span className="truncate">

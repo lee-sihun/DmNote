@@ -659,12 +659,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       ${isBeingDragged ? 'opacity-30' : ''}
                       ${
                         isDropInto
-                          ? 'bg-surface-hover text-fg-muted'
+                          ? 'bg-fill-hover text-fg-muted'
                           : isSelected
                           ? 'bg-accent-muted text-fg'
                           : dnd.isDragging
                           ? 'text-fg-muted'
-                          : 'hover:bg-surface-hover text-fg-muted'
+                          : 'hover:bg-fill text-fg-muted'
                       }
                     `}
                   >
@@ -762,7 +762,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         ? 'bg-accent-muted text-fg'
                         : dnd.isDragging
                         ? 'text-fg-muted'
-                        : 'hover:bg-surface-hover text-fg-muted'
+                        : 'hover:bg-fill text-fg-muted'
                     }
                   `}
                 >

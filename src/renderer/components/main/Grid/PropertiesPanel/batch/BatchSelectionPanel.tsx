@@ -422,7 +422,7 @@ const BatchPanelHeader: React.FC<BatchPanelHeaderProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
@@ -919,7 +919,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     );
     if (isMixed)
       return {
-        color: '#666',
+        color: 'var(--ui-fg-disabled)',
         gradient: undefined,
         opacity: 1,
         label: 'Mixed',
@@ -992,7 +992,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     );
     if (isMixed)
       return {
-        color: '#666',
+        color: 'var(--ui-fg-disabled)',
         gradient: undefined,
         opacity: 1,
         label: 'Mixed',
@@ -1051,7 +1051,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     const { isMixed, value } = mixedFn((pos) => pos.noteBorderColor, '#FFFFFF');
     if (isMixed)
       return {
-        color: '#666',
+        color: 'var(--ui-fg-disabled)',
         gradient: undefined,
         opacity: 1,
         label: 'Mixed',

@@ -119,7 +119,7 @@ const PanelHeaderActions = ({
         <button
           {...detachPress}
           onMouseDown={(event) => event.preventDefault()}
-          className="pointer-events-auto w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors text-white/45 hover:text-white/90 cursor-pointer"
+          className="pointer-events-auto w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors text-fg-faint hover:text-fg cursor-pointer"
           title={detachLabel}
           aria-label={detachLabel}
         >
@@ -133,7 +133,7 @@ const PanelHeaderActions = ({
           className={`pointer-events-auto w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors ${
             modeToggleDisabled
               ? 'text-fg-disabled cursor-not-allowed'
-              : 'text-white/45 hover:text-white/90 cursor-pointer'
+              : 'text-fg-faint hover:text-fg cursor-pointer'
           }`}
           title={modeToggleLabel}
           aria-label={modeToggleLabel}

@@ -1828,8 +1828,8 @@ const FontStyleButton = ({
     onCommit: onChange,
   });
   const buttonClass = visualActive
-    ? 'bg-fill-active text-fg'
-    : 'text-fg-faint hover:bg-surface-hover hover:text-fg-muted';
+    ? 'bg-fill-hover text-fg'
+    : 'text-fg-faint hover:bg-fill hover:text-fg-muted';
 
   return (
     <button
