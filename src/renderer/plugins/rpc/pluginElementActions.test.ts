@@ -1810,6 +1810,7 @@ describe('plugin element panel queue', () => {
 
   it('soundPath outcome-unknown은 snapshot만 요청하고 옛 path를 재전송하지 않는다', async () => {
     mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     await expect(
       actions.patchSoundPathViaAuthority(
@@ -1820,6 +1821,11 @@ describe('plugin element panel queue', () => {
 
     expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
     expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+    // 버려진 결과는 흔적을 남긴다 - 무음이면 패널 조작이 먹통으로 보인다
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('dropped: unknown'),
+    );
+    warn.mockRestore();
   });
 
   it('soundEnabled outcome-unknown은 snapshot만 요청하고 값을 재전송하지 않는다', async () => {

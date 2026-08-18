@@ -33,7 +33,11 @@ import type {
   EditorNotePaintPropertyPatchV1,
 } from '@src/types/editor';
 
-import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
+import {
+  getPluginAuthorityGeneration,
+  sendPluginRpc,
+  type PluginRpcOutcome,
+} from './pluginRpcClient';
 
 export const PLUGIN_RPC_OPERATIONS = {
   setHidden: 'elements:setHidden',
@@ -199,8 +203,20 @@ const sendQueuedOp = async (op: QueuedElementOp) => {
   return outcome;
 };
 
+const describeOutcome = (outcome: PluginRpcOutcome) =>
+  outcome.kind === 'error' ? outcome.errorCode : outcome.kind;
+
 const drainQueue = async (): Promise<boolean> => {
   let succeeded = true;
+  // 버리는 결과도 흔적은 남긴다. 무음이면 패널 조작이 그냥 먹통으로 보인다.
+  // 로그와 resolve를 한 곳에서 짝지어 어느 분기든 빠뜨리지 않는다
+  const dropOp = (op: QueuedElementOp, reason: string) => {
+    console.warn(`Plugin RPC ${op.operation} dropped: ${reason}`);
+    succeeded = false;
+    op.resolve?.(false);
+    op.resolvePayload?.(null);
+    requestFreshSnapshot();
+  };
   while (outboundQueue.length > 0) {
     const op = outboundQueue.shift()!;
     const outcome = await sendQueuedOp(op);
@@ -219,10 +235,7 @@ const drainQueue = async (): Promise<boolean> => {
       continue;
     }
     if (op.retryPolicy === 'none') {
-      succeeded = false;
-      op.resolve?.(false);
-      op.resolvePayload?.(null);
-      requestFreshSnapshot();
+      dropOp(op, describeOutcome(outcome));
       continue;
     }
     const retryableStaleOutcome =
@@ -231,10 +244,7 @@ const drainQueue = async (): Promise<boolean> => {
       (outcome.errorCode === 'MODEL_REVISION_STALE' ||
         outcome.errorCode === 'PLUGIN_MODEL_REVISION_CONFLICT');
     if (op.retryPolicy === 'staleOnly' && !retryableStaleOutcome) {
-      succeeded = false;
-      op.resolve?.(false);
-      op.resolvePayload?.(null);
-      requestFreshSnapshot();
+      dropOp(op, describeOutcome(outcome));
       continue;
     }
     const retryableDeleteOutcome =
@@ -244,10 +254,7 @@ const drainQueue = async (): Promise<boolean> => {
           (outcome.errorCode === 'MODEL_REVISION_STALE' ||
             outcome.errorCode === 'PLUGIN_MODEL_REVISION_CONFLICT')));
     if (op.retryPolicy === 'idempotentDelete' && !retryableDeleteOutcome) {
-      succeeded = false;
-      op.resolve?.(false);
-      op.resolvePayload?.(null);
-      requestFreshSnapshot();
+      dropOp(op, describeOutcome(outcome));
       continue;
     }
     if (outcome.kind === 'error') {
@@ -261,6 +268,10 @@ const drainQueue = async (): Promise<boolean> => {
       op.authorityGeneration !== undefined &&
       op.authorityGeneration !== getPluginAuthorityGeneration()
     ) {
+      // 스냅샷은 이미 요청했으므로 다시 부르지 않는다
+      console.warn(
+        `Plugin RPC ${op.operation} dropped: authority generation changed`,
+      );
       succeeded = false;
       op.resolve?.(false);
       op.resolvePayload?.(null);
@@ -272,15 +283,7 @@ const drainQueue = async (): Promise<boolean> => {
       op.resolvePayload?.(retry.response.payload ?? null);
       continue;
     }
-    succeeded = false;
-    op.resolve?.(false);
-    op.resolvePayload?.(null);
-    if (retry.kind === 'error') {
-      console.error(
-        `Plugin RPC ${op.operation} retry failed: ${retry.errorCode}`,
-      );
-    }
-    requestFreshSnapshot();
+    dropOp(op, `retry ${describeOutcome(retry)}`);
   }
   return succeeded;
 };
