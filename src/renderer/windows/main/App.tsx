@@ -380,6 +380,14 @@ export default function App() {
     });
   };
 
+  // 정산 실패로 분리하지 못하면 알린다. 조용히 끝나면 버튼이 먹통으로 보인다
+  const requestPanelDetach = async () => {
+    const outcome = await detachPropertiesPanel();
+    if (outcome === 'blocked' || outcome === 'failed') {
+      showAlert(t('propertiesPanel.detachFailed'), t('common.ok'));
+    }
+  };
+
   const handleUpdatePrimaryAction = async () => {
     if (!updateInfo) return;
 
@@ -712,7 +720,7 @@ export default function App() {
               <PropertiesPanel
                 onKeyMappingChange={handleKeyMappingChange}
                 detachAction="detach"
-                onDetachAction={() => void detachPropertiesPanel()}
+                onDetachAction={() => void requestPanelDetach()}
               />
             )}
           </div>

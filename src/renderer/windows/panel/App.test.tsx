@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   startDragging: vi.fn((_clientX: number, _clientY: number) =>
     Promise.resolve(),
   ),
+  reattach: vi.fn(() => Promise.resolve('done')),
+  alert: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('@hooks/app/useAppBootstrap', () => ({ useAppBootstrap: vi.fn() }));
@@ -39,14 +41,24 @@ vi.mock('@hooks/useKeyManager', () => ({
   }),
 }));
 vi.mock('@components/main/Grid/PropertiesPanel', () => ({
-  default: ({ selectionSyncReady }: { selectionSyncReady?: boolean }) => (
+  default: ({
+    selectionSyncReady,
+    onDetachAction,
+  }: {
+    selectionSyncReady?: boolean;
+    onDetachAction?: () => void;
+  }) => (
     <div data-testid="properties-panel">
       <div
         className="dmn-panel-header"
         data-testid="panel-header"
         data-sync-ready={selectionSyncReady ? 'true' : 'false'}
       >
-        <button type="button" data-testid="panel-header-button">
+        <button
+          type="button"
+          data-testid="panel-header-button"
+          onClick={onDetachAction}
+        >
           action
         </button>
       </div>
@@ -54,6 +66,9 @@ vi.mock('@components/main/Grid/PropertiesPanel', () => ({
   ),
 }));
 vi.mock('./PanelDialogHost', () => ({ default: () => null }));
+vi.mock('@contexts/useTranslation', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock('@api/modules/selectionSessionApi', () => ({
   panelWindowApi: {
     onCloseRequested: () => () => {},
@@ -64,7 +79,7 @@ vi.mock('@api/modules/selectionSessionApi', () => ({
   },
 }));
 vi.mock('@stores/grid/usePanelWindowStore', () => ({
-  reattachPropertiesPanel: vi.fn(() => Promise.resolve()),
+  reattachPropertiesPanel: () => mocks.reattach(),
 }));
 vi.mock('@stores/grid/panelViewHandoff', () => ({
   applyPanelViewState: mocks.applyPanelViewState,
@@ -101,6 +116,13 @@ describe('detached panel selection sync gate', () => {
     mocks.handleRedo.mockClear();
     mocks.applyPanelViewState.mockClear();
     mocks.startDragging.mockClear();
+    mocks.reattach.mockReset();
+    mocks.reattach.mockResolvedValue('done');
+    mocks.alert.mockClear();
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: { ui: { dialog: { alert: mocks.alert } } },
+    });
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -240,5 +262,27 @@ describe('detached panel selection sync gate', () => {
     expect(undoEvent.defaultPrevented).toBe(false);
     expect(mocks.handleUndo).not.toHaveBeenCalled();
     input.remove();
+  });
+
+  it('정산 실패로 되돌리지 못하면 알리고, 정상 복귀에는 알리지 않는다', async () => {
+    act(() => mocks.readyListener?.());
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-testid="panel-header-button"]',
+    )!;
+
+    await act(async () => button.click());
+    expect(mocks.reattach).toHaveBeenCalledTimes(1);
+    expect(mocks.alert).not.toHaveBeenCalled();
+
+    mocks.reattach.mockResolvedValue('blocked');
+    await act(async () => button.click());
+    expect(mocks.alert).toHaveBeenCalledWith('propertiesPanel.attachFailed', {
+      confirmText: 'common.ok',
+    });
+
+    // 진행 중 중복 호출은 사용자 잘못이 아니므로 조용히 넘어간다
+    mocks.reattach.mockResolvedValue('busy');
+    await act(async () => button.click());
+    expect(mocks.alert).toHaveBeenCalledTimes(1);
   });
 });

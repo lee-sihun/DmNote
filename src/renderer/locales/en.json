@@ -565,6 +565,8 @@
     "noLayers": "No layers",
     "detachPanel": "Detach panel to window",
     "attachPanel": "Attach panel to main window",
+    "detachFailed": "Couldn't detach the panel. A pending edit couldn't be committed or the window switch failed.",
+    "attachFailed": "Couldn't attach the panel. A pending edit couldn't be committed or the window switch failed.",
     "detachedGradientHint": "The canvas stays in the main window. Attach the panel again to use on-canvas handles.",
     "switchToLayer": "Switch to Layer Panel",
     "switchToProperty": "Switch to Property Panel",

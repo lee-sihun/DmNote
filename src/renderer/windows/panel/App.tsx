@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from '@contexts/useTranslation';
 
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
@@ -33,6 +34,7 @@ interface AppProps {
 }
 
 const App = ({ initialViewState }: AppProps) => {
+  const { t } = useTranslation();
   useAppBootstrap();
   useCustomCssInjection();
   // Cmd+R/F5 등 브라우저 기본 단축키 차단 - 문서 reload는 뷰 상태를 잃음
@@ -142,16 +144,32 @@ const App = ({ initialViewState }: AppProps) => {
     onRedo: handleRedo,
   });
 
+  // 정산 실패로 되돌리지 못하면 알린다. 조용히 끝나면 버튼이 먹통으로 보인다.
+  // 구독 effect가 재등록되지 않도록 문구는 ref로 읽는다
+  const attachFailedMessageRef = useRef({ message: '', confirmText: '' });
+  useEffect(() => {
+    attachFailedMessageRef.current = {
+      message: t('propertiesPanel.attachFailed'),
+      confirmText: t('common.ok'),
+    };
+  }, [t]);
+  const requestReattach = useCallback(async () => {
+    const outcome = await reattachPropertiesPanel();
+    if (outcome !== 'blocked' && outcome !== 'failed') return;
+    const { message, confirmText } = attachFailedMessageRef.current;
+    void window.api.ui.dialog.alert(message, { confirmText }).catch(() => {});
+  }, []);
+
   // X 버튼은 닫기가 아니라 재부착 - ack로 백엔드 fallback을 해제하고 게스처 커밋 후 창 반납
   useEffect(() => {
     const unsubscribe = panelWindowApi.onCloseRequested(({ requestId }) => {
       void panelWindowApi
         .ackClose(requestId)
         .catch(() => {})
-        .then(() => reattachPropertiesPanel());
+        .then(() => requestReattach());
     });
     return unsubscribe;
-  }, []);
+  }, [requestReattach]);
 
   // 프레임리스라 네이티브 닫기 수단이 없음 - 창 닫기 단축키를 재부착으로 배선
   // 플랫폼 primary modifier만 인정(macOS Cmd, 그 외 Ctrl), 다른 수식키·반복 제외
@@ -166,11 +184,11 @@ const App = ({ initialViewState }: AppProps) => {
       if (!primaryOnly(event)) return;
       if (event.key.toLowerCase() !== 'w') return;
       event.preventDefault();
-      void reattachPropertiesPanel();
+      void requestReattach();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [requestReattach]);
 
   // 프레임리스 창 이동: 패널 헤더의 빈 영역에서만 드래그 시작
   // 제목 span(더블클릭 이름 변경)·버튼 등 자식 요소 위에서는 시작하지 않음
@@ -209,7 +227,7 @@ const App = ({ initialViewState }: AppProps) => {
           <PropertiesPanel
             onKeyMappingChange={handleKeyMappingChange}
             detachAction="reattach"
-            onDetachAction={() => void reattachPropertiesPanel()}
+            onDetachAction={() => void requestReattach()}
             frameVariant="window"
             selectionSyncReady={selectionSyncReady}
           />

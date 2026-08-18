@@ -565,6 +565,8 @@
     "noLayers": "레이어 없음",
     "detachPanel": "패널을 별도 창으로 분리",
     "attachPanel": "패널을 메인 창에 부착",
+    "detachFailed": "패널을 분리하지 못했습니다. 미확정 편집을 정리할 수 없거나 창 전환에 실패했습니다.",
+    "attachFailed": "패널을 부착하지 못했습니다. 미확정 편집을 정리할 수 없거나 창 전환에 실패했습니다.",
     "detachedGradientHint": "캔버스가 메인 창에 있어 온캔버스 핸들은 패널을 다시 부착한 뒤 사용할 수 있습니다.",
     "switchToLayer": "레이어 패널로 전환",
     "switchToProperty": "속성 패널로 전환",
