@@ -59,6 +59,33 @@ pub fn panel_window_start_dragging(app: AppHandle, client_x: f64, client_y: f64)
     Ok(())
 }
 
+// 창 가장자리 표면을 네이티브 레이어가 그리게 한다 - 리사이즈 프레임을 못 따라오는
+// 웹 페인트 대신 면과 1px 인셋 라인을 컴포지터가 소유.
+// 색은 CSS 토큰이 단일 출처라 렌더러가 계산값(sRGB 0~1)을 넘겨준다.
+// 반환값이 true면 렌더러는 CSS 링을 그리지 않는다 (겹치면 라인이 진해짐)
+#[tauri::command]
+pub fn panel_window_apply_native_chrome(
+    app: AppHandle,
+    window: WebviewWindow,
+    fill: [f64; 4],
+    line: [f64; 4],
+) -> CmdResult<bool> {
+    if window.label() != crate::state::PANEL_LABEL {
+        return Err(anyhow!("native chrome can only be applied from panel").into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Ok(crate::state::macos_window_corners::apply_surface_chrome(
+            &app, &window, fill, line,
+        ))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, fill, line);
+        Ok(false)
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
 fn start_panel_window_dragging(
     window: &WebviewWindow,

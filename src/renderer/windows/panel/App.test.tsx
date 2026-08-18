@@ -59,6 +59,7 @@ vi.mock('@api/modules/selectionSessionApi', () => ({
     onCloseRequested: () => () => {},
     onPropertyModeRequested: () => () => {},
     ackClose: vi.fn(() => Promise.resolve()),
+    applyNativeChrome: vi.fn(() => Promise.resolve(false)),
     startDragging: mocks.startDragging,
   },
 }));

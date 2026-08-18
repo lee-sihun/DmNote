@@ -18,6 +18,7 @@ import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditor
 import { applyPanelViewState } from '@stores/grid/panelViewHandoff';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { readTokenColor } from './nativeChrome';
 
 import type { PanelViewState } from '@api/modules/selectionSessionApi';
 
@@ -58,6 +59,46 @@ const App = ({ initialViewState }: AppProps) => {
     window.addEventListener('blur', settle);
     return () => window.removeEventListener('blur', settle);
   }, []);
+  // 창 가장자리 표면을 네이티브 레이어에 위임
+  // 상단 엣지를 끌면 창은 즉시 커지는데 콘텐츠는 옛 높이라 바닥에 띠가 생기고,
+  // 웹이 그리는 인셋 링은 그 옛 아래끝에 잔상으로 남는다.
+  // macOS는 적용을 전제하고 시작 - 첫 페인트에 CSS 링이 한 프레임 겹쳐 진해지는 것 방지
+  const [nativeChrome, setNativeChrome] = useState(() => isMac());
+  useEffect(() => {
+    let sent = '';
+    let scheduled = 0;
+    const sync = () => {
+      const fill = readTokenColor('--ui-bg-panel-detached');
+      const line = readTokenColor('--ui-line');
+      if (!fill || !line) {
+        setNativeChrome(false);
+        return;
+      }
+      const signature = `${fill.join()}|${line.join()}`;
+      if (signature === sent) return;
+      sent = signature;
+      void panelWindowApi
+        .applyNativeChrome(fill, line)
+        .then((applied) => setNativeChrome(applied))
+        .catch(() => setNativeChrome(false));
+    };
+    sync();
+    // 커스텀 CSS가 토큰을 덮으면 네이티브 색도 따라가야 함 - 주입은 head를 건드린다
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(scheduled);
+      scheduled = requestAnimationFrame(sync);
+    });
+    observer.observe(document.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(scheduled);
+    };
+  }, []);
+
   useEffect(
     () =>
       panelWindowApi.onPropertyModeRequested(() => {
@@ -175,11 +216,14 @@ const App = ({ initialViewState }: AppProps) => {
         )}
       </div>
       <PanelDialogHost />
-      {/* 프레임리스 창 가장자리 링 - 메인 창의 네이티브 엣지에 대응하는 인셋 라인 */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[12px] shadow-[inset_0_0_0_1px_var(--ui-line)] z-50"
-      />
+      {/* 프레임리스 창 가장자리 링 - 메인 창의 네이티브 엣지에 대응하는 인셋 라인.
+          네이티브 레이어가 같은 라인을 그리면 겹쳐서 진해지므로 여기선 생략 */}
+      {!nativeChrome && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-[12px] shadow-[inset_0_0_0_1px_var(--ui-line)] z-50"
+        />
+      )}
     </div>
   );
 };

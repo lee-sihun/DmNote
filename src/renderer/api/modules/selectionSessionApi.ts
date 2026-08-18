@@ -191,6 +191,12 @@ export const panelWindowApi = {
   isOpen: () => invoke<boolean>('panel_window_is_open'),
   startDragging: (clientX: number, clientY: number) =>
     invoke<void>('panel_window_start_dragging', { clientX, clientY }),
+  // 창 가장자리 표면을 네이티브 레이어에 위임 - 리사이즈 프레임을 못 따라오는
+  // 웹 페인트 대신 면과 1px 라인을 컴포지터가 그린다. true면 CSS 링은 그리지 않음
+  applyNativeChrome: (
+    fill: [number, number, number, number],
+    line: [number, number, number, number],
+  ) => invoke<boolean>('panel_window_apply_native_chrome', { fill, line }),
   // X 버튼 ack - 제한 시간 내 미호출 시 백엔드가 fallback으로 창을 닫음
   ackClose: (requestId: string) =>
     invoke<boolean>('panel_window_close_ack', { requestId }),

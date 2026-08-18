@@ -3303,6 +3303,10 @@ impl AppState {
         app: &AppHandle,
         initial_max_height: f64,
     ) {
+        // 웹 콘텐츠가 그리는 라운딩은 리사이즈 프레임을 못 따라옴 - 실루엣은 컴포지터가 소유
+        #[cfg(target_os = "macos")]
+        super::macos_window_corners::apply_rounded_corners(app, window);
+
         let bounds_session = self
             .panel_bounds_persistence
             .attach(window, initial_max_height);

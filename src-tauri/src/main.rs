@@ -309,6 +309,7 @@ fn main() {
             commands::layout::panel::panel_window_close_ack,
             commands::layout::panel::panel_window_is_open,
             commands::layout::panel::panel_window_start_dragging,
+            commands::layout::panel::panel_window_apply_native_chrome,
             // 미디어
             commands::media::image::image_load,
             commands::media::counter_animation::counter_animation_list,
