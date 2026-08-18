@@ -245,6 +245,14 @@ enum PanelBoundsChange {
     },
 }
 
+impl PanelBoundsChange {
+    // 복원에 쓰는 값은 높이뿐이라 이동은 디스크로 가지 않는다.
+    // x/y는 store 호환을 위해 계속 기록만 되고 창 배치에는 쓰이지 않음
+    fn changes_persisted_bounds(self) -> bool {
+        !matches!(self, Self::Moved(_))
+    }
+}
+
 #[derive(Default)]
 struct PanelBoundsPersistenceState {
     latest: Option<PanelBoundsSample>,
@@ -253,7 +261,9 @@ struct PanelBoundsPersistenceState {
     session: u64,
     generation: u64,
     worker_running: bool,
+    // dirty는 워커가 처리할 변경이 남았는지, persist_dirty는 그중 저장까지 필요한지
     dirty: bool,
+    persist_dirty: bool,
     active: bool,
 }
 
@@ -262,6 +272,7 @@ struct PanelBoundsPersistWork {
     session: u64,
     generation: u64,
     sample: PanelBoundsSample,
+    persist: bool,
 }
 
 struct PanelBoundsPersistenceController {
@@ -777,8 +788,15 @@ fn should_create_overlay_on_startup(obs_mode_enabled: bool, overlay_visible: boo
     !obs_mode_enabled && overlay_visible
 }
 
-// 트레이 시작(main_window_hidden)에서는 복원 보류 - 숨은 메인 창 의존 방지(background throttling)
-// 플래그는 유지되므로 다음 정상 기동 때 복원됨
+// 기동 시 메인 창을 트레이에 숨긴 채 둘지. 트레이가 꺼져 있으면 숨겨도 되살릴 방법이 없다.
+// 메인 창 표시와 분리 패널 복원이 같은 판정을 쓰도록 여기 한 곳에서만 정한다
+fn main_window_starts_hidden(tray_enabled: bool, main_window_hidden: bool) -> bool {
+    tray_enabled && main_window_hidden
+}
+
+// 트레이 시작에서는 복원 보류 - 숨은 메인 창 의존 방지(background throttling)
+// 플래그는 유지되므로 다음 정상 기동 때 복원됨.
+// main_window_hidden에는 main_window_starts_hidden으로 확정한 최종 가시성을 넘긴다
 fn should_restore_panel_on_startup(
     obs_mode_enabled: bool,
     main_window_hidden: bool,
@@ -1030,6 +1048,40 @@ fn run_panel_close_timeout(
     let result = fallback();
     finish_panel_close(state);
     result.map(|()| true)
+}
+
+// 메인과 함께 감추는 전환. 이미 숨은 창은 건너뛰고, hide가 실패해도 표식을 세우지 않는다 -
+// 우리가 감춘 창만 되돌리기 위한 표식이라 거짓 표식은 남의 창을 깨운다
+fn hide_panel_with_main_transition(
+    hidden_flag: &AtomicBool,
+    visible: bool,
+    hide: impl FnOnce() -> Result<()>,
+) -> Result<bool> {
+    if !visible {
+        return Ok(false);
+    }
+    hide()?;
+    Ok(!hidden_flag.swap(true, Ordering::SeqCst))
+}
+
+// 우리가 감췄던 패널만 되돌린다. show가 실패하면 표식을 되살려 다음 트레이 복귀에 남긴다
+fn restore_panel_with_main_transition(
+    hidden_flag: &AtomicBool,
+    show: impl FnOnce() -> Result<()>,
+) -> Result<bool> {
+    if !hidden_flag.swap(false, Ordering::SeqCst) {
+        return Ok(false);
+    }
+    if let Err(error) = show() {
+        hidden_flag.store(true, Ordering::SeqCst);
+        return Err(error);
+    }
+    Ok(true)
+}
+
+// 창이 사라지면 동행 복원 대상도 사라진다
+fn drop_panel_hidden_with_main(hidden_flag: &AtomicBool) -> bool {
+    hidden_flag.swap(false, Ordering::SeqCst)
 }
 
 pub struct AppState {
@@ -1296,6 +1348,13 @@ impl AppState {
             .build(app)?;
 
         Ok(())
+    }
+
+    /// 기동 시 메인 창을 트레이에 숨긴 채 띄울지. 분리 패널 복원도 이 판정을 따른다
+    pub fn should_start_main_window_hidden(&self) -> bool {
+        self.store.with_state(|state| {
+            main_window_starts_hidden(state.tray_enabled, state.main_window_hidden)
+        })
     }
 
     pub fn set_main_window_hidden(&self, hidden: bool) -> Result<()> {
@@ -3089,12 +3148,35 @@ impl AppState {
             .mark_unavailable(&self.plugin_rpc_router);
     }
 
+    // 분리 상태 기록: 값 갱신만 창 전환과 같은 락 안에서 끝내 순서가 뒤집히지 않게 하고,
+    // 디스크 대기는 flush_panel_detached가 락 밖에서 맡는다
+    fn mark_panel_detached(&self, detached: bool) {
+        if let Err(err) = self
+            .store
+            .update_deferred(move |data| data.panel_detached = detached)
+        {
+            log::warn!("failed to record panel detached={detached} state: {err}");
+        }
+    }
+
+    // 드문 조작이라 즉시 디스크로 - deferred로 두면 강제 종료 때 유저가 고른 배치가 날아간다.
+    // 반드시 panel_creation_lock을 놓은 뒤 부를 것: 저장 대기 동안 창 전환이 막힌다.
+    // 사이에 반대 전환이 끝났다면 그쪽 저장이 이미 dirty를 걷어가 여기서 값을 되살리지 않는다
+    fn flush_panel_detached(&self) {
+        if let Err(err) = self.store.flush() {
+            log::warn!("failed to persist panel detached state: {err}");
+        }
+    }
+
     pub fn show_panel_window(&self, app: &AppHandle, view_state: PanelViewState) -> Result<()> {
         // 창 게터와 모니터 조회는 메인 스레드 이벤트 루프로 왕복한다 - 락을 쥔 워커에서
         // 부르면 메인이 같은 락을 기다리는 순간 역전 데드락이라 락 밖에서 먼저 읽는다.
-        // 창 생성 자체는 여전히 락 안이므로 메인 스레드에서 이 락을 잡으면 안 되는 건 그대로다
-        let main_rect = main_window_logical_rect(app);
-        let monitors = MonitorData::gather(app);
+        // 창 생성 자체는 여전히 락 안이므로 메인 스레드에서 이 락을 잡으면 안 되는 건 그대로다.
+        // 배치 정보는 새로 만들 때만 쓰이니 이미 떠 있으면 왕복 자체를 건너뛴다
+        let placement = app
+            .get_webview_window(PANEL_LABEL)
+            .is_none()
+            .then(|| (main_window_logical_rect(app), MonitorData::gather(app)));
         let result = {
             let _creation_guard = self.panel_creation_lock.lock();
             *self.panel_view_state.lock() = Some(TargetedPanelViewState {
@@ -3112,20 +3194,20 @@ impl AppState {
                         publish_panel_visibility_transition(&self.panel_visible, app, true, None)
                     })
             } else {
+                // 사전 확인 뒤 창이 사라진 드문 경우엔 배치 정보가 없다 - 락 안에서는 창 게터를
+                // 부를 수 없어 이번만 OS 기본 자리에 띄우고, 다음 열기에서 제자리를 잡는다
+                let (main_rect, monitors) = placement.unwrap_or_else(|| {
+                    log::warn!("panel window disappeared before creation; using os placement");
+                    Default::default()
+                });
                 self.create_panel_window(app, main_rect, &monitors)
                     .and_then(|_| {
                         publish_panel_visibility_transition(&self.panel_visible, app, true, None)
                     })
             };
             if result.is_ok() {
-                // 재시작 복원용 분리 상태 기록. 값 갱신은 창 전환과 같은 락 안에서 끝내
-                // 재부착이 끼어들어도 순서가 뒤집히지 않게 하고, 저장 대기만 락 밖으로 뺀다
-                if let Err(err) = self
-                    .store
-                    .update_deferred(|data| data.panel_detached = true)
-                {
-                    log::warn!("failed to record detached panel state: {err}");
-                }
+                // 재시작 복원용 분리 상태 기록
+                self.mark_panel_detached(true);
             }
             if result.is_err() && app.get_webview_window(PANEL_LABEL).is_none() {
                 clear_targeted_panel_view_state(
@@ -3136,26 +3218,24 @@ impl AppState {
             result
         };
         if result.is_ok() {
-            // 드문 조작이라 즉시 디스크로 - deferred로 두면 강제 종료 때 유저가 고른 배치가 날아감.
-            // 사이에 재부착이 끝났다면 그쪽 저장이 이미 dirty를 걷어가 여기서는 값을 되살리지 않는다
-            if let Err(err) = self.store.flush() {
-                log::warn!("failed to persist detached panel state: {err}");
-            }
+            self.flush_panel_detached();
         }
         result
     }
 
-    // 기동 시 분리 패널 복원 진입점. 메인 창 배치가 끝난 뒤에 불러야 한다 -
-    // 패널은 메인 오른쪽에 붙으므로 아직 기본 위치인 메인을 기준으로 잡으면 엉뚱한 자리에 뜬다
+    // 기동 시 분리 패널 복원 진입점. 메인 창 배치가 끝나고 최종 가시성이 정해진 뒤에 불러야 한다 -
+    // 패널은 메인 오른쪽에 붙으므로 아직 기본 위치인 메인을 기준으로 잡으면 엉뚱한 자리에 뜬다.
+    // main_window_hidden은 트레이 아이콘 생성 실패 폴백까지 반영된 값이어야 한다
     pub fn restore_detached_panel_on_startup(
         &self,
         app: &AppHandle,
         main_rect: Option<LogicalRect>,
+        main_window_hidden: bool,
     ) {
         let snapshot = self.store.snapshot();
         if !should_restore_panel_on_startup(
             snapshot.obs_mode_enabled,
-            snapshot.main_window_hidden,
+            main_window_hidden,
             snapshot.panel_detached,
         ) {
             return;
@@ -3173,11 +3253,17 @@ impl AppState {
         app: &AppHandle,
         main_rect: Option<LogicalRect>,
     ) -> Result<()> {
-        // 배치를 막 끝낸 쪽이 좌표를 넘겨준다. 그 좌표가 없을 때만 실측으로 되돌아간다 -
-        // 기동 직후의 게터는 아직 옛 프레임을 돌려주므로 기준으로 삼을 수 없다
+        // 배치를 막 끝낸 쪽이 좌표를 넘겨준다. 넘겨받은 값이 없을 때만 실측으로 되돌아가는데,
+        // 기동 직후의 게터는 아직 옛 프레임을 돌려줄 수 있어 어디까지나 차선책이다
         let main_rect = main_rect.or_else(|| main_window_logical_rect(app));
         let monitors = MonitorData::gather(app);
-        let _creation_guard = self.panel_creation_lock.lock();
+        // 이 경로는 메인 스레드에서 돈다 - 락을 쥔 워커가 메인 응답을 기다리는 구간이 있어
+        // 무한 대기하면 역전 데드락이다. 기동 훅은 이벤트 루프보다 앞서 돌아 경합이 없으니
+        // 정상적으론 바로 잡히고, 못 잡으면 복원을 포기한다(분리 플래그는 남아 다음 기동에 재시도)
+        let Some(_creation_guard) = self.panel_creation_lock.try_lock() else {
+            log::warn!("panel creation lock was busy on startup; detached panel restore skipped");
+            return Ok(());
+        };
         if app.get_webview_window(PANEL_LABEL).is_some() {
             return Ok(());
         }
@@ -3194,30 +3280,31 @@ impl AppState {
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
             return;
         };
-        // 최소화된 패널은 그대로 둔다 - macOS orderOut은 Dock 타일을 못 지우고,
-        // 이미 치워진 창이라 복원 때 앞으로 튀어나와 포커스를 뺏을 이유가 없다
-        if !window.is_visible().unwrap_or(false) {
-            return;
-        }
-        if let Err(err) = window.hide() {
+        // 이미 숨어 있는 창은 건너뛴다 - is_visible이 걸러내는 건 감춰진 창이고,
+        // 우리가 감추지 않은 창을 동행 복원 대상으로 올리지 않기 위한 가드다
+        let visible = window.is_visible().unwrap_or(false);
+        let hidden = hide_panel_with_main_transition(&self.panel_hidden_with_main, visible, || {
+            window.hide().map_err(anyhow::Error::from)
+        });
+        if let Err(err) = hidden {
             log::warn!("failed to hide detached panel with main window: {err}");
-            return;
         }
-        self.panel_hidden_with_main.store(true, Ordering::SeqCst);
     }
 
     // 메인이 트레이에서 나올 때, 우리가 감췄던 패널만 되돌린다
     fn restore_detached_panel_with_main(&self, app: &AppHandle) {
-        if !self.panel_hidden_with_main.swap(false, Ordering::SeqCst) {
-            return;
-        }
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+            drop_panel_hidden_with_main(&self.panel_hidden_with_main);
             return;
         };
-        if let Err(err) = window.show() {
+        let restored = restore_panel_with_main_transition(&self.panel_hidden_with_main, || {
+            // 메인 표시 경로와 같은 순서 - 최소화 해제부터
+            let _ = window.unminimize();
+            window.show().map_err(anyhow::Error::from)
+        });
+        if let Err(err) = restored {
+            // 표식은 되살렸지만 자동 재시도는 없다 - 유저가 트레이로 다시 숨겼다 꺼내야 복원된다
             log::warn!("failed to show detached panel with main window: {err}");
-            // 다음 표시 때 다시 시도
-            self.panel_hidden_with_main.store(true, Ordering::SeqCst);
         }
     }
 
@@ -3226,20 +3313,25 @@ impl AppState {
     }
 
     pub fn close_panel_window(&self, app: &AppHandle, view_state: PanelViewState) -> Result<()> {
-        let _creation_guard = self.panel_creation_lock.lock();
-        *self.panel_view_state.lock() = Some(TargetedPanelViewState {
-            target: PanelViewTarget::Main,
-            view_state,
-        });
-        *self.panel_close_request.lock() = PanelCloseRequestState::Closing;
-        let result = self.close_panel_window_inner(app, PanelVisibilityReason::Closed);
-        finish_panel_close(&self.panel_close_request);
-        if result.is_err() && app.get_webview_window(PANEL_LABEL).is_some() {
-            clear_targeted_panel_view_state(
-                &mut self.panel_view_state.lock(),
-                PanelViewTarget::Main,
-            );
-        }
+        let result = {
+            let _creation_guard = self.panel_creation_lock.lock();
+            *self.panel_view_state.lock() = Some(TargetedPanelViewState {
+                target: PanelViewTarget::Main,
+                view_state,
+            });
+            *self.panel_close_request.lock() = PanelCloseRequestState::Closing;
+            let result = self.close_panel_window_inner(app, PanelVisibilityReason::Closed);
+            finish_panel_close(&self.panel_close_request);
+            if result.is_err() && app.get_webview_window(PANEL_LABEL).is_some() {
+                clear_targeted_panel_view_state(
+                    &mut self.panel_view_state.lock(),
+                    PanelViewTarget::Main,
+                );
+            }
+            result
+        };
+        // 실패해 되돌린 경우도 저장한다 - 어느 쪽이든 마지막 값이 디스크에 남아야 다음 기동이 맞는다
+        self.flush_panel_detached();
         result
     }
 
@@ -3250,10 +3342,9 @@ impl AppState {
     ) -> Result<()> {
         // 도킹 상태 기록: 명시 재부착과 close-ack 타임아웃 강제 닫힘이 모두 이 경로를 지남
         // Destroyed 핸들러에서는 기록 금지 - 종료 시 shutdown_application이 panel.destroy()를
-        // 직접 호출해 같은 핸들러로 들어오므로 분리 채 종료할 때마다 플래그가 지워짐
-        if let Err(err) = self.store.update(|data| data.panel_detached = false) {
-            log::warn!("failed to record docked panel state: {err}");
-        }
+        // 직접 호출해 같은 핸들러로 들어오므로 분리 채 종료할 때마다 플래그가 지워짐.
+        // 이 함수는 panel_creation_lock 안에서 도는 만큼 저장은 호출자가 락을 놓은 뒤 맡는다
+        self.mark_panel_detached(false);
         *self.panel_destroy_reason.lock() = Some(reason);
         let mut bounds_error = None;
         if let Some(window) = app.get_webview_window(PANEL_LABEL) {
@@ -3264,9 +3355,7 @@ impl AppState {
                 self.clear_panel_destroy_reason(reason);
                 // 창이 살아 있으면 여전히 분리 상태다. 도킹 기록을 되돌리지
                 // 않으면 다음 기동에서 분리 패널이 복원되지 않는다
-                if let Err(err) = self.store.update(|data| data.panel_detached = true) {
-                    log::warn!("failed to restore detached panel state: {err}");
-                }
+                self.mark_panel_detached(true);
                 return Err(error.into());
             }
         }
@@ -3317,7 +3406,7 @@ impl AppState {
     }
 
     pub fn handle_panel_window_destroyed(&self, app: &AppHandle) {
-        self.panel_hidden_with_main.store(false, Ordering::SeqCst);
+        drop_panel_hidden_with_main(&self.panel_hidden_with_main);
         self.plugin_rpc_router.remove_window(PANEL_LABEL);
         clear_targeted_panel_view_state(&mut self.panel_view_state.lock(), PanelViewTarget::Panel);
         finish_panel_close(&self.panel_close_request);
@@ -3423,16 +3512,28 @@ impl AppState {
                     let Some(state) = timeout_app.try_state::<AppState>() else {
                         return;
                     };
-                    let _creation_guard = state.panel_creation_lock.lock();
-                    if let Err(error) =
-                        run_panel_close_timeout(&state.panel_close_request, &request_id, || {
-                            state.close_panel_window_inner(
-                                &timeout_app,
-                                PanelVisibilityReason::Destroyed,
-                            )
-                        })
-                    {
-                        log::warn!("failed to close panel after missing ack: {error}");
+                    let closed = {
+                        let _creation_guard = state.panel_creation_lock.lock();
+                        match run_panel_close_timeout(
+                            &state.panel_close_request,
+                            &request_id,
+                            || {
+                                state.close_panel_window_inner(
+                                    &timeout_app,
+                                    PanelVisibilityReason::Destroyed,
+                                )
+                            },
+                        ) {
+                            Ok(claimed) => claimed,
+                            Err(error) => {
+                                log::warn!("failed to close panel after missing ack: {error}");
+                                true
+                            }
+                        }
+                    };
+                    // 도킹 기록 저장은 락을 놓은 뒤 - 저장 대기 동안 창 전환이 막히지 않게
+                    if closed {
+                        state.flush_panel_detached();
                     }
                 });
             }
@@ -5270,6 +5371,7 @@ impl PanelBoundsPersistenceController {
         state.applied_max_height = Some(max_height);
         state.generation = state.generation.wrapping_add(1);
         state.dirty = false;
+        state.persist_dirty = false;
         state.active = true;
         state.session
     }
@@ -5301,20 +5403,23 @@ impl PanelBoundsPersistenceController {
         if !state.active || state.session != session {
             return false;
         }
+        let persist = change.changes_persisted_bounds();
         if let PanelBoundsChange::Snapshot(snapshot) = change {
             state.latest = Some(snapshot);
-            return Self::mark_dirty(state);
+            return Self::mark_dirty(state, persist);
         }
         let Some(latest) = state.latest.as_mut() else {
             return false;
         };
         apply_panel_bounds_change(latest, change);
-        Self::mark_dirty(state)
+        Self::mark_dirty(state, persist)
     }
 
-    fn mark_dirty(state: &mut PanelBoundsPersistenceState) -> bool {
+    // 이동만 바뀌어도 워커는 깨운다 - 모니터가 바뀌면 높이 한계를 다시 걸어야 하기 때문
+    fn mark_dirty(state: &mut PanelBoundsPersistenceState, persist: bool) -> bool {
         state.generation = state.generation.wrapping_add(1);
         state.dirty = true;
+        state.persist_dirty |= persist;
         let should_spawn = !state.worker_running;
         state.worker_running = true;
         should_spawn
@@ -5322,11 +5427,14 @@ impl PanelBoundsPersistenceController {
 
     fn take_dirty_work(state: &mut PanelBoundsPersistenceState) -> Option<PanelBoundsPersistWork> {
         let sample = state.latest.filter(|_| state.active && state.dirty)?;
+        let persist = state.persist_dirty;
         state.dirty = false;
+        state.persist_dirty = false;
         Some(PanelBoundsPersistWork {
             session: state.session,
             generation: state.generation,
             sample,
+            persist,
         })
     }
 
@@ -5342,6 +5450,7 @@ impl PanelBoundsPersistenceController {
             return false;
         }
         state.dirty = true;
+        state.persist_dirty |= work.persist;
         true
     }
 
@@ -5358,6 +5467,10 @@ impl PanelBoundsPersistenceController {
     }
 
     fn persist_worker_work(&self, work: PanelBoundsPersistWork) -> Result<bool> {
+        // 이동만 바뀐 구간은 디스크를 건드리지 않는다 - 저장 값은 높이뿐이라 쓸 이유가 없다
+        if !work.persist {
+            return Ok(false);
+        }
         let _persist_guard = self.persist_lock.lock();
         if !Self::work_is_current(&self.state.lock(), &work) {
             return Ok(false);
@@ -5482,10 +5595,13 @@ impl PanelBoundsPersistenceController {
             state.latest = Some(sample);
             state.generation = state.generation.wrapping_add(1);
             state.dirty = false;
+            state.persist_dirty = false;
+            // 생명주기 경계의 flush는 이동 여부를 가리지 않고 현재 값을 남긴다
             PanelBoundsPersistWork {
                 session: state.session,
                 generation: state.generation,
                 sample,
+                persist: true,
             }
         };
 
@@ -5515,6 +5631,7 @@ impl PanelBoundsPersistenceController {
         state.applied_max_height = None;
         state.generation = state.generation.wrapping_add(1);
         state.dirty = false;
+        state.persist_dirty = false;
         true
     }
 }
@@ -5702,14 +5819,16 @@ mod tests {
         apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
         canonical_hold_duration_ms, changed_panel_max_height, clamp_overlay_dimension,
         collect_authorized_css_paths, collect_frontend_lifecycle_targets,
-        frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
-        global_css_watch_path, initial_overlay_placement, install_history_handshake,
-        install_lifecycle_handshake, key_state_payload, monitor_scale_is_usable,
+        drop_panel_hidden_with_main, frontend_history_mutation_blocked,
+        frontend_lifecycle_restore_labels, global_css_watch_path, hide_panel_with_main_transition,
+        initial_overlay_placement, install_history_handshake, install_lifecycle_handshake,
+        key_state_payload, main_window_starts_hidden, monitor_scale_is_usable,
         next_keyboard_recovery_plan, normalize_stored_overlay_bounds, overlay_reset_fallback_rect,
         panel_bounds_from_sample, panel_height_bounds, panel_position_beside_main,
         publish_panel_hidden_transition, publish_panel_visibility_transition,
         publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
-        run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
+        restore_panel_with_main_transition, run_panel_close_timeout,
+        should_create_overlay_on_startup, should_recover_keyboard_daemon,
         should_restore_panel_on_startup, stored_bounds_need_monitor_data,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
         take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
@@ -5749,6 +5868,24 @@ mod tests {
         assert!(!should_restore_panel_on_startup(false, false, false));
         assert!(!should_restore_panel_on_startup(true, false, true));
         assert!(!should_restore_panel_on_startup(false, true, true));
+    }
+
+    #[test]
+    fn startup_hidden_main_window_needs_both_tray_and_hidden_flags() {
+        assert!(main_window_starts_hidden(true, true));
+        assert!(!main_window_starts_hidden(false, true));
+        assert!(!main_window_starts_hidden(true, false));
+        // 메인 창 표시와 패널 복원이 같은 판정을 공유한다
+        assert!(should_restore_panel_on_startup(
+            false,
+            main_window_starts_hidden(false, true),
+            true
+        ));
+        assert!(!should_restore_panel_on_startup(
+            false,
+            main_window_starts_hidden(true, true),
+            true
+        ));
     }
 
     #[test]
@@ -6005,6 +6142,118 @@ mod tests {
             PanelBoundsChange::Snapshot(sample),
         ));
         assert_eq!(empty_state.latest, Some(sample));
+    }
+
+    #[test]
+    fn panel_move_skips_the_disk_write_while_resize_persists() {
+        let sample = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let mut state = PanelBoundsPersistenceState {
+            latest: Some(sample),
+            session: 3,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+
+        // 이동도 워커는 깨운다 - 모니터 보정이 붙어 있기 때문
+        assert!(PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Moved(PhysicalPosition::new(800, 400)),
+        ));
+        let moved = PanelBoundsPersistenceController::take_dirty_work(&mut state)
+            .expect("move still schedules worker work");
+        assert!(!moved.persist);
+        assert!(!state.persist_dirty);
+
+        // 리사이즈는 복원에 쓰는 높이를 바꾸므로 저장 대상
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_200)),
+        );
+        let resized = PanelBoundsPersistenceController::take_dirty_work(&mut state)
+            .expect("resize schedules worker work");
+        assert!(resized.persist);
+
+        // 저장 실패는 저장 대상 표식까지 되살린다
+        assert!(PanelBoundsPersistenceController::restore_failed_work(
+            &mut state, &resized
+        ));
+        assert!(state.dirty);
+        assert!(state.persist_dirty);
+
+        // 뒤따르는 이동이 이미 잡힌 저장 대상을 지우지 않는다
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Moved(PhysicalPosition::new(900, 500)),
+        );
+        assert!(
+            PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("coalesced work stays scheduled")
+                .persist
+        );
+    }
+
+    #[test]
+    fn panel_tray_companion_flag_marks_only_windows_we_hid() {
+        let hidden = AtomicBool::new(false);
+
+        // 보이는 창만 감추고 표식을 남긴다
+        assert!(hide_panel_with_main_transition(&hidden, true, || Ok(())).unwrap());
+        assert!(hidden.load(Ordering::SeqCst));
+
+        // 이미 숨은 창은 건드리지 않고 표식도 그대로
+        assert!(!hide_panel_with_main_transition(&hidden, false, || panic!(
+            "hidden window must not be hidden again"
+        ))
+        .unwrap());
+        assert!(hidden.load(Ordering::SeqCst));
+
+        // 복원에 성공하면 표식이 지워진다
+        assert!(restore_panel_with_main_transition(&hidden, || Ok(())).unwrap());
+        assert!(!hidden.load(Ordering::SeqCst));
+
+        // 우리가 감추지 않은 창은 복원 대상이 아니다
+        assert!(!restore_panel_with_main_transition(&hidden, || panic!(
+            "untouched window must not be shown"
+        ))
+        .unwrap());
+    }
+
+    #[test]
+    fn panel_tray_companion_flag_survives_failed_window_calls() {
+        let hidden = AtomicBool::new(false);
+
+        // hide 실패는 표식을 세우지 않는다 - 세우면 남의 창을 깨운다
+        assert!(
+            hide_panel_with_main_transition(&hidden, true, || Err(anyhow::anyhow!(
+                "hide unavailable"
+            )))
+            .is_err()
+        );
+        assert!(!hidden.load(Ordering::SeqCst));
+
+        hide_panel_with_main_transition(&hidden, true, || Ok(())).unwrap();
+        // show 실패는 표식을 되살린다
+        assert!(
+            restore_panel_with_main_transition(&hidden, || Err(anyhow::anyhow!(
+                "show unavailable"
+            )))
+            .is_err()
+        );
+        assert!(hidden.load(Ordering::SeqCst));
+
+        // 창이 파괴되면 동행 복원 대상도 사라진다
+        assert!(drop_panel_hidden_with_main(&hidden));
+        assert!(!hidden.load(Ordering::SeqCst));
+        assert!(!drop_panel_hidden_with_main(&hidden));
     }
 
     #[test]

@@ -33,6 +33,10 @@ use state::{AppState, AppStore, LogicalRect, PANEL_LABEL};
 
 const INTERACTION_BENCHMARK_ENV: &str = "DMN_INTERACTION_WEBVIEW_BENCHMARK";
 
+// 메인 창 논리 크기 - 고정 크기이고, 분리 패널이 이 사각형을 기준으로 옆에 붙는다
+const MAIN_WINDOW_WIDTH: f64 = 902.0;
+const MAIN_WINDOW_HEIGHT: f64 = 488.0;
+
 fn is_interaction_benchmark_mode() -> bool {
     std::env::var_os(INTERACTION_BENCHMARK_ENV).is_some()
 }
@@ -540,7 +544,7 @@ fn apply_main_window_configuration(
     app: &tauri::AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<()> {
-    let size = LogicalSize::new(902.0, 488.0);
+    let size = LogicalSize::new(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT);
 
     if let Err(err) = window.hide() {
         log::debug!("failed to hide main window before configuration: {err}");
@@ -629,21 +633,32 @@ fn apply_main_window_configuration(
     }
 
     let state = app.state::<AppState>();
+    let wants_hidden = state.should_start_main_window_hidden();
+    // 트레이 아이콘을 못 만들면 숨은 창을 되살릴 방법이 없다 - 표시로 되돌린다
+    let stays_hidden = wants_hidden
+        && match state.ensure_tray_icon_for_background(app) {
+            Ok(()) => true,
+            Err(err) => {
+                log::warn!("failed to create tray icon on startup: {err}");
+                false
+            }
+        };
+
     // 분리 패널은 메인 창 옆에 붙으므로 메인 배치가 끝난 지금 만든다.
-    // 메인 show보다 앞이라 포커스는 그대로 메인에 남는다.
+    // 트레이 실패 폴백까지 반영한 최종 가시성으로 판단하고, 메인 show보다 앞이라
+    // 포커스는 그대로 메인에 남는다.
     // 좌표는 실측 대신 방금 계산한 값을 넘긴다 - set_position 직후의 게터는
     // 아직 반영 전 프레임을 돌려줘서 패널이 엉뚱한 높이에 뜬다
-    state.restore_detached_panel_on_startup(app, placed_rect);
-    let snapshot = state.store.snapshot();
-    let should_start_hidden = snapshot.tray_enabled && snapshot.main_window_hidden;
+    state.restore_detached_panel_on_startup(app, placed_rect, stays_hidden);
 
-    if should_start_hidden {
-        if let Err(err) = state.ensure_tray_icon_for_background(app) {
-            log::warn!("failed to create tray icon on startup: {err}");
-            // 공용 표시 경로로 되돌린다 - 분리 패널 동행 복원과 hidden 플래그 정리까지 함께
-            if let Err(err) = state.show_main_window(app) {
-                log::warn!("failed to show main window after tray init error: {err}");
-            }
+    if stays_hidden {
+        return Ok(());
+    }
+
+    if wants_hidden {
+        // 공용 표시 경로로 되돌린다 - 분리 패널 동행 복원과 hidden 플래그 정리까지 함께
+        if let Err(err) = state.show_main_window(app) {
+            log::warn!("failed to show main window after tray init error: {err}");
         }
         return Ok(());
     }
