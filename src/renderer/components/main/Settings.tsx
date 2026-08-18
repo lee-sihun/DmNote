@@ -9,13 +9,13 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import Dropdown from '@components/main/common/Dropdown';
+import ReloadIcon from '@components/main/common/ReloadIcon';
 import {
   SettingCard,
   SettingRow,
   SettingToggleRow,
 } from '@components/main/common/SettingRow';
 import FlaskIcon from '@assets/svgs/flask.svg';
-import ResetIcon from '@assets/svgs/reset.svg';
 import { PluginDataDeleteModal } from '@components/main/Modal/content/dialogs/PluginDataDeleteModal';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import SettingsSidePanel from '@components/main/SettingsPanel/SettingsSidePanel';
@@ -1062,7 +1062,17 @@ const Settings = ({
                       }
                       title={t('settings.reloadPlugins')}
                     >
-                      <ResetIcon className="w-[13px] h-[13px] -scale-x-100" />
+                      {/* svg 루트가 아니라 래퍼를 돌려야 회전축이 아이콘 중심에 고정된다 */}
+                      <span
+                        className={
+                          'inline-flex' +
+                          (isReloadingPlugins
+                            ? ' motion-safe:animate-spin'
+                            : '')
+                        }
+                      >
+                        <ReloadIcon />
+                      </span>
                     </button>
                     <button
                       onClick={() =>
@@ -1119,7 +1129,7 @@ const Settings = ({
                         : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
                     }
                   >
-                    <ResetIcon className="w-[13px] h-[13px] -scale-x-100" />
+                    <ReloadIcon />
                   </button>
                   <button
                     onClick={handleObsCopyUrl}
