@@ -33,6 +33,7 @@ import {
 } from '@utils/animation/rafLatestScheduler';
 import { counterAnimationApi } from '@api/modules/resourceApi';
 import { updateCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
+import { isPanelWindow } from '@utils/windowType';
 
 type EditorMode = 'create' | 'edit';
 
@@ -869,7 +870,7 @@ const CounterAnimationEditorModal = ({
     try {
       const response =
         mode === 'edit' && initialPreset
-          ? window.__dmn_window_type === 'panel'
+          ? isPanelWindow()
             ? await updateCounterAnimationPresetViaAuthority({
                 id: initialPreset.id,
                 ...requestBase,

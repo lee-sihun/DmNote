@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FloatingPopup from './FloatingPopup';
+import { stubAnimationFrame } from '@src/renderer/__tests__/deferredContentHarness';
 
 // 퇴장 유예가 생기면서 닫힘 구간에도 DOM이 남는다. 그 구간의 계약을 고정한다
 describe('FloatingPopup exit transition', () => {
@@ -98,12 +99,7 @@ describe('FloatingPopup exit transition', () => {
 
   it('after-paint 콘텐츠가 붙기 전에는 entering에 머물고, 붙은 뒤 open으로 넘어간다', async () => {
     // rAF를 타이머로 흘려 지연 마운트 시점을 손으로 넘긴다
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
-      window.setTimeout(() => callback(performance.now()), 0),
-    );
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-      window.clearTimeout(id);
-    });
+    stubAnimationFrame();
     await act(async () => {
       root.render(
         <FloatingPopup

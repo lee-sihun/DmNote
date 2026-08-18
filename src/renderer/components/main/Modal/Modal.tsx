@@ -1,8 +1,9 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { getFocusableElements } from '@utils/focusableElements';
 import { useFocusRestore } from '@hooks/ui/useFocusRestore';
+import { useDeferredContentMount } from '@hooks/ui/useDeferredContentMount';
 import type { PopupMotionState } from '@hooks/ui/usePopupPresence';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 
@@ -40,26 +41,16 @@ const Modal = ({
   const closeFromBackdropRef = useRef(false);
   const backdropRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClick);
-  const [deferredContentMounted, setDeferredContentMounted] = useState(false);
+  // 닫히기 전에 아직 내용이 안 붙었다면 퇴장 잔상에서 무거운 children을 새로
+  // 마운트하지 않는다. 이미 붙은 내용은 훅이 유지하므로 그대로 퇴장한다
+  const deferredContentMounted = useDeferredContentMount(
+    !closing && contentMountStrategy !== 'sync',
+  );
   const contentReady =
     contentMountStrategy === 'sync' || deferredContentMounted;
   useEffect(() => {
     onCloseRef.current = onClick;
   });
-
-  useEffect(() => {
-    // 닫히기 전에 아직 내용이 안 붙었다면 퇴장 잔상에서 무거운 children을 새로
-    // 마운트하지 않는다. 이미 붙은 내용은 state가 유지하므로 그대로 퇴장한다
-    if (closing || contentMountStrategy === 'sync') return;
-    let timer: number | null = null;
-    const frame = requestAnimationFrame(() => {
-      timer = window.setTimeout(() => setDeferredContentMounted(true), 0);
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, [closing, contentMountStrategy]);
 
   // 퇴장 유예 동안 DOM이 남으므로 열림 여부는 closing으로 판정한다
   const { captureOpener } = useFocusRestore(!closing);

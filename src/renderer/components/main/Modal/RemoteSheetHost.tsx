@@ -12,6 +12,7 @@ import WebFontEditorSheet from './content/pickers/WebFontEditorSheet';
 import { preloadWebFontEditor } from './content/pickers/webFontEditorLoader';
 import CounterAnimationEditorModal from './content/editors/CounterAnimationEditorModal';
 import SoundTrimModal from './content/managers/SoundTrimModal';
+import { soundTrimEditProps } from './content/managers/soundTrimEditProps';
 
 // 패널 창이 이미 사라졌으면 emitTo가 거부한다. 결과를 받을 상대가 없을 뿐이니 삼킨다
 const sendToPanel = (send: () => Promise<void>) => {
@@ -130,18 +131,7 @@ const RemoteSheetHost = () => {
         <SoundTrimModal
           isOpen
           previewVolume={active.previewVolume}
-          editingSoundPath={
-            active.mode === 'edit' ? active.item.soundPath : null
-          }
-          editingTrimStartRatio={
-            active.mode === 'edit' ? active.item.trimStartRatio : undefined
-          }
-          editingTrimEndRatio={
-            active.mode === 'edit' ? active.item.trimEndRatio : undefined
-          }
-          editingDisplayName={
-            active.mode === 'edit' ? active.item.displayName : undefined
-          }
+          {...soundTrimEditProps(active.mode === 'edit' ? active.item : null)}
           // 파일은 창을 넘지 못한다. 시트 안의 불러오기 버튼으로 고른다
           initialFile={null}
           onSaved={(soundPath) =>

@@ -25,6 +25,7 @@ import {
 } from '@hooks/ui/usePopupPresence';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import { useFocusRestore } from '@hooks/ui/useFocusRestore';
+import { useDeferredContentMount } from '@hooks/ui/useDeferredContentMount';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import {
   isInsideHigherPopupLayer,
@@ -275,19 +276,9 @@ const FloatingPopup = ({
     x: number;
     y: number;
   } | null>(null);
-  const [deferredContentMounted, setDeferredContentMounted] = useState(false);
-
-  useEffect(() => {
-    if (!open || contentMountStrategy === 'sync') return;
-    let timer: number | null = null;
-    const frame = requestAnimationFrame(() => {
-      timer = window.setTimeout(() => setDeferredContentMounted(true), 0);
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, [contentMountStrategy, open]);
+  const deferredContentMounted = useDeferredContentMount(
+    open && contentMountStrategy !== 'sync',
+  );
 
   // 퇴장 중에는 마지막 children을 유지한다. open에 묶으면 PopupExit가 붙잡은
   // 내용도 닫는 첫 렌더에서 비어 퇴장 잔상과 미저장 편집 상태가 사라진다

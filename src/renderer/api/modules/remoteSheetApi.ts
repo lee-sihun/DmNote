@@ -16,13 +16,13 @@ const ACCEPTED_EVENT = 'panel-sheet:accepted';
 const CLOSED_EVENT = 'panel-sheet:closed';
 const HOST_READY_EVENT = 'panel-sheet:host-ready';
 
-export interface WebFontSheetRequest {
+interface WebFontSheetRequest {
   kind: 'webFont';
   // 편집할 웹폰트 id. null이면 새로 추가. 폰트 목록은 양쪽 창이 같은 설정을 보므로 id면 충분
   editingId: string | null;
 }
 
-export interface CounterAnimationSheetRequest {
+interface CounterAnimationSheetRequest {
   kind: 'counterAnimation';
   mode: 'create' | 'edit';
   preset: CounterAnimationPreset | null;
@@ -37,7 +37,7 @@ export interface SoundTrimEditItem {
   displayName?: string;
 }
 
-export type SoundTrimSheetRequest = {
+type SoundTrimSheetRequest = {
   kind: 'soundTrim';
   previewVolume?: number;
 } & ({ mode: 'create' } | { mode: 'edit'; item: SoundTrimEditItem });

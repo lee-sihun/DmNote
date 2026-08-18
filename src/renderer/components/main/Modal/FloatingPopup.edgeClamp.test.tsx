@@ -2,6 +2,10 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FloatingPopup from './FloatingPopup';
+import {
+  settleDeferredContent,
+  stubAnimationFrame,
+} from '@src/renderer/__tests__/deferredContentHarness';
 
 const VIEWPORT_WIDTH = 800;
 const VIEWPORT_HEIGHT = 600;
@@ -52,12 +56,7 @@ describe('FloatingPopup 화면 경계 보정', () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal('innerWidth', VIEWPORT_WIDTH);
     vi.stubGlobal('innerHeight', VIEWPORT_HEIGHT);
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
-      window.setTimeout(() => callback(0), 0),
-    );
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-      window.clearTimeout(id);
-    });
+    stubAnimationFrame();
     grown = false;
     ResizeObserverStub.instances = [];
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
@@ -95,10 +94,7 @@ describe('FloatingPopup 화면 경계 보정', () => {
         </FloatingPopup>,
       );
     });
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    });
+    await settleDeferredContent();
   };
 
   it('오른쪽 경계를 넘으면 안쪽으로 당긴다', async () => {
