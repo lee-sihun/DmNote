@@ -94,23 +94,74 @@ fn stored_bounds_need_monitor_data(
 
 /// 저장된 사각형을 logical 좌표로 정규화한다.
 /// 구버전 store는 physical px를 담고 있으므로(`overlay_bounds_are_logical == false`)
-/// 환산 없이 쓰면 defer_overlay_bounds가 마커를 true로 굳혀 좌표가 영구 고착된다.
-/// 환산에 실패하면 None - 호출부가 각자 안전한 대체 경로를 고른다
+/// 환산이 필요하다. 모니터 조회가 비어 환산 근거가 없으면 `fallback_scale`
+/// (보통 창 자신의 scale)로 재시도한다 - 모니터 열거는 실패해도 창 scale은
+/// 살아 있는 경우가 있어, 환산을 포기하고 physical 값을 그대로 쓰는 것보다 낫다.
+/// 그래도 실패하면 None - 호출부가 각자 안전한 대체 경로를 고른다
 fn normalize_stored_overlay_bounds(
     stored: Option<&OverlayBounds>,
     bounds_are_logical: bool,
     monitors: &MonitorData,
+    fallback_scale: Option<f64>,
 ) -> Option<OverlayBounds> {
     let usable = stored.filter(|bounds| overlay_bounds_are_usable(bounds))?;
 
     let normalized = if bounds_are_logical {
         usable.clone()
     } else {
-        convert_physical_bounds_to_logical(usable, monitors)?
+        match convert_physical_bounds_to_logical(usable, monitors) {
+            Some(converted) => converted,
+            None => {
+                let scale = fallback_scale?;
+                log::warn!(
+                    "[overlay] monitor data unavailable; converting stored bounds with window scale {scale}"
+                );
+                scale_physical_bounds_to_logical(usable, scale)?
+            }
+        }
     };
 
     // 극단적으로 작은 scale로 나누면 inf로 넘칠 수 있어 결과도 재검증한다
     overlay_bounds_are_usable(&normalized).then_some(normalized)
+}
+
+/// 초기화 resize에서 복원 좌표를 어디에 놓을지 정한다.
+/// 저장된 크기가 아니라 **이번에 적용될 크기**로 판정해야, 화면 안으로
+/// 되돌린다는 목적을 실제로 달성한다 (콘텐츠 크기는 첫 resize에서 처음 확정됨)
+fn initial_overlay_placement(
+    stored: &OverlayBounds,
+    width: f64,
+    height: f64,
+    monitors: &MonitorData,
+) -> OverlayPosition {
+    compute_overlay_position(
+        &OverlayBounds {
+            x: stored.x,
+            y: stored.y,
+            width,
+            height,
+        },
+        true,
+        monitors,
+    )
+}
+
+fn monitor_scale_is_usable(scale: f64) -> bool {
+    scale.is_finite() && scale > 0.0
+}
+
+/// 주어진 scale 하나로 physical 사각형을 logical로 나눈다
+fn scale_physical_bounds_to_logical(bounds: &OverlayBounds, scale: f64) -> Option<OverlayBounds> {
+    if !monitor_scale_is_usable(scale) {
+        return None;
+    }
+
+    Some(OverlayBounds {
+        x: bounds.x / scale,
+        y: bounds.y / scale,
+        width: bounds.width / scale,
+        height: bounds.height / scale,
+    })
 }
 
 /// 창이 없을 때 위치 초기화가 딛고 설 사각형.
@@ -120,7 +171,8 @@ fn overlay_reset_fallback_rect(
     bounds_are_logical: bool,
     monitors: &MonitorData,
 ) -> (LogicalPosition<f64>, LogicalSize<f64>) {
-    match normalize_stored_overlay_bounds(stored, bounds_are_logical, monitors) {
+    // 창이 없는 경로라 창 scale을 근거로 쓸 수 없다
+    match normalize_stored_overlay_bounds(stored, bounds_are_logical, monitors, None) {
         Some(bounds) => (
             LogicalPosition::new(bounds.x, bounds.y),
             LogicalSize::new(
@@ -2173,7 +2225,10 @@ impl AppState {
             );
         }
 
-        let scale_factor = window.scale_factor().unwrap_or(1.0);
+        // 한 번만 조회한다 - 프레임 적용과 환산 근거가 서로 다른 값을 보면
+        // 방금 얻은 멀쩡한 scale을 쥐고도 환산을 포기하는 일이 생긴다
+        let window_scale = window.scale_factor().ok();
+        let scale_factor = window_scale.unwrap_or(1.0);
         let position = window
             .outer_position()
             .map(|value| value.to_logical::<f64>(scale_factor))
@@ -2194,7 +2249,9 @@ impl AppState {
             // store에서 저장된 위치를 가져와 사용 (빌더 position이 무시될 수 있으므로).
             // 구버전 store의 physical 좌표를 그대로 쓰면 뒤이은 defer_overlay_bounds가
             // 마커를 true로 굳혀 영구 고착되므로 환산을 거친다.
-            // 환산 불가 시엔 창의 실제 위치를 유지하는 편이 안전하다
+            // 환산 불가 시엔 창의 실제 위치를 유지하는 편이 안전하다.
+            // 겹침 구제도 이 레거시 마커 경로에서만 걸린다 - 마커가 true면
+            // 창 생성 시 이미 배치가 확정됐다는 뜻이라 모니터를 조회하지 않는다
             let snapshot = self.store.snapshot();
             // 환산이 필요할 때만 모니터를 조회한다
             let monitors = if stored_bounds_need_monitor_data(
@@ -2209,10 +2266,12 @@ impl AppState {
                 snapshot.overlay_bounds.as_ref(),
                 snapshot.overlay_bounds_are_logical,
                 &monitors,
+                window_scale,
             );
             if let Some(stored) = restored {
-                new_x = stored.x;
-                new_y = stored.y;
+                let placement = initial_overlay_placement(&stored, width, height, &monitors);
+                new_x = placement.x;
+                new_y = placement.y;
             }
             // 초기화 중이라도 content_top_offset은 저장해야 다음 resize에서 delta 계산이 정확함
             if let Some(offset) = content_top_offset {
@@ -3364,7 +3423,7 @@ impl AppState {
 
         let original_x = bounds.x;
         let original_y = bounds.y;
-        let position = self.compute_overlay_position(&bounds, had_bounds, &monitor_data);
+        let position = compute_overlay_position(&bounds, had_bounds, &monitor_data);
         bounds.x = position.x;
         bounds.y = position.y;
         let position_was_adjusted =
@@ -3555,72 +3614,6 @@ impl AppState {
                 }
             _ => {}
         });
-    }
-
-    fn compute_overlay_position(
-        &self,
-        bounds: &OverlayBounds,
-        had_stored_bounds: bool,
-        monitors: &MonitorData,
-    ) -> OverlayPosition {
-        // 최소 가시 면적 — 오버레이 전체 면적의 25% 또는 100×100 중 작은 값
-        let min_visible_area = (bounds.width * bounds.height * 0.25).min(100.0 * 100.0);
-
-        if monitors.is_empty() {
-            return if had_stored_bounds {
-                OverlayPosition {
-                    x: bounds.x,
-                    y: bounds.y,
-                }
-            } else {
-                OverlayPosition {
-                    x: OVERLAY_MARGIN,
-                    y: OVERLAY_MARGIN,
-                }
-            };
-        }
-
-        let fallback = monitors
-            .primary_spec()
-            .cloned()
-            .or_else(|| monitors.first().cloned());
-
-        let Some(fallback_spec) = fallback else {
-            return OverlayPosition {
-                x: bounds.x,
-                y: bounds.y,
-            };
-        };
-
-        // 저장된 위치가 없으면 기본 위치로 배치 (clamp 적용)
-        if !had_stored_bounds {
-            let base_x = fallback_spec.logical_origin_x + fallback_spec.logical_width
-                - bounds.width
-                - OVERLAY_MARGIN;
-            let base_y = fallback_spec.logical_origin_y + fallback_spec.logical_height
-                - bounds.height
-                - OVERLAY_MARGIN;
-            return fallback_spec.clamp(base_x, base_y, bounds.width, bounds.height);
-        }
-
-        // 저장된 bounds와 가장 많이 겹치는 모니터 탐색
-        if let Some(best) =
-            monitors.find_best_overlap(bounds.x, bounds.y, bounds.width, bounds.height)
-        {
-            let area = best.intersection_area(bounds.x, bounds.y, bounds.width, bounds.height);
-            if area >= min_visible_area {
-                // 충분히 보이므로 저장 좌표 그대로 복원
-                return OverlayPosition {
-                    x: bounds.x,
-                    y: bounds.y,
-                };
-            }
-            // 겹침이 부족하면 해당 모니터에 clamp
-            return best.clamp(bounds.x, bounds.y, bounds.width, bounds.height);
-        }
-
-        // 어떤 모니터와도 겹치지 않음 — fallback 모니터에 clamp
-        fallback_spec.clamp(bounds.x, bounds.y, bounds.width, bounds.height)
     }
 
     fn apply_settings_effects(&self, diff: &SettingsDiff, app: &AppHandle) -> Result<()> {
@@ -4807,16 +4800,7 @@ fn convert_physical_bounds_to_logical(
         .map(|spec| spec.scale_factor)
         .unwrap_or_else(|| monitors.fallback_scale());
 
-    if !scale.is_finite() || scale <= 0.0 {
-        return None;
-    }
-
-    Some(OverlayBounds {
-        x: bounds.x / scale,
-        y: bounds.y / scale,
-        width: bounds.width / scale,
-        height: bounds.height / scale,
-    })
+    scale_physical_bounds_to_logical(bounds, scale)
 }
 
 #[derive(Clone)]
@@ -4835,6 +4819,10 @@ struct MonitorSpec {
 impl MonitorSpec {
     fn from_monitor(monitor: Monitor) -> Option<Self> {
         let scale = monitor.scale_factor();
+        // 병리적 scale이 spec에 섞이면 환산이 조용히 깨진다
+        if !monitor_scale_is_usable(scale) {
+            return None;
+        }
         let work_area = monitor.work_area();
         let origin = work_area.position;
         let size = work_area.size;
@@ -5381,12 +5369,77 @@ impl PanelBoundsPersistenceController {
     }
 }
 
+fn compute_overlay_position(
+    bounds: &OverlayBounds,
+    had_stored_bounds: bool,
+    monitors: &MonitorData,
+) -> OverlayPosition {
+    // 최소 가시 면적 — 오버레이 전체 면적의 25% 또는 100×100 중 작은 값
+    let min_visible_area = (bounds.width * bounds.height * 0.25).min(100.0 * 100.0);
+
+    if monitors.is_empty() {
+        return if had_stored_bounds {
+            OverlayPosition {
+                x: bounds.x,
+                y: bounds.y,
+            }
+        } else {
+            OverlayPosition {
+                x: OVERLAY_MARGIN,
+                y: OVERLAY_MARGIN,
+            }
+        };
+    }
+
+    let fallback = monitors
+        .primary_spec()
+        .cloned()
+        .or_else(|| monitors.first().cloned());
+
+    let Some(fallback_spec) = fallback else {
+        return OverlayPosition {
+            x: bounds.x,
+            y: bounds.y,
+        };
+    };
+
+    // 저장된 위치가 없으면 기본 위치로 배치 (clamp 적용)
+    if !had_stored_bounds {
+        let base_x = fallback_spec.logical_origin_x + fallback_spec.logical_width
+            - bounds.width
+            - OVERLAY_MARGIN;
+        let base_y = fallback_spec.logical_origin_y + fallback_spec.logical_height
+            - bounds.height
+            - OVERLAY_MARGIN;
+        return fallback_spec.clamp(base_x, base_y, bounds.width, bounds.height);
+    }
+
+    // 저장된 bounds와 가장 많이 겹치는 모니터 탐색
+    if let Some(best) = monitors.find_best_overlap(bounds.x, bounds.y, bounds.width, bounds.height)
+    {
+        let area = best.intersection_area(bounds.x, bounds.y, bounds.width, bounds.height);
+        if area >= min_visible_area {
+            // 충분히 보이므로 저장 좌표 그대로 복원
+            return OverlayPosition {
+                x: bounds.x,
+                y: bounds.y,
+            };
+        }
+        // 겹침이 부족하면 해당 모니터에 clamp
+        return best.clamp(bounds.x, bounds.y, bounds.width, bounds.height);
+    }
+
+    // 어떤 모니터와도 겹치지 않음 — fallback 모니터에 clamp
+    fallback_spec.clamp(bounds.x, bounds.y, bounds.width, bounds.height)
+}
+
 fn defer_overlay_bounds_from_window(
     window: &WebviewWindow,
     store: &Arc<AppStore>,
     generation: &Arc<AtomicU64>,
 ) -> Result<()> {
-    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    // scale 조회가 실패하면 1.0으로 때우지 않는다 - physical 값이 logical 라벨로 굳는다
+    let scale_factor = window.scale_factor()?;
     let position = window.outer_position()?.to_logical::<f64>(scale_factor);
     let size = window.outer_size()?.to_logical::<f64>(scale_factor);
 
@@ -5403,6 +5456,12 @@ fn defer_overlay_bounds_from_window(
     )
 }
 
+/// 모든 호출부는 logical 사각형만 넘긴다 - `apply_overlay_frame` 반환값,
+/// `MonitorSpec`의 logical 필드, `to_logical(scale)` 산출값이 전부다.
+/// 따라서 `overlay_bounds_are_logical = true`는 참인 단언이다.
+/// 마커를 인자화해 false를 보존하면 다음 세션의 ensure_overlay_window가
+/// x/y/width/height 전부를 scale로 다시 나눠 이중 환산이 발생한다
+/// (신규 설치 후 위치 초기화, 창 드래그 경로가 즉시 깨진다)
 fn defer_overlay_bounds(
     store: &Arc<AppStore>,
     generation: &Arc<AtomicU64>,
@@ -5494,28 +5553,29 @@ mod tests {
         canonical_hold_duration_ms, changed_panel_max_height, clamp_overlay_dimension,
         collect_authorized_css_paths, collect_frontend_lifecycle_targets,
         frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
-        global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
-        key_state_payload, next_keyboard_recovery_plan, normalize_stored_overlay_bounds,
-        overlay_reset_fallback_rect, panel_bounds_from_sample, panel_height_bounds,
-        publish_panel_hidden_transition, publish_panel_visibility_transition,
-        publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
-        run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
-        should_restore_panel_on_startup, stored_bounds_need_monitor_data,
-        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
-        take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
-        EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
-        FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
-        LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex, PanelBoundsChange,
-        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
-        PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
-        PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
-        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
-        SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
-        DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
-        KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS,
-        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
-        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
-        PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
+        global_css_watch_path, initial_overlay_placement, install_history_handshake,
+        install_lifecycle_handshake, key_state_payload, monitor_scale_is_usable,
+        next_keyboard_recovery_plan, normalize_stored_overlay_bounds, overlay_reset_fallback_rect,
+        panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
+        publish_panel_visibility_transition, publish_selection_snapshot, resolve_event_age_ms,
+        resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
+        should_recover_keyboard_daemon, should_restore_panel_on_startup,
+        stored_bounds_need_monitor_data, take_cancelable_editor_flush_handshake,
+        take_editor_flush_handshake, take_targeted_panel_view_state, validate_selection_session,
+        EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
+        FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
+        FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex,
+        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
+        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab,
+        PanelPropertyTab, PanelViewMode, PanelViewState, PanelViewTarget,
+        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
+        PhysicalPosition, PhysicalSize, SelectionSessionElement, SelectionSessionSnapshot,
+        TargetedPanelViewState, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
+        MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
+        OVERLAY_LABEL, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
+        PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
@@ -6651,18 +6711,32 @@ mod tests {
             height: 640.0,
         };
 
-        let converted = normalize_stored_overlay_bounds(Some(&stored), false, &monitors)
+        let converted = normalize_stored_overlay_bounds(Some(&stored), false, &monitors, None)
             .expect("physical 좌표는 환산되어야 한다");
         assert_eq!((converted.x, converted.y), (200.0, 100.0));
         assert_eq!((converted.width, converted.height), (860.0, 320.0));
 
-        let passthrough = normalize_stored_overlay_bounds(Some(&stored), true, &monitors)
+        let passthrough = normalize_stored_overlay_bounds(Some(&stored), true, &monitors, None)
             .expect("logical 좌표는 그대로 쓴다");
         assert_eq!((passthrough.x, passthrough.y), (400.0, 200.0));
 
         // 환산 근거가 없으면 None - 호출부가 창의 실제 위치를 유지하도록
         let blind = MonitorData::default();
-        assert!(normalize_stored_overlay_bounds(Some(&stored), false, &blind).is_none());
+        assert!(normalize_stored_overlay_bounds(Some(&stored), false, &blind, None).is_none());
+        // 모니터가 없어도 창 scale이 살아 있으면 그것을 근거로 환산한다
+        let by_window_scale =
+            normalize_stored_overlay_bounds(Some(&stored), false, &blind, Some(2.0))
+                .expect("창 scale이 2차 환산 근거가 되어야 한다");
+        assert_eq!((by_window_scale.x, by_window_scale.y), (200.0, 100.0));
+        assert_eq!(
+            (by_window_scale.width, by_window_scale.height),
+            (860.0, 320.0)
+        );
+        // 창 scale도 병리적이면 근거가 못 된다
+        assert!(normalize_stored_overlay_bounds(Some(&stored), false, &blind, Some(0.0)).is_none());
+        assert!(
+            normalize_stored_overlay_bounds(Some(&stored), false, &blind, Some(f64::NAN)).is_none()
+        );
 
         // 깨진 값은 마커와 무관하게 거른다
         let broken = OverlayBounds {
@@ -6671,8 +6745,8 @@ mod tests {
             width: 800.0,
             height: 300.0,
         };
-        assert!(normalize_stored_overlay_bounds(Some(&broken), true, &monitors).is_none());
-        assert!(normalize_stored_overlay_bounds(None, true, &monitors).is_none());
+        assert!(normalize_stored_overlay_bounds(Some(&broken), true, &monitors, None).is_none());
+        assert!(normalize_stored_overlay_bounds(None, true, &monitors, None).is_none());
     }
 
     #[test]
@@ -6690,6 +6764,72 @@ mod tests {
         // 저장값이 없으면 환산할 대상 자체가 없다
         assert!(!stored_bounds_need_monitor_data(false, None));
         assert!(!stored_bounds_need_monitor_data(true, None));
+    }
+
+    #[test]
+    fn a_false_marker_on_logical_bounds_is_a_double_conversion() {
+        // defer_overlay_bounds가 마커를 무조건 true로 세팅하는 것은 거짓말이 아니다.
+        // 호출부가 넘기는 값은 전부 logical이며, 마커를 false로 "보존"하면
+        // 다음 세션의 ensure_overlay_window가 x/y/w/h를 전부 다시 나눈다.
+        // 신규 설치 후 위치 초기화(화면 중앙)가 절반 크기로 왼쪽 위에 뜨게 되는 경로
+        let monitors = reset_test_monitors(2.0);
+        let centered = OverlayBounds {
+            x: 530.0,
+            y: 380.0,
+            width: 860.0,
+            height: 320.0,
+        };
+
+        let double_converted =
+            normalize_stored_overlay_bounds(Some(&centered), false, &monitors, None)
+                .expect("마커가 false면 환산 대상이 된다");
+        assert_eq!((double_converted.x, double_converted.y), (265.0, 190.0));
+        assert_eq!(
+            (double_converted.width, double_converted.height),
+            (430.0, 160.0)
+        );
+
+        // 마커가 true여야 저장된 그대로 복원된다
+        let preserved = normalize_stored_overlay_bounds(Some(&centered), true, &monitors, None)
+            .expect("logical 값은 그대로 쓴다");
+        assert_eq!((preserved.x, preserved.y), (530.0, 380.0));
+        assert_eq!((preserved.width, preserved.height), (860.0, 320.0));
+    }
+
+    #[test]
+    fn pathological_monitor_scale_is_rejected() {
+        // scale이 0/NaN인 모니터가 spec에 섞이면 logical 필드가 inf/NaN이 되어
+        // clamp와 겹침 판정이 통째로 오염된다. from_monitor가 이 술어로 걸러낸다
+        assert!(monitor_scale_is_usable(1.0));
+        assert!(monitor_scale_is_usable(2.0));
+        assert!(!monitor_scale_is_usable(0.0));
+        assert!(!monitor_scale_is_usable(-1.0));
+        assert!(!monitor_scale_is_usable(f64::NAN));
+        assert!(!monitor_scale_is_usable(f64::INFINITY));
+    }
+
+    #[test]
+    fn initial_placement_clamps_with_the_size_being_applied() {
+        // 초기화 resize는 콘텐츠 크기를 처음 확정하는 순간이라, 저장된 크기로
+        // 판정하면 화면 안으로 되돌린다는 목적을 놓친다
+        let monitors = reset_test_monitors(2.0); // logical 1920x1080
+        let stored = OverlayBounds {
+            x: 1900.0,
+            y: 50.0,
+            width: 860.0,
+            height: 320.0,
+        };
+
+        // 이번에 적용될 크기는 1200x400 - 저장된 860 기준으로 clamp하면
+        // 우측 끝이 1060+1200 = 2260이 되어 340px가 화면 밖에 남는다
+        let placement = initial_overlay_placement(&stored, 1200.0, 400.0, &monitors);
+        assert_eq!(placement.x, 1920.0 - 1200.0);
+        assert!(placement.x + 1200.0 <= 1920.0);
+
+        // 모니터 정보가 없으면 판정 근거가 없으므로 좌표를 그대로 둔다
+        let blind = MonitorData::default();
+        let untouched = initial_overlay_placement(&stored, 1200.0, 400.0, &blind);
+        assert_eq!((untouched.x, untouched.y), (1900.0, 50.0));
     }
 
     #[test]
@@ -6716,7 +6856,7 @@ mod tests {
             width: 1e200,
             height: 1e200,
         };
-        assert!(normalize_stored_overlay_bounds(Some(&stored), false, &monitors).is_none());
+        assert!(normalize_stored_overlay_bounds(Some(&stored), false, &monitors, None).is_none());
     }
 
     #[test]
