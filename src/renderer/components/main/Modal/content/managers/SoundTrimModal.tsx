@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
 import { isTopmostPopupLayer } from '@components/main/Modal/popupLayer';
@@ -328,6 +328,14 @@ const SoundTrimModal = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // 시트 본문은 첫 paint 뒤에 붙는다(FullSurfaceModalLayout after-paint). 파형 노드에
+  // 리스너·관측을 거는 이펙트는 마운트 시점 ref 읽기로는 노드를 못 잡으므로,
+  // 붙는 순간을 state로 받아 그때 다시 돌린다. 핸들러는 그대로 ref를 읽는다
+  const [waveformHost, setWaveformHost] = useState<HTMLDivElement | null>(null);
+  const attachWaveformHost = useCallback((node: HTMLDivElement | null) => {
+    waveformRef.current = node;
+    setWaveformHost(node);
+  }, []);
   const dragTargetRef = useRef<DragTarget>(null);
 
   const isEditMode = !!editingSoundPath;
@@ -705,7 +713,7 @@ const SoundTrimModal = ({
     if (!isOpen) return;
     if (isPlaying) return; // 재생 중에는 애니메이션 루프가 렌더 담당
     const canvas = canvasRef.current;
-    if (!canvas || peaks.length === 0) return;
+    if (!waveformHost || !canvas || peaks.length === 0) return;
     drawWaveform(
       canvas,
       peaks,
@@ -715,11 +723,20 @@ const SoundTrimModal = ({
       viewStart,
       viewEnd,
     );
-  }, [isOpen, isPlaying, peaks, startRatio, endRatio, viewStart, viewEnd]);
+  }, [
+    isOpen,
+    isPlaying,
+    peaks,
+    startRatio,
+    endRatio,
+    viewStart,
+    viewEnd,
+    waveformHost,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const node = waveformRef.current;
+    const node = waveformHost;
     if (!node) return;
 
     const observer = new ResizeObserver(() => {
@@ -730,7 +747,7 @@ const SoundTrimModal = ({
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isOpen, isPlaying]);
+  }, [isOpen, isPlaying, waveformHost]);
 
   const selectFile = () => {
     fileInputRef.current?.click();
@@ -749,39 +766,38 @@ const SoundTrimModal = ({
   viewPanRatioRef.current = viewPanRatio;
   const wheelDeltaRef = useRef(0);
 
-  const applyWheel = (e: WheelEvent, deltaY: number) => {
-    if (!audioBuffer) return;
-
-    const host = waveformRef.current;
-    if (!host) return;
-    const rect = host.getBoundingClientRect();
-    const drawableW = rect.width - WAVEFORM_PAD_X * 2;
-    const mouseScreenRatio = clamp(
-      (e.clientX - rect.left - WAVEFORM_PAD_X) / Math.max(1, drawableW),
-      0,
-      1,
-    );
-
-    const curZoom = viewZoomRef.current;
-    const curPan = viewPanRatioRef.current;
-    const curViewSpan = 1 / curZoom;
-    const mouseAudioRatio = curPan + mouseScreenRatio * curViewSpan;
-
-    const zoomFactor = Math.exp(-deltaY * 0.0018);
-    const newZoom = clamp(curZoom * zoomFactor, MIN_VIEW_ZOOM, MAX_VIEW_ZOOM);
-    const newViewSpan = 1 / newZoom;
-
-    let newPan = mouseAudioRatio - mouseScreenRatio * newViewSpan;
-    newPan = clamp(newPan, 0, Math.max(0, 1 - newViewSpan));
-
-    setViewZoom(newZoom);
-    setViewPanRatio(newPan);
-  };
-
+  // 최신 값은 전부 ref로 읽으므로 노드가 붙을 때만 다시 건다. 매 렌더 재등록하면
+  // 정리 시 스케줄러가 아직 안 흘린 휠 델타를 버린다
   useEffect(() => {
     if (!isOpen) return;
-    const node = waveformRef.current;
+    const node = waveformHost;
     if (!node) return;
+    const applyWheel = (e: WheelEvent, deltaY: number) => {
+      if (!audioBufferRef.current) return;
+
+      const rect = node.getBoundingClientRect();
+      const drawableW = rect.width - WAVEFORM_PAD_X * 2;
+      const mouseScreenRatio = clamp(
+        (e.clientX - rect.left - WAVEFORM_PAD_X) / Math.max(1, drawableW),
+        0,
+        1,
+      );
+
+      const curZoom = viewZoomRef.current;
+      const curPan = viewPanRatioRef.current;
+      const curViewSpan = 1 / curZoom;
+      const mouseAudioRatio = curPan + mouseScreenRatio * curViewSpan;
+
+      const zoomFactor = Math.exp(-deltaY * 0.0018);
+      const newZoom = clamp(curZoom * zoomFactor, MIN_VIEW_ZOOM, MAX_VIEW_ZOOM);
+      const newViewSpan = 1 / newZoom;
+
+      let newPan = mouseAudioRatio - mouseScreenRatio * newViewSpan;
+      newPan = clamp(newPan, 0, Math.max(0, 1 - newViewSpan));
+
+      setViewZoom(newZoom);
+      setViewPanRatio(newPan);
+    };
     const scheduler = createRafLatestScheduler<WheelEvent>((event) => {
       const deltaY = wheelDeltaRef.current;
       wheelDeltaRef.current = 0;
@@ -798,7 +814,7 @@ const SoundTrimModal = ({
       wheelDeltaRef.current = 0;
       node.removeEventListener('wheel', handleWheel);
     };
-  });
+  }, [continuousInputStrategy, isOpen, waveformHost]);
 
   // 중간 버튼 드래그: 줌 시 수평 패닝
   const handleMiddleDown = (e: MouseEvent) => {
@@ -850,14 +866,14 @@ const SoundTrimModal = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    const node = waveformRef.current;
+    const node = waveformHost;
     if (!node) return;
     node.addEventListener('mousedown', handleMiddleDown);
     return () => {
       node.removeEventListener('mousedown', handleMiddleDown);
       middleDragCleanupRef.current?.();
     };
-  }, [isOpen]);
+  }, [isOpen, waveformHost]);
 
   // 커서 overlay 루트가 모달 포털보다 DOM 순서상 위에 위치하도록 보장
   useEffect(() => {
@@ -872,7 +888,7 @@ const SoundTrimModal = ({
   useEffect(() => {
     if (!isOpen || !audioBuffer) return;
     const canvas = canvasRef.current;
-    const host = waveformRef.current;
+    const host = waveformHost;
     if (!canvas || !host) return;
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -912,7 +928,7 @@ const SoundTrimModal = ({
       canvas.removeEventListener('mouseleave', handleMouseLeave);
       setCustomCursorHover(null);
     };
-  }, [isOpen, audioBuffer]);
+  }, [isOpen, audioBuffer, waveformHost]);
 
   const updateFromClientX = (clientX: number, target: DragTarget) => {
     const host = waveformRef.current;
@@ -1111,7 +1127,7 @@ const SoundTrimModal = ({
         {/* 파형 카드 — 카드 내부를 통째로 채우는 풀블리드 캔버스 */}
         <div className="flex-1 min-w-0 min-h-0 bg-fill-faint rounded-surface p-[10px] flex flex-col">
           <div
-            ref={waveformRef}
+            ref={attachWaveformHost}
             data-sound-waveform="true"
             className="relative flex-1 min-h-0 min-w-0 rounded-md overflow-hidden bg-inset"
             onPointerDown={handleWaveformPointerDown}
