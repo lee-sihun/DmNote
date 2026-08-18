@@ -409,7 +409,8 @@ impl AppStore {
         self.commit_locked(&mut guard, scratch, ())
     }
 
-    /// overlay·panel 창 상태(bounds, 분리 여부) 전용
+    /// overlay·panel 창 상태 전용 - 드래그와 리사이즈로 쏟아지는 갱신을 합치는 경로다.
+    /// 저장 보증이 필요한 갱신은 호출자가 락을 놓은 뒤 flush로 이어 붙인다(분리 플래그가 그 경우).
     /// 다른 데이터에는 일반 update를 사용해 성공한 저장만 committed로 공개해야 함
     pub(crate) fn update_deferred(&self, updater: impl FnOnce(&mut AppStoreData)) -> Result<()> {
         let mut guard = self.lock_for_update()?;
@@ -18627,13 +18628,16 @@ mod tests {
     }
 
     #[test]
-    fn panel_detached_persists_and_restores_across_store_reopen() {
+    fn panel_detached_persists_immediately_and_restores_across_store_reopen() {
         let dir = test_directory("panel-detached-persist-test");
         let store = AppStore::initialize_in_dir(&dir).unwrap();
 
-        store
-            .update_deferred(|state| state.panel_detached = true)
-            .unwrap();
+        store.update(|state| state.panel_detached = true).unwrap();
+        // flush 전에 이미 디스크에 있어야 강제 종료로 배치 선택이 날아가지 않는다
+        let persisted: AppStoreData =
+            serde_json::from_slice(&std::fs::read(dir.join("store.json")).unwrap()).unwrap();
+        assert!(persisted.panel_detached);
+
         store.flush_and_shutdown().unwrap();
         drop(store);
 

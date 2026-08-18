@@ -1844,6 +1844,8 @@ pub struct OverlayBounds {
     pub height: f64,
 }
 
+/// 분리 패널의 마지막 기하 정보. 복원에 쓰는 값은 height뿐이고
+/// x/y는 이동 기록으로만 남는다 - 패널은 열 때마다 메인 창 옆에 다시 배치된다
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PanelBounds {

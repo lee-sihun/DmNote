@@ -188,6 +188,8 @@ fn overlay_reset_fallback_rect(
 }
 
 const PANEL_WIDTH: f64 = 240.0;
+// 분리 패널과 메인 창 사이 여백
+const PANEL_BESIDE_GAP: f64 = 16.0;
 // 피커가 트리거 행 아래에 그대로 들어갈 세로 여유 - 이보다 낮으면 팝업이
 // 매번 위로 뒤집히거나 창 경계로 클램프됨. 늘리는 것만 허용
 const PANEL_INITIAL_HEIGHT: f64 = 712.0;
@@ -1166,15 +1168,7 @@ impl AppState {
         if should_create_overlay_on_startup(snapshot.obs_mode_enabled, snapshot.overlay_visible) {
             self.ensure_overlay_window(app)?;
         }
-        if should_restore_panel_on_startup(
-            snapshot.obs_mode_enabled,
-            snapshot.main_window_hidden,
-            snapshot.panel_detached,
-        ) {
-            if let Err(err) = self.restore_panel_window_on_startup(app) {
-                log::warn!("failed to restore detached panel window: {err}");
-            }
-        }
+        // 분리 패널 복원은 메인 창 배치가 끝난 뒤 restore_detached_panel_on_startup이 맡는다
         // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         if snapshot.developer_mode_enabled {
             if let Some(main) = app.get_webview_window("main") {
@@ -1183,9 +1177,7 @@ impl AppState {
             if let Some(overlay) = app.get_webview_window("overlay") {
                 overlay.open_devtools();
             }
-            if let Some(panel) = app.get_webview_window(PANEL_LABEL) {
-                panel.open_devtools();
-            }
+            // 분리 패널 DevTools는 create_panel_window가 직접 연다
         }
         self.start_keyboard_hook(app.clone())?;
         // CSS 핫리로딩 워처 초기화
@@ -3098,54 +3090,99 @@ impl AppState {
     }
 
     pub fn show_panel_window(&self, app: &AppHandle, view_state: PanelViewState) -> Result<()> {
-        let _creation_guard = self.panel_creation_lock.lock();
-        *self.panel_view_state.lock() = Some(TargetedPanelViewState {
-            target: PanelViewTarget::Panel,
-            view_state,
-        });
-        *self.panel_destroy_reason.lock() = None;
-        let result = if let Some(window) = app.get_webview_window(PANEL_LABEL) {
-            let _ = window.unminimize();
-            window
-                .show()
-                .and_then(|()| window.set_focus())
-                .map_err(anyhow::Error::from)
-                .and_then(|()| {
-                    publish_panel_visibility_transition(&self.panel_visible, app, true, None)
-                })
-        } else {
-            self.create_panel_window(app).and_then(|_| {
-                publish_panel_visibility_transition(&self.panel_visible, app, true, None)
-            })
+        // 창 게터와 모니터 조회는 메인 스레드 이벤트 루프로 왕복한다 - 락을 쥔 워커에서
+        // 부르면 메인이 같은 락을 기다리는 순간 역전 데드락이라 락 밖에서 먼저 읽는다.
+        // 창 생성 자체는 여전히 락 안이므로 메인 스레드에서 이 락을 잡으면 안 되는 건 그대로다
+        let main_rect = main_window_logical_rect(app);
+        let monitors = MonitorData::gather(app);
+        let result = {
+            let _creation_guard = self.panel_creation_lock.lock();
+            *self.panel_view_state.lock() = Some(TargetedPanelViewState {
+                target: PanelViewTarget::Panel,
+                view_state,
+            });
+            *self.panel_destroy_reason.lock() = None;
+            let result = if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+                let _ = window.unminimize();
+                window
+                    .show()
+                    .and_then(|()| window.set_focus())
+                    .map_err(anyhow::Error::from)
+                    .and_then(|()| {
+                        publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+                    })
+            } else {
+                self.create_panel_window(app, main_rect, &monitors)
+                    .and_then(|_| {
+                        publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+                    })
+            };
+            if result.is_ok() {
+                // 재시작 복원용 분리 상태 기록. 값 갱신은 창 전환과 같은 락 안에서 끝내
+                // 재부착이 끼어들어도 순서가 뒤집히지 않게 하고, 저장 대기만 락 밖으로 뺀다
+                if let Err(err) = self
+                    .store
+                    .update_deferred(|data| data.panel_detached = true)
+                {
+                    log::warn!("failed to record detached panel state: {err}");
+                }
+            }
+            if result.is_err() && app.get_webview_window(PANEL_LABEL).is_none() {
+                clear_targeted_panel_view_state(
+                    &mut self.panel_view_state.lock(),
+                    PanelViewTarget::Panel,
+                );
+            }
+            result
         };
         if result.is_ok() {
-            // 재시작 복원용 분리 상태 기록 (bounds와 같은 deferred 기록 보증 수준)
-            if let Err(err) = self
-                .store
-                .update_deferred(|data| data.panel_detached = true)
-            {
-                log::warn!("failed to record detached panel state: {err}");
+            // 드문 조작이라 즉시 디스크로 - deferred로 두면 강제 종료 때 유저가 고른 배치가 날아감.
+            // 사이에 재부착이 끝났다면 그쪽 저장이 이미 dirty를 걷어가 여기서는 값을 되살리지 않는다
+            if let Err(err) = self.store.flush() {
+                log::warn!("failed to persist detached panel state: {err}");
             }
-        }
-        if result.is_err() && app.get_webview_window(PANEL_LABEL).is_none() {
-            clear_targeted_panel_view_state(
-                &mut self.panel_view_state.lock(),
-                PanelViewTarget::Panel,
-            );
         }
         result
     }
 
+    // 기동 시 분리 패널 복원 진입점. 메인 창 배치가 끝난 뒤에 불러야 한다 -
+    // 패널은 메인 오른쪽에 붙으므로 아직 기본 위치인 메인을 기준으로 잡으면 엉뚱한 자리에 뜬다
+    pub fn restore_detached_panel_on_startup(
+        &self,
+        app: &AppHandle,
+        main_rect: Option<LogicalRect>,
+    ) {
+        let snapshot = self.store.snapshot();
+        if !should_restore_panel_on_startup(
+            snapshot.obs_mode_enabled,
+            snapshot.main_window_hidden,
+            snapshot.panel_detached,
+        ) {
+            return;
+        }
+        if let Err(err) = self.restore_panel_window_on_startup(app, main_rect) {
+            log::warn!("failed to restore detached panel window: {err}");
+        }
+    }
+
     // 재시작 시 분리 창 재생성: 기동 시점엔 뷰 핸드오프 상태가 없어 show_panel_window를 재사용하지 않음
     // panel_view_state가 비어 있으면 패널 엔트리가 기본 뷰로 뜨고,
-    // 저장 bounds와 모니터 보정은 create_panel_window의 resolve_panel_window_layout이 처리
-    fn restore_panel_window_on_startup(&self, app: &AppHandle) -> Result<()> {
+    // 저장 높이와 모니터 보정은 create_panel_window의 resolve_panel_window_layout이 처리
+    fn restore_panel_window_on_startup(
+        &self,
+        app: &AppHandle,
+        main_rect: Option<LogicalRect>,
+    ) -> Result<()> {
+        // 배치를 막 끝낸 쪽이 좌표를 넘겨준다. 그 좌표가 없을 때만 실측으로 되돌아간다 -
+        // 기동 직후의 게터는 아직 옛 프레임을 돌려주므로 기준으로 삼을 수 없다
+        let main_rect = main_rect.or_else(|| main_window_logical_rect(app));
+        let monitors = MonitorData::gather(app);
         let _creation_guard = self.panel_creation_lock.lock();
         if app.get_webview_window(PANEL_LABEL).is_some() {
             return Ok(());
         }
         *self.panel_destroy_reason.lock() = None;
-        self.create_panel_window(app)?;
+        self.create_panel_window(app, main_rect, &monitors)?;
         publish_panel_visibility_transition(&self.panel_visible, app, true, None)
     }
 
@@ -3214,10 +3251,7 @@ impl AppState {
         // 도킹 상태 기록: 명시 재부착과 close-ack 타임아웃 강제 닫힘이 모두 이 경로를 지남
         // Destroyed 핸들러에서는 기록 금지 - 종료 시 shutdown_application이 panel.destroy()를
         // 직접 호출해 같은 핸들러로 들어오므로 분리 채 종료할 때마다 플래그가 지워짐
-        if let Err(err) = self
-            .store
-            .update_deferred(|data| data.panel_detached = false)
-        {
+        if let Err(err) = self.store.update(|data| data.panel_detached = false) {
             log::warn!("failed to record docked panel state: {err}");
         }
         *self.panel_destroy_reason.lock() = Some(reason);
@@ -3230,10 +3264,7 @@ impl AppState {
                 self.clear_panel_destroy_reason(reason);
                 // 창이 살아 있으면 여전히 분리 상태다. 도킹 기록을 되돌리지
                 // 않으면 다음 기동에서 분리 패널이 복원되지 않는다
-                if let Err(err) = self
-                    .store
-                    .update_deferred(|data| data.panel_detached = true)
-                {
+                if let Err(err) = self.store.update(|data| data.panel_detached = true) {
                     log::warn!("failed to restore detached panel state: {err}");
                 }
                 return Err(error.into());
@@ -3295,11 +3326,16 @@ impl AppState {
         }
     }
 
-    fn create_panel_window(&self, app: &AppHandle) -> Result<WebviewWindow> {
-        let monitor_data = MonitorData::gather(app);
+    // monitors는 호출자가 panel_creation_lock 밖에서 모아 넘긴다
+    fn create_panel_window(
+        &self,
+        app: &AppHandle,
+        main_rect: Option<LogicalRect>,
+        monitors: &MonitorData,
+    ) -> Result<WebviewWindow> {
         let snapshot = self.store.snapshot();
         let stored_bounds = snapshot.panel_bounds;
-        let layout = resolve_panel_window_layout(stored_bounds, &monitor_data, None);
+        let layout = resolve_panel_window_layout(stored_bounds, main_rect, monitors, None);
 
         let mut builder = WebviewWindowBuilder::new(app, PANEL_LABEL, WebviewUrl::App(PANEL_ENTRYPOINT.into()))
                 .title("DM Note - Panel")
@@ -5027,6 +5063,73 @@ impl MonitorData {
     }
 }
 
+/// 논리 좌표계 사각형 - 창 게터가 주는 physical 값을 scale로 나눈 도메인
+#[derive(Clone, Copy)]
+pub struct LogicalRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+impl LogicalRect {
+    /// physical 사각형을 scale로 나눠 논리 좌표계로 옮긴다.
+    /// 창을 방금 배치한 쪽이 그 좌표를 그대로 넘길 때 쓴다
+    pub fn from_physical(x: f64, y: f64, width: f64, height: f64, scale: f64) -> Option<Self> {
+        if !monitor_scale_is_usable(scale) {
+            return None;
+        }
+        Some(Self {
+            x: x / scale,
+            y: y / scale,
+            width: width / scale,
+            height: height / scale,
+        })
+    }
+}
+
+/// 메인 창의 현재 사각형을 logical로 읽는다.
+/// 창 게터는 메인 스레드로 왕복하므로 panel_creation_lock 밖에서만 호출할 것.
+/// outer 기준이라 Windows 프레임과 macOS 타이틀바가 포함되는데, 패널은 그 바깥에 붙는 게 맞다
+fn main_window_logical_rect(app: &AppHandle) -> Option<LogicalRect> {
+    let window = app.get_webview_window("main")?;
+    let scale = window
+        .scale_factor()
+        .ok()
+        .filter(|scale| monitor_scale_is_usable(*scale))
+        .unwrap_or(1.0);
+    let position = window.outer_position().ok()?.to_logical::<f64>(scale);
+    let size = window.outer_size().ok()?.to_logical::<f64>(scale);
+    Some(LogicalRect {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+    })
+}
+
+/// 분리 패널을 메인 창 오른쪽에 여백을 두고 세로 중앙으로 붙인다.
+/// 오른쪽 자리가 모자라면 왼쪽, 양쪽 다 모자라면 작업 영역 안으로 밀어 넣는다
+fn panel_position_beside_main(
+    main: &LogicalRect,
+    panel_height: f64,
+    work_area: &MonitorSpec,
+) -> OverlayPosition {
+    let right_x = main.x + main.width + PANEL_BESIDE_GAP;
+    let left_x = main.x - PANEL_BESIDE_GAP - PANEL_WIDTH;
+    let fits_right = right_x + PANEL_WIDTH <= work_area.logical_origin_x + work_area.logical_width;
+    let fits_left = left_x >= work_area.logical_origin_x;
+    // 양쪽 다 안 들어가면 오른쪽 후보를 넘겨 clamp가 작업 영역 오른쪽 끝에 붙이게 둔다
+    let x = if fits_right || !fits_left {
+        right_x
+    } else {
+        left_x
+    };
+    // 패널이 화면보다 높으면 clamp가 위쪽 정렬로 떨어뜨린다
+    let y = main.y + (main.height - panel_height) / 2.0;
+    work_area.clamp(x, y, PANEL_WIDTH, panel_height)
+}
+
 struct PanelWindowLayout {
     position: Option<OverlayPosition>,
     height: f64,
@@ -5048,13 +5151,13 @@ fn panel_height_bounds(work_area_height: Option<f64>) -> (f64, f64) {
 
 fn resolve_panel_window_layout(
     stored_bounds: Option<PanelBounds>,
+    main_rect: Option<LogicalRect>,
     monitors: &MonitorData,
     fallback_height: Option<f64>,
 ) -> PanelWindowLayout {
-    let target_monitor = stored_bounds
-        .and_then(|bounds| {
-            monitors.find_best_overlap(bounds.x, bounds.y, PANEL_WIDTH, bounds.height)
-        })
+    // 기준 화면은 메인 창이 놓인 모니터 - 패널이 그 옆에 붙으니 높이 한계도 같은 화면을 따른다
+    let target_monitor = main_rect
+        .and_then(|rect| monitors.find_best_overlap(rect.x, rect.y, rect.width, rect.height))
         .or_else(|| monitors.primary_spec());
     let (min_height, max_height) =
         panel_height_bounds(target_monitor.map(|monitor| monitor.logical_height));
@@ -5064,14 +5167,11 @@ fn resolve_panel_window_layout(
         .or(fallback_height)
         .unwrap_or(PANEL_INITIAL_HEIGHT);
     let height = requested_height.clamp(min_height, max_height);
-    let position = stored_bounds.map(|bounds| {
-        target_monitor
-            .map(|monitor| monitor.clamp(bounds.x, bounds.y, PANEL_WIDTH, height))
-            .unwrap_or(OverlayPosition {
-                x: bounds.x,
-                y: bounds.y,
-            })
-    });
+    // 위치는 열 때마다 메인 창 옆으로 다시 잡는다 - 저장된 x/y는 이동 기록으로만 남고 복원에 쓰지 않음.
+    // 메인 좌표를 못 읽으면 OS 기본 배치에 맡긴다
+    let position = main_rect
+        .zip(target_monitor)
+        .map(|(rect, monitor)| panel_position_beside_main(&rect, height, monitor));
 
     PanelWindowLayout {
         position,
@@ -5606,26 +5706,27 @@ mod tests {
         global_css_watch_path, initial_overlay_placement, install_history_handshake,
         install_lifecycle_handshake, key_state_payload, monitor_scale_is_usable,
         next_keyboard_recovery_plan, normalize_stored_overlay_bounds, overlay_reset_fallback_rect,
-        panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
-        publish_panel_visibility_transition, publish_selection_snapshot, resolve_event_age_ms,
-        resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
-        should_recover_keyboard_daemon, should_restore_panel_on_startup,
-        stored_bounds_need_monitor_data, take_cancelable_editor_flush_handshake,
-        take_editor_flush_handshake, take_targeted_panel_view_state, validate_selection_session,
-        EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
-        FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
-        FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex,
-        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
-        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab,
-        PanelPropertyTab, PanelViewMode, PanelViewState, PanelViewTarget,
-        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
-        PhysicalPosition, PhysicalSize, SelectionSessionElement, SelectionSessionSnapshot,
-        TargetedPanelViewState, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
-        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-        KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
-        MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
-        OVERLAY_LABEL, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
-        PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
+        panel_bounds_from_sample, panel_height_bounds, panel_position_beside_main,
+        publish_panel_hidden_transition, publish_panel_visibility_transition,
+        publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
+        run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
+        should_restore_panel_on_startup, stored_bounds_need_monitor_data,
+        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
+        take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
+        EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
+        FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
+        LifecycleHandshakeInstall, LogicalRect, MonitorData, MonitorSpec, Mutex, PanelBoundsChange,
+        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
+        PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
+        PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
+        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
+        SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
+        DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+        KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS,
+        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
+        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_BESIDE_GAP,
+        PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH,
+        RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
@@ -5685,11 +5786,100 @@ mod tests {
             }],
             primary_index: Some(0),
         };
-        let layout = resolve_panel_window_layout(None, &monitors, None);
+        let layout = resolve_panel_window_layout(None, None, &monitors, None);
 
         assert!(layout.min_height <= layout.max_height);
         assert!(layout.height <= 680.0);
         assert_eq!(layout.height, layout.max_height);
+    }
+
+    fn work_area_spec(origin_x: f64, origin_y: f64, width: f64, height: f64) -> MonitorSpec {
+        MonitorSpec {
+            logical_origin_x: origin_x,
+            logical_origin_y: origin_y,
+            logical_width: width,
+            logical_height: height,
+            physical_origin_x: origin_x,
+            physical_origin_y: origin_y,
+            physical_width: width,
+            physical_height: height,
+            scale_factor: 1.0,
+        }
+    }
+
+    fn main_rect(x: f64, y: f64, width: f64, height: f64) -> LogicalRect {
+        LogicalRect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn panel_lands_beside_the_main_window_on_the_right() {
+        let work_area = work_area_spec(0.0, 0.0, 1_920.0, 1_080.0);
+        let position =
+            panel_position_beside_main(&main_rect(400.0, 200.0, 900.0, 500.0), 400.0, &work_area);
+
+        assert_eq!(position.x, 400.0 + 900.0 + PANEL_BESIDE_GAP);
+        // 메인 창 세로 중앙
+        assert_eq!(position.y, 250.0);
+    }
+
+    #[test]
+    fn panel_flips_to_the_left_when_the_right_side_has_no_room() {
+        let work_area = work_area_spec(0.0, 0.0, 1_920.0, 1_080.0);
+        let position =
+            panel_position_beside_main(&main_rect(1_600.0, 200.0, 300.0, 500.0), 400.0, &work_area);
+
+        assert_eq!(position.x, 1_600.0 - PANEL_BESIDE_GAP - PANEL_WIDTH);
+        assert_eq!(position.y, 250.0);
+    }
+
+    #[test]
+    fn panel_clamps_into_the_work_area_when_neither_side_fits() {
+        let work_area = work_area_spec(0.0, 0.0, 600.0, 800.0);
+        let position =
+            panel_position_beside_main(&main_rect(0.0, 0.0, 600.0, 400.0), 300.0, &work_area);
+
+        assert_eq!(position.x, 600.0 - PANEL_WIDTH);
+        assert_eq!(position.y, 50.0);
+    }
+
+    #[test]
+    fn panel_taller_than_the_work_area_clamps_to_its_top() {
+        let work_area = work_area_spec(100.0, 50.0, 1_920.0, 1_000.0);
+        let position =
+            panel_position_beside_main(&main_rect(200.0, 400.0, 900.0, 500.0), 1_400.0, &work_area);
+
+        assert_eq!(position.x, 200.0 + 900.0 + PANEL_BESIDE_GAP);
+        assert_eq!(position.y, 50.0);
+    }
+
+    #[test]
+    fn panel_layout_keeps_stored_height_and_places_beside_main() {
+        let monitors = MonitorData {
+            specs: vec![work_area_spec(0.0, 0.0, 1_920.0, 1_080.0)],
+            primary_index: Some(0),
+        };
+        let layout = resolve_panel_window_layout(
+            Some(PanelBounds {
+                x: 31.0,
+                y: 47.0,
+                height: 800.0,
+            }),
+            Some(main_rect(300.0, 100.0, 900.0, 500.0)),
+            &monitors,
+            None,
+        );
+
+        // 높이는 저장값 유지, 위치는 저장값을 무시하고 메인 옆으로 다시 계산
+        assert_eq!(layout.height, 800.0);
+        let position = layout.position.expect("panel should be placed beside main");
+        assert_eq!(position.x, 300.0 + 900.0 + PANEL_BESIDE_GAP);
+        // 세로 중앙이 화면 위로 넘치면 작업 영역 상단에 붙는다
+        assert_eq!(position.y, 0.0);
     }
 
     #[test]
@@ -6024,7 +6214,92 @@ mod tests {
     }
 
     #[test]
-    fn persisted_panel_bounds_restore_with_height_clamping() {
+    fn logical_rect_from_physical_divides_by_scale_and_rejects_unusable_scale() {
+        let rect = LogicalRect::from_physical(1_658.0, 930.0, 1_804.0, 976.0, 2.0)
+            .expect("usable scale converts");
+
+        assert_eq!(rect.x, 829.0);
+        assert_eq!(rect.y, 465.0);
+        assert_eq!(rect.width, 902.0);
+        assert_eq!(rect.height, 488.0);
+        assert!(LogicalRect::from_physical(0.0, 0.0, 100.0, 100.0, 0.0).is_none());
+        assert!(LogicalRect::from_physical(0.0, 0.0, 100.0, 100.0, f64::NAN).is_none());
+    }
+
+    // 기동 복원 회귀: 메인 창을 방금 놓은 좌표를 받으면 세로 중앙이 맞는다
+    #[test]
+    fn panel_restore_centers_on_the_freshly_placed_main_window() {
+        let monitors = MonitorData {
+            specs: vec![work_area_spec(0.0, 30.0, 2_560.0, 1_358.0)],
+            primary_index: Some(0),
+        };
+        let main = LogicalRect::from_physical(1_658.0, 930.0, 1_804.0, 976.0, 2.0)
+            .expect("usable scale converts");
+        let layout = resolve_panel_window_layout(
+            Some(PanelBounds {
+                x: 2_205.0,
+                y: 185.0,
+                height: 712.0,
+            }),
+            Some(main),
+            &monitors,
+            None,
+        );
+
+        assert_eq!(layout.height, 712.0);
+        let position = layout.position.expect("panel should be placed beside main");
+        assert_eq!(position.x, 1_747.0);
+        assert_eq!(position.y, 353.0);
+    }
+
+    #[test]
+    fn panel_layout_leaves_placement_to_the_os_without_monitor_data() {
+        let monitors = MonitorData {
+            specs: Vec::new(),
+            primary_index: None,
+        };
+        let layout = resolve_panel_window_layout(
+            None,
+            Some(main_rect(300.0, 100.0, 900.0, 500.0)),
+            &monitors,
+            None,
+        );
+
+        // 메인 좌표는 있어도 기준 화면을 못 고르면 붙일 자리를 계산할 수 없다
+        assert!(layout.position.is_none());
+        assert_eq!(layout.height, PANEL_INITIAL_HEIGHT);
+    }
+
+    #[test]
+    fn panel_follows_the_monitor_that_holds_the_main_window() {
+        let monitors = MonitorData {
+            specs: vec![
+                work_area_spec(0.0, 0.0, 1_920.0, 1_080.0),
+                work_area_spec(1_920.0, 0.0, 1_280.0, 800.0),
+            ],
+            primary_index: Some(0),
+        };
+        let layout = resolve_panel_window_layout(
+            Some(PanelBounds {
+                x: 31.0,
+                y: 47.0,
+                height: 800.0,
+            }),
+            Some(main_rect(2_000.0, 100.0, 900.0, 500.0)),
+            &monitors,
+            None,
+        );
+
+        // 주 모니터가 아니라 메인 창이 놓인 보조 모니터의 한계를 따른다
+        assert_eq!(layout.max_height, 720.0);
+        assert_eq!(layout.height, 720.0);
+        let position = layout.position.expect("panel should be placed beside main");
+        assert_eq!(position.x, 2_000.0 + 900.0 + PANEL_BESIDE_GAP);
+        assert_eq!(position.y, 0.0);
+    }
+
+    #[test]
+    fn persisted_panel_height_clamps_and_position_waits_for_main_geometry() {
         let monitors = MonitorData {
             specs: Vec::new(),
             primary_index: None,
@@ -6035,14 +6310,14 @@ mod tests {
                 y: 47.0,
                 height: 200.0,
             }),
+            None,
             &monitors,
             None,
         );
 
         assert_eq!(layout.height, PANEL_MIN_HEIGHT);
-        let position = layout.position.expect("stored position should be restored");
-        assert_eq!(position.x, 31.0);
-        assert_eq!(position.y, 47.0);
+        // 메인 좌표를 못 읽으면 OS 기본 배치 - 저장된 x/y는 더 이상 위치가 아니다
+        assert!(layout.position.is_none());
     }
 
     #[test]
