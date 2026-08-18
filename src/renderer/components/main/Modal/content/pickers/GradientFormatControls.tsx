@@ -1,11 +1,6 @@
-import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import {
-  isTopmostPopupLayer,
-  registerPopupLayer,
-} from '@components/main/Modal/popupLayer';
-import { usePopupPresence } from '@hooks/ui/usePopupPresence';
+import ListPopup from '@components/main/Modal/ListPopup';
 import { usePointerSession } from './colorPickerPrimitives';
 import { CHECKER_PATTERN } from './ColorSwatch';
 import {
@@ -18,8 +13,7 @@ import {
 
 /**
  * 형식 셀렉트 바(footerSlot, 팔레트 아래) + 전폭 스톱 바(headerSlot).
- * 셀렉트 바는 Dropdown 토큰·popupLayer 규약을 따르고 메뉴가 트리거 폭에 정렬,
- * 아래 공간이 부족하면 위로 열림.
+ * 셀렉트 바는 공용 ListPopup을 쓰고 메뉴가 트리거 폭에 정렬된다.
  * 스톱은 클릭=선택, 드래그=이동(임계값), 우클릭=삭제, 빈 트랙 클릭=추가
  */
 
@@ -28,8 +22,6 @@ export type ColorFormat = 'solid' | 'gradient';
 // 클릭이 드래그로 승격되는 이동 임계값(px)과 스톱 그랩 판정 반경(px)
 const DRAG_THRESHOLD_PX = 3;
 const STOP_GRAB_RADIUS_PX = 11;
-// 형식 메뉴 높이 추정 — 항목 2개(26px) + 패딩 8 + 간격 4
-const FORMAT_MENU_HEIGHT = 64;
 
 interface FormatSelectBarProps {
   format: ColorFormat;
@@ -42,76 +34,14 @@ export const FormatSelectBar = ({
 }: FormatSelectBarProps) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  // 열림 시점 트리거 실측 — body 포털 메뉴를 트리거 폭에 정렬
-  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
-  const [openUp, setOpenUp] = useState(false);
+  // 렌더 중 ref를 읽으면 첫 렌더에 null이라 여는 시점에 실측해 둔다
+  const [triggerWidth, setTriggerWidth] = useState<number | undefined>();
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const { mounted, state: motionState } = usePopupPresence(open, {
-    motionRef: menuRef,
-  });
 
   const labels: Record<ColorFormat, string> = {
     solid: t('colorPicker.solid'),
     gradient: t('colorPicker.gradient'),
   };
-
-  const toggleOpen = () => {
-    if (open) {
-      setOpen(false);
-      return;
-    }
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setAnchorRect(rect);
-    // 아래 공간이 부족하면 위로 열기 — 팔레트 아래 푸터 배치 대응
-    setOpenUp(rect.bottom + 4 + FORMAT_MENU_HEIGHT > window.innerHeight);
-    setOpen(true);
-  };
-
-  // 팝업 레이어 규약 — 등록 후 최상위 레이어일 때만 Escape 소비 (Dropdown과 동일)
-  useLayoutEffect(() => {
-    const menu = menuRef.current;
-    if (!open || !menu) return undefined;
-    return registerPopupLayer(menu);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      if (!isTopmostPopupLayer(menuRef.current)) return;
-      event.preventDefault();
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (triggerRef.current?.contains(target)) return;
-      if (menuRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    // 트리거가 스크롤·리사이즈로 움직이면 좌표가 어긋나므로 닫는다 (Dropdown과 동일)
-    const handleScroll = (event: Event) => {
-      if (
-        event.target instanceof Node &&
-        menuRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-      setOpen(false);
-    };
-    document.addEventListener('keydown', handleKey);
-    document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', handleScroll);
-    return () => {
-      document.removeEventListener('keydown', handleKey);
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleScroll);
-    };
-  }, [open]);
 
   return (
     <>
@@ -120,7 +50,10 @@ export const FormatSelectBar = ({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={toggleOpen}
+        onClick={() => {
+          setTriggerWidth(triggerRef.current?.offsetWidth);
+          setOpen((previous) => !previous);
+        }}
         className={`w-full flex items-center gap-[8px] h-[23px] px-[8px] bg-fill hover:bg-fill-hover rounded-md text-fg text-body transition-colors duration-fast ${
           open ? 'shadow-focus-ring' : ''
         }`}
@@ -144,67 +77,27 @@ export const FormatSelectBar = ({
           />
         </svg>
       </button>
-      {mounted &&
-        anchorRect &&
-        createPortal(
-          <div
-            ref={menuRef}
-            data-dmn-popup-layer="true"
-            data-dmn-popup-submenu="true"
-            data-dmn-motion-state={motionState}
-            data-dmn-placement={openUp ? 'top-start' : 'bottom-start'}
-            inert={motionState === 'closing'}
-            role="menu"
-            aria-label={labels[format]}
-            className="dmn-motion fixed z-[60] flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2"
-            style={{
-              left: anchorRect.left,
-              top: openUp
-                ? anchorRect.top - 4 - FORMAT_MENU_HEIGHT
-                : anchorRect.bottom + 4,
-              width: anchorRect.width,
-            }}
-          >
-            {(['solid', 'gradient'] as ColorFormat[]).map((f) => (
-              <button
-                key={f}
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={format === f}
-                onClick={() => {
-                  setOpen(false);
-                  onFormatChange(f);
-                }}
-                className="w-full h-[26px] px-[8px] rounded-md flex items-center gap-[6px] hover:bg-surface-hover active:bg-surface-active cursor-pointer transition-colors duration-fast"
-              >
-                <span className="flex-1 text-body text-fg whitespace-nowrap text-left">
-                  {labels[f]}
-                </span>
-                {/* 우측 체크 — 선택된 형식 표시 */}
-                <span className="w-[14px] flex-shrink-0 flex items-center justify-center">
-                  {format === f && (
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      className="text-fg"
-                    >
-                      <path
-                        d="M2 6.5L4.5 9L10 3"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                </span>
-              </button>
-            ))}
-          </div>,
-          document.body,
-        )}
+      {/* 아래 공간이 부족하면 flip이 위로 돌려준다 - 높이를 추정할 필요가 없다 */}
+      <ListPopup
+        open={open}
+        ariaLabel={labels[format]}
+        referenceRef={triggerRef as React.RefObject<HTMLElement>}
+        placement="bottom-start"
+        minWidth={triggerWidth}
+        offset={4}
+        className="z-[60]"
+        portalToBody
+        onClose={() => setOpen(false)}
+        items={(['solid', 'gradient'] as ColorFormat[]).map((f) => ({
+          id: f,
+          label: labels[f],
+          checked: format === f,
+        }))}
+        onSelect={(id) => {
+          setOpen(false);
+          onFormatChange(id as ColorFormat);
+        }}
+      />
     </>
   );
 };

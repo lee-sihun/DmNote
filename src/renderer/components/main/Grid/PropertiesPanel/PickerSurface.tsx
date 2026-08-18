@@ -55,7 +55,7 @@ const PickerSurface = ({
   fallbackFixedX,
   fallbackFixedY,
   closeOnScroll = false,
-  portalToBody = false,
+  portalToBody = true,
   interactiveRefs = [],
   onClose,
   children,
@@ -111,7 +111,7 @@ const PickerSurface = ({
       onClose={onClose}
       autoClose={false}
       closeOnScroll={closeOnScroll}
-      portalToBody={Boolean(panelElement) || portalToBody}
+      portalToBody={portalToBody}
       // 도킹·분리 배치도 모션 대상. 실측이 끝나기 전 프레임에 등장이 소모되는 건
       // motionReady가 막는다
       motionReady={!awaitingPosition}

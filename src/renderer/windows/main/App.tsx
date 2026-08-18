@@ -823,7 +823,6 @@ export default function App() {
             offsetY={colorPickerState.referenceElement ? 10 : -80}
             placement="right"
             solidOnly={true}
-            portalToBody={true}
             closeOnScroll={true}
           />
         ) : null}

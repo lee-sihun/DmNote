@@ -11,6 +11,7 @@ import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { isTopmostPopupLayer, registerPopupLayer } from '../Modal/popupLayer';
 import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
+import { clampToViewport } from '@utils/ui/popupGeometry';
 
 interface DropdownOption {
   label: string;
@@ -168,16 +169,24 @@ const Dropdown: React.FC<DropdownProps> = ({
     let horizontal: Omit<MenuPosition, 'placement'>;
     let alignment: 'start' | 'end';
     if (!fullWidth && align === 'right') {
-      let right = window.innerWidth - anchor.right;
-      right = Math.min(right, window.innerWidth - margin - menuWidth);
-      right = Math.max(right, margin);
-      horizontal = { right };
+      horizontal = {
+        right: clampToViewport(
+          window.innerWidth - anchor.right,
+          menuWidth,
+          window.innerWidth,
+          margin,
+        ),
+      };
       alignment = 'end';
     } else {
-      let left = anchor.left;
-      left = Math.min(left, window.innerWidth - margin - menuWidth);
-      left = Math.max(left, margin);
-      horizontal = { left };
+      horizontal = {
+        left: clampToViewport(
+          anchor.left,
+          menuWidth,
+          window.innerWidth,
+          margin,
+        ),
+      };
       alignment = 'start';
     }
 
@@ -187,15 +196,23 @@ const Dropdown: React.FC<DropdownProps> = ({
       anchor.bottom + gap + menuHeight > window.innerHeight - bottomPadding;
     let vertical: Omit<MenuPosition, 'placement'>;
     if (openUpward) {
-      let bottom = window.innerHeight - anchor.top + gap;
-      bottom = Math.min(bottom, window.innerHeight - margin - menuHeight);
-      bottom = Math.max(bottom, margin);
-      vertical = { bottom };
+      vertical = {
+        bottom: clampToViewport(
+          window.innerHeight - anchor.top + gap,
+          menuHeight,
+          window.innerHeight,
+          margin,
+        ),
+      };
     } else {
-      let top = anchor.bottom + gap;
-      top = Math.min(top, window.innerHeight - margin - menuHeight);
-      top = Math.max(top, margin);
-      vertical = { top };
+      vertical = {
+        top: clampToViewport(
+          anchor.bottom + gap,
+          menuHeight,
+          window.innerHeight,
+          margin,
+        ),
+      };
     }
 
     const next: MenuPosition = {

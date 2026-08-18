@@ -1,5 +1,11 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import {
   useFloating,
@@ -25,6 +31,7 @@ import {
   isTopmostPopupLayer,
   registerPopupLayer,
 } from './popupLayer';
+import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface FloatingPopupBaseProps {
@@ -44,6 +51,8 @@ interface FloatingPopupBaseProps {
   autoClose?: boolean;
   closeOnScroll?: boolean; // 스크롤 시 닫을지 여부
   portalToBody?: boolean;
+  /** 트리거 폭에 맞추는 메뉴용 - 내용이 더 넓으면 내용을 따른다 */
+  minWidth?: number;
   /** 모션 전면 차단 - 등퇴장이 없어야 하는 표면과 테스트용 탈출구 */
   animate?: boolean;
   /** 좌표 실측이 끝나기 전에는 false - 감춰진 프레임에 등장 모션이 소비되는 걸 막는다 */
@@ -228,6 +237,7 @@ const FloatingPopup = ({
   autoClose = true,
   closeOnScroll = false,
   portalToBody = false,
+  minWidth,
   animate = true,
   motionReady = true,
   onKeyDown,
@@ -250,7 +260,13 @@ const FloatingPopup = ({
     // 이후 계속 true라 두 번째 열림부터 등장 상태가 한 프레임도 안 그려지고 합쳐진다
     open,
     placement: placement as Placement,
-    middleware: [fuiOffset(offset), shift(), flip()],
+    // flip이 먼저 방향을 정하고 shift가 남은 넘침만 밀어야 한다.
+    // 순서가 바뀌면 shift가 밀어둔 결과를 flip이 다시 뒤집어 어긋난다
+    middleware: [
+      fuiOffset(offset),
+      flip(),
+      shift({ padding: POPUP_EDGE_PADDING }),
+    ],
     whileElementsMounted: autoUpdate,
   });
 
@@ -386,8 +402,12 @@ const FloatingPopup = ({
     };
   }, [open, closeOnScroll, onClose]);
 
+  // 좌표가 바뀔 때마다 옵저버를 다시 만들 필요는 없다. 고정 모드인지만 보면 된다
+  const isFixedMode =
+    typeof shownFixedX === 'number' && typeof shownFixedY === 'number';
+
   // 고정 좌표 사용 시 메뉴 위치를 조정
-  useLayoutEffect(() => {
+  const place = useCallback(() => {
     // 닫히는 중엔 좌표를 얼린다. scale 보간 중 rect를 다시 재면 팝업이 흐른다
     if (motionState === 'closing') return;
     if (
@@ -400,42 +420,41 @@ const FloatingPopup = ({
       return;
     }
 
-    const rect = floatingRef.current.getBoundingClientRect();
+    // 등장 모션이 scale을 보간하는 중이라 rect는 실제보다 작게 나온다.
+    // offsetWidth/Height는 transform을 무시하므로 최종 크기를 그대로 준다
+    const { offsetWidth: menuWidth, offsetHeight: menuHeight } =
+      floatingRef.current;
+    const x = clampToViewport(
+      shownFixedX + offsetX,
+      menuWidth,
+      window.innerWidth,
+    );
+    const y = clampToViewport(
+      shownFixedY + offsetY,
+      menuHeight,
+      window.innerHeight,
+    );
 
-    let adjustedX = shownFixedX + offsetX;
-    let adjustedY = shownFixedY + offsetY;
-
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const menuWidth = rect.width;
-    const menuHeight = rect.height;
-    const padding = 5; // 창 가장자리로부터의 패딩
-
-    // 오른쪽 경계를 벗어나면 왼쪽으로 이동
-    if (adjustedX + menuWidth > viewportWidth - padding) {
-      adjustedX = viewportWidth - menuWidth - padding;
-    }
-
-    // 아래쪽 경계를 벗어나면 위쪽으로 이동
-    if (adjustedY + menuHeight > viewportHeight - padding) {
-      adjustedY = viewportHeight - menuHeight - padding;
-    }
-
-    // 왼쪽 경계를 벗어나면 최소 padding 위치로 조정
-    if (adjustedX < padding) {
-      adjustedX = padding;
-    }
-
-    // 위쪽 경계를 벗어나면 최소 padding 위치로 조정
-    if (adjustedY < padding) {
-      adjustedY = padding;
-    }
-
-    setAdjustedPos((prev) => {
-      if (prev?.x === adjustedX && prev.y === adjustedY) return prev;
-      return { x: adjustedX, y: adjustedY };
-    });
+    setAdjustedPos((prev) => (prev?.x === x && prev.y === y ? prev : { x, y }));
   }, [mounted, motionState, shownFixedX, shownFixedY, offsetX, offsetY]);
+
+  // contentMounted가 빠지면 지연 마운트 팝업이 내용 없는 상태(폭 8px)에서 한 번만
+  // 재고 그대로 굳는다. 내용이 붙어도 다시 재지 않아 경계 밖으로 잘려 나간다
+  useLayoutEffect(place, [place, contentMounted]);
+
+  // 내용이 나중에 커지거나(비동기 로드, 폰트 스왑) 창 크기가 바뀌면 다시 잰다
+  useEffect(() => {
+    const el = floatingRef.current;
+    if (!mounted || !el || !isFixedMode) return;
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    observer?.observe(el);
+    window.addEventListener('resize', place);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', place);
+    };
+  }, [mounted, isFixedMode, place]);
 
   useEffect(() => {
     if (!open || autoClose) return;
@@ -540,17 +559,14 @@ const FloatingPopup = ({
 
   if (!mounted) return null;
 
-  const isFixed =
-    typeof shownFixedX === 'number' && typeof shownFixedY === 'number';
-
   // 고정 좌표를 사용할 때는 조정된 위치, 아니면 기본 위치를 사용합
   let left: number;
   let top: number;
 
-  if (isFixed && adjustedPos) {
+  if (isFixedMode && adjustedPos) {
     left = adjustedPos.x;
     top = adjustedPos.y;
-  } else if (isFixed) {
+  } else if (isFixedMode) {
     // adjustedPos 계산 대기 중이면 기본 위치 사용
     left = (shownFixedX as number) + offsetX;
     top = (shownFixedY as number) + offsetY;
@@ -566,15 +582,16 @@ const FloatingPopup = ({
         floatingRef.current = node;
       }}
       style={{
-        position: isFixed ? 'fixed' : strategy,
+        position: isFixedMode ? 'fixed' : strategy,
         left,
         top,
+        minWidth,
       }}
       className={className}
       active={open}
       motionState={animate ? motionState : undefined}
       // 고정 좌표는 Floating UI 배치를 우회하므로 기준 방향이 없다
-      placement={animate && !isFixed ? resolvedPlacement : undefined}
+      placement={animate && !isFixedMode ? resolvedPlacement : undefined}
       role={role}
       ariaLabel={ariaLabel}
       onMenuTab={onMenuTab}
@@ -590,7 +607,7 @@ const FloatingPopup = ({
   );
 
   // 위치 계산 전후에 렌더 루트가 바뀌지 않도록 필요 시 처음부터 body에 렌더링
-  if (portalToBody || isFixed) {
+  if (portalToBody || isFixedMode) {
     return createPortal(floatingContent, document.body);
   }
 

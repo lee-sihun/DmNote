@@ -9,6 +9,9 @@ import { createPortal, flushSync } from 'react-dom';
 import FloatingPopup from './FloatingPopup';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
+import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
+import { useViewportSize } from '@hooks/ui/useViewportSize';
+import { getListScrollMetrics } from './listScrollMetrics';
 import { useLenis } from '@hooks/useLenis';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
@@ -20,8 +23,6 @@ export type ListItem = {
   checked?: boolean;
   /** 서브메뉴 항목 */
   children?: ListItem[];
-  /** 서브메뉴 최대 표시 항목 수 (초과 시 스크롤) */
-  maxVisibleChildren?: number;
 };
 
 interface ListPopupProps {
@@ -35,28 +36,16 @@ interface ListPopupProps {
   className?: string;
   offsetX?: number;
   offsetY?: number;
-  /** 최대 표시 항목 수 (초과 시 스크롤) */
-  maxVisibleItems?: number;
   contentMountStrategy?: CommitStrategy;
+  /** 앵커 기준 배치 방향 (referenceRef를 쓸 때만 의미) */
+  placement?: string;
+  /** 트리거 폭 정렬용 최소 폭 */
+  minWidth?: number;
+  /** 앵커와의 간격 */
+  offset?: number;
+  /** 스크롤·contain 조상 안에서 열릴 때 필요 */
+  portalToBody?: boolean;
 }
-
-// 아이템 26 + 갭 4 리듬 공용 스크롤 계산 — 메인 메뉴·서브메뉴가 함께 사용
-const ITEM_HEIGHT = 26;
-const ITEM_GAP = 4;
-const SCROLL_EDGE_PADDING = 6;
-
-const getListScrollMetrics = (
-  itemCount: number,
-  maxVisibleItems?: number,
-): { needsScroll: boolean; maxHeight: number | undefined } => {
-  if (maxVisibleItems == null || itemCount <= maxVisibleItems) {
-    return { needsScroll: false, maxHeight: undefined };
-  }
-  return {
-    needsScroll: true,
-    maxHeight: maxVisibleItems * (ITEM_HEIGHT + ITEM_GAP) + SCROLL_EDGE_PADDING,
-  };
-};
 
 const DOCUMENT_FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -134,7 +123,6 @@ const SubMenu = ({
   onSelect,
   onCloseAll,
   onMenuTab,
-  maxVisibleItems,
   anchorRect,
   parentItemRef,
   focusFirst,
@@ -147,7 +135,6 @@ const SubMenu = ({
   onSelect?: (id: string) => void;
   onCloseAll: () => void;
   onMenuTab: (event: KeyboardEvent) => void;
-  maxVisibleItems?: number;
   anchorRect: DOMRect | null;
   parentItemRef: React.RefObject<HTMLButtonElement | null>;
   focusFirst: boolean;
@@ -198,26 +185,26 @@ const SubMenu = ({
     const el = subMenuRef.current;
     if (!anchorRect || !el) return;
 
-    const padding = 5;
+    const padding = POPUP_EDGE_PADDING;
     const { offsetWidth: width, offsetHeight: height } = el;
     const normalLeft = anchorRect.right + 2;
-    let top = anchorRect.top;
+    const flippedLeft = anchorRect.left - 2 - width;
 
-    // 오른쪽 경계 체크 → 공간 부족 시 왼쪽에 표시 (right 기준 정렬)
-    const flipToLeft = normalLeft + width > window.innerWidth - padding;
+    // 오른쪽이 좁을 때만 뒤집되, 왼쪽에도 자리가 있어야 의미가 있다
+    const flipToLeft =
+      normalLeft + width > window.innerWidth - padding &&
+      flippedLeft >= padding;
 
-    // 아래쪽 경계 체크
-    if (top + height > window.innerHeight - padding) {
-      top = window.innerHeight - height - padding;
-    }
-    if (top < padding) top = padding;
+    const top = clampToViewport(anchorRect.top, height, window.innerHeight);
+    // 양쪽 다 좁으면 오른쪽 경계에 맞춰 안쪽으로 당긴다
+    const left = clampToViewport(normalLeft, width, window.innerWidth);
 
     // 측정→배치 패턴: 페인트 전 위치 확정이 목적이라 동기 setState가 의도임
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPos(
       flipToLeft
         ? { right: window.innerWidth - anchorRect.left + 2, top }
-        : { left: normalLeft, top },
+        : { left, top },
     );
   }, [anchorRect, items.length]);
 
@@ -229,9 +216,10 @@ const SubMenu = ({
     firstItem?.focus();
   }, [focusFirst, pos]);
 
+  const { height: viewportHeight } = useViewportSize();
   const { needsScroll, maxHeight } = getListScrollMetrics(
     items.length,
-    maxVisibleItems,
+    viewportHeight,
   );
   const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
@@ -475,7 +463,6 @@ const MenuItemRow = ({
           onSelect={onSelect}
           onCloseAll={onCloseAll}
           onMenuTab={onMenuTab}
-          maxVisibleItems={item.maxVisibleChildren}
           anchorRect={rowRect}
           parentItemRef={rowRef}
           focusFirst={focusSubMenuOnOpen}
@@ -508,8 +495,11 @@ const ListPopup = ({
   className = '',
   offsetX = 0,
   offsetY = 0,
-  maxVisibleItems,
   contentMountStrategy = 'after-paint',
+  placement = 'top',
+  minWidth,
+  offset = 25,
+  portalToBody = false,
 }: ListPopupProps) => {
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -526,13 +516,18 @@ const ListPopup = ({
   };
 
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
+  // z는 호출부가 덮을 수 있어야 한다. 기본값을 클래스로 박으면 두 클래스가
+  // 같은 특이도로 충돌해 CSS 생성 순서에 따라 결과가 달라진다
   const defaultClassName =
-    'dmn-motion z-40 bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
-  const effectiveClassName = `${defaultClassName} ${className}`.trim();
+    'dmn-motion bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
+  const zClassName = /(^|\s)z-/.test(className) ? '' : 'z-40';
+  const effectiveClassName =
+    `${defaultClassName} ${zClassName} ${className}`.trim();
 
+  const { height: viewportHeight } = useViewportSize();
   const { needsScroll, maxHeight } = getListScrollMetrics(
     items.length,
-    maxVisibleItems,
+    viewportHeight,
   );
   const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
@@ -553,8 +548,10 @@ const ListPopup = ({
       onMenuTab={handleMenuTab}
       focusOriginRef={openerRef}
       referenceRef={referenceRef}
-      placement="top"
-      offset={25}
+      placement={placement}
+      minWidth={minWidth}
+      portalToBody={portalToBody}
+      offset={offset}
       offsetX={offsetX}
       offsetY={offsetY}
       fixedX={position?.x}
