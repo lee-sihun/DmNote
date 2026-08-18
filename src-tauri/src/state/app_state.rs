@@ -1047,6 +1047,9 @@ pub struct AppState {
     plugin_rpc_router: PluginRpcRouter,
     panel_bounds_persistence: Arc<PanelBoundsPersistenceController>,
     panel_visible: AtomicBool,
+    /// 트레이 숨김에 동행해 우리가 감춘 분리 패널 표식
+    /// 메인이 다시 보일 때 이 표식이 선 창만 되돌린다
+    panel_hidden_with_main: AtomicBool,
     panel_creation_lock: Mutex<()>,
     panel_close_request: Mutex<PanelCloseRequestState>,
     panel_destroy_reason: Mutex<Option<PanelVisibilityReason>>,
@@ -1125,6 +1128,7 @@ impl AppState {
             plugin_rpc_router: PluginRpcRouter::default(),
             panel_bounds_persistence,
             panel_visible: AtomicBool::new(false),
+            panel_hidden_with_main: AtomicBool::new(false),
             panel_creation_lock: Mutex::new(()),
             panel_close_request: Mutex::new(PanelCloseRequestState::Idle),
             panel_destroy_reason: Mutex::new(None),
@@ -1229,6 +1233,10 @@ impl AppState {
     }
 
     fn show_main_window_inner(&self, app: &AppHandle) -> Result<()> {
+        // 패널을 먼저 되살린다 - macOS show는 makeKeyAndOrderFront고, Windows도 tao의
+        // MARKER_DONT_FOCUS가 소모되면 SW_SHOW로 활성화된다. 메인 show+set_focus를
+        // 항상 뒤에 둬야 포커스와 최상단이 메인에 남는다
+        self.restore_detached_panel_with_main(app);
         if let Some(main) = app.get_webview_window("main") {
             let _ = main.unminimize();
             main.show()?;
@@ -3141,6 +3149,41 @@ impl AppState {
         publish_panel_visibility_transition(&self.panel_visible, app, true, None)
     }
 
+    // 트레이로 숨는 메인과 동행 - panel:visibility는 재부착 신호라 여기서 발행하지 않는다
+    // (발행하면 메인이 인라인 패널을 다시 붙이고 열린 시트가 사라짐)
+    // 메인 스레드에서 불리므로 panel_creation_lock을 잡지 않는다 - 락을 쥔 워커가
+    // 메인 스레드 응답을 기다리는 구간(bounds 샘플링, 창 생성)이 있어 잡으면 역전 데드락
+    fn hide_detached_panel_with_main(&self, app: &AppHandle) {
+        let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+            return;
+        };
+        // 최소화된 패널은 그대로 둔다 - macOS orderOut은 Dock 타일을 못 지우고,
+        // 이미 치워진 창이라 복원 때 앞으로 튀어나와 포커스를 뺏을 이유가 없다
+        if !window.is_visible().unwrap_or(false) {
+            return;
+        }
+        if let Err(err) = window.hide() {
+            log::warn!("failed to hide detached panel with main window: {err}");
+            return;
+        }
+        self.panel_hidden_with_main.store(true, Ordering::SeqCst);
+    }
+
+    // 메인이 트레이에서 나올 때, 우리가 감췄던 패널만 되돌린다
+    fn restore_detached_panel_with_main(&self, app: &AppHandle) {
+        if !self.panel_hidden_with_main.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+            return;
+        };
+        if let Err(err) = window.show() {
+            log::warn!("failed to show detached panel with main window: {err}");
+            // 다음 표시 때 다시 시도
+            self.panel_hidden_with_main.store(true, Ordering::SeqCst);
+        }
+    }
+
     pub fn take_panel_view_state(&self, window_label: &str) -> Option<PanelViewState> {
         take_targeted_panel_view_state(&mut self.panel_view_state.lock(), window_label)
     }
@@ -3243,6 +3286,7 @@ impl AppState {
     }
 
     pub fn handle_panel_window_destroyed(&self, app: &AppHandle) {
+        self.panel_hidden_with_main.store(false, Ordering::SeqCst);
         self.plugin_rpc_router.remove_window(PANEL_LABEL);
         clear_targeted_panel_view_state(&mut self.panel_view_state.lock(), PanelViewTarget::Panel);
         finish_panel_close(&self.panel_close_request);
@@ -4357,6 +4401,8 @@ fn attach_main_window_close_handler(
             let state = app_handle.state::<AppState>();
             if state.store.snapshot().tray_enabled {
                 api.prevent_close();
+                // 메인보다 먼저 감춰 macOS에서 패널이 잠시 key 창이 되는 것을 막음
+                state.hide_detached_panel_with_main(&app_handle);
                 if let Err(err) = main_window.hide() {
                     log::warn!("failed to hide main window for tray mode: {err}");
                 }

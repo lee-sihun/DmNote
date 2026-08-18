@@ -612,12 +612,9 @@ fn apply_main_window_configuration(
     if should_start_hidden {
         if let Err(err) = state.ensure_tray_icon_for_background(app) {
             log::warn!("failed to create tray icon on startup: {err}");
-            if let Err(err) = window.show() {
+            // 공용 표시 경로로 되돌린다 - 분리 패널 동행 복원과 hidden 플래그 정리까지 함께
+            if let Err(err) = state.show_main_window(app) {
                 log::warn!("failed to show main window after tray init error: {err}");
-            }
-            let _ = window.set_focus();
-            if let Err(err) = state.set_main_window_hidden(false) {
-                log::warn!("failed to reset main hidden state after tray init error: {err}");
             }
         }
         return Ok(());
