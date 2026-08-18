@@ -13,6 +13,10 @@ const api = vi.hoisted(() => ({
   lastAck: null as CanonicalEditorDocumentV1 | null,
 }));
 
+vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  patchNativeLayerPropertyViaAuthority: vi.fn(),
+}));
+
 vi.mock('./editorStateCoordinator', () => ({
   editorCoordinator: {
     commitGeneratedPatch: api.commitGeneratedPatch,
@@ -27,6 +31,7 @@ vi.mock('./editorSemanticOps', () => ({
 }));
 
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { patchNativeLayerPropertyViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
@@ -94,6 +99,7 @@ import {
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
   rebindKeySlotById,
+  patchElementPropertyViaAuthority,
 } from './elementOps';
 
 import {
@@ -3811,5 +3817,88 @@ describe('elementOps', () => {
       patchActiveImageFitById('key', 'key-0', 'contain'),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+});
+
+// 분리 속성 패널 창의 커밋 경로. 즉시 반영이 없으면 낙관 커밋이 해제되는
+// 프레임에 값이 옛 canonical로 되돌아갔다가 editor:committed 도착 때
+// 다시 바뀌어 토글이 버벅인다
+describe('patchElementPropertyViaAuthority', () => {
+  beforeEach(() => {
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      keyMappings: { '4key': ['A', 'B'] },
+      canonicalPositions: { '4key': [keyAt(ID_A), keyAt(ID_B)] },
+      positions: { '4key': [keyAt(ID_A), keyAt(ID_B)] },
+    });
+  });
+
+  it('RPC 왕복 전에 로컬 스토어에 즉시 반영한다', async () => {
+    let resolveRpc!: (persisted: boolean) => void;
+    vi.mocked(patchNativeLayerPropertyViaAuthority).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRpc = resolve;
+        }),
+    );
+
+    const pending = patchElementPropertyViaAuthority('key', ID_A, {
+      property: 'noteEffectEnabled',
+      value: false,
+    });
+
+    // 아직 RPC가 안 끝났는데 이미 반영돼 있어야 낙관 해제 프레임에 안 되돌아간다
+    expect(useKeyStore.getState().positions['4key'][0].noteEffectEnabled).toBe(
+      false,
+    );
+
+    resolveRpc(true);
+    await expect(pending).resolves.toBe(true);
+    expect(useKeyStore.getState().positions['4key'][0].noteEffectEnabled).toBe(
+      false,
+    );
+  });
+
+  it('authority가 거절하면 즉시 반영을 되돌린다', async () => {
+    vi.mocked(patchNativeLayerPropertyViaAuthority).mockResolvedValue(false);
+
+    await patchElementPropertyViaAuthority('key', ID_A, {
+      property: 'noteEffectEnabled',
+      value: false,
+    });
+
+    expect(
+      useKeyStore.getState().positions['4key'][0].noteEffectEnabled,
+    ).not.toBe(false);
+  });
+
+  it('그 사이 canonical이 다른 값을 쓰면 롤백이 덮지 않는다', async () => {
+    let resolveRpc!: (persisted: boolean) => void;
+    vi.mocked(patchNativeLayerPropertyViaAuthority).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRpc = resolve;
+        }),
+    );
+
+    const pending = patchElementPropertyViaAuthority('key', ID_A, {
+      property: 'noteEffectEnabled',
+      value: false,
+    });
+
+    // editor:committed가 먼저 도착해 canonical이 true로 덮은 상황
+    useKeyStore.setState({
+      positions: {
+        '4key': [{ ...keyAt(ID_A), noteEffectEnabled: true }, keyAt(ID_B)],
+      },
+    });
+
+    resolveRpc(false);
+    await pending;
+
+    // CAS 롤백이라 우리가 쓴 값이 아니면 복원하지 않는다
+    expect(useKeyStore.getState().positions['4key'][0].noteEffectEnabled).toBe(
+      true,
+    );
   });
 });

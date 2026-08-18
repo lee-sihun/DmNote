@@ -48,8 +48,8 @@ import type {
   EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorShadowPropertyPatchV1,
-  EditorElementPropertyPatchV1,
 } from '@src/types/editor';
+import type { BatchElementPropertyUpdate } from '../types';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -116,7 +116,7 @@ interface BatchStyleTabContentProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   // 키 전용 (사운드 등)
   getKeyOnlyMixedValue?: <T>(
     getter: (pos: KeyPosition) => T | undefined,
@@ -781,9 +781,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                     getMixedValue((pos) => pos.fontStrikethrough, false).value
                   }
                   {...createFontStyleToggleHandlers((property, value) =>
-                    onElementPropertyCommit?.({
-                      [property]: value,
-                    } as never),
+                    onElementPropertyCommit?.({ [property]: value }),
                   )}
                 />
               </PropertyRow>
@@ -808,10 +806,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   (pos) => pos.useInlineStyles,
                   false,
                 ).value;
-                onElementPropertyCommit?.({
-                  property: 'useInlineStyles',
-                  value: !currentValue,
-                });
+                onElementPropertyCommit?.({ useInlineStyles: !currentValue });
               }}
             />
           </div>
@@ -927,10 +922,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
             onFontSelect={(fontName) => {
               if (fontName !== null) {
-                onElementPropertyCommit?.({
-                  property: 'fontFamily',
-                  value: fontName,
-                });
+                onElementPropertyCommit?.({ fontFamily: fontName });
               }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}

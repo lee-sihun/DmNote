@@ -66,6 +66,7 @@ import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { BatchElementPropertyUpdate } from './PropertiesPanel/types';
 import type {
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
@@ -138,6 +139,7 @@ import {
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
   patchElementPropertyById,
+  patchElementPropertyViaAuthority,
 } from '@src/renderer/editor/runtime/elementOps';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -1554,13 +1556,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorElementPropertyPatchV1) => {
+          // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchNativeLayerPropertyViaAuthority({
-                  elementType: type,
-                  id,
-                  patch,
-                })
+              ? patchElementPropertyViaAuthority(type, id, patch)
               : patchElementPropertyById(type, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update element property', error);
@@ -2348,8 +2347,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     },
   });
 
+  // 단일 키 업데이트 객체를 받는다. 아래 get*Patch 헬퍼가 태그 유니온으로 바꿔 wire에 올린다
   const handleBatchElementPropertyCommit = (
-    patch: EditorElementPropertyPatchV1,
+    patch: BatchElementPropertyUpdate,
   ) => {
     const fontStylePatch = getFontStylePatch(patch);
     const fontFamilyPatch = getFontFamilyPatch(patch);
@@ -2382,7 +2382,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const handleBatchNoteElementPropertyCommit = (
-    patch: EditorElementPropertyPatchV1,
+    patch: BatchElementPropertyUpdate,
   ) => {
     const notePatch = getNotePropertyPatch(patch);
     if (!notePatch) return;

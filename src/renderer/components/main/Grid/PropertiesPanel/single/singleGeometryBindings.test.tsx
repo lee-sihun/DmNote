@@ -308,6 +308,7 @@ import {
   SingleKnobPanel as ActualSingleKnobPanel,
 } from './SingleSelectionPanel';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import { isEditorElementPropertyPatchV1 } from '@src/types/editor';
 
 type CompatProps<T extends React.ElementType> = React.ComponentProps<T> &
   Record<string, unknown>;
@@ -1674,6 +1675,87 @@ describe('single geometry input bindings', () => {
       expect(legacy).not.toHaveBeenCalled();
     },
   );
+
+  // 커밋 패치 모양 계약. 단일 패널은 태그 유니온만 받는 핸들러에 물리므로
+  // 단일 키 객체를 보내면 wire 검증에서 조용히 폐기된다
+  describe('요소 속성 커밋 패치 모양', () => {
+    const assertTagged = (commit: ReturnType<typeof vi.fn>) => {
+      expect(commit).toHaveBeenCalled();
+      for (const [patch] of commit.mock.calls) {
+        expect(isEditorElementPropertyPatchV1(patch, 'key')).toBe(true);
+      }
+    };
+
+    it('NOTE 탭 리터럴 토글이 태그 유니온으로 커밋한다', () => {
+      const commit = vi.fn();
+      act(() => {
+        root.render(
+          <NoteTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            onElementPropertyCommit={commit}
+            t={(key: string) => key}
+          />,
+        );
+      });
+      expect(captured.checkboxes.length).toBeGreaterThan(0);
+      act(() => {
+        captured.checkboxes.forEach((checkbox) => checkbox.onChange());
+      });
+      assertTagged(commit);
+    });
+
+    it('NOTE 탭 드롭다운 선택이 태그 유니온 모양으로 커밋한다', () => {
+      const commit = vi.fn();
+      act(() => {
+        root.render(
+          <NoteTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            onElementPropertyCommit={commit}
+            t={(key: string) => key}
+          />,
+        );
+      });
+      expect(captured.dropdowns.length).toBeGreaterThan(0);
+      act(() => {
+        captured.dropdowns.forEach((dropdown) => dropdown.onChange('center'));
+      });
+      // 값 유효성은 드롭다운마다 다르므로 여기서는 모양만 본다.
+      // 회귀는 단일 키 객체를 보내던 데서 났다
+      expect(commit).toHaveBeenCalled();
+      for (const [patch] of commit.mock.calls) {
+        expect(Object.keys(patch as object).sort()).toEqual([
+          'property',
+          'value',
+        ]);
+      }
+    });
+
+    it('STYLE 탭 글꼴 스타일 토글이 태그 유니온으로 커밋한다', () => {
+      const commit = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={0}
+            keyCode="A"
+            keyInfo={null}
+            keyPosition={createDefaultKeyPosition()}
+            onElementPropertyCommit={commit}
+            t={(key: string) => key}
+          />,
+        );
+      });
+      expect(captured.fontStyle).not.toBeNull();
+      act(() => {
+        captured.fontStyle?.onBoldChange?.(true);
+        captured.fontStyle?.onItalicChange?.(true);
+        captured.fontStyle?.onUnderlineChange?.(true);
+        captured.fontStyle?.onStrikethroughChange?.(true);
+      });
+      assertTagged(commit);
+    });
+  });
 
   afterEach(() => {
     act(() => root.unmount());

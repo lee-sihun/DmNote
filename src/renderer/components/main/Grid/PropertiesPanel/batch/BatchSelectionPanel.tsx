@@ -89,7 +89,6 @@ import type {
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorFontColorPropertyPatchV1,
-  EditorElementPropertyPatchV1,
 } from '@src/types/editor';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
 import {
@@ -97,6 +96,7 @@ import {
   previewBatchStyleProperty,
 } from '../previewPatchForwarders';
 import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
+import type { BatchElementPropertyUpdate } from '../types';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 
@@ -518,8 +518,8 @@ interface BatchKeyLikePanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
-  onNoteElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onNoteElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
   getMixedValue: MixedValueGetter<KeyPosition>;
@@ -1673,7 +1673,7 @@ interface BatchGraphOnlyPanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -2023,7 +2023,7 @@ interface BatchKnobOnlyPanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;

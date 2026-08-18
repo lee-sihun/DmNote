@@ -14,6 +14,7 @@ import {
 } from '../model/keys';
 import { newElementId } from '../model/elementId';
 import { cloneSlot } from '@utils/keySlot';
+import { patchNativeLayerPropertyViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { stableStringify } from '@utils/core/stableStringify';
 import {
   normalizeLayerGroupsForMode,
@@ -686,6 +687,32 @@ export const patchElementPropertyById = (
     .then((outcome) => outcome.opResults[0]?.status !== 'targetMissing')
     .catch((error) => {
       if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+// 분리 속성 패널 창 전용. 도킹 경로(patchElementPropertyById)와 같은 즉시 반영을
+// 하고 영속화만 authority RPC로 보낸다. 즉시 반영이 없으면 낙관 커밋이 해제되는
+// 프레임에 값이 옛 canonical로 되돌아갔다가 editor:committed 도착 때 다시 바뀌어
+// 토글이 버벅인다. 롤백은 CAS라 그 사이 도착한 canonical을 덮지 않는다
+export const patchElementPropertyViaAuthority = (
+  type: NativeElementType,
+  id: string,
+  patch: EditorElementPropertyPatchV1,
+): Promise<boolean> => {
+  if (!isNativeElementId(id)) return Promise.resolve(false);
+  const eagerPatch = { [patch.property]: patch.value ?? undefined };
+  const intents: PropertyIntents = new Map([
+    [type, new Map([[id, eagerPatch]])],
+  ]);
+  const receipt = applyPropertyIntentsEagerly(intents);
+  return patchNativeLayerPropertyViaAuthority({ elementType: type, id, patch })
+    .then((persisted) => {
+      if (!persisted) receipt?.rollback();
+      return persisted;
+    })
+    .catch((error) => {
+      receipt?.rollback();
       throw error;
     });
 };

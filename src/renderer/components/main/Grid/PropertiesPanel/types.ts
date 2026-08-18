@@ -297,3 +297,9 @@ export interface LayerDisplayItem {
 }
 
 export type DisplayItem = GroupHeaderItem | LayerDisplayItem;
+
+// 배치 커밋이 받는 모양. 단일 선택이 쓰는 태그 유니온(EditorElementPropertyPatchV1)과
+// 다르다 - 배치 핸들러는 PropertiesPanel의 get*Patch 헬퍼로 단일 키 객체를 태그 유니온으로
+// 바꿔 wire에 올린다. 그 헬퍼들이 키가 정확히 하나일 때만 통과시키므로, 여기에 태그 유니온을
+// 보내면 키가 둘이라 전부 null이 되어 커밋이 조용히 폐기된다
+export type BatchElementPropertyUpdate = Partial<KeyPosition>;
