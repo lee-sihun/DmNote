@@ -662,7 +662,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               }
               className={`flex items-center justify-center h-[23px] min-w-[0px] max-w-[120px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                 slotListening && !slotPickerOpen ? 'shadow-focus-ring' : ''
-              } text-fg text-label`}
+              } text-fg text-body`}
             >
               <span className="truncate">
                 {slotListening && !slotPickerOpen

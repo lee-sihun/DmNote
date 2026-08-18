@@ -311,7 +311,7 @@ const ShortcutsPanelContent = ({
           }}
           className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
             isRowListening ? 'shadow-focus-ring' : ''
-          } text-fg text-label`}
+          } text-fg text-body`}
         >
           {display}
         </button>
