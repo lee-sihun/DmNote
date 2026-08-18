@@ -14,7 +14,17 @@ import {
 } from '../model/keys';
 import { newElementId } from '../model/elementId';
 import { cloneSlot } from '@utils/keySlot';
-import { patchNativeLayerPropertyViaAuthority } from '@plugins/rpc/pluginElementActions';
+import {
+  patchActiveImageViaAuthority,
+  patchActiveTransparentViaAuthority,
+  patchCounterAnimationEnabledViaAuthority,
+  patchCounterEnabledViaAuthority,
+  patchIdleTransparentViaAuthority,
+  patchInactiveImageViaAuthority,
+  patchNativeLayerPropertyViaAuthority,
+  patchSoundEnabledViaAuthority,
+  patchSoundPathViaAuthority,
+} from '@plugins/rpc/pluginElementActions';
 import { stableStringify } from '@utils/core/stableStringify';
 import {
   normalizeLayerGroupsForMode,
@@ -660,6 +670,39 @@ export const rebindKeySlotById = (
     });
 };
 
+// 단건 property의 즉시 반영 투영. 도킹·분리, 단건·다건 네 경로가 같은 걸 쓴다
+const elementPropertyIntents = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorElementPropertyPatchV1,
+): PropertyIntents => {
+  const intents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    // nullable leaf의 null은 위치 조각에서 undefined로, 나머지는 1:1 투영
+    const byId = intents.get(elementType) ?? new Map();
+    byId.set(id, { [patch.property]: patch.value ?? undefined });
+    intents.set(elementType, byId);
+  }
+  return intents;
+};
+
+// 빈 목록·비 native id·중복 id는 커밋 대상이 아니다
+const hasCommittableTargets = (targets: readonly { id: string }[]): boolean =>
+  targets.length > 0 &&
+  targets.every(({ id }) => isNativeElementId(id)) &&
+  new Set(targets.map(({ id }) => id)).size === targets.length;
+
+const applyElementPropertyEagerly = (
+  type: NativeElementType,
+  id: string,
+  patch: EditorElementPropertyPatchV1,
+): ElementIntentReceipt | null =>
+  applyPropertyIntentsEagerly(
+    elementPropertyIntents([{ elementType: type, id }], patch),
+  );
+
 export const patchElementPropertyById = (
   type: NativeElementType,
   id: string,
@@ -667,12 +710,7 @@ export const patchElementPropertyById = (
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!isNativeElementId(id)) return Promise.resolve(false);
-  // nullable leaf의 null은 위치 조각에서 undefined로, 나머지는 1:1 투영
-  const eagerPatch = { [patch.property]: patch.value ?? undefined };
-  const intents: PropertyIntents = new Map([
-    [type, new Map([[id, eagerPatch]])],
-  ]);
-  const receipt = applyPropertyIntentsEagerly(intents);
+  const receipt = applyElementPropertyEagerly(type, id, patch);
   let enrolled = false;
   return commitSemanticOps(
     [{ kind: 'patchElement', elementType: type, id, patch }],
@@ -691,6 +729,22 @@ export const patchElementPropertyById = (
     });
 };
 
+// 사운드 자산 두 속성만 재시도 정책이 다르다. 결과 불명이면 옛 경로·값을 되돌려
+// 보내지 않는 전용 sender를 쓴다(staleOnly). 나머지는 공용 단건 sender
+const sendElementPropertyToAuthority = (
+  type: NativeElementType,
+  id: string,
+  patch: EditorElementPropertyPatchV1,
+): Promise<boolean> => {
+  if (patch.property === 'soundPath') {
+    return patchSoundPathViaAuthority([id], patch.value);
+  }
+  if (patch.property === 'soundEnabled') {
+    return patchSoundEnabledViaAuthority([id], patch.value);
+  }
+  return patchNativeLayerPropertyViaAuthority({ elementType: type, id, patch });
+};
+
 // 분리 속성 패널 창 전용. 도킹 경로(patchElementPropertyById)와 같은 즉시 반영을
 // 하고 영속화만 authority RPC로 보낸다. 즉시 반영이 없으면 낙관 커밋이 해제되는
 // 프레임에 값이 옛 canonical로 되돌아갔다가 editor:committed 도착 때 다시 바뀌어
@@ -701,12 +755,87 @@ export const patchElementPropertyViaAuthority = (
   patch: EditorElementPropertyPatchV1,
 ): Promise<boolean> => {
   if (!isNativeElementId(id)) return Promise.resolve(false);
-  const eagerPatch = { [patch.property]: patch.value ?? undefined };
-  const intents: PropertyIntents = new Map([
-    [type, new Map([[id, eagerPatch]])],
-  ]);
-  const receipt = applyPropertyIntentsEagerly(intents);
-  return patchNativeLayerPropertyViaAuthority({ elementType: type, id, patch })
+  const receipt = applyElementPropertyEagerly(type, id, patch);
+  return sendElementPropertyToAuthority(type, id, patch)
+    .then((persisted) => {
+      if (!persisted) receipt?.rollback();
+      return persisted;
+    })
+    .catch((error) => {
+      receipt?.rollback();
+      throw error;
+    });
+};
+
+// 분리 패널 다건 경로의 sender 선택. 속성별 전용 sender를 그대로 쓴다 - 재시도 정책이
+// 속성마다 다르고, 배치 하나가 RPC 한 건으로 나가야 메인 쪽 undo 묶음이 쪼개지지 않는다
+const elementPropertyTargetsSender = (
+  patch: EditorElementPropertyPatchV1,
+):
+  | ((
+      targets: readonly { elementType: NativeElementType; id: string }[],
+    ) => Promise<boolean>)
+  | null => {
+  switch (patch.property) {
+    case 'inactiveImage': {
+      const value = patch.value;
+      return (targets) => patchInactiveImageViaAuthority(targets, value);
+    }
+    case 'activeImage': {
+      const value = patch.value;
+      // 활성 이미지·투명은 key·knob만 갖는다. 호출부가 그 둘만 싣는다
+      return (targets) =>
+        patchActiveImageViaAuthority(
+          targets as readonly { elementType: 'key' | 'knob'; id: string }[],
+          value,
+        );
+    }
+    case 'idleTransparent': {
+      const value = patch.value;
+      return (targets) => patchIdleTransparentViaAuthority(targets, value);
+    }
+    case 'activeTransparent': {
+      const value = patch.value;
+      return (targets) =>
+        patchActiveTransparentViaAuthority(
+          targets as readonly { elementType: 'key' | 'knob'; id: string }[],
+          value,
+        );
+    }
+    case 'soundPath': {
+      const value = patch.value;
+      return (targets) =>
+        patchSoundPathViaAuthority(
+          targets.map(({ id }) => id),
+          value,
+        );
+    }
+    case 'soundEnabled': {
+      const value = patch.value;
+      return (targets) =>
+        patchSoundEnabledViaAuthority(
+          targets.map(({ id }) => id),
+          value,
+        );
+    }
+    default:
+      return null;
+  }
+};
+
+// 분리 속성 패널 창의 다건 경로. 단건 래퍼와 같은 즉시 반영을 하고 영속화만 RPC로 보낸다.
+// 배치 토글도 즉시 반영이 없으면 왕복 동안 옛 값으로 되돌아갔다가 다시 뒤집힌다
+export const patchElementPropertyByTargetsViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorElementPropertyPatchV1,
+): Promise<boolean> => {
+  const send = elementPropertyTargetsSender(patch);
+  // 다건 sender가 없는 속성을 여기로 보내면 즉시 반영만 되고 영속화가 샌다
+  if (!send || !hasCommittableTargets(targets)) return Promise.resolve(false);
+  const receipt = applyPropertyIntentsEagerly(
+    elementPropertyIntents(targets, patch),
+  );
+  return send(targets)
     .then((persisted) => {
       if (!persisted) receipt?.rollback();
       return persisted;
@@ -741,24 +870,10 @@ const patchElementPropertyByTargets = (
   patch: EditorElementPropertyPatchV1,
   options: PropertyCommitOptions = {},
 ): Promise<boolean> => {
-  if (
-    targets.length === 0 ||
-    targets.some(({ id }) => !isNativeElementId(id)) ||
-    new Set(targets.map(({ id }) => id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  const mutableIntents = new Map<
-    NativeElementType,
-    Map<string, Record<string, unknown>>
-  >();
-  for (const { elementType, id } of targets) {
-    // nullable leaf의 null은 위치 조각에서 undefined로, 나머지는 1:1 투영
-    const byId = mutableIntents.get(elementType) ?? new Map();
-    byId.set(id, { [patch.property]: patch.value ?? undefined });
-    mutableIntents.set(elementType, byId);
-  }
-  const receipt = applyPropertyIntentsEagerly(mutableIntents);
+  if (!hasCommittableTargets(targets)) return Promise.resolve(false);
+  const receipt = applyPropertyIntentsEagerly(
+    elementPropertyIntents(targets, patch),
+  );
   let enrolled = false;
   return commitSemanticOps(
     targets.map(({ elementType, id }) => ({
@@ -1291,6 +1406,31 @@ const patchCounterBooleanByTargets = (
     )
     .catch((error) => {
       if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+// 분리 패널 다건 경로. counter는 중첩 객체 투영이라 공용 leaf 투영을 못 쓴다 -
+// 즉시 반영은 도킹 경로와 같은 intents 빌더를 쓰고 영속화만 authority RPC로 보낸다
+export const patchCounterBooleanByTargetsViaAuthority = (
+  targets: readonly CounterAnimationTarget[],
+  patch: EditorCounterBooleanPropertyPatchV1,
+): Promise<boolean> => {
+  if (!hasCommittableTargets(targets)) return Promise.resolve(false);
+  const receipt = applyPropertyIntentsEagerly(
+    counterBooleanPropertyIntents(targets, patch),
+  );
+  return (
+    patch.property === 'counterEnabled'
+      ? patchCounterEnabledViaAuthority(targets, patch.value)
+      : patchCounterAnimationEnabledViaAuthority(targets, patch.value)
+  )
+    .then((persisted) => {
+      if (!persisted) receipt?.rollback();
+      return persisted;
+    })
+    .catch((error) => {
+      receipt?.rollback();
       throw error;
     });
 };
