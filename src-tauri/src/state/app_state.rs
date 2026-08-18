@@ -74,32 +74,53 @@ fn clamp_overlay_dimension(value: f64) -> f64 {
         .round()
 }
 
+fn overlay_bounds_are_usable(bounds: &OverlayBounds) -> bool {
+    bounds.x.is_finite()
+        && bounds.y.is_finite()
+        && bounds.width.is_finite()
+        && bounds.height.is_finite()
+        && bounds.width > 0.0
+        && bounds.height > 0.0
+}
+
+/// 저장값이 있고 아직 환산되지 않았을 때만 모니터 정보가 필요하다.
+/// 이 판단이 뒤집히면 physical 좌표가 환산 없이 쓰이므로 별도 술어로 고정한다
+fn stored_bounds_need_monitor_data(
+    bounds_are_logical: bool,
+    stored: Option<&OverlayBounds>,
+) -> bool {
+    !bounds_are_logical && stored.is_some()
+}
+
+/// 저장된 사각형을 logical 좌표로 정규화한다.
+/// 구버전 store는 physical px를 담고 있으므로(`overlay_bounds_are_logical == false`)
+/// 환산 없이 쓰면 defer_overlay_bounds가 마커를 true로 굳혀 좌표가 영구 고착된다.
+/// 환산에 실패하면 None - 호출부가 각자 안전한 대체 경로를 고른다
+fn normalize_stored_overlay_bounds(
+    stored: Option<&OverlayBounds>,
+    bounds_are_logical: bool,
+    monitors: &MonitorData,
+) -> Option<OverlayBounds> {
+    let usable = stored.filter(|bounds| overlay_bounds_are_usable(bounds))?;
+
+    let normalized = if bounds_are_logical {
+        usable.clone()
+    } else {
+        convert_physical_bounds_to_logical(usable, monitors)?
+    };
+
+    // 극단적으로 작은 scale로 나누면 inf로 넘칠 수 있어 결과도 재검증한다
+    overlay_bounds_are_usable(&normalized).then_some(normalized)
+}
+
 /// 창이 없을 때 위치 초기화가 딛고 설 사각형.
-/// 저장된 값이 있으면 그대로 쓰고, 없거나 깨졌으면 기본 크기로 되돌린다.
-/// 구버전 store는 physical 좌표를 담고 있으므로(`overlay_bounds_are_logical == false`)
-/// logical로 환산해야 겹침 판정과 이후 저장되는 마커가 어긋나지 않는다
+/// 저장된 값을 쓰되, 없거나 깨졌거나 환산 불가면 기본 크기로 되돌린다
 fn overlay_reset_fallback_rect(
     stored: Option<&OverlayBounds>,
     bounds_are_logical: bool,
     monitors: &MonitorData,
 ) -> (LogicalPosition<f64>, LogicalSize<f64>) {
-    let usable = stored.filter(|bounds| {
-        bounds.x.is_finite()
-            && bounds.y.is_finite()
-            && bounds.width.is_finite()
-            && bounds.height.is_finite()
-            && bounds.width > 0.0
-            && bounds.height > 0.0
-    });
-
-    // 환산에 실패하면 physical 값을 logical로 오인하는 대신 기본 크기로 떨어뜨린다
-    let normalized = match usable {
-        Some(bounds) if !bounds_are_logical => convert_physical_bounds_to_logical(bounds, monitors),
-        Some(bounds) => Some(bounds.clone()),
-        None => None,
-    };
-
-    match normalized {
+    match normalize_stored_overlay_bounds(stored, bounds_are_logical, monitors) {
         Some(bounds) => (
             LogicalPosition::new(bounds.x, bounds.y),
             LogicalSize::new(
@@ -2170,8 +2191,26 @@ impl AppState {
         // store에 저장된 위치를 사용 (빌더 position이 무시될 수 있으므로)
         let initializing = self.overlay_initializing.swap(false, Ordering::SeqCst);
         if initializing {
-            // store에서 저장된 위치를 가져와 사용 (빌더 position이 무시될 수 있으므로)
-            if let Some(stored) = self.store.snapshot().overlay_bounds.as_ref() {
+            // store에서 저장된 위치를 가져와 사용 (빌더 position이 무시될 수 있으므로).
+            // 구버전 store의 physical 좌표를 그대로 쓰면 뒤이은 defer_overlay_bounds가
+            // 마커를 true로 굳혀 영구 고착되므로 환산을 거친다.
+            // 환산 불가 시엔 창의 실제 위치를 유지하는 편이 안전하다
+            let snapshot = self.store.snapshot();
+            // 환산이 필요할 때만 모니터를 조회한다
+            let monitors = if stored_bounds_need_monitor_data(
+                snapshot.overlay_bounds_are_logical,
+                snapshot.overlay_bounds.as_ref(),
+            ) {
+                MonitorData::gather(app)
+            } else {
+                MonitorData::default()
+            };
+            let restored = normalize_stored_overlay_bounds(
+                snapshot.overlay_bounds.as_ref(),
+                snapshot.overlay_bounds_are_logical,
+                &monitors,
+            );
+            if let Some(stored) = restored {
                 new_x = stored.x;
                 new_y = stored.y;
             }
@@ -4851,6 +4890,7 @@ impl MonitorSpec {
     }
 }
 
+#[derive(Default)]
 struct MonitorData {
     specs: Vec<MonitorSpec>,
     primary_index: Option<usize>,
@@ -4867,10 +4907,7 @@ impl MonitorData {
     /// run_on_main_thread는 메인 스레드에서 호출되면 인라인 실행되므로 데드락 없음
     #[cfg(target_os = "macos")]
     fn gather(app: &AppHandle) -> Self {
-        let empty = Self {
-            specs: Vec::new(),
-            primary_index: None,
-        };
+        let empty = Self::default();
         let (tx, rx) = std::sync::mpsc::channel();
         let app_handle = app.clone();
         if let Err(err) = app.run_on_main_thread(move || {
@@ -5458,11 +5495,12 @@ mod tests {
         collect_authorized_css_paths, collect_frontend_lifecycle_targets,
         frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
         global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
-        key_state_payload, next_keyboard_recovery_plan, overlay_reset_fallback_rect,
-        panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
-        publish_panel_visibility_transition, publish_selection_snapshot, resolve_event_age_ms,
-        resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
-        should_recover_keyboard_daemon, should_restore_panel_on_startup,
+        key_state_payload, next_keyboard_recovery_plan, normalize_stored_overlay_bounds,
+        overlay_reset_fallback_rect, panel_bounds_from_sample, panel_height_bounds,
+        publish_panel_hidden_transition, publish_panel_visibility_transition,
+        publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
+        run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
+        should_restore_panel_on_startup, stored_bounds_need_monitor_data,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
         take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
         EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
@@ -6598,6 +6636,87 @@ mod tests {
             (size.width, size.height),
             (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
         );
+    }
+
+    #[test]
+    fn stored_bounds_normalization_respects_the_logical_marker() {
+        // resize_overlay의 initializing 분기도 같은 정규화를 거친다.
+        // 마커를 무시하고 physical 좌표를 쓰면 defer_overlay_bounds가 마커를
+        // true로 굳혀 좌표가 영구 고착된다
+        let monitors = reset_test_monitors(2.0);
+        let stored = OverlayBounds {
+            x: 400.0,
+            y: 200.0,
+            width: 1720.0,
+            height: 640.0,
+        };
+
+        let converted = normalize_stored_overlay_bounds(Some(&stored), false, &monitors)
+            .expect("physical 좌표는 환산되어야 한다");
+        assert_eq!((converted.x, converted.y), (200.0, 100.0));
+        assert_eq!((converted.width, converted.height), (860.0, 320.0));
+
+        let passthrough = normalize_stored_overlay_bounds(Some(&stored), true, &monitors)
+            .expect("logical 좌표는 그대로 쓴다");
+        assert_eq!((passthrough.x, passthrough.y), (400.0, 200.0));
+
+        // 환산 근거가 없으면 None - 호출부가 창의 실제 위치를 유지하도록
+        let blind = MonitorData::default();
+        assert!(normalize_stored_overlay_bounds(Some(&stored), false, &blind).is_none());
+
+        // 깨진 값은 마커와 무관하게 거른다
+        let broken = OverlayBounds {
+            x: f64::NAN,
+            y: 20.0,
+            width: 800.0,
+            height: 300.0,
+        };
+        assert!(normalize_stored_overlay_bounds(Some(&broken), true, &monitors).is_none());
+        assert!(normalize_stored_overlay_bounds(None, true, &monitors).is_none());
+    }
+
+    #[test]
+    fn monitor_data_is_gathered_only_for_unconverted_stored_bounds() {
+        // 이 판단이 뒤집히면 initializing 분기가 환산 없이 physical 좌표를 써서
+        // M1이 그대로 재발한다. 순수 정규화 테스트만으로는 잡히지 않는 배선이다
+        let stored = OverlayBounds {
+            x: 400.0,
+            y: 200.0,
+            width: 1720.0,
+            height: 640.0,
+        };
+        assert!(stored_bounds_need_monitor_data(false, Some(&stored)));
+        assert!(!stored_bounds_need_monitor_data(true, Some(&stored)));
+        // 저장값이 없으면 환산할 대상 자체가 없다
+        assert!(!stored_bounds_need_monitor_data(false, None));
+        assert!(!stored_bounds_need_monitor_data(true, None));
+    }
+
+    #[test]
+    fn stored_bounds_normalization_rejects_overflowing_conversions() {
+        // scale 가드는 0보다 크기만 하면 통과시키므로, 극단적으로 작은 scale에서
+        // 나눗셈이 inf로 넘친다. 위치는 clamp 대상이 아니라 여기서 걸러야 store로 새지 않는다
+        let monitors = MonitorData {
+            specs: vec![MonitorSpec {
+                logical_origin_x: 0.0,
+                logical_origin_y: 0.0,
+                logical_width: 1_920.0,
+                logical_height: 1_080.0,
+                physical_origin_x: 0.0,
+                physical_origin_y: 0.0,
+                physical_width: 1_920.0,
+                physical_height: 1_080.0,
+                scale_factor: 1e-300,
+            }],
+            primary_index: Some(0),
+        };
+        let stored = OverlayBounds {
+            x: 1e200,
+            y: 1e200,
+            width: 1e200,
+            height: 1e200,
+        };
+        assert!(normalize_stored_overlay_bounds(Some(&stored), false, &monitors).is_none());
     }
 
     #[test]
