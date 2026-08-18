@@ -1875,11 +1875,7 @@ export function assertEditorOpsV1(
         assertExactKeys(op.slot, ['keys', 'match'], `${opLabel}.slot`);
       }
       const parsedSlot = keySlotSchema.safeParse(op.slot);
-      if (
-        typeof op.id !== 'string' ||
-        op.id.length === 0 ||
-        !parsedSlot.success
-      ) {
+      if (!isNativeElementId(op.id) || !parsedSlot.success) {
         throw new EditorProtocolError(`${opLabel} is invalid`);
       }
       if (typeof parsedSlot.data !== 'string') {
@@ -1924,8 +1920,7 @@ export function assertEditorOpsV1(
           !['key', 'stat', 'graph', 'knob'].includes(
             target.elementType as string,
           ) ||
-          typeof target.id !== 'string' ||
-          target.id.length === 0
+          !isNativeElementId(target.id)
         ) {
           throw new EditorProtocolError(`${targetLabel} target is invalid`);
         }
@@ -2033,8 +2028,7 @@ export function assertEditorOpsV1(
         !['key', 'stat', 'graph', 'knob'].includes(
           update.elementType as string,
         ) ||
-        typeof update.id !== 'string' ||
-        update.id.length === 0 ||
+        !isNativeElementId(update.id) ||
         !Number.isSafeInteger(update.zIndex) ||
         (update.zIndex as number) < -2_147_483_648 ||
         (update.zIndex as number) > 2_147_483_647 ||

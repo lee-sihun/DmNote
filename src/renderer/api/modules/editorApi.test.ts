@@ -1256,3 +1256,54 @@ describe('editor canonical ID ingress', () => {
     );
   });
 });
+
+// 백엔드는 이 세 필드도 UUID로 거절한다(editor.rs의 is_valid_element_id).
+// 프론트가 길이만 보면 낙관 적용까지 끝난 뒤 백엔드가 거절해 문서가 갈리고
+// 편집이 조용히 사라진다. 두 검증의 기준을 같게 유지하는 계약
+describe('요소 ID 검증이 백엔드와 같은 기준을 쓴다', () => {
+  const VALID = '00000000-0000-4000-8000-0000000000aa';
+  const INVALID = ['key-0', '00000000-0000-0000-0000-000000000000', 'x'];
+
+  const opsOf = (op: unknown) => ({
+    opsVersion: EDITOR_OPS_VERSION,
+    ops: [op],
+  });
+
+  it('네이티브 형식 id는 통과한다 - 과잉 거절이면 정상 편집이 막힌다', () => {
+    expect(() =>
+      assertEditorOpsV1(
+        opsOf({ kind: 'setKeySlot', id: VALID, slot: 'A' }).ops,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'reorderElements',
+          mode: '4key',
+          zUpdates: [{ elementType: 'key', id: VALID, zIndex: 1 }],
+          groupUpdates: [],
+          completeModeOrder: false,
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  it.each(INVALID)('setKeySlot.id에서 %s를 거절한다', (id) => {
+    expect(() =>
+      assertEditorOpsV1(opsOf({ kind: 'setKeySlot', id, slot: 'A' }).ops),
+    ).toThrow(EditorProtocolError);
+  });
+
+  it.each(INVALID)('reorderElements의 zUpdates id에서 %s를 거절한다', (id) => {
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'reorderElements',
+          mode: '4key',
+          zUpdates: [{ elementType: 'key', id, zIndex: 1 }],
+          groupUpdates: [],
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+  });
+});
