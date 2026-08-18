@@ -602,6 +602,7 @@
     "delete": "삭제",
     "enabledToggle": "활성화",
     "saveFailed": "폰트 설정 저장에 실패했습니다.",
+    "editorLoadFailed": "웹폰트 편집기를 불러오지 못했습니다. 다시 시도해 주세요.",
     "deleteConfirm": "폰트를 삭제하시겠습니까? 이 폰트를 사용 중인 요소는 기본 폰트로 표시됩니다.",
     "add": "폰트 추가"
   },

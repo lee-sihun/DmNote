@@ -602,6 +602,7 @@
     "delete": "Delete",
     "enabledToggle": "Enabled",
     "saveFailed": "Failed to save font settings.",
+    "editorLoadFailed": "Couldn't load the web font editor. Please try again.",
     "deleteConfirm": "Delete this font? Elements using it will fall back to the default font.",
     "add": "Add Font"
   },

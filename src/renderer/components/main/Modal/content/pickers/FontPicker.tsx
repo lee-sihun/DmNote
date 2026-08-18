@@ -15,6 +15,7 @@ import {
 } from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
+import RenderErrorBoundary from '@components/main/common/RenderErrorBoundary';
 import { useRetainedValue } from '@hooks/ui/useRetainedValue';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
@@ -48,7 +49,13 @@ const preloadWebFontInputModal = () => {
   return webFontInputModalPreloadPromise;
 };
 
-const LazyWebFontInputModal = lazy(preloadWebFontInputModal);
+// 청크 로드가 실패하면 lazy는 그 실패를 영구히 기억한다. 다시 시도하려면
+// import 프라미스와 lazy 래퍼를 둘 다 새로 만들어야 한다
+const createLazyWebFontInputModal = () => lazy(preloadWebFontInputModal);
+
+const resetWebFontInputModalLoader = () => {
+  webFontInputModalPreloadPromise = null;
+};
 
 // preview용 font-family 이름 (syncFontCSS가 주입하는 원본 이름과 분리)
 const getPreviewFontFamily = (fontName: string) => `${fontName}__preview`;
@@ -115,6 +122,13 @@ const FontPicker = ({
   const [webFontModal, setWebFontModal] = useState<{
     editingId: string | null;
   } | null>(null);
+  // cycle은 실패한 경계를 새로 마운트하는 key. 로더와 함께 갈린다
+  const [webFontEditorLoader, setWebFontEditorLoader] = useState(() => ({
+    cycle: 0,
+    Component: createLazyWebFontInputModal(),
+  }));
+  const { cycle: webFontEditorCycle, Component: LazyWebFontInputModal } =
+    webFontEditorLoader;
   const [renamingFontId, setRenamingFontId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -290,10 +304,28 @@ const FontPicker = ({
   };
 
   const openWebFontModal = (editingId: string | null) => {
-    void preloadWebFontInputModal();
+    // 실패는 렌더 시점에 lazy가 다시 던지고 경계가 받는다. 여기선 로그 소음만 막는다
+    preloadWebFontInputModal().catch(() => {});
     startTransition(() => {
       setWebFontModal({ editingId });
     });
+  };
+
+  // 청크를 못 불러오면 창 루트가 아니라 시트만 접는다. 다음 열기가 새로 시도하도록
+  // 로더를 갈아 끼운다
+  const handleWebFontModalLoadError = (error: unknown) => {
+    console.error('Failed to load web font editor', error);
+    resetWebFontInputModalLoader();
+    setWebFontEditorLoader((prev) => ({
+      cycle: prev.cycle + 1,
+      Component: createLazyWebFontInputModal(),
+    }));
+    setWebFontModal(null);
+    void window.api.ui.dialog
+      .alert(t('fontPicker.editorLoadFailed'), {
+        confirmText: t('common.ok'),
+      })
+      .catch(() => {});
   };
 
   const handleWebFontSubmit = (css: string, displayName: string) => {
@@ -479,23 +511,28 @@ const FontPicker = ({
         />
       )}
 
-      <Suspense fallback={null}>
-        {webFontModal ? (
-          <LazyWebFontInputModal
-            isOpen
-            onClose={() => setWebFontModal(null)}
-            onSubmit={handleWebFontSubmit}
-            initialCss={editingWebFont?.cssContent || ''}
-            mode={editingWebFont ? 'edit' : 'add'}
-            isDuplicateFontFamily={(fontFamily) =>
-              fontLibrary.isDuplicateFontFamily(fontFamily, {
-                excludeId: webFontModal.editingId,
-              })
-            }
-            t={t}
-          />
-        ) : null}
-      </Suspense>
+      <RenderErrorBoundary
+        key={webFontEditorCycle}
+        onError={handleWebFontModalLoadError}
+      >
+        <Suspense fallback={null}>
+          {webFontModal ? (
+            <LazyWebFontInputModal
+              isOpen
+              onClose={() => setWebFontModal(null)}
+              onSubmit={handleWebFontSubmit}
+              initialCss={editingWebFont?.cssContent || ''}
+              mode={editingWebFont ? 'edit' : 'add'}
+              isDuplicateFontFamily={(fontFamily) =>
+                fontLibrary.isDuplicateFontFamily(fontFamily, {
+                  excludeId: webFontModal.editingId,
+                })
+              }
+              t={t}
+            />
+          ) : null}
+        </Suspense>
+      </RenderErrorBoundary>
     </>
   );
 };
