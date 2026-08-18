@@ -95,4 +95,39 @@ describe('FloatingPopup exit transition', () => {
     await render({ open: false, fixedX: 10, fixedY: 10 });
     expect(document.activeElement).toBe(second);
   });
+
+  it('after-paint 콘텐츠가 붙기 전에는 entering에 머물고, 붙은 뒤 open으로 넘어간다', async () => {
+    // rAF를 타이머로 흘려 지연 마운트 시점을 손으로 넘긴다
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
+    await act(async () => {
+      root.render(
+        <FloatingPopup
+          open
+          ariaLabel="Deferred motion popup"
+          fixedX={10}
+          fixedY={10}
+          autoClose={false}
+          contentMountStrategy="after-paint"
+          onClose={() => undefined}
+        >
+          <button type="button">Item</button>
+        </FloatingPopup>,
+      );
+    });
+    // 빈 셸 자리에서 등장을 시작하면 내용이 붙는 순간 클램프가 다시 돌아 튄다
+    expect(surface()?.getAttribute('data-dmn-motion-state')).toBe('entering');
+    expect(surface()?.textContent).not.toContain('Item');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(surface()?.textContent).toContain('Item');
+    expect(surface()?.getAttribute('data-dmn-motion-state')).toBe('open');
+    vi.unstubAllGlobals();
+  });
 });

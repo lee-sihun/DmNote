@@ -309,10 +309,13 @@ const FloatingPopup = ({
     (typeof shownFixedX !== 'number' || typeof shownFixedY !== 'number');
 
   // Floating UI 배치는 비동기다. 좌표가 확정되기 전에 등장을 시작하면
-  // 원점(0,0)에서 한 프레임 그려진 뒤 제자리로 튀어 모션이 묻힌다
+  // 원점(0,0)에서 한 프레임 그려진 뒤 제자리로 튀어 모션이 묻힌다.
+  // 지연 마운트 children도 같은 이유로 기다린다 - 빈 셸 크기로 잡은 자리에서
+  // 등장을 시작하면 내용이 붙는 순간 클램프·flip이 다시 돌아 제자리로 튄다
   const { mounted, state: motionState } = usePopupPresence(open, {
     enabled: animate,
-    ready: motionReady && (!usesFloatingPosition || isPositioned),
+    ready:
+      motionReady && (!usesFloatingPosition || isPositioned) && contentMounted,
     motionRef: floatingRef,
   });
 
