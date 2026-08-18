@@ -226,12 +226,10 @@ const CssPanelContent = ({
                     key={item.path}
                     role="button"
                     tabIndex={0}
-                    onPointerDown={() => menu.capturePressState(item.path)}
-                    onClick={(event) => menu.openFromRow(event, item.path)}
                     onKeyDown={(event) => {
                       if (event.target !== event.currentTarget) return;
                       if (event.key === 'Enter' || event.key === ' ') {
-                        menu.openFromRow(event, item.path);
+                        menu.openFromKeyboard(event, item.path);
                       }
                     }}
                     onContextMenu={(event) =>

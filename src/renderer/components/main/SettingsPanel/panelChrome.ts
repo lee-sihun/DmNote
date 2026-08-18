@@ -5,9 +5,11 @@ export const PANEL_SECTION_CLASS =
   'bg-inset rounded-surface px-[14px] py-[8px] flex flex-col';
 
 // 설정 페인 목록 행 - 토글 카드와 같은 밀도 (min-h-36, 인셋은 카드 px-14가 담당)
-// 행 전체가 항목 메뉴 트리거 - group으로 이름 밝기 호버를 묶음
+// 항목 메뉴는 우클릭·키보드로만 연다 - 좌클릭 동작이 없어 포인터 커서를 주지 않는다.
+// preflight가 role=button에 pointer를 깔므로 default를 명시해야 한다.
+// group으로 이름 밝기 호버를 묶음
 export const PANEL_LIST_ROW_CLASS =
-  'group w-full min-h-[36px] flex items-center gap-[8px] text-label cursor-pointer rounded-md outline-none focus-visible:shadow-focus-ring';
+  'group w-full min-h-[36px] flex items-center gap-[8px] text-label cursor-default rounded-md outline-none focus-visible:shadow-focus-ring';
 
 // 채움 상태 2단 - 알약·푸터 버튼이 공유하는 인터랙티브/비활성 배경
 export const FILL_INTERACTIVE_CLASS =
