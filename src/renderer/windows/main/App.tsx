@@ -7,6 +7,7 @@ import {
   usePanelWindowStore,
   detachPropertiesPanel,
   hasInlinePropertiesPanelLease,
+  isTransitionFailure,
 } from '@stores/grid/usePanelWindowStore';
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
@@ -384,7 +385,7 @@ export default function App() {
   // 정산 실패로 분리하지 못하면 알린다. 조용히 끝나면 버튼이 먹통으로 보인다
   const requestPanelDetach = async () => {
     const outcome = await detachPropertiesPanel();
-    if (outcome === 'blocked' || outcome === 'failed') {
+    if (isTransitionFailure(outcome)) {
       showAlert(t('propertiesPanel.detachFailed'), t('common.ok'));
     }
   };

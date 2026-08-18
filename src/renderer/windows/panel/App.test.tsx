@@ -89,6 +89,8 @@ vi.mock('@api/modules/selectionSessionApi', () => ({
 }));
 vi.mock('@stores/grid/usePanelWindowStore', () => ({
   reattachPropertiesPanel: () => mocks.reattach(),
+  isTransitionFailure: (outcome: string) =>
+    outcome === 'blocked' || outcome === 'failed',
 }));
 vi.mock('@stores/grid/useRemoteSheetStore', () => ({
   useRemoteSheetStore: (

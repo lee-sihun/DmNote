@@ -13,7 +13,10 @@ import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { PANEL_HEADER_HEIGHT } from '@components/main/Grid/PropertiesPanel/panelChrome';
 import PanelDialogHost from './PanelDialogHost';
 import { panelWindowApi } from '@api/modules/selectionSessionApi';
-import { reattachPropertiesPanel } from '@stores/grid/usePanelWindowStore';
+import {
+  isTransitionFailure,
+  reattachPropertiesPanel,
+} from '@stores/grid/usePanelWindowStore';
 import {
   isRemoteSheetActive,
   listenRemoteSheetHost,
@@ -33,6 +36,21 @@ import type { PanelViewState } from '@api/modules/selectionSessionApi';
 // 인터랙티브 요소 위에서는 창 드래그를 시작하지 않음
 const INTERACTIVE_SELECTOR =
   'button, input, textarea, select, a, [role="switch"], [role="listbox"], [contenteditable="true"]';
+
+// 프레임리스 창 이동 시작. 헤더 경로와 잠금 오버레이 경로가 같은 게이트를 쓴다.
+// 정산 잠금은 window 캡처에서 mousedown을 이미 삼키지만, 두 경로가 같은 판정을
+// 봐야 잠금 중 창이 한쪽에서만 움직이는 어긋남이 생기지 않는다
+const beginWindowDrag = (event: {
+  preventDefault: () => void;
+  clientX: number;
+  clientY: number;
+}) => {
+  if (isHistoryEditorFlushLocked()) return;
+  event.preventDefault();
+  void panelWindowApi
+    .startDragging(event.clientX, event.clientY)
+    .catch(() => {});
+};
 
 // 분리 패널 창 호스트
 // 편집 경로는 메인과 동일 (coordinator 커밋 + 프리뷰 채널 + 백엔드 undo)라 창 위치와 무관하게 동작
@@ -177,7 +195,7 @@ const App = ({ initialViewState }: AppProps) => {
   // 정산 실패로 되돌리지 못하면 알린다. 조용히 끝나면 버튼이 먹통으로 보인다
   const requestReattach = useCallback(async () => {
     const outcome = await reattachPropertiesPanel();
-    if (outcome !== 'blocked' && outcome !== 'failed') return;
+    if (!isTransitionFailure(outcome)) return;
     const { attachFailed, confirmText } = messagesRef.current;
     void window.api.ui.dialog
       .alert(attachFailed, { confirmText })
@@ -233,7 +251,6 @@ const App = ({ initialViewState }: AppProps) => {
   // 제목 span(더블클릭 이름 변경)·버튼 등 자식 요소 위에서는 시작하지 않음
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
-      if (isHistoryEditorFlushLocked()) return;
       if (event.button !== 0) return;
       const target = event.target as HTMLElement | null;
       if (!target) return;
@@ -245,10 +262,7 @@ const App = ({ initialViewState }: AppProps) => {
         target.textContent === '';
       if (!isHeaderSelf && !isHeaderRowGap) return;
       if (target.closest(INTERACTIVE_SELECTOR)) return;
-      event.preventDefault();
-      void panelWindowApi
-        .startDragging(event.clientX, event.clientY)
-        .catch(() => {});
+      beginWindowDrag(event);
     };
     window.addEventListener('mousedown', handleMouseDown);
     return () => window.removeEventListener('mousedown', handleMouseDown);
@@ -257,10 +271,7 @@ const App = ({ initialViewState }: AppProps) => {
   // 잠금 오버레이가 헤더를 덮으므로 창 드래그는 여기서 이어받는다
   const handleLockOverlayMouseDown = (event: React.MouseEvent) => {
     if (event.button !== 0 || event.clientY > PANEL_HEADER_HEIGHT) return;
-    event.preventDefault();
-    void panelWindowApi
-      .startDragging(event.clientX, event.clientY)
-      .catch(() => {});
+    beginWindowDrag(event);
   };
 
   return (

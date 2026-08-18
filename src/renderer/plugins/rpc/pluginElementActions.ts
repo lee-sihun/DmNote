@@ -15,6 +15,7 @@ import {
   flushPluginInstancesEditSession,
   rotatePluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import { isPanelWindow } from '@utils/windowType';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import type { BatchGeometryDescriptor } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -118,8 +119,6 @@ export type LayerReorderIntentWire =
       anchors: LayerReorderAnchorsWire;
     };
 
-const isPanelWindow = () => window.__dmn_window_type === 'panel';
-
 const rotateTargetPluginSessions = (
   fullIds: string[],
   gestureId?: string,
@@ -210,12 +209,19 @@ const drainQueue = async (): Promise<boolean> => {
   let succeeded = true;
   // 버리는 결과도 흔적은 남긴다. 무음이면 패널 조작이 그냥 먹통으로 보인다.
   // 로그와 resolve를 한 곳에서 짝지어 어느 분기든 빠뜨리지 않는다
-  const dropOp = (op: QueuedElementOp, reason: string) => {
-    console.warn(`Plugin RPC ${op.operation} dropped: ${reason}`);
+  // level: 회복 불가 실패는 error, 나머지는 warn
+  // snapshot: 이미 스냅샷을 요청한 분기는 false로 중복 요청을 막는다
+  const dropOp = (
+    op: QueuedElementOp,
+    reason: string,
+    options: { level?: 'warn' | 'error'; snapshot?: boolean } = {},
+  ) => {
+    const log = options.level === 'error' ? console.error : console.warn;
+    log(`Plugin RPC ${op.operation} dropped: ${reason}`);
     succeeded = false;
     op.resolve?.(false);
     op.resolvePayload?.(null);
-    requestFreshSnapshot();
+    if (options.snapshot !== false) requestFreshSnapshot();
   };
   while (outboundQueue.length > 0) {
     const op = outboundQueue.shift()!;
@@ -227,11 +233,7 @@ const drainQueue = async (): Promise<boolean> => {
     }
     // 신원 소실은 같은 payload 재전송으로 회복 불가 - 재시도 없이 실패 확정
     if (outcome.kind === 'error' && outcome.errorCode === 'ELEMENT_NOT_FOUND') {
-      console.error(`Plugin RPC ${op.operation} failed: ${outcome.errorCode}`);
-      succeeded = false;
-      op.resolve?.(false);
-      op.resolvePayload?.(null);
-      requestFreshSnapshot();
+      dropOp(op, outcome.errorCode, { level: 'error' });
       continue;
     }
     if (op.retryPolicy === 'none') {
@@ -269,12 +271,7 @@ const drainQueue = async (): Promise<boolean> => {
       op.authorityGeneration !== getPluginAuthorityGeneration()
     ) {
       // 스냅샷은 이미 요청했으므로 다시 부르지 않는다
-      console.warn(
-        `Plugin RPC ${op.operation} dropped: authority generation changed`,
-      );
-      succeeded = false;
-      op.resolve?.(false);
-      op.resolvePayload?.(null);
+      dropOp(op, 'authority generation changed', { snapshot: false });
       continue;
     }
     const retry = await sendQueuedOp(op);
@@ -283,7 +280,7 @@ const drainQueue = async (): Promise<boolean> => {
       op.resolvePayload?.(retry.response.payload ?? null);
       continue;
     }
-    dropOp(op, `retry ${describeOutcome(retry)}`);
+    dropOp(op, `retry ${describeOutcome(retry)}`, { level: 'error' });
   }
   return succeeded;
 };

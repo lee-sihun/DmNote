@@ -69,6 +69,10 @@ let transitionInFlight = false;
 // busy: 이미 진행 중, blocked: 미확정 편집을 정산하지 못해 중단, failed: 창 전환 자체가 실패
 export type TransitionOutcome = 'done' | 'busy' | 'blocked' | 'failed';
 
+// 알림이 필요한 결과. busy는 진행 중인 전환이 곧 결론을 내므로 조용히 넘긴다
+export const isTransitionFailure = (outcome: TransitionOutcome): boolean =>
+  outcome === 'blocked' || outcome === 'failed';
+
 export const openPropertiesPanelForSelection = (): void => {
   const panel = usePropertiesPanelStore.getState();
   panel.setCanvasPanelMode('property');

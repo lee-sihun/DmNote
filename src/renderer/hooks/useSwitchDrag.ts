@@ -7,6 +7,7 @@ import {
 } from 'react';
 import type React from 'react';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
+import { prefersReducedMotion } from '@utils/animation/motionPreferences';
 
 // 드래그 중 이동 전환을 끄는 표식. dmn- 접두사는 플러그인 마크업과의 속성 충돌 방지
 const DRAG_ATTR = 'data-dmn-dragging';
@@ -51,10 +52,6 @@ const clamp = (value: number, min: number, max: number) =>
 const lockTextSelection = (locked: boolean) => {
   document.body.style.userSelect = locked ? 'none' : '';
 };
-
-const prefersReducedMotion = () =>
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // 이동 폭은 토큰이 소유한다. 토큰을 못 읽는 환경에서는 실측 사각형으로 대체
 const readTravel = (track: HTMLElement, thumb: HTMLElement | null) => {
