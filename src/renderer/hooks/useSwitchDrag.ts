@@ -29,15 +29,15 @@ interface DragSession {
   thumb: HTMLElement | null;
   travel: number;
   startX: number;
+  // 누른 순간의 값. 강등 판정 기준이라 손 밑에서 바뀌는 현재 값과 따로 둔다
   startValue: boolean;
   startOffset: number;
   offset: number;
-  // 마지막 포인터 이동량. clamp된 offset과 달리 끝에서 바깥으로 민 거리도 남는다
-  dx: number;
+  // 세션 동안 본 최대 이동량 절댓값. 이동 폭만큼 끌어본 적이 있는지 가른다.
+  // clamp된 offset과 달리 끝에서 바깥으로 민 거리도 남는다
+  maxAbsDx: number;
   intent: DragIntent;
   displayed: boolean;
-  // 노브가 한 번이라도 중앙선을 넘어 반대편에 닿았는지
-  crossed: boolean;
 }
 
 interface UseSwitchDragOptions {
@@ -70,6 +70,14 @@ const readTravel = (track: HTMLElement, thumb: HTMLElement | null) => {
   return Math.max(0, trackRect.width - thumbRect.width - inset * 2);
 };
 
+// 포인터 위치를 세션에 접어 넣는다. 뗄 때 좌표가 마지막 이동보다 앞서 오는 경우가 있어
+// 손을 떼는 순간에도 한 번 더 반영해야 빠른 플릭이 짧게 잡히지 않는다
+const foldPointer = (session: DragSession, clientX: number) => {
+  const dx = clientX - session.startX;
+  session.maxAbsDx = Math.max(session.maxAbsDx, Math.abs(dx));
+  return dx;
+};
+
 // 인라인 위치를 CSS에 돌려준다. 전환을 되살린 상태를 리플로우로 한 번 확정시켜야
 // 시작값이 손끝 위치로 잡힌다. 같은 재계산에 둘을 넣으면 전환이 안 걸린다
 const handBack = (session: DragSession) => {
@@ -83,11 +91,11 @@ const handBack = (session: DragSession) => {
  * 토글 노브를 잡고 좌우로 끌어 상태를 정하는 제스처. 데스크톱 스위치의 관례를 따른다.
  * - 분류: 이동 슬롭을 넘겨야 드래그. 못 넘기면 탭이고 뒤따르는 click이 뒤집는다
  * - 판정: 손을 뗀 순간 노브 중심이 중앙선을 넘었는지. 손가락 위치가 아니라 노브 위치다
- * - 강등: 슬롭은 넘겼지만 중앙선에 닿은 적 없이 이동량이 반 폭 미만이면 탭으로 되돌린다.
- *   이동 폭이 12px뿐이라 슬롭(3)과 중앙선(6) 사이가 클릭 중 손 떨림 범위와 겹친다 -
+ * - 강등: 이동 폭만큼 끌어본 적 없는 제스처가 값 그대로 끝나면 탭으로 되돌린다.
+ *   이동 폭이 12px뿐이라 슬롭(3)과 이동 폭(12) 사이가 클릭 중 손 떨림 범위와 겹친다 -
  *   여기서 "값 그대로 + click 삼킴"으로 끝내면 눌렀는데 아무 반응이 없는 구간이 생긴다.
- *   반 폭 이상 끌었는데 안 넘은 건 이미 그쪽 끝이라 안 움직인 경우다(켜진 걸 켜는 쪽으로) -
- *   그건 그대로 두고, 중앙선을 넘었다 되돌아온 취소도 그대로 취소다(넘은 적이 있으므로)
+ *   한 번이라도 이동 폭만큼 끌었으면 의도한 드래그다. 이동 폭을 채우고 되돌아온 취소도,
+ *   이미 그쪽 끝이라 노브가 안 움직인 무동작(켜진 걸 켜는 쪽으로)도 드래그로 남는다
  * - 속도와 방향은 안 쓴다
  *
  * 노브는 누른 지점 기준 상대 델타로 움직인다. 커서 절대 좌표에 매핑하면
@@ -96,8 +104,9 @@ const handBack = (session: DragSession) => {
  * 짧게 누른 프레스를 이동량과 무관하게 탭으로 구제하는 시간 게이트는 안 쓴다.
  * 되돌려 취소하는 동작과 빠른 플릭이 구분되지 않는다.
  *
- * 끌었다가 원위치로 되돌리면 노브 위치가 시작값과 같아져 자연히 취소된다.
- * 별도 분기가 아니라 위치 판정의 결과다.
+ * 되돌려 취소하는 길은 노브를 이동 폭만큼 끌고 난 뒤에 열린다. 그 아래에서 시작점으로
+ * 돌아온 제스처는 흔들린 클릭으로 본다. 이동 폭이 12px뿐이라 짧게 나갔다 온 왕복은
+ * 손 떨림과 구분되지 않고, 애매하면 탭이 이긴다.
  *
  * 위치는 CSS가 translate로 소유하므로 드래그 중에만 인라인 translate로 덮고
  * 놓을 때 되돌려준다. transform으로 쓰면 CSS translate와 합성돼 켜짐 상태에서
@@ -174,14 +183,22 @@ export const useSwitchDrag = ({
       }
 
       lockTextSelection(false);
-      // 슬롭은 넘겼지만 중앙선에 닿은 적 없이 반 폭도 못 간 건 흔들린 클릭이다 - 탭으로 되돌린다.
+      // 노브 중심이 중앙선을 넘었는지만 본다. 원위치로 돌아왔으면 시작값과 같아져 취소된다.
+      // 취소는 지금 값으로 돌려준다 - 끄는 사이 외부에서 바뀌었을 수 있다
+      const target = commit
+        ? session.offset >= session.travel / 2
+        : checkedRef.current;
+
+      // 이동 폭만큼 끌어본 적 없이 값까지 그대로면 흔들린 클릭이다 - 탭으로 되돌린다.
       // 노브를 제자리로 돌려주고 click은 삼키지 않아 평소처럼 뒤집히게 둔다.
+      // 기준은 세션 시작값이다 - 끄는 사이 외부에서 값이 바뀌면 현재 값과는 우연히
+      // 같아질 수 있고, 그걸 흔들림으로 보면 뒤따르는 click이 남의 변경을 되돌린다.
       // 세로는 보지 않는다 - 세로로 트랙을 벗어나 뗀 click은 조상에 꽂히며, 그건 평범한 클릭이
       // 트랙 밖에서 끝났을 때와 같은 결과다(설정 행은 행 버튼이 받아 뒤집고, 맨 트랙은 무반응)
       if (
         commit &&
-        !session.crossed &&
-        Math.abs(session.dx) < session.travel / 2
+        target === session.startValue &&
+        session.maxAbsDx < session.travel
       ) {
         setDragValue(null);
         handBack(session);
@@ -189,11 +206,6 @@ export const useSwitchDrag = ({
       }
       // 취소로 끝난 제스처는 click이 따라오지 않는다
       if (commit) armClickSwallow();
-      // 노브 중심이 중앙선을 넘었는지만 본다. 원위치로 돌아왔으면 시작값과 같아져 취소된다.
-      // 취소는 지금 값으로 돌려준다 - 끄는 사이 외부에서 바뀌었을 수 있다
-      const target = commit
-        ? session.offset >= session.travel / 2
-        : checkedRef.current;
 
       // 표시값을 목표로 먼저 고정한다. 이 렌더가 끝나야 CSS의 정착 지점이 목표가 되고,
       // 그때 인라인을 걷어야 노브가 손끝에서 목표까지 한 번에 간다
@@ -270,17 +282,16 @@ export const useSwitchDrag = ({
       startValue: checkedRef.current,
       startOffset: checkedRef.current ? travel : 0,
       offset: checkedRef.current ? travel : 0,
-      dx: 0,
+      maxAbsDx: 0,
       intent: 'undecided',
       displayed: checkedRef.current,
-      crossed: false,
     };
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const session = sessionRef.current;
     if (!session || session.pointerId !== event.pointerId) return;
-    const dx = event.clientX - session.startX;
+    const dx = foldPointer(session, event.clientX);
     if (session.intent === 'undecided') {
       if (Math.abs(dx) < DRAG_SLOP_PX) return;
       session.intent = 'drag';
@@ -289,18 +300,22 @@ export const useSwitchDrag = ({
       session.track.setAttribute(DRAG_ATTR, '');
       lockTextSelection(true);
     }
-    session.dx = dx;
     session.offset = clamp(session.startOffset + dx, 0, session.travel);
     schedulerRef.current?.push(session.offset);
     const next = session.offset >= session.travel / 2;
-    if (next !== session.startValue) session.crossed = true;
     if (next === session.displayed) return;
     session.displayed = next;
     setDragValue(next);
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (sessionRef.current?.pointerId !== event.pointerId) return;
+    const session = sessionRef.current;
+    if (!session || session.pointerId !== event.pointerId) return;
+    const dx = foldPointer(session, event.clientX);
+    // 표시값은 건드리지 않는다. 어차피 바로 목표로 확정된다
+    if (session.intent === 'drag') {
+      session.offset = clamp(session.startOffset + dx, 0, session.travel);
+    }
     endSession(true);
   };
 

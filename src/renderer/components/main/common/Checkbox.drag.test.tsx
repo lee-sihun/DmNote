@@ -71,8 +71,7 @@ describe('Checkbox 노브 드래그', () => {
       host.dispatchEvent(pointer('click'));
     });
 
-  const render = (checked: boolean, onChange: () => void) => {
-    act(() => root.render(<Checkbox checked={checked} onChange={onChange} />));
+  const mockRects = () => {
     vi.spyOn(track(), 'getBoundingClientRect').mockReturnValue(
       rect(TRACK.width, TRACK.height, TRACK.x),
     );
@@ -80,6 +79,41 @@ describe('Checkbox 노브 드래그', () => {
       rect(THUMB.width, THUMB.height),
     );
   };
+
+  const render = (checked: boolean, onChange: () => void) => {
+    act(() => root.render(<Checkbox checked={checked} onChange={onChange} />));
+    mockRects();
+  };
+
+  const renderAfterPaint = (checked: boolean, onChange: () => void) => {
+    act(() =>
+      root.render(
+        <Checkbox
+          checked={checked}
+          onChange={onChange}
+          commitStrategy="after-paint"
+        />,
+      ),
+    );
+    mockRects();
+  };
+
+  // after-paint 커밋은 프레임을 하나 넘긴 뒤 타이머에서 실행된다.
+  // rAF 스텁을 지켜야 하니 타이머만 가짜로 바꾼다
+  const flushDeferredCommit = async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      flushRaf();
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  // 손 떨림 폭. 슬롭 아래부터 이동 폭 직전까지 1px 단위로 훑는다
+  const JITTERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
   beforeEach(() => {
     rafCallbacks = new Map();
@@ -142,9 +176,22 @@ describe('Checkbox 노브 드래그', () => {
     expect(onChange).toHaveBeenCalledOnce();
   });
 
-  // 노브가 이미 끝이라 안 움직이는 방향으로 반 폭 이상 끈 건 "켜려고 끈" 의도다.
-  // 중앙선 통과 여부만으로 탭 판정하면 여기서 click이 살아 켜려고 끌었는데 꺼진다
-  it('켜진 스위치를 켜는 방향으로 반 폭 이상 끌면 켜진 채로 남는다', () => {
+  // 노브가 이미 끝이라 안 움직이는 방향으로 이동 폭만큼 끈 건 "켜려고 끈" 의도다.
+  // 이걸 탭으로 강등하면 click이 살아 켜려고 끌었는데 꺼진다
+  it('켜진 스위치를 켜는 방향으로 이동 폭만큼 끌면 켜진 채로 남는다', () => {
+    const onChange = vi.fn();
+    render(true, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 14 });
+    send('pointermove', { clientX: TRACK.x + 14 + TRAVEL });
+    send('pointerup', { clientX: TRACK.x + 14 + TRAVEL });
+    clickAfterRelease();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // 같은 방향이라도 이동 폭에 못 미치면 끌 의도로 보기 어렵다. 흔들린 클릭으로 두고 뒤집는다
+  it('켜진 스위치를 켜는 방향으로 이동 폭보다 짧게 끌면 탭이라 click이 뒤집는다', () => {
     const onChange = vi.fn();
     render(true, onChange);
 
@@ -153,12 +200,12 @@ describe('Checkbox 노브 드래그', () => {
     send('pointerup', { clientX: TRACK.x + 14 + TRAVEL / 2 + 2 });
     clickAfterRelease();
 
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledOnce();
   });
 
-  // 슬롭(3)과 중앙선(6) 사이는 클릭 중 손 떨림 범위와 겹친다. 여기서 값 그대로 + click 삼킴으로
+  // 슬롭(3)과 이동 폭(12) 사이는 클릭 중 손 떨림 범위와 겹친다. 여기서 값 그대로 + click 삼킴으로
   // 끝내면 눌렀는데 아무 반응이 없다 - 흔들린 클릭으로 보고 뒤따르는 click이 뒤집게 둔다
-  it('슬롭은 넘겼지만 중앙선에 못 닿은 흔들린 클릭은 탭으로 강등돼 click이 뒤집는다', () => {
+  it('슬롭은 넘겼지만 이동 폭에 못 미친 흔들린 클릭은 탭으로 강등돼 click이 뒤집는다', () => {
     const onChange = vi.fn();
     render(false, onChange);
 
@@ -185,7 +232,7 @@ describe('Checkbox 노브 드래그', () => {
     expect(onChange).toHaveBeenCalledOnce();
   });
 
-  it('중앙선을 넘었다 슬롭 안으로 되돌아와도 취소다 - 넘은 적이 있으므로 탭으로 강등하지 않는다', () => {
+  it('이동 폭만큼 끌었다 슬롭 안으로 되돌아와도 취소다 - 끝까지 간 적이 있으므로 탭으로 강등하지 않는다', () => {
     const onChange = vi.fn();
     render(false, onChange);
 
@@ -219,7 +266,7 @@ describe('Checkbox 노브 드래그', () => {
     expect(track().getAttribute('aria-checked')).toBe('false');
   });
 
-  it('중앙선을 넘겼다 되돌아오면 취소로 보고 커밋하지 않는다', () => {
+  it('이동 폭만큼 끌었다 되돌아오면 취소로 보고 커밋하지 않는다', () => {
     const onChange = vi.fn();
     render(false, onChange);
 
@@ -381,13 +428,29 @@ describe('Checkbox 노브 드래그', () => {
     expect(track().className).not.toContain('bg-accent');
     send('pointermove', { clientX: TRACK.x + 4 + 14 });
     expect(track().className).toContain('bg-accent');
-    // 되돌아와 놓으면 취소 - 토큰 기준 반 폭(12)을 넘겼으니 탭으로 강등되지 않는다
+    // 되돌아와 놓으면 취소 - 토큰 기준 이동 폭(24)을 채웠으니 탭으로 강등되지 않는다
+    send('pointermove', { clientX: TRACK.x + 4 + 24 });
     send('pointermove', { clientX: TRACK.x + 4 + 8 });
     send('pointerup', { clientX: TRACK.x + 4 + 8 });
     clickAfterRelease();
     flushRaf();
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('토큰 이동 폭이 24면 14px 흔들림은 아직 탭이라 click이 뒤집는다', () => {
+    const onChange = vi.fn();
+    render(false, onChange);
+    track().style.setProperty('--ui-toggle-travel', '24');
+
+    // 실측 이동 폭(12) 기준이면 드래그로 굳지만 토큰 기준으로는 아직 흔들림이다
+    send('pointerdown', { clientX: TRACK.x + 20 });
+    send('pointermove', { clientX: TRACK.x + 20 - 14 });
+    send('pointerup', { clientX: TRACK.x + 20 - 14 });
+    clickAfterRelease();
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(track().hasAttribute('data-dmn-dragging')).toBe(false);
   });
 
   it('이전 드래그의 정산 프레임 안에 새 드래그가 시작돼도 표식과 위치를 잃지 않는다', () => {
@@ -480,5 +543,198 @@ describe('Checkbox 노브 드래그', () => {
     act(() => root.render(null));
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // 이동 폭만큼 끌었으면 노브가 clamp돼 제자리여도 의도한 드래그다. 값을 그대로 두고
+  // click까지 삼켜 "끌어봤지만 안 움직였다"는 결과를 지킨다
+  it('꺼진 스위치를 못 움직이는 쪽으로 이동 폭만큼 끌면 아무 일도 안 일어난다', () => {
+    const onChange = vi.fn();
+    render(false, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 20 });
+    send('pointermove', { clientX: TRACK.x + 20 - TRAVEL });
+    send('pointerup', { clientX: TRACK.x + 20 - TRAVEL });
+    clickAfterRelease();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // 강등은 세션 시작값으로 판정한다. 현재 값으로 보면 남이 켠 걸 뒤따르는 click이 되돌린다
+  it('드래그 중 외부에서 값이 바뀌어 목표와 같아져도 탭으로 강등하지 않는다', () => {
+    const onChange = vi.fn();
+    render(false, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    send('pointermove', { clientX: TRACK.x + 11 });
+    // 노브가 중앙선을 넘긴 사이 외부에서 켜진다
+    act(() => root.render(<Checkbox checked={true} onChange={onChange} />));
+    send('pointerup', { clientX: TRACK.x + 11 });
+    clickAfterRelease();
+    flushRaf();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('중앙선을 넘긴 짧은 드래그는 트랙 밖에서 떼도 조상 click까지 삼킨다', () => {
+    const onChange = vi.fn();
+    const ancestorClick = vi.fn();
+    act(() =>
+      root.render(
+        <div onClick={ancestorClick}>
+          <Checkbox checked={false} onChange={onChange} />
+        </div>,
+      ),
+    );
+    mockRects();
+
+    // 이동 폭에는 못 미치지만 값이 바뀌는 드래그다 - 억제까지 살아 있어야 한다
+    send('pointerdown', { clientX: TRACK.x + 22 });
+    send('pointermove', { clientX: TRACK.x + 29 });
+    send('pointerup', { clientX: TRACK.x + 29 });
+    act(() => {
+      track().parentElement!.dispatchEvent(pointer('click'));
+    });
+    flushRaf();
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(ancestorClick).not.toHaveBeenCalled();
+  });
+
+  // 브라우저가 마지막 이동보다 앞선 좌표로 pointerup을 주기도 한다. 그 좌표까지 접어야
+  // 빠른 플릭이 짧은 흔들림으로 잡히지 않는다
+  it('뗄 때 좌표가 마지막 이동보다 멀면 그 거리까지 드래그로 본다', () => {
+    const onChange = vi.fn();
+    render(false, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 20 });
+    send('pointermove', { clientX: TRACK.x + 13 });
+    send('pointerup', { clientX: TRACK.x + 8 });
+    clickAfterRelease();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('after-paint 전략에서 이동 폭만큼 끌어 뒤집으면 한 번만 커밋한다', async () => {
+    const onChange = vi.fn();
+    renderAfterPaint(false, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointerup', { clientX: TRACK.x + 4 + TRAVEL });
+    clickAfterRelease();
+    await flushDeferredCommit();
+
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  it('after-paint 전략에서도 흔들린 클릭이 한 번 뒤집는다', async () => {
+    const onChange = vi.fn();
+    renderAfterPaint(false, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 20 });
+    send('pointermove', { clientX: TRACK.x + 14 });
+    send('pointerup', { clientX: TRACK.x + 14 });
+    clickAfterRelease();
+    await flushDeferredCommit();
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(track().hasAttribute('data-dmn-dragging')).toBe(false);
+  });
+
+  it('after-paint 전략에서 갔다 되돌아온 흔들린 클릭도 한 번 뒤집는다', async () => {
+    const onChange = vi.fn();
+    renderAfterPaint(false, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    send('pointermove', { clientX: TRACK.x + 11 });
+    send('pointermove', { clientX: TRACK.x + 5 });
+    send('pointerup', { clientX: TRACK.x + 5 });
+    clickAfterRelease();
+    await flushDeferredCommit();
+
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  // 이동 폭이 12px뿐이라 클릭 중 손 떨림이 판정 경계와 겹친다. 슬롭 위·이동 폭 아래는
+  // 폭도 방향도 가리지 않고 결과가 "한 번 뒤집기"로 같아야 한다
+  describe('이동 폭에 못 미친 흔들림', () => {
+    it.each(JITTERS)(
+      '꺼진 스위치를 왼쪽으로 %ipx 흔들어도 한 번 뒤집는다',
+      (drift) => {
+        const onChange = vi.fn();
+        render(false, onChange);
+
+        // 노브가 이미 왼쪽 끝이라 clamp돼 제자리
+        send('pointerdown', { clientX: TRACK.x + 20 });
+        send('pointermove', { clientX: TRACK.x + 20 - drift });
+        send('pointerup', { clientX: TRACK.x + 20 - drift });
+        clickAfterRelease();
+
+        expect(onChange).toHaveBeenCalledOnce();
+      },
+    );
+
+    // 중앙선을 넘긴 쪽은 드래그가, 못 넘긴 쪽은 뒤따르는 click이 뒤집는다
+    it.each(JITTERS)(
+      '꺼진 스위치를 오른쪽으로 %ipx 흔들어도 한 번 뒤집는다',
+      (drift) => {
+        const onChange = vi.fn();
+        render(false, onChange);
+
+        send('pointerdown', { clientX: TRACK.x + 4 });
+        send('pointermove', { clientX: TRACK.x + 4 + drift });
+        send('pointerup', { clientX: TRACK.x + 4 + drift });
+        clickAfterRelease();
+
+        expect(onChange).toHaveBeenCalledOnce();
+      },
+    );
+
+    it.each(JITTERS)(
+      '켜진 스위치를 오른쪽으로 %ipx 흔들어도 한 번 뒤집는다',
+      (drift) => {
+        const onChange = vi.fn();
+        render(true, onChange);
+
+        send('pointerdown', { clientX: TRACK.x + 8 });
+        send('pointermove', { clientX: TRACK.x + 8 + drift });
+        send('pointerup', { clientX: TRACK.x + 8 + drift });
+        clickAfterRelease();
+
+        expect(onChange).toHaveBeenCalledOnce();
+      },
+    );
+
+    it.each(JITTERS)(
+      '켜진 스위치를 왼쪽으로 %ipx 흔들어도 한 번 뒤집는다',
+      (drift) => {
+        const onChange = vi.fn();
+        render(true, onChange);
+
+        send('pointerdown', { clientX: TRACK.x + 20 });
+        send('pointermove', { clientX: TRACK.x + 20 - drift });
+        send('pointerup', { clientX: TRACK.x + 20 - drift });
+        clickAfterRelease();
+
+        expect(onChange).toHaveBeenCalledOnce();
+      },
+    );
+
+    // 넘어갔다 돌아오는 손 떨림. 이동 폭을 채운 적이 없어 취소로 안 보고 탭으로 둔다
+    it.each([0, 1, 2, 3, 4, 5])(
+      '오른쪽 7px까지 갔다 %ipx로 돌아와도 한 번 뒤집는다',
+      (back) => {
+        const onChange = vi.fn();
+        render(false, onChange);
+
+        send('pointerdown', { clientX: TRACK.x + 4 });
+        send('pointermove', { clientX: TRACK.x + 4 + 7 });
+        send('pointermove', { clientX: TRACK.x + 4 + back });
+        send('pointerup', { clientX: TRACK.x + 4 + back });
+        clickAfterRelease();
+
+        expect(onChange).toHaveBeenCalledOnce();
+      },
+    );
   });
 });
