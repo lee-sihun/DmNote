@@ -18632,8 +18632,12 @@ mod tests {
         let dir = test_directory("panel-detached-persist-test");
         let store = AppStore::initialize_in_dir(&dir).unwrap();
 
-        store.update(|state| state.panel_detached = true).unwrap();
-        // flush 전에 이미 디스크에 있어야 강제 종료로 배치 선택이 날아가지 않는다
+        // 프로덕션 경로와 같은 조합 - 락 안 deferred 기록 뒤 락 밖 flush.
+        // flush 직후 디스크에 있어야 강제 종료로 배치 선택이 날아가지 않는다
+        store
+            .update_deferred(|state| state.panel_detached = true)
+            .unwrap();
+        store.flush().unwrap();
         let persisted: AppStoreData =
             serde_json::from_slice(&std::fs::read(dir.join("store.json")).unwrap()).unwrap();
         assert!(persisted.panel_detached);

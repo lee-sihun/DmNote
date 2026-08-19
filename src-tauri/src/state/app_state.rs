@@ -3169,10 +3169,12 @@ impl AppState {
     }
 
     pub fn show_panel_window(&self, app: &AppHandle, view_state: PanelViewState) -> Result<()> {
-        // 창 게터와 모니터 조회는 메인 스레드 이벤트 루프로 왕복한다 - 락을 쥔 워커에서
-        // 부르면 메인이 같은 락을 기다리는 순간 역전 데드락이라 락 밖에서 먼저 읽는다.
-        // 창 생성 자체는 여전히 락 안이므로 메인 스레드에서 이 락을 잡으면 안 되는 건 그대로다.
-        // 배치 정보는 새로 만들 때만 쓰이니 이미 떠 있으면 왕복 자체를 건너뛴다
+        // 동기 커맨드라 메인 스레드에서 돈다. 이 락을 오프메인에서 쥐는 건 ack 타임아웃
+        // 태스크뿐인데, 그쪽이 락을 쥔 채 메인 왕복 게터를 기다리는 구간이 있어 메인이 여기서
+        // 락을 기다리면 역전 데드락이다(기존 한계, 범위 밖). 락을 쥔 오프메인 코드는 메인 왕복
+        // 게터를 부르면 안 되고, 메인 스레드의 게터는 인라인 처리라 왕복이 없다.
+        // 배치 정보(메인 좌표·모니터)는 락과 무관하니 락 밖에서 먼저 읽어 점유 시간을 줄인다 -
+        // 새로 만들 때만 쓰이니 이미 떠 있으면 건너뛴다
         let placement = app
             .get_webview_window(PANEL_LABEL)
             .is_none()
@@ -3194,8 +3196,8 @@ impl AppState {
                         publish_panel_visibility_transition(&self.panel_visible, app, true, None)
                     })
             } else {
-                // 사전 확인 뒤 창이 사라진 드문 경우엔 배치 정보가 없다 - 락 안에서는 창 게터를
-                // 부를 수 없어 이번만 OS 기본 자리에 띄우고, 다음 열기에서 제자리를 잡는다
+                // 사전 확인 뒤 창이 사라진 드문 경우엔 배치 정보가 없다 - 이번만 OS 기본
+                // 자리에 띄우고, 다음 열기에서 제자리를 잡는다
                 let (main_rect, monitors) = placement.unwrap_or_else(|| {
                     log::warn!("panel window disappeared before creation; using os placement");
                     Default::default()
@@ -3257,9 +3259,10 @@ impl AppState {
         // 기동 직후의 게터는 아직 옛 프레임을 돌려줄 수 있어 어디까지나 차선책이다
         let main_rect = main_rect.or_else(|| main_window_logical_rect(app));
         let monitors = MonitorData::gather(app);
-        // 이 경로는 메인 스레드에서 돈다 - 락을 쥔 워커가 메인 응답을 기다리는 구간이 있어
-        // 무한 대기하면 역전 데드락이다. 기동 훅은 이벤트 루프보다 앞서 돌아 경합이 없으니
-        // 정상적으론 바로 잡히고, 못 잡으면 복원을 포기한다(분리 플래그는 남아 다음 기동에 재시도)
+        // 기동 훅은 메인 스레드에서 돈다. 이 락을 오프메인에서 쥐는 ack 타임아웃 태스크가
+        // 메인 왕복 게터를 기다리는 구간이 있어 여기서 무한 대기하면 역전 데드락이다.
+        // 기동 시점엔 경합이 없어 정상적으론 바로 잡히고, 못 잡으면 복원을 포기한다
+        // (분리 플래그는 남아 다음 기동에 재시도)
         let Some(_creation_guard) = self.panel_creation_lock.try_lock() else {
             log::warn!("panel creation lock was busy on startup; detached panel restore skipped");
             return Ok(());
@@ -3274,15 +3277,16 @@ impl AppState {
 
     // 트레이로 숨는 메인과 동행 - panel:visibility는 재부착 신호라 여기서 발행하지 않는다
     // (발행하면 메인이 인라인 패널을 다시 붙이고 열린 시트가 사라짐)
-    // 메인 스레드에서 불리므로 panel_creation_lock을 잡지 않는다 - 락을 쥔 워커가
-    // 메인 스레드 응답을 기다리는 구간(bounds 샘플링, 창 생성)이 있어 잡으면 역전 데드락
+    // 메인 스레드에서 불리므로 panel_creation_lock을 잡지 않는다 - 락을 쥔 ack 타임아웃
+    // 태스크가 메인 스레드 응답을 기다리는 구간(bounds 샘플링)이 있어 잡으면 역전 데드락
     fn hide_detached_panel_with_main(&self, app: &AppHandle) {
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
             return;
         };
-        // 이미 숨어 있는 창은 건너뛴다 - is_visible이 걸러내는 건 감춰진 창이고,
-        // 우리가 감추지 않은 창을 동행 복원 대상으로 올리지 않기 위한 가드다
-        let visible = window.is_visible().unwrap_or(false);
+        // 이미 숨어 있거나 최소화된 창은 건너뛴다 - 우리가 감추지 않은 창을 동행 복원 대상으로
+        // 올리지 않기 위한 가드다. Windows의 is_visible은 최소화 창도 true라 is_minimized를 함께 본다
+        let visible =
+            window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
         let hidden = hide_panel_with_main_transition(&self.panel_hidden_with_main, visible, || {
             window.hide().map_err(anyhow::Error::from)
         });
