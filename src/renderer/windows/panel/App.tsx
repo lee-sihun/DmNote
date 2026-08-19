@@ -13,6 +13,7 @@ import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { PANEL_HEADER_HEIGHT } from '@components/main/Grid/PropertiesPanel/panelChrome';
 import PanelDialogHost from './PanelDialogHost';
 import { panelWindowApi } from '@api/modules/selectionSessionApi';
+import { windowApi } from '@api/modules/appApi';
 import {
   isTransitionFailure,
   reattachPropertiesPanel,
@@ -268,10 +269,16 @@ const App = ({ initialViewState }: AppProps) => {
     return () => window.removeEventListener('mousedown', handleMouseDown);
   }, []);
 
-  // 잠금 오버레이가 헤더를 덮으므로 창 드래그는 여기서 이어받는다
+  // 잠금 오버레이가 헤더를 덮으므로 창 드래그는 여기서 이어받는다.
+  // 헤더 아래를 누르면 시트가 떠 있는 메인 창을 앞으로 가져온다 - 안내를 읽고 패널을 클릭하면
+  // 패널이 메인 위로 올라와 정작 가야 할 시트를 가리므로, 그 클릭을 시트로 가는 길로 쓴다
   const handleLockOverlayMouseDown = (event: React.MouseEvent) => {
-    if (event.button !== 0 || event.clientY > PANEL_HEADER_HEIGHT) return;
-    beginWindowDrag(event);
+    if (event.button !== 0) return;
+    if (event.clientY < PANEL_HEADER_HEIGHT) {
+      beginWindowDrag(event);
+      return;
+    }
+    void windowApi.showMain().catch(() => {});
   };
 
   return (

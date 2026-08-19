@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     | null
     | ((payload: { requestId: string }) => void),
   ackClose: vi.fn((_requestId: string) => Promise.resolve(true)),
+  showMain: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('@hooks/app/useAppBootstrap', () => ({ useAppBootstrap: vi.fn() }));
@@ -87,6 +88,9 @@ vi.mock('@api/modules/selectionSessionApi', () => ({
     startDragging: mocks.startDragging,
   },
 }));
+vi.mock('@api/modules/appApi', () => ({
+  windowApi: { showMain: () => mocks.showMain() },
+}));
 vi.mock('@stores/grid/usePanelWindowStore', () => ({
   reattachPropertiesPanel: () => mocks.reattach(),
   isTransitionFailure: (outcome: string) =>
@@ -138,6 +142,7 @@ describe('detached panel selection sync gate', () => {
     mocks.handleRedo.mockClear();
     mocks.applyPanelViewState.mockClear();
     mocks.startDragging.mockClear();
+    mocks.showMain.mockClear();
     mocks.reattach.mockReset();
     mocks.reattach.mockResolvedValue('done');
     mocks.alert.mockClear();
@@ -339,6 +344,43 @@ describe('detached panel selection sync gate', () => {
     await act(async () => mocks.closeRequestedListener?.({ requestId: 'c1' }));
     expect(mocks.ackClose).toHaveBeenCalledWith('c1');
     expect(mocks.reattach).not.toHaveBeenCalled();
+  });
+
+  it('잠금 오버레이는 헤더에서 창 드래그를, 그 아래에서는 메인 창 전면 이동을 잇는다', () => {
+    mocks.remoteSheetActive = true;
+    act(() => root.render(<App initialViewState={initialViewState} />));
+    act(() => mocks.readyListener?.());
+    const lock = container.querySelector<HTMLElement>(
+      '[data-testid="remote-sheet-lock"]',
+    )!;
+
+    // 헤더 높이 안: 창 드래그
+    act(() => {
+      lock.dispatchEvent(
+        new MouseEvent('mousedown', {
+          bubbles: true,
+          button: 0,
+          clientX: 30,
+          clientY: 20,
+        }),
+      );
+    });
+    expect(mocks.startDragging).toHaveBeenCalledWith(30, 20);
+    expect(mocks.showMain).not.toHaveBeenCalled();
+
+    // 헤더 바로 아래 첫 픽셀부터: 시트가 있는 메인을 앞으로
+    act(() => {
+      lock.dispatchEvent(
+        new MouseEvent('mousedown', {
+          bubbles: true,
+          button: 0,
+          clientX: 30,
+          clientY: 48,
+        }),
+      );
+    });
+    expect(mocks.startDragging).toHaveBeenCalledTimes(1);
+    expect(mocks.showMain).toHaveBeenCalledTimes(1);
   });
 
   it('메인이 시트 요청을 받지 못하면 안내를 띄운다', async () => {

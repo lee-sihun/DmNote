@@ -6,6 +6,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   request: null as null | ((request: unknown) => void),
+  abort: null as null | ((payload: { requestId: string }) => void),
   visibility: null as null | ((payload: { visible: boolean }) => void),
   accept: vi.fn((_requestId: string) => Promise.resolve()),
   close: vi.fn((_result: unknown) => Promise.resolve()),
@@ -18,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   soundClose: null as null | (() => void),
   soundProps: null as null | Record<string, unknown>,
   panelStatus: 'detached',
+  // true면 사운드 시트가 렌더 중 예외를 던진 것으로 친다
+  soundBroken: false,
 }));
 
 vi.mock('@contexts/useTranslation', () => ({
@@ -27,6 +30,10 @@ vi.mock('@api/modules/remoteSheetApi', () => ({
   remoteSheetApi: {
     onRequest: (listener: (request: unknown) => void) => {
       mocks.request = listener;
+      return () => {};
+    },
+    onAbort: (listener: (payload: { requestId: string }) => void) => {
+      mocks.abort = listener;
       return () => {};
     },
     accept: (requestId: string) => mocks.accept(requestId),
@@ -81,6 +88,7 @@ vi.mock('./content/managers/SoundTrimModal', () => ({
     onSaved: (soundPath: string) => void;
     onClose: () => void;
   }) => {
+    if (mocks.soundBroken) throw new TypeError('sheet render failed');
     mocks.soundSaved = props.onSaved;
     mocks.soundClose = props.onClose;
     mocks.soundProps = props;
@@ -99,6 +107,7 @@ describe('RemoteSheetHost', () => {
     mocks.close.mockClear();
     mocks.hostReady.mockClear();
     mocks.preload.mockClear();
+    mocks.soundBroken = false;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -243,5 +252,66 @@ describe('RemoteSheetHost', () => {
     );
     await act(async () => mocks.visibility?.({ visible: false }));
     expect(host.querySelector('[data-testid="web-font-sheet"]')).toBeNull();
+  });
+
+  it('패널이 사라져 내린 시트의 늦은 저장 완료가 다음 시트를 내리지 못한다', async () => {
+    await act(async () =>
+      mocks.request?.({ requestId: 'r8', kind: 'soundTrim', mode: 'create' }),
+    );
+    // 저장이 진행 중인 채로 패널이 파괴됐다가 다시 분리돼 새 요청이 온다
+    const lateSaved = mocks.soundSaved;
+    const lateClose = mocks.soundClose;
+    await act(async () => mocks.visibility?.({ visible: false }));
+    await act(async () =>
+      mocks.request?.({ requestId: 'r9', kind: 'webFont', editingId: null }),
+    );
+    expect(host.querySelector('[data-testid="web-font-sheet"]')).not.toBeNull();
+
+    // r8의 비동기 저장이 뒤늦게 끝나 옛 클로저의 콜백을 부른다
+    await act(async () => {
+      lateSaved?.('sounds/late.wav');
+      lateClose?.();
+    });
+    expect(host.querySelector('[data-testid="web-font-sheet"]')).not.toBeNull();
+    expect(mocks.close).not.toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'r8' }),
+    );
+  });
+
+  it('패널이 중단을 알리면 그 요청의 시트만 내리고 결과는 보내지 않는다', async () => {
+    await act(async () =>
+      mocks.request?.({ requestId: 'r10', kind: 'webFont', editingId: null }),
+    );
+    // 다른 요청의 중단은 무시
+    await act(async () => mocks.abort?.({ requestId: 'other' }));
+    expect(host.querySelector('[data-testid="web-font-sheet"]')).not.toBeNull();
+
+    await act(async () => mocks.abort?.({ requestId: 'r10' }));
+    expect(host.querySelector('[data-testid="web-font-sheet"]')).toBeNull();
+    expect(mocks.close).not.toHaveBeenCalled();
+    // 내려간 시트의 늦은 onDone도 결과를 보내지 않는다
+    await act(async () => mocks.webFontDone?.('cancelled'));
+    expect(mocks.close).not.toHaveBeenCalled();
+  });
+
+  it('시트가 렌더 중 터지면 창을 살리고 failed로 돌려준 뒤 다음 요청은 정상 처리한다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.soundBroken = true;
+    await act(async () =>
+      mocks.request?.({ requestId: 'r11', kind: 'soundTrim', mode: 'create' }),
+    );
+    expect(host.isConnected).toBe(true);
+    expect(mocks.close).toHaveBeenCalledWith({
+      requestId: 'r11',
+      status: 'failed',
+    });
+    expect(host.querySelector('[data-testid="sound-sheet"]')).toBeNull();
+
+    // 경계는 요청마다 새로 마운트되므로 이전 실패가 다음 시트를 막지 않는다
+    mocks.soundBroken = false;
+    await act(async () =>
+      mocks.request?.({ requestId: 'r12', kind: 'soundTrim', mode: 'create' }),
+    );
+    expect(host.querySelector('[data-testid="sound-sheet"]')).not.toBeNull();
   });
 });

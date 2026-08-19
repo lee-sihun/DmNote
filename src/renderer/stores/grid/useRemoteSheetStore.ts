@@ -36,19 +36,24 @@ interface PendingRequest {
 let pending: PendingRequest | null = null;
 let notifyFailed: (() => void) | null = null;
 
-const settle = (result: RemoteSheetResult) => {
-  if (!pending || pending.requestId !== result.requestId) return;
+// 실제로 정산했을 때만 true - 이미 끝난 요청의 늦은 신호는 false
+const settle = (result: RemoteSheetResult): boolean => {
+  if (!pending || pending.requestId !== result.requestId) return false;
   const current = pending;
   pending = null;
   window.clearTimeout(current.acceptTimer);
   useRemoteSheetStore.getState().setActive(null);
   current.resolve(result);
+  return true;
 };
 
-// 메인에 닿지 못한 경우만 여기서 알린다. 메인 쪽 실패는 메인이 이미 안내했다
+// 메인에 닿지 못한 경우만 여기서 알린다. 메인 쪽 실패는 메인이 이미 안내했다.
+// 이미 정산된 요청이면(타임아웃 뒤 전송 거부처럼 두 경로가 겹칠 때) 알림을 반복하지 않는다.
+// 잠금을 푼 뒤 메인에 늦게 뜬 시트가 남으면 두 창이 동시에 편집을 받으므로 중단을 알린다
 const failLocally = (requestId: string) => {
-  settle({ requestId, status: 'failed' });
+  if (!settle({ requestId, status: 'failed' })) return;
   notifyFailed?.();
+  remoteSheetApi.abort(requestId).catch(() => {});
 };
 
 /**

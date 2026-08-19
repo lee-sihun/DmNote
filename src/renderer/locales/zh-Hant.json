@@ -607,6 +607,7 @@
     "enabledToggle": "啟用",
     "saveFailed": "字體設定儲存失敗。",
     "editorLoadFailed": "無法載入網路字體編輯器，請再試一次。",
+    "editTargetMissing": "找不到要編輯的網路字體，可能已被移除。",
     "deleteConfirm": "確定刪除該字體？使用它的元素將以預設字體顯示。",
     "add": "新增字型"
   },

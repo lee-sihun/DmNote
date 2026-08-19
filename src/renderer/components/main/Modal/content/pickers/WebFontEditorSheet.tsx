@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import { useFontLibrary } from '@hooks/useFontLibrary';
@@ -35,22 +35,47 @@ const WebFontEditorSheet = ({ editingId, onDone }: WebFontEditorSheetProps) => {
           (font) => font.type === 'web' && font.id === editingId,
         ) ?? null
       : null;
+  // 편집 대상 id가 이 창의 목록에 없다(삭제됨·아직 하이드레이션 전). 추가 모드로 흘려보내면
+  // 빈 폼이 보이는데 제출은 그 id를 덮어써 기존 폰트를 조용히 지운다 - 열지 않고 실패로 접는다.
+  // 마운트 시점에 한 번만 판정한다 - 편집 중 다른 창이 그 폰트를 지워도 쓰던 내용을 걷어가지 않는다
+  const [editingTargetMissing] = useState(
+    () => editingId != null && editingWebFont === null,
+  );
 
-  // 청크를 못 불러오면 창 루트가 아니라 시트만 접는다
-  const handleLoadError = (error: unknown) => {
-    console.error('Failed to load web font editor', error);
-    resetWebFontEditorLoader();
+  const failToOpen = (message: string, notice: string, error?: unknown) => {
+    console.error(message, error);
     void window.api.ui.dialog
-      .alert(t('fontPicker.editorLoadFailed'), {
-        confirmText: t('common.ok'),
-      })
+      .alert(notice, { confirmText: t('common.ok') })
       .catch(() => {});
     onDone('failed');
   };
 
+  // 청크를 못 불러오면 창 루트가 아니라 시트만 접는다
+  const handleLoadError = (error: unknown) => {
+    resetWebFontEditorLoader();
+    failToOpen(
+      'Failed to load web font editor',
+      t('fontPicker.editorLoadFailed'),
+      error,
+    );
+  };
+
+  useEffect(() => {
+    if (editingTargetMissing) {
+      failToOpen(
+        `Web font ${editingId} not found in this window`,
+        t('fontPicker.editTargetMissing'),
+      );
+    }
+    // 마운트 판정 한 번 - onDone·t는 그 시점 값을 쓰면 된다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingTargetMissing]);
+
   const handleSubmit = (css: string, displayName: string) => {
     if (fontLibrary.submitWebFont(css, displayName, editingId)) onDone('saved');
   };
+
+  if (editingTargetMissing) return null;
 
   return (
     <RenderErrorBoundary onError={handleLoadError}>

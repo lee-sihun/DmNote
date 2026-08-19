@@ -607,6 +607,7 @@
     "enabledToggle": "启用",
     "saveFailed": "字体设置保存失败。",
     "editorLoadFailed": "无法加载网络字体编辑器，请重试。",
+    "editTargetMissing": "找不到要编辑的网络字体，可能已被移除。",
     "deleteConfirm": "确定删除该字体？使用它的元素将以默认字体显示。",
     "add": "添加字体"
   },

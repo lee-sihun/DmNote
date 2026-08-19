@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   showMain: vi.fn(() => Promise.resolve()),
   request: vi.fn((_request: unknown) => Promise.resolve()),
+  abort: vi.fn((_requestId: string) => Promise.resolve()),
   accepted: null as null | ((payload: { requestId: string }) => void),
   closed: null as null | ((result: unknown) => void),
   hostReady: null as null | (() => void),
@@ -14,6 +15,7 @@ vi.mock('@api/modules/appApi', () => ({
 vi.mock('@api/modules/remoteSheetApi', () => ({
   remoteSheetApi: {
     request: (request: unknown) => mocks.request(request),
+    abort: (requestId: string) => mocks.abort(requestId),
     onAccepted: (listener: (payload: { requestId: string }) => void) => {
       mocks.accepted = listener;
       return () => {};
@@ -49,6 +51,7 @@ describe('openRemoteSheet', () => {
     vi.useFakeTimers();
     mocks.showMain.mockClear();
     mocks.request.mockClear();
+    mocks.abort.mockClear();
     onFailed = vi.fn<() => void>();
     stopListening = listenRemoteSheetHost(onFailed);
   });
@@ -92,13 +95,33 @@ describe('openRemoteSheet', () => {
     expect(onFailed).not.toHaveBeenCalled();
   });
 
-  it('메인이 수락하지 않으면 시간 안에 실패로 풀고 알린다', async () => {
+  it('메인이 수락하지 않으면 시간 안에 실패로 풀고 알리며, 늦게 뜬 시트를 내리라고 중단을 보낸다', async () => {
     const promise = openRemoteSheet({ kind: 'webFont', editingId: 'f1' });
     await flush();
     vi.advanceTimersByTime(3000);
     await expect(promise).resolves.toMatchObject({ status: 'failed' });
     expect(isRemoteSheetActive()).toBe(false);
     expect(onFailed).toHaveBeenCalledTimes(1);
+    expect(mocks.abort).toHaveBeenCalledWith(requestIdOf());
+  });
+
+  it('타임아웃 뒤 전송 거부가 겹쳐도 알림은 한 번이다', async () => {
+    let rejectRequest: (error: Error) => void = () => {};
+    mocks.request.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectRequest = reject;
+        }),
+    );
+    const promise = openRemoteSheet({ kind: 'webFont', editingId: null });
+    await flush();
+    vi.advanceTimersByTime(3000);
+    await expect(promise).resolves.toMatchObject({ status: 'failed' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    rejectRequest(new Error('late reject'));
+    await flush();
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    expect(mocks.abort).toHaveBeenCalledTimes(1);
   });
 
   it('수락된 뒤에는 시간이 지나도 기다린다', async () => {
