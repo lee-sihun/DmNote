@@ -19,7 +19,8 @@ vi.mock('@api/modules/panelWindowApi', () => ({
   panelWindowApi: {
     applyNativeChrome: () => mocks.applyNativeChrome(),
     startDragging: (x: number, y: number) => mocks.startDragging(x, y),
-    mainWindowFrame: () => Promise.resolve(null),
+    dragContext: () =>
+      Promise.resolve({ mainFrame: null, mainContentOrigin: null }),
     moveTo: () => Promise.resolve(),
     presentAt: () => Promise.resolve(),
   },

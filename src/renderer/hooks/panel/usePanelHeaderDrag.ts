@@ -90,15 +90,19 @@ const inflate = (rect: Rect, by: number): Rect => ({
   height: rect.height + by * 2,
 });
 
-// 메인 창 content 원점(화면 논리 좌표). outer 프레임 원점에 크롬 두께를 더한다 -
-// macOS 오버레이 타이틀바는 두께 0, Windows 표준 프레임은 테두리/타이틀바만큼
+// 메인 창 content 원점(화면 논리 좌표) - 백엔드가 inner_position으로 실측한다.
+// 프레임리스+그림자 창의 인셋(Windows tao, 좌우 ≈8px)을 렌더러의 outerWidth-innerWidth로는
+// 못 잡는다(WebView2에선 0). 실측 실패 시 outer 원점 근사 - 인셋만큼의 오차는
+// 도크 존 여유(DOCK_ZONE_MARGIN_PX)가 흡수한다
 const resolveMainContentOrigin = async () => {
   const context = await panelWindowApi.dragContext().catch(() => null);
-  const frame = context?.mainFrame;
-  if (!frame) return null;
-  const chromeX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
-  const chromeY = Math.max(0, window.outerHeight - window.innerHeight);
-  return { x: frame.x + chromeX, y: frame.y + chromeY };
+  if (!context) return null;
+  return (
+    context.mainContentOrigin ??
+    (context.mainFrame
+      ? { x: context.mainFrame.x, y: context.mainFrame.y }
+      : null)
+  );
 };
 
 interface UsePanelHeaderDragParams {

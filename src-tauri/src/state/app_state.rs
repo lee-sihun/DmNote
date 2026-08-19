@@ -3065,9 +3065,10 @@ impl AppState {
             let stored_bounds = self.store.snapshot().panel_bounds;
             let mut layout = resolve_panel_window_layout(stored_bounds, main_rect, &monitors, None);
             if let Some(position) = position {
+                let outer = panel_client_to_outer_position(&window, position.x, position.y);
                 layout.position = Some(OverlayPosition {
-                    x: position.x,
-                    y: position.y,
+                    x: outer.x,
+                    y: outer.y,
                 });
             }
             self.apply_panel_window_layout(&window, &layout);
@@ -3095,22 +3096,17 @@ impl AppState {
         let window = app
             .get_webview_window(PANEL_LABEL)
             .ok_or_else(|| anyhow!("panel window is not open"))?;
+        let position = panel_client_to_outer_position(&window, x, y);
         window
-            .set_position(LogicalPosition::new(x, y))
+            .set_position(position)
             .context("failed to move panel window")
     }
 
-    // 헤더 드래그 세션 시작 시 한 번 읽는 값 - 메인 창 outer 사각형(도크 존 판정)과
-    // 패널 창이 뜰 때의 높이(고스트를 실제 창 크기로 그리기 위해)
+    // 헤더 드래그 세션 시작 시 한 번 읽는 값 - 도크 존 판정 기준 좌표
     pub fn panel_drag_context(&self, app: &AppHandle) -> PanelDragContext {
-        let main_frame = main_window_logical_rect(app);
-        let monitors = MonitorData::gather(app);
-        let stored_bounds = self.store.snapshot().panel_bounds;
-        let layout = resolve_panel_window_layout(stored_bounds, main_frame, &monitors, None);
         PanelDragContext {
-            main_frame,
-            panel_width: PANEL_WIDTH,
-            panel_height: layout.height,
+            main_frame: main_window_logical_rect(app),
+            main_content_origin: main_window_content_origin(app),
         }
     }
 
@@ -3356,6 +3352,17 @@ impl AppState {
         if let Some(position) = layout.position {
             if let Err(err) = window.set_position(LogicalPosition::new(position.x, position.y)) {
                 log::warn!("failed to restore panel position after build: {err}");
+            }
+        }
+
+        // Windows 접근성 텍스트 배율 보상 - about:blank는 네비게이션이 없어
+        // zoom-guard(on_page_load)가 이 창에 닿지 않는다. 메인과 같은 배율을 직접 적용
+        let zoom = crate::compute_compensating_zoom();
+        if crate::should_apply_compensating_zoom(zoom) {
+            // 성공도 남긴다 - WebView2가 이후 네비게이션에서 리셋하면 로그 부재로 판별해야 한다
+            match window.set_zoom(zoom) {
+                Ok(()) => log::info!("[zoom-guard] panel window compensating zoom={zoom:.6}"),
+                Err(err) => log::warn!("failed to set panel compensating zoom: {err}"),
             }
         }
 
@@ -5064,9 +5071,19 @@ impl MonitorData {
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PanelDragContext {
+    /// 메인 창 outer 사각형 - content 원점 실측 실패 시 근사 폴백
     pub main_frame: Option<LogicalRect>,
-    pub panel_width: f64,
-    pub panel_height: f64,
+    /// 메인 창 content(웹뷰) 원점 - 드래그 도크 존 판정 기준.
+    /// Windows 메인 창은 프레임리스+그림자(tao undecorated-shadow 인셋, 좌우 ≈8px·상단 0~1px)라
+    /// outer와 어긋나고, 렌더러의 outerWidth-innerWidth는 WebView2에서 0이라 여기서 실측한다
+    pub main_content_origin: Option<LogicalPoint>,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogicalPoint {
+    pub x: f64,
+    pub y: f64,
 }
 
 /// 논리 좌표계 사각형 - 창 게터가 주는 physical 값을 scale로 나눈 도메인
@@ -5096,6 +5113,40 @@ fn main_window_logical_rect(app: &AppHandle) -> Option<LogicalRect> {
         y: position.y,
         width: size.width,
         height: size.height,
+    })
+}
+
+// 렌더러의 드롭 좌표는 "커서 - client 기준 grab 오프셋" = 원하는 client 원점이다.
+// 패널 창도 프레임리스+그림자라 Windows에선 outer가 client보다 인셋만큼 크다 -
+// set_position(outer)에 그대로 꽂으면 콘텐츠가 그만큼 밀리므로 실측 인셋으로 보정한다.
+// macOS는 인셋 0이라 무변화. 실측 실패 시 보정 없이 진행
+fn panel_client_to_outer_position(window: &WebviewWindow, x: f64, y: f64) -> LogicalPosition<f64> {
+    let inset = window
+        .scale_factor()
+        .ok()
+        .filter(|scale| monitor_scale_is_usable(*scale))
+        .and_then(|scale| {
+            let outer = window.outer_position().ok()?.to_logical::<f64>(scale);
+            let inner = window.inner_position().ok()?.to_logical::<f64>(scale);
+            Some((inner.x - outer.x, inner.y - outer.y))
+        })
+        .unwrap_or((0.0, 0.0));
+    LogicalPosition::new(x - inset.0, y - inset.1)
+}
+
+/// 메인 창 content(웹뷰) 영역의 화면 논리 원점.
+/// 렌더러 client 좌표 + 이 원점 = 화면 논리 좌표 (드래그 도크 존 판정에 사용)
+fn main_window_content_origin(app: &AppHandle) -> Option<LogicalPoint> {
+    let window = app.get_webview_window("main")?;
+    let scale = window
+        .scale_factor()
+        .ok()
+        .filter(|scale| monitor_scale_is_usable(*scale))
+        .unwrap_or(1.0);
+    let position = window.inner_position().ok()?.to_logical::<f64>(scale);
+    Some(LogicalPoint {
+        x: position.x,
+        y: position.y,
     })
 }
 

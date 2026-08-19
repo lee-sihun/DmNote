@@ -15,12 +15,13 @@ export const panelWindowApi = {
   // 드래그 중 창 이동 (논리 좌표, 창 좌상단)
   moveTo: (x: number, y: number) =>
     invoke<void>('panel_window_move_to', { x, y }),
-  // 헤더 드래그 세션 컨텍스트 - 메인 창 outer 사각형(도크 존)과 패널 창 크기(고스트)
+  // 헤더 드래그 세션 컨텍스트 - 도크 존 판정 기준 좌표. content 원점은 백엔드 실측
+  // (프레임리스+그림자 창의 인셋을 렌더러의 outerWidth-innerWidth로는 못 잡는다 - WebView2에선 0)
   dragContext: () =>
     invoke<{
+      // content 원점 실측 실패 시 근사 폴백용 outer 프레임
       mainFrame: { x: number; y: number; width: number; height: number } | null;
-      panelWidth: number;
-      panelHeight: number;
+      mainContentOrigin: { x: number; y: number } | null;
     }>('panel_window_drag_context'),
   // 창을 감춘다 - 파괴하지 않는다
   dock: () => invoke<void>('panel_window_dock'),

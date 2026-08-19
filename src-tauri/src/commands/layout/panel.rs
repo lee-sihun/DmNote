@@ -57,7 +57,7 @@ pub fn panel_window_move_to(
     Ok(state.move_panel_window_to(&app, x, y)?)
 }
 
-// 헤더 드래그 세션 컨텍스트 - 메인 창 outer 사각형(도크 존)과 패널 창 크기(고스트)
+// 헤더 드래그 세션 컨텍스트 - 도크 존 판정 기준 좌표(메인 content 원점·outer 폴백)
 #[tauri::command]
 pub fn panel_window_drag_context(
     state: State<'_, AppState>,
