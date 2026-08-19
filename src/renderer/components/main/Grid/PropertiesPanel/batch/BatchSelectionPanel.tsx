@@ -37,7 +37,9 @@ import {
   patchActiveImageByTargets,
   patchActiveTransparentByTargets,
   patchCounterAnimationEnabledByTargets,
+  patchCounterBooleanByTargetsViaAuthority,
   patchCounterEnabledByTargets,
+  patchElementPropertyByTargetsViaAuthority,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
   patchPaintByTargets,
@@ -53,10 +55,6 @@ import {
   patchSoundPathByIds,
 } from '@src/renderer/editor/runtime/elementOps';
 import {
-  patchActiveImageViaAuthority,
-  patchActiveTransparentViaAuthority,
-  patchCounterAnimationEnabledViaAuthority,
-  patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
   patchPaintViaAuthority,
@@ -65,12 +63,9 @@ import {
   patchCounterFillViaAuthority,
   patchFontColorViaAuthority,
   patchStylePropertyViaAuthority,
-  patchInactiveImageViaAuthority,
-  patchIdleTransparentViaAuthority,
-  patchSoundEnabledViaAuthority,
   patchSoundVolumeViaAuthority,
-  patchSoundPathViaAuthority,
 } from '@plugins/rpc/pluginElementActions';
+import { isPanelWindow } from '@utils/windowType';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import {
@@ -89,7 +84,6 @@ import type {
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorFontColorPropertyPatchV1,
-  EditorElementPropertyPatchV1,
 } from '@src/types/editor';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
 import {
@@ -97,6 +91,7 @@ import {
   previewBatchStyleProperty,
 } from '../previewPatchForwarders';
 import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
+import type { BatchElementPropertyUpdate } from '../types';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 
@@ -127,10 +122,9 @@ const createStylePropertyHandlers = (
       const gestureId = options.settleGesture
         ? editGestureController.activeGestureId() ?? undefined
         : undefined;
-      const persisted =
-        window.__dmn_window_type === 'panel'
-          ? patchStylePropertyViaAuthority(stableTargets, patch, gestureId)
-          : patchStylePropertyByTargets(stableTargets, patch, { gestureId });
+      const persisted = isPanelWindow()
+        ? patchStylePropertyViaAuthority(stableTargets, patch, gestureId)
+        : patchStylePropertyByTargets(stableTargets, patch, { gestureId });
       if (options.settleGesture) {
         editGestureController.settleCommit(persisted);
       }
@@ -174,10 +168,9 @@ const createPaintCommitHandler =
     if (!stable) {
       return;
     }
-    const persisted =
-      window.__dmn_window_type === 'panel'
-        ? patchPaintViaAuthority(relevant, patch)
-        : patchPaintByTargets(relevant, patch);
+    const persisted = isPanelWindow()
+      ? patchPaintViaAuthority(relevant, patch)
+      : patchPaintByTargets(relevant, patch);
     void persisted.catch(reportElementOpError);
   };
 
@@ -215,14 +208,13 @@ const createFontColorHandlers = (
       const gestureId = active
         ? undefined
         : editGestureController.activeGestureId() ?? undefined;
-      const persisted =
-        window.__dmn_window_type === 'panel'
-          ? patchFontColorViaAuthority(stable, patch, gestureId)
-          : patchFontColorByTargets(
-              stable,
-              patch,
-              gestureId ? { gestureId } : {},
-            );
+      const persisted = isPanelWindow()
+        ? patchFontColorViaAuthority(stable, patch, gestureId)
+        : patchFontColorByTargets(
+            stable,
+            patch,
+            gestureId ? { gestureId } : {},
+          );
       if (!active) editGestureController.settleCommit(persisted);
       void persisted.catch(reportElementOpError);
     },
@@ -248,10 +240,9 @@ const createShadowCommitHandler =
     if (!stable) {
       return;
     }
-    const persisted =
-      window.__dmn_window_type === 'panel'
-        ? patchShadowViaAuthority(relevant, patch)
-        : patchShadowByTargets(relevant, patch);
+    const persisted = isPanelWindow()
+      ? patchShadowViaAuthority(relevant, patch)
+      : patchShadowByTargets(relevant, patch);
     void persisted.catch(reportElementOpError);
   };
 
@@ -263,10 +254,12 @@ const commitBoundInactiveImage = (
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
   if (targets.length === 0) return;
-  const persisted =
-    window.__dmn_window_type === 'panel'
-      ? patchInactiveImageViaAuthority(targets, inactiveImage)
-      : patchInactiveImageByTargets(targets, inactiveImage);
+  const persisted = isPanelWindow()
+    ? patchElementPropertyByTargetsViaAuthority(targets, {
+        property: 'inactiveImage',
+        value: inactiveImage,
+      })
+    : patchInactiveImageByTargets(targets, inactiveImage);
   void persisted.catch(reportElementOpError);
 };
 
@@ -278,10 +271,12 @@ const commitBoundActiveImage = (
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
   if (targets.length === 0) return;
-  const persisted =
-    window.__dmn_window_type === 'panel'
-      ? patchActiveImageViaAuthority(targets, activeImage)
-      : patchActiveImageByTargets(targets, activeImage);
+  const persisted = isPanelWindow()
+    ? patchElementPropertyByTargetsViaAuthority(targets, {
+        property: 'activeImage',
+        value: activeImage,
+      })
+    : patchActiveImageByTargets(targets, activeImage);
   void persisted.catch(reportElementOpError);
 };
 
@@ -293,10 +288,12 @@ const commitBoundIdleTransparent = (
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
   if (targets.length === 0) return;
-  const persisted =
-    window.__dmn_window_type === 'panel'
-      ? patchIdleTransparentViaAuthority(targets, idleTransparent)
-      : patchIdleTransparentByTargets(targets, idleTransparent);
+  const persisted = isPanelWindow()
+    ? patchElementPropertyByTargetsViaAuthority(targets, {
+        property: 'idleTransparent',
+        value: idleTransparent,
+      })
+    : patchIdleTransparentByTargets(targets, idleTransparent);
   void persisted.catch(reportElementOpError);
 };
 
@@ -308,10 +305,12 @@ const commitBoundActiveTransparent = (
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
   if (targets.length === 0) return;
-  const persisted =
-    window.__dmn_window_type === 'panel'
-      ? patchActiveTransparentViaAuthority(targets, activeTransparent)
-      : patchActiveTransparentByTargets(targets, activeTransparent);
+  const persisted = isPanelWindow()
+    ? patchElementPropertyByTargetsViaAuthority(targets, {
+        property: 'activeTransparent',
+        value: activeTransparent,
+      })
+    : patchActiveTransparentByTargets(targets, activeTransparent);
   void persisted.catch(reportElementOpError);
 };
 
@@ -321,10 +320,12 @@ const commitBoundSoundPath = (
 ) => {
   const ids = selection.key ?? [];
   if (ids.length === 0) return;
-  const persisted =
-    window.__dmn_window_type === 'panel'
-      ? patchSoundPathViaAuthority(ids, soundPath)
-      : patchSoundPathByIds(ids, soundPath);
+  const persisted = isPanelWindow()
+    ? patchElementPropertyByTargetsViaAuthority(
+        ids.map((id) => ({ elementType: 'key' as const, id })),
+        { property: 'soundPath', value: soundPath },
+      )
+    : patchSoundPathByIds(ids, soundPath);
   void persisted.catch(reportElementOpError);
 };
 
@@ -518,8 +519,8 @@ interface BatchKeyLikePanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
-  onNoteElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onNoteElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
   getMixedValue: MixedValueGetter<KeyPosition>;
@@ -740,10 +741,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const commitNotePaint = stableNotePaintIds
     ? (patch: EditorNotePaintPropertyPatchV1) => {
         const gestureId = editGestureController.activeGestureId() ?? undefined;
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchNotePaintViaAuthority(stableNotePaintIds, patch, gestureId)
-            : patchNotePaintByIds(stableNotePaintIds, patch, { gestureId });
+        const persisted = isPanelWindow()
+          ? patchNotePaintViaAuthority(stableNotePaintIds, patch, gestureId)
+          : patchNotePaintByIds(stableNotePaintIds, patch, { gestureId });
         editGestureController.settleCommit(persisted);
         void persisted.catch(reportElementOpError);
       }
@@ -790,10 +790,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       : null;
   const commitCounterFill = stableCounterFillTargets
     ? (patch: EditorCounterFillPropertyPatchV1) => {
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchCounterFillViaAuthority(stableCounterFillTargets, patch)
-            : patchCounterFillByTargets(stableCounterFillTargets, patch);
+        const persisted = isPanelWindow()
+          ? patchCounterFillViaAuthority(stableCounterFillTargets, patch)
+          : patchCounterFillByTargets(stableCounterFillTargets, patch);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -805,43 +804,48 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       : null;
   const commitSoundEnabled = stableSoundTargets
     ? (soundEnabled: boolean) => {
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchSoundEnabledViaAuthority(stableSoundTargets, soundEnabled)
-            : patchSoundEnabledByIds(stableSoundTargets, soundEnabled);
+        const persisted = isPanelWindow()
+          ? patchElementPropertyByTargetsViaAuthority(
+              stableSoundTargets.map((id) => ({
+                elementType: 'key' as const,
+                id,
+              })),
+              { property: 'soundEnabled', value: soundEnabled },
+            )
+          : patchSoundEnabledByIds(stableSoundTargets, soundEnabled);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
   const commitSoundVolume = stableSoundTargets
     ? (soundVolume: number) => {
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchSoundVolumeViaAuthority(stableSoundTargets, soundVolume)
-            : patchSoundVolumeByIds(stableSoundTargets, soundVolume);
+        const persisted = isPanelWindow()
+          ? patchSoundVolumeViaAuthority(stableSoundTargets, soundVolume)
+          : patchSoundVolumeByIds(stableSoundTargets, soundVolume);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
   const commitCounterEnabled = stableCounterTargets
     ? (enabled: boolean) => {
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchCounterEnabledViaAuthority(stableCounterTargets, enabled)
-            : patchCounterEnabledByTargets(stableCounterTargets, enabled);
+        const persisted = isPanelWindow()
+          ? patchCounterBooleanByTargetsViaAuthority(stableCounterTargets, {
+              property: 'counterEnabled',
+              value: enabled,
+            })
+          : patchCounterEnabledByTargets(stableCounterTargets, enabled);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
   const commitCounterAnimationEnabled = stableCounterTargets
     ? (enabled: boolean) => {
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchCounterAnimationEnabledViaAuthority(
-                stableCounterTargets,
-                enabled,
-              )
-            : patchCounterAnimationEnabledByTargets(
-                stableCounterTargets,
-                enabled,
-              );
+        const persisted = isPanelWindow()
+          ? patchCounterBooleanByTargetsViaAuthority(stableCounterTargets, {
+              property: 'counterAnimationEnabled',
+              value: enabled,
+            })
+          : patchCounterAnimationEnabledByTargets(
+              stableCounterTargets,
+              enabled,
+            );
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -849,10 +853,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     ? (
         patch: import('@src/types/editor').EditorCounterLayoutPropertyPatchV1,
       ) => {
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchCounterLayoutViaAuthority(stableCounterTargets, patch)
-            : patchCounterLayoutByTargets(stableCounterTargets, patch);
+        const persisted = isPanelWindow()
+          ? patchCounterLayoutViaAuthority(stableCounterTargets, patch)
+          : patchCounterLayoutByTargets(stableCounterTargets, patch);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -860,10 +863,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     ? (
         patch: import('@src/types/editor').EditorCounterTypographyPropertyPatchV1,
       ) => {
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchCounterTypographyViaAuthority(stableCounterTargets, patch)
-            : patchCounterTypographyByTargets(stableCounterTargets, patch);
+        const persisted = isPanelWindow()
+          ? patchCounterTypographyViaAuthority(stableCounterTargets, patch)
+          : patchCounterTypographyByTargets(stableCounterTargets, patch);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -1673,7 +1675,7 @@ interface BatchGraphOnlyPanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -2023,7 +2025,7 @@ interface BatchKnobOnlyPanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;

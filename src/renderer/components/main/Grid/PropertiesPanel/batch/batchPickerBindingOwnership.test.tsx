@@ -82,6 +82,8 @@ const captured = vi.hoisted(() => ({
 
 const patches = vi.hoisted(() => ({
   onElementPropertyCommit: vi.fn(),
+  patchElementPropertyByTargetsViaAuthority: vi.fn(async () => true),
+  patchCounterBooleanByTargetsViaAuthority: vi.fn(async () => true),
   patchInactiveImageByTargets: vi.fn(async () => true),
   patchInactiveImageViaAuthority: vi.fn(async () => true),
   patchActiveImageByTargets: vi.fn(async () => true),
@@ -130,6 +132,10 @@ const gestures = vi.hoisted(() => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  patchElementPropertyByTargetsViaAuthority:
+    patches.patchElementPropertyByTargetsViaAuthority,
+  patchCounterBooleanByTargetsViaAuthority:
+    patches.patchCounterBooleanByTargetsViaAuthority,
   patchActiveImageByTargets: patches.patchActiveImageByTargets,
   patchInactiveImageByTargets: patches.patchInactiveImageByTargets,
   patchIdleTransparentByTargets: patches.patchIdleTransparentByTargets,
@@ -1421,13 +1427,12 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'stat', id: statB },
       ];
       if (windowType === 'panel') {
-        expect(patches.patchCounterEnabledViaAuthority).toHaveBeenCalledWith(
-          targets,
-          false,
-        );
         expect(
-          patches.patchCounterAnimationEnabledViaAuthority,
-        ).toHaveBeenCalledWith(targets, true);
+          patches.patchCounterBooleanByTargetsViaAuthority.mock.calls,
+        ).toEqual([
+          [targets, { property: 'counterEnabled', value: false }],
+          [targets, { property: 'counterAnimationEnabled', value: true }],
+        ]);
         expect(patches.patchCounterEnabledByTargets).not.toHaveBeenCalled();
       } else {
         expect(patches.patchCounterEnabledByTargets).toHaveBeenCalledWith(
@@ -1437,7 +1442,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         expect(
           patches.patchCounterAnimationEnabledByTargets,
         ).toHaveBeenCalledWith(targets, true);
-        expect(patches.patchCounterEnabledViaAuthority).not.toHaveBeenCalled();
+        expect(
+          patches.patchCounterBooleanByTargetsViaAuthority,
+        ).not.toHaveBeenCalled();
       }
       expect(legacy).not.toHaveBeenCalled();
     },
@@ -2123,19 +2130,23 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         captured.image?.onIdleImageReset();
       });
 
-      const selectedWriter =
-        windowType === 'panel'
-          ? patches.patchInactiveImageViaAuthority
-          : patches.patchInactiveImageByTargets;
-      const otherWriter =
-        windowType === 'panel'
-          ? patches.patchInactiveImageByTargets
-          : patches.patchInactiveImageViaAuthority;
-      expect(selectedWriter.mock.calls).toEqual([
-        [targetsA, '  frozen.png  '],
-        [targetsA, ''],
-      ]);
-      expect(otherWriter).not.toHaveBeenCalled();
+      if (windowType === 'panel') {
+        expect(
+          patches.patchElementPropertyByTargetsViaAuthority.mock.calls,
+        ).toEqual([
+          [targetsA, { property: 'inactiveImage', value: '  frozen.png  ' }],
+          [targetsA, { property: 'inactiveImage', value: '' }],
+        ]);
+        expect(patches.patchInactiveImageByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchInactiveImageByTargets.mock.calls).toEqual([
+          [targetsA, '  frozen.png  '],
+          [targetsA, ''],
+        ]);
+        expect(
+          patches.patchElementPropertyByTargetsViaAuthority,
+        ).not.toHaveBeenCalled();
+      }
       expect(legacy).not.toHaveBeenCalled();
       expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
     },
@@ -2183,19 +2194,23 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         captured.image?.onActiveImageReset();
       });
 
-      const selectedWriter =
-        windowType === 'panel'
-          ? patches.patchActiveImageViaAuthority
-          : patches.patchActiveImageByTargets;
-      const otherWriter =
-        windowType === 'panel'
-          ? patches.patchActiveImageByTargets
-          : patches.patchActiveImageViaAuthority;
-      expect(selectedWriter.mock.calls).toEqual([
-        [targetsA, '  active.png  '],
-        [targetsA, ''],
-      ]);
-      expect(otherWriter).not.toHaveBeenCalled();
+      if (windowType === 'panel') {
+        expect(
+          patches.patchElementPropertyByTargetsViaAuthority.mock.calls,
+        ).toEqual([
+          [targetsA, { property: 'activeImage', value: '  active.png  ' }],
+          [targetsA, { property: 'activeImage', value: '' }],
+        ]);
+        expect(patches.patchActiveImageByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchActiveImageByTargets.mock.calls).toEqual([
+          [targetsA, '  active.png  '],
+          [targetsA, ''],
+        ]);
+        expect(
+          patches.patchElementPropertyByTargetsViaAuthority,
+        ).not.toHaveBeenCalled();
+      }
       expect(legacy).not.toHaveBeenCalled();
       expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
     },
@@ -2228,15 +2243,19 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         }
       });
 
-      const selectedWriter =
-        state === 'idle'
-          ? windowType === 'panel'
-            ? patches.patchIdleTransparentViaAuthority
-            : patches.patchIdleTransparentByTargets
-          : windowType === 'panel'
-          ? patches.patchActiveTransparentViaAuthority
-          : patches.patchActiveTransparentByTargets;
-      expect(selectedWriter).toHaveBeenCalledWith(targetsB, true);
+      const property =
+        state === 'idle' ? 'idleTransparent' : 'activeTransparent';
+      if (windowType === 'panel') {
+        expect(
+          patches.patchElementPropertyByTargetsViaAuthority,
+        ).toHaveBeenCalledWith(targetsB, { property, value: true });
+      } else {
+        const dockedWriter =
+          state === 'idle'
+            ? patches.patchIdleTransparentByTargets
+            : patches.patchActiveTransparentByTargets;
+        expect(dockedWriter).toHaveBeenCalledWith(targetsB, true);
+      }
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -2283,7 +2302,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       [[ID_A], 'second.wav'],
       [[ID_A], ''],
     ]);
-    expect(patches.patchSoundPathViaAuthority).not.toHaveBeenCalled();
+    expect(
+      patches.patchElementPropertyByTargetsViaAuthority,
+    ).not.toHaveBeenCalled();
     expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
   });
 
@@ -2302,9 +2323,12 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     act(() => captured.sound!.onSoundSelect('  sounds/raw.wav  '));
     act(() => captured.sound!.onSoundSelect(''));
 
-    expect(patches.patchSoundPathViaAuthority.mock.calls).toEqual([
-      [[ID_A], '  sounds/raw.wav  '],
-      [[ID_A], ''],
+    const keyTargets = [{ elementType: 'key', id: ID_A }];
+    expect(
+      patches.patchElementPropertyByTargetsViaAuthority.mock.calls,
+    ).toEqual([
+      [keyTargets, { property: 'soundPath', value: '  sounds/raw.wav  ' }],
+      [keyTargets, { property: 'soundPath', value: '' }],
     ]);
     expect(patches.patchSoundPathByIds).not.toHaveBeenCalled();
     expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
@@ -2321,17 +2345,21 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
       clickSoundEnabled();
       if (windowType === 'panel') {
-        expect(patches.patchSoundEnabledViaAuthority).toHaveBeenCalledWith(
-          [ID_B],
-          true,
-        );
+        expect(
+          patches.patchElementPropertyByTargetsViaAuthority,
+        ).toHaveBeenCalledWith([{ elementType: 'key', id: ID_B }], {
+          property: 'soundEnabled',
+          value: true,
+        });
         expect(patches.patchSoundEnabledByIds).not.toHaveBeenCalled();
       } else {
         expect(patches.patchSoundEnabledByIds).toHaveBeenCalledWith(
           [ID_B],
           true,
         );
-        expect(patches.patchSoundEnabledViaAuthority).not.toHaveBeenCalled();
+        expect(
+          patches.patchElementPropertyByTargetsViaAuthority,
+        ).not.toHaveBeenCalled();
       }
     },
   );

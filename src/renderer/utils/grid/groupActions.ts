@@ -18,6 +18,7 @@ import { setElementGroupsViaAuthority } from '@plugins/rpc/pluginElementActions'
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { buildNextLayerGroupName } from '@utils/layerGroupUtils';
+import { isPanelWindow } from '@utils/windowType';
 import type { EditorElementGroupTargetV1 } from '@src/types/editor';
 
 interface SplitGroupTargets {
@@ -93,7 +94,7 @@ const dispatchGroupChange = (
     | { kind: 'create'; id: string; name: string }
     | null,
 ): Promise<boolean> =>
-  window.__dmn_window_type === 'panel'
+  isPanelWindow()
     ? setElementGroupsViaAuthority(
         mode,
         targets.native,

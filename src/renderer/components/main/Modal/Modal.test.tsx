@@ -3,6 +3,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FloatingPopup from './FloatingPopup';
 import Modal from './Modal';
+import {
+  settleDeferredContent,
+  stubAnimationFrame,
+} from '@src/renderer/__tests__/deferredContentHarness';
 
 describe('Modal focus contract', () => {
   let host: HTMLDivElement;
@@ -138,12 +142,7 @@ describe('Modal focus contract', () => {
   });
 
   it('after-paint 전략은 dialog shell을 먼저 표시한 뒤 콘텐츠를 mount한다', async () => {
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
-      window.setTimeout(() => callback(performance.now()), 0),
-    );
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-      window.clearTimeout(id);
-    });
+    stubAnimationFrame();
 
     await act(async () => {
       root.render(
@@ -164,10 +163,7 @@ describe('Modal focus contract', () => {
     expect(dialog?.textContent).not.toContain('Deferred action');
     expect(document.activeElement).toBe(dialog);
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    });
+    await settleDeferredContent();
 
     const action = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent === 'Deferred action',

@@ -29,9 +29,13 @@ use tauri::{
 
 use dm_note::{compute_compensating_zoom, should_apply_compensating_zoom};
 
-use state::{AppState, AppStore, PANEL_LABEL};
+use state::{AppState, AppStore, LogicalRect, PANEL_LABEL};
 
 const INTERACTION_BENCHMARK_ENV: &str = "DMN_INTERACTION_WEBVIEW_BENCHMARK";
+
+// 메인 창 논리 크기 - 고정 크기이고, 분리 패널이 이 사각형을 기준으로 옆에 붙는다
+const MAIN_WINDOW_WIDTH: f64 = 902.0;
+const MAIN_WINDOW_HEIGHT: f64 = 488.0;
 
 fn is_interaction_benchmark_mode() -> bool {
     std::env::var_os(INTERACTION_BENCHMARK_ENV).is_some()
@@ -521,11 +525,26 @@ fn configure_main_window(app: &tauri::AppHandle) {
     });
 }
 
+// 메인 창을 놓을 자리 (physical px + 그 화면의 scale)
+struct MainWindowPlacement {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    scale_factor: f64,
+}
+
+impl MainWindowPlacement {
+    fn to_logical_rect(&self) -> Option<LogicalRect> {
+        LogicalRect::from_physical(self.x, self.y, self.width, self.height, self.scale_factor)
+    }
+}
+
 fn apply_main_window_configuration(
     app: &tauri::AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<()> {
-    let size = LogicalSize::new(902.0, 488.0);
+    let size = LogicalSize::new(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT);
 
     if let Err(err) = window.hide() {
         log::debug!("failed to hide main window before configuration: {err}");
@@ -559,7 +578,8 @@ fn apply_main_window_configuration(
         log::warn!("failed to enable shadow: {err}");
     }
 
-    let positioned = app.primary_monitor().ok().flatten().and_then(|monitor| {
+    let placement = app.primary_monitor().ok().flatten().and_then(|monitor| {
+        let scale_factor = monitor.scale_factor();
         let work_area = monitor.work_area();
         window.outer_size().ok().map(|size| {
             let width = size.width as f64;
@@ -575,22 +595,29 @@ fn apply_main_window_configuration(
             let max_x = origin_x + (available_width - width).max(0.0);
             let max_y = origin_y + (available_height - height).max(0.0);
 
-            (
-                desired_x.clamp(origin_x, max_x),
-                desired_y.clamp(origin_y, max_y),
-            )
+            MainWindowPlacement {
+                x: desired_x.clamp(origin_x, max_x),
+                y: desired_y.clamp(origin_y, max_y),
+                width,
+                height,
+                scale_factor,
+            }
         })
     });
 
-    if let Some((x, y)) = positioned {
+    // 방금 놓은 좌표를 그대로 들고 있는다 - 분리 패널이 이걸 기준으로 붙는다
+    let mut placed_rect = None;
+    if let Some(placement) = placement {
         if let Err(err) = window.set_position(Position::Physical(PhysicalPosition::new(
-            x.round() as i32,
-            y.round() as i32,
+            placement.x.round() as i32,
+            placement.y.round() as i32,
         ))) {
             log::warn!("failed to set main window position: {err}");
             if let Err(err) = window.center() {
                 log::warn!("failed to center window: {err}");
             }
+        } else {
+            placed_rect = placement.to_logical_rect();
         }
     } else if let Err(err) = window.center() {
         log::warn!("failed to center window: {err}");
@@ -606,19 +633,32 @@ fn apply_main_window_configuration(
     }
 
     let state = app.state::<AppState>();
-    let snapshot = state.store.snapshot();
-    let should_start_hidden = snapshot.tray_enabled && snapshot.main_window_hidden;
+    let wants_hidden = state.should_start_main_window_hidden();
+    // 트레이 아이콘을 못 만들면 숨은 창을 되살릴 방법이 없다 - 표시로 되돌린다
+    let stays_hidden = wants_hidden
+        && match state.ensure_tray_icon_for_background(app) {
+            Ok(()) => true,
+            Err(err) => {
+                log::warn!("failed to create tray icon on startup: {err}");
+                false
+            }
+        };
 
-    if should_start_hidden {
-        if let Err(err) = state.ensure_tray_icon_for_background(app) {
-            log::warn!("failed to create tray icon on startup: {err}");
-            if let Err(err) = window.show() {
-                log::warn!("failed to show main window after tray init error: {err}");
-            }
-            let _ = window.set_focus();
-            if let Err(err) = state.set_main_window_hidden(false) {
-                log::warn!("failed to reset main hidden state after tray init error: {err}");
-            }
+    // 분리 패널은 메인 창 옆에 붙으므로 메인 배치가 끝난 지금 만든다.
+    // 트레이 실패 폴백까지 반영한 최종 가시성으로 판단하고, 메인 show보다 앞이라
+    // 포커스는 그대로 메인에 남는다.
+    // 좌표는 실측 대신 방금 계산한 값을 넘긴다 - set_position 직후의 게터는
+    // 아직 반영 전 프레임을 돌려줘서 패널이 엉뚱한 높이에 뜬다
+    state.restore_detached_panel_on_startup(app, placed_rect, stays_hidden);
+
+    if stays_hidden {
+        return Ok(());
+    }
+
+    if wants_hidden {
+        // 공용 표시 경로로 되돌린다 - 분리 패널 동행 복원과 hidden 플래그 정리까지 함께
+        if let Err(err) = state.show_main_window(app) {
+            log::warn!("failed to show main window after tray init error: {err}");
         }
         return Ok(());
     }

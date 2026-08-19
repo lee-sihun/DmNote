@@ -318,7 +318,12 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
             className={`${FORM_ROW_CLASS} cursor-pointer`}
           >
             <span className={FORM_LABEL_CLASS}>{t('tabCss.enableCss')}</span>
-            <span aria-hidden="true" className="pointer-events-none">
+            {/* 토글이 포인터를 받아야 노브 드래그가 산다. 닫히는 중에는 행 버튼의
+                disabled가 안쪽까지 미치지 않으므로 그때만 다시 막는다 */}
+            <span
+              aria-hidden="true"
+              className={isClosing ? 'pointer-events-none' : undefined}
+            >
               <Checkbox checked={visualCssEnabled} onChange={handleToggleCss} />
             </span>
           </button>

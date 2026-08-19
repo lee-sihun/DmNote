@@ -38,15 +38,10 @@ import {
   patchNotePaintViaAuthority,
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
-  patchNativeLayerPropertyViaAuthority,
   patchNativeLayerBoundsViaAuthority,
   patchNotePropertiesViaAuthority,
-  patchSoundPathViaAuthority,
-  patchSoundEnabledViaAuthority,
   patchSoundVolumeViaAuthority,
-  patchCounterAnimationEnabledViaAuthority,
   patchCounterAnimationPresetViaAuthority,
-  patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
   patchCounterStrokeViaAuthority,
@@ -66,6 +61,7 @@ import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { BatchElementPropertyUpdate } from './PropertiesPanel/types';
 import type {
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
@@ -138,6 +134,8 @@ import {
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
   patchElementPropertyById,
+  patchElementPropertyViaAuthority,
+  patchCounterBooleanByTargetsViaAuthority,
 } from '@src/renderer/editor/runtime/elementOps';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -1046,7 +1044,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       } as const;
       try {
         if (window.__dmn_window_type === 'panel') {
-          await patchNativeLayerPropertyViaAuthority(target);
+          await patchElementPropertyViaAuthority(
+            target.elementType,
+            target.id,
+            target.patch,
+          );
         } else {
           await patchElementLayerNameById(
             target.elementType,
@@ -1554,13 +1556,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorElementPropertyPatchV1) => {
+          // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchNativeLayerPropertyViaAuthority({
-                  elementType: type,
-                  id,
-                  patch,
-                })
+              ? patchElementPropertyViaAuthority(type, id, patch)
               : patchElementPropertyById(type, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update element property', error);
@@ -1576,10 +1575,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (inactiveImage: string) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchNativeLayerPropertyViaAuthority({
-                  elementType: type,
-                  id,
-                  patch: { property: 'inactiveImage', value: inactiveImage },
+              ? patchElementPropertyViaAuthority(type, id, {
+                  property: 'inactiveImage',
+                  value: inactiveImage,
                 })
               : patchInactiveImageById(type, id, inactiveImage);
           void persisted.catch((error) => {
@@ -1596,10 +1594,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (activeImage: string) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchNativeLayerPropertyViaAuthority({
-                  elementType: type,
-                  id,
-                  patch: { property: 'activeImage', value: activeImage },
+              ? patchElementPropertyViaAuthority(type, id, {
+                  property: 'activeImage',
+                  value: activeImage,
                 })
               : patchActiveImageById(type, id, activeImage);
           void persisted.catch((error) => {
@@ -1616,13 +1613,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (idleTransparent: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchNativeLayerPropertyViaAuthority({
-                  elementType: type,
-                  id,
-                  patch: {
-                    property: 'idleTransparent',
-                    value: idleTransparent,
-                  },
+              ? patchElementPropertyViaAuthority(type, id, {
+                  property: 'idleTransparent',
+                  value: idleTransparent,
                 })
               : patchIdleTransparentById(type, id, idleTransparent);
           void persisted.catch((error) => {
@@ -1639,13 +1632,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (activeTransparent: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchNativeLayerPropertyViaAuthority({
-                  elementType: type,
-                  id,
-                  patch: {
-                    property: 'activeTransparent',
-                    value: activeTransparent,
-                  },
+              ? patchElementPropertyViaAuthority(type, id, {
+                  property: 'activeTransparent',
+                  value: activeTransparent,
                 })
               : patchActiveTransparentById(type, id, activeTransparent);
           void persisted.catch((error) => {
@@ -1662,10 +1651,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (idleImageFit: ImageFit) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchNativeLayerPropertyViaAuthority({
-                  elementType: type,
-                  id,
-                  patch: { property: 'idleImageFit', value: idleImageFit },
+              ? patchElementPropertyViaAuthority(type, id, {
+                  property: 'idleImageFit',
+                  value: idleImageFit,
                 })
               : patchIdleImageFitById(type, id, idleImageFit);
           void persisted.catch((error) => {
@@ -1682,10 +1670,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (activeImageFit: ImageFit) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchNativeLayerPropertyViaAuthority({
-                  elementType: type,
-                  id,
-                  patch: { property: 'activeImageFit', value: activeImageFit },
+              ? patchElementPropertyViaAuthority(type, id, {
+                  property: 'activeImageFit',
+                  value: activeImageFit,
                 })
               : patchActiveImageFitById(type, id, activeImageFit);
           void persisted.catch((error) => {
@@ -1699,7 +1686,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (soundPath: string) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchSoundPathViaAuthority([id], soundPath)
+              ? patchElementPropertyViaAuthority('key', id, {
+                  property: 'soundPath',
+                  value: soundPath,
+                })
               : patchSoundPathById(id, soundPath);
           void persisted.catch((error) => {
             console.error('Failed to update sound path', error);
@@ -1712,7 +1702,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (soundEnabled: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchSoundEnabledViaAuthority([id], soundEnabled)
+              ? patchElementPropertyViaAuthority('key', id, {
+                  property: 'soundEnabled',
+                  value: soundEnabled,
+                })
               : patchSoundEnabledById(id, soundEnabled);
           void persisted.catch((error) => {
             console.error('Failed to update sound enabled', error);
@@ -1874,9 +1867,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (enabled: boolean) => {
+          // 분리 창도 즉시 반영을 거친다 - 배치 경로와 같은 래퍼를 대상 하나로 재사용
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchCounterEnabledViaAuthority([{ elementType, id }], enabled)
+              ? patchCounterBooleanByTargetsViaAuthority(
+                  [{ elementType, id }],
+                  {
+                    property: 'counterEnabled',
+                    value: enabled,
+                  },
+                )
               : patchCounterEnabledById(elementType, id, enabled);
           void persisted.catch((error) => {
             console.error('Failed to update counter enabled', error);
@@ -1892,9 +1892,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (enabled: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchCounterAnimationEnabledViaAuthority(
+              ? patchCounterBooleanByTargetsViaAuthority(
                   [{ elementType, id }],
-                  enabled,
+                  {
+                    property: 'counterAnimationEnabled',
+                    value: enabled,
+                  },
                 )
               : patchCounterAnimationEnabledById(elementType, id, enabled);
           void persisted.catch((error) => {
@@ -2348,8 +2351,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     },
   });
 
+  // 단일 키 업데이트 객체를 받는다. 아래 get*Patch 헬퍼가 태그 유니온으로 바꿔 wire에 올린다
   const handleBatchElementPropertyCommit = (
-    patch: EditorElementPropertyPatchV1,
+    patch: BatchElementPropertyUpdate,
   ) => {
     const fontStylePatch = getFontStylePatch(patch);
     const fontFamilyPatch = getFontFamilyPatch(patch);
@@ -2382,7 +2386,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const handleBatchNoteElementPropertyCommit = (
-    patch: EditorElementPropertyPatchV1,
+    patch: BatchElementPropertyUpdate,
   ) => {
     const notePatch = getNotePropertyPatch(patch);
     if (!notePatch) return;

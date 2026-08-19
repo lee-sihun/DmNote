@@ -5,9 +5,11 @@ export const PANEL_SECTION_CLASS =
   'bg-inset rounded-surface px-[14px] py-[8px] flex flex-col';
 
 // 설정 페인 목록 행 - 토글 카드와 같은 밀도 (min-h-36, 인셋은 카드 px-14가 담당)
-// 행 전체가 항목 메뉴 트리거 - group으로 이름 밝기 호버를 묶음
+// 항목 메뉴는 우클릭·키보드로만 연다 - 좌클릭 동작이 없어 포인터 커서를 주지 않는다.
+// preflight가 role=button에 pointer를 깔므로 default를 명시해야 한다.
+// group으로 이름 밝기 호버를 묶음
 export const PANEL_LIST_ROW_CLASS =
-  'group w-full min-h-[36px] flex items-center gap-[8px] text-label cursor-pointer rounded-md outline-none focus-visible:shadow-focus-ring';
+  'group w-full min-h-[36px] flex items-center gap-[8px] text-label cursor-default rounded-md outline-none focus-visible:shadow-focus-ring';
 
 // 채움 상태 2단 - 알약·푸터 버튼이 공유하는 인터랙티브/비활성 배경
 export const FILL_INTERACTIVE_CLASS =
@@ -48,14 +50,17 @@ export const PANEL_LIST_EMPTY_CLASS =
 export const PANEL_ROW_NAME_CLASS =
   'min-w-0 flex-1 truncate text-left transition-colors duration-fast';
 
-// 행 이름 밝기 - 평소 한 단계 낮추고 행 호버에서 올려 메뉴가 있음을 알림
-export const PANEL_ROW_NAME_ACTIVE_CLASS = 'text-fg-muted group-hover:text-fg';
-// 꺼짐 행 이름 - 한 단계만 내린다. 더 내리면 목록 배경에서 대비가 무너지는데
-// (disabled는 본문 기준 미달) 기준을 지키는 가장 어두운 회색은 muted보다 10%밖에 안 어두워
-// '꺼짐'으로 읽히지도 않는다. 상태 신호는 트레일링 알약의 면이 소유하고
-// 이름은 밝기를 한 칸 낮춰 거드는 역할만 한다
+// 행 이름 밝기 - 평소 한 단계 낮추고 행 호버에서 올려 메뉴가 있음을 알림.
+// 켜짐을 fg로 올리면 호버에서 더 갈 데가 없어 반응이 사라진다
+export const PANEL_ROW_NAME_ACTIVE_CLASS =
+  'text-fg-muted group-hover:text-fg group-focus-visible:text-fg';
+// 꺼짐 행 이름 - disabled까지 내린다. faint는 켜짐(muted)과 10%밖에 안 갈려
+// 긴 목록에서 켜짐·꺼짐이 이름만으로는 안 읽힌다.
+// 목록 웰 위 대비는 약 2.9:1로 본문 기준 미달이지만 의도된 값 -
+// 상태 신호는 트레일링 알약의 면이 소유하고 이름은 밝기를 낮춰 거드는 역할이며,
+// 행 호버·키보드 포커스에서 faint로 한 칸 올려 읽기와 메뉴 존재를 같이 보장한다
 export const PANEL_ROW_NAME_INACTIVE_CLASS =
-  'text-fg-faint group-hover:text-fg-muted';
+  'text-fg-disabled group-hover:text-fg-faint group-focus-visible:text-fg-faint';
 
 // 히스토리 행 트레일링 표식 - 현재 항목 라벨과 상태 배지.
 // 면이 있는 쪽이 '지금 적용 중'이다. 플러그인 목록의 켜짐 알약과 같은 규칙 -

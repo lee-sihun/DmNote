@@ -13,10 +13,8 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
-import type {
-  EditorElementPropertyPatchV1,
-  EditorPreviewStylePropertyPatchV1,
-} from '@src/types/editor';
+import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
+import type { BatchElementPropertyUpdate } from '../types';
 
 interface SwatchDisplay {
   color?: string;
@@ -32,7 +30,7 @@ interface BatchNoteTabContentProps {
     getter: (pos: KeyPosition) => T | undefined,
     defaultValue: T,
   ) => { isMixed: boolean; value: T };
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   // 노트/글로우 색상 디스플레이
   getBatchNoteColorDisplay: () => SwatchDisplay;
@@ -87,8 +85,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         .value,
       noteGlowEnabled: getMixedValue((pos) => pos.noteGlowEnabled, false).value,
     },
-    (property, value) =>
-      onElementPropertyCommit?.({ [property]: value } as never),
+    (property, value) => onElementPropertyCommit?.({ [property]: value }),
   );
 
   return (

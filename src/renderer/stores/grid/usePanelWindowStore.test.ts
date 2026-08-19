@@ -162,11 +162,31 @@ describe('panel window transition flush', () => {
       order.push('show');
     });
 
-    await detachPropertiesPanel();
+    await expect(detachPropertiesPanel()).resolves.toBe('done');
 
     expect(order).toEqual(['blur', 'commit', 'show']);
     expect(mocks.show).toHaveBeenCalledWith(viewState);
     expect(usePanelWindowStore.getState().status).toBe('detached');
+  });
+
+  it('창 생성이 실패하면 failed를 돌려주고 인라인 lease를 되돌린다', async () => {
+    mocks.commitPendingAsync.mockResolvedValue(true);
+    mocks.show.mockRejectedValueOnce(new Error('window'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(detachPropertiesPanel()).resolves.toBe('failed');
+    expect(usePanelWindowStore.getState().status).toBe('attached');
+  });
+
+  it('정산 자체가 던져도 failed로 끝난다 - 조용히 거절되면 버튼이 먹통으로 보인다', async () => {
+    mocks.commitPendingAsync.mockRejectedValueOnce(new Error('rpc'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(detachPropertiesPanel()).resolves.toBe('failed');
+    expect(mocks.show).not.toHaveBeenCalled();
+    // 다음 시도는 막히지 않는다
+    mocks.commitPendingAsync.mockResolvedValue(true);
+    await expect(detachPropertiesPanel()).resolves.toBe('done');
   });
 
   it('blur 뒤 pending commit이 실패하면 창 전환을 중단한다', async () => {
@@ -175,7 +195,8 @@ describe('panel window transition flush', () => {
     input.focus();
     mocks.commitPendingAsync.mockResolvedValue(false);
 
-    await reattachPropertiesPanel();
+    // 호출부가 사용자에게 알릴 수 있도록 중단 사유를 돌려준다
+    await expect(reattachPropertiesPanel()).resolves.toBe('blocked');
 
     expect(document.activeElement).not.toBe(input);
     expect(mocks.capturePanelViewState).not.toHaveBeenCalled();

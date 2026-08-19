@@ -2,6 +2,10 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FloatingPopup from './FloatingPopup';
+import {
+  settleDeferredContent,
+  stubAnimationFrame,
+} from '@src/renderer/__tests__/deferredContentHarness';
 
 describe('FloatingPopup focus contract', () => {
   let host: HTMLDivElement;
@@ -222,12 +226,7 @@ describe('FloatingPopup focus contract', () => {
   });
 
   it('after-paint 전략은 opener와 shell을 먼저 반영한 뒤 콘텐츠를 mount한다', async () => {
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
-      window.setTimeout(() => callback(performance.now()), 0),
-    );
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-      window.clearTimeout(id);
-    });
+    stubAnimationFrame();
     const Harness = () => {
       const [open, setOpen] = React.useState(false);
       return (
@@ -266,16 +265,62 @@ describe('FloatingPopup focus contract', () => {
     expect(dialog?.textContent).not.toContain('Deferred action');
     expect(document.activeElement).toBe(dialog);
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    });
+    await settleDeferredContent();
 
     const action = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent === 'Deferred action',
     );
     expect(action).not.toBeUndefined();
     expect(document.activeElement).toBe(action);
+  });
+
+  it('after-paint 콘텐츠가 붙은 뒤 고정 좌표를 창 안으로 다시 클램프한다', async () => {
+    stubAnimationFrame();
+    vi.stubGlobal('innerWidth', 240);
+    vi.stubGlobal('innerHeight', 725);
+    // 빈 셸은 패딩만큼, 콘텐츠가 붙으면 메뉴 크기
+    const sizeOf = (element: HTMLElement) =>
+      element.querySelector('button') ? { w: 104, h: 64 } : { w: 8, h: 8 };
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(
+      function (this: HTMLElement) {
+        return sizeOf(this).w;
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
+      function (this: HTMLElement) {
+        return sizeOf(this).h;
+      },
+    );
+
+    await act(async () => {
+      root.render(
+        <FloatingPopup
+          open
+          ariaLabel="Edge popup"
+          fixedX={227}
+          fixedY={681}
+          animate={false}
+          contentMountStrategy="after-paint"
+          onClose={() => undefined}
+        >
+          <button type="button">Deferred action</button>
+        </FloatingPopup>,
+      );
+    });
+
+    const dialog = document.querySelector<HTMLElement>(
+      '[aria-label="Edge popup"]',
+    )!;
+    // 빈 셸은 창 안에 들어가므로 그대로 둔다
+    expect(dialog.style.left).toBe('227px');
+    expect(dialog.style.top).toBe('681px');
+
+    await settleDeferredContent();
+
+    // 콘텐츠 크기로 다시 재서 오른쪽·아래 패딩 5px 안으로 밀어넣는다
+    expect(dialog.textContent).toContain('Deferred action');
+    expect(dialog.style.left).toBe('131px');
+    expect(dialog.style.top).toBe('656px');
   });
 
   it('lets only the topmost popup consume Escape', async () => {

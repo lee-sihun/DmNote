@@ -26,10 +26,7 @@ vi.mock('@utils/core/axisEventBus', () => ({
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchKnobAxisIdById: mocks.patchAxis,
-}));
-
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
-  patchNativeLayerPropertyViaAuthority: mocks.patchAuthority,
+  patchElementPropertyViaAuthority: mocks.patchAuthority,
 }));
 
 vi.mock('@hooks/useLenis', () => ({
@@ -197,10 +194,9 @@ describe('SingleKnobPanel 대상 전환 세션 정리', () => {
     emitAxis('HIDA:panel');
     emitAxis('HIDA:panel');
 
-    expect(mocks.patchAuthority).toHaveBeenCalledWith({
-      elementType: 'knob',
-      id: knobPosition.id,
-      patch: { property: 'axisId', value: 'HIDA:panel' },
+    expect(mocks.patchAuthority).toHaveBeenCalledWith('knob', knobPosition.id, {
+      property: 'axisId',
+      value: 'HIDA:panel',
     });
     expect(mocks.patchAxis).not.toHaveBeenCalled();
   });

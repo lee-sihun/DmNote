@@ -28,6 +28,8 @@ import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessio
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import { counterAnimationApi } from '@api/modules/resourceApi';
 import { deleteCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
+import { useRemoteSheetOpener } from '@hooks/ui/useRemoteSheetOpener';
+import { isPanelWindow } from '@utils/windowType';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -212,10 +214,9 @@ const CounterAnimationPicker = ({
         counterAnimationLibraryCache = next;
         return next;
       });
-      const removed =
-        window.__dmn_window_type === 'panel'
-          ? await deleteCounterAnimationPresetViaAuthority(preset.id)
-          : await counterAnimationApi.remove(preset.id);
+      const removed = isPanelWindow()
+        ? await deleteCounterAnimationPresetViaAuthority(preset.id)
+        : await counterAnimationApi.remove(preset.id);
       if (!removed) throw new Error('counter animation delete failed');
       await loadLibrary();
     } catch (error) {
@@ -228,15 +229,6 @@ const CounterAnimationPicker = ({
     } finally {
       pendingPresetActionsRef.current.delete(preset.id);
     }
-  };
-
-  const openCreateModal = () => {
-    setEditorState({ mode: 'create', preset: null });
-  };
-
-  const openEditModal = (preset: CounterAnimationPreset) => {
-    menu.close();
-    setEditorState({ mode: 'edit', preset });
   };
 
   const menuItems: ListItem[] = [
@@ -269,6 +261,34 @@ const CounterAnimationPicker = ({
     if (mode === 'create' || selectedPresetId === preset.id) {
       onAnimationChange(applyPresetToAnimation(animation, preset));
     }
+  };
+
+  // 분리 패널 창은 시트를 메인 창에 넘긴다. 저장 결과는 도킹 경로와 같은 핸들러로 적용
+  const remoteEditor = useRemoteSheetOpener('counterAnimation', (result) => {
+    void handleEditorSaved(result.payload);
+  });
+
+  const openEditor = (state: EditorState) => {
+    if (remoteEditor.isPanel) {
+      void remoteEditor.open({
+        kind: 'counterAnimation',
+        mode: state.mode,
+        preset: state.preset,
+        counterSettings,
+        keyVisual,
+      });
+      return;
+    }
+    setEditorState(state);
+  };
+
+  const openCreateModal = () => {
+    openEditor({ mode: 'create', preset: null });
+  };
+
+  const openEditModal = (preset: CounterAnimationPreset) => {
+    menu.close();
+    openEditor({ mode: 'edit', preset });
   };
 
   return (

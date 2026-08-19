@@ -1,9 +1,11 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
-import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
+import {
+  patchElementPropertyViaAuthority,
+  patchKnobAxisIdById,
+} from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
-import { patchNativeLayerPropertyViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { flushPluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
@@ -869,10 +871,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         bound = true;
         const persisted =
           window.__dmn_window_type === 'panel'
-            ? patchNativeLayerPropertyViaAuthority({
-                elementType: 'knob',
-                id: axisCaptureTarget,
-                patch: { property: 'axisId', value: axisId },
+            ? patchElementPropertyViaAuthority('knob', axisCaptureTarget, {
+                property: 'axisId',
+                value: axisId,
               })
             : patchKnobAxisIdById(axisCaptureTarget, axisId);
         void persisted.catch(reportElementOpError);
@@ -1160,7 +1161,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   }
                   className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                     capturingThisKnob ? 'shadow-focus-ring' : ''
-                  } text-fg text-label`}
+                  } text-fg text-body`}
                   title={singleKnobPosition.axisId || ''}
                 >
                   <span className="truncate max-w-[120px]">

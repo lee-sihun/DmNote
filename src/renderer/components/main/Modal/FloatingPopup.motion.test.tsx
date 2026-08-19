@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FloatingPopup from './FloatingPopup';
+import { stubAnimationFrame } from '@src/renderer/__tests__/deferredContentHarness';
 
 // 퇴장 유예가 생기면서 닫힘 구간에도 DOM이 남는다. 그 구간의 계약을 고정한다
 describe('FloatingPopup exit transition', () => {
@@ -26,6 +27,7 @@ describe('FloatingPopup exit transition', () => {
     await act(async () => root.unmount());
     host.remove();
     document.body.innerHTML = '';
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -94,5 +96,34 @@ describe('FloatingPopup exit transition', () => {
 
     await render({ open: false, fixedX: 10, fixedY: 10 });
     expect(document.activeElement).toBe(second);
+  });
+
+  it('after-paint 콘텐츠가 붙기 전에는 entering에 머물고, 붙은 뒤 open으로 넘어간다', async () => {
+    // rAF를 타이머로 흘려 지연 마운트 시점을 손으로 넘긴다
+    stubAnimationFrame();
+    await act(async () => {
+      root.render(
+        <FloatingPopup
+          open
+          ariaLabel="Deferred motion popup"
+          fixedX={10}
+          fixedY={10}
+          autoClose={false}
+          contentMountStrategy="after-paint"
+          onClose={() => undefined}
+        >
+          <button type="button">Item</button>
+        </FloatingPopup>,
+      );
+    });
+    // 빈 셸 자리에서 등장을 시작하면 내용이 붙는 순간 클램프가 다시 돌아 튄다
+    expect(surface()?.getAttribute('data-dmn-motion-state')).toBe('entering');
+    expect(surface()?.textContent).not.toContain('Item');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(surface()?.textContent).toContain('Item');
+    expect(surface()?.getAttribute('data-dmn-motion-state')).toBe('open');
   });
 });

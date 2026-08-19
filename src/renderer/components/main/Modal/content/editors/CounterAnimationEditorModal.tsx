@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CounterAnimationBezier,
   KeyCounterSettings,
@@ -33,6 +33,7 @@ import {
 } from '@utils/animation/rafLatestScheduler';
 import { counterAnimationApi } from '@api/modules/resourceApi';
 import { updateCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
+import { isPanelWindow } from '@utils/windowType';
 
 type EditorMode = 'create' | 'edit';
 
@@ -195,7 +196,6 @@ const CounterAnimationEditorModal = ({
   const pinchStartOffsetRef = useRef({ x: 0, y: 0 });
   const pinchStartMidFracRef = useRef({ x: 0, y: 0 });
   const autoFitRafRef = useRef<number | null>(null);
-  const editorAreaRef = useRef<HTMLDivElement>(null);
   const editorSizeRef = useRef({
     width: EDITOR_RENDER_SIZE,
     height: EDITOR_RENDER_SIZE,
@@ -348,13 +348,12 @@ const CounterAnimationEditorModal = ({
 
   useEffect(() => () => cancelAutoFit(), []);
 
-  // 캔버스 리사이즈 추적 — 첫 페인트 전에 실측해야 초기 aspect 불일치로
-  // 커브가 늘어났다 복귀하는 프레임이 없음 (preserveAspectRatio=none)
-  useLayoutEffect(() => {
-    if (!isOpen) return;
-    const area = editorAreaRef.current;
+  // 캔버스 리사이즈 추적 - 첫 페인트 전에 실측해야 초기 aspect 불일치로
+  // 커브가 늘어났다 복귀하는 프레임이 없음 (preserveAspectRatio=none).
+  // 시트 본문은 첫 paint 뒤에 붙으므로(after-paint) 마운트 이펙트로는 노드를 못 잡는다.
+  // 노드가 실제로 붙는 순간을 ref 콜백으로 받고, 콜백 정체성은 고정한다
+  const observeEditorArea = useCallback((area: HTMLDivElement | null) => {
     if (!area) return;
-
     const measure = () => {
       const rect = area.getBoundingClientRect();
       const width = Math.floor(rect.width);
@@ -368,7 +367,7 @@ const CounterAnimationEditorModal = ({
     const observer = new ResizeObserver(measure);
     observer.observe(area);
     return () => observer.disconnect();
-  }, [isOpen]);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -871,7 +870,7 @@ const CounterAnimationEditorModal = ({
     try {
       const response =
         mode === 'edit' && initialPreset
-          ? window.__dmn_window_type === 'panel'
+          ? isPanelWindow()
             ? await updateCounterAnimationPresetViaAuthority({
                 id: initialPreset.id,
                 ...requestBase,
@@ -963,7 +962,7 @@ const CounterAnimationEditorModal = ({
           {/* 커브 캔버스 — 카드 내부를 통째로 채우는 풀블리드 캔버스 */}
           <div className="flex-1 min-w-0 min-h-0 bg-fill-faint rounded-surface p-[10px] flex flex-col">
             <div
-              ref={editorAreaRef}
+              ref={observeEditorArea}
               className="relative flex-1 min-h-0 min-w-0 rounded-md overflow-hidden bg-inset"
             >
               <svg

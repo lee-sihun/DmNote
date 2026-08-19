@@ -59,6 +59,7 @@ const {
   patchCounterAnimationEnabledMock,
   patchCounterEnabledViaAuthorityMock,
   patchCounterAnimationEnabledViaAuthorityMock,
+  patchCounterBooleanByTargetsViaAuthorityMock,
   patchCounterLayoutMock,
   patchCounterLayoutViaAuthorityMock,
   patchCounterTypographyMock,
@@ -146,6 +147,9 @@ const {
   patchCounterEnabledMock: vi.fn(() => Promise.resolve(true)),
   patchCounterAnimationEnabledMock: vi.fn(() => Promise.resolve(true)),
   patchCounterEnabledViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterBooleanByTargetsViaAuthorityMock: vi.fn(() =>
+    Promise.resolve(true),
+  ),
   patchCounterAnimationEnabledViaAuthorityMock: vi.fn(() =>
     Promise.resolve(true),
   ),
@@ -259,6 +263,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchSoundVolumeById: patchSoundVolumeMock,
   patchCounterEnabledById: patchCounterEnabledMock,
   patchCounterAnimationEnabledById: patchCounterAnimationEnabledMock,
+  patchCounterBooleanByTargetsViaAuthority:
+    patchCounterBooleanByTargetsViaAuthorityMock,
   patchCounterLayoutById: patchCounterLayoutMock,
   patchCounterTypographyById: patchCounterTypographyMock,
   patchCounterStrokeById: patchCounterStrokeMock,
@@ -456,6 +462,7 @@ const resetStores = () => {
   patchCounterEnabledMock.mockClear();
   patchCounterAnimationEnabledMock.mockClear();
   patchCounterEnabledViaAuthorityMock.mockClear();
+  patchCounterBooleanByTargetsViaAuthorityMock.mockClear();
   patchCounterAnimationEnabledViaAuthorityMock.mockClear();
   patchCounterLayoutMock.mockClear();
   patchCounterLayoutViaAuthorityMock.mockClear();
@@ -653,6 +660,8 @@ describe('PropertiesPanel canonical native contract', () => {
       handleGeometryCommit?: (field: 'dx', value: number) => void;
       handleGeometryPreview?: (field: 'dx', value: number) => void;
       onElementPropertyCommit?: (patch: Record<string, unknown>) => void;
+      onCounterEnabledCommit?: (enabled: boolean) => void;
+      onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
     };
 
   beforeEach(() => {
@@ -712,6 +721,39 @@ describe('PropertiesPanel canonical native contract', () => {
         patch: { dx: 43 },
       });
       expect(patchGeometryMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key', '55555555-5555-4555-8555-555555555555'],
+    ['stat', '56666666-6666-4666-8666-666666666666'],
+  ] as const)(
+    'panel single %s counter 토글은 즉시 반영 래퍼를 대상 하나로 쓴다',
+    (type, id) => {
+      window.__dmn_window_type = 'panel';
+      installSingle(type, id);
+      mounted = mountPanel(true);
+
+      act(() => latestSingleProps(type).onCounterEnabledCommit?.(false));
+      act(() =>
+        latestSingleProps(type).onCounterAnimationEnabledCommit?.(true),
+      );
+
+      expect(patchCounterBooleanByTargetsViaAuthorityMock).toHaveBeenCalledWith(
+        [{ elementType: type, id }],
+        { property: 'counterEnabled', value: false },
+      );
+      expect(patchCounterBooleanByTargetsViaAuthorityMock).toHaveBeenCalledWith(
+        [{ elementType: type, id }],
+        { property: 'counterAnimationEnabled', value: true },
+      );
+      // 즉시 반영 없는 직행 sender와 도킹 경로는 쓰지 않는다
+      expect(patchCounterEnabledViaAuthorityMock).not.toHaveBeenCalled();
+      expect(
+        patchCounterAnimationEnabledViaAuthorityMock,
+      ).not.toHaveBeenCalled();
+      expect(patchCounterEnabledMock).not.toHaveBeenCalled();
+      expect(patchCounterAnimationEnabledMock).not.toHaveBeenCalled();
     },
   );
 

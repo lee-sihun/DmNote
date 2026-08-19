@@ -768,8 +768,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                 >
                   {/* 드롭 인디케이터 */}
                   {dnd.draggedItemId &&
-                    dnd.dragOverItemDisplayIndex === displayIndex &&
-                    !dnd.draggedItemIdsRef.current.includes(item.id) && (
+                    dnd.dragOverItemDisplayIndex === displayIndex && (
                       <div
                         className={`absolute ${itemIndicatorIndentClass} right-0 top-0 h-[2px] bg-accent z-10`}
                       />

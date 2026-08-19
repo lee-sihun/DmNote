@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { StyleTabContentProps } from '../types';
+import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
   slotMembers,
@@ -566,7 +567,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       );
       return;
     }
-    onElementPropertyCommit?.({ [property]: value } as never);
+    // property와 value의 상관은 TS가 못 잡아 캐스트가 남는다. 모양은 wire 계약과
+    // 같고 값 유효성은 하류 검증이 잡는다. 단일 키 객체를 보내면 조용히 폐기된다
+    onElementPropertyCommit?.({
+      property,
+      value,
+    } as EditorElementPropertyPatchV1);
   };
 
   // 이미지 변경 핸들러
@@ -656,7 +662,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               }
               className={`flex items-center justify-center h-[23px] min-w-[0px] max-w-[120px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                 slotListening && !slotPickerOpen ? 'shadow-focus-ring' : ''
-              } text-fg text-label`}
+              } text-fg text-body`}
             >
               <span className="truncate">
                 {slotListening && !slotPickerOpen

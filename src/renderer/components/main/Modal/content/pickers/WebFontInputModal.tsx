@@ -1,5 +1,11 @@
 /* eslint-disable react-hooks/refs */
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, placeholder } from '@codemirror/view';
 import {
@@ -102,6 +108,17 @@ const WEBFONT_EDITOR_BASE_EXTENSIONS = [
   }),
 ] as const;
 
+// 문서 전체를 새 값으로 바꾸고 커서를 앞으로. 같은 값이면 건드리지 않는다
+const replaceEditorDoc = (editorView: EditorView, nextValue: string) => {
+  const currentValue = editorView.state.doc.toString();
+  if (currentValue === nextValue) return;
+  editorView.dispatch({
+    changes: { from: 0, to: currentValue.length, insert: nextValue },
+    selection: EditorSelection.cursor(0),
+    scrollIntoView: true,
+  });
+};
+
 const WebFontInputModal = ({
   isOpen,
   onClose,
@@ -118,10 +135,12 @@ const WebFontInputModal = ({
     loaded: number[];
     failed: number[];
   } | null>(null);
-  const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const handleSubmitRef = useRef<() => void>(() => undefined);
   const normalizedInitialCss = initialCss || '';
+  // 에디터는 컨테이너가 붙는 순간 만들어지므로 그때의 초기값을 ref로 읽는다
+  const initialCssRef = useRef(normalizedInitialCss);
+  initialCssRef.current = normalizedInitialCss;
 
   const trimmedCSS = cssInput.trim();
 
@@ -196,22 +215,8 @@ const WebFontInputModal = ({
 
   const resetEditorContent = (nextValue = '') => {
     setCssInput(nextValue);
-
-    const editorView = editorViewRef.current;
-    if (!editorView) return;
-
-    const currentValue = editorView.state.doc.toString();
-    if (currentValue === nextValue) return;
-
-    editorView.dispatch({
-      changes: {
-        from: 0,
-        to: currentValue.length,
-        insert: nextValue,
-      },
-      selection: EditorSelection.cursor(0),
-      scrollIntoView: true,
-    });
+    if (editorViewRef.current)
+      replaceEditorDoc(editorViewRef.current, nextValue);
   };
 
   const handleSubmit = () => {
@@ -230,49 +235,38 @@ const WebFontInputModal = ({
     onClose();
   };
 
-  useLayoutEffect(() => {
-    if (!isOpen) {
-      if (editorViewRef.current) {
-        editorViewRef.current.destroy();
-        editorViewRef.current = null;
-      }
-      setCssInput('');
-      return;
-    }
-
-    setCssInput(normalizedInitialCss);
-
-    const mountNode = editorContainerRef.current;
+  // 시트 본문은 첫 paint 뒤에 붙는다(FullSurfaceModalLayout after-paint). 마운트 시점
+  // 이펙트에서 컨테이너를 찾으면 아직 없어 에디터가 영영 안 만들어지므로, 컨테이너가
+  // 실제로 붙고 떨어지는 순간을 ref 콜백으로 받아 거기서 수명을 소유한다.
+  // 콜백 정체성이 바뀌면 React가 정리·재부착을 반복하니 의존성 없이 고정한다
+  const mountEditor = useCallback((mountNode: HTMLDivElement | null) => {
     if (!mountNode) return;
-
-    const nextState = EditorState.create({
-      doc: normalizedInitialCss,
-      extensions: [
-        ...WEBFONT_EDITOR_BASE_EXTENSIONS,
-        placeholder(WEBFONT_PLACEHOLDER_EXAMPLE),
-        keymap.of([
-          ...defaultKeymap,
-          ...historyKeymap,
-          indentWithTab,
-          {
-            key: 'Mod-Enter',
-            run: () => {
-              handleSubmitRef.current();
-              return true;
-            },
-            preventDefault: true,
-          },
-        ]),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            setCssInput(update.state.doc.toString());
-          }
-        }),
-      ],
-    });
-
     const editorView = new EditorView({
-      state: nextState,
+      state: EditorState.create({
+        doc: initialCssRef.current,
+        extensions: [
+          ...WEBFONT_EDITOR_BASE_EXTENSIONS,
+          placeholder(WEBFONT_PLACEHOLDER_EXAMPLE),
+          keymap.of([
+            ...defaultKeymap,
+            ...historyKeymap,
+            indentWithTab,
+            {
+              key: 'Mod-Enter',
+              run: () => {
+                handleSubmitRef.current();
+                return true;
+              },
+              preventDefault: true,
+            },
+          ]),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              setCssInput(update.state.doc.toString());
+            }
+          }),
+        ],
+      }),
       parent: mountNode,
     });
 
@@ -288,27 +282,15 @@ const WebFontInputModal = ({
         editorViewRef.current = null;
       }
     };
-  }, [isOpen, normalizedInitialCss]);
+  }, []);
 
+  // 초기값이 바뀌면(다른 폰트 편집으로 전환) 입력 상태와 문서를 함께 맞춘다.
+  // 에디터가 아직 안 붙었으면 붙을 때 initialCssRef를 읽으므로 상태만 맞춘다
   useLayoutEffect(() => {
-    if (!isOpen) return;
-
-    const editorView = editorViewRef.current;
-    if (!editorView) return;
-
-    const currentValue = editorView.state.doc.toString();
-    if (currentValue === normalizedInitialCss) return;
-
-    editorView.dispatch({
-      changes: {
-        from: 0,
-        to: currentValue.length,
-        insert: normalizedInitialCss,
-      },
-      selection: EditorSelection.cursor(0),
-      scrollIntoView: true,
-    });
-    setCssInput(normalizedInitialCss);
+    const nextValue = isOpen ? normalizedInitialCss : '';
+    setCssInput(nextValue);
+    if (editorViewRef.current)
+      replaceEditorDoc(editorViewRef.current, nextValue);
   }, [isOpen, normalizedInitialCss]);
 
   // 스페시멘 로드 — 입력이 잠잠해지면 초안 패밀리로 주입하고 실제 로드를 확인
@@ -390,10 +372,7 @@ const WebFontInputModal = ({
             </p>
           </div>
           <div className="flex-1 min-h-0 rounded-md bg-inset-solid overflow-hidden">
-            <div
-              ref={editorContainerRef}
-              className="h-full webfont-cm-editor"
-            />
+            <div ref={mountEditor} className="h-full webfont-cm-editor" />
           </div>
         </div>
 

@@ -37,6 +37,9 @@ const FullSurfaceModalLayout = ({
       fullSurface
       onClick={onClose}
       ariaLabel={title}
+      // 시트 크롬을 먼저 그리고 무거운 본문은 다음 틱에 붙인다. 소비자가 본문 노드에
+      // 이펙트를 걸 때는 마운트 시점 ref 읽기가 아니라 ref 콜백이나 노드 state로
+      // 붙는 순간을 받아야 한다 - 첫 커밋에는 본문이 없다
       contentMountStrategy="after-paint"
     >
       <div

@@ -1810,6 +1810,7 @@ describe('plugin element panel queue', () => {
 
   it('soundPath outcome-unknown은 snapshot만 요청하고 옛 path를 재전송하지 않는다', async () => {
     mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     await expect(
       actions.patchSoundPathViaAuthority(
@@ -1820,6 +1821,11 @@ describe('plugin element panel queue', () => {
 
     expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
     expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+    // 버려진 결과는 흔적을 남긴다 - 무음이면 패널 조작이 먹통으로 보인다
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('dropped: unknown'),
+    );
+    warn.mockRestore();
   });
 
   it('soundEnabled outcome-unknown은 snapshot만 요청하고 값을 재전송하지 않는다', async () => {
@@ -2555,6 +2561,9 @@ describe('plugin element panel queue', () => {
       errorCode: 'ELEMENT_NOT_FOUND',
       response: { modelRevision: 2 },
     });
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
     await expect(
       actions.setPluginElementsHidden([
@@ -2564,6 +2573,36 @@ describe('plugin element panel queue', () => {
 
     expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
     expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+    // 신원 소실은 회복 불가라 warn이 아니라 error로 남는다
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('dropped: ELEMENT_NOT_FOUND'),
+    );
+    error.mockRestore();
+  });
+
+  it('재시도까지 실패하면 error 레벨로 남긴다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({ kind: 'unknown' });
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const changed = actions.patchNativeLayerPropertyViaAuthority({
+      elementType: 'key',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      patch: { property: 'layerName', value: 'renamed' },
+    });
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(false);
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('dropped: retry unknown'),
+    );
+    error.mockRestore();
   });
 
   it('setPluginElementsHidden 패널 경로는 결과 boolean을 반환한다', async () => {

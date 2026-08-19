@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
 import type { NoteTabContentProps } from '../types';
+import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type { NoteColor } from '@src/types/key/keys';
 import {
   PropertyRow,
@@ -407,7 +408,12 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
   // 스타일 변경 완료 핸들러
   const handleStyleChangeComplete = (property: string, value: unknown) => {
-    onElementPropertyCommit?.({ [property]: value } as never);
+    // property와 value의 상관은 TS가 못 잡아 캐스트가 남는다. 모양은 wire 계약과
+    // 같고 값 유효성은 하류 검증이 잡는다. 단일 키 객체를 보내면 조용히 폐기된다
+    onElementPropertyCommit?.({
+      property,
+      value,
+    } as EditorElementPropertyPatchV1);
   };
   const noteLiteralHandlers = createNoteLiteralHandlers(
     {

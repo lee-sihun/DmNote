@@ -1,11 +1,4 @@
-import {
-  Suspense,
-  lazy,
-  startTransition,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
@@ -16,6 +9,7 @@ import {
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import { useRetainedValue } from '@hooks/ui/useRetainedValue';
+import { useRemoteSheetOpener } from '@hooks/ui/useRemoteSheetOpener';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
   pickerRowClass,
@@ -26,6 +20,8 @@ import {
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { useFontLibrary } from '@hooks/useFontLibrary';
+import WebFontEditorSheet from './WebFontEditorSheet';
+import { preloadWebFontEditor } from './webFontEditorLoader';
 
 interface FontPickerProps {
   open: boolean;
@@ -36,19 +32,6 @@ interface FontPickerProps {
 }
 
 type FilterType = 'all' | 'builtin' | 'local' | 'web';
-
-let webFontInputModalPreloadPromise: Promise<
-  typeof import('./WebFontInputModal')
-> | null = null;
-
-const preloadWebFontInputModal = () => {
-  if (!webFontInputModalPreloadPromise) {
-    webFontInputModalPreloadPromise = import('./WebFontInputModal');
-  }
-  return webFontInputModalPreloadPromise;
-};
-
-const LazyWebFontInputModal = lazy(preloadWebFontInputModal);
 
 // preview용 font-family 이름 (syncFontCSS가 주입하는 원본 이름과 분리)
 const getPreviewFontFamily = (fontName: string) => `${fontName}__preview`;
@@ -124,6 +107,8 @@ const FontPicker = ({
   const { builtinFonts, customFonts } = useFontStore();
   const fontLibrary = useFontLibrary();
   const menu = usePickerItemMenu<string>();
+  // 저장 결과는 기다리지 않는다 - 저장된 폰트는 설정 변경 이벤트로 이 창에도 들어온다
+  const remoteWebFont = useRemoteSheetOpener('webFont');
 
   // 비활성 폰트도 목록에서 실제 서체로 보이도록 preview CSS 주입
   // (활성 폰트는 syncFontCSS가 원본 이름으로 주입)
@@ -172,11 +157,12 @@ const FontPicker = ({
     renameInputRef.current?.select();
   }, [renamingFontId]);
 
-  // 피커가 열려 있는 동안 WebFontInputModal 코드를 미리 로드
+  // 피커가 열려 있는 동안 웹폰트 편집기 코드를 미리 로드.
+  // 분리 패널은 시트를 메인 창에 넘기므로 이 청크를 쓸 일이 없다
   useEffect(() => {
-    if (!open) return;
-    void preloadWebFontInputModal();
-  }, [open]);
+    if (!open || remoteWebFont.isPanel) return;
+    preloadWebFontEditor();
+  }, [open, remoteWebFont.isPanel]);
 
   // 필터링된 폰트 목록 (비활성 폰트도 노출 — 행에서 흐리게 표시)
   const filteredFonts = (() => {
@@ -260,13 +246,6 @@ const FontPicker = ({
     },
   ];
 
-  const editingWebFont =
-    webFontModal?.editingId != null
-      ? customFonts.find(
-          (font) => font.type === 'web' && font.id === webFontModal.editingId,
-        ) ?? null
-      : null;
-
   const handleDelete = async (font: CustomFont) => {
     const confirmed = await window.api.ui.dialog.confirm(
       t('fontPicker.deleteConfirm') ||
@@ -290,19 +269,14 @@ const FontPicker = ({
   };
 
   const openWebFontModal = (editingId: string | null) => {
-    void preloadWebFontInputModal();
+    if (remoteWebFont.isPanel) {
+      void remoteWebFont.open({ kind: 'webFont', editingId });
+      return;
+    }
+    preloadWebFontEditor();
     startTransition(() => {
       setWebFontModal({ editingId });
     });
-  };
-
-  const handleWebFontSubmit = (css: string, displayName: string) => {
-    const ok = fontLibrary.submitWebFont(
-      css,
-      displayName,
-      webFontModal?.editingId ?? null,
-    );
-    if (ok) setWebFontModal(null);
   };
 
   return (
@@ -479,23 +453,12 @@ const FontPicker = ({
         />
       )}
 
-      <Suspense fallback={null}>
-        {webFontModal ? (
-          <LazyWebFontInputModal
-            isOpen
-            onClose={() => setWebFontModal(null)}
-            onSubmit={handleWebFontSubmit}
-            initialCss={editingWebFont?.cssContent || ''}
-            mode={editingWebFont ? 'edit' : 'add'}
-            isDuplicateFontFamily={(fontFamily) =>
-              fontLibrary.isDuplicateFontFamily(fontFamily, {
-                excludeId: webFontModal.editingId,
-              })
-            }
-            t={t}
-          />
-        ) : null}
-      </Suspense>
+      {webFontModal ? (
+        <WebFontEditorSheet
+          editingId={webFontModal.editingId}
+          onDone={() => setWebFontModal(null)}
+        />
+      ) : null}
     </>
   );
 };

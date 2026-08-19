@@ -90,6 +90,21 @@ describe('SettingToggleRow commit 전략', () => {
     expect(onToggle).toHaveBeenCalledOnce();
   });
 
+  // 토글은 노브 드래그를 받아야 해서 포인터를 직접 받는다. 행 버튼과 토글이
+  // 각자 커밋 훅을 들고 있어 전파를 안 끊으면 한 번 눌러 두 번 뒤집힌다
+  it('행 안쪽 토글을 눌러도 커밋은 한 번만 난다', () => {
+    const onToggle = vi.fn();
+    act(() =>
+      root.render(
+        <SettingToggleRow label="설정" checked={false} onToggle={onToggle} />,
+      ),
+    );
+
+    act(() => host.querySelector<HTMLElement>('div[role="switch"]')?.click());
+
+    expect(onToggle).toHaveBeenCalledOnce();
+  });
+
   it('after-paint 연타는 canonical과 같은 최종 의도를 커밋하지 않는다', async () => {
     const onToggle = vi.fn();
     act(() =>

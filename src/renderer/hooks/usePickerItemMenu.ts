@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useRetainedValue } from '@hooks/ui/useRetainedValue';
 
-// 피커 행의 ⋮ 버튼/행 클릭/우클릭으로 여는 컨텍스트 메뉴 상태 관리
+// 피커 행의 ⋮ 버튼/우클릭/키보드로 여는 컨텍스트 메뉴 상태 관리
 export const usePickerItemMenu = <TKey>() => {
   const [menuKey, setMenuKey] = useState<TKey | null>(null);
   const [menuPosition, setMenuPosition] = useState<{
@@ -41,17 +41,14 @@ export const usePickerItemMenu = <TKey>() => {
     openAt(key, { x: rect.right + 4, y: rect.top - 2 });
   };
 
-  // 행 본문 좌클릭 - 포인터 위치에서 열고, 키보드 조작은 행 왼쪽 아래에 붙임
-  const openFromRow = (
-    event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>,
+  // 행 키보드 조작(Enter/Space) - 행 왼쪽 아래에 붙여 연다.
+  // 좌클릭은 메뉴를 열지 않는다 - 마우스는 우클릭 전용
+  const openFromKeyboard = (
+    event: React.KeyboardEvent<HTMLElement>,
     key: TKey,
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    if ('clientX' in event && event.detail > 0) {
-      openAt(key, { x: event.clientX, y: event.clientY });
-      return;
-    }
     // 포인터 기록은 마우스 경로 전용 - 키보드 조작은 현재 열림 상태만 보고 토글
     pressedWhileOpenKeyRef.current = null;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -83,7 +80,7 @@ export const usePickerItemMenu = <TKey>() => {
     renderPosition,
     capturePressState,
     openFromButton,
-    openFromRow,
+    openFromKeyboard,
     openFromContextMenu,
     close,
   };

@@ -65,6 +65,14 @@ const flushPanelTransition = async (): Promise<boolean> => {
 
 let transitionInFlight = false;
 
+// 전환 결과. 호출부가 사용자에게 알릴지 결정한다 - 여기서 조용히 끝나면 버튼이 먹통으로 보인다
+// busy: 이미 진행 중, blocked: 미확정 편집을 정산하지 못해 중단, failed: 창 전환 자체가 실패
+export type TransitionOutcome = 'done' | 'busy' | 'blocked' | 'failed';
+
+// 알림이 필요한 결과. busy는 진행 중인 전환이 곧 결론을 내므로 조용히 넘긴다
+export const isTransitionFailure = (outcome: TransitionOutcome): boolean =>
+  outcome === 'blocked' || outcome === 'failed';
+
 export const openPropertiesPanelForSelection = (): void => {
   const panel = usePropertiesPanelStore.getState();
   panel.setCanvasPanelMode('property');
@@ -80,24 +88,30 @@ export const openPropertiesPanelForSelection = (): void => {
  * 메인 창에서 패널 분리
  * 순서: 진행 게스처 커밋 성공 확인 → 인라인 unmount(lease 반납) → 창 생성. 실패 시 원복
  */
-export const detachPropertiesPanel = async (): Promise<void> => {
-  if (transitionInFlight) return;
+export const detachPropertiesPanel = async (): Promise<TransitionOutcome> => {
+  if (transitionInFlight) return 'busy';
   transitionInFlight = true;
   try {
     const committed = await flushPanelTransition();
     if (!committed) {
       console.error('Aborting panel detach: pending edit failed to commit');
-      return;
+      return 'blocked';
     }
     const viewState = capturePanelViewState();
     usePanelWindowStore.getState().setStatus('detached');
     await yieldToRender();
     try {
       await panelWindowApi.show(viewState);
+      return 'done';
     } catch (error) {
       usePanelWindowStore.getState().setStatus('attached');
       console.error('Failed to open detached panel', error);
+      return 'failed';
     }
+  } catch (error) {
+    // 정산 자체가 던져도 호출부가 알릴 수 있게 결과로 바꾼다
+    console.error('Failed to detach panel', error);
+    return 'failed';
   } finally {
     transitionInFlight = false;
   }
@@ -107,18 +121,20 @@ export const detachPropertiesPanel = async (): Promise<void> => {
  * 패널 창에서 재부착
  * 진행 게스처 커밋 성공 확인 후 창 반납 - 실패 시 창 유지 (편집 보존)
  */
-export const reattachPropertiesPanel = async (): Promise<void> => {
-  if (transitionInFlight) return;
+export const reattachPropertiesPanel = async (): Promise<TransitionOutcome> => {
+  if (transitionInFlight) return 'busy';
   transitionInFlight = true;
   try {
     const committed = await flushPanelTransition();
     if (!committed) {
       console.error('Aborting panel reattach: pending edit failed to commit');
-      return;
+      return 'blocked';
     }
     await panelWindowApi.close(capturePanelViewState());
+    return 'done';
   } catch (error) {
     console.error('Failed to close detached panel', error);
+    return 'failed';
   } finally {
     transitionInFlight = false;
   }

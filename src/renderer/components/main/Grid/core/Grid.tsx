@@ -828,8 +828,11 @@ const Grid = ({
         : type === 'graph'
         ? useGraphItemStore.getState().positions[selectedKeyType]?.[index]
         : useKnobItemStore.getState().positions[selectedKeyType]?.[index];
-    const clickedId = clickedPosition.id;
-    if (shouldOpenMixedSelectionMenu(clickedId)) {
+    // 조회가 옵셔널인데 여기서 무방비로 풀면, 렌더와 우클릭 사이에 배열이 줄었을 때
+    // TypeError가 나고 에러 바운더리가 없어 앱이 통째로 언마운트된다.
+    // id가 없으면 혼합 선택 판정 자체가 성립하지 않으므로 그냥 건너뛴다
+    const clickedId = clickedPosition?.id;
+    if (clickedId && shouldOpenMixedSelectionMenu(clickedId)) {
       openMixedSelectionContextMenu(clientX, clientY, ref);
       return;
     }
