@@ -53,9 +53,12 @@ use crate::{
 
 const OVERLAY_LABEL: &str = "overlay";
 pub(crate) const PANEL_LABEL: &str = "panel";
-const PANEL_ENTRYPOINT: &str = "panel/index.html";
-const RAW_INPUT_WINDOW_LABELS: [&str; 3] = ["main", OVERLAY_LABEL, PANEL_LABEL];
-const FRONTEND_LIFECYCLE_WINDOW_LABELS: [&str; 3] = ["main", OVERLAY_LABEL, PANEL_LABEL];
+// 분리 패널 창은 메인 웹뷰가 window.open으로 여는 opener 자식 - 자체 JS 런타임이 없어
+// raw input·종료 핸드셰이크 대상이 아니다
+const RAW_INPUT_WINDOW_LABELS: [&str; 2] = ["main", OVERLAY_LABEL];
+const FRONTEND_LIFECYCLE_WINDOW_LABELS: [&str; 2] = ["main", OVERLAY_LABEL];
+// 메인이 window.open을 부르기 직전 arm하고, 이 시간 안에 온 요청만 패널 창으로 인정
+const PANEL_OPEN_ARM_TIMEOUT: Duration = Duration::from_secs(2);
 const TRAY_ICON_ID: &str = "background-tray";
 const TRAY_MENU_SETTINGS_ID: &str = "tray-settings";
 const TRAY_MENU_QUIT_ID: &str = "tray-quit";
@@ -595,83 +598,6 @@ struct PanelCloseRequestedPayload {
     request_id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PanelViewState {
-    pub mode: PanelViewMode,
-    pub active_tab: PanelLayerTab,
-    pub property_active_tab: PanelPropertyTab,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum PanelViewMode {
-    Layer,
-    Property,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum PanelLayerTab {
-    Layer,
-    Grid,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum PanelPropertyTab {
-    Style,
-    Note,
-    Counter,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PanelViewTarget {
-    Main,
-    Panel,
-}
-
-impl PanelViewTarget {
-    fn matches_window(self, label: &str) -> bool {
-        matches!(
-            (self, label),
-            (Self::Main, "main") | (Self::Panel, PANEL_LABEL)
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TargetedPanelViewState {
-    target: PanelViewTarget,
-    view_state: PanelViewState,
-}
-
-fn take_targeted_panel_view_state(
-    slot: &mut Option<TargetedPanelViewState>,
-    window_label: &str,
-) -> Option<PanelViewState> {
-    if slot
-        .as_ref()
-        .is_some_and(|pending| pending.target.matches_window(window_label))
-    {
-        slot.take().map(|pending| pending.view_state)
-    } else {
-        None
-    }
-}
-
-fn clear_targeted_panel_view_state(
-    slot: &mut Option<TargetedPanelViewState>,
-    target: PanelViewTarget,
-) {
-    if slot
-        .as_ref()
-        .is_some_and(|pending| pending.target == target)
-    {
-        *slot = None;
-    }
-}
-
 #[derive(Debug, Default, PartialEq, Eq)]
 enum PanelCloseRequestState {
     #[default]
@@ -803,6 +729,19 @@ fn should_restore_panel_on_startup(
     panel_detached: bool,
 ) -> bool {
     panel_detached && !obs_mode_enabled && !main_window_hidden
+}
+
+// arm 토큰은 1회 소비 - 만료됐거나 없으면 거부하고 슬롯도 비운다
+fn take_panel_open_arm(slot: &mut Option<Instant>, now: Instant) -> bool {
+    match slot.take() {
+        Some(armed_at) => now.saturating_duration_since(armed_at) <= PANEL_OPEN_ARM_TIMEOUT,
+        None => false,
+    }
+}
+
+// 패널 창은 opener가 문서를 채우므로 빈 url(about:blank)로만 연다
+fn is_panel_open_url(url: &str) -> bool {
+    url.is_empty() || url == "about:blank"
 }
 
 fn bootstrap_keyboard_state(keyboard: &KeyboardManager) -> (String, Vec<String>) {
@@ -1107,7 +1046,11 @@ pub struct AppState {
     panel_creation_lock: Mutex<()>,
     panel_close_request: Mutex<PanelCloseRequestState>,
     panel_destroy_reason: Mutex<Option<PanelVisibilityReason>>,
-    panel_view_state: Mutex<Option<TargetedPanelViewState>>,
+    /// 메인이 window.open 직전에 세우는 1회용 토큰 - 플러그인 JS 등 임의의 window.open이
+    /// 패널 라벨 창을 만들지 못하게 fail-closed
+    panel_open_armed: Mutex<Option<Instant>>,
+    /// 기동 시 분리 상태 복원 요청 - 메인 렌더러가 부트스트랩 뒤 1회 소비해 window.open으로 연다
+    panel_restore_pending: AtomicBool,
     keyboard_task: RwLock<Option<KeyboardDaemonTask>>,
     keyboard_task_generation: AtomicU64,
     key_counters: Arc<RwLock<KeyCounters>>,
@@ -1186,7 +1129,8 @@ impl AppState {
             panel_creation_lock: Mutex::new(()),
             panel_close_request: Mutex::new(PanelCloseRequestState::Idle),
             panel_destroy_reason: Mutex::new(None),
-            panel_view_state: Mutex::new(None),
+            panel_open_armed: Mutex::new(None),
+            panel_restore_pending: AtomicBool::new(false),
             keyboard_task: RwLock::new(None),
             keyboard_task_generation: AtomicU64::new(0),
             key_counters,
@@ -1220,7 +1164,7 @@ impl AppState {
         if should_create_overlay_on_startup(snapshot.obs_mode_enabled, snapshot.overlay_visible) {
             self.ensure_overlay_window(app)?;
         }
-        // 분리 패널 복원은 메인 창 배치가 끝난 뒤 restore_detached_panel_on_startup이 맡는다
+        // 분리 패널 복원은 메인 창 배치가 끝난 뒤 restore_detached_panel_on_startup이 요청만 남긴다
         // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         if snapshot.developer_mode_enabled {
             if let Some(main) = app.get_webview_window("main") {
@@ -1229,7 +1173,6 @@ impl AppState {
             if let Some(overlay) = app.get_webview_window("overlay") {
                 overlay.open_devtools();
             }
-            // 분리 패널 DevTools는 create_panel_window가 직접 연다
         }
         self.start_keyboard_hook(app.clone())?;
         // CSS 핫리로딩 워처 초기화
@@ -3168,54 +3111,80 @@ impl AppState {
         }
     }
 
-    pub fn show_panel_window(&self, app: &AppHandle, view_state: PanelViewState) -> Result<()> {
-        // 동기 커맨드라 메인 스레드에서 돈다. 이 락을 오프메인에서 쥐는 건 ack 타임아웃
-        // 태스크뿐인데, 그쪽이 락을 쥔 채 메인 왕복 게터를 기다리는 구간이 있어 메인이 여기서
-        // 락을 기다리면 역전 데드락이다(기존 한계, 범위 밖). 락을 쥔 오프메인 코드는 메인 왕복
-        // 게터를 부르면 안 되고, 메인 스레드의 게터는 인라인 처리라 왕복이 없다.
-        // 배치 정보(메인 좌표·모니터)는 락과 무관하니 락 밖에서 먼저 읽어 점유 시간을 줄인다 -
-        // 새로 만들 때만 쓰이니 이미 떠 있으면 건너뛴다
-        let placement = app
-            .get_webview_window(PANEL_LABEL)
-            .is_none()
-            .then(|| (main_window_logical_rect(app), MonitorData::gather(app)));
+    // 메인이 window.open을 부르기 직전에 세운다. 핸들러가 이 토큰을 1회 소비한다
+    pub fn arm_panel_open(&self) {
+        *self.panel_open_armed.lock() = Some(Instant::now());
+    }
+
+    fn take_panel_open_arm(&self) -> bool {
+        take_panel_open_arm(&mut self.panel_open_armed.lock(), Instant::now())
+    }
+
+    // 메인 웹뷰의 window.open 요청을 패널 창으로 만든다 (on_new_window 핸들러 진입점).
+    // WKUIDelegate/NewWindowRequested 콜백 안 - 메인 스레드에서 window.open이 동기로
+    // 기다리는 중이라 메인 웹뷰 JS 왕복은 금지, 게터는 인라인이라 안전하다.
+    // 창은 프로세스 수명 동안 한 번만 만든다: opener와 WKUserContentController를 공유해
+    // 자식 웹뷰를 파괴하면 메인의 IPC 핸들러까지 제거된다(도킹은 hide, 파괴는 종료 시만)
+    pub fn open_panel_window_for_request(
+        &self,
+        app: &AppHandle,
+        url: &str,
+        features: tauri::webview::NewWindowFeatures,
+    ) -> Result<WebviewWindow> {
+        if !self.take_panel_open_arm() {
+            return Err(anyhow!(
+                "window.open request was not armed as the panel window"
+            ));
+        }
+        if !is_panel_open_url(url) {
+            return Err(anyhow!(
+                "panel window must be opened with an empty url, got {url}"
+            ));
+        }
+        // 메인 스레드 콜백이라 락은 try_lock만 - 잡고 있는 오프메인 태스크(ack 타임아웃)를
+        // 기다리면 역전 데드락
+        let Some(_creation_guard) = self.panel_creation_lock.try_lock() else {
+            return Err(anyhow!("panel creation lock is busy"));
+        };
+        if app.get_webview_window(PANEL_LABEL).is_some() {
+            return Err(anyhow!("panel window already exists"));
+        }
+        *self.panel_destroy_reason.lock() = None;
+        let main_rect = main_window_logical_rect(app);
+        let monitors = MonitorData::gather(app);
+        let window = self.create_panel_window(app, features, main_rect, &monitors)?;
+        publish_panel_visibility_transition(&self.panel_visible, app, true, None)?;
+        // 재시작 복원용 분리 상태 기록 - 디스크 대기는 콜백 밖(다른 스레드)에서
+        self.mark_panel_detached(true);
+        self.flush_panel_detached_off_thread(app);
+        Ok(window)
+    }
+
+    // 도킹(hide)돼 있던 패널 창을 다시 띄운다. 창이 없으면 메인이 window.open으로 만들어야 한다
+    pub fn present_panel_window(&self, app: &AppHandle) -> Result<()> {
+        // 배치 정보는 락과 무관하니 락 밖에서 먼저 읽는다
+        let main_rect = main_window_logical_rect(app);
+        let monitors = MonitorData::gather(app);
         let result = {
             let _creation_guard = self.panel_creation_lock.lock();
-            *self.panel_view_state.lock() = Some(TargetedPanelViewState {
-                target: PanelViewTarget::Panel,
-                view_state,
-            });
-            *self.panel_destroy_reason.lock() = None;
-            let result = if let Some(window) = app.get_webview_window(PANEL_LABEL) {
-                let _ = window.unminimize();
-                window
-                    .show()
-                    .and_then(|()| window.set_focus())
-                    .map_err(anyhow::Error::from)
-                    .and_then(|()| {
-                        publish_panel_visibility_transition(&self.panel_visible, app, true, None)
-                    })
-            } else {
-                // 사전 확인 뒤 창이 사라진 드문 경우엔 배치 정보가 없다 - 이번만 OS 기본
-                // 자리에 띄우고, 다음 열기에서 제자리를 잡는다
-                let (main_rect, monitors) = placement.unwrap_or_else(|| {
-                    log::warn!("panel window disappeared before creation; using os placement");
-                    Default::default()
-                });
-                self.create_panel_window(app, main_rect, &monitors)
-                    .and_then(|_| {
-                        publish_panel_visibility_transition(&self.panel_visible, app, true, None)
-                    })
+            let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+                return Err(anyhow!("panel window is not open"));
             };
+            *self.panel_destroy_reason.lock() = None;
+            // 재표시는 저장 높이만 이어받고 자리는 메인 옆으로 다시 잡는다 (기존 계약)
+            let stored_bounds = self.store.snapshot().panel_bounds;
+            let layout = resolve_panel_window_layout(stored_bounds, main_rect, &monitors, None);
+            self.apply_panel_window_layout(&window, &layout);
+            let _ = window.unminimize();
+            let result = window
+                .show()
+                .and_then(|()| window.set_focus())
+                .map_err(anyhow::Error::from)
+                .and_then(|()| {
+                    publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+                });
             if result.is_ok() {
-                // 재시작 복원용 분리 상태 기록
                 self.mark_panel_detached(true);
-            }
-            if result.is_err() && app.get_webview_window(PANEL_LABEL).is_none() {
-                clear_targeted_panel_view_state(
-                    &mut self.panel_view_state.lock(),
-                    PanelViewTarget::Panel,
-                );
             }
             result
         };
@@ -3225,60 +3194,49 @@ impl AppState {
         result
     }
 
-    // 기동 시 분리 패널 복원 진입점. 메인 창 배치가 끝나고 최종 가시성이 정해진 뒤에 불러야 한다 -
-    // 패널은 메인 오른쪽에 붙으므로 아직 기본 위치인 메인을 기준으로 잡으면 엉뚱한 자리에 뜬다.
-    // main_window_hidden은 트레이 아이콘 생성 실패 폴백까지 반영된 값이어야 한다
-    pub fn restore_detached_panel_on_startup(
-        &self,
-        app: &AppHandle,
-        main_rect: Option<LogicalRect>,
-        main_window_hidden: bool,
-    ) {
-        let snapshot = self.store.snapshot();
-        if !should_restore_panel_on_startup(
-            snapshot.obs_mode_enabled,
-            main_window_hidden,
-            snapshot.panel_detached,
-        ) {
-            return;
+    fn apply_panel_window_layout(&self, window: &WebviewWindow, layout: &PanelWindowLayout) {
+        if let Err(err) =
+            window.set_min_size(Some(LogicalSize::new(PANEL_WIDTH, layout.min_height)))
+        {
+            log::warn!("failed to apply panel min size: {err}");
         }
-        if let Err(err) = self.restore_panel_window_on_startup(app, main_rect) {
-            log::warn!("failed to restore detached panel window: {err}");
+        if let Err(err) =
+            window.set_max_size(Some(LogicalSize::new(PANEL_WIDTH, layout.max_height)))
+        {
+            log::warn!("failed to apply panel max size: {err}");
+        }
+        if let Err(err) = window.set_size(LogicalSize::new(PANEL_WIDTH, layout.height)) {
+            log::warn!("failed to apply panel size: {err}");
+        }
+        if let Some(position) = layout.position {
+            if let Err(err) = window.set_position(LogicalPosition::new(position.x, position.y)) {
+                log::warn!("failed to apply panel position: {err}");
+            }
         }
     }
 
-    // 재시작 시 분리 창 재생성: 기동 시점엔 뷰 핸드오프 상태가 없어 show_panel_window를 재사용하지 않음
-    // panel_view_state가 비어 있으면 패널 엔트리가 기본 뷰로 뜨고,
-    // 저장 높이와 모니터 보정은 create_panel_window의 resolve_panel_window_layout이 처리
-    fn restore_panel_window_on_startup(
-        &self,
-        app: &AppHandle,
-        main_rect: Option<LogicalRect>,
-    ) -> Result<()> {
-        // 배치를 막 끝낸 쪽이 좌표를 넘겨준다. 넘겨받은 값이 없을 때만 실측으로 되돌아가는데,
-        // 기동 직후의 게터는 아직 옛 프레임을 돌려줄 수 있어 어디까지나 차선책이다
-        let main_rect = main_rect.or_else(|| main_window_logical_rect(app));
-        let monitors = MonitorData::gather(app);
-        // 기동 훅은 메인 스레드에서 돈다. 이 락을 오프메인에서 쥐는 ack 타임아웃 태스크가
-        // 메인 왕복 게터를 기다리는 구간이 있어 여기서 무한 대기하면 역전 데드락이다.
-        // 기동 시점엔 경합이 없어 정상적으론 바로 잡히고, 못 잡으면 복원을 포기한다
-        // (분리 플래그는 남아 다음 기동에 재시도)
-        let Some(_creation_guard) = self.panel_creation_lock.try_lock() else {
-            log::warn!("panel creation lock was busy on startup; detached panel restore skipped");
-            return Ok(());
-        };
-        if app.get_webview_window(PANEL_LABEL).is_some() {
-            return Ok(());
-        }
-        *self.panel_destroy_reason.lock() = None;
-        self.create_panel_window(app, main_rect, &monitors)?;
-        publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+    // 기동 시 분리 패널 복원 진입점. 창은 메인 렌더러만 만들 수 있으므로(opener 관계) 여기서는
+    // 요청만 남기고, 메인이 부트스트랩 뒤 take_panel_restore_request로 1회 소비한다.
+    // main_window_hidden은 트레이 아이콘 생성 실패 폴백까지 반영된 값이어야 한다
+    pub fn restore_detached_panel_on_startup(&self, main_window_hidden: bool) {
+        let snapshot = self.store.snapshot();
+        let restore = should_restore_panel_on_startup(
+            snapshot.obs_mode_enabled,
+            main_window_hidden,
+            snapshot.panel_detached,
+        );
+        self.panel_restore_pending.store(restore, Ordering::SeqCst);
+    }
+
+    pub fn take_panel_restore_request(&self) -> bool {
+        self.panel_restore_pending.swap(false, Ordering::SeqCst)
     }
 
     // 트레이로 숨는 메인과 동행 - panel:visibility는 재부착 신호라 여기서 발행하지 않는다
     // (발행하면 메인이 인라인 패널을 다시 붙이고 열린 시트가 사라짐)
     // 메인 스레드에서 불리므로 panel_creation_lock을 잡지 않는다 - 락을 쥔 ack 타임아웃
-    // 태스크가 메인 스레드 응답을 기다리는 구간(bounds 샘플링)이 있어 잡으면 역전 데드락
+    // 태스크가 메인 스레드 응답을 기다리는 구간(bounds 샘플링)이 있어 잡으면 역전 데드락.
+    // 도킹된(hide) 창은 is_visible이 false라 표식이 서지 않는다
     fn hide_detached_panel_with_main(&self, app: &AppHandle) {
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
             return;
@@ -3312,26 +3270,13 @@ impl AppState {
         }
     }
 
-    pub fn take_panel_view_state(&self, window_label: &str) -> Option<PanelViewState> {
-        take_targeted_panel_view_state(&mut self.panel_view_state.lock(), window_label)
-    }
-
-    pub fn close_panel_window(&self, app: &AppHandle, view_state: PanelViewState) -> Result<()> {
+    // 도킹: 창을 감추고 도킹 상태를 기록한다 (명시 재부착 경로)
+    pub fn dock_panel_window(&self, app: &AppHandle) -> Result<()> {
         let result = {
             let _creation_guard = self.panel_creation_lock.lock();
-            *self.panel_view_state.lock() = Some(TargetedPanelViewState {
-                target: PanelViewTarget::Main,
-                view_state,
-            });
             *self.panel_close_request.lock() = PanelCloseRequestState::Closing;
-            let result = self.close_panel_window_inner(app, PanelVisibilityReason::Closed);
+            let result = self.dock_panel_window_inner(app, PanelVisibilityReason::Closed);
             finish_panel_close(&self.panel_close_request);
-            if result.is_err() && app.get_webview_window(PANEL_LABEL).is_some() {
-                clear_targeted_panel_view_state(
-                    &mut self.panel_view_state.lock(),
-                    PanelViewTarget::Main,
-                );
-            }
             result
         };
         // 실패해 되돌린 경우도 저장한다 - 어느 쪽이든 마지막 값이 디스크에 남아야 다음 기동이 맞는다
@@ -3339,12 +3284,23 @@ impl AppState {
         result
     }
 
-    fn close_panel_window_inner(
+    // 메인 문서가 다시 로드되면 opener 쪽 WindowProxy가 사라진다 - 창은 살려 두고(파괴 금지)
+    // 감춰서 새 문서가 다시 붙일 수 있게 한다. dev reload 대비
+    pub fn dock_panel_window_for_main_reload(&self, app: &AppHandle) {
+        if app.get_webview_window(PANEL_LABEL).is_none() {
+            return;
+        }
+        if let Err(err) = self.dock_panel_window(app) {
+            log::warn!("failed to dock panel window on main reload: {err}");
+        }
+    }
+
+    fn dock_panel_window_inner(
         &self,
         app: &AppHandle,
         reason: PanelVisibilityReason,
     ) -> Result<()> {
-        // 도킹 상태 기록: 명시 재부착과 close-ack 타임아웃 강제 닫힘이 모두 이 경로를 지남
+        // 도킹 상태 기록: 명시 재부착과 close-ack 타임아웃 강제 도킹이 모두 이 경로를 지남
         // Destroyed 핸들러에서는 기록 금지 - 종료 시 shutdown_application이 panel.destroy()를
         // 직접 호출해 같은 핸들러로 들어오므로 분리 채 종료할 때마다 플래그가 지워짐.
         // 이 함수는 panel_creation_lock 안에서 도는 만큼 저장은 호출자가 락을 놓은 뒤 맡는다
@@ -3355,9 +3311,9 @@ impl AppState {
             if let Err(error) = self.panel_bounds_persistence.flush_now(&window) {
                 bounds_error = Some(error);
             }
-            if let Err(error) = window.destroy() {
+            if let Err(error) = window.hide() {
                 self.clear_panel_destroy_reason(reason);
-                // 창이 살아 있으면 여전히 분리 상태다. 도킹 기록을 되돌리지
+                // 창이 보이면 여전히 분리 상태다. 도킹 기록을 되돌리지
                 // 않으면 다음 기동에서 분리 패널이 복원되지 않는다
                 self.mark_panel_detached(true);
                 return Err(error.into());
@@ -3394,10 +3350,6 @@ impl AppState {
         acknowledge_panel_close_request(&self.panel_close_request, request_id)
     }
 
-    pub fn is_panel_window_open(&self, app: &AppHandle) -> bool {
-        app.get_webview_window(PANEL_LABEL).is_some()
-    }
-
     pub fn capture_and_flush_panel_bounds_for_lifecycle(&self, app: &AppHandle) -> Result<()> {
         if self.shutdown_started.load(Ordering::SeqCst) {
             return Ok(());
@@ -3412,17 +3364,27 @@ impl AppState {
     pub fn handle_panel_window_destroyed(&self, app: &AppHandle) {
         drop_panel_hidden_with_main(&self.panel_hidden_with_main);
         self.plugin_rpc_router.remove_window(PANEL_LABEL);
-        clear_targeted_panel_view_state(&mut self.panel_view_state.lock(), PanelViewTarget::Panel);
         finish_panel_close(&self.panel_close_request);
         if let Err(error) = self.publish_panel_hidden(app, PanelVisibilityReason::Destroyed) {
             log::warn!("failed to emit destroyed panel visibility: {error}");
         }
     }
 
+    // window.open 콜백 안에서 디스크를 기다리지 않는다 - 메인 JS가 동기로 멈춰 있는 구간
+    fn flush_panel_detached_off_thread(&self, app: &AppHandle) {
+        let app_handle = app.clone();
+        thread::spawn(move || {
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                state.flush_panel_detached();
+            }
+        });
+    }
+
     // monitors는 호출자가 panel_creation_lock 밖에서 모아 넘긴다
     fn create_panel_window(
         &self,
         app: &AppHandle,
+        features: tauri::webview::NewWindowFeatures,
         main_rect: Option<LogicalRect>,
         monitors: &MonitorData,
     ) -> Result<WebviewWindow> {
@@ -3430,25 +3392,34 @@ impl AppState {
         let stored_bounds = snapshot.panel_bounds;
         let layout = resolve_panel_window_layout(stored_bounds, main_rect, monitors, None);
 
-        let mut builder = WebviewWindowBuilder::new(app, PANEL_LABEL, WebviewUrl::App(PANEL_ENTRYPOINT.into()))
-                .title("DM Note - Panel")
-                // 메인·오버레이와 같은 프레임리스 크롬 - 드래그 영역은 패널 상단 스트립이 담당
-                .decorations(false)
-                .transparent(true)
-                .shadow(true)
-                .resizable(true)
-                .maximizable(false)
-                .always_on_top(false)
-                .skip_taskbar(false)
-                .focused(false)
-                // 비포커스 상태의 첫 클릭이 포커스 획득에만 소비되지 않게 함
-                // (유틸리티 패널 관례 - 버튼이 첫 클릭에 바로 동작)
-                .accept_first_mouse(true)
-                .visible(true)
-                .inner_size(PANEL_WIDTH, layout.height)
-                .min_inner_size(PANEL_WIDTH, layout.min_height)
-                .max_inner_size(PANEL_WIDTH, layout.max_height)
-                .zoom_hotkeys_enabled(false);
+        // about:blank는 runtime-wry가 초기 네비게이션을 건너뛴다 - opener가 문서를 채우고,
+        // WebView2의 "NewWindow는 네비게이션 전이어야 함" 요건도 이걸로 맞는다.
+        // window_features는 opener의 configuration/environment를 물려주는 필수 호출이라
+        // 크기·위치를 덮어쓰기 전에 먼저 둔다
+        let mut builder = WebviewWindowBuilder::new(
+            app,
+            PANEL_LABEL,
+            WebviewUrl::External("about:blank".parse().expect("about:blank url")),
+        )
+        .window_features(features)
+        .title("DM Note - Panel")
+        // 메인·오버레이와 같은 프레임리스 크롬 - 드래그 영역은 패널 상단 스트립이 담당
+        .decorations(false)
+        .transparent(true)
+        .shadow(true)
+        .resizable(true)
+        .maximizable(false)
+        .always_on_top(false)
+        .skip_taskbar(false)
+        .focused(false)
+        // 비포커스 상태의 첫 클릭이 포커스 획득에만 소비되지 않게 함
+        // (유틸리티 패널 관례 - 버튼이 첫 클릭에 바로 동작)
+        .accept_first_mouse(true)
+        .visible(true)
+        .inner_size(PANEL_WIDTH, layout.height)
+        .min_inner_size(PANEL_WIDTH, layout.min_height)
+        .max_inner_size(PANEL_WIDTH, layout.max_height)
+        .zoom_hotkeys_enabled(false);
 
         if let Some(position) = layout.position {
             builder = builder.position(position.x, position.y);
@@ -3460,10 +3431,6 @@ impl AppState {
             if let Err(err) = window.set_position(LogicalPosition::new(position.x, position.y)) {
                 log::warn!("failed to restore panel position after build: {err}");
             }
-        }
-
-        if snapshot.developer_mode_enabled {
-            window.open_devtools();
         }
 
         self.configure_panel_window(&window, app, layout.max_height);
@@ -3522,9 +3489,9 @@ impl AppState {
                             &state.panel_close_request,
                             &request_id,
                             || {
-                                state.close_panel_window_inner(
+                                state.dock_panel_window_inner(
                                     &timeout_app,
-                                    PanelVisibilityReason::Destroyed,
+                                    PanelVisibilityReason::Closed,
                                 )
                             },
                         ) {
@@ -5177,22 +5144,6 @@ pub struct LogicalRect {
     height: f64,
 }
 
-impl LogicalRect {
-    /// physical 사각형을 scale로 나눠 논리 좌표계로 옮긴다.
-    /// 창을 방금 배치한 쪽이 그 좌표를 그대로 넘길 때 쓴다
-    pub fn from_physical(x: f64, y: f64, width: f64, height: f64, scale: f64) -> Option<Self> {
-        if !monitor_scale_is_usable(scale) {
-            return None;
-        }
-        Some(Self {
-            x: x / scale,
-            y: y / scale,
-            width: width / scale,
-            height: height / scale,
-        })
-    }
-}
-
 /// 메인 창의 현재 사각형을 logical로 읽는다.
 /// 창 게터는 메인 스레드로 왕복하므로 panel_creation_lock 밖에서만 호출할 것.
 /// outer 기준이라 Windows 프레임과 macOS 타이틀바가 포함되는데, 패널은 그 바깥에 붙는 게 맞다
@@ -5815,7 +5766,7 @@ mod tests {
             atomic::{AtomicBool, AtomicUsize, Ordering},
             Arc,
         },
-        time::Duration,
+        time::{Duration, Instant},
     };
 
     use super::{
@@ -5826,7 +5777,7 @@ mod tests {
         drop_panel_hidden_with_main, frontend_history_mutation_blocked,
         frontend_lifecycle_restore_labels, global_css_watch_path, hide_panel_with_main_transition,
         initial_overlay_placement, install_history_handshake, install_lifecycle_handshake,
-        key_state_payload, main_window_starts_hidden, monitor_scale_is_usable,
+        is_panel_open_url, key_state_payload, main_window_starts_hidden, monitor_scale_is_usable,
         next_keyboard_recovery_plan, normalize_stored_overlay_bounds, overlay_reset_fallback_rect,
         panel_bounds_from_sample, panel_height_bounds, panel_position_beside_main,
         publish_panel_hidden_transition, publish_panel_visibility_transition,
@@ -5834,22 +5785,20 @@ mod tests {
         restore_panel_with_main_transition, run_panel_close_timeout,
         should_create_overlay_on_startup, should_recover_keyboard_daemon,
         should_restore_panel_on_startup, stored_bounds_need_monitor_data,
-        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
-        take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
-        EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
-        FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
-        LifecycleHandshakeInstall, LogicalRect, MonitorData, MonitorSpec, Mutex, PanelBoundsChange,
-        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
-        PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
-        PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
-        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
-        SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
-        DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
-        KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS,
-        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
-        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_BESIDE_GAP,
-        PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH,
-        RAW_INPUT_WINDOW_LABELS,
+        take_cancelable_editor_flush_handshake, take_editor_flush_handshake, take_panel_open_arm,
+        validate_selection_session, EditorFlushAcknowledge, EditorFlushCompletion,
+        EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
+        FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect,
+        MonitorData, MonitorSpec, Mutex, PanelBoundsChange, PanelBoundsPersistenceController,
+        PanelBoundsPersistenceState, PanelBoundsSample, PanelCloseRequestState,
+        PanelCloseRequestedPayload, PanelVisibilityEventEmitter, PanelVisibilityPayload,
+        PanelVisibilityReason, PhysicalPosition, PhysicalSize, SelectionSessionElement,
+        SelectionSessionSnapshot, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
+        MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
+        OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
+        PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
@@ -5895,7 +5844,6 @@ mod tests {
     #[test]
     fn panel_window_contract_uses_fixed_client_width() {
         assert_eq!(PANEL_LABEL, "panel");
-        assert_eq!(PANEL_ENTRYPOINT, "panel/index.html");
         assert_eq!(PANEL_WIDTH, 240.0);
         assert_eq!(PANEL_INITIAL_HEIGHT, 712.0);
         assert_eq!(PANEL_MIN_HEIGHT, 712.0);
@@ -6024,57 +5972,42 @@ mod tests {
     }
 
     #[test]
-    fn raw_input_targets_include_detached_panel() {
-        assert_eq!(
-            RAW_INPUT_WINDOW_LABELS,
-            ["main", OVERLAY_LABEL, PANEL_LABEL]
-        );
-    }
-
-    fn note_panel_view_state() -> PanelViewState {
-        PanelViewState {
-            mode: PanelViewMode::Property,
-            active_tab: PanelLayerTab::Grid,
-            property_active_tab: PanelPropertyTab::Note,
-        }
+    fn raw_input_targets_exclude_the_opener_hosted_panel() {
+        // 패널 창은 자체 JS 런타임이 없다 - raw input을 받을 수신자가 없다
+        assert_eq!(RAW_INPUT_WINDOW_LABELS, ["main", OVERLAY_LABEL]);
     }
 
     #[test]
-    fn panel_view_state_rejects_invalid_missing_and_unknown_fields() {
-        assert!(serde_json::from_value::<PanelViewState>(serde_json::json!({
-            "mode": "property",
-            "activeTab": "grid",
-            "propertyActiveTab": "invalid"
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<PanelViewState>(serde_json::json!({
-            "mode": "property",
-            "activeTab": "grid"
-        }))
-        .is_err());
-        assert!(serde_json::from_value::<PanelViewState>(serde_json::json!({
-            "mode": "property",
-            "activeTab": "grid",
-            "propertyActiveTab": "note",
-            "extra": true
-        }))
-        .is_err());
+    fn panel_open_arm_is_consumed_once_and_expires() {
+        let now = Instant::now();
+        let mut slot = None;
+        assert!(!take_panel_open_arm(&mut slot, now));
+
+        let mut slot = Some(now);
+        assert!(take_panel_open_arm(
+            &mut slot,
+            now + Duration::from_millis(500)
+        ));
+        // 소비된 토큰은 다시 쓸 수 없다
+        assert!(!take_panel_open_arm(
+            &mut slot,
+            now + Duration::from_millis(600)
+        ));
+
+        let mut slot = Some(now);
+        assert!(!take_panel_open_arm(
+            &mut slot,
+            now + PANEL_OPEN_ARM_TIMEOUT + Duration::from_millis(1)
+        ));
+        assert!(slot.is_none());
     }
 
     #[test]
-    fn panel_view_state_is_consumed_once_by_its_target_window() {
-        let expected = note_panel_view_state();
-        let mut slot = Some(TargetedPanelViewState {
-            target: PanelViewTarget::Panel,
-            view_state: expected.clone(),
-        });
-
-        assert_eq!(take_targeted_panel_view_state(&mut slot, "main"), None);
-        assert_eq!(
-            take_targeted_panel_view_state(&mut slot, PANEL_LABEL),
-            Some(expected)
-        );
-        assert_eq!(take_targeted_panel_view_state(&mut slot, PANEL_LABEL), None);
+    fn panel_open_accepts_only_blank_urls() {
+        assert!(is_panel_open_url(""));
+        assert!(is_panel_open_url("about:blank"));
+        assert!(!is_panel_open_url("https://example.com"));
+        assert!(!is_panel_open_url("tauri://localhost/panel/index.html"));
     }
 
     #[test]
@@ -6466,28 +6399,19 @@ mod tests {
         assert!(state.lock().dirty);
     }
 
-    #[test]
-    fn logical_rect_from_physical_divides_by_scale_and_rejects_unusable_scale() {
-        let rect = LogicalRect::from_physical(1_658.0, 930.0, 1_804.0, 976.0, 2.0)
-            .expect("usable scale converts");
-
-        assert_eq!(rect.x, 829.0);
-        assert_eq!(rect.y, 465.0);
-        assert_eq!(rect.width, 902.0);
-        assert_eq!(rect.height, 488.0);
-        assert!(LogicalRect::from_physical(0.0, 0.0, 100.0, 100.0, 0.0).is_none());
-        assert!(LogicalRect::from_physical(0.0, 0.0, 100.0, 100.0, f64::NAN).is_none());
-    }
-
-    // 기동 복원 회귀: 메인 창을 방금 놓은 좌표를 받으면 세로 중앙이 맞는다
+    // 기동 복원 회귀: 방금 배치된 메인 창의 논리 좌표를 받으면 세로 중앙이 맞는다
     #[test]
     fn panel_restore_centers_on_the_freshly_placed_main_window() {
         let monitors = MonitorData {
             specs: vec![work_area_spec(0.0, 30.0, 2_560.0, 1_358.0)],
             primary_index: Some(0),
         };
-        let main = LogicalRect::from_physical(1_658.0, 930.0, 1_804.0, 976.0, 2.0)
-            .expect("usable scale converts");
+        let main = LogicalRect {
+            x: 829.0,
+            y: 465.0,
+            width: 902.0,
+            height: 488.0,
+        };
         let layout = resolve_panel_window_layout(
             Some(PanelBounds {
                 x: 2_205.0,
@@ -6802,8 +6726,9 @@ mod tests {
     }
 
     #[test]
-    fn frontend_lifecycle_targets_include_open_panel_only() {
-        let open_labels = ["main", PANEL_LABEL];
+    fn frontend_lifecycle_targets_skip_the_opener_hosted_panel() {
+        // 패널 창은 메인 문서가 그리는 자식 - 자체 렌더러가 없어 ack를 낼 수 없다
+        let open_labels = ["main", OVERLAY_LABEL, PANEL_LABEL];
         let targets =
             collect_frontend_lifecycle_targets(|label| open_labels.contains(&label).then_some(()));
         let labels = targets
@@ -6811,12 +6736,12 @@ mod tests {
             .map(|(label, ())| label)
             .collect::<Vec<_>>();
 
-        assert_eq!(labels, vec!["main".to_string(), PANEL_LABEL.to_string()]);
+        assert_eq!(labels, vec!["main".to_string(), OVERLAY_LABEL.to_string()]);
     }
 
     #[test]
-    fn panel_only_flush_failure_restores_every_original_handshake_target() {
-        let target_windows = ["main", OVERLAY_LABEL, PANEL_LABEL]
+    fn overlay_only_flush_failure_restores_every_original_handshake_target() {
+        let target_windows = ["main", OVERLAY_LABEL]
             .into_iter()
             .map(str::to_string)
             .collect::<HashSet<_>>();
@@ -6828,18 +6753,17 @@ mod tests {
         });
         let active = slot.as_mut().expect("handshake should be active");
         assert!(active.pending_windows.remove("main"));
-        assert!(active.pending_windows.remove(OVERLAY_LABEL));
         assert_eq!(
             active.pending_windows,
-            HashSet::from([PANEL_LABEL.to_string()])
+            HashSet::from([OVERLAY_LABEL.to_string()])
         );
 
         let canceled = take_editor_flush_handshake(&mut slot, "handshake-1")
-            .expect("panel failure should cancel the handshake");
+            .expect("overlay failure should cancel the handshake");
 
         assert_eq!(
             frontend_lifecycle_restore_labels(&canceled.target_windows),
-            vec!["main", OVERLAY_LABEL, PANEL_LABEL]
+            vec!["main", OVERLAY_LABEL]
         );
         assert!(slot.is_none());
     }

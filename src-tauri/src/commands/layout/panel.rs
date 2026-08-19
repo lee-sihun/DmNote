@@ -1,53 +1,58 @@
 use anyhow::{anyhow, Context};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
-use crate::{
-    errors::CmdResult,
-    state::{AppState, PanelViewState},
-};
+use crate::{errors::CmdResult, state::AppState};
 
-#[tauri::command]
-pub fn panel_window_show(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    window: WebviewWindow,
-    view_state: PanelViewState,
-) -> CmdResult<()> {
+fn ensure_main_caller(window: &WebviewWindow, action: &str) -> CmdResult<()> {
     if window.label() != "main" {
-        return Err(anyhow!("panel window can only be opened from main").into());
+        return Err(anyhow!("panel window can only be {action} from main").into());
     }
-    Ok(state.show_panel_window(&app, view_state)?)
+    Ok(())
 }
 
+// window.open 직전 arm - 이어지는 요청 하나만 패널 창으로 인정한다
 #[tauri::command]
-pub fn panel_window_close(
+pub fn panel_window_arm_open(state: State<'_, AppState>, window: WebviewWindow) -> CmdResult<()> {
+    ensure_main_caller(&window, "armed")?;
+    state.arm_panel_open();
+    Ok(())
+}
+
+// 도킹(hide)된 패널 창을 다시 띄운다. 창이 없으면 메인이 window.open으로 만들어야 한다
+#[tauri::command]
+pub fn panel_window_present(
     state: State<'_, AppState>,
     app: AppHandle,
     window: WebviewWindow,
-    view_state: PanelViewState,
 ) -> CmdResult<()> {
-    if window.label() != crate::state::PANEL_LABEL {
-        return Err(anyhow!("panel window can only be closed from panel").into());
-    }
-    Ok(state.close_panel_window(&app, view_state)?)
+    ensure_main_caller(&window, "presented")?;
+    Ok(state.present_panel_window(&app)?)
 }
 
+// 도킹: 창은 살려 둔 채 감춘다 (파괴는 종료 시만 - opener와 컨트롤러를 공유)
 #[tauri::command]
-pub fn panel_window_take_view_state(
+pub fn panel_window_dock(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<()> {
+    ensure_main_caller(&window, "docked")?;
+    Ok(state.dock_panel_window(&app)?)
+}
+
+// 기동 시 분리 복원 요청 1회 소비 - true면 메인이 window.open으로 패널을 연다
+#[tauri::command]
+pub fn panel_window_take_restore_request(
     state: State<'_, AppState>,
     window: WebviewWindow,
-) -> Option<PanelViewState> {
-    state.take_panel_view_state(window.label())
+) -> CmdResult<bool> {
+    ensure_main_caller(&window, "restored")?;
+    Ok(state.take_panel_restore_request())
 }
 
 #[tauri::command]
 pub fn panel_window_close_ack(state: State<'_, AppState>, request_id: String) -> CmdResult<bool> {
     Ok(state.acknowledge_panel_window_close(&request_id))
-}
-
-#[tauri::command]
-pub fn panel_window_is_open(state: State<'_, AppState>, app: AppHandle) -> CmdResult<bool> {
-    Ok(state.is_panel_window_open(&app))
 }
 
 #[tauri::command]
@@ -70,18 +75,19 @@ pub fn panel_window_apply_native_chrome(
     fill: [f64; 4],
     line: [f64; 4],
 ) -> CmdResult<bool> {
-    if window.label() != crate::state::PANEL_LABEL {
-        return Err(anyhow!("native chrome can only be applied from panel").into());
-    }
+    ensure_main_caller(&window, "styled")?;
+    let panel = app
+        .get_webview_window(crate::state::PANEL_LABEL)
+        .ok_or_else(|| anyhow!("panel window is not open"))?;
     #[cfg(target_os = "macos")]
     {
         Ok(crate::state::macos_window_corners::apply_surface_chrome(
-            &app, &window, fill, line,
+            &app, &panel, fill, line,
         ))
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (app, fill, line);
+        let _ = (app, panel, fill, line);
         Ok(false)
     }
 }
