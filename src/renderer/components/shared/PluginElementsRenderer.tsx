@@ -1,7 +1,23 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+// 수동 useMemo 콜백 안정화(개별 요소 비교 deps)가 격리 계약의 근거 —
+// React Compiler의 deps 재추론이 이를 매 렌더 무효화하지 않도록 명시적으로 제외
+// (현재는 exhaustive-deps suppression으로 우발적 bail-out 상태를 의도로 고정)
+'use no memo';
+
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
+import {
+  selectPluginRenderList,
+  pluginRenderListEqual,
+} from '@utils/plugin/pluginRenderList';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { PluginElement } from './PluginElement';
+import PluginElementHost from './PluginElementHost';
 import type {
   PluginDisplayElementInternal,
   ElementResizeAnchor,
@@ -76,7 +92,18 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
   onMultiDragStart,
   onMultiDragEnd,
 }) => {
-  const elements = usePluginDisplayElementStore((state) => state.elements);
+  const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+  // 표시 대상 fullId 목록만 구독 - 요소의 state/html 갱신이
+  // 리스트 전체 재조정으로 승격되지 않게 (#111 구조 경화)
+  const renderIds = useStoreWithEqualityFn(
+    usePluginDisplayElementStore,
+    useCallback(
+      (state: { elements: PluginDisplayElementInternal[] }) =>
+        selectPluginRenderList(state, selectedKeyType),
+      [selectedKeyType],
+    ),
+    pluginRenderListEqual,
+  );
   // 상위(App)가 렌더마다 새 offset 객체를 만들어도 값이 같으면 참조 유지 —
   // PluginElement의 React.memo가 형제 요소 리렌더를 실제로 막도록 보장
   const stablePositionOffset = useMemo(
@@ -146,10 +173,10 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
   const updateElement = usePluginDisplayElementStore(
     (state) => state.updateElement,
   );
-  const { selectedKeyType, positions } = useKeyStore();
-
-  // 현재 탭의 키 개수
-  const keyCount = positions[selectedKeyType]?.length ?? 0;
+  // 현재 탭의 키 개수 - z-order 폴백 계산용. 개수 변화만 구독
+  const keyCount = useKeyStore(
+    (state) => state.positions[state.selectedKeyType]?.length ?? 0,
+  );
 
   // 선택 상태 가져오기 (main 윈도우에서만 실제 값 사용)
   const selectedElementsRaw = useGridSelectionStore(
@@ -157,17 +184,6 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
   );
   const selectedElements: SelectedElement[] =
     windowType === 'main' ? selectedElementsRaw : EMPTY_SELECTED_ELEMENTS;
-
-  // 현재 탭에 해당하는 요소만 필터링
-  const filteredElements = elements.filter((el) => {
-    if (el.hidden) return false;
-    // tabId가 없으면(레거시) 모든 탭에 표시하거나, 정책에 따라 처리
-    // 여기서는 tabId가 있는 경우 현재 탭과 일치하는지 확인
-    if (el.tabId) {
-      return el.tabId === selectedKeyType;
-    }
-    return true; // tabId가 없으면 항상 표시 (하위 호환성)
-  });
 
   // 오버레이에서 메인의 브릿지 메시지 수신
   useEffect(() => {
@@ -254,10 +270,10 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
 
   return (
     <>
-      {filteredElements.map((element, index) => (
-        <PluginElement
-          key={element.fullId}
-          element={element}
+      {renderIds.map((fullId, index) => (
+        <PluginElementHost
+          key={fullId}
+          fullId={fullId}
           windowType={windowType}
           activeTool={activeTool}
           positionOffset={stablePositionOffset}
@@ -268,7 +284,7 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
           arrayIndex={index}
           keyCount={keyCount}
           isSelected={selectedElements.some(
-            (sel) => sel.type === 'plugin' && sel.id === element.fullId,
+            (sel) => sel.type === 'plugin' && sel.id === fullId,
           )}
           selectedElements={selectedElements}
           onSelectionContextMenu={stableOnSelectionContextMenu}
