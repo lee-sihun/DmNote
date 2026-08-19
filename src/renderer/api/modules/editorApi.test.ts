@@ -1302,8 +1302,10 @@ describe('요소 ID 검증이 백엔드와 같은 기준을 쓴다', () => {
           mode: '4key',
           zUpdates: [{ elementType: 'key', id, zIndex: 1 }],
           groupUpdates: [],
+          // 필수 키를 채워야 exact-keys 검사가 아니라 id 검증에서 거절된다
+          completeModeOrder: false,
         },
       ]),
-    ).toThrow(EditorProtocolError);
+    ).toThrow(/zUpdates\[0\] target is invalid/);
   });
 });

@@ -41,9 +41,7 @@ import {
   patchNativeLayerBoundsViaAuthority,
   patchNotePropertiesViaAuthority,
   patchSoundVolumeViaAuthority,
-  patchCounterAnimationEnabledViaAuthority,
   patchCounterAnimationPresetViaAuthority,
-  patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
   patchCounterStrokeViaAuthority,
@@ -137,6 +135,7 @@ import {
   patchUseInlineStylesByTargets,
   patchElementPropertyById,
   patchElementPropertyViaAuthority,
+  patchCounterBooleanByTargetsViaAuthority,
 } from '@src/renderer/editor/runtime/elementOps';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -1868,9 +1867,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (enabled: boolean) => {
+          // 분리 창도 즉시 반영을 거친다 - 배치 경로와 같은 래퍼를 대상 하나로 재사용
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchCounterEnabledViaAuthority([{ elementType, id }], enabled)
+              ? patchCounterBooleanByTargetsViaAuthority(
+                  [{ elementType, id }],
+                  {
+                    property: 'counterEnabled',
+                    value: enabled,
+                  },
+                )
               : patchCounterEnabledById(elementType, id, enabled);
           void persisted.catch((error) => {
             console.error('Failed to update counter enabled', error);
@@ -1886,9 +1892,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (enabled: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchCounterAnimationEnabledViaAuthority(
+              ? patchCounterBooleanByTargetsViaAuthority(
                   [{ elementType, id }],
-                  enabled,
+                  {
+                    property: 'counterAnimationEnabled',
+                    value: enabled,
+                  },
                 )
               : patchCounterAnimationEnabledById(elementType, id, enabled);
           void persisted.catch((error) => {
