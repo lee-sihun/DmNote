@@ -370,8 +370,6 @@ interface PropertiesPanelProps {
   onDetachAction?: () => void;
   // 분리 창에서는 인셋 채움 프레임 사용
   frameVariant?: 'inline' | 'window';
-  // 분리 창의 authoritative 선택 동기화 완료 여부
-  selectionSyncReady?: boolean;
 }
 
 // ============================================================================
@@ -382,7 +380,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   detachAction,
   onDetachAction,
   frameVariant = 'inline',
-  selectionSyncReady = true,
   onKeyMappingChange,
 }) => {
   const { t, i18n } = useTranslation();
@@ -888,21 +885,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return () => hostDocument.removeEventListener('keydown', onKey, true);
   }, [pluginSettingsPanel, activePageKey, hostDocument]);
 
-  // 선택 동기화 중 이전 렌더의 effect가 최신 탭을 덮지 않도록 커밋 직전 재확인
+  // 이전 렌더의 effect가 최신 탭을 덮지 않도록 커밋 직전 재확인
   useEffect(() => {
-    if (frameVariant === 'window' && !selectionSyncReady) return;
     const latestTab = usePropertiesPanelStore.getState().propertyPanelActiveTab;
     const latestSelection = useGridSelectionStore.getState().selectedElements;
     if (shouldNormalizePropertyTabToStyle(latestSelection, latestTab)) {
       setActiveTab(TABS.STYLE);
     }
-  }, [
-    frameVariant,
-    selectionSyncReady,
-    activeTab,
-    selectedElements,
-    setActiveTab,
-  ]);
+  }, [activeTab, selectedElements, setActiveTab]);
 
   // 레이어 이름 변경: 현재 선택된 요소의 layerName 가져오기
   const getCurrentLayerName = (): string => {
@@ -1185,9 +1175,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // property로 남아 있으면 다음 캔버스 클릭이 목록을 건너뛰고 편집으로 점프함
   // (플러그인 설정 패널 종료·설정 왕복 리마운트 경로 포함)
   useEffect(() => {
-    // 분리 창의 초기 동기화 전 빈 선택은 아직 원격 상태 미도착 - 정규화 보류
-    // (600ms 폴백 마운트 시 핸드오프의 property가 layer로 덮이는 경합 방지)
-    if (frameVariant === 'window' && !selectionSyncReady) return;
     if (
       isPanelVisible &&
       !pluginSettingsPanel &&
@@ -1198,8 +1185,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setPanelMode('layer');
     }
   }, [
-    frameVariant,
-    selectionSyncReady,
     isPanelVisible,
     pluginSettingsPanel,
     panelMode,

@@ -3205,13 +3205,30 @@ impl AppState {
     }
 
     // 메인 문서가 다시 로드되면 opener 쪽 WindowProxy가 사라진다 - 창은 살려 두고(파괴 금지)
-    // 감춰서 새 문서가 다시 붙일 수 있게 한다. dev reload 대비
+    // 감춰서 새 문서가 다시 붙일 수 있게 한다. dev reload 대비.
+    // on_page_load 콜백(메인 스레드)에서 불리므로 blocking lock 금지 - 락을 쥔 오프메인
+    // 태스크(ack 타임아웃 등)가 메인 왕복 게터를 기다리는 구간과 겹치면 역전 데드락이다.
+    // try_lock에 실패하면 그 경합 중인 전환이 이미 가시성을 정리하므로 건너뛴다
     pub fn dock_panel_window_for_main_reload(&self, app: &AppHandle) {
         if app.get_webview_window(PANEL_LABEL).is_none() {
             return;
         }
-        if let Err(err) = self.dock_panel_window(app) {
-            log::warn!("failed to dock panel window on main reload: {err}");
+        let docked = {
+            let Some(_creation_guard) = self.panel_creation_lock.try_lock() else {
+                log::warn!("panel creation lock busy on main reload; docking skipped");
+                return;
+            };
+            *self.panel_close_request.lock() = PanelCloseRequestState::Closing;
+            let result = self.dock_panel_window_inner(app, PanelVisibilityReason::Closed);
+            finish_panel_close(&self.panel_close_request);
+            if let Err(err) = &result {
+                log::warn!("failed to dock panel window on main reload: {err}");
+            }
+            result.is_ok()
+        };
+        // 도킹 기록 저장은 락을 놓은 뒤 - 저장 대기 동안 창 전환이 막히지 않게
+        if docked {
+            self.flush_panel_detached();
         }
     }
 
