@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
@@ -24,10 +24,12 @@ const SearchField = ({
 }: SearchFieldProps) => {
   const [localValue, setLocalValue] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { scheduleCommit, flushPendingCommit } =
     useAfterPaintValueCommit<string>({
       onCommit: onChange,
       strategy: commitStrategy,
+      frameHostRef: inputRef,
     });
 
   useEffect(() => {
@@ -53,6 +55,7 @@ const SearchField = ({
         />
       </svg>
       <input
+        ref={inputRef}
         type="text"
         value={localValue}
         onChange={(event) => {

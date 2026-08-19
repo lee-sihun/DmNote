@@ -55,14 +55,17 @@ const LayerGroupDisclosure = ({
   collapsed,
   onToggle,
 }: LayerGroupDisclosureProps) => {
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const { value: visualCollapsed, toggle } = useOptimisticBooleanCommit({
     canonicalValue: collapsed,
     onCommit: onToggle,
+    frameHostRef: buttonRef,
   });
 
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
         aria-expanded={!visualCollapsed}
         className="absolute left-0 top-0 bottom-0 w-[34px] flex items-center pl-[1px] cursor-pointer z-[1]"

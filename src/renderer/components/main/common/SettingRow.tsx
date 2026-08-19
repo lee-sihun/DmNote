@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import Checkbox from '@components/main/common/Checkbox';
 import {
   useOptimisticBooleanCommit,
@@ -85,14 +85,17 @@ export const SettingToggleRow = ({
   onMouseEnter,
   onMouseLeave,
 }: SettingToggleRowProps) => {
+  const rowRef = useRef<HTMLButtonElement>(null);
   const { value: visualChecked, toggle } = useOptimisticBooleanCommit({
     canonicalValue: checked,
     onCommit: onToggle,
     strategy: commitStrategy,
+    frameHostRef: rowRef,
   });
 
   return (
     <button
+      ref={rowRef}
       type="button"
       role="switch"
       aria-checked={visualChecked}
