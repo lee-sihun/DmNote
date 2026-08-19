@@ -3149,15 +3149,11 @@ impl AppState {
         if app.get_webview_window(PANEL_LABEL).is_some() {
             return Err(anyhow!("panel window already exists"));
         }
-        *self.panel_destroy_reason.lock() = None;
         let main_rect = main_window_logical_rect(app);
         let monitors = MonitorData::gather(app);
-        let window = self.create_panel_window(app, features, main_rect, &monitors)?;
-        publish_panel_visibility_transition(&self.panel_visible, app, true, None)?;
-        // 재시작 복원용 분리 상태 기록 - 디스크 대기는 콜백 밖(다른 스레드)에서
-        self.mark_panel_detached(true);
-        self.flush_panel_detached_off_thread(app);
-        Ok(window)
+        // 창은 숨긴 채 만든다 - 메인이 문서를 채운 뒤 present_panel_window로 드러내야
+        // 빈 창이 한 프레임 비치지 않는다. 가시성 전환·분리 기록도 그쪽이 맡는다
+        self.create_panel_window(app, features, main_rect, &monitors)
     }
 
     // 도킹(hide)돼 있던 패널 창을 다시 띄운다. 창이 없으면 메인이 window.open으로 만들어야 한다
@@ -3370,16 +3366,6 @@ impl AppState {
         }
     }
 
-    // window.open 콜백 안에서 디스크를 기다리지 않는다 - 메인 JS가 동기로 멈춰 있는 구간
-    fn flush_panel_detached_off_thread(&self, app: &AppHandle) {
-        let app_handle = app.clone();
-        thread::spawn(move || {
-            if let Some(state) = app_handle.try_state::<AppState>() {
-                state.flush_panel_detached();
-            }
-        });
-    }
-
     // monitors는 호출자가 panel_creation_lock 밖에서 모아 넘긴다
     fn create_panel_window(
         &self,
@@ -3415,7 +3401,7 @@ impl AppState {
         // 비포커스 상태의 첫 클릭이 포커스 획득에만 소비되지 않게 함
         // (유틸리티 패널 관례 - 버튼이 첫 클릭에 바로 동작)
         .accept_first_mouse(true)
-        .visible(true)
+        .visible(false)
         .inner_size(PANEL_WIDTH, layout.height)
         .min_inner_size(PANEL_WIDTH, layout.min_height)
         .max_inner_size(PANEL_WIDTH, layout.max_height)
