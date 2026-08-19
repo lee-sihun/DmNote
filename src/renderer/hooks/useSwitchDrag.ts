@@ -32,8 +32,12 @@ interface DragSession {
   startValue: boolean;
   startOffset: number;
   offset: number;
+  // 마지막 포인터 이동량. clamp된 offset과 달리 끝에서 바깥으로 민 거리도 남는다
+  dx: number;
   intent: DragIntent;
   displayed: boolean;
+  // 노브가 한 번이라도 중앙선을 넘어 반대편에 닿았는지
+  crossed: boolean;
 }
 
 interface UseSwitchDragOptions {
@@ -79,6 +83,11 @@ const handBack = (session: DragSession) => {
  * 토글 노브를 잡고 좌우로 끌어 상태를 정하는 제스처. 데스크톱 스위치의 관례를 따른다.
  * - 분류: 이동 슬롭을 넘겨야 드래그. 못 넘기면 탭이고 뒤따르는 click이 뒤집는다
  * - 판정: 손을 뗀 순간 노브 중심이 중앙선을 넘었는지. 손가락 위치가 아니라 노브 위치다
+ * - 강등: 슬롭은 넘겼지만 중앙선에 닿은 적 없이 이동량이 반 폭 미만이면 탭으로 되돌린다.
+ *   이동 폭이 12px뿐이라 슬롭(3)과 중앙선(6) 사이가 클릭 중 손 떨림 범위와 겹친다 -
+ *   여기서 "값 그대로 + click 삼킴"으로 끝내면 눌렀는데 아무 반응이 없는 구간이 생긴다.
+ *   반 폭 이상 끌었는데 안 넘은 건 이미 그쪽 끝이라 안 움직인 경우다(켜진 걸 켜는 쪽으로) -
+ *   그건 그대로 두고, 중앙선을 넘었다 되돌아온 취소도 그대로 취소다(넘은 적이 있으므로)
  * - 속도와 방향은 안 쓴다
  *
  * 노브는 누른 지점 기준 상대 델타로 움직인다. 커서 절대 좌표에 매핑하면
@@ -102,6 +111,9 @@ export const useSwitchDrag = ({
   const sessionRef = useRef<DragSession | null>(null);
   const disarmSwallowRef = useRef<(() => void) | null>(null);
   const handBackFrameRef = useRef(0);
+  // 다음 프레임에 CSS로 돌려줄 세션. 그 프레임 안에 새 드래그가 시작되면 먼저 정산해야
+  // 뒤늦게 도는 handBack이 새 세션의 표식과 인라인 위치를 걷어가지 않는다
+  const pendingHandBackRef = useRef<DragSession | null>(null);
   const [dragValue, setDragValue] = useState<boolean | null>(null);
 
   // 드래그 뒤에 오는 click 한 번을 창 캡처 단계에서 삼킨다.
@@ -162,12 +174,26 @@ export const useSwitchDrag = ({
       }
 
       lockTextSelection(false);
+      // 슬롭은 넘겼지만 중앙선에 닿은 적 없이 반 폭도 못 간 건 흔들린 클릭이다 - 탭으로 되돌린다.
+      // 노브를 제자리로 돌려주고 click은 삼키지 않아 평소처럼 뒤집히게 둔다.
+      // 세로는 보지 않는다 - 세로로 트랙을 벗어나 뗀 click은 조상에 꽂히며, 그건 평범한 클릭이
+      // 트랙 밖에서 끝났을 때와 같은 결과다(설정 행은 행 버튼이 받아 뒤집고, 맨 트랙은 무반응)
+      if (
+        commit &&
+        !session.crossed &&
+        Math.abs(session.dx) < session.travel / 2
+      ) {
+        setDragValue(null);
+        handBack(session);
+        return;
+      }
       // 취소로 끝난 제스처는 click이 따라오지 않는다
       if (commit) armClickSwallow();
-      // 노브 중심이 중앙선을 넘었는지만 본다. 원위치로 돌아왔으면 시작값과 같아져 취소된다
+      // 노브 중심이 중앙선을 넘었는지만 본다. 원위치로 돌아왔으면 시작값과 같아져 취소된다.
+      // 취소는 지금 값으로 돌려준다 - 끄는 사이 외부에서 바뀌었을 수 있다
       const target = commit
         ? session.offset >= session.travel / 2
-        : session.startValue;
+        : checkedRef.current;
 
       // 표시값을 목표로 먼저 고정한다. 이 렌더가 끝나야 CSS의 정착 지점이 목표가 되고,
       // 그때 인라인을 걷어야 노브가 손끝에서 목표까지 한 번에 간다
@@ -177,14 +203,27 @@ export const useSwitchDrag = ({
         onFlipRef.current();
       }
       cancelAnimationFrame(handBackFrameRef.current);
+      pendingHandBackRef.current = session;
       handBackFrameRef.current = requestAnimationFrame(() => {
         handBackFrameRef.current = 0;
+        pendingHandBackRef.current = null;
         setDragValue(null);
         handBack(session);
       });
     },
     [armClickSwallow],
   );
+
+  // 아직 프레임을 기다리는 이전 세션의 정산을 지금 끝낸다
+  const flushPendingHandBack = () => {
+    const pending = pendingHandBackRef.current;
+    if (!pending) return;
+    cancelAnimationFrame(handBackFrameRef.current);
+    handBackFrameRef.current = 0;
+    pendingHandBackRef.current = null;
+    setDragValue(null);
+    handBack(pending);
+  };
 
   useEffect(() => {
     const scheduler = createRafLatestScheduler<number>((offset) => {
@@ -199,6 +238,9 @@ export const useSwitchDrag = ({
       scheduler.cancel();
       schedulerRef.current = null;
       cancelAnimationFrame(handBackFrameRef.current);
+      const pending = pendingHandBackRef.current;
+      pendingHandBackRef.current = null;
+      if (pending) handBack(pending);
       disarmSwallowRef.current?.();
       const session = sessionRef.current;
       sessionRef.current = null;
@@ -217,6 +259,7 @@ export const useSwitchDrag = ({
     // 이동 폭을 모르면(레이아웃 전·숨김) 드래그 판정이 성립하지 않는다. 탭으로 둔다 -
     // 여기서 세션을 잡으면 슬롭만 넘겨도 click까지 삼켜 토글이 통째로 먹통이 된다
     if (travel <= 0) return;
+    flushPendingHandBack();
     track.setPointerCapture?.(event.pointerId);
     sessionRef.current = {
       pointerId: event.pointerId,
@@ -227,8 +270,10 @@ export const useSwitchDrag = ({
       startValue: checkedRef.current,
       startOffset: checkedRef.current ? travel : 0,
       offset: checkedRef.current ? travel : 0,
+      dx: 0,
       intent: 'undecided',
       displayed: checkedRef.current,
+      crossed: false,
     };
   };
 
@@ -244,9 +289,11 @@ export const useSwitchDrag = ({
       session.track.setAttribute(DRAG_ATTR, '');
       lockTextSelection(true);
     }
+    session.dx = dx;
     session.offset = clamp(session.startOffset + dx, 0, session.travel);
     schedulerRef.current?.push(session.offset);
     const next = session.offset >= session.travel / 2;
+    if (next !== session.startValue) session.crossed = true;
     if (next === session.displayed) return;
     session.displayed = next;
     setDragValue(next);

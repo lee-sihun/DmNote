@@ -142,28 +142,57 @@ describe('Checkbox 노브 드래그', () => {
     expect(onChange).toHaveBeenCalledOnce();
   });
 
-  // 중앙선 통과 여부로 탭·드래그를 가르면 노브가 이미 끝이라 안 움직여
-  // 탭으로 판정되고, 켜려고 끌었는데 꺼진다
-  it('켜진 스위치를 켜는 방향으로 끌면 켜진 채로 남는다', () => {
+  // 노브가 이미 끝이라 안 움직이는 방향으로 반 폭 이상 끈 건 "켜려고 끈" 의도다.
+  // 중앙선 통과 여부만으로 탭 판정하면 여기서 click이 살아 켜려고 끌었는데 꺼진다
+  it('켜진 스위치를 켜는 방향으로 반 폭 이상 끌면 켜진 채로 남는다', () => {
     const onChange = vi.fn();
     render(true, onChange);
 
     send('pointerdown', { clientX: TRACK.x + 14 });
-    send('pointermove', { clientX: TRACK.x + 14 + 5 });
-    send('pointerup', { clientX: TRACK.x + 14 + 5 });
+    send('pointermove', { clientX: TRACK.x + 14 + TRAVEL / 2 + 2 });
+    send('pointerup', { clientX: TRACK.x + 14 + TRAVEL / 2 + 2 });
     clickAfterRelease();
 
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('슬롭은 넘겼지만 중앙선을 못 넘기면 값이 그대로다', () => {
+  // 슬롭(3)과 중앙선(6) 사이는 클릭 중 손 떨림 범위와 겹친다. 여기서 값 그대로 + click 삼킴으로
+  // 끝내면 눌렀는데 아무 반응이 없다 - 흔들린 클릭으로 보고 뒤따르는 click이 뒤집게 둔다
+  it('슬롭은 넘겼지만 중앙선에 못 닿은 흔들린 클릭은 탭으로 강등돼 click이 뒤집는다', () => {
     const onChange = vi.fn();
     render(false, onChange);
 
     send('pointerdown', { clientX: TRACK.x + 4 });
-    // 슬롭(3)은 넘고 중앙선(TRAVEL / 2)에는 못 미치는 이동
     send('pointermove', { clientX: TRACK.x + 4 + TRAVEL / 2 - 1 });
     send('pointerup', { clientX: TRACK.x + 4 + TRAVEL / 2 - 1 });
+    // 강등된 탭은 click을 삼키지 않는다
+    clickAfterRelease();
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(track().hasAttribute('data-dmn-dragging')).toBe(false);
+  });
+
+  it('노브가 못 움직이는 쪽으로 조금 흔들린 클릭도 탭이다', () => {
+    const onChange = vi.fn();
+    render(false, onChange);
+
+    // 꺼진 노브를 왼쪽으로 4px - 슬롭은 넘지만 노브는 clamp돼 제자리
+    send('pointerdown', { clientX: TRACK.x + 8 });
+    send('pointermove', { clientX: TRACK.x + 8 - 4 });
+    send('pointerup', { clientX: TRACK.x + 8 - 4 });
+    clickAfterRelease();
+
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  it('중앙선을 넘었다 슬롭 안으로 되돌아와도 취소다 - 넘은 적이 있으므로 탭으로 강등하지 않는다', () => {
+    const onChange = vi.fn();
+    render(false, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointermove', { clientX: TRACK.x + 4 + 2 });
+    send('pointerup', { clientX: TRACK.x + 4 + 2 });
     clickAfterRelease();
 
     expect(onChange).not.toHaveBeenCalled();
@@ -348,11 +377,65 @@ describe('Checkbox 노브 드래그', () => {
 
     send('pointerdown', { clientX: TRACK.x + 4 });
     send('pointermove', { clientX: TRACK.x + 4 + 8 });
+    // 토큰 기준으로는 아직 중앙선 앞이라 트랙 색이 넘어가지 않는다
+    expect(track().className).not.toContain('bg-accent');
+    send('pointermove', { clientX: TRACK.x + 4 + 14 });
+    expect(track().className).toContain('bg-accent');
+    // 되돌아와 놓으면 취소 - 토큰 기준 반 폭(12)을 넘겼으니 탭으로 강등되지 않는다
+    send('pointermove', { clientX: TRACK.x + 4 + 8 });
     send('pointerup', { clientX: TRACK.x + 4 + 8 });
     clickAfterRelease();
     flushRaf();
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('이전 드래그의 정산 프레임 안에 새 드래그가 시작돼도 표식과 위치를 잃지 않는다', () => {
+    render(false, vi.fn());
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointerup', { clientX: TRACK.x + 4 + TRAVEL });
+    clickAfterRelease();
+    // 정산 rAF가 아직 안 돌았는데 바로 다음 드래그가 시작된다(빠른 연속 플릭).
+    // 상위가 checked를 되먹이지 않는 마운트라 시작값은 여전히 꺼짐이다
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    send('pointermove', { clientX: TRACK.x + 4 + 5 });
+    flushRaf();
+
+    // 이전 세션의 늦은 handBack이 새 세션의 표식·인라인 위치를 걷어가면 안 된다
+    expect(track().hasAttribute('data-dmn-dragging')).toBe(true);
+    expect(thumb().style.translate).toBe('5px 0');
+  });
+
+  it('드래그 뒤 click이 조상 버튼에 꽂혀도 조상 핸들러까지 삼킨다', () => {
+    const onChange = vi.fn();
+    const ancestorClick = vi.fn();
+    act(() =>
+      root.render(
+        <div onClick={ancestorClick}>
+          <Checkbox checked={false} onChange={onChange} />
+        </div>,
+      ),
+    );
+    vi.spyOn(track(), 'getBoundingClientRect').mockReturnValue(
+      rect(TRACK.width, TRACK.height, TRACK.x),
+    );
+    vi.spyOn(thumb(), 'getBoundingClientRect').mockReturnValue(
+      rect(THUMB.width, THUMB.height),
+    );
+
+    send('pointerdown', { clientX: TRACK.x + 20 });
+    send('pointermove', { clientX: TRACK.x + 34 });
+    send('pointerup', { clientX: TRACK.x + 34 });
+    // 트랙 밖에서 떼 click이 조상에 꽂힌다 - 설정 행처럼 조상이 토글 버튼이면 여기서 한 번 더 뒤집힌다
+    act(() => {
+      track().parentElement!.dispatchEvent(pointer('click'));
+    });
+    flushRaf();
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(ancestorClick).not.toHaveBeenCalled();
   });
 
   it('드래그로 뒤집을 때 누름 표식을 먼저 찍어 정착 모션을 살린다', () => {
