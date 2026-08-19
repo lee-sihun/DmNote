@@ -52,14 +52,15 @@ export const PANEL_ROW_NAME_CLASS =
 
 // 행 이름 밝기 - 평소 한 단계 낮추고 행 호버에서 올려 메뉴가 있음을 알림.
 // 켜짐을 fg로 올리면 호버에서 더 갈 데가 없어 반응이 사라진다
-export const PANEL_ROW_NAME_ACTIVE_CLASS = 'text-fg-muted group-hover:text-fg';
+export const PANEL_ROW_NAME_ACTIVE_CLASS =
+  'text-fg-muted group-hover:text-fg group-focus-visible:text-fg';
 // 꺼짐 행 이름 - disabled까지 내린다. faint는 켜짐(muted)과 10%밖에 안 갈려
 // 긴 목록에서 켜짐·꺼짐이 이름만으로는 안 읽힌다.
 // 목록 웰 위 대비는 약 2.9:1로 본문 기준 미달이지만 의도된 값 -
 // 상태 신호는 트레일링 알약의 면이 소유하고 이름은 밝기를 낮춰 거드는 역할이며,
-// 행 호버에서 faint로 한 칸 올려 읽기와 메뉴 존재를 같이 보장한다
+// 행 호버·키보드 포커스에서 faint로 한 칸 올려 읽기와 메뉴 존재를 같이 보장한다
 export const PANEL_ROW_NAME_INACTIVE_CLASS =
-  'text-fg-disabled group-hover:text-fg-faint';
+  'text-fg-disabled group-hover:text-fg-faint group-focus-visible:text-fg-faint';
 
 // 히스토리 행 트레일링 표식 - 현재 항목 라벨과 상태 배지.
 // 면이 있는 쪽이 '지금 적용 중'이다. 플러그인 목록의 켜짐 알약과 같은 규칙 -

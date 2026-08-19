@@ -27,6 +27,7 @@ describe('FloatingPopup exit transition', () => {
     await act(async () => root.unmount());
     host.remove();
     document.body.innerHTML = '';
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -124,6 +125,5 @@ describe('FloatingPopup exit transition', () => {
     });
     expect(surface()?.textContent).toContain('Item');
     expect(surface()?.getAttribute('data-dmn-motion-state')).toBe('open');
-    vi.unstubAllGlobals();
   });
 });

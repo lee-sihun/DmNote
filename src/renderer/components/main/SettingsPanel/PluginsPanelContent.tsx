@@ -78,6 +78,7 @@ const PluginsPanelContent = ({
                   <div
                     key={plugin.id}
                     role="button"
+                    aria-haspopup="menu"
                     tabIndex={0}
                     onKeyDown={(event) => {
                       if (event.target !== event.currentTarget) return;

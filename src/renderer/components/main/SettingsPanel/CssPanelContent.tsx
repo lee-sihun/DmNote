@@ -225,6 +225,7 @@ const CssPanelContent = ({
                   <div
                     key={item.path}
                     role="button"
+                    aria-haspopup="menu"
                     tabIndex={0}
                     onKeyDown={(event) => {
                       if (event.target !== event.currentTarget) return;
