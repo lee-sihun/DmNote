@@ -1,3 +1,6 @@
+import { getActiveElement } from '@utils/dom/activeElement';
+import { isHTMLElementNode } from '@utils/dom/isElementNode';
+
 import { beginEditorWriteBarrier } from './editorWriteBarrier';
 import { finalizeEditorDraftForLifecycle } from './lifecycleEditorDraft';
 
@@ -18,9 +21,10 @@ export const settleFocusedEditor = async (
 ): Promise<boolean> => {
   const drainBlurWrites = beginEditorWriteBarrier();
 
-  const active = document.activeElement;
+  // 분리 패널 창의 입력도 대상 - 그 창은 다른 realm이라 instanceof 대신 nodeType으로 본다
+  const active = getActiveElement();
   if (
-    active instanceof HTMLElement &&
+    isHTMLElementNode(active) &&
     active.matches('input, textarea, [contenteditable="true"]')
   ) {
     active.blur();

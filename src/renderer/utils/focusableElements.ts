@@ -12,7 +12,9 @@ export const isAvailableFocusTarget = (element: HTMLElement) => {
   if (element.closest('[hidden], [aria-hidden="true"]')) return false;
   if (element.getAttribute('aria-disabled') === 'true') return false;
 
-  const style = window.getComputedStyle(element);
+  // 요소가 사는 창의 스타일 계산 (분리 패널 창 노드는 다른 window)
+  const view = element.ownerDocument.defaultView ?? window;
+  const style = view.getComputedStyle(element);
   if (
     style.display === 'none' ||
     style.visibility === 'hidden' ||

@@ -133,24 +133,24 @@ export function useLayerDnD({
     // 앵커 후보에서 제외한 id들 - mouseup의 이동 집합과 대조해 축소 감지
     excludedIds: string[];
   } | null>(null);
-  const dragCursorAppliedRef = useRef(false);
+  // 커서 클래스를 건 문서 - 분리 패널 창이면 그 창의 body
+  const dragCursorDocumentRef = useRef<Document | null>(null);
 
   // press부터 세션 종료까지 전역 grabbing - WKWebView가 hover 중 CSS :active
   // 커서 갱신을 놓치는 문제로 캔버스 useDraggable과 같은 JS 토글 병행
-  const applyDragCursor = () => {
-    if (typeof document === 'undefined') return;
-    if (dragCursorAppliedRef.current) return;
-    document.body.classList.add(DRAG_CURSOR_CLASS);
-    dragCursorAppliedRef.current = true;
+  const applyDragCursor = (ownerDocument: Document) => {
+    if (dragCursorDocumentRef.current) return;
+    ownerDocument.body.classList.add(DRAG_CURSOR_CLASS);
+    dragCursorDocumentRef.current = ownerDocument;
     // 세션 동안 핸들 호버 커서 갱신 중단 (시작 시 잔여 호버 클리어 포함)
     suspendCustomCursorHover();
   };
 
   const clearDragCursor = () => {
-    if (typeof document === 'undefined') return;
-    if (!dragCursorAppliedRef.current) return;
-    document.body.classList.remove(DRAG_CURSOR_CLASS);
-    dragCursorAppliedRef.current = false;
+    const applied = dragCursorDocumentRef.current;
+    if (!applied) return;
+    applied.body.classList.remove(DRAG_CURSOR_CLASS);
+    dragCursorDocumentRef.current = null;
     resumeCustomCursorHover();
   };
 
@@ -265,6 +265,8 @@ export function useLayerDnD({
 
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
+    // 분리 패널 창에서는 그 창의 document가 mousemove/up을 받는다
+    const ownerDocument = target.ownerDocument ?? document;
 
     dragStateRef.current = {
       itemHeight: rect.height,
@@ -272,7 +274,7 @@ export function useLayerDnD({
     };
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
-    applyDragCursor();
+    applyDragCursor(ownerDocument);
 
     const applyMouseMove = (moveEvent: MouseEvent) => {
       if (
@@ -459,8 +461,8 @@ export function useLayerDnD({
       setDragOverTargetGroupId(null);
       setIsDragging(false);
 
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      ownerDocument.removeEventListener('mousemove', handleMouseMove);
+      ownerDocument.removeEventListener('mouseup', handleMouseUp);
 
       // 드래그 표식은 trailing click 한 번만 흡수한다. mousedown 행과 mouseup
       // 행이 다르면 행 onClick이 발화하지 않아 소비자가 리셋할 기회가 없고,
@@ -480,8 +482,8 @@ export function useLayerDnD({
       }
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    ownerDocument.addEventListener('mousemove', handleMouseMove);
+    ownerDocument.addEventListener('mouseup', handleMouseUp);
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -494,6 +496,7 @@ export function useLayerDnD({
 
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
+    const ownerDocument = target.ownerDocument ?? document;
 
     groupDragStateRef.current = {
       groupId,
@@ -504,7 +507,7 @@ export function useLayerDnD({
     };
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
-    applyDragCursor();
+    applyDragCursor(ownerDocument);
 
     const applyMouseMove = (moveEvent: MouseEvent) => {
       if (
@@ -689,12 +692,12 @@ export function useLayerDnD({
       setDragOverDisplayIndex(null);
       setIsDragging(false);
 
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      ownerDocument.removeEventListener('mousemove', handleMouseMove);
+      ownerDocument.removeEventListener('mouseup', handleMouseUp);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    ownerDocument.addEventListener('mousemove', handleMouseMove);
+    ownerDocument.addEventListener('mouseup', handleMouseUp);
   };
 
   return {

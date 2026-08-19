@@ -6,6 +6,8 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
+import { usePanelHost } from '@contexts/PanelHostContext';
+import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -411,6 +413,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onKeyMappingChange,
 }) => {
   const { t, i18n } = useTranslation();
+  // 패널이 분리 창에 있으면 키·마우스 이벤트는 그 창의 document로 온다
+  const { document: hostDocument } = usePanelHost();
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
   );
@@ -886,7 +890,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target;
       if (
-        target instanceof HTMLElement &&
+        isHTMLElementNode(target) &&
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
           target.isContentEditable)
@@ -894,10 +898,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return;
       }
       // 모달·포털 메뉴 등 상위 레이어가 열려 있으면 그쪽이 Escape를 소유
+      // 모달은 메인 문서에, 팝업 레이어는 패널이 있는 문서에 뜬다 - 둘 다 본다
       if (
         document.querySelector(
           '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
-        )
+        ) ||
+        (hostDocument !== document &&
+          hostDocument.querySelector('[data-dmn-popup-layer="true"]'))
       ) {
         return;
       }
@@ -906,9 +913,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       event.stopPropagation();
       closePage();
     };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-  }, [activePageKey, closePage]);
+    hostDocument.addEventListener('keydown', onKey, true);
+    return () => hostDocument.removeEventListener('keydown', onKey, true);
+  }, [activePageKey, closePage, hostDocument]);
 
   // Escape로 플러그인 설정 세션 취소 - 서브 페이지·모달이 없을 때만
   useEffect(() => {
@@ -918,17 +925,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target;
       if (
-        target instanceof HTMLElement &&
+        isHTMLElementNode(target) &&
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
           target.isContentEditable)
       ) {
         return;
       }
+      // 모달은 메인 문서에, 팝업 레이어는 패널이 있는 문서에 뜬다 - 둘 다 본다
       if (
         document.querySelector(
           '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
-        )
+        ) ||
+        (hostDocument !== document &&
+          hostDocument.querySelector('[data-dmn-popup-layer="true"]'))
       ) {
         return;
       }
@@ -936,9 +946,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       event.stopPropagation();
       handlePluginSettingsPanelCancelImpl.current();
     };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-  }, [pluginSettingsPanel, activePageKey]);
+    hostDocument.addEventListener('keydown', onKey, true);
+    return () => hostDocument.removeEventListener('keydown', onKey, true);
+  }, [pluginSettingsPanel, activePageKey, hostDocument]);
 
   // 선택 동기화 중 이전 렌더의 effect가 최신 탭을 덮지 않도록 커밋 직전 재확인
   useEffect(() => {

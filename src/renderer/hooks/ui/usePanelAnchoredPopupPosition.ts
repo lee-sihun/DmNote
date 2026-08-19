@@ -149,6 +149,8 @@ export const usePanelAnchoredPopupPosition = ({
       ? anchorRect.top + anchorRect.height / 2
       : null;
 
+    // 패널이 분리 창에 있으면 그 창의 뷰포트가 기준이다
+    const ownerWindow = panelElement.ownerDocument.defaultView ?? window;
     const compute = () => {
       const popupElement = popupRef.current;
       const next = getPanelAnchoredPopupPosition({
@@ -156,8 +158,8 @@ export const usePanelAnchoredPopupPosition = ({
         anchorCenterY: capturedAnchorCenterY,
         popupWidth: popupElement?.offsetWidth || fallbackWidth,
         popupHeight: popupElement?.offsetHeight || fallbackHeight,
-        viewportWidth: window.innerWidth,
-        viewportHeight: window.innerHeight,
+        viewportWidth: ownerWindow.innerWidth,
+        viewportHeight: ownerWindow.innerHeight,
       });
 
       setPosition((previous) =>
@@ -176,11 +178,11 @@ export const usePanelAnchoredPopupPosition = ({
         : new ResizeObserver(() => compute());
     observer?.observe(panelElement);
     if (popupRef.current) observer?.observe(popupRef.current);
-    window.addEventListener('resize', compute);
+    ownerWindow.addEventListener('resize', compute);
 
     return () => {
       observer?.disconnect();
-      window.removeEventListener('resize', compute);
+      ownerWindow.removeEventListener('resize', compute);
       computePositionRef.current = null;
     };
   }, [
@@ -237,6 +239,7 @@ export const useTriggerAnchoredPopupPosition = ({
     // 앵커는 열리는 시점에 한 번만 캡처 — 패널 스크롤·리렌더에도 제자리 유지
     const triggerRect = trigger.getBoundingClientRect();
     const sectionRect = section.getBoundingClientRect();
+    const ownerWindow = trigger.ownerDocument.defaultView ?? window;
 
     const compute = () => {
       const popupElement = popupRef.current;
@@ -244,8 +247,8 @@ export const useTriggerAnchoredPopupPosition = ({
         sectionRect,
         triggerRect,
         popupHeight: popupElement?.offsetHeight || fallbackHeight,
-        viewportWidth: window.innerWidth,
-        viewportHeight: window.innerHeight,
+        viewportWidth: ownerWindow.innerWidth,
+        viewportHeight: ownerWindow.innerHeight,
       });
 
       setResult((previous) => {
@@ -267,11 +270,11 @@ export const useTriggerAnchoredPopupPosition = ({
         ? null
         : new ResizeObserver(() => compute());
     if (popupRef.current) observer?.observe(popupRef.current);
-    window.addEventListener('resize', compute);
+    ownerWindow.addEventListener('resize', compute);
 
     return () => {
       observer?.disconnect();
-      window.removeEventListener('resize', compute);
+      ownerWindow.removeEventListener('resize', compute);
       computePositionRef.current = null;
     };
   }, [fallbackHeight, open, popupRef, referenceRef]);

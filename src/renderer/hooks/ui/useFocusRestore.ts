@@ -32,8 +32,10 @@ export const useFocusRestore = (open: boolean): FocusRestore => {
   const restoredRef = useRef(false);
 
   const captureOpener = useCallback((container: HTMLElement) => {
-    if (activatedRef.current && !container.contains(document.activeElement)) {
-      openerRef.current = document.activeElement as HTMLElement | null;
+    // 컨테이너가 분리 패널 창에 있으면 그 창의 activeElement가 opener다
+    const activeElement = container.ownerDocument.activeElement;
+    if (activatedRef.current && !container.contains(activeElement)) {
+      openerRef.current = activeElement as HTMLElement | null;
     }
     activatedRef.current = true;
   }, []);

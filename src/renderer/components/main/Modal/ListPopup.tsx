@@ -9,6 +9,7 @@ import { createPortal, flushSync } from 'react-dom';
 import FloatingPopup from './FloatingPopup';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
+import { usePanelHost } from '@contexts/PanelHostContext';
 import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import { useViewportSize } from '@hooks/ui/useViewportSize';
 import { getListScrollMetrics } from './listScrollMetrics';
@@ -64,7 +65,8 @@ const getAdjacentFocusTarget = (
   const modalScope = origin?.closest<HTMLElement>(
     '[data-dmn-modal-backdrop="true"]',
   );
-  const focusScope: ParentNode = modalScope ?? document;
+  const focusScope: ParentNode =
+    modalScope ?? origin?.ownerDocument ?? document;
   const focusable = Array.from(
     focusScope.querySelectorAll<HTMLElement>(DOCUMENT_FOCUSABLE_SELECTOR),
   ).filter(
@@ -95,7 +97,7 @@ const handleMenuNavigation = (event: React.KeyboardEvent<HTMLElement>) => {
   if (items.length === 0) return;
 
   const activeIndex = items.indexOf(
-    document.activeElement as HTMLButtonElement,
+    event.currentTarget.ownerDocument.activeElement as HTMLButtonElement,
   );
   let nextIndex: number | null = null;
   if (event.key === 'ArrowDown') {
@@ -142,6 +144,7 @@ const SubMenu = ({
   onMouseLeave?: () => void;
   onRequestClose: () => void;
 }) => {
+  const { window: ownerWindow, document: ownerDocument } = usePanelHost();
   const subMenuRef = useRef<HTMLDivElement>(null);
   const parentMotionState = useContext(FloatingPopupMotionContext);
   const siblingActiveRef = useRef<{
@@ -177,9 +180,9 @@ const SubMenu = ({
       flushSync(onRequestClose);
       parentItemRef.current?.focus();
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onMenuTab, onRequestClose, parentItemRef]);
+    ownerDocument.addEventListener('keydown', onKey);
+    return () => ownerDocument.removeEventListener('keydown', onKey);
+  }, [onMenuTab, onRequestClose, parentItemRef, ownerDocument]);
 
   useLayoutEffect(() => {
     const el = subMenuRef.current;
@@ -192,21 +195,25 @@ const SubMenu = ({
 
     // 오른쪽이 좁을 때만 뒤집되, 왼쪽에도 자리가 있어야 의미가 있다
     const flipToLeft =
-      normalLeft + width > window.innerWidth - padding &&
+      normalLeft + width > ownerWindow.innerWidth - padding &&
       flippedLeft >= padding;
 
-    const top = clampToViewport(anchorRect.top, height, window.innerHeight);
+    const top = clampToViewport(
+      anchorRect.top,
+      height,
+      ownerWindow.innerHeight,
+    );
     // 양쪽 다 좁으면 오른쪽 경계에 맞춰 안쪽으로 당긴다
-    const left = clampToViewport(normalLeft, width, window.innerWidth);
+    const left = clampToViewport(normalLeft, width, ownerWindow.innerWidth);
 
     // 측정→배치 패턴: 페인트 전 위치 확정이 목적이라 동기 setState가 의도임
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPos(
       flipToLeft
-        ? { right: window.innerWidth - anchorRect.left + 2, top }
+        ? { right: ownerWindow.innerWidth - anchorRect.left + 2, top }
         : { left, top },
     );
-  }, [anchorRect, items.length]);
+  }, [anchorRect, items.length, ownerWindow]);
 
   useLayoutEffect(() => {
     if (!focusFirst || !pos) return;
@@ -281,7 +288,7 @@ const SubMenu = ({
         />
       ))}
     </div>,
-    document.body,
+    ownerDocument.body,
   );
 };
 
