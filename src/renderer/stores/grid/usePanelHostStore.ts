@@ -108,6 +108,8 @@ export const dockPropertiesPanel = async (): Promise<TransitionOutcome> => {
       return 'blocked';
     }
     usePanelHostStore.getState().setPlacement('docked');
+    // 분리 창엔 접힘이 없었다 - 도킹한 패널은 펼친 채로 돌려준다
+    usePropertiesPanelStore.getState().setCanvasPanelOpen(true);
     await yieldToRender();
     try {
       await panelWindowApi.dock();

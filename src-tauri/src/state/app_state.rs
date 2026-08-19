@@ -3141,6 +3141,9 @@ impl AppState {
                 "panel window must be opened with an empty url, got {url}"
             ));
         }
+        // 배치 정보는 락과 무관하니 락 밖에서 먼저 읽는다
+        let main_rect = main_window_logical_rect(app);
+        let monitors = MonitorData::gather(app);
         // 메인 스레드 콜백이라 락은 try_lock만 - 잡고 있는 오프메인 태스크(ack 타임아웃)를
         // 기다리면 역전 데드락
         let Some(_creation_guard) = self.panel_creation_lock.try_lock() else {
@@ -3149,8 +3152,6 @@ impl AppState {
         if app.get_webview_window(PANEL_LABEL).is_some() {
             return Err(anyhow!("panel window already exists"));
         }
-        let main_rect = main_window_logical_rect(app);
-        let monitors = MonitorData::gather(app);
         // 창은 숨긴 채 만든다 - 메인이 문서를 채운 뒤 present_panel_window로 드러내야
         // 빈 창이 한 프레임 비치지 않는다. 가시성 전환·분리 기록도 그쪽이 맡는다
         let window = self.create_panel_window(app, features, main_rect, &monitors)?;

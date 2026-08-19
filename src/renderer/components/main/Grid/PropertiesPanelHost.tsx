@@ -48,7 +48,7 @@ const PropertiesPanelHost = ({
 }: PropertiesPanelHostProps) => {
   const placement = usePanelHostStore((state) => state.placement);
   const detached = placement === 'detached';
-  const slotRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLDivElement | null>(null);
   const [host] = useState(() => {
     const element = document.createElement('div');
     element.className = 'contents';
@@ -58,6 +58,15 @@ const PropertiesPanelHost = ({
   // 자식 창은 detached일 때만 유효 - 배치가 바뀌면 다시 읽는다
   const child = detached ? getPanelChildWindow() : null;
   const childWindow = child?.window ?? null;
+
+  // 슬롯 ref는 패널 서브트리의 layout effect보다 먼저 붙는다(형제 순서) -
+  // 첫 마운트에서 패널이 문서 밖 호스트에서 실측되는 일이 없게 여기서 즉시 끼운다
+  const attachSlot = (slot: HTMLDivElement | null) => {
+    slotRef.current = slot;
+    if (slot && !detached && host.parentNode !== slot) {
+      slot.appendChild(host);
+    }
+  };
 
   // 호스트 엘리먼트 이동. 자식 창이 사라졌으면 도킹으로 되돌린다
   useLayoutEffect(() => {
@@ -208,7 +217,7 @@ const PropertiesPanelHost = ({
 
   return (
     <>
-      <div ref={slotRef} className="contents" data-dmn-panel-slot="" />
+      <div ref={attachSlot} className="contents" data-dmn-panel-slot="" />
       {createPortal(
         <PanelHostContext.Provider value={hostValue}>
           <div className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}>

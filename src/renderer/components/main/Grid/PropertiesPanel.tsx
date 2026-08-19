@@ -1307,11 +1307,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }, [pluginSettingsPanel, setIsPanelVisible, setPanelMode]);
 
   // 레이어 뷰가 표시된 상태(선택 없음)에서 그리드 빈 공간 클릭 시 패널 닫기
-  // panelMode가 property로 남아 있어도 선택이 없으면 레이어 뷰가 표시되므로 동일하게 닫음
+  // panelMode가 property로 남아 있어도 선택이 없으면 레이어 뷰가 표시되므로 동일하게 닫음.
+  // 분리 창일 때는 접힘이 없다 - 여기서 스토어를 닫으면 도킹 뒤 패널이 접힌 채 돌아온다
   useEffect(() => {
     const hasSelection =
       selectedKeyElements.length > 0 || selectedElements.length > 0;
-    if (!isPanelVisible || hasSelection) {
+    if (frameVariant === 'window' || !isPanelVisible || hasSelection) {
       return undefined;
     }
 
@@ -1346,6 +1347,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       document.removeEventListener('mousedown', handleGridClick);
     };
   }, [
+    frameVariant,
     isPanelVisible,
     selectedKeyElements.length,
     selectedKeyLikeElements.length,
