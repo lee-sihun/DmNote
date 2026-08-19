@@ -19,6 +19,9 @@ vi.mock('@api/modules/panelWindowApi', () => ({
   panelWindowApi: {
     applyNativeChrome: () => mocks.applyNativeChrome(),
     startDragging: (x: number, y: number) => mocks.startDragging(x, y),
+    mainWindowFrame: () => Promise.resolve(null),
+    moveTo: () => Promise.resolve(),
+    presentAt: () => Promise.resolve(),
   },
 }));
 vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
@@ -167,7 +170,7 @@ describe('PropertiesPanelHost', () => {
     expect(hostElement()!.parentElement).toBe(slot);
   });
 
-  it('wires child-window keyboard, blur and drag listeners only while detached', async () => {
+  it('wires child-window keyboard and blur listeners only while detached', async () => {
     await render();
     mocks.childWindow = createChild();
     const add = mocks.childWindow.window
@@ -176,16 +179,14 @@ describe('PropertiesPanelHost', () => {
       usePanelHostStore.getState().setPlacement('detached');
     });
     const events = add.mock.calls.map((call) => call[0]);
-    expect(events).toEqual(
-      expect.arrayContaining(['keydown', 'blur', 'mousedown']),
-    );
+    expect(events).toEqual(expect.arrayContaining(['keydown', 'blur']));
     const remove = mocks.childWindow.window
       .removeEventListener as unknown as ReturnType<typeof vi.fn>;
     await act(async () => {
       usePanelHostStore.getState().setPlacement('docked');
     });
     expect(remove.mock.calls.map((call) => call[0])).toEqual(
-      expect.arrayContaining(['keydown', 'blur', 'mousedown']),
+      expect.arrayContaining(['keydown', 'blur']),
     );
   });
 });

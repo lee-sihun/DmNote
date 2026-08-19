@@ -9,6 +9,19 @@ export const panelWindowApi = {
   armOpen: () => invoke<void>('panel_window_arm_open'),
   // 도킹(hide)돼 있던 창을 다시 띄운다. 창이 없으면 실패
   present: () => invoke<void>('panel_window_present'),
+  // 드래그 드롭 위치(논리 좌표, 창 좌상단)에 띄운다. focus=false는 드래그 도중 tear-off용
+  presentAt: (x: number, y: number, focus: boolean) =>
+    invoke<void>('panel_window_present_at', { x, y, focus }),
+  // 드래그 중 창 이동 (논리 좌표, 창 좌상단)
+  moveTo: (x: number, y: number) =>
+    invoke<void>('panel_window_move_to', { x, y }),
+  // 헤더 드래그 세션 컨텍스트 - 메인 창 outer 사각형(도크 존)과 패널 창 크기(고스트)
+  dragContext: () =>
+    invoke<{
+      mainFrame: { x: number; y: number; width: number; height: number } | null;
+      panelWidth: number;
+      panelHeight: number;
+    }>('panel_window_drag_context'),
   // 창을 감춘다 - 파괴하지 않는다
   dock: () => invoke<void>('panel_window_dock'),
   // 기동 시 "분리 상태로 종료했다" 복원 요청 1회 소비

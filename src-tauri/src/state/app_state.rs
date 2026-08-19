@@ -3159,8 +3159,15 @@ impl AppState {
         Ok(window)
     }
 
-    // 도킹(hide)돼 있던 패널 창을 다시 띄운다. 창이 없으면 메인이 window.open으로 만들어야 한다
-    pub fn present_panel_window(&self, app: &AppHandle) -> Result<()> {
+    // 도킹(hide)돼 있던 패널 창을 다시 띄운다. 창이 없으면 메인이 window.open으로 만들어야 한다.
+    // position이 있으면(드래그 드롭) 그 자리에, 없으면 메인 옆에 붙인다.
+    // focus=false는 드래그 도중 tear-off용 - 포커스를 뺏으면 메인의 드래그 세션이 끊긴다
+    pub fn present_panel_window(
+        &self,
+        app: &AppHandle,
+        position: Option<LogicalPosition<f64>>,
+        focus: bool,
+    ) -> Result<()> {
         // 배치 정보는 락과 무관하니 락 밖에서 먼저 읽는다
         let main_rect = main_window_logical_rect(app);
         let monitors = MonitorData::gather(app);
@@ -3170,14 +3177,21 @@ impl AppState {
                 return Err(anyhow!("panel window is not open"));
             };
             *self.panel_destroy_reason.lock() = None;
-            // 재표시는 저장 높이만 이어받고 자리는 메인 옆으로 다시 잡는다 (기존 계약)
+            // 재표시는 저장 높이만 이어받고 자리는 메인 옆으로 다시 잡는다 (기존 계약).
+            // 드롭 위치가 오면 그 자리가 우선이다
             let stored_bounds = self.store.snapshot().panel_bounds;
-            let layout = resolve_panel_window_layout(stored_bounds, main_rect, &monitors, None);
+            let mut layout = resolve_panel_window_layout(stored_bounds, main_rect, &monitors, None);
+            if let Some(position) = position {
+                layout.position = Some(OverlayPosition {
+                    x: position.x,
+                    y: position.y,
+                });
+            }
             self.apply_panel_window_layout(&window, &layout);
             let _ = window.unminimize();
             let result = window
                 .show()
-                .and_then(|()| window.set_focus())
+                .and_then(|()| if focus { window.set_focus() } else { Ok(()) })
                 .map_err(anyhow::Error::from)
                 .and_then(|()| {
                     publish_panel_visibility_transition(&self.panel_visible, app, true, None)
@@ -3191,6 +3205,30 @@ impl AppState {
             self.flush_panel_detached();
         }
         result
+    }
+
+    // 드래그 중 창 이동 - 락·가시성 전환 없이 위치만 (bounds 세션이 Moved로 받아 적는다)
+    pub fn move_panel_window_to(&self, app: &AppHandle, x: f64, y: f64) -> Result<()> {
+        let window = app
+            .get_webview_window(PANEL_LABEL)
+            .ok_or_else(|| anyhow!("panel window is not open"))?;
+        window
+            .set_position(LogicalPosition::new(x, y))
+            .context("failed to move panel window")
+    }
+
+    // 헤더 드래그 세션 시작 시 한 번 읽는 값 - 메인 창 outer 사각형(도크 존 판정)과
+    // 패널 창이 뜰 때의 높이(고스트를 실제 창 크기로 그리기 위해)
+    pub fn panel_drag_context(&self, app: &AppHandle) -> PanelDragContext {
+        let main_frame = main_window_logical_rect(app);
+        let monitors = MonitorData::gather(app);
+        let stored_bounds = self.store.snapshot().panel_bounds;
+        let layout = resolve_panel_window_layout(stored_bounds, main_frame, &monitors, None);
+        PanelDragContext {
+            main_frame,
+            panel_width: PANEL_WIDTH,
+            panel_height: layout.height,
+        }
     }
 
     fn apply_panel_window_layout(&self, window: &WebviewWindow, layout: &PanelWindowLayout) {
@@ -5124,8 +5162,17 @@ impl MonitorData {
     }
 }
 
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelDragContext {
+    pub main_frame: Option<LogicalRect>,
+    pub panel_width: f64,
+    pub panel_height: f64,
+}
+
 /// 논리 좌표계 사각형 - 창 게터가 주는 physical 값을 scale로 나눈 도메인
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LogicalRect {
     x: f64,
     y: f64,

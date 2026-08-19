@@ -60,11 +60,20 @@ const settleEditsBeforeMove = async (): Promise<boolean> => {
   }
 };
 
+export interface DetachOptions {
+  // 창 좌상단을 놓을 화면 논리 좌표 - 없으면 메인 옆에 붙인다
+  position?: { x: number; y: number };
+  // 드래그 도중 tear-off - 포커스를 뺏으면 메인의 드래그 세션이 끊기므로 창만 보인다
+  keepMainFocus?: boolean;
+}
+
 /**
  * 패널 분리: 자식 창 확보(없으면 window.open) → 호스트 이동 → 창 드러내기
  * 실패 시 docked로 되돌린다
  */
-export const detachPropertiesPanel = async (): Promise<TransitionOutcome> => {
+export const detachPropertiesPanel = async (
+  options: DetachOptions = {},
+): Promise<TransitionOutcome> => {
   const store = usePanelHostStore.getState();
   if (store.transition !== 'idle') return 'busy';
   if (store.placement === 'detached') return 'done';
@@ -78,7 +87,15 @@ export const detachPropertiesPanel = async (): Promise<TransitionOutcome> => {
     usePanelHostStore.getState().setPlacement('detached');
     await yieldToRender();
     try {
-      await panelWindowApi.present();
+      if (options.position) {
+        await panelWindowApi.presentAt(
+          options.position.x,
+          options.position.y,
+          !options.keepMainFocus,
+        );
+      } else {
+        await panelWindowApi.present();
+      }
       return 'done';
     } catch (error) {
       usePanelHostStore.getState().setPlacement('docked');

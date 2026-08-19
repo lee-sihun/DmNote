@@ -3697,6 +3697,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           }}
         >
           <div
+            data-dmn-panel-frame=""
             className={
               frameVariant === 'window'
                 ? WINDOW_PANEL_FRAME_CLASS

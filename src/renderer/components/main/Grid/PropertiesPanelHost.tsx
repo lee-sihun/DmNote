@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import PanelDragGhost from '@components/main/Grid/PanelDragGhost';
 import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
-import { PANEL_HEADER_HEIGHT } from '@components/main/Grid/PropertiesPanel/panelChrome';
 import { PanelHostContext } from '@contexts/PanelHostContext';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
+import { usePanelHeaderDrag } from '@hooks/panel/usePanelHeaderDrag';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
@@ -16,7 +17,10 @@ import {
 } from '@stores/grid/usePanelHostStore';
 import { isMac } from '@utils/core/platform';
 import { readTokenColor } from '@utils/panelWindow/nativeChrome';
-import { getPanelChildWindow } from '@utils/panelWindow/panelChildWindow';
+import {
+  getPanelChildWindow,
+  openPanelChildWindow,
+} from '@utils/panelWindow/panelChildWindow';
 
 import type { PanelHostValue } from '@contexts/PanelHostContext';
 
@@ -25,10 +29,6 @@ import type { PanelHostValue } from '@contexts/PanelHostContext';
 const DETACHED_ROOT_CLASS =
   'relative w-screen h-screen overflow-hidden rounded-[12px] bg-panel-detached';
 const DOCKED_ROOT_CLASS = 'contents';
-
-// 인터랙티브 요소 위에서는 창 드래그를 시작하지 않음
-const INTERACTIVE_SELECTOR =
-  'button, input, textarea, select, a, [role="switch"], [role="listbox"], [contenteditable="true"]';
 
 interface PropertiesPanelHostProps {
   onKeyMappingChange?: (index: number, newKey: string) => void;
@@ -49,6 +49,8 @@ const PropertiesPanelHost = ({
   const placement = usePanelHostStore((state) => state.placement);
   const detached = placement === 'detached';
   const slotRef = useRef<HTMLDivElement | null>(null);
+  // 도킹 자리(그리드 영역) - 헤더 드래그의 도크 존 기준
+  const dockAreaRef = useRef<HTMLElement | null>(null);
   const [host] = useState(() => {
     const element = document.createElement('div');
     element.className = 'contents';
@@ -63,6 +65,7 @@ const PropertiesPanelHost = ({
   // 첫 마운트에서 패널이 문서 밖 호스트에서 실측되는 일이 없게 여기서 즉시 끼운다
   const attachSlot = (slot: HTMLDivElement | null) => {
     slotRef.current = slot;
+    dockAreaRef.current = slot?.parentElement ?? null;
     if (slot && !detached && host.parentNode !== slot) {
       slot.appendChild(host);
     }
@@ -148,32 +151,27 @@ const PropertiesPanelHost = ({
     return () => childWindow.removeEventListener('keydown', handleKeyDown);
   }, [childWindow]);
 
-  // 프레임리스 창 이동: 패널 헤더의 빈 영역에서만 드래그 시작
-  // 제목 span(더블클릭 이름 변경)·버튼 등 자식 요소 위에서는 시작하지 않음
+  // 자식 창은 프로세스당 한 번 만든다 - 첫 tear-off가 드래그 도중 창 생성으로 끊기지 않게
+  // 한가할 때 미리 만들어(숨김) 둔다. 실패해도 조용히 - 제스처 때 다시 시도한다
   useEffect(() => {
-    if (!childWindow) return undefined;
-    const handleMouseDown = (event: MouseEvent) => {
-      if (event.button !== 0) return;
-      const target = event.target as HTMLElement | null;
-      if (!target || typeof target.closest !== 'function') return;
-      const isHeaderSelf = target.classList.contains('dmn-panel-header');
-      const isHeaderRowGap =
-        !isHeaderSelf &&
-        target.parentElement?.classList.contains('dmn-panel-header') === true &&
-        target.childElementCount === 0 &&
-        target.textContent === '';
-      if (!isHeaderSelf && !isHeaderRowGap) return;
-      if (target.closest(INTERACTIVE_SELECTOR)) return;
-      if (event.clientY > PANEL_HEADER_HEIGHT) return;
-      if (isHistoryEditorFlushLocked()) return;
-      event.preventDefault();
-      void panelWindowApi
-        .startDragging(event.clientX, event.clientY)
-        .catch(() => {});
-    };
-    childWindow.addEventListener('mousedown', handleMouseDown);
-    return () => childWindow.removeEventListener('mousedown', handleMouseDown);
-  }, [childWindow]);
+    if (getPanelChildWindow()) return undefined;
+    const idle =
+      window.requestIdleCallback ??
+      ((cb: () => void) => window.setTimeout(cb, 1500));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const handle = idle(() => {
+      void openPanelChildWindow().catch(() => {});
+    });
+    return () => cancel(handle);
+  }, []);
+
+  // 헤더 배경 드래그: 도킹 상태에선 고스트를 끌다 놓으면 분리, 분리 상태에선 창을 끌고
+  // 메인의 도크 존에 놓으면 도킹. 리스너는 패널이 사는 문서에 건다
+  const { ghost, dockHint } = usePanelHeaderDrag({
+    hostDocument: hostValue.document,
+    hostWindow: hostValue.window,
+    dockAreaRef,
+  });
 
   // 창 가장자리 표면을 네이티브 레이어에 위임 - 리사이즈 중 웹 페인트가 못 따라오는 구간을
   // 컴포지터가 같은 색으로 그린다. macOS는 적용을 전제하고 시작 - 첫 페인트에 CSS 링이
@@ -218,9 +216,21 @@ const PropertiesPanelHost = ({
   return (
     <>
       <div ref={attachSlot} className="contents" data-dmn-panel-slot="" />
+      {/* 분리 창을 도크 존 위로 끌고 있을 때 도킹 자리를 비춘다 */}
+      {dockHint && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-[240px] z-40 rounded-l-[12px] bg-white/[0.06] shadow-[inset_0_0_0_1px_var(--ui-line)]"
+        />
+      )}
+      {ghost && createPortal(<PanelDragGhost ghost={ghost} />, document.body)}
       {createPortal(
         <PanelHostContext.Provider value={hostValue}>
-          <div className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}>
+          <div
+            className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}
+            // 고스트를 끄는 동안 원래 자리의 패널은 흐려진다 (contents 박스라 프레임에 CSS로 건다)
+            data-dmn-panel-ghosting={ghost && !detached ? '' : undefined}
+          >
             <PropertiesPanel
               onKeyMappingChange={onKeyMappingChange}
               detachAction={detached ? 'reattach' : 'detach'}

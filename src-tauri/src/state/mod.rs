@@ -20,5 +20,5 @@ pub(crate) mod plugin;
 pub mod store;
 
 pub(crate) use app_state::PANEL_LABEL;
-pub use app_state::{AppState, SelectionSessionSnapshot};
+pub use app_state::{AppState, PanelDragContext, SelectionSessionSnapshot};
 pub use store::AppStore;

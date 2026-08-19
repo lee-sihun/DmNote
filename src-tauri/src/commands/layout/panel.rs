@@ -26,7 +26,44 @@ pub fn panel_window_present(
     window: WebviewWindow,
 ) -> CmdResult<()> {
     ensure_main_caller(&window, "presented")?;
-    Ok(state.present_panel_window(&app)?)
+    Ok(state.present_panel_window(&app, None, true)?)
+}
+
+// 드래그 드롭 위치(논리 좌표, 창 좌상단)에 패널 창을 띄운다.
+// focus=false는 드래그 도중 tear-off - 메인의 드래그 세션을 끊지 않게 포커스를 두지 않는다
+#[tauri::command]
+pub fn panel_window_present_at(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+    x: f64,
+    y: f64,
+    focus: bool,
+) -> CmdResult<()> {
+    ensure_main_caller(&window, "presented")?;
+    Ok(state.present_panel_window(&app, Some(tauri::LogicalPosition::new(x, y)), focus)?)
+}
+
+// 드래그 중 창 이동 (논리 좌표, 창 좌상단)
+#[tauri::command]
+pub fn panel_window_move_to(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+    x: f64,
+    y: f64,
+) -> CmdResult<()> {
+    ensure_main_caller(&window, "moved")?;
+    Ok(state.move_panel_window_to(&app, x, y)?)
+}
+
+// 헤더 드래그 세션 컨텍스트 - 메인 창 outer 사각형(도크 존)과 패널 창 크기(고스트)
+#[tauri::command]
+pub fn panel_window_drag_context(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> crate::state::PanelDragContext {
+    state.panel_drag_context(&app)
 }
 
 // 도킹: 창은 살려 둔 채 감춘다 (파괴는 종료 시만 - opener와 컨트롤러를 공유)
