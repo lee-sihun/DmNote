@@ -49,7 +49,7 @@ describe('openPanelChildWindow', () => {
     const handle = await openPanelChildWindow();
 
     expect(openSpy).toHaveBeenCalledWith(
-      '',
+      'about:blank',
       'dmn-panel',
       expect.stringContaining('popup=yes'),
     );

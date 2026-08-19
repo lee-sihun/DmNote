@@ -11,8 +11,9 @@ import {
   isValueSetting,
   safeEvaluateVisibility,
 } from '@plugins/runtime/settingsSections';
-import { usePanelWindowStore } from '@stores/grid/usePanelWindowStore';
-import type { PanelWindowStatus } from '@stores/grid/usePanelWindowStore';
+
+// 옛 분리 창 상태 projection - 패널은 이제 메인 React 트리의 portal이라 항상 attached
+type PanelWindowStatus = 'unknown' | 'attached' | 'detached';
 import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 import { getBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
 import { sendBridgeMessageBestEffort } from './bridgeMessages';
@@ -143,9 +144,8 @@ const flushPanelModelSync = () => {
   pendingForce = false;
   if (!elements || !definitions) return;
 
-  // 패널 창이 없으면 push 생략 - 재열림 시 request로 전체 스냅샷 복구
-  if (!shouldSendPanelModel(usePanelWindowStore.getState().status, force))
-    return;
+  // 패널은 메인 React 트리의 portal - 별도 수신자가 없다 (미러층은 후속 단계에서 제거)
+  if (!shouldSendPanelModel('attached', force)) return;
 
   // 요소별 현재 settings 기준 visibility만 평가 - 스키마 본문 복제 없이 O(E×키 수) boolean
   const elementVisibility: PluginPanelModelSnapshot['elementVisibility'] = {};

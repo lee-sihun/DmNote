@@ -9,7 +9,6 @@ import {
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import { useRetainedValue } from '@hooks/ui/useRetainedValue';
-import { useRemoteSheetOpener } from '@hooks/ui/useRemoteSheetOpener';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
   pickerRowClass,
@@ -107,8 +106,6 @@ const FontPicker = ({
   const { builtinFonts, customFonts } = useFontStore();
   const fontLibrary = useFontLibrary();
   const menu = usePickerItemMenu<string>();
-  // 저장 결과는 기다리지 않는다 - 저장된 폰트는 설정 변경 이벤트로 이 창에도 들어온다
-  const remoteWebFont = useRemoteSheetOpener('webFont');
 
   // 비활성 폰트도 목록에서 실제 서체로 보이도록 preview CSS 주입
   // (활성 폰트는 syncFontCSS가 원본 이름으로 주입)
@@ -157,12 +154,11 @@ const FontPicker = ({
     renameInputRef.current?.select();
   }, [renamingFontId]);
 
-  // 피커가 열려 있는 동안 웹폰트 편집기 코드를 미리 로드.
-  // 분리 패널은 시트를 메인 창에 넘기므로 이 청크를 쓸 일이 없다
+  // 피커가 열려 있는 동안 웹폰트 편집기 코드를 미리 로드
   useEffect(() => {
-    if (!open || remoteWebFont.isPanel) return;
+    if (!open) return;
     preloadWebFontEditor();
-  }, [open, remoteWebFont.isPanel]);
+  }, [open]);
 
   // 필터링된 폰트 목록 (비활성 폰트도 노출 — 행에서 흐리게 표시)
   const filteredFonts = (() => {
@@ -269,10 +265,6 @@ const FontPicker = ({
   };
 
   const openWebFontModal = (editingId: string | null) => {
-    if (remoteWebFont.isPanel) {
-      void remoteWebFont.open({ kind: 'webFont', editingId });
-      return;
-    }
     preloadWebFontEditor();
     startTransition(() => {
       setWebFontModal({ editingId });

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
+import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import {
   getPanelChildWindow,
   openPanelChildWindow,
@@ -28,6 +29,13 @@ export const usePanelHostStore = create<PanelHostState>((set) => ({
 
 export const isPanelDetached = (): boolean =>
   usePanelHostStore.getState().placement === 'detached';
+
+// 선택 대상의 속성 보기로 전환 - 패널이 어디에 붙어 있든 같은 스토어를 본다
+export const openPropertiesPanelForSelection = (): void => {
+  const panel = usePropertiesPanelStore.getState();
+  panel.setCanvasPanelMode('property');
+  panel.setCanvasPanelOpen(true);
+};
 
 // 전환 결과. 호출부가 사용자에게 알릴지 결정한다 - 여기서 조용히 끝나면 버튼이 먹통으로 보인다
 // busy: 이미 진행 중, blocked: 미확정 편집을 정산하지 못해 중단, failed: 창 전환 자체가 실패

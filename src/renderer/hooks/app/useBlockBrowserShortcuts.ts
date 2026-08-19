@@ -6,11 +6,15 @@ import { useEffect } from 'react';
  * 브라우저 기본 동작을 방지합니다.
  */
 export function useBlockBrowserShortcuts(options?: {
-  // 분리 패널 창처럼 Cmd/Ctrl+W를 앱 핸들러(재부착)로 넘겨야 하는 창용
+  // 분리 패널 창처럼 Cmd/Ctrl+W를 앱 핸들러(도킹)로 넘겨야 하는 창용
   allowCloseKeyPropagation?: boolean;
+  // 리스너를 걸 창. 기본은 현재 창, null이면 걸지 않는다 (opener가 그리는 자식 창용)
+  target?: Window | null;
 }) {
   const allowCloseKeyPropagation = options?.allowCloseKeyPropagation === true;
+  const target = options && 'target' in options ? options.target : window;
   useEffect(() => {
+    if (!target) return undefined;
     const handler = (e: KeyboardEvent) => {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
@@ -94,7 +98,7 @@ export function useBlockBrowserShortcuts(options?: {
     };
 
     // 캡처 단계에서 이벤트를 가로채서 가장 먼저 처리
-    window.addEventListener('keydown', handler, true);
-    return () => window.removeEventListener('keydown', handler, true);
-  }, [allowCloseKeyPropagation]);
+    target.addEventListener('keydown', handler, true);
+    return () => target.removeEventListener('keydown', handler, true);
+  }, [allowCloseKeyPropagation, target]);
 }

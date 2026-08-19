@@ -18,7 +18,7 @@ import {
   isElementInMarquee,
 } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
+import { openPropertiesPanelForSelection } from '@stores/grid/usePanelHostStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useTranslation } from '@contexts/useTranslation';
 import ListPopup, { ListItem } from '../main/Modal/ListPopup';

@@ -9,7 +9,6 @@ import {
   usePropertiesPanelStore,
   type PluginSettingsPanelPayload,
 } from '@stores/grid/usePropertiesPanelStore';
-import { usePanelWindowStore } from '@stores/grid/usePanelWindowStore';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { resolveSettingsSchemaForValues } from '@utils/plugin/panelModelSync';
 
@@ -217,10 +216,7 @@ export const openPluginSettingsSession = (
   };
   session = record;
 
-  if (usePanelWindowStore.getState().status === 'detached') {
-    transferToPanel(record);
-    return;
-  }
+  // 패널 호스트는 메인 React 트리의 portal이라 어디에 붙어 있든 메인 뷰가 곧 패널 뷰다
   openMainView(record);
 };
 

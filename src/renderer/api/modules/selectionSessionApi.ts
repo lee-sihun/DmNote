@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
 
 import { subscribe } from './shared';
 
@@ -34,12 +33,6 @@ const isSelectionSessionElementType = (
 ): value is SelectionSessionElementType =>
   typeof value === 'string' &&
   SELECTION_ELEMENT_TYPES.some((type) => type === value);
-
-export interface PanelViewState {
-  mode: 'layer' | 'property';
-  activeTab: 'layer' | 'grid';
-  propertyActiveTab: 'style' | 'note' | 'counter';
-}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -178,41 +171,4 @@ export const selectionSessionApi = {
     subscribe<unknown>('selection:changed', (payload) =>
       listener(parseSelectionSessionSnapshot(payload)),
     ),
-};
-
-export const panelWindowApi = {
-  show: (viewState: PanelViewState) =>
-    invoke<void>('panel_window_show', { viewState }),
-  close: (viewState: PanelViewState) =>
-    invoke<void>('panel_window_close', { viewState }),
-  takeViewState: () =>
-    invoke<PanelViewState | null>('panel_window_take_view_state'),
-  requestPropertyMode: () => emit('panel:property-mode-requested'),
-  isOpen: () => invoke<boolean>('panel_window_is_open'),
-  startDragging: (clientX: number, clientY: number) =>
-    invoke<void>('panel_window_start_dragging', { clientX, clientY }),
-  // 창 가장자리 표면을 네이티브 레이어에 위임 - 리사이즈 프레임을 못 따라오는
-  // 웹 페인트 대신 면과 1px 라인을 컴포지터가 그린다. true면 CSS 링은 그리지 않음
-  applyNativeChrome: (
-    fill: [number, number, number, number],
-    line: [number, number, number, number],
-  ) => invoke<boolean>('panel_window_apply_native_chrome', { fill, line }),
-  // X 버튼 ack - 제한 시간 내 미호출 시 백엔드가 fallback으로 창을 닫음
-  ackClose: (requestId: string) =>
-    invoke<boolean>('panel_window_close_ack', { requestId }),
-  onVisibility: (
-    listener: (payload: {
-      visible: boolean;
-      // visible=false 한정 - 정상 close(reattach)와 예기치 못한 파괴 구분
-      reason?: 'closed' | 'destroyed';
-    }) => void,
-  ) =>
-    subscribe<{ visible: boolean; reason?: 'closed' | 'destroyed' }>(
-      'panel:visibility',
-      listener,
-    ),
-  onCloseRequested: (listener: (payload: { requestId: string }) => void) =>
-    subscribe<{ requestId: string }>('panel:close-requested', listener),
-  onPropertyModeRequested: (listener: () => void) =>
-    subscribe('panel:property-mode-requested', listener),
 };

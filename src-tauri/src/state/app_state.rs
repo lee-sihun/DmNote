@@ -3153,7 +3153,9 @@ impl AppState {
         let monitors = MonitorData::gather(app);
         // 창은 숨긴 채 만든다 - 메인이 문서를 채운 뒤 present_panel_window로 드러내야
         // 빈 창이 한 프레임 비치지 않는다. 가시성 전환·분리 기록도 그쪽이 맡는다
-        self.create_panel_window(app, features, main_rect, &monitors)
+        let window = self.create_panel_window(app, features, main_rect, &monitors)?;
+        log::info!("panel window created as an opener child of main");
+        Ok(window)
     }
 
     // 도킹(hide)돼 있던 패널 창을 다시 띄운다. 창이 없으면 메인이 window.open으로 만들어야 한다

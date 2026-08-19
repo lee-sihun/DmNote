@@ -80,7 +80,13 @@ export const openPanelChildWindow = async (): Promise<PanelChildWindow> => {
   current = null;
 
   await panelWindowApi.armOpen();
-  const child = window.open('', PANEL_WINDOW_NAME, PANEL_WINDOW_FEATURES);
+  // 빈 url은 tauri-runtime-wry가 Url 파싱에 실패해 요청 자체를 거부한다 - about:blank로 명시.
+  // WebKit은 about:blank를 초기 문서로 그대로 쓰므로 opener가 쓴 DOM이 지워지지 않는다
+  const child = window.open(
+    'about:blank',
+    PANEL_WINDOW_NAME,
+    PANEL_WINDOW_FEATURES,
+  );
   if (!child) {
     throw new PanelChildWindowError(
       'window.open returned null - the panel window request was denied',

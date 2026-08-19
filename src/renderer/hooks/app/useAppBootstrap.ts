@@ -29,18 +29,18 @@ import {
 import { stableStringify } from '@utils/core/stableStringify';
 import { useTranslation } from '@contexts/useTranslation';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { panelWindowApi } from '@api/modules/selectionSessionApi';
+import { panelWindowApi } from '@api/modules/panelWindowApi';
 import {
   initSelectionSync,
   resetSelectionForModeChange,
 } from '@src/renderer/editor/runtime/selectionSync';
-import { usePanelWindowStore } from '@stores/grid/usePanelWindowStore';
-import { applyPanelViewState } from '@stores/grid/panelViewHandoff';
-import { initPluginRpcHandler } from '@plugins/rpc/pluginRpcHandler';
 import {
-  initPluginSettingsSessionHost,
-  notePanelVisibilityForSettingsSession,
-} from '@plugins/rpc/pluginSettingsSession';
+  detachPropertiesPanel,
+  dockPropertiesPanel,
+  notePanelWindowHidden,
+} from '@stores/grid/usePanelHostStore';
+import { initPluginRpcHandler } from '@plugins/rpc/pluginRpcHandler';
+import { initPluginSettingsSessionHost } from '@plugins/rpc/pluginSettingsSession';
 import { initPluginInstancesUndoSync } from '@plugins/runtime/displayElement/instancesUndoSync';
 import { initPluginGroupRefsMirror } from '@plugins/runtime/pluginGroupRefsMirror';
 import { historyApi } from '@api/modules/historyApi';
@@ -790,28 +790,20 @@ export function useAppBootstrap() {
         // 백엔드 undo authority 상태 초기 조회
         void syncHistoryStatus();
 
-        // 분리 패널 창 존재 여부 초기 조회 (메인 인라인 gating)
-        if (window.__dmn_window_type === 'main') {
-          const expectedRevision =
-            usePanelWindowStore.getState().statusRevision;
-          try {
-            const open = await panelWindowApi.isOpen();
-            usePanelWindowStore
-              .getState()
-              .resolveInitialStatus(
-                open ? 'detached' : 'attached',
-                expectedRevision,
-              );
-          } catch (error) {
-            console.error('분리 패널 상태 초기화 실패', error);
-            usePanelWindowStore
-              .getState()
-              .resolveInitialStatus('attached', expectedRevision);
-          }
-        }
-
         finalizeBootstrap();
         startSelectionSyncOnceReady();
+
+        // 분리 상태로 종료했다면 복원 - 창은 메인만 열 수 있어(opener 자식) 백엔드는
+        // 요청만 남긴다. 부트스트랩 뒤에 열어야 패널이 채워진 상태로 뜬다
+        if (window.__dmn_window_type === 'main') {
+          try {
+            if (await panelWindowApi.takeRestoreRequest()) {
+              void detachPropertiesPanel();
+            }
+          } catch (error) {
+            console.error('분리 패널 복원 요청 확인 실패', error);
+          }
+        }
       } catch (error) {
         console.error('초기 부트스트랩 실패', error);
       } finally {
@@ -866,39 +858,18 @@ export function useAppBootstrap() {
       historyApi.onStatus((status) => {
         useHistoryStatusStore.getState().applyStatus(status);
       }),
-      // 분리 패널 창 가시성 → 인라인 패널 gating
-      panelWindowApi.onVisibility(({ visible, reason }) => {
-        if (window.__dmn_window_type === 'main') {
-          notePanelVisibilityForSettingsSession(visible, reason);
-          if (visible) {
-            usePanelWindowStore.getState().setStatus('detached');
-            return;
-          }
-          usePanelWindowStore.getState().setStatus('unknown');
-          void panelWindowApi
-            .takeViewState()
-            .then((viewState) => {
-              if (viewState) applyPanelViewState(viewState);
-            })
-            .catch((error) => {
-              console.error('분리 패널 뷰 상태 복원 실패', error);
-            })
-            .finally(() => {
-              usePanelWindowStore.getState().setStatus('attached');
-            });
-          return;
-        }
-
-        if (window.__dmn_window_type === 'panel' && visible) {
-          void panelWindowApi
-            .takeViewState()
-            .then((viewState) => {
-              if (viewState) applyPanelViewState(viewState);
-            })
-            .catch((error) => {
-              console.error('분리 패널 뷰 상태 적용 실패', error);
-            });
-        }
+      // 백엔드가 패널 창을 감추거나(close-ack 타임아웃·종료) 파괴하면 호스트를 메인으로
+      panelWindowApi.onVisibility(({ visible }) => {
+        if (window.__dmn_window_type !== 'main') return;
+        if (!visible) notePanelWindowHidden();
+      }),
+      // 분리 창 닫기 요청은 도킹 - ack로 백엔드 fallback을 해제한 뒤 호스트를 되돌리고 창을 감춘다
+      panelWindowApi.onCloseRequested(({ requestId }) => {
+        if (window.__dmn_window_type !== 'main') return;
+        void panelWindowApi
+          .ackClose(requestId)
+          .catch(() => {})
+          .then(() => dockPropertiesPanel());
       }),
       subscribe<{
         handshakeId: string;
