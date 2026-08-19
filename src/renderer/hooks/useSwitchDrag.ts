@@ -27,6 +27,9 @@ interface DragSession {
   pointerId: number;
   track: HTMLElement;
   thumb: HTMLElement | null;
+  // 노브가 사는 문서와 창. 분리 패널 자식 창에 그려지면 메인의 것과 다르다
+  ownerDocument: Document;
+  ownerWindow: Window;
   travel: number;
   startX: number;
   // 누른 순간의 값. 강등 판정 기준이라 손 밑에서 바뀌는 현재 값과 따로 둔다
@@ -38,6 +41,10 @@ interface DragSession {
   maxAbsDx: number;
   intent: DragIntent;
   displayed: boolean;
+  // 이 세션이 자기 창에 건 취소용 blur를 걷는다
+  releaseBlur: () => void;
+  // 노브 인라인 위치를 자기 창 프레임에 실어 보낸다
+  scheduler: ReturnType<typeof createRafLatestScheduler<number>>;
 }
 
 interface UseSwitchDragOptions {
@@ -53,14 +60,15 @@ const clamp = (value: number, min: number, max: number) =>
 
 // 포인터 캡처는 네이티브 텍스트 선택을 막지 않는다. 노브가 실제로 움직인 뒤에만
 // 잠가 단순 클릭의 선택 동작은 건드리지 않는다 (useDraggable과 같은 관례)
-const lockTextSelection = (locked: boolean) => {
-  document.body.style.userSelect = locked ? 'none' : '';
+const lockTextSelection = (doc: Document, locked: boolean) => {
+  doc.body.style.userSelect = locked ? 'none' : '';
 };
 
 // 이동 폭은 토큰이 소유한다. 토큰을 못 읽는 환경에서는 실측 사각형으로 대체
 const readTravel = (track: HTMLElement, thumb: HTMLElement | null) => {
+  const view = track.ownerDocument.defaultView ?? window;
   const fromToken = Number.parseFloat(
-    getComputedStyle(track).getPropertyValue('--ui-toggle-travel'),
+    view.getComputedStyle(track).getPropertyValue('--ui-toggle-travel'),
   );
   if (Number.isFinite(fromToken) && fromToken > 0) return fromToken;
   if (!thumb) return 0;
@@ -98,6 +106,9 @@ const handBack = (session: DragSession) => {
  *   이미 그쪽 끝이라 노브가 안 움직인 무동작(켜진 걸 켜는 쪽으로)도 드래그로 남는다
  * - 속도와 방향은 안 쓴다
  *
+ * 리스너·rAF·선택 잠금·스타일 계산은 노브가 사는 창 기준이다. 토글이 분리 패널
+ * 자식 창 문서에 그려질 수 있어서다. 전역 window는 폴백으로만 쓴다.
+ *
  * 노브는 누른 지점 기준 상대 델타로 움직인다. 커서 절대 좌표에 매핑하면
  * 트랙 아무 데나 눌러도 노브가 커서로 점프한다.
  *
@@ -119,35 +130,45 @@ export const useSwitchDrag = ({
 }: UseSwitchDragOptions) => {
   const sessionRef = useRef<DragSession | null>(null);
   const disarmSwallowRef = useRef<(() => void) | null>(null);
-  const handBackFrameRef = useRef(0);
+  // 정산 프레임은 예약한 창과 함께 들고 있어야 그 창에서 취소된다
+  const handBackFrameRef = useRef<{ win: Window; id: number } | null>(null);
   // 다음 프레임에 CSS로 돌려줄 세션. 그 프레임 안에 새 드래그가 시작되면 먼저 정산해야
   // 뒤늦게 도는 handBack이 새 세션의 표식과 인라인 위치를 걷어가지 않는다
   const pendingHandBackRef = useRef<DragSession | null>(null);
   const [dragValue, setDragValue] = useState<boolean | null>(null);
 
+  const cancelHandBackFrame = useCallback(() => {
+    const frame = handBackFrameRef.current;
+    if (!frame) return;
+    handBackFrameRef.current = null;
+    frame.win.cancelAnimationFrame(frame.id);
+  }, []);
+
   // 드래그 뒤에 오는 click 한 번을 창 캡처 단계에서 삼킨다.
   // 트랙은 28px인데 이동 폭이 12px이라 노브를 끝까지 끌면 손이 트랙 밖에서 떨어진다.
   // 그러면 click이 트랙이 아니라 공통 조상에 꽂혀 컨트롤 자신의 핸들러로는 못 막고,
   // 설정 행처럼 조상이 행 버튼인 표면에서는 거기서 한 번 더 뒤집힌다.
+  // 무장은 노브가 사는 창에 건다. 메인에 걸면 자식 창에서 뜬 click을 못 잡는다.
   // 해제는 click이 오거나 다음 입력(pointerdown·keydown)이 시작될 때. 먼저 오는 쪽이다 -
   // 타이머로 풀면 click과 경합하고, 안 풀면 엉뚱한 클릭을 삼킨다. 드래그가 click 없이
   // 끝난 뒤 키보드로 누른 버튼의 합성 click에는 pointerdown이 없어 keydown도 해제 조건이다
-  const armClickSwallow = useCallback(() => {
+  const armClickSwallow = useCallback((win: Window) => {
     disarmSwallowRef.current?.();
     const swallow = (event: MouseEvent) => {
       event.stopPropagation();
       event.preventDefault();
       disarm();
     };
+    // 무장한 그 창에서 걷는다. 해제가 엉뚱한 창을 보지 않는다
     const disarm = () => {
-      window.removeEventListener('click', swallow, true);
-      window.removeEventListener('pointerdown', disarm, true);
-      window.removeEventListener('keydown', disarm, true);
+      win.removeEventListener('click', swallow, true);
+      win.removeEventListener('pointerdown', disarm, true);
+      win.removeEventListener('keydown', disarm, true);
       disarmSwallowRef.current = null;
     };
-    window.addEventListener('click', swallow, true);
-    window.addEventListener('pointerdown', disarm, true);
-    window.addEventListener('keydown', disarm, true);
+    win.addEventListener('click', swallow, true);
+    win.addEventListener('pointerdown', disarm, true);
+    win.addEventListener('keydown', disarm, true);
     disarmSwallowRef.current = disarm;
   }, []);
 
@@ -160,17 +181,14 @@ export const useSwitchDrag = ({
     markPressRef.current = markPress;
   }, [checked, onFlip, markPress]);
 
-  const schedulerRef = useRef<ReturnType<
-    typeof createRafLatestScheduler<number>
-  > | null>(null);
-
   const endSession = useCallback(
     (commit: boolean) => {
       const session = sessionRef.current;
       if (!session) return;
       // 소유권을 먼저 내려놓아 커밋이 부르는 blur·캡처 상실로 재진입하지 못하게 한다
       sessionRef.current = null;
-      schedulerRef.current?.cancel();
+      session.releaseBlur();
+      session.scheduler.cancel();
       if (session.track.hasPointerCapture?.(session.pointerId)) {
         session.track.releasePointerCapture(session.pointerId);
       }
@@ -182,7 +200,7 @@ export const useSwitchDrag = ({
         return;
       }
 
-      lockTextSelection(false);
+      lockTextSelection(session.ownerDocument, false);
       // 노브 중심이 중앙선을 넘었는지만 본다. 원위치로 돌아왔으면 시작값과 같아져 취소된다.
       // 취소는 지금 값으로 돌려준다 - 끄는 사이 외부에서 바뀌었을 수 있다
       const target = commit
@@ -205,7 +223,7 @@ export const useSwitchDrag = ({
         return;
       }
       // 취소로 끝난 제스처는 click이 따라오지 않는다
-      if (commit) armClickSwallow();
+      if (commit) armClickSwallow(session.ownerWindow);
 
       // 표시값을 목표로 먼저 고정한다. 이 렌더가 끝나야 CSS의 정착 지점이 목표가 되고,
       // 그때 인라인을 걷어야 노브가 손끝에서 목표까지 한 번에 간다
@@ -214,42 +232,39 @@ export const useSwitchDrag = ({
         markPressRef.current();
         onFlipRef.current();
       }
-      cancelAnimationFrame(handBackFrameRef.current);
+      cancelHandBackFrame();
       pendingHandBackRef.current = session;
-      handBackFrameRef.current = requestAnimationFrame(() => {
-        handBackFrameRef.current = 0;
-        pendingHandBackRef.current = null;
-        setDragValue(null);
-        handBack(session);
-      });
+      // 정산 프레임은 지금 노브가 사는 창에 건다. 세션 도중 호스트가 옮겨지면
+      // 떠나온 창은 숨겨져 프레임이 멈춘다
+      const frameWindow =
+        session.track.ownerDocument.defaultView ?? session.ownerWindow;
+      handBackFrameRef.current = {
+        win: frameWindow,
+        id: frameWindow.requestAnimationFrame(() => {
+          handBackFrameRef.current = null;
+          pendingHandBackRef.current = null;
+          setDragValue(null);
+          handBack(session);
+        }),
+      };
     },
-    [armClickSwallow],
+    [armClickSwallow, cancelHandBackFrame],
   );
 
   // 아직 프레임을 기다리는 이전 세션의 정산을 지금 끝낸다
   const flushPendingHandBack = () => {
     const pending = pendingHandBackRef.current;
     if (!pending) return;
-    cancelAnimationFrame(handBackFrameRef.current);
-    handBackFrameRef.current = 0;
+    cancelHandBackFrame();
     pendingHandBackRef.current = null;
     setDragValue(null);
     handBack(pending);
   };
 
-  useEffect(() => {
-    const scheduler = createRafLatestScheduler<number>((offset) => {
-      const thumb = sessionRef.current?.thumb;
-      if (thumb) thumb.style.translate = `${offset}px 0`;
-    });
-    schedulerRef.current = scheduler;
-    const cancel = () => endSession(false);
-    window.addEventListener('blur', cancel);
-    return () => {
-      window.removeEventListener('blur', cancel);
-      scheduler.cancel();
-      schedulerRef.current = null;
-      cancelAnimationFrame(handBackFrameRef.current);
+  // 언마운트 정리. 남은 세션이 자기 창에 걸어둔 리스너·프레임·선택 잠금까지 걷는다
+  useEffect(
+    () => () => {
+      cancelHandBackFrame();
       const pending = pendingHandBackRef.current;
       pendingHandBackRef.current = null;
       if (pending) handBack(pending);
@@ -257,11 +272,16 @@ export const useSwitchDrag = ({
       const session = sessionRef.current;
       sessionRef.current = null;
       if (session) {
+        session.releaseBlur();
+        session.scheduler.cancel();
         handBack(session);
-        if (session.intent === 'drag') lockTextSelection(false);
+        if (session.intent === 'drag') {
+          lockTextSelection(session.ownerDocument, false);
+        }
       }
-    };
-  }, [endSession]);
+    },
+    [cancelHandBackFrame],
+  );
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !event.isPrimary || sessionRef.current) return;
@@ -273,10 +293,18 @@ export const useSwitchDrag = ({
     if (travel <= 0) return;
     flushPendingHandBack();
     track.setPointerCapture?.(event.pointerId);
+    const ownerDocument = track.ownerDocument;
+    const ownerWindow = ownerDocument.defaultView ?? window;
+    // 자식 창에 그려진 토글은 자기 창의 blur만 취소 사유다. 메인 창 blur는 자식이
+    // 포커스를 가져갈 때도 뜬다
+    const cancelOnBlur = () => endSession(false);
+    ownerWindow.addEventListener('blur', cancelOnBlur);
     sessionRef.current = {
       pointerId: event.pointerId,
       track,
       thumb,
+      ownerDocument,
+      ownerWindow,
       travel,
       startX: event.clientX,
       startValue: checkedRef.current,
@@ -285,6 +313,15 @@ export const useSwitchDrag = ({
       maxAbsDx: 0,
       intent: 'undecided',
       displayed: checkedRef.current,
+      releaseBlur: () => ownerWindow.removeEventListener('blur', cancelOnBlur),
+      scheduler: createRafLatestScheduler<number>(
+        (offset) => {
+          const node = sessionRef.current?.thumb;
+          if (node) node.style.translate = `${offset}px 0`;
+        },
+        'frame',
+        ownerWindow,
+      ),
     };
   };
 
@@ -298,10 +335,10 @@ export const useSwitchDrag = ({
       // 표식은 여기서 붙인다. 누르자마자 붙이면 단순 클릭에도 전환 규칙이 갈려
       // 기존 누름 감각을 건드린다
       session.track.setAttribute(DRAG_ATTR, '');
-      lockTextSelection(true);
+      lockTextSelection(session.ownerDocument, true);
     }
     session.offset = clamp(session.startOffset + dx, 0, session.travel);
-    schedulerRef.current?.push(session.offset);
+    session.scheduler.push(session.offset);
     const next = session.offset >= session.travel / 2;
     if (next === session.displayed) return;
     session.displayed = next;
