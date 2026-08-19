@@ -16,7 +16,7 @@ import {
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
-import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
+import { getPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 import {
   buildLayerItemsForMode,
   isPluginGroupMemberInMode,

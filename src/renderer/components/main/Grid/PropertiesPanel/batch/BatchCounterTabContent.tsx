@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { createCounterAnimationPresetIntent } from '@src/types/key/counterAnimation';
 import { patchCounterAnimationPresetByTargets } from '@src/renderer/editor/runtime/elementOps';
-import { patchCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   EMPTY_BATCH_ELEMENT_BINDING,
@@ -104,10 +103,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
       nextAnimation,
       'batch',
     );
-    const persisted =
-      window.__dmn_window_type === 'panel'
-        ? patchCounterAnimationPresetViaAuthority(targets, intent)
-        : patchCounterAnimationPresetByTargets(targets, intent);
+    const persisted = patchCounterAnimationPresetByTargets(targets, intent);
     void persisted.catch(reportElementOpError);
   };
 

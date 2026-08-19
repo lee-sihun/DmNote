@@ -45,18 +45,9 @@ vi.mock('@api/internalApi', () => ({
   },
 }));
 
-vi.mock('@api/modules/pluginRpcApi', async (importOriginal) => {
-  const original = await importOriginal<
-    typeof import('@api/modules/pluginRpcApi')
-  >();
-  return {
-    ...original,
-    pluginRpcApi: {
-      ...original.pluginRpcApi,
-      authorityReset: authorityResetMock,
-    },
-  };
-});
+vi.mock('@api/modules/pluginAuthorityApi', () => ({
+  pluginAuthorityApi: { reset: authorityResetMock },
+}));
 
 vi.mock('@utils/plugin/bridgeMessages', () => ({
   sendBridgeMessageBestEffort: sendBridgeMock,

@@ -187,20 +187,6 @@ describe('SingleKnobPanel 대상 전환 세션 정리', () => {
     expect(captureButton().textContent).toBe('propertiesPanel.knobCapturing');
   });
 
-  it('panel stable capture는 authority만 호출한다', () => {
-    window.__dmn_window_type = 'panel';
-    act(() => captureButton().click());
-    emitAxis('HIDA:panel');
-    emitAxis('HIDA:panel');
-    emitAxis('HIDA:panel');
-
-    expect(mocks.patchAuthority).toHaveBeenCalledWith('knob', knobPosition.id, {
-      property: 'axisId',
-      value: 'HIDA:panel',
-    });
-    expect(mocks.patchAxis).not.toHaveBeenCalled();
-  });
-
   it('synthetic capture는 시작하지 않고 어떤 writer도 호출하지 않는다', () => {
     render({ ...knobPosition, id: 'knob-4' });
     act(() => captureButton().click());

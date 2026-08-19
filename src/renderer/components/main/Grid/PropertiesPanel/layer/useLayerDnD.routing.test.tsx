@@ -31,7 +31,7 @@ vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpSkipped: mocks.reportElementOpSkipped,
 }));
 
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   setPluginElementZIndexes: mocks.setPluginZIndexes,
   reorderLayerSelectionViaAuthority: mocks.reorderViaAuthority,
 }));
@@ -315,34 +315,6 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     );
     expect(mocks.commitPatch).not.toHaveBeenCalled();
     expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
-  });
-
-  it('panel stable 드롭은 exact descriptor를 main authority로 위임한다', async () => {
-    window.__dmn_window_type = 'panel';
-    const startItems = [nativeItem(ID_A, 0, 2), nativeItem(ID_B, 1, 1)];
-    await dragItemToEnd(startItems, {
-      layerItems: startItems,
-      displayItems: toDisplay(startItems),
-    });
-
-    expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
-    expect(mocks.reorderViaAuthority).toHaveBeenCalledWith({
-      kind: 'items',
-      mode: '4key',
-      draggedIds: [ID_A],
-      preserveFullGroups: false,
-      collapsedGroupIds: [],
-      anchors: {
-        toDisplayIndex: expect.any(Number),
-        targetGroupId: null,
-        anchorBeforeId: expect.anything(),
-        anchorAfterId: null,
-        anchorHeaderGroupId: null,
-        anchorBeforeHeaderGroupId: null,
-        anchorAfterHeaderGroupId: null,
-        boundary: null,
-      },
-    });
   });
 
   it('native 전용 편입 전 실패는 runner가 소유하고 layerGroups는 eager를 건드리지 않는다', async () => {

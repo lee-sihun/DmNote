@@ -10,7 +10,7 @@ import {
   reportElementOpSkipped,
 } from './elementIntent';
 import { commitSemanticOps } from './editorSemanticOps';
-import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
+import { getPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 

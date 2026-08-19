@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { emitTo, sendTo } = vi.hoisted(() => ({
-  emitTo: vi.fn(),
+const { sendTo } = vi.hoisted(() => ({
   sendTo: vi.fn(),
 }));
 
-vi.mock('@tauri-apps/api/event', () => ({ emitTo }));
 vi.mock('@api/modules/bridgeApi', () => ({ bridgeApi: { sendTo } }));
 
 import { sendBridgeMessageBestEffort } from './bridgeMessages';
@@ -16,7 +14,6 @@ describe('sendBridgeMessageBestEffort', () => {
   const originalApi = window.api;
   beforeEach(() => {
     sendTo.mockReset();
-    emitTo.mockReset().mockResolvedValue(undefined);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
@@ -33,17 +30,6 @@ describe('sendBridgeMessageBestEffort', () => {
 
     expect(sendTo).toHaveBeenCalledWith('overlay', 'test:sync', { value: 1 });
     expect(console.error).not.toHaveBeenCalled();
-  });
-
-  it('sends panel-only messages through the internal direct channel', async () => {
-    sendBridgeMessageBestEffort('panel', 'test:panel', { value: 2 });
-    await flushPromises();
-
-    expect(emitTo).toHaveBeenCalledWith('panel', 'plugin-bridge:message', {
-      type: 'test:panel',
-      data: { value: 2 },
-    });
-    expect(sendTo).not.toHaveBeenCalled();
   });
 
   it('ignores an absent optional target window', async () => {

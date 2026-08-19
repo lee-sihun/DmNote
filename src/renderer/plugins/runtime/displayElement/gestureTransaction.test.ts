@@ -59,7 +59,6 @@ const mocks = vi.hoisted(() => {
     }>,
     definitions: new Map(),
     modelRevision: 5,
-    schedulePanel: vi.fn(),
   };
 });
 
@@ -102,17 +101,13 @@ vi.mock('@stores/data/useHistoryStatusStore', () => ({
   useHistoryStatusStore: { getState: () => ({ historyEpoch: 7 }) },
 }));
 
-vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+vi.mock('@plugins/runtime/pluginAuthorityGeneration', () => ({
   getPluginAuthorityGeneration: () => 3,
 }));
 
-vi.mock('@plugins/rpc/pluginModelRevision', () => ({
+vi.mock('@plugins/runtime/pluginModelRevision', () => ({
   getBackendPluginRevision: () => mocks.modelRevision,
   noteBackendPluginRevision: mocks.noteRevision,
-}));
-
-vi.mock('@utils/plugin/panelModelSync', () => ({
-  schedulePluginPanelModelSync: mocks.schedulePanel,
 }));
 
 describe('mixed gesture transaction lifecycle', () => {
@@ -206,7 +201,6 @@ describe('mixed gesture transaction lifecycle', () => {
     ]);
     expect(mocks.commitApi.mock.calls[0]?.[0].pluginBaseRevision).toBe(6);
 
-    const committedElements = mocks.elements;
     mocks.elements = [
       {
         definitionId: 'plugin-a',
@@ -222,12 +216,6 @@ describe('mixed gesture transaction lifecycle', () => {
       authorityGeneration: 3,
     });
     await committing;
-
-    expect(mocks.schedulePanel).toHaveBeenCalledWith(
-      committedElements,
-      mocks.definitions,
-      7,
-    );
   });
 
   it('후속 혼합 gesture가 같은 plugin을 넘겨받아도 앞 gesture 스냅샷을 보존한다', async () => {

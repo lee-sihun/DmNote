@@ -208,7 +208,7 @@ vi.mock('@contexts/useTranslation', () => ({
 vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   renameLayerGroupViaAuthority: renameLayerGroupViaAuthorityMock,
   patchGraphColorsViaAuthority: patchGraphColorsViaAuthorityMock,
   patchGraphPropertiesViaAuthority: patchGraphPropertiesViaAuthorityMock,
@@ -701,62 +701,6 @@ describe('PropertiesPanel canonical native contract', () => {
     },
   );
 
-  it.each([
-    ['key', '51111111-1111-4111-8111-111111111111'],
-    ['stat', '52222222-2222-4222-8222-222222222222'],
-    ['graph', '53333333-3333-4333-8333-333333333333'],
-    ['knob', '54444444-4444-4444-8444-444444444444'],
-  ] as const)(
-    'panel single stable %s geometry는 authority만 쓴다',
-    (type, id) => {
-      window.__dmn_window_type = 'panel';
-      installSingle(type, id);
-      mounted = mountPanel(true);
-
-      act(() => latestSingleProps(type).handleGeometryCommit?.('dx', 43));
-
-      expect(patchBoundsViaAuthorityMock).toHaveBeenCalledWith({
-        elementType: type,
-        id,
-        patch: { dx: 43 },
-      });
-      expect(patchGeometryMock).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
-    ['key', '55555555-5555-4555-8555-555555555555'],
-    ['stat', '56666666-6666-4666-8666-666666666666'],
-  ] as const)(
-    'panel single %s counter 토글은 즉시 반영 래퍼를 대상 하나로 쓴다',
-    (type, id) => {
-      window.__dmn_window_type = 'panel';
-      installSingle(type, id);
-      mounted = mountPanel(true);
-
-      act(() => latestSingleProps(type).onCounterEnabledCommit?.(false));
-      act(() =>
-        latestSingleProps(type).onCounterAnimationEnabledCommit?.(true),
-      );
-
-      expect(patchCounterBooleanByTargetsViaAuthorityMock).toHaveBeenCalledWith(
-        [{ elementType: type, id }],
-        { property: 'counterEnabled', value: false },
-      );
-      expect(patchCounterBooleanByTargetsViaAuthorityMock).toHaveBeenCalledWith(
-        [{ elementType: type, id }],
-        { property: 'counterAnimationEnabled', value: true },
-      );
-      // 즉시 반영 없는 직행 sender와 도킹 경로는 쓰지 않는다
-      expect(patchCounterEnabledViaAuthorityMock).not.toHaveBeenCalled();
-      expect(
-        patchCounterAnimationEnabledViaAuthorityMock,
-      ).not.toHaveBeenCalled();
-      expect(patchCounterEnabledMock).not.toHaveBeenCalled();
-      expect(patchCounterAnimationEnabledMock).not.toHaveBeenCalled();
-    },
-  );
-
   it('single key preview는 선택 ID를 신원으로 전달한다', () => {
     const id = '61111111-1111-4111-8111-111111111111';
     installSingle('key', id);
@@ -996,34 +940,6 @@ describe('PropertiesPanel canonical native contract', () => {
       );
       expect(patchBatchGeometryMock).not.toHaveBeenCalled();
       expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
-    });
-
-    it('panel 혼합 커밋은 pluginTargets를 authority payload에 싣는다', () => {
-      window.__dmn_window_type = 'panel';
-      installMixedSelection('panel');
-      mounted = mountPanel(true);
-
-      act(() =>
-        commitProps().onStableGeometryCommit({
-          kind: 'align',
-          direction: 'left',
-        }),
-      );
-
-      expect(patchBatchGeometryViaAuthorityMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          mode: '4key',
-          targets: [
-            { type: 'key', id: FIRST_KEY_ID },
-            { type: 'key', id: SECOND_KEY_ID },
-          ],
-          operation: { kind: 'align', direction: 'left' },
-        }),
-        undefined,
-        [PLUGIN_FULL_ID],
-      );
-      expect(patchBatchGeometryMock).not.toHaveBeenCalled();
-      expect(commitMixedBatchGeometryMock).not.toHaveBeenCalled();
     });
 
     it('혼합 선택 resize는 native 전용 경로로 남는다', () => {

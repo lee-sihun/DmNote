@@ -61,11 +61,11 @@ vi.mock('../displayElement/instancesUndoSync', () => ({
   },
 }));
 
-vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+vi.mock('@plugins/runtime/pluginAuthorityGeneration', () => ({
   getPluginAuthorityGeneration: () => 1,
 }));
 
-vi.mock('@plugins/rpc/pluginModelRevision', () => ({
+vi.mock('@plugins/runtime/pluginModelRevision', () => ({
   noteBackendPluginRevision: vi.fn(),
 }));
 

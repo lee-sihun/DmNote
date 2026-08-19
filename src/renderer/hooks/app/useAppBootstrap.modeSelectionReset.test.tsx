@@ -134,29 +134,24 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
     sync: vi.fn(),
   },
 }));
-vi.mock('@api/modules/selectionSessionApi', () => ({
+vi.mock('@api/modules/panelWindowApi', () => ({
   panelWindowApi: {
     onVisibility: vi.fn(() => vi.fn()),
-    isOpen: vi.fn(),
-    takeViewState: vi.fn(),
+    onCloseRequested: vi.fn(() => vi.fn()),
+    takeRestoreRequest: vi.fn(() => Promise.resolve(false)),
+    ackClose: vi.fn(() => Promise.resolve(true)),
   },
 }));
-vi.mock('@src/renderer/editor/runtime/selectionSync', () => ({
-  initSelectionSync: vi.fn(),
-  resetSelectionForModeChange: vi.fn(),
-}));
-vi.mock('@stores/grid/usePanelWindowStore', () => ({
-  usePanelWindowStore: { getState: vi.fn(() => ({ setDetached: vi.fn() })) },
-}));
-vi.mock('@stores/grid/panelViewHandoff', () => ({
-  applyPanelViewState: vi.fn(),
-}));
-vi.mock('@plugins/rpc/pluginRpcHandler', () => ({
-  initPluginRpcHandler: vi.fn(),
-}));
-vi.mock('@plugins/rpc/pluginSettingsSession', () => ({
-  initPluginSettingsSessionHost: vi.fn(),
-  notePanelVisibilityForSettingsSession: vi.fn(),
+// 모드 전환 시 창 로컬 선택을 비운다 - 비어 있지 않을 때만 clearSelection
+const clearSelection = vi.fn();
+vi.mock('@stores/grid/useGridSelectionStore', () => ({
+  useGridSelectionStore: {
+    getState: () => ({
+      selectedElements: [{ type: 'key', id: 'k1' }],
+      selectedGroupIds: [],
+      clearSelection,
+    }),
+  },
 }));
 vi.mock('@plugins/runtime/displayElement/instancesUndoSync', () => ({
   initPluginInstancesUndoSync: vi.fn(),
@@ -202,8 +197,6 @@ vi.mock('@utils/grid/cursorUtils', () => ({
   initializeCursorSystem: vi.fn(() => Promise.resolve()),
   refreshCursorSettings: vi.fn(() => Promise.resolve()),
 }));
-
-import { resetSelectionForModeChange } from '@src/renderer/editor/runtime/selectionSync';
 
 import { useAppBootstrap } from './useAppBootstrap';
 
@@ -346,7 +339,7 @@ describe('모드 전환 선택 리셋', () => {
     };
     mocks.keyStoreListeners.clear();
     mocks.bootstrap.mockResolvedValue(makeBootstrap());
-    vi.mocked(resetSelectionForModeChange).mockClear();
+    clearSelection.mockClear();
 
     await mount();
     expect(mocks.bootstrap).toHaveBeenCalledTimes(1);
@@ -365,7 +358,7 @@ describe('모드 전환 선택 리셋', () => {
       mocks.customTabsListener?.({ customTabs: [], selectedKeyType: '8key' });
     });
 
-    expect(resetSelectionForModeChange).toHaveBeenCalledTimes(1);
+    expect(clearSelection).toHaveBeenCalledTimes(1);
     expect(mocks.keyState.selectedKeyType).toBe('8key');
   });
 
@@ -377,7 +370,7 @@ describe('모드 전환 선택 리셋', () => {
       });
     });
 
-    expect(resetSelectionForModeChange).not.toHaveBeenCalled();
+    expect(clearSelection).not.toHaveBeenCalled();
     expect(mocks.keyState.customTabs).toEqual([{ id: 'tab-a' }]);
   });
 
@@ -386,7 +379,7 @@ describe('모드 전환 선택 리셋', () => {
       mocks.presetSnapshotListener?.(snapshotPayload('8key'));
     });
 
-    expect(resetSelectionForModeChange).toHaveBeenCalledTimes(1);
+    expect(clearSelection).toHaveBeenCalledTimes(1);
   });
 
   it('프리셋 스냅샷의 모드가 같으면 선택을 건드리지 않는다', () => {
@@ -394,7 +387,7 @@ describe('모드 전환 선택 리셋', () => {
       mocks.presetSnapshotListener?.(snapshotPayload('4key'));
     });
 
-    expect(resetSelectionForModeChange).not.toHaveBeenCalled();
+    expect(clearSelection).not.toHaveBeenCalled();
   });
 
   it('오버레이 창에서는 리셋하지 않는다', async () => {
@@ -412,7 +405,7 @@ describe('모드 전환 선택 리셋', () => {
       mocks.customTabsListener?.({ customTabs: [], selectedKeyType: '8key' });
     });
 
-    expect(resetSelectionForModeChange).not.toHaveBeenCalled();
+    expect(clearSelection).not.toHaveBeenCalled();
   });
 
   it('영구 저장 실패를 짧은 두 줄 문구로 한 번 알린다', async () => {

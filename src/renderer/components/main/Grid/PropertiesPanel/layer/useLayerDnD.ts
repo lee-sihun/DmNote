@@ -8,10 +8,6 @@ import {
   reportElementOpError,
   reportElementOpSkipped,
 } from '@src/renderer/editor/runtime/elementIntent';
-import {
-  reorderLayerSelectionViaAuthority,
-  type LayerReorderIntentWire,
-} from '@plugins/rpc/pluginElementActions';
 import { useState, useRef, useEffect } from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
@@ -26,37 +22,6 @@ import { isNoopLayerDrop, resolveLayerDropZone } from './layerDropZone';
 
 export { resolveDropIndexFromAnchors } from './layerReorderIntent';
 export { isNoopLayerDrop, resolveLayerDropZone } from './layerDropZone';
-
-const toReorderWire = (
-  descriptor: import('./layerReorderIntent').LayerDropIntent,
-): LayerReorderIntentWire => ({
-  ...descriptor,
-  anchors: {
-    toDisplayIndex: descriptor.anchors.toDisplayIndex,
-    targetGroupId: descriptor.anchors.targetGroupId ?? null,
-    anchorBeforeId: descriptor.anchors.anchorBeforeId ?? null,
-    anchorAfterId: descriptor.anchors.anchorAfterId ?? null,
-    anchorHeaderGroupId: descriptor.anchors.anchorHeaderGroupId ?? null,
-    anchorBeforeHeaderGroupId:
-      descriptor.anchors.anchorBeforeHeaderGroupId ?? null,
-    anchorAfterHeaderGroupId:
-      descriptor.anchors.anchorAfterHeaderGroupId ?? null,
-    boundary: descriptor.anchors.boundary ?? null,
-  },
-});
-
-const commitLayerDropFromCurrentWindow = (
-  descriptor: import('./layerReorderIntent').LayerDropIntent,
-): Promise<void> => {
-  if (window.__dmn_window_type !== 'panel') {
-    return commitLayerDropIntent(descriptor);
-  }
-  return reorderLayerSelectionViaAuthority(toReorderWire(descriptor)).then(
-    (succeeded) => {
-      if (!succeeded) reportElementOpSkipped('panel layer drop settlement');
-    },
-  );
-};
 
 // 드래그 세션 동안 body에 붙는 전역 grabbing 클래스 (main.css) - 캔버스와 동일 정책
 const DRAG_CURSOR_CLASS = 'dmn-dragging';
@@ -434,7 +399,7 @@ export function useLayerDnD({
             (item) => item.type !== 'plugin' && !isNativeElementId(item.id),
           );
           if (!hasInvalidNative) {
-            void commitLayerDropFromCurrentWindow({
+            void commitLayerDropIntent({
               kind: 'items',
               mode: selectedKeyType,
               draggedIds: [...draggedIds],
@@ -668,7 +633,7 @@ export function useLayerDnD({
             (item) => item.type !== 'plugin' && !isNativeElementId(item.id),
           );
           if (!excludedShrank && anchors && !hasInvalidNative) {
-            void commitLayerDropFromCurrentWindow({
+            void commitLayerDropIntent({
               kind: 'group',
               mode: selectedKeyType,
               groupId,

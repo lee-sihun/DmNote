@@ -96,7 +96,7 @@ const mount = async (order: RowOrder) => {
     layerGroups: { '4key': [{ id: GROUP_ID, name: 'Group A' }] },
     collapsedGroups: new Set(),
   });
-  usePluginDisplayElementStore.setState({ elements: [], panelElements: [] });
+  usePluginDisplayElementStore.setState({ elements: [] });
   useGridSelectionStore.setState({
     selectedElements: [],
     selectedGroupIds: [],

@@ -35,7 +35,7 @@ vi.mock('./elementIntent', () => ({
     error instanceof Error && error.name === 'ElementIntentAbort',
 }));
 
-vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+vi.mock('@plugins/runtime/pluginAuthorityGeneration', () => ({
   getPluginAuthorityGeneration: () => mocks.authorityGeneration,
 }));
 

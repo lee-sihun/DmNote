@@ -27,8 +27,6 @@ import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessio
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import { counterAnimationApi } from '@api/modules/resourceApi';
-import { deleteCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
-import { isPanelWindow } from '@utils/windowType';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -213,9 +211,7 @@ const CounterAnimationPicker = ({
         counterAnimationLibraryCache = next;
         return next;
       });
-      const removed = isPanelWindow()
-        ? await deleteCounterAnimationPresetViaAuthority(preset.id)
-        : await counterAnimationApi.remove(preset.id);
+      const removed = await counterAnimationApi.remove(preset.id);
       if (!removed) throw new Error('counter animation delete failed');
       await loadLibrary();
     } catch (error) {

@@ -14,7 +14,7 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use log::{error, warn};
 use parking_lot::{Condvar, Mutex, RwLock};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::json;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -29,7 +29,7 @@ use super::{
     history::{
         HistoryAdmissionGate, HistoryAdmissionLease, HistoryBarrierLease, HistoryBarrierWaiter,
     },
-    plugin::{PluginAuthorityLease, PluginRpcRouter, PluginRuntimeAuthority},
+    plugin::{PluginAuthorityLease, PluginRuntimeAuthority},
     store::AppStore,
 };
 #[cfg(debug_assertions)]
@@ -201,12 +201,6 @@ const PANEL_MAX_HEIGHT_RATIO: f64 = 0.9;
 const PANEL_FALLBACK_MAX_HEIGHT: f64 = 10_000.0;
 const PANEL_BOUNDS_DEBOUNCE_MS: u64 = 400;
 const PANEL_CLOSE_ACK_TIMEOUT: Duration = Duration::from_millis(1_500);
-const MAX_SELECTION_ELEMENTS: usize = 4_096;
-const MAX_SELECTION_GROUP_IDS: usize = 4_096;
-const MAX_SELECTION_ELEMENT_TYPE_BYTES: usize = 64;
-const MAX_SELECTION_FULL_ID_BYTES: usize = 512;
-const MAX_SELECTION_GROUP_ID_BYTES: usize = 512;
-const MAX_SELECTION_MODE_BYTES: usize = 128;
 const OVERLAY_MARGIN: f64 = 40.0;
 const OVERLAY_BOUNDS_DEBOUNCE_MS: u64 = 400;
 const OVERLAY_CREATION_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -557,26 +551,6 @@ fn frontend_lifecycle_restore_labels(target_windows: &HashSet<String>) -> Vec<&'
         .collect()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SelectionSessionElement {
-    pub element_type: String,
-    pub full_id: String,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SelectionSessionSnapshot {
-    #[serde(default)]
-    pub selected_elements: Vec<SelectionSessionElement>,
-    #[serde(default)]
-    pub selected_group_ids: Vec<String>,
-    #[serde(default)]
-    pub mode: String,
-    #[serde(default)]
-    pub selection_revision: u64,
-}
-
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct PanelVisibilityPayload {
@@ -838,69 +812,6 @@ fn collect_frontend_lifecycle_targets<T>(
         .collect()
 }
 
-fn validate_selection_session(snapshot: &SelectionSessionSnapshot) -> Result<(), String> {
-    if snapshot.selected_elements.len() > MAX_SELECTION_ELEMENTS {
-        return Err(format!(
-            "selectedElements exceeds the {MAX_SELECTION_ELEMENTS} item limit"
-        ));
-    }
-    if snapshot.selected_group_ids.len() > MAX_SELECTION_GROUP_IDS {
-        return Err(format!(
-            "selectedGroupIds exceeds the {MAX_SELECTION_GROUP_IDS} item limit"
-        ));
-    }
-    if snapshot.mode.len() > MAX_SELECTION_MODE_BYTES {
-        return Err(format!(
-            "mode exceeds the {MAX_SELECTION_MODE_BYTES} byte limit"
-        ));
-    }
-    let mut seen_element_ids = HashSet::new();
-    for (index, element) in snapshot.selected_elements.iter().enumerate() {
-        if element.element_type.len() > MAX_SELECTION_ELEMENT_TYPE_BYTES
-            || !matches!(
-                element.element_type.as_str(),
-                "key" | "stat" | "graph" | "knob" | "plugin"
-            )
-        {
-            return Err(format!("selectedElements[{index}].elementType is invalid"));
-        }
-        if element.full_id.is_empty()
-            || element.full_id.len() > MAX_SELECTION_FULL_ID_BYTES
-            || (element.element_type != "plugin"
-                && !crate::state::native_element_id::is_valid_element_id(&element.full_id))
-        {
-            return Err(format!("selectedElements[{index}].fullId is invalid"));
-        }
-        if !seen_element_ids.insert(element.full_id.as_str()) {
-            return Err(format!("selectedElements[{index}].fullId is duplicated"));
-        }
-    }
-    let mut seen_group_ids = HashSet::new();
-    for (index, group_id) in snapshot.selected_group_ids.iter().enumerate() {
-        if group_id.is_empty()
-            || group_id.len() > MAX_SELECTION_GROUP_ID_BYTES
-            || !seen_group_ids.insert(group_id.as_str())
-        {
-            return Err(format!("selectedGroupIds[{index}] is invalid"));
-        }
-    }
-    Ok(())
-}
-
-fn publish_selection_snapshot(
-    session: &Mutex<SelectionSessionSnapshot>,
-    mut snapshot: SelectionSessionSnapshot,
-) -> Result<SelectionSessionSnapshot, String> {
-    validate_selection_session(&snapshot)?;
-    let mut current = session.lock();
-    snapshot.selection_revision = current
-        .selection_revision
-        .checked_add(1)
-        .ok_or_else(|| "selection revision overflow".to_string())?;
-    *current = snapshot.clone();
-    Ok(snapshot)
-}
-
 fn publish_panel_visibility_transition(
     visible_state: &AtomicBool,
     emitter: &dyn PanelVisibilityEventEmitter,
@@ -1035,9 +946,7 @@ pub struct AppState {
     /// 메인 스레드 이벤트 콜백에서 획득 금지 — setup 훅은 이벤트 루프 가동 전이라 예외
     overlay_creation_lock: Mutex<()>,
     overlay_bounds_generation: Arc<AtomicU64>,
-    selection_session: Mutex<SelectionSessionSnapshot>,
     plugin_authority: PluginRuntimeAuthority,
-    plugin_rpc_router: PluginRpcRouter,
     panel_bounds_persistence: Arc<PanelBoundsPersistenceController>,
     panel_visible: AtomicBool,
     /// 트레이 숨김에 동행해 우리가 감춘 분리 패널 표식
@@ -1106,10 +1015,6 @@ impl AppState {
         let authorized_css_paths = collect_authorized_css_paths(&snapshot);
         let panel_bounds_persistence =
             Arc::new(PanelBoundsPersistenceController::new(Arc::clone(&store)));
-        let selection_session = SelectionSessionSnapshot {
-            mode: snapshot.selected_key_type.clone(),
-            ..SelectionSessionSnapshot::default()
-        };
 
         Ok(Self {
             store,
@@ -1120,9 +1025,7 @@ impl AppState {
             overlay_initializing: Arc::new(AtomicBool::new(false)),
             overlay_creation_lock: Mutex::new(()),
             overlay_bounds_generation: Arc::new(AtomicU64::new(0)),
-            selection_session: Mutex::new(selection_session),
             plugin_authority: PluginRuntimeAuthority::default(),
-            plugin_rpc_router: PluginRpcRouter::default(),
             panel_bounds_persistence,
             panel_visible: AtomicBool::new(false),
             panel_hidden_with_main: AtomicBool::new(false),
@@ -3059,36 +2962,16 @@ impl AppState {
         self.start_keyboard_hook_locked(app, &mut task_guard, 0, None)
     }
 
-    pub fn selection_session(&self) -> SelectionSessionSnapshot {
-        self.selection_session.lock().clone()
-    }
-
-    pub fn publish_selection_session(
-        &self,
-        app: &AppHandle,
-        snapshot: SelectionSessionSnapshot,
-    ) -> Result<SelectionSessionSnapshot, String> {
-        let published = publish_selection_snapshot(&self.selection_session, snapshot)?;
-        app.emit("selection:changed", &published)
-            .map_err(|error| error.to_string())?;
-        Ok(published)
-    }
-
     pub(crate) fn plugin_authority(&self) -> &PluginRuntimeAuthority {
         &self.plugin_authority
     }
 
-    pub(crate) fn plugin_rpc_router(&self) -> &PluginRpcRouter {
-        &self.plugin_rpc_router
-    }
-
     pub(crate) fn reset_plugin_authority(&self) -> Result<PluginAuthorityLease<'_>, String> {
-        self.plugin_authority.reset(&self.plugin_rpc_router)
+        self.plugin_authority.reset()
     }
 
     pub fn mark_plugin_authority_unavailable(&self) {
-        self.plugin_authority
-            .mark_unavailable(&self.plugin_rpc_router);
+        self.plugin_authority.mark_unavailable();
     }
 
     // 분리 상태 기록: 값 갱신만 창 전환과 같은 락 안에서 끝내 순서가 뒤집히지 않게 하고,
@@ -3400,7 +3283,6 @@ impl AppState {
 
     pub fn handle_panel_window_destroyed(&self, app: &AppHandle) {
         drop_panel_hidden_with_main(&self.panel_hidden_with_main);
-        self.plugin_rpc_router.remove_window(PANEL_LABEL);
         finish_panel_close(&self.panel_close_request);
         if let Err(error) = self.publish_panel_hidden(app, PanelVisibilityReason::Destroyed) {
             log::warn!("failed to emit destroyed panel visibility: {error}");
@@ -5816,25 +5698,22 @@ mod tests {
         is_panel_open_url, key_state_payload, main_window_starts_hidden, monitor_scale_is_usable,
         next_keyboard_recovery_plan, normalize_stored_overlay_bounds, overlay_reset_fallback_rect,
         panel_bounds_from_sample, panel_height_bounds, panel_position_beside_main,
-        publish_panel_hidden_transition, publish_panel_visibility_transition,
-        publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
-        restore_panel_with_main_transition, run_panel_close_timeout,
+        publish_panel_hidden_transition, publish_panel_visibility_transition, resolve_event_age_ms,
+        resolve_panel_window_layout, restore_panel_with_main_transition, run_panel_close_timeout,
         should_create_overlay_on_startup, should_recover_keyboard_daemon,
         should_restore_panel_on_startup, stored_bounds_need_monitor_data,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake, take_panel_open_arm,
-        validate_selection_session, EditorFlushAcknowledge, EditorFlushCompletion,
-        EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
-        FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect,
-        MonitorData, MonitorSpec, Mutex, PanelBoundsChange, PanelBoundsPersistenceController,
-        PanelBoundsPersistenceState, PanelBoundsSample, PanelCloseRequestState,
-        PanelCloseRequestedPayload, PanelVisibilityEventEmitter, PanelVisibilityPayload,
-        PanelVisibilityReason, PhysicalPosition, PhysicalSize, SelectionSessionElement,
-        SelectionSessionSnapshot, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
+        EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
+        FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
+        FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect, MonitorData, MonitorSpec,
+        Mutex, PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
+        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload,
+        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
+        PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
         HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-        KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
-        MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
-        OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
-        PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
+        KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
+        PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
+        RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
@@ -6541,74 +6420,6 @@ mod tests {
         assert_eq!(changed_panel_max_height(None, 720.0), Some(720.0));
         assert_eq!(changed_panel_max_height(Some(900.0), f64::NAN), None);
         assert_eq!(changed_panel_max_height(Some(900.0), 0.0), None);
-    }
-
-    #[test]
-    fn selection_publish_advances_backend_revision_and_get_matches() {
-        let session = Mutex::new(SelectionSessionSnapshot {
-            mode: "4key".to_string(),
-            ..SelectionSessionSnapshot::default()
-        });
-        let first = publish_selection_snapshot(
-            &session,
-            SelectionSessionSnapshot {
-                selected_elements: vec![SelectionSessionElement {
-                    element_type: "key".to_string(),
-                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
-                }],
-                selected_group_ids: vec!["group-1".to_string()],
-                mode: "4key".to_string(),
-                selection_revision: 999,
-            },
-        )
-        .unwrap();
-        let second = publish_selection_snapshot(&session, first.clone()).unwrap();
-
-        assert_eq!(first.selection_revision, 1);
-        assert_eq!(second.selection_revision, 2);
-        assert_eq!(*session.lock(), second);
-    }
-
-    #[test]
-    fn selection_validation_enforces_collection_and_string_limits() {
-        let oversized_elements = SelectionSessionSnapshot {
-            selected_elements: vec![
-                SelectionSessionElement {
-                    element_type: "key".to_string(),
-                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
-                };
-                MAX_SELECTION_ELEMENTS + 1
-            ],
-            ..SelectionSessionSnapshot::default()
-        };
-        assert!(validate_selection_session(&oversized_elements).is_err());
-
-        for invalid in [
-            SelectionSessionSnapshot {
-                selected_elements: vec![SelectionSessionElement {
-                    element_type: "x".repeat(MAX_SELECTION_ELEMENT_TYPE_BYTES + 1),
-                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
-                }],
-                ..SelectionSessionSnapshot::default()
-            },
-            SelectionSessionSnapshot {
-                selected_elements: vec![SelectionSessionElement {
-                    element_type: "key".to_string(),
-                    full_id: "x".repeat(MAX_SELECTION_FULL_ID_BYTES + 1),
-                }],
-                ..SelectionSessionSnapshot::default()
-            },
-            SelectionSessionSnapshot {
-                selected_group_ids: vec!["x".repeat(MAX_SELECTION_GROUP_ID_BYTES + 1)],
-                ..SelectionSessionSnapshot::default()
-            },
-            SelectionSessionSnapshot {
-                mode: "x".repeat(MAX_SELECTION_MODE_BYTES + 1),
-                ..SelectionSessionSnapshot::default()
-            },
-        ] {
-            assert!(validate_selection_session(&invalid).is_err());
-        }
     }
 
     #[derive(Default)]

@@ -118,7 +118,7 @@ describe('LayerTab 행 커서 정책', () => {
       layerGroups: { '4key': [{ id: GROUP_ID, name: 'Group A' }] },
       collapsedGroups: new Set(),
     });
-    usePluginDisplayElementStore.setState({ elements: [], panelElements: [] });
+    usePluginDisplayElementStore.setState({ elements: [] });
     useGridSelectionStore.setState({
       selectedElements: [],
       selectedGroupIds: [],

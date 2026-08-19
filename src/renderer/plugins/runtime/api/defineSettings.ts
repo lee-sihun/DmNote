@@ -7,7 +7,7 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import {
   openPluginSettingsSession,
   cancelPluginSettingsSessionForPlugin,
-} from '@plugins/rpc/pluginSettingsSession';
+} from '@plugins/runtime/pluginSettingsSession';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {

@@ -25,7 +25,7 @@ vi.mock('@src/renderer/editor/runtime/mixedElementGroups', () => ({
   setMixedElementGroups: mocks.setMixedElementGroups,
 }));
 
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   setElementGroupsViaAuthority: mocks.setElementGroupsViaAuthority,
 }));
 
@@ -48,7 +48,6 @@ const seedKey = (groupId?: string) => {
 
 const seedPluginElement = (groupId?: string) => {
   usePluginDisplayElementStore.setState({
-    panelElements: [],
     elements: [
       {
         id: PLUGIN_FULL_ID.split('::')[1],
@@ -126,48 +125,6 @@ describe('grid group structural routes', () => {
     );
   });
 
-  it('panel 창은 panelElements 미러에서 plugin 소속을 읽어 그룹을 재사용한다', async () => {
-    window.__dmn_window_type = 'panel';
-    useLayerGroupStore.setState({
-      layerGroups: { '4key': [{ id: 'group-a', name: 'Existing' }] },
-    });
-    // 패널 창은 elements가 항상 비어 있다 - 미러만 소속을 안다
-    usePluginDisplayElementStore.setState({
-      elements: [],
-      panelElements: [
-        {
-          id: PLUGIN_FULL_ID.split('::')[1],
-          fullId: PLUGIN_FULL_ID,
-          pluginId: 'plugin-a',
-          definitionId: 'plugin-a',
-          position: { x: 0, y: 0 },
-          tabId: '4key',
-          groupId: 'group-a',
-        } as never,
-      ],
-    });
-
-    await expect(
-      groupSelectedElements(
-        '4key',
-        [
-          { type: 'key', id: ID_A, index: 0 },
-          { type: 'plugin', id: PLUGIN_FULL_ID },
-        ],
-        'New Group',
-      ),
-    ).resolves.toBe(true);
-
-    // 무소속 native + 그룹 G 소속 plugin은 G 재사용 - 새 그룹 생성 아님
-    expect(mocks.setElementGroupsViaAuthority).toHaveBeenCalledWith(
-      '4key',
-      [{ elementType: 'key', id: ID_A }],
-      { kind: 'existing', id: 'group-a' },
-      [PLUGIN_FULL_ID],
-    );
-    expect(mocks.setMixedElementGroups).not.toHaveBeenCalled();
-  });
-
   it('모드에 def가 없는 plugin groupId는 재사용하지 않고 새 그룹을 만든다', async () => {
     seedPluginElement('group-missing');
 
@@ -215,25 +172,6 @@ describe('grid group structural routes', () => {
     expect(pluginTargets).toEqual([PLUGIN_FULL_ID]);
     expect(targetGroup.kind).toBe('create');
     expect(targetGroup.name).toBe('New Group 1');
-  });
-
-  it('stable ungroup은 panel authority에 native+plugin 대상을 함께 보낸다', async () => {
-    window.__dmn_window_type = 'panel';
-
-    await expect(
-      ungroupSelectedElements('4key', [
-        { type: 'key', id: ID_A, index: 5 },
-        { type: 'plugin', id: PLUGIN_FULL_ID },
-      ]),
-    ).resolves.toBe(true);
-
-    expect(mocks.setElementGroupsViaAuthority).toHaveBeenCalledWith(
-      '4key',
-      [{ elementType: 'key', id: ID_A }],
-      null,
-      [PLUGIN_FULL_ID],
-    );
-    expect(mocks.setMixedElementGroups).not.toHaveBeenCalled();
   });
 
   it('stable ungroup은 클릭 뒤 store reorder와 무관하게 원래 ID를 유지한다', async () => {

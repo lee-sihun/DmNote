@@ -68,12 +68,12 @@ vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
   runMixedElementDeleteIntent: mocks.runMixedDeleteIntent,
 }));
 
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   deletePluginElements: mocks.deletePluginElements,
   deleteLayerSelectionViaAuthority: mocks.deleteLayerSelectionViaAuthority,
 }));
 
-vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+vi.mock('@plugins/runtime/pluginAuthorityGeneration', () => ({
   getPluginAuthorityGeneration: () => 7,
 }));
 

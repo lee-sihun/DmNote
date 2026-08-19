@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -108,50 +107,6 @@ pub struct PluginInstancesChangedPayload {
     // commit 발신 mutation id - undo/redo 복원 이벤트는 None (self-echo 구분용)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin_mutation_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PluginRpcRequest {
-    pub protocol_version: u32,
-    pub request_id: String,
-    pub authority_generation: u64,
-    pub expected_model_revision: u64,
-    pub operation: String,
-    pub payload: Value,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginRpcRequestEnvelope {
-    pub protocol_version: u32,
-    pub request_id: String,
-    pub source_window_label: String,
-    pub authority_generation: u64,
-    pub expected_model_revision: u64,
-    pub operation: String,
-    pub payload: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PluginRpcError {
-    pub code: String,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PluginRpcResponse {
-    pub protocol_version: u32,
-    pub request_id: String,
-    pub authority_generation: u64,
-    pub model_revision: u64,
-    pub ok: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub payload: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<PluginRpcError>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

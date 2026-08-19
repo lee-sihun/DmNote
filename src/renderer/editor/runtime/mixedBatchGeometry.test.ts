@@ -171,11 +171,11 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
   sendBridgeMessageBestEffort: vi.fn(),
 }));
 
-vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+vi.mock('@plugins/runtime/pluginAuthorityGeneration', () => ({
   getPluginAuthorityGeneration: () => 0,
 }));
 
-vi.mock('@plugins/rpc/pluginModelRevision', () => ({
+vi.mock('@plugins/runtime/pluginModelRevision', () => ({
   getBackendPluginRevision: () => 0,
   noteBackendPluginRevision: vi.fn(),
 }));

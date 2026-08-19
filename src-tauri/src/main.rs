@@ -263,8 +263,6 @@ fn main() {
             commands::editor::preview::editor_preview_subscribe,
             commands::editor::preview::editor_preview_publish,
             commands::editor::preview::editor_preview_cancel,
-            commands::editor::selection::selection_session_get,
-            commands::editor::selection::selection_session_publish,
             // 키 입력/설정
             commands::keys::keys::keys_get,
             commands::keys::keys::keys_get_counters,
@@ -343,8 +341,6 @@ fn main() {
             // 플러그인
             commands::plugin::bridge::plugin_bridge_send,
             commands::plugin::bridge::plugin_bridge_send_to,
-            commands::plugin::rpc::plugin_rpc_send,
-            commands::plugin::rpc::plugin_rpc_respond,
             commands::plugin::rpc::plugin_authority_reset,
             commands::plugin::instances::plugin_instances_commit,
             commands::plugin::instances::plugin_instances_get,

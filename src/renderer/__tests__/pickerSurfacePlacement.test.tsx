@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import { PanelHostContext } from '@contexts/PanelHostContext';
 import { getTriggerAnchoredPopupPosition } from '@hooks/ui/usePanelAnchoredPopupPosition';
 
 interface CapturedPopupProps {
@@ -54,26 +55,35 @@ vi.mock('@hooks/ui/usePanelAnchoredPopupPosition', async (importOriginal) => {
   };
 });
 
-const Harness = () => {
+// 분리 상태는 패널 호스트 컨텍스트가 알려준다 (자식 창 문서에 붙어 있음)
+const Harness = ({ detached = false }: { detached?: boolean }) => {
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   return (
-    <div>
-      <button ref={triggerRef} data-testid="trigger" />
-      <PickerSurface
-        open
-        ariaLabel="색상"
-        referenceRef={triggerRef}
-        panelElement={document.body}
-        fallbackWidth={168}
-        fallbackHeight={300}
-        cardClassName="w-[168px]"
-        placement="right-start"
-        offsetY={-80}
-        onClose={vi.fn()}
-      >
-        <div data-testid="body" />
-      </PickerSurface>
-    </div>
+    <PanelHostContext.Provider
+      value={{
+        placement: detached ? 'detached' : 'docked',
+        window,
+        document,
+      }}
+    >
+      <div>
+        <button ref={triggerRef} data-testid="trigger" />
+        <PickerSurface
+          open
+          ariaLabel="색상"
+          referenceRef={triggerRef}
+          panelElement={document.body}
+          fallbackWidth={168}
+          fallbackHeight={300}
+          cardClassName="w-[168px]"
+          placement="right-start"
+          offsetY={-80}
+          onClose={vi.fn()}
+        >
+          <div data-testid="body" />
+        </PickerSurface>
+      </div>
+    </PanelHostContext.Provider>
   );
 };
 
@@ -96,14 +106,11 @@ describe('분리 창 피커 배치', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
-    delete window.__dmn_window_type;
   });
 
   it('분리 창에서는 섹션 정렬 좌표와 폭을 따른다', () => {
-    window.__dmn_window_type = 'panel';
-
     act(() => {
-      root.render(<Harness />);
+      root.render(<Harness detached />);
     });
 
     expect(captured.popupProps?.fixedX).toBe(8);
@@ -115,11 +122,10 @@ describe('분리 창 피커 배치', () => {
   });
 
   it('섹션 앵커가 없으면 감추지 않고 기본 배치로 넘긴다', () => {
-    window.__dmn_window_type = 'panel';
     captured.triggerResult = { settled: true, position: null };
 
     act(() => {
-      root.render(<Harness />);
+      root.render(<Harness detached />);
     });
 
     // 좌표를 못 잡았다고 팝업이 사라지면 안 됨
@@ -129,11 +135,10 @@ describe('분리 창 피커 배치', () => {
   });
 
   it('앵커 탐색이 끝나기 전에는 감춘다', () => {
-    window.__dmn_window_type = 'panel';
     captured.triggerResult = { settled: false, position: null };
 
     act(() => {
-      root.render(<Harness />);
+      root.render(<Harness detached />);
     });
 
     expect(card()?.style.visibility).toBe('hidden');

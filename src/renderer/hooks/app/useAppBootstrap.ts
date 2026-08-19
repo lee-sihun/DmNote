@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
@@ -31,16 +32,10 @@ import { useTranslation } from '@contexts/useTranslation';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import {
-  initSelectionSync,
-  resetSelectionForModeChange,
-} from '@src/renderer/editor/runtime/selectionSync';
-import {
   detachPropertiesPanel,
   dockPropertiesPanel,
   notePanelWindowHidden,
 } from '@stores/grid/usePanelHostStore';
-import { initPluginRpcHandler } from '@plugins/rpc/pluginRpcHandler';
-import { initPluginSettingsSessionHost } from '@plugins/rpc/pluginSettingsSession';
 import { initPluginInstancesUndoSync } from '@plugins/runtime/displayElement/instancesUndoSync';
 import { initPluginGroupRefsMirror } from '@plugins/runtime/pluginGroupRefsMirror';
 import { historyApi } from '@api/modules/historyApi';
@@ -147,10 +142,21 @@ export function useAppBootstrap() {
 
   useEffect(() => {
     let disposed = false;
-    let stopSelectionSync: (() => void) | null = null;
     let editorCoordinatorRetryTimer: ReturnType<typeof setTimeout> | null =
       null;
     const isOverlayWindow = window.__dmn_window_type === 'overlay';
+
+    // authoritative 모드 변경 시 창 로컬 선택 무효화 - 이전 모드의 index가
+    // 새 모드 요소로 재해석되지 않게
+    const resetSelectionForModeChange = () => {
+      const selection = useGridSelectionStore.getState();
+      if (
+        selection.selectedElements.length > 0 ||
+        selection.selectedGroupIds.length > 0
+      ) {
+        selection.clearSelection();
+      }
+    };
 
     // 모드가 실제로 갈릴 때만 선택을 리셋한다.
     //
@@ -791,7 +797,6 @@ export function useAppBootstrap() {
         void syncHistoryStatus();
 
         finalizeBootstrap();
-        startSelectionSyncOnceReady();
 
         // 분리 상태로 종료했다면 복원 - 창은 메인만 열 수 있어(opener 자식) 백엔드는
         // 요청만 남긴다. 부트스트랩 뒤에 열어야 패널이 채워진 상태로 뜬다
@@ -819,28 +824,6 @@ export function useAppBootstrap() {
       }
     })();
 
-    // authoritative 상태(selectedKeyType 등) 적용 후 시작 (H2: 유실 창·모드 시차 제거)
-    // 호출이 위쪽 async 블록에 있어 hoisting되는 함수 선언 사용
-    function startSelectionSyncOnceReady() {
-      if (disposed || stopSelectionSync) return;
-      if (
-        window.__dmn_runtime !== 'obs' &&
-        window.__dmn_window_type !== 'overlay'
-      ) {
-        stopSelectionSync = initSelectionSync();
-      }
-    }
-
-    // main = 플러그인 단일 authority - 패널발 mutation RPC 수신
-    const stopPluginRpcHandler =
-      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
-        ? initPluginRpcHandler()
-        : null;
-    // 설정 세션 host - lease 이동 시 세션 이전, panel 재요청 응답
-    const stopPluginSettingsSessionHost =
-      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
-        ? initPluginSettingsSessionHost()
-        : null;
     // 플러그인 인스턴스 undo/redo의 canonical 재결합 (C4)
     const stopPluginInstancesUndoSync =
       window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
@@ -1076,9 +1059,6 @@ export function useAppBootstrap() {
         editorCoordinatorRetryTimer = null;
       }
       resetHistoryEditorFlushLock();
-      stopSelectionSync?.();
-      stopPluginRpcHandler?.();
-      stopPluginSettingsSessionHost?.();
       stopPluginInstancesUndoSync?.();
       stopPluginGroupRefsMirror?.();
       unsubscribers.forEach((unsubscribe) => {
