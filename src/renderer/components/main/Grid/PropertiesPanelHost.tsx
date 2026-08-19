@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-import PanelDragGhost from '@components/main/Grid/PanelDragGhost';
 import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { PanelHostContext } from '@contexts/PanelHostContext';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
@@ -165,9 +164,9 @@ const PropertiesPanelHost = ({
     return () => cancel(handle);
   }, []);
 
-  // 헤더 배경 드래그: 도킹 상태에선 고스트를 끌다 놓으면 분리, 분리 상태에선 창을 끌고
-  // 메인의 도크 존에 놓으면 도킹. 리스너는 패널이 사는 문서에 건다
-  const { ghost, dockHint } = usePanelHeaderDrag({
+  // 헤더 배경 드래그: 조금만 움직여도 그 자리에서 실제 창이 떠서 따라오고, 도크 존 안에
+  // 놓으면 자석처럼 다시 붙는다. 리스너는 패널이 사는 문서에 건다
+  const { dockHint } = usePanelHeaderDrag({
     hostDocument: hostValue.document,
     hostWindow: hostValue.window,
     dockAreaRef,
@@ -216,21 +215,16 @@ const PropertiesPanelHost = ({
   return (
     <>
       <div ref={attachSlot} className="contents" data-dmn-panel-slot="" />
-      {/* 분리 창을 도크 존 위로 끌고 있을 때 도킹 자리를 비춘다 */}
+      {/* 창을 도크 존 위로 끌고 있을 때 도킹 자리를 비춘다 - 놓으면 여기 붙는다 */}
       {dockHint && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute right-0 top-0 bottom-0 w-[240px] z-40 rounded-l-[12px] bg-white/[0.06] shadow-[inset_0_0_0_1px_var(--ui-line)]"
         />
       )}
-      {ghost && createPortal(<PanelDragGhost ghost={ghost} />, document.body)}
       {createPortal(
         <PanelHostContext.Provider value={hostValue}>
-          <div
-            className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}
-            // 고스트를 끄는 동안 원래 자리의 패널은 흐려진다 (contents 박스라 프레임에 CSS로 건다)
-            data-dmn-panel-ghosting={ghost && !detached ? '' : undefined}
-          >
+          <div className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}>
             <PropertiesPanel
               onKeyMappingChange={onKeyMappingChange}
               detachAction={detached ? 'reattach' : 'detach'}

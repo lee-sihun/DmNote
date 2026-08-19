@@ -77,12 +77,6 @@ body.dmn-custom-cursor * {
   cursor: grabbing;
 }
 
-/* 패널 헤더 드래그로 고스트를 끄는 동안 원래 자리의 패널은 흐려진다 */
-[data-dmn-panel-ghosting] [data-dmn-panel-frame] {
-  opacity: 0.35;
-  transition: opacity 120ms ease-out;
-}
-
 /* 드래그 세션 전역 grabbing, useDraggable·useLayerDnD가 press부터 세션 종료까지 토글 */
 body.dmn-dragging,
 body.dmn-dragging * {

@@ -10,34 +10,29 @@ import {
 } from '@stores/grid/usePanelHostStore';
 import { isElementNode } from '@utils/dom/isElementNode';
 
-// 패널 헤더 배경 드래그로 분리/도킹.
+// 패널 헤더 배경 드래그로 분리/도킹 (OBS/Qt 도크 위젯 방식).
 //
-// 도킹 상태: 헤더를 잡고 끌면 고스트(패널 실루엣)가 커서를 따라다니고, 인라인 패널은 흐려진다.
-//   - 도크 존(원래 자리) 안에서 놓으면 취소, 밖에서 놓으면 그 자리에 창을 띄운다(분리)
-//   - 커서가 메인 창 밖으로 나가면 그 즉시 실제 창을 커서 밑에 띄우고(tear-off) 창을 끌고 간다
-// 분리 상태: 헤더를 잡고 끌면 창 자체가 따라온다(JS 주도 이동). 메인의 도크 존 위에서 놓으면 도킹
+// 도킹 상태: 헤더를 잡고 조금만 움직이면 그 자리에서 곧바로 실제 창이 떠서 커서를 따라온다.
+//   원래 자리(도크 존) 안에서 놓으면 자석처럼 다시 붙고(도킹), 밖에서 애 그대로 분리 창이 된다
+// 분리 상태: 헤더를 잡고 끌면 창이 따라온다. 메인의 도크 존 위에서 놓으면 도킹
 //
+// 창은 자식 창을 미리 만들어 두므로(PropertiesPanelHost 워밍업) 첫 이동에서 바로 뜬다.
 // 좌표: mousemove의 screenX/Y(CSS px, 화면 논리 좌표)가 곧 Tauri LogicalPosition이다.
 // 창 밖으로 나가도 드래그를 시작한 문서가 mousemove를 계속 받는다(WebKit 마우스 캡처)
 
-// 이만큼 움직여야 제스처 시작 - 클릭과 구분
+// 이만큼 움직여야 제스처 시작(창이 뜸) - 클릭과 구분
 const DRAG_START_PX = 6;
-// 도크 존 여유 - 원래 자리 주변 이 거리 안에서 놓으면 도킹으로 본다
+// 도킹에서 막 떼어낸 창: 잡은 지점에서 이 거리 안에서 놓으면 자석처럼 제자리로 돌아간다.
+// 원래 자리 스트립 전체를 기준으로 하면 세로로는 어디서 놓아도 돌아가 버려 너무 예민하다
+const SNAP_BACK_PX = 30;
+// 분리 창을 다시 가져와 붙일 때의 도크 존 여유 - 원래 자리 주변 이 거리 안에서 놓으면 도킹
 const DOCK_ZONE_MARGIN_PX = 48;
-// 컨텍스트를 못 받았을 때의 폭 - 고스트·도크 존 계산에 쓴다
+// 컨텍스트를 못 받았을 때의 폭 - 도크 존 계산에 쓴다
 const FALLBACK_PANEL_WIDTH = 240;
 
 // 인터랙티브 요소 위에서는 드래그를 시작하지 않음
 const INTERACTIVE_SELECTOR =
   'button, input, textarea, select, a, [role="switch"], [role="listbox"], [contenteditable="true"]';
-
-export interface PanelDragGhost {
-  // 메인 창 client 좌표
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 interface Rect {
   x: number;
@@ -47,23 +42,19 @@ interface Rect {
 }
 
 interface DragSession {
-  // 시작 시점의 배치 - 세션 중간에 바뀌어도(다른 경로의 전환) 이 값 기준으로 정리한다
+  // 시작 시점의 배치 - 세션 중간에 바뀌어도 이 값 기준으로 정리한다
   origin: 'docked' | 'detached';
   startScreen: { x: number; y: number };
-  // 커서 - 패널 프레임 좌상단 (프레임 좌표계와 무관하게 유지되는 잡은 위치)
+  // 커서 - 패널 프레임 좌상단 (창을 이 오프셋만큼 커서 아래에 둔다)
   grabOffset: { x: number; y: number };
-  // 고스트 크기 = 실제로 뜰 창 크기 (인라인 높이가 아니라 백엔드가 산출한 창 높이)
-  ghostSize: { width: number; height: number };
-  // 화면 논리 좌표의 도크 존 - 여기 놓으면 도킹/취소
+  // 화면 논리 좌표의 도크 존 - 여기 놓으면 도킹
   dockZoneScreen: Rect | null;
-  // 메인 창 content 원점(화면 논리 좌표) - 고스트 client 좌표 변환용
-  mainContentOrigin: { x: number; y: number };
   started: boolean;
   // 창을 끌고 있는 중(분리 상태 드래그 또는 tear-off 이후)
   draggingWindow: boolean;
-  // tear-off 진행 중 - 끝나면 마지막 위치로 창을 옮긴다
+  // tear-off(창 띄우기) 진행 중 - 끝나면 마지막 위치로 창을 옮긴다
   tearingOff: boolean;
-  // tear-off 도중에 버튼을 놓았다 - 창이 뜨면 마지막 위치에 두고 세션을 끝낸다
+  // tear-off 도중에 버튼을 놓았다 - 창이 뜨면 드롭 처리를 마저 한다
   releasedWhileTearingOff: boolean;
   lastScreen: { x: number; y: number };
   moveFrame: number | null;
@@ -99,21 +90,15 @@ const inflate = (rect: Rect, by: number): Rect => ({
   height: rect.height + by * 2,
 });
 
-// 세션 컨텍스트: 메인 창 content 원점(화면 논리 좌표)과 패널 창 크기.
-// content 원점은 outer 프레임 원점에 크롬 두께를 더한다 -
+// 메인 창 content 원점(화면 논리 좌표). outer 프레임 원점에 크롬 두께를 더한다 -
 // macOS 오버레이 타이틀바는 두께 0, Windows 표준 프레임은 테두리/타이틀바만큼
-const resolveDragContext = async () => {
+const resolveMainContentOrigin = async () => {
   const context = await panelWindowApi.dragContext().catch(() => null);
-  if (!context) return null;
-  const frame = context.mainFrame;
+  const frame = context?.mainFrame;
+  if (!frame) return null;
   const chromeX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
   const chromeY = Math.max(0, window.outerHeight - window.innerHeight);
-  return {
-    mainContentOrigin: frame
-      ? { x: frame.x + chromeX, y: frame.y + chromeY }
-      : null,
-    panelSize: { width: context.panelWidth, height: context.panelHeight },
-  };
+  return { x: frame.x + chromeX, y: frame.y + chromeY };
 };
 
 interface UsePanelHeaderDragParams {
@@ -125,8 +110,7 @@ interface UsePanelHeaderDragParams {
 }
 
 interface UsePanelHeaderDragResult {
-  ghost: PanelDragGhost | null;
-  // 분리 창을 도크 존 위로 끌고 있음 - 메인이 도킹 자리를 비춘다
+  // 창을 도크 존 위로 끌고 있음 - 메인이 도킹 자리를 비춘다
   dockHint: boolean;
 }
 
@@ -135,9 +119,9 @@ export const usePanelHeaderDrag = ({
   hostWindow,
   dockAreaRef,
 }: UsePanelHeaderDragParams): UsePanelHeaderDragResult => {
-  const [ghost, setGhost] = useState<PanelDragGhost | null>(null);
   const [dockHint, setDockHint] = useState(false);
   const sessionRef = useRef<DragSession | null>(null);
+  const endSessionRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const doc = hostDocument;
@@ -151,7 +135,6 @@ export const usePanelHeaderDrag = ({
         session.ownerWindow.cancelAnimationFrame(session.moveFrame);
       }
       session.cleanup();
-      setGhost(null);
       setDockHint(false);
       document.body.classList.remove('dmn-dragging');
       session.ownerDocument.body.classList.remove('dmn-dragging');
@@ -176,58 +159,73 @@ export const usePanelHeaderDrag = ({
       );
     };
 
+    const windowPositionFor = (session: DragSession) => ({
+      x: session.lastScreen.x - session.grabOffset.x,
+      y: session.lastScreen.y - session.grabOffset.y,
+    });
+
     const scheduleWindowMove = (session: DragSession) => {
       if (session.moveFrame !== null) return;
       session.moveFrame = session.ownerWindow.requestAnimationFrame(() => {
         session.moveFrame = null;
         if (sessionRef.current !== session || !session.draggingWindow) return;
-        const { x, y } = session.lastScreen;
-        void panelWindowApi
-          .moveTo(x - session.grabOffset.x, y - session.grabOffset.y)
-          .catch(() => {});
+        const { x, y } = windowPositionFor(session);
+        void panelWindowApi.moveTo(x, y).catch(() => {});
       });
     };
 
-    const updateDockHint = (session: DragSession) => {
-      const zone = session.dockZoneScreen;
-      const over =
-        !!zone && contains(zone, session.lastScreen.x, session.lastScreen.y);
-      setDockHint(over);
-      return over;
+    const isInDockZone = (session: DragSession) =>
+      !!session.dockZoneScreen &&
+      contains(
+        session.dockZoneScreen,
+        session.lastScreen.x,
+        session.lastScreen.y,
+      );
+
+    // 놓으면 도킹되는가 - 막 떼어낸 창은 잡은 지점 근처에서만, 분리 창은 도크 존 위에서
+    const wouldDock = (session: DragSession) => {
+      if (session.origin === 'docked') {
+        return (
+          Math.hypot(
+            session.lastScreen.x - session.startScreen.x,
+            session.lastScreen.y - session.startScreen.y,
+          ) <= SNAP_BACK_PX
+        );
+      }
+      return isInDockZone(session);
     };
 
-    // 커서가 메인 창 밖으로 나갔다 - 실제 창을 커서 밑에 띄우고 이어서 끌고 간다
+    // 놓았다 - 도크 존 안이면 자석처럼 다시 붙고, 밖이면 그 자리에 둔다
+    const finishDrop = (session: DragSession) => {
+      const snapBack = wouldDock(session);
+      endSession();
+      if (snapBack) void dockPropertiesPanel();
+    };
+
+    // 첫 이동에서 곧바로 실제 창을 커서 밑에 띄운다 (OBS 방식)
     const tearOff = (session: DragSession) => {
       if (session.tearingOff || session.draggingWindow) return;
       session.tearingOff = true;
-      const position = {
-        x: session.lastScreen.x - session.grabOffset.x,
-        y: session.lastScreen.y - session.grabOffset.y,
-      };
-      void detachPropertiesPanel({ position, keepMainFocus: true }).then(
-        (outcome) => {
-          if (sessionRef.current !== session) return;
-          session.tearingOff = false;
-          if (outcome !== 'done') {
-            endSession();
-            return;
-          }
-          setGhost(null);
-          session.draggingWindow = true;
-          if (session.releasedWhileTearingOff) {
-            // 놓은 자리로 맞추고 끝낸다
-            const { x, y } = session.lastScreen;
-            void panelWindowApi
-              .moveTo(x - session.grabOffset.x, y - session.grabOffset.y)
-              .catch(() => {});
-            endSession();
-            return;
-          }
-          // 놓는 사이 움직인 만큼 따라잡는다
-          scheduleWindowMove(session);
-          updateDockHint(session);
-        },
-      );
+      void detachPropertiesPanel({
+        position: windowPositionFor(session),
+        keepMainFocus: true,
+      }).then((outcome) => {
+        if (sessionRef.current !== session) return;
+        session.tearingOff = false;
+        if (outcome !== 'done') {
+          endSession();
+          return;
+        }
+        session.draggingWindow = true;
+        // 창이 뜨는 사이 움직인 만큼 따라잡는다
+        const { x, y } = windowPositionFor(session);
+        void panelWindowApi.moveTo(x, y).catch(() => {});
+        if (session.releasedWhileTearingOff) {
+          finishDrop(session);
+          return;
+        }
+        setDockHint(wouldDock(session));
+      });
     };
 
     const handleMouseMove = (event: MouseEvent) => {
@@ -244,107 +242,68 @@ export const usePanelHeaderDrag = ({
         session.ownerDocument.body.classList.add('dmn-dragging');
         if (session.origin === 'detached') {
           session.draggingWindow = true;
+        } else {
+          tearOff(session);
+          return;
         }
       }
 
       if (session.draggingWindow) {
         scheduleWindowMove(session);
-        updateDockHint(session);
-        return;
+        setDockHint(wouldDock(session));
       }
-      if (session.tearingOff) return;
-
-      // 도킹 상태에서 끄는 중 - 고스트가 따라온다
-      const inMainWindow =
-        event.clientX >= 0 &&
-        event.clientY >= 0 &&
-        event.clientX <= window.innerWidth &&
-        event.clientY <= window.innerHeight;
-      if (!inMainWindow) {
-        tearOff(session);
-        return;
-      }
-      setGhost({
-        x: event.clientX - session.grabOffset.x,
-        y: event.clientY - session.grabOffset.y,
-        width: session.ghostSize.width,
-        height: session.ghostSize.height,
-      });
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (event: MouseEvent) => {
       const session = sessionRef.current;
       if (!session) return;
+      session.lastScreen = { x: event.screenX, y: event.screenY };
       if (!session.started) {
         endSession();
         return;
       }
       if (session.tearingOff) {
-        // tear-off가 끝나기 전에 놓았다 - 창이 뜨면 그 자리에 두고 끝낸다
+        // 창이 뜨기 전에 놓았다 - 뜨면 드롭 처리를 마저 한다
         session.releasedWhileTearingOff = true;
         session.cleanup();
         return;
       }
-      const inDockZone =
-        !!session.dockZoneScreen &&
-        contains(
-          session.dockZoneScreen,
-          session.lastScreen.x,
-          session.lastScreen.y,
-        );
-      const wasDraggingWindow = session.draggingWindow;
-      const drop = {
-        x: session.lastScreen.x - session.grabOffset.x,
-        y: session.lastScreen.y - session.grabOffset.y,
-      };
-      endSession();
-
-      if (wasDraggingWindow) {
-        if (inDockZone) void dockPropertiesPanel();
-        return;
-      }
-      if (inDockZone) return;
-      void detachPropertiesPanel({ position: drop });
+      finishDrop(session);
     };
 
+    // Esc: 도킹에서 끌어낸 창은 제자리로 돌려놓는다
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       const session = sessionRef.current;
-      if (!session || session.draggingWindow) return;
+      if (!session || session.tearingOff) return;
+      const snapBack = session.origin === 'docked' && session.draggingWindow;
       endSession();
+      if (snapBack) void dockPropertiesPanel();
     };
 
     const handleMouseDown = (event: MouseEvent) => {
       if (event.button !== 0 || sessionRef.current) return;
       if (isHistoryEditorFlushLocked()) return;
+      if (usePanelHostStore.getState().transition !== 'idle') return;
       if (!isHeaderBackground(event.target)) return;
       const header = (event.target as HTMLElement).closest<HTMLElement>(
         '.dmn-panel-header',
       );
       const frame = header?.closest<HTMLElement>('[data-dmn-panel-frame]');
       if (!header || !frame) return;
+      const frameRect = frame.getBoundingClientRect();
       // 헤더 아래(본문)에서 시작한 건 드래그가 아니다
-      if (
-        event.clientY - frame.getBoundingClientRect().top >
-        PANEL_HEADER_HEIGHT
-      ) {
-        return;
-      }
+      if (event.clientY - frameRect.top > PANEL_HEADER_HEIGHT) return;
       event.preventDefault();
 
-      const frameRect = frame.getBoundingClientRect();
-      const placement = usePanelHostStore.getState().placement;
       const session: DragSession = {
-        origin: placement,
+        origin: usePanelHostStore.getState().placement,
         startScreen: { x: event.screenX, y: event.screenY },
         grabOffset: {
           x: event.clientX - frameRect.left,
           y: event.clientY - frameRect.top,
         },
-        // 컨텍스트가 오기 전엔 인라인 프레임 크기 - 첫 프레임 몇 개만 다르다
-        ghostSize: { width: FALLBACK_PANEL_WIDTH, height: frameRect.height },
         dockZoneScreen: null,
-        mainContentOrigin: { x: 0, y: 0 },
         started: false,
         draggingWindow: false,
         tearingOff: false,
@@ -364,23 +323,28 @@ export const usePanelHeaderDrag = ({
       doc.addEventListener('mouseup', handleMouseUp);
       doc.addEventListener('keydown', handleKeyDown, true);
 
-      // 도크 존·창 크기는 백엔드에 물어봐야 한다 - 왕복 동안 시작해도 무방
-      void resolveDragContext().then((context) => {
-        if (sessionRef.current !== session || !context) return;
-        session.ghostSize = context.panelSize;
-        if (context.mainContentOrigin) {
-          session.mainContentOrigin = context.mainContentOrigin;
-          session.dockZoneScreen = computeDockZone(context.mainContentOrigin);
-        }
+      // 도크 존은 메인 창 위치를 물어봐야 한다 - 왕복 동안 시작해도 무방
+      void resolveMainContentOrigin().then((origin) => {
+        if (sessionRef.current !== session || !origin) return;
+        session.dockZoneScreen = computeDockZone(origin);
       });
     };
 
     doc.addEventListener('mousedown', handleMouseDown);
+    endSessionRef.current = endSession;
     return () => {
+      // tear-off로 호스트 문서가 바뀌어 다시 구독할 때 진행 중인 세션을 끊으면 안 된다 -
+      // 세션 리스너는 시작한 문서에 묶여 있어 그대로 살아 있다. 종료는 언마운트에서만
       doc.removeEventListener('mousedown', handleMouseDown);
-      endSession();
     };
   }, [hostDocument, hostWindow, dockAreaRef]);
 
-  return { ghost, dockHint };
+  useEffect(
+    () => () => {
+      endSessionRef.current?.();
+    },
+    [],
+  );
+
+  return { dockHint };
 };
