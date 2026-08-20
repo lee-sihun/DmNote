@@ -1,96 +1,124 @@
 ---
-title: i18n API
-description: dmn.i18n API reference
+title: Internationalization (i18n)
+description: Locale events and localized plugin content
 ---
 
-# i18n API
+# Internationalization (i18n)
 
-Internationalization support for the application.
+## Read the current locale
 
-## Language Operations
+### getLocale()
 
-### `dmn.i18n.getLanguage(): Promise<string>`
-
-Returns current app language.
+Returns the locale currently used by the app.
 
 ```javascript
-const lang = await dmn.i18n.getLanguage();
-console.log(lang); // 'ko' | 'en' | 'ja' | ...
+const locale = await dmn.i18n.getLocale();
+console.log(locale); // "ko" or "en"
 ```
 
-### `dmn.i18n.setLanguage(lang: string): Promise<void>`
+The plugin API does not change the app locale. Users choose the locale in the app settings.
 
-Sets app language.
+## Subscribe to locale changes
+
+### onLocaleChange(listener)
+
+Calls the listener whenever the app locale changes and returns an unsubscribe function.
 
 ```javascript
-await dmn.i18n.setLanguage("en");
-```
-
-### `dmn.i18n.getSupportedLanguages(): Promise<string[]>`
-
-Returns list of supported languages.
-
-```javascript
-const langs = await dmn.i18n.getSupportedLanguages();
-console.log(langs); // ['ko', 'en', 'ja', ...]
-```
-
----
-
-## Translation
-
-### `dmn.i18n.t(key: string): Promise<string>`
-
-Returns translation for a key.
-
-```javascript
-const text = await dmn.i18n.t("settings.theme");
-console.log(text); // 'Theme' or '테마'
-```
-
----
-
-## Change Events
-
-### `dmn.i18n.onLanguageChanged(callback): Unsubscribe`
-
-Subscribes to language changes.
-
-```typescript
-interface LanguageEvent {
-  language: string;
-}
-
-const unsub = dmn.i18n.onLanguageChanged(({ language }) => {
-  console.log("Language changed to:", language);
+const unsub = dmn.i18n.onLocaleChange((locale) => {
+  console.log('Locale changed:', locale);
+  updateUI(locale);
 });
+
+dmn.plugin.registerCleanup(unsub);
 ```
 
----
+## Localize a plugin element
 
-## Plugin i18n
-
-For plugin-specific translations, use `defineSettings`:
+Use `messages` with `defineElement`. The element template and lifecycle helpers receive a `t()` function for the current locale.
 
 ```javascript
+// @id i18n-demo
+
 dmn.plugin.defineElement({
-  name: "Localized Panel",
+  name: 'Keyboard Monitor',
 
   messages: {
     ko: {
-      greeting: "안녕하세요",
-      "settings.size": "크기",
+      'menu.create': '모니터 생성',
+      title: '키보드 모니터',
+      count: '입력 횟수',
     },
     en: {
-      greeting: "Hello",
-      "settings.size": "Size",
+      'menu.create': 'Create Monitor',
+      title: 'Keyboard Monitor',
+      count: 'Key Count',
     },
   },
 
+  contextMenu: {
+    create: 'menu.create',
+  },
+
   template: (state, settings, { html, t }) => html`
-    <div>${t("greeting")}</div>
+    <div>
+      <h3>${t('title')}</h3>
+      <p>${t('count')}: ${state.count ?? 0}</p>
+    </div>
   `,
+
+  onMount: ({ locale, t, onLocaleChange }) => {
+    console.log('Current locale:', locale);
+    console.log('Translation:', t('title'));
+
+    onLocaleChange((newLocale) => {
+      console.log('Element locale changed:', newLocale);
+    });
+  },
 });
 ```
 
-The `t` function in template automatically uses the correct language based on app settings.
+### Message parameters
+
+Use `{{param}}` placeholders in message strings and pass their values to `t()`.
+
+```javascript fragment=object-members
+messages: {
+  ko: {
+    greeting: "안녕하세요, {{name}}님!",
+  },
+  en: {
+    greeting: "Hello, {{name}}!",
+  },
+},
+
+template: (state, settings, { html, t }) => html`
+  <div>${t("greeting", { name: "DM NOTE" })}</div>
+`
+```
+
+## Locale-aware formatting
+
+Use the standard `Intl` APIs with the locale returned by `getLocale()`.
+
+```javascript
+async function formatDate(date) {
+  const locale = await dmn.i18n.getLocale();
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(date);
+}
+```
+
+## Supported locales
+
+| Code | Language |
+| ---- | -------- |
+| `ko` | Korean   |
+| `en` | English  |
+
+<Callout type="info">
+  Additional locales may be added in future updates.
+</Callout>

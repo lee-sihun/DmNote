@@ -1,92 +1,138 @@
 ---
 title: Overlay API
-description: dmn.overlay API reference
+description: Read and control the overlay window state
 ---
 
 # Overlay API
 
-Control overlay window state.
+`dmn.overlay` controls the overlay visibility, lock state, resize anchor, and size.
 
-## Overlay Control
+## Read state
 
-### `dmn.overlay.show(): Promise<void>`
+### get()
 
-Shows the overlay window.
-
-```javascript
-await dmn.overlay.show();
-```
-
-### `dmn.overlay.hide(): Promise<void>`
-
-Hides the overlay window.
+Returns the current overlay state.
 
 ```javascript
-await dmn.overlay.hide();
+const state = await dmn.overlay.get();
+console.log('Visible:', state.visible);
+console.log('Locked:', state.locked);
+console.log('Anchor:', state.anchor);
 ```
 
-### `dmn.overlay.toggle(): Promise<void>`
+## Control state
 
-Toggles overlay visibility.
+### setVisible(visible)
+
+Shows or hides the overlay.
 
 ```javascript
-await dmn.overlay.toggle();
+await dmn.overlay.setVisible(true);
+await dmn.overlay.setVisible(false);
 ```
 
-### `dmn.overlay.reset(): Promise<void>`
+### setLock(locked)
 
-Resets overlay position and size.
+Locks or unlocks the overlay. A locked overlay ignores pointer input and cannot be moved or resized by the user.
 
 ```javascript
-await dmn.overlay.reset();
+await dmn.overlay.setLock(true);
+await dmn.overlay.setLock(false);
 ```
 
-### `dmn.overlay.resetPosition(): Promise<OverlayBounds>`
+### setAnchor(anchor)
 
-Moves the overlay back to the center of the current monitor work area. Use it when the overlay ends up off-screen. Returns the applied bounds. The OBS overlay has no window, so the call is rejected there.
+Sets the fixed point used when resizing the overlay.
+
+<Callout type="info">
+  Supported values: `top-left`, `top-right`, `bottom-left`, `bottom-right`, and
+  `center`.
+</Callout>
+
+```javascript
+await dmn.overlay.setAnchor('top-left');
+await dmn.overlay.setAnchor('center');
+await dmn.overlay.setAnchor('bottom-right');
+```
+
+### resize(payload)
+
+Resizes the overlay and returns the bounds actually applied. The position may move to keep the selected anchor fixed.
+
+```typescript
+interface ResizePayload {
+  width: number;
+  height: number;
+  anchor?: string;
+  contentTopOffset?: number;
+  fixedPositionDeltaX?: number;
+  fixedPositionDeltaY?: number;
+}
+```
+
+```javascript
+const bounds = await dmn.overlay.resize({
+  width: 800,
+  height: 200,
+});
+console.log('Applied bounds:', bounds);
+```
+
+<Callout type="info">
+  Width and height are clamped to the supported 100 to 4096 range. OBS has no
+  native overlay window, so this call is rejected there.
+</Callout>
+
+### resetPosition()
+
+Moves an off-screen overlay back to the center of the current monitor work area and returns the applied bounds.
 
 ```javascript
 const bounds = await dmn.overlay.resetPosition();
-console.log("restored bounds:", bounds);
+console.log('Restored bounds:', bounds);
 ```
 
----
+<Callout type="info">
+  OBS has no native overlay window, so this call is rejected there.
+</Callout>
 
-## Visibility Events
+## Events
 
-### `dmn.overlay.onVisibilityChanged(callback): Unsubscribe`
+### onVisibility(listener)
 
-Subscribes to overlay visibility changes.
+```javascript
+const unsub = dmn.overlay.onVisibility(({ visible }) => {
+  console.log(visible ? 'Overlay shown' : 'Overlay hidden');
+});
+dmn.plugin.registerCleanup(unsub);
+```
 
-```typescript
-interface VisibilityEvent {
-  visible: boolean;
-}
+### onLock(listener)
 
-const unsub = dmn.overlay.onVisibilityChanged(({ visible }) => {
-  console.log(visible ? "Shown" : "Hidden");
+```javascript
+const unsub = dmn.overlay.onLock(({ locked }) => {
+  console.log(locked ? 'Overlay locked' : 'Overlay unlocked');
 });
 ```
 
----
-
-## Example Usage
+### onAnchor(listener)
 
 ```javascript
-// Overlay control panel (for main window)
-if (dmn.window.type === "main") {
-  dmn.plugin.defineElement({
-    name: "Overlay Controls",
-    maxInstances: 1,
-
-    template: (state, settings, { html }) => html`
-      <div style="display: flex; gap: 8px;">
-        <button @click=${() => dmn.overlay.show()}>Show</button>
-        <button @click=${() => dmn.overlay.hide()}>Hide</button>
-        <button @click=${() => dmn.overlay.toggle()}>Toggle</button>
-        <button @click=${() => dmn.overlay.reset()}>Reset</button>
-      </div>
-    `,
-  });
-}
+const unsub = dmn.overlay.onAnchor(({ anchor }) => {
+  console.log('New anchor:', anchor);
+});
 ```
+
+### onResized(listener)
+
+```javascript
+const unsub = dmn.overlay.onResized((bounds) => {
+  console.log(`Position: ${bounds.x}, ${bounds.y}`);
+  console.log(`Size: ${bounds.width} x ${bounds.height}`);
+});
+```
+
+<Callout type="warning">
+  `dmn.overlay` does not provide an API for moving the overlay to an arbitrary
+  coordinate.
+</Callout>
