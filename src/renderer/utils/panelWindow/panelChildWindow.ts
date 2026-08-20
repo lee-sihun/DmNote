@@ -38,6 +38,15 @@ export const getPanelChildWindow = (): PanelChildWindow | null =>
 // 자식 문서의 기본 골격. about:blank라 charset·color-scheme·base가 없다.
 // dev reload로 opener가 바뀌면 같은 이름의 기존 창이 돌아올 수 있어 이전 흔적을 걷어낸다
 const prepareChildDocument = (source: Document, target: Document) => {
+  // about:blank는 DOCTYPE이 없어 quirks mode로 열린다 - %-높이가 부모 대신 뷰포트로
+  // 풀려 스크롤 뷰포트(height:100%)가 창 높이만큼 커지고 바닥이 클립된다.
+  // 렌더링 모드는 문서 생성 시 고정이라 DOM으로 doctype을 꽂아도 안 바뀌고,
+  // document.write로 문서를 다시 여는 것만이 표준 모드로 바꾸는 길이다
+  if (target.compatMode !== 'CSS1Compat') {
+    target.open();
+    target.write('<!doctype html><html><head></head><body></body></html>');
+    target.close();
+  }
   const alreadyPrepared = target.documentElement.dataset[PREPARED_MARK] === '1';
   if (alreadyPrepared) {
     removeMirroredStyles(target);
