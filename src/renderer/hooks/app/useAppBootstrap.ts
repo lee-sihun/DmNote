@@ -33,7 +33,6 @@ import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoord
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import {
   detachPropertiesPanel,
-  dockPropertiesPanel,
   notePanelWindowHidden,
 } from '@stores/grid/usePanelHostStore';
 import { initPluginInstancesUndoSync } from '@plugins/runtime/displayElement/instancesUndoSync';
@@ -845,14 +844,6 @@ export function useAppBootstrap() {
       panelWindowApi.onVisibility(({ visible }) => {
         if (window.__dmn_window_type !== 'main') return;
         if (!visible) notePanelWindowHidden();
-      }),
-      // 분리 창 닫기 요청은 도킹 - ack로 백엔드 fallback을 해제한 뒤 호스트를 되돌리고 창을 감춘다
-      panelWindowApi.onCloseRequested(({ requestId }) => {
-        if (window.__dmn_window_type !== 'main') return;
-        void panelWindowApi
-          .ackClose(requestId)
-          .catch(() => {})
-          .then(() => dockPropertiesPanel());
       }),
       subscribe<{
         handshakeId: string;

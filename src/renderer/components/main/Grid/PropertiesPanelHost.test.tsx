@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   ),
   readTokenColor: vi.fn((): [number, number, number, number] | null => null),
   startDragging: vi.fn((_x: number, _y: number) => Promise.resolve()),
+  dock: vi.fn(() => Promise.resolve()),
+  ackClose: vi.fn((_requestId: string) => Promise.resolve(true)),
+  closeListener: null as null | ((payload: { requestId: string }) => void),
+  closeUnsubscribe: vi.fn(),
+  flushResult: true,
 }));
 
 vi.mock('@utils/panelWindow/panelChildWindow', () => ({
@@ -26,10 +31,16 @@ vi.mock('@api/modules/panelWindowApi', () => ({
       Promise.resolve({ mainFrame: null, mainContentOrigin: null }),
     moveTo: () => Promise.resolve(),
     presentAt: () => Promise.resolve(),
+    dock: () => mocks.dock(),
+    ackClose: (requestId: string) => mocks.ackClose(requestId),
+    onCloseRequested: (listener: (payload: { requestId: string }) => void) => {
+      mocks.closeListener = listener;
+      return mocks.closeUnsubscribe;
+    },
   },
 }));
 vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
-  flushFocusedEditor: () => Promise.resolve(true),
+  flushFocusedEditor: () => Promise.resolve(mocks.flushResult),
 }));
 vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
   isHistoryEditorFlushLocked: () => false,
@@ -97,6 +108,13 @@ describe('PropertiesPanelHost', () => {
     mocks.mountCount = 0;
     mocks.applyNativeChrome.mockClear();
     mocks.readTokenColor.mockReturnValue(null);
+    mocks.dock.mockReset();
+    mocks.dock.mockResolvedValue(undefined);
+    mocks.ackClose.mockReset();
+    mocks.ackClose.mockResolvedValue(true);
+    mocks.closeListener = null;
+    mocks.closeUnsubscribe.mockClear();
+    mocks.flushResult = true;
     usePanelHostStore.setState({ placement: 'docked', transition: 'idle' });
   });
 
@@ -197,6 +215,92 @@ describe('PropertiesPanelHost', () => {
     expect(remove.mock.calls.map((call) => call[0])).toEqual(
       expect.arrayContaining(['keydown', 'blur']),
     );
+  });
+
+  describe('네이티브 닫기 요청', () => {
+    const detachBeforeRender = () => {
+      mocks.childWindow = createChild();
+      usePanelHostStore.setState({ placement: 'detached', transition: 'idle' });
+    };
+
+    it('fallback을 먼저 ack한 뒤 도킹한다', async () => {
+      detachBeforeRender();
+      await render();
+
+      await act(async () => {
+        mocks.closeListener?.({ requestId: 'close-done' });
+        await vi.waitFor(() => {
+          expect(mocks.dock).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      expect(mocks.ackClose).toHaveBeenCalledWith('close-done');
+      expect(mocks.ackClose.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.dock.mock.invocationCallOrder[0],
+      );
+      expect(usePanelHostStore.getState().placement).toBe('docked');
+    });
+
+    it('진행 중 전환이 끝나면 닫기 요청을 다시 도킹한다', async () => {
+      detachBeforeRender();
+      await render();
+      usePanelHostStore.getState().setTransition('detaching');
+
+      await act(async () => {
+        mocks.closeListener?.({ requestId: 'close-busy' });
+        await Promise.resolve();
+        usePanelHostStore.getState().setTransition('idle');
+        await vi.waitFor(() => {
+          expect(mocks.dock).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      expect(mocks.ackClose).toHaveBeenCalledWith('close-busy');
+      expect(usePanelHostStore.getState().placement).toBe('docked');
+    });
+
+    it('편집 정산이 막히면 fallback을 ack하고 기존 실패 UI를 호출한다', async () => {
+      detachBeforeRender();
+      mocks.flushResult = false;
+      const onTransitionFailure = vi.fn();
+      await act(async () => {
+        root.render(
+          <PropertiesPanelHost onTransitionFailure={onTransitionFailure} />,
+        );
+      });
+
+      await act(async () => {
+        mocks.closeListener?.({ requestId: 'close-blocked' });
+        await vi.waitFor(() => {
+          expect(onTransitionFailure).toHaveBeenCalledWith('dock');
+        });
+      });
+
+      expect(mocks.dock).not.toHaveBeenCalled();
+      expect(mocks.ackClose).toHaveBeenCalledWith('close-blocked');
+      expect(usePanelHostStore.getState().placement).toBe('detached');
+    });
+
+    it('창 감추기가 실패하면 ack하고 기존 실패 UI를 호출한다', async () => {
+      detachBeforeRender();
+      mocks.dock.mockRejectedValueOnce(new Error('hide failed'));
+      const onTransitionFailure = vi.fn();
+      await act(async () => {
+        root.render(
+          <PropertiesPanelHost onTransitionFailure={onTransitionFailure} />,
+        );
+      });
+
+      await act(async () => {
+        mocks.closeListener?.({ requestId: 'close-failed' });
+        await vi.waitFor(() => {
+          expect(onTransitionFailure).toHaveBeenCalledWith('dock');
+        });
+      });
+
+      expect(mocks.ackClose).toHaveBeenCalledWith('close-failed');
+      expect(usePanelHostStore.getState().placement).toBe('detached');
+    });
   });
 
   describe('네이티브 창 크롬', () => {
