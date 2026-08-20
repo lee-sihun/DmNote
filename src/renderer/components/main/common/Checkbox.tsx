@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
 import { useSwitchDrag } from '@hooks/useSwitchDrag';
 import {
@@ -19,12 +19,18 @@ const Checkbox = ({
   onChange,
   commitStrategy = 'sync',
 }: CheckboxProps) => {
+  // 트랙 ref는 두 훅이 나눠 쓴다. 커밋 프레임과 표식 프레임 모두 트랙이 사는 창 기준
+  const trackRef = useRef<HTMLDivElement>(null);
   const { value: visualChecked, toggle } = useOptimisticBooleanCommit({
     canonicalValue: checked,
     onCommit: onChange,
     strategy: commitStrategy,
+    frameHostRef: trackRef,
   });
-  const { ref, markPress } = usePressGatedSwap<HTMLDivElement>(visualChecked);
+  const { markPress } = usePressGatedSwap<HTMLDivElement>(
+    visualChecked,
+    trackRef,
+  );
   const drag = useSwitchDrag({
     checked: visualChecked,
     onFlip: toggle,
@@ -44,7 +50,7 @@ const Checkbox = ({
 
   return (
     <div
-      ref={ref}
+      ref={trackRef}
       role="switch"
       aria-checked={visualChecked}
       className={`dmn-toggle-track relative w-[28px] h-[16px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${

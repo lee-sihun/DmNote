@@ -56,6 +56,9 @@ const ShadowControls = ({
       canonicalValue: canonicalEnabled,
       onCommit: onEnabledChange,
       strategy: enabledCommitStrategy,
+      // 토글 자체는 Checkbox라 자기 trackRef를 따로 물고 있다. 여기 버튼 ref는
+      // 이 훅이 쓸 창을 정할 뿐이고, 창 판정은 같은 섹션 안 요소면 충분하다
+      frameHostRef: configButtonRef,
     });
 
   // 설정하기 행이 항상 남으므로 열어둔 피커를 끊지 않는다.

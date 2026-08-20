@@ -33,13 +33,19 @@ const PanelToggleButton = ({
   commitStrategy = 'after-paint',
 }: PanelToggleButtonProps) => {
   const { t } = useTranslation();
+  // 버튼 ref는 두 훅이 나눠 쓴다. 커밋 프레임과 표식 프레임 모두 버튼이 사는 창 기준
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const { value: visualOpen, toggle } = useOptimisticBooleanCommit({
     canonicalValue: open,
     onCommit: onClick,
     strategy: commitStrategy,
+    frameHostRef: buttonRef,
   });
   // 버튼에 data-instant 부여 — 외부 개폐 시 divider/lines transition도 차단
-  const { ref, isInstant } = usePressGatedSwap<HTMLButtonElement>(visualOpen);
+  const { isInstant } = usePressGatedSwap<HTMLButtonElement>(
+    visualOpen,
+    buttonRef,
+  );
   const chipRef = useRef<HTMLSpanElement>(null);
   const mountedRef = useRef(false);
   const animRef = useRef<Animation | null>(null);
@@ -90,7 +96,7 @@ const PanelToggleButton = ({
   return (
     <div className="absolute top-0 right-0 z-30 w-[48px] h-[48px] flex items-center justify-center pointer-events-none">
       <button
-        ref={ref}
+        ref={buttonRef}
         {...togglePress}
         className="dmn-panel-toggle pointer-events-auto relative w-[32px] h-[32px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors"
         data-open={visualOpen ? 'true' : 'false'}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
@@ -23,10 +23,12 @@ const TabSwitch = ({
   commitStrategy = 'sync',
   className,
 }: TabSwitchProps) => {
+  const rootRef = useRef<HTMLDivElement>(null);
   const { value: visualActiveTab, select } = useOptimisticValueCommit({
     canonicalValue: activeTab,
     onCommit: onTabChange,
     strategy: commitStrategy,
+    frameHostRef: rootRef,
   });
   const activeIndex = Math.max(
     0,
@@ -35,6 +37,7 @@ const TabSwitch = ({
 
   return (
     <div
+      ref={rootRef}
       className={`relative flex w-full h-[30px] bg-inset rounded-surface items-center p-[2px] ${
         className ?? ''
       }`}

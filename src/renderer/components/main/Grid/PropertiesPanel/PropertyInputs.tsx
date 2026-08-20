@@ -1285,6 +1285,7 @@ export const TextInput: React.FC<TextInputProps> = ({
     useAfterPaintValueCommit<string>({
       onCommit: liveCommit,
       strategy: commitStrategy,
+      frameHostRef: inputRef,
     });
 
   useEffect(() => {
@@ -1823,9 +1824,11 @@ const FontStyleButton = ({
   onChange,
   children,
 }: FontStyleButtonProps) => {
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const { value: visualActive, toggle } = useOptimisticBooleanCommit({
     canonicalValue: active,
     onCommit: onChange,
+    frameHostRef: buttonRef,
   });
   const buttonClass = visualActive
     ? 'bg-fill-hover text-fg'
@@ -1833,6 +1836,7 @@ const FontStyleButton = ({
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-pressed={visualActive}
       onClick={toggle}
