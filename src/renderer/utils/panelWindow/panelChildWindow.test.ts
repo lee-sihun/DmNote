@@ -26,7 +26,7 @@ describe('openPanelChildWindow', () => {
   let openSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    mocks.armOpen.mockClear();
+    mocks.armOpen.mockReset().mockResolvedValue(undefined);
     openSpy = vi.spyOn(window, 'open');
   });
 
@@ -76,6 +76,31 @@ describe('openPanelChildWindow', () => {
     expect(second).toBe(first);
     expect(openSpy).toHaveBeenCalledTimes(1);
     expect(mocks.armOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one in-flight window creation between concurrent callers', async () => {
+    let releaseArm!: () => void;
+    mocks.armOpen.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseArm = resolve;
+        }),
+    );
+    const { child } = createFakeChild();
+    openSpy.mockReturnValue(child);
+
+    const first = openPanelChildWindow();
+    const second = openPanelChildWindow();
+
+    expect(mocks.armOpen).toHaveBeenCalledTimes(1);
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(second).toBe(first);
+
+    releaseArm();
+    const [firstHandle, secondHandle] = await Promise.all([first, second]);
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(secondHandle).toBe(firstHandle);
   });
 
   it('opens a new window when the previous one is closed', async () => {

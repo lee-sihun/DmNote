@@ -31,6 +31,7 @@ export class PanelChildWindowError extends Error {
 }
 
 let current: PanelChildWindow | null = null;
+let opening: Promise<PanelChildWindow> | null = null;
 
 export const getPanelChildWindow = (): PanelChildWindow | null =>
   current && !current.window.closed ? current : null;
@@ -83,9 +84,7 @@ const prepareChildDocument = (source: Document, target: Document) => {
  * 자식 창을 연다(이미 있으면 재사용). 반환 시점에 문서 골격과 스타일 복제가 끝나 있다.
  * 창은 숨김 상태 - DOM을 옮긴 뒤 panelWindowApi.present()로 드러낸다
  */
-export const openPanelChildWindow = async (): Promise<PanelChildWindow> => {
-  const existing = getPanelChildWindow();
-  if (existing) return existing;
+const createPanelChildWindow = async (): Promise<PanelChildWindow> => {
   current = null;
 
   await panelWindowApi.armOpen();
@@ -111,6 +110,24 @@ export const openPanelChildWindow = async (): Promise<PanelChildWindow> => {
   }
   current = { window: child, document: doc, styles };
   return current;
+};
+
+export const openPanelChildWindow = (): Promise<PanelChildWindow> => {
+  const existing = getPanelChildWindow();
+  if (existing) return Promise.resolve(existing);
+  if (opening) return opening;
+
+  const task = createPanelChildWindow();
+  opening = task;
+  task.then(
+    () => {
+      if (opening === task) opening = null;
+    },
+    () => {
+      if (opening === task) opening = null;
+    },
+  );
+  return task;
 };
 
 // 테스트·재시작 경로용 - 참조만 버린다 (창은 백엔드가 소유)

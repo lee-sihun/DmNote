@@ -117,7 +117,7 @@ const FloatingPopupSurface = ({
   const surfaceRef = useRef<HTMLDivElement>(null);
   // 분리 패널 창 안에서는 그 창의 document가 포커스·키 이벤트의 주인이다
   const { document: ownerDocument } = usePanelHost();
-  const { openerRef, captureOpener } = useFocusRestore(active);
+  const { openerRef, captureOpener } = useFocusRestore(active, ownerDocument);
 
   // 자식 팝업은 부모 모달의 layout 등록 뒤에 쌓여야 하므로 passive effect 사용.
   // 닫힘 모션이 도는 동안 DOM은 남지만 레이어 소유권은 즉시 놓는다

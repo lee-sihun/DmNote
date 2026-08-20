@@ -3073,17 +3073,23 @@ impl AppState {
             }
             self.apply_panel_window_layout(&window, &layout);
             let _ = window.unminimize();
-            let result = window
-                .show()
-                .and_then(|()| if focus { window.set_focus() } else { Ok(()) })
-                .map_err(anyhow::Error::from)
-                .and_then(|()| {
-                    publish_panel_visibility_transition(&self.panel_visible, app, true, None)
-                });
-            if result.is_ok() {
-                self.mark_panel_detached(true);
+            // 네이티브 show가 적용된 뒤의 보조 작업 실패를 커맨드 실패로 돌려보내면
+            // 프론트는 도킹으로 되돌아가지만 창은 이미 보여 서로 다른 상태가 된다.
+            window.show().context("failed to show panel window")?;
+            if focus {
+                if let Err(error) = window.set_focus() {
+                    log::warn!("failed to focus the visible panel window: {error}");
+                }
             }
-            result
+            if let Err(error) =
+                publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+            {
+                // 이벤트 발행 실패 시 helper가 원래 값으로 되돌리므로 실제 창 상태로 재정렬
+                self.panel_visible.store(true, Ordering::SeqCst);
+                log::warn!("failed to publish the visible panel state: {error}");
+            }
+            self.mark_panel_detached(true);
+            Ok(())
         };
         if result.is_ok() {
             self.flush_panel_detached();
@@ -3239,10 +3245,10 @@ impl AppState {
         // 이 함수는 panel_creation_lock 안에서 도는 만큼 저장은 호출자가 락을 놓은 뒤 맡는다
         self.mark_panel_detached(false);
         *self.panel_destroy_reason.lock() = Some(reason);
-        let mut bounds_error = None;
         if let Some(window) = app.get_webview_window(PANEL_LABEL) {
             if let Err(error) = self.panel_bounds_persistence.flush_now(&window) {
-                bounds_error = Some(error);
+                // 위치 저장 실패는 이미 적용될 도킹을 되돌릴 수 없으므로 별도로 기록
+                log::warn!("failed to persist panel bounds before docking: {error}");
             }
             if let Err(error) = window.hide() {
                 self.clear_panel_destroy_reason(reason);
@@ -3252,9 +3258,12 @@ impl AppState {
                 return Err(error.into());
             }
         }
-        self.publish_panel_hidden(app, reason)?;
-        if let Some(error) = bounds_error {
-            return Err(error);
+        if let Err(error) = self.publish_panel_hidden(app, reason) {
+            // 이벤트 발행 실패 시 helper가 가시성과 사유를 되돌린다. 네이티브 창은 이미
+            // 숨겨졌으므로 실제 상태를 우선하고 다음 전환에 낡은 사유를 남기지 않는다
+            self.panel_visible.store(false, Ordering::SeqCst);
+            self.clear_panel_destroy_reason(reason);
+            log::warn!("failed to publish the hidden panel state: {error}");
         }
         Ok(())
     }
