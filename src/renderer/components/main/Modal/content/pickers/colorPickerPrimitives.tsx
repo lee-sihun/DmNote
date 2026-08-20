@@ -78,12 +78,9 @@ export const usePointerSession = (
     emitRef.current(x, y, final);
   };
 
+  // 스케줄러는 세션 시작 때 트랙이 사는 창으로 만들어 둔다
   const schedulePreview = () => {
-    previewSchedulerRef.current ??= createRafLatestScheduler(
-      () => emitLast(false),
-      continuousInputStrategy,
-    );
-    previewSchedulerRef.current.push(true);
+    previewSchedulerRef.current?.push(true);
   };
 
   // 세션 해제 — 어떤 종료 경로로 와도 1회만 동작
@@ -128,10 +125,17 @@ export const usePointerSession = (
       ? getEditSessionTarget()
       : null;
     target.setPointerCapture(event.pointerId);
+    // 트랙이 분리 패널 자식 창에 있으면 그 창의 blur·프레임을 쓴다
+    const ownerWindow = target.ownerDocument.defaultView ?? window;
     const onWindowBlur = () => finish();
-    window.addEventListener('blur', onWindowBlur);
+    ownerWindow.addEventListener('blur', onWindowBlur);
     blurCleanupRef.current = () =>
-      window.removeEventListener('blur', onWindowBlur);
+      ownerWindow.removeEventListener('blur', onWindowBlur);
+    previewSchedulerRef.current = createRafLatestScheduler<true>(
+      () => emitLast(false),
+      continuousInputStrategy,
+      ownerWindow,
+    );
     updateRatio(event.clientX, event.clientY);
     emitLast(false);
   };

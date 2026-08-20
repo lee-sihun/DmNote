@@ -10,7 +10,6 @@ import {
   resolvedGlowSize,
   type TrackLayoutInput,
 } from '@stores/signals/noteBuffer';
-import { isMac } from '@utils/core/platform';
 
 const vertexShader = `
   attribute vec3 position;
@@ -355,11 +354,13 @@ const normalizeFrameLimit = (value: unknown): number => {
 
 const FRAME_PACING_EPSILON_MS = 0.3;
 const MAX_DRIFT_FRAMES = 8;
-const MACOS_DPR_CAP = 1;
+// 노트 캔버스 backing 배율 상한 - 좌표계가 CSS px라 위치·크기는 그대로, 픽셀 밀도만 줄어듦
+// GPU 드로우는 fill 비례라 고배율 화면에서 절반~1/3로 감소
+const NOTE_DPR_CAP = 1;
 
 const resolveDpr = (): number => {
   const rawDpr = window.devicePixelRatio || 1;
-  return isMac() ? Math.min(rawDpr, MACOS_DPR_CAP) : rawDpr;
+  return Math.min(rawDpr, NOTE_DPR_CAP);
 };
 
 // 캔버스 crop: 노트가 실제로 그려질 수 있는 트랙 union 영역 (DOM 좌표)
