@@ -39,7 +39,6 @@ import {
   MAX_EXPRESSION_LENGTH,
 } from '@utils/core/arithmeticExpression';
 import { gradientToCss } from '@src/types/color';
-import { useTranslation } from '@contexts/useTranslation';
 import { I18nContext } from '@contexts/I18nContextDef';
 import { registerEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';
@@ -1432,7 +1431,6 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   canvasAnchor,
   gradientSurface = 'background',
 }) => {
-  const { t } = useTranslation();
   // 외부 제어 모드인지 확인
   const isControlled =
     externalIsOpen !== undefined && externalOnToggle !== undefined;
@@ -1586,10 +1584,6 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 
   // ── gradient 배선 — onModeCommit이 주어진 경우에만 활성화 ──
   const supportsGradient = onModeCommit !== undefined;
-  const showDetachedGradientHint =
-    supportsGradient &&
-    typeof window !== 'undefined' &&
-    window.__dmn_window_type === 'panel';
   const storedGradient =
     stateMode === 'active'
       ? activeGradientValue ?? null
@@ -1607,12 +1601,8 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       : {},
     fallbackColor: '#ffffff',
     contextKey: `${_stableId}:${stateMode}`,
-    // 분리 창에서는 온캔버스 그라디언트 핸들 비활성 - 캔버스는 메인 창에 있고
-    // 편집 세션 콜백이 창 경계를 넘을 수 없음 (Phase E 계약 E5)
-    canvasAnchor:
-      pickerMounted && window.__dmn_window_type !== 'panel'
-        ? canvasAnchor
-        : undefined,
+    // 패널이 분리돼 있어도 캔버스 핸들은 메인 캔버스에 그려진다 (같은 React 트리)
+    canvasAnchor: pickerMounted ? canvasAnchor : undefined,
     canvasSurface: gradientSurface,
     canvasState: stateMode,
     onPreview: (modeValue) => {
@@ -1682,16 +1672,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
             }
             headerSlot={supportsGradient ? gradientState.headerSlot : undefined}
             footerSlot={
-              supportsGradient ? (
-                <>
-                  {gradientState.footerSlot}
-                  {showDetachedGradientHint && (
-                    <p className="mt-[8px] max-w-[210px] text-caption leading-[1.35] text-fg-muted">
-                      {t('propertiesPanel.detachedGradientHint')}
-                    </p>
-                  )}
-                </>
-              ) : undefined
+              supportsGradient ? <>{gradientState.footerSlot}</> : undefined
             }
             gradientSpec={
               supportsGradient ? gradientState.paletteGradientSpec : undefined

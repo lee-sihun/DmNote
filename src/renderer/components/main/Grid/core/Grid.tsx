@@ -63,7 +63,7 @@ import {
   useGridSelectionStore,
   isElementInMarquee,
 } from '@stores/grid/useGridSelectionStore';
-import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
+import { openPropertiesPanelForSelection } from '@stores/grid/usePanelHostStore';
 import { useUIStore } from '@stores/useUIStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';

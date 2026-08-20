@@ -14,11 +14,9 @@ import {
   usePluginDisplayElementStore,
 } from '@stores/plugin/usePluginDisplayElementStore';
 import { setMixedElementGroups } from '@src/renderer/editor/runtime/mixedElementGroups';
-import { setElementGroupsViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { buildNextLayerGroupName } from '@utils/layerGroupUtils';
-import { isPanelWindow } from '@utils/windowType';
 import type { EditorElementGroupTargetV1 } from '@src/types/editor';
 
 interface SplitGroupTargets {
@@ -94,14 +92,7 @@ const dispatchGroupChange = (
     | { kind: 'create'; id: string; name: string }
     | null,
 ): Promise<boolean> =>
-  isPanelWindow()
-    ? setElementGroupsViaAuthority(
-        mode,
-        targets.native,
-        targetGroup,
-        targets.plugin,
-      )
-    : setMixedElementGroups(mode, targets.native, targets.plugin, targetGroup);
+  setMixedElementGroups(mode, targets.native, targets.plugin, targetGroup);
 
 /**
  * 선택된 요소들을 그룹화 (native+plugin 혼합 지원)

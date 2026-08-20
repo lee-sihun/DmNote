@@ -5,11 +5,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
-import {
-  deleteLayerSelectionViaAuthority,
-  deletePluginElements,
-  type LayerDeleteTarget,
-} from '@plugins/rpc/pluginElementActions';
+import { deletePluginElements } from '@plugins/runtime/displayElement/pluginElementActions';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
@@ -61,30 +57,7 @@ export const deleteFrozenSelection = async (
   } = {},
 ): Promise<void> => {
   if (selectedElements.length === 0) return;
-  if (window.__dmn_window_type === 'panel') {
-    const targets: LayerDeleteTarget[] = [];
-    const seen = new Set<string>();
-    for (const element of selectedElements) {
-      if (
-        element.id.trim().length === 0 ||
-        seen.has(element.id) ||
-        (element.type !== 'plugin' && !isNativeElementId(element.id))
-      ) {
-        reportElementOpSkipped('panel batch delete (unstable target)');
-        return;
-      }
-      seen.add(element.id);
-      targets.push({ elementType: element.type, id: element.id });
-    }
-    if (targets.length > 4096) {
-      reportElementOpSkipped('panel batch delete (too many targets)');
-      return;
-    }
-    useGridSelectionStore.getState().clearSelection();
-    const deleted = await deleteLayerSelectionViaAuthority(targets);
-    if (!deleted) reportElementOpSkipped('panel batch delete');
-    return;
-  }
+
   // 동기 프레임 내 authority 세대 재검증은 중복 - 실제 보호는 await 경계 assert가 수행
   const gestureId = crypto.randomUUID();
   const stableTargets: Array<{ type: NativeType; id: string }> = [];

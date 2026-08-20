@@ -3,13 +3,7 @@
  * 가시성 토글, 이름 변경, 컨텍스트 메뉴, 삭제, 그룹 연산 등
  */
 
-import {
-  patchNativeLayerPropertyViaAuthority,
-  renameLayerGroupViaAuthority,
-  setElementGroupsViaAuthority,
-  setLayerGroupVisibilityViaAuthority,
-  setPluginElementsHidden,
-} from '@plugins/rpc/pluginElementActions';
+import { setPluginElementsHidden } from '@plugins/runtime/displayElement/pluginElementActions';
 import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -173,19 +167,11 @@ export function useLayerActions({
           id: item.id,
           hidden: !item.hidden,
         };
-        if (window.__dmn_window_type === 'panel') {
-          await patchNativeLayerPropertyViaAuthority({
-            elementType: target.elementType,
-            id: target.id,
-            patch: { property: 'hidden', value: target.hidden },
-          });
-        } else {
-          await patchElementHiddenById(
-            target.elementType,
-            target.id,
-            target.hidden,
-          );
-        }
+        await patchElementHiddenById(
+          target.elementType,
+          target.id,
+          target.hidden,
+        );
       } catch (error) {
         console.error(`Failed to toggle ${item.type} visibility`, error);
       }
@@ -217,26 +203,8 @@ export function useLayerActions({
     const allHidden = children.every((c) => c.hidden);
     const newHidden = !allHidden;
     const nativeChildren = children.filter((child) => child.type !== 'plugin');
-    const pluginTargets = children
-      .filter((child) => child.type === 'plugin')
-      .map((child) => ({ fullId: child.id, hidden: newHidden }));
 
     try {
-      if (window.__dmn_window_type === 'panel') {
-        if (nativeChildren.length === 0) {
-          // plugin-only 그룹 - editor 변경이 없어 단일 plugin 커밋으로 충분
-          await setPluginElementsHidden(pluginTargets);
-          return;
-        }
-        // native+plugin은 main authority가 단일 게스처로 정산 - 별도
-        // plugin 커밋을 보내면 히스토리가 2엔트리로 갈라진다
-        await setLayerGroupVisibilityViaAuthority(
-          selectedKeyType,
-          groupId,
-          newHidden,
-        );
-        return;
-      }
       if (nativeChildren.some((child) => !isNativeElementId(child.id))) {
         return;
       }
@@ -263,15 +231,11 @@ export function useLayerActions({
           id: item.id,
           patch: { property: 'layerName', value: newLayerName },
         } as const;
-        if (window.__dmn_window_type === 'panel') {
-          await patchNativeLayerPropertyViaAuthority(target);
-        } else {
-          await patchElementLayerNameById(
-            target.elementType,
-            target.id,
-            target.patch.value,
-          );
-        }
+        await patchElementLayerNameById(
+          target.elementType,
+          target.id,
+          target.patch.value,
+        );
       } catch (error) {
         console.error(`Failed to rename ${item.type} layer`, error);
       }
@@ -298,9 +262,7 @@ export function useLayerActions({
     if (!currentGroup || currentGroup.name === trimmed) return;
 
     try {
-      await (window.__dmn_window_type === 'panel'
-        ? renameLayerGroupViaAuthority(selectedKeyType, groupId, trimmed)
-        : renameLayerGroupById(selectedKeyType, groupId, trimmed));
+      await renameLayerGroupById(selectedKeyType, groupId, trimmed);
     } catch (error) {
       console.error('Failed to rename group', error);
     }
@@ -356,19 +318,12 @@ export function useLayerActions({
           ? { kind: 'create', id: creatingGroup.id, name: creatingGroup.name }
           : { kind: 'existing', id: targetGroupId };
       }
-      return window.__dmn_window_type === 'panel'
-        ? setElementGroupsViaAuthority(
-            selectedKeyType,
-            nativeTargets,
-            targetGroup,
-            pluginTargets,
-          )
-        : setMixedElementGroups(
-            selectedKeyType,
-            nativeTargets,
-            pluginTargets,
-            targetGroup,
-          );
+      return setMixedElementGroups(
+        selectedKeyType,
+        nativeTargets,
+        pluginTargets,
+        targetGroup,
+      );
     }
     return false;
   };

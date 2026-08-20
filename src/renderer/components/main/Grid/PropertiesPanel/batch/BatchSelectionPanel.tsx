@@ -37,9 +37,7 @@ import {
   patchActiveImageByTargets,
   patchActiveTransparentByTargets,
   patchCounterAnimationEnabledByTargets,
-  patchCounterBooleanByTargetsViaAuthority,
   patchCounterEnabledByTargets,
-  patchElementPropertyByTargetsViaAuthority,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
   patchPaintByTargets,
@@ -54,18 +52,6 @@ import {
   patchSoundVolumeByIds,
   patchSoundPathByIds,
 } from '@src/renderer/editor/runtime/elementOps';
-import {
-  patchCounterLayoutViaAuthority,
-  patchCounterTypographyViaAuthority,
-  patchPaintViaAuthority,
-  patchShadowViaAuthority,
-  patchNotePaintViaAuthority,
-  patchCounterFillViaAuthority,
-  patchFontColorViaAuthority,
-  patchStylePropertyViaAuthority,
-  patchSoundVolumeViaAuthority,
-} from '@plugins/rpc/pluginElementActions';
-import { isPanelWindow } from '@utils/windowType';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import {
@@ -122,9 +108,9 @@ const createStylePropertyHandlers = (
       const gestureId = options.settleGesture
         ? editGestureController.activeGestureId() ?? undefined
         : undefined;
-      const persisted = isPanelWindow()
-        ? patchStylePropertyViaAuthority(stableTargets, patch, gestureId)
-        : patchStylePropertyByTargets(stableTargets, patch, { gestureId });
+      const persisted = patchStylePropertyByTargets(stableTargets, patch, {
+        gestureId,
+      });
       if (options.settleGesture) {
         editGestureController.settleCommit(persisted);
       }
@@ -168,9 +154,7 @@ const createPaintCommitHandler =
     if (!stable) {
       return;
     }
-    const persisted = isPanelWindow()
-      ? patchPaintViaAuthority(relevant, patch)
-      : patchPaintByTargets(relevant, patch);
+    const persisted = patchPaintByTargets(relevant, patch);
     void persisted.catch(reportElementOpError);
   };
 
@@ -208,13 +192,11 @@ const createFontColorHandlers = (
       const gestureId = active
         ? undefined
         : editGestureController.activeGestureId() ?? undefined;
-      const persisted = isPanelWindow()
-        ? patchFontColorViaAuthority(stable, patch, gestureId)
-        : patchFontColorByTargets(
-            stable,
-            patch,
-            gestureId ? { gestureId } : {},
-          );
+      const persisted = patchFontColorByTargets(
+        stable,
+        patch,
+        gestureId ? { gestureId } : {},
+      );
       if (!active) editGestureController.settleCommit(persisted);
       void persisted.catch(reportElementOpError);
     },
@@ -240,9 +222,7 @@ const createShadowCommitHandler =
     if (!stable) {
       return;
     }
-    const persisted = isPanelWindow()
-      ? patchShadowViaAuthority(relevant, patch)
-      : patchShadowByTargets(relevant, patch);
+    const persisted = patchShadowByTargets(relevant, patch);
     void persisted.catch(reportElementOpError);
   };
 
@@ -254,12 +234,7 @@ const commitBoundInactiveImage = (
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
   if (targets.length === 0) return;
-  const persisted = isPanelWindow()
-    ? patchElementPropertyByTargetsViaAuthority(targets, {
-        property: 'inactiveImage',
-        value: inactiveImage,
-      })
-    : patchInactiveImageByTargets(targets, inactiveImage);
+  const persisted = patchInactiveImageByTargets(targets, inactiveImage);
   void persisted.catch(reportElementOpError);
 };
 
@@ -271,12 +246,7 @@ const commitBoundActiveImage = (
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
   if (targets.length === 0) return;
-  const persisted = isPanelWindow()
-    ? patchElementPropertyByTargetsViaAuthority(targets, {
-        property: 'activeImage',
-        value: activeImage,
-      })
-    : patchActiveImageByTargets(targets, activeImage);
+  const persisted = patchActiveImageByTargets(targets, activeImage);
   void persisted.catch(reportElementOpError);
 };
 
@@ -288,12 +258,7 @@ const commitBoundIdleTransparent = (
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
   if (targets.length === 0) return;
-  const persisted = isPanelWindow()
-    ? patchElementPropertyByTargetsViaAuthority(targets, {
-        property: 'idleTransparent',
-        value: idleTransparent,
-      })
-    : patchIdleTransparentByTargets(targets, idleTransparent);
+  const persisted = patchIdleTransparentByTargets(targets, idleTransparent);
   void persisted.catch(reportElementOpError);
 };
 
@@ -305,12 +270,7 @@ const commitBoundActiveTransparent = (
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
   if (targets.length === 0) return;
-  const persisted = isPanelWindow()
-    ? patchElementPropertyByTargetsViaAuthority(targets, {
-        property: 'activeTransparent',
-        value: activeTransparent,
-      })
-    : patchActiveTransparentByTargets(targets, activeTransparent);
+  const persisted = patchActiveTransparentByTargets(targets, activeTransparent);
   void persisted.catch(reportElementOpError);
 };
 
@@ -320,12 +280,7 @@ const commitBoundSoundPath = (
 ) => {
   const ids = selection.key ?? [];
   if (ids.length === 0) return;
-  const persisted = isPanelWindow()
-    ? patchElementPropertyByTargetsViaAuthority(
-        ids.map((id) => ({ elementType: 'key' as const, id })),
-        { property: 'soundPath', value: soundPath },
-      )
-    : patchSoundPathByIds(ids, soundPath);
+  const persisted = patchSoundPathByIds(ids, soundPath);
   void persisted.catch(reportElementOpError);
 };
 
@@ -741,9 +696,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const commitNotePaint = stableNotePaintIds
     ? (patch: EditorNotePaintPropertyPatchV1) => {
         const gestureId = editGestureController.activeGestureId() ?? undefined;
-        const persisted = isPanelWindow()
-          ? patchNotePaintViaAuthority(stableNotePaintIds, patch, gestureId)
-          : patchNotePaintByIds(stableNotePaintIds, patch, { gestureId });
+        const persisted = patchNotePaintByIds(stableNotePaintIds, patch, {
+          gestureId,
+        });
         editGestureController.settleCommit(persisted);
         void persisted.catch(reportElementOpError);
       }
@@ -790,9 +745,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       : null;
   const commitCounterFill = stableCounterFillTargets
     ? (patch: EditorCounterFillPropertyPatchV1) => {
-        const persisted = isPanelWindow()
-          ? patchCounterFillViaAuthority(stableCounterFillTargets, patch)
-          : patchCounterFillByTargets(stableCounterFillTargets, patch);
+        const persisted = patchCounterFillByTargets(
+          stableCounterFillTargets,
+          patch,
+        );
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -804,48 +760,37 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       : null;
   const commitSoundEnabled = stableSoundTargets
     ? (soundEnabled: boolean) => {
-        const persisted = isPanelWindow()
-          ? patchElementPropertyByTargetsViaAuthority(
-              stableSoundTargets.map((id) => ({
-                elementType: 'key' as const,
-                id,
-              })),
-              { property: 'soundEnabled', value: soundEnabled },
-            )
-          : patchSoundEnabledByIds(stableSoundTargets, soundEnabled);
+        const persisted = patchSoundEnabledByIds(
+          stableSoundTargets,
+          soundEnabled,
+        );
         void persisted.catch(reportElementOpError);
       }
     : undefined;
   const commitSoundVolume = stableSoundTargets
     ? (soundVolume: number) => {
-        const persisted = isPanelWindow()
-          ? patchSoundVolumeViaAuthority(stableSoundTargets, soundVolume)
-          : patchSoundVolumeByIds(stableSoundTargets, soundVolume);
+        const persisted = patchSoundVolumeByIds(
+          stableSoundTargets,
+          soundVolume,
+        );
         void persisted.catch(reportElementOpError);
       }
     : undefined;
   const commitCounterEnabled = stableCounterTargets
     ? (enabled: boolean) => {
-        const persisted = isPanelWindow()
-          ? patchCounterBooleanByTargetsViaAuthority(stableCounterTargets, {
-              property: 'counterEnabled',
-              value: enabled,
-            })
-          : patchCounterEnabledByTargets(stableCounterTargets, enabled);
+        const persisted = patchCounterEnabledByTargets(
+          stableCounterTargets,
+          enabled,
+        );
         void persisted.catch(reportElementOpError);
       }
     : undefined;
   const commitCounterAnimationEnabled = stableCounterTargets
     ? (enabled: boolean) => {
-        const persisted = isPanelWindow()
-          ? patchCounterBooleanByTargetsViaAuthority(stableCounterTargets, {
-              property: 'counterAnimationEnabled',
-              value: enabled,
-            })
-          : patchCounterAnimationEnabledByTargets(
-              stableCounterTargets,
-              enabled,
-            );
+        const persisted = patchCounterAnimationEnabledByTargets(
+          stableCounterTargets,
+          enabled,
+        );
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -853,9 +798,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     ? (
         patch: import('@src/types/editor').EditorCounterLayoutPropertyPatchV1,
       ) => {
-        const persisted = isPanelWindow()
-          ? patchCounterLayoutViaAuthority(stableCounterTargets, patch)
-          : patchCounterLayoutByTargets(stableCounterTargets, patch);
+        const persisted = patchCounterLayoutByTargets(
+          stableCounterTargets,
+          patch,
+        );
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -863,9 +809,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     ? (
         patch: import('@src/types/editor').EditorCounterTypographyPropertyPatchV1,
       ) => {
-        const persisted = isPanelWindow()
-          ? patchCounterTypographyViaAuthority(stableCounterTargets, patch)
-          : patchCounterTypographyByTargets(stableCounterTargets, patch);
+        const persisted = patchCounterTypographyByTargets(
+          stableCounterTargets,
+          patch,
+        );
         void persisted.catch(reportElementOpError);
       }
     : undefined;

@@ -6,6 +6,7 @@ import {
   settleDeferredContent,
   stubAnimationFrame,
 } from '@src/renderer/__tests__/deferredContentHarness';
+import { PanelHostContext } from '@contexts/PanelHostContext';
 
 describe('FloatingPopup focus contract', () => {
   let host: HTMLDivElement;
@@ -170,6 +171,47 @@ describe('FloatingPopup focus contract', () => {
 
     await renderPopup(false, null);
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('restores the opener in a detached child document after first close', async () => {
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const childWindow = frame.contentWindow!;
+    const childDocument = childWindow.document;
+    const opener = childDocument.createElement('button');
+    childDocument.body.appendChild(opener);
+    opener.focus();
+
+    const renderDetachedPopup = async (open: boolean) => {
+      await act(async () => {
+        root.render(
+          <PanelHostContext.Provider
+            value={{
+              placement: 'detached',
+              window: childWindow,
+              document: childDocument,
+            }}
+          >
+            <FloatingPopup
+              open={open}
+              ariaLabel="Detached popup"
+              fixedX={0}
+              fixedY={0}
+              animate={false}
+              onClose={() => undefined}
+            >
+              {open ? <button type="button">Action</button> : null}
+            </FloatingPopup>
+          </PanelHostContext.Provider>,
+        );
+      });
+    };
+
+    await renderDetachedPopup(true);
+    expect(childDocument.activeElement?.textContent).toBe('Action');
+
+    await renderDetachedPopup(false);
+    expect(childDocument.activeElement).toBe(opener);
   });
 
   it('focuses the surface first when initialFocus is surface', async () => {

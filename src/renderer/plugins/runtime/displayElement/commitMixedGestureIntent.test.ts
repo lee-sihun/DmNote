@@ -115,11 +115,11 @@ vi.mock('@stores/data/useHistoryStatusStore', () => ({
   useHistoryStatusStore: { getState: () => ({ historyEpoch: 0 }) },
 }));
 
-vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+vi.mock('@plugins/runtime/pluginAuthorityGeneration', () => ({
   getPluginAuthorityGeneration: () => 0,
 }));
 
-vi.mock('@plugins/rpc/pluginModelRevision', () => ({
+vi.mock('@plugins/runtime/pluginModelRevision', () => ({
   getBackendPluginRevision: () => 0,
   noteBackendPluginRevision: vi.fn(),
 }));

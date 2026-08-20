@@ -23,13 +23,14 @@ use std::{path::PathBuf, process::Command};
 use std::{fs, path::PathBuf};
 
 use tauri::{
-    ipc::CapabilityBuilder, webview::PageLoadEvent, LogicalSize, Manager, PhysicalPosition,
-    Position,
+    ipc::CapabilityBuilder,
+    webview::{NewWindowResponse, PageLoadEvent},
+    LogicalSize, Manager, PhysicalPosition, Position,
 };
 
 use dm_note::{compute_compensating_zoom, should_apply_compensating_zoom};
 
-use state::{AppState, AppStore, LogicalRect, PANEL_LABEL};
+use state::{AppState, AppStore, PANEL_LABEL};
 
 const INTERACTION_BENCHMARK_ENV: &str = "DMN_INTERACTION_WEBVIEW_BENCHMARK";
 
@@ -90,6 +91,13 @@ fn main() {
 
     let builder = tauri::Builder::default()
         .on_page_load(|webview, payload| {
+            // 메인 문서가 다시 로드되면 분리 패널의 opener 참조가 끊긴다 - 창은 살려 둔 채
+            // 감춰서 새 문서가 다시 붙일 수 있게 한다 (dev reload)
+            if matches!(payload.event(), PageLoadEvent::Started) && webview.label() == "main" {
+                if let Some(state) = webview.app_handle().try_state::<AppState>() {
+                    state.dock_panel_window_for_main_reload(webview.app_handle());
+                }
+            }
             if matches!(payload.event(), PageLoadEvent::Finished) {
                 let zoom = compute_compensating_zoom();
                 // macOS WKWebView의 identity zoom은 활성 입력 선택·캐럿을 리셋
@@ -131,6 +139,10 @@ fn main() {
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // 메인 창은 config 자동 생성 대신 여기서 만든다 - 분리 패널 창을 opener 자식으로
+            // 붙이는 on_new_window 훅은 빌더에만 걸 수 있다
+            build_main_window(app)?;
 
             if interaction_benchmark {
                 if let Some(window) = app.get_webview_window("main") {
@@ -251,8 +263,6 @@ fn main() {
             commands::editor::preview::editor_preview_subscribe,
             commands::editor::preview::editor_preview_publish,
             commands::editor::preview::editor_preview_cancel,
-            commands::editor::selection::selection_session_get,
-            commands::editor::selection::selection_session_publish,
             // 키 입력/설정
             commands::keys::keys::keys_get,
             commands::keys::keys::keys_get_counters,
@@ -307,11 +317,14 @@ fn main() {
             commands::layout::overlay::overlay_resize,
             commands::layout::overlay::overlay_reset_position,
             commands::layout::overlay::overlay_transition_fade,
-            commands::layout::panel::panel_window_show,
-            commands::layout::panel::panel_window_close,
-            commands::layout::panel::panel_window_take_view_state,
+            commands::layout::panel::panel_window_arm_open,
+            commands::layout::panel::panel_window_present,
+            commands::layout::panel::panel_window_present_at,
+            commands::layout::panel::panel_window_move_to,
+            commands::layout::panel::panel_window_drag_context,
+            commands::layout::panel::panel_window_dock,
+            commands::layout::panel::panel_window_take_restore_request,
             commands::layout::panel::panel_window_close_ack,
-            commands::layout::panel::panel_window_is_open,
             commands::layout::panel::panel_window_start_dragging,
             commands::layout::panel::panel_window_apply_native_chrome,
             // 미디어
@@ -328,8 +341,6 @@ fn main() {
             // 플러그인
             commands::plugin::bridge::plugin_bridge_send,
             commands::plugin::bridge::plugin_bridge_send_to,
-            commands::plugin::rpc::plugin_rpc_send,
-            commands::plugin::rpc::plugin_rpc_respond,
             commands::plugin::rpc::plugin_authority_reset,
             commands::plugin::instances::plugin_instances_commit,
             commands::plugin::instances::plugin_instances_get,
@@ -492,6 +503,37 @@ fn setup_logging() -> Result<()> {
     Ok(())
 }
 
+// tauri.conf.json의 main 항목(create=false)을 그대로 쓰되 on_new_window를 건다.
+// 핸들러는 메인 웹뷰의 window.open을 패널 창으로 만든다 - arm 토큰이 없거나 조건이 맞지 않는
+// 요청(플러그인 JS 등)은 거부한다
+fn build_main_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .cloned()
+        .ok_or("main window config is missing")?;
+    let handle = app.handle().clone();
+    tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+        .on_new_window(move |url, features| {
+            let Some(state) = handle.try_state::<AppState>() else {
+                log::warn!("window.open before app state was ready; denied");
+                return NewWindowResponse::Deny;
+            };
+            match state.open_panel_window_for_request(&handle, url.as_str(), features) {
+                Ok(window) => NewWindowResponse::Create { window },
+                Err(err) => {
+                    log::warn!("denied window.open from main webview: {err}");
+                    NewWindowResponse::Deny
+                }
+            }
+        })
+        .build()?;
+    Ok(())
+}
+
 fn configure_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if let Err(err) = apply_main_window_configuration(app, window) {
@@ -525,19 +567,10 @@ fn configure_main_window(app: &tauri::AppHandle) {
     });
 }
 
-// 메인 창을 놓을 자리 (physical px + 그 화면의 scale)
+// 메인 창을 놓을 자리 (physical px)
 struct MainWindowPlacement {
     x: f64,
     y: f64,
-    width: f64,
-    height: f64,
-    scale_factor: f64,
-}
-
-impl MainWindowPlacement {
-    fn to_logical_rect(&self) -> Option<LogicalRect> {
-        LogicalRect::from_physical(self.x, self.y, self.width, self.height, self.scale_factor)
-    }
 }
 
 fn apply_main_window_configuration(
@@ -579,7 +612,6 @@ fn apply_main_window_configuration(
     }
 
     let placement = app.primary_monitor().ok().flatten().and_then(|monitor| {
-        let scale_factor = monitor.scale_factor();
         let work_area = monitor.work_area();
         window.outer_size().ok().map(|size| {
             let width = size.width as f64;
@@ -598,15 +630,10 @@ fn apply_main_window_configuration(
             MainWindowPlacement {
                 x: desired_x.clamp(origin_x, max_x),
                 y: desired_y.clamp(origin_y, max_y),
-                width,
-                height,
-                scale_factor,
             }
         })
     });
 
-    // 방금 놓은 좌표를 그대로 들고 있는다 - 분리 패널이 이걸 기준으로 붙는다
-    let mut placed_rect = None;
     if let Some(placement) = placement {
         if let Err(err) = window.set_position(Position::Physical(PhysicalPosition::new(
             placement.x.round() as i32,
@@ -616,8 +643,6 @@ fn apply_main_window_configuration(
             if let Err(err) = window.center() {
                 log::warn!("failed to center window: {err}");
             }
-        } else {
-            placed_rect = placement.to_logical_rect();
         }
     } else if let Err(err) = window.center() {
         log::warn!("failed to center window: {err}");
@@ -644,12 +669,10 @@ fn apply_main_window_configuration(
             }
         };
 
-    // 분리 패널은 메인 창 옆에 붙으므로 메인 배치가 끝난 지금 만든다.
-    // 트레이 실패 폴백까지 반영한 최종 가시성으로 판단하고, 메인 show보다 앞이라
-    // 포커스는 그대로 메인에 남는다.
-    // 좌표는 실측 대신 방금 계산한 값을 넘긴다 - set_position 직후의 게터는
-    // 아직 반영 전 프레임을 돌려줘서 패널이 엉뚱한 높이에 뜬다
-    state.restore_detached_panel_on_startup(app, placed_rect, stays_hidden);
+    // 분리 패널은 메인 렌더러가 window.open으로만 만들 수 있다(opener 관계) - 여기서는
+    // 트레이 실패 폴백까지 반영한 최종 가시성으로 복원 요청만 남기고, 메인이 부트스트랩
+    // 뒤 1회 소비한다. 그 시점엔 메인 배치가 끝나 있어 패널이 제자리(메인 옆)에 붙는다
+    state.restore_detached_panel_on_startup(stays_hidden);
 
     if stays_hidden {
         return Ok(());

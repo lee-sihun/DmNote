@@ -12,6 +12,8 @@ import { isTopmostPopupLayer, registerPopupLayer } from '../Modal/popupLayer';
 import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { clampToViewport } from '@utils/ui/popupGeometry';
+import { usePanelHost } from '@contexts/PanelHostContext';
+import { isNodeLike } from '@utils/dom/isElementNode';
 
 interface DropdownOption {
   label: string;
@@ -61,6 +63,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   widthClass = '',
   size = 'sm',
 }) => {
+  // 분리 패널 창 안에서는 그 창 기준으로 배치·포털·바깥 클릭 처리
+  const { window: ownerWindow, document: ownerDocument } = usePanelHost();
   const [open, setOpen] = useState(false);
   // 트리거 실측 — 열리는 순간 캡처, 메뉴 좌표 계산의 기준
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
@@ -171,9 +175,9 @@ const Dropdown: React.FC<DropdownProps> = ({
     if (!fullWidth && align === 'right') {
       horizontal = {
         right: clampToViewport(
-          window.innerWidth - anchor.right,
+          ownerWindow.innerWidth - anchor.right,
           menuWidth,
-          window.innerWidth,
+          ownerWindow.innerWidth,
           margin,
         ),
       };
@@ -183,7 +187,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         left: clampToViewport(
           anchor.left,
           menuWidth,
-          window.innerWidth,
+          ownerWindow.innerWidth,
           margin,
         ),
       };
@@ -193,14 +197,15 @@ const Dropdown: React.FC<DropdownProps> = ({
     // 버튼 아래 공간이 부족하면 위로 펼치기 — 위로 열릴 땐 bottom 좌표로
     // 고정해 내용 높이가 변해도 위쪽으로 자라게 유지
     const openUpward =
-      anchor.bottom + gap + menuHeight > window.innerHeight - bottomPadding;
+      anchor.bottom + gap + menuHeight >
+      ownerWindow.innerHeight - bottomPadding;
     let vertical: Omit<MenuPosition, 'placement'>;
     if (openUpward) {
       vertical = {
         bottom: clampToViewport(
-          window.innerHeight - anchor.top + gap,
+          ownerWindow.innerHeight - anchor.top + gap,
           menuHeight,
-          window.innerHeight,
+          ownerWindow.innerHeight,
           margin,
         ),
       };
@@ -209,7 +214,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         top: clampToViewport(
           anchor.bottom + gap,
           menuHeight,
-          window.innerHeight,
+          ownerWindow.innerHeight,
           margin,
         ),
       };
@@ -230,7 +235,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         ? prev
         : next,
     );
-  }, [anchor, fullWidth, align]);
+  }, [anchor, fullWidth, align, ownerWindow]);
 
   useLayoutEffect(() => {
     if (!open || !mounted || menuPos) return;
@@ -283,9 +288,9 @@ const Dropdown: React.FC<DropdownProps> = ({
       event.preventDefault();
       closeAndFocusTrigger();
     };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [closeAndFocusTrigger, open]);
+    ownerDocument.addEventListener('keydown', handleKey);
+    return () => ownerDocument.removeEventListener('keydown', handleKey);
+  }, [closeAndFocusTrigger, open, ownerDocument]);
 
   const handleTriggerKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
@@ -376,24 +381,21 @@ const Dropdown: React.FC<DropdownProps> = ({
     // 트리거가 스크롤/리사이즈로 움직이면 좌표가 어긋나므로 닫는다
     // (메뉴 내부 스크롤은 제외)
     const handleScroll = (event: Event) => {
-      if (
-        event.target instanceof Node &&
-        menuRef.current?.contains(event.target)
-      ) {
+      if (isNodeLike(event.target) && menuRef.current?.contains(event.target)) {
         return;
       }
       setOpen(false);
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', handleScroll);
+    ownerDocument.addEventListener('mousedown', handleClickOutside);
+    ownerWindow.addEventListener('scroll', handleScroll, true);
+    ownerWindow.addEventListener('resize', handleScroll);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleScroll);
+      ownerDocument.removeEventListener('mousedown', handleClickOutside);
+      ownerWindow.removeEventListener('scroll', handleScroll, true);
+      ownerWindow.removeEventListener('resize', handleScroll);
     };
-  }, [open]);
+  }, [open, ownerDocument, ownerWindow]);
 
   const selected = options.find((opt) => opt.value === visualValue);
 
@@ -452,7 +454,7 @@ const Dropdown: React.FC<DropdownProps> = ({
               ))
             )}
           </div>,
-          document.body,
+          ownerDocument.body,
         )
       : null;
 

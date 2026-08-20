@@ -6,10 +6,6 @@ import {
   setPluginMenuRuntimeState,
 } from '@utils/plugin/pluginMenuRuntimeState';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
-import {
-  PANEL_MODEL_REQUEST_MESSAGE,
-  schedulePluginPanelModelSync,
-} from '@utils/plugin/panelModelSync';
 
 // 다중 OBS 클라이언트 동시 재연결 시 요청 버스트를 응답 1회로 코얼레싱
 const RESPOND_DEBOUNCE_MS = 100;
@@ -40,19 +36,6 @@ export function usePluginDisplayElementsResponder() {
       if (timer) clearTimeout(timer);
       unsubscribe();
     };
-  }, []);
-
-  // 분리 패널의 read-model 스냅샷 요청에 응답 (mount 이전 push 유실 복구)
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on(
-      PANEL_MODEL_REQUEST_MESSAGE,
-      () => {
-        const { elements, definitions } =
-          usePluginDisplayElementStore.getState();
-        schedulePluginPanelModelSync(elements, definitions, undefined, true);
-      },
-    );
-    return unsubscribe;
   }, []);
 
   // 오버레이의 메뉴 predicate용 상태 동기화 수신 (contextMenuStateKeys)

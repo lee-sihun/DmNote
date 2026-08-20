@@ -36,7 +36,7 @@ vi.mock('@api/modules/resourceApi', () => ({
     update: (...args: unknown[]) => mocks.update(...args),
   },
 }));
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   updateCounterAnimationPresetViaAuthority: (...args: unknown[]) =>
     mocks.authorityUpdate(...args),
 }));
@@ -202,31 +202,5 @@ describe('CounterAnimationEditorModal 저장 순서', () => {
 
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(onSaved.mock.calls[0][0]).toMatchObject({ mode: 'edit' });
-  });
-
-  it('panel 편집은 main authority만 호출하고 create는 기존 direct API를 유지한다', async () => {
-    window.__dmn_window_type = 'panel';
-    mocks.authorityUpdate.mockResolvedValue({
-      preset: PRESET,
-      affectedUsageCount: 3,
-    });
-    mount('edit', PRESET);
-    act(() => mocks.submit?.());
-    await settle();
-
-    expect(mocks.authorityUpdate).toHaveBeenCalledOnce();
-    expect(update).not.toHaveBeenCalled();
-    expect(onSaved).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: 'edit' }),
-    );
-
-    act(() => root.unmount());
-    host.remove();
-    mount('create', null);
-    typeName('panel create');
-    act(() => mocks.submit?.());
-    await settle();
-    expect(create).toHaveBeenCalledOnce();
-    expect(mocks.authorityUpdate).toHaveBeenCalledOnce();
   });
 });

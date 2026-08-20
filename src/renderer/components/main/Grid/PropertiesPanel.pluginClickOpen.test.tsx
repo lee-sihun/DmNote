@@ -72,7 +72,7 @@ vi.mock('@contexts/useTranslation', () => ({
 vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   renameLayerGroupViaAuthority: vi.fn(() => Promise.resolve(true)),
   patchGraphColorsViaAuthority: vi.fn(() => Promise.resolve(true)),
   patchGraphPropertiesViaAuthority: vi.fn(() => Promise.resolve(true)),

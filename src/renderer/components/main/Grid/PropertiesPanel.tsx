@@ -6,6 +6,8 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
+import { usePanelHost } from '@contexts/PanelHostContext';
+import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -26,32 +28,8 @@ import {
   omitLayoutSettingValues,
   type SettingsNormalizationErrorKind,
 } from '@plugins/runtime/settingsSections';
-import {
-  commitBatchGeometryViaAuthority,
-  patchGraphColorsViaAuthority,
-  patchGraphPropertiesViaAuthority,
-  patchGraphTypesViaAuthority,
-  patchFontFamilyViaAuthority,
-  patchStylePropertyViaAuthority,
-  patchPaintViaAuthority,
-  patchShadowViaAuthority,
-  patchNotePaintViaAuthority,
-  patchFontStyleViaAuthority,
-  patchKnobPropertiesViaAuthority,
-  patchNativeLayerBoundsViaAuthority,
-  patchNotePropertiesViaAuthority,
-  patchSoundVolumeViaAuthority,
-  patchCounterAnimationPresetViaAuthority,
-  patchCounterLayoutViaAuthority,
-  patchCounterTypographyViaAuthority,
-  patchCounterStrokeViaAuthority,
-  patchCounterFillViaAuthority,
-  patchFontColorViaAuthority,
-  renameLayerGroupViaAuthority,
-  patchUseInlineStylesViaAuthority,
-  updatePluginElement,
-} from '@plugins/rpc/pluginElementActions';
-import type { NativeLayerBoundsTarget } from '@plugins/rpc/pluginElementActions';
+import { updatePluginElement } from '@plugins/runtime/displayElement/pluginElementActions';
+import type { NativeLayerBoundsTarget } from '@plugins/runtime/displayElement/pluginElementActions';
 import {
   toRgbHexColor,
   parseAlphaPercent,
@@ -86,7 +64,6 @@ import type {
 import type {
   PluginSettingSchema,
   PluginMessages,
-  PluginDefinitionInternal,
 } from '@src/types/plugin/api';
 import { normalizeCounterSettings } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
@@ -134,8 +111,6 @@ import {
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
   patchElementPropertyById,
-  patchElementPropertyViaAuthority,
-  patchCounterBooleanByTargetsViaAuthority,
 } from '@src/renderer/editor/runtime/elementOps';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -395,8 +370,6 @@ interface PropertiesPanelProps {
   onDetachAction?: () => void;
   // 분리 창에서는 인셋 채움 프레임 사용
   frameVariant?: 'inline' | 'window';
-  // 분리 창의 authoritative 선택 동기화 완료 여부
-  selectionSyncReady?: boolean;
 }
 
 // ============================================================================
@@ -407,10 +380,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   detachAction,
   onDetachAction,
   frameVariant = 'inline',
-  selectionSyncReady = true,
   onKeyMappingChange,
 }) => {
   const { t, i18n } = useTranslation();
+  // 패널이 분리 창에 있으면 키·마우스 이벤트는 그 창의 document로 온다
+  const { document: hostDocument } = usePanelHost();
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
   );
@@ -546,44 +520,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const stablePluginGeometryTargets: string[] | null =
     stablePluginGeometryElements?.map((element) => element.fullId) ?? null;
 
-  const pluginDefinitionViews = usePluginDisplayElementStore(
-    (state) => state.definitionViews,
-  );
-  const pluginElementVisibilityViews = usePluginDisplayElementStore(
-    (state) => state.elementVisibilityViews,
-  );
-
-  const selectedPluginDefinition = (() => {
-    if (!selectedPluginElement?.definitionId) return null;
-    const local = pluginDefinitions.get(selectedPluginElement.definitionId);
-    if (local) return local;
-    // 분리 패널 창 - main이 push한 definition 투영으로 폴백
-    // visibility는 main이 요소별 현재 settings로 평가한 오버레이를 병합
-    const view = pluginDefinitionViews.get(selectedPluginElement.definitionId);
-    if (!view) return null;
-    const visibilityOverlay = pluginElementVisibilityViews.get(
-      selectedPluginElement.fullId,
-    );
-    const settings = visibilityOverlay
-      ? Object.fromEntries(
-          Object.entries(view.resolvedSettingsSchema).map(([key, schema]) => [
-            key,
-            { ...schema, visible: visibilityOverlay[key] ?? schema.visible },
-          ]),
-        )
-      : view.resolvedSettingsSchema;
-    return {
-      id: view.definitionId,
-      pluginId: selectedPluginElement.pluginId,
-      name: view.name,
-      resizable: view.resizable,
-      preserveAxis: view.preserveAxis,
-      resizeAnchor: view.resizeAnchor,
-      settingsUI: view.settingsUI,
-      settings,
-      messages: view.messages,
-    } as unknown as PluginDefinitionInternal;
-  })();
+  const selectedPluginDefinition = selectedPluginElement?.definitionId
+    ? pluginDefinitions.get(selectedPluginElement.definitionId) ?? null
+    : null;
 
   const pluginSettingsUI = selectedPluginDefinition?.settingsUI ?? 'panel';
   const hasSinglePluginSelection =
@@ -886,7 +825,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target;
       if (
-        target instanceof HTMLElement &&
+        isHTMLElementNode(target) &&
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
           target.isContentEditable)
@@ -894,10 +833,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return;
       }
       // 모달·포털 메뉴 등 상위 레이어가 열려 있으면 그쪽이 Escape를 소유
+      // 모달은 메인 문서에, 팝업 레이어는 패널이 있는 문서에 뜬다 - 둘 다 본다
       if (
         document.querySelector(
           '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
-        )
+        ) ||
+        (hostDocument !== document &&
+          hostDocument.querySelector('[data-dmn-popup-layer="true"]'))
       ) {
         return;
       }
@@ -906,9 +848,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       event.stopPropagation();
       closePage();
     };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-  }, [activePageKey, closePage]);
+    hostDocument.addEventListener('keydown', onKey, true);
+    return () => hostDocument.removeEventListener('keydown', onKey, true);
+  }, [activePageKey, closePage, hostDocument]);
 
   // Escape로 플러그인 설정 세션 취소 - 서브 페이지·모달이 없을 때만
   useEffect(() => {
@@ -918,17 +860,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target;
       if (
-        target instanceof HTMLElement &&
+        isHTMLElementNode(target) &&
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
           target.isContentEditable)
       ) {
         return;
       }
+      // 모달은 메인 문서에, 팝업 레이어는 패널이 있는 문서에 뜬다 - 둘 다 본다
       if (
         document.querySelector(
           '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
-        )
+        ) ||
+        (hostDocument !== document &&
+          hostDocument.querySelector('[data-dmn-popup-layer="true"]'))
       ) {
         return;
       }
@@ -936,25 +881,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       event.stopPropagation();
       handlePluginSettingsPanelCancelImpl.current();
     };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-  }, [pluginSettingsPanel, activePageKey]);
+    hostDocument.addEventListener('keydown', onKey, true);
+    return () => hostDocument.removeEventListener('keydown', onKey, true);
+  }, [pluginSettingsPanel, activePageKey, hostDocument]);
 
-  // 선택 동기화 중 이전 렌더의 effect가 최신 탭을 덮지 않도록 커밋 직전 재확인
+  // 이전 렌더의 effect가 최신 탭을 덮지 않도록 커밋 직전 재확인
   useEffect(() => {
-    if (frameVariant === 'window' && !selectionSyncReady) return;
     const latestTab = usePropertiesPanelStore.getState().propertyPanelActiveTab;
     const latestSelection = useGridSelectionStore.getState().selectedElements;
     if (shouldNormalizePropertyTabToStyle(latestSelection, latestTab)) {
       setActiveTab(TABS.STYLE);
     }
-  }, [
-    frameVariant,
-    selectionSyncReady,
-    activeTab,
-    selectedElements,
-    setActiveTab,
-  ]);
+  }, [activeTab, selectedElements, setActiveTab]);
 
   // 레이어 이름 변경: 현재 선택된 요소의 layerName 가져오기
   const getCurrentLayerName = (): string => {
@@ -994,9 +932,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (!currentGroup || currentGroup.name === trimmed) return;
 
     try {
-      await (window.__dmn_window_type === 'panel'
-        ? renameLayerGroupViaAuthority(selectedKeyType, groupId, trimmed)
-        : renameLayerGroupById(selectedKeyType, groupId, trimmed));
+      await renameLayerGroupById(selectedKeyType, groupId, trimmed);
     } catch (error) {
       console.error('Failed to rename group', error);
     }
@@ -1043,19 +979,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         patch: { property: 'layerName', value: newLayerName },
       } as const;
       try {
-        if (window.__dmn_window_type === 'panel') {
-          await patchElementPropertyViaAuthority(
-            target.elementType,
-            target.id,
-            target.patch,
-          );
-        } else {
-          await patchElementLayerNameById(
-            target.elementType,
-            target.id,
-            target.patch.value,
-          );
-        }
+        await patchElementLayerNameById(
+          target.elementType,
+          target.id,
+          target.patch.value,
+        );
       } catch (error) {
         console.error('Failed to rename layer', error);
       }
@@ -1247,9 +1175,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // property로 남아 있으면 다음 캔버스 클릭이 목록을 건너뛰고 편집으로 점프함
   // (플러그인 설정 패널 종료·설정 왕복 리마운트 경로 포함)
   useEffect(() => {
-    // 분리 창의 초기 동기화 전 빈 선택은 아직 원격 상태 미도착 - 정규화 보류
-    // (600ms 폴백 마운트 시 핸드오프의 property가 layer로 덮이는 경합 방지)
-    if (frameVariant === 'window' && !selectionSyncReady) return;
     if (
       isPanelVisible &&
       !pluginSettingsPanel &&
@@ -1260,8 +1185,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setPanelMode('layer');
     }
   }, [
-    frameVariant,
-    selectionSyncReady,
     isPanelVisible,
     pluginSettingsPanel,
     panelMode,
@@ -1297,11 +1220,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }, [pluginSettingsPanel, setIsPanelVisible, setPanelMode]);
 
   // 레이어 뷰가 표시된 상태(선택 없음)에서 그리드 빈 공간 클릭 시 패널 닫기
-  // panelMode가 property로 남아 있어도 선택이 없으면 레이어 뷰가 표시되므로 동일하게 닫음
+  // panelMode가 property로 남아 있어도 선택이 없으면 레이어 뷰가 표시되므로 동일하게 닫음.
+  // 분리 창일 때는 접힘이 없다 - 여기서 스토어를 닫으면 도킹 뒤 패널이 접힌 채 돌아온다
   useEffect(() => {
     const hasSelection =
       selectedKeyElements.length > 0 || selectedElements.length > 0;
-    if (!isPanelVisible || hasSelection) {
+    if (frameVariant === 'window' || !isPanelVisible || hasSelection) {
       return undefined;
     }
 
@@ -1336,6 +1260,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       document.removeEventListener('mousedown', handleGridClick);
     };
   }, [
+    frameVariant,
     isPanelVisible,
     selectedKeyElements.length,
     selectedKeyLikeElements.length,
@@ -1496,15 +1421,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const gestureId = ownsPreviewGesture
       ? editGestureController.activeGestureId() ?? undefined
       : undefined;
-    const persisted =
-      window.__dmn_window_type === 'panel'
-        ? patchNativeLayerBoundsViaAuthority({
-            elementType: type,
-            id,
-            patch,
-            ...(gestureId ? { gestureId } : {}),
-          })
-        : commitElementGeometryById(type, id, patch, { gestureId });
+    const persisted = commitElementGeometryById(type, id, patch, { gestureId });
     if (ownsPreviewGesture) editGestureController.settleCommit(persisted);
     void persisted.catch((error) => {
       console.error('Failed to update element geometry', error);
@@ -1557,10 +1474,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id && isNativeElementId(id)
       ? (patch: EditorElementPropertyPatchV1) => {
           // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority(type, id, patch)
-              : patchElementPropertyById(type, id, patch);
+          const persisted = patchElementPropertyById(type, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update element property', error);
           });
@@ -1573,13 +1487,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (inactiveImage: string) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority(type, id, {
-                  property: 'inactiveImage',
-                  value: inactiveImage,
-                })
-              : patchInactiveImageById(type, id, inactiveImage);
+          const persisted = patchInactiveImageById(type, id, inactiveImage);
           void persisted.catch((error) => {
             console.error('Failed to update inactive image', error);
           });
@@ -1592,13 +1500,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (activeImage: string) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority(type, id, {
-                  property: 'activeImage',
-                  value: activeImage,
-                })
-              : patchActiveImageById(type, id, activeImage);
+          const persisted = patchActiveImageById(type, id, activeImage);
           void persisted.catch((error) => {
             console.error('Failed to update active image', error);
           });
@@ -1611,13 +1513,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (idleTransparent: boolean) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority(type, id, {
-                  property: 'idleTransparent',
-                  value: idleTransparent,
-                })
-              : patchIdleTransparentById(type, id, idleTransparent);
+          const persisted = patchIdleTransparentById(type, id, idleTransparent);
           void persisted.catch((error) => {
             console.error('Failed to update idle transparency', error);
           });
@@ -1630,13 +1526,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (activeTransparent: boolean) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority(type, id, {
-                  property: 'activeTransparent',
-                  value: activeTransparent,
-                })
-              : patchActiveTransparentById(type, id, activeTransparent);
+          const persisted = patchActiveTransparentById(
+            type,
+            id,
+            activeTransparent,
+          );
           void persisted.catch((error) => {
             console.error('Failed to update active transparency', error);
           });
@@ -1649,13 +1543,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (idleImageFit: ImageFit) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority(type, id, {
-                  property: 'idleImageFit',
-                  value: idleImageFit,
-                })
-              : patchIdleImageFitById(type, id, idleImageFit);
+          const persisted = patchIdleImageFitById(type, id, idleImageFit);
           void persisted.catch((error) => {
             console.error('Failed to update idle image fit', error);
           });
@@ -1668,13 +1556,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (activeImageFit: ImageFit) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority(type, id, {
-                  property: 'activeImageFit',
-                  value: activeImageFit,
-                })
-              : patchActiveImageFitById(type, id, activeImageFit);
+          const persisted = patchActiveImageFitById(type, id, activeImageFit);
           void persisted.catch((error) => {
             console.error('Failed to update active image fit', error);
           });
@@ -1684,13 +1566,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const stableSoundPathHandler = (id: string | undefined) =>
     id && isNativeElementId(id)
       ? (soundPath: string) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority('key', id, {
-                  property: 'soundPath',
-                  value: soundPath,
-                })
-              : patchSoundPathById(id, soundPath);
+          const persisted = patchSoundPathById(id, soundPath);
           void persisted.catch((error) => {
             console.error('Failed to update sound path', error);
           });
@@ -1700,13 +1576,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const stableSoundEnabledHandler = (id: string | undefined) =>
     id && isNativeElementId(id)
       ? (soundEnabled: boolean) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchElementPropertyViaAuthority('key', id, {
-                  property: 'soundEnabled',
-                  value: soundEnabled,
-                })
-              : patchSoundEnabledById(id, soundEnabled);
+          const persisted = patchSoundEnabledById(id, soundEnabled);
           void persisted.catch((error) => {
             console.error('Failed to update sound enabled', error);
           });
@@ -1718,10 +1588,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (soundVolume: number) => {
           const gestureId =
             editGestureController.activeGestureId() ?? undefined;
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchSoundVolumeViaAuthority([id], soundVolume, gestureId)
-              : patchSoundVolumeById(id, soundVolume, { gestureId });
+          const persisted = patchSoundVolumeById(id, soundVolume, {
+            gestureId,
+          });
           editGestureController.settleCommit(persisted);
           void persisted.catch((error) => {
             console.error('Failed to update sound volume', error);
@@ -1748,14 +1617,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           const gestureId = options.settleGesture
             ? editGestureController.activeGestureId() ?? undefined
             : undefined;
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchStylePropertyViaAuthority(
-                  [{ elementType: type, id }],
-                  patch,
-                  gestureId,
-                )
-              : patchStylePropertyById(type, id, patch, { gestureId });
+          const persisted = patchStylePropertyById(type, id, patch, {
+            gestureId,
+          });
           if (options.settleGesture) {
             editGestureController.settleCommit(persisted);
           }
@@ -1771,10 +1635,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorPaintPropertyPatchV1) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchPaintViaAuthority([{ elementType: type, id }], patch)
-              : patchPaintById(type, id, patch);
+          const persisted = patchPaintById(type, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update paint', error);
           });
@@ -1787,10 +1648,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorFontColorPropertyPatchV1) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchFontColorViaAuthority([{ elementType: type, id }], patch)
-              : patchFontColorById(type, id, patch);
+          const persisted = patchFontColorById(type, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update font color', error);
           });
@@ -1803,10 +1661,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorShadowPropertyPatchV1) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchShadowViaAuthority([{ elementType: type, id }], patch)
-              : patchShadowById(type, id, patch);
+          const persisted = patchShadowById(type, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update shadow', error);
           });
@@ -1818,10 +1673,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (patch: EditorNotePaintPropertyPatchV1) => {
           const gestureId =
             editGestureController.activeGestureId() ?? undefined;
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchNotePaintViaAuthority([id], patch, gestureId)
-              : patchNotePaintById(id, patch, { gestureId });
+          const persisted = patchNotePaintById(id, patch, { gestureId });
           editGestureController.settleCommit(persisted);
           void persisted.catch((error) => {
             console.error('Failed to update note paint', error);
@@ -1848,13 +1700,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (intent: EditorCounterAnimationPresetIntentV1) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchCounterAnimationPresetViaAuthority(
-                  [{ elementType, id }],
-                  intent,
-                )
-              : patchCounterAnimationPresetById(elementType, id, intent);
+          const persisted = patchCounterAnimationPresetById(
+            elementType,
+            id,
+            intent,
+          );
           void persisted.catch((error) => {
             console.error('Failed to update counter animation preset', error);
           });
@@ -1868,16 +1718,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id && isNativeElementId(id)
       ? (enabled: boolean) => {
           // 분리 창도 즉시 반영을 거친다 - 배치 경로와 같은 래퍼를 대상 하나로 재사용
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchCounterBooleanByTargetsViaAuthority(
-                  [{ elementType, id }],
-                  {
-                    property: 'counterEnabled',
-                    value: enabled,
-                  },
-                )
-              : patchCounterEnabledById(elementType, id, enabled);
+          const persisted = patchCounterEnabledById(elementType, id, enabled);
           void persisted.catch((error) => {
             console.error('Failed to update counter enabled', error);
           });
@@ -1890,16 +1731,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (enabled: boolean) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchCounterBooleanByTargetsViaAuthority(
-                  [{ elementType, id }],
-                  {
-                    property: 'counterAnimationEnabled',
-                    value: enabled,
-                  },
-                )
-              : patchCounterAnimationEnabledById(elementType, id, enabled);
+          const persisted = patchCounterAnimationEnabledById(
+            elementType,
+            id,
+            enabled,
+          );
           void persisted.catch((error) => {
             console.error('Failed to update counter animation enabled', error);
           });
@@ -1912,10 +1748,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorCounterLayoutPropertyPatchV1) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchCounterLayoutViaAuthority([{ elementType, id }], patch)
-              : patchCounterLayoutById(elementType, id, patch);
+          const persisted = patchCounterLayoutById(elementType, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update counter layout', error);
           });
@@ -1928,10 +1761,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorCounterTypographyPropertyPatchV1) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchCounterTypographyViaAuthority([{ elementType, id }], patch)
-              : patchCounterTypographyById(elementType, id, patch);
+          const persisted = patchCounterTypographyById(elementType, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update counter typography', error);
           });
@@ -1944,10 +1774,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorCounterStrokePropertyPatchV1) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchCounterStrokeViaAuthority([{ elementType, id }], patch)
-              : patchCounterStrokeById(elementType, id, patch);
+          const persisted = patchCounterStrokeById(elementType, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update counter stroke', error);
           });
@@ -1960,10 +1787,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorCounterFillPropertyPatchV1) => {
-          const persisted =
-            window.__dmn_window_type === 'panel'
-              ? patchCounterFillViaAuthority([{ elementType, id }], patch)
-              : patchCounterFillById(elementType, id, patch);
+          const persisted = patchCounterFillById(elementType, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update counter fill', error);
           });
@@ -2329,13 +2153,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const pluginTargets =
         operation.kind === 'resize' ? [] : stablePluginGeometryTargets;
       const commit =
-        window.__dmn_window_type === 'panel'
-          ? commitBatchGeometryViaAuthority(
-              descriptor,
-              gestureId,
-              pluginTargets,
-            )
-          : pluginTargets.length > 0
+        pluginTargets.length > 0
           ? commitMixedBatchGeometry(descriptor, pluginTargets, {
               ...(gestureId ? { gestureId } : {}),
             })
@@ -2370,15 +2188,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return;
     const commit =
       fontStylePatch !== null
-        ? window.__dmn_window_type === 'panel'
-          ? patchFontStyleViaAuthority(targets, fontStylePatch)
-          : patchFontStyleByTargets(targets, fontStylePatch)
+        ? patchFontStyleByTargets(targets, fontStylePatch)
         : fontFamilyPatch !== null
-        ? window.__dmn_window_type === 'panel'
-          ? patchFontFamilyViaAuthority(targets, fontFamilyPatch)
-          : patchFontFamilyByTargets(targets, fontFamilyPatch)
-        : window.__dmn_window_type === 'panel'
-        ? patchUseInlineStylesViaAuthority(targets, useInlineStyles!)
+        ? patchFontFamilyByTargets(targets, fontFamilyPatch)
         : patchUseInlineStylesByTargets(targets, useInlineStyles!);
     void commit.catch((error) => {
       console.error('Failed to batch update element style property', error);
@@ -2392,10 +2204,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (!notePatch) return;
     const ids = selectedKeyElements.map((element) => element.id);
     if (ids.length === 0 || ids.some((id) => !isNativeElementId(id))) return;
-    const commit =
-      window.__dmn_window_type === 'panel'
-        ? patchNotePropertiesViaAuthority(ids, notePatch)
-        : patchNotePropertiesByIds(ids, notePatch);
+    const commit = patchNotePropertiesByIds(ids, notePatch);
     void commit.catch((error) => {
       console.error('Failed to batch update note property', error);
     });
@@ -2489,10 +2298,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       stableGraphIds.length > 0 &&
       stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchGraphTypesViaAuthority(stableGraphIds, graphType)
-          : patchGraphTypesByIds(stableGraphIds, graphType);
+      const commit = patchGraphTypesByIds(stableGraphIds, graphType);
       void commit.catch((error) => {
         console.error('Failed to batch update graph type', error);
       });
@@ -2503,10 +2309,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       stableGraphIds.length > 0 &&
       stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchGraphPropertiesViaAuthority(stableGraphIds, runtimePatch)
-          : patchGraphPropertiesByIds(stableGraphIds, runtimePatch);
+      const commit = patchGraphPropertiesByIds(stableGraphIds, runtimePatch);
       void commit.catch((error) => {
         console.error('Failed to batch update graph property', error);
       });
@@ -2519,10 +2322,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       stableGraphIds.length > 0 &&
       stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchGraphColorsViaAuthority(stableGraphIds, graphColor)
-          : patchGraphColorsByIds(stableGraphIds, graphColor);
+      const commit = patchGraphColorsByIds(stableGraphIds, graphColor);
       void commit.catch((error) => {
         console.error('Failed to batch update graph color', error);
       });
@@ -2541,10 +2341,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       stableKnobIds.length > 0 &&
       stableKnobIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchKnobPropertiesViaAuthority(stableKnobIds, runtimePatch)
-          : patchKnobPropertiesByIds(stableKnobIds, runtimePatch);
+      const commit = patchKnobPropertiesByIds(stableKnobIds, runtimePatch);
       void commit.catch((error) => {
         console.error('Failed to batch update knob property', error);
       });
@@ -3011,10 +2808,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const patch: EditorCounterStrokePropertyPatchV1 = active
         ? { property: 'counterStrokeActive', value: strokeColor }
         : { property: 'counterStrokeIdle', value: strokeColor };
-      const persisted =
-        window.__dmn_window_type === 'panel'
-          ? patchCounterStrokeViaAuthority(targets, patch)
-          : patchCounterStrokeByTargets(targets, patch);
+      const persisted = patchCounterStrokeByTargets(targets, patch);
       void persisted.catch((error) => {
         console.error('Failed to update batch counter stroke', error);
       });
@@ -3685,6 +3479,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           }}
         >
           <div
+            data-dmn-panel-frame=""
             className={
               frameVariant === 'window'
                 ? WINDOW_PANEL_FRAME_CLASS

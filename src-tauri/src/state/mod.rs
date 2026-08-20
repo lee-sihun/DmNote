@@ -18,7 +18,9 @@ pub(crate) mod migration;
 pub(crate) mod native_element_id;
 pub(crate) mod plugin;
 pub mod store;
+#[cfg(target_os = "windows")]
+pub(crate) mod windows_window_corners;
 
 pub(crate) use app_state::PANEL_LABEL;
-pub use app_state::{AppState, LogicalRect, PanelViewState, SelectionSessionSnapshot};
+pub use app_state::{AppState, PanelDragContext};
 pub use store::AppStore;

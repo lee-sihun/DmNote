@@ -22,9 +22,14 @@ export interface FocusRestore {
 //
 // open은 "열려 있는가"지 "마운트돼 있는가"가 아니다. 퇴장 유예 중에는 DOM이 남아도
 // false여야 복원이 모션 시작과 함께 일어난다
-export const useFocusRestore = (open: boolean): FocusRestore => {
+export const useFocusRestore = (
+  open: boolean,
+  ownerDocument?: Document,
+): FocusRestore => {
   const openerRef = useRef<HTMLElement | null>(
-    typeof document !== 'undefined'
+    ownerDocument
+      ? (ownerDocument.activeElement as HTMLElement | null)
+      : typeof document !== 'undefined'
       ? (document.activeElement as HTMLElement | null)
       : null,
   );
@@ -32,8 +37,10 @@ export const useFocusRestore = (open: boolean): FocusRestore => {
   const restoredRef = useRef(false);
 
   const captureOpener = useCallback((container: HTMLElement) => {
-    if (activatedRef.current && !container.contains(document.activeElement)) {
-      openerRef.current = document.activeElement as HTMLElement | null;
+    // 컨테이너가 분리 패널 창에 있으면 그 창의 activeElement가 opener다
+    const activeElement = container.ownerDocument.activeElement;
+    if (activatedRef.current && !container.contains(activeElement)) {
+      openerRef.current = activeElement as HTMLElement | null;
     }
     activatedRef.current = true;
   }, []);

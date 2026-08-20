@@ -17,6 +17,7 @@ import {
 } from '@stores/plugin/usePluginDisplayElementStore';
 import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
+import { usePanelHost } from '@contexts/PanelHostContext';
 import ListPopup from '@components/main/Modal/ListPopup';
 import IconSwap from '@components/main/common/IconSwap';
 import CloseEyeIcon from '@assets/svgs/close_eye.svg';
@@ -179,11 +180,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     number | null
   >(null);
 
+  // 패널이 사는 창 - 분리 시 프레임·타이머를 자식 창에 싣는다
+  const { window: hostWindow } = usePanelHost();
+
   // 더블클릭/클릭 충돌 방지 타이머
   const pendingDeselectTimerRef = useRef<number | null>(null);
   const clearPendingDeselect = () => {
     if (pendingDeselectTimerRef.current !== null) {
-      window.clearTimeout(pendingDeselectTimerRef.current);
+      (hostWindow ?? window).clearTimeout(pendingDeselectTimerRef.current);
       pendingDeselectTimerRef.current = null;
     }
   };
@@ -235,12 +239,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     displayItemsRef.current = displayItems;
   });
 
-  // 콘텐츠 높이 변경 시 Lenis 갱신
+  // 콘텐츠 높이 변경 시 Lenis 갱신 - 분리 창에서는 그 창의 프레임에 실어야
+  // 메인이 가려져도 멈추지 않는다
   useEffect(() => {
-    const rafId = requestAnimationFrame(() => {
+    const win = hostWindow ?? window;
+    const rafId = win.requestAnimationFrame(() => {
       lenisInstance.current?.resize();
     });
-    return () => cancelAnimationFrame(rafId);
+    return () => win.cancelAnimationFrame(rafId);
   });
 
   // 접기/펼치기 시 displayIndex 앵커 리셋 (stale 인덱스 방지)
@@ -480,15 +486,21 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
     } else {
       if (isAlreadySelected && selectedElements.length > 1) {
-        pendingDeselectTimerRef.current = window.setTimeout(() => {
-          setFullSelection([element], []);
-          pendingDeselectTimerRef.current = null;
-        }, 50);
+        pendingDeselectTimerRef.current = (hostWindow ?? window).setTimeout(
+          () => {
+            setFullSelection([element], []);
+            pendingDeselectTimerRef.current = null;
+          },
+          50,
+        );
       } else if (isAlreadySelected) {
-        pendingDeselectTimerRef.current = window.setTimeout(() => {
-          clearSelection();
-          pendingDeselectTimerRef.current = null;
-        }, 50);
+        pendingDeselectTimerRef.current = (hostWindow ?? window).setTimeout(
+          () => {
+            clearSelection();
+            pendingDeselectTimerRef.current = null;
+          },
+          50,
+        );
       } else {
         clearSelection();
         toggleSelection(element);

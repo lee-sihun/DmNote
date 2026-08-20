@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
@@ -29,18 +30,12 @@ import {
 import { stableStringify } from '@utils/core/stableStringify';
 import { useTranslation } from '@contexts/useTranslation';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { panelWindowApi } from '@api/modules/selectionSessionApi';
+import { panelWindowApi } from '@api/modules/panelWindowApi';
 import {
-  initSelectionSync,
-  resetSelectionForModeChange,
-} from '@src/renderer/editor/runtime/selectionSync';
-import { usePanelWindowStore } from '@stores/grid/usePanelWindowStore';
-import { applyPanelViewState } from '@stores/grid/panelViewHandoff';
-import { initPluginRpcHandler } from '@plugins/rpc/pluginRpcHandler';
-import {
-  initPluginSettingsSessionHost,
-  notePanelVisibilityForSettingsSession,
-} from '@plugins/rpc/pluginSettingsSession';
+  detachPropertiesPanel,
+  dockPropertiesPanel,
+  notePanelWindowHidden,
+} from '@stores/grid/usePanelHostStore';
 import { initPluginInstancesUndoSync } from '@plugins/runtime/displayElement/instancesUndoSync';
 import { initPluginGroupRefsMirror } from '@plugins/runtime/pluginGroupRefsMirror';
 import { historyApi } from '@api/modules/historyApi';
@@ -147,10 +142,21 @@ export function useAppBootstrap() {
 
   useEffect(() => {
     let disposed = false;
-    let stopSelectionSync: (() => void) | null = null;
     let editorCoordinatorRetryTimer: ReturnType<typeof setTimeout> | null =
       null;
     const isOverlayWindow = window.__dmn_window_type === 'overlay';
+
+    // authoritative 모드 변경 시 창 로컬 선택 무효화 - 이전 모드의 index가
+    // 새 모드 요소로 재해석되지 않게
+    const resetSelectionForModeChange = () => {
+      const selection = useGridSelectionStore.getState();
+      if (
+        selection.selectedElements.length > 0 ||
+        selection.selectedGroupIds.length > 0
+      ) {
+        selection.clearSelection();
+      }
+    };
 
     // 모드가 실제로 갈릴 때만 선택을 리셋한다.
     //
@@ -790,28 +796,19 @@ export function useAppBootstrap() {
         // 백엔드 undo authority 상태 초기 조회
         void syncHistoryStatus();
 
-        // 분리 패널 창 존재 여부 초기 조회 (메인 인라인 gating)
+        finalizeBootstrap();
+
+        // 분리 상태로 종료했다면 복원 - 창은 메인만 열 수 있어(opener 자식) 백엔드는
+        // 요청만 남긴다. 부트스트랩 뒤에 열어야 패널이 채워진 상태로 뜬다
         if (window.__dmn_window_type === 'main') {
-          const expectedRevision =
-            usePanelWindowStore.getState().statusRevision;
           try {
-            const open = await panelWindowApi.isOpen();
-            usePanelWindowStore
-              .getState()
-              .resolveInitialStatus(
-                open ? 'detached' : 'attached',
-                expectedRevision,
-              );
+            if (await panelWindowApi.takeRestoreRequest()) {
+              void detachPropertiesPanel();
+            }
           } catch (error) {
-            console.error('분리 패널 상태 초기화 실패', error);
-            usePanelWindowStore
-              .getState()
-              .resolveInitialStatus('attached', expectedRevision);
+            console.error('분리 패널 복원 요청 확인 실패', error);
           }
         }
-
-        finalizeBootstrap();
-        startSelectionSyncOnceReady();
       } catch (error) {
         console.error('초기 부트스트랩 실패', error);
       } finally {
@@ -827,28 +824,6 @@ export function useAppBootstrap() {
       }
     })();
 
-    // authoritative 상태(selectedKeyType 등) 적용 후 시작 (H2: 유실 창·모드 시차 제거)
-    // 호출이 위쪽 async 블록에 있어 hoisting되는 함수 선언 사용
-    function startSelectionSyncOnceReady() {
-      if (disposed || stopSelectionSync) return;
-      if (
-        window.__dmn_runtime !== 'obs' &&
-        window.__dmn_window_type !== 'overlay'
-      ) {
-        stopSelectionSync = initSelectionSync();
-      }
-    }
-
-    // main = 플러그인 단일 authority - 패널발 mutation RPC 수신
-    const stopPluginRpcHandler =
-      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
-        ? initPluginRpcHandler()
-        : null;
-    // 설정 세션 host - lease 이동 시 세션 이전, panel 재요청 응답
-    const stopPluginSettingsSessionHost =
-      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
-        ? initPluginSettingsSessionHost()
-        : null;
     // 플러그인 인스턴스 undo/redo의 canonical 재결합 (C4)
     const stopPluginInstancesUndoSync =
       window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
@@ -866,39 +841,18 @@ export function useAppBootstrap() {
       historyApi.onStatus((status) => {
         useHistoryStatusStore.getState().applyStatus(status);
       }),
-      // 분리 패널 창 가시성 → 인라인 패널 gating
-      panelWindowApi.onVisibility(({ visible, reason }) => {
-        if (window.__dmn_window_type === 'main') {
-          notePanelVisibilityForSettingsSession(visible, reason);
-          if (visible) {
-            usePanelWindowStore.getState().setStatus('detached');
-            return;
-          }
-          usePanelWindowStore.getState().setStatus('unknown');
-          void panelWindowApi
-            .takeViewState()
-            .then((viewState) => {
-              if (viewState) applyPanelViewState(viewState);
-            })
-            .catch((error) => {
-              console.error('분리 패널 뷰 상태 복원 실패', error);
-            })
-            .finally(() => {
-              usePanelWindowStore.getState().setStatus('attached');
-            });
-          return;
-        }
-
-        if (window.__dmn_window_type === 'panel' && visible) {
-          void panelWindowApi
-            .takeViewState()
-            .then((viewState) => {
-              if (viewState) applyPanelViewState(viewState);
-            })
-            .catch((error) => {
-              console.error('분리 패널 뷰 상태 적용 실패', error);
-            });
-        }
+      // 백엔드가 패널 창을 감추거나(close-ack 타임아웃·종료) 파괴하면 호스트를 메인으로
+      panelWindowApi.onVisibility(({ visible }) => {
+        if (window.__dmn_window_type !== 'main') return;
+        if (!visible) notePanelWindowHidden();
+      }),
+      // 분리 창 닫기 요청은 도킹 - ack로 백엔드 fallback을 해제한 뒤 호스트를 되돌리고 창을 감춘다
+      panelWindowApi.onCloseRequested(({ requestId }) => {
+        if (window.__dmn_window_type !== 'main') return;
+        void panelWindowApi
+          .ackClose(requestId)
+          .catch(() => {})
+          .then(() => dockPropertiesPanel());
       }),
       subscribe<{
         handshakeId: string;
@@ -1105,9 +1059,6 @@ export function useAppBootstrap() {
         editorCoordinatorRetryTimer = null;
       }
       resetHistoryEditorFlushLock();
-      stopSelectionSync?.();
-      stopPluginRpcHandler?.();
-      stopPluginSettingsSessionHost?.();
       stopPluginInstancesUndoSync?.();
       stopPluginGroupRefsMirror?.();
       unsubscribers.forEach((unsubscribe) => {

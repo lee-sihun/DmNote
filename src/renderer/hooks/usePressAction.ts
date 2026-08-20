@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type React from 'react';
 
+import { usePanelHost } from '@contexts/PanelHostContext';
+import { isHTMLElementNode } from '@utils/dom/isElementNode';
+
 /**
  * 입력 blur 커밋이 유발하는 리렌더와 경합해 click이 유실되는 terminal 버튼용
  * pointerdown에서 press 의도를 기록하고 click이 정상 도착하면 그대로 실행,
@@ -15,6 +18,8 @@ export const usePressAction = (action: () => void) => {
     bounds: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>;
   } | null>(null);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 분리 패널 창의 버튼이면 그 창의 document/window가 포인터·blur를 받는다
+  const { window: ownerWindow, document: ownerDocument } = usePanelHost();
 
   useLayoutEffect(() => {
     actionRef.current = action;
@@ -61,33 +66,41 @@ export const usePressAction = (action: () => void) => {
         clearCurrentPress();
       }
     };
-    window.addEventListener('blur', handleWindowBlur);
-    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-    document.addEventListener('pointerup', handleDocumentPointerUp, true);
-    document.addEventListener(
+    ownerWindow.addEventListener('blur', handleWindowBlur);
+    ownerDocument.addEventListener(
+      'pointerdown',
+      handleDocumentPointerDown,
+      true,
+    );
+    ownerDocument.addEventListener('pointerup', handleDocumentPointerUp, true);
+    ownerDocument.addEventListener(
       'pointercancel',
       handleDocumentPointerCancel,
       true,
     );
     return () => {
-      window.removeEventListener('blur', handleWindowBlur);
-      document.removeEventListener(
+      ownerWindow.removeEventListener('blur', handleWindowBlur);
+      ownerDocument.removeEventListener(
         'pointerdown',
         handleDocumentPointerDown,
         true,
       );
-      document.removeEventListener('pointerup', handleDocumentPointerUp, true);
-      document.removeEventListener(
+      ownerDocument.removeEventListener(
+        'pointerup',
+        handleDocumentPointerUp,
+        true,
+      );
+      ownerDocument.removeEventListener(
         'pointercancel',
         handleDocumentPointerCancel,
         true,
       );
       clearCurrentPress();
     };
-  }, []);
+  }, [ownerDocument, ownerWindow]);
 
   const isDisabled = (target: EventTarget | null) =>
-    target instanceof HTMLElement &&
+    isHTMLElementNode(target) &&
     (target.matches(':disabled') ||
       target.getAttribute('aria-disabled') === 'true');
 

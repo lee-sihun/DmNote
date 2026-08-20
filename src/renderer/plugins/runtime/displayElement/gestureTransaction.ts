@@ -6,11 +6,11 @@ import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
 import { stableStringify } from '@utils/core/stableStringify';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStatusStore } from '@stores/data/useHistoryStatusStore';
-import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
+import { getPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 import {
   getBackendPluginRevision,
   noteBackendPluginRevision,
-} from '@plugins/rpc/pluginModelRevision';
+} from '@plugins/runtime/pluginModelRevision';
 import {
   applyCanonicalPluginInstances,
   notePluginInstancesMutation,
@@ -24,7 +24,6 @@ import {
   stagePluginInstancesGesture,
   unstagePluginInstancesGesture,
 } from './instancesCommitQueue';
-import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
 import { EDITOR_OPS_VERSION } from '@src/types/editor';
 
 import type {
@@ -36,10 +35,7 @@ import type {
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
-import type {
-  PluginDefinitionInternal,
-  PluginDisplayElementInternal,
-} from '@src/types/plugin/api';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 interface StagedGesture {
   pluginIds: Set<string>;
@@ -53,29 +49,6 @@ const stagedGestures = new Map<string, StagedGesture>();
 
 const normalizePluginIds = (pluginIds: readonly string[]): string[] =>
   [...new Set(pluginIds)].sort();
-
-const buildCommittedElementProjection = (
-  currentElements: readonly PluginDisplayElementInternal[],
-  pluginElements: ReadonlyMap<string, PluginDisplayElementInternal[]>,
-): PluginDisplayElementInternal[] => {
-  const inserted = new Set<string>();
-  const projected: PluginDisplayElementInternal[] = [];
-  for (const element of currentElements) {
-    const pluginId = element.definitionId;
-    if (!pluginId || !pluginElements.has(pluginId)) {
-      projected.push(element);
-      continue;
-    }
-    if (!inserted.has(pluginId)) {
-      projected.push(...(pluginElements.get(pluginId) ?? []));
-      inserted.add(pluginId);
-    }
-  }
-  for (const [pluginId, elements] of pluginElements) {
-    if (!inserted.has(pluginId)) projected.push(...elements);
-  }
-  return projected;
-};
 
 export const beginMixedGestureTransaction = (
   gestureId: string,
@@ -195,8 +168,6 @@ export const commitMixedGestureIntent = (options: {
 
   let sealedProjection: readonly PluginDisplayElementInternal[] = [];
   let lastGeneration: MixedIntentGeneration | null = null;
-  let gestureResult: Awaited<ReturnType<typeof gestureApi.commit>> | null =
-    null;
   let editorOnlyCommit = false;
 
   const prepare = async (): Promise<void> => {
@@ -325,7 +296,6 @@ export const commitMixedGestureIntent = (options: {
           });
           assertAuthorityGeneration();
           noteBackendPluginRevision(result.pluginModelRevision);
-          gestureResult = result;
           return {
             revision: result.editorRevision,
             changedFields: result.changedFields,
@@ -419,21 +389,6 @@ export const commitMixedGestureIntent = (options: {
             store.setElements(merged);
           }
         }
-        if (gestureResult && gestureResult.changedPluginIds.length > 0) {
-          try {
-            // panel에는 정렬 후 최종 상태를 발행 - elements와 definitions를
-            // 같은 getState 스냅샷에서 읽는다. IPC 전 캡처 definitions는
-            // 도중의 plugin reload가 예약한 최신 모델을 되덮는다
-            const latest = usePluginDisplayElementStore.getState();
-            schedulePluginPanelModelSync(
-              latest.elements,
-              latest.definitions,
-              gestureResult.pluginModelRevision,
-            );
-          } catch (error) {
-            console.error('Failed to publish committed plugin model', error);
-          }
-        }
       });
   } catch (error) {
     commitWork = Promise.reject(error);
@@ -481,10 +436,6 @@ export const commitMixedGestureTransaction = (
   beginMixedGestureTransaction(gestureId, normalizedPluginIds);
   const staged = stagedGestures.get(gestureId);
   if (staged) staged.committing = true;
-  let gestureResult: Awaited<ReturnType<typeof gestureApi.commit>> | null =
-    null;
-  let committedElements: PluginDisplayElementInternal[] | null = null;
-  let committedDefinitions: Map<string, PluginDefinitionInternal> | null = null;
   let commitWork: Promise<void>;
 
   try {
@@ -494,8 +445,7 @@ export const commitMixedGestureTransaction = (
         gestureId,
         async (context) => {
           await drainPluginInstancesCommitQueues(normalizedPluginIds);
-          const { elements, definitions } =
-            usePluginDisplayElementStore.getState();
+          const { elements } = usePluginDisplayElementStore.getState();
           const stagedAtCommit = stagedGestures.get(gestureId);
           const pluginElements = new Map(
             normalizedPluginIds.map((pluginId) => [
@@ -511,11 +461,6 @@ export const commitMixedGestureTransaction = (
               pluginId,
             ),
           }));
-          committedElements = buildCommittedElementProjection(
-            elements,
-            pluginElements,
-          );
-          committedDefinitions = definitions;
           notePluginInstancesMutation(context.mutationId);
           const request = {
             gestureId,
@@ -536,7 +481,6 @@ export const commitMixedGestureTransaction = (
           };
           const result = await gestureApi.commit(request);
           noteBackendPluginRevision(result.pluginModelRevision);
-          gestureResult = result;
           return {
             revision: result.editorRevision,
             changedFields: result.changedFields,
@@ -547,24 +491,7 @@ export const commitMixedGestureTransaction = (
         },
         meta,
       )
-      .then(() => {
-        if (
-          gestureResult &&
-          committedElements &&
-          committedDefinitions &&
-          gestureResult.changedPluginIds.length > 0
-        ) {
-          try {
-            schedulePluginPanelModelSync(
-              committedElements,
-              committedDefinitions,
-              gestureResult.pluginModelRevision,
-            );
-          } catch (error) {
-            console.error('Failed to publish committed plugin model', error);
-          }
-        }
-      });
+      .then(() => undefined);
   } catch (error) {
     commitWork = Promise.reject(error);
   }

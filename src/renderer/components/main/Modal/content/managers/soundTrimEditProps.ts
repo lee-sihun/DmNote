@@ -1,4 +1,9 @@
-import type { SoundTrimEditItem } from '@api/modules/remoteSheetApi';
+export interface SoundTrimEditItem {
+  soundPath: string;
+  trimStartRatio?: number;
+  trimEndRatio?: number;
+  displayName?: string;
+}
 
 /**
  * 편집 대상 사운드를 SoundTrimModal의 편집 props로 편다.

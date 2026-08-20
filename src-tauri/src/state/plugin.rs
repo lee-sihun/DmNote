@@ -1,22 +1,19 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 use parking_lot::{Mutex, MutexGuard};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::models::{
-    AppStoreData, PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginRpcRequest,
-    PluginRpcRequestEnvelope, PluginRpcResponse, SavedPluginInstance,
+    AppStoreData, PluginInstancesCommitRequest, PluginInstancesReconcileRequest,
+    SavedPluginInstance,
 };
 use crate::state::editor::{is_valid_gesture_id, is_valid_group_id_shape, MAX_SAFE_WIRE_REVISION};
 use crate::state::native_element_id::{is_valid_element_id, new_unique_id, BackfillOutcome};
 
-pub(crate) const PLUGIN_RPC_PROTOCOL_VERSION: u32 = 1;
-pub(crate) const MAX_PLUGIN_RPC_BYTES: usize = 256 * 1024;
 pub(crate) const MAX_PLUGIN_INSTANCES_REQUEST_BYTES: usize = 8 * 1024 * 1024;
 // 플러그인 스토리지 키 네임스페이스 - storage 커맨드와 canonical 헬퍼의 단일 원천
 pub(crate) const PLUGIN_DATA_KEY_PREFIX: &str = "plugin_data_";
-const PLUGIN_RPC_ROUTE_CAPACITY: usize = 512;
 const MAX_PLUGIN_ID_BYTES: usize = 128;
 const MAX_PLUGIN_INSTANCES: usize = 4_096;
 const MAX_PLUGIN_RECONCILE_TAB_IDS: usize = 64;
@@ -26,9 +23,6 @@ const MAX_SETTING_KEY_BYTES: usize = 256;
 const MAX_SETTING_STRING_BYTES: usize = 64 * 1024;
 const MAX_ABS_COORDINATE: f64 = 32_768.0;
 const MAX_DIMENSION: f64 = 32_768.0;
-const MAX_RPC_OPERATION_BYTES: usize = 128;
-const MAX_RPC_ERROR_CODE_BYTES: usize = 128;
-const MAX_RPC_ERROR_MESSAGE_BYTES: usize = 4 * 1024;
 
 #[derive(Debug, Default)]
 struct PluginAuthorityState {
@@ -67,10 +61,7 @@ impl PluginRuntimeAuthority {
         Ok(PluginAuthorityLease { guard })
     }
 
-    pub(crate) fn reset<'a>(
-        &'a self,
-        router: &PluginRpcRouter,
-    ) -> Result<PluginAuthorityLease<'a>, String> {
+    pub(crate) fn reset(&self) -> Result<PluginAuthorityLease<'_>, String> {
         let mut state = self.state.lock();
         state.generation = state
             .generation
@@ -78,7 +69,6 @@ impl PluginRuntimeAuthority {
             .filter(|generation| *generation <= MAX_SAFE_WIRE_REVISION)
             .ok_or_else(|| "AUTHORITY_GENERATION_OUT_OF_RANGE".to_string())?;
         state.available = true;
-        router.clear();
         Ok(PluginAuthorityLease { guard: state })
     }
 
@@ -86,186 +76,10 @@ impl PluginRuntimeAuthority {
         self.state.lock().generation
     }
 
-    pub(crate) fn mark_unavailable(&self, router: &PluginRpcRouter) {
+    pub(crate) fn mark_unavailable(&self) {
         let mut state = self.state.lock();
         state.available = false;
-        router.clear();
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PendingPluginRpcRoute {
-    request_id: String,
-    source_window_label: String,
-    target_window_label: String,
-    authority_generation: u64,
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct PluginRpcRouter {
-    pending: Mutex<VecDeque<PendingPluginRpcRoute>>,
-}
-
-impl PluginRpcRouter {
-    pub(crate) fn has_pending_request(
-        &self,
-        request_id: &str,
-        source_window_label: &str,
-        target_window_label: &str,
-        authority_generation: u64,
-    ) -> bool {
-        self.pending.lock().iter().any(|route| {
-            route.request_id == request_id
-                && route.source_window_label == source_window_label
-                && route.target_window_label == target_window_label
-                && route.authority_generation == authority_generation
-        })
-    }
-
-    pub(crate) fn forward_request(
-        &self,
-        target_window_label: &str,
-        envelope: PluginRpcRequestEnvelope,
-        current_model_revision: u64,
-        emit: impl FnOnce(&str, &PluginRpcRequestEnvelope) -> Result<(), String>,
-    ) -> Result<(), String> {
-        let mut pending = self.pending.lock();
-        if pending
-            .iter()
-            .any(|route| route.request_id == envelope.request_id)
-        {
-            return Err("PLUGIN_RPC_REQUEST_ID_REUSED".to_string());
-        }
-        if !envelope.operation.starts_with("settings:")
-            && envelope.expected_model_revision != current_model_revision
-        {
-            return Err("PLUGIN_MODEL_REVISION_CONFLICT".to_string());
-        }
-
-        emit(target_window_label, &envelope)?;
-        if pending.len() == PLUGIN_RPC_ROUTE_CAPACITY {
-            pending.pop_front();
-        }
-        pending.push_back(PendingPluginRpcRoute {
-            request_id: envelope.request_id,
-            source_window_label: envelope.source_window_label,
-            target_window_label: target_window_label.to_string(),
-            authority_generation: envelope.authority_generation,
-        });
-        Ok(())
-    }
-
-    pub(crate) fn forward_response(
-        &self,
-        responder_window_label: &str,
-        response: &PluginRpcResponse,
-        emit: impl FnOnce(&str, &PluginRpcResponse) -> Result<(), String>,
-    ) -> Result<(), String> {
-        let mut pending = self.pending.lock();
-        let index = pending
-            .iter()
-            .position(|route| route.request_id == response.request_id)
-            .ok_or_else(|| "PLUGIN_RPC_REQUEST_NOT_FOUND".to_string())?;
-        let route = pending
-            .get(index)
-            .cloned()
-            .ok_or_else(|| "PLUGIN_RPC_REQUEST_NOT_FOUND".to_string())?;
-        if route.target_window_label != responder_window_label {
-            return Err("PLUGIN_RPC_RESPONDER_MISMATCH".to_string());
-        }
-        if route.authority_generation != response.authority_generation {
-            return Err("AUTHORITY_GENERATION_CHANGED".to_string());
-        }
-        let result = emit(&route.source_window_label, response);
-        pending.remove(index);
-        result
-    }
-
-    pub(crate) fn clear(&self) {
-        self.pending.lock().clear();
-    }
-
-    pub(crate) fn remove_window(&self, window_label: &str) {
-        self.pending.lock().retain(|route| {
-            route.target_window_label != window_label && route.source_window_label != window_label
-        });
-    }
-
-    #[cfg(test)]
-    pub(crate) fn pending_count(&self) -> usize {
-        self.pending.lock().len()
-    }
-}
-
-pub(crate) fn validate_plugin_rpc_request(request: &PluginRpcRequest) -> Result<usize, String> {
-    validate_rpc_common(
-        request.protocol_version,
-        &request.request_id,
-        request.authority_generation,
-        request.expected_model_revision,
-    )?;
-    if request.operation.is_empty()
-        || request.operation.len() > MAX_RPC_OPERATION_BYTES
-        || !request
-            .operation
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'.' | b'_' | b'-'))
-    {
-        return Err("INVALID_PLUGIN_RPC_OPERATION".to_string());
-    }
-    validate_compact_size(
-        request,
-        MAX_PLUGIN_RPC_BYTES,
-        "PLUGIN_RPC_REQUEST_TOO_LARGE",
-    )
-}
-
-pub(crate) fn validate_plugin_rpc_response(response: &PluginRpcResponse) -> Result<usize, String> {
-    validate_rpc_common(
-        response.protocol_version,
-        &response.request_id,
-        response.authority_generation,
-        response.model_revision,
-    )?;
-    match (
-        response.ok,
-        response.payload.is_some(),
-        response.error.as_ref(),
-    ) {
-        (true, _, None) => {}
-        (false, false, Some(error)) => {
-            if error.code.is_empty()
-                || error.code.len() > MAX_RPC_ERROR_CODE_BYTES
-                || error.message.len() > MAX_RPC_ERROR_MESSAGE_BYTES
-            {
-                return Err("INVALID_PLUGIN_RPC_ERROR".to_string());
-            }
-        }
-        _ => return Err("INVALID_PLUGIN_RPC_RESPONSE".to_string()),
-    }
-    validate_compact_size(
-        response,
-        MAX_PLUGIN_RPC_BYTES,
-        "PLUGIN_RPC_RESPONSE_TOO_LARGE",
-    )
-}
-
-fn validate_rpc_common(
-    protocol_version: u32,
-    request_id: &str,
-    authority_generation: u64,
-    model_revision: u64,
-) -> Result<(), String> {
-    if protocol_version != PLUGIN_RPC_PROTOCOL_VERSION {
-        return Err("UNSUPPORTED_PLUGIN_RPC_PROTOCOL".to_string());
-    }
-    if request_id.len() > 64 || uuid::Uuid::parse_str(request_id).is_err() {
-        return Err("INVALID_PLUGIN_RPC_REQUEST_ID".to_string());
-    }
-    if authority_generation > MAX_SAFE_WIRE_REVISION || model_revision > MAX_SAFE_WIRE_REVISION {
-        return Err("PLUGIN_RPC_REVISION_OUT_OF_RANGE".to_string());
-    }
-    Ok(())
 }
 
 pub(crate) fn validate_plugin_instances_request(
@@ -648,21 +462,10 @@ mod tests {
 
     use super::*;
     use crate::models::{
-        PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint, PluginRpcError,
+        PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
         PluginSettingValue,
     };
     use crate::state::editor::MAX_GROUP_ID_BYTES;
-
-    fn rpc_request(payload: Value) -> PluginRpcRequest {
-        PluginRpcRequest {
-            protocol_version: PLUGIN_RPC_PROTOCOL_VERSION,
-            request_id: uuid::Uuid::new_v4().to_string(),
-            authority_generation: 1,
-            expected_model_revision: 3,
-            operation: "elements:delete".to_string(),
-            payload,
-        }
-    }
 
     fn saved_instance() -> SavedPluginInstance {
         SavedPluginInstance {
@@ -678,180 +481,24 @@ mod tests {
     }
 
     #[test]
-    fn rpc_validation_rejects_protocol_shape_and_size_violations() {
-        let mut invalid_protocol = rpc_request(Value::Null);
-        invalid_protocol.protocol_version += 1;
-        assert_eq!(
-            validate_plugin_rpc_request(&invalid_protocol).unwrap_err(),
-            "UNSUPPORTED_PLUGIN_RPC_PROTOCOL"
-        );
-
-        let mut invalid_operation = rpc_request(Value::Null);
-        invalid_operation.operation = "bad operation".to_string();
-        assert_eq!(
-            validate_plugin_rpc_request(&invalid_operation).unwrap_err(),
-            "INVALID_PLUGIN_RPC_OPERATION"
-        );
-
-        let oversized = rpc_request(Value::String("x".repeat(MAX_PLUGIN_RPC_BYTES)));
-        assert_eq!(
-            validate_plugin_rpc_request(&oversized).unwrap_err(),
-            "PLUGIN_RPC_REQUEST_TOO_LARGE"
-        );
-
-        let invalid_response = PluginRpcResponse {
-            protocol_version: PLUGIN_RPC_PROTOCOL_VERSION,
-            request_id: uuid::Uuid::new_v4().to_string(),
-            authority_generation: 1,
-            model_revision: 4,
-            ok: false,
-            payload: Some(Value::Null),
-            error: Some(PluginRpcError {
-                code: "FAILED".to_string(),
-                message: "failed".to_string(),
-            }),
-        };
-        assert_eq!(
-            validate_plugin_rpc_response(&invalid_response).unwrap_err(),
-            "INVALID_PLUGIN_RPC_RESPONSE"
-        );
-    }
-
-    #[test]
-    fn rpc_router_targets_source_and_rejects_pending_request_id_reuse() {
-        let router = PluginRpcRouter::default();
-        let request = rpc_request(serde_json::json!({ "fullId": "demo:1" }));
-        let envelope = PluginRpcRequestEnvelope {
-            protocol_version: request.protocol_version,
-            request_id: request.request_id.clone(),
-            source_window_label: "panel".to_string(),
-            authority_generation: request.authority_generation,
-            expected_model_revision: request.expected_model_revision,
-            operation: request.operation,
-            payload: request.payload,
-        };
-        let requests = Mutex::new(Vec::new());
-        router
-            .forward_request("main", envelope.clone(), 3, |target, forwarded| {
-                requests
-                    .lock()
-                    .push((target.to_string(), forwarded.clone()));
-                Ok(())
-            })
-            .unwrap();
-        let duplicate_error = router
-            .forward_request("main", envelope.clone(), 3, |target, forwarded| {
-                requests
-                    .lock()
-                    .push((target.to_string(), forwarded.clone()));
-                Ok(())
-            })
-            .unwrap_err();
-        assert_eq!(duplicate_error, "PLUGIN_RPC_REQUEST_ID_REUSED");
-        assert_eq!(router.pending_count(), 1);
-        assert_eq!(requests.lock().len(), 1);
-        assert!(router.has_pending_request(&envelope.request_id, "panel", "main", 1));
-        assert!(!router.has_pending_request(&envelope.request_id, "main", "main", 1));
-        assert!(!router.has_pending_request(&envelope.request_id, "panel", "main", 2));
-
-        let response = PluginRpcResponse {
-            protocol_version: PLUGIN_RPC_PROTOCOL_VERSION,
-            request_id: envelope.request_id.clone(),
-            authority_generation: 1,
-            model_revision: 4,
-            ok: true,
-            payload: Some(serde_json::json!({ "applied": true })),
-            error: None,
-        };
-        let responses = Mutex::new(Vec::new());
-        router
-            .forward_response("main", &response, |target, forwarded| {
-                responses
-                    .lock()
-                    .push((target.to_string(), forwarded.clone()));
-                Ok(())
-            })
-            .unwrap();
-
-        assert_eq!(responses.lock()[0].0, "panel");
-        assert_eq!(router.pending_count(), 0);
-        assert!(!router.has_pending_request(&envelope.request_id, "panel", "main", 1));
-        let mut reused_after_completion = envelope;
-        reused_after_completion.expected_model_revision = 4;
-        router
-            .forward_request("main", reused_after_completion, 4, |target, forwarded| {
-                requests
-                    .lock()
-                    .push((target.to_string(), forwarded.clone()));
-                Ok(())
-            })
-            .unwrap();
-        assert_eq!(router.pending_count(), 1);
-        assert_eq!(requests.lock().len(), 2);
-    }
-
-    #[test]
-    fn rpc_router_exempts_settings_operations_from_model_revision_gate() {
-        let router = PluginRpcRouter::default();
-        let request = rpc_request(Value::Null);
-        let mut envelope = PluginRpcRequestEnvelope {
-            protocol_version: request.protocol_version,
-            request_id: request.request_id,
-            source_window_label: "panel".to_string(),
-            authority_generation: request.authority_generation,
-            expected_model_revision: request.expected_model_revision,
-            operation: request.operation,
-            payload: request.payload,
-        };
-
-        let error = router
-            .forward_request("main", envelope.clone(), 4, |_, _| Ok(()))
-            .unwrap_err();
-        assert_eq!(error, "PLUGIN_MODEL_REVISION_CONFLICT");
-
-        envelope.operation = "settings:change".to_string();
-        router
-            .forward_request("main", envelope, 4, |_, _| Ok(()))
-            .unwrap();
-        assert_eq!(router.pending_count(), 1);
-    }
-
-    #[test]
-    fn unavailable_rpc_target_does_not_leave_a_pending_route() {
-        let router = PluginRpcRouter::default();
-        let request = rpc_request(Value::Null);
-        let envelope = PluginRpcRequestEnvelope {
-            protocol_version: request.protocol_version,
-            request_id: request.request_id,
-            source_window_label: "panel".to_string(),
-            authority_generation: request.authority_generation,
-            expected_model_revision: request.expected_model_revision,
-            operation: request.operation,
-            payload: request.payload,
-        };
-
-        let error = router
-            .forward_request("main", envelope, 3, |_, _| {
-                Err("AUTHORITY_UNAVAILABLE".to_string())
-            })
-            .unwrap_err();
-
-        assert_eq!(error, "AUTHORITY_UNAVAILABLE");
-        assert_eq!(router.pending_count(), 0);
-    }
-
-    #[test]
     fn authority_generation_advances_and_rejects_stale_leases() {
         let authority = PluginRuntimeAuthority::default();
-        assert_eq!(authority.admit(0).unwrap_err(), "AUTHORITY_UNAVAILABLE");
-        let router = PluginRpcRouter::default();
-        assert_eq!(authority.reset(&router).unwrap().generation(), 1);
         assert_eq!(
             authority.admit(0).unwrap_err(),
-            "AUTHORITY_GENERATION_CHANGED"
+            "AUTHORITY_UNAVAILABLE".to_string()
         );
-        assert_eq!(authority.admit(1).unwrap().generation(), 1);
-        assert_eq!(authority.reset(&router).unwrap().generation(), 2);
+        let generation = authority.reset().unwrap().generation();
+        assert_eq!(generation, 1);
+        assert!(authority.admit(1).is_ok());
+        assert_eq!(
+            authority.admit(0).unwrap_err(),
+            "AUTHORITY_GENERATION_CHANGED".to_string()
+        );
+        authority.mark_unavailable();
+        assert_eq!(
+            authority.admit(1).unwrap_err(),
+            "AUTHORITY_UNAVAILABLE".to_string()
+        );
     }
 
     #[test]

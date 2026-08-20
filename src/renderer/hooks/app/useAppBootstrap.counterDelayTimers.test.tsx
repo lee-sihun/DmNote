@@ -133,29 +133,13 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
     sync: vi.fn(),
   },
 }));
-vi.mock('@api/modules/selectionSessionApi', () => ({
+vi.mock('@api/modules/panelWindowApi', () => ({
   panelWindowApi: {
     onVisibility: vi.fn(() => vi.fn()),
-    isOpen: vi.fn(),
-    takeViewState: vi.fn(),
+    onCloseRequested: vi.fn(() => vi.fn()),
+    takeRestoreRequest: vi.fn(() => Promise.resolve(false)),
+    ackClose: vi.fn(() => Promise.resolve(true)),
   },
-}));
-vi.mock('@src/renderer/editor/runtime/selectionSync', () => ({
-  initSelectionSync: vi.fn(),
-  resetSelectionForModeChange: vi.fn(),
-}));
-vi.mock('@stores/grid/usePanelWindowStore', () => ({
-  usePanelWindowStore: { getState: vi.fn(() => ({ setDetached: vi.fn() })) },
-}));
-vi.mock('@stores/grid/panelViewHandoff', () => ({
-  applyPanelViewState: vi.fn(),
-}));
-vi.mock('@plugins/rpc/pluginRpcHandler', () => ({
-  initPluginRpcHandler: vi.fn(),
-}));
-vi.mock('@plugins/rpc/pluginSettingsSession', () => ({
-  initPluginSettingsSessionHost: vi.fn(),
-  notePanelVisibilityForSettingsSession: vi.fn(),
 }));
 vi.mock('@plugins/runtime/displayElement/instancesUndoSync', () => ({
   initPluginInstancesUndoSync: vi.fn(),

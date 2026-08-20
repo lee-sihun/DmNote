@@ -208,7 +208,7 @@ vi.mock('@contexts/useTranslation', () => ({
 vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   renameLayerGroupViaAuthority: renameLayerGroupViaAuthorityMock,
   patchGraphColorsViaAuthority: patchGraphColorsViaAuthorityMock,
   patchGraphPropertiesViaAuthority: patchGraphPropertiesViaAuthorityMock,
@@ -386,28 +386,26 @@ const ScopeProbe = ({ id }: { id: string }) => (
 interface MountedPanel {
   container: HTMLDivElement;
   root: Root;
-  render: (selectionSyncReady: boolean) => void;
+  render: () => void;
 }
 
 const mountPanel = (
-  selectionSyncReady: boolean,
   onKeyMappingChange: (index: number, newKey: string) => void = vi.fn(),
 ): MountedPanel => {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  const render = (ready: boolean) => {
+  const render = () => {
     act(() => {
       root.render(
         <PropertiesPanel
           onKeyMappingChange={onKeyMappingChange}
           frameVariant="window"
-          selectionSyncReady={ready}
         />,
       );
     });
   };
-  render(selectionSyncReady);
+  render();
   return { container, root, render };
 };
 
@@ -688,7 +686,7 @@ describe('PropertiesPanel canonical native contract', () => {
     'single stable %s geometry는 stale index가 아니라 선택 ID를 쓴다',
     (type, id) => {
       installSingle(type, id);
-      mounted = mountPanel(true);
+      mounted = mountPanel();
 
       act(() => latestSingleProps(type).handleGeometryCommit?.('dx', 42));
 
@@ -701,66 +699,10 @@ describe('PropertiesPanel canonical native contract', () => {
     },
   );
 
-  it.each([
-    ['key', '51111111-1111-4111-8111-111111111111'],
-    ['stat', '52222222-2222-4222-8222-222222222222'],
-    ['graph', '53333333-3333-4333-8333-333333333333'],
-    ['knob', '54444444-4444-4444-8444-444444444444'],
-  ] as const)(
-    'panel single stable %s geometry는 authority만 쓴다',
-    (type, id) => {
-      window.__dmn_window_type = 'panel';
-      installSingle(type, id);
-      mounted = mountPanel(true);
-
-      act(() => latestSingleProps(type).handleGeometryCommit?.('dx', 43));
-
-      expect(patchBoundsViaAuthorityMock).toHaveBeenCalledWith({
-        elementType: type,
-        id,
-        patch: { dx: 43 },
-      });
-      expect(patchGeometryMock).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
-    ['key', '55555555-5555-4555-8555-555555555555'],
-    ['stat', '56666666-6666-4666-8666-666666666666'],
-  ] as const)(
-    'panel single %s counter 토글은 즉시 반영 래퍼를 대상 하나로 쓴다',
-    (type, id) => {
-      window.__dmn_window_type = 'panel';
-      installSingle(type, id);
-      mounted = mountPanel(true);
-
-      act(() => latestSingleProps(type).onCounterEnabledCommit?.(false));
-      act(() =>
-        latestSingleProps(type).onCounterAnimationEnabledCommit?.(true),
-      );
-
-      expect(patchCounterBooleanByTargetsViaAuthorityMock).toHaveBeenCalledWith(
-        [{ elementType: type, id }],
-        { property: 'counterEnabled', value: false },
-      );
-      expect(patchCounterBooleanByTargetsViaAuthorityMock).toHaveBeenCalledWith(
-        [{ elementType: type, id }],
-        { property: 'counterAnimationEnabled', value: true },
-      );
-      // 즉시 반영 없는 직행 sender와 도킹 경로는 쓰지 않는다
-      expect(patchCounterEnabledViaAuthorityMock).not.toHaveBeenCalled();
-      expect(
-        patchCounterAnimationEnabledViaAuthorityMock,
-      ).not.toHaveBeenCalled();
-      expect(patchCounterEnabledMock).not.toHaveBeenCalled();
-      expect(patchCounterAnimationEnabledMock).not.toHaveBeenCalled();
-    },
-  );
-
   it('single key preview는 선택 ID를 신원으로 전달한다', () => {
     const id = '61111111-1111-4111-8111-111111111111';
     installSingle('key', id);
-    mounted = mountPanel(true);
+    mounted = mountPanel();
 
     act(() => latestSingleProps('key').handleGeometryPreview?.('dx', 17));
 
@@ -775,7 +717,7 @@ describe('PropertiesPanel canonical native contract', () => {
     'invalid %s ID는 semantic과 full-record writer를 모두 막는다',
     (type) => {
       installSingle(type, `${type}-0`, 1);
-      mounted = mountPanel(true);
+      mounted = mountPanel();
       const props = latestSingleProps(type);
 
       expect(props?.handleGeometryCommit).toBeUndefined();
@@ -827,7 +769,7 @@ describe('PropertiesPanel canonical native contract', () => {
         selectedElements: ids.map((id, index) => ({ type, id, index })),
         selectedGroupIds: [],
       });
-      mounted = mountPanel(true);
+      mounted = mountPanel();
       const props = (
         type === 'graph' ? batchGraphPropsMock : batchKnobPropsMock
       ).mock.lastCall?.[0] as {
@@ -868,7 +810,7 @@ describe('PropertiesPanel canonical native contract', () => {
       ],
       selectedGroupIds: [],
     });
-    mounted = mountPanel(true);
+    mounted = mountPanel();
     const props = batchPropsMock.mock.lastCall?.[0] as {
       onStableGeometryCommit: (
         operation: Record<string, unknown>,
@@ -912,7 +854,7 @@ describe('PropertiesPanel canonical native contract', () => {
       ],
       selectedGroupIds: [],
     });
-    mounted = mountPanel(true);
+    mounted = mountPanel();
 
     expect(patchBatchGeometryMock).not.toHaveBeenCalled();
     expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
@@ -973,7 +915,7 @@ describe('PropertiesPanel canonical native contract', () => {
 
     it('main 혼합 정렬은 mixed helper에 pluginTargets를 싣는다', () => {
       installMixedSelection('main');
-      mounted = mountPanel(true);
+      mounted = mountPanel();
 
       act(() =>
         commitProps().onStableGeometryCommit({
@@ -998,37 +940,9 @@ describe('PropertiesPanel canonical native contract', () => {
       expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
     });
 
-    it('panel 혼합 커밋은 pluginTargets를 authority payload에 싣는다', () => {
-      window.__dmn_window_type = 'panel';
-      installMixedSelection('panel');
-      mounted = mountPanel(true);
-
-      act(() =>
-        commitProps().onStableGeometryCommit({
-          kind: 'align',
-          direction: 'left',
-        }),
-      );
-
-      expect(patchBatchGeometryViaAuthorityMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          mode: '4key',
-          targets: [
-            { type: 'key', id: FIRST_KEY_ID },
-            { type: 'key', id: SECOND_KEY_ID },
-          ],
-          operation: { kind: 'align', direction: 'left' },
-        }),
-        undefined,
-        [PLUGIN_FULL_ID],
-      );
-      expect(patchBatchGeometryMock).not.toHaveBeenCalled();
-      expect(commitMixedBatchGeometryMock).not.toHaveBeenCalled();
-    });
-
     it('혼합 선택 resize는 native 전용 경로로 남는다', () => {
       installMixedSelection('main');
-      mounted = mountPanel(true);
+      mounted = mountPanel();
 
       act(() =>
         commitProps().onStableGeometryCommit(
@@ -1052,7 +966,7 @@ describe('PropertiesPanel canonical native contract', () => {
       usePluginDisplayElementStore.setState({
         elements: [{ ...store.elements[0], tabId: '7key' }],
       } as never);
-      mounted = mountPanel(true);
+      mounted = mountPanel();
 
       act(() =>
         commitProps().onStableGeometryCommit({
@@ -1097,7 +1011,7 @@ describe('PropertiesPanel canonical native contract', () => {
         ],
         selectedGroupIds: [],
       });
-      mounted = mountPanel(true);
+      mounted = mountPanel();
 
       const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
         selectedGroupInfo: {
@@ -1135,7 +1049,7 @@ describe('PropertiesPanel canonical native contract', () => {
         ],
         selectedGroupIds: [],
       });
-      mounted = mountPanel(true);
+      mounted = mountPanel();
 
       const props = batchPluginPropsMock.mock.lastCall?.[0] as {
         totalCount: number;
@@ -1182,7 +1096,7 @@ describe('PropertiesPanel 편집 세션 scope 경계', () => {
       selectedElements: [{ type: 'stat', id, index: 0 }],
       selectedGroupIds: [],
     });
-    mounted = mountPanel(true);
+    mounted = mountPanel();
 
     expect(scopedOf('single-key-stat')).toBe('true');
   });
@@ -1200,7 +1114,7 @@ describe('PropertiesPanel 편집 세션 scope 경계', () => {
         resolve: vi.fn(),
       } as never,
     });
-    mounted = mountPanel(true);
+    mounted = mountPanel();
 
     expect(scopedOf('plugin-settings')).toBe('false');
   });
@@ -1240,7 +1154,7 @@ describe('PropertiesPanel 배치 색상 피커 대상 결합', () => {
       },
     });
     selectKeys(0, 1, 2);
-    mounted = mountPanel(true);
+    mounted = mountPanel();
   });
 
   afterEach(() => {
@@ -1262,7 +1176,7 @@ describe('PropertiesPanel 배치 색상 피커 대상 결합', () => {
   it('선택을 건드리지 않는 재렌더는 피커를 닫지 않는다', () => {
     act(() => latestBatchProps().handleBatchPickerToggle('noteColor'));
 
-    act(() => mounted.render(true));
+    act(() => mounted.render());
 
     expect(latestBatchProps().batchPickerFor).toBe('noteColor');
   });
@@ -1280,56 +1194,18 @@ describe('PropertiesPanel detached selection sync contract', () => {
     mounted.container.remove();
   });
 
-  it('late empty sync normalizes a fail-open property handoff to layer', () => {
-    mounted = mountPanel(false);
-    expect(usePropertiesPanelStore.getState().canvasPanelMode).toBe('property');
-    expect(
-      mounted.container.querySelector('[data-testid="layer-panel"]'),
-    ).not.toBeNull();
-
-    mounted.render(true);
-
+  it('normalizes an empty snapshot to layer immediately', () => {
+    mounted = mountPanel();
     expect(usePropertiesPanelStore.getState().canvasPanelMode).toBe('layer');
   });
 
-  it('normalizes an empty ready snapshot to layer immediately', () => {
-    mounted = mountPanel(true);
-    expect(usePropertiesPanelStore.getState().canvasPanelMode).toBe('layer');
-  });
-
-  it('동기화 전 graph 렌더가 뒤늦게 key 탭을 덮지 않는다', () => {
+  it('graph 선택이면 style로 정규화한다', () => {
     usePropertiesPanelStore.setState({ propertyPanelActiveTab: 'counter' });
     useGridSelectionStore.setState({
       selectedElements: [{ type: 'graph', id: 'graph-0', index: 0 }],
       selectedGroupIds: [],
     });
-    mounted = mountPanel(false);
-    expect(usePropertiesPanelStore.getState().propertyPanelActiveTab).toBe(
-      'counter',
-    );
-
-    act(() => {
-      useGridSelectionStore.setState({
-        selectedElements: [{ type: 'key', id: 'key-0', index: 0 }],
-        selectedGroupIds: [],
-      });
-    });
-    mounted.render(true);
-
-    expect(usePropertiesPanelStore.getState().propertyPanelActiveTab).toBe(
-      'counter',
-    );
-  });
-
-  it('동기화 뒤에도 graph 선택이면 style로 정규화한다', () => {
-    usePropertiesPanelStore.setState({ propertyPanelActiveTab: 'counter' });
-    useGridSelectionStore.setState({
-      selectedElements: [{ type: 'graph', id: 'graph-0', index: 0 }],
-      selectedGroupIds: [],
-    });
-    mounted = mountPanel(false);
-
-    mounted.render(true);
+    mounted = mountPanel();
 
     expect(usePropertiesPanelStore.getState().propertyPanelActiveTab).toBe(
       'style',
@@ -1337,25 +1213,21 @@ describe('PropertiesPanel detached selection sync contract', () => {
   });
 
   it.each(['property', 'layer'] as const)(
-    'preserves a delayed selected %s handoff',
+    'selection이 있으면 %s 모드를 유지한다',
     (mode) => {
       usePropertiesPanelStore.setState({ canvasPanelMode: mode });
-      mounted = mountPanel(false);
-      act(() => {
-        useGridSelectionStore.setState({
-          selectedElements: [{ type: 'plugin', id: 'missing-plugin' }],
-          selectedGroupIds: [],
-        });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'plugin', id: 'missing-plugin' }],
+        selectedGroupIds: [],
       });
-
-      mounted.render(true);
+      mounted = mountPanel();
 
       expect(usePropertiesPanelStore.getState().canvasPanelMode).toBe(mode);
     },
   );
 
   it('keeps layer sticky when selection arrives after an empty snapshot', () => {
-    mounted = mountPanel(true);
+    mounted = mountPanel();
     expect(usePropertiesPanelStore.getState().canvasPanelMode).toBe('layer');
 
     act(() => {
@@ -1390,7 +1262,7 @@ describe('PropertiesPanel plugin settings Escape contract', () => {
         resolve,
       } as never,
     });
-    mounted = mountPanel(true);
+    mounted = mountPanel();
   });
 
   afterEach(() => {

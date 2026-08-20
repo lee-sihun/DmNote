@@ -2,7 +2,7 @@ use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
 use crate::errors::CmdResult;
-use crate::state::{AppState, PANEL_LABEL};
+use crate::state::AppState;
 
 #[tauri::command]
 pub fn window_minimize(app: AppHandle) -> CmdResult<()> {
@@ -76,10 +76,6 @@ pub fn window_open_devtools_all(app: AppHandle) -> CmdResult<()> {
     if let Some(overlay) = app.get_webview_window("overlay") {
         overlay.open_devtools();
         let _ = overlay.show();
-    }
-    if let Some(panel) = app.get_webview_window(PANEL_LABEL) {
-        panel.open_devtools();
-        let _ = panel.show();
     }
     Ok(())
 }

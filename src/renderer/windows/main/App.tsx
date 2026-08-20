@@ -3,12 +3,6 @@ import {
   closeCustomDialogOwnedSurface,
   replaceCustomDialogCallbacks,
 } from './customDialogCallbacks';
-import {
-  usePanelWindowStore,
-  detachPropertiesPanel,
-  hasInlinePropertiesPanelLease,
-  isTransitionFailure,
-} from '@stores/grid/usePanelWindowStore';
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
@@ -20,10 +14,9 @@ import SettingTab from '@components/main/Settings';
 import { useKeyManager } from '@hooks/useKeyManager';
 import { usePalette } from '@hooks/Modal/usePalette';
 import CustomAlert from '@components/main/Modal/content/dialogs/Alert';
-import RemoteSheetHost from '@components/main/Modal/RemoteSheetHost';
 import NoteSettingModal from '@components/main/Modal/content/settings/NoteSetting';
 import UpdateModal from '@components/main/Modal/content/dialogs/UpdateModal';
-import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
+import PropertiesPanelHost from '@components/main/Grid/PropertiesPanelHost';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { ShortcutBinding } from '@src/types/settings/shortcuts';
 import FloatingPopup from '@components/main/Modal/FloatingPopup';
@@ -167,7 +160,6 @@ export default function App() {
   } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
-  const panelWindowStatus = usePanelWindowStore((state) => state.status);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
   const { value: visualSettingsOpen, toggle: toggleSettingsView } =
     useOptimisticBooleanCommit({
@@ -382,12 +374,16 @@ export default function App() {
     });
   };
 
-  // 정산 실패로 분리하지 못하면 알린다. 조용히 끝나면 버튼이 먹통으로 보인다
-  const requestPanelDetach = async () => {
-    const outcome = await detachPropertiesPanel();
-    if (isTransitionFailure(outcome)) {
-      showAlert(t('propertiesPanel.detachFailed'), t('common.ok'));
-    }
+  // 정산 실패로 분리/도킹하지 못하면 알린다. 조용히 끝나면 버튼이 먹통으로 보인다
+  const handlePanelTransitionFailure = (kind: 'detach' | 'dock') => {
+    showAlert(
+      t(
+        kind === 'detach'
+          ? 'propertiesPanel.detachFailed'
+          : 'propertiesPanel.attachFailed',
+      ),
+      t('common.ok'),
+    );
   };
 
   const handleUpdatePrimaryAction = async () => {
@@ -718,13 +714,10 @@ export default function App() {
               isNoteSettingOpen={isNoteSettingOpen}
               setIsNoteSettingOpen={setIsNoteSettingOpen}
             />
-            {hasInlinePropertiesPanelLease(panelWindowStatus) && (
-              <PropertiesPanel
-                onKeyMappingChange={handleKeyMappingChange}
-                detachAction="detach"
-                onDetachAction={() => void requestPanelDetach()}
-              />
-            )}
+            <PropertiesPanelHost
+              onKeyMappingChange={handleKeyMappingChange}
+              onTransitionFailure={handlePanelTransitionFailure}
+            />
           </div>
         )}
       </div>
@@ -794,8 +787,6 @@ export default function App() {
           }}
         />
       )}
-      {/* 분리 패널이 요청한 전면 시트 - 패널 창엔 시트가 들어갈 자리가 없다 */}
-      <RemoteSheetHost />
       <CustomAlert
         isOpen={alertState.isOpen}
         message={alertState.message}

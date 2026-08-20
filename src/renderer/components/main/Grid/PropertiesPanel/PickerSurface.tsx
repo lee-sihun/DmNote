@@ -6,11 +6,7 @@ import {
   useTriggerAnchoredPopupPosition,
 } from '@hooks/ui/usePanelAnchoredPopupPosition';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
-
-// 분리 창은 패널 왼쪽에 도킹할 여백이 없음 —
-// 같은 팝업을 트리거 행 바로 아래에 붙이고 폭·좌우 정렬은 속성 섹션에 맞춘다
-const isDetachedPanelWindow = (): boolean =>
-  typeof window !== 'undefined' && window.__dmn_window_type === 'panel';
+import { usePanelHost } from '@contexts/PanelHostContext';
 
 // 트리거와 팝업 사이 간격 — 좌표 계산기의 gap과 같은 값
 const POPUP_GAP = 5;
@@ -61,7 +57,9 @@ const PickerSurface = ({
   children,
   overlay,
 }: PickerSurfaceProps) => {
-  const detached = isDetachedPanelWindow();
+  // 분리 창은 패널 왼쪽에 도킹할 여백이 없음 —
+  // 같은 팝업을 트리거 행 바로 아래에 붙이고 폭·좌우 정렬은 속성 섹션에 맞춘다
+  const detached = usePanelHost().placement === 'detached';
 
   const cardRef = useRef<HTMLDivElement>(null);
   const dockedPosition = usePanelAnchoredPopupPosition({

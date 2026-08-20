@@ -22,5 +22,7 @@ export const PANEL_HEADER_CLASS =
 // 글래스 대신 같은 색상의 불투명 표면 (분리 창은 뒤 비침이 무의미)
 // 도킹된 사이드 패널과 같은 L*에 서도록 솔리드 토큰을 쓴다 - 리터럴을 박으면
 // 램프를 옮길 때 분리 창만 옛 색으로 남는다
+// 반경은 분리 창 루트가 --dmn-panel-window-radius로 내려준다 - 네이티브가 실루엣을 소유하는
+// 플랫폼(Windows)에서는 0이 되어야 하고, 여기서 12px을 고정하면 원호가 둘이 되어 간극이 생긴다
 export const WINDOW_PANEL_FRAME_CLASS =
-  'absolute inset-0 bg-panel-detached z-30 rounded-[12px] overflow-hidden';
+  'absolute inset-0 bg-panel-detached z-30 rounded-[var(--dmn-panel-window-radius,12px)] overflow-hidden';

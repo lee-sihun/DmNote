@@ -9,38 +9,10 @@ use crate::{
         PluginGroupRefsSnapshot, PluginInstancesChangedPayload, PluginInstancesCommitRequest,
         PluginInstancesCommitResult, PluginInstancesReconcileRequest, PluginInstancesSnapshot,
     },
-    state::{
-        plugin::{PluginGroupRefs, PluginRpcRouter},
-        store::AdmittedPluginInstancesCommit,
-        AppState,
-    },
+    state::{plugin::PluginGroupRefs, store::AdmittedPluginInstancesCommit, AppState},
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
-const PANEL_WINDOW_LABEL: &str = "panel";
-
-fn plugin_mutation_source<'a>(
-    router: &PluginRpcRouter,
-    authority_generation: u64,
-    rpc_request_id: Option<&str>,
-    direct_window_label: &'a str,
-) -> CmdResult<&'a str> {
-    let Some(request_id) = rpc_request_id else {
-        return Ok(direct_window_label);
-    };
-    if uuid::Uuid::parse_str(request_id).is_err()
-        || !router.has_pending_request(
-            request_id,
-            PANEL_WINDOW_LABEL,
-            MAIN_WINDOW_LABEL,
-            authority_generation,
-        )
-    {
-        return Err(CommandError::msg("PLUGIN_RPC_REQUEST_NOT_FOUND"));
-    }
-    Ok(PANEL_WINDOW_LABEL)
-}
-
 pub(crate) trait PluginInstancesEventEmitter {
     fn main_available(&self) -> bool;
     fn emit_plugin_instances_changed(
@@ -168,7 +140,6 @@ pub fn plugin_instances_commit(
     app: AppHandle,
     window: WebviewWindow,
     request: PluginInstancesCommitRequest,
-    rpc_request_id: Option<String>,
 ) -> CmdResult<PluginInstancesCommitResult> {
     crate::state::plugin::validate_plugin_instances_request(&request).map_err(CommandError::msg)?;
     if window.label() != MAIN_WINDOW_LABEL {
@@ -178,14 +149,8 @@ pub fn plugin_instances_commit(
         .plugin_authority()
         .admit(request.authority_generation)
         .map_err(CommandError::msg)?;
-    let source_window_label = plugin_mutation_source(
-        state.plugin_rpc_router(),
-        authority.generation(),
-        rpc_request_id.as_deref(),
-        window.label(),
-    )?;
     let admission = state
-        .admit_frontend_history_mutation(source_window_label)
+        .admit_frontend_history_mutation(window.label())
         .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
     let mutation_id = request.mutation_id.clone();
     let committed = state
@@ -237,7 +202,6 @@ mod tests {
     use parking_lot::Mutex;
 
     use super::*;
-    use crate::models::{PluginRpcRequestEnvelope, PluginRpcResponse};
 
     struct TestEmitter {
         main_available: bool,
@@ -331,68 +295,6 @@ mod tests {
                 },
                 "modelRevision": 7,
             })
-        );
-    }
-
-    #[test]
-    fn routed_commit_uses_pending_panel_provenance_until_response() {
-        let router = PluginRpcRouter::default();
-        let request_id = "00000000-0000-0000-0000-000000000001".to_string();
-        let envelope = PluginRpcRequestEnvelope {
-            protocol_version: 1,
-            request_id: request_id.clone(),
-            source_window_label: PANEL_WINDOW_LABEL.to_string(),
-            authority_generation: 7,
-            expected_model_revision: 3,
-            operation: "elements:delete".to_string(),
-            payload: serde_json::json!({ "fullIds": ["demo:one"] }),
-        };
-        router
-            .forward_request(MAIN_WINDOW_LABEL, envelope, 3, |_, _| Ok(()))
-            .unwrap();
-
-        assert_eq!(
-            plugin_mutation_source(&router, 7, Some(&request_id), MAIN_WINDOW_LABEL).unwrap(),
-            PANEL_WINDOW_LABEL
-        );
-        assert_eq!(
-            plugin_mutation_source(&router, 7, Some(&request_id), MAIN_WINDOW_LABEL).unwrap(),
-            PANEL_WINDOW_LABEL
-        );
-        assert_eq!(
-            plugin_mutation_source(&router, 7, None, MAIN_WINDOW_LABEL).unwrap(),
-            MAIN_WINDOW_LABEL
-        );
-        assert_eq!(
-            plugin_mutation_source(
-                &router,
-                7,
-                Some("00000000-0000-0000-0000-000000000002"),
-                MAIN_WINDOW_LABEL,
-            )
-            .unwrap_err()
-            .to_string(),
-            "PLUGIN_RPC_REQUEST_NOT_FOUND"
-        );
-
-        let response = PluginRpcResponse {
-            protocol_version: 1,
-            request_id: request_id.clone(),
-            authority_generation: 7,
-            model_revision: 4,
-            ok: true,
-            payload: None,
-            error: None,
-        };
-        router
-            .forward_response(MAIN_WINDOW_LABEL, &response, |_, _| Ok(()))
-            .unwrap();
-
-        assert_eq!(
-            plugin_mutation_source(&router, 7, Some(&request_id), MAIN_WINDOW_LABEL)
-                .unwrap_err()
-                .to_string(),
-            "PLUGIN_RPC_REQUEST_NOT_FOUND"
         );
     }
 }

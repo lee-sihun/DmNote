@@ -96,12 +96,12 @@ vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
   runMixedElementDeleteIntent: mocks.runMixedDeleteIntent,
 }));
 
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   deletePluginElements: mocks.deletePluginElements,
   deleteLayerSelectionViaAuthority: mocks.deleteLayerSelectionViaAuthority,
 }));
 
-vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+vi.mock('@plugins/runtime/pluginAuthorityGeneration', () => ({
   getPluginAuthorityGeneration: () => 7,
 }));
 
@@ -266,26 +266,6 @@ describe('useGridSelection compound history gesture', () => {
       },
     ]);
     expect(mocks.commitPatch).not.toHaveBeenCalled();
-  });
-
-  it('분리 패널 삭제는 stable descriptor만 main authority에 위임한다', async () => {
-    window.__dmn_window_type = 'panel';
-    await act(async () => {
-      useGridSelectionStore.getState().setSelectedElements([
-        { type: 'key', id: STABLE_KEY_ID, index: 0 },
-        { type: 'plugin', id: 'plugin-a:element' },
-      ]);
-    });
-
-    await act(async () => api.deleteSelectedElements());
-
-    expect(mocks.deleteLayerSelectionViaAuthority).toHaveBeenCalledWith([
-      { elementType: 'key', id: STABLE_KEY_ID },
-      { elementType: 'plugin', id: 'plugin-a:element' },
-    ]);
-    expect(mocks.runMixedDeleteIntent).not.toHaveBeenCalled();
-    expect(mocks.deletePluginElements).not.toHaveBeenCalled();
-    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
   });
 
   it('분리 패널의 synthetic 선택은 삭제를 main에 보내지 않는다', async () => {

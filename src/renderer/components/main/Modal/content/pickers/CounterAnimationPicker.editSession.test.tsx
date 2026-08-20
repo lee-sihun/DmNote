@@ -40,7 +40,7 @@ vi.mock('@hooks/usePickerItemMenu', () => ({
     close: vi.fn(),
   }),
 }));
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   deleteCounterAnimationPresetViaAuthority: (...args: unknown[]) =>
     mocks.authorityDelete(...args),
 }));
@@ -163,32 +163,5 @@ describe('CounterAnimationPicker 저장 완료와 모드 전환', () => {
     await savePreset();
 
     expect(onAnimationChange).toHaveBeenCalled();
-  });
-
-  it('panel delete는 main authority만 호출하고 element callback은 만들지 않는다', async () => {
-    window.__dmn_window_type = 'panel';
-    list.mockResolvedValue({
-      builtinPresets: [],
-      userPresets: [
-        {
-          id: 'preset-user',
-          name: 'User',
-          source: 'user',
-          bezier: [0.25, 0.1, 0.25, 1],
-          scale: 1.2,
-          durationMs: 300,
-        },
-      ],
-    });
-    act(() => root.unmount());
-    root = createRoot(container);
-    await mountPicker();
-    await act(async () => {
-      mocks.menuSelect?.('delete');
-      await settle();
-    });
-    expect(mocks.authorityDelete).toHaveBeenCalledWith('preset-user');
-    expect(mocks.remove).not.toHaveBeenCalled();
-    expect(onAnimationChange).not.toHaveBeenCalled();
   });
 });

@@ -158,7 +158,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchNotePaintByIds: patches.patchNotePaintByIds,
   patchStylePropertyByTargets: patches.patchDisplayTextByTargets,
 }));
-vi.mock('@plugins/rpc/pluginElementActions', () => ({
+vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
   patchInactiveImageViaAuthority: patches.patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority: patches.patchIdleTransparentViaAuthority,
@@ -668,7 +668,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     });
   };
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s batch counter picker는 open 시점 key/stat만 한 exact intent로 보낸다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -702,26 +702,18 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'key', id: ID_A },
         { elementType: 'stat', id: statA },
       ];
-      if (windowType === 'panel') {
-        expect(
-          patches.patchCounterAnimationPresetViaAuthority,
-        ).toHaveBeenCalledWith(targets, exact);
-        expect(
-          patches.patchCounterAnimationPresetByTargets,
-        ).not.toHaveBeenCalled();
-      } else {
-        expect(
-          patches.patchCounterAnimationPresetByTargets,
-        ).toHaveBeenCalledWith(targets, exact);
-        expect(
-          patches.patchCounterAnimationPresetViaAuthority,
-        ).not.toHaveBeenCalled();
-      }
+      expect(patches.patchCounterAnimationPresetByTargets).toHaveBeenCalledWith(
+        targets,
+        exact,
+      );
+      expect(
+        patches.patchCounterAnimationPresetViaAuthority,
+      ).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     'batch mixed active paint는 latest key와 knob subset만 %s authority로 보낸다',
     async (windowType) => {
       window.__dmn_window_type = windowType;
@@ -740,19 +732,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         property: 'activeBackgroundPaint',
         value: { color: 'active-final', gradient: null },
       } as const;
-      if (windowType === 'panel') {
-        expect(patches.patchPaintViaAuthority).toHaveBeenCalledWith(
-          targets,
-          patch,
-        );
-        expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchPaintByTargets).toHaveBeenCalledWith(
-          targets,
-          patch,
-        );
-        expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
-      }
+      expect(patches.patchPaintByTargets).toHaveBeenCalledWith(targets, patch);
+      expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -784,7 +765,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(legacy).not.toHaveBeenCalled();
   });
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s batch noteGlowSize는 current key subset에 gesture 없이 exact commit한다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -818,30 +799,19 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         .at(-1);
       act(() => glow?.onChange(20.5));
 
-      const writer =
-        windowType === 'panel'
-          ? patches.patchDisplayTextViaAuthority
-          : patches.patchDisplayTextByTargets;
-      if (windowType === 'panel') {
-        expect(writer).toHaveBeenCalledWith(
-          [{ elementType: 'key', id: ID_B }],
-          { property: 'noteGlowSize', value: 20.5 },
-          undefined,
-        );
-      } else {
-        expect(writer).toHaveBeenCalledWith(
-          [{ elementType: 'key', id: ID_B }],
-          { property: 'noteGlowSize', value: 20.5 },
-          { gestureId: undefined },
-        );
-      }
+      const writer = patches.patchDisplayTextByTargets;
+      expect(writer).toHaveBeenCalledWith(
+        [{ elementType: 'key', id: ID_B }],
+        { property: 'noteGlowSize', value: 20.5 },
+        { gestureId: undefined },
+      );
       expect(gestures.preview).not.toHaveBeenCalled();
       expect(gestures.settleCommit).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s batch note numeric은 latest key에 nullable exact leaf를 gesture 없이 commit한다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -887,10 +857,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       act(() => borderWidth?.onChange(2.5));
       act(() => borderRadius?.onChange(18.5));
 
-      const writer =
-        windowType === 'panel'
-          ? patches.patchDisplayTextViaAuthority
-          : patches.patchDisplayTextByTargets;
+      const writer = patches.patchDisplayTextByTargets;
       const target = [{ elementType: 'key', id: ID_B }];
       const patchesInOrder = [
         { property: 'noteOffsetX', value: 0 },
@@ -901,11 +868,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ];
       expect(writer).toHaveBeenCalledTimes(5);
       for (const [index, patch] of patchesInOrder.entries()) {
-        expect(writer.mock.calls[index]).toEqual(
-          windowType === 'panel'
-            ? [target, patch, undefined]
-            : [target, patch, { gestureId: undefined }],
-        );
+        expect(writer.mock.calls[index]).toEqual([
+          target,
+          patch,
+          { gestureId: undefined },
+        ]);
       }
       expect(gestures.preview).not.toHaveBeenCalled();
       expect(gestures.settleCommit).not.toHaveBeenCalled();
@@ -913,7 +880,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s soundVolume commit은 current key subset만 쓴다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -923,23 +890,12 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       renderPanel({ active: null, renderKey: null });
 
       changeSoundVolume(137.5);
-      if (windowType === 'panel') {
-        expect(patches.patchSoundVolumeViaAuthority).toHaveBeenCalledWith(
-          [ID_B],
-          137.5,
-        );
-        expect(patches.patchSoundVolumeByIds).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchSoundVolumeByIds).toHaveBeenCalledWith(
-          [ID_B],
-          137.5,
-        );
-        expect(patches.patchSoundVolumeViaAuthority).not.toHaveBeenCalled();
-      }
+      expect(patches.patchSoundVolumeByIds).toHaveBeenCalledWith([ID_B], 137.5);
+      expect(patches.patchSoundVolumeViaAuthority).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s displayText actual input은 mixed 4-type stable IDs를 preview하고 같은 gesture로 commit한다',
     async (windowType) => {
       window.__dmn_window_type = windowType;
@@ -1030,16 +986,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'graph', id: graphId },
         { elementType: 'knob', id: knobId },
       ];
-      const writer =
-        windowType === 'panel'
-          ? patches.patchDisplayTextViaAuthority
-          : patches.patchDisplayTextByTargets;
+      const writer = patches.patchDisplayTextByTargets;
       expect(writer).toHaveBeenCalledWith(
         targets,
         { property: 'displayText', value: '  Preview label  ' },
-        windowType === 'panel'
-          ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
-          : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+        { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
       );
       expect(gestures.settleCommit).toHaveBeenCalledWith(
         writer.mock.results[0]?.value,
@@ -1170,11 +1121,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   it.each([
     ['main', 'mixed'],
-    ['panel', 'mixed'],
     ['main', 'graph'],
-    ['panel', 'graph'],
     ['main', 'knob'],
-    ['panel', 'knob'],
   ] as const)(
     '%s %s batch className actual input은 preview하고 같은 gesture로 commit한다',
     async (windowType, kind) => {
@@ -1213,16 +1161,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ).toContainEqual({ className: '  Raw class  ' });
       act(() => input?.blur());
 
-      const writer =
-        windowType === 'panel'
-          ? patches.patchDisplayTextViaAuthority
-          : patches.patchDisplayTextByTargets;
+      const writer = patches.patchDisplayTextByTargets;
       expect(writer).toHaveBeenCalledWith(
         targets,
         { property: 'className', value: '  Raw class  ' },
-        windowType === 'panel'
-          ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
-          : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+        { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
       );
       expect(gestures.settleCommit).toHaveBeenCalledWith(
         writer.mock.results[0]?.value,
@@ -1234,7 +1177,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   it.each([
     ['main idle', 'main', 'idle'],
-    ['panel active', 'panel', 'active'],
+    ['main active', 'main', 'active'],
   ] as const)(
     '%s mixed batch font color는 latest current type subset과 기존 gesture timing을 쓴다',
     async (_label, windowType, state) => {
@@ -1282,21 +1225,14 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         state === 'active'
           ? { property: 'activeFontColor', value: ' final raw ' }
           : { property: 'fontColor', value: ' final raw ' };
-      const writer =
-        windowType === 'panel'
-          ? patches.patchFontColorViaAuthority
-          : patches.patchFontColorByTargets;
+      const writer = patches.patchFontColorByTargets;
       const gestureId =
         state === 'idle' ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' : undefined;
-      if (windowType === 'panel') {
-        expect(writer).toHaveBeenCalledWith(targets, patch, gestureId);
-      } else {
-        expect(writer).toHaveBeenCalledWith(
-          targets,
-          patch,
-          gestureId === undefined ? {} : { gestureId },
-        );
-      }
+      expect(writer).toHaveBeenCalledWith(
+        targets,
+        patch,
+        gestureId === undefined ? {} : { gestureId },
+      );
       if (state === 'idle') {
         expect(gestures.preview).toHaveBeenCalled();
         expect(gestures.settleCommit).toHaveBeenCalledWith(
@@ -1326,11 +1262,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   it.each([
     ['main', 'mixed', 'borderWidth', 0, 20, 12.5],
-    ['panel', 'mixed', 'borderRadius', 0, 100, 88.5],
     ['main', 'mixed', 'fontSize', 8, 72, 31.5],
-    ['panel', 'graph', 'borderWidth', 0, 20, 14.5],
     ['main', 'graph', 'borderRadius', 0, 100, 77.5],
-    ['panel', 'knob', 'borderWidth', 0, 20, 18.5],
     ['main', 'knob', 'borderRadius', 0, 100, 99.5],
   ] as const)(
     '%s %s batch %s actual input은 current stable targets를 preview하고 commit한다',
@@ -1371,16 +1304,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ).toContainEqual({ [property]: value });
       act(() => input?.onChange(value));
 
-      const writer =
-        windowType === 'panel'
-          ? patches.patchDisplayTextViaAuthority
-          : patches.patchDisplayTextByTargets;
+      const writer = patches.patchDisplayTextByTargets;
       expect(writer).toHaveBeenCalledWith(
         targets,
         { property, value },
-        windowType === 'panel'
-          ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
-          : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+        { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
       );
       expect(gestures.settleCommit).toHaveBeenCalledWith(
         writer.mock.results[0]?.value,
@@ -1407,7 +1335,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(patches.patchSoundVolumeByIds).toHaveBeenCalledWith([ID_A], 80);
   });
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s batch counter bool 토글은 클릭 시점 current key/stat만 쓴다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -1426,31 +1354,21 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         { elementType: 'key', id: ID_B },
         { elementType: 'stat', id: statB },
       ];
-      if (windowType === 'panel') {
-        expect(
-          patches.patchCounterBooleanByTargetsViaAuthority.mock.calls,
-        ).toEqual([
-          [targets, { property: 'counterEnabled', value: false }],
-          [targets, { property: 'counterAnimationEnabled', value: true }],
-        ]);
-        expect(patches.patchCounterEnabledByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchCounterEnabledByTargets).toHaveBeenCalledWith(
-          targets,
-          false,
-        );
-        expect(
-          patches.patchCounterAnimationEnabledByTargets,
-        ).toHaveBeenCalledWith(targets, true);
-        expect(
-          patches.patchCounterBooleanByTargetsViaAuthority,
-        ).not.toHaveBeenCalled();
-      }
+      expect(patches.patchCounterEnabledByTargets).toHaveBeenCalledWith(
+        targets,
+        false,
+      );
+      expect(
+        patches.patchCounterAnimationEnabledByTargets,
+      ).toHaveBeenCalledWith(targets, true);
+      expect(
+        patches.patchCounterBooleanByTargetsViaAuthority,
+      ).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s batch counter layout은 current key/stat에 4 exact leaf를 적용한다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -1476,20 +1394,13 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         [targets, { property: 'counterAlignMode', value: 'between' }],
         [targets, { property: 'counterGap', value: 9999 }],
       ];
-      if (windowType === 'panel') {
-        expect(patches.patchCounterLayoutViaAuthority.mock.calls).toEqual(
-          calls,
-        );
-        expect(patches.patchCounterLayoutByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchCounterLayoutByTargets.mock.calls).toEqual(calls);
-        expect(patches.patchCounterLayoutViaAuthority).not.toHaveBeenCalled();
-      }
+      expect(patches.patchCounterLayoutByTargets.mock.calls).toEqual(calls);
+      expect(patches.patchCounterLayoutViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s batch counter typography는 current key/stat에 5 exact leaf를 적용한다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -1521,24 +1432,13 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         [targets, { property: 'counterFontUnderline', value: true }],
         [targets, { property: 'counterFontStrikethrough', value: true }],
       ];
-      if (windowType === 'panel') {
-        expect(patches.patchCounterTypographyViaAuthority.mock.calls).toEqual(
-          calls,
-        );
-        expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchCounterTypographyByTargets.mock.calls).toEqual(
-          calls,
-        );
-        expect(
-          patches.patchCounterTypographyViaAuthority,
-        ).not.toHaveBeenCalled();
-      }
+      expect(patches.patchCounterTypographyByTargets.mock.calls).toEqual(calls);
+      expect(patches.patchCounterTypographyViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s batch counter FontPicker는 open A가 아니라 최신 B key/stat targets에 적용한다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -1560,19 +1460,10 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         targets,
         { property: 'counterFontFamily', value: '  Raw Counter Family  ' },
       ];
-      if (windowType === 'panel') {
-        expect(patches.patchCounterTypographyViaAuthority).toHaveBeenCalledWith(
-          ...args,
-        );
-        expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchCounterTypographyByTargets).toHaveBeenCalledWith(
-          ...args,
-        );
-        expect(
-          patches.patchCounterTypographyViaAuthority,
-        ).not.toHaveBeenCalled();
-      }
+      expect(patches.patchCounterTypographyByTargets).toHaveBeenCalledWith(
+        ...args,
+      );
+      expect(patches.patchCounterTypographyViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -1615,7 +1506,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   it.each([
     ['main idle', 'main', 'idle'],
-    ['panel active', 'panel', 'active'],
+    ['main active', 'main', 'active'],
   ] as const)(
     '%s batch counter fill은 open A가 아니라 latest B key/stat targets에 solid descriptor를 보낸다',
     (_label, windowType, state) => {
@@ -1689,19 +1580,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         state === 'active'
           ? { property: 'counterFillActive', value: { color: ' solid final ' } }
           : { property: 'counterFillIdle', value: { color: ' solid final ' } };
-      if (windowType === 'panel') {
-        expect(patches.patchCounterFillViaAuthority).toHaveBeenCalledWith(
-          targets,
-          patch,
-        );
-        expect(patches.patchCounterFillByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchCounterFillByTargets).toHaveBeenCalledWith(
-          targets,
-          patch,
-        );
-        expect(patches.patchCounterFillViaAuthority).not.toHaveBeenCalled();
-      }
+      expect(patches.patchCounterFillByTargets).toHaveBeenCalledWith(
+        targets,
+        patch,
+      );
+      expect(patches.patchCounterFillViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -1974,7 +1857,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(patches.patchShadowViaAuthority).not.toHaveBeenCalled();
   });
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     'batch shadow는 latest current key/stat/knob targets에 %s exact partial을 보낸다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -1985,10 +1868,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       renderImagePanel('mixed', legacy);
       commitShadow('idle', { blur: 22.5 });
 
-      const writer =
-        windowType === 'panel'
-          ? patches.patchShadowViaAuthority
-          : patches.patchShadowByTargets;
+      const writer = patches.patchShadowByTargets;
       expect(writer).toHaveBeenCalledWith(targets, {
         property: 'shadow',
         value: { leaf: 'blur', value: 22.5 },
@@ -2053,7 +1933,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     });
   };
 
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     'batch mixed paint는 latest current target과 final-only %s authority를 사용한다',
     async (windowType) => {
       window.__dmn_window_type = windowType;
@@ -2072,13 +1952,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           value: { color: ' raw final ', gradient: null },
         },
       ] as const;
-      if (windowType === 'panel') {
-        expect(patches.patchPaintViaAuthority).toHaveBeenCalledWith(...args);
-        expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchPaintByTargets).toHaveBeenCalledWith(...args);
-        expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
-      }
+      expect(patches.patchPaintByTargets).toHaveBeenCalledWith(...args);
+      expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -2111,9 +1986,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     ['main', 'mixed'],
     ['main', 'graph'],
     ['main', 'knob'],
-    ['panel', 'mixed'],
-    ['panel', 'graph'],
-    ['panel', 'knob'],
   ] as const)(
     '%s %s batch ImagePicker load와 reset은 open 시점 ID를 고정한다',
     (windowType, kind) => {
@@ -2130,23 +2002,13 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         captured.image?.onIdleImageReset();
       });
 
-      if (windowType === 'panel') {
-        expect(
-          patches.patchElementPropertyByTargetsViaAuthority.mock.calls,
-        ).toEqual([
-          [targetsA, { property: 'inactiveImage', value: '  frozen.png  ' }],
-          [targetsA, { property: 'inactiveImage', value: '' }],
-        ]);
-        expect(patches.patchInactiveImageByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchInactiveImageByTargets.mock.calls).toEqual([
-          [targetsA, '  frozen.png  '],
-          [targetsA, ''],
-        ]);
-        expect(
-          patches.patchElementPropertyByTargetsViaAuthority,
-        ).not.toHaveBeenCalled();
-      }
+      expect(patches.patchInactiveImageByTargets.mock.calls).toEqual([
+        [targetsA, '  frozen.png  '],
+        [targetsA, ''],
+      ]);
+      expect(
+        patches.patchElementPropertyByTargetsViaAuthority,
+      ).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
       expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
     },
@@ -2174,8 +2036,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
   it.each([
     ['main', 'mixed'],
     ['main', 'knob'],
-    ['panel', 'mixed'],
-    ['panel', 'knob'],
   ] as const)(
     '%s %s batch active image load와 reset은 open 시점 key/knob ID만 쓴다',
     (windowType, kind) => {
@@ -2194,23 +2054,13 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         captured.image?.onActiveImageReset();
       });
 
-      if (windowType === 'panel') {
-        expect(
-          patches.patchElementPropertyByTargetsViaAuthority.mock.calls,
-        ).toEqual([
-          [targetsA, { property: 'activeImage', value: '  active.png  ' }],
-          [targetsA, { property: 'activeImage', value: '' }],
-        ]);
-        expect(patches.patchActiveImageByTargets).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchActiveImageByTargets.mock.calls).toEqual([
-          [targetsA, '  active.png  '],
-          [targetsA, ''],
-        ]);
-        expect(
-          patches.patchElementPropertyByTargetsViaAuthority,
-        ).not.toHaveBeenCalled();
-      }
+      expect(patches.patchActiveImageByTargets.mock.calls).toEqual([
+        [targetsA, '  active.png  '],
+        [targetsA, ''],
+      ]);
+      expect(
+        patches.patchElementPropertyByTargetsViaAuthority,
+      ).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
       expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
     },
@@ -2218,9 +2068,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   it.each([
     ['main', 'mixed', 'idle'],
-    ['panel', 'graph', 'idle'],
     ['main', 'knob', 'active'],
-    ['panel', 'mixed', 'active'],
   ] as const)(
     '%s %s batch %s transparency는 picker open이 아니라 최신 선택 ID를 쓴다',
     (windowType, kind, state) => {
@@ -2243,19 +2091,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         }
       });
 
-      const property =
-        state === 'idle' ? 'idleTransparent' : 'activeTransparent';
-      if (windowType === 'panel') {
-        expect(
-          patches.patchElementPropertyByTargetsViaAuthority,
-        ).toHaveBeenCalledWith(targetsB, { property, value: true });
-      } else {
-        const dockedWriter =
-          state === 'idle'
-            ? patches.patchIdleTransparentByTargets
-            : patches.patchActiveTransparentByTargets;
-        expect(dockedWriter).toHaveBeenCalledWith(targetsB, true);
-      }
+      const dockedWriter =
+        state === 'idle'
+          ? patches.patchIdleTransparentByTargets
+          : patches.patchActiveTransparentByTargets;
+      expect(dockedWriter).toHaveBeenCalledWith(targetsB, true);
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -2308,33 +2148,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
   });
 
-  it('panel sound select와 clear는 open 시점 key ID를 authority에만 보낸다', () => {
-    window.__dmn_window_type = 'panel';
-    renderPanel({
-      active: BATCH_STYLE_SOUND_PAGE_KEY,
-      renderKey: BATCH_STYLE_SOUND_PAGE_KEY,
-    });
-    act(() => selectKey(ID_B));
-    renderPanel({
-      active: BATCH_STYLE_SOUND_PAGE_KEY,
-      renderKey: BATCH_STYLE_SOUND_PAGE_KEY,
-    });
-
-    act(() => captured.sound!.onSoundSelect('  sounds/raw.wav  '));
-    act(() => captured.sound!.onSoundSelect(''));
-
-    const keyTargets = [{ elementType: 'key', id: ID_A }];
-    expect(
-      patches.patchElementPropertyByTargetsViaAuthority.mock.calls,
-    ).toEqual([
-      [keyTargets, { property: 'soundPath', value: '  sounds/raw.wav  ' }],
-      [keyTargets, { property: 'soundPath', value: '' }],
-    ]);
-    expect(patches.patchSoundPathByIds).not.toHaveBeenCalled();
-    expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
-  });
-
-  it.each(['main', 'panel'] as const)(
+  it.each(['main'] as const)(
     '%s soundEnabled 토글은 picker binding이 아니라 current key subset만 쓴다',
     (windowType) => {
       window.__dmn_window_type = windowType;
@@ -2344,23 +2158,10 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       renderPanel({ active: null, renderKey: null });
 
       clickSoundEnabled();
-      if (windowType === 'panel') {
-        expect(
-          patches.patchElementPropertyByTargetsViaAuthority,
-        ).toHaveBeenCalledWith([{ elementType: 'key', id: ID_B }], {
-          property: 'soundEnabled',
-          value: true,
-        });
-        expect(patches.patchSoundEnabledByIds).not.toHaveBeenCalled();
-      } else {
-        expect(patches.patchSoundEnabledByIds).toHaveBeenCalledWith(
-          [ID_B],
-          true,
-        );
-        expect(
-          patches.patchElementPropertyByTargetsViaAuthority,
-        ).not.toHaveBeenCalled();
-      }
+      expect(patches.patchSoundEnabledByIds).toHaveBeenCalledWith([ID_B], true);
+      expect(
+        patches.patchElementPropertyByTargetsViaAuthority,
+      ).not.toHaveBeenCalled();
     },
   );
 

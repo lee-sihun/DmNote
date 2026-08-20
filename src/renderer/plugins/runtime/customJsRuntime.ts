@@ -12,10 +12,10 @@
  * - api/: defineElement, defineSettings 등 플러그인 API
  */
 
-import { pluginRpcApi } from '@api/modules/pluginRpcApi';
+import { pluginAuthorityApi } from '@api/modules/pluginAuthorityApi';
 import { internalApi } from '@api/internalApi';
-import { setPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
-import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
+import { setPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
+import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
@@ -288,7 +288,7 @@ ${plugin.content}
     }
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const snapshot = await pluginRpcApi.authorityReset();
+        const snapshot = await pluginAuthorityApi.reset();
         setPluginAuthorityGeneration(snapshot.authorityGeneration);
         noteBackendPluginRevision(snapshot.modelRevision);
         return true;

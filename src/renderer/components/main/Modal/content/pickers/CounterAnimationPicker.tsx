@@ -27,9 +27,6 @@ import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessio
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import { counterAnimationApi } from '@api/modules/resourceApi';
-import { deleteCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
-import { useRemoteSheetOpener } from '@hooks/ui/useRemoteSheetOpener';
-import { isPanelWindow } from '@utils/windowType';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -214,9 +211,7 @@ const CounterAnimationPicker = ({
         counterAnimationLibraryCache = next;
         return next;
       });
-      const removed = isPanelWindow()
-        ? await deleteCounterAnimationPresetViaAuthority(preset.id)
-        : await counterAnimationApi.remove(preset.id);
+      const removed = await counterAnimationApi.remove(preset.id);
       if (!removed) throw new Error('counter animation delete failed');
       await loadLibrary();
     } catch (error) {
@@ -263,22 +258,7 @@ const CounterAnimationPicker = ({
     }
   };
 
-  // 분리 패널 창은 시트를 메인 창에 넘긴다. 저장 결과는 도킹 경로와 같은 핸들러로 적용
-  const remoteEditor = useRemoteSheetOpener('counterAnimation', (result) => {
-    void handleEditorSaved(result.payload);
-  });
-
   const openEditor = (state: EditorState) => {
-    if (remoteEditor.isPanel) {
-      void remoteEditor.open({
-        kind: 'counterAnimation',
-        mode: state.mode,
-        preset: state.preset,
-        counterSettings,
-        keyVisual,
-      });
-      return;
-    }
     setEditorState(state);
   };
 

@@ -33,6 +33,8 @@ import {
   registerPopupLayer,
 } from './popupLayer';
 import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
+import { usePanelHost } from '@contexts/PanelHostContext';
+import { isElementNode } from '@utils/dom/isElementNode';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface FloatingPopupBaseProps {
@@ -113,7 +115,9 @@ const FloatingPopupSurface = ({
   children,
 }: FloatingPopupSurfaceProps) => {
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const { openerRef, captureOpener } = useFocusRestore(active);
+  // 분리 패널 창 안에서는 그 창의 document가 포커스·키 이벤트의 주인이다
+  const { document: ownerDocument } = usePanelHost();
+  const { openerRef, captureOpener } = useFocusRestore(active, ownerDocument);
 
   // 자식 팝업은 부모 모달의 layout 등록 뒤에 쌓여야 하므로 passive effect 사용.
   // 닫힘 모션이 도는 동안 DOM은 남지만 레이어 소유권은 즉시 놓는다
@@ -132,10 +136,12 @@ const FloatingPopupSurface = ({
     if (focusOriginRef) {
       focusOriginRef.current = openerRef.current;
     }
+    // 표면이 사는 문서의 포커스만 본다 (분리 패널 창이면 그 창)
+    const activeElement = surface.ownerDocument.activeElement;
     if (
       contentReady &&
-      document.activeElement !== surface &&
-      surface.contains(document.activeElement)
+      activeElement !== surface &&
+      surface.contains(activeElement)
     ) {
       return;
     }
@@ -179,7 +185,7 @@ const FloatingPopupSurface = ({
       }
 
       const activeIndex = focusable.indexOf(
-        document.activeElement as HTMLElement,
+        ownerDocument.activeElement as HTMLElement,
       );
       const nextIndex =
         activeIndex < 0
@@ -191,9 +197,9 @@ const FloatingPopupSurface = ({
       focusable[nextIndex].focus();
     };
 
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onMenuTab, role]);
+    ownerDocument.addEventListener('keydown', onKey);
+    return () => ownerDocument.removeEventListener('keydown', onKey);
+  }, [onMenuTab, role, ownerDocument]);
 
   return (
     <div
@@ -247,6 +253,8 @@ const FloatingPopup = ({
   initialFocus,
   contentMountStrategy = 'sync',
 }: FloatingPopupProps) => {
+  // 앵커가 사는 창 기준으로 배치·포털·바깥 클릭을 처리한다 (분리 패널 창 지원)
+  const { window: ownerWindow, document: ownerDocument } = usePanelHost();
   const {
     x,
     y,
@@ -332,9 +340,9 @@ const FloatingPopup = ({
       e.preventDefault();
       onClose();
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    ownerDocument.addEventListener('keydown', onKey);
+    return () => ownerDocument.removeEventListener('keydown', onKey);
+  }, [open, onClose, ownerDocument]);
 
   useEffect(() => {
     if (open && autoClose) {
@@ -351,17 +359,17 @@ const FloatingPopup = ({
         // 모달이 열린 상태에서 모달 내부 클릭으로 팝업이 닫히는 것을 방지
         // (Modal은 body로 portal 렌더링되기 때문에 floating 내부로 인식되지 않음)
         const isInsideModal =
-          target instanceof Element &&
+          isElementNode(target) &&
           !!target.closest('[data-dmn-modal-backdrop="true"]');
         if (isInsideModal) return;
         // 서브메뉴도 body 포털이라 floating 내부로 인식되지 않음 — 닫힘 예외
         const isInsideSubMenu =
-          target instanceof Element &&
+          isElementNode(target) &&
           !!target.closest('[data-dmn-popup-submenu="true"]');
         if (isInsideSubMenu) return;
         // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
         const isInsideGradientOverlay =
-          target instanceof Element &&
+          isElementNode(target) &&
           !!target.closest('[data-dmn-gradient-overlay="true"]');
         if (isInsideGradientOverlay) return;
         // 위에 쌓인 팝업(자식 피커 등)은 body 포털이라 floating 내부로 인식되지 않음
@@ -369,12 +377,12 @@ const FloatingPopup = ({
         onClose();
       };
 
-      document.addEventListener('mousedown', onClickAway);
+      ownerDocument.addEventListener('mousedown', onClickAway);
       return () => {
-        document.removeEventListener('mousedown', onClickAway);
+        ownerDocument.removeEventListener('mousedown', onClickAway);
       };
     }
-  }, [open, autoClose, onClose, referenceRef, refs.floating]);
+  }, [open, autoClose, onClose, referenceRef, refs.floating, ownerDocument]);
 
   useEffect(() => {
     if (open) update?.();
@@ -389,12 +397,12 @@ const FloatingPopup = ({
     };
 
     // 캡처 단계에서 모든 스크롤 이벤트 감지
-    document.addEventListener('scroll', handleScroll, true);
+    ownerDocument.addEventListener('scroll', handleScroll, true);
 
     return () => {
-      document.removeEventListener('scroll', handleScroll, true);
+      ownerDocument.removeEventListener('scroll', handleScroll, true);
     };
-  }, [open, closeOnScroll, onClose]);
+  }, [open, closeOnScroll, onClose, ownerDocument]);
 
   // 좌표가 바뀔 때마다 옵저버를 다시 만들 필요는 없다. 고정 모드인지만 보면 된다
   const isFixedMode =
@@ -421,16 +429,24 @@ const FloatingPopup = ({
     const x = clampToViewport(
       shownFixedX + offsetX,
       menuWidth,
-      window.innerWidth,
+      ownerWindow.innerWidth,
     );
     const y = clampToViewport(
       shownFixedY + offsetY,
       menuHeight,
-      window.innerHeight,
+      ownerWindow.innerHeight,
     );
 
     setAdjustedPos((prev) => (prev?.x === x && prev.y === y ? prev : { x, y }));
-  }, [mounted, motionState, shownFixedX, shownFixedY, offsetX, offsetY]);
+  }, [
+    mounted,
+    motionState,
+    shownFixedX,
+    shownFixedY,
+    offsetX,
+    offsetY,
+    ownerWindow,
+  ]);
 
   // contentMounted가 빠지면 지연 마운트 팝업이 내용 없는 상태(폭 8px)에서 한 번만
   // 재고 그대로 굳는다. 내용이 붙어도 다시 재지 않아 경계 밖으로 잘려 나간다
@@ -443,12 +459,12 @@ const FloatingPopup = ({
     const observer =
       typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
     observer?.observe(el);
-    window.addEventListener('resize', place);
+    ownerWindow.addEventListener('resize', place);
     return () => {
       observer?.disconnect();
-      window.removeEventListener('resize', place);
+      ownerWindow.removeEventListener('resize', place);
     };
-  }, [mounted, isFixedMode, place]);
+  }, [mounted, isFixedMode, place, ownerWindow]);
 
   useEffect(() => {
     if (!open || autoClose) return;
@@ -473,7 +489,7 @@ const FloatingPopup = ({
         .map((r) => r?.current)
         .filter(Boolean) as HTMLElement[];
       const isInsideModal =
-        target instanceof Element &&
+        isElementNode(target) &&
         !!target.closest('[data-dmn-modal-backdrop="true"]');
 
       if (!floatingEl) return;
@@ -510,7 +526,7 @@ const FloatingPopup = ({
 
       // 서브메뉴·포털 드롭다운도 body 포털이라 floating 내부로 인식되지 않음
       const isInsideSubMenu =
-        target instanceof Element &&
+        isElementNode(target) &&
         !!target.closest('[data-dmn-popup-submenu="true"]');
       if (isInsideSubMenu) {
         pointerCapturedInside = false;
@@ -519,7 +535,7 @@ const FloatingPopup = ({
 
       // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
       const isInsideGradientOverlay =
-        target instanceof Element &&
+        isElementNode(target) &&
         !!target.closest('[data-dmn-gradient-overlay="true"]');
       if (isInsideGradientOverlay) {
         pointerCapturedInside = false;
@@ -540,16 +556,20 @@ const FloatingPopup = ({
     };
 
     // 이벤트 리스너는 document에만 등록 (floatingEl은 동적으로 참조)
-    document.addEventListener('pointerup', handlePointerUp, true);
-    document.addEventListener('pointerdown', handleDocumentDown, true);
-    document.addEventListener('mousedown', handleDocumentDown, true);
+    ownerDocument.addEventListener('pointerup', handlePointerUp, true);
+    ownerDocument.addEventListener('pointerdown', handleDocumentDown, true);
+    ownerDocument.addEventListener('mousedown', handleDocumentDown, true);
 
     return () => {
-      document.removeEventListener('pointerup', handlePointerUp, true);
-      document.removeEventListener('pointerdown', handleDocumentDown, true);
-      document.removeEventListener('mousedown', handleDocumentDown, true);
+      ownerDocument.removeEventListener('pointerup', handlePointerUp, true);
+      ownerDocument.removeEventListener(
+        'pointerdown',
+        handleDocumentDown,
+        true,
+      );
+      ownerDocument.removeEventListener('mousedown', handleDocumentDown, true);
     };
-  }, [open, autoClose, onClose, referenceRef, interactiveRefs]);
+  }, [open, autoClose, onClose, referenceRef, interactiveRefs, ownerDocument]);
 
   if (!mounted) return null;
 
@@ -602,7 +622,7 @@ const FloatingPopup = ({
 
   // 위치 계산 전후에 렌더 루트가 바뀌지 않도록 필요 시 처음부터 body에 렌더링
   if (portalToBody || isFixedMode) {
-    return createPortal(floatingContent, document.body);
+    return createPortal(floatingContent, ownerDocument.body);
   }
 
   return floatingContent;

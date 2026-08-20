@@ -30,9 +30,8 @@ import {
   registerPluginInstancesStagedRelease,
   touchPluginInstancesEditSession,
 } from '../displayElement/instancesCommitQueue';
-import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
-import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
-import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
+import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
+import { getPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 import {
   useHistoryStatusStore,
   syncHistoryStatus,
@@ -194,13 +193,6 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       try {
         const result = await pluginInstancesApi.commit(buildRequest());
         noteBackendPluginRevision(result.modelRevision);
-        // 전진한 revision을 패널 미러에 반드시 전파 - store 변경이 없어도
-        // 패널의 revision 충돌 재시도가 자력으로 수렴할 수 있게 함
-        if (result.changed) {
-          const { elements, definitions } =
-            usePluginDisplayElementStore.getState();
-          schedulePluginPanelModelSync(elements, definitions);
-        }
       } catch (error) {
         // 낡은 epoch 관측 = barrier(undo·프리셋 복원)와 경합 - barrier가 이긴다
         // 캡처값 재시도는 undo 직전 상태를 되살리므로 폐기하고, 다른 gesture가

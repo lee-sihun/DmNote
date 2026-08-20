@@ -1667,46 +1667,6 @@ describe('숫자 스텝 팝인 레이어', () => {
   });
 });
 
-describe('ColorInput detached gradient guidance', () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.append(container);
-    root = createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-    window.__dmn_window_type = 'main';
-  });
-
-  it('분리 창에서 온캔버스 핸들 재부착 안내를 표시한다', () => {
-    window.__dmn_window_type = 'panel';
-    act(() =>
-      root.render(
-        <ColorInput
-          value="#ffffff"
-          onChange={() => {}}
-          isOpen
-          onToggle={() => {}}
-          onModeCommit={() => {}}
-          canvasAnchor={{
-            kind: 'key',
-            id: '11111111-1111-4111-8111-111111111111',
-          }}
-        />,
-      ),
-    );
-
-    expect(container.textContent).toContain(
-      'propertiesPanel.detachedGradientHint',
-    );
-  });
-});
-
 describe('ColorInput deferred picker mount', () => {
   let container: HTMLDivElement;
   let root: Root;

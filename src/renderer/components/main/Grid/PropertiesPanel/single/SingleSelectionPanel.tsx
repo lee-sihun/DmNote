@@ -1,9 +1,6 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  patchElementPropertyViaAuthority,
-  patchKnobAxisIdById,
-} from '@src/renderer/editor/runtime/elementOps';
+import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { flushPluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
@@ -869,13 +866,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       counts.set(axisId, c);
       if (c >= 3) {
         bound = true;
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchElementPropertyViaAuthority('knob', axisCaptureTarget, {
-                property: 'axisId',
-                value: axisId,
-              })
-            : patchKnobAxisIdById(axisCaptureTarget, axisId);
+        const persisted = patchKnobAxisIdById(axisCaptureTarget, axisId);
         void persisted.catch(reportElementOpError);
         setAxisCaptureTarget(null);
       }
