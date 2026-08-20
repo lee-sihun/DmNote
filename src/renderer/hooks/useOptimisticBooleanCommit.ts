@@ -7,6 +7,9 @@ import {
 } from 'react';
 import type React from 'react';
 
+import { usePanelHost } from '@contexts/PanelHostContext';
+import { registerPendingOptimisticCommit } from './pendingOptimisticCommits';
+
 export type CommitStrategy = 'sync' | 'after-paint';
 export type BooleanCommitStrategy = CommitStrategy;
 
@@ -34,6 +37,10 @@ export const useOptimisticBooleanCommit = ({
   const pendingValueRef = useRef<boolean | null>(null);
   const canonicalValueRef = useRef(canonicalValue);
   const onCommitRef = useRef(onCommit);
+  // 패널 호스트 창 - frameHostRef가 없어도 분리 창 안이면 그 창의 프레임에 실린다.
+  // 스케줄 함수들은 렌더마다 새로 만들어져 최신 컨텍스트 값을 클로저로 잡는다
+  const { window: panelHostWindow } = usePanelHost();
+  const unregisterPendingRef = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
     canonicalValueRef.current = canonicalValue;
@@ -53,17 +60,23 @@ export const useOptimisticBooleanCommit = ({
     }
   }, []);
 
-  useEffect(
-    () => () => {
-      cancelScheduledCommit();
-      const pending = pendingValueRef.current;
-      pendingValueRef.current = null;
-      if (pending !== null && pending !== canonicalValueRef.current) {
-        onCommitRef.current(pending);
-      }
-    },
-    [cancelScheduledCommit],
-  );
+  // 어느 경로로 와도 1회만 확정 - 타이머 완료·언마운트·호스트 이동 drain이 같은 문을 지난다
+  const settlePendingCommit = useCallback(() => {
+    unregisterPendingRef.current?.();
+    unregisterPendingRef.current = null;
+    cancelScheduledCommit();
+    const pending = pendingValueRef.current;
+    pendingValueRef.current = null;
+    if (pending === null) return;
+    if (pending !== canonicalValueRef.current) {
+      onCommitRef.current(pending);
+    }
+    setOptimisticValue((currentOptimistic) =>
+      currentOptimistic === pending ? null : currentOptimistic,
+    );
+  }, [cancelScheduledCommit]);
+
+  useEffect(() => () => settlePendingCommit(), [settlePendingCommit]);
 
   const toggle = () => {
     const current = pendingValueRef.current ?? canonicalValueRef.current;
@@ -79,7 +92,13 @@ export const useOptimisticBooleanCommit = ({
 
     cancelScheduledCommit();
 
-    const win = frameHostRef?.current?.ownerDocument.defaultView ?? window;
+    const win =
+      frameHostRef?.current?.ownerDocument.defaultView ??
+      panelHostWindow ??
+      window;
+    unregisterPendingRef.current?.();
+    unregisterPendingRef.current =
+      registerPendingOptimisticCommit(settlePendingCommit);
     commitFrameRef.current = {
       win,
       id: win.requestAnimationFrame(() => {
@@ -88,15 +107,7 @@ export const useOptimisticBooleanCommit = ({
           win,
           id: win.setTimeout(() => {
             commitTimerRef.current = null;
-            const pending = pendingValueRef.current;
-            pendingValueRef.current = null;
-            if (pending === null) return;
-            if (pending !== canonicalValueRef.current) {
-              onCommitRef.current(pending);
-            }
-            setOptimisticValue((currentOptimistic) =>
-              currentOptimistic === pending ? null : currentOptimistic,
-            );
+            settlePendingCommit();
           }, 0),
         };
       }),

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { panelWindowApi } from '@api/modules/panelWindowApi';
+import { drainPendingOptimisticCommits } from '@hooks/pendingOptimisticCommits';
 import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import {
@@ -50,9 +51,11 @@ const yieldToRender = () =>
   new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 // 문서를 옮기면 포커스가 풀리는데 blur 이벤트가 따라온다는 보장이 없다 -
-// blur 전용 편집값을 옮기기 전에 확정한다
+// blur 전용 편집값을 옮기기 전에 확정한다.
+// 낙관 커밋의 rAF는 떠나는 창과 함께 멈추므로 대기분도 지금 확정한다
 const settleEditsBeforeMove = async (): Promise<boolean> => {
   try {
+    drainPendingOptimisticCommits();
     return await flushFocusedEditor();
   } catch (error) {
     console.error('패널 이동 전 편집 정산 실패', error);

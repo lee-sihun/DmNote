@@ -380,7 +380,11 @@ export function useLayerDnD({
       setDragOverIntoGroupId(dropTarget.intoGroupId);
       setDragOverTargetGroupId(dropTarget.targetGroupId ?? null);
     };
-    const moveScheduler = createRafLatestScheduler(applyMouseMove);
+    const moveScheduler = createRafLatestScheduler(
+      applyMouseMove,
+      'frame',
+      ownerDocument.defaultView ?? window,
+    );
     const handleMouseMove = (moveEvent: MouseEvent) =>
       moveScheduler.push(moveEvent);
 
@@ -587,7 +591,11 @@ export function useLayerDnD({
       groupDragStateRef.current.excludedIds = [...groupDraggingSet];
       setDragOverDisplayIndex(newIndex);
     };
-    const moveScheduler = createRafLatestScheduler(applyMouseMove);
+    const moveScheduler = createRafLatestScheduler(
+      applyMouseMove,
+      'frame',
+      ownerDocument.defaultView ?? window,
+    );
     const handleMouseMove = (moveEvent: MouseEvent) =>
       moveScheduler.push(moveEvent);
 
