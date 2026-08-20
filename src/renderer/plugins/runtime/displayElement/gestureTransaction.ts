@@ -168,8 +168,6 @@ export const commitMixedGestureIntent = (options: {
 
   let sealedProjection: readonly PluginDisplayElementInternal[] = [];
   let lastGeneration: MixedIntentGeneration | null = null;
-  let gestureResult: Awaited<ReturnType<typeof gestureApi.commit>> | null =
-    null;
   let editorOnlyCommit = false;
 
   const prepare = async (): Promise<void> => {
@@ -298,7 +296,6 @@ export const commitMixedGestureIntent = (options: {
           });
           assertAuthorityGeneration();
           noteBackendPluginRevision(result.pluginModelRevision);
-          gestureResult = result;
           return {
             revision: result.editorRevision,
             changedFields: result.changedFields,
@@ -439,8 +436,6 @@ export const commitMixedGestureTransaction = (
   beginMixedGestureTransaction(gestureId, normalizedPluginIds);
   const staged = stagedGestures.get(gestureId);
   if (staged) staged.committing = true;
-  let gestureResult: Awaited<ReturnType<typeof gestureApi.commit>> | null =
-    null;
   let commitWork: Promise<void>;
 
   try {
@@ -486,7 +481,6 @@ export const commitMixedGestureTransaction = (
           };
           const result = await gestureApi.commit(request);
           noteBackendPluginRevision(result.pluginModelRevision);
-          gestureResult = result;
           return {
             revision: result.editorRevision,
             changedFields: result.changedFields,
@@ -497,7 +491,7 @@ export const commitMixedGestureTransaction = (
         },
         meta,
       )
-      .then(() => {});
+      .then(() => undefined);
   } catch (error) {
     commitWork = Promise.reject(error);
   }

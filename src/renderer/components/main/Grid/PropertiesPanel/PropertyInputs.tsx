@@ -39,7 +39,6 @@ import {
   MAX_EXPRESSION_LENGTH,
 } from '@utils/core/arithmeticExpression';
 import { gradientToCss } from '@src/types/color';
-import { useTranslation } from '@contexts/useTranslation';
 import { I18nContext } from '@contexts/I18nContextDef';
 import { registerEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';

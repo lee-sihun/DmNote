@@ -92,7 +92,7 @@ lto = true
 codegen-units = 1
 opt-level = "z"  # 's'보다 더 공격적인 크기 최적화
 strip = true
-panic = "abort"
+panic = "unwind" # macOS Objective-C 예외 포착에 필요
 
 # 빌드 시 release 의존성도 최적화
 [profile.release.package."*"]
