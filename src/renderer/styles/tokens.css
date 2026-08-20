@@ -27,7 +27,9 @@
   /* 불투명 웰 — 코드 에디터처럼 배경이 흔들리면 안 되는 표면 전용 */
   --ui-bg-inset-solid: #161618;
   /* 분리된 속성 패널 창의 바닥 — 창 자체가 transparent라 알파를 쓰면 데스크톱이 비친다.
-     값은 도킹 상태의 사이드 패널(--ui-glass-panel 합성 결과)과 같은 L*에 맞춰 둠 */
+     값은 도킹 상태의 사이드 패널(--ui-glass-panel 합성 결과)과 같은 L*에 맞춰 둠.
+     Windows는 첫 페인트 전 구간을 같은 색으로 메우므로 windows_window_corners.rs의
+     SEED_FILL과 함께 바꿀 것 */
   --ui-bg-panel-detached: #1c1c1e;
 
   /* 글래스 표면 — 스모크 재질. 팝업·패널 0.72, 캔버스 크롬 0.6

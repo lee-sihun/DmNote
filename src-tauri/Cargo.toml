@@ -54,6 +54,7 @@ libc = "0.2"
 cpal = { version = "0.17.3", optional = true, default-features = false, features = ["asio"] }
 windows = { version = "0.61.3", features = [
 	"Win32_Foundation",
+	"Win32_Graphics_Dwm",
 	"Win32_UI_WindowsAndMessaging",
 	"Win32_UI_Input",
 	"Win32_Devices_HumanInterfaceDevice",

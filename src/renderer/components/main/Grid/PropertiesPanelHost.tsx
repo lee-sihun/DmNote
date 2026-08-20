@@ -14,20 +14,40 @@ import {
   isTransitionFailure,
   usePanelHostStore,
 } from '@stores/grid/usePanelHostStore';
-import { isMac } from '@utils/core/platform';
+import { isMac, isWindows } from '@utils/core/platform';
 import { readTokenColor } from '@utils/panelWindow/nativeChrome';
 import {
   getPanelChildWindow,
   openPanelChildWindow,
 } from '@utils/panelWindow/panelChildWindow';
 
+import type { PanelWindowChrome } from '@api/modules/panelWindowApi';
 import type { PanelHostValue } from '@contexts/PanelHostContext';
+import type { CSSProperties } from 'react';
 
 // 분리 창 루트 - 창 자체가 패널. 도킹 시엔 레이아웃에 끼어들지 않는 contents 박스로 바뀐다
 // (같은 엘리먼트를 유지해야 PropertiesPanel 서브트리가 리마운트되지 않는다)
 const DETACHED_ROOT_CLASS =
-  'relative w-screen h-screen overflow-hidden rounded-[12px] bg-panel-detached';
+  'relative w-screen h-screen overflow-hidden rounded-[var(--dmn-panel-window-radius,12px)] bg-panel-detached';
 const DOCKED_ROOT_CLASS = 'contents';
+
+// Windows는 창이 불투명이라 실루엣이 항상 네이티브 - 반경은 적용 성공 여부와 무관하게 0
+const nativeOwnsSilhouette = () => isWindows();
+
+// 네이티브 크롬이 답하기 전의 낙관값 - 첫 페인트에 CSS 링이 한 프레임 겹쳐 진해지고
+// (Windows에서는 라운딩까지 겹쳐) 모서리가 한 번 튀는 것을 막는다
+const initialChrome = (): PanelWindowChrome =>
+  nativeOwnsSilhouette()
+    ? { webRadius: 0, webRing: false }
+    : { webRadius: 12, webRing: false };
+
+// 색을 네이티브에 넘기지 못했을 때 - 창 생성 시점에 이미 심어둔 것만 남아 있다.
+// macOS는 레이어 마스크(반경)만 심으므로 라인은 CSS가 그려야 하고,
+// Windows는 apply_initial_chrome이 시드 라인까지 심으므로 CSS 링을 더하면 선이 진해진다
+const fallbackChrome = (): PanelWindowChrome =>
+  nativeOwnsSilhouette()
+    ? { webRadius: 0, webRing: false }
+    : { webRadius: 12, webRing: true };
 
 interface PropertiesPanelHostProps {
   onKeyMappingChange?: (index: number, newKey: string) => void;
@@ -173,18 +193,30 @@ const PropertiesPanelHost = ({
   });
 
   // 창 가장자리 표면을 네이티브 레이어에 위임 - 리사이즈 중 웹 페인트가 못 따라오는 구간을
-  // 컴포지터가 같은 색으로 그린다. macOS는 적용을 전제하고 시작 - 첫 페인트에 CSS 링이
-  // 한 프레임 겹쳐 진해지는 것 방지
-  const [nativeChrome, setNativeChrome] = useState(() => isMac());
+  // 컴포지터가 같은 색으로 그린다. 무엇이 남는지는 백엔드가 정한다 (webRadius / webRing)
+  const [chrome, setChrome] = useState(initialChrome);
   useEffect(() => {
     if (!childWindow) return undefined;
     let sent = '';
     let scheduled = 0;
+    const settle = (next: PanelWindowChrome) =>
+      setChrome((prev) =>
+        prev.webRadius === next.webRadius && prev.webRing === next.webRing
+          ? prev
+          : next,
+      );
+    // 토큰을 못 읽으면 네이티브에 색을 넘길 수 없다 - 생성 시점에 심어둔 것만 남는다.
+    // 시그니처도 비운다 - 안 비우면 색이 원래대로 돌아와도 dedupe에 걸려 재요청이 없어
+    // 폴백 상태가 영구 고착된다 (커스텀 CSS를 타이핑하다 잠깐 해석 불가가 되는 경로)
+    const fallback = () => {
+      sent = '';
+      settle(fallbackChrome());
+    };
     const sync = () => {
       const fill = readTokenColor('--ui-bg-panel-detached');
       const line = readTokenColor('--ui-line');
       if (!fill || !line) {
-        setNativeChrome(false);
+        fallback();
         return;
       }
       const signature = `${fill.join()}|${line.join()}`;
@@ -192,8 +224,8 @@ const PropertiesPanelHost = ({
       sent = signature;
       void panelWindowApi
         .applyNativeChrome(fill, line)
-        .then((applied) => setNativeChrome(applied))
-        .catch(() => setNativeChrome(false));
+        .then(settle)
+        .catch(fallback);
     };
     sync();
     // 커스텀 CSS가 토큰을 덮으면 네이티브 색도 따라가야 함 - 주입은 메인 head를 건드린다
@@ -224,7 +256,18 @@ const PropertiesPanelHost = ({
       )}
       {createPortal(
         <PanelHostContext.Provider value={hostValue}>
-          <div className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}>
+          <div
+            className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}
+            // 프레임(WINDOW_PANEL_FRAME_CLASS)까지 상속으로 함께 따라간다.
+            // 도킹 상태에선 걸지 않는다 - contents 박스라 메인 창 서브트리 전체로 새어나간다
+            style={
+              detached
+                ? ({
+                    '--dmn-panel-window-radius': `${chrome.webRadius}px`,
+                  } as CSSProperties)
+                : undefined
+            }
+          >
             <PropertiesPanel
               onKeyMappingChange={onKeyMappingChange}
               detachAction={detached ? 'reattach' : 'detach'}
@@ -235,10 +278,10 @@ const PropertiesPanelHost = ({
             />
             {/* 프레임리스 창 가장자리 링 - 메인 창의 네이티브 엣지에 대응하는 인셋 라인.
                 네이티브 레이어가 같은 라인을 그리면 겹쳐서 진해지므로 그땐 생략 */}
-            {detached && !nativeChrome && (
+            {detached && chrome.webRing && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-[12px] shadow-[inset_0_0_0_1px_var(--ui-line)] z-50"
+                className="pointer-events-none absolute inset-0 rounded-[var(--dmn-panel-window-radius,12px)] shadow-[inset_0_0_0_1px_var(--ui-line)] z-50"
               />
             )}
           </div>

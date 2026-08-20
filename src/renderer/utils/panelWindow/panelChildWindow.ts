@@ -74,7 +74,9 @@ const prepareChildDocument = (source: Document, target: Document) => {
     base.href = source.baseURI;
     target.head.appendChild(base);
   }
-  // 창 자체가 패널 - 문서 여백 없이 투명 바탕(모서리 라운딩은 콘텐츠가 그린다)
+  // 창 자체가 패널 - 문서 여백 없이 투명 바탕.
+  // 모서리 실루엣의 주인은 플랫폼마다 다르다(Windows는 DWM, macOS는 CALayer, 그 외는 CSS) -
+  // 여기서 바탕을 칠하면 모서리 바깥까지 덮어 네이티브가 잘라낸 자리를 도로 메운다
   target.body.style.margin = '0';
   target.body.style.background = 'transparent';
   target.body.style.overflow = 'hidden';

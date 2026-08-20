@@ -101,31 +101,66 @@ pub fn panel_window_start_dragging(app: AppHandle, client_x: f64, client_y: f64)
     Ok(())
 }
 
-// 창 가장자리 표면을 네이티브 레이어가 그리게 한다 - 리사이즈 프레임을 못 따라오는
-// 웹 페인트 대신 면과 1px 인셋 라인을 컴포지터가 소유.
-// 색은 CSS 토큰이 단일 출처라 렌더러가 계산값(sRGB 0~1)을 넘겨준다.
-// 반환값이 true면 렌더러는 CSS 링을 그리지 않는다 (겹치면 라인이 진해짐)
+// 웹이 그리는 분리 창 모서리 반경 - panelChrome.ts의 CSS 폴백과 같은 값을 유지한다.
+// macOS 레이어 마스크(macos_window_corners::CORNER_RADIUS)도 같은 값이라 겹쳐도 어긋나지 않는다
+// Windows는 실루엣이 항상 네이티브라 이 값을 쓰지 않는다
+#[cfg(not(target_os = "windows"))]
+const WEB_CORNER_RADIUS: f64 = 12.0;
+
+/// 네이티브가 창 가장자리를 얼마나 가져갔는지 - 렌더러는 남은 몫만 그린다.
+/// 두 값을 따로 두는 이유는 Windows 10: 창이 불투명이라 실루엣은 이미 네이티브(사각)인데
+/// DWM 보더 속성이 없어 라인만 웹이 그려야 한다
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelWindowChrome {
+    /// 웹이 그릴 모서리 반경(px). 네이티브가 실루엣을 소유하면 0
+    web_radius: f64,
+    /// 웹이 1px 인셋 링을 그려야 하는지. 네이티브가 라인을 그리면 false (겹치면 진해짐)
+    web_ring: bool,
+}
+
+// 창 가장자리 표면을 네이티브가 그리게 한다 - 리사이즈 프레임을 못 따라오는
+// 웹 페인트 대신 면과 1px 라인을 컴포지터(macOS CALayer / Windows DWM)가 소유.
+// 색은 CSS 토큰이 단일 출처라 렌더러가 계산값(sRGB 0~1)을 넘겨준다
 #[tauri::command]
 pub fn panel_window_apply_native_chrome(
     app: AppHandle,
     window: WebviewWindow,
     fill: [f64; 4],
     line: [f64; 4],
-) -> CmdResult<bool> {
+) -> CmdResult<PanelWindowChrome> {
     ensure_main_caller(&window, "styled")?;
     let panel = app
         .get_webview_window(crate::state::PANEL_LABEL)
         .ok_or_else(|| anyhow!("panel window is not open"))?;
+    // macOS 레이어 마스크는 CSS와 같은 12px라 반경을 웹에 남긴다 - 실패해도 그대로 정답
     #[cfg(target_os = "macos")]
     {
-        Ok(crate::state::macos_window_corners::apply_surface_chrome(
-            &app, &panel, fill, line,
-        ))
+        let applied =
+            crate::state::macos_window_corners::apply_surface_chrome(&app, &panel, fill, line);
+        Ok(PanelWindowChrome {
+            web_radius: WEB_CORNER_RADIUS,
+            web_ring: !applied,
+        })
     }
-    #[cfg(not(target_os = "macos"))]
+    // Windows는 창이 불투명이라 실루엣이 항상 네이티브 - 웹 반경은 성공 여부와 무관하게 0
+    #[cfg(target_os = "windows")]
+    {
+        let _ = app;
+        let applied =
+            crate::state::windows_window_corners::apply_surface_chrome(&panel, fill, line);
+        Ok(PanelWindowChrome {
+            web_radius: 0.0,
+            web_ring: !applied,
+        })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (app, panel, fill, line);
-        Ok(false)
+        Ok(PanelWindowChrome {
+            web_radius: WEB_CORNER_RADIUS,
+            web_ring: true,
+        })
     }
 }
 

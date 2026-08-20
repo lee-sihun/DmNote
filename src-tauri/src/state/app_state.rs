@@ -1123,9 +1123,9 @@ impl AppState {
     }
 
     fn show_main_window_inner(&self, app: &AppHandle) -> Result<()> {
-        // 패널을 먼저 되살린다 - macOS show는 makeKeyAndOrderFront고, Windows도 tao의
-        // MARKER_DONT_FOCUS가 소모되면 SW_SHOW로 활성화된다. 메인 show+set_focus를
-        // 항상 뒤에 둬야 포커스와 최상단이 메인에 남는다
+        // 패널을 먼저 되살린다 - macOS show는 makeKeyAndOrderFront고, Windows는 z-order만
+        // 올린다(MARKER_DONT_FOCUS가 지워지지 않아 show는 언제나 비활성 표시).
+        // 메인 show+set_focus를 항상 뒤에 둬야 포커스와 최상단이 메인에 남는다
         self.restore_detached_panel_with_main(app);
         if let Some(main) = app.get_webview_window("main") {
             let _ = main.unminimize();
@@ -3188,7 +3188,12 @@ impl AppState {
         let restored = restore_panel_with_main_transition(&self.panel_hidden_with_main, || {
             // 메인 표시 경로와 같은 순서 - 최소화 해제부터
             let _ = window.unminimize();
-            window.show().map_err(anyhow::Error::from)
+            window.show().map_err(anyhow::Error::from)?;
+            // present_panel_window와 같은 이유 - show가 z-order를 안 건드려 메인 뒤에 깔린다.
+            // 메인을 위에 남기는 건 뒤따르는 main.show()+set_focus가 맡는다
+            #[cfg(target_os = "windows")]
+            raise_panel_window_without_activation(&window);
+            Ok(())
         });
         if let Err(err) = restored {
             // 표식은 되살렸지만 자동 재시도는 없다 - 유저가 트레이로 다시 숨겼다 꺼내야 복원된다
@@ -3340,7 +3345,11 @@ impl AppState {
         .title("DM Note - Panel")
         // 메인·오버레이와 같은 프레임리스 크롬 - 드래그 영역은 패널 상단 스트립이 담당
         .decorations(false)
-        .transparent(true)
+        // Windows는 DWM이 실루엣을 소유하므로(windows_window_corners) 모서리 바깥을 비출
+        // 필요가 없다. 투명이면 wry가 WebView2 기본 배경을 (0,0,0,0)으로 못박고 빌더
+        // background_color를 버려, 리사이즈로 새로 드러난 띠가 그대로 비친다.
+        // 메인 창(transparent: false + backgroundColor)과 같은 구성
+        .transparent(cfg!(not(target_os = "windows")))
         .shadow(true)
         .resizable(true)
         .maximizable(false)
@@ -3355,6 +3364,13 @@ impl AppState {
         .min_inner_size(PANEL_WIDTH, layout.min_height)
         .max_inner_size(PANEL_WIDTH, layout.max_height)
         .zoom_hotkeys_enabled(false);
+
+        // 컨트롤러 생성 옵션에 실려야 첫 프레임부터 유효하다 - build() 이후 런타임 호출은
+        // 이미 내비게이션이 시작된 뒤라 늦다. 실제 색은 렌더러가 토큰을 읽어 덮는다
+        #[cfg(target_os = "windows")]
+        {
+            builder = builder.background_color(super::windows_window_corners::SEED_FILL);
+        }
 
         if let Some(position) = layout.position {
             builder = builder.position(position.x, position.y);
@@ -3392,6 +3408,10 @@ impl AppState {
         // 웹 콘텐츠가 그리는 라운딩은 리사이즈 프레임을 못 따라옴 - 실루엣은 컴포지터가 소유
         #[cfg(target_os = "macos")]
         super::macos_window_corners::apply_rounded_corners(app, window);
+        // Windows는 DWM이 이미 자기 반경으로 자르고 있어 웹 라운딩과 어긋난다 - 반경 지정이
+        // 불가능하므로 실루엣을 DWM에 넘기고 웹은 사각으로 채운다 (메인 창과 같은 처리)
+        #[cfg(target_os = "windows")]
+        super::windows_window_corners::apply_initial_chrome(window);
 
         let bounds_session = self
             .panel_bounds_persistence

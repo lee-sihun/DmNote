@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
   childWindow: null as null | { window: Window; document: Document },
   panelProps: [] as Array<Record<string, unknown>>,
   mountCount: 0,
-  applyNativeChrome: vi.fn(() => Promise.resolve(false)),
+  applyNativeChrome: vi.fn(() =>
+    Promise.resolve({ webRadius: 12, webRing: true }),
+  ),
+  readTokenColor: vi.fn((): [number, number, number, number] | null => null),
   startDragging: vi.fn((_x: number, _y: number) => Promise.resolve()),
 }));
 
@@ -31,9 +34,12 @@ vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
 vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
   isHistoryEditorFlushLocked: () => false,
 }));
-vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
+vi.mock('@utils/core/platform', () => ({
+  isMac: () => false,
+  isWindows: () => false,
+}));
 vi.mock('@utils/panelWindow/nativeChrome', () => ({
-  readTokenColor: () => null,
+  readTokenColor: () => mocks.readTokenColor(),
 }));
 // 실제 패널 대신 로컬 state를 가진 스텁 - 이동 중 리마운트 여부를 state로 판별
 vi.mock('@components/main/Grid/PropertiesPanel', () => ({
@@ -89,6 +95,8 @@ describe('PropertiesPanelHost', () => {
     mocks.childWindow = null;
     mocks.panelProps = [];
     mocks.mountCount = 0;
+    mocks.applyNativeChrome.mockClear();
+    mocks.readTokenColor.mockReturnValue(null);
     usePanelHostStore.setState({ placement: 'docked', transition: 'idle' });
   });
 
@@ -189,5 +197,79 @@ describe('PropertiesPanelHost', () => {
     expect(remove.mock.calls.map((call) => call[0])).toEqual(
       expect.arrayContaining(['keydown', 'blur']),
     );
+  });
+
+  describe('네이티브 창 크롬', () => {
+    const detachedRoot = () =>
+      mocks.childWindow!.document.querySelector<HTMLElement>(
+        '[data-dmn-panel-host] > div',
+      )!;
+    const ring = () =>
+      mocks.childWindow!.document.querySelector(
+        '[data-dmn-panel-host] [aria-hidden="true"]',
+      );
+    // head MutationObserver → rAF 코얼레싱을 태워 sync를 한 번 돌린다
+    const pokeCustomCss = async () => {
+      await act(async () => {
+        document.head.appendChild(document.createElement('style'));
+      });
+      await act(async () => {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      });
+    };
+
+    it('백엔드가 정한 반경·링을 그대로 반영한다', async () => {
+      mocks.readTokenColor.mockReturnValue([0.1, 0.1, 0.12, 1]);
+      mocks.applyNativeChrome.mockResolvedValue({
+        webRadius: 0,
+        webRing: false,
+      });
+      await render();
+      mocks.childWindow = createChild();
+      await act(async () => {
+        usePanelHostStore.getState().setPlacement('detached');
+      });
+
+      expect(mocks.applyNativeChrome).toHaveBeenCalledTimes(1);
+      expect(
+        detachedRoot().style.getPropertyValue('--dmn-panel-window-radius'),
+      ).toBe('0px');
+      // 네이티브가 라인을 그리므로 CSS 링은 없어야 한다 (겹치면 진해짐)
+      expect(ring()).toBeNull();
+    });
+
+    it('토큰을 못 읽으면 CSS 링으로 물러나고, 색이 돌아오면 다시 요청한다', async () => {
+      const color: [number, number, number, number] = [0.1, 0.1, 0.12, 1];
+      mocks.readTokenColor.mockReturnValue(color);
+      mocks.applyNativeChrome.mockResolvedValue({
+        webRadius: 0,
+        webRing: false,
+      });
+      await render();
+      mocks.childWindow = createChild();
+      await act(async () => {
+        usePanelHostStore.getState().setPlacement('detached');
+      });
+      expect(mocks.applyNativeChrome).toHaveBeenCalledTimes(1);
+
+      // 커스텀 CSS를 타이핑하다 토큰이 잠깐 색으로 해석되지 않는 구간
+      mocks.readTokenColor.mockReturnValue(null);
+      await pokeCustomCss();
+      expect(
+        detachedRoot().style.getPropertyValue('--dmn-panel-window-radius'),
+      ).toBe('12px');
+      expect(ring()).not.toBeNull();
+
+      // 같은 색으로 되돌아왔다 - 시그니처가 같아도 재요청해야 한다 (dedupe 고착 방지)
+      mocks.readTokenColor.mockReturnValue(color);
+      await pokeCustomCss();
+      expect(mocks.applyNativeChrome).toHaveBeenCalledTimes(2);
+      expect(
+        detachedRoot().style.getPropertyValue('--dmn-panel-window-radius'),
+      ).toBe('0px');
+      expect(ring()).toBeNull();
+    });
   });
 });

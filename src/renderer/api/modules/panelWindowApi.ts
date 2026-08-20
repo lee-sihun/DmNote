@@ -2,6 +2,14 @@ import { invoke } from '@tauri-apps/api/core';
 
 import { subscribe } from './shared';
 
+// 네이티브가 창 가장자리를 얼마나 가져갔는지 - 렌더러는 남은 몫만 그린다
+export interface PanelWindowChrome {
+  // 웹이 그릴 모서리 반경(px). 네이티브가 실루엣을 소유하면 0
+  webRadius: number;
+  // 웹이 1px 인셋 링을 그려야 하는지. 네이티브가 라인을 그리면 false
+  webRing: boolean;
+}
+
 // 분리 패널 창 제어. 창은 메인 웹뷰의 window.open으로만 생기고(opener 자식) 그 뒤로는
 // present(show)/dock(hide)만 오간다 - 자세한 수명 규칙은 utils/panelWindow/panelChildWindow.ts
 export const panelWindowApi = {
@@ -31,11 +39,16 @@ export const panelWindowApi = {
   startDragging: (clientX: number, clientY: number) =>
     invoke<void>('panel_window_start_dragging', { clientX, clientY }),
   // 창 가장자리 표면을 네이티브 레이어에 위임 - 리사이즈 프레임을 못 따라오는
-  // 웹 페인트 대신 면과 1px 라인을 컴포지터가 그린다. true면 CSS 링은 그리지 않음
+  // 웹 페인트 대신 면과 1px 라인을 컴포지터가 그린다.
+  // 반환값은 네이티브가 가져가고 남은 몫 - 렌더러는 그것만 그린다
   applyNativeChrome: (
     fill: [number, number, number, number],
     line: [number, number, number, number],
-  ) => invoke<boolean>('panel_window_apply_native_chrome', { fill, line }),
+  ) =>
+    invoke<PanelWindowChrome>('panel_window_apply_native_chrome', {
+      fill,
+      line,
+    }),
   // X 버튼 ack - 제한 시간 내 미호출 시 백엔드가 fallback으로 창을 감춘다
   ackClose: (requestId: string) =>
     invoke<boolean>('panel_window_close_ack', { requestId }),
