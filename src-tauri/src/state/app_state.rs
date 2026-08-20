@@ -3076,6 +3076,10 @@ impl AppState {
             // 네이티브 show가 적용된 뒤의 보조 작업 실패를 커맨드 실패로 돌려보내면
             // 프론트는 도킹으로 되돌아가지만 창은 이미 보여 서로 다른 상태가 된다.
             window.show().context("failed to show panel window")?;
+            // Windows의 show는 z-order를 건드리지 않아 활성 창(메인) 뒤에 깔린다 -
+            // 포커스는 그대로 두고 순서만 올린다 (드래그 tear-off 세션 유지)
+            #[cfg(target_os = "windows")]
+            raise_panel_window_without_activation(&window);
             if focus {
                 if let Err(error) = window.set_focus() {
                     log::warn!("failed to focus the visible panel window: {error}");
@@ -4790,6 +4794,43 @@ fn hide_overlay_window(window: &WebviewWindow) -> Result<()> {
     // tao API 사용으로 내부 VISIBLE 플래그와 실제 창 상태 일치 유지
     window.hide()?;
     Ok(())
+}
+
+/// 분리 창을 포커스 이동 없이 메인 위로 올린다.
+///
+/// 빌더의 focused(false)가 tao에 MARKER_DONT_FOCUS를 남기는데, 이 플래그를 내리는 코드는
+/// apply_diff가 값으로 받은 복사본만 바꾸므로 창 수명 내내 살아 있다. 그래서 show()는 항상
+/// SW_SHOWNOACTIVATE로 나가고, 그건 활성 창 위로 올려주지 않아 패널이 메인 뒤에 깔린다.
+/// 순서를 올리는 유일한 경로였던 set_focus는 드래그 tear-off에서 쓸 수 없다 -
+/// 메인 웹뷰가 kill-focus를 받으면 mousedown 암시적 캡처가 풀려 드래그 세션이 끊긴다.
+///
+/// TOPMOST 밴드는 쓰지 않는다 - 한 프레임이라도 올라가면 always-on-top 오버레이 위로 나온다
+#[cfg(target_os = "windows")]
+fn raise_panel_window_without_activation(window: &WebviewWindow) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE,
+    };
+
+    let hwnd = match window.hwnd() {
+        Ok(hwnd) => hwnd,
+        Err(err) => {
+            log::warn!("failed to get panel HWND for z-order raise: {err}");
+            return;
+        }
+    };
+    if let Err(err) = unsafe {
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOP),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
+        )
+    } {
+        log::warn!("failed to raise panel window above main: {err}");
+    }
 }
 
 /// macOS 전체화면 Space에서도 오버레이가 보이도록 NSWindow 동작을 보정
