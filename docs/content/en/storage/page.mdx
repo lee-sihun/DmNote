@@ -15,7 +15,7 @@ Simply use keys without worrying about conflicts with other plugins.
 
 ```javascript
 // If plugin ID is "kps-panel"
-// Internally stored as "kps-panel:settings" key
+// Internally stored under the "kps-panel/settings" namespace
 await dmn.plugin.storage.set("settings", { theme: "dark" });
 ```
 
@@ -83,6 +83,7 @@ console.log("Stored keys:", allKeys); // ['settings', 'position']
 ### hasData(prefix)
 
 Check if data exists with a specific prefix.
+The prefix is automatically scoped to the current plugin, so do not include the plugin ID.
 
 ```javascript
 const hasSettings = await dmn.plugin.storage.hasData("settings");
@@ -92,6 +93,7 @@ console.log("Settings data exists:", hasSettings); // true or false
 ### clearByPrefix(prefix)
 
 Delete all data starting with a specific prefix.
+The prefix is automatically scoped to the current plugin, so it cannot delete another plugin's data.
 
 ```javascript
 const deletedCount = await dmn.plugin.storage.clearByPrefix("cache-");

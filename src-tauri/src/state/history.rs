@@ -962,6 +962,23 @@ impl HistoryService {
         true
     }
 
+    pub(crate) fn invalidate_all(&mut self) -> bool {
+        if self.past.is_empty() && self.future.is_empty() {
+            return false;
+        }
+        self.clear_past();
+        self.clear_future();
+        self.advance_revision();
+        true
+    }
+
+    pub(crate) fn contains_plugin_elements_for(&self, plugin_id: Option<&str>) -> bool {
+        self.past
+            .iter()
+            .chain(self.future.iter())
+            .any(|entry| snapshot_contains_plugin_elements(&entry.before, plugin_id))
+    }
+
     pub(crate) fn begin_barrier(&mut self) {
         self.history_epoch = self.history_epoch.saturating_add(1);
         self.busy = true;
@@ -1144,6 +1161,22 @@ impl HistoryService {
         self.total_max_bytes = total_max_bytes;
         self.max_entries = max_entries;
         self.enforce_budget();
+    }
+}
+
+fn snapshot_contains_plugin_elements(snapshot: &HistorySnapshot, plugin_id: Option<&str>) -> bool {
+    match snapshot {
+        HistorySnapshot::PluginElements(snapshot) => {
+            plugin_id.is_none_or(|plugin_id| snapshot.plugin_id == plugin_id)
+        }
+        HistorySnapshot::Compound { snapshots } => snapshots
+            .iter()
+            .any(|snapshot| snapshot_contains_plugin_elements(snapshot, plugin_id)),
+        HistorySnapshot::Editor { .. }
+        | HistorySnapshot::CustomTabs(_)
+        | HistorySnapshot::Mode(_)
+        | HistorySnapshot::Counters(_)
+        | HistorySnapshot::PresetFull(_) => false,
     }
 }
 

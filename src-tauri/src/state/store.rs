@@ -43,7 +43,9 @@ use super::history::{
     HISTORY_ENTRY_TOO_LARGE, HISTORY_INVALID_OPPOSITE_ENTRY, HISTORY_IN_PROGRESS,
     HISTORY_SCOPE_MISMATCH, HISTORY_TARGET_ALREADY_APPLIED, INVALID_HISTORY_OPERATION_ID,
 };
-use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
+use super::local_asset_path::{
+    file_url_to_path, path_identity_key, paths_have_same_identity, FileUrlPath,
+};
 use super::migration::{
     find_legacy_store_file, is_foreign_portable_asset_reference, load_store_from_path,
     migrate_key_images_to_app_data, migrate_local_fonts_to_app_data, normalize_state,
@@ -55,7 +57,7 @@ use super::plugin::{
     normalize_plugin_instance_tab_id, plugin_group_refs_from_store,
     plugin_id_from_instances_storage_key, plugin_instances_storage_key, validate_plugin_id,
     validate_plugin_instances_reconcile_request, validate_plugin_instances_request,
-    PluginGroupRefs,
+    PluginGroupRefs, PLUGIN_DATA_KEY_PREFIX,
 };
 
 const TRASH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -2332,10 +2334,13 @@ impl AppStore {
         admission
             .revalidate_for(&self.history_gate)
             .map_err(anyhow::Error::msg)?;
+        let plugin_history_exists = guard.history.contains_plugin_elements_for(None);
         if guard.data.plugin_data.is_empty() {
+            let history_status = (plugin_history_exists && guard.history.invalidate_all())
+                .then(|| guard.history.issue_status(self.history_gate.is_closed()));
             return Ok(AdmittedPluginStorageMutation {
                 value: (),
-                history_status: None,
+                history_status,
                 plugin_instances_changes: Vec::new(),
                 _admission: admission,
             });
@@ -2353,8 +2358,9 @@ impl AppStore {
         if let Some(revision) = next_model_revision {
             guard.plugin_model_revision = revision;
         }
-        let history_status = (instance_data_changed && guard.history.invalidate_future())
-            .then(|| guard.history.issue_status(self.history_gate.is_closed()));
+        let history_status = ((instance_data_changed || plugin_history_exists)
+            && guard.history.invalidate_all())
+        .then(|| guard.history.issue_status(self.history_gate.is_closed()));
         let plugin_instances_changes = next_model_revision
             .map(|revision| {
                 affected_plugin_ids
@@ -2400,6 +2406,9 @@ impl AppStore {
         admission
             .revalidate_for(&self.history_gate)
             .map_err(anyhow::Error::msg)?;
+        let namespace_plugin_id = plugin_id_from_storage_namespace_prefix(prefix);
+        let plugin_history_exists = namespace_plugin_id
+            .is_some_and(|plugin_id| guard.history.contains_plugin_elements_for(Some(plugin_id)));
         let keys = guard
             .data
             .plugin_data
@@ -2408,9 +2417,11 @@ impl AppStore {
             .cloned()
             .collect::<Vec<_>>();
         if keys.is_empty() {
+            let history_status = (plugin_history_exists && guard.history.invalidate_all())
+                .then(|| guard.history.issue_status(self.history_gate.is_closed()));
             return Ok(AdmittedPluginStorageMutation {
                 value: 0,
-                history_status: None,
+                history_status,
                 plugin_instances_changes: Vec::new(),
                 _admission: admission,
             });
@@ -2429,8 +2440,9 @@ impl AppStore {
         if let Some(revision) = next_model_revision {
             guard.plugin_model_revision = revision;
         }
-        let history_status = (instance_data_changed && guard.history.invalidate_future())
-            .then(|| guard.history.issue_status(self.history_gate.is_closed()));
+        let history_status = ((instance_data_changed || plugin_history_exists)
+            && guard.history.invalidate_all())
+        .then(|| guard.history.issue_status(self.history_gate.is_closed()));
         let plugin_instances_changes = next_model_revision
             .map(|revision| {
                 affected_plugin_ids
@@ -3029,6 +3041,14 @@ fn collect_plugin_instance_ids<'a>(keys: impl Iterator<Item = &'a str>) -> Vec<S
     plugin_ids
 }
 
+fn plugin_id_from_storage_namespace_prefix(prefix: &str) -> Option<&str> {
+    let plugin_id = prefix
+        .strip_prefix(PLUGIN_DATA_KEY_PREFIX)?
+        .strip_suffix('/')?;
+    validate_plugin_id(plugin_id).ok()?;
+    Some(plugin_id)
+}
+
 fn apply_plugin_elements_snapshot(
     store: &mut AppStoreData,
     snapshot: &PluginElementsHistorySnapshot,
@@ -3184,6 +3204,51 @@ impl AssetReferencePaths {
     }
 }
 
+fn collect_plugin_managed_asset_paths(
+    app_data_dir: &Path,
+    data: &AppStoreData,
+    directory_name: &str,
+    paths: &mut AssetReferencePaths,
+) {
+    let managed_dir = app_data_dir.join(directory_name);
+    for value in data.plugin_data.values() {
+        collect_plugin_managed_asset_value(app_data_dir, &managed_dir, value, paths);
+    }
+}
+
+fn collect_plugin_managed_asset_value(
+    app_data_dir: &Path,
+    managed_dir: &Path,
+    value: &Value,
+    paths: &mut AssetReferencePaths,
+) {
+    match value {
+        Value::String(raw) => {
+            let LocalAssetPathResolution::Path(path) = resolve_local_asset_path(app_data_dir, raw)
+            else {
+                return;
+            };
+            if path
+                .parent()
+                .is_some_and(|parent| paths_have_same_identity(parent, managed_dir))
+            {
+                paths.keys.insert(path_identity_key(&path));
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                collect_plugin_managed_asset_value(app_data_dir, managed_dir, value, paths);
+            }
+        }
+        Value::Object(values) => {
+            for value in values.values() {
+                collect_plugin_managed_asset_value(app_data_dir, managed_dir, value, paths);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
 fn warn_unresolved_asset_references(app_data_dir: &Path, data: &AppStoreData) {
     for (category, count) in [
         (
@@ -3217,6 +3282,8 @@ fn collect_local_font_paths(app_data_dir: &Path, data: &AppStoreData) -> AssetRe
         paths.collect(app_data_dir, font.local_path.as_ref());
     }
 
+    collect_plugin_managed_asset_paths(app_data_dir, data, "fonts", &mut paths);
+
     paths
 }
 
@@ -3227,6 +3294,8 @@ fn collect_local_image_paths(app_data_dir: &Path, data: &AppStoreData) -> AssetR
         paths.collect(app_data_dir, position.active_image.as_ref());
         paths.collect(app_data_dir, position.inactive_image.as_ref());
     }
+
+    collect_plugin_managed_asset_paths(app_data_dir, data, "images", &mut paths);
 
     paths
 }
@@ -7800,6 +7869,76 @@ mod tests {
     }
 
     #[test]
+    fn plugin_namespace_clear_invalidates_history_after_instances_are_already_empty() {
+        let dir = test_directory("plugin-empty-instances-history-clear-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        for plugin_id in ["alpha", "beta"] {
+            drop(
+                store
+                    .commit_plugin_instances(plugin_instances_request(
+                        plugin_id,
+                        vec![saved_plugin_instance(10.0)],
+                        uuid::Uuid::new_v4().to_string(),
+                        None,
+                        Some(store.plugin_model_revision()),
+                    ))
+                    .unwrap(),
+            );
+            drop(
+                store
+                    .commit_plugin_instances(plugin_instances_request(
+                        plugin_id,
+                        Vec::new(),
+                        uuid::Uuid::new_v4().to_string(),
+                        None,
+                        Some(store.plugin_model_revision()),
+                    ))
+                    .unwrap(),
+            );
+            assert!(store.history_status().can_undo);
+            assert!(store.plugin_instances_get(plugin_id).unwrap().0.is_empty());
+
+            if plugin_id == "alpha" {
+                drop(
+                    store
+                        .set_plugin_data("plugin_data_alpha/cache/item", json!(true))
+                        .unwrap(),
+                );
+                let nested = store
+                    .remove_plugin_data_by_prefix("plugin_data_alpha/cache/")
+                    .unwrap();
+                assert_eq!(nested.value, 1);
+                assert!(nested.history_status.is_none());
+                assert!(store.history_status().can_undo);
+
+                drop(
+                    store
+                        .set_plugin_data("plugin_data_alpha/preferences", json!(true))
+                        .unwrap(),
+                );
+                let namespace = store
+                    .remove_plugin_data_by_prefix("plugin_data_alpha/")
+                    .unwrap();
+                assert_eq!(namespace.value, 1);
+                let status = namespace.history_status.unwrap();
+                assert!(!status.can_undo);
+                assert!(!status.can_redo);
+            } else {
+                assert!(store.snapshot().plugin_data.is_empty());
+                let clear = store.clear_all_plugin_data().unwrap();
+                let status = clear.history_status.unwrap();
+                assert!(!status.can_undo);
+                assert!(!status.can_redo);
+            }
+        }
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn bulk_plugin_storage_deletion_reports_each_instance_revision() {
         let dir = test_directory("plugin-instances-bulk-delete-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -7838,6 +7977,7 @@ mod tests {
             .remove_plugin_data_by_prefix("plugin_data_alpha/")
             .unwrap();
         assert_eq!(prefix_delete.value, 2);
+        assert!(!prefix_delete.history_status.as_ref().unwrap().can_undo);
         assert!(!prefix_delete.history_status.as_ref().unwrap().can_redo);
         assert_eq!(
             prefix_delete.plugin_instances_changes,
@@ -7865,6 +8005,8 @@ mod tests {
 
         let clear_revision = store.plugin_model_revision() + 1;
         let clear = store.clear_all_plugin_data().unwrap();
+        assert!(!clear.history_status.as_ref().unwrap().can_undo);
+        assert!(!clear.history_status.as_ref().unwrap().can_redo);
         assert_eq!(
             clear.plugin_instances_changes,
             vec![
@@ -19189,6 +19331,62 @@ mod tests {
             assert!(image_paths.contains(&path_identity_key(&root.join(format!("{kind}.png")))));
             assert!(sound_paths.contains(&path_identity_key(&root.join(format!("{kind}.wav")))));
         }
+    }
+
+    #[test]
+    fn plugin_managed_assets_remain_until_plugin_data_releases_them() {
+        let dir = test_directory("plugin-managed-assets-sweep-test");
+        let image_path = dir.join("images").join("plugin-owned.png");
+        let font_path = dir.join("fonts").join("plugin-owned.ttf");
+        for path in [&image_path, &font_path] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"plugin-asset").unwrap();
+        }
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let plugin_key = "plugin_data_demo-plugin/settings".to_string();
+        store
+            .update(|data| {
+                data.plugin_data.insert(
+                    plugin_key.clone(),
+                    json!({
+                        "nested": {
+                            "imagePath": image_path.to_string_lossy(),
+                            "fontPaths": [font_path.to_string_lossy()]
+                        }
+                    }),
+                );
+            })
+            .unwrap();
+
+        store.flush_cleanup_and_shutdown().unwrap();
+        drop(store);
+
+        assert!(image_path.exists());
+        assert!(font_path.exists());
+        assert!(!dir.join("trash").exists());
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .update(|data| {
+                data.plugin_data.remove(&plugin_key);
+            })
+            .unwrap();
+        store.flush_cleanup_and_shutdown().unwrap();
+        drop(store);
+
+        assert!(!image_path.exists());
+        assert!(!font_path.exists());
+        let trash_sessions = std::fs::read_dir(dir.join("trash")).unwrap();
+        let trashed = trash_sessions
+            .map(|entry| entry.unwrap().path())
+            .any(|session| {
+                session.join("images").join("plugin-owned.png").exists()
+                    && session.join("fonts").join("plugin-owned.ttf").exists()
+            });
+        assert!(trashed);
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[cfg(not(target_os = "windows"))]
