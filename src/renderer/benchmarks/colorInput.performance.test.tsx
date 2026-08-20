@@ -114,6 +114,10 @@ benchmarkDescribe('BASE-06 ColorInput 성능', () => {
       frameTimers.delete(id);
     });
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    document.documentElement.style.setProperty(
+      '--ui-popup-exit-duration',
+      '0ms',
+    );
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -123,6 +127,7 @@ benchmarkDescribe('BASE-06 ColorInput 성능', () => {
     act(() => root.unmount());
     host.remove();
     frameTimers.forEach((timer) => window.clearTimeout(timer));
+    document.documentElement.style.removeProperty('--ui-popup-exit-duration');
     vi.unstubAllGlobals();
   });
 
@@ -189,6 +194,13 @@ benchmarkDescribe('BASE-06 ColorInput 성능', () => {
         }
 
         act(() => button!.click());
+        await act(async () => {
+          for (let step = 0; step < 3; step += 1) {
+            await new Promise((resolvePromise) =>
+              window.setTimeout(resolvePromise, 0),
+            );
+          }
+        });
         expect(
           document.querySelector('[data-benchmark-color-picker="true"]'),
         ).toBeNull();
