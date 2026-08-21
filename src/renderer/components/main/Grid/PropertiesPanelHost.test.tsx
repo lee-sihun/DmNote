@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   ),
   readTokenColor: vi.fn((): [number, number, number, number] | null => null),
   startDragging: vi.fn((_x: number, _y: number) => Promise.resolve()),
+  dock: vi.fn(() => Promise.resolve()),
+  flushResult: true,
 }));
 
 vi.mock('@utils/panelWindow/panelChildWindow', () => ({
@@ -26,10 +28,11 @@ vi.mock('@api/modules/panelWindowApi', () => ({
       Promise.resolve({ mainFrame: null, mainContentOrigin: null }),
     moveTo: () => Promise.resolve(),
     presentAt: () => Promise.resolve(),
+    dock: () => mocks.dock(),
   },
 }));
 vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
-  flushFocusedEditor: () => Promise.resolve(true),
+  flushFocusedEditor: () => Promise.resolve(mocks.flushResult),
 }));
 vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
   isHistoryEditorFlushLocked: () => false,
@@ -97,6 +100,9 @@ describe('PropertiesPanelHost', () => {
     mocks.mountCount = 0;
     mocks.applyNativeChrome.mockClear();
     mocks.readTokenColor.mockReturnValue(null);
+    mocks.dock.mockReset();
+    mocks.dock.mockResolvedValue(undefined);
+    mocks.flushResult = true;
     usePanelHostStore.setState({ placement: 'docked', transition: 'idle' });
   });
 

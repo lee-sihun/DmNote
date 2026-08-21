@@ -111,6 +111,41 @@ const counters = await dmn.keys.getCounters();
 console.log(counters['4key']);
 ```
 
+### `dmn.keys.setCounters(counters): Promise<KeyCounters>`
+
+Replaces all cumulative key counters and returns the committed snapshot.
+
+```javascript
+await dmn.keys.setCounters({
+  '4key': { D: 100, F: 200, J: 150, K: 180 },
+});
+```
+
+### `dmn.keys.resetCounters(): Promise<KeyCounters>`
+
+Resets cumulative counters for every mode.
+
+```javascript
+await dmn.keys.resetCounters();
+```
+
+### `dmn.keys.resetCountersMode(mode): Promise<KeyCounters>`
+
+Resets cumulative counters for one mode.
+
+```javascript
+await dmn.keys.resetCountersMode('4key');
+```
+
+### `dmn.keys.resetSingleCounter(mode, key): Promise<KeyCounters>`
+
+Resets one canonical slot counter in one mode.
+
+```javascript
+await dmn.keys.resetSingleCounter('4key', 'D');
+await dmn.keys.resetSingleCounter('4key', 'F|NUMPAD 4');
+```
+
 ### `dmn.keys.onCounterChanged(callback): Unsubscribe`
 
 <Callout type="warning">Overlay window only.</Callout>
@@ -140,6 +175,16 @@ change within `sessionId`. Compare both fields with
 `keyCountersSessionId`/`keyCountersRevision` from `dmn.app.bootstrap()` when
 reconciling a bootstrap snapshot with live events.
 
+### `dmn.keys.onCountersChanged(callback): Unsubscribe`
+
+Subscribes to whole counter snapshot replacements such as reset and bulk set operations.
+
+```javascript
+const unsub = dmn.keys.onCountersChanged((counters) => {
+  console.log('Counter snapshot changed:', counters);
+});
+```
+
 ---
 
 ## Mode Events
@@ -156,6 +201,32 @@ interface ModeEvent {
 const unsub = dmn.keys.onModeChanged(({ mode }) => {
   console.log('Mode changed:', mode);
 });
+```
+
+### `dmn.keys.setMode(mode): Promise<KeysModeResponse>`
+
+Changes the active key mode.
+
+```javascript
+const result = await dmn.keys.setMode('8key');
+console.log('Mode changed:', result.success);
+```
+
+### `dmn.keys.resetMode(mode): Promise<KeysModeResponse>`
+
+Resets one key mode and its positions to the built-in defaults.
+
+```javascript
+await dmn.keys.resetMode('4key');
+```
+
+### `dmn.keys.resetAll(): Promise<KeysResetAllResponse>`
+
+Resets all keys, positions, counters, and custom tabs to their built-in defaults.
+
+```javascript
+const result = await dmn.keys.resetAll();
+console.log('Selected mode:', result.selectedKeyType);
 ```
 
 ---
@@ -398,6 +469,40 @@ const unsubscribe = dmn.keys.onPositionsChanged((positions) => {
 
 <Callout type="warning">Main window only.</Callout>
 
+### `dmn.keys.customTabs.list(): Promise<CustomTab[]>`
+
+Returns all custom tabs.
+
+```javascript
+const tabs = await dmn.keys.customTabs.list();
+```
+
+### `dmn.keys.customTabs.create(name): Promise<CustomTabResult>`
+
+Creates and selects a new custom tab.
+
+```javascript
+const result = await dmn.keys.customTabs.create('My Keys');
+console.log(result.result?.id, result.error);
+```
+
+### `dmn.keys.customTabs.delete(id): Promise<CustomTabDeleteResult>`
+
+Deletes a custom tab and its tab-scoped editor data.
+
+```javascript
+const result = await dmn.keys.customTabs.delete('custom-123');
+console.log('Selected mode:', result.selected);
+```
+
+### `dmn.keys.customTabs.select(id): Promise<CustomTabDeleteResult>`
+
+Selects an existing built-in mode or custom tab.
+
+```javascript
+await dmn.keys.customTabs.select('custom-123');
+```
+
 ### `dmn.keys.customTabs.restore(customTabs, selectedKeyType): Promise<void>`
 
 Restores the names/order of existing custom tabs and the selected mode
@@ -410,6 +515,16 @@ await dmn.keys.customTabs.restore(
   [{ id: 'custom-123', name: 'My Keys' }],
   'custom-123',
 );
+```
+
+### `dmn.keys.customTabs.onChanged(callback): Unsubscribe`
+
+Subscribes to custom tab create, delete, select, and restore changes.
+
+```javascript
+const unsub = dmn.keys.customTabs.onChanged((payload) => {
+  console.log(payload.customTabs, payload.selectedKeyType);
+});
 ```
 
 ---

@@ -7,6 +7,7 @@ pub(crate) mod editor_ops;
 mod editor_ops_parity;
 pub(crate) mod gesture;
 pub(crate) mod history;
+pub(crate) mod image_asset;
 pub(crate) mod local_asset_path;
 #[cfg(target_os = "macos")]
 pub(crate) mod macos_frame_rate;

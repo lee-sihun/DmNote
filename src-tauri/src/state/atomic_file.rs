@@ -93,6 +93,18 @@ pub(crate) fn atomic_replace(path: &Path, content: &[u8], label: &str) -> Result
     prepare_atomic_replace(path, content, label)?.commit()
 }
 
+pub(crate) fn atomic_replace_from_temp(temp_path: &Path, target_path: &Path) -> Result<()> {
+    replace_file(temp_path, target_path)
+        .with_context(|| format!("failed to replace file at {}", target_path.display()))?;
+    if let Err(error) = sync_parent_directory(target_path) {
+        log::warn!(
+            "failed to sync parent directory after replacing '{}': {error:#}",
+            target_path.display()
+        );
+    }
+    Ok(())
+}
+
 #[cfg(not(target_os = "windows"))]
 fn replace_file(source: &Path, target: &Path) -> Result<()> {
     fs::rename(source, target).map_err(Into::into)
@@ -130,7 +142,7 @@ fn replace_file(source: &Path, target: &Path) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-fn sync_file_contents(file: &File) -> Result<()> {
+pub(crate) fn sync_file_contents(file: &File) -> Result<()> {
     use std::os::fd::AsRawFd;
 
     let result = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_FULLFSYNC) };
@@ -150,7 +162,7 @@ fn sync_file_contents(file: &File) -> Result<()> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn sync_file_contents(file: &File) -> Result<()> {
+pub(crate) fn sync_file_contents(file: &File) -> Result<()> {
     file.sync_all().map_err(Into::into)
 }
 

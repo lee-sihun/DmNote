@@ -1,22 +1,10 @@
-use gif::Repeat;
-use gif_dispose::Screen;
-use rfd::FileDialog;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
-use std::fs;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
-use tauri::{Emitter, Manager, WebviewWindow};
-use uuid::Uuid;
-use webp_animation::{
-    AnimParams, Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig,
-};
+use tauri::{Manager, WebviewWindow};
 
 use crate::{
-    commands::editor::state::{emit_best_effort, publish_editor_change},
+    commands::dialog::parented_file_dialog,
     errors::{CmdResult, CommandError},
-    models::{AppStoreData, CommittedEditorChange, EditorCommitOrigin, EditorField, KeyPosition},
-    state::AppState,
+    state::image_asset::import_image_file,
 };
 
 #[derive(Serialize)]
@@ -31,21 +19,22 @@ pub struct ImageLoadResponse {
 
 /// 로컬 이미지 파일을 선택해서 앱 데이터 디렉토리로 복사한 뒤 경로를 반환합니다.
 /// 저장소에는 base64 대신 파일 경로만 저장해 직렬화/역직렬화 비용을 줄입니다.
-///
-/// GIF는 UX를 위해 즉시 원본 경로를 반환하고, 백그라운드에서 WebP 최적화를 수행한 뒤
-/// 스토어의 이미지 경로를 자동으로 치환합니다.
 #[tauri::command]
-pub fn image_load(app: tauri::AppHandle, window: WebviewWindow) -> CmdResult<ImageLoadResponse> {
-    let picked = FileDialog::new()
-        .add_filter(
-            "Images",
-            &[
-                "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif",
-            ],
-        )
-        .pick_file();
+pub async fn image_load(
+    app: tauri::AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<ImageLoadResponse> {
+    let picked = parented_file_dialog(
+        &window,
+        "Images",
+        &[
+            "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif",
+        ],
+    )
+    .pick_file()
+    .await;
 
-    let Some(path) = picked else {
+    let Some(file) = picked else {
         return Ok(ImageLoadResponse {
             success: false,
             error: None,
@@ -53,338 +42,21 @@ pub fn image_load(app: tauri::AppHandle, window: WebviewWindow) -> CmdResult<Ima
         });
     };
 
-    let ext = normalize_image_extension(path.extension().and_then(|e| e.to_str()));
-
-    let data_dir = app.path().app_data_dir()?;
-    let images_dir = data_dir.join("images");
-    fs::create_dir_all(&images_dir)?;
-
-    let dest_path = copy_image_to_app_data(&path, &images_dir, &ext)?;
-
-    // GIF는 즉시 원본을 보여주고, 백그라운드 최적화 완료 후 자동 치환
-    if ext == "gif" {
-        schedule_gif_optimization(
-            app.clone(),
-            window.label().to_string(),
-            dest_path.clone(),
-            images_dir.clone(),
-        );
-    }
+    let source_path = file.path().to_path_buf();
+    let extension =
+        normalize_image_extension(source_path.extension().and_then(|value| value.to_str()));
+    let images_dir = app.path().app_data_dir()?.join("images");
+    let imported = tauri::async_runtime::spawn_blocking(move || {
+        import_image_file(&source_path, &images_dir, &extension)
+    })
+    .await
+    .map_err(|error| CommandError::msg(format!("image import task failed: {error}")))??;
 
     Ok(ImageLoadResponse {
         success: true,
         error: None,
-        image_path: Some(dest_path.to_string_lossy().to_string()),
+        image_path: Some(imported.path.to_string_lossy().to_string()),
     })
-}
-
-fn schedule_gif_optimization(
-    app: tauri::AppHandle,
-    source_window_label: String,
-    gif_path: PathBuf,
-    images_dir: PathBuf,
-) {
-    std::thread::spawn(move || {
-        let optimized_path = match try_convert_gif_to_cached_webp(&gif_path, &images_dir) {
-            Ok(Some(path)) => path,
-            Ok(None) => return,
-            Err(error) => {
-                log::warn!("[Image] 백그라운드 GIF 최적화 실패: {error}");
-                return;
-            }
-        };
-
-        if optimized_path == gif_path {
-            return;
-        }
-
-        if let Err(error) = replace_store_image_path_references(
-            &app,
-            &source_window_label,
-            &gif_path,
-            &optimized_path,
-        ) {
-            log::warn!("[Image] 최적화 이미지 경로 치환 실패: {error}");
-        }
-    });
-}
-
-fn copy_image_to_app_data(
-    source_path: &Path,
-    images_dir: &Path,
-    extension: &str,
-) -> CmdResult<PathBuf> {
-    let dest_path = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
-    fs::copy(source_path, &dest_path)?;
-    Ok(dest_path)
-}
-
-fn replace_store_image_path_references(
-    app: &tauri::AppHandle,
-    source_window_label: &str,
-    from_path: &Path,
-    to_path: &Path,
-) -> CmdResult<()> {
-    let from = from_path.to_string_lossy().to_string();
-    let to = to_path.to_string_lossy().to_string();
-    if from == to {
-        return Ok(());
-    }
-
-    let state = app.state::<AppState>();
-    let snapshot = state.store.snapshot();
-    let has_reference = snapshot.key_positions.values().any(|positions| {
-        positions
-            .iter()
-            .any(|position| position_references_image(position, &from))
-    }) || snapshot.stat_positions.values().any(|positions| {
-        positions
-            .iter()
-            .any(|stat_position| position_references_image(&stat_position.position, &from))
-    }) || snapshot.graph_positions.values().any(|positions| {
-        positions
-            .iter()
-            .any(|graph_position| position_references_image(&graph_position.position, &from))
-    }) || snapshot.knob_positions.values().any(|positions| {
-        positions
-            .iter()
-            .any(|knob_position| position_references_image(&knob_position.position, &from))
-    });
-
-    if !has_reference {
-        // 미저장(편집 중) 참조 가능성
-        let _ = app.emit(
-            "image:optimized",
-            serde_json::json!({ "fromPath": from, "toPath": to }),
-        );
-        return Ok(());
-    }
-
-    let admission = state.admit_frontend_history_mutation(source_window_label)?;
-    let transaction = state
-        .store
-        .commit_legacy_editor_transaction_with_admission(
-            EditorCommitOrigin::LegacyAdapter("image_optimize".to_string()),
-            &[
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-            ],
-            admission,
-            |store| Ok(replace_image_path_references(store, &from, &to)),
-        )?;
-
-    if !transaction.value {
-        // snapshot 이후 참조가 사라진 레이스 케이스
-        let _ = app.emit(
-            "image:optimized",
-            serde_json::json!({ "fromPath": from, "toPath": to }),
-        );
-        return Ok(());
-    }
-
-    publish_editor_change(state.inner(), app, &transaction.change, false);
-    emit_image_position_changes(app, &transaction.change);
-    let _ = app.emit(
-        "image:optimized",
-        serde_json::json!({ "fromPath": from, "toPath": to }),
-    );
-
-    Ok(())
-}
-
-fn position_references_image(position: &KeyPosition, path: &str) -> bool {
-    position.active_image.as_deref() == Some(path)
-        || position.inactive_image.as_deref() == Some(path)
-}
-
-fn replace_position_image_paths(position: &mut KeyPosition, from: &str, to: &str) -> bool {
-    let mut changed = false;
-    if position.active_image.as_deref() == Some(from) {
-        position.active_image = Some(to.to_string());
-        changed = true;
-    }
-    if position.inactive_image.as_deref() == Some(from) {
-        position.inactive_image = Some(to.to_string());
-        changed = true;
-    }
-    changed
-}
-
-fn replace_image_path_references(store: &mut AppStoreData, from: &str, to: &str) -> bool {
-    let mut changed = false;
-
-    for positions in store.key_positions.values_mut() {
-        for position in positions {
-            changed |= replace_position_image_paths(position, from, to);
-        }
-    }
-    for positions in store.stat_positions.values_mut() {
-        for position in positions {
-            changed |= replace_position_image_paths(&mut position.position, from, to);
-        }
-    }
-    for positions in store.graph_positions.values_mut() {
-        for position in positions {
-            changed |= replace_position_image_paths(&mut position.position, from, to);
-        }
-    }
-    for positions in store.knob_positions.values_mut() {
-        for position in positions {
-            changed |= replace_position_image_paths(&mut position.position, from, to);
-        }
-    }
-
-    changed
-}
-
-fn emit_image_position_changes(app: &tauri::AppHandle, change: &CommittedEditorChange) {
-    for field in &change.result.changed_fields {
-        match field {
-            EditorField::KeyPositions => {
-                emit_best_effort(app, "positions:changed", &change.document.key_positions);
-            }
-            EditorField::StatPositions => {
-                emit_best_effort(
-                    app,
-                    "statPositions:changed",
-                    &change.document.stat_positions,
-                );
-            }
-            EditorField::GraphPositions => {
-                emit_best_effort(
-                    app,
-                    "graphPositions:changed",
-                    &change.document.graph_positions,
-                );
-            }
-            EditorField::KnobPositions => {
-                emit_best_effort(
-                    app,
-                    "knobPositions:changed",
-                    &change.document.knob_positions,
-                );
-            }
-            _ => {}
-        }
-    }
-}
-
-fn try_convert_gif_to_cached_webp(
-    source_path: &Path,
-    images_dir: &Path,
-) -> CmdResult<Option<PathBuf>> {
-    let gif_bytes = fs::read(source_path)?;
-    if gif_bytes.is_empty() {
-        return Ok(None);
-    }
-
-    let hash = sha256_hex(&gif_bytes);
-    let cached_webp_path = images_dir.join(format!("gif-cache-{hash}.webp"));
-    if cached_webp_path.exists() {
-        return Ok(Some(cached_webp_path));
-    }
-
-    convert_gif_to_webp(&gif_bytes, &cached_webp_path)?;
-    Ok(Some(cached_webp_path))
-}
-
-fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> CmdResult<()> {
-    let mut gif_opts = gif::DecodeOptions::new();
-    // gif-dispose 사용 시 indexed 모드 필수
-    gif_opts.set_color_output(gif::ColorOutput::Indexed);
-
-    let cursor = Cursor::new(gif_bytes);
-    let mut decoder = gif_opts
-        .read_info(cursor)
-        .map_err(|e| CommandError::msg(format!("GIF 디코더 초기화 실패: {e}")))?;
-
-    let width = decoder.width() as u32;
-    let height = decoder.height() as u32;
-    if width == 0 || height == 0 {
-        return Err(CommandError::msg("유효하지 않은 GIF 크기입니다."));
-    }
-
-    let repeat = decoder.repeat();
-    let mut screen = Screen::new_decoder(&decoder);
-
-    let encoder_options = EncoderOptions {
-        anim_params: AnimParams {
-            loop_count: gif_repeat_to_loop_count(repeat),
-        },
-        allow_mixed: true,
-        minimize_size: true,
-        encoding_config: Some(EncodingConfig {
-            encoding_type: EncodingType::Lossy(LossyEncodingConfig {
-                alpha_compression: true,
-                ..Default::default()
-            }),
-            quality: 78.0,
-            method: 4,
-        }),
-        ..Default::default()
-    };
-
-    let mut encoder = Encoder::new_with_options((width, height), encoder_options)
-        .map_err(|e| CommandError::msg(format!("WebP 인코더 초기화 실패: {e}")))?;
-
-    let mut frame_count = 0usize;
-    let mut timestamp_ms = 0i32;
-
-    loop {
-        let frame_opt = decoder
-            .read_next_frame()
-            .map_err(|e| CommandError::msg(format!("GIF 프레임 읽기 실패: {e}")))?;
-        let Some(frame) = frame_opt else {
-            break;
-        };
-
-        screen
-            .blit_frame(frame)
-            .map_err(|e| CommandError::msg(format!("GIF 프레임 합성 실패: {e}")))?;
-
-        let (rgba_pixels, _, _) = screen.pixels_rgba().to_contiguous_buf();
-        let mut rgba_bytes = Vec::with_capacity(rgba_pixels.len() * 4);
-        for px in rgba_pixels.iter() {
-            rgba_bytes.extend_from_slice(&[px.r, px.g, px.b, px.a]);
-        }
-
-        encoder
-            .add_frame(&rgba_bytes, timestamp_ms)
-            .map_err(|e| CommandError::msg(format!("WebP 프레임 추가 실패: {e}")))?;
-
-        let frame_delay_ms = i32::from(frame.delay.max(1)).saturating_mul(10);
-        timestamp_ms = timestamp_ms.saturating_add(frame_delay_ms);
-        frame_count += 1;
-    }
-
-    if frame_count == 0 {
-        return Err(CommandError::msg("GIF 프레임이 없습니다."));
-    }
-
-    let final_timestamp_ms = timestamp_ms.max(10);
-    let webp_data = encoder
-        .finalize(final_timestamp_ms)
-        .map_err(|e| CommandError::msg(format!("WebP 인코딩 마무리 실패: {e}")))?;
-
-    fs::write(output_path, &webp_data[..])?;
-
-    Ok(())
-}
-
-fn gif_repeat_to_loop_count(repeat: Repeat) -> i32 {
-    match repeat {
-        Repeat::Infinite => 0,
-        Repeat::Finite(0) => 1,
-        Repeat::Finite(count) => i32::from(count),
-    }
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
 }
 
 fn normalize_image_extension(extension: Option<&str>) -> String {
@@ -409,41 +81,16 @@ fn normalize_image_extension(extension: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::replace_image_path_references;
-    use crate::models::{AppStoreData, EditorDocumentV1, EditorField, KeyPosition, KnobPosition};
+    use super::normalize_image_extension;
 
     #[test]
-    fn optimizer_replaces_knob_active_and_inactive_image_references() {
-        let from = "/images/source.gif";
-        let to = "/images/optimized.webp";
-        let mut position = KeyPosition {
-            active_image: Some(from.to_string()),
-            inactive_image: Some(from.to_string()),
-            ..Default::default()
-        };
-        position.sound_path = Some("/sounds/unchanged.wav".to_string());
+    fn gif_extension_is_kept_without_format_conversion() {
+        assert_eq!(normalize_image_extension(Some("GIF")), "gif");
+    }
 
-        let mut store = AppStoreData::default();
-        store.knob_positions.insert(
-            "4key".to_string(),
-            vec![KnobPosition {
-                axis_id: "axis".to_string(),
-                sensitivity: 1.0,
-                reverse: false,
-                position,
-            }],
-        );
-        let before = EditorDocumentV1::from_store(&store);
-
-        assert!(replace_image_path_references(&mut store, from, to));
-
-        let knob = &store.knob_positions["4key"][0].position;
-        assert_eq!(knob.active_image.as_deref(), Some(to));
-        assert_eq!(knob.inactive_image.as_deref(), Some(to));
-        assert_eq!(knob.sound_path.as_deref(), Some("/sounds/unchanged.wav"));
-        assert_eq!(
-            before.changed_fields(&EditorDocumentV1::from_store(&store)),
-            vec![EditorField::KnobPositions]
-        );
+    #[test]
+    fn unknown_extension_uses_existing_png_fallback() {
+        assert_eq!(normalize_image_extension(Some("unknown")), "png");
+        assert_eq!(normalize_image_extension(None), "png");
     }
 }

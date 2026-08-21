@@ -1,14 +1,16 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use log::info;
-use rfd::FileDialog;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
-    commands::editor::state::emit_best_effort,
-    errors::CmdResult,
+    commands::{dialog::parented_file_dialog, editor::state::emit_best_effort},
+    errors::{CmdResult, CommandError},
     models::{CustomJs, JsPlugin},
     state::{store::AdmittedHistoryOverlapMutation, AppState},
 };
@@ -214,21 +216,33 @@ fn make_plugin_from_path(path: &Path, content: String) -> JsPlugin {
 }
 
 #[tauri::command]
-pub fn js_load(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    window: WebviewWindow,
-) -> CmdResult<JsLoadResponse> {
-    let Some(paths) = FileDialog::new()
-        .add_filter("JavaScript", &["js", "mjs"])
+pub async fn js_load(app: AppHandle, window: WebviewWindow) -> CmdResult<JsLoadResponse> {
+    let picked = parented_file_dialog(&window, "JavaScript", &["js", "mjs"])
         .pick_files()
-    else {
+        .await;
+
+    let Some(files) = picked else {
         return Ok(JsLoadResponse {
             success: false,
             added: Vec::new(),
             errors: Vec::new(),
         });
     };
+    let paths = files
+        .into_iter()
+        .map(|file| file.path().to_path_buf())
+        .collect();
+    tauri::async_runtime::spawn_blocking(move || js_load_from_paths(app, window, paths))
+        .await
+        .map_err(|error| CommandError::msg(format!("JavaScript load task failed: {error}")))?
+}
+
+fn js_load_from_paths(
+    app: AppHandle,
+    window: WebviewWindow,
+    paths: Vec<PathBuf>,
+) -> CmdResult<JsLoadResponse> {
+    let state = app.state::<AppState>();
 
     let mut added = Vec::new();
     let mut errors = Vec::new();

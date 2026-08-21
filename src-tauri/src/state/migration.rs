@@ -13,7 +13,10 @@ use serde_json::{Map, Value};
 use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
-use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
+use super::{
+    image_asset::{import_image_bytes, import_image_file},
+    local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath},
+};
 
 use crate::{
     custom_css::{
@@ -762,16 +765,15 @@ fn migrate_image_reference_to_app_data(images_dir: &Path, image_ref: &mut Option
     }
 
     if let Some((bytes, extension)) = decode_image_data_url(trimmed) {
-        let dest = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
-        match fs::write(&dest, bytes) {
-            Ok(_) => {
-                *image_ref = Some(dest.to_string_lossy().to_string());
+        match import_image_bytes(&bytes, images_dir, &extension) {
+            Ok(imported) => {
+                *image_ref = Some(imported.path.to_string_lossy().to_string());
                 return true;
             }
             Err(err) => {
                 log::warn!(
-                    "[Images] Failed to migrate data URL image into {}: {err}",
-                    dest.display()
+                    "[Images] Failed to migrate data URL image into {}: {err:#}",
+                    images_dir.display()
                 );
                 return false;
             }
@@ -787,10 +789,9 @@ fn migrate_image_reference_to_app_data(images_dir: &Path, image_ref: &mut Option
     }
 
     let extension = normalize_image_extension(source.extension().and_then(|ext| ext.to_str()));
-    let dest = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
-    match fs::copy(&source, &dest) {
-        Ok(_) => {
-            *image_ref = Some(dest.to_string_lossy().to_string());
+    match import_image_file(&source, images_dir, &extension) {
+        Ok(imported) => {
+            *image_ref = Some(imported.path.to_string_lossy().to_string());
             true
         }
         Err(err) => {

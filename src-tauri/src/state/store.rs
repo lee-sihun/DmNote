@@ -43,7 +43,9 @@ use super::history::{
     HISTORY_ENTRY_TOO_LARGE, HISTORY_INVALID_OPPOSITE_ENTRY, HISTORY_IN_PROGRESS,
     HISTORY_SCOPE_MISMATCH, HISTORY_TARGET_ALREADY_APPLIED, INVALID_HISTORY_OPERATION_ID,
 };
-use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
+use super::local_asset_path::{
+    file_url_to_path, path_identity_key, paths_have_same_identity, FileUrlPath,
+};
 use super::migration::{
     find_legacy_store_file, is_foreign_portable_asset_reference, load_store_from_path,
     migrate_key_images_to_app_data, migrate_local_fonts_to_app_data, normalize_state,
@@ -55,7 +57,7 @@ use super::plugin::{
     normalize_plugin_instance_tab_id, plugin_group_refs_from_store,
     plugin_id_from_instances_storage_key, plugin_instances_storage_key, validate_plugin_id,
     validate_plugin_instances_reconcile_request, validate_plugin_instances_request,
-    PluginGroupRefs,
+    PluginGroupRefs, PLUGIN_DATA_KEY_PREFIX,
 };
 
 const TRASH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -225,6 +227,7 @@ struct EditorTransactionHistoryOptions {
     scope: Option<HistoryScope>,
     observed_epoch: Option<u64>,
     key_counters: Option<KeyCounters>,
+    invalidate_history_on_store_only_change: bool,
 }
 
 struct PersistTicket {
@@ -1640,6 +1643,43 @@ impl AppStore {
         )
     }
 
+    pub(crate) fn commit_legacy_resource_deletion_with_admission<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history_admission(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                invalidate_history_on_store_only_change: true,
+                ..EditorTransactionHistoryOptions::default()
+            },
+            admission,
+            updater,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn commit_legacy_resource_deletion<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                invalidate_history_on_store_only_change: true,
+                ..EditorTransactionHistoryOptions::default()
+            },
+            updater,
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn commit_history_overlap_mutation<T>(
         &self,
@@ -1703,6 +1743,7 @@ impl AppStore {
                 scope: Some(HistoryScope::PresetFull),
                 observed_epoch: None,
                 key_counters: Some(current_key_counters),
+                ..EditorTransactionHistoryOptions::default()
             },
             updater,
         )
@@ -1723,6 +1764,7 @@ impl AppStore {
                 scope: Some(HistoryScope::PresetFull),
                 observed_epoch: None,
                 key_counters: Some(current_key_counters),
+                ..EditorTransactionHistoryOptions::default()
             },
             admission,
             updater,
@@ -1751,6 +1793,7 @@ impl AppStore {
                 scope: Some(scope),
                 observed_epoch: observed_history_epoch,
                 key_counters: None,
+                ..EditorTransactionHistoryOptions::default()
             },
             updater,
         )
@@ -1778,6 +1821,7 @@ impl AppStore {
                 scope: Some(scope),
                 observed_epoch: observed_history_epoch,
                 key_counters: None,
+                ..EditorTransactionHistoryOptions::default()
             },
             admission,
             updater,
@@ -1957,10 +2001,17 @@ impl AppStore {
             self.commit_locked(&mut guard, scratch, ())
                 .map_err(|error| EditorCommitError::io(error.to_string()))?;
         }
-        let history_status = history_plan.map(|plan| {
+        let history_status = if let Some(plan) = history_plan {
             guard.history.apply_record_plan(plan);
-            guard.history.issue_status(self.history_gate.is_closed())
-        });
+            Some(guard.history.issue_status(self.history_gate.is_closed()))
+        } else if history_options.scope.is_none() {
+            let should_invalidate_history = !changed_fields.is_empty()
+                || (history_options.invalidate_history_on_store_only_change && has_store_changes);
+            let history_changed = should_invalidate_history && guard.history.invalidate_all();
+            history_changed.then(|| guard.history.issue_status(self.history_gate.is_closed()))
+        } else {
+            None
+        };
 
         let event = if changed_fields.is_empty() {
             None
@@ -2332,10 +2383,13 @@ impl AppStore {
         admission
             .revalidate_for(&self.history_gate)
             .map_err(anyhow::Error::msg)?;
+        let plugin_history_exists = guard.history.contains_plugin_elements_for(None);
         if guard.data.plugin_data.is_empty() {
+            let history_status = (plugin_history_exists && guard.history.invalidate_all())
+                .then(|| guard.history.issue_status(self.history_gate.is_closed()));
             return Ok(AdmittedPluginStorageMutation {
                 value: (),
-                history_status: None,
+                history_status,
                 plugin_instances_changes: Vec::new(),
                 _admission: admission,
             });
@@ -2353,8 +2407,9 @@ impl AppStore {
         if let Some(revision) = next_model_revision {
             guard.plugin_model_revision = revision;
         }
-        let history_status = (instance_data_changed && guard.history.invalidate_future())
-            .then(|| guard.history.issue_status(self.history_gate.is_closed()));
+        let history_status = ((instance_data_changed || plugin_history_exists)
+            && guard.history.invalidate_all())
+        .then(|| guard.history.issue_status(self.history_gate.is_closed()));
         let plugin_instances_changes = next_model_revision
             .map(|revision| {
                 affected_plugin_ids
@@ -2400,6 +2455,9 @@ impl AppStore {
         admission
             .revalidate_for(&self.history_gate)
             .map_err(anyhow::Error::msg)?;
+        let namespace_plugin_id = plugin_id_from_storage_namespace_prefix(prefix);
+        let plugin_history_exists = namespace_plugin_id
+            .is_some_and(|plugin_id| guard.history.contains_plugin_elements_for(Some(plugin_id)));
         let keys = guard
             .data
             .plugin_data
@@ -2408,9 +2466,11 @@ impl AppStore {
             .cloned()
             .collect::<Vec<_>>();
         if keys.is_empty() {
+            let history_status = (plugin_history_exists && guard.history.invalidate_all())
+                .then(|| guard.history.issue_status(self.history_gate.is_closed()));
             return Ok(AdmittedPluginStorageMutation {
                 value: 0,
-                history_status: None,
+                history_status,
                 plugin_instances_changes: Vec::new(),
                 _admission: admission,
             });
@@ -2429,8 +2489,9 @@ impl AppStore {
         if let Some(revision) = next_model_revision {
             guard.plugin_model_revision = revision;
         }
-        let history_status = (instance_data_changed && guard.history.invalidate_future())
-            .then(|| guard.history.issue_status(self.history_gate.is_closed()));
+        let history_status = ((instance_data_changed || plugin_history_exists)
+            && guard.history.invalidate_all())
+        .then(|| guard.history.issue_status(self.history_gate.is_closed()));
         let plugin_instances_changes = next_model_revision
             .map(|revision| {
                 affected_plugin_ids
@@ -3029,6 +3090,14 @@ fn collect_plugin_instance_ids<'a>(keys: impl Iterator<Item = &'a str>) -> Vec<S
     plugin_ids
 }
 
+fn plugin_id_from_storage_namespace_prefix(prefix: &str) -> Option<&str> {
+    let plugin_id = prefix
+        .strip_prefix(PLUGIN_DATA_KEY_PREFIX)?
+        .strip_suffix('/')?;
+    validate_plugin_id(plugin_id).ok()?;
+    Some(plugin_id)
+}
+
 fn apply_plugin_elements_snapshot(
     store: &mut AppStoreData,
     snapshot: &PluginElementsHistorySnapshot,
@@ -3184,6 +3253,51 @@ impl AssetReferencePaths {
     }
 }
 
+fn collect_plugin_managed_asset_paths(
+    app_data_dir: &Path,
+    data: &AppStoreData,
+    directory_name: &str,
+    paths: &mut AssetReferencePaths,
+) {
+    let managed_dir = app_data_dir.join(directory_name);
+    for value in data.plugin_data.values() {
+        collect_plugin_managed_asset_value(app_data_dir, &managed_dir, value, paths);
+    }
+}
+
+fn collect_plugin_managed_asset_value(
+    app_data_dir: &Path,
+    managed_dir: &Path,
+    value: &Value,
+    paths: &mut AssetReferencePaths,
+) {
+    match value {
+        Value::String(raw) => {
+            let LocalAssetPathResolution::Path(path) = resolve_local_asset_path(app_data_dir, raw)
+            else {
+                return;
+            };
+            if path
+                .parent()
+                .is_some_and(|parent| paths_have_same_identity(parent, managed_dir))
+            {
+                paths.keys.insert(path_identity_key(&path));
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                collect_plugin_managed_asset_value(app_data_dir, managed_dir, value, paths);
+            }
+        }
+        Value::Object(values) => {
+            for value in values.values() {
+                collect_plugin_managed_asset_value(app_data_dir, managed_dir, value, paths);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
 fn warn_unresolved_asset_references(app_data_dir: &Path, data: &AppStoreData) {
     for (category, count) in [
         (
@@ -3217,6 +3331,8 @@ fn collect_local_font_paths(app_data_dir: &Path, data: &AppStoreData) -> AssetRe
         paths.collect(app_data_dir, font.local_path.as_ref());
     }
 
+    collect_plugin_managed_asset_paths(app_data_dir, data, "fonts", &mut paths);
+
     paths
 }
 
@@ -3227,6 +3343,8 @@ fn collect_local_image_paths(app_data_dir: &Path, data: &AppStoreData) -> AssetR
         paths.collect(app_data_dir, position.active_image.as_ref());
         paths.collect(app_data_dir, position.inactive_image.as_ref());
     }
+
+    collect_plugin_managed_asset_paths(app_data_dir, data, "images", &mut paths);
 
     paths
 }
@@ -7800,6 +7918,76 @@ mod tests {
     }
 
     #[test]
+    fn plugin_namespace_clear_invalidates_history_after_instances_are_already_empty() {
+        let dir = test_directory("plugin-empty-instances-history-clear-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        for plugin_id in ["alpha", "beta"] {
+            drop(
+                store
+                    .commit_plugin_instances(plugin_instances_request(
+                        plugin_id,
+                        vec![saved_plugin_instance(10.0)],
+                        uuid::Uuid::new_v4().to_string(),
+                        None,
+                        Some(store.plugin_model_revision()),
+                    ))
+                    .unwrap(),
+            );
+            drop(
+                store
+                    .commit_plugin_instances(plugin_instances_request(
+                        plugin_id,
+                        Vec::new(),
+                        uuid::Uuid::new_v4().to_string(),
+                        None,
+                        Some(store.plugin_model_revision()),
+                    ))
+                    .unwrap(),
+            );
+            assert!(store.history_status().can_undo);
+            assert!(store.plugin_instances_get(plugin_id).unwrap().0.is_empty());
+
+            if plugin_id == "alpha" {
+                drop(
+                    store
+                        .set_plugin_data("plugin_data_alpha/cache/item", json!(true))
+                        .unwrap(),
+                );
+                let nested = store
+                    .remove_plugin_data_by_prefix("plugin_data_alpha/cache/")
+                    .unwrap();
+                assert_eq!(nested.value, 1);
+                assert!(nested.history_status.is_none());
+                assert!(store.history_status().can_undo);
+
+                drop(
+                    store
+                        .set_plugin_data("plugin_data_alpha/preferences", json!(true))
+                        .unwrap(),
+                );
+                let namespace = store
+                    .remove_plugin_data_by_prefix("plugin_data_alpha/")
+                    .unwrap();
+                assert_eq!(namespace.value, 1);
+                let status = namespace.history_status.unwrap();
+                assert!(!status.can_undo);
+                assert!(!status.can_redo);
+            } else {
+                assert!(store.snapshot().plugin_data.is_empty());
+                let clear = store.clear_all_plugin_data().unwrap();
+                let status = clear.history_status.unwrap();
+                assert!(!status.can_undo);
+                assert!(!status.can_redo);
+            }
+        }
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn bulk_plugin_storage_deletion_reports_each_instance_revision() {
         let dir = test_directory("plugin-instances-bulk-delete-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -7838,6 +8026,7 @@ mod tests {
             .remove_plugin_data_by_prefix("plugin_data_alpha/")
             .unwrap();
         assert_eq!(prefix_delete.value, 2);
+        assert!(!prefix_delete.history_status.as_ref().unwrap().can_undo);
         assert!(!prefix_delete.history_status.as_ref().unwrap().can_redo);
         assert_eq!(
             prefix_delete.plugin_instances_changes,
@@ -7865,6 +8054,8 @@ mod tests {
 
         let clear_revision = store.plugin_model_revision() + 1;
         let clear = store.clear_all_plugin_data().unwrap();
+        assert!(!clear.history_status.as_ref().unwrap().can_undo);
+        assert!(!clear.history_status.as_ref().unwrap().can_redo);
         assert_eq!(
             clear.plugin_instances_changes,
             vec![
@@ -16125,6 +16316,253 @@ mod tests {
     }
 
     #[test]
+    fn unrecorded_legacy_editor_mutations_invalidate_stale_undo_and_redo() {
+        let dir = test_directory("legacy-editor-history-invalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 1.0),
+            ))
+            .unwrap();
+        assert!(store.history_status().can_undo);
+
+        let transaction = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("resource_delete_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].dx = initial_dx + 2.0;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let status = transaction.change.history_status.as_ref().unwrap();
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        drop(transaction);
+
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 3.0),
+            ))
+            .unwrap();
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(HistoryDirection::Undo, &operation_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert!(store.history_status().can_redo);
+
+        let transaction = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("resource_replace_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].dx = initial_dx + 4.0;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let status = transaction.change.history_status.as_ref().unwrap();
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn counter_preset_library_only_delete_invalidates_stale_history() {
+        let dir = test_directory("counter-preset-library-history-invalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let preset = CounterAnimationPreset {
+            id: "user-delete-target".to_string(),
+            name: "Delete target".to_string(),
+            source: CounterAnimationSource::User,
+            label_key: None,
+            bezier: [0.25, 0.1, 0.25, 1.0],
+            scale: 1.0,
+            duration_ms: 300,
+        };
+        store
+            .update(|data| data.counter_animation_presets.push(preset.clone()))
+            .unwrap();
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 1.0),
+            ))
+            .unwrap();
+        assert!(store.history_status().can_undo);
+        let editor_revision = store.editor_get().revision;
+
+        let transaction = store
+            .commit_legacy_resource_deletion(
+                EditorCommitOrigin::LegacyAdapter("counter_animation_delete_test".to_string()),
+                &[
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                ],
+                |data| {
+                    data.counter_animation_presets
+                        .retain(|candidate| candidate.id != preset.id);
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(transaction.change.result.changed_fields.is_empty());
+        assert_eq!(transaction.change.result.revision, editor_revision);
+        let status = transaction.change.history_status.as_ref().unwrap();
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        assert!(store
+            .snapshot()
+            .counter_animation_presets
+            .iter()
+            .all(|candidate| candidate.id != preset.id));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn unbound_sound_library_delete_invalidates_stale_history() {
+        let dir = test_directory("sound-library-history-invalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let sound_path = "/tmp/dmnote-unbound-history.wav".to_string();
+        store
+            .update(|data| {
+                data.sound_library
+                    .insert(sound_path.clone(), SoundLibraryEntry::default());
+            })
+            .unwrap();
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 1.0),
+            ))
+            .unwrap();
+        assert!(store.history_status().can_undo);
+
+        let transaction = store
+            .commit_legacy_resource_deletion(
+                EditorCommitOrigin::LegacyAdapter("sound_delete_test".to_string()),
+                &[
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                ],
+                |data| {
+                    data.sound_library.remove(&sound_path);
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(transaction.change.result.changed_fields.is_empty());
+        let status = transaction.change.history_status.as_ref().unwrap();
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        assert!(!store.snapshot().sound_library.contains_key(&sound_path));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn counter_preset_library_only_update_preserves_editor_history() {
+        let dir = test_directory("counter-preset-library-history-preservation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let preset = CounterAnimationPreset {
+            id: "user-update-target".to_string(),
+            name: "Before".to_string(),
+            source: CounterAnimationSource::User,
+            label_key: None,
+            bezier: [0.25, 0.1, 0.25, 1.0],
+            scale: 1.0,
+            duration_ms: 300,
+        };
+        store
+            .update(|data| data.counter_animation_presets.push(preset.clone()))
+            .unwrap();
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 1.0),
+            ))
+            .unwrap();
+        let before_status = store.history_status();
+        assert!(before_status.can_undo);
+
+        let transaction = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("counter_animation_update_test".to_string()),
+                &[
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                ],
+                |data| {
+                    let target = data
+                        .counter_animation_presets
+                        .iter_mut()
+                        .find(|candidate| candidate.id == preset.id)
+                        .unwrap();
+                    target.name = "After".to_string();
+                    target.bezier = [0.42, 0.0, 0.58, 1.0];
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(transaction.change.result.changed_fields.is_empty());
+        assert!(transaction.change.history_status.is_none());
+        let after_status = store.history_status();
+        assert_eq!(
+            after_status.history_revision,
+            before_status.history_revision
+        );
+        assert_eq!(after_status.history_epoch, before_status.history_epoch);
+        assert!(after_status.can_undo);
+        assert!(!after_status.can_redo);
+        assert_eq!(
+            store
+                .snapshot()
+                .counter_animation_presets
+                .iter()
+                .find(|candidate| candidate.id == preset.id)
+                .unwrap()
+                .name,
+            "After"
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn css_watcher_reload_after_undo_preserves_latest_canonical_and_invalidates_redo() {
         let dir = test_directory("css-watcher-history-interleaving-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -17280,15 +17718,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_keys_publication_drains_before_history_restore() {
+    fn legacy_keys_publication_drains_before_later_history_restore() {
         let dir = test_directory("legacy-editor-publication-drain-test");
         std::fs::create_dir_all(&dir).unwrap();
         let state =
             Arc::new(AppState::initialize(AppStore::initialize_in_dir(&dir).unwrap()).unwrap());
         let initial = state.store.snapshot();
         let mode = initial.selected_key_type.clone();
-        let original_key = initial.keys[&mode][0].canonical();
-
         let mut strict_keys = initial.keys.clone();
         strict_keys.get_mut(&mode).unwrap()[0] = "StrictHistoryKey".into();
         state
@@ -17351,6 +17787,21 @@ mod tests {
             .recv_timeout(Duration::from_secs(2))
             .unwrap();
 
+        let post_legacy_key = "PostLegacyHistoryKey".to_string();
+        let mut post_legacy_keys = state.store.snapshot().keys;
+        post_legacy_keys.get_mut(&mode).unwrap()[0] = post_legacy_key.clone().into();
+        state
+            .store
+            .commit_editor_document(editor_request(
+                state.store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    keys: Some(post_legacy_keys),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
         let gate = state.store.history_gate();
         let undo_gate = Arc::clone(&gate);
         let undo_state = Arc::clone(&state);
@@ -17401,14 +17852,14 @@ mod tests {
         undo_done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
         let outcome = undo.join().unwrap();
 
-        assert_eq!(outcome.change.unwrap().result.revision, 3);
+        assert_eq!(outcome.change.unwrap().result.revision, 4);
         assert_eq!(
             state.store.snapshot().keys[&mode][0].canonical(),
-            original_key
+            legacy_key
         );
         assert_eq!(state.snapshot_key_counters(), expected_counters);
-        assert!(state.keyboard.register_key_down(&mode, &original_key));
-        assert!(!state.keyboard.register_key_down(&mode, &legacy_key));
+        assert!(state.keyboard.register_key_down(&mode, &legacy_key));
+        assert!(!state.keyboard.register_key_down(&mode, &post_legacy_key));
         assert_eq!(
             *events.lock().unwrap(),
             vec![
@@ -19189,6 +19640,110 @@ mod tests {
             assert!(image_paths.contains(&path_identity_key(&root.join(format!("{kind}.png")))));
             assert!(sound_paths.contains(&path_identity_key(&root.join(format!("{kind}.wav")))));
         }
+    }
+
+    #[test]
+    fn plugin_managed_assets_remain_until_plugin_data_releases_them() {
+        let dir = test_directory("plugin-managed-assets-sweep-test");
+        let image_path = dir.join("images").join("plugin-owned.png");
+        let font_path = dir.join("fonts").join("plugin-owned.ttf");
+        for path in [&image_path, &font_path] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"plugin-asset").unwrap();
+        }
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let plugin_key = "plugin_data_demo-plugin/settings".to_string();
+        store
+            .update(|data| {
+                data.plugin_data.insert(
+                    plugin_key.clone(),
+                    json!({
+                        "nested": {
+                            "imagePath": image_path.to_string_lossy(),
+                            "fontPaths": [font_path.to_string_lossy()]
+                        }
+                    }),
+                );
+            })
+            .unwrap();
+
+        store.flush_cleanup_and_shutdown().unwrap();
+        drop(store);
+
+        assert!(image_path.exists());
+        assert!(font_path.exists());
+        assert!(!dir.join("trash").exists());
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .update(|data| {
+                data.plugin_data.remove(&plugin_key);
+            })
+            .unwrap();
+        store.flush_cleanup_and_shutdown().unwrap();
+        drop(store);
+
+        assert!(!image_path.exists());
+        assert!(!font_path.exists());
+        let trash_sessions = std::fs::read_dir(dir.join("trash")).unwrap();
+        let trashed = trash_sessions
+            .map(|entry| entry.unwrap().path())
+            .any(|session| {
+                session.join("images").join("plugin-owned.png").exists()
+                    && session.join("fonts").join("plugin-owned.ttf").exists()
+            });
+        assert!(trashed);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn referenced_v1_gif_cache_remains_a_direct_image_asset() {
+        let dir = test_directory("gif-v1-direct-reference-test");
+        let images = dir.join("images");
+        std::fs::create_dir_all(&images).unwrap();
+        let hash = "a".repeat(64);
+        let cache = images.join(format!("gif-cache-{hash}.webp"));
+        std::fs::write(&cache, b"lossy-v1").unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("gif_v1_direct_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].active_image =
+                        Some(cache.to_string_lossy().to_string());
+                    Ok(())
+                },
+            )
+            .unwrap();
+        store.cleanup_orphan_assets_now().unwrap();
+        assert!(cache.exists());
+        assert_eq!(
+            store.snapshot().key_positions["4key"][0]
+                .active_image
+                .as_deref(),
+            Some(cache.to_string_lossy().as_ref())
+        );
+
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("gif_v1_direct_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].active_image = None;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        store.cleanup_orphan_assets_now().unwrap();
+        assert!(!cache.exists());
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[cfg(not(target_os = "windows"))]

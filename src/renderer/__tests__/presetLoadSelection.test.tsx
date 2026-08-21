@@ -59,6 +59,8 @@ describe('프리셋 로드 선택 수명', () => {
   const originalApi = window.api;
   const load = apiMocks.load;
   const loadTab = apiMocks.loadTab;
+  const save = apiMocks.save;
+  const saveTab = apiMocks.saveTab;
   let root: Root;
   let host: HTMLDivElement;
 
@@ -66,6 +68,8 @@ describe('프리셋 로드 선택 수명', () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     load.mockReset().mockResolvedValue({ success: true });
     loadTab.mockReset().mockResolvedValue({ success: true });
+    save.mockReset().mockResolvedValue({ success: true });
+    saveTab.mockReset().mockResolvedValue({ success: true });
     window.api = {
       overlay: {
         get: vi.fn().mockResolvedValue({ visible: true }),
@@ -105,6 +109,42 @@ describe('프리셋 로드 선택 수명', () => {
     if (!popup.onSelect) throw new Error('popup handler not captured');
     await act(async () => popup.onSelect?.(id));
   };
+
+  it('선택창을 닫으면 실패 알림을 띄우지 않는다', async () => {
+    const showAlert = vi.fn();
+    await act(async () => root.render(<SettingTool showAlert={showAlert} />));
+    load.mockResolvedValueOnce({ success: false });
+    loadTab.mockResolvedValueOnce({ success: false });
+    save.mockResolvedValueOnce({ success: false });
+    saveTab.mockResolvedValueOnce({ success: false });
+
+    await invokePopup('import-all');
+    await invokePopup('import-tab');
+    await invokePopup('export-all');
+    await invokePopup('export-tab');
+
+    expect(showAlert).not.toHaveBeenCalled();
+  });
+
+  it('프리셋 작업이 실제로 실패하면 실패 알림을 띄운다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const showAlert = vi.fn();
+    await act(async () => root.render(<SettingTool showAlert={showAlert} />));
+    load.mockRejectedValueOnce(new Error('injected failure'));
+
+    await invokePopup('import-all');
+
+    expect(showAlert).toHaveBeenCalledWith('preset.loadFail');
+  });
+
+  it('프리셋 작업이 성공하면 성공 알림을 띄운다', async () => {
+    const showAlert = vi.fn();
+    await act(async () => root.render(<SettingTool showAlert={showAlert} />));
+
+    await invokePopup('import-all');
+
+    expect(showAlert).toHaveBeenCalledWith('preset.loadSuccess');
+  });
 
   it('전체 프리셋 로드 성공 시 선택을 해제한다', async () => {
     selectKey();

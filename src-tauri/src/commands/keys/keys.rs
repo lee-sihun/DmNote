@@ -4,7 +4,9 @@ use serde::Serialize;
 use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
-    commands::editor::state::{emit_best_effort, publish_editor_change},
+    commands::editor::state::{
+        emit_best_effort, publish_editor_change, publish_legacy_editor_change,
+    },
     defaults::{default_keys, default_positions},
     errors::CmdResult,
     models::{
@@ -368,7 +370,7 @@ pub fn keys_reset_all(
         state.unwatch_tab_css(tab_id);
     }
     drop(css_operation_guard);
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
     if !transaction
         .change
         .result
@@ -471,7 +473,7 @@ pub fn keys_reset_mode(
             mode,
         });
     };
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
     if !transaction
         .change
         .result

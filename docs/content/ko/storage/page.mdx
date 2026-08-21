@@ -15,7 +15,7 @@ description: 플러그인 데이터 영속화 (dmn.plugin.storage)
 
 ```javascript
 // 플러그인 ID가 "kps-panel"인 경우
-// 내부적으로 "kps-panel:settings" 키로 저장됨
+// 내부적으로 "kps-panel/settings" 네임스페이스에 저장됨
 await dmn.plugin.storage.set("settings", { theme: "dark" });
 ```
 
@@ -83,6 +83,7 @@ console.log("저장된 키:", allKeys); // ['settings', 'position']
 ### hasData(prefix)
 
 특정 접두사로 시작하는 데이터가 있는지 확인합니다.
+접두사는 현재 플러그인 영역으로 자동 한정되므로 플러그인 ID를 직접 붙이지 않습니다.
 
 ```javascript
 const hasSettings = await dmn.plugin.storage.hasData("settings");
@@ -92,6 +93,7 @@ console.log("설정 데이터 존재:", hasSettings); // true 또는 false
 ### clearByPrefix(prefix)
 
 특정 접두사로 시작하는 모든 데이터를 삭제합니다.
+접두사는 현재 플러그인 영역으로 자동 한정되어 다른 플러그인의 데이터는 삭제할 수 없습니다.
 
 ```javascript
 const deletedCount = await dmn.plugin.storage.clearByPrefix("cache-");

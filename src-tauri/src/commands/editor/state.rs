@@ -117,6 +117,17 @@ pub(crate) fn publish_editor_change(
     );
 }
 
+pub(crate) fn publish_legacy_editor_change(
+    state: &AppState,
+    app: &AppHandle,
+    change: &CommittedEditorChange,
+) {
+    publish_editor_change(state, app, change, false);
+    if let Some(history_status) = change.history_status.as_ref() {
+        emit_best_effort(app, "history:status", history_status);
+    }
+}
+
 fn publish_editor_change_with_options(
     state: &AppState,
     app: &AppHandle,

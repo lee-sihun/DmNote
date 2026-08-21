@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -259,6 +259,83 @@ fn changed_key_position_fields(left: &Value, right: &Value) -> BTreeSet<String> 
     changed
 }
 
+fn collection_counts(value: &Value, field: &str) -> BTreeMap<String, usize> {
+    value
+        .get(field)
+        .and_then(Value::as_object)
+        .expect("editor collection must be an object")
+        .iter()
+        .map(|(mode, entries)| {
+            (
+                mode.clone(),
+                entries
+                    .as_array()
+                    .expect("editor collection mode must be an array")
+                    .len(),
+            )
+        })
+        .collect()
+}
+
+fn editor_position_semantics_without_ids(data: &AppStoreData) -> Value {
+    let mut value = json!({
+        "keyPositions": data.key_positions,
+        "statPositions": data.stat_positions,
+        "graphPositions": data.graph_positions,
+        "knobPositions": data.knob_positions,
+    });
+    for field in [
+        "keyPositions",
+        "statPositions",
+        "graphPositions",
+        "knobPositions",
+    ] {
+        for entries in value
+            .get_mut(field)
+            .and_then(Value::as_object_mut)
+            .expect("editor collection must remain an object")
+            .values_mut()
+        {
+            for entry in entries
+                .as_array_mut()
+                .expect("editor collection mode must remain an array")
+            {
+                entry
+                    .as_object_mut()
+                    .expect("editor element must remain an object")
+                    .remove("id");
+            }
+        }
+    }
+    value
+}
+
+fn editor_element_ids(data: &AppStoreData) -> BTreeSet<String> {
+    data.key_positions
+        .values()
+        .flatten()
+        .map(|position| position.id.clone())
+        .chain(
+            data.stat_positions
+                .values()
+                .flatten()
+                .map(|position| position.position.id.clone()),
+        )
+        .chain(
+            data.graph_positions
+                .values()
+                .flatten()
+                .map(|position| position.position.id.clone()),
+        )
+        .chain(
+            data.knob_positions
+                .values()
+                .flatten()
+                .map(|position| position.position.id.clone()),
+        )
+        .collect()
+}
+
 fn editor_preset_from_store(data: &AppStoreData) -> PresetFile {
     PresetFile {
         keys: Some(data.keys.clone()),
@@ -404,7 +481,7 @@ fn simulation_1_real_legacy_store_load_is_gradient_neutral() {
 // 실행: DMNOTE_SIM_STORE_PATH=/path/to/store.json cargo test -- --ignored
 #[test]
 #[ignore]
-fn simulation_2_real_solid_store_round_trip_is_lossless() {
+fn simulation_2_real_solid_store_migration_is_gradient_neutral_and_idempotent() {
     let fixture = RealFixture::from_env(2);
     let directory = SimulationDir::new("solid-round-trip");
     let path = write_store_copy(&directory, "store.json", &fixture.bytes);
@@ -424,30 +501,35 @@ fn simulation_2_real_solid_store_round_trip_is_lossless() {
         round_trip.get("keyPositions").unwrap(),
     );
 
-    let keys_byte_equal = serde_json::to_vec(source.get("keys").unwrap()).unwrap()
-        == serde_json::to_vec(round_trip.get("keys").unwrap()).unwrap();
-    let positions_byte_equal = serde_json::to_vec(source.get("keyPositions").unwrap()).unwrap()
-        == serde_json::to_vec(round_trip.get("keyPositions").unwrap()).unwrap();
-    let full_store_byte_equal = serde_json::to_vec_pretty(&loaded.data)
-        .expect("loaded store must serialize")
-        == fixture.bytes;
+    let key_position_counts_equal = collection_counts(&source, "keyPositions")
+        == collection_counts(&round_trip, "keyPositions");
+    let round_trip_path = write_store_copy(
+        &directory,
+        "store-round-trip.json",
+        &serde_json::to_vec_pretty(&loaded.data).expect("loaded store must serialize"),
+    );
+    let reloaded = load_store_from_path(&round_trip_path)
+        .expect("migrated solid store must reload idempotently");
     fixture.verify_unchanged();
 
     println!(
-        "SIMULATION 2 RESULT: keysEqual={keys_equal} keyPositionsEqual={positions_equal} counterColorsEqual={counter_colors_equal} gradientsAbsent={gradients_absent} keysBytes={keys_byte_equal} keyPositionsBytes={positions_byte_equal} fullStoreBytes={full_store_byte_equal} changedFields={changed_fields:?}"
+        "SIMULATION 2 RESULT: keysEqual={keys_equal} keyPositionsRawEqual={positions_equal} counterColorsRawEqual={counter_colors_equal} keyPositionCountsEqual={key_position_counts_equal} gradientsAbsent={gradients_absent} changedFields={changed_fields:?}"
     );
     assert!(keys_equal, "keys changed during solid round trip");
     assert!(
-        positions_equal,
-        "keyPositions changed during solid round trip: {changed_fields:?}"
+        key_position_counts_equal,
+        "key position counts changed during solid migration"
     );
     assert!(
-        counter_colors_equal,
-        "counter colors changed during solid round trip"
+        changed_fields
+            .iter()
+            .all(|field| !GRADIENT_FIELDS.iter().any(|name| field.contains(name))),
+        "solid migration changed gradient fields: {changed_fields:?}"
     );
     assert!(gradients_absent, "gradient siblings were generated");
-    assert!(keys_byte_equal);
-    assert!(positions_byte_equal);
+    assert!(!reloaded.needs_persist);
+    assert!(!reloaded.repaired);
+    assert_eq!(reloaded.data, loaded.data);
 }
 
 // 실행: DMNOTE_SIM_STORE_PATH=/path/to/store.json cargo test -- --ignored
@@ -546,10 +628,30 @@ fn simulation_3_gradient_store_and_preset_chain_stays_canonical() {
         .expect("exported preset must pass the import parser");
     let imported_store = import_editor_preset(&directory.path().join("imported"), imported_preset);
     assert!(imported_store.keys == reloaded.data.keys);
-    assert!(imported_store.key_positions == reloaded.data.key_positions);
-    assert!(imported_store.stat_positions == reloaded.data.stat_positions);
-    assert!(imported_store.graph_positions == reloaded.data.graph_positions);
-    assert!(imported_store.knob_positions == reloaded.data.knob_positions);
+    assert_eq!(
+        editor_position_semantics_without_ids(&imported_store),
+        editor_position_semantics_without_ids(&reloaded.data)
+    );
+    let source_ids = editor_element_ids(&reloaded.data);
+    let imported_ids = editor_element_ids(&imported_store);
+    assert_eq!(
+        imported_ids.len(),
+        imported_store.key_positions.values().flatten().count()
+            + imported_store.stat_positions.values().flatten().count()
+            + imported_store.graph_positions.values().flatten().count()
+            + imported_store.knob_positions.values().flatten().count(),
+        "imported element IDs must remain unique"
+    );
+    assert!(
+        imported_ids
+            .iter()
+            .all(|id| uuid::Uuid::parse_str(id).is_ok()),
+        "imported element IDs must be valid UUIDs"
+    );
+    assert!(
+        source_ids.is_disjoint(&imported_ids),
+        "preset import must rekey every native element"
+    );
     fixture.verify_unchanged();
 
     println!(

@@ -11,6 +11,7 @@ import FloatingTooltip from '../Modal/FloatingTooltip';
 import { TooltipGroup } from '../Modal/TooltipGroup';
 import ListPopup from '../Modal/ListPopup';
 import { useIconMotion } from '@hooks/useIconMotion';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 type SelectableTool = 'move' | 'eraser';
 type AddItemType = 'key' | 'stat' | 'graph' | 'knob';
@@ -54,6 +55,9 @@ const CanvasTool = ({
 
   const handleClick = (key: string) => {
     if (key === 'move' || key === 'eraser') {
+      if (key === 'eraser') {
+        useGridSelectionStore.getState().clearSelection();
+      }
       setSelectedTool(key as SelectableTool);
       setActiveTool?.(key);
       setIsAddPopupOpen(false);

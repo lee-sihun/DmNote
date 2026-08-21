@@ -12,26 +12,31 @@ export const createNamespacedStorage = (
   pluginId: string,
   originalStorage: DMNoteAPI['plugin']['storage'],
 ) => {
+  const namespace = `${pluginId}/`;
+  const namespacedKey = (key: string) => `${namespace}${key}`;
+  const namespacedPrefix = (prefix: string) =>
+    prefix.startsWith(namespace) ? prefix : namespacedKey(prefix);
+
   return {
     get: async <T = unknown>(key: string) => {
-      const prefixedKey = `${pluginId}/${key}`;
-      return await originalStorage.get<T>(prefixedKey as string);
+      return await originalStorage.get<T>(namespacedKey(key));
     },
     set: (key: string, value: unknown) =>
-      originalStorage.set(`${pluginId}/${key}`, value),
-    remove: (key: string) => originalStorage.remove(`${pluginId}/${key}`),
+      originalStorage.set(namespacedKey(key), value),
+    remove: (key: string) => originalStorage.remove(namespacedKey(key)),
     clear: async () => {
-      await originalStorage.clearByPrefix(pluginId);
+      await originalStorage.clearByPrefix(namespace);
     },
     keys: async () => {
       const allKeys = await originalStorage.keys();
-      const prefix = `${pluginId}/`;
       return allKeys
-        .filter((k) => k.startsWith(prefix))
-        .map((k) => k.substring(prefix.length));
+        .filter((key) => key.startsWith(namespace))
+        .map((key) => key.substring(namespace.length));
     },
-    hasData: originalStorage.hasData,
-    clearByPrefix: originalStorage.clearByPrefix,
+    hasData: (prefix: string) =>
+      originalStorage.hasData(namespacedPrefix(prefix)),
+    clearByPrefix: (prefix: string) =>
+      originalStorage.clearByPrefix(namespacedPrefix(prefix)),
   };
 };
 

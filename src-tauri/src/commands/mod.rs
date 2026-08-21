@@ -1,4 +1,5 @@
 pub mod app;
+pub(crate) mod dialog;
 pub mod editor;
 pub mod keys;
 pub mod layout;

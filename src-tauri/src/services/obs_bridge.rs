@@ -55,6 +55,8 @@ const ALLOWED_WS_COMMANDS: &[&str] = &[
     "graph_positions_get",
     "knob_positions_get",
     "custom_tabs_list",
+    "sound_list",
+    "sound_load_original",
     "counter_animation_list",
     "plugin_bridge_send",
     "plugin_bridge_send_to",
@@ -66,6 +68,41 @@ const ALLOWED_WS_COMMANDS: &[&str] = &[
     "plugin_storage_keys",
     "plugin_storage_has_data",
     // 파괴적 bulk 삭제는 plugin_storage_clear와 동일하게 원격 차단
+];
+
+const FORWARDED_EVENTS: &[&str] = &[
+    "settings:changed",
+    "editor:committed",
+    "keys:state",
+    "keys:reset",
+    "keys:changed",
+    "keys:counters",
+    "keys:counter",
+    "keys:counters-state",
+    "keys:mode-changed",
+    "customTabs:changed",
+    "positions:changed",
+    "statPositions:changed",
+    "graphPositions:changed",
+    "knobPositions:changed",
+    "layerGroups:changed",
+    "overlay:visibility",
+    "overlay:lock",
+    "overlay:anchor",
+    "overlay:resized",
+    "input:raw",
+    "input:press",
+    "input:axis",
+    "css:use",
+    "css:content",
+    "js:use",
+    "js:content",
+    "tabNote:changed",
+    "tabNote:changed_all",
+    "tabCss:changed",
+    "counterAnimation:changed",
+    "preset:snapshot",
+    "plugin-bridge:message",
 ];
 
 fn is_allowed_command(command: &str) -> bool {
@@ -366,41 +403,10 @@ impl ObsBridgeService {
         }
 
         // OBS 오버레이가 수신하는 이벤트 목록
-        let forwarded_events = [
-            "settings:changed",
-            "editor:committed",
-            "keys:state",
-            "keys:reset",
-            "keys:changed",
-            "keys:counters",
-            "keys:counter",
-            "keys:counters-state",
-            "keys:mode-changed",
-            "positions:changed",
-            "statPositions:changed",
-            "graphPositions:changed",
-            "knobPositions:changed",
-            "layerGroups:changed",
-            "overlay:visibility",
-            "overlay:lock",
-            "overlay:anchor",
-            "input:raw",
-            "input:press",
-            "input:axis",
-            "css:use",
-            "css:content",
-            "js:use",
-            "js:content",
-            "tabNote:changed",
-            "tabNote:changed_all",
-            "tabCss:changed",
-            "plugin-bridge:message",
-        ];
-
         // listen_any: 모든 타깃(App/Window/Webview)의 이벤트를 캡처
         // emit_to()로 특정 윈도우에 보낸 이벤트도 포워딩됨
-        let mut ids = Vec::with_capacity(forwarded_events.len());
-        for event_name in &forwarded_events {
+        let mut ids = Vec::with_capacity(FORWARDED_EVENTS.len());
+        for event_name in FORWARDED_EVENTS {
             let tx = self.broadcast_tx.clone();
             let name = event_name.to_string();
             let id = app.listen_any(*event_name, move |evt| {
@@ -415,7 +421,7 @@ impl ObsBridgeService {
         *self.event_listener_ids.write() = ids;
         log::info!(
             "[ObsBridge] 이벤트 포워딩 등록: {}개 이벤트",
-            forwarded_events.len()
+            FORWARDED_EVENTS.len()
         );
     }
 
@@ -1382,9 +1388,12 @@ mod tests {
 
     #[test]
     fn websocket_allowlist_uses_exact_matching() {
-        assert_eq!(ALLOWED_WS_COMMANDS.len(), 30);
+        assert_eq!(ALLOWED_WS_COMMANDS.len(), 32);
         assert!(is_allowed_command("app_bootstrap"));
         assert!(is_allowed_command("editor_get"));
+        assert!(!is_allowed_command("css_history_get"));
+        assert!(is_allowed_command("sound_list"));
+        assert!(is_allowed_command("sound_load_original"));
         assert!(!is_allowed_command("plugin_storage_clear"));
         assert!(!is_allowed_command("plugin_storage_clear_by_prefix"));
         assert!(!is_allowed_command("editor_commit"));
@@ -1399,6 +1408,18 @@ mod tests {
         assert!(!is_allowed_command("app_bootstrap_extra"));
         assert!(!is_allowed_command("plugin:window|close"));
         assert_eq!(build_allowed_list().len(), ALLOWED_WS_COMMANDS.len());
+    }
+
+    #[test]
+    fn public_overlay_events_are_forwarded_to_obs_clients() {
+        for event in [
+            "customTabs:changed",
+            "overlay:resized",
+            "counterAnimation:changed",
+            "preset:snapshot",
+        ] {
+            assert!(FORWARDED_EVENTS.contains(&event), "missing event: {event}");
+        }
     }
 
     #[test]

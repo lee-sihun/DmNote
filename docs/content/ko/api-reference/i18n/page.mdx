@@ -13,7 +13,7 @@ description: 다국어 지원 및 로케일 API
 
 ```javascript
 const locale = await dmn.i18n.getLocale();
-console.log(locale); // "ko" 또는 "en"
+console.log(locale); // "ko", "en", "zh-cn", "zh-Hant", "ru" 중 하나
 ```
 
 ## 이벤트 구독
@@ -167,11 +167,10 @@ async function formatRelativeTime(date) {
 
 ## 지원 로케일
 
-| 코드 | 언어    |
-| ---- | ------- |
-| `ko` | 한국어  |
-| `en` | English |
-
-<Callout type="info">
-  추가 언어 지원은 향후 업데이트에서 제공될 예정입니다.
-</Callout>
+| 코드      | 언어        |
+| --------- | ----------- |
+| `ko`      | 한국어      |
+| `en`      | English     |
+| `zh-cn`   | 简体中文    |
+| `zh-Hant` | 繁體中文    |
+| `ru`      | Русский     |

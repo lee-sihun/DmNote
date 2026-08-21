@@ -139,9 +139,9 @@ SettingToolProps) => {
     try {
       const result = await runPresetAction(() => presetsApi.save());
       if (!result) return;
-      showAlert?.(
-        result?.success ? t('preset.saveSuccess') : t('preset.saveFail'),
-      );
+      // success가 false면 선택창을 닫은 것 - 실패가 아니므로 알리지 않음
+      if (!result.success) return;
+      showAlert?.(t('preset.saveSuccess'));
     } catch (error) {
       console.error('Failed to save preset', error);
       showAlert?.(t('preset.saveFail'));
@@ -152,12 +152,9 @@ SettingToolProps) => {
     try {
       const result = await runPresetAction(() => presetsApi.load());
       if (!result) return;
-      if (result?.success) {
-        useGridSelectionStore.getState().clearSelection();
-      }
-      showAlert?.(
-        result?.success ? t('preset.loadSuccess') : t('preset.loadFail'),
-      );
+      if (!result.success) return;
+      useGridSelectionStore.getState().clearSelection();
+      showAlert?.(t('preset.loadSuccess'));
     } catch (error) {
       console.error('Failed to load preset', error);
       showAlert?.(t('preset.loadFail'));
@@ -168,9 +165,8 @@ SettingToolProps) => {
     try {
       const result = await runPresetAction(() => presetsApi.saveTab());
       if (!result) return;
-      showAlert?.(
-        result?.success ? t('preset.saveTabSuccess') : t('preset.saveTabFail'),
-      );
+      if (!result.success) return;
+      showAlert?.(t('preset.saveTabSuccess'));
     } catch (error) {
       console.error('Failed to save tab preset', error);
       showAlert?.(t('preset.saveTabFail'));
@@ -207,12 +203,9 @@ SettingToolProps) => {
     try {
       const result = await runPresetAction(() => presetsApi.loadTab());
       if (!result) return;
-      if (result?.success) {
-        useGridSelectionStore.getState().clearSelection();
-      }
-      showAlert?.(
-        result?.success ? t('preset.loadTabSuccess') : t('preset.loadTabFail'),
-      );
+      if (!result.success) return;
+      useGridSelectionStore.getState().clearSelection();
+      showAlert?.(t('preset.loadTabSuccess'));
     } catch (error) {
       console.error('Failed to load tab preset', error);
       showAlert?.(resolvePresetLoadTabErrorMessage(error));

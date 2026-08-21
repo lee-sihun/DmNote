@@ -3,7 +3,7 @@ use tauri::{AppHandle, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
-    commands::editor::state::{emit_best_effort, publish_editor_change},
+    commands::editor::state::{emit_best_effort, publish_legacy_editor_change},
     errors::{CmdResult, CommandError, EditorCommitError},
     models::{
         default_counter_animation_builtin_presets, default_counter_animation_preset_id,
@@ -160,7 +160,7 @@ pub fn counter_animation_update(
         )?;
     let (user_presets, affected_usage_count) = transaction.value;
 
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
     emit_counter_animation_changed(&app, &user_presets);
     emit_positions_changed(&app, &transaction.change, affected_usage_count);
 
@@ -201,30 +201,28 @@ pub fn counter_animation_delete(
     let fallback_target = fallback_preset.clone();
 
     let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction = state
-        .store
-        .commit_legacy_editor_transaction_with_admission(
-            EditorCommitOrigin::LegacyAdapter("counter_animation_delete".to_string()),
-            &[
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-            ],
-            admission,
-            |store| {
-                remove_counter_animation_preset(store, &target_id)?;
+    let transaction = state.store.commit_legacy_resource_deletion_with_admission(
+        EditorCommitOrigin::LegacyAdapter("counter_animation_delete".to_string()),
+        &[
+            EditorField::KeyPositions,
+            EditorField::StatPositions,
+            EditorField::GraphPositions,
+        ],
+        admission,
+        |store| {
+            remove_counter_animation_preset(store, &target_id)?;
 
-                let affected_usage_count =
-                    apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
-                Ok((
-                    store.counter_animation_presets.clone(),
-                    affected_usage_count,
-                ))
-            },
-        )?;
+            let affected_usage_count =
+                apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
+            Ok((
+                store.counter_animation_presets.clone(),
+                affected_usage_count,
+            ))
+        },
+    )?;
     let (user_presets, affected_usage_count) = transaction.value;
 
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
     emit_counter_animation_changed(&app, &user_presets);
     emit_positions_changed(&app, &transaction.change, affected_usage_count);
 

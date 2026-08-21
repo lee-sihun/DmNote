@@ -5,11 +5,11 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use rfd::FileDialog;
-use tauri::State;
+use tauri::{AppHandle, Manager, WebviewWindow};
 
 use crate::{
-    errors::CmdResult,
+    commands::dialog::parented_file_dialog,
+    errors::{CmdResult, CommandError},
     models::{
         FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions, KnobPositions,
         LayerGroups, StatPositions, TabCssOverrides, TabNoteOverrides,
@@ -25,18 +25,29 @@ use super::{
 };
 
 #[tauri::command]
-pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResult> {
-    let preset_path = FileDialog::new()
+pub async fn preset_save(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<PresetOperationResult> {
+    let preset_file = parented_file_dialog(&window, "DM NOTE Preset", &["json"])
         .set_file_name("preset.json")
-        .add_filter("DM NOTE Preset", &["json"])
-        .save_file();
+        .save_file()
+        .await;
 
-    let Some(path) = preset_path else {
+    let Some(file) = preset_file else {
         return Ok(PresetOperationResult {
             success: false,
             error: None,
         });
     };
+    let path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || preset_save_from_path(app, path))
+        .await
+        .map_err(|error| CommandError::msg(format!("preset export task failed: {error}")))?
+}
+
+fn preset_save_from_path(app: AppHandle, path: PathBuf) -> CmdResult<PresetOperationResult> {
+    let state = app.state::<AppState>();
 
     let snapshot = state.store.snapshot();
     let used_font_families = collect_used_font_families(
@@ -98,18 +109,29 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
 }
 
 #[tauri::command]
-pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationResult> {
-    let preset_path = FileDialog::new()
+pub async fn preset_save_tab(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<PresetOperationResult> {
+    let preset_file = parented_file_dialog(&window, "DM NOTE Preset", &["json"])
         .set_file_name("preset-tab.json")
-        .add_filter("DM NOTE Preset", &["json"])
-        .save_file();
+        .save_file()
+        .await;
 
-    let Some(path) = preset_path else {
+    let Some(file) = preset_file else {
         return Ok(PresetOperationResult {
             success: false,
             error: None,
         });
     };
+    let path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || preset_save_tab_from_path(app, path))
+        .await
+        .map_err(|error| CommandError::msg(format!("tab preset export task failed: {error}")))?
+}
+
+fn preset_save_tab_from_path(app: AppHandle, path: PathBuf) -> CmdResult<PresetOperationResult> {
+    let state = app.state::<AppState>();
 
     let snapshot = state.store.snapshot();
     let tab_id = snapshot.selected_key_type.clone();

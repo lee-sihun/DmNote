@@ -1,7 +1,7 @@
 use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
-    commands::editor::state::{emit_best_effort, publish_editor_change},
+    commands::editor::state::{emit_best_effort, publish_legacy_editor_change},
     errors::CmdResult,
     models::{EditorCommitOrigin, EditorField, StatPositions},
     state::AppState,
@@ -31,7 +31,7 @@ pub fn stat_positions_update(
                 Ok(())
             },
         )?;
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
     let updated = transaction.change.document.stat_positions;
     emit_best_effort(&app, "statPositions:changed", &updated);
     if transaction.change.event.is_none() {

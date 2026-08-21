@@ -28,7 +28,7 @@ const FRAGMENT_KINDS: ReadonlySet<string> = new Set([
 
 export const extractMdxCodeFences = (content: string): MdxCodeFence[] => {
   const fences: MdxCodeFence[] = [];
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
 
   let open: {
     lang: string;

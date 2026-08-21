@@ -1,126 +1,117 @@
 ---
 title: Settings API
-description: dmn.settings API reference
+description: Read, update, and subscribe to app settings
 ---
 
 # Settings API
 
-Access and modify app settings.
+`dmn.settings` reads and partially updates global app settings.
 
-## Get Settings
+## Read settings
 
-### `dmn.settings.get(): Promise<Settings>`
+### get()
 
-Returns current app settings.
+Returns the complete current settings object.
+
+```typescript
+interface SettingsState {
+  hardwareAcceleration: boolean;
+  alwaysOnTop: boolean;
+  overlayLocked: boolean;
+  noteEffect: boolean;
+  noteSettings: NoteSettings;
+  angleMode: string;
+  language: string;
+  laboratoryEnabled: boolean;
+  developerModeEnabled: boolean;
+  backgroundColor: string;
+  useCustomCSS: boolean;
+  customCSS: { path: string | null; content: string };
+  useCustomJS: boolean;
+  customJS: { path: string | null; content: string; plugins: JsPlugin[] };
+  overlayResizeAnchor:
+    | 'top-left'
+    | 'top-right'
+    | 'bottom-left'
+    | 'bottom-right'
+    | 'center';
+  keyCounterEnabled: boolean;
+  gridSettings: {
+    alignmentGuides: boolean;
+    spacingGuides: boolean;
+    sizeMatchGuides: boolean;
+  };
+}
+```
 
 ```javascript
 const settings = await dmn.settings.get();
-console.log(settings.theme);
-console.log(settings.opacity);
+console.log('Language:', settings.language);
+console.log('Always on top:', settings.alwaysOnTop);
+console.log('Overlay locked:', settings.overlayLocked);
 ```
 
-### `dmn.settings.getValue(key): Promise<any>`
+<Callout type="info">
+  See `src/types/settings/settings.ts` and `src/types/settings/noteSettings.ts`
+  in the app source for the complete current types.
+</Callout>
 
-Returns specific setting value.
+## Update settings
 
-```javascript
-const opacity = await dmn.settings.getValue("opacity");
-console.log(opacity); // e.g., 0.8
-```
+### update(patch)
 
----
-
-## Set Settings
-
-### `dmn.settings.set(settings: Partial<Settings>): Promise<void>`
-
-Updates settings. Pass only changed values.
+Updates only the supplied fields and returns the committed settings.
 
 ```javascript
-await dmn.settings.set({
-  opacity: 0.9,
-  showLabels: true,
+await dmn.settings.update({
+  language: 'en',
+});
+
+await dmn.settings.update({
+  alwaysOnTop: true,
+  backgroundColor: 'transparent',
 });
 ```
 
----
+Nested settings objects such as `noteSettings`, `customCSS`, `customJS`, and `gridSettings` are partially merged.
 
-## Change Events
+```javascript
+await dmn.settings.update({
+  noteEffect: true,
+  noteSettings: { speed: 15, reverse: true },
+});
+```
 
-### `dmn.settings.onChanged(callback): Unsubscribe`
+## Subscribe to changes
 
-Subscribes to settings changes.
+### onChanged(listener)
 
 ```typescript
-interface SettingsChangedEvent {
-  changed: Partial<Settings>; // only changed fields
-  full: Settings; // full settings object
+interface SettingsDiff {
+  changed: Record<string, unknown>;
+  full: SettingsState;
 }
-
-const unsub = dmn.settings.onChanged(({ changed, full }) => {
-  console.log("Changed fields:", changed);
-  console.log("Full settings:", full);
-});
 ```
 
----
+```javascript
+const unsub = dmn.settings.onChanged(({ changed, full }) => {
+  console.log('Changed settings:', changed);
+  console.log('Current settings:', full);
+});
 
-## Main Settings
+dmn.plugin.registerCleanup(unsub);
+```
 
-| Key               | Type      | Description           |
-| ----------------- | --------- | --------------------- |
-| `theme`           | `string`  | Current theme name    |
-| `opacity`         | `number`  | Overlay opacity (0~1) |
-| `showLabels`      | `boolean` | Show key labels       |
-| `showCounter`     | `boolean` | Show key counter      |
-| `keySize`         | `number`  | Key size              |
-| `keyGap`          | `number`  | Gap between keys      |
-| `counterFontSize` | `number`  | Counter font size     |
-| `labelFontSize`   | `number`  | Label font size       |
-
----
-
-## Example Usage
+## Example: toggle a boolean setting
 
 ```javascript
-// Opacity control panel
-dmn.plugin.defineElement({
-  name: "Opacity Control",
-  maxInstances: 1,
+async function toggleBooleanSetting(key) {
+  const settings = await dmn.settings.get();
+  const current = settings[key];
+  if (typeof current === 'boolean') {
+    await dmn.settings.update({ [key]: !current });
+  }
+}
 
-  template: (state, settings, { html }) => {
-    const opacity = state.opacity ?? 1;
-    return html`
-      <div style="display: flex; gap: 8px; align-items: center;">
-        <button
-          @click=${() =>
-            dmn.settings.set({ opacity: Math.max(0, opacity - 0.1) })}
-        >
-          -
-        </button>
-        <span>${(opacity * 100).toFixed(0)}%</span>
-        <button
-          @click=${() =>
-            dmn.settings.set({ opacity: Math.min(1, opacity + 0.1) })}
-        >
-          +
-        </button>
-      </div>
-    `;
-  },
-
-  onMount: ({ setState }) => {
-    // Initial value
-    dmn.settings.get().then((s) => {
-      setState({ opacity: s.opacity });
-    });
-
-    // Watch changes
-    const unsub = dmn.settings.onChanged(({ full }) => {
-      setState({ opacity: full.opacity });
-    });
-
-    return () => unsub();
-  },
-});
+await toggleBooleanSetting('alwaysOnTop');
 ```
