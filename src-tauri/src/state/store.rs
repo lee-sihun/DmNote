@@ -227,6 +227,7 @@ struct EditorTransactionHistoryOptions {
     scope: Option<HistoryScope>,
     observed_epoch: Option<u64>,
     key_counters: Option<KeyCounters>,
+    invalidate_history_on_store_only_change: bool,
 }
 
 struct PersistTicket {
@@ -1642,6 +1643,43 @@ impl AppStore {
         )
     }
 
+    pub(crate) fn commit_legacy_resource_deletion_with_admission<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history_admission(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                invalidate_history_on_store_only_change: true,
+                ..EditorTransactionHistoryOptions::default()
+            },
+            admission,
+            updater,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn commit_legacy_resource_deletion<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                invalidate_history_on_store_only_change: true,
+                ..EditorTransactionHistoryOptions::default()
+            },
+            updater,
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn commit_history_overlap_mutation<T>(
         &self,
@@ -1705,6 +1743,7 @@ impl AppStore {
                 scope: Some(HistoryScope::PresetFull),
                 observed_epoch: None,
                 key_counters: Some(current_key_counters),
+                ..EditorTransactionHistoryOptions::default()
             },
             updater,
         )
@@ -1725,6 +1764,7 @@ impl AppStore {
                 scope: Some(HistoryScope::PresetFull),
                 observed_epoch: None,
                 key_counters: Some(current_key_counters),
+                ..EditorTransactionHistoryOptions::default()
             },
             admission,
             updater,
@@ -1753,6 +1793,7 @@ impl AppStore {
                 scope: Some(scope),
                 observed_epoch: observed_history_epoch,
                 key_counters: None,
+                ..EditorTransactionHistoryOptions::default()
             },
             updater,
         )
@@ -1780,6 +1821,7 @@ impl AppStore {
                 scope: Some(scope),
                 observed_epoch: observed_history_epoch,
                 key_counters: None,
+                ..EditorTransactionHistoryOptions::default()
             },
             admission,
             updater,
@@ -1963,7 +2005,9 @@ impl AppStore {
             guard.history.apply_record_plan(plan);
             Some(guard.history.issue_status(self.history_gate.is_closed()))
         } else if history_options.scope.is_none() {
-            let history_changed = !changed_fields.is_empty() && guard.history.invalidate_all();
+            let should_invalidate_history = !changed_fields.is_empty()
+                || (history_options.invalidate_history_on_store_only_change && has_store_changes);
+            let history_changed = should_invalidate_history && guard.history.invalidate_all();
             history_changed.then(|| guard.history.issue_status(self.history_gate.is_closed()))
         } else {
             None
@@ -16332,6 +16376,187 @@ mod tests {
         let status = transaction.change.history_status.as_ref().unwrap();
         assert!(!status.can_undo);
         assert!(!status.can_redo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn counter_preset_library_only_delete_invalidates_stale_history() {
+        let dir = test_directory("counter-preset-library-history-invalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let preset = CounterAnimationPreset {
+            id: "user-delete-target".to_string(),
+            name: "Delete target".to_string(),
+            source: CounterAnimationSource::User,
+            label_key: None,
+            bezier: [0.25, 0.1, 0.25, 1.0],
+            scale: 1.0,
+            duration_ms: 300,
+        };
+        store
+            .update(|data| data.counter_animation_presets.push(preset.clone()))
+            .unwrap();
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 1.0),
+            ))
+            .unwrap();
+        assert!(store.history_status().can_undo);
+        let editor_revision = store.editor_get().revision;
+
+        let transaction = store
+            .commit_legacy_resource_deletion(
+                EditorCommitOrigin::LegacyAdapter("counter_animation_delete_test".to_string()),
+                &[
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                ],
+                |data| {
+                    data.counter_animation_presets
+                        .retain(|candidate| candidate.id != preset.id);
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(transaction.change.result.changed_fields.is_empty());
+        assert_eq!(transaction.change.result.revision, editor_revision);
+        let status = transaction.change.history_status.as_ref().unwrap();
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        assert!(store
+            .snapshot()
+            .counter_animation_presets
+            .iter()
+            .all(|candidate| candidate.id != preset.id));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn unbound_sound_library_delete_invalidates_stale_history() {
+        let dir = test_directory("sound-library-history-invalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let sound_path = "/tmp/dmnote-unbound-history.wav".to_string();
+        store
+            .update(|data| {
+                data.sound_library
+                    .insert(sound_path.clone(), SoundLibraryEntry::default());
+            })
+            .unwrap();
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 1.0),
+            ))
+            .unwrap();
+        assert!(store.history_status().can_undo);
+
+        let transaction = store
+            .commit_legacy_resource_deletion(
+                EditorCommitOrigin::LegacyAdapter("sound_delete_test".to_string()),
+                &[
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                ],
+                |data| {
+                    data.sound_library.remove(&sound_path);
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(transaction.change.result.changed_fields.is_empty());
+        let status = transaction.change.history_status.as_ref().unwrap();
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        assert!(!store.snapshot().sound_library.contains_key(&sound_path));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn counter_preset_library_only_update_preserves_editor_history() {
+        let dir = test_directory("counter-preset-library-history-preservation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let preset = CounterAnimationPreset {
+            id: "user-update-target".to_string(),
+            name: "Before".to_string(),
+            source: CounterAnimationSource::User,
+            label_key: None,
+            bezier: [0.25, 0.1, 0.25, 1.0],
+            scale: 1.0,
+            duration_ms: 300,
+        };
+        store
+            .update(|data| data.counter_animation_presets.push(preset.clone()))
+            .unwrap();
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 1.0),
+            ))
+            .unwrap();
+        let before_status = store.history_status();
+        assert!(before_status.can_undo);
+
+        let transaction = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("counter_animation_update_test".to_string()),
+                &[
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                ],
+                |data| {
+                    let target = data
+                        .counter_animation_presets
+                        .iter_mut()
+                        .find(|candidate| candidate.id == preset.id)
+                        .unwrap();
+                    target.name = "After".to_string();
+                    target.bezier = [0.42, 0.0, 0.58, 1.0];
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(transaction.change.result.changed_fields.is_empty());
+        assert!(transaction.change.history_status.is_none());
+        let after_status = store.history_status();
+        assert_eq!(
+            after_status.history_revision,
+            before_status.history_revision
+        );
+        assert_eq!(after_status.history_epoch, before_status.history_epoch);
+        assert!(after_status.can_undo);
+        assert!(!after_status.can_redo);
+        assert_eq!(
+            store
+                .snapshot()
+                .counter_animation_presets
+                .iter()
+                .find(|candidate| candidate.id == preset.id)
+                .unwrap()
+                .name,
+            "After"
+        );
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

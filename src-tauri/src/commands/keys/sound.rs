@@ -10,7 +10,7 @@ use std::{
 use tauri::{Emitter, Manager, State, WebviewWindow};
 use uuid::Uuid;
 
-use crate::commands::editor::state::publish_editor_change;
+use crate::commands::editor::state::publish_legacy_editor_change;
 use crate::errors::{CmdResult, CommandError};
 use crate::models::{
     AppStoreData, EditorCommitOrigin, EditorField, PendingProcessedWavReplacement,
@@ -486,19 +486,17 @@ pub fn sound_delete(
 
     let transaction = commit_staged_sound_deletion(&staged, || {
         let admission = state.admit_frontend_history_mutation(window.label())?;
-        Ok(state
-            .store
-            .commit_legacy_editor_transaction_with_admission(
-                EditorCommitOrigin::LegacyAdapter("sound_delete".to_string()),
-                &[
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                ],
-                admission,
-                |store| Ok(remove_sound_entry_and_references(store, &path_key)),
-            )?)
+        Ok(state.store.commit_legacy_resource_deletion_with_admission(
+            EditorCommitOrigin::LegacyAdapter("sound_delete".to_string()),
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ],
+            admission,
+            |store| Ok(remove_sound_entry_and_references(store, &path_key)),
+        )?)
     })?;
 
     state.key_sound_invalidate_file_cache(&path_key);
@@ -507,7 +505,7 @@ pub fn sound_delete(
         log::warn!("[Sound] 삭제 파일 trash 이동 지연: {error:#}");
     }
 
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
     if transaction.value {
         emit_sound_reference_changes_with(&transaction.change.result.changed_fields, |event| {
             match event {
