@@ -1,8 +1,8 @@
 # 단노트 판정용 입력 타임라인 지연 재생 기획
 
-> 작성일: 2026-08-21  
-> 상태: 구현 중 — source timeline, canonical batch, 프론트 shadow clock 기반 작업  
-> 대상 기능: `단노트 길이 일관성 유지`, 노트 이펙트, 키 표시 지연, 카운터 지연, OBS 오버레이  
+> 작성일: 2026-08-21
+> 상태: 코드 구현 및 자동 검증 완료 — 실측 튜닝·Windows/OBS 실기 검증 대기
+> 대상 기능: `단노트 길이 일관성 유지`, 노트 이펙트, 키 표시 지연, 카운터 지연, OBS 오버레이
 > 핵심 목표: 입력 이벤트 전달이 늦어져도 잘못된 노트를 먼저 그린 뒤 길이를 고치지 않는다
 
 ---
@@ -33,11 +33,42 @@
 - stream reset과 복구 불가능한 gap은 같은 fade-clear epoch reset으로 처리한다. 이전 stream과 새 stream을 한 화면에 섞지 않는다.
 - OBS는 같은 reducer와 clock을 사용하며 transport gap을 timeline replay로 복구한다. replay 범위를 벗어나면 baseline을 받은 뒤 hard rebase한다.
 
+### 1.2 구현 결과
+
+2026-08-21 기준 구현은 다음 경로로 연결되어 있다.
+
+- 입력 daemon callback과 16ms watermark writer가 하나의 source sequencer barrier를 공유한다.
+- 백엔드는 press ID가 연결된 canonical state/counter batch와 stream baseline을 발행한다.
+- 네이티브 오버레이는 구독 준비 직후 내부 checkpoint를 받아 초기 revision 유실 없이 시작한다.
+- 프론트 reducer는 revision, watermark, state lifecycle을 검증하고 노트·키·카운터를 하나의 presentation clock으로 재생한다.
+- 단노트는 `hold < threshold`에서 고정 최소 길이, `hold >= threshold`에서 canonical 실제 hold를 사용하는 strict binary 정책을 적용한다.
+- WebGL은 미래 `endTime`을 미리 길이로 노출하지 않고 playhead까지 성장시키며, CPU 정리도 같은 playhead를 사용한다.
+- 설정 변경은 fade-clear epoch 전환으로 기존 노트와 대기 action을 함께 폐기한다.
+- OBS protocol v3은 최대 512 batch/2MiB ring replay와 hard rebase를 지원한다.
+- 프론트 대기열은 press 4096개, action 8192개, source span 30초, OBS transport batch 1024개로 제한하며 초과 시 fail-closed/resync한다.
+- stream 시작 전에 이미 눌린 키는 baseline 하이라이트와 이후 UP 연결에만 사용하고 과거 DOWN 시각이나 노트를 합성하지 않는다.
+- rAF 중단으로 생긴 지연 부채는 노트와 대기 action이 모두 없는 시점에만 nominal 위치로 회수한다.
+
+현재 `transportReserveMs = 16`과 buffer 상한은 기능 검증용 잠정값이다. 정확성은 이 값에 의존하지 않으며, 출시 기본값 확정에는 Windows/macOS/OBS 실측이 남아 있다.
+
+### 1.3 자동 검증 결과
+
+2026-08-21 최종 코드 기준 결과다.
+
+- 프론트 전체 테스트: 231 files, 2530 passed, 17 skipped
+- Rust library 전체 테스트: 720 passed, 6 ignored
+- TypeScript type check, ESLint, Prettier check 통과
+- Rust `cargo check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt` 통과
+- Vite production build 통과
+- OBS WebSocket replay 요청과 native 초기 checkpoint/gap recovery 통합 테스트 통과
+
+macOS 호스트의 컴파일·자동 테스트는 완료했지만 실제 키보드 입력 장시간 테스트는 아직 수행하지 않았다. macOS에서 Windows target cross-check는 Windows C SDK 부재로 완료할 수 없었으므로 Windows 11 실기 검증으로 대체해야 한다. OBS 브라우저 소스도 프로토콜 통합 테스트까지만 완료했고 실제 방송 환경 검증은 남아 있다.
+
 ---
 
 ## 2. 배경과 현재 문제
 
-### 2.1 현재 입력 흐름
+### 2.1 변경 전 입력 흐름
 
 ```text
 OS 입력
@@ -464,13 +495,15 @@ key/counter target on playhead = E + (D - L)
 
 ```text
 noteTravelTimeMs = trackHeight / speed * 1000
-nominalNoteDelayMs = threshold + measuredTransportReserveMs
+nominalNoteDelayMs = threshold + transportReserveMs
 
 recommendedKeyDisplayDelayMs =
   round(noteTravelTimeMs + nominalNoteDelayMs)
 ```
 
-`measuredTransportReserveMs`는 임의의 80ms 같은 상수로 정하지 않는다.
+코드의 현재 변수명은 `transportReserveMs`이며 기능 검증 단계에서는 source
+watermark 한 주기와 같은 16ms를 잠정값으로 사용한다. 이 값은 실측 기본값이라고
+간주하지 않으며, 임의의 80ms 같은 큰 상수로 정확성을 대신하지 않는다.
 
 출시 전 계측으로 다음 값을 분리해 측정한다.
 
@@ -710,7 +743,7 @@ debug 또는 opt-in 진단에서 다음 값을 기록한다.
 
 1. 단노트 활성 경로의 key/counter timer를 PresentationScheduler로 교체한다.
 2. 노트·키·카운터에 동일한 delay debt를 적용한다.
-3. 자동 계산을 `travel + threshold + measured reserve`로 변경한다.
+3. 자동 계산을 `travel + threshold + transport reserve`로 변경한다.
 4. 수동 지연은 총 지연값이라는 기존 의미를 보존한다.
 5. 현재 실제 출력 지연을 진단 화면에서 확인할 수 있게 한다.
 
@@ -721,7 +754,7 @@ debug 또는 opt-in 진단에서 다음 값을 기록한다.
 - 자동 계산값과 실제 nominal delay 계산 일치
 - 설정 최대값 clamp와 탭별 override 유지
 
-### 6단계 — OBS 및 실기 검증 후 전환
+### 6단계 — OBS 및 실기 검증 후 전환 (자동 검증 완료, 실기 대기)
 
 1. Windows 11 로컬 및 OBS 장시간 연타 테스트
 2. macOS 로컬 입력 테스트
@@ -806,23 +839,24 @@ sequence gap 상태에서는 playhead 진행 금지
 
 ## 14. 수용 기준
 
-- [ ] strict binary 단노트 판정이 코드와 테스트에 명시됨
-- [ ] threshold 미만 hold는 모두 동일한 고정 길이
-- [ ] threshold 이상 hold는 모두 canonical 실제 길이
-- [ ] UP callback 도착 지연이 노트 길이에 포함되지 않음
-- [ ] 지연 크기와 무관하게 표시 중인 노트가 줄어들지 않음
-- [ ] 입력이 미확정인 경우 추정 렌더 대신 clock stall 발생
-- [ ] 같은 키 연타에서 press ID 연결 오류 없음
-- [ ] sequence gap에서 조용한 이벤트 유실 없음
-- [ ] 로컬과 OBS가 같은 timeline reducer 결과를 생성
-- [ ] OBS 재연결 후 과거 press 합성으로 잘못된 노트가 생기지 않음
-- [ ] key/counter와 노트의 상대 싱크 유지
-- [ ] 자동 계산이 threshold와 실측 reserve를 포함
-- [ ] 수동 key delay에 숨은 추가 상수를 더하지 않음
-- [ ] 지연 부채는 안전 구간에서만 회수
-- [ ] 기존 단노트 비활성 경로, 키음, 플러그인 `keys:state` 계약 회귀 없음
-- [ ] 프론트 타입·lint·format·전체 테스트 통과
-- [ ] Rust check·clippy·format·전체 테스트 통과
+- [x] strict binary 단노트 판정이 코드와 테스트에 명시됨
+- [x] threshold 미만 hold는 모두 동일한 고정 길이
+- [x] threshold 이상 hold는 모두 canonical 실제 길이
+- [x] UP callback 도착 지연이 노트 길이에 포함되지 않음
+- [x] 지연 크기와 무관하게 표시 중인 노트가 줄어들지 않음
+- [x] 입력이 미확정인 경우 추정 렌더 대신 clock stall 발생
+- [x] 같은 키 연타에서 press ID 연결 오류 없음
+- [x] sequence gap에서 조용한 이벤트 유실 없음
+- [x] 로컬과 OBS가 같은 timeline reducer 결과를 생성
+- [x] OBS 재연결 후 과거 press 합성으로 잘못된 노트가 생기지 않음
+- [x] key/counter와 노트의 상대 싱크 유지
+- [x] 자동 계산이 threshold와 잠정 16ms reserve를 포함
+- [ ] 자동 계산의 reserve를 플랫폼 실측값으로 확정
+- [x] 수동 key delay에 숨은 추가 상수를 더하지 않음
+- [x] 지연 부채는 안전 구간에서만 회수
+- [x] 기존 단노트 비활성 경로, 키음, 플러그인 `keys:state` 계약 회귀 없음
+- [x] 프론트 타입·lint·format·전체 테스트 통과
+- [x] Rust check·clippy·format·전체 테스트 통과
 - [ ] Windows 11 및 macOS 실기 검증 완료
 - [ ] OBS 브라우저 소스 실기 검증 완료
 

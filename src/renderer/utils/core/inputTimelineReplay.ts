@@ -172,7 +172,10 @@ export class InputTimelineReplay {
     }
   }
 
-  rebase(checkpoint: CanonicalInputTimelineRebase, receivedAtMs: number): void {
+  rebase(
+    checkpoint: CanonicalInputTimelineRebase,
+    receivedAtMs: number,
+  ): boolean {
     const result = this.buffer.rebase(checkpoint);
     if (result.type !== 'new_stream') {
       const reason =
@@ -180,7 +183,7 @@ export class InputTimelineReplay {
           ? result.reason
           : 'Unexpected timeline rebase result';
       this.failClosed(reason);
-      return;
+      return false;
     }
 
     this.failed = false;
@@ -196,6 +199,7 @@ export class InputTimelineReplay {
     if (this.config.enabled) {
       this.callbacks.onEpochReset('stream', checkpoint.baseline);
     }
+    return true;
   }
 
   tick(localNowMs: number): PresentationClockSnapshot | null {

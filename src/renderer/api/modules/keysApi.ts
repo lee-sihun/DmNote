@@ -26,6 +26,10 @@ import type {
   KeyPositions,
   KeyCounters,
 } from '@src/types/key/keys';
+import type { CanonicalInputTimelineRebase } from '@src/types/inputTimeline';
+
+export const getInputTimelineCheckpoint = () =>
+  invoke<CanonicalInputTimelineRebase | null>('keys_timeline_checkpoint');
 
 // 백엔드 gestureId UUID 강제와 동형 (canonical hyphenated + 32-hex simple)
 const GESTURE_ID_PATTERN =

@@ -406,13 +406,9 @@ impl ObsBridgeService {
         let mut ids = Vec::with_capacity(forwarded_events.len());
         for event_name in &forwarded_events {
             let tx = self.broadcast_tx.clone();
-            let timeline_replay = Arc::clone(&self.timeline_replay);
             let name = event_name.to_string();
             let id = app.listen_any(*event_name, move |evt| {
                 let data: Value = serde_json::from_str(evt.payload()).unwrap_or(Value::Null);
-                if name == "keys:timeline" {
-                    timeline_replay.write().ingest(&data);
-                }
                 let _ = tx.send(ObsBroadcast::TauriEvent {
                     event: name.clone(),
                     data,
@@ -461,12 +457,20 @@ impl ObsBridgeService {
 
     /// 범용 Tauri 이벤트 포워딩 (OBS 클라이언트에 tauri_event로 전달)
     pub fn broadcast_tauri_event(&self, event: String, data: Value) {
-        if event == "keys:timeline" {
-            self.timeline_replay.write().ingest(&data);
-        }
         let _ = self
             .broadcast_tx
             .send(ObsBroadcast::TauriEvent { event, data });
+    }
+
+    pub fn record_input_timeline(&self, batch: &Value) {
+        self.timeline_replay.write().ingest(batch);
+    }
+
+    pub fn input_timeline_checkpoint(&self) -> Option<Value> {
+        match self.timeline_replay.read().replay_after(None, 0) {
+            TimelineReplayResponse::Rebase(payload) => Some(payload),
+            TimelineReplayResponse::Replay(_) | TimelineReplayResponse::Unavailable => None,
+        }
     }
 
     /// 전체 스냅샷 재전송 (프리셋 로드 등 대규모 변경 시)
@@ -1457,6 +1461,7 @@ mod tests {
         assert!(!is_allowed_command("settings_update"));
         assert!(!is_allowed_command("keys_update"));
         assert!(!is_allowed_command("keys_update_with_positions"));
+        assert!(!is_allowed_command("keys_timeline_checkpoint"));
         assert!(!is_allowed_command("plugin_rpc_send"));
         assert!(!is_allowed_command("plugin_rpc_respond"));
         assert!(!is_allowed_command("plugin_instances_commit"));
@@ -1744,24 +1749,23 @@ mod tests {
         let bridge = Arc::new(ObsBridgeService::new("test"));
         bridge.update_snapshot(serde_json::json!({ "source": "timeline-test" }));
         for revision in 1..=2 {
-            bridge.broadcast_tauri_event(
-                "keys:timeline".to_string(),
-                serde_json::json!({
-                    "version": 1,
-                    "streamId": "stream-a",
-                    "revision": revision.to_string(),
-                    "sourceRevision": (revision * 2).to_string(),
-                    "safeThroughUs": (revision * 16_000).to_string(),
-                    "baseline": (revision == 1).then(|| serde_json::json!({
-                        "mode": "4key",
-                        "activeKeys": [],
-                        "counters": {},
-                        "counterSessionId": "counter-a",
-                        "counterRevision": "0"
-                    })),
-                    "actions": [],
-                }),
-            );
+            let batch = serde_json::json!({
+                "version": 1,
+                "streamId": "stream-a",
+                "revision": revision.to_string(),
+                "sourceRevision": (revision * 2).to_string(),
+                "safeThroughUs": (revision * 16_000).to_string(),
+                "baseline": (revision == 1).then(|| serde_json::json!({
+                    "mode": "4key",
+                    "activeKeys": [],
+                    "counters": {},
+                    "counterSessionId": "counter-a",
+                    "counterRevision": "0"
+                })),
+                "actions": [],
+            });
+            bridge.record_input_timeline(&batch);
+            bridge.broadcast_tauri_event("keys:timeline".to_string(), batch);
         }
         let port = bridge
             .start(0, "token".to_string())

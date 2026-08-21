@@ -573,3 +573,11 @@ dmn.stats.reset();
   `total`을 초기화하려면 `dmn.keys.resetCounters()` 또는
   `dmn.keys.resetCountersMode(mode)`를 사용하세요.
 </Callout>
+
+## 내부 입력 타임라인
+
+네이티브 오버레이는 이벤트 구독 준비가 끝났거나 revision gap을 감지했을 때 내부
+Tauri 커맨드 `keys_timeline_checkpoint`로 canonical 입력 타임라인을 복구합니다.
+이 커맨드는 `dmn.keys` 공개 API가 아니며 OBS invoke allowlist에도 노출되지 않으므로
+플러그인에서 사용하면 안 됩니다. OBS는 protocol v3의 `timeline_replay`와
+`timeline_rebase` 메시지로 같은 복구를 수행합니다.

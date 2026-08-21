@@ -804,6 +804,17 @@ fn emit_canonical_input_timeline(
     overlay_window: &mut Option<WebviewWindow>,
     batch: &crate::models::CanonicalInputTimelineBatch,
 ) {
+    let app_state = app.state::<AppState>();
+    let serialized = match serde_json::to_value(batch) {
+        Ok(payload) => {
+            app_state.obs_bridge.record_input_timeline(&payload);
+            Some(payload)
+        }
+        Err(err) => {
+            error!("failed to serialize keys:timeline: {err}");
+            None
+        }
+    };
     let mut emitted = false;
     if let Some(overlay) = overlay_window.as_ref() {
         match overlay.emit("keys:timeline", batch) {
@@ -830,13 +841,11 @@ fn emit_canonical_input_timeline(
         return;
     }
 
-    let app_state = app.state::<AppState>();
     if app_state.is_obs_mode_active() {
-        match serde_json::to_value(batch) {
-            Ok(payload) => app_state
+        if let Some(payload) = serialized {
+            app_state
                 .obs_bridge
-                .broadcast_tauri_event("keys:timeline".to_string(), payload),
-            Err(err) => error!("failed to serialize keys:timeline: {err}"),
+                .broadcast_tauri_event("keys:timeline".to_string(), payload);
         }
     } else if let Err(err) = app.emit("keys:timeline", batch) {
         error!("failed to emit keys:timeline (fallback): {err}");
