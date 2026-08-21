@@ -1,10 +1,12 @@
 pub mod editor;
 pub mod gesture;
+pub mod input_timeline;
 pub mod obs;
 pub mod plugin;
 
 pub use editor::*;
 pub use gesture::*;
+pub use input_timeline::*;
 pub use plugin::*;
 
 use serde::de::Error as DeError;

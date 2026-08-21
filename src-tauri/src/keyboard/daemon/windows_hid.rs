@@ -81,13 +81,7 @@ impl HidProcessor {
     }
 
     /// WM_INPUT (RIM_TYPEHID) 진입점
-    pub fn handle_hid(
-        &mut self,
-        raw: &RAWINPUT,
-        hdevice: HANDLE,
-        captured: super::InputCapture,
-        output: &super::OutputSender,
-    ) {
+    pub fn handle_hid(&mut self, raw: &RAWINPUT, hdevice: HANDLE, output: &super::OutputSender) {
         let key = hdevice.0 as usize;
         if let std::collections::hash_map::Entry::Vacant(e) = self.devices.entry(key) {
             match build_device_caps(hdevice) {
@@ -110,17 +104,11 @@ impl HidProcessor {
 
         for i in 0..count {
             let report = unsafe { std::slice::from_raw_parts(base.add(i * size), size) };
-            self.decode_report(key, report, captured, output);
+            self.decode_report(key, report, output);
         }
     }
 
-    fn decode_report(
-        &mut self,
-        key: usize,
-        report: &[u8],
-        captured: super::InputCapture,
-        output: &super::OutputSender,
-    ) {
+    fn decode_report(&mut self, key: usize, report: &[u8], output: &super::OutputSender) {
         // 동일 리포트 반복 skip — 상수 주기 전송 디바이스의 폭주 방지
         {
             let state = self.states.entry(key).or_default();
@@ -213,33 +201,42 @@ impl HidProcessor {
             (down, up)
         };
 
-        for (page, usage) in down {
-            let label = button_label(vid, pid, page, usage);
-            let physical_id = super::windows_hid_physical_id(key, page, usage);
-            let labels = self
-                .hold_tracker
-                .press(physical_id, captured.instant, vec![label]);
-            output.send(super::DaemonOutput::Hook(button_msg(
-                labels,
-                HookKeyState::Down,
-                physical_id.opaque(),
-                None,
-                captured.input_ts_ms,
-            )));
-        }
-        for (page, usage) in up {
-            let label = button_label(vid, pid, page, usage);
-            let physical_id = super::windows_hid_physical_id(key, page, usage);
-            let release = self
-                .hold_tracker
-                .release(physical_id, captured.instant, vec![label]);
-            output.send(super::DaemonOutput::Hook(button_msg(
-                release.labels,
-                HookKeyState::Up,
-                physical_id.opaque(),
-                release.hold_duration_ms,
-                captured.input_ts_ms,
-            )));
+        if !down.is_empty() || !up.is_empty() {
+            let captured = super::InputCapture::now();
+            for (page, usage) in down {
+                let label = button_label(vid, pid, page, usage);
+                let physical_id = super::windows_hid_physical_id(key, page, usage);
+                let labels = self
+                    .hold_tracker
+                    .press(physical_id, captured.instant, vec![label]);
+                output.send_hook(
+                    button_msg(
+                        labels,
+                        HookKeyState::Down,
+                        physical_id.opaque(),
+                        None,
+                        captured.input_ts_ms,
+                    ),
+                    &captured,
+                );
+            }
+            for (page, usage) in up {
+                let label = button_label(vid, pid, page, usage);
+                let physical_id = super::windows_hid_physical_id(key, page, usage);
+                let release = self
+                    .hold_tracker
+                    .release(physical_id, captured.instant, vec![label]);
+                output.send_hook(
+                    button_msg(
+                        release.labels,
+                        HookKeyState::Up,
+                        physical_id.opaque(),
+                        release.hold_duration_ms,
+                        captured.input_ts_ms,
+                    ),
+                    &captured,
+                );
+            }
         }
 
         // 축 throttle 전송

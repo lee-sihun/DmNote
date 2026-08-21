@@ -643,6 +643,13 @@ pub(crate) trait KeyCounterEventEmitter {
     ) -> Result<()>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct KeyCounterPublication {
+    pub(crate) count: u32,
+    pub(crate) session_id: String,
+    pub(crate) revision: u64,
+}
+
 impl KeyCounterEventEmitter for AppHandle {
     fn emit_key_counters(
         &self,
@@ -790,6 +797,50 @@ fn key_state_payload(
         }
     }
     payload
+}
+
+fn emit_canonical_input_timeline(
+    app: &AppHandle,
+    overlay_window: &mut Option<WebviewWindow>,
+    batch: &crate::models::CanonicalInputTimelineBatch,
+) {
+    let mut emitted = false;
+    if let Some(overlay) = overlay_window.as_ref() {
+        match overlay.emit("keys:timeline", batch) {
+            Ok(_) => emitted = true,
+            Err(err) => {
+                error!("failed to emit keys:timeline to overlay: {err}");
+                *overlay_window = None;
+            }
+        }
+    }
+
+    if !emitted && overlay_window.is_none() {
+        *overlay_window = app.get_webview_window(OVERLAY_LABEL);
+        if let Some(overlay) = overlay_window.as_ref() {
+            if overlay.emit("keys:timeline", batch).is_ok() {
+                emitted = true;
+            } else {
+                *overlay_window = None;
+            }
+        }
+    }
+
+    if emitted {
+        return;
+    }
+
+    let app_state = app.state::<AppState>();
+    if app_state.is_obs_mode_active() {
+        match serde_json::to_value(batch) {
+            Ok(payload) => app_state
+                .obs_bridge
+                .broadcast_tauri_event("keys:timeline".to_string(), payload),
+            Err(err) => error!("failed to serialize keys:timeline: {err}"),
+        }
+    } else if let Err(err) = app.emit("keys:timeline", batch) {
+        error!("failed to emit keys:timeline (fallback): {err}");
+    }
 }
 
 fn canonical_hold_duration_ms(
@@ -2483,6 +2534,11 @@ impl AppState {
                 }
 
                 let mut exit_reason = None;
+                let mut input_stream_cursor = crate::ipc::DaemonInputStreamCursor::default();
+                let mut canonical_timeline =
+                    crate::keyboard::timeline::CanonicalInputTimelineBuilder::default();
+                let mut canonical_timeline_valid = false;
+                let mut input_stream_initialized = false;
                 while running_reader.load(Ordering::SeqCst) {
                     let mut line = String::new();
                     match reader.read_line(&mut line) {
@@ -2563,12 +2619,117 @@ impl AppState {
                                 continue;
                             }
 
+                            // 신규 입력 timeline envelope. 기존 command/axis wire는 유지하고
+                            // HookMessage와 watermark만 같은 source sequence로 검증한다.
+                            let mut timeline_input_meta: Option<(u64, u64)> = None;
+                            let framed_message =
+                                match serde_json::from_str::<crate::ipc::DaemonInputFrame>(s) {
+                                    Ok(frame) => {
+                                        match input_stream_cursor.observe(&frame) {
+                                            Ok(crate::ipc::DaemonInputFrameOrder::NewStream) => {
+                                                if input_stream_initialized {
+                                                    app_handle
+                                                        .state::<AppState>()
+                                                        .reset_keyboard_hook_state(&app_handle);
+                                                }
+                                                input_stream_initialized = true;
+                                                let (mode, active_keys) =
+                                                    keyboard.current_mode_and_pressed_keys();
+                                                let app_state = app_handle.state::<AppState>();
+                                                let (counters, counter_revision) = {
+                                                    let counters = app_state.key_counters.read();
+                                                    (
+                                                        counters.clone(),
+                                                        app_state
+                                                            .key_counters_revision
+                                                            .load(Ordering::Relaxed),
+                                                    )
+                                                };
+                                                canonical_timeline.begin_stream(
+                                                    &frame.stream_id,
+                                                    crate::models::CanonicalInputTimelineBaseline {
+                                                        mode,
+                                                        active_keys,
+                                                        counters,
+                                                        counter_session_id: app_state
+                                                            .key_counters_session_id
+                                                            .clone(),
+                                                        counter_revision: counter_revision.to_string(),
+                                                    },
+                                                );
+                                                canonical_timeline_valid = true;
+                                            }
+                                            Ok(crate::ipc::DaemonInputFrameOrder::Next) => {}
+                                            Err(err) => {
+                                                // 공개 keys:state는 계속 처리하되 timeline은 새
+                                                // stream 전까지 fail-closed한다.
+                                                warn!("invalid daemon input timeline frame: {err}");
+                                                canonical_timeline_valid = false;
+                                            }
+                                        }
+                                        let source_revision = frame.parsed_revision();
+                                        let source_time_us = frame.parsed_source_time_us();
+                                        match frame.kind {
+                                            crate::ipc::DaemonInputFrameKind::Input => {
+                                                match frame.message {
+                                                    Some(message) => {
+                                                        if canonical_timeline_valid {
+                                                            timeline_input_meta = source_revision
+                                                                .zip(source_time_us);
+                                                        }
+                                                        Some(message)
+                                                    }
+                                                    None => {
+                                                        warn!("daemon input frame is missing message");
+                                                        canonical_timeline_valid = false;
+                                                        continue;
+                                                    }
+                                                }
+                                            }
+                                            crate::ipc::DaemonInputFrameKind::Watermark => {
+                                                if frame.message.is_some() {
+                                                    warn!("daemon watermark unexpectedly contains message");
+                                                }
+                                                if canonical_timeline_valid {
+                                                    match source_revision
+                                                        .zip(source_time_us)
+                                                        .ok_or_else(|| {
+                                                            String::from(
+                                                                "daemon watermark has invalid timing",
+                                                            )
+                                                        })
+                                                        .and_then(|(revision, safe_through_us)| {
+                                                            canonical_timeline.watermark(
+                                                                revision,
+                                                                safe_through_us,
+                                                            )
+                                                        }) {
+                                                        Ok(batch) => emit_canonical_input_timeline(
+                                                            &app_handle,
+                                                            &mut overlay_window,
+                                                            &batch,
+                                                        ),
+                                                        Err(err) => {
+                                                            warn!(
+                                                                "failed to build canonical input timeline: {err}"
+                                                            );
+                                                            canonical_timeline_valid = false;
+                                                        }
+                                                    }
+                                                }
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    Err(_) => None,
+                                };
+
                             // 입력 수신 시각 — 노트 위치의 프레임 양자화 보정용 age 측정 기준
                             let recv_at = Instant::now();
 
                             // 우선 형식: JSON 인코딩된 HookMessage (device 포함)
-                            let parsed: Option<crate::ipc::HookMessage> =
-                                serde_json::from_str(s).ok();
+                            let parsed: Option<crate::ipc::HookMessage> = framed_message
+                                .or_else(|| serde_json::from_str(s).ok());
 
                             let message = if let Some(msg) = parsed {
                                 if msg.labels.is_empty() {
@@ -2742,16 +2903,44 @@ impl AppState {
 
                             for slot_event in outcome.events {
                                 if slot_event.press && is_down {
-                                    app_state.increment_key_counter_and_emit(
+                                    let publication = app_state
+                                        .increment_key_counter_and_emit_publication(
                                         &app_handle,
                                         &outcome.mode,
                                         &slot_event.canonical,
                                     );
+                                    if let (Some((_source_revision, event_time_us)), Some(publication)) =
+                                        (timeline_input_meta, publication)
+                                    {
+                                        if let Err(err) = canonical_timeline.push_counter(
+                                            event_time_us,
+                                            &outcome.mode,
+                                            &slot_event.canonical,
+                                            publication.count,
+                                            &publication.session_id,
+                                            publication.revision,
+                                        ) {
+                                            warn!("failed to append timeline counter: {err}");
+                                            canonical_timeline_valid = false;
+                                        }
+                                    }
                                 }
 
                                 let Some(is_active) = slot_event.transition else {
                                     continue;
                                 };
+                                if let Some((source_revision, event_time_us)) = timeline_input_meta {
+                                    if let Err(err) = canonical_timeline.push_state(
+                                        source_revision,
+                                        event_time_us,
+                                        &outcome.mode,
+                                        &slot_event.canonical,
+                                        is_active,
+                                    ) {
+                                        warn!("failed to append timeline state: {err}");
+                                        canonical_timeline_valid = false;
+                                    }
+                                }
                                 let transition_state = if is_active { "DOWN" } else { "UP" };
                                 let payload = key_state_payload(
                                     &slot_event.canonical,
@@ -3799,12 +3988,23 @@ impl AppState {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn increment_key_counter_and_emit(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
         mode: &str,
         key: &str,
     ) -> Option<u32> {
+        self.increment_key_counter_and_emit_publication(emitter, mode, key)
+            .map(|publication| publication.count)
+    }
+
+    pub(crate) fn increment_key_counter_and_emit_publication(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        mode: &str,
+        key: &str,
+    ) -> Option<KeyCounterPublication> {
         if !self.key_counter_enabled.load(Ordering::Relaxed) {
             return None;
         }
@@ -3847,7 +4047,11 @@ impl AppState {
         if barrier.active_increments == 0 {
             self.counter_history_ready.notify_all();
         }
-        Some(count)
+        Some(KeyCounterPublication {
+            count,
+            session_id: self.key_counters_session_id.clone(),
+            revision,
+        })
     }
 
     pub fn snapshot_key_counters(&self) -> KeyCounters {

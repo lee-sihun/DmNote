@@ -14,6 +14,7 @@ import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
+import { useInputTimelineShadow } from '@hooks/overlay/useInputTimelineShadow';
 import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransition';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { obsApi } from '@api/modules/obsApi';
@@ -156,6 +157,7 @@ export default function App() {
     () => mergeNoteSettings(globalNoteSettings, currentTabNoteOverride),
     [globalNoteSettings, currentTabNoteOverride],
   );
+  useInputTimelineShadow(noteSettings);
   const noteEffect = useSettingsStore((state) => state.noteEffect);
   const overlayPadding = useSettingsStore(
     (state) => state.gridSettings.overlayPadding ?? 30,

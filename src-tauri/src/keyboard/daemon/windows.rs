@@ -335,7 +335,6 @@ pub(super) fn run_raw_input() -> Result<()> {
         // 메시지 루프: WM_INPUT 처리 후 HookMessage로 변환
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).into() {
-            let captured = super::InputCapture::now();
             if msg.message == WM_INPUT {
                 // 필요한 버퍼 크기 먼저 조회
                 let mut size: u32 = 0;
@@ -367,6 +366,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                 let raw: &RAWINPUT = &*(buffer.as_ptr() as *const RAWINPUT);
                 match raw.header.dwType {
                     t if t == RIM_TYPEKEYBOARD.0 => {
+                        let captured = super::InputCapture::now();
                         let kbd = raw.data.keyboard;
                         let vkey = kbd.VKey as u32;
                         let scan_code = kbd.MakeCode as u32;
@@ -537,7 +537,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                             input_ts_ms: captured.input_ts_ms,
                         };
 
-                        output.send(super::DaemonOutput::Hook(message));
+                        output.send_hook(message, &captured);
                     }
                     t if t == RIM_TYPEMOUSE.0 => {
                         let mouse = raw.data.mouse;
@@ -579,44 +579,50 @@ pub(super) fn run_raw_input() -> Result<()> {
                             push(5, "MOUSE5", HookKeyState::Up);
                         }
 
-                        for (button, label, state) in events {
-                            let physical_id = WindowsPhysicalInputId::MouseButton(button);
-                            let opaque_physical_id = physical_id.opaque();
-                            let current_labels = vec![label];
-                            let (labels, hold_duration_ms) = match state {
-                                HookKeyState::Down => (
-                                    hold_tracker.press(
-                                        physical_id,
-                                        captured.instant,
-                                        current_labels,
+                        if !events.is_empty() {
+                            let captured = super::InputCapture::now();
+                            for (button, label, state) in events {
+                                let physical_id = WindowsPhysicalInputId::MouseButton(button);
+                                let opaque_physical_id = physical_id.opaque();
+                                let current_labels = vec![label];
+                                let (labels, hold_duration_ms) = match state {
+                                    HookKeyState::Down => (
+                                        hold_tracker.press(
+                                            physical_id,
+                                            captured.instant,
+                                            current_labels,
+                                        ),
+                                        None,
                                     ),
-                                    None,
-                                ),
-                                HookKeyState::Up => {
-                                    let release = hold_tracker.release(
-                                        physical_id,
-                                        captured.instant,
-                                        current_labels,
-                                    );
-                                    (release.labels, release.hold_duration_ms)
-                                }
-                            };
-                            output.send(super::DaemonOutput::Hook(HookMessage {
-                                device: InputDeviceKind::Mouse,
-                                labels,
-                                state,
-                                physical_id: Some(opaque_physical_id),
-                                vk_code: None,
-                                scan_code: None,
-                                flags: None,
-                                hold_duration_ms,
-                                input_ts_ms: captured.input_ts_ms,
-                            }));
+                                    HookKeyState::Up => {
+                                        let release = hold_tracker.release(
+                                            physical_id,
+                                            captured.instant,
+                                            current_labels,
+                                        );
+                                        (release.labels, release.hold_duration_ms)
+                                    }
+                                };
+                                output.send_hook(
+                                    HookMessage {
+                                        device: InputDeviceKind::Mouse,
+                                        labels,
+                                        state,
+                                        physical_id: Some(opaque_physical_id),
+                                        vk_code: None,
+                                        scan_code: None,
+                                        flags: None,
+                                        hold_duration_ms,
+                                        input_ts_ms: captured.input_ts_ms,
+                                    },
+                                    &captured,
+                                );
+                            }
                         }
                     }
                     t if t == RIM_TYPEHID.0 => {
                         // HID 버튼/축 디코딩 → 파이프 전송 (버튼=HookMessage, 축=HidAxisMessage)
-                        hid.handle_hid(raw, raw.header.hDevice, captured, &output);
+                        hid.handle_hid(raw, raw.header.hDevice, &output);
                     }
                     _ => {}
                 }
