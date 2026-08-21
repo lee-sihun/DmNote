@@ -1959,10 +1959,15 @@ impl AppStore {
             self.commit_locked(&mut guard, scratch, ())
                 .map_err(|error| EditorCommitError::io(error.to_string()))?;
         }
-        let history_status = history_plan.map(|plan| {
+        let history_status = if let Some(plan) = history_plan {
             guard.history.apply_record_plan(plan);
-            guard.history.issue_status(self.history_gate.is_closed())
-        });
+            Some(guard.history.issue_status(self.history_gate.is_closed()))
+        } else if history_options.scope.is_none() {
+            let history_changed = !changed_fields.is_empty() && guard.history.invalidate_all();
+            history_changed.then(|| guard.history.issue_status(self.history_gate.is_closed()))
+        } else {
+            None
+        };
 
         let event = if changed_fields.is_empty() {
             None
@@ -16267,6 +16272,72 @@ mod tests {
     }
 
     #[test]
+    fn unrecorded_legacy_editor_mutations_invalidate_stale_undo_and_redo() {
+        let dir = test_directory("legacy-editor-history-invalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 1.0),
+            ))
+            .unwrap();
+        assert!(store.history_status().can_undo);
+
+        let transaction = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("resource_delete_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].dx = initial_dx + 2.0;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let status = transaction.change.history_status.as_ref().unwrap();
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        drop(transaction);
+
+        store
+            .commit_editor_document(editor_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_dx + 3.0),
+            ))
+            .unwrap();
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(HistoryDirection::Undo, &operation_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert!(store.history_status().can_redo);
+
+        let transaction = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("resource_replace_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].dx = initial_dx + 4.0;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let status = transaction.change.history_status.as_ref().unwrap();
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn css_watcher_reload_after_undo_preserves_latest_canonical_and_invalidates_redo() {
         let dir = test_directory("css-watcher-history-interleaving-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -17422,15 +17493,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_keys_publication_drains_before_history_restore() {
+    fn legacy_keys_publication_drains_before_later_history_restore() {
         let dir = test_directory("legacy-editor-publication-drain-test");
         std::fs::create_dir_all(&dir).unwrap();
         let state =
             Arc::new(AppState::initialize(AppStore::initialize_in_dir(&dir).unwrap()).unwrap());
         let initial = state.store.snapshot();
         let mode = initial.selected_key_type.clone();
-        let original_key = initial.keys[&mode][0].canonical();
-
         let mut strict_keys = initial.keys.clone();
         strict_keys.get_mut(&mode).unwrap()[0] = "StrictHistoryKey".into();
         state
@@ -17493,6 +17562,21 @@ mod tests {
             .recv_timeout(Duration::from_secs(2))
             .unwrap();
 
+        let post_legacy_key = "PostLegacyHistoryKey".to_string();
+        let mut post_legacy_keys = state.store.snapshot().keys;
+        post_legacy_keys.get_mut(&mode).unwrap()[0] = post_legacy_key.clone().into();
+        state
+            .store
+            .commit_editor_document(editor_request(
+                state.store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    keys: Some(post_legacy_keys),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
         let gate = state.store.history_gate();
         let undo_gate = Arc::clone(&gate);
         let undo_state = Arc::clone(&state);
@@ -17543,14 +17627,14 @@ mod tests {
         undo_done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
         let outcome = undo.join().unwrap();
 
-        assert_eq!(outcome.change.unwrap().result.revision, 3);
+        assert_eq!(outcome.change.unwrap().result.revision, 4);
         assert_eq!(
             state.store.snapshot().keys[&mode][0].canonical(),
-            original_key
+            legacy_key
         );
         assert_eq!(state.snapshot_key_counters(), expected_counters);
-        assert!(state.keyboard.register_key_down(&mode, &original_key));
-        assert!(!state.keyboard.register_key_down(&mode, &legacy_key));
+        assert!(state.keyboard.register_key_down(&mode, &legacy_key));
+        assert!(!state.keyboard.register_key_down(&mode, &post_legacy_key));
         assert_eq!(
             *events.lock().unwrap(),
             vec![
@@ -19386,6 +19470,54 @@ mod tests {
             });
         assert!(trashed);
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn referenced_v1_gif_cache_remains_a_direct_image_asset() {
+        let dir = test_directory("gif-v1-direct-reference-test");
+        let images = dir.join("images");
+        std::fs::create_dir_all(&images).unwrap();
+        let hash = "a".repeat(64);
+        let cache = images.join(format!("gif-cache-{hash}.webp"));
+        std::fs::write(&cache, b"lossy-v1").unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("gif_v1_direct_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].active_image =
+                        Some(cache.to_string_lossy().to_string());
+                    Ok(())
+                },
+            )
+            .unwrap();
+        store.cleanup_orphan_assets_now().unwrap();
+        assert!(cache.exists());
+        assert_eq!(
+            store.snapshot().key_positions["4key"][0]
+                .active_image
+                .as_deref(),
+            Some(cache.to_string_lossy().as_ref())
+        );
+
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("gif_v1_direct_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].active_image = None;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        store.cleanup_orphan_assets_now().unwrap();
+        assert!(!cache.exists());
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
         let _ = std::fs::remove_dir_all(dir);
     }
 

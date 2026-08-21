@@ -37,4 +37,20 @@ describe('image source cache', () => {
 
     expect(mocks.convertFileSrc).toHaveBeenCalledTimes(257);
   });
+
+  it('GIF 원본 경로를 다른 이미지와 동일하게 직접 변환한다', () => {
+    expect(resolveImageSource('/images/original.gif')).toBe(
+      'asset:///images/original.gif',
+    );
+    expect(mocks.convertFileSrc).toHaveBeenCalledWith('/images/original.gif');
+  });
+
+  it('기존 v1 WebP 참조를 변경하지 않고 직접 변환한다', () => {
+    const legacy = '/images/gif-cache-abc123.webp';
+
+    expect(resolveImageSource(legacy)).toBe(
+      'asset:///images/gif-cache-abc123.webp',
+    );
+    expect(mocks.convertFileSrc).toHaveBeenCalledWith(legacy);
+  });
 });

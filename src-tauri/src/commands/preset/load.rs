@@ -5,8 +5,8 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use rfd::FileDialog;
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use rfd::AsyncFileDialog;
+use tauri::{AppHandle, Manager, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
@@ -25,7 +25,10 @@ use crate::{
         TabNoteSettings, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
-    state::AppState,
+    state::{
+        image_asset::{import_image_bytes, import_image_file},
+        AppState,
+    },
 };
 
 use super::{
@@ -213,23 +216,25 @@ fn resolve_full_preset_settings(
 }
 
 #[tauri::command]
-pub fn preset_load(
-    state: State<'_, AppState>,
+pub async fn preset_load(
     app: AppHandle,
     window: WebviewWindow,
 ) -> CmdResult<PresetOperationResult> {
-    let picked = FileDialog::new()
+    let picked = AsyncFileDialog::new()
         .add_filter("DM NOTE Preset", &["json"])
-        .pick_file();
+        .pick_file()
+        .await;
 
-    let Some(path) = picked else {
+    let Some(file) = picked else {
         return Ok(PresetOperationResult {
             success: false,
             error: None,
         });
     };
+    let path = file.path();
+    let state = app.state::<AppState>();
 
-    let mut preset = read_preset_file(&path)?;
+    let mut preset = read_preset_file(path)?;
     let has_imported_global_css = preset.custom_css.is_some();
     let current = state.store.snapshot();
     let resolved_settings = resolve_full_preset_settings(&mut preset, &current);
@@ -452,7 +457,6 @@ pub fn preset_load(
     if let Some(status) = history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
     }
-
     Ok(PresetOperationResult {
         success: true,
         error: None,
@@ -460,23 +464,25 @@ pub fn preset_load(
 }
 
 #[tauri::command]
-pub fn preset_load_tab(
-    state: State<'_, AppState>,
+pub async fn preset_load_tab(
     app: AppHandle,
     window: WebviewWindow,
 ) -> CmdResult<PresetOperationResult> {
-    let picked = FileDialog::new()
+    let picked = AsyncFileDialog::new()
         .add_filter("DM NOTE Preset", &["json"])
-        .pick_file();
+        .pick_file()
+        .await;
 
-    let Some(path) = picked else {
+    let Some(file) = picked else {
         return Ok(PresetOperationResult {
             success: false,
             error: None,
         });
     };
+    let path = file.path();
+    let state = app.state::<AppState>();
 
-    let preset = read_preset_file(&path)?;
+    let preset = read_preset_file(path)?;
 
     let PresetFile {
         keys,
@@ -731,7 +737,6 @@ pub fn preset_load_tab(
     if let Some(status) = history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
     }
-
     Ok(PresetOperationResult {
         success: true,
         error: None,
@@ -1298,16 +1303,18 @@ fn restore_position_image_reference(
             }
         };
         let extension = normalize_image_extension(embedded.extension.as_deref());
-        let dest_path = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
-        if let Err(err) = fs::write(&dest_path, bytes) {
-            log::warn!(
-                "[Preset] Failed to restore embedded image '{}': {err}",
-                image_id
-            );
-            *image_ref = None;
-            return Ok(());
-        }
-        let restored = dest_path.to_string_lossy().to_string();
+        let imported = match import_image_bytes(&bytes, images_dir, &extension) {
+            Ok(imported) => imported,
+            Err(err) => {
+                log::warn!(
+                    "[Preset] Failed to restore embedded image '{}': {err}",
+                    image_id
+                );
+                *image_ref = None;
+                return Ok(());
+            }
+        };
+        let restored = imported.path.to_string_lossy().to_string();
         restored_path_cache.insert(image_id.to_string(), restored.clone());
         *image_ref = Some(restored);
         return Ok(());
@@ -1315,9 +1322,8 @@ fn restore_position_image_reference(
 
     // 레거시 Preset 호환: data URL 이미지를 appdata 파일 경로로 변환
     if let Some((bytes, extension)) = decode_image_data_url(trimmed) {
-        let dest_path = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
-        fs::write(&dest_path, bytes)?;
-        *image_ref = Some(dest_path.to_string_lossy().to_string());
+        let imported = import_image_bytes(&bytes, images_dir, &extension)?;
+        *image_ref = Some(imported.path.to_string_lossy().to_string());
         return Ok(());
     }
 
@@ -1330,16 +1336,18 @@ fn restore_position_image_reference(
             }
             let extension =
                 normalize_image_extension(source_path.extension().and_then(|ext| ext.to_str()));
-            let dest_path = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
-            if let Err(err) = fs::copy(&source_path, &dest_path) {
-                log::warn!(
-                    "[Preset] Failed to copy local image from '{}': {err}",
-                    source_path.display()
-                );
-                *image_ref = None;
-                return Ok(());
-            }
-            *image_ref = Some(dest_path.to_string_lossy().to_string());
+            let imported = match import_image_file(&source_path, images_dir, &extension) {
+                Ok(imported) => imported,
+                Err(err) => {
+                    log::warn!(
+                        "[Preset] Failed to copy local image from '{}': {err}",
+                        source_path.display()
+                    );
+                    *image_ref = None;
+                    return Ok(());
+                }
+            };
+            *image_ref = Some(imported.path.to_string_lossy().to_string());
             return Ok(());
         }
 
