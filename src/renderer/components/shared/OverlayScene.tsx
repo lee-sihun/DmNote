@@ -13,6 +13,7 @@ import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { NoteBuffer } from '@stores/signals/noteBuffer';
 import { resolveZIndexFallback } from '@utils/core/zIndexFallback';
+import type { PresentationTimeSource } from '@hooks/overlay/useInputTimelineReplay';
 
 // 타입 별칭 (공용)
 interface OverlayKeyProps {
@@ -88,6 +89,7 @@ interface OverlaySceneProps {
   notesRef: React.RefObject<any>;
   subscribe: (cb: NoteSubscriber) => () => void;
   noteBuffer: NoteBuffer | null;
+  presentationTimeSource?: PresentationTimeSource;
 
   // 설정
   backgroundColor: string;
@@ -120,6 +122,7 @@ const OverlayScene = ({
   notesRef,
   subscribe,
   noteBuffer,
+  presentationTimeSource,
   backgroundColor,
   keyCounterEnabled,
   contentSize,
@@ -167,6 +170,7 @@ const OverlayScene = ({
             subscribe={subscribe}
             noteSettings={noteSettings}
             noteBuffer={noteBuffer}
+            presentationTimeSource={presentationTimeSource}
           />
         </Suspense>
       )}

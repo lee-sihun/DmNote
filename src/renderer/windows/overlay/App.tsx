@@ -14,7 +14,7 @@ import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
-import { useInputTimelineShadow } from '@hooks/overlay/useInputTimelineShadow';
+import { useInputTimelineReplay } from '@hooks/overlay/useInputTimelineReplay';
 import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransition';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { obsApi } from '@api/modules/obsApi';
@@ -157,8 +157,8 @@ export default function App() {
     () => mergeNoteSettings(globalNoteSettings, currentTabNoteOverride),
     [globalNoteSettings, currentTabNoteOverride],
   );
-  useInputTimelineShadow(noteSettings);
   const noteEffect = useSettingsStore((state) => state.noteEffect);
+  const timelineEnabled = Boolean(noteSettings?.delayedNoteEnabled);
   const overlayPadding = useSettingsStore(
     (state) => state.gridSettings.overlayPadding ?? 30,
   );
@@ -393,6 +393,10 @@ export default function App() {
     subscribe,
     handleKeyDown,
     handleKeyUp,
+    handleTimelinePressStart,
+    handleTimelinePressResolve,
+    advanceTimeline,
+    resetTimeline,
     finalizeAllActive,
     reconcileActiveNotes,
     noteBuffer,
@@ -400,6 +404,49 @@ export default function App() {
   } = useNoteSystem({
     noteEffect,
     noteSettings,
+  });
+
+  const timelineContextRef = useRef({
+    noteEffect,
+    keyMappings,
+    positions,
+    selectedKeyType,
+    handleTimelinePressStart,
+    handleTimelinePressResolve,
+    advanceTimeline,
+    resetTimeline,
+  });
+  useEffect(() => {
+    timelineContextRef.current = {
+      noteEffect,
+      keyMappings,
+      positions,
+      selectedKeyType,
+      handleTimelinePressStart,
+      handleTimelinePressResolve,
+      advanceTimeline,
+      resetTimeline,
+    };
+  });
+
+  const presentationTimeSource = useInputTimelineReplay({
+    enabled: timelineEnabled,
+    thresholdMs: Number(noteSettings?.shortNoteThresholdMs ?? 0),
+    onEpochReset: () => timelineContextRef.current.resetTimeline(),
+    onPressStart: (press) => {
+      const context = timelineContextRef.current;
+      if (!context.noteEffect || press.mode !== context.selectedKeyType) return;
+      const slots = context.keyMappings[context.selectedKeyType] ?? [];
+      const currentPositions = context.positions[context.selectedKeyType] ?? [];
+      const keyIndex = buildCanonicalIndexMap(slots).get(press.key) ?? -1;
+      if (currentPositions[keyIndex]?.noteEffectEnabled !== false) {
+        context.handleTimelinePressStart(press);
+      }
+    },
+    onPressResolve: (press) =>
+      timelineContextRef.current.handleTimelinePressResolve(press),
+    onAdvance: (playheadMs) =>
+      timelineContextRef.current.advanceTimeline(playheadMs),
   });
 
   // 노트 이펙트 꺼짐 시 트랙 예약 공간 제거 - 창 높이와 키 오프셋이 함께 줄어든다
@@ -448,6 +495,7 @@ export default function App() {
     keyMappings,
     positions,
     selectedKeyType,
+    timelineEnabled,
     handleKeyDown,
     handleKeyUp,
     finalizeAllActive,
@@ -459,6 +507,7 @@ export default function App() {
       keyMappings,
       positions,
       selectedKeyType,
+      timelineEnabled,
       handleKeyDown,
       handleKeyUp,
       finalizeAllActive,
@@ -537,11 +586,12 @@ export default function App() {
               keyMappings,
               positions,
               selectedKeyType,
+              timelineEnabled,
               handleKeyDown,
               handleKeyUp,
             } = keyEventContextRef.current;
             // 노트 이펙트는 즉시 처리 (딜레이 없음)
-            if (noteEffect) {
+            if (noteEffect && !timelineEnabled) {
               // 실제 입력 시각을 복원해 노트 시작 위치를 보정 (프레임 양자화 방지).
               // displayTime은 0~MAX_EVENT_AGE_MS 클램프 - 백엔드 stall/클럭 이상 시
               // 노트가 화면 위로 튀는 것을 방지. physTime은 비클램프 - 단/롱 판정의
@@ -935,6 +985,7 @@ export default function App() {
       notesRef={notesRef}
       subscribe={subscribe}
       noteBuffer={noteBuffer}
+      presentationTimeSource={presentationTimeSource}
       backgroundColor={backgroundColor}
       keyCounterEnabled={keyCounterEnabled}
       positionOffset={positionOffset}

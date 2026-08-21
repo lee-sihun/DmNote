@@ -30,4 +30,14 @@ describe('PresentationClock', () => {
       safeTargetMs: 400,
     });
   });
+
+  it('does not turn a suspended render interval into a playhead jump', () => {
+    const clock = new PresentationClock(100, 100);
+    clock.updateWatermark(500_000n, 1000);
+    expect(clock.tick(1000)?.playheadMs).toBe(300);
+
+    clock.updateWatermark(1_000_000n, 2000);
+    expect(clock.tick(2000)?.playheadMs).toBe(300);
+    expect(clock.tick(2016)?.playheadMs).toBe(316);
+  });
 });

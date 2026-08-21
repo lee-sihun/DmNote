@@ -10,6 +10,7 @@ import {
   resolvedGlowSize,
   type TrackLayoutInput,
 } from '@stores/signals/noteBuffer';
+import type { PresentationTimeSource } from '@hooks/overlay/useInputTimelineReplay';
 
 const vertexShader = `
   attribute vec3 position;
@@ -61,23 +62,21 @@ const vertexShader = `
       return;
     }
 
-    bool isActive = endTime == 0.0;
+    bool hasEnd = endTime != 0.0;
+    bool isCompleted = hasEnd && uTime >= endTime;
     float rawNoteLength = 0.0;
     float glowSize = max(noteGlow.x, 0.0);
     float glowOpacityTop = clamp(noteGlow.y, 0.0, 1.0);
     float glowOpacityBottom = clamp(noteGlow.z, 0.0, 1.0);
 
-    if (isActive) {
-      rawNoteLength = max(0.0, (uTime - startTime) * uFlowSpeed / 1000.0);
-    } else {
-      rawNoteLength = max(0.0, (endTime - startTime) * uFlowSpeed / 1000.0);
-    }
+    float effectiveEndTime = hasEnd ? min(uTime, endTime) : uTime;
+    rawNoteLength = max(0.0, (effectiveEndTime - startTime) * uFlowSpeed / 1000.0);
 
     float noteLength = min(rawNoteLength, uTrackHeight);
     float noteTopY;
     float noteBottomY;
 
-    if (isActive) {
+    if (!isCompleted) {
       if (uReverse < 0.5) {
         noteBottomY = trackBottomY;
         noteTopY = trackBottomY - noteLength;
@@ -465,6 +464,7 @@ interface WebGLTracksOGLProps {
   noteSettings: NoteSettings;
   laboratoryEnabled?: boolean;
   noteBuffer: NoteBuffer | null;
+  presentationTimeSource?: PresentationTimeSource;
 }
 
 export function WebGLTracksOGL({
@@ -474,6 +474,7 @@ export function WebGLTracksOGL({
   noteSettings,
   laboratoryEnabled: _laboratoryEnabled,
   noteBuffer,
+  presentationTimeSource,
 }: WebGLTracksOGLProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
@@ -495,8 +496,10 @@ export function WebGLTracksOGL({
   const cropAppliedRef = useRef<AppliedCrop | null>(null);
   const refreshCropRef = useRef<() => void>(() => {});
   const subscribeRef = useRef(subscribe);
+  const presentationTimeSourceRef = useRef(presentationTimeSource);
   useEffect(() => {
     subscribeRef.current = subscribe;
+    presentationTimeSourceRef.current = presentationTimeSource;
   });
 
   useEffect(() => {
@@ -687,8 +690,13 @@ export function WebGLTracksOGL({
         resetFrameClock(frameClockRef.current);
       }
 
+      const presentationTime =
+        presentationTimeSourceRef.current?.isEnabled() === true
+          ? presentationTimeSourceRef.current.read(currentTime)
+          : renderTime;
+
       // Float32 정밀도 유지 - 장시간 실행 시 epoch 이동, noteInfo 전체 재업로드 예약
-      if (noteBuffer.maybeRebaseEpoch(renderTime)) {
+      if (noteBuffer.maybeRebaseEpoch(presentationTime)) {
         queueAttributeUpload(
           pendingUpdateRef.current,
           FINALIZE_ATTRIBUTE_KEYS,
@@ -727,7 +735,7 @@ export function WebGLTracksOGL({
 
       // uTime도 epoch 상대값 - noteInfo와 같은 기준이어야 길이·이동 계산이 성립
       programRef.current.uniforms.uTime.value =
-        renderTime - noteBuffer.timeEpoch;
+        presentationTime - noteBuffer.timeEpoch;
       rendererRef.current.render({
         scene: sceneRef.current,
         camera: cameraRef.current,

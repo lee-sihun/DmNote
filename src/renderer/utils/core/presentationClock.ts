@@ -6,6 +6,8 @@ export interface PresentationClockSnapshot {
   stalled: boolean;
 }
 
+const MAX_CONTINUOUS_TICK_GAP_MS = 100;
+
 export class PresentationClock {
   private thresholdMs: number;
   private transportReserveMs: number;
@@ -50,7 +52,10 @@ export class PresentationClock {
 
   tick(localNowMs: number): PresentationClockSnapshot | null {
     if (this.playheadMs == null) return null;
-    const elapsed = Math.max(0, localNowMs - this.lastTickMs);
+    const rawElapsed = Math.max(0, localNowMs - this.lastTickMs);
+    // rAF가 중단된 구간은 재생 시간이 아니다. 복귀 프레임에서 누적 시간을
+    // 한 번에 적용하면 확정성은 유지돼도 화면이 점프하므로 anchor만 다시 잡는다.
+    const elapsed = rawElapsed > MAX_CONTINUOUS_TICK_GAP_MS ? 0 : rawElapsed;
     const nominalTargetMs = this.nominalTarget(localNowMs);
     const safeTargetMs = this.safeTarget();
     const target = Math.min(nominalTargetMs, safeTargetMs);

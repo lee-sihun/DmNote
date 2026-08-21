@@ -14,6 +14,7 @@ import {
   toMinLengthMs,
   type NoteLengthPolicy,
 } from '@utils/core/noteLengthPolicy';
+import type { TimelinePress } from '@utils/core/inputTimelineReplay';
 
 interface Note {
   id: string;
@@ -52,6 +53,13 @@ interface NoteState {
   lengthPolicy?: NoteLengthPolicy;
 }
 
+interface TimelineNoteState {
+  pressId: string;
+  keyName: string;
+  noteId: string;
+  downTimeMs: number;
+}
+
 // 키 이벤트 시각 정보. displayTime은 클램프 보정(표시 위치 전용),
 // physTime은 비클램프 보정(hold 폴백 전용)
 export interface NoteKeyTiming {
@@ -83,6 +91,10 @@ interface UseNoteSystemReturn {
   subscribe: (callback: NoteSubscriber) => () => void;
   handleKeyDown: (keyName: string, timing?: NoteKeyTiming) => void;
   handleKeyUp: (keyName: string, timing?: NoteKeyTiming) => void;
+  handleTimelinePressStart: (press: TimelinePress) => void;
+  handleTimelinePressResolve: (press: Required<TimelinePress>) => void;
+  advanceTimeline: (playheadMs: number) => void;
+  resetTimeline: () => void;
   finalizeAllActive: () => void;
   reconcileActiveNotes: (activeKeys: ReadonlySet<string>) => void;
   noteBuffer: NoteBuffer;
@@ -121,6 +133,10 @@ type LatestNoteSystemFns = Pick<
   | 'subscribe'
   | 'handleKeyDown'
   | 'handleKeyUp'
+  | 'handleTimelinePressStart'
+  | 'handleTimelinePressResolve'
+  | 'advanceTimeline'
+  | 'resetTimeline'
   | 'finalizeAllActive'
   | 'reconcileActiveNotes'
 >;
@@ -178,6 +194,7 @@ export function useNoteSystem({
   // 마운트~첫 effect 사이에도 최신값 보장 - 반환 핸들러는 삼항 없이 이 ref만 가드
   const noteEffectEnabled = useRef<boolean>(!!noteEffect);
   const activeNotes = useRef<Map<string, NoteState[]>>(new Map());
+  const timelineNotes = useRef<Map<string, TimelineNoteState>>(new Map());
   const flowSpeedRef = useRef<number>(DEFAULT_NOTE_SETTINGS.speed);
   const trackHeightRef = useRef<number>(DEFAULT_NOTE_SETTINGS.trackHeight);
   const frameLimitRef = useRef<number>(0);
@@ -218,9 +235,11 @@ export function useNoteSystem({
     return (flowSpeed * slackMs) / 1000;
   };
 
-  // In-place 클린업 함수
-  const runCleanup = (): void => {
-    const currentTime = performance.now();
+  // wall clock과 presentation clock이 공유하는 in-place 클린업
+  const runCleanupAt = (
+    currentTime: number,
+    scheduleWallClock: boolean,
+  ): void => {
     const flowSpeed = flowSpeedRef.current;
     const trackHeight =
       trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
@@ -324,17 +343,22 @@ export function useNoteSystem({
       }
     }
 
-    // 다음 클린업이 필요하면 스케줄
+    // 다음 클린업 시각. timeline 모드는 advanceTimeline이 playhead로 실행한다.
     if (earliestCleanupTime < Infinity) {
-      const delay = Math.max(0, earliestCleanupTime - performance.now());
-      cleanupTimerRef.current = setTimeout(runCleanup, delay);
       nextCleanupTimeRef.current = earliestCleanupTime;
+      if (scheduleWallClock) {
+        const delay = Math.max(0, earliestCleanupTime - performance.now());
+        cleanupTimerRef.current = setTimeout(
+          () => runCleanupAt(performance.now(), true),
+          delay,
+        );
+      }
     }
   };
 
   // 이벤트 기반 클린업 스케줄러
   const scheduleCleanup = (finalizedNote: Note): void => {
-    if (!finalizedNote || !finalizedNote.endTime) return;
+    if (!finalizedNote || finalizedNote.endTime == null) return;
 
     const flowSpeed = flowSpeedRef.current;
     const trackHeight =
@@ -351,9 +375,25 @@ export function useNoteSystem({
         clearTimeout(cleanupTimerRef.current);
       }
       const delay = Math.max(0, newCleanupTime - performance.now());
-      cleanupTimerRef.current = setTimeout(runCleanup, delay);
+      cleanupTimerRef.current = setTimeout(
+        () => runCleanupAt(performance.now(), true),
+        delay,
+      );
       nextCleanupTimeRef.current = newCleanupTime;
     }
+  };
+
+  const scheduleTimelineCleanup = (finalizedNote: Note): void => {
+    if (finalizedNote.endTime == null) return;
+    const flowSpeed = flowSpeedRef.current || DEFAULT_NOTE_SETTINGS.speed;
+    const trackHeight =
+      trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
+    const travelTimeMs =
+      ((trackHeight + cleanupSlackPx(flowSpeed)) * 1000) / flowSpeed;
+    nextCleanupTimeRef.current = Math.min(
+      nextCleanupTimeRef.current,
+      finalizedNote.endTime + travelTimeMs,
+    );
   };
 
   useEffect(() => {
@@ -379,61 +419,57 @@ export function useNoteSystem({
       clearTimeout(cleanupTimerRef.current);
       cleanupTimerRef.current = null;
       nextCleanupTimeRef.current = Infinity;
-      runCleanup();
+      runCleanupAt(performance.now(), true);
     }
     prevCleanupScalarsRef.current = cleanupScalars;
   }, [noteSettings]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const resetAllNoteState = (): void => {
+    if (cleanupTimerRef.current !== null) {
+      clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+    }
+    nextCleanupTimeRef.current = Infinity;
+    for (const stateList of activeNotes.current.values()) {
+      for (const state of stateList) {
+        if (state.startTimer) clearTimeout(state.startTimer);
+        if (state.finalizeTimer) clearTimeout(state.finalizeTimer);
+      }
+    }
+    activeNotes.current.clear();
+    timelineNotes.current.clear();
+    for (const timer of finalizeTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    finalizeTimersRef.current.clear();
+    releaseAllNotes(
+      notesRef.current,
+      notePoolRef.current,
+      noteLookupRef.current,
+    );
+    noteLookupRef.current.clear();
+    noteBufferRef.current.clear();
+    notifySubscribers({
+      type: 'clear',
+      activeCount: 0,
+      version: noteBufferRef.current.version,
+    });
+  };
+
   useEffect(() => {
     noteEffectEnabled.current = !!noteEffect;
     if (!noteEffect) {
-      // 클린업 타이머 취소
-      if (cleanupTimerRef.current !== null) {
-        clearTimeout(cleanupTimerRef.current);
-        cleanupTimerRef.current = null;
-        nextCleanupTimeRef.current = Infinity;
-      }
-      releaseAllNotes(
-        notesRef.current,
-        notePoolRef.current,
-        noteLookupRef.current,
-      );
-      noteLookupRef.current.clear();
-      // activeNotes에 남아있는 타이머 정리
-      for (const [, stateList] of activeNotes.current.entries()) {
-        if (!Array.isArray(stateList)) continue;
-        for (const state of stateList) {
-          try {
-            if (state?.startTimer) {
-              clearTimeout(state.startTimer);
-              state.startTimer = null;
-            }
-            if (state?.finalizeTimer) {
-              clearTimeout(state.finalizeTimer);
-              state.finalizeTimer = null;
-            }
-          } catch {}
-        }
-      }
-      activeNotes.current.clear();
-      for (const timer of finalizeTimersRef.current.values()) {
-        try {
-          clearTimeout(timer);
-        } catch {}
-      }
-      finalizeTimersRef.current.clear();
-      noteBufferRef.current.clear();
-      notifySubscribers({
-        type: 'clear',
-        activeCount: 0,
-        version: noteBufferRef.current.version,
-      });
+      resetAllNoteState();
     }
-  }, [noteEffect]);
+  }, [noteEffect]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const createNote = (keyName: string, startTimeOverride?: number): string => {
+  const createNote = (
+    keyName: string,
+    startTimeOverride?: number,
+    noteIdOverride?: string,
+  ): string => {
     const startTime = startTimeOverride ?? performance.now();
-    const noteId = `${keyName}_${startTime}`;
+    const noteId = noteIdOverride ?? `${keyName}_${startTime}`;
     const currentNotes = notesRef.current;
     let keyNotes = currentNotes[keyName];
     if (!keyNotes) {
@@ -470,6 +506,7 @@ export function useNoteSystem({
     keyName: string,
     noteId: string,
     endTimeOverride?: number,
+    cleanupClock: 'wall' | 'timeline' = 'wall',
   ): void => {
     const endTime = endTimeOverride ?? performance.now();
     const note = noteLookupRef.current.get(noteId);
@@ -485,8 +522,11 @@ export function useNoteSystem({
       activeCount: noteBufferRef.current.activeCount,
       version: noteBufferRef.current.version,
     });
-    // 이벤트 기반 클린업 스케줄링
-    scheduleCleanup(note);
+    if (cleanupClock === 'timeline') {
+      scheduleTimelineCleanup(note);
+    } else {
+      scheduleCleanup(note);
+    }
   };
 
   const removeState = (keyName: string, state: NoteState): void => {
@@ -701,6 +741,48 @@ export function useNoteSystem({
     }
   };
 
+  const handleTimelinePressStart = (press: TimelinePress): void => {
+    if (
+      !noteEffectEnabled.current ||
+      !delayEnabledRef.current ||
+      timelineNotes.current.has(press.pressId)
+    ) {
+      return;
+    }
+    const noteId = `timeline:${press.pressId}`;
+    createNote(press.key, press.downTimeMs, noteId);
+    timelineNotes.current.set(press.pressId, {
+      pressId: press.pressId,
+      keyName: press.key,
+      noteId,
+      downTimeMs: press.downTimeMs,
+    });
+  };
+
+  const handleTimelinePressResolve = (press: Required<TimelinePress>): void => {
+    const state = timelineNotes.current.get(press.pressId);
+    if (!state) return;
+    const holdMs = Math.max(0, press.upTimeMs - state.downTimeMs);
+    const noteLengthMs =
+      holdMs < delayMsRef.current ? computeMinLengthMs() : holdMs;
+    finalizeNote(
+      state.keyName,
+      state.noteId,
+      state.downTimeMs + noteLengthMs,
+      'timeline',
+    );
+    timelineNotes.current.delete(press.pressId);
+  };
+
+  const advanceTimeline = (playheadMs: number): void => {
+    if (playheadMs < nextCleanupTimeRef.current) return;
+    runCleanupAt(playheadMs, false);
+  };
+
+  const resetTimeline = (): void => {
+    resetAllNoteState();
+  };
+
   // 화면 밖으로 나간 노트 제거 - 언마운트 시 타이머 정리
   useEffect(() => {
     const activeNotesCurrent = activeNotes.current;
@@ -745,6 +827,10 @@ export function useNoteSystem({
 
   // 탭 전환 시 진행 중인 모든 노트 강제 완료
   const finalizeAllActive = (): void => {
+    if (delayEnabledRef.current) {
+      resetAllNoteState();
+      return;
+    }
     for (const [keyName, stateList] of activeNotes.current.entries()) {
       if (!Array.isArray(stateList)) continue;
       for (const state of stateList) {
@@ -813,6 +899,10 @@ export function useNoteSystem({
     subscribe,
     handleKeyDown,
     handleKeyUp,
+    handleTimelinePressStart,
+    handleTimelinePressResolve,
+    advanceTimeline,
+    resetTimeline,
     finalizeAllActive,
     reconcileActiveNotes,
   };
@@ -825,6 +915,13 @@ export function useNoteSystem({
       latestRef.current!.handleKeyDown(keyName, timing),
     handleKeyUp: (keyName, timing) =>
       latestRef.current!.handleKeyUp(keyName, timing),
+    handleTimelinePressStart: (press) =>
+      latestRef.current!.handleTimelinePressStart(press),
+    handleTimelinePressResolve: (press) =>
+      latestRef.current!.handleTimelinePressResolve(press),
+    advanceTimeline: (playheadMs) =>
+      latestRef.current!.advanceTimeline(playheadMs),
+    resetTimeline: () => latestRef.current!.resetTimeline(),
     finalizeAllActive: () => latestRef.current!.finalizeAllActive(),
     reconcileActiveNotes: (activeKeys) =>
       latestRef.current!.reconcileActiveNotes(activeKeys),
