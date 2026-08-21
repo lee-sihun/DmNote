@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fs,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -231,10 +231,20 @@ pub async fn preset_load(
             error: None,
         });
     };
-    let path = file.path();
+    let path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || preset_load_from_path(app, window, path))
+        .await
+        .map_err(|error| CommandError::msg(format!("preset import task failed: {error}")))?
+}
+
+fn preset_load_from_path(
+    app: AppHandle,
+    window: WebviewWindow,
+    path: PathBuf,
+) -> CmdResult<PresetOperationResult> {
     let state = app.state::<AppState>();
 
-    let mut preset = read_preset_file(path)?;
+    let mut preset = read_preset_file(&path)?;
     let has_imported_global_css = preset.custom_css.is_some();
     let current = state.store.snapshot();
     let resolved_settings = resolve_full_preset_settings(&mut preset, &current);
@@ -479,10 +489,20 @@ pub async fn preset_load_tab(
             error: None,
         });
     };
-    let path = file.path();
+    let path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || preset_load_tab_from_path(app, window, path))
+        .await
+        .map_err(|error| CommandError::msg(format!("tab preset import task failed: {error}")))?
+}
+
+fn preset_load_tab_from_path(
+    app: AppHandle,
+    window: WebviewWindow,
+    path: PathBuf,
+) -> CmdResult<PresetOperationResult> {
     let state = app.state::<AppState>();
 
-    let preset = read_preset_file(path)?;
+    let preset = read_preset_file(&path)?;
 
     let PresetFile {
         keys,
