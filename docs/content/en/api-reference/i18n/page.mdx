@@ -13,7 +13,7 @@ Returns the locale currently used by the app.
 
 ```javascript
 const locale = await dmn.i18n.getLocale();
-console.log(locale); // "ko" or "en"
+console.log(locale); // "ko", "en", "zh-cn", "zh-Hant", or "ru"
 ```
 
 The plugin API does not change the app locale. Users choose the locale in the app settings.
@@ -114,11 +114,10 @@ async function formatDate(date) {
 
 ## Supported locales
 
-| Code | Language |
-| ---- | -------- |
-| `ko` | Korean   |
-| `en` | English  |
-
-<Callout type="info">
-  Additional locales may be added in future updates.
-</Callout>
+| Code      | Language            |
+| --------- | ------------------- |
+| `ko`      | Korean              |
+| `en`      | English             |
+| `zh-cn`   | Simplified Chinese  |
+| `zh-Hant` | Traditional Chinese |
+| `ru`      | Russian             |

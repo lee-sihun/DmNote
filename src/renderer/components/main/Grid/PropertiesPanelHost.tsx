@@ -49,23 +49,6 @@ const fallbackChrome = (): PanelWindowChrome =>
     ? { webRadius: 0, webRing: false }
     : { webRadius: 12, webRing: true };
 
-const waitForPanelTransitionIdle = (): Promise<void> => {
-  if (usePanelHostStore.getState().transition === 'idle') {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    const unsubscribe = usePanelHostStore.subscribe((state) => {
-      if (state.transition !== 'idle') return;
-      unsubscribe();
-      resolve();
-    });
-    if (usePanelHostStore.getState().transition === 'idle') {
-      unsubscribe();
-      resolve();
-    }
-  });
-};
-
 interface PropertiesPanelHostProps {
   onKeyMappingChange?: (index: number, newKey: string) => void;
   // 분리/도킹 전환이 사용자에게 알릴 만한 이유로 실패했을 때
@@ -149,29 +132,6 @@ const PropertiesPanelHost = ({
     const outcome = await dockPropertiesPanel();
     if (isTransitionFailure(outcome)) onTransitionFailureRef.current?.('dock');
   };
-
-  useEffect(
-    () =>
-      panelWindowApi.onCloseRequested(({ requestId }) => {
-        void (async () => {
-          await panelWindowApi.ackClose(requestId).catch((error) => {
-            console.error('Failed to acknowledge panel close request', error);
-          });
-          let outcome = await dockPropertiesPanel();
-          while (outcome === 'busy') {
-            await waitForPanelTransitionIdle();
-            outcome = await dockPropertiesPanel();
-          }
-          if (isTransitionFailure(outcome)) {
-            onTransitionFailureRef.current?.('dock');
-          }
-        })().catch((error) => {
-          console.error('Failed to handle panel close request', error);
-          onTransitionFailureRef.current?.('dock');
-        });
-      }),
-    [],
-  );
 
   // 자식 창: Cmd+R 등 브라우저 단축키 차단 - 문서 reload는 여기 그려둔 DOM을 통째로 잃는다
   useBlockBrowserShortcuts({

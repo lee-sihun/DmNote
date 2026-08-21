@@ -8,6 +8,7 @@ import TitleBar from '@components/main/TitleBar';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
+import { usePanelCloseRequest } from '@hooks/panel/usePanelCloseRequest';
 import ToolBar from '@components/main/Tool/ToolBar';
 import Grid from '@components/main/Grid';
 import SettingTab from '@components/main/Settings';
@@ -385,6 +386,9 @@ export default function App() {
       t('common.ok'),
     );
   };
+
+  // 설정 화면에서도 분리 패널의 네이티브 닫기 요청 처리 유지
+  usePanelCloseRequest(() => handlePanelTransitionFailure('dock'));
 
   const handleUpdatePrimaryAction = async () => {
     if (!updateInfo) return;
