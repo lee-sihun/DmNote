@@ -1,10 +1,12 @@
-use rfd::FileDialog;
 use serde::Serialize;
-use std::fs;
-use tauri::Manager;
+use std::{fs, path::PathBuf};
+use tauri::{Manager, WebviewWindow};
 use uuid::Uuid;
 
-use crate::errors::CmdResult;
+use crate::{
+    commands::dialog::parented_file_dialog,
+    errors::{CmdResult, CommandError},
+};
 
 /// 폰트 로드 결과 응답 타입
 #[derive(Serialize)]
@@ -22,12 +24,15 @@ pub struct FontLoadResponse {
 /// 로컬 폰트 파일을 선택하고 폰트 이름/경로를 반환
 /// 파일 경로만 저장하고, 프론트에서 `convertFileSrc` 기반으로 `@font-face`를 생성
 #[tauri::command]
-pub fn font_load(app: tauri::AppHandle) -> CmdResult<FontLoadResponse> {
-    let picked = FileDialog::new()
-        .add_filter("Fonts", &["ttf", "otf", "woff", "woff2"])
-        .pick_file();
+pub async fn font_load(
+    app: tauri::AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<FontLoadResponse> {
+    let picked = parented_file_dialog(&window, "Fonts", &["ttf", "otf", "woff", "woff2"])
+        .pick_file()
+        .await;
 
-    let Some(path) = picked else {
+    let Some(file) = picked else {
         return Ok(FontLoadResponse {
             success: false,
             error: None,
@@ -35,7 +40,13 @@ pub fn font_load(app: tauri::AppHandle) -> CmdResult<FontLoadResponse> {
             font_path: None,
         });
     };
+    let path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || font_load_from_path(app, path))
+        .await
+        .map_err(|error| CommandError::msg(format!("font load task failed: {error}")))?
+}
 
+fn font_load_from_path(app: tauri::AppHandle, path: PathBuf) -> CmdResult<FontLoadResponse> {
     // 파일명(확장자 제외)을 폰트 이름으로 사용
     let font_name = path
         .file_stem()

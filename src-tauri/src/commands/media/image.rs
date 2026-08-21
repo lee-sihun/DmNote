@@ -1,8 +1,8 @@
-use rfd::AsyncFileDialog;
 use serde::Serialize;
 use tauri::{Manager, WebviewWindow};
 
 use crate::{
+    commands::dialog::parented_file_dialog,
     errors::{CmdResult, CommandError},
     state::image_asset::import_image_file,
 };
@@ -17,21 +17,22 @@ pub struct ImageLoadResponse {
     pub image_path: Option<String>,
 }
 
-/// 선택과 파일 I/O를 메인 스레드 밖에서 처리
+/// 로컬 이미지 파일을 선택해서 앱 데이터 디렉토리로 복사한 뒤 경로를 반환합니다.
+/// 저장소에는 base64 대신 파일 경로만 저장해 직렬화/역직렬화 비용을 줄입니다.
 #[tauri::command]
 pub async fn image_load(
     app: tauri::AppHandle,
-    _window: WebviewWindow,
+    window: WebviewWindow,
 ) -> CmdResult<ImageLoadResponse> {
-    let picked = AsyncFileDialog::new()
-        .add_filter(
-            "Images",
-            &[
-                "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif",
-            ],
-        )
-        .pick_file()
-        .await;
+    let picked = parented_file_dialog(
+        &window,
+        "Images",
+        &[
+            "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif",
+        ],
+    )
+    .pick_file()
+    .await;
 
     let Some(file) = picked else {
         return Ok(ImageLoadResponse {

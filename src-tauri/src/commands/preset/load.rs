@@ -5,11 +5,11 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use rfd::AsyncFileDialog;
 use tauri::{AppHandle, Manager, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
+    commands::dialog::parented_file_dialog,
     commands::editor::{
         css::TabCssResponse,
         state::{emit_best_effort, publish_editor_change_after_key_runtime},
@@ -220,8 +220,7 @@ pub async fn preset_load(
     app: AppHandle,
     window: WebviewWindow,
 ) -> CmdResult<PresetOperationResult> {
-    let picked = AsyncFileDialog::new()
-        .add_filter("DM NOTE Preset", &["json"])
+    let picked = parented_file_dialog(&window, "DM NOTE Preset", &["json"])
         .pick_file()
         .await;
 
@@ -478,8 +477,7 @@ pub async fn preset_load_tab(
     app: AppHandle,
     window: WebviewWindow,
 ) -> CmdResult<PresetOperationResult> {
-    let picked = AsyncFileDialog::new()
-        .add_filter("DM NOTE Preset", &["json"])
+    let picked = parented_file_dialog(&window, "DM NOTE Preset", &["json"])
         .pick_file()
         .await;
 

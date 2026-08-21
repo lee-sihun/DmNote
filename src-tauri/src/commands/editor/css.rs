@@ -3,12 +3,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rfd::FileDialog;
 use serde::Serialize;
-use tauri::{AppHandle, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::{
-    commands::editor::state::emit_best_effort,
+    commands::{dialog::parented_file_dialog, editor::state::emit_best_effort},
     custom_css::{
         custom_css_settings_diff, history_paths_match, inspect_css_history_status,
         normalize_custom_css_history, record_custom_css_load, touch_custom_css_history,
@@ -16,7 +15,7 @@ use crate::{
         ValidatedCssFile, MAX_CUSTOM_CSS_BYTES,
     },
     defaults::default_keys,
-    errors::CmdResult,
+    errors::{CmdResult, CommandError},
     models::{AppStoreData, CustomCss, CustomCssHistoryEntry, TabCss, TabCssOverrides},
     state::{
         atomic_file::atomic_replace, history::HistoryAdmissionLease,
@@ -343,14 +342,12 @@ pub fn css_set_content(
 }
 
 #[tauri::command]
-pub fn css_load(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    window: WebviewWindow,
-) -> CmdResult<CssLoadResponse> {
-    let picked = FileDialog::new().add_filter("CSS", &["css"]).pick_file();
+pub async fn css_load(app: AppHandle, window: WebviewWindow) -> CmdResult<CssLoadResponse> {
+    let picked = parented_file_dialog(&window, "CSS", &["css"])
+        .pick_file()
+        .await;
 
-    let Some(path) = picked else {
+    let Some(file) = picked else {
         return Ok(CssLoadResponse {
             success: false,
             error: None,
@@ -358,6 +355,18 @@ pub fn css_load(
             path: None,
         });
     };
+    let path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || css_load_from_path(app, window, path))
+        .await
+        .map_err(|error| CommandError::msg(format!("CSS load task failed: {error}")))?
+}
+
+fn css_load_from_path(
+    app: AppHandle,
+    window: WebviewWindow,
+    path: PathBuf,
+) -> CmdResult<CssLoadResponse> {
+    let state = app.state::<AppState>();
 
     let selected_path = path.to_string_lossy().to_string();
     let _operation_guard = state.lock_css_operation();
@@ -507,15 +516,16 @@ pub fn css_tab_get(state: State<'_, AppState>, tab_id: String) -> CmdResult<TabC
 
 /// 특정 탭에 CSS 파일 로드
 #[tauri::command]
-pub fn css_tab_load(
-    state: State<'_, AppState>,
+pub async fn css_tab_load(
     app: AppHandle,
     window: WebviewWindow,
     tab_id: String,
 ) -> CmdResult<TabCssLoadResponse> {
-    let picked = FileDialog::new().add_filter("CSS", &["css"]).pick_file();
+    let picked = parented_file_dialog(&window, "CSS", &["css"])
+        .pick_file()
+        .await;
 
-    let Some(path) = picked else {
+    let Some(file) = picked else {
         return Ok(TabCssLoadResponse {
             success: false,
             error: None,
@@ -523,6 +533,19 @@ pub fn css_tab_load(
             css: None,
         });
     };
+    let path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || css_tab_load_from_path(app, window, tab_id, path))
+        .await
+        .map_err(|error| CommandError::msg(format!("tab CSS load task failed: {error}")))?
+}
+
+fn css_tab_load_from_path(
+    app: AppHandle,
+    window: WebviewWindow,
+    tab_id: String,
+    path: PathBuf,
+) -> CmdResult<TabCssLoadResponse> {
+    let state = app.state::<AppState>();
 
     let selected_path = path.to_string_lossy().to_string();
     let _operation_guard = state.lock_css_operation();
@@ -886,11 +909,13 @@ fn write_tab_css_export(path: &Path, content: &str) -> anyhow::Result<()> {
 }
 
 #[tauri::command]
-pub fn css_tab_export(
-    state: State<'_, AppState>,
+pub async fn css_tab_export(
+    app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
 ) -> CmdResult<TabCssExportResponse> {
-    let initial_css = state
+    let initial_css = app
+        .state::<AppState>()
         .store
         .with_state(|store| store.tab_css_overrides.get(&tab_id).cloned());
     let Some(initial_css) = initial_css.filter(|css| !css.content.is_empty()) else {
@@ -902,11 +927,11 @@ pub fn css_tab_export(
         .and_then(|path| Path::new(path).file_name())
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| format!("{tab_id}.css"));
-    let selected_path = FileDialog::new()
+    let selected_file = parented_file_dialog(&window, "CSS", &["css"])
         .set_file_name(&default_file_name)
-        .add_filter("CSS", &["css"])
-        .save_file();
-    let Some(selected_path) = selected_path else {
+        .save_file()
+        .await;
+    let Some(file) = selected_file else {
         return Ok(TabCssExportResponse {
             success: false,
             code: None,
@@ -914,6 +939,20 @@ pub fn css_tab_export(
             path: None,
         });
     };
+    let selected_path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        css_tab_export_from_path(app, tab_id, selected_path)
+    })
+    .await
+    .map_err(|error| CommandError::msg(format!("tab CSS export task failed: {error}")))?
+}
+
+fn css_tab_export_from_path(
+    app: AppHandle,
+    tab_id: String,
+    selected_path: PathBuf,
+) -> CmdResult<TabCssExportResponse> {
+    let state = app.state::<AppState>();
     let export_path = ensure_css_extension(selected_path);
     let current_content = state.store.with_state(|store| {
         store
