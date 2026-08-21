@@ -16,6 +16,10 @@ import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
 import { useInputTimelineReplay } from '@hooks/overlay/useInputTimelineReplay';
 import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransition';
+import {
+  mergeContentFades,
+  useTimelineEpochTransition,
+} from '@hooks/overlay/useTimelineEpochTransition';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { obsApi } from '@api/modules/obsApi';
 import { overlayApi } from '@api/modules/overlayApi';
@@ -30,6 +34,12 @@ import {
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
 } from '@stores/signals/keySignals';
+import {
+  applyCounterSnapshot,
+  resetAllCounters,
+  setKeyCounter,
+} from '@stores/signals/keyCounterSignals';
+import { getCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
@@ -46,6 +56,7 @@ import {
   slotDisplayName,
 } from '@utils/keySlot';
 import type { KeySlot } from '@src/types/key/keys';
+import { INPUT_TIMELINE_TRANSPORT_RESERVE_MS } from '@constants/inputTimeline';
 
 type KeyDelayTimerHandle = ReturnType<typeof setTimeout>;
 type KeyDelayTimerEntry = {
@@ -153,11 +164,21 @@ export default function App() {
   const tabNoteOverrides = useSettingsStore((state) => state.tabNoteOverrides);
   // 현재 탭 override로 deps 한정 - 다른 탭 override 변경이 재병합·재계산으로 번지지 않게
   const currentTabNoteOverride = tabNoteOverrides?.[selectedKeyType];
-  const noteSettings = useMemo(
+  const targetNoteSettings = useMemo(
     () => mergeNoteSettings(globalNoteSettings, currentTabNoteOverride),
     [globalNoteSettings, currentTabNoteOverride],
   );
   const noteEffect = useSettingsStore((state) => state.noteEffect);
+  const {
+    settings: noteSettings,
+    epochKey: timelineEpochKey,
+    contentFade: timelineContentFade,
+  } = useTimelineEpochTransition({
+    target: targetNoteSettings,
+    noteEffect,
+    mode: selectedKeyType,
+    hydrated: isBootstrapped,
+  });
   const timelineEnabled = Boolean(noteSettings?.delayedNoteEnabled);
   const overlayPadding = useSettingsStore(
     (state) => state.gridSettings.overlayPadding ?? 30,
@@ -388,6 +409,12 @@ export default function App() {
     };
   }, []);
 
+  const keyDisplayDelayMs = Number(noteSettings?.keyDisplayDelayMs ?? 0);
+  const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
+  const pendingKeyDelayTimersRef = useRef<Map<KeyDelayTimerHandle, () => void>>(
+    new Map(),
+  );
+
   const {
     notesRef,
     subscribe,
@@ -411,6 +438,7 @@ export default function App() {
     keyMappings,
     positions,
     selectedKeyType,
+    timelineEnabled,
     handleTimelinePressStart,
     handleTimelinePressResolve,
     advanceTimeline,
@@ -422,6 +450,7 @@ export default function App() {
       keyMappings,
       positions,
       selectedKeyType,
+      timelineEnabled,
       handleTimelinePressStart,
       handleTimelinePressResolve,
       advanceTimeline,
@@ -432,7 +461,51 @@ export default function App() {
   const presentationTimeSource = useInputTimelineReplay({
     enabled: timelineEnabled,
     thresholdMs: Number(noteSettings?.shortNoteThresholdMs ?? 0),
-    onEpochReset: () => timelineContextRef.current.resetTimeline(),
+    transportReserveMs: INPUT_TIMELINE_TRANSPORT_RESERVE_MS,
+    keyDisplayDelayMs,
+    epochKey: timelineEpochKey,
+    onEpochReset: (reason, baseline) => {
+      timelineContextRef.current.resetTimeline();
+      cancelKeyDelayTimers(
+        keyDelayTimersRef.current,
+        pendingKeyDelayTimersRef.current,
+      );
+      resetAllKeySignals();
+      if (reason === 'validation_failure') {
+        resetAllCounters();
+        return;
+      }
+      if (baseline) {
+        applyCounterSnapshot(baseline.counters);
+        const context = timelineContextRef.current;
+        if (baseline.mode === context.selectedKeyType) {
+          const validKeys = validKeySet(
+            context.keyMappings[context.selectedKeyType] ?? [],
+          );
+          for (const key of baseline.activeKeys) {
+            if (validKeys.has(key)) setKeyActiveSignal(key, true);
+          }
+        }
+        return;
+      }
+      applyCounterSnapshot(getCounterCacheSnapshot());
+      const selectedMode = timelineContextRef.current.selectedKeyType;
+      void window.api.app
+        .bootstrap()
+        .then(({ activeKeys }) => {
+          const context = timelineContextRef.current;
+          if (context.selectedKeyType !== selectedMode) return;
+          const validKeys = validKeySet(
+            context.keyMappings[selectedMode] ?? [],
+          );
+          for (const key of activeKeys ?? []) {
+            if (validKeys.has(key)) setKeyActiveSignal(key, true);
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to rehydrate timeline epoch', error);
+        });
+    },
     onPressStart: (press) => {
       const context = timelineContextRef.current;
       if (!context.noteEffect || press.mode !== context.selectedKeyType) return;
@@ -445,6 +518,12 @@ export default function App() {
     },
     onPressResolve: (press) =>
       timelineContextRef.current.handleTimelinePressResolve(press),
+    onKeyState: (action) => {
+      if (action.mode === timelineContextRef.current.selectedKeyType) {
+        setKeyActiveSignal(action.key, action.state === 'DOWN');
+      }
+    },
+    onCounter: (action) => setKeyCounter(action.mode, action.key, action.count),
     onAdvance: (playheadMs) =>
       timelineContextRef.current.advanceTimeline(playheadMs),
   });
@@ -455,18 +534,11 @@ export default function App() {
     : 0;
   // 토글 전환은 창 페이드로 감싸 리사이즈 순간의 덜컥거림을 가린다
   // 하이드레이션 전 초기값 반영은 전환 없이 즉시 채택
-  const { trackHeight, contentFade } = useTrackReserveTransition(
-    targetTrackReserve,
-    isBootstrapped,
-  );
-
-  // 키 딜레이 설정
-  const keyDisplayDelayMs = Number(noteSettings?.keyDisplayDelayMs ?? 0);
-
-  // 키 딜레이 타이머 관리 (down/up 별도 관리)
-  const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
-  const pendingKeyDelayTimersRef = useRef<Map<KeyDelayTimerHandle, () => void>>(
-    new Map(),
+  const { trackHeight, contentFade: trackContentFade } =
+    useTrackReserveTransition(targetTrackReserve, isBootstrapped);
+  const contentFade = useMemo(
+    () => mergeContentFades(trackContentFade, timelineContentFade),
+    [trackContentFade, timelineContentFade],
   );
 
   // 키 딜레이 값을 ref로 관리하여 클로저 문제 방지
@@ -579,8 +651,11 @@ export default function App() {
             seenSinceResetRef.current.add(key);
             reconcileSeenRef.current?.add(`${mode}::${key}`);
             const isDown = state === 'DOWN';
-            // 키 UI 업데이트 (딜레이 적용)
-            updateKeySignalWithDelay(key, isDown);
+            const context = keyEventContextRef.current;
+            // timeline 활성 경로는 key transition도 presentation playhead에서 적용
+            if (!context.timelineEnabled) {
+              updateKeySignalWithDelay(key, isDown);
+            }
             const {
               noteEffect,
               keyMappings,
@@ -589,7 +664,7 @@ export default function App() {
               timelineEnabled,
               handleKeyDown,
               handleKeyUp,
-            } = keyEventContextRef.current;
+            } = context;
             // 노트 이펙트는 즉시 처리 (딜레이 없음)
             if (noteEffect && !timelineEnabled) {
               // 실제 입력 시각을 복원해 노트 시작 위치를 보정 (프레임 양자화 방지).
@@ -640,6 +715,7 @@ export default function App() {
           .bootstrap()
           .then(({ activeKeys }) => {
             if (hydrationCancelled || !activeKeys?.length) return;
+            if (keyEventContextRef.current.timelineEnabled) return;
             // 탭 전환 리셋이 끼었으면 이 스냅샷은 낡음 - 전환 effect의 재수화가 담당
             if (seenSinceResetRef.current !== hydrationSeen) return;
             const { keyMappings, selectedKeyType } = keyEventContextRef.current;
@@ -696,6 +772,7 @@ export default function App() {
         }
         reconcileActiveNotes(held);
         // 고착된 눌림 하이라이트도 같은 기준으로 정정
+        if (keyEventContextRef.current.timelineEnabled) return;
         const validKeys = validKeySet(keyMappings[selectedKeyType] ?? []);
         for (const key of validKeys) {
           if (!sinceFetch.has(`${payload.currentMode}::${key}`)) {
@@ -735,6 +812,7 @@ export default function App() {
         .bootstrap()
         .then(({ activeKeys }) => {
           if (hydrationCancelled || !activeKeys?.length) return;
+          if (keyEventContextRef.current.timelineEnabled) return;
           if (seenSinceResetRef.current !== seen) return;
           const { keyMappings, selectedKeyType } = keyEventContextRef.current;
           const validKeys = validKeySet(keyMappings[selectedKeyType] ?? []);
@@ -810,6 +888,7 @@ export default function App() {
       .then(() => window.api.app.bootstrap())
       .then(({ activeKeys }) => {
         if (cancelled || !activeKeys?.length) return;
+        if (keyEventContextRef.current.timelineEnabled) return;
         // 이후 전환의 리셋이 끼었으면 그쪽 재수화가 담당
         if (seenSinceResetRef.current !== seen) return;
         for (const key of activeKeys) {

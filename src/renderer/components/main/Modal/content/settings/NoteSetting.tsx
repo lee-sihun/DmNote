@@ -14,11 +14,7 @@ import {
   clampValue,
 } from '../../../../../../types/settings/noteSettingsConstraints';
 import type { NoteSettings } from '../../../../../../types/settings/noteSettings';
-import {
-  toDisplayDelayMs,
-  toEffectiveMinLengthPx,
-  toMinLengthMs,
-} from '@utils/core/noteLengthPolicy';
+import { recommendedKeyDisplayDelayMs } from '@constants/inputTimeline';
 
 type ConstraintKey = keyof typeof NOTE_SETTINGS_CONSTRAINTS;
 
@@ -130,21 +126,12 @@ const NoteSetting = ({
     shortNoteThresholdMs,
     'shortNoteThresholdMs',
   );
-  const safeMinLengthPx = sanitizeNumericValue(
-    shortNoteMinLengthPx,
-    'shortNoteMinLengthPx',
-  );
-  const effectiveMinPx = toEffectiveMinLengthPx(
-    safeMinLengthPx,
-    safeTrackHeight,
-  );
-  const minLengthMs = toMinLengthMs(effectiveMinPx, safeSpeed);
   const travelDelay = (safeTrackHeight / safeSpeed) * 1000;
-  // 노트 표시 지연은 오버레이 길이 정책과 같은 식을 써야 키·카운터와 정렬이 맞음
-  const noteDisplayDelay = toDisplayDelayMs(minLengthMs, safeThreshold);
-  const calculatedDelay = Math.round(
-    delayedNoteEnabled ? travelDelay + noteDisplayDelay : travelDelay,
-  );
+  const calculatedDelay = recommendedKeyDisplayDelayMs({
+    travelMs: travelDelay,
+    delayedNoteEnabled,
+    thresholdMs: safeThreshold,
+  });
 
   const handleAutoCalculate = () => {
     const clamped = clampValue(calculatedDelay, 'keyDisplayDelayMs');

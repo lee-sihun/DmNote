@@ -124,7 +124,7 @@ describe('NoteSetting 단노트 정책 안내', () => {
     vi.restoreAllMocks();
   });
 
-  it('자동 계산에 트랙 높이로 제한한 최소 길이를 쓴다', () => {
+  it('자동 계산에 이동 시간과 timeline 명목 지연을 합산한다', () => {
     renderAdvanced({
       delayedNoteEnabled: true,
       speed: 70,
@@ -133,8 +133,8 @@ describe('NoteSetting 단노트 정책 안내', () => {
       shortNoteMinLengthPx: 9999,
     });
 
-    // 9999px가 아니라 트랙 높이 20px 기준 -> 이동 285.7 + 지연 7.1
-    expect(container.textContent).toContain('laboratory.keyDelayAuto:293');
+    // 이동 285.7 + threshold 300 + watermark 한 구간 16
+    expect(container.textContent).toContain('laboratory.keyDelayAuto:602');
   });
 
   it('최대 허용 조합의 추천 지연과 30000ms 입력 상한을 노출한다', () => {
@@ -146,7 +146,7 @@ describe('NoteSetting 단노트 정책 안내', () => {
       shortNoteMinLengthPx: 1,
     });
 
-    expect(container.textContent).toContain('laboratory.keyDelayAuto:29564');
+    expect(container.textContent).toContain('laboratory.keyDelayAuto:30587');
     const input = container.querySelector(
       '[data-label="laboratory.keyDelay"] input',
     ) as HTMLInputElement;

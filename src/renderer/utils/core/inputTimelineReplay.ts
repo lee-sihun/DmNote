@@ -1,6 +1,7 @@
 import type {
   CanonicalInputTimelineBaseline,
   CanonicalInputTimelineBatch,
+  CanonicalInputTimelineCounterAction,
   CanonicalInputTimelineStateAction,
 } from '@src/types/inputTimeline';
 import { InputTimelineBuffer } from './inputTimeline';
@@ -29,6 +30,8 @@ export interface InputTimelineReplayCallbacks {
   ) => void;
   onPressStart: (press: TimelinePress) => void;
   onPressResolve: (press: Required<TimelinePress>) => void;
+  onKeyState: (action: CanonicalInputTimelineStateAction) => void;
+  onCounter: (action: CanonicalInputTimelineCounterAction) => void;
   onAdvance: (snapshot: PresentationClockSnapshot) => void;
   onFailure: (reason: string) => void;
 }
@@ -37,11 +40,20 @@ export interface InputTimelineReplayConfig {
   enabled: boolean;
   thresholdMs: number;
   transportReserveMs: number;
+  keyDisplayDelayMs: number;
+  epochKey: string;
 }
 
 interface PendingPress extends TimelinePress {
   started: boolean;
 }
+
+type ScheduledPresentationAction = {
+  targetTimeMs: number;
+  action:
+    | CanonicalInputTimelineStateAction
+    | CanonicalInputTimelineCounterAction;
+};
 
 const sourceUsToMs = (value: string): number => {
   const converted = Number(BigInt(value)) / 1000;
@@ -59,6 +71,8 @@ export class InputTimelineReplay {
   private presses = new Map<string, PendingPress>();
   private pendingStarts: PendingPress[] = [];
   private pendingStartIndex = 0;
+  private scheduledActions: ScheduledPresentationAction[] = [];
+  private scheduledActionIndex = 0;
   private failed = false;
   private currentPlayheadMs: number | null = null;
 
@@ -79,7 +93,9 @@ export class InputTimelineReplay {
     if (
       next.enabled === this.config.enabled &&
       next.thresholdMs === this.config.thresholdMs &&
-      next.transportReserveMs === this.config.transportReserveMs
+      next.transportReserveMs === this.config.transportReserveMs &&
+      next.keyDisplayDelayMs === this.config.keyDisplayDelayMs &&
+      next.epochKey === this.config.epochKey
     ) {
       return;
     }
@@ -142,6 +158,7 @@ export class InputTimelineReplay {
       if (action.kind === 'state') {
         this.ingestStateAction(action);
       }
+      this.schedulePresentationAction(action);
     }
   }
 
@@ -150,6 +167,17 @@ export class InputTimelineReplay {
     const snapshot = this.clock.tick(localNowMs);
     if (!snapshot) return null;
     this.currentPlayheadMs = snapshot.playheadMs;
+
+    while (this.scheduledActionIndex < this.scheduledActions.length) {
+      const scheduled = this.scheduledActions[this.scheduledActionIndex];
+      if (scheduled.targetTimeMs > snapshot.playheadMs) break;
+      this.scheduledActionIndex += 1;
+      if (scheduled.action.kind === 'state') {
+        this.callbacks.onKeyState(scheduled.action);
+      } else {
+        this.callbacks.onCounter(scheduled.action);
+      }
+    }
 
     while (this.pendingStartIndex < this.pendingStarts.length) {
       const press = this.pendingStarts[this.pendingStartIndex];
@@ -169,6 +197,15 @@ export class InputTimelineReplay {
     ) {
       this.pendingStarts = this.pendingStarts.slice(this.pendingStartIndex);
       this.pendingStartIndex = 0;
+    }
+    if (
+      this.scheduledActionIndex > 1024 &&
+      this.scheduledActionIndex * 2 > this.scheduledActions.length
+    ) {
+      this.scheduledActions = this.scheduledActions.slice(
+        this.scheduledActionIndex,
+      );
+      this.scheduledActionIndex = 0;
     }
     this.callbacks.onAdvance(snapshot);
     return snapshot;
@@ -212,6 +249,24 @@ export class InputTimelineReplay {
     this.presses.clear();
     this.pendingStarts = [];
     this.pendingStartIndex = 0;
+    this.scheduledActions = [];
+    this.scheduledActionIndex = 0;
+  }
+
+  private schedulePresentationAction(
+    action:
+      | CanonicalInputTimelineStateAction
+      | CanonicalInputTimelineCounterAction,
+  ): void {
+    const nominalDelayMs =
+      this.config.thresholdMs + this.config.transportReserveMs;
+    this.scheduledActions.push({
+      targetTimeMs:
+        sourceUsToMs(action.eventTimeUs) +
+        this.config.keyDisplayDelayMs -
+        nominalDelayMs,
+      action,
+    });
   }
 
   private normalizeConfig(
@@ -221,6 +276,8 @@ export class InputTimelineReplay {
       enabled: config.enabled,
       thresholdMs: Math.max(0, Number(config.thresholdMs) || 0),
       transportReserveMs: Math.max(0, Number(config.transportReserveMs) || 0),
+      keyDisplayDelayMs: Math.max(0, Number(config.keyDisplayDelayMs) || 0),
+      epochKey: String(config.epochKey ?? ''),
     };
   }
 }

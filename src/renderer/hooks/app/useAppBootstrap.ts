@@ -302,6 +302,15 @@ export function useAppBootstrap() {
       );
     };
 
+    const isTimelineCounterReplayEnabled = () => {
+      const { noteSettings, tabNoteOverrides } = useSettingsStore.getState();
+      const { selectedKeyType } = useKeyStore.getState();
+      return Boolean(
+        mergeNoteSettings(noteSettings, tabNoteOverrides?.[selectedKeyType])
+          .delayedNoteEnabled,
+      );
+    };
+
     const scheduleCounterUpdate = (
       mode: string,
       key: string,
@@ -949,7 +958,7 @@ export function useAppBootstrap() {
         if (!previous || event.revision > previous.revision) {
           counterResyncContext?.latestUpdates.set(composed, event);
         }
-        if (isOverlayWindow) {
+        if (isOverlayWindow && !isTimelineCounterReplayEnabled()) {
           scheduleCounterUpdate(
             event.mode,
             event.key,

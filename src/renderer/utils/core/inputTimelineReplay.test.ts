@@ -31,6 +31,8 @@ const callbacks = (): InputTimelineReplayCallbacks => ({
   onEpochReset: vi.fn(),
   onPressStart: vi.fn(),
   onPressResolve: vi.fn(),
+  onKeyState: vi.fn(),
+  onCounter: vi.fn(),
   onAdvance: vi.fn(),
   onFailure: vi.fn(),
 });
@@ -39,7 +41,13 @@ describe('InputTimelineReplay', () => {
   it('starts a short press only after its threshold window is safe', () => {
     const sink = callbacks();
     const replay = new InputTimelineReplay(
-      { enabled: true, thresholdMs: 100, transportReserveMs: 0 },
+      {
+        enabled: true,
+        thresholdMs: 100,
+        transportReserveMs: 0,
+        keyDisplayDelayMs: 0,
+        epochKey: 'test',
+      },
       sink,
     );
     replay.ingest(
@@ -77,7 +85,13 @@ describe('InputTimelineReplay', () => {
   it('resolves a long press before the playhead reaches its up time', () => {
     const sink = callbacks();
     const replay = new InputTimelineReplay(
-      { enabled: true, thresholdMs: 100, transportReserveMs: 0 },
+      {
+        enabled: true,
+        thresholdMs: 100,
+        transportReserveMs: 0,
+        keyDisplayDelayMs: 0,
+        epochKey: 'test',
+      },
       sink,
     );
     replay.ingest(
@@ -119,7 +133,13 @@ describe('InputTimelineReplay', () => {
   it('fails closed until a new stream arrives', () => {
     const sink = callbacks();
     const replay = new InputTimelineReplay(
-      { enabled: true, thresholdMs: 100, transportReserveMs: 0 },
+      {
+        enabled: true,
+        thresholdMs: 100,
+        transportReserveMs: 0,
+        keyDisplayDelayMs: 0,
+        epochKey: 'test',
+      },
       sink,
     );
     replay.ingest(batch(1, 200_000, []), 1000);
@@ -128,5 +148,54 @@ describe('InputTimelineReplay', () => {
     expect(replay.tick(1020)).toBeNull();
     expect(sink.onEpochReset).toHaveBeenCalledWith('validation_failure');
     expect(sink.onFailure).toHaveBeenCalledOnce();
+  });
+
+  it('replays key and counter actions on the shared presentation target', () => {
+    const sink = callbacks();
+    const replay = new InputTimelineReplay(
+      {
+        enabled: true,
+        thresholdMs: 100,
+        transportReserveMs: 20,
+        keyDisplayDelayMs: 120,
+        epochKey: 'test',
+      },
+      sink,
+    );
+    replay.ingest(
+      batch(1, 200_000, [
+        {
+          kind: 'state',
+          pressId: 'press-a',
+          mode: '4key',
+          key: 'A',
+          state: 'DOWN',
+          eventTimeUs: '100000',
+        },
+        {
+          kind: 'counter',
+          mode: '4key',
+          key: 'A',
+          count: 7,
+          counterSessionId: 'counter-session',
+          counterRevision: '1',
+          eventTimeUs: '100000',
+        },
+      ]),
+      1000,
+    );
+
+    replay.tick(1000);
+    expect(sink.onKeyState).not.toHaveBeenCalled();
+    expect(sink.onCounter).not.toHaveBeenCalled();
+
+    replay.ingest(batch(2, 400_000, []), 1010);
+    replay.tick(1020);
+    expect(sink.onKeyState).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'A', state: 'DOWN' }),
+    );
+    expect(sink.onCounter).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'A', count: 7 }),
+    );
   });
 });

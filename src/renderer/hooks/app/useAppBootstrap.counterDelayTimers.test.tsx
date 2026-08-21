@@ -367,6 +367,7 @@ describe('카운터 지연 타이머', () => {
     useSettingsStore.setState((state) => ({
       noteSettings: {
         ...state.noteSettings,
+        delayedNoteEnabled: false,
         keyDisplayDelayMs: 30000,
       },
       tabNoteOverrides: {},
@@ -451,6 +452,22 @@ describe('카운터 지연 타이머', () => {
     expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(3);
     vi.advanceTimersByTime(30000);
     expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(3);
+  });
+
+  it('timeline 활성 경로에서는 실시간 counter 이벤트를 화면에 중복 적용하지 않는다', () => {
+    act(() => {
+      useSettingsStore.setState((state) => ({
+        noteSettings: {
+          ...state.noteSettings,
+          delayedNoteEnabled: true,
+        },
+      }));
+    });
+
+    emitCounter(7);
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(0);
   });
 
   it('활성 탭 오버라이드 변경 시 대기 값을 반영하고 새 지연을 사용한다', () => {
