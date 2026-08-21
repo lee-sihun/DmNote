@@ -1,5 +1,6 @@
 import {
   CANONICAL_INPUT_TIMELINE_VERSION,
+  type CanonicalInputTimelineRebase,
   type CanonicalInputTimelineAction,
   type CanonicalInputTimelineBaseline,
   type CanonicalInputTimelineBatch,
@@ -21,6 +22,9 @@ const parseU64 = (value: string, field: string): bigint => {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+
+const baselinePressId = (streamId: string, key: string): string =>
+  `${streamId}/0/${key}`;
 
 const validateBaseline = (baseline: CanonicalInputTimelineBaseline): void => {
   if (
@@ -116,6 +120,10 @@ export class InputTimelineBuffer {
   private validateStateLifecycle(
     actions: CanonicalInputTimelineAction[],
     reset: boolean,
+    baseline?: {
+      streamId: string;
+      value: CanonicalInputTimelineBaseline;
+    },
   ): {
     activePresses: Map<string, { mode: string; key: string }>;
     activeKeys: Map<string, string>;
@@ -126,6 +134,21 @@ export class InputTimelineBuffer {
     const activeKeys = reset
       ? new Map<string, string>()
       : new Map(this.activeKeys);
+
+    if (baseline) {
+      for (const key of baseline.value.activeKeys) {
+        const composedKey = `${baseline.value.mode}\u0000${key}`;
+        const pressId = baselinePressId(baseline.streamId, key);
+        if (activeKeys.has(composedKey) || activePresses.has(pressId)) {
+          throw new Error('Duplicate timeline baseline key');
+        }
+        activePresses.set(pressId, {
+          mode: baseline.value.mode,
+          key,
+        });
+        activeKeys.set(composedKey, pressId);
+      }
+    }
 
     for (const action of actions) {
       if (action.kind !== 'state') continue;
@@ -219,7 +242,10 @@ export class InputTimelineBuffer {
           return invalid('New timeline stream lacks baseline');
         }
         validateBaseline(batch.baseline);
-        const lifecycle = this.validateStateLifecycle(batch.actions, true);
+        const lifecycle = this.validateStateLifecycle(batch.actions, true, {
+          streamId: batch.streamId,
+          value: batch.baseline,
+        });
         this.streamId = batch.streamId;
         this.revision = revision;
         this.sourceRevision = sourceRevision;
@@ -275,6 +301,100 @@ export class InputTimelineBuffer {
       return { type: 'accepted', actions: batch.actions };
     } catch (error) {
       return invalid(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  rebase(checkpoint: CanonicalInputTimelineRebase): InputTimelineIngestResult {
+    try {
+      if (
+        checkpoint.version !== CANONICAL_INPUT_TIMELINE_VERSION ||
+        !checkpoint.streamId
+      ) {
+        throw new Error('Invalid timeline rebase envelope');
+      }
+      const revision = parseU64(checkpoint.revision, 'revision');
+      const sourceRevision = parseU64(
+        checkpoint.sourceRevision,
+        'sourceRevision',
+      );
+      const safeThroughUs = parseU64(checkpoint.safeThroughUs, 'safeThroughUs');
+      if (revision === 0n || sourceRevision === 0n) {
+        throw new Error('Timeline rebase revisions must be positive');
+      }
+      validateBaseline(checkpoint.baseline);
+      if (!Array.isArray(checkpoint.activePresses)) {
+        throw new Error('Invalid timeline rebase active presses');
+      }
+
+      const activePresses = new Map<string, { mode: string; key: string }>();
+      const activeKeys = new Map<string, string>();
+      for (const press of checkpoint.activePresses) {
+        if (
+          !isRecord(press) ||
+          typeof press.pressId !== 'string' ||
+          !press.pressId ||
+          typeof press.mode !== 'string' ||
+          typeof press.key !== 'string' ||
+          parseU64(press.downTimeUs, 'downTimeUs') > safeThroughUs
+        ) {
+          throw new Error('Invalid timeline rebase active press');
+        }
+        const composedKey = `${press.mode}\u0000${press.key}`;
+        if (activePresses.has(press.pressId) || activeKeys.has(composedKey)) {
+          throw new Error('Duplicate timeline rebase active press');
+        }
+        activePresses.set(press.pressId, {
+          mode: press.mode,
+          key: press.key,
+        });
+        activeKeys.set(composedKey, press.pressId);
+      }
+
+      const baselineKeys = new Set(checkpoint.baseline.activeKeys);
+      if (baselineKeys.size !== checkpoint.baseline.activeKeys.length) {
+        throw new Error('Duplicate timeline rebase baseline key');
+      }
+      if (
+        checkpoint.activePresses.some(
+          (press) =>
+            press.mode === checkpoint.baseline.mode &&
+            !baselineKeys.has(press.key),
+        )
+      ) {
+        throw new Error('Timeline rebase active keys do not match presses');
+      }
+      for (const key of baselineKeys) {
+        const composedKey = `${checkpoint.baseline.mode}\u0000${key}`;
+        if (activeKeys.has(composedKey)) continue;
+        const pressId = baselinePressId(checkpoint.streamId, key);
+        if (activePresses.has(pressId)) {
+          throw new Error('Duplicate timeline rebase active press');
+        }
+        activePresses.set(pressId, {
+          mode: checkpoint.baseline.mode,
+          key,
+        });
+        activeKeys.set(composedKey, pressId);
+      }
+
+      this.streamId = checkpoint.streamId;
+      this.revision = revision;
+      this.sourceRevision = sourceRevision;
+      this.safeThroughUs = safeThroughUs;
+      this.gap = false;
+      this.activePresses = activePresses;
+      this.activeKeys = activeKeys;
+      return {
+        type: 'new_stream',
+        baseline: checkpoint.baseline,
+        actions: [],
+      };
+    } catch (error) {
+      this.gap = true;
+      return {
+        type: 'invalid',
+        reason: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 

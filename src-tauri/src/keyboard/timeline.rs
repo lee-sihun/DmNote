@@ -10,6 +10,10 @@ struct ActivePress {
     press_id: String,
 }
 
+fn baseline_press_id(stream_id: &str, key: &str) -> String {
+    format!("{stream_id}/0/{key}")
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct CanonicalInputTimelineBuilder {
     stream_id: Option<String>,
@@ -30,9 +34,17 @@ impl CanonicalInputTimelineBuilder {
         }
         self.stream_id = Some(stream_id.to_string());
         self.batch_revision = 0;
-        self.baseline = Some(baseline);
         self.actions.clear();
         self.active.clear();
+        for key in &baseline.active_keys {
+            self.active.insert(
+                (baseline.mode.clone(), key.clone()),
+                ActivePress {
+                    press_id: baseline_press_id(stream_id, key),
+                },
+            );
+        }
+        self.baseline = Some(baseline);
     }
 
     pub(crate) fn push_state(
@@ -195,6 +207,26 @@ mod tests {
         let batch = builder.watermark(1, 0).unwrap();
         assert!(batch.actions.is_empty());
         assert!(builder.push_state(2, 5, "4key", "A", false).is_err());
+    }
+
+    #[test]
+    fn baseline_key_can_be_released_without_synthesizing_a_down_action() {
+        let mut builder = CanonicalInputTimelineBuilder::default();
+        let mut initial = baseline();
+        initial.active_keys.push("A".to_string());
+        builder.begin_stream("stream-a", initial);
+
+        builder.push_state(2, 20, "4key", "A", false).unwrap();
+        let batch = builder.watermark(3, 30).unwrap();
+
+        assert!(matches!(
+            &batch.actions[0],
+            CanonicalInputTimelineAction::State {
+                press_id,
+                state: CanonicalInputState::Up,
+                ..
+            } if press_id == "stream-a/0/A"
+        ));
     }
 
     #[test]

@@ -526,6 +526,7 @@ export default function App() {
     onCounter: (action) => setKeyCounter(action.mode, action.key, action.count),
     onAdvance: (playheadMs) =>
       timelineContextRef.current.advanceTimeline(playheadMs),
+    isPresentationIdle: () => noteBuffer.activeCount === 0,
   });
 
   // 노트 이펙트 꺼짐 시 트랙 예약 공간 제거 - 창 높이와 키 오프셋이 함께 줄어든다

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { CanonicalInputTimelineBatch } from '@src/types/inputTimeline';
+import type {
+  CanonicalInputTimelineBatch,
+  CanonicalInputTimelineRebase,
+} from '@src/types/inputTimeline';
 import { InputTimelineBuffer } from './inputTimeline';
 
 const batch = (
@@ -135,5 +138,107 @@ describe('InputTimelineBuffer', () => {
       reason: 'Duplicate timeline DOWN',
     });
     expect(buffer.snapshot().gap).toBe(true);
+  });
+
+  it('accepts an OBS checkpoint and continues the active press lifecycle', () => {
+    const buffer = new InputTimelineBuffer();
+    const checkpoint: CanonicalInputTimelineRebase = {
+      version: 1,
+      streamId: 'stream-a',
+      revision: '20',
+      sourceRevision: '200',
+      safeThroughUs: '20000',
+      baseline: {
+        mode: '4key',
+        activeKeys: ['A'],
+        counters: { '4key': { A: 3 } },
+        counterSessionId: 'counter-session',
+        counterRevision: '3',
+      },
+      activePresses: [
+        {
+          pressId: 'press-a',
+          mode: '4key',
+          key: 'A',
+          downTimeUs: '15000',
+        },
+      ],
+    };
+
+    expect(buffer.rebase(checkpoint).type).toBe('new_stream');
+    const up = batch(21, 21_000);
+    up.sourceRevision = '210';
+    up.actions.push({
+      kind: 'state',
+      pressId: 'press-a',
+      mode: '4key',
+      key: 'A',
+      state: 'UP',
+      eventTimeUs: '20500',
+    });
+    expect(buffer.ingest(up).type).toBe('accepted');
+  });
+
+  it('rejects a checkpoint whose active key snapshot cannot continue safely', () => {
+    const buffer = new InputTimelineBuffer();
+    const checkpoint: CanonicalInputTimelineRebase = {
+      version: 1,
+      streamId: 'stream-a',
+      revision: '20',
+      sourceRevision: '200',
+      safeThroughUs: '20000',
+      baseline: {
+        mode: '4key',
+        activeKeys: [],
+        counters: {},
+        counterSessionId: 'counter-session',
+        counterRevision: '0',
+      },
+      activePresses: [
+        {
+          pressId: 'press-a',
+          mode: '4key',
+          key: 'A',
+          downTimeUs: '15000',
+        },
+      ],
+    };
+
+    expect(buffer.rebase(checkpoint)).toEqual({
+      type: 'invalid',
+      reason: 'Timeline rebase active keys do not match presses',
+    });
+  });
+
+  it('continues an unknown baseline press without inventing its DOWN time', () => {
+    const buffer = new InputTimelineBuffer();
+    const checkpoint: CanonicalInputTimelineRebase = {
+      version: 1,
+      streamId: 'stream-a',
+      revision: '20',
+      sourceRevision: '200',
+      safeThroughUs: '20000',
+      baseline: {
+        mode: '4key',
+        activeKeys: ['A'],
+        counters: {},
+        counterSessionId: 'counter-session',
+        counterRevision: '0',
+      },
+      activePresses: [],
+    };
+
+    expect(buffer.rebase(checkpoint).type).toBe('new_stream');
+    const up = batch(21, 21_000);
+    up.sourceRevision = '210';
+    up.actions.push({
+      kind: 'state',
+      pressId: 'stream-a/0/A',
+      mode: '4key',
+      key: 'A',
+      state: 'UP',
+      eventTimeUs: '20500',
+    });
+    expect(buffer.ingest(up).type).toBe('accepted');
   });
 });

@@ -40,4 +40,16 @@ describe('PresentationClock', () => {
     expect(clock.tick(2000)?.playheadMs).toBe(300);
     expect(clock.tick(2016)?.playheadMs).toBe(316);
   });
+
+  it('can re-anchor accumulated delay debt at a caller-approved idle point', () => {
+    const clock = new PresentationClock(100, 100);
+    clock.updateWatermark(500_000n, 1000);
+    clock.updateWatermark(1_000_000n, 2000);
+
+    expect(clock.tick(2000)?.playheadMs).toBe(300);
+    expect(clock.recoverDelayDebt(2000)).toMatchObject({
+      playheadMs: 800,
+      delayDebtMs: 0,
+    });
+  });
 });

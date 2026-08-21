@@ -30,6 +30,7 @@ use crate::models::obs::{
     make_envelope, HelloAckPayload, InvokeRequestPayload, ObsBroadcast, ObsEnvelope, ObsStatus,
     OBS_PROTOCOL_VERSION,
 };
+use crate::services::obs_timeline_replay::{ObsTimelineReplayStore, TimelineReplayResponse};
 
 const MAX_HTTP_HEADER_SIZE: usize = 16 * 1024;
 
@@ -309,6 +310,7 @@ pub struct ObsBridgeService {
     port: RwLock<u16>,
     client_count: AtomicU32,
     cached_snapshot: RwLock<Value>,
+    timeline_replay: Arc<RwLock<ObsTimelineReplayStore>>,
     broadcast_tx: broadcast::Sender<ObsBroadcast>,
     shutdown_tx: RwLock<Option<oneshot::Sender<()>>>,
     /// 서버 루프 태스크 핸들 (stop→start 경쟁 조건 방지)
@@ -334,6 +336,7 @@ impl ObsBridgeService {
             port: RwLock::new(0),
             client_count: AtomicU32::new(0),
             cached_snapshot: RwLock::new(Value::Null),
+            timeline_replay: Arc::new(RwLock::new(ObsTimelineReplayStore::default())),
             broadcast_tx,
             shutdown_tx: RwLock::new(None),
             server_handle: tokio::sync::Mutex::new(None),
@@ -403,9 +406,13 @@ impl ObsBridgeService {
         let mut ids = Vec::with_capacity(forwarded_events.len());
         for event_name in &forwarded_events {
             let tx = self.broadcast_tx.clone();
+            let timeline_replay = Arc::clone(&self.timeline_replay);
             let name = event_name.to_string();
             let id = app.listen_any(*event_name, move |evt| {
                 let data: Value = serde_json::from_str(evt.payload()).unwrap_or(Value::Null);
+                if name == "keys:timeline" {
+                    timeline_replay.write().ingest(&data);
+                }
                 let _ = tx.send(ObsBroadcast::TauriEvent {
                     event: name.clone(),
                     data,
@@ -454,6 +461,9 @@ impl ObsBridgeService {
 
     /// 범용 Tauri 이벤트 포워딩 (OBS 클라이언트에 tauri_event로 전달)
     pub fn broadcast_tauri_event(&self, event: String, data: Value) {
+        if event == "keys:timeline" {
+            self.timeline_replay.write().ingest(&data);
+        }
         let _ = self
             .broadcast_tx
             .send(ObsBroadcast::TauriEvent { event, data });
@@ -935,6 +945,14 @@ impl ObsBridgeService {
                         }
                         Err(broadcast::error::RecvError::Lagged(n)) => {
                             log::warn!("[ObsBridge] {addr}: {n}개 메시지 누락, 스냅샷 재전송");
+                            let timeline_recovery =
+                                self.timeline_replay.read().replay_after(None, 0);
+                            if let TimelineReplayResponse::Rebase(payload) = timeline_recovery {
+                                let rebase = make_envelope("timeline_rebase", next_seq(), payload);
+                                if ws_tx.send(Message::Text(rebase.to_string())).await.is_err() {
+                                    break;
+                                }
+                            }
                             let snapshot = self.cached_snapshot.read().clone();
                             let msg = make_envelope("snapshot", next_seq(), snapshot);
                             if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
@@ -961,9 +979,56 @@ impl ObsBridgeService {
                                         }
                                     }
                                     "resync_request" => {
+                                        let timeline_recovery =
+                                            self.timeline_replay.read().replay_after(None, 0);
+                                        if let TimelineReplayResponse::Rebase(payload) = timeline_recovery {
+                                            let rebase = make_envelope(
+                                                "timeline_rebase",
+                                                next_seq(),
+                                                payload,
+                                            );
+                                            if ws_tx.send(Message::Text(rebase.to_string())).await.is_err() {
+                                                break;
+                                            }
+                                        }
                                         let snapshot = self.cached_snapshot.read().clone();
                                         let msg = make_envelope("snapshot", next_seq(), snapshot);
                                         if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                    "timeline_replay_request" => {
+                                        let stream_id = envelope
+                                            .payload
+                                            .get("streamId")
+                                            .and_then(Value::as_str);
+                                        let after_revision = envelope
+                                            .payload
+                                            .get("afterRevision")
+                                            .and_then(Value::as_str)
+                                            .and_then(|value| value.parse::<u64>().ok())
+                                            .unwrap_or(0);
+                                        let response = self
+                                            .timeline_replay
+                                            .read()
+                                            .replay_after(stream_id, after_revision);
+                                        let (message_type, payload) = match response {
+                                            TimelineReplayResponse::Replay(payload) => {
+                                                ("timeline_replay", payload)
+                                            }
+                                            TimelineReplayResponse::Rebase(payload) => {
+                                                ("timeline_rebase", payload)
+                                            }
+                                            TimelineReplayResponse::Unavailable => {
+                                                ("timeline_unavailable", Value::Null)
+                                            }
+                                        };
+                                        let response = make_envelope(
+                                            message_type,
+                                            next_seq(),
+                                            payload,
+                                        );
+                                        if ws_tx.send(Message::Text(response.to_string())).await.is_err() {
                                             break;
                                         }
                                     }
@@ -1643,9 +1708,9 @@ mod tests {
         bridge.stop();
     }
 
-    // v1 번들은 KeySlot union 와이어 형식을 소비할 수 없으므로 handshake에서 결정적으로 거부
+    // v2 번들은 timeline replay/rebase를 소비할 수 없으므로 handshake에서 결정적으로 거부
     #[tokio::test]
-    async fn legacy_protocol_v1_hello_is_rejected() {
+    async fn legacy_protocol_v2_hello_is_rejected() {
         let bridge = Arc::new(ObsBridgeService::new("test"));
         let port = bridge
             .start(0, "token".to_string())
@@ -1656,10 +1721,10 @@ mod tests {
             .await
             .expect("WS 연결 실패");
         let hello = serde_json::json!({
-            "v": 1,
+            "v": 2,
             "type": "hello",
             "seq": 0,
-            "payload": { "token": "token", "protocol": 1 },
+            "payload": { "token": "token", "protocol": 2 },
         });
         ws.send(Message::Text(hello.to_string()))
             .await
@@ -1670,6 +1735,51 @@ mod tests {
             error.payload.get("code").and_then(Value::as_str),
             Some("PROTOCOL_MISMATCH")
         );
+
+        bridge.stop();
+    }
+
+    #[tokio::test]
+    async fn timeline_replay_request_returns_missing_batches() {
+        let bridge = Arc::new(ObsBridgeService::new("test"));
+        bridge.update_snapshot(serde_json::json!({ "source": "timeline-test" }));
+        for revision in 1..=2 {
+            bridge.broadcast_tauri_event(
+                "keys:timeline".to_string(),
+                serde_json::json!({
+                    "version": 1,
+                    "streamId": "stream-a",
+                    "revision": revision.to_string(),
+                    "sourceRevision": (revision * 2).to_string(),
+                    "safeThroughUs": (revision * 16_000).to_string(),
+                    "baseline": (revision == 1).then(|| serde_json::json!({
+                        "mode": "4key",
+                        "activeKeys": [],
+                        "counters": {},
+                        "counterSessionId": "counter-a",
+                        "counterRevision": "0"
+                    })),
+                    "actions": [],
+                }),
+            );
+        }
+        let port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 시작 실패");
+        let mut ws = connect_authenticated(port, "token").await;
+
+        let request = make_envelope(
+            "timeline_replay_request",
+            1,
+            serde_json::json!({ "streamId": "stream-a", "afterRevision": "1" }),
+        );
+        ws.send(Message::Text(request.to_string()))
+            .await
+            .expect("timeline replay 요청 실패");
+        let replay = receive_envelope(&mut ws, "timeline_replay").await;
+        assert_eq!(replay.payload["latestRevision"], "2");
+        assert_eq!(replay.payload["batches"].as_array().map(Vec::len), Some(1));
 
         bridge.stop();
     }

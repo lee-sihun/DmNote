@@ -46,7 +46,7 @@ describe('ipcShim 프로토콜 불일치 처리', () => {
     socket.onopen?.();
     socket.onmessage?.({
       data: JSON.stringify({
-        v: 2,
+        v: 3,
         type: 'error',
         seq: 0,
         ts: 0,
@@ -74,7 +74,7 @@ describe('ipcShim 프로토콜 불일치 처리', () => {
     socket.onopen?.();
     socket.onmessage?.({
       data: JSON.stringify({
-        v: 2,
+        v: 3,
         type: 'error',
         seq: 0,
         ts: 0,
@@ -87,5 +87,124 @@ describe('ipcShim 프로토콜 불일치 처리', () => {
     socket.onclose?.();
     vi.advanceTimersByTime(10_000);
     expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it('timeline gap은 checkpoint rebase 후 다음 revision부터 이어 붙인다', async () => {
+    const { initIpcShim } = await import('./ipcShim');
+    const promise = initIpcShim('ws://127.0.0.1:34891', 'token');
+    const socket = FakeWebSocket.instances[0];
+    socket.onopen?.();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        v: 3,
+        type: 'hello_ack',
+        seq: 0,
+        ts: 0,
+        payload: { serverVersion: 'test', obsMode: true, allowedList: [] },
+      }),
+    });
+    socket.onmessage?.({
+      data: JSON.stringify({
+        v: 3,
+        type: 'snapshot',
+        seq: 1,
+        ts: 0,
+        payload: {},
+      }),
+    });
+    await promise;
+
+    const internals = (
+      window as unknown as {
+        __TAURI_INTERNALS__: {
+          invoke: (
+            command: string,
+            args: Record<string, unknown>,
+          ) => Promise<unknown>;
+          transformCallback: (callback: (data: unknown) => void) => number;
+        };
+      }
+    ).__TAURI_INTERNALS__;
+    const onRebase = vi.fn();
+    const onTimeline = vi.fn();
+    await internals.invoke('plugin:event|listen', {
+      event: 'keys:timeline-rebase',
+      handler: internals.transformCallback(onRebase),
+    });
+    await internals.invoke('plugin:event|listen', {
+      event: 'keys:timeline',
+      handler: internals.transformCallback(onTimeline),
+    });
+
+    const liveBatch = {
+      version: 1,
+      streamId: 'stream-a',
+      revision: '3',
+      sourceRevision: '30',
+      safeThroughUs: '30000',
+      actions: [],
+    };
+    socket.onmessage?.({
+      data: JSON.stringify({
+        v: 3,
+        type: 'tauri_event',
+        seq: 2,
+        ts: 0,
+        payload: { event: 'keys:timeline', data: liveBatch },
+      }),
+    });
+    expect(onTimeline).not.toHaveBeenCalled();
+    expect(
+      socket.sent.map((message) => JSON.parse(message)).at(-1),
+    ).toMatchObject({
+      type: 'timeline_replay_request',
+      payload: { streamId: 'stream-a', afterRevision: '0' },
+    });
+
+    const checkpoint = {
+      version: 1,
+      streamId: 'stream-a',
+      revision: '3',
+      sourceRevision: '30',
+      safeThroughUs: '30000',
+      baseline: {
+        mode: '4key',
+        activeKeys: [],
+        counters: {},
+        counterSessionId: 'counter-a',
+        counterRevision: '0',
+      },
+      activePresses: [],
+    };
+    socket.onmessage?.({
+      data: JSON.stringify({
+        v: 3,
+        type: 'timeline_rebase',
+        seq: 3,
+        ts: 0,
+        payload: checkpoint,
+      }),
+    });
+    expect(onRebase).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: checkpoint }),
+    );
+
+    socket.onmessage?.({
+      data: JSON.stringify({
+        v: 3,
+        type: 'tauri_event',
+        seq: 4,
+        ts: 0,
+        payload: {
+          event: 'keys:timeline',
+          data: { ...liveBatch, revision: '4', sourceRevision: '40' },
+        },
+      }),
+    });
+    expect(onTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ revision: '4' }),
+      }),
+    );
   });
 });

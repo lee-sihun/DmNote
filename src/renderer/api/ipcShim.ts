@@ -41,6 +41,14 @@ const eventListenersByName = new Map<string, Set<number>>();
 let nextEventId = 1;
 let seqCounter = 0;
 
+let timelineListenerReady = false;
+let timelineObservedStreamId: string | null = null;
+let timelineStreamId: string | null = null;
+let timelineRevision = 0n;
+let timelineRecovering = false;
+const pendingTimelineBatches = new Map<string, Record<string, unknown>>();
+const MAX_PENDING_TIMELINE_BATCHES = 1024;
+
 // WS RPC 대기 중인 요청
 const pendingRpc = new Map<
   string,
@@ -99,6 +107,17 @@ function handleEventListen(args: Record<string, unknown>): number {
   }
   eventListenersByName.get(event)!.add(eventId);
 
+  if (event === 'keys:timeline' && !timelineListenerReady) {
+    timelineListenerReady = true;
+    timelineStreamId = timelineObservedStreamId;
+    timelineRevision = 0n;
+    timelineRecovering = timelineStreamId !== null;
+    pendingTimelineBatches.clear();
+    if (timelineStreamId) {
+      requestTimelineReplay(timelineStreamId, 0n);
+    }
+  }
+
   return eventId;
 }
 
@@ -144,6 +163,137 @@ function dispatchEvent(event: string, payload: unknown) {
   }
 }
 
+const parseTimelineRevision = (value: unknown): bigint | null => {
+  if (typeof value !== 'string' || !/^(?:0|[1-9]\d*)$/.test(value)) {
+    return null;
+  }
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+};
+
+function requestTimelineReplay(streamId: string, afterRevision: bigint) {
+  timelineRecovering = true;
+  sendWsMessage('timeline_replay_request', {
+    streamId,
+    afterRevision: afterRevision.toString(),
+  });
+}
+
+function queueTimelineBatch(batch: Record<string, unknown>) {
+  const revision = parseTimelineRevision(batch.revision);
+  if (revision == null) return;
+  pendingTimelineBatches.set(revision.toString(), batch);
+  if (pendingTimelineBatches.size <= MAX_PENDING_TIMELINE_BATCHES) return;
+
+  pendingTimelineBatches.clear();
+  timelineRecovering = false;
+  dispatchEvent('obs:resync', null);
+  sendWsMessage('resync_request');
+}
+
+function acceptTimelineBatch(batch: Record<string, unknown>) {
+  const revision = parseTimelineRevision(batch.revision);
+  if (revision == null) return false;
+  dispatchEvent('keys:timeline', batch);
+  timelineRevision = revision;
+  return true;
+}
+
+function flushPendingTimelineBatches() {
+  while (true) {
+    const nextRevision = timelineRevision + 1n;
+    const batch = pendingTimelineBatches.get(nextRevision.toString());
+    if (!batch) break;
+    pendingTimelineBatches.delete(nextRevision.toString());
+    if (!acceptTimelineBatch(batch)) break;
+  }
+}
+
+function handleTimelineBatch(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return;
+  const batch = payload as Record<string, unknown>;
+  const streamId = typeof batch.streamId === 'string' ? batch.streamId : null;
+  const revision = parseTimelineRevision(batch.revision);
+  if (!streamId || revision == null || revision === 0n) return;
+  timelineObservedStreamId = streamId;
+  if (!timelineListenerReady) return;
+
+  if (timelineStreamId !== streamId) {
+    pendingTimelineBatches.clear();
+    timelineStreamId = streamId;
+    timelineRevision = 0n;
+    if (revision === 1n) {
+      timelineRecovering = false;
+      acceptTimelineBatch(batch);
+    } else {
+      queueTimelineBatch(batch);
+      requestTimelineReplay(streamId, 0n);
+    }
+    return;
+  }
+
+  if (revision <= timelineRevision) return;
+  if (!timelineRecovering && revision === timelineRevision + 1n) {
+    acceptTimelineBatch(batch);
+    return;
+  }
+
+  queueTimelineBatch(batch);
+  if (!timelineRecovering) {
+    requestTimelineReplay(streamId, timelineRevision);
+  }
+}
+
+function handleTimelineReplay(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return;
+  const replay = payload as Record<string, unknown>;
+  const streamId = typeof replay.streamId === 'string' ? replay.streamId : null;
+  if (
+    !streamId ||
+    timelineStreamId !== streamId ||
+    !Array.isArray(replay.batches)
+  ) {
+    return;
+  }
+  for (const batch of replay.batches) {
+    if (batch && typeof batch === 'object') {
+      queueTimelineBatch(batch as Record<string, unknown>);
+    }
+  }
+  timelineRecovering = false;
+  flushPendingTimelineBatches();
+
+  const latestRevision = parseTimelineRevision(replay.latestRevision);
+  if (latestRevision != null && timelineRevision < latestRevision) {
+    requestTimelineReplay(streamId, timelineRevision);
+  }
+}
+
+function handleTimelineRebase(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return;
+  const checkpoint = payload as Record<string, unknown>;
+  const streamId =
+    typeof checkpoint.streamId === 'string' ? checkpoint.streamId : null;
+  const revision = parseTimelineRevision(checkpoint.revision);
+  if (!streamId || revision == null || revision === 0n) return;
+
+  timelineObservedStreamId = streamId;
+  timelineStreamId = streamId;
+  timelineRevision = revision;
+  timelineRecovering = false;
+  dispatchEvent('keys:timeline-rebase', checkpoint);
+  for (const key of pendingTimelineBatches.keys()) {
+    const pendingRevision = parseTimelineRevision(key);
+    if (pendingRevision == null || pendingRevision <= revision) {
+      pendingTimelineBatches.delete(key);
+    }
+  }
+  flushPendingTimelineBatches();
+}
+
 // ── WS 메시지 수신 → Tauri 이벤트 디스패치 ──
 
 function onWsMessage(envelope: ObsEnvelope) {
@@ -154,7 +304,11 @@ function onWsMessage(envelope: ObsEnvelope) {
         event: string;
         data: unknown;
       };
-      dispatchEvent(event, data);
+      if (event === 'keys:timeline') {
+        handleTimelineBatch(data);
+      } else {
+        dispatchEvent(event, data);
+      }
       break;
     }
 
@@ -185,6 +339,19 @@ function onWsMessage(envelope: ObsEnvelope) {
       dispatchEvent('obs:resync', null);
       break;
     }
+
+    case 'timeline_replay':
+      handleTimelineReplay(envelope.payload);
+      break;
+
+    case 'timeline_rebase':
+      handleTimelineRebase(envelope.payload);
+      break;
+
+    case 'timeline_unavailable':
+      timelineRecovering = false;
+      dispatchEvent('obs:resync', null);
+      break;
   }
 }
 
@@ -447,4 +614,16 @@ export function disposeIpcShim() {
   allowList = [];
   allowListReceived = false;
   _snapshotReceived = false;
+  timelineListenerReady = false;
+  timelineObservedStreamId = null;
+  timelineStreamId = null;
+  timelineRevision = 0n;
+  timelineRecovering = false;
+  pendingTimelineBatches.clear();
+}
+
+export function requestObsTimelineResync(): void {
+  if (window.__dmn_runtime === 'obs') {
+    sendWsMessage('resync_request');
+  }
 }

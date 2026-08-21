@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { subscribe } from '@api/modules/shared';
 import { animationScheduler } from '@utils/animation/animationScheduler';
+import { requestObsTimelineResync } from '@api/ipcShim';
 import type {
   CanonicalInputTimelineBaseline,
   CanonicalInputTimelineBatch,
   CanonicalInputTimelineCounterAction,
+  CanonicalInputTimelineRebase,
   CanonicalInputTimelineStateAction,
 } from '@src/types/inputTimeline';
 import {
@@ -12,6 +14,7 @@ import {
   type TimelineEpochResetReason,
   type TimelinePress,
 } from '@utils/core/inputTimelineReplay';
+import { updateInputTimelineDiagnostics } from '@utils/core/inputTimelineDiagnostics';
 
 export interface PresentationTimeSource {
   read(localFallbackMs: number): number;
@@ -28,6 +31,7 @@ interface InputTimelineReplayHandlers {
   onKeyState: (action: CanonicalInputTimelineStateAction) => void;
   onCounter: (action: CanonicalInputTimelineCounterAction) => void;
   onAdvance: (playheadMs: number) => void;
+  isPresentationIdle: () => boolean;
 }
 
 interface UseInputTimelineReplayOptions extends InputTimelineReplayHandlers {
@@ -48,6 +52,7 @@ export const useInputTimelineReplay = ({
   onKeyState,
   onCounter,
   onAdvance,
+  isPresentationIdle,
   keyDisplayDelayMs,
   epochKey,
 }: UseInputTimelineReplayOptions): PresentationTimeSource => {
@@ -58,6 +63,7 @@ export const useInputTimelineReplay = ({
     onKeyState,
     onCounter,
     onAdvance,
+    isPresentationIdle,
   });
   handlersRef.current = {
     onEpochReset,
@@ -66,6 +72,7 @@ export const useInputTimelineReplay = ({
     onKeyState,
     onCounter,
     onAdvance,
+    isPresentationIdle,
   };
 
   const replayRef = useRef<InputTimelineReplay | null>(null);
@@ -85,8 +92,12 @@ export const useInputTimelineReplay = ({
       onKeyState: (action) => handlersRef.current.onKeyState(action),
       onCounter: (action) => handlersRef.current.onCounter(action),
       onAdvance: ({ playheadMs }) => handlersRef.current.onAdvance(playheadMs),
-      onFailure: (reason) =>
-        console.error('[InputTimeline] replay stopped:', reason),
+      isPresentationIdle: () => handlersRef.current.isPresentationIdle(),
+      onFailure: (reason) => {
+        console.error('[InputTimeline] replay stopped:', reason);
+        requestObsTimelineResync();
+      },
+      onDiagnostics: updateInputTimelineDiagnostics,
     },
   );
 
@@ -103,13 +114,24 @@ export const useInputTimelineReplay = ({
     );
   }, [enabled, thresholdMs, transportReserveMs, keyDisplayDelayMs, epochKey]);
 
-  useEffect(
-    () =>
-      subscribe<CanonicalInputTimelineBatch>('keys:timeline', (batch) => {
+  useEffect(() => {
+    const unsubscribeRebase = subscribe<CanonicalInputTimelineRebase>(
+      'keys:timeline-rebase',
+      (checkpoint) => {
+        replayRef.current!.rebase(checkpoint, performance.now());
+      },
+    );
+    const unsubscribeTimeline = subscribe<CanonicalInputTimelineBatch>(
+      'keys:timeline',
+      (batch) => {
         replayRef.current!.ingest(batch, performance.now());
-      }),
-    [],
-  );
+      },
+    );
+    return () => {
+      unsubscribeTimeline();
+      unsubscribeRebase();
+    };
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;

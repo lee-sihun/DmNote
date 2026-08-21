@@ -65,14 +65,19 @@ export class PresentationClock {
       Math.min(this.playheadMs + elapsed, target),
     );
     this.lastTickMs = localNowMs;
-    return {
-      playheadMs: this.playheadMs,
-      safeTargetMs,
-      nominalTargetMs,
-      delayDebtMs: Math.max(0, nominalTargetMs - this.playheadMs),
-      stalled:
-        this.playheadMs >= safeTargetMs && nominalTargetMs > safeTargetMs,
-    };
+    return this.snapshot(nominalTargetMs, safeTargetMs);
+  }
+
+  recoverDelayDebt(localNowMs: number): PresentationClockSnapshot | null {
+    if (this.playheadMs == null) return null;
+    const nominalTargetMs = this.nominalTarget(localNowMs);
+    const safeTargetMs = this.safeTarget();
+    this.playheadMs = Math.max(
+      this.playheadMs,
+      Math.min(nominalTargetMs, safeTargetMs),
+    );
+    this.lastTickMs = localNowMs;
+    return this.snapshot(nominalTargetMs, safeTargetMs);
   }
 
   private nominalTarget(localNowMs: number): number {
@@ -83,5 +88,19 @@ export class PresentationClock {
 
   private safeTarget(): number {
     return this.safeThroughMs - this.thresholdMs;
+  }
+
+  private snapshot(
+    nominalTargetMs: number,
+    safeTargetMs: number,
+  ): PresentationClockSnapshot {
+    return {
+      playheadMs: this.playheadMs!,
+      safeTargetMs,
+      nominalTargetMs,
+      delayDebtMs: Math.max(0, nominalTargetMs - this.playheadMs!),
+      stalled:
+        this.playheadMs! >= safeTargetMs && nominalTargetMs > safeTargetMs,
+    };
   }
 }

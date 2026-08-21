@@ -1,7 +1,7 @@
 // OBS WebSocket 프로토콜 타입
 
-// v2: 키 슬롯 와이어 형식이 KeySlot union(string | MultiKeySlot)으로 확장됨
-export const OBS_PROTOCOL_VERSION = 2;
+// v3: canonical input timeline replay/rebase 계약 추가
+export const OBS_PROTOCOL_VERSION = 3;
 export const DEFAULT_OBS_PORT = 34891;
 
 export interface ObsEnvelope<T = unknown> {

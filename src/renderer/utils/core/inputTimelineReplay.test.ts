@@ -34,7 +34,9 @@ const callbacks = (): InputTimelineReplayCallbacks => ({
   onKeyState: vi.fn(),
   onCounter: vi.fn(),
   onAdvance: vi.fn(),
+  isPresentationIdle: vi.fn(() => false),
   onFailure: vi.fn(),
+  onDiagnostics: vi.fn(),
 });
 
 describe('InputTimelineReplay', () => {
@@ -197,5 +199,102 @@ describe('InputTimelineReplay', () => {
     expect(sink.onCounter).toHaveBeenCalledWith(
       expect.objectContaining({ key: 'A', count: 7 }),
     );
+  });
+
+  it('recovers a failed OBS stream from a validated checkpoint', () => {
+    const sink = callbacks();
+    const replay = new InputTimelineReplay(
+      {
+        enabled: true,
+        thresholdMs: 100,
+        transportReserveMs: 0,
+        keyDisplayDelayMs: 0,
+        epochKey: 'test',
+      },
+      sink,
+    );
+    replay.ingest(batch(1, 200_000, []), 1000);
+    replay.ingest(batch(3, 300_000, []), 1010);
+    replay.rebase(
+      {
+        version: 1,
+        streamId: 'stream-a',
+        revision: '3',
+        sourceRevision: '30',
+        safeThroughUs: '300000',
+        baseline,
+        activePresses: [],
+      },
+      1020,
+    );
+
+    expect(replay.tick(1020)).not.toBeNull();
+    expect(sink.onEpochReset).toHaveBeenLastCalledWith('stream', baseline);
+    expect(sink.onDiagnostics).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rebaseCount: 1 }),
+    );
+  });
+
+  it('fails closed when the bounded presentation queue is exceeded', () => {
+    const sink = callbacks();
+    const replay = new InputTimelineReplay(
+      {
+        enabled: true,
+        thresholdMs: 100,
+        transportReserveMs: 0,
+        keyDisplayDelayMs: 10_000,
+        epochKey: 'test',
+      },
+      sink,
+    );
+    const actions = Array.from({ length: 8193 }, (_, index) => ({
+      kind: 'counter' as const,
+      mode: '4key',
+      key: `K${index}`,
+      count: 1,
+      counterSessionId: 'counter-session',
+      counterRevision: String(index + 1),
+      eventTimeUs: '100000',
+    }));
+
+    replay.ingest(batch(1, 200_000, actions), 1000);
+
+    expect(sink.onFailure).toHaveBeenCalledWith(
+      'Timeline presentation buffer exceeded bounds',
+    );
+    expect(replay.tick(1010)).toBeNull();
+    expect(sink.onDiagnostics).toHaveBeenLastCalledWith(
+      expect.objectContaining({ failureCount: 1, pendingActions: 0 }),
+    );
+  });
+
+  it('recovers delay debt only after the presentation becomes idle', () => {
+    let idle = false;
+    const sink = callbacks();
+    sink.isPresentationIdle = () => idle;
+    const replay = new InputTimelineReplay(
+      {
+        enabled: true,
+        thresholdMs: 100,
+        transportReserveMs: 100,
+        keyDisplayDelayMs: 0,
+        epochKey: 'test',
+      },
+      sink,
+    );
+    replay.ingest(batch(1, 500_000, []), 1000);
+    expect(replay.tick(1000)?.playheadMs).toBe(300);
+
+    replay.ingest(batch(2, 1_000_000, []), 2000);
+    expect(replay.tick(2000)).toMatchObject({
+      playheadMs: 300,
+      delayDebtMs: 500,
+    });
+
+    idle = true;
+    expect(replay.tick(2010)).toMatchObject({
+      playheadMs: 810,
+      delayDebtMs: 0,
+    });
   });
 });

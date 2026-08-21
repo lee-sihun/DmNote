@@ -2,6 +2,7 @@ import type {
   CanonicalInputTimelineBaseline,
   CanonicalInputTimelineBatch,
   CanonicalInputTimelineCounterAction,
+  CanonicalInputTimelineRebase,
   CanonicalInputTimelineStateAction,
 } from '@src/types/inputTimeline';
 import { InputTimelineBuffer } from './inputTimeline';
@@ -9,6 +10,11 @@ import {
   PresentationClock,
   type PresentationClockSnapshot,
 } from './presentationClock';
+import type { InputTimelineDiagnostics } from './inputTimelineDiagnostics';
+
+const MAX_PENDING_PRESSES = 4096;
+const MAX_PENDING_ACTIONS = 8192;
+const MAX_BUFFERED_SOURCE_SPAN_MS = 30_000;
 
 export interface TimelinePress {
   pressId: string;
@@ -33,7 +39,9 @@ export interface InputTimelineReplayCallbacks {
   onKeyState: (action: CanonicalInputTimelineStateAction) => void;
   onCounter: (action: CanonicalInputTimelineCounterAction) => void;
   onAdvance: (snapshot: PresentationClockSnapshot) => void;
+  isPresentationIdle: () => boolean;
   onFailure: (reason: string) => void;
+  onDiagnostics: (diagnostics: InputTimelineDiagnostics) => void;
 }
 
 export interface InputTimelineReplayConfig {
@@ -75,6 +83,10 @@ export class InputTimelineReplay {
   private scheduledActionIndex = 0;
   private failed = false;
   private currentPlayheadMs: number | null = null;
+  private lastWatermarkReceivedAtMs: number | null = null;
+  private maxWatermarkIntervalMs = 0;
+  private rebaseCount = 0;
+  private failureCount = 0;
 
   constructor(
     config: InputTimelineReplayConfig,
@@ -124,13 +136,7 @@ export class InputTimelineReplay {
           result.type === 'gap'
             ? `Timeline gap: expected ${result.expectedRevision}, received ${result.receivedRevision}`
             : result.reason;
-        this.failed = true;
-        this.clearPendingPresses();
-        this.currentPlayheadMs = null;
-        if (this.config.enabled) {
-          this.callbacks.onEpochReset('validation_failure');
-        }
-        this.callbacks.onFailure(reason);
+        this.failClosed(reason);
       }
       return;
     }
@@ -151,6 +157,7 @@ export class InputTimelineReplay {
     }
 
     const snapshot = this.buffer.snapshot();
+    this.observeWatermarkArrival(receivedAtMs);
     this.clock.updateWatermark(snapshot.safeThroughUs, receivedAtMs);
     if (!this.config.enabled) return;
 
@@ -159,6 +166,35 @@ export class InputTimelineReplay {
         this.ingestStateAction(action);
       }
       this.schedulePresentationAction(action);
+    }
+    if (this.exceedsBufferBounds(snapshot.safeThroughUs)) {
+      this.failClosed('Timeline presentation buffer exceeded bounds');
+    }
+  }
+
+  rebase(checkpoint: CanonicalInputTimelineRebase, receivedAtMs: number): void {
+    const result = this.buffer.rebase(checkpoint);
+    if (result.type !== 'new_stream') {
+      const reason =
+        result.type === 'invalid'
+          ? result.reason
+          : 'Unexpected timeline rebase result';
+      this.failClosed(reason);
+      return;
+    }
+
+    this.failed = false;
+    this.rebaseCount += 1;
+    this.clearPendingPresses();
+    this.clock.resetEpoch(
+      this.config.thresholdMs,
+      this.config.transportReserveMs,
+    );
+    this.clock.updateWatermark(BigInt(checkpoint.safeThroughUs), receivedAtMs);
+    this.currentPlayheadMs = null;
+    this.observeWatermarkArrival(receivedAtMs);
+    if (this.config.enabled) {
+      this.callbacks.onEpochReset('stream', checkpoint.baseline);
     }
   }
 
@@ -208,7 +244,9 @@ export class InputTimelineReplay {
       this.scheduledActionIndex = 0;
     }
     this.callbacks.onAdvance(snapshot);
-    return snapshot;
+    const recovered = this.recoverDelayDebtIfIdle(localNowMs, snapshot);
+    this.emitDiagnostics(recovered);
+    return recovered;
   }
 
   readPlayhead(localFallbackMs: number): number {
@@ -279,5 +317,79 @@ export class InputTimelineReplay {
       keyDisplayDelayMs: Math.max(0, Number(config.keyDisplayDelayMs) || 0),
       epochKey: String(config.epochKey ?? ''),
     };
+  }
+
+  private exceedsBufferBounds(safeThroughUs: bigint): boolean {
+    const pendingActions =
+      this.scheduledActions.length - this.scheduledActionIndex;
+    const bufferedSpanMs =
+      this.currentPlayheadMs == null
+        ? 0
+        : Number(safeThroughUs) / 1000 - this.currentPlayheadMs;
+    return (
+      this.presses.size > MAX_PENDING_PRESSES ||
+      pendingActions > MAX_PENDING_ACTIONS ||
+      bufferedSpanMs > MAX_BUFFERED_SOURCE_SPAN_MS
+    );
+  }
+
+  private observeWatermarkArrival(receivedAtMs: number): void {
+    if (this.lastWatermarkReceivedAtMs != null) {
+      this.maxWatermarkIntervalMs = Math.max(
+        this.maxWatermarkIntervalMs,
+        Math.max(0, receivedAtMs - this.lastWatermarkReceivedAtMs),
+      );
+    }
+    this.lastWatermarkReceivedAtMs = receivedAtMs;
+  }
+
+  private recoverDelayDebtIfIdle(
+    localNowMs: number,
+    snapshot: PresentationClockSnapshot,
+  ): PresentationClockSnapshot {
+    if (
+      snapshot.delayDebtMs <= 0 ||
+      this.presses.size > 0 ||
+      this.pendingStartIndex < this.pendingStarts.length ||
+      this.scheduledActionIndex < this.scheduledActions.length ||
+      !this.callbacks.isPresentationIdle()
+    ) {
+      return snapshot;
+    }
+    const recovered = this.clock.recoverDelayDebt(localNowMs) ?? snapshot;
+    this.currentPlayheadMs = recovered.playheadMs;
+    if (recovered.playheadMs !== snapshot.playheadMs) {
+      this.callbacks.onAdvance(recovered);
+    }
+    return recovered;
+  }
+
+  private failClosed(reason: string): void {
+    this.failed = true;
+    this.failureCount += 1;
+    this.clearPendingPresses();
+    this.currentPlayheadMs = null;
+    if (this.config.enabled) {
+      this.callbacks.onEpochReset('validation_failure');
+    }
+    this.callbacks.onFailure(reason);
+    this.emitDiagnostics();
+  }
+
+  private emitDiagnostics(clock?: PresentationClockSnapshot): void {
+    const buffer = this.buffer.snapshot();
+    this.callbacks.onDiagnostics({
+      streamId: buffer.streamId,
+      revision: buffer.revision.toString(),
+      pendingPresses: this.presses.size,
+      pendingActions: this.scheduledActions.length - this.scheduledActionIndex,
+      safeHeadroomMs:
+        clock == null ? 0 : Math.max(0, clock.safeTargetMs - clock.playheadMs),
+      delayDebtMs: clock?.delayDebtMs ?? 0,
+      stalled: clock?.stalled ?? false,
+      maxWatermarkIntervalMs: this.maxWatermarkIntervalMs,
+      rebaseCount: this.rebaseCount,
+      failureCount: this.failureCount,
+    });
   }
 }

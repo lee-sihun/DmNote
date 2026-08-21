@@ -42,3 +42,20 @@ export interface CanonicalInputTimelineBatch {
   baseline?: CanonicalInputTimelineBaseline;
   actions: CanonicalInputTimelineAction[];
 }
+
+export interface CanonicalInputTimelineActivePress {
+  pressId: string;
+  mode: string;
+  key: string;
+  downTimeUs: string;
+}
+
+export interface CanonicalInputTimelineRebase {
+  version: typeof CANONICAL_INPUT_TIMELINE_VERSION;
+  streamId: string;
+  revision: string;
+  sourceRevision: string;
+  safeThroughUs: string;
+  baseline: CanonicalInputTimelineBaseline;
+  activePresses: CanonicalInputTimelineActivePress[];
+}
