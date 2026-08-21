@@ -625,6 +625,7 @@ export function useAppBootstrap() {
       counterContext: CounterResyncContext,
     ) => {
       initDefaults(bootstrap.defaults);
+
       // 설정/모드 적용은 구독자를 통해 대기 카운터를 flush할 수 있으므로,
       // 카운터의 인과 순서를 먼저 확정한 뒤 나머지 스냅샷을 적용
       applyResyncCounters(

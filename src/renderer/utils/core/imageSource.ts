@@ -53,11 +53,13 @@ export function resolveImageSource(value?: string | null): string | null {
     return cached;
   }
 
+  // Tauri API 시도 → 실패 시 OBS HTTP fallback
   try {
     const converted = convertFileSrc(raw);
     cacheImageSource(raw, converted);
     return converted;
   } catch {
+    // OBS 환경 (Tauri API 없음): HTTP /media/ 경로로 서빙
     const url = resolveForObs(raw);
     cacheImageSource(raw, url);
     return url;

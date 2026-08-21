@@ -176,11 +176,13 @@ const ImagePicker = ({
 
         {/* 이미지 표시 */}
         {currentImage && !currentTransparent && (
-          <img
-            className="absolute inset-0 h-full w-full object-cover"
-            src={currentImageSrc || ''}
-            alt=""
-            draggable={false}
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{
+              backgroundImage: currentImageSrc
+                ? `url(${currentImageSrc})`
+                : 'none',
+            }}
           />
         )}
 
