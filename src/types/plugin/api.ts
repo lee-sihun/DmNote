@@ -114,6 +114,8 @@ export type CssActivateResult = {
 export type FontLoadResult = {
   success: boolean;
   error?: string;
+  /** 'invalid-font-content' - 없으면 사용자 취소 */
+  errorCode?: string;
   fontName?: string;
   fontPath?: string;
 };
@@ -121,6 +123,8 @@ export type FontLoadResult = {
 export type ImageLoadResult = {
   success: boolean;
   error?: string;
+  /** 'invalid-image-content' - 없으면 사용자 취소 */
+  errorCode?: string;
   imagePath?: string;
 };
 

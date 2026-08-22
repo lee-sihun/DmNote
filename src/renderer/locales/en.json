@@ -184,7 +184,8 @@
     "idle": "Idle",
     "active": "Pressed",
     "transparent": "Transparent",
-    "reset": "Reset Image"
+    "reset": "Reset Image",
+    "invalidImage": "This image file could not be read."
   },
   "noteSetting": {
     "borderRadius": "Corner Radius",
@@ -609,7 +610,8 @@
     "editorLoadFailed": "Couldn't load the web font editor. Please try again.",
     "editTargetMissing": "Couldn't find the web font to edit. It may have been removed.",
     "deleteConfirm": "Delete this font? Elements using it will fall back to the default font.",
-    "add": "Add Font"
+    "add": "Add Font",
+    "invalidFont": "This font file could not be read."
   },
   "soundPicker": {
     "searchPlaceholder": "Search...",

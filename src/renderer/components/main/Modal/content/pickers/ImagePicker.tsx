@@ -6,6 +6,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import TabSwitch from '@components/main/common/TabSwitch';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
+import { canDecodeImage } from '@utils/core/assetProbe';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
@@ -78,6 +79,16 @@ const ImagePicker = ({
     if (!showActiveState) setMode(STATE_MODES.idle);
   }, [showActiveState]);
 
+  const showInvalidImageAlert = (): void => {
+    void window.api.ui.dialog
+      .alert(t('imagePicker.invalidImage'), {
+        confirmText: t('common.ok') || '확인',
+      })
+      .catch((error) => {
+        console.error('Failed to open invalid image alert:', error);
+      });
+  };
+
   const handleImageClick = async (stateMode: string): Promise<void> => {
     if (loadingImageRef.current) return;
     loadingImageRef.current = true;
@@ -85,6 +96,13 @@ const ImagePicker = ({
     try {
       const result = await imageApi.load();
       if (!result?.success || !result.imagePath) {
+        // errorCode가 없는 실패는 사용자 취소
+        if (result?.errorCode) showInvalidImageAlert();
+        return;
+      }
+      // 시그니처를 통과해도 WebView가 못 그리는 파일이 있다. 직전 값을 덮기 전에 확인한다
+      if (!(await canDecodeImage(result.imagePath))) {
+        showInvalidImageAlert();
         return;
       }
       // 파일 복사는 이미 끝났다. 대상이 갈렸으면 연결만 하지 않는다

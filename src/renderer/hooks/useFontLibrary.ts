@@ -9,6 +9,7 @@ import {
 } from '@src/types/settings/fonts';
 import { settingsApi } from '@api/modules/settingsApi';
 import { fontApi } from '@api/modules/resourceApi';
+import { canLoadFont } from '@utils/core/assetProbe';
 
 // 폰트 라이브러리 CRUD — 낙관적 스토어 갱신 + 설정 영속화
 // CSS 반영은 settings:changed 라운드트립(useAppBootstrap의 syncFontCSS)이 담당
@@ -90,6 +91,16 @@ export const useFontLibrary = () => {
       });
   };
 
+  const showInvalidFontAlert = () => {
+    void window.api.ui.dialog
+      .alert(t('fontPicker.invalidFont'), {
+        confirmText: t('common.ok') || '확인',
+      })
+      .catch((error) => {
+        console.error('Failed to open invalid font alert:', error);
+      });
+  };
+
   const addLocalFont = async () => {
     if (isAddingRef.current) return;
     isAddingRef.current = true;
@@ -99,6 +110,12 @@ export const useFontLibrary = () => {
       if (result.success && result.fontName && result.fontPath) {
         if (isDuplicateFontFamily(result.fontName)) {
           showDuplicateFontFamilyAlert(result.fontName);
+          return;
+        }
+
+        // 시그니처를 통과해도 브라우저가 못 쓰는 폰트가 있다. 목록에 넣기 전에 확인한다
+        if (!(await canLoadFont(result.fontPath))) {
+          showInvalidFontAlert();
           return;
         }
 
@@ -112,8 +129,10 @@ export const useFontLibrary = () => {
         };
         const nextFonts = [...useFontStore.getState().customFonts, newFont];
         persistFonts(nextFonts);
-      } else if (result.error) {
-        console.error('Failed to load font:', result.error);
+      } else if (result.errorCode) {
+        // errorCode가 없는 실패는 사용자 취소
+        console.error('Failed to load font:', result.error ?? result.errorCode);
+        showInvalidFontAlert();
       }
     } catch (error) {
       console.error('Failed to add local font:', error);

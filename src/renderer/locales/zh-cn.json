@@ -184,7 +184,8 @@
     "idle": "闲置",
     "active": "按下",
     "transparent": "透明",
-    "reset": "重置图像"
+    "reset": "重置图像",
+    "invalidImage": "无法读取该图片文件。"
   },
   "noteSetting": {
     "borderRadius": "圆角半径",
@@ -609,7 +610,8 @@
     "editorLoadFailed": "无法加载网络字体编辑器，请重试。",
     "editTargetMissing": "找不到要编辑的网络字体，可能已被移除。",
     "deleteConfirm": "确定删除该字体？使用它的元素将以默认字体显示。",
-    "add": "添加字体"
+    "add": "添加字体",
+    "invalidFont": "无法读取该字体文件。"
   },
   "soundPicker": {
     "searchPlaceholder": "搜索",

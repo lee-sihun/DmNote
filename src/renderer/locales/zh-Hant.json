@@ -184,7 +184,8 @@
     "idle": "閒置",
     "active": "按下",
     "transparent": "透明",
-    "reset": "重置圖像"
+    "reset": "重置圖像",
+    "invalidImage": "無法讀取此圖片檔案。"
   },
   "noteSetting": {
     "borderRadius": "圓角半徑",
@@ -609,7 +610,8 @@
     "editorLoadFailed": "無法載入網路字體編輯器，請再試一次。",
     "editTargetMissing": "找不到要編輯的網路字體，可能已被移除。",
     "deleteConfirm": "確定刪除該字體？使用它的元素將以預設字體顯示。",
-    "add": "新增字型"
+    "add": "新增字型",
+    "invalidFont": "無法讀取此字型檔案。"
   },
   "soundPicker": {
     "searchPlaceholder": "搜尋",
