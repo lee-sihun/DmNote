@@ -5,13 +5,14 @@ use std::{
 
 use log::info;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
     commands::{dialog::parented_file_dialog, editor::state::emit_best_effort},
     errors::{CmdResult, CommandError},
     models::{CustomJs, JsPlugin},
+    services::event_publisher::publish_event,
     state::{store::AdmittedHistoryOverlapMutation, AppState},
 };
 
@@ -86,7 +87,7 @@ struct JsStatePayload<'a> {
 }
 
 fn emit_js_state(app: &AppHandle, script: &CustomJs, forced: bool) -> CmdResult<()> {
-    app.emit("js:content", JsStatePayload { script, forced })?;
+    publish_event(app, "js:content", JsStatePayload { script, forced });
     Ok(())
 }
 
@@ -132,7 +133,7 @@ pub fn js_toggle(
             })?;
 
     emit_history_status(&app, &transaction);
-    app.emit("js:use", &JsToggleResponse { enabled })?;
+    publish_event(&app, "js:use", JsToggleResponse { enabled });
 
     if enabled {
         emit_js_state(&app, &transaction.value, false)?;
@@ -160,7 +161,7 @@ pub fn js_reset(
             })?;
 
     emit_history_status(&app, &transaction);
-    app.emit("js:use", &JsToggleResponse { enabled: false })?;
+    publish_event(&app, "js:use", JsToggleResponse { enabled: false });
     emit_js_state(&app, &default, false)?;
     Ok(())
 }

@@ -1,10 +1,11 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State, WebviewWindow};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
     commands::editor::state::emit_best_effort,
     errors::CmdResult,
     models::{TabNoteOverrides, TabNoteSettings},
+    services::event_publisher::publish_event,
     state::AppState,
 };
 
@@ -76,7 +77,7 @@ pub fn note_tab_set(
     if let Some(status) = transaction.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
     }
-    app.emit("tabNote:changed", &response)?;
+    publish_event(&app, "tabNote:changed", &response);
     state.refresh_obs_snapshot();
 
     Ok(TabNoteSetResponse {
@@ -110,7 +111,7 @@ pub fn note_tab_clear(
     if let Some(status) = transaction.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
     }
-    app.emit("tabNote:changed", &response)?;
+    publish_event(&app, "tabNote:changed", &response);
     state.refresh_obs_snapshot();
 
     Ok(TabNoteClearResponse {

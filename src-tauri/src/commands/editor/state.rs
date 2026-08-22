@@ -1,17 +1,15 @@
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, State, WebviewWindow};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
     errors::CmdResult,
     models::{CommittedEditorChange, EditorCommitResult, EditorField, EditorGetResult},
-    services::preview_broker::PreviewBroker,
+    services::{event_publisher::publish_event, preview_broker::PreviewBroker},
     state::{editor::decode_editor_commit_request, AppState},
 };
 
 pub(crate) fn emit_best_effort<T: serde::Serialize>(app: &AppHandle, event: &str, payload: &T) {
-    if let Err(error) = app.emit(event, payload) {
-        log::error!("[Editor] failed to emit {event}: {error}");
-    }
+    publish_event(app, event, payload);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

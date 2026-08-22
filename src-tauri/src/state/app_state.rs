@@ -47,15 +47,15 @@ use crate::{
         KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
         SettingsDiff, SettingsState, TabCssOverrides,
     },
-    services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
+    services::{
+        css_watcher::CssWatcher, event_publisher::publish_event, obs_bridge::ObsBridgeService,
+        settings::SettingsService,
+    },
     state::local_asset_path::path_identity_key,
 };
 
 const OVERLAY_LABEL: &str = "overlay";
 pub(crate) const PANEL_LABEL: &str = "panel";
-// 분리 패널 창은 메인 웹뷰가 window.open으로 여는 opener 자식 - 자체 JS 런타임이 없어
-// raw input·종료 핸드셰이크 대상이 아니다
-const RAW_INPUT_WINDOW_LABELS: [&str; 2] = ["main", OVERLAY_LABEL];
 const FRONTEND_LIFECYCLE_WINDOW_LABELS: [&str; 2] = ["main", OVERLAY_LABEL];
 // 메인이 window.open을 부르기 직전 arm하고, 이 시간 안에 온 요청만 패널 창으로 인정
 const PANEL_OPEN_ARM_TIMEOUT: Duration = Duration::from_secs(2);
@@ -597,6 +597,46 @@ struct QueuedCounterIncrement {
     key: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyCountersStatePayload<'a> {
+    session_id: &'a str,
+    revision: u64,
+    counters: &'a KeyCounters,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyCounterPayload<'a> {
+    mode: &'a str,
+    key: &'a str,
+    count: u32,
+    session_id: &'a str,
+    revision: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InputAxisPayload<'a> {
+    axis_id: &'a str,
+    value: u32,
+    full: u32,
+}
+
+#[derive(Serialize)]
+struct RawInputPayload<'a> {
+    label: &'a str,
+    labels: &'a [String],
+    state: &'a str,
+    device: &'a str,
+}
+
+#[derive(Serialize)]
+struct InputPressPayload<'a> {
+    label: &'a str,
+    mode: &'a str,
+}
+
 #[derive(Debug, Default)]
 struct CounterHistoryBarrierState {
     queueing: bool,
@@ -625,7 +665,6 @@ pub(crate) struct AdmittedCounterMutation {
 }
 
 /// 카운터 write lock 내부 전용 이벤트 송신 경계
-/// 동기 Rust listener에서 AppState 카운터 API 재진입 금지
 pub(crate) trait KeyCounterEventEmitter {
     fn emit_key_counters(
         &self,
@@ -650,15 +689,16 @@ impl KeyCounterEventEmitter for AppHandle {
         session_id: &str,
         revision: u64,
     ) -> Result<()> {
-        self.emit("keys:counters", counters)?;
-        self.emit(
+        publish_event(self, "keys:counters", counters);
+        publish_event(
+            self,
             "keys:counters-state",
-            &json!({
-                "sessionId": session_id,
-                "revision": revision,
-                "counters": counters,
-            }),
-        )?;
+            KeyCountersStatePayload {
+                session_id,
+                revision,
+                counters,
+            },
+        );
         Ok(())
     }
 
@@ -670,16 +710,17 @@ impl KeyCounterEventEmitter for AppHandle {
         session_id: &str,
         revision: u64,
     ) -> Result<()> {
-        self.emit(
+        publish_event(
+            self,
             "keys:counter",
-            &json!({
-                "mode": mode,
-                "key": key,
-                "count": count,
-                "sessionId": session_id,
-                "revision": revision,
-            }),
-        )?;
+            KeyCounterPayload {
+                mode,
+                key,
+                count,
+                session_id,
+                revision,
+            },
+        );
         Ok(())
     }
 }
@@ -774,22 +815,32 @@ fn should_recover_keyboard_daemon(
         && task_generation == Some(failed_generation)
 }
 
-fn key_state_payload(
-    key: &str,
-    state: &str,
-    mode: &str,
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyStatePayload<'a> {
+    key: &'a str,
+    state: &'a str,
+    mode: &'a str,
+    event_age_ms: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hold_duration_ms: Option<f64>,
+}
+
+fn key_state_payload<'a>(
+    key: &'a str,
+    state: &'a str,
+    mode: &'a str,
     event_age_ms: f64,
     is_down: bool,
     hold_duration_ms: Option<f64>,
-) -> serde_json::Value {
-    let mut payload =
-        json!({ "key": key, "state": state, "mode": mode, "eventAgeMs": event_age_ms });
-    if !is_down {
-        if let Some(hold_duration_ms) = hold_duration_ms {
-            payload["holdDurationMs"] = json!(hold_duration_ms);
-        }
+) -> KeyStatePayload<'a> {
+    KeyStatePayload {
+        key,
+        state,
+        mode,
+        event_age_ms,
+        hold_duration_ms: if is_down { None } else { hold_duration_ms },
     }
-    payload
 }
 
 fn canonical_hold_duration_ms(
@@ -1275,7 +1326,7 @@ impl AppState {
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
         }
-        // OBS 브릿지 캐시 갱신 (이벤트는 register_event_forwarding이 자동 포워딩)
+        // OBS 브릿지 캐시 갱신
         if self.obs_bridge.is_running() {
             let bp = self.bootstrap_payload();
             if let Ok(snap) = serde_json::to_value(&bp) {
@@ -1285,7 +1336,7 @@ impl AppState {
         // 전체 설정 페이로드 전송 방지 (임베디드 폰트 등 대용량 데이터 제외)
         let mut payload = diff.clone();
         payload.full = None;
-        app.emit("settings:changed", payload)?;
+        publish_event(app, "settings:changed", payload);
         Ok(())
     }
 
@@ -1357,9 +1408,6 @@ impl AppState {
 
         // AppHandle 전달 (invoke_request 디스패치용)
         bridge.set_app_handle(app.clone());
-        // Tauri 이벤트 → OBS WS 포워딩 리스너 등록
-        bridge.register_event_forwarding(app);
-
         // async start를 tokio 런타임에서 실행
         tauri::async_runtime::spawn(async move {
             match bridge.start(port, token).await {
@@ -1414,7 +1462,7 @@ impl AppState {
         // store.overlay_visible은 변경하지 않음 — ensure_overlay_window가 재생성 시
         // 이 값을 기준으로 show/hide를 결정하므로, 원래 값을 유지해야 함
         *self.overlay_visible.write() = false;
-        let _ = app.emit("overlay:visibility", &json!({ "visible": false }));
+        publish_event(app, "overlay:visibility", json!({ "visible": false }));
     }
 
     /// OBS 중지 시 오버레이 재생성 + 복원
@@ -1455,7 +1503,7 @@ impl AppState {
         }
     }
 
-    /// OBS 브릿지 캐시 스냅샷 갱신 (이벤트는 register_event_forwarding이 자동 포워딩)
+    /// OBS 브릿지 캐시 스냅샷 갱신
     /// CSS 등 개별 설정 변경이 OBS 런타임 상태(키 시그널, KPS)를 리셋하지 않도록 사용
     pub fn notify_obs_settings_diff(&self, _diff: serde_json::Value) {
         if !self.obs_bridge.is_running() {
@@ -1467,7 +1515,7 @@ impl AppState {
         }
     }
 
-    /// OBS 브릿지 캐시 스냅샷 갱신 (카운터 이벤트는 register_event_forwarding이 자동 포워딩)
+    /// OBS 브릿지 카운터 스냅샷 갱신
     pub fn obs_broadcast_counters(&self) {
         if !self.obs_bridge.is_running() {
             return;
@@ -1535,13 +1583,13 @@ impl AppState {
                     "[Overlay] 저장 실패 후 보상도 실패({comp_err}) — 창 상태({visible})를 권위로 동기화"
                 );
                 *self.overlay_visible.write() = visible;
-                let _ = app.emit("overlay:visibility", &json!({ "visible": visible }));
+                publish_event(app, "overlay:visibility", json!({ "visible": visible }));
             }
             return Err(persist_err);
         }
 
         *self.overlay_visible.write() = visible;
-        app.emit("overlay:visibility", &json!({ "visible": visible }))?;
+        publish_event(app, "overlay:visibility", json!({ "visible": visible }));
         Ok(())
     }
 
@@ -1565,7 +1613,7 @@ impl AppState {
                 window.set_ignore_cursor_events(locked)?;
             }
         }
-        app.emit("overlay:lock", &json!({ "locked": locked }))?;
+        publish_event(app, "overlay:lock", json!({ "locked": locked }));
         Ok(())
     }
 
@@ -2095,7 +2143,7 @@ impl AppState {
         let updated = self.store.update(|state| {
             state.overlay_resize_anchor = value.clone();
         })?;
-        app.emit("overlay:anchor", &json!({ "anchor": value.as_str() }))?;
+        publish_event(app, "overlay:anchor", json!({ "anchor": value.as_str() }));
         Ok(updated.overlay_resize_anchor.as_str().to_string())
     }
 
@@ -2247,15 +2295,16 @@ impl AppState {
             bounds.x,
             bounds.y
         );
-        app.emit(
+        publish_event(
+            app,
             "overlay:resized",
-            &json!({
+            json!({
                 "x": bounds.x,
                 "y": bounds.y,
                 "width": bounds.width,
                 "height": bounds.height,
             }),
-        )?;
+        );
 
         Ok(bounds)
     }
@@ -2345,15 +2394,16 @@ impl AppState {
             None,
         )?;
 
-        app.emit(
+        publish_event(
+            app,
             "overlay:resized",
-            &json!({
+            json!({
                 "x": bounds.x,
                 "y": bounds.y,
                 "width": bounds.width,
                 "height": bounds.height,
             }),
-        )?;
+        );
 
         Ok(bounds)
     }
@@ -2474,7 +2524,6 @@ impl AppState {
                         BufReader::new(Box::new(stdout))
                     }
                 };
-                let mut overlay_window = app_handle.get_webview_window(OVERLAY_LABEL);
                 // Windows에서 reader 스레드 우선순위 약간 상향
                 #[cfg(target_os = "windows")]
                 unsafe {
@@ -2552,13 +2601,14 @@ impl AppState {
                             if let Ok(axis) =
                                 serde_json::from_str::<crate::ipc::HidAxisMessage>(s)
                             {
-                                let _ = app_handle.emit(
+                                publish_event(
+                                    &app_handle,
                                     "input:axis",
-                                    &json!({
-                                        "axisId": axis.axis_id,
-                                        "value": axis.value,
-                                        "full": axis.full,
-                                    }),
+                                    InputAxisPayload {
+                                        axis_id: &axis.axis_id,
+                                        value: axis.value,
+                                        full: axis.full,
+                                    },
                                 );
                                 continue;
                             }
@@ -2614,26 +2664,22 @@ impl AppState {
                                 crate::ipc::HookKeyState::Down => "DOWN",
                                 crate::ipc::HookKeyState::Up => "UP",
                             };
-                            let labels_for_emit = message.labels.clone();
-                            let primary_label = labels_for_emit.first()
-                                .cloned()
-                                .unwrap_or_else(|| String::from(""));
+                            let primary_label =
+                                message.labels.first().map(String::as_str).unwrap_or("");
 
                             // 구독자가 있을 때만 raw input 스트림 emit
                             let app_state = app_handle.state::<AppState>();
                             if app_state.raw_input_subscriber_count() > 0 {
-                                let raw_payload = json!({
-                                    "label": primary_label,
-                                    "labels": labels_for_emit.clone(),
-                                    "state": state,
-                                    "device": device_str,
-                                });
-
-                                for label in RAW_INPUT_WINDOW_LABELS {
-                                    if let Some(window) = app_handle.get_webview_window(label) {
-                                        let _ = window.emit("input:raw", &raw_payload);
-                                    }
-                                }
+                                publish_event(
+                                    &app_handle,
+                                    "input:raw",
+                                    RawInputPayload {
+                                        label: primary_label,
+                                        labels: &message.labels,
+                                        state,
+                                        device: device_str,
+                                    },
+                                );
                             }
 
                             let is_down = state == "DOWN";
@@ -2647,12 +2693,14 @@ impl AppState {
                             };
 
                             if let Some(pressed_label) = outcome.pressed_label.as_ref() {
-                                if let Err(err) = app_handle.emit(
+                                publish_event(
+                                    &app_handle,
                                     "input:press",
-                                    &json!({ "label": pressed_label, "mode": &outcome.mode }),
-                                ) {
-                                    error!("failed to emit input:press: {err}");
-                                }
+                                    InputPressPayload {
+                                        label: pressed_label,
+                                        mode: &outcome.mode,
+                                    },
+                                );
                             }
 
                             let fallback_age_ms = recv_at.elapsed().as_secs_f64() * 1000.0;
@@ -2765,55 +2813,15 @@ impl AppState {
                                     ),
                                 );
 
-                                let mut emitted = false;
-                                if let Some(overlay) = overlay_window.as_ref() {
-                                    match overlay.emit("keys:state", &payload) {
-                                        Ok(_) => emitted = true,
-                                        Err(err) => {
-                                            error!("failed to emit keys:state to overlay: {err}");
-                                            overlay_window = None;
-                                        }
-                                    }
-                                }
-                                if !emitted {
-                                    if overlay_window.is_none() {
-                                        overlay_window =
-                                            app_handle.get_webview_window(OVERLAY_LABEL);
-                                        if let Some(overlay) = overlay_window.as_ref() {
-                                            if overlay.emit("keys:state", &payload).is_ok() {
-                                                emitted = true;
-                                            } else {
-                                                overlay_window = None;
-                                            }
-                                        }
-                                    }
-                                    if !emitted {
-                                        if app_state.is_obs_mode_active() {
-                                            app_state.obs_bridge.broadcast_tauri_event(
-                                                "keys:state".to_string(),
-                                                payload.clone(),
-                                            );
-                                            emitted = true;
-                                        } else if let Err(err) =
-                                            app_handle.emit("keys:state", &payload)
-                                        {
-                                            error!("failed to emit keys:state (fallback): {err}");
-                                        } else {
-                                            emitted = true;
-                                        }
-                                    }
-                                }
-
-                                if emitted {
-                                    keys_state_emit_count += 1;
-                                    if keys_state_emit_count.is_multiple_of(500) {
-                                        log::debug!(
-                                            "[AppState] emitted keys:state {} times (last key={}, state={})",
-                                            keys_state_emit_count,
-                                            slot_event.canonical,
-                                            transition_state
-                                        );
-                                    }
+                                publish_event(&app_handle, "keys:state", payload);
+                                keys_state_emit_count += 1;
+                                if keys_state_emit_count.is_multiple_of(500) {
+                                    log::debug!(
+                                        "[AppState] emitted keys:state {} times (last key={}, state={})",
+                                        keys_state_emit_count,
+                                        slot_event.canonical,
+                                        transition_state
+                                    );
                                 }
                             }
                         }
@@ -2949,9 +2957,7 @@ impl AppState {
 
     fn reset_keyboard_hook_state(&self, app: &AppHandle) {
         self.clear_active_keys();
-        if let Err(err) = app.emit("keys:reset", &json!({ "reason": "hook_restart" })) {
-            warn!("failed to emit keys:reset: {err}");
-        }
+        publish_event(app, "keys:reset", json!({ "reason": "hook_restart" }));
     }
 
     fn restart_keyboard_hook(&self, app: AppHandle) -> Result<()> {
@@ -3698,17 +3704,20 @@ impl AppState {
                             // 보상 실패 — 실제 창 상태(숨김)를 권위로 runtime과 이벤트만 동기화
                             log::error!("failed to compensate overlay hide: {show_err}");
                             *overlay_visible.write() = false;
-                            let _ = app_handle
-                                .emit("overlay:visibility", &json!({ "visible": false }));
+                            publish_event(
+                                &app_handle,
+                                "overlay:visibility",
+                                json!({ "visible": false }),
+                            );
                         }
                         return;
                     }
                     *overlay_visible.write() = false;
-                    if let Err(err) =
-                        app_handle.emit("overlay:visibility", &json!({ "visible": false }))
-                    {
-                        log::error!("failed to emit overlay visibility change: {err}");
-                    }
+                    publish_event(
+                        &app_handle,
+                        "overlay:visibility",
+                        json!({ "visible": false }),
+                    );
                 }
             }
             WindowEvent::Focused(true) => {
@@ -3760,7 +3769,7 @@ impl AppState {
                     window.set_ignore_cursor_events(value)?;
                 }
             }
-            app.emit("overlay:lock", &json!({ "locked": value }))?;
+            publish_event(app, "overlay:lock", json!({ "locked": value }));
         }
 
         if let Some(enabled) = diff.changed.developer_mode_enabled {
@@ -5851,7 +5860,6 @@ mod tests {
         HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
         PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
-        RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
@@ -6022,12 +6030,6 @@ mod tests {
         assert_eq!(position.x, 300.0 + 900.0 + PANEL_BESIDE_GAP);
         // 세로 중앙이 화면 위로 넘치면 작업 영역 상단에 붙는다
         assert_eq!(position.y, 0.0);
-    }
-
-    #[test]
-    fn raw_input_targets_exclude_the_opener_hosted_panel() {
-        // 패널 창은 자체 JS 런타임이 없다 - raw input을 받을 수신자가 없다
-        assert_eq!(RAW_INPUT_WINDOW_LABELS, ["main", OVERLAY_LABEL]);
     }
 
     #[test]
@@ -7026,9 +7028,19 @@ mod tests {
 
     #[test]
     fn key_state_payload_exposes_hold_duration_on_up_only() {
-        let down = key_state_payload("A", "DOWN", "4key", 2.0, true, Some(15.0));
-        let up = key_state_payload("A", "UP", "4key", 3.0, false, Some(15.0));
-        let unmatched_up = key_state_payload("A", "UP", "4key", 3.0, false, None);
+        let down = serde_json::to_value(key_state_payload(
+            "A",
+            "DOWN",
+            "4key",
+            2.0,
+            true,
+            Some(15.0),
+        ))
+        .unwrap();
+        let up = serde_json::to_value(key_state_payload("A", "UP", "4key", 3.0, false, Some(15.0)))
+            .unwrap();
+        let unmatched_up =
+            serde_json::to_value(key_state_payload("A", "UP", "4key", 3.0, false, None)).unwrap();
 
         assert!(down.get("holdDurationMs").is_none());
         assert_eq!(up["holdDurationMs"], serde_json::json!(15.0));

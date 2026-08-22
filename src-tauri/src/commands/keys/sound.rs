@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
     time::SystemTime,
 };
-use tauri::{Emitter, Manager, State, WebviewWindow};
+use tauri::{Manager, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::commands::{dialog::parented_file_dialog, editor::state::publish_legacy_editor_change};
@@ -15,6 +15,7 @@ use crate::models::{
     AppStoreData, EditorCommitOrigin, EditorField, PendingProcessedWavReplacement,
     SoundLibraryEntry, SoundSource,
 };
+use crate::services::event_publisher::publish_event;
 use crate::state::{
     atomic_file::{prepare_atomic_replace, PreparedAtomicReplace},
     local_asset_path::paths_have_same_identity,
@@ -517,18 +518,35 @@ pub fn sound_delete(
         emit_sound_reference_changes_with(&transaction.change.result.changed_fields, |event| {
             match event {
                 SoundReferenceChangeEvent::Key => {
-                    app.emit(event.name(), &transaction.change.document.key_positions)
+                    publish_event(
+                        &app,
+                        event.name(),
+                        &transaction.change.document.key_positions,
+                    );
                 }
                 SoundReferenceChangeEvent::Stat => {
-                    app.emit(event.name(), &transaction.change.document.stat_positions)
+                    publish_event(
+                        &app,
+                        event.name(),
+                        &transaction.change.document.stat_positions,
+                    );
                 }
                 SoundReferenceChangeEvent::Graph => {
-                    app.emit(event.name(), &transaction.change.document.graph_positions)
+                    publish_event(
+                        &app,
+                        event.name(),
+                        &transaction.change.document.graph_positions,
+                    );
                 }
                 SoundReferenceChangeEvent::Knob => {
-                    app.emit(event.name(), &transaction.change.document.knob_positions)
+                    publish_event(
+                        &app,
+                        event.name(),
+                        &transaction.change.document.knob_positions,
+                    );
                 }
             }
+            Ok::<(), std::convert::Infallible>(())
         });
     }
 
