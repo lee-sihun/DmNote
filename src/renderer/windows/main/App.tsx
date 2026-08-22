@@ -37,6 +37,7 @@ import {
   clearPendingPostUpdateReleaseNotice,
 } from '@hooks/app/useUpdateCheck';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { usePanelHostStore } from '@stores/grid/usePanelHostStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
@@ -144,6 +145,7 @@ export default function App() {
   }, []);
 
   const primaryButtonRef = useRef(null);
+  const gridAreaRef = useRef<HTMLDivElement | null>(null);
 
   const {
     keyMappings,
@@ -162,6 +164,7 @@ export default function App() {
     type: ToolbarAddItemType;
   } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const panelPlacement = usePanelHostStore((state) => state.placement);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
   const { value: visualSettingsOpen, toggle: toggleSettingsView } =
@@ -689,13 +692,14 @@ export default function App() {
   return (
     <div className="bg-app w-full h-full flex flex-col overflow-hidden rounded-[8px]">
       <TitleBar />
-      <div className="flex-1 bg-panel overflow-hidden flex">
+      <div className="flex-1 bg-panel overflow-hidden flex relative">
         {isSettingsOpen ? (
           <div className="h-full w-full overflow-y-auto">
             <SettingTab showAlert={showAlert} showConfirm={showConfirm} />
           </div>
         ) : (
           <div
+            ref={gridAreaRef}
             className="flex-1 h-full overflow-hidden relative"
             onMouseEnter={() => setGridAreaHovered(true)}
             onMouseLeave={() => setGridAreaHovered(false)}
@@ -714,11 +718,14 @@ export default function App() {
               isNoteSettingOpen={isNoteSettingOpen}
               setIsNoteSettingOpen={setIsNoteSettingOpen}
             />
-            <PropertiesPanelHost
-              onKeyMappingChange={handleKeyMappingChange}
-              onTransitionFailure={handlePanelTransitionFailure}
-            />
           </div>
+        )}
+        {(!isSettingsOpen || panelPlacement === 'detached') && (
+          <PropertiesPanelHost
+            dockAreaRef={gridAreaRef}
+            onKeyMappingChange={handleKeyMappingChange}
+            onTransitionFailure={handlePanelTransitionFailure}
+          />
         )}
       </div>
       <ToolBar

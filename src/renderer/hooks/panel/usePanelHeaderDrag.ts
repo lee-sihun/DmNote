@@ -196,6 +196,8 @@ export const usePanelHeaderDrag = ({
           ) <= SNAP_BACK_PX
         );
       }
+      // 설정 화면처럼 실제 그리드가 사라진 동안에는 이전에 계산한 영역도 무효
+      if (!dockAreaRef.current) return false;
       return isInDockZone(session);
     };
 

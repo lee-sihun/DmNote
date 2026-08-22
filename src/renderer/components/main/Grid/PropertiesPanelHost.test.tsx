@@ -1,4 +1,5 @@
 import React, { act, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,12 +8,25 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const mocks = vi.hoisted(() => ({
   childWindow: null as null | { window: Window; document: Document },
   panelProps: [] as Array<Record<string, unknown>>,
+  panelLayoutDocuments: [] as Document[],
+  popupLayoutDocuments: [] as Array<{
+    panel: Document;
+    popup: Document | null;
+  }>,
   mountCount: 0,
   applyNativeChrome: vi.fn(() =>
     Promise.resolve({ webRadius: 12, webRing: true }),
   ),
   readTokenColor: vi.fn((): [number, number, number, number] | null => null),
   startDragging: vi.fn((_x: number, _y: number) => Promise.resolve()),
+  moveTo: vi.fn((_x: number, _y: number) => Promise.resolve()),
+  dragContext: {
+    mainFrame: null,
+    mainContentOrigin: { x: 0, y: 0 },
+  } as {
+    mainFrame: null;
+    mainContentOrigin: { x: number; y: number } | null;
+  },
   dock: vi.fn(() => Promise.resolve()),
   flushResult: true,
 }));
@@ -24,9 +38,8 @@ vi.mock('@api/modules/panelWindowApi', () => ({
   panelWindowApi: {
     applyNativeChrome: () => mocks.applyNativeChrome(),
     startDragging: (x: number, y: number) => mocks.startDragging(x, y),
-    dragContext: () =>
-      Promise.resolve({ mainFrame: null, mainContentOrigin: null }),
-    moveTo: () => Promise.resolve(),
+    dragContext: () => Promise.resolve(mocks.dragContext),
+    moveTo: (x: number, y: number) => mocks.moveTo(x, y),
     presentAt: () => Promise.resolve(),
     dock: () => mocks.dock(),
   },
@@ -47,13 +60,43 @@ vi.mock('@utils/panelWindow/nativeChrome', () => ({
 // 실제 패널 대신 로컬 state를 가진 스텁 - 이동 중 리마운트 여부를 state로 판별
 vi.mock('@components/main/Grid/PropertiesPanel', () => ({
   default: function PanelStub(props: Record<string, unknown>) {
+    const { document: ownerDocument } = usePanelHost();
     mocks.panelProps.push(props);
     const [count, setCount] = useState(0);
+    const [popupOpen, setPopupOpen] = useState(false);
+    const viewportRef = React.useRef<HTMLDivElement>(null);
+    const previousVariantRef = React.useRef(props.frameVariant);
     React.useEffect(() => {
       mocks.mountCount += 1;
     }, []);
+    React.useLayoutEffect(() => {
+      if (viewportRef.current) {
+        mocks.panelLayoutDocuments.push(viewportRef.current.ownerDocument);
+        if (popupOpen) {
+          const popup = ownerDocument.querySelector(
+            '[data-testid="panel-popup"]',
+          );
+          mocks.popupLayoutDocuments.push({
+            panel: viewportRef.current.ownerDocument,
+            popup: popup?.ownerDocument ?? null,
+          });
+        }
+      }
+      if (previousVariantRef.current !== props.frameVariant) {
+        if (viewportRef.current) viewportRef.current.scrollTop = 0;
+        previousVariantRef.current = props.frameVariant;
+      }
+    }, [ownerDocument, popupOpen, props.frameVariant]);
     return (
-      <div data-testid="panel-stub" data-variant={String(props.frameVariant)}>
+      <div
+        data-testid="panel-stub"
+        data-variant={String(props.frameVariant)}
+        data-dmn-panel-frame=""
+      >
+        <div className="dmn-panel-header" data-testid="drag-header" />
+        <div ref={viewportRef} className="properties-panel-overlay-viewport">
+          <div style={{ height: 1200 }} />
+        </div>
         <button
           type="button"
           data-testid="bump"
@@ -68,6 +111,18 @@ vi.mock('@components/main/Grid/PropertiesPanel', () => ({
         >
           {String(props.detachAction)}
         </button>
+        <button
+          type="button"
+          data-testid="popup-action"
+          onClick={() => setPopupOpen((open) => !open)}
+        >
+          popup
+        </button>
+        {popupOpen &&
+          createPortal(
+            <div data-testid="panel-popup">popup</div>,
+            ownerDocument.body,
+          )}
       </div>
     );
   },
@@ -76,6 +131,7 @@ vi.mock('@components/main/Grid/PropertiesPanel', () => ({
 import PropertiesPanelHost from './PropertiesPanelHost';
 import { usePanelHostStore } from '@stores/grid/usePanelHostStore';
 import { registerPopupLayer } from '@components/main/Modal/popupLayer';
+import { usePanelHost } from '@contexts/PanelHostContext';
 
 const createChild = () => {
   const doc = document.implementation.createHTMLDocument('child');
@@ -84,6 +140,8 @@ const createChild = () => {
     closed: false,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   } as unknown as Window;
   return { window: win, document: doc };
 };
@@ -91,21 +149,30 @@ const createChild = () => {
 describe('PropertiesPanelHost', () => {
   let container: HTMLDivElement;
   let root: Root;
+  let dockAreaRef: React.RefObject<HTMLElement | null>;
   const layerCleanups: Array<() => void> = [];
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    dockAreaRef = { current: container };
     mocks.childWindow = null;
     mocks.panelProps = [];
+    mocks.panelLayoutDocuments = [];
+    mocks.popupLayoutDocuments = [];
     mocks.mountCount = 0;
     mocks.applyNativeChrome.mockClear();
+    mocks.moveTo.mockClear();
     mocks.readTokenColor.mockReturnValue(null);
     mocks.dock.mockReset();
     mocks.dock.mockResolvedValue(undefined);
     mocks.flushResult = true;
-    usePanelHostStore.setState({ placement: 'docked', transition: 'idle' });
+    usePanelHostStore.setState({
+      placement: 'docked',
+      attachedPlacement: null,
+      transition: 'idle',
+    });
   });
 
   afterEach(async () => {
@@ -124,7 +191,7 @@ describe('PropertiesPanelHost', () => {
 
   const render = async () => {
     await act(async () => {
-      root.render(<PropertiesPanelHost />);
+      root.render(<PropertiesPanelHost dockAreaRef={dockAreaRef} />);
     });
   };
 
@@ -183,6 +250,241 @@ describe('PropertiesPanelHost', () => {
     expect(hostElement()!.ownerDocument).toBe(document);
     expect(bump().textContent).toBe('2');
     expect(mocks.mountCount).toBe(1);
+  });
+
+  it('removes the external host and child-body popup after final unmount', async () => {
+    await render();
+    mocks.childWindow = createChild();
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+    const popupButton = hostElement()!.querySelector<HTMLButtonElement>(
+      '[data-testid="popup-action"]',
+    )!;
+    await act(async () => popupButton.click());
+    const childDocument = mocks.childWindow.document;
+    expect(childDocument.querySelector('[data-dmn-panel-host]')).not.toBeNull();
+    expect(
+      childDocument.querySelector('[data-testid="panel-popup"]'),
+    ).not.toBeNull();
+
+    await act(async () => {
+      root.render(null);
+    });
+
+    expect(childDocument.querySelector('[data-dmn-panel-host]')).toBeNull();
+    expect(
+      childDocument.querySelector('[data-testid="panel-popup"]'),
+    ).toBeNull();
+  });
+
+  it('invalidates a calculated dock zone when the grid area disappears', async () => {
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 800,
+      bottom: 600,
+      left: 0,
+      width: 800,
+      height: 600,
+      toJSON: () => ({}),
+    });
+    await render();
+    mocks.childWindow = createChild();
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+    const childDocument = mocks.childWindow.document;
+    const header = childDocument.querySelector<HTMLElement>(
+      '[data-testid="drag-header"]',
+    )!;
+
+    header.dispatchEvent(
+      new MouseEvent('mousedown', {
+        bubbles: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        screenX: 900,
+        screenY: 100,
+      }),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      // mousedown 때 계산된 영역이 있어도 설정 전환으로 그리드가 사라지면 무효
+      dockAreaRef.current = null;
+      childDocument.dispatchEvent(
+        new MouseEvent('mousemove', {
+          screenX: 700,
+          screenY: 100,
+        }),
+      );
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => resolve()),
+      );
+      childDocument.dispatchEvent(
+        new MouseEvent('mouseup', {
+          screenX: 700,
+          screenY: 100,
+        }),
+      );
+    });
+
+    expect(mocks.moveTo).toHaveBeenCalled();
+    expect(mocks.dock).not.toHaveBeenCalled();
+    expect(usePanelHostStore.getState().placement).toBe('detached');
+  });
+
+  it('keeps the explicit reattach action while drag docking is disabled', async () => {
+    dockAreaRef.current = null;
+    await render();
+    mocks.childWindow = createChild();
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+    const action = hostElement()!.querySelector<HTMLButtonElement>(
+      '[data-testid="detach-action"]',
+    )!;
+
+    await act(async () => {
+      action.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(mocks.dock).toHaveBeenCalledTimes(1);
+    expect(usePanelHostStore.getState().placement).toBe('docked');
+  });
+
+  it('keeps the close shortcut while drag docking is disabled', async () => {
+    dockAreaRef.current = null;
+    await render();
+    mocks.childWindow = createChild();
+    const add = mocks.childWindow.window
+      .addEventListener as unknown as ReturnType<typeof vi.fn>;
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+    const keydown = add.mock.calls
+      .filter((call) => call[0] === 'keydown')
+      .at(-1)?.[1] as ((event: KeyboardEvent) => void) | undefined;
+    const event = new KeyboardEvent('keydown', {
+      key: 'w',
+      ctrlKey: true,
+      cancelable: true,
+    });
+
+    await act(async () => {
+      keydown?.(event);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(mocks.dock).toHaveBeenCalledTimes(1);
+    expect(usePanelHostStore.getState().placement).toBe('docked');
+  });
+
+  it('reattaches the host before panel layout effects run for docked mode', async () => {
+    await render();
+    mocks.childWindow = createChild();
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+    mocks.panelLayoutDocuments = [];
+
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('docked');
+    });
+
+    expect(mocks.panelLayoutDocuments.at(-1)).toBe(document);
+  });
+
+  it('preserves the latest scroll position across document moves', async () => {
+    await render();
+    const viewport = hostElement()!.querySelector<HTMLElement>(
+      '.properties-panel-overlay-viewport',
+    )!;
+    viewport.scrollTop = 420;
+
+    mocks.childWindow = createChild();
+    const childAdopt = mocks.childWindow.document.adoptNode.bind(
+      mocks.childWindow.document,
+    );
+    vi.spyOn(mocks.childWindow.document, 'adoptNode').mockImplementation(
+      (node) => {
+        const adopted = childAdopt(node);
+        (adopted as Element)
+          .querySelectorAll<HTMLElement>('.properties-panel-overlay-viewport')
+          .forEach((element) => {
+            element.scrollTop = 0;
+          });
+        return adopted;
+      },
+    );
+    const mainAdopt = document.adoptNode.bind(document);
+    const mainAdoptSpy = vi
+      .spyOn(document, 'adoptNode')
+      .mockImplementation((node) => {
+        const adopted = mainAdopt(node);
+        (adopted as Element)
+          .querySelectorAll<HTMLElement>('.properties-panel-overlay-viewport')
+          .forEach((element) => {
+            element.scrollTop = 0;
+          });
+        return adopted;
+      });
+
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+    expect(viewport.scrollTop).toBe(420);
+
+    viewport.scrollTop = 85;
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('docked');
+    });
+    expect(viewport.scrollTop).toBe(85);
+
+    viewport.scrollTop = 310;
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+    expect(viewport.scrollTop).toBe(310);
+    mainAdoptSpy.mockRestore();
+  });
+
+  it('moves an open panel popup to the child document with the panel', async () => {
+    await render();
+    const popupButton = hostElement()!.querySelector<HTMLButtonElement>(
+      '[data-testid="popup-action"]',
+    )!;
+    await act(async () => popupButton.click());
+    expect(
+      document.querySelector('[data-testid="panel-popup"]'),
+    ).not.toBeNull();
+
+    mocks.childWindow = createChild();
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+
+    expect(document.querySelector('[data-testid="panel-popup"]')).toBeNull();
+    expect(
+      mocks.childWindow.document.querySelector('[data-testid="panel-popup"]'),
+    ).not.toBeNull();
+    expect(
+      mocks.childWindow.document.querySelector('[data-testid="panel-stub"]'),
+    ).not.toBeNull();
+
+    mocks.popupLayoutDocuments = [];
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('docked');
+    });
+
+    expect(mocks.popupLayoutDocuments.at(-1)).toEqual({
+      panel: document,
+      popup: document,
+    });
   });
 
   it('falls back to docked when the child window is gone', async () => {

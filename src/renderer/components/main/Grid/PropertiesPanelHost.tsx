@@ -5,6 +5,7 @@ import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { PanelHostContext } from '@contexts/PanelHostContext';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { usePanelHeaderDrag } from '@hooks/panel/usePanelHeaderDrag';
+import { restoreLenisScroll } from '@hooks/useLenis';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
@@ -12,6 +13,8 @@ import {
   detachPropertiesPanel,
   dockPropertiesPanel,
   isTransitionFailure,
+  registerPanelHostMoveCapture,
+  type PanelHostPlacement,
   usePanelHostStore,
 } from '@stores/grid/usePanelHostStore';
 import { isMac, isWindows } from '@utils/core/platform';
@@ -34,6 +37,12 @@ import type { CSSProperties } from 'react';
 const DETACHED_ROOT_CLASS =
   'relative w-screen h-screen overflow-hidden rounded-[var(--dmn-panel-window-radius,12px)] bg-panel-detached';
 const DOCKED_ROOT_CLASS = 'contents';
+const SCROLL_VIEWPORT_SELECTOR = '.properties-panel-overlay-viewport';
+
+interface ScrollPosition {
+  top: number;
+  left: number;
+}
 
 // Windows는 창이 불투명이라 실루엣이 항상 네이티브 - 반경은 적용 성공 여부와 무관하게 0
 const nativeOwnsSilhouette = () => isWindows();
@@ -54,6 +63,8 @@ const fallbackChrome = (): PanelWindowChrome =>
     : { webRadius: 12, webRing: true };
 
 interface PropertiesPanelHostProps {
+  // 실제 그리드 영역만 드래그 도킹 대상으로 사용
+  dockAreaRef: React.RefObject<HTMLElement | null>;
   onKeyMappingChange?: (index: number, newKey: string) => void;
   // 분리/도킹 전환이 사용자에게 알릴 만한 이유로 실패했을 때
   onTransitionFailure?: (kind: 'detach' | 'dock') => void;
@@ -66,6 +77,7 @@ interface PropertiesPanelHostProps {
  * React는 리마운트하지 않고, 위임 리스너도 컨테이너에 붙어 있어 문서를 옮겨도 살아 있다
  */
 const PropertiesPanelHost = ({
+  dockAreaRef,
   onKeyMappingChange,
   onTransitionFailure,
 }: PropertiesPanelHostProps) => {
@@ -73,8 +85,6 @@ const PropertiesPanelHost = ({
   const placement = usePanelHostStore((state) => state.placement);
   const detached = placement === 'detached';
   const slotRef = useRef<HTMLDivElement | null>(null);
-  // 도킹 자리(그리드 영역) - 헤더 드래그의 도크 존 기준
-  const dockAreaRef = useRef<HTMLElement | null>(null);
   const [host] = useState(() => {
     const element = document.createElement('div');
     element.className = 'contents';
@@ -85,6 +95,8 @@ const PropertiesPanelHost = ({
   const child = detached ? getPanelChildWindow() : null;
   const childWindow = child?.window ?? null;
   const childBodyRef = useRef<HTMLElement | null>(null);
+  const attachedPlacementRef = useRef<PanelHostPlacement | null>(null);
+  const scrollPositionsRef = useRef(new WeakMap<HTMLElement, ScrollPosition>());
 
   useLayoutEffect(() => {
     childBodyRef.current = childWindow?.document.body ?? null;
@@ -116,14 +128,43 @@ const PropertiesPanelHost = ({
   // 첫 마운트에서 패널이 문서 밖 호스트에서 실측되는 일이 없게 여기서 즉시 끼운다
   const attachSlot = (slot: HTMLDivElement | null) => {
     slotRef.current = slot;
-    dockAreaRef.current = slot?.parentElement ?? null;
     if (slot && !detached && host.parentNode !== slot) {
       slot.appendChild(host);
     }
   };
 
+  useLayoutEffect(() => {
+    return registerPanelHostMoveCapture(() => {
+      const sourcePlacement = attachedPlacementRef.current;
+      if (!sourcePlacement) return;
+      host
+        .querySelectorAll<HTMLElement>(SCROLL_VIEWPORT_SELECTOR)
+        .forEach((viewport) => {
+          scrollPositionsRef.current.set(viewport, {
+            top: viewport.scrollTop,
+            left: viewport.scrollLeft,
+          });
+        });
+    });
+  }, [host]);
+
   // 호스트 엘리먼트 이동. 자식 창이 사라졌으면 도킹으로 되돌린다
   useLayoutEffect(() => {
+    const viewports = Array.from(
+      host.querySelectorAll<HTMLElement>(SCROLL_VIEWPORT_SELECTOR),
+    );
+
+    const finishMove = (targetPlacement: PanelHostPlacement) => {
+      viewports.forEach((viewport) => {
+        const position = scrollPositionsRef.current.get(viewport);
+        if (!position) return;
+        viewport.scrollLeft = position.left;
+        restoreLenisScroll(viewport, position.top);
+      });
+      attachedPlacementRef.current = targetPlacement;
+      usePanelHostStore.getState().setAttachedPlacement(targetPlacement);
+    };
+
     if (detached) {
       const target = getPanelChildWindow();
       if (!target) {
@@ -133,13 +174,30 @@ const PropertiesPanelHost = ({
       if (host.parentNode !== target.document.body) {
         target.document.body.appendChild(target.document.adoptNode(host));
       }
+      finishMove('detached');
       return;
     }
     const slot = slotRef.current;
     if (slot && host.parentNode !== slot) {
       slot.appendChild(document.adoptNode(host));
     }
+    if (slot && host.parentNode === slot) finishMove('docked');
   }, [detached, host]);
+
+  useLayoutEffect(() => {
+    return () => {
+      attachedPlacementRef.current = null;
+      usePanelHostStore.getState().setAttachedPlacement(null);
+    };
+  }, []);
+
+  // Portal 자식 cleanup 뒤 외부 컨테이너만 회수
+  useEffect(
+    () => () => {
+      host.remove();
+    },
+    [host],
+  );
 
   const hostValue = useMemo<PanelHostValue>(
     () => ({

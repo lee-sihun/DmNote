@@ -61,7 +61,11 @@ describe('usePanelCloseRequest', () => {
     mocks.dock.mockReset();
     mocks.dock.mockResolvedValue(undefined);
     mocks.flushResult = true;
-    usePanelHostStore.setState({ placement: 'detached', transition: 'idle' });
+    usePanelHostStore.setState({
+      placement: 'detached',
+      attachedPlacement: null,
+      transition: 'idle',
+    });
   });
 
   afterEach(async () => {

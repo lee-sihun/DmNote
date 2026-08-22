@@ -3,11 +3,13 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useLenis } from './useLenis';
+import { restoreLenisScroll, useLenis } from './useLenis';
 
 const { instances } = vi.hoisted(() => ({
   instances: [] as Array<{
     raf: ReturnType<typeof vi.fn>;
+    resize: ReturnType<typeof vi.fn>;
+    scrollTo: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
   }>,
 }));
@@ -15,6 +17,8 @@ const { instances } = vi.hoisted(() => ({
 vi.mock('lenis', () => ({
   default: class {
     raf = vi.fn();
+    resize = vi.fn();
+    scrollTo = vi.fn();
     destroy = vi.fn();
     constructor() {
       instances.push(this);
@@ -25,6 +29,22 @@ vi.mock('lenis', () => ({
 const ScrollArea = () => {
   const { scrollContainerRef } = useLenis();
   return <div ref={scrollContainerRef} />;
+};
+
+const ScrollAreaWithHandle = ({
+  onReady,
+}: {
+  onReady: (node: HTMLDivElement) => void;
+}) => {
+  const { scrollContainerRef } = useLenis();
+  return (
+    <div
+      ref={(node) => {
+        scrollContainerRef(node);
+        if (node) onReady(node);
+      }}
+    />
+  );
 };
 
 const Harness = ({ count }: { count: number }) => (
@@ -85,5 +105,25 @@ describe('useLenis 공유 RAF', () => {
     instances.forEach((instance) =>
       expect(instance.destroy).toHaveBeenCalledOnce(),
     );
+  });
+
+  it('문서 이동 뒤 DOM 위치와 Lenis 목표점을 함께 복원한다', () => {
+    let wrapper: HTMLDivElement | null = null;
+    act(() =>
+      root.render(
+        <ScrollAreaWithHandle
+          onReady={(node) => {
+            wrapper = node;
+          }}
+        />,
+      ),
+    );
+
+    restoreLenisScroll(wrapper!, 240);
+    expect(instances[0].resize).toHaveBeenCalledOnce();
+    expect(instances[0].scrollTo).toHaveBeenCalledWith(240, {
+      immediate: true,
+      force: true,
+    });
   });
 });
