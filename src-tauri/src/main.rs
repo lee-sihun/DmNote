@@ -147,10 +147,19 @@ fn main() {
                 return Ok(());
             }
 
-            // macOS: 네이티브 Edit 메뉴 추가 — WKWebView 편집 단축키(Cmd+Z/X/C/V/A) 활성화
+            // macOS: 네이티브 앱/Edit 메뉴 추가 - 앱 메뉴로 Cmd+Q, Edit 메뉴로 WKWebView 편집 단축키(Cmd+Z/X/C/V/A) 활성화
             #[cfg(target_os = "macos")]
             {
                 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
+
+                // AppKit은 메뉴 바의 첫 서브메뉴를 앱 메뉴로 렌더한다.
+                // set_menu는 Tauri 기본 메뉴를 통째로 대체하므로 Quit을 여기서 직접 넣어야 한다
+                let app_menu = Submenu::with_items(
+                    app,
+                    app.package_info().name.clone(),
+                    true,
+                    &[&PredefinedMenuItem::quit(app, None)?],
+                )?;
 
                 let edit_menu = Submenu::with_items(
                     app,
@@ -168,7 +177,7 @@ fn main() {
                     ],
                 )?;
 
-                let menu = Menu::with_items(app, &[&edit_menu])?;
+                let menu = Menu::with_items(app, &[&app_menu, &edit_menu])?;
                 app.set_menu(menu)?;
             }
 
