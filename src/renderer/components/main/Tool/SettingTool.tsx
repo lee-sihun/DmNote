@@ -22,6 +22,7 @@ interface SettingToolProps {
   onOpenSettings?: () => void;
   onCloseSettings?: () => void;
   showAlert?: (message: string) => void;
+  interactionDisabled?: boolean;
   // onOpenNoteSetting?: () => void;
 }
 
@@ -30,6 +31,7 @@ const SettingTool = ({
   onOpenSettings,
   onCloseSettings,
   showAlert,
+  interactionDisabled = false,
 }: // onOpenNoteSetting,
 SettingToolProps) => {
   const { t } = useTranslation();
@@ -46,6 +48,13 @@ SettingToolProps) => {
   const setExportImportPopupOpen = useUIStore(
     (state) => state.setExportImportPopupOpen,
   );
+
+  // 메뉴는 body 포털이므로 ToolBar의 inert 경계 밖에서 별도로 닫는다
+  useEffect(() => {
+    if (!interactionDisabled) return;
+    setIsExportImportOpenLocal(false);
+    setExportImportPopupOpen(false);
+  }, [interactionDisabled, setExportImportPopupOpen]);
 
   // isExportImportOpen 상태를 설정하면서 전역 스토어에도 동기화
   const setIsExportImportOpen = (

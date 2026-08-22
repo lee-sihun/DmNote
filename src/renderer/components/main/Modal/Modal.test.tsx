@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FloatingPopup from './FloatingPopup';
 import Modal from './Modal';
+import { isModalLayerActive } from './popupLayer';
 import {
   settleDeferredContent,
   stubAnimationFrame,
@@ -209,6 +210,67 @@ describe('Modal focus contract', () => {
 
     expect(pendingFrame).toBeNull();
     expect(document.body.textContent).not.toContain('Late action');
+  });
+
+  it('closing 전환 즉시 배경 입력 잠금 소유권을 놓는다', async () => {
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Closing dialog" motionState="open">
+          <button type="button">Action</button>
+        </Modal>,
+      );
+    });
+    expect(isModalLayerActive()).toBe(true);
+
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Closing dialog" motionState="closing">
+          <button type="button">Action</button>
+        </Modal>,
+      );
+    });
+
+    expect(
+      document.querySelector('[aria-label="Closing dialog"]'),
+    ).not.toBeNull();
+    expect(isModalLayerActive()).toBe(false);
+  });
+
+  it('inert 해제보다 먼저 실패한 opener 포커스를 다음 frame에 복구한다', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const opener = document.createElement('button');
+    document.body.prepend(opener);
+    opener.focus();
+    const nativeFocus = opener.focus.bind(opener);
+    const focus = vi
+      .spyOn(opener, 'focus')
+      .mockImplementationOnce(() => undefined)
+      .mockImplementation(() => nativeFocus());
+
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Retry focus" motionState="open">
+          <button type="button">Action</button>
+        </Modal>,
+      );
+    });
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Retry focus" motionState="closing">
+          <button type="button">Action</button>
+        </Modal>,
+      );
+    });
+
+    expect(focus).toHaveBeenCalledOnce();
+    expect(frames).toHaveLength(1);
+    act(() => frames[0](performance.now()));
+    expect(focus).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(opener);
   });
 
   it('yields keyboard ownership while a popup layer is open', async () => {

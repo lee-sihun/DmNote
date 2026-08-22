@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { isMac } from '@utils/core/platform';
 import { usePanelChildWindow } from '@hooks/panel/usePanelChildWindow';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 
 interface UseHistoryShortcutsParams {
   onUndo?: () => void;
@@ -20,6 +21,7 @@ export const useHistoryShortcuts = ({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isHistoryEditorFlushLocked()) return;
+      if (isModalLayerActive()) return;
       if (typeof window !== 'undefined' && window.__dmn_isKeyListening) {
         return;
       }

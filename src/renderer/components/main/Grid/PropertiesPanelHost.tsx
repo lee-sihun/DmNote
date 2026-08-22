@@ -17,6 +17,10 @@ import {
 import { isMac, isWindows } from '@utils/core/platform';
 import { readTokenColor } from '@utils/panelWindow/nativeChrome';
 import {
+  isModalLayerActive,
+  useModalLayerActive,
+} from '@components/main/Modal/popupLayer';
+import {
   getPanelChildWindow,
   openPanelChildWindow,
 } from '@utils/panelWindow/panelChildWindow';
@@ -65,6 +69,7 @@ const PropertiesPanelHost = ({
   onKeyMappingChange,
   onTransitionFailure,
 }: PropertiesPanelHostProps) => {
+  const modalLayerActive = useModalLayerActive();
   const placement = usePanelHostStore((state) => state.placement);
   const detached = placement === 'detached';
   const slotRef = useRef<HTMLDivElement | null>(null);
@@ -79,6 +84,33 @@ const PropertiesPanelHost = ({
   // 자식 창은 detached일 때만 유효 - 배치가 바뀌면 다시 읽는다
   const child = detached ? getPanelChildWindow() : null;
   const childWindow = child?.window ?? null;
+  const childBodyRef = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    childBodyRef.current = childWindow?.document.body ?? null;
+    return () => {
+      childBodyRef.current = null;
+    };
+  }, [childWindow]);
+
+  // 분리 패널의 picker와 메뉴는 host 밖의 child body로 포털될 수 있다
+  useLayoutEffect(() => {
+    const body = childBodyRef.current;
+    if (!body || !modalLayerActive) return;
+    const previousInert = body.inert;
+    const previousOpacity = body.style.opacity;
+    const previousTransition = body.style.transition;
+    body.inert = true;
+    body.dataset.dmnModalLocked = 'true';
+    body.style.opacity = '0.4';
+    body.style.transition = 'opacity 150ms ease';
+    return () => {
+      body.inert = previousInert;
+      delete body.dataset.dmnModalLocked;
+      body.style.opacity = previousOpacity;
+      body.style.transition = previousTransition;
+    };
+  }, [childWindow, modalLayerActive]);
 
   // 슬롯 ref는 패널 서브트리의 layout effect보다 먼저 붙는다(형제 순서) -
   // 첫 마운트에서 패널이 문서 밖 호스트에서 실측되는 일이 없게 여기서 즉시 끼운다
@@ -159,6 +191,7 @@ const PropertiesPanelHost = ({
         ? event.metaKey && !event.ctrlKey
         : event.ctrlKey && !event.metaKey;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isModalLayerActive()) return;
       if (isHistoryEditorFlushLocked()) return;
       if (event.repeat || event.shiftKey || event.altKey) return;
       if (!primaryOnly(event)) return;
@@ -258,6 +291,8 @@ const PropertiesPanelHost = ({
         <PanelHostContext.Provider value={hostValue}>
           <div
             className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}
+            data-dmn-modal-locked={modalLayerActive ? 'true' : undefined}
+            inert={modalLayerActive ? true : undefined}
             // 프레임(WINDOW_PANEL_FRAME_CLASS)까지 상속으로 함께 따라간다.
             // 도킹 상태에선 걸지 않는다 - contents 박스라 메인 창 서브트리 전체로 새어나간다
             style={

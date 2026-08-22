@@ -18,6 +18,7 @@ import CustomAlert from '@components/main/Modal/content/dialogs/Alert';
 import NoteSettingModal from '@components/main/Modal/content/settings/NoteSetting';
 import UpdateModal from '@components/main/Modal/content/dialogs/UpdateModal';
 import PropertiesPanelHost from '@components/main/Grid/PropertiesPanelHost';
+import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { ShortcutBinding } from '@src/types/settings/shortcuts';
 import FloatingPopup from '@components/main/Modal/FloatingPopup';
@@ -290,10 +291,7 @@ export default function App() {
         if (tag === 'input' || tag === 'textarea' || editable) return;
       }
       // 모달이 열려있으면 탭 전환 차단
-      const hasModal = document.querySelector(
-        "[data-dmn-modal-backdrop='true']",
-      );
-      if (hasModal) return;
+      if (isModalLayerActive()) return;
 
       // 키 리스닝 중이면 탭 전환 차단
       if (window.__dmn_isKeyListening) return;
@@ -330,10 +328,7 @@ export default function App() {
       }
 
       // 모달이 열려있으면 토글 차단
-      const hasModal = document.querySelector(
-        "[data-dmn-modal-backdrop='true']",
-      );
-      if (hasModal) return;
+      if (isModalLayerActive()) return;
 
       // 키 리스닝 중이면 토글 차단
       if (window.__dmn_isKeyListening) return;
@@ -733,6 +728,7 @@ export default function App() {
           })
         }
         onTogglePalette={() => setPalette((p) => !p)}
+        onClosePalette={handlePaletteClose}
         isPaletteOpen={palette}
         onResetCurrentMode={() =>
           showConfirm(

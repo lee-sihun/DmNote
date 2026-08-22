@@ -51,6 +51,12 @@ export const useFocusRestore = (
     const opener = openerRef.current;
     if (opener && opener.isConnected) {
       opener.focus();
+      // 모달 종료 커밋에서 opener의 inert 해제가 한 번 늦으면 다음 frame에 재시도
+      if (opener.ownerDocument.activeElement !== opener) {
+        opener.ownerDocument.defaultView?.requestAnimationFrame(() => {
+          if (opener.isConnected && !opener.closest('[inert]')) opener.focus();
+        });
+      }
     }
   }, []);
 

@@ -75,6 +75,7 @@ vi.mock('@components/main/Grid/PropertiesPanel', () => ({
 
 import PropertiesPanelHost from './PropertiesPanelHost';
 import { usePanelHostStore } from '@stores/grid/usePanelHostStore';
+import { registerPopupLayer } from '@components/main/Modal/popupLayer';
 
 const createChild = () => {
   const doc = document.implementation.createHTMLDocument('child');
@@ -90,6 +91,7 @@ const createChild = () => {
 describe('PropertiesPanelHost', () => {
   let container: HTMLDivElement;
   let root: Root;
+  const layerCleanups: Array<() => void> = [];
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -107,8 +109,17 @@ describe('PropertiesPanelHost', () => {
   });
 
   afterEach(async () => {
+    await act(async () =>
+      layerCleanups
+        .splice(0)
+        .reverse()
+        .forEach((cleanup) => cleanup()),
+    );
     await act(async () => root.unmount());
     container.remove();
+    document
+      .querySelectorAll('[data-dmn-modal-backdrop="true"]')
+      .forEach((element) => element.remove());
   });
 
   const render = async () => {
@@ -203,6 +214,39 @@ describe('PropertiesPanelHost', () => {
     expect(remove.mock.calls.map((call) => call[0])).toEqual(
       expect.arrayContaining(['keydown', 'blur']),
     );
+  });
+
+  it('활성 모달 동안 분리 문서 전체를 잠그고 종료 후 복원한다', async () => {
+    await render();
+    mocks.childWindow = createChild();
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+
+    const modal = document.createElement('div');
+    modal.dataset.dmnModalBackdrop = 'true';
+    document.body.appendChild(modal);
+    let unregister = () => {};
+    await act(async () => {
+      unregister = registerPopupLayer(modal);
+      layerCleanups.push(unregister);
+    });
+
+    const childBody = mocks.childWindow.document.body;
+    const panelRoot = childBody.querySelector<HTMLElement>(
+      '[data-dmn-panel-host] > div',
+    )!;
+    expect(childBody.inert).toBe(true);
+    expect(childBody.dataset.dmnModalLocked).toBe('true');
+    expect(childBody.style.opacity).toBe('0.4');
+    expect(panelRoot.hasAttribute('inert')).toBe(true);
+
+    await act(async () => unregister());
+
+    expect(childBody.inert).toBeUndefined();
+    expect(childBody.dataset.dmnModalLocked).toBeUndefined();
+    expect(childBody.style.opacity).toBe('');
+    expect(panelRoot.hasAttribute('inert')).toBe(false);
   });
 
   describe('네이티브 창 크롬', () => {

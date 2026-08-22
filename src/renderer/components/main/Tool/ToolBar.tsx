@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import CanvasTool from './CanvasTool';
 import SettingTool from './SettingTool';
 import TabTool from './TabTool';
@@ -11,10 +12,12 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import { useIconMotion } from '@hooks/useIconMotion';
 import { appApi } from '@api/modules/appApi';
+import { useModalLayerActive } from '../Modal/popupLayer';
 
 interface ToolBarProps {
   onAddItem: (type: 'key' | 'stat' | 'graph' | 'knob') => void;
   onTogglePalette: () => void;
+  onClosePalette: () => void;
   isPaletteOpen: boolean;
   onResetCurrentMode: () => void;
   onResetCounters?: () => void;
@@ -31,6 +34,7 @@ interface ToolBarProps {
 const ToolBar = ({
   onAddItem,
   onTogglePalette,
+  onClosePalette,
   isPaletteOpen,
   onResetCurrentMode,
   onResetCounters,
@@ -44,6 +48,7 @@ const ToolBar = ({
   primaryButtonRef,
 }: ToolBarProps) => {
   const { t } = useTranslation();
+  const modalLayerActive = useModalLayerActive();
   const { run: openExternal, pending: isOpeningExternal } =
     useSingleFlightAction((link: string) => appApi.openExternal(link));
   const handleExternal = (link: string) => {
@@ -52,9 +57,20 @@ const ToolBar = ({
     );
   };
 
+  // 툴바 포털로 열린 팔레트는 inert 루트 밖에 있으므로 함께 닫는다
+  useEffect(() => {
+    if (modalLayerActive && isPaletteOpen) onClosePalette();
+  }, [isPaletteOpen, modalLayerActive, onClosePalette]);
+
   return (
     <div
-      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-app border-t border-line justify-between`}
+      data-dmn-toolbar="true"
+      data-dmn-modal-locked={modalLayerActive ? 'true' : undefined}
+      aria-disabled={modalLayerActive || undefined}
+      inert={modalLayerActive ? true : undefined}
+      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-app border-t border-line justify-between transition-opacity duration-fast ${
+        modalLayerActive ? 'opacity-40' : ''
+      }`}
     >
       {isSettingsOpen ? (
         <TooltipGroup>
@@ -102,6 +118,7 @@ const ToolBar = ({
             activeTool={activeTool}
             setActiveTool={setActiveTool}
             primaryButtonRef={primaryButtonRef}
+            interactionDisabled={modalLayerActive}
           />
         )}
         {!isSettingsOpen && (
@@ -112,6 +129,7 @@ const ToolBar = ({
           onOpenSettings={onOpenSettings}
           onCloseSettings={onCloseSettings}
           showAlert={showAlert}
+          interactionDisabled={modalLayerActive}
           // onOpenNoteSetting={onOpenNoteSetting}
         />
       </div>
