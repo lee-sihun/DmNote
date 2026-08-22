@@ -9,10 +9,7 @@ const gateway = vi.hoisted(() => ({
 
 vi.mock('./pluginWriteGateway', () => gateway);
 
-import {
-  createPluginApiProxy,
-  createPluginWindowProxy,
-} from './pluginApiProxy';
+import { createPluginApiProxy } from './pluginApiProxy';
 import type { DMNoteAPI } from '@src/types/plugin/api';
 
 // 직접 호출용 raw API - 프록시가 4개 위치 API를 게이트웨이로 덮지 않으면
@@ -70,60 +67,6 @@ describe('플러그인 프록시 위치 API 재라우팅', () => {
     },
   );
 
-  it('공개 window.api와 window.dmn은 같은 플러그인 프록시를 반환한다', () => {
-    const proxiedApi = createProxy();
-    const proxyWindow = createPluginWindowProxy(proxiedApi);
-
-    expect(proxyWindow.api).toBe(proxiedApi);
-    expect((proxyWindow as unknown as { dmn: DMNoteAPI }).dmn).toBe(proxiedApi);
-    expect('api' in proxyWindow).toBe(true);
-    expect('dmn' in proxyWindow).toBe(true);
-    expect(Object.getOwnPropertyDescriptor(proxyWindow, 'api')?.value).toBe(
-      proxiedApi,
-    );
-    expect(Object.getOwnPropertyDescriptor(proxyWindow, 'dmn')?.value).toBe(
-      proxiedApi,
-    );
-  });
-
-  it.each(['api', 'dmn'] as const)(
-    '플러그인이 proxy window.%s를 다시 정의해도 root는 바뀌지 않는다',
-    (property) => {
-      const proxiedApi = createProxy();
-      const original = Object.getOwnPropertyDescriptor(window, property);
-      const rootValue = { surface: 'host-read-only' };
-      Object.defineProperty(window, property, {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value: rootValue,
-      });
-
-      try {
-        const proxyWindow = createPluginWindowProxy(proxiedApi);
-        expect(Reflect.set(proxyWindow, property, { bypass: true })).toBe(
-          false,
-        );
-        expect(
-          Reflect.defineProperty(proxyWindow, property, {
-            configurable: true,
-            value: { bypass: true },
-          }),
-        ).toBe(false);
-        expect(Reflect.deleteProperty(proxyWindow, property)).toBe(false);
-
-        expect(Reflect.get(window, property)).toBe(rootValue);
-        expect(Reflect.get(proxyWindow, property)).toBe(proxiedApi);
-        expect(
-          Object.getOwnPropertyDescriptor(proxyWindow, property)?.value,
-        ).toBe(proxiedApi);
-      } finally {
-        if (original) {
-          Object.defineProperty(window, property, original);
-        } else {
-          Reflect.deleteProperty(window, property);
-        }
-      }
-    },
-  );
+  // window 프록시 제거로 이 파일의 window.api·window.dmn 계약 테스트 2건은
+  // pluginInjectionContract.test.ts 로 옮겨 새 계약(실제 window + dmn 인자)으로 교체했다
 });

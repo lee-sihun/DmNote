@@ -55,7 +55,6 @@ declare global {
       string,
       Record<string, Record<string, string>>
     >;
-    __dmn_plugin_window_proxy?: Window;
     __dmn_custom_js_cleanup?: () => void;
     /** 래퍼가 잡은 플러그인 실행 오류 - 주입 직후 런타임이 회수 */
     __dmn_plugin_run_error?: string;

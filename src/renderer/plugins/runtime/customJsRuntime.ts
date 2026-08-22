@@ -23,7 +23,8 @@ import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { handlerRegistry } from './handlers';
 import { displayElementInstanceRegistry } from './displayElement';
-import { createPluginApiProxy, createPluginWindowProxy } from './api';
+import { createPluginApiProxy } from './api';
+import type { DMNoteAPI } from '@src/types/plugin/api';
 import type { JsPlugin } from '@src/types/plugin/js';
 import type {
   PluginHealthEntry,
@@ -32,6 +33,11 @@ import type {
 } from '@stores/plugin/usePluginHealthStore';
 
 const SCRIPT_ID_PREFIX = 'dmn-custom-js-';
+
+/** 플러그인별 API를 실어 나르는 script element */
+type PluginScriptElement = HTMLScriptElement & {
+  __dmn_plugin_api?: DMNoteAPI;
+};
 
 export interface CustomJsRuntime {
   initialize: () => void;
@@ -184,7 +190,6 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     const pluginId = extractPluginId(plugin.content, plugin.name);
     const previousCleanup = window.__dmn_custom_js_cleanup;
     const previousPluginId = window.__dmn_current_plugin_id;
-    const previousProxy = window.__dmn_plugin_window_proxy;
     let element: HTMLScriptElement | null = null;
     let committed = false;
 
@@ -206,17 +211,10 @@ export function createCustomJsRuntime(): CustomJsRuntime {
         waitForReloadEnd,
       });
 
-      // 플러그인용 Window 프록시 생성
-      const proxyWindow = createPluginWindowProxy(proxiedApi);
-      window.__dmn_plugin_window_proxy = proxyWindow;
-
       const wrappedContent = `
-;(function(window){
+;(function(window, dmn){
   'use strict';
   const __PLUGIN_ID__ = "${pluginId}";
-  
-  // 플러그인 스코프에 dmn 별칭 추가 (window. 없이 바로 접근 가능)
-  const dmn = window.api;
   
   const __autoWrapAsync__ = () => {
     const globalWindow = typeof window !== 'undefined' ? window : globalThis;
@@ -270,13 +268,16 @@ ${plugin.content}
   __autoWrapAsync__();
   // 끝까지 도달했다는 표시 - 문법 오류나 래퍼 자체의 예외를 여기서 가른다
   window.__dmn_plugin_ran = true;
-})(window.__dmn_plugin_window_proxy);
+})(window, document.currentScript.__dmn_plugin_api);
 `;
 
       element = document.createElement('script');
       element.id = `${SCRIPT_ID_PREFIX}${plugin.id}`;
       element.type = 'text/javascript';
       element.textContent = wrappedContent;
+      // 공유 전역 대신 이 script element로만 전달한다.
+      // 동기 평가 중 document.currentScript가 이 요소를 가리킨다
+      (element as PluginScriptElement).__dmn_plugin_api = proxiedApi;
 
       // 인라인 script의 문법 오류는 appendChild 호출자에게 예외로 오지 않고
       // window error 이벤트로만 보고된다 (HTML 스펙 run a classic script).
@@ -298,6 +299,7 @@ ${plugin.content}
       // 일어나지 않으면 오류 이벤트도 없으므로 완주 여부를 직접 확인한다
       const completed = window.__dmn_plugin_ran === true;
       delete window.__dmn_plugin_ran;
+      delete (element as PluginScriptElement).__dmn_plugin_api;
       const runErrorMessage = window.__dmn_plugin_run_error;
       delete window.__dmn_plugin_run_error;
 
@@ -352,11 +354,6 @@ ${plugin.content}
           window.__dmn_current_plugin_id = previousPluginId;
         } else {
           delete window.__dmn_current_plugin_id;
-        }
-        if (previousProxy !== undefined) {
-          window.__dmn_plugin_window_proxy = previousProxy;
-        } else {
-          delete window.__dmn_plugin_window_proxy;
         }
         if (previousCleanup) {
           window.__dmn_custom_js_cleanup = previousCleanup;
