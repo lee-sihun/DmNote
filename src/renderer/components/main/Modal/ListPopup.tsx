@@ -15,6 +15,7 @@ import { useViewportSize } from '@hooks/ui/useViewportSize';
 import { getListScrollMetrics } from './listScrollMetrics';
 import { useLenis } from '@hooks/useLenis';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
+import { CANVAS_POPUP_MATERIAL_CLASS } from './popupChrome';
 
 export type ListItem = {
   id: string;
@@ -263,7 +264,7 @@ const SubMenu = ({
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`fixed z-[60] bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
+      className={`fixed z-[60] ${CANVAS_POPUP_MATERIAL_CLASS} shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
         needsScroll ? ' listpopup-scroll' : ''
       }`}
       style={{
@@ -525,8 +526,7 @@ const ListPopup = ({
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
   // z는 호출부가 덮을 수 있어야 한다. 기본값을 클래스로 박으면 두 클래스가
   // 같은 특이도로 충돌해 CSS 생성 순서에 따라 결과가 달라진다
-  const defaultClassName =
-    'dmn-motion bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
+  const defaultClassName = `dmn-motion ${CANVAS_POPUP_MATERIAL_CLASS} shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]`;
   const zClassName = /(^|\s)z-/.test(className) ? '' : 'z-40';
   const effectiveClassName =
     `${defaultClassName} ${zClassName} ${className}`.trim();

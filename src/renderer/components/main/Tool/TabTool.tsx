@@ -4,6 +4,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useIconMotion } from '@hooks/useIconMotion';
 import { useState, useRef } from 'react';
 import FloatingPopup from '../Modal/FloatingPopup';
+import { CANVAS_POPUP_MATERIAL_CLASS } from '../Modal/popupChrome';
 import TabList from '../Modal/content/settings/TabList';
 
 const TabTool = () => {
@@ -64,7 +65,7 @@ const TabTool = () => {
         onClose={() => setIsPopupOpen(false)}
         contentMountStrategy="after-paint"
         // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조
-        className="dmn-motion flex flex-col gap-[6px] w-[216px] p-[8px] bg-glass backdrop-glass-popup rounded-popup shadow-elevation-2"
+        className={`dmn-motion flex flex-col gap-[6px] w-[216px] p-[8px] ${CANVAS_POPUP_MATERIAL_CLASS} rounded-popup shadow-elevation-2`}
       >
         <TabList />
       </FloatingPopup>

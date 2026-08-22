@@ -58,7 +58,10 @@
      dim ↓ = 밝은 배경 투과 억제. 과하게 누르면 투과 변화 자체가 죽어 글래스가 안 읽힘 / sat = 색기운 유지량 */
   --ui-glass-backdrop-dim: 0.8;
   --ui-glass-backdrop-sat: 1;
-  /* 루미노시티 캡 — 투과 결과의 휘도를 어두운 쪽으로 강제 (색조는 유지)
+  /* canvas 위 글래스 전용 - blur와 배경 변화는 남기고 색조 지배만 억제 */
+  --ui-glass-canvas-backdrop-dim: 0.62;
+  --ui-glass-canvas-backdrop-sat: 0.35;
+  /* 루미노시티 캡 - 투과 결과의 휘도를 어두운 쪽으로 강제 (색조는 유지)
      0 = 끔, 1 = 완전 캡. 필터와 독립 동작하는 2차 안전망 */
   --ui-glass-backdrop-lum: 0.1;
   /* 캡의 기준 휘도 — --ui-glass 틴트와 같은 색을 유지할 것.

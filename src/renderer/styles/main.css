@@ -105,6 +105,23 @@ body.dmn-dragging * {
     saturate(var(--ui-glass-backdrop-sat));
 }
 
+/* canvas 위 표면은 배경색이 재질을 지배하지 않게 clamp 강화 */
+:where(.backdrop-glass-canvas).backdrop-glass {
+  -webkit-backdrop-filter: blur(32px)
+    brightness(var(--ui-glass-canvas-backdrop-dim))
+    saturate(var(--ui-glass-canvas-backdrop-sat));
+  backdrop-filter: blur(32px) brightness(var(--ui-glass-canvas-backdrop-dim))
+    saturate(var(--ui-glass-canvas-backdrop-sat));
+}
+
+:where(.backdrop-glass-canvas).backdrop-glass-popup {
+  -webkit-backdrop-filter: blur(24px)
+    brightness(var(--ui-glass-canvas-backdrop-dim))
+    saturate(var(--ui-glass-canvas-backdrop-sat));
+  backdrop-filter: blur(24px) brightness(var(--ui-glass-canvas-backdrop-dim))
+    saturate(var(--ui-glass-canvas-backdrop-sat));
+}
+
 /* 스크림 프로스트 — 검은 딤 + 은은한 전화면 블러 (디자인 개편 전 레시피 복원).
    틴트는 유틸리티가 아니라 여기서 소유 — 딤·블러 레시피 단일 소스.
    전화면 재필터라 반경은 최소 유지, 블러 키프레임 보간 금지가 최적화의 핵심 —
@@ -647,8 +664,7 @@ body.dmn-dragging * {
   height: 100%;
 }
 
-/* 크롬 색은 사이드 패널과 같은 토큰 — 웰(bg-inset-solid)이 배경을 소유, 에디터는 투명.
-   웰이 알파면 모달 카드 밝기를 그대로 물려받아 신택스 팔레트 대비가 무너진다 */
+/* 입력 well이 어두운 glass를 소유하고 editor는 투명하게 유지 */
 .webfont-cm-editor .cm-editor {
   height: 100%;
   background: transparent;

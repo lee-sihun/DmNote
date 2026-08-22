@@ -762,7 +762,7 @@ const ColorPickerWrapper = ({
       panelElement={panelElement}
       fallbackWidth={168}
       fallbackHeight={300}
-      cardClassName="flex flex-col p-[10px] gap-[12px] w-[168px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
+      cardClassName="flex flex-col p-[10px] gap-[12px] w-[168px] rounded-popup shadow-elevation-3"
       placement={placement}
       offsetY={offsetY}
       fallbackFixedX={typeof position === 'object' ? position?.x : undefined}

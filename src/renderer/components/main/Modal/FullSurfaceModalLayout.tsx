@@ -2,8 +2,9 @@ import { usePressAction } from '@hooks/usePressAction';
 import type { ReactNode } from 'react';
 import Modal from './Modal';
 
-// 전면 시트 재질 — 시트 크롬과 로딩 폴백이 같은 소스를 공유
-export const FULL_SURFACE_MATERIAL_CLASS = 'bg-glass-heavy backdrop-glass';
+// 전면 시트 재질 - 글래스는 유지하되 넓은 면이 canvas 색을 과하게 받지 않게 제한
+export const FULL_SURFACE_MATERIAL_CLASS =
+  'bg-glass backdrop-glass backdrop-glass-canvas';
 
 interface FullSurfaceModalLayoutProps {
   onClose: () => void;

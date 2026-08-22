@@ -59,7 +59,7 @@ const KeySlotPicker = ({
       panelElement={panelElement}
       fallbackWidth={172}
       fallbackHeight={150}
-      cardClassName="flex flex-col p-[8px] gap-[8px] w-[172px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
+      cardClassName="flex flex-col p-[8px] gap-[8px] w-[172px] rounded-popup shadow-elevation-3"
       onClose={onClose}
     >
       {/* 판정 방식 - 개별(any) / 동시(all), 키 2개부터 의미가 생김 */}
