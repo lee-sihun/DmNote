@@ -33,6 +33,7 @@ import {
   waitForPluginInjection,
 } from '@stores/plugin/usePluginHealthStore';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
+import { classifyPluginAddResult } from '@utils/plugin/pluginAddResult';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
@@ -572,20 +573,20 @@ const Settings = ({
         ...(result.errors ?? []),
         ...injectionErrors,
       ];
-      const succeeded: number = added.length - injectionErrors.length;
+      const alertKind = classifyPluginAddResult(added.length, errors.length);
 
-      if (errors.length && succeeded) {
+      if (alertKind === 'partial') {
         showAlert?.(
           `${t('settings.jsAddPartial', {
-            count: succeeded,
+            count: added.length,
           })}\n${formatPluginErrors(errors)}`,
         );
-      } else if (errors.length) {
+      } else if (alertKind === 'failed') {
         showAlert?.(
           `${t('settings.jsAddFailed')}\n${formatPluginErrors(errors)}`,
         );
-      } else if (succeeded) {
-        showAlert?.(t('settings.jsAddSuccess', { count: succeeded }));
+      } else if (alertKind === 'success') {
+        showAlert?.(t('settings.jsAddSuccess', { count: added.length }));
       }
     } catch (error) {
       console.error('Failed to add JS plugins', error);

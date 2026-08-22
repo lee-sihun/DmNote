@@ -37,11 +37,17 @@ export function canLoadFont(path: string): Promise<boolean> {
   if (!src) return Promise.resolve(false);
   if (typeof FontFace === 'undefined') return Promise.resolve(true);
 
-  return withTimeout(
+  try {
     // document.fonts에 넣지 않는다 - 판정만 하고 버린다
-    new FontFace('dmn-font-probe', `url("${src}")`).load().then(
-      () => true,
-      () => false,
-    ),
-  );
+    const probe = new FontFace('dmn-font-probe', `url("${src}")`);
+    return withTimeout(
+      probe.load().then(
+        () => true,
+        () => false,
+      ),
+    );
+  } catch (error) {
+    console.error('Failed to create font probe', error);
+    return Promise.resolve(false);
+  }
 }

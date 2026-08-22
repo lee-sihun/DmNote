@@ -104,7 +104,7 @@ const Alert = ({
       {/* Modal 가용 영역 90px과 위아래 안전 여백 12px 반영
           부모 높이가 auto라 백분율 대신 뷰포트 기준 확정 높이 사용 */}
       <div
-        className="flex flex-col min-w-[264px] max-h-[calc(100vh-90px-24px)] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"
+        className="flex w-fit min-w-[264px] max-w-[calc(100vw-48px)] flex-col max-h-[calc(100vh-90px-24px)] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 메시지 텍스트 or Custom HTML */}
@@ -116,7 +116,7 @@ const Alert = ({
             dangerouslySetInnerHTML={{ __html: message }}
           />
         ) : (
-          <div className="max-w-[236px] min-h-0 self-center overflow-y-auto modal-content-scroll dmn-scroll-fade whitespace-pre-line break-words text-center text-fg text-label px-[8px] py-[8px]">
+          <div className="max-w-[412px] min-h-0 self-center overflow-y-auto modal-content-scroll dmn-scroll-fade whitespace-pre-line break-words break-keep text-center text-fg text-label px-[8px] py-[8px]">
             {message}
           </div>
         )}
