@@ -108,7 +108,10 @@
     "obsStopFailed": "Не удалось остановить сервер OBS.",
     "obsGuide": "Отображает оверлей через источник «Браузер» в OBS.",
     "obsTokenRegenMessage": "Сгенерировать новый токен сессии?",
-    "obsTokenRegenConfirm": "Сгенерировать"
+    "obsTokenRegenConfirm": "Сгенерировать",
+    "jsPluginFailed": "Ошибка",
+    "jsRuntimeError": "Во время выполнения плагина произошла ошибка.",
+    "jsNotApplied": "Не удалось применить плагин."
   },
   "shortcutSetting": {
     "title": "Горячие клавиши",

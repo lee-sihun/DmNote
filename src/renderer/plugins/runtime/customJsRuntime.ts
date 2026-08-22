@@ -18,12 +18,18 @@ import { setPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGe
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { usePluginHealthStore } from '@stores/plugin/usePluginHealthStore';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { handlerRegistry } from './handlers';
 import { displayElementInstanceRegistry } from './displayElement';
 import { createPluginApiProxy, createPluginWindowProxy } from './api';
 import type { JsPlugin } from '@src/types/plugin/js';
+import type {
+  PluginHealthEntry,
+  PluginHealthMap,
+  PluginInjectionOutcome,
+} from '@stores/plugin/usePluginHealthStore';
 
 const SCRIPT_ID_PREFIX = 'dmn-custom-js-';
 
@@ -74,6 +80,15 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     return new Promise((resolve) => reloadSettledWaiters.add(resolve));
   };
 
+  // 주입 결과는 main 창의 관리 목록과 알림이 쓴다
+  const publishHealth = (
+    outcome: PluginInjectionOutcome,
+    health: PluginHealthMap = {},
+  ) => {
+    if (disposed) return;
+    usePluginHealthStore.getState().publish(outcome, health);
+  };
+
   const safeRun = (fn?: () => void, label?: string) => {
     if (typeof fn !== 'function') return;
     try {
@@ -93,6 +108,24 @@ export function createCustomJsRuntime(): CustomJsRuntime {
       cleanupRegistry.set(pluginId, []);
     }
     cleanupRegistry.get(pluginId)!.push(cleanup);
+  };
+
+  const clearPluginUi = (pluginId: string) => {
+    if (window.__dmn_window_type !== 'main') return;
+    try {
+      usePluginMenuStore.getState().clearByPluginId(pluginId);
+      usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
+      displayElementInstanceRegistry.clearByPluginId(pluginId);
+
+      sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+        elements: usePluginDisplayElementStore.getState().elements,
+      });
+    } catch (error) {
+      console.error(
+        `Failed to clear UI elements for plugin '${pluginId}'`,
+        error,
+      );
+    }
   };
 
   const runPluginCleanups = (pluginId: string) => {
@@ -147,35 +180,22 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     }
   };
 
-  const injectPlugin = (plugin: JsPlugin) => {
+  const injectPlugin = (plugin: JsPlugin): PluginHealthEntry => {
+    const pluginId = extractPluginId(plugin.content, plugin.name);
+    const previousCleanup = window.__dmn_custom_js_cleanup;
+    const previousPluginId = window.__dmn_current_plugin_id;
+    const previousProxy = window.__dmn_plugin_window_proxy;
+    let element: HTMLScriptElement | null = null;
+    let committed = false;
+
     try {
-      const previousCleanup = window.__dmn_custom_js_cleanup;
       if (previousCleanup) {
         delete window.__dmn_custom_js_cleanup;
       }
 
-      const pluginId = extractPluginId(plugin.content, plugin.name);
-
       window.__dmn_current_plugin_id = pluginId;
 
-      if (window.__dmn_window_type === 'main') {
-        try {
-          usePluginMenuStore.getState().clearByPluginId(pluginId);
-          usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
-          displayElementInstanceRegistry.clearByPluginId(pluginId);
-
-          sendBridgeMessageBestEffort(
-            'overlay',
-            'plugin:displayElements:sync',
-            { elements: usePluginDisplayElementStore.getState().elements },
-          );
-        } catch (error) {
-          console.error(
-            `Failed to clear UI elements for plugin '${pluginId}'`,
-            error,
-          );
-        }
-      }
+      clearPluginUi(pluginId);
 
       // 플러그인용 API 프록시 생성
       const proxiedApi = createPluginApiProxy({
@@ -240,32 +260,56 @@ export function createCustomJsRuntime(): CustomJsRuntime {
 ${plugin.content}
     })();
   } catch (e) {
-    console.error('Failed to run JS plugin: ${plugin.name}', e);
+    console.error('Failed to run JS plugin: ' + ${JSON.stringify(
+      plugin.name,
+    )}, e);
+    // 주입 직후 런타임이 회수한다 - 삼키면 실패가 성공처럼 보인다
+    window.__dmn_plugin_run_error = e && e.message ? String(e.message) : String(e);
   }
   
   __autoWrapAsync__();
+  // 끝까지 도달했다는 표시 - 문법 오류나 래퍼 자체의 예외를 여기서 가른다
+  window.__dmn_plugin_ran = true;
 })(window.__dmn_plugin_window_proxy);
 `;
 
-      const element = document.createElement('script');
+      element = document.createElement('script');
       element.id = `${SCRIPT_ID_PREFIX}${plugin.id}`;
       element.type = 'text/javascript';
       element.textContent = wrappedContent;
-      document.head.appendChild(element);
+
+      // 인라인 script의 문법 오류는 appendChild 호출자에게 예외로 오지 않고
+      // window error 이벤트로만 보고된다 (HTML 스펙 run a classic script).
+      // 다만 이 구간의 error 이벤트가 전부 이 플러그인의 실패는 아니다.
+      // 실패 판정은 완주 여부로 하고, 이 메시지는 완주하지 못했을 때 사유로만 쓴다
+      let observedErrorMessage: string | undefined;
+      const captureParseError = (event: ErrorEvent): void => {
+        observedErrorMessage ??= event.message || 'SyntaxError';
+      };
+      window.addEventListener('error', captureParseError, true);
+      delete window.__dmn_plugin_ran;
+      try {
+        document.head.appendChild(element);
+      } finally {
+        window.removeEventListener('error', captureParseError, true);
+      }
+
+      // 오류가 없었다는 것으로 성공을 추정하지 않는다. CSP 차단처럼 평가 자체가
+      // 일어나지 않으면 오류 이벤트도 없으므로 완주 여부를 직접 확인한다
+      const completed = window.__dmn_plugin_ran === true;
+      delete window.__dmn_plugin_ran;
+      const runErrorMessage = window.__dmn_plugin_run_error;
+      delete window.__dmn_plugin_run_error;
 
       const pluginCleanup = window.__dmn_custom_js_cleanup;
 
-      try {
-        delete window.__dmn_plugin_window_proxy;
-        delete window.__dmn_current_plugin_id;
-      } catch {
-        // 무시
-      }
-
-      if (previousCleanup) {
-        window.__dmn_custom_js_cleanup = previousCleanup;
-      } else {
-        delete window.__dmn_custom_js_cleanup;
+      // 완주했으면 성공이다. 실행 중 관측된 error 이벤트는 이 플러그인이 낸
+      // 진단일 수 있으므로 완주 결과를 뒤집지 않는다
+      const failure = completed
+        ? runErrorMessage
+        : observedErrorMessage ?? 'Plugin script was not evaluated';
+      if (failure) {
+        return { status: 'failed' as const, message: failure };
       }
 
       activeElements.set(plugin.id, {
@@ -274,8 +318,54 @@ ${plugin.content}
           typeof pluginCleanup === 'function' ? pluginCleanup : undefined,
         pluginId,
       });
+      committed = true;
+      return { status: 'ok' as const };
     } catch (error) {
       console.error(`Failed to inject JS plugin '${plugin.name}'`, error);
+      return {
+        status: 'failed' as const,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      // 전역 복원과 실패 회수는 모든 탈출 경로에서 일어나야 한다.
+      // 복원을 빠뜨리면 다음 플러그인이 남의 컨텍스트로 주입된다
+      try {
+        delete window.__dmn_plugin_ran;
+        delete window.__dmn_plugin_run_error;
+      } catch {
+        // 무시
+      }
+
+      if (!committed) {
+        // 사용자 코드가 throw 전에 등록한 UI·handler·cleanup을 되돌린다.
+        // 실패한 플러그인의 반쪽 기능이 정상 항목과 나란히 남으면 안 된다
+        window.__dmn_current_plugin_id = pluginId;
+        runPluginCleanups(pluginId);
+        safeRun(window.__dmn_custom_js_cleanup, plugin.id);
+        clearPluginUi(pluginId);
+        element?.remove();
+      }
+
+      // 진입 전 값으로 되돌린다 - 삭제로 끝내면 바깥 소유자 정보가 사라진다
+      try {
+        if (previousPluginId !== undefined) {
+          window.__dmn_current_plugin_id = previousPluginId;
+        } else {
+          delete window.__dmn_current_plugin_id;
+        }
+        if (previousProxy !== undefined) {
+          window.__dmn_plugin_window_proxy = previousProxy;
+        } else {
+          delete window.__dmn_plugin_window_proxy;
+        }
+        if (previousCleanup) {
+          window.__dmn_custom_js_cleanup = previousCleanup;
+        } else {
+          delete window.__dmn_custom_js_cleanup;
+        }
+      } catch {
+        // 무시
+      }
     }
   };
 
@@ -303,6 +393,13 @@ ${plugin.content}
   // 재주입 세대 - reset 대기 중 다음 injectAll이 시작되면 이전 세대 주입을 중단
   let injectGeneration = 0;
 
+  // 전역 OFF - 켜져 있던 동안의 오류 상태를 그대로 두면 지금도 실패 중으로 보인다
+  const disableRuntime = () => {
+    removeAll();
+    publishHealth('skipped');
+    void resetPluginAuthorityForRuntime();
+  };
+
   const injectAll = () => {
     setReloading(true);
     removeAll();
@@ -314,17 +411,24 @@ ${plugin.content}
       if (!resetOk) {
         // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
         console.error('Skipping plugin injection: authority reset failed');
+        // 주입이 아예 일어나지 않았다. 빈 결과를 성공으로 읽히게 두면 안 된다
+        publishHealth('aborted');
         setReloading(false);
         return;
       }
       if (!enabled) {
+        publishHealth('skipped');
         setReloading(false);
         return;
       }
 
+      const health: PluginHealthMap = {};
       currentPlugins
         .filter((plugin) => plugin.enabled && plugin.content)
-        .forEach((plugin) => injectPlugin(plugin));
+        .forEach((plugin) => {
+          health[plugin.id] = injectPlugin(plugin);
+        });
+      publishHealth('settled', health);
       // 주입이 실제 실행된 시점에만 기록 - reset 실패로 중단된 뒤 같은
       // 내용이 다시 오면 재시도가 가능해야 한다
       appliedSignature = pluginsSignature(currentPlugins);
@@ -347,8 +451,7 @@ ${plugin.content}
       if (!options?.forced && appliedSignature === nextSignature) return;
       injectAll();
     } else {
-      removeAll();
-      void resetPluginAuthorityForRuntime();
+      disableRuntime();
     }
   };
 
@@ -371,8 +474,7 @@ ${plugin.content}
         if (enabled) {
           injectAll();
         } else {
-          removeAll();
-          void resetPluginAuthorityForRuntime();
+          disableRuntime();
         }
       })
       .catch((error) => {
@@ -386,8 +488,7 @@ ${plugin.content}
       if (enabled) {
         injectAll();
       } else {
-        removeAll();
-        void resetPluginAuthorityForRuntime();
+        disableRuntime();
       }
     });
 

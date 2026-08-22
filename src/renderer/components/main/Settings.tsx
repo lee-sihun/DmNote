@@ -28,6 +28,10 @@ import {
   FILL_INTERACTIVE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
+import {
+  currentPluginHealthRevision,
+  waitForPluginInjection,
+} from '@stores/plugin/usePluginHealthStore';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
@@ -456,6 +460,39 @@ const Settings = ({
   const formatPluginErrors = (errors: PluginError[] = []): string =>
     errors.map((item) => `${item.path ?? 'unknown'}: ${item.error}`).join('\n');
 
+  // 파일을 읽는 데 성공해도 브라우저가 평가하지 못하면 실패다.
+  // 주입 결과가 정산될 때까지 기다렸다가 실제로 죽은 플러그인을 오류로 합류시킨다
+  const collectInjectionErrors = async (
+    candidates: JsPlugin[],
+    revision: number,
+  ): Promise<PluginError[]> => {
+    const injected: JsPlugin[] = candidates.filter(
+      (plugin) => plugin.enabled && plugin.content,
+    );
+    if (!injected.length) return [];
+
+    const { outcome, health } = await waitForPluginInjection(revision);
+
+    // 전역 JS가 꺼져 있으면 주입 대상이 아니다. 실패로 셀 일이 아니다
+    if (outcome === 'skipped') return [];
+
+    // 주입이 아예 못 돌았으면 결과가 비어 있다. 이걸 '오류 없음'으로 읽으면
+    // 실행되지 않은 플러그인을 성공으로 표시하게 된다
+    if (outcome !== 'settled') {
+      return injected.map((plugin) => ({
+        path: plugin.path ?? plugin.name,
+        error: t('settings.jsNotApplied'),
+      }));
+    }
+
+    return injected
+      .filter((plugin) => health[plugin.id]?.status === 'failed')
+      .map((plugin) => ({
+        path: plugin.path ?? plugin.name,
+        error: health[plugin.id]?.message ?? t('settings.jsRuntimeError'),
+      }));
+  };
+
   const canReloadPlugins: boolean = jsPlugins.some(
     (plugin: JsPlugin) => plugin.path,
   );
@@ -470,22 +507,33 @@ const Settings = ({
     reloadingPluginsRef.current = true;
     setIsReloadingPlugins(true);
     try {
+      // 요청 전에 회차를 잡는다 - 응답보다 주입 정산이 먼저 끝나도 놓치지 않는다
+      const healthRevision: number = currentPluginHealthRevision();
       const result: JsReloadResult = await jsApi.reload();
       const updated: JsPlugin[] = result.updated ?? [];
-      const errors: PluginError[] = result.errors ?? [];
+      const injectionErrors: PluginError[] = await collectInjectionErrors(
+        updated,
+        healthRevision,
+      );
+      const errors: PluginError[] = [
+        ...(result.errors ?? []),
+        ...injectionErrors,
+      ];
 
-      if (errors.length && updated.length) {
+      const succeeded: number = updated.length - injectionErrors.length;
+
+      if (errors.length && succeeded) {
         showAlert?.(
           `${t('settings.jsReloadPartial', {
-            count: updated.length,
+            count: succeeded,
           })}\n${formatPluginErrors(errors)}`,
         );
       } else if (errors.length) {
         showAlert?.(
           `${t('settings.jsReloadFailed')}\n${formatPluginErrors(errors)}`,
         );
-      } else if (updated.length) {
-        showAlert?.(t('settings.jsReloadSuccess', { count: updated.length }));
+      } else if (succeeded) {
+        showAlert?.(t('settings.jsReloadSuccess', { count: succeeded }));
       } else {
         showAlert?.(t('settings.jsReloadNoChanges'));
       }
@@ -512,23 +560,32 @@ const Settings = ({
     addingPluginsRef.current = true;
     setIsAddingPlugins(true);
     try {
+      const healthRevision: number = currentPluginHealthRevision();
       const result: JsLoadResult = await jsApi.load();
       if (!result) return;
       const added: JsPlugin[] = result.added ?? [];
-      const errors: PluginError[] = result.errors ?? [];
+      const injectionErrors: PluginError[] = await collectInjectionErrors(
+        added,
+        healthRevision,
+      );
+      const errors: PluginError[] = [
+        ...(result.errors ?? []),
+        ...injectionErrors,
+      ];
+      const succeeded: number = added.length - injectionErrors.length;
 
-      if (errors.length && added.length) {
+      if (errors.length && succeeded) {
         showAlert?.(
           `${t('settings.jsAddPartial', {
-            count: added.length,
+            count: succeeded,
           })}\n${formatPluginErrors(errors)}`,
         );
       } else if (errors.length) {
         showAlert?.(
           `${t('settings.jsAddFailed')}\n${formatPluginErrors(errors)}`,
         );
-      } else if (added.length) {
-        showAlert?.(t('settings.jsAddSuccess', { count: added.length }));
+      } else if (succeeded) {
+        showAlert?.(t('settings.jsAddSuccess', { count: succeeded }));
       }
     } catch (error) {
       console.error('Failed to add JS plugins', error);

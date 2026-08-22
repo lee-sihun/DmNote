@@ -108,7 +108,10 @@
     "obsStopFailed": "OBS 伺服器停止失敗。",
     "obsGuide": "透過 OBS 瀏覽器來源顯示覆蓋層。",
     "obsTokenRegenMessage": "是否重新產生工作階段權杖？",
-    "obsTokenRegenConfirm": "重新產生"
+    "obsTokenRegenConfirm": "重新產生",
+    "jsPluginFailed": "錯誤",
+    "jsRuntimeError": "外掛程式執行時發生錯誤。",
+    "jsNotApplied": "無法套用此外掛程式。"
   },
   "shortcutSetting": {
     "title": "快捷鍵設定",

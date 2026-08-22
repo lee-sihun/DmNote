@@ -108,7 +108,10 @@
     "obsStopFailed": "OBS 服务器停止失败。",
     "obsGuide": "通过 OBS 浏览器源显示叠加层。",
     "obsTokenRegenMessage": "是否重新生成会话令牌？",
-    "obsTokenRegenConfirm": "重新生成"
+    "obsTokenRegenConfirm": "重新生成",
+    "jsPluginFailed": "错误",
+    "jsRuntimeError": "插件运行时发生错误。",
+    "jsNotApplied": "无法应用该插件。"
   },
   "shortcutSetting": {
     "title": "快捷键设置",

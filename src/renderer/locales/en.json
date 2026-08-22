@@ -108,7 +108,10 @@
     "obsStopFailed": "Failed to stop OBS server.",
     "obsGuide": "Displays the overlay via a browser source in OBS.",
     "obsTokenRegenMessage": "Regenerate the session token?",
-    "obsTokenRegenConfirm": "Regenerate"
+    "obsTokenRegenConfirm": "Regenerate",
+    "jsPluginFailed": "Error",
+    "jsRuntimeError": "The plugin failed while running.",
+    "jsNotApplied": "The plugin could not be applied."
   },
   "shortcutSetting": {
     "title": "Shortcut Settings",

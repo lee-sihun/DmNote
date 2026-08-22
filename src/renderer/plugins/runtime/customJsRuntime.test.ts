@@ -64,6 +64,19 @@ const pluginA: JsPlugin = {
 const scripts = () =>
   Array.from(document.querySelectorAll('script[id^="dmn-custom-js-"]'));
 
+// jsdom은 동적 script를 지연 실행한다. 런타임은 실행 흔적을 요구하므로
+// 실 Chromium의 동기 평가를 appendChild 시점에 흉내낸다
+const stubSynchronousEvaluation = () => {
+  const original = document.head.appendChild.bind(document.head);
+  vi.spyOn(document.head, 'appendChild').mockImplementation(((
+    node: HTMLScriptElement,
+  ) => {
+    const appended = original(node);
+    window.__dmn_plugin_ran = true;
+    return appended;
+  }) as typeof document.head.appendChild);
+};
+
 const stateListener = (): ((payload: JsStatePayload) => void) =>
   onStateMock.mock.calls[0][0];
 
@@ -86,6 +99,7 @@ describe('customJsRuntime 재주입 가드', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    stubSynchronousEvaluation();
     jsGetMock.mockReset().mockResolvedValue({ plugins: [{ ...pluginA }] });
     jsGetUseMock.mockReset().mockResolvedValue(true);
     onUseMock.mockClear();
@@ -102,6 +116,8 @@ describe('customJsRuntime 재주입 가드', () => {
     runtime = null;
     await vi.runOnlyPendingTimersAsync();
     vi.useRealTimers();
+    vi.restoreAllMocks();
+    delete window.__dmn_plugin_ran;
     scripts().forEach((element) => element.remove());
   });
 
