@@ -22,7 +22,7 @@ import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { ShortcutBinding } from '@src/types/settings/shortcuts';
 import FloatingPopup from '@components/main/Modal/FloatingPopup';
-import { CANVAS_POPUP_MATERIAL_CLASS } from '@components/main/Modal/popupChrome';
+import { CANVAS_POPUP_CHROME_CLASS } from '@components/main/Modal/popupChrome';
 import { useModalPresence } from '@hooks/ui/usePopupPresence';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import PopupExit from '@components/main/Modal/PopupExit';
@@ -767,7 +767,7 @@ export default function App() {
         offset={25}
         onClose={handlePaletteClose}
         // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조
-        className={`dmn-motion z-50 flex flex-col justify-between rounded-popup ${CANVAS_POPUP_MATERIAL_CLASS} shadow-elevation-2 p-[8px]`}
+        className={`dmn-motion z-50 flex flex-col justify-between rounded-popup ${CANVAS_POPUP_CHROME_CLASS} p-[8px]`}
         contentMountStrategy="after-paint"
       >
         <Palette color={color} onColorChange={handleColorChange} />

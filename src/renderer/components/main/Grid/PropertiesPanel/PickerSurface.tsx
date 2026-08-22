@@ -7,7 +7,7 @@ import {
 } from '@hooks/ui/usePanelAnchoredPopupPosition';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import { usePanelHost } from '@contexts/PanelHostContext';
-import { CANVAS_POPUP_MATERIAL_CLASS } from '@components/main/Modal/popupChrome';
+import { CANVAS_POPUP_CHROME_CLASS } from '@components/main/Modal/popupChrome';
 
 // 트리거와 팝업 사이 간격 — 좌표 계산기의 gap과 같은 값
 const POPUP_GAP = 5;
@@ -117,7 +117,7 @@ const PickerSurface = ({
     >
       <div
         ref={cardRef}
-        className={`dmn-motion ${CANVAS_POPUP_MATERIAL_CLASS} ${cardClassName}`}
+        className={`dmn-motion ${CANVAS_POPUP_CHROME_CLASS} ${cardClassName}`}
         style={{
           visibility: awaitingPosition ? 'hidden' : undefined,
           // 분리 창에서는 카드 고정 폭 대신 섹션 폭을 따름

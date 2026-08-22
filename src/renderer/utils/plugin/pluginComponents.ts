@@ -5,7 +5,7 @@
 
 import { registerComponentHandler } from './pluginUtils';
 import { FORM_ROW_CLASS, FORM_LABEL_CLASS } from '@utils/cardRecipes';
-import { CANVAS_POPUP_MATERIAL_CLASS } from '@components/main/Modal/popupChrome';
+import { CANVAS_POPUP_CHROME_CLASS } from '@components/main/Modal/popupChrome';
 
 /**
  * 현재 실행 중인 플러그인 ID를 가져옵니다.
@@ -304,7 +304,7 @@ export function createDropdown(options: DropdownOptions): string {
         <path d="M1 1L7 7L13 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
-    <div class="hidden absolute left-0 top-[27px] flex-col p-[4px] gap-[4px] ${CANVAS_POPUP_MATERIAL_CLASS} rounded-surface shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto tooltip-fade-in" data-dropdown-menu>
+    <div class="hidden absolute left-0 top-[27px] flex-col p-[4px] gap-[4px] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface z-20 overflow-x-hidden overflow-y-auto tooltip-fade-in" data-dropdown-menu>
       ${itemsHtml}
     </div>
   </div>`;

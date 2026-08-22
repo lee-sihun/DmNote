@@ -10,6 +10,10 @@ const mainCss = readFileSync(
   resolve(process.cwd(), 'src/renderer/styles/main.css'),
   'utf8',
 );
+const tailwindConfig = readFileSync(
+  resolve(process.cwd(), 'tailwind.config.js'),
+  'utf8',
+);
 
 describe('canvas 위 glass 표면 계약', () => {
   it('일반 glass와 분리된 밝기·채도 clamp를 가진다', () => {
@@ -32,5 +36,14 @@ describe('canvas 위 glass 표면 계약', () => {
     );
     expect(canvasSurfaceRule).toBeGreaterThan(-1);
     expect(reducedTransparencyRule).toBeGreaterThan(canvasSurfaceRule);
+  });
+
+  it('popup 전용 짧은 shadow가 theme에 연결된다', () => {
+    expect(tokensCss).toMatch(
+      /--ui-shadow-popup:[\s\S]*?0 3px 10px rgba\(0, 0, 0, 0\.28\)/,
+    );
+    expect(tailwindConfig).toContain(
+      "'elevation-popup': 'var(--ui-shadow-popup)'",
+    );
   });
 });

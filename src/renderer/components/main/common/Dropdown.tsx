@@ -14,7 +14,7 @@ import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { clampToViewport } from '@utils/ui/popupGeometry';
 import { usePanelHost } from '@contexts/PanelHostContext';
 import { isNodeLike } from '@utils/dom/isElementNode';
-import { CANVAS_POPUP_MATERIAL_CLASS } from '../Modal/popupChrome';
+import { CANVAS_POPUP_CHROME_CLASS } from '../Modal/popupChrome';
 
 interface DropdownOption {
   label: string;
@@ -413,7 +413,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             inert={motionState === 'closing'}
             role="listbox"
             id={menuId}
-            className={`dmn-motion fixed flex flex-col p-[4px] gap-[4px] ${CANVAS_POPUP_MATERIAL_CLASS} rounded-surface shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] ${widthClass}`}
+            className={`dmn-motion fixed flex flex-col p-[4px] gap-[4px] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] ${widthClass}`}
             style={{
               // 실측 전에는 원점에서 히든 렌더 — 자연 크기 그대로 측정
               left: menuPos ? menuPos.left : 0,

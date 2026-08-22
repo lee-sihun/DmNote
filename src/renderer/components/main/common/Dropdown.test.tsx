@@ -114,6 +114,9 @@ describe('Dropdown keyboard contract', () => {
     expect(menu?.classList.contains('bg-glass-panel')).toBe(true);
     expect(menu?.classList.contains('backdrop-glass-popup')).toBe(true);
     expect(menu?.classList.contains('backdrop-glass-canvas')).toBe(true);
+    expect(menu?.classList.contains('shadow-elevation-popup')).toBe(true);
+    expect(menu?.classList.contains('shadow-elevation-2')).toBe(false);
+    expect(menu?.classList.contains('shadow-elevation-3')).toBe(false);
   });
 
   it('after-paint 전략은 메뉴와 라벨을 먼저 갱신하고 선택 콜백을 미룬다', async () => {

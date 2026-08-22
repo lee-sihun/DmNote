@@ -93,6 +93,7 @@ module.exports = {
         'elevation-1': 'var(--ui-shadow-1)',
         'elevation-2': 'var(--ui-shadow-2)',
         'elevation-3': 'var(--ui-shadow-3)',
+        'elevation-popup': 'var(--ui-shadow-popup)',
         'elevation-chrome': 'var(--ui-shadow-chrome)',
         'elevation-panel': 'var(--ui-shadow-panel)',
         'focus-ring': 'var(--ui-focus-ring)',
