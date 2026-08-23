@@ -32,7 +32,10 @@ import {
   currentPluginHealthRevision,
   waitForPluginInjection,
 } from '@stores/plugin/usePluginHealthStore';
-import { extractPluginId } from '@utils/plugin/pluginUtils';
+import {
+  extractPluginId,
+  getPluginDisplayName,
+} from '@utils/plugin/pluginUtils';
 import { classifyPluginAddResult } from '@utils/plugin/pluginAddResult';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
@@ -1448,7 +1451,7 @@ const Settings = ({
           }}
           onDeleteWithData={() => removePluginWithData(shownPluginToDelete.id)}
           onDeletePluginOnly={() => removePluginOnly(shownPluginToDelete.id)}
-          pluginName={shownPluginToDelete.name}
+          pluginName={getPluginDisplayName(shownPluginToDelete.name)}
           t={t}
         />
       )}

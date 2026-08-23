@@ -110,3 +110,8 @@ export function extractPluginId(content: string, filename: string): string {
     .replace(/--+/g, '-')
     .replace(/^-|-$/g, '');
 }
+
+export function getPluginDisplayName(filename: string): string {
+  const displayName = filename.replace(/\.(?:m?js)$/i, '');
+  return displayName || filename;
+}

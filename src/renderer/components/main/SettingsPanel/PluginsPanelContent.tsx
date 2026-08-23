@@ -23,6 +23,7 @@ import { SettingToggleRow } from '@components/main/common/SettingRow';
 import ListPopup from '@components/main/Modal/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { usePluginHealthStore } from '@stores/plugin/usePluginHealthStore';
+import { getPluginDisplayName } from '@utils/plugin/pluginUtils';
 import type { JsPlugin } from '@src/types/plugin/js';
 
 interface PluginsPanelContentProps {
@@ -77,6 +78,7 @@ const PluginsPanelContent = ({
           ) : (
             <div className="flex flex-col py-[8px]">
               {plugins.map((plugin) => {
+                const displayName = getPluginDisplayName(plugin.name);
                 const failure =
                   pluginHealth[plugin.id]?.status === 'failed'
                     ? pluginHealth[plugin.id]
@@ -97,7 +99,7 @@ const PluginsPanelContent = ({
                       menu.openFromContextMenu(event, plugin.id)
                     }
                     className={PANEL_LIST_ROW_CLASS}
-                    title={plugin.name}
+                    title={displayName}
                   >
                     <span
                       className={`${PANEL_ROW_NAME_CLASS} ${
@@ -106,7 +108,7 @@ const PluginsPanelContent = ({
                           : PANEL_ROW_NAME_INACTIVE_CLASS
                       }`}
                     >
-                      {plugin.name}
+                      {displayName}
                     </span>
                     {/* 켠 상태와 실제 실행 상태는 별개다 - 평가에 실패한 파일을 표시한다 */}
                     {plugin.enabled && failure ? (
