@@ -253,6 +253,19 @@ body.dmn-dragging * {
     animation-timeline: scroll(self);
   }
 
+  /* 행 리스트용 얕은 변형 - 30px 행이 20px 페이드에 통째로 잠겨
+     걸친 행 단서가 사라지므로 바닥 깊이를 8px로 캡. 뷰포트 스냅(20px 걸침)과
+     쌍: 글자 윗부분은 또렷하고 아랫부분이 녹아내리는 절단면을 만든다 */
+  .dmn-scroll-fade.dmn-scroll-fade-shallow {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--dmn-fade-top, 0px),
+      black calc(100% - min(var(--dmn-fade-bottom, 0px), 8px)),
+      transparent
+    );
+  }
+
   @keyframes dmn-scroll-fade {
     0% {
       --dmn-fade-top: 0px;

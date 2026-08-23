@@ -107,6 +107,23 @@ const FontPicker = ({
   const fontLibrary = useFontLibrary();
   const menu = usePickerItemMenu<string>();
 
+  // 추가 행이 스크롤 영역 안에 있어 메뉴를 연 채 스크롤하면
+  // 고정 좌표 메뉴가 행에서 분리됨 - 스크롤 시작 즉시 닫는다
+  useEffect(() => {
+    if (addMenuPosition === null) return;
+    const closeOnScroll = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.('[data-dmn-popup-layer="true"]')) return;
+      setAddMenuPosition(null);
+    };
+    document.addEventListener('scroll', closeOnScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () =>
+      document.removeEventListener('scroll', closeOnScroll, { capture: true });
+  }, [addMenuPosition]);
+
   // 비활성 폰트도 목록에서 실제 서체로 보이도록 preview CSS 주입
   // (활성 폰트는 syncFontCSS가 원본 이름으로 주입)
   const previewIdsRef = useRef<Set<string>>(new Set());
@@ -396,6 +413,7 @@ const FontPicker = ({
           setAddMenuPosition({ x: rect.right + 4, y: rect.top - 2 });
         }}
         addLabel={t('fontPicker.add')}
+        addRowPlacement="start"
         addButtonRef={addButtonRef}
       />
 

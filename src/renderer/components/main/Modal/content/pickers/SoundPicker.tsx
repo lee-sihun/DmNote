@@ -408,6 +408,7 @@ const SoundPicker = ({
         errorText={loadError}
         onAdd={() => openTrimSheet({ mode: 'create' })}
         addLabel={t('soundPicker.add') || '사운드 추가'}
+        addRowPlacement="start"
       />
 
       <input
