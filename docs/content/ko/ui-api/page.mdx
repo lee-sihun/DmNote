@@ -41,6 +41,8 @@ const menuId = dmn.ui.contextMenu.addKeyMenuItem({
 ### 그리드 메뉴 (addGridMenuItem)
 
 그리드 빈 공간을 우클릭할 때 표시되는 메뉴에 항목을 추가합니다.
+설치된 플러그인이 늘어도 메뉴가 길어지지 않도록, 여기 추가된 항목은 `플러그인` 서브메뉴 하나로 묶여 표시됩니다.
+자리는 등록 순서를 따르며 `position`은 적용되지 않습니다.
 
 ```javascript
 dmn.ui.contextMenu.addGridMenuItem({
@@ -65,7 +67,7 @@ dmn.ui.contextMenu.addGridMenuItem({
 {
   id: "my-menu",           // 플러그인 내 고유 ID
   label: "메뉴 항목",       // 표시 텍스트
-  position: "bottom",      // "top" | "bottom" (기본: bottom)
+  position: "bottom",      // "top" | "bottom" (기본: bottom, 키 메뉴 전용)
 
   // 조건부 표시
   visible: (context) => context.mode === "4key",

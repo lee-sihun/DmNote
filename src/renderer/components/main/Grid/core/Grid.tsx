@@ -85,6 +85,7 @@ import type {
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { overlayApi } from '@api/modules/overlayApi';
+import { panelWindowApi } from '@api/modules/panelWindowApi';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
@@ -2209,6 +2210,10 @@ const Grid = ({
             } else if (id === 'resetOverlayPosition') {
               void overlayApi.resetPosition().catch((error) => {
                 console.error('Failed to reset overlay position', error);
+              });
+            } else if (id === 'resetPanelPosition') {
+              void panelWindowApi.resetPosition().catch((error) => {
+                console.error('Failed to reset panel window position', error);
               });
             }
             setIsGridContextOpen(false);

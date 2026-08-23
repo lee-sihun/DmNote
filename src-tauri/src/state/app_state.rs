@@ -255,6 +255,9 @@ struct PanelBoundsPersistenceState {
     latest: Option<PanelBoundsSample>,
     window: Option<WebviewWindow>,
     applied_max_height: Option<f64>,
+    // 초기화로 발생한 resize가 비운 저장값을 되살리지 않게 하는 기본 높이 추적
+    unpersisted_default_height: Option<f64>,
+    default_height_pending: bool,
     session: u64,
     generation: u64,
     worker_running: bool,
@@ -3118,6 +3121,26 @@ impl AppState {
             .context("failed to move panel window")
     }
 
+    // 저장값을 비우고 기본 배치로 되돌린다. 창을 새로 보이거나 포커스를 옮기지 않는다.
+    // 즉시 저장은 panel_creation_lock 밖에서 - 디스크 대기 동안 창 전환이 막힌다
+    pub fn reset_panel_window_position(&self, app: &AppHandle) -> Result<()> {
+        let main_rect = main_window_logical_rect(app);
+        let monitors = MonitorData::gather(app);
+        let window = app.get_webview_window(PANEL_LABEL);
+        let layout = window
+            .as_ref()
+            .map(|_| resolve_panel_window_layout(None, main_rect, &monitors, None));
+
+        self.panel_bounds_persistence
+            .clear_saved_bounds(layout.as_ref())?;
+
+        if let (Some(window), Some(layout)) = (window, layout) {
+            let _creation_guard = self.panel_creation_lock.lock();
+            self.apply_panel_window_layout(&window, &layout);
+        }
+        Ok(())
+    }
+
     // 헤더 드래그 세션 시작 시 한 번 읽는 값 - 도크 존 판정 기준 좌표
     pub fn panel_drag_context(&self, app: &AppHandle) -> PanelDragContext {
         PanelDragContext {
@@ -5389,6 +5412,8 @@ impl PanelBoundsPersistenceController {
         state.latest = latest;
         state.window = Some(window.clone());
         state.applied_max_height = Some(max_height);
+        state.unpersisted_default_height = None;
+        state.default_height_pending = false;
         state.generation = state.generation.wrapping_add(1);
         state.dirty = false;
         state.persist_dirty = false;
@@ -5426,13 +5451,38 @@ impl PanelBoundsPersistenceController {
         let persist = change.changes_persisted_bounds();
         if let PanelBoundsChange::Snapshot(snapshot) = change {
             state.latest = Some(snapshot);
-            return Self::mark_dirty(state, persist);
+        } else {
+            let Some(latest) = state.latest.as_mut() else {
+                return false;
+            };
+            apply_panel_bounds_change(latest, change);
         }
-        let Some(latest) = state.latest.as_mut() else {
-            return false;
-        };
-        apply_panel_bounds_change(latest, change);
+        let persist = Self::should_persist_change(state, persist);
         Self::mark_dirty(state, persist)
+    }
+
+    fn should_persist_change(state: &mut PanelBoundsPersistenceState, persist: bool) -> bool {
+        if !persist {
+            return false;
+        }
+        let Some(default_height) = state.unpersisted_default_height else {
+            return true;
+        };
+        let Some(sample) = state.latest else {
+            state.unpersisted_default_height = None;
+            state.default_height_pending = false;
+            return true;
+        };
+        let height = panel_bounds_from_sample(sample).height;
+        if (height - default_height).abs() < 0.5 {
+            state.default_height_pending = false;
+            return false;
+        }
+        if state.default_height_pending {
+            return false;
+        }
+        state.unpersisted_default_height = None;
+        true
     }
 
     // 이동만 바뀌어도 워커는 깨운다 - 모니터가 바뀌면 높이 한계를 다시 걸어야 하기 때문
@@ -5484,6 +5534,32 @@ impl PanelBoundsPersistenceController {
         self.store
             .flush()
             .context("failed to flush settled panel bounds")
+    }
+
+    fn clear_saved_bounds(&self, layout: Option<&PanelWindowLayout>) -> Result<()> {
+        let _persist_guard = self.persist_lock.lock();
+        self.store
+            .update_deferred(|data| data.panel_bounds = None)
+            .context("failed to clear saved panel bounds")?;
+        self.store
+            .flush()
+            .context("failed to flush cleared panel bounds")?;
+
+        let mut state = self.state.lock();
+        let default_height = layout.map(|value| value.height);
+        let current_height = state
+            .latest
+            .map(panel_bounds_from_sample)
+            .map(|value| value.height);
+        state.unpersisted_default_height = default_height;
+        state.default_height_pending = default_height
+            .zip(current_height)
+            .is_none_or(|(default, current)| (default - current).abs() >= 0.5);
+        state.applied_max_height = layout.map(|value| value.max_height);
+        state.generation = state.generation.wrapping_add(1);
+        state.dirty = false;
+        state.persist_dirty = false;
+        Ok(())
     }
 
     fn persist_worker_work(&self, work: PanelBoundsPersistWork) -> Result<bool> {
@@ -5590,9 +5666,16 @@ impl PanelBoundsPersistenceController {
         let _persist_guard = self.persist_lock.lock();
         let generation_before_sample = self.state.lock().generation;
         let sampled = panel_bounds_sample_from_window(window);
-        Self::flush_samples(&self.state, generation_before_sample, sampled, |sample| {
-            self.persist_sample(sample)
-        })
+        let persisted =
+            Self::flush_samples(&self.state, generation_before_sample, sampled, |sample| {
+                self.persist_sample(sample)
+            })?;
+        if !persisted {
+            self.store
+                .flush()
+                .context("failed to flush store with cleared panel bounds")?;
+        }
+        Ok(())
     }
 
     fn flush_samples(
@@ -5600,7 +5683,7 @@ impl PanelBoundsPersistenceController {
         generation_before_sample: u64,
         sampled: Result<PanelBoundsSample>,
         mut persist: impl FnMut(PanelBoundsSample) -> Result<()>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let mut work = {
             let mut state = state_mutex.lock();
             let sampled = match sampled {
@@ -5616,22 +5699,31 @@ impl PanelBoundsPersistenceController {
             state.generation = state.generation.wrapping_add(1);
             state.dirty = false;
             state.persist_dirty = false;
-            // 생명주기 경계의 flush는 이동 여부를 가리지 않고 현재 값을 남긴다
+            let persist = Self::should_persist_change(&mut state, true);
             PanelBoundsPersistWork {
                 session: state.session,
                 generation: state.generation,
                 sample,
-                persist: true,
+                persist,
             }
         };
+        let mut persisted = false;
 
         loop {
-            if let Err(error) = persist(work.sample) {
-                Self::restore_failed_work(&mut state_mutex.lock(), &work);
-                return Err(error);
+            if work.persist {
+                if let Err(error) = persist(work.sample) {
+                    Self::restore_failed_work(&mut state_mutex.lock(), &work);
+                    return Err(error);
+                }
+                persisted = true;
             }
-            let Some(next) = Self::take_dirty_work(&mut state_mutex.lock()) else {
-                return Ok(());
+            let next = {
+                let mut state = state_mutex.lock();
+                let Some(mut next) = Self::take_dirty_work(&mut state) else {
+                    return Ok(persisted);
+                };
+                next.persist = Self::should_persist_change(&mut state, true);
+                next
             };
             work = next;
         }
@@ -5649,6 +5741,8 @@ impl PanelBoundsPersistenceController {
         state.active = false;
         state.window = None;
         state.applied_max_height = None;
+        state.unpersisted_default_height = None;
+        state.default_height_pending = false;
         state.generation = state.generation.wrapping_add(1);
         state.dirty = false;
         state.persist_dirty = false;
@@ -6194,6 +6288,90 @@ mod tests {
     }
 
     #[test]
+    fn panel_reset_ignores_default_layout_resize_before_user_resize() {
+        let mut state = PanelBoundsPersistenceState {
+            latest: Some(PanelBoundsSample {
+                position: PhysicalPosition::new(600, 300),
+                position_scale_factor: 2.0,
+                size: PhysicalSize::new(480, 2_000),
+                size_scale_factor: 2.0,
+                current_scale_factor: 2.0,
+            }),
+            unpersisted_default_height: Some(712.0),
+            default_height_pending: true,
+            session: 3,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_600)),
+        );
+        assert!(
+            !PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("intermediate reset size should schedule constraints")
+                .persist
+        );
+
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_424)),
+        );
+        assert!(
+            !PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("default reset size should schedule constraints")
+                .persist
+        );
+        assert!(!state.default_height_pending);
+
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_500)),
+        );
+        assert!(
+            PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("user resize should schedule persistence")
+                .persist
+        );
+        assert_eq!(state.unpersisted_default_height, None);
+    }
+
+    #[test]
+    fn panel_reset_at_default_height_persists_the_next_user_resize() {
+        let mut state = PanelBoundsPersistenceState {
+            latest: Some(PanelBoundsSample {
+                position: PhysicalPosition::new(600, 300),
+                position_scale_factor: 2.0,
+                size: PhysicalSize::new(480, 1_424),
+                size_scale_factor: 2.0,
+                current_scale_factor: 2.0,
+            }),
+            unpersisted_default_height: Some(712.0),
+            default_height_pending: false,
+            session: 4,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            4,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_500)),
+        );
+
+        assert!(
+            PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("user resize should schedule persistence")
+                .persist
+        );
+        assert_eq!(state.unpersisted_default_height, None);
+    }
+
+    #[test]
     fn panel_tray_companion_flag_marks_only_windows_we_hid() {
         let hidden = AtomicBool::new(false);
 
@@ -6452,6 +6630,34 @@ mod tests {
             .is_err()
         );
         assert!(state.lock().dirty);
+    }
+
+    #[test]
+    fn panel_bounds_flush_preserves_cleared_default_height() {
+        let sample = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_424),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let state = Mutex::new(PanelBoundsPersistenceState {
+            latest: Some(sample),
+            unpersisted_default_height: Some(712.0),
+            default_height_pending: false,
+            session: 7,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        });
+
+        let persisted =
+            PanelBoundsPersistenceController::flush_samples(&state, 0, Ok(sample), |_| {
+                panic!("default height must remain cleared")
+            })
+            .unwrap();
+
+        assert!(!persisted);
+        assert_eq!(state.lock().unpersisted_default_height, Some(712.0));
     }
 
     // 기동 복원 회귀: 방금 배치된 메인 창의 논리 좌표를 받으면 세로 중앙이 맞는다

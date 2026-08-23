@@ -21,7 +21,18 @@ interface PluginMenuState {
   clearAll: () => void;
 }
 
-export const usePluginMenuStore = create<PluginMenuState>((set, _get) => ({
+// 빈 바닥 메뉴의 플러그인 항목은 묶음 서브메뉴로 들어가므로 position이 자리를 정하지 못한다.
+// 조용히 무시하면 작성자가 원인을 못 찾으니 플러그인마다 한 번 알린다
+const gridPositionWarned = new Set<string>();
+const warnIgnoredGridPosition = (pluginId: string) => {
+  if (gridPositionWarned.has(pluginId)) return;
+  gridPositionWarned.add(pluginId);
+  console.warn(
+    `[Plugin ${pluginId}] "position" is ignored for grid menu items - they are grouped into a submenu`,
+  );
+};
+
+export const usePluginMenuStore = create<PluginMenuState>((set, get) => ({
   keyMenuItems: [],
   gridMenuItems: [],
 
@@ -47,6 +58,7 @@ export const usePluginMenuStore = create<PluginMenuState>((set, _get) => ({
   addGridMenuItem: (item) => {
     const pluginId = window.__dmn_current_plugin_id || 'unknown';
     const fullId = `${pluginId}:${item.id}`;
+    if (item.position !== undefined) warnIgnoredGridPosition(pluginId);
 
     // 중복 제거 (같은 fullId가 있으면 교체)
     set((state) => ({
@@ -71,7 +83,11 @@ export const usePluginMenuStore = create<PluginMenuState>((set, _get) => ({
       ),
     })),
 
-  updateMenuItem: (fullId, updates) =>
+  updateMenuItem: (fullId, updates) => {
+    if (updates.position !== undefined) {
+      const target = get().gridMenuItems.find((item) => item.fullId === fullId);
+      if (target) warnIgnoredGridPosition(target.pluginId);
+    }
     set((state) => ({
       keyMenuItems: state.keyMenuItems.map((item) =>
         item.fullId === fullId ? { ...item, ...updates } : item,
@@ -79,9 +95,12 @@ export const usePluginMenuStore = create<PluginMenuState>((set, _get) => ({
       gridMenuItems: state.gridMenuItems.map((item) =>
         item.fullId === fullId ? { ...item, ...updates } : item,
       ),
-    })),
+    }));
+  },
 
-  clearByPluginId: (pluginId) =>
+  clearByPluginId: (pluginId) => {
+    // 리로드한 플러그인이 같은 실수를 반복하면 다시 알려야 한다
+    gridPositionWarned.delete(pluginId);
     set((state) => ({
       keyMenuItems: state.keyMenuItems.filter(
         (item) => item.pluginId !== pluginId,
@@ -89,11 +108,14 @@ export const usePluginMenuStore = create<PluginMenuState>((set, _get) => ({
       gridMenuItems: state.gridMenuItems.filter(
         (item) => item.pluginId !== pluginId,
       ),
-    })),
+    }));
+  },
 
-  clearAll: () =>
+  clearAll: () => {
+    gridPositionWarned.clear();
     set({
       keyMenuItems: [],
       gridMenuItems: [],
-    }),
+    });
+  },
 }));

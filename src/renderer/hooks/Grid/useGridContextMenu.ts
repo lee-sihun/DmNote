@@ -4,6 +4,8 @@
  * - 그리드 컨텍스트 메뉴 항목 생성
  */
 
+import { useRef } from 'react';
+
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -17,11 +19,17 @@ import type {
   PluginMessages,
 } from '@src/types/plugin/api';
 
+// 빈 바닥 메뉴의 플러그인 묶음 행. 자식이 있는 행은 선택 이벤트를 내지 않으므로
+// 이 id가 onSelect로 흘러가지 않는다
+export const PLUGIN_GROUP_ID = 'pluginGroup';
+
 interface MenuItem {
   id: string;
   label: string;
   disabled?: boolean;
   isPlugin?: boolean;
+  // 서브메뉴 - 빈 바닥 메뉴의 플러그인 묶음이 쓴다
+  children?: MenuItem[];
 }
 
 interface KeyContext {
@@ -106,6 +114,66 @@ export function useGridContextMenu({
       fallback: rawLabel,
     });
 
+  // 플러그인 predicate 예외는 fail-closed로 격리 - 하나가 던져도 메뉴 전체가 사라지지 않게
+  // (요소 메뉴 evaluatePluginMenuItems와 같은 정책). 로그는 항목·종류별 1회
+  const predicateErrorRef = useRef<Set<string>>(new Set());
+  const reportPredicateError = (
+    fullId: string,
+    kind: 'visible' | 'disabled',
+    error: unknown,
+  ) => {
+    const key = `${fullId}:${kind}`;
+    if (predicateErrorRef.current.has(key)) return;
+    predicateErrorRef.current.add(key);
+    console.error(
+      `[Plugin Menu] Failed to evaluate "${kind}" for '${fullId}':`,
+      error,
+    );
+  };
+
+  // 등록 순서를 그대로 유지한다 - 선택 핸들러가 fullId로 원본을 되찾는다
+  const evaluatePluginItems = (
+    items: PluginMenuItemInternal<unknown>[],
+    context: unknown,
+  ): MenuItem[] => {
+    if (!context) return [];
+    const evaluated: MenuItem[] = [];
+    items.forEach((item) => {
+      let visible = true;
+      if (typeof item.visible === 'function') {
+        try {
+          visible = Boolean(item.visible(context));
+        } catch (error) {
+          reportPredicateError(item.fullId, 'visible', error);
+          visible = false;
+        }
+      } else if (item.visible !== undefined) {
+        visible = item.visible;
+      }
+      if (!visible) return;
+
+      let disabled = false;
+      if (typeof item.disabled === 'function') {
+        try {
+          disabled = Boolean(item.disabled(context));
+        } catch (error) {
+          reportPredicateError(item.fullId, 'disabled', error);
+          disabled = true;
+        }
+      } else if (item.disabled !== undefined) {
+        disabled = item.disabled;
+      }
+
+      evaluated.push({
+        id: item.fullId,
+        label: resolvePluginLabel(item.pluginId, item.label),
+        disabled,
+        isPlugin: true,
+      });
+    });
+    return evaluated;
+  };
+
   // 키 메뉴 아이템 생성 (기본 + 플러그인)
   const getKeyMenuItems = (
     contextIndex: number | null,
@@ -151,34 +219,13 @@ export function useGridContextMenu({
           }
         : null;
 
-    const filterPluginItems = (
-      items: PluginMenuItemInternal<unknown>[],
-    ): MenuItem[] => {
-      if (!context) return [];
-      return items
-        .filter((item) => {
-          // visible 체크
-          if (item.visible === false) return false;
-          if (typeof item.visible === 'function' && !item.visible(context))
-            return false;
-          return true;
-        })
-        .map((item) => ({
-          id: item.fullId,
-          label: resolvePluginLabel(item.pluginId, item.label),
-          disabled:
-            typeof item.disabled === 'function'
-              ? item.disabled(context)
-              : item.disabled || false,
-          isPlugin: true,
-        }));
-    };
-
-    const topPluginItems = filterPluginItems(
+    const topPluginItems = evaluatePluginItems(
       pluginKeyMenuItems.filter((i) => i.position === 'top'),
+      context,
     );
-    const bottomPluginItems = filterPluginItems(
+    const bottomPluginItems = evaluatePluginItems(
       pluginKeyMenuItems.filter((i) => i.position !== 'top'),
+      context,
     );
 
     return [...topPluginItems, ...baseItems, ...bottomPluginItems];
@@ -234,6 +281,11 @@ export function useGridContextMenu({
         label: t('contextMenu.resetOverlayPosition'),
       });
     }
+    // 분리 패널도 같은 이유 - 저장된 위치가 화면 밖이면 창으로는 손댈 수 없다
+    bottomBaseItems.push({
+      id: 'resetPanelPosition',
+      label: t('contextMenu.resetPanelPosition'),
+    });
 
     // 플러그인 메뉴 필터링
     const context: GridContext | null = gridAddLocalPos
@@ -243,41 +295,21 @@ export function useGridContextMenu({
         }
       : null;
 
-    const filterPluginItems = (
-      items: PluginMenuItemInternal<unknown>[],
-    ): MenuItem[] => {
-      if (!context) return [];
-      return items
-        .filter((item) => {
-          if (item.visible === false) return false;
-          if (typeof item.visible === 'function' && !item.visible(context))
-            return false;
-          return true;
-        })
-        .map((item) => ({
-          id: item.fullId,
-          label: resolvePluginLabel(item.pluginId, item.label),
-          disabled:
-            typeof item.disabled === 'function'
-              ? item.disabled(context)
-              : item.disabled || false,
-          isPlugin: true,
-        }));
-    };
+    // 설치 수와 무관하게 루트 길이를 고정한다 - 플러그인 항목은 묶음 하나로 접는다.
+    // 여기서는 position이 자리를 정하지 못하므로 등록 순서를 그대로 쓴다.
+    // 보이는 항목이 없으면 묶음 자체를 내지 않는다
+    const pluginItems = evaluatePluginItems(pluginGridMenuItems, context);
+    const pluginGroup: MenuItem[] = pluginItems.length
+      ? [
+          {
+            id: PLUGIN_GROUP_ID,
+            label: t('contextMenu.plugins'),
+            children: pluginItems,
+          },
+        ]
+      : [];
 
-    const topPluginItems = filterPluginItems(
-      pluginGridMenuItems.filter((i) => i.position === 'top'),
-    );
-    const bottomPluginItems = filterPluginItems(
-      pluginGridMenuItems.filter((i) => i.position !== 'top'),
-    );
-
-    return [
-      ...topPluginItems,
-      ...topBaseItems,
-      ...bottomPluginItems,
-      ...bottomBaseItems,
-    ];
+    return [...topBaseItems, ...pluginGroup, ...bottomBaseItems];
   };
 
   return {

@@ -113,10 +113,11 @@ describe('그리드 컨텍스트 메뉴', () => {
       'tabCss',
       'tabNote',
       'resetOverlayPosition',
+      'resetPanelPosition',
     ]);
   });
 
-  it('OBS 모드에서는 항목을 감춘다', () => {
+  it('OBS 모드에서는 오버레이 항목만 감추고 패널 항목은 남긴다', () => {
     act(() => root.unmount());
     settings.obsModeEnabled = true;
     mount();
@@ -128,13 +129,23 @@ describe('그리드 컨텍스트 메뉴', () => {
       'addKnob',
       'tabCss',
       'tabNote',
+      'resetPanelPosition',
     ]);
+  });
+
+  it('분리 패널 위치 초기화 항목을 노출한다', () => {
+    const item = captured.items.find(
+      (entry) => entry.id === 'resetPanelPosition',
+    );
+    expect(item).toBeDefined();
+    expect(item?.label).toBe('contextMenu.resetPanelPosition');
+    expect(item?.disabled).toBeUndefined();
   });
 
   it('5개 로케일 모두 번역을 갖는다', () => {
     Object.entries(locales).forEach(([name, messages]) => {
-      const value = messages.contextMenu.resetOverlayPosition;
-      expect(value, name).toBeTruthy();
+      expect(messages.contextMenu.resetOverlayPosition, name).toBeTruthy();
+      expect(messages.contextMenu.resetPanelPosition, name).toBeTruthy();
     });
   });
 });

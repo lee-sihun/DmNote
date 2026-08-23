@@ -57,6 +57,16 @@ pub fn panel_window_move_to(
     Ok(state.move_panel_window_to(&app, x, y)?)
 }
 
+#[tauri::command]
+pub fn panel_window_reset_position(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<()> {
+    ensure_main_caller(&window, "reset")?;
+    Ok(state.reset_panel_window_position(&app)?)
+}
+
 // 헤더 드래그 세션 컨텍스트 - 도크 존 판정 기준 좌표(메인 content 원점·outer 폴백)
 #[tauri::command]
 pub fn panel_window_drag_context(

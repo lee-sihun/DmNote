@@ -324,6 +324,7 @@ fn main() {
             commands::layout::panel::panel_window_present,
             commands::layout::panel::panel_window_present_at,
             commands::layout::panel::panel_window_move_to,
+            commands::layout::panel::panel_window_reset_position,
             commands::layout::panel::panel_window_drag_context,
             commands::layout::panel::panel_window_dock,
             commands::layout::panel::panel_window_take_restore_request,
