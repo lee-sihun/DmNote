@@ -285,6 +285,23 @@ pub(crate) enum FrontendLifecycleAction {
     Restart,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OverlayCloseAction {
+    AllowClose,
+    PreserveVisibility,
+    HideAndPersist,
+}
+
+fn overlay_close_action(force_close: bool, lifecycle_pending: bool) -> OverlayCloseAction {
+    if force_close {
+        OverlayCloseAction::AllowClose
+    } else if lifecycle_pending {
+        OverlayCloseAction::PreserveVisibility
+    } else {
+        OverlayCloseAction::HideAndPersist
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 enum FrontendFlushAction {
@@ -1634,6 +1651,20 @@ impl AppState {
 
     pub fn request_frontend_restart(&self, app_handle: AppHandle) {
         self.request_frontend_lifecycle(app_handle, FrontendLifecycleAction::Restart);
+    }
+
+    #[cfg(target_os = "windows")]
+    fn frontend_lifecycle_pending(&self) -> bool {
+        if self
+            .editor_flush_handshake
+            .lock()
+            .as_ref()
+            .is_some_and(|handshake| handshake.completion.is_lifecycle())
+        {
+            return true;
+        }
+
+        self.deferred_frontend_lifecycle.lock().is_some()
     }
 
     pub fn acknowledge_frontend_lifecycle(
@@ -3673,41 +3704,61 @@ impl AppState {
 
         window.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {
-                if force_close_flag.load(Ordering::SeqCst) {
-                    // 앱 종료 시 — 실제 close 허용
-                    *overlay_visible.write() = false;
-                } else {
-                    api.prevent_close();
-                    if let Err(err) =
-                        flush_deferred_overlay_bounds(&store, &bounds_generation)
-                    {
-                        log::warn!("failed to flush overlay bounds on close: {err}");
-                        return;
+                #[cfg(target_os = "windows")]
+                let lifecycle_pending = app_handle
+                    .try_state::<AppState>()
+                    .is_some_and(|state| state.frontend_lifecycle_pending());
+                #[cfg(not(target_os = "windows"))]
+                let lifecycle_pending = false;
+
+                match overlay_close_action(
+                    force_close_flag.load(Ordering::SeqCst),
+                    lifecycle_pending,
+                ) {
+                    OverlayCloseAction::AllowClose => {
+                        // 앱 종료 시 — 실제 close 허용
+                        *overlay_visible.write() = false;
                     }
-                    // 숨김 먼저, 저장은 성공 후 — set_overlay_visibility와 같은 전환 계약
-                    if let Err(err) = overlay_window.hide() {
-                        log::error!("failed to hide overlay window on close: {err}");
-                        return;
+                    OverlayCloseAction::PreserveVisibility => {
+                        // Windows의 작업 표시줄 그룹 종료가 오버레이에도 WM_CLOSE를 보내는 구간
+                        api.prevent_close();
+                        log::debug!(
+                            "[Overlay] preserving visibility during frontend lifecycle flush"
+                        );
                     }
-                    if let Err(err) = store.update(|state| {
-                        state.overlay_visible = false;
-                    }) {
-                        log::warn!("failed to persist overlay visibility on close: {err}");
-                        // 보상: 숨김을 되돌려 전 계층을 이전 상태로 일치
-                        if let Err(show_err) = overlay_window.show() {
-                            // 보상 실패 — 실제 창 상태(숨김)를 권위로 runtime과 이벤트만 동기화
-                            log::error!("failed to compensate overlay hide: {show_err}");
-                            *overlay_visible.write() = false;
-                            let _ = app_handle
-                                .emit("overlay:visibility", &json!({ "visible": false }));
+                    OverlayCloseAction::HideAndPersist => {
+                        api.prevent_close();
+                        if let Err(err) =
+                            flush_deferred_overlay_bounds(&store, &bounds_generation)
+                        {
+                            log::warn!("failed to flush overlay bounds on close: {err}");
+                            return;
                         }
-                        return;
-                    }
-                    *overlay_visible.write() = false;
-                    if let Err(err) =
-                        app_handle.emit("overlay:visibility", &json!({ "visible": false }))
-                    {
-                        log::error!("failed to emit overlay visibility change: {err}");
+                        // 숨김 먼저, 저장은 성공 후 — set_overlay_visibility와 같은 전환 계약
+                        if let Err(err) = overlay_window.hide() {
+                            log::error!("failed to hide overlay window on close: {err}");
+                            return;
+                        }
+                        if let Err(err) = store.update(|state| {
+                            state.overlay_visible = false;
+                        }) {
+                            log::warn!("failed to persist overlay visibility on close: {err}");
+                            // 보상: 숨김을 되돌려 전 계층을 이전 상태로 일치
+                            if let Err(show_err) = overlay_window.show() {
+                                // 보상 실패 — 실제 창 상태(숨김)를 권위로 runtime과 이벤트만 동기화
+                                log::error!("failed to compensate overlay hide: {show_err}");
+                                *overlay_visible.write() = false;
+                                let _ = app_handle
+                                    .emit("overlay:visibility", &json!({ "visible": false }));
+                            }
+                            return;
+                        }
+                        *overlay_visible.write() = false;
+                        if let Err(err) =
+                            app_handle.emit("overlay:visibility", &json!({ "visible": false }))
+                        {
+                            log::error!("failed to emit overlay visibility change: {err}");
+                        }
                     }
                 }
             }
@@ -5834,21 +5885,22 @@ mod tests {
         frontend_lifecycle_restore_labels, global_css_watch_path, hide_panel_with_main_transition,
         initial_overlay_placement, install_history_handshake, install_lifecycle_handshake,
         is_panel_open_url, key_state_payload, main_window_starts_hidden, monitor_scale_is_usable,
-        next_keyboard_recovery_plan, normalize_stored_overlay_bounds, overlay_reset_fallback_rect,
-        panel_bounds_from_sample, panel_height_bounds, panel_position_beside_main,
-        publish_panel_hidden_transition, publish_panel_visibility_transition, resolve_event_age_ms,
-        resolve_panel_window_layout, restore_panel_with_main_transition, run_panel_close_timeout,
+        next_keyboard_recovery_plan, normalize_stored_overlay_bounds, overlay_close_action,
+        overlay_reset_fallback_rect, panel_bounds_from_sample, panel_height_bounds,
+        panel_position_beside_main, publish_panel_hidden_transition,
+        publish_panel_visibility_transition, resolve_event_age_ms, resolve_panel_window_layout,
+        restore_panel_with_main_transition, run_panel_close_timeout,
         should_create_overlay_on_startup, should_recover_keyboard_daemon,
         should_restore_panel_on_startup, stored_bounds_need_monitor_data,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake, take_panel_open_arm,
         EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
         FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
         FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect, MonitorData, MonitorSpec,
-        Mutex, PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
-        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload,
-        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
-        PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
-        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        Mutex, OverlayCloseAction, PanelBoundsChange, PanelBoundsPersistenceController,
+        PanelBoundsPersistenceState, PanelBoundsSample, PanelCloseRequestState,
+        PanelCloseRequestedPayload, PanelVisibilityEventEmitter, PanelVisibilityPayload,
+        PanelVisibilityReason, PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT,
+        DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
         PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
         RAW_INPUT_WINDOW_LABELS,
@@ -5866,6 +5918,26 @@ mod tests {
         assert!(should_create_overlay_on_startup(false, true));
         assert!(!should_create_overlay_on_startup(true, false));
         assert!(!should_create_overlay_on_startup(true, true));
+    }
+
+    #[test]
+    fn overlay_close_preserves_visibility_while_windows_lifecycle_is_pending() {
+        assert_eq!(
+            overlay_close_action(false, true),
+            OverlayCloseAction::PreserveVisibility
+        );
+    }
+
+    #[test]
+    fn overlay_close_distinguishes_final_shutdown_from_user_close() {
+        assert_eq!(
+            overlay_close_action(true, true),
+            OverlayCloseAction::AllowClose
+        );
+        assert_eq!(
+            overlay_close_action(false, false),
+            OverlayCloseAction::HideAndPersist
+        );
     }
 
     #[test]
