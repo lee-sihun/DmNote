@@ -49,7 +49,7 @@
 - stream 시작 전에 이미 눌린 키는 baseline 하이라이트와 이후 UP 연결에만 사용하고 과거 DOWN 시각이나 노트를 합성하지 않는다.
 - rAF 중단으로 생긴 지연 부채는 노트와 대기 action이 모두 없는 시점에만 nominal 위치로 회수한다.
 
-현재 `transportReserveMs = 16`과 buffer 상한은 기능 검증용 잠정값이다. 정확성은 이 값에 의존하지 않으며, 출시 기본값 확정에는 Windows/macOS/OBS 실측이 남아 있다.
+내부 화면 재생 버퍼의 기본값은 `INPUT_TIMELINE_PRESENTATION_BUFFER_MS` 상수 한 곳에서 관리한다. 이 값은 사용자 단노트 구분 시간과 분리되어 저장되지 않으며, 정확성은 이 값에 의존하지 않는다. 운영값 조정에는 Windows/macOS/OBS 실측이 필요하다.
 
 ### 1.3 자동 검증 결과
 
@@ -495,15 +495,17 @@ key/counter target on playhead = E + (D - L)
 
 ```text
 noteTravelTimeMs = trackHeight / speed * 1000
-nominalNoteDelayMs = threshold + transportReserveMs
+nominalNoteDelayMs = threshold + presentationBufferMs
 
 recommendedKeyDisplayDelayMs =
   round(noteTravelTimeMs + nominalNoteDelayMs)
 ```
 
-코드의 현재 변수명은 `transportReserveMs`이며 기능 검증 단계에서는 source
-watermark 한 주기와 같은 16ms를 잠정값으로 사용한다. 이 값은 실측 기본값이라고
-간주하지 않으며, 임의의 80ms 같은 큰 상수로 정확성을 대신하지 않는다.
+코어의 변수명은 `presentationBufferMs`이며 화면 재생 기본 버퍼는
+`INPUT_TIMELINE_PRESENTATION_BUFFER_MS` 한 곳에서 주입한다.
+이 값은 사용자 `shortNoteThresholdMs`에 합산하여 저장하지 않고 재생 시계에서만
+별도로 적용한다. 정확성은 고정 버퍼가 아니라 watermark 상한과 원본 시계열로
+보장한다.
 
 출시 전 계측으로 다음 값을 분리해 측정한다.
 
@@ -850,7 +852,7 @@ sequence gap 상태에서는 playhead 진행 금지
 - [x] 로컬과 OBS가 같은 timeline reducer 결과를 생성
 - [x] OBS 재연결 후 과거 press 합성으로 잘못된 노트가 생기지 않음
 - [x] key/counter와 노트의 상대 싱크 유지
-- [x] 자동 계산이 threshold와 잠정 16ms reserve를 포함
+- [x] 자동 계산이 사용자 threshold와 비저장 화면 버퍼 상수를 포함
 - [ ] 자동 계산의 reserve를 플랫폼 실측값으로 확정
 - [x] 수동 key delay에 숨은 추가 상수를 더하지 않음
 - [x] 지연 부채는 안전 구간에서만 회수

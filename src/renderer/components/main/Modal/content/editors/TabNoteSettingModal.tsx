@@ -59,22 +59,22 @@ const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
   }, [isOpen, selectedKeyType]);
 
   const handleSave = async (normalized: NoteSettings) => {
-    try {
-      // 전역 설정과 비교하여 다른 값만 오버라이드로 저장
-      const override: TabNoteSettings = {};
-      const keys = Object.keys(normalized) as (keyof NoteSettings)[];
-      for (const key of keys) {
-        if (normalized[key] !== globalSettings[key]) {
-          (override as Record<string, NoteSettings[keyof NoteSettings]>)[key] =
-            normalized[key];
-        }
+    // 전역 설정과 비교하여 다른 값만 오버라이드로 저장
+    const override: TabNoteSettings = {};
+    const keys = Object.keys(normalized) as (keyof NoteSettings)[];
+    for (const key of keys) {
+      if (normalized[key] !== globalSettings[key]) {
+        (override as Record<string, NoteSettings[keyof NoteSettings]>)[key] =
+          normalized[key];
       }
-      // 모든 값이 전역과 동일하면 오버라이드 제거
-      const hasOverride = Object.keys(override).length > 0;
-      await noteTabApi.set(selectedKeyType, hasOverride ? override : null);
-    } catch (error) {
-      console.error('Failed to save tab note settings', error);
     }
+    // 모든 값이 전역과 동일하면 오버라이드 제거
+    const hasOverride = Object.keys(override).length > 0;
+    const saved = await noteTabApi.set(
+      selectedKeyType,
+      hasOverride ? override : null,
+    );
+    setTabOverride(saved.settings ?? null);
   };
 
   // 퇴장 모션이 도는 동안 DOM을 유지한다

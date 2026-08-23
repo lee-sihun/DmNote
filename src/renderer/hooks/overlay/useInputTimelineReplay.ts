@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { subscribe } from '@api/modules/shared';
-import { getInputTimelineCheckpoint } from '@api/modules/keysApi';
+import {
+  getInputTimelineCheckpoint,
+  recoverInputTimeline,
+} from '@api/modules/keysApi';
 import { animationScheduler } from '@utils/animation/animationScheduler';
 import { requestObsTimelineResync } from '@api/ipcShim';
 import type {
@@ -40,7 +43,7 @@ interface InputTimelineReplayHandlers {
 interface UseInputTimelineReplayOptions extends InputTimelineReplayHandlers {
   enabled: boolean;
   thresholdMs: number;
-  transportReserveMs?: number;
+  presentationBufferMs?: number;
   keyDisplayDelayMs: number;
   epochKey: string;
 }
@@ -48,7 +51,7 @@ interface UseInputTimelineReplayOptions extends InputTimelineReplayHandlers {
 export const useInputTimelineReplay = ({
   enabled,
   thresholdMs,
-  transportReserveMs = 0,
+  presentationBufferMs = 0,
   onEpochReset,
   onPressStart,
   onPressResolve,
@@ -84,7 +87,7 @@ export const useInputTimelineReplay = ({
     {
       enabled,
       thresholdMs,
-      transportReserveMs,
+      presentationBufferMs,
       keyDisplayDelayMs,
       epochKey,
     },
@@ -114,13 +117,13 @@ export const useInputTimelineReplay = ({
       {
         enabled,
         thresholdMs,
-        transportReserveMs,
+        presentationBufferMs,
         keyDisplayDelayMs,
         epochKey,
       },
       performance.now(),
     );
-  }, [enabled, thresholdMs, transportReserveMs, keyDisplayDelayMs, epochKey]);
+  }, [enabled, thresholdMs, presentationBufferMs, keyDisplayDelayMs, epochKey]);
 
   useEffect(() => {
     const isObs = window.__dmn_runtime === 'obs';
@@ -129,16 +132,17 @@ export const useInputTimelineReplay = ({
     let recoveryInFlight = false;
     const pending = new Map<string, CanonicalInputTimelineBatch>();
 
-    const revisionOf = (
-      value: CanonicalInputTimelineBatch | CanonicalInputTimelineRebase,
-    ): bigint | null => {
-      if (!/^(?:0|[1-9]\d*)$/.test(value.revision)) return null;
+    const decimalOf = (value: string): bigint | null => {
+      if (!/^(?:0|[1-9]\d*)$/.test(value)) return null;
       try {
-        return BigInt(value.revision);
+        return BigInt(value);
       } catch {
         return null;
       }
     };
+    const revisionOf = (
+      value: CanonicalInputTimelineBatch | CanonicalInputTimelineRebase,
+    ): bigint | null => decimalOf(value.revision);
     const queue = (batch: CanonicalInputTimelineBatch) => {
       pending.set(`${batch.streamId}\u0000${batch.revision}`, batch);
       if (pending.size <= MAX_PENDING_LOCAL_TIMELINE_BATCHES) return;
@@ -150,22 +154,107 @@ export const useInputTimelineReplay = ({
     const recover = async () => {
       if (isObs || disposed || recoveryInFlight) return;
       recoveryInFlight = true;
-      let checkpointApplied = false;
+      let recoveryApplied = false;
       try {
-        const checkpoint = await getInputTimelineCheckpoint();
-        if (disposed || !checkpoint) return;
-        const checkpointRevision = revisionOf(checkpoint);
-        if (checkpointRevision == null) return;
-
-        if (!replayRef.current!.rebase(checkpoint, performance.now())) return;
-        checkpointApplied = true;
-        const queued = [...pending.values()]
-          .filter((batch) => {
+        const cursor = replayRef.current!.recoveryCursor();
+        let recoveredStreamId: string;
+        let recoveredRevision: bigint;
+        if (cursor) {
+          const response = await recoverInputTimeline(
+            cursor.streamId,
+            cursor.revision,
+          );
+          if (disposed || response.type === 'unavailable') return;
+          if (response.type === 'replay') {
+            const replayApplied = replayRef.current!.recover(
+              response.payload.batches,
+              performance.now(),
+            );
+            if (replayApplied) {
+              const recoveredCursor = replayRef.current!.recoveryCursor();
+              if (!recoveredCursor) return;
+              const cursorRevision = decimalOf(recoveredCursor.revision);
+              if (cursorRevision == null) return;
+              recoveredStreamId = recoveredCursor.streamId;
+              recoveredRevision = cursorRevision;
+            } else {
+              const checkpoint = await getInputTimelineCheckpoint();
+              if (disposed || !checkpoint) return;
+              const checkpointRevision = revisionOf(checkpoint);
+              if (checkpointRevision == null) return;
+              const observed = [...pending.values()].filter((batch) => {
+                const revision = revisionOf(batch);
+                return (
+                  batch.streamId === checkpoint.streamId &&
+                  revision != null &&
+                  revision <= checkpointRevision
+                );
+              });
+              if (
+                !replayRef.current!.rebase(
+                  checkpoint,
+                  performance.now(),
+                  observed,
+                )
+              ) {
+                return;
+              }
+              recoveredStreamId = checkpoint.streamId;
+              recoveredRevision = checkpointRevision;
+            }
+          } else {
+            const checkpointRevision = revisionOf(response.payload);
+            if (checkpointRevision == null) return;
+            const observed = [...pending.values()].filter((batch) => {
+              const revision = revisionOf(batch);
+              return (
+                batch.streamId === response.payload.streamId &&
+                revision != null &&
+                revision <= checkpointRevision
+              );
+            });
+            if (
+              !replayRef.current!.rebase(
+                response.payload,
+                performance.now(),
+                observed,
+              )
+            ) {
+              return;
+            }
+            recoveredStreamId = response.payload.streamId;
+            recoveredRevision = checkpointRevision;
+          }
+        } else {
+          const checkpoint = await getInputTimelineCheckpoint();
+          if (disposed || !checkpoint) return;
+          const checkpointRevision = revisionOf(checkpoint);
+          if (checkpointRevision == null) return;
+          const observed = [...pending.values()].filter((batch) => {
             const revision = revisionOf(batch);
             return (
               batch.streamId === checkpoint.streamId &&
               revision != null &&
-              revision > checkpointRevision
+              revision <= checkpointRevision
+            );
+          });
+          if (
+            !replayRef.current!.rebase(checkpoint, performance.now(), observed)
+          ) {
+            return;
+          }
+          recoveredStreamId = checkpoint.streamId;
+          recoveredRevision = checkpointRevision;
+        }
+
+        recoveryApplied = true;
+        const queued = [...pending.values()]
+          .filter((batch) => {
+            const revision = revisionOf(batch);
+            return (
+              batch.streamId === recoveredStreamId &&
+              revision != null &&
+              revision > recoveredRevision
             );
           })
           .sort((left, right) => {
@@ -194,7 +283,7 @@ export const useInputTimelineReplay = ({
         }
       } finally {
         recoveryInFlight = false;
-        if (!disposed && checkpointApplied && recovering) {
+        if (!disposed && recoveryApplied && recovering) {
           void recover();
         }
       }

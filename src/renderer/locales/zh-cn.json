@@ -154,6 +154,7 @@
     "idle": "闲置",
     "active": "激活",
     "save": "应用",
+    "saveFailed": "无法保存，请重试。",
     "cancel": "取消",
     "noteGlowColor": "发光颜色",
     "noteAutoYCorrection": "自动 Y 轴校正",

@@ -59,3 +59,15 @@ export interface CanonicalInputTimelineRebase {
   baseline: CanonicalInputTimelineBaseline;
   activePresses: CanonicalInputTimelineActivePress[];
 }
+
+export interface CanonicalInputTimelineReplayPayload {
+  streamId: string;
+  afterRevision: string;
+  latestRevision: string;
+  batches: CanonicalInputTimelineBatch[];
+}
+
+export type CanonicalInputTimelineRecovery =
+  | { type: 'replay'; payload: CanonicalInputTimelineReplayPayload }
+  | { type: 'rebase'; payload: CanonicalInputTimelineRebase }
+  | { type: 'unavailable' };

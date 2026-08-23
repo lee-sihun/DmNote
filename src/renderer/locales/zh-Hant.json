@@ -154,6 +154,7 @@
     "idle": "閒置",
     "active": "激活",
     "save": "應用",
+    "saveFailed": "無法儲存，請再試一次。",
     "cancel": "取消",
     "noteGlowColor": "發光顏色",
     "noteAutoYCorrection": "自動 Y 軸校正",

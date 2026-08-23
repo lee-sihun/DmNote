@@ -50,6 +50,21 @@ describe('InputTimelineBuffer', () => {
     expect(buffer.snapshot().gap).toBe(false);
   });
 
+  it('resumes a gap only from the exact next replay revision', () => {
+    const buffer = new InputTimelineBuffer();
+    buffer.ingest(batch(1, 1000));
+    buffer.ingest(batch(3, 3000));
+
+    expect(buffer.resume(batch(3, 3000))).toEqual({
+      type: 'gap',
+      expectedRevision: '2',
+      receivedRevision: '3',
+    });
+    expect(buffer.resume(batch(2, 2000)).type).toBe('accepted');
+    expect(buffer.ingest(batch(3, 3000)).type).toBe('accepted');
+    expect(buffer.snapshot()).toMatchObject({ revision: 3n, gap: false });
+  });
+
   it('rejects an action beyond the watermark', () => {
     const buffer = new InputTimelineBuffer();
     const value = batch(1, 1000);

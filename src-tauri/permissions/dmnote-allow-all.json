@@ -81,6 +81,7 @@
           "keys_set_counters",
           "keys_set_mode",
           "keys_timeline_checkpoint",
+          "keys_timeline_recover",
           "knob_positions_get",
           "knob_positions_update",
           "layer_groups_get",

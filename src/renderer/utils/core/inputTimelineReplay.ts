@@ -6,6 +6,7 @@ import type {
   CanonicalInputTimelineStateAction,
 } from '@src/types/inputTimeline';
 import { InputTimelineBuffer } from './inputTimeline';
+import type { InputTimelineIngestResult } from './inputTimeline';
 import {
   PresentationClock,
   type PresentationClockSnapshot,
@@ -47,10 +48,20 @@ export interface InputTimelineReplayCallbacks {
 export interface InputTimelineReplayConfig {
   enabled: boolean;
   thresholdMs: number;
-  transportReserveMs: number;
+  presentationBufferMs: number;
   keyDisplayDelayMs: number;
   epochKey: string;
 }
+
+export interface InputTimelineRecoveryCursor {
+  streamId: string;
+  revision: string;
+}
+
+type AcceptedTimelineResult = Extract<
+  InputTimelineIngestResult,
+  { type: 'new_stream' | 'accepted' }
+>;
 
 interface PendingPress extends TimelinePress {
   started: boolean;
@@ -96,7 +107,7 @@ export class InputTimelineReplay {
     this.callbacks = callbacks;
     this.clock = new PresentationClock(
       this.config.thresholdMs,
-      this.config.transportReserveMs,
+      this.config.presentationBufferMs,
     );
   }
 
@@ -105,7 +116,7 @@ export class InputTimelineReplay {
     if (
       next.enabled === this.config.enabled &&
       next.thresholdMs === this.config.thresholdMs &&
-      next.transportReserveMs === this.config.transportReserveMs &&
+      next.presentationBufferMs === this.config.presentationBufferMs &&
       next.keyDisplayDelayMs === this.config.keyDisplayDelayMs &&
       next.epochKey === this.config.epochKey
     ) {
@@ -115,7 +126,7 @@ export class InputTimelineReplay {
     const wasEnabled = this.config.enabled;
     this.config = next;
     this.clearPendingPresses();
-    this.clock.resetEpoch(next.thresholdMs, next.transportReserveMs);
+    this.clock.resetEpoch(next.thresholdMs, next.presentationBufferMs);
     this.currentPlayheadMs = null;
 
     const snapshot = this.buffer.snapshot();
@@ -136,17 +147,54 @@ export class InputTimelineReplay {
           result.type === 'gap'
             ? `Timeline gap: expected ${result.expectedRevision}, received ${result.receivedRevision}`
             : result.reason;
-        this.failClosed(reason);
+        this.pauseForRecovery(reason);
       }
       return;
     }
 
+    this.applyAcceptedResult(result, receivedAtMs);
+  }
+
+  recover(
+    batches: CanonicalInputTimelineBatch[],
+    receivedAtMs: number,
+  ): boolean {
+    if (batches.length === 0) return !this.failed;
+
+    const first = this.buffer.resume(batches[0]);
+    if (first.type !== 'new_stream' && first.type !== 'accepted') {
+      return false;
+    }
+    this.failed = false;
+    this.applyAcceptedResult(first, receivedAtMs);
+    if (this.failed) return false;
+
+    for (const batch of batches.slice(1)) {
+      this.ingest(batch, receivedAtMs);
+      if (this.failed) return false;
+    }
+    return true;
+  }
+
+  recoveryCursor(): InputTimelineRecoveryCursor | null {
+    const snapshot = this.buffer.snapshot();
+    if (!snapshot.streamId || snapshot.revision === 0n) return null;
+    return {
+      streamId: snapshot.streamId,
+      revision: snapshot.revision.toString(),
+    };
+  }
+
+  private applyAcceptedResult(
+    result: AcceptedTimelineResult,
+    receivedAtMs: number,
+  ): void {
     if (result.type === 'new_stream') {
       this.failed = false;
       this.clearPendingPresses();
       this.clock.resetEpoch(
         this.config.thresholdMs,
-        this.config.transportReserveMs,
+        this.config.presentationBufferMs,
       );
       this.currentPlayheadMs = null;
       if (this.config.enabled) {
@@ -175,6 +223,7 @@ export class InputTimelineReplay {
   rebase(
     checkpoint: CanonicalInputTimelineRebase,
     receivedAtMs: number,
+    observedBatches: CanonicalInputTimelineBatch[] = [],
   ): boolean {
     const result = this.buffer.rebase(checkpoint);
     if (result.type !== 'new_stream') {
@@ -191,11 +240,16 @@ export class InputTimelineReplay {
     this.clearPendingPresses();
     this.clock.resetEpoch(
       this.config.thresholdMs,
-      this.config.transportReserveMs,
+      this.config.presentationBufferMs,
     );
     this.clock.updateWatermark(BigInt(checkpoint.safeThroughUs), receivedAtMs);
     this.currentPlayheadMs = null;
     this.observeWatermarkArrival(receivedAtMs);
+    this.restoreObservedPresses(checkpoint, observedBatches);
+    if (this.presses.size > MAX_PENDING_PRESSES) {
+      this.failClosed('Timeline checkpoint press buffer exceeded bounds');
+      return false;
+    }
     if (this.config.enabled) {
       this.callbacks.onEpochReset('stream', checkpoint.baseline);
     }
@@ -287,6 +341,94 @@ export class InputTimelineReplay {
     }
   }
 
+  private restoreObservedPresses(
+    checkpoint: CanonicalInputTimelineRebase,
+    observedBatches: CanonicalInputTimelineBatch[],
+  ): void {
+    const checkpointRevision = BigInt(checkpoint.revision);
+    const activeById = new Map(
+      checkpoint.activePresses.map((press) => [press.pressId, press]),
+    );
+    const observed = new Map<string, PendingPress>();
+    const batches = observedBatches
+      .filter((batch) => {
+        if (batch.streamId !== checkpoint.streamId) return false;
+        try {
+          return BigInt(batch.revision) <= checkpointRevision;
+        } catch {
+          return false;
+        }
+      })
+      .sort((left, right) => {
+        const leftRevision = BigInt(left.revision);
+        const rightRevision = BigInt(right.revision);
+        return leftRevision === rightRevision
+          ? 0
+          : leftRevision < rightRevision
+          ? -1
+          : 1;
+      });
+
+    for (const batch of batches) {
+      for (const action of batch.actions) {
+        if (action.kind !== 'state') continue;
+        if (action.state === 'DOWN') {
+          if (observed.has(action.pressId)) continue;
+          observed.set(action.pressId, {
+            pressId: action.pressId,
+            mode: action.mode,
+            key: action.key,
+            downTimeMs: sourceUsToMs(action.eventTimeUs),
+            started: false,
+          });
+          continue;
+        }
+
+        const press = observed.get(action.pressId);
+        if (
+          !press ||
+          press.mode !== action.mode ||
+          press.key !== action.key ||
+          press.upTimeMs != null
+        ) {
+          continue;
+        }
+        const upTimeMs = sourceUsToMs(action.eventTimeUs);
+        if (upTimeMs >= press.downTimeMs) {
+          press.upTimeMs = upTimeMs;
+        }
+      }
+    }
+
+    for (const press of observed.values()) {
+      const active = activeById.get(press.pressId);
+      const remainsActive =
+        active != null &&
+        active.mode === press.mode &&
+        active.key === press.key &&
+        sourceUsToMs(active.downTimeUs) === press.downTimeMs;
+      if (press.upTimeMs == null && !remainsActive) continue;
+      this.presses.set(press.pressId, press);
+      this.pendingStarts.push(press);
+      activeById.delete(press.pressId);
+    }
+
+    for (const active of activeById.values()) {
+      const press: PendingPress = {
+        pressId: active.pressId,
+        mode: active.mode,
+        key: active.key,
+        downTimeMs: sourceUsToMs(active.downTimeUs),
+        started: false,
+      };
+      this.presses.set(press.pressId, press);
+      this.pendingStarts.push(press);
+    }
+    this.pendingStarts.sort(
+      (left, right) => left.downTimeMs - right.downTimeMs,
+    );
+  }
+
   private clearPendingPresses(): void {
     this.presses.clear();
     this.pendingStarts = [];
@@ -301,7 +443,7 @@ export class InputTimelineReplay {
       | CanonicalInputTimelineCounterAction,
   ): void {
     const nominalDelayMs =
-      this.config.thresholdMs + this.config.transportReserveMs;
+      this.config.thresholdMs + this.config.presentationBufferMs;
     this.scheduledActions.push({
       targetTimeMs:
         sourceUsToMs(action.eventTimeUs) +
@@ -317,7 +459,10 @@ export class InputTimelineReplay {
     return {
       enabled: config.enabled,
       thresholdMs: Math.max(0, Number(config.thresholdMs) || 0),
-      transportReserveMs: Math.max(0, Number(config.transportReserveMs) || 0),
+      presentationBufferMs: Math.max(
+        0,
+        Number(config.presentationBufferMs) || 0,
+      ),
       keyDisplayDelayMs: Math.max(0, Number(config.keyDisplayDelayMs) || 0),
       epochKey: String(config.epochKey ?? ''),
     };
@@ -376,6 +521,13 @@ export class InputTimelineReplay {
     if (this.config.enabled) {
       this.callbacks.onEpochReset('validation_failure');
     }
+    this.callbacks.onFailure(reason);
+    this.emitDiagnostics();
+  }
+
+  private pauseForRecovery(reason: string): void {
+    this.failed = true;
+    this.failureCount += 1;
     this.callbacks.onFailure(reason);
     this.emitDiagnostics();
   }

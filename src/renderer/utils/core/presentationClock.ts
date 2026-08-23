@@ -10,21 +10,21 @@ const MAX_CONTINUOUS_TICK_GAP_MS = 100;
 
 export class PresentationClock {
   private thresholdMs: number;
-  private transportReserveMs: number;
+  private presentationBufferMs: number;
   private playheadMs: number | null = null;
   private safeThroughMs = 0;
   private sourceAnchorMs = 0;
   private localAnchorMs = 0;
   private lastTickMs = 0;
 
-  constructor(thresholdMs: number, transportReserveMs = 0) {
+  constructor(thresholdMs: number, presentationBufferMs = 0) {
     this.thresholdMs = Math.max(0, thresholdMs);
-    this.transportReserveMs = Math.max(0, transportReserveMs);
+    this.presentationBufferMs = Math.max(0, presentationBufferMs);
   }
 
-  resetEpoch(thresholdMs: number, transportReserveMs = 0): void {
+  resetEpoch(thresholdMs: number, presentationBufferMs = 0): void {
     this.thresholdMs = Math.max(0, thresholdMs);
-    this.transportReserveMs = Math.max(0, transportReserveMs);
+    this.presentationBufferMs = Math.max(0, presentationBufferMs);
     this.playheadMs = null;
     this.safeThroughMs = 0;
     this.sourceAnchorMs = 0;
@@ -83,7 +83,7 @@ export class PresentationClock {
   private nominalTarget(localNowMs: number): number {
     const estimatedSourceNow =
       this.sourceAnchorMs + Math.max(0, localNowMs - this.localAnchorMs);
-    return estimatedSourceNow - this.thresholdMs - this.transportReserveMs;
+    return estimatedSourceNow - this.thresholdMs - this.presentationBufferMs;
   }
 
   private safeTarget(): number {

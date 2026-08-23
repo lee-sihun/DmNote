@@ -169,4 +169,38 @@ describe('TabNoteSettingModal 로드 세대', () => {
 
     expect(noteTabSet).toHaveBeenCalledWith('tab-b', settingsB);
   });
+
+  it('저장 응답의 확정 오버라이드를 즉시 화면 상태로 채택한다', async () => {
+    const globalSettings = testState.noteSettings as NoteSettings;
+    const loaded: TabNoteSettings = { speed: globalSettings.speed + 20 };
+    const saved: TabNoteSettings = { speed: globalSettings.speed + 30 };
+    const onClose = vi.fn();
+    noteTabGet.mockResolvedValue({ tabId: 'tab-a', settings: loaded });
+    noteTabSet.mockResolvedValue({
+      success: true,
+      tabId: 'tab-a',
+      settings: saved,
+    });
+
+    await act(async () => {
+      root.render(<TabNoteSettingModal isOpen onClose={onClose} />);
+      await Promise.resolve();
+    });
+    expect(
+      container
+        .querySelector('[data-note-speed]')
+        ?.getAttribute('data-note-speed'),
+    ).toBe(String(loaded.speed));
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button')?.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container
+        .querySelector('[data-note-speed]')
+        ?.getAttribute('data-note-speed'),
+    ).toBe(String(saved.speed));
+  });
 });

@@ -153,6 +153,7 @@
     "idle": "대기",
     "active": "입력",
     "save": "저장",
+    "saveFailed": "저장하지 못했습니다. 다시 시도해 주세요.",
     "cancel": "취소",
     "noteGlow": "글로우 효과",
     "noteGlowColor": "글로우 색상",

@@ -576,8 +576,9 @@ dmn.stats.reset();
 
 ## 내부 입력 타임라인
 
-네이티브 오버레이는 이벤트 구독 준비가 끝났거나 revision gap을 감지했을 때 내부
-Tauri 커맨드 `keys_timeline_checkpoint`로 canonical 입력 타임라인을 복구합니다.
-이 커맨드는 `dmn.keys` 공개 API가 아니며 OBS invoke allowlist에도 노출되지 않으므로
-플러그인에서 사용하면 안 됩니다. OBS는 protocol v3의 `timeline_replay`와
-`timeline_rebase` 메시지로 같은 복구를 수행합니다.
+네이티브 오버레이는 이벤트 구독 준비가 끝나면 내부 Tauri 커맨드
+`keys_timeline_checkpoint`로 기준 상태를 받습니다. revision gap을 감지하면
+`keys_timeline_recover`로 보관된 배치를 먼저 재생하고, 불가능한 경우 체크포인트로
+대체합니다. 이 커맨드들은 `dmn.keys` 공개 API가 아니며 OBS invoke allowlist에도
+노출되지 않으므로 플러그인에서 사용하면 안 됩니다. OBS는 protocol v3의
+`timeline_replay`와 `timeline_rebase` 메시지로 같은 복구를 수행합니다.

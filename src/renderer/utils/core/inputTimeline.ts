@@ -304,6 +304,37 @@ export class InputTimelineBuffer {
     }
   }
 
+  resume(batch: CanonicalInputTimelineBatch): InputTimelineIngestResult {
+    if (!this.gap || this.streamId !== batch.streamId) {
+      return this.ingest(batch);
+    }
+
+    try {
+      const revision = parseU64(batch.revision, 'revision');
+      const expectedRevision = this.revision + 1n;
+      if (revision !== expectedRevision) {
+        return {
+          type: 'gap',
+          expectedRevision: expectedRevision.toString(),
+          receivedRevision: revision.toString(),
+        };
+      }
+    } catch {
+      return this.ingest(batch);
+    }
+
+    this.gap = false;
+    const result = this.ingest(batch);
+    if (
+      result.type !== 'accepted' &&
+      result.type !== 'new_stream' &&
+      result.type !== 'stale'
+    ) {
+      this.gap = true;
+    }
+    return result;
+  }
+
   rebase(checkpoint: CanonicalInputTimelineRebase): InputTimelineIngestResult {
     try {
       if (

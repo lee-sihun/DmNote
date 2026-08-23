@@ -497,8 +497,9 @@ dmn.plugin.defineElement({
 ## Internal Input Timeline
 
 The native overlay uses the internal `keys_timeline_checkpoint` Tauri command
-to recover the canonical input timeline after its event subscription becomes
-ready or a revision gap is detected. This command is not part of `dmn.keys`, is
-not available through the OBS invoke allowlist, and must not be used by
-plugins. OBS performs the equivalent recovery through protocol v3
-`timeline_replay` and `timeline_rebase` messages.
+after its event subscription becomes ready. If a revision gap is detected, it
+uses `keys_timeline_recover` to replay retained batches before falling back to
+a checkpoint. These commands are not part of `dmn.keys`, are not available
+through the OBS invoke allowlist, and must not be used by plugins. OBS performs
+the equivalent recovery through protocol v3 `timeline_replay` and
+`timeline_rebase` messages.

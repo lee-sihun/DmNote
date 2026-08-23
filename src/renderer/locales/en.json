@@ -154,6 +154,7 @@
     "idle": "Idle",
     "active": "Active",
     "save": "Apply",
+    "saveFailed": "Couldn't save. Please try again.",
     "cancel": "Cancel",
     "noteGlowColor": "Glow Color",
     "noteAutoYCorrection": "Auto Y Correction",

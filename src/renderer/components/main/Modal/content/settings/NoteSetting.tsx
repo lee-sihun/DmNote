@@ -107,6 +107,8 @@ const NoteSetting = ({
       sanitizeNumericValue(initial.keyDisplayDelayMs, 'keyDisplayDelayMs'),
     ),
   );
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const tabContentRef = useRef<HTMLDivElement>(null);
   const [tabContentHeight, setTabContentHeight] = useState<number | null>(null);
   const [disableHeightTransition, setDisableHeightTransition] =
@@ -176,6 +178,8 @@ const NoteSetting = ({
   }, [isAnimating, disableHeightTransition]);
 
   const handleSave = async () => {
+    if (isSaving) return;
+
     const normalized = {
       ...settings,
       frameLimit: sanitizeNumericValue(frameLimit, 'frameLimit'),
@@ -207,11 +211,21 @@ const NoteSetting = ({
       ),
     };
 
+    setIsSaving(true);
+    setSaveFailed(false);
     try {
       await onSave?.(normalized as NoteSettings);
-    } finally {
       onClose?.();
+    } catch (error) {
+      console.error('Failed to save note settings', error);
+      setSaveFailed(true);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const handleClose = () => {
+    if (!isSaving) onClose?.();
   };
 
   const renderNoteTab = () => (
@@ -444,12 +458,12 @@ const NoteSetting = ({
 
   // 입력 blur·IME flush와의 경합으로 첫 click이 유실되는 것을 방어
   const savePress = usePressAction(handleSave);
-  const cancelPress = usePressAction(onClose);
+  const cancelPress = usePressAction(handleClose);
 
   return (
     <Modal
       motionState={motionState}
-      onClick={onClose}
+      onClick={handleClose}
       ariaLabel={title ?? t('keySetting.tabNote')}
       contentMountStrategy="after-paint"
     >
@@ -495,16 +509,23 @@ const NoteSetting = ({
           </div>
         </div>
 
+        {saveFailed && (
+          <p role="alert" className="mt-[12px] text-body text-danger">
+            {t('noteSetting.saveFailed')}
+          </p>
+        )}
         <div className="flex gap-[8px] mt-[12px]">
           <button
             {...savePress}
-            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
+            disabled={isSaving}
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active disabled:opacity-50 rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('noteSetting.save')}
           </button>
           <button
             {...cancelPress}
-            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            disabled={isSaving}
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active disabled:opacity-50 rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('noteSetting.cancel')}
           </button>

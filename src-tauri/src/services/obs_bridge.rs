@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse, InvokeResponseBody};
 use tauri::webview::InvokeRequest;
 use tauri::{AppHandle, Listener, Manager, Wry};
@@ -470,6 +470,22 @@ impl ObsBridgeService {
         match self.timeline_replay.read().replay_after(None, 0) {
             TimelineReplayResponse::Rebase(payload) => Some(payload),
             TimelineReplayResponse::Replay(_) | TimelineReplayResponse::Unavailable => None,
+        }
+    }
+
+    pub fn input_timeline_recovery(&self, stream_id: Option<&str>, after_revision: u64) -> Value {
+        match self
+            .timeline_replay
+            .read()
+            .replay_after(stream_id, after_revision)
+        {
+            TimelineReplayResponse::Replay(payload) => {
+                json!({ "type": "replay", "payload": payload })
+            }
+            TimelineReplayResponse::Rebase(payload) => {
+                json!({ "type": "rebase", "payload": payload })
+            }
+            TimelineReplayResponse::Unavailable => json!({ "type": "unavailable" }),
         }
     }
 
@@ -1462,6 +1478,7 @@ mod tests {
         assert!(!is_allowed_command("keys_update"));
         assert!(!is_allowed_command("keys_update_with_positions"));
         assert!(!is_allowed_command("keys_timeline_checkpoint"));
+        assert!(!is_allowed_command("keys_timeline_recover"));
         assert!(!is_allowed_command("plugin_rpc_send"));
         assert!(!is_allowed_command("plugin_rpc_respond"));
         assert!(!is_allowed_command("plugin_instances_commit"));

@@ -277,6 +277,7 @@ fn main() {
             commands::keys::keys::raw_input_subscribe,
             commands::keys::keys::raw_input_unsubscribe,
             commands::keys::timeline::keys_timeline_checkpoint,
+            commands::keys::timeline::keys_timeline_recover,
             commands::keys::keys::custom_tabs_list,
             commands::keys::keys::custom_tabs_create,
             commands::keys::keys::custom_tabs_delete,

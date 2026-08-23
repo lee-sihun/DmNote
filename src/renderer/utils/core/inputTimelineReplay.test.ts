@@ -46,7 +46,7 @@ describe('InputTimelineReplay', () => {
       {
         enabled: true,
         thresholdMs: 100,
-        transportReserveMs: 0,
+        presentationBufferMs: 0,
         keyDisplayDelayMs: 0,
         epochKey: 'test',
       },
@@ -90,7 +90,7 @@ describe('InputTimelineReplay', () => {
       {
         enabled: true,
         thresholdMs: 100,
-        transportReserveMs: 0,
+        presentationBufferMs: 0,
         keyDisplayDelayMs: 0,
         epochKey: 'test',
       },
@@ -132,13 +132,13 @@ describe('InputTimelineReplay', () => {
     expect(replay.readPlayhead(1010)).toBe(100);
   });
 
-  it('fails closed until a new stream arrives', () => {
+  it('pauses on a gap and resumes from contiguous replay batches', () => {
     const sink = callbacks();
     const replay = new InputTimelineReplay(
       {
         enabled: true,
         thresholdMs: 100,
-        transportReserveMs: 0,
+        presentationBufferMs: 0,
         keyDisplayDelayMs: 0,
         epochKey: 'test',
       },
@@ -148,8 +148,17 @@ describe('InputTimelineReplay', () => {
     replay.ingest(batch(3, 300_000, []), 1010);
 
     expect(replay.tick(1020)).toBeNull();
-    expect(sink.onEpochReset).toHaveBeenCalledWith('validation_failure');
+    expect(sink.onEpochReset).not.toHaveBeenCalledWith('validation_failure');
     expect(sink.onFailure).toHaveBeenCalledOnce();
+
+    expect(
+      replay.recover([batch(2, 250_000, []), batch(3, 300_000, [])], 1020),
+    ).toBe(true);
+    expect(replay.tick(1020)).not.toBeNull();
+    expect(replay.recoveryCursor()).toEqual({
+      streamId: 'stream-a',
+      revision: '3',
+    });
   });
 
   it('replays key and counter actions on the shared presentation target', () => {
@@ -158,7 +167,7 @@ describe('InputTimelineReplay', () => {
       {
         enabled: true,
         thresholdMs: 100,
-        transportReserveMs: 20,
+        presentationBufferMs: 20,
         keyDisplayDelayMs: 120,
         epochKey: 'test',
       },
@@ -207,7 +216,7 @@ describe('InputTimelineReplay', () => {
       {
         enabled: true,
         thresholdMs: 100,
-        transportReserveMs: 0,
+        presentationBufferMs: 0,
         keyDisplayDelayMs: 0,
         epochKey: 'test',
       },
@@ -235,13 +244,122 @@ describe('InputTimelineReplay', () => {
     );
   });
 
+  it('continues a press that is active in a checkpoint', () => {
+    const sink = callbacks();
+    const replay = new InputTimelineReplay(
+      {
+        enabled: true,
+        thresholdMs: 100,
+        presentationBufferMs: 0,
+        keyDisplayDelayMs: 0,
+        epochKey: 'test',
+      },
+      sink,
+    );
+    replay.rebase(
+      {
+        version: 1,
+        streamId: 'stream-a',
+        revision: '20',
+        sourceRevision: '200',
+        safeThroughUs: '300000',
+        baseline: { ...baseline, activeKeys: ['A'] },
+        activePresses: [
+          {
+            pressId: 'press-a',
+            mode: '4key',
+            key: 'A',
+            downTimeUs: '100000',
+          },
+        ],
+      },
+      1000,
+    );
+    replay.ingest(
+      batch(21, 400_000, [
+        {
+          kind: 'state',
+          pressId: 'press-a',
+          mode: '4key',
+          key: 'A',
+          state: 'UP',
+          eventTimeUs: '350000',
+        },
+      ]),
+      1010,
+    );
+    replay.tick(1010);
+
+    expect(sink.onPressStart).toHaveBeenCalledWith(
+      expect.objectContaining({ pressId: 'press-a', downTimeMs: 100 }),
+    );
+    expect(sink.onPressResolve).toHaveBeenCalledWith(
+      expect.objectContaining({ pressId: 'press-a', upTimeMs: 350 }),
+    );
+  });
+
+  it('restores a completed press observed while a checkpoint was in flight', () => {
+    const sink = callbacks();
+    const replay = new InputTimelineReplay(
+      {
+        enabled: true,
+        thresholdMs: 100,
+        presentationBufferMs: 0,
+        keyDisplayDelayMs: 0,
+        epochKey: 'test',
+      },
+      sink,
+    );
+    const observed = batch(20, 300_000, [
+      {
+        kind: 'state',
+        pressId: 'press-a',
+        mode: '4key',
+        key: 'A',
+        state: 'DOWN',
+        eventTimeUs: '100000',
+      },
+      {
+        kind: 'state',
+        pressId: 'press-a',
+        mode: '4key',
+        key: 'A',
+        state: 'UP',
+        eventTimeUs: '150000',
+      },
+    ]);
+    delete observed.baseline;
+
+    replay.rebase(
+      {
+        version: 1,
+        streamId: 'stream-a',
+        revision: '20',
+        sourceRevision: '200',
+        safeThroughUs: '300000',
+        baseline,
+        activePresses: [],
+      },
+      1000,
+      [observed],
+    );
+    replay.tick(1000);
+
+    expect(sink.onPressStart).toHaveBeenCalledWith(
+      expect.objectContaining({ pressId: 'press-a', downTimeMs: 100 }),
+    );
+    expect(sink.onPressResolve).toHaveBeenCalledWith(
+      expect.objectContaining({ pressId: 'press-a', upTimeMs: 150 }),
+    );
+  });
+
   it('fails closed when the bounded presentation queue is exceeded', () => {
     const sink = callbacks();
     const replay = new InputTimelineReplay(
       {
         enabled: true,
         thresholdMs: 100,
-        transportReserveMs: 0,
+        presentationBufferMs: 0,
         keyDisplayDelayMs: 10_000,
         epochKey: 'test',
       },
@@ -276,7 +394,7 @@ describe('InputTimelineReplay', () => {
       {
         enabled: true,
         thresholdMs: 100,
-        transportReserveMs: 100,
+        presentationBufferMs: 100,
         keyDisplayDelayMs: 0,
         epochKey: 'test',
       },

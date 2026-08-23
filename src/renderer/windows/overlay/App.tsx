@@ -56,7 +56,7 @@ import {
   slotDisplayName,
 } from '@utils/keySlot';
 import type { KeySlot } from '@src/types/key/keys';
-import { INPUT_TIMELINE_TRANSPORT_RESERVE_MS } from '@constants/inputTimeline';
+import { INPUT_TIMELINE_PRESENTATION_BUFFER_MS } from '@constants/inputTimeline';
 
 type KeyDelayTimerHandle = ReturnType<typeof setTimeout>;
 type KeyDelayTimerEntry = {
@@ -461,7 +461,7 @@ export default function App() {
   const presentationTimeSource = useInputTimelineReplay({
     enabled: timelineEnabled,
     thresholdMs: Number(noteSettings?.shortNoteThresholdMs ?? 0),
-    transportReserveMs: INPUT_TIMELINE_TRANSPORT_RESERVE_MS,
+    presentationBufferMs: INPUT_TIMELINE_PRESENTATION_BUFFER_MS,
     keyDisplayDelayMs,
     epochKey: timelineEpochKey,
     onEpochReset: (reason, baseline) => {
