@@ -21,6 +21,7 @@ export type ListItem = {
   id: string;
   label: string;
   disabled?: boolean;
+  isPlugin?: boolean;
   /** 토글 항목의 체크 상태 */
   checked?: boolean;
   /** 서브메뉴 항목 */
@@ -58,6 +59,10 @@ const DOCUMENT_FOCUSABLE_SELECTOR = [
   '[contenteditable="true"]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
+
+const POPUP_CHROME_INSET = 4;
+const SUBMENU_SURFACE_GAP = 5;
+const SUBMENU_ANCHOR_GAP = POPUP_CHROME_INSET + SUBMENU_SURFACE_GAP;
 
 const getAdjacentFocusTarget = (
   origin: HTMLElement | null,
@@ -191,8 +196,8 @@ const SubMenu = ({
 
     const padding = POPUP_EDGE_PADDING;
     const { offsetWidth: width, offsetHeight: height } = el;
-    const normalLeft = anchorRect.right + 2;
-    const flippedLeft = anchorRect.left - 2 - width;
+    const normalLeft = anchorRect.right + SUBMENU_ANCHOR_GAP;
+    const flippedLeft = anchorRect.left - SUBMENU_ANCHOR_GAP - width;
 
     // 오른쪽이 좁을 때만 뒤집되, 왼쪽에도 자리가 있어야 의미가 있다
     const flipToLeft =
@@ -200,7 +205,7 @@ const SubMenu = ({
       flippedLeft >= padding;
 
     const top = clampToViewport(
-      anchorRect.top,
+      anchorRect.top - POPUP_CHROME_INSET,
       height,
       ownerWindow.innerHeight,
     );
@@ -211,7 +216,11 @@ const SubMenu = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPos(
       flipToLeft
-        ? { right: ownerWindow.innerWidth - anchorRect.left + 2, top }
+        ? {
+            right:
+              ownerWindow.innerWidth - anchorRect.left + SUBMENU_ANCHOR_GAP,
+            top,
+          }
         : { left, top },
     );
   }, [anchorRect, items.length, ownerWindow]);
@@ -243,11 +252,7 @@ const SubMenu = ({
   // 뷰포트 좌표가 어긋나는 것 방지. 호버 유지는 onMouseEnter/Leave 콜백으로 연결
   return createPortal(
     <div
-      ref={(node) => {
-        (subMenuRef as React.MutableRefObject<HTMLDivElement | null>).current =
-          node;
-        if (needsScroll) subLenisRef(node);
-      }}
+      ref={subMenuRef as React.MutableRefObject<HTMLDivElement | null>}
       data-dmn-popup-submenu="true"
       data-dmn-popup-layer="true"
       role="menu"
@@ -264,30 +269,39 @@ const SubMenu = ({
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`fixed z-[60] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
-        needsScroll ? ' listpopup-scroll' : ''
-      }`}
+      className={`fixed z-[60] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface p-[4px] flex flex-col tooltip-fade-in`}
       style={{
         left: pos?.left,
         right: pos?.right,
         top: pos?.top ?? 0,
         visibility: pos ? undefined : 'hidden',
-        ...(maxHeight
-          ? { maxHeight, overflowY: 'auto', overflowX: 'hidden' }
-          : {}),
+        ...(maxHeight ? { maxHeight } : {}),
       }}
     >
-      {items.map((it) => (
-        <MenuItemRow
-          key={it.id}
-          item={it}
-          onSelect={onSelect}
-          onCloseAll={onCloseAll}
-          onMenuTab={onMenuTab}
-          siblingActiveRef={siblingActiveRef}
-          hasCheckColumn={hasCheckColumn}
-        />
-      ))}
+      {/* 스크롤러를 크롬 박스 안쪽으로 한 겹 내린다 - 마스크가 표면과 그림자까지
+          갉아먹지 않게. role=none으로 menu와 menuitem의 관계는 그대로 통과시킨다 */}
+      <div
+        ref={needsScroll ? subLenisRef : undefined}
+        role="none"
+        className={`flex flex-col gap-[4px]${
+          needsScroll ? ' listpopup-scroll dmn-scroll-fade' : ''
+        }`}
+        style={
+          maxHeight ? { overflowY: 'auto', overflowX: 'hidden' } : undefined
+        }
+      >
+        {items.map((it) => (
+          <MenuItemRow
+            key={it.id}
+            item={it}
+            onSelect={onSelect}
+            onCloseAll={onCloseAll}
+            onMenuTab={onMenuTab}
+            siblingActiveRef={siblingActiveRef}
+            hasCheckColumn={hasCheckColumn}
+          />
+        ))}
+      </div>
     </div>,
     ownerDocument.body,
   );
@@ -367,6 +381,7 @@ const MenuItemRow = ({
   }, []);
 
   const hasCheck = typeof item.checked === 'boolean';
+  const constrainLabel = item.isPlugin === true;
 
   const handleSelect = () => {
     if (item.disabled) return;
@@ -406,6 +421,8 @@ const MenuItemRow = ({
         onClick={handleSelect}
         onKeyDown={handleKeyDown}
         className={`w-full min-w-[96px] h-[26px] px-[8px] rounded-md flex items-center gap-[6px] transition-colors duration-fast ${
+          constrainLabel ? 'max-w-[172px] overflow-hidden ' : ''
+        }${
           item.disabled
             ? 'opacity-70'
             : 'hover:bg-fill active:bg-fill-active cursor-pointer'
@@ -436,9 +453,9 @@ const MenuItemRow = ({
 
         {/* 라벨 텍스트 */}
         <span
-          className={`flex-1 text-body whitespace-nowrap text-left ${
-            item.disabled ? 'text-fg-disabled' : 'text-fg'
-          }`}
+          className={`min-w-0 flex-1 text-body text-left ${
+            constrainLabel ? 'truncate' : 'whitespace-nowrap'
+          } ${item.disabled ? 'text-fg-disabled' : 'text-fg'}`}
         >
           {item.label}
         </span>
@@ -575,8 +592,9 @@ const ListPopup = ({
             ? { maxHeight, overflowY: 'auto', overflowX: 'hidden' }
             : undefined
         }
+        role="none"
         className={`flex flex-col gap-[4px]${
-          needsScroll ? ' listpopup-scroll' : ''
+          needsScroll ? ' listpopup-scroll dmn-scroll-fade' : ''
         }`}
       >
         {items.map((it) => (

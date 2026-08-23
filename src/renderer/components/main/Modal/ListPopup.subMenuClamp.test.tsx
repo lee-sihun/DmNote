@@ -5,9 +5,11 @@ import ListPopup from './ListPopup';
 
 const VIEWPORT_WIDTH = 600;
 const VIEWPORT_HEIGHT = 500;
-const SUB_WIDTH = 200;
+const SUB_WIDTH = 180;
 const SUB_HEIGHT = 100;
 const PADDING = 5;
+const POPUP_CHROME_INSET = 4;
+const SUBMENU_ANCHOR_GAP = 9;
 
 const subMenu = () =>
   document.querySelector<HTMLElement>('[aria-label="더보기"]');
@@ -59,7 +61,7 @@ describe('서브메뉴 화면 경계 보정', () => {
             {
               id: 'more',
               label: '더보기',
-              children: [{ id: 'child', label: '항목' }],
+              children: [{ id: 'child', label: '항목', isPlugin: true }],
             },
           ]}
         />
@@ -91,10 +93,16 @@ describe('서브메뉴 화면 경계 보정', () => {
     });
   };
 
-  it('오른쪽에 자리가 있으면 부모 오른쪽에 붙인다', async () => {
+  it('오른쪽에 자리가 있으면 부모와 간격을 두고 배치한다', async () => {
     await openSubMenuAt(20, 120);
 
-    expect(subMenu()?.style.left).toBe('122px');
+    expect(subMenu()?.style.left).toBe(`${120 + SUBMENU_ANCHOR_GAP}px`);
+  });
+
+  it('서브메뉴 첫 행의 세로 중심을 부모 행과 맞춘다', async () => {
+    await openSubMenuAt(20, 120);
+
+    expect(subMenu()?.style.top).toBe(`${100 - POPUP_CHROME_INSET}px`);
   });
 
   it('오른쪽이 좁고 왼쪽이 넉넉하면 왼쪽으로 뒤집는다', async () => {
@@ -102,7 +110,7 @@ describe('서브메뉴 화면 경계 보정', () => {
 
     const style = subMenu()?.style;
     expect(style?.left).toBe('');
-    expect(style?.right).toBe(`${VIEWPORT_WIDTH - 380 + 2}px`);
+    expect(style?.right).toBe(`${VIEWPORT_WIDTH - 380 + SUBMENU_ANCHOR_GAP}px`);
   });
 
   // 뒤집어도 왼쪽에 자리가 없으면 반대쪽으로 잘리기만 한다.
