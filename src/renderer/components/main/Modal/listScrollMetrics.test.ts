@@ -31,14 +31,14 @@ describe('메뉴 높이 예산', () => {
     const viewportHeight = 400;
     const { maxHeight } = getListScrollMetrics(60, viewportHeight);
     // 표면이 위아래로 두르는 패딩(4)과 화면 여백(5)을 더해도 화면 안
-    const surfaceHeight = maxHeight! + 4 * 2 + 5 * 2;
+    const surfaceHeight = maxHeight! + 5 * 2 + 5 * 2;
 
     expect(surfaceHeight).toBeLessThanOrEqual(viewportHeight);
   });
 
   it('경계에서 한 칸 차이로 스크롤이 켜진다', () => {
     // 10개가 딱 들어가는 화면 높이를 역산
-    const viewportHeight = contentHeight(10) + 5 * 2 + 4 * 2;
+    const viewportHeight = contentHeight(10) + 5 * 2 + 5 * 2;
 
     expect(getListScrollMetrics(10, viewportHeight).needsScroll).toBe(false);
     expect(getListScrollMetrics(11, viewportHeight).needsScroll).toBe(true);
@@ -53,7 +53,7 @@ describe('메뉴 높이 예산', () => {
       (SEPARATOR_HEIGHT + ITEM_GAP) +
       SCROLL_EDGE_PADDING +
       5 * 2 +
-      4 * 2;
+      5 * 2;
 
     expect(getListScrollMetrics(7, exact, 1).needsScroll).toBe(false);
     // 같은 높이라도 구분선을 항목으로 세면 넘친다고 잘못 판단한다
@@ -66,7 +66,7 @@ describe('메뉴 높이 예산', () => {
       3 * (SEPARATOR_HEIGHT + ITEM_GAP) +
       SCROLL_EDGE_PADDING +
       5 * 2 +
-      4 * 2;
+      5 * 2;
 
     expect(getListScrollMetrics(9, exact, 3).needsScroll).toBe(false);
   });

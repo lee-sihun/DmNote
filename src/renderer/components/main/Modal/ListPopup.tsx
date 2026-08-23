@@ -77,7 +77,8 @@ const DOCUMENT_FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-const POPUP_CHROME_INSET = 4;
+// 표면 패딩 5px = 행 갭 4px + inset 링 1px 보정 (링이 패딩 최외곽 1px 위에 그려짐)
+const POPUP_CHROME_INSET = 5;
 const SUBMENU_SURFACE_GAP = 5;
 const SUBMENU_ANCHOR_GAP = POPUP_CHROME_INSET + SUBMENU_SURFACE_GAP;
 
@@ -296,7 +297,7 @@ const SubMenu = ({
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`fixed z-[var(--z-chrome-submenu)] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface p-[4px] flex flex-col${
+      className={`fixed z-[var(--z-chrome-submenu)] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface p-[5px] flex flex-col${
         instant ? '' : ' tooltip-fade-in'
       }`}
       style={{
@@ -719,7 +720,7 @@ const ListPopup = ({
   // 일시적 팝업은 상주 크롬(패널·미니맵)보다 항상 위 - 사다리는 tokens.css가 소유
   // z는 호출부가 덮을 수 있어야 한다. 기본값을 클래스로 박으면 두 클래스가
   // 같은 특이도로 충돌해 CSS 생성 순서에 따라 결과가 달라진다
-  const defaultClassName = `dmn-motion ${CANVAS_POPUP_CHROME_CLASS} rounded-surface p-[4px] flex flex-col gap-[4px]`;
+  const defaultClassName = `dmn-motion ${CANVAS_POPUP_CHROME_CLASS} rounded-surface p-[5px] flex flex-col gap-[4px]`;
   const zClassName = /(^|\s)z-/.test(className)
     ? ''
     : 'z-[var(--z-chrome-popup)]';

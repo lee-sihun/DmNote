@@ -8,8 +8,8 @@ const VIEWPORT_HEIGHT = 500;
 const SUB_WIDTH = 180;
 const SUB_HEIGHT = 100;
 const PADDING = 5;
-const POPUP_CHROME_INSET = 4;
-const SUBMENU_ANCHOR_GAP = 9;
+const POPUP_CHROME_INSET = 5;
+const SUBMENU_ANCHOR_GAP = 10;
 
 const subMenu = () =>
   document.querySelector<HTMLElement>('[aria-label="더보기"]');

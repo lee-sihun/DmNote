@@ -65,9 +65,10 @@ const TabTool = () => {
         onClose={() => setIsPopupOpen(false)}
         contentMountStrategy="after-paint"
         // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조.
-        // 담는 것이 메뉴 행뿐이라 표면도 메뉴 계열을 그대로 쓴다 - 패딩과 갭을
-        // 같은 값으로 둬야 행 여백이 사방으로 균일해 보인다
-        className={`dmn-motion flex flex-col gap-[4px] w-[180px] p-[4px] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface`}
+        // 담는 것이 메뉴 행뿐이라 표면도 메뉴 계열을 그대로 쓴다.
+        // 패딩 5px = 갭 4px + inset 링 1px 보정 - 링이 패딩 최외곽을 덮어
+        // 같은 값이면 가장자리만 1px 좁아 보인다
+        className={`dmn-motion flex flex-col gap-[4px] w-[180px] p-[5px] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface`}
       >
         <TabList />
       </FloatingPopup>
