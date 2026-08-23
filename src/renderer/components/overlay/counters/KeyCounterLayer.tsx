@@ -53,7 +53,7 @@ const KeyCounterLayer = React.memo(
     return (
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ zIndex: 12 }}
+        style={{ zIndex: 'var(--z-canvas-counter-preview)' }}
       >
         {keys.map((key: string, index: number) => {
           const position = positions[index];

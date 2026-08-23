@@ -38,7 +38,7 @@ export const MarqueeSelectionOverlay: React.FC<
         backgroundColor: 'var(--ui-selection-fill)',
         border: '1px dashed var(--ui-selection-border)',
         pointerEvents: 'none',
-        zIndex: 9998,
+        zIndex: 'var(--z-canvas-marquee)',
       }}
     />
   );

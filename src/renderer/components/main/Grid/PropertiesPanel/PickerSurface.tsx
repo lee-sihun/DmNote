@@ -105,7 +105,7 @@ const PickerSurface = ({
       offset={detached ? POPUP_GAP : 32}
       // 측정 좌표는 이미 정확하므로 세로 보정을 무시
       offsetY={measured || detached ? 0 : offsetY}
-      className="z-50"
+      className="z-[var(--z-chrome-modal)]"
       interactiveRefs={interactiveRefs}
       onClose={onClose}
       autoClose={false}

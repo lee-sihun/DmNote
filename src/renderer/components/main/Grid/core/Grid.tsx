@@ -1376,7 +1376,7 @@ const Grid = ({
             border: `1px solid ${DEFAULT_ELEMENT_HAIRLINE}`,
             borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
             opacity: 0.5,
-            zIndex: 1000,
+            zIndex: 'var(--z-canvas-drag-preview)',
           }}
         />
       );
@@ -1431,7 +1431,7 @@ const Grid = ({
           boxShadow: previewShadow,
           overflow: 'hidden',
           opacity: 0.5,
-          zIndex: 1000,
+          zIndex: 'var(--z-canvas-drag-preview)',
         }}
       >
         {previewImage ? (
@@ -1499,7 +1499,7 @@ const Grid = ({
         gridContainerRef.current = node;
       }}
       data-grid-container
-      className="relative w-full h-full bg-panel rounded-[0px] overflow-hidden"
+      className="relative isolate w-full h-full bg-panel rounded-[0px] overflow-hidden"
       style={color === 'transparent' ? undefined : { backgroundColor: color }}
       onContextMenu={(e) => {
         if (duplicateState) {
@@ -1676,7 +1676,7 @@ const Grid = ({
               border: '2px solid var(--ui-selection-border)',
               borderRadius: '4px',
               pointerEvents: 'none',
-              zIndex: 20,
+              zIndex: 'var(--z-canvas-selection-outline)',
             }}
           />
         );

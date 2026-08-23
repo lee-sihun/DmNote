@@ -46,7 +46,7 @@ const StatCounterLayer = React.memo(({ positions }: StatCounterLayerProps) => {
   return (
     <div
       className="absolute inset-0 pointer-events-none"
-      style={{ zIndex: 12 }}
+      style={{ zIndex: 'var(--z-canvas-counter-preview)' }}
     >
       {positions.map((position, index) => {
         if (!position || position.hidden) return null;

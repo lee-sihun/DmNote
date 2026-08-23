@@ -94,7 +94,7 @@ const PanelToggleButton = ({
   const togglePress = usePressAction(toggle);
 
   return (
-    <div className="absolute top-0 right-0 z-30 w-[48px] h-[48px] flex items-center justify-center pointer-events-none">
+    <div className="absolute top-0 right-0 z-[var(--z-chrome-panel)] w-[48px] h-[48px] flex items-center justify-center pointer-events-none">
       <button
         ref={buttonRef}
         {...togglePress}

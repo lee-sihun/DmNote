@@ -107,7 +107,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
         height: '100%',
         pointerEvents: 'none',
         overflow: 'visible',
-        zIndex: 9999,
+        zIndex: 'var(--z-canvas-smart-guides)',
       }}
     >
       {/* 화살표 마커 정의 */}

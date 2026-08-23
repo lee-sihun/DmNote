@@ -132,6 +132,26 @@
   --ui-selection-fill: rgba(139, 92, 246, 0.15);
   --ui-selection-glow: rgba(139, 92, 246, 0.5);
 
+  /* 앱 크롬 전역 스택 */
+  --z-chrome-panel: 30;
+  --z-chrome-popup: 40;
+  --z-chrome-modal: 50;
+  --z-chrome-submenu: 60;
+  --z-chrome-tooltip: 70;
+
+  /* 격리된 그리드 안에서만 비교되는 캔버스 내부 스택.
+     카운터 프리뷰와 드래그 프리뷰는 줌·팬 래퍼 안에 있고 그 래퍼가 transform으로
+     자기 컨텍스트를 만든다 - 아래 선택선·핸들·마퀴와는 애초에 겨루지 않는다 */
+  --z-canvas-counter-preview: 12;
+  --z-canvas-selection-outline: 20;
+  --z-canvas-selection-handle: 21;
+  --z-canvas-group-outline: 22;
+  --z-canvas-group-handle: 25;
+  --z-canvas-gradient-editor: 26;
+  --z-canvas-drag-preview: 1000;
+  --z-canvas-marquee: 9998;
+  --z-canvas-smart-guides: 9999;
+
   /* 시맨틱 */
   --ui-danger: #e5484d;
   --ui-danger-hover: #ec5d62;

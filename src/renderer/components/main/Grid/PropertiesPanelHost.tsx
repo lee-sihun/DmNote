@@ -342,7 +342,7 @@ const PropertiesPanelHost = ({
       {dockHint && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute right-0 top-0 bottom-0 w-[240px] z-40 bg-white/[0.06] shadow-[inset_0_0_0_1px_var(--ui-line)]"
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-[240px] z-[var(--z-chrome-popup)] bg-white/[0.06] shadow-[inset_0_0_0_1px_var(--ui-line)]"
         />
       )}
       {createPortal(
@@ -374,7 +374,7 @@ const PropertiesPanelHost = ({
             {detached && chrome.webRing && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-[var(--dmn-panel-window-radius,12px)] shadow-[inset_0_0_0_1px_var(--ui-line)] z-50"
+                className="pointer-events-none absolute inset-0 rounded-[var(--dmn-panel-window-radius,12px)] shadow-[inset_0_0_0_1px_var(--ui-line)] z-[var(--z-chrome-modal)]"
               />
             )}
           </div>

@@ -3,7 +3,7 @@
 // 상주 풀하이트 표면의 라이브 블러 — 캔버스 damage마다 재필터되므로
 // Windows에서 키 연타 프레임 실측이 유지 조건 (미달 시 bg-glass-panel-solid로 복귀)
 export const SIDE_PANEL_FRAME_CLASS =
-  'absolute right-0 top-0 bottom-0 w-[240px] bg-glass-panel backdrop-glass-popup backdrop-glass-canvas shadow-elevation-panel z-30';
+  'absolute right-0 top-0 bottom-0 w-[240px] bg-glass-panel backdrop-glass-popup backdrop-glass-canvas shadow-elevation-panel z-[var(--z-chrome-panel)]';
 
 // 구상 패널 루트 — 프레임을 꽉 채우는 투명 레이어
 export const PANEL_ROOT_CLASS = 'absolute inset-0 flex flex-col';
@@ -25,4 +25,4 @@ export const PANEL_HEADER_CLASS =
 // 반경은 분리 창 루트가 --dmn-panel-window-radius로 내려준다 - 네이티브가 실루엣을 소유하는
 // 플랫폼(Windows)에서는 0이 되어야 하고, 여기서 12px을 고정하면 원호가 둘이 되어 간극이 생긴다
 export const WINDOW_PANEL_FRAME_CLASS =
-  'absolute inset-0 bg-panel-detached z-30 rounded-[var(--dmn-panel-window-radius,12px)] overflow-hidden';
+  'absolute inset-0 bg-panel-detached z-[var(--z-chrome-panel)] rounded-[var(--dmn-panel-window-radius,12px)] overflow-hidden';

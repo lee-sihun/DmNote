@@ -109,7 +109,7 @@ const openMenu = (
   menu.classList.remove('hidden');
   menu.classList.add('flex');
   menu.style.position = 'fixed';
-  menu.style.zIndex = '60';
+  menu.style.zIndex = 'var(--z-chrome-submenu)';
   menu.style.maxHeight = '200px';
   menu.style.overflowY = 'auto';
   menu.dataset.pluginDropdownPortal = 'true';

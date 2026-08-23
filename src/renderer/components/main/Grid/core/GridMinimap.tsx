@@ -394,7 +394,7 @@ const GridMinimap = ({
   return (
     <div
       ref={minimapRef}
-      className="absolute bottom-2 left-2 z-30 select-none bg-glass-dim-solid rounded-[8px] shadow-elevation-chrome overflow-hidden"
+      className="absolute bottom-2 left-2 z-[var(--z-chrome-panel)] select-none bg-glass-dim-solid rounded-[8px] shadow-elevation-chrome overflow-hidden"
       style={{
         width: MINIMAP_WIDTH,
         opacity: shouldShow ? 1 : 0,

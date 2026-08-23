@@ -209,7 +209,7 @@ const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
         width: HANDLE_HIT_SIZE,
         height: HANDLE_HIT_SIZE,
         cursor: cursorStyle,
-        zIndex: 21,
+        zIndex: 'var(--z-canvas-selection-handle)',
         backgroundColor: 'transparent',
         display: 'flex',
         alignItems: 'center',

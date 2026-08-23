@@ -774,7 +774,7 @@ export default function App() {
         offset={25}
         onClose={handlePaletteClose}
         // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조
-        className={`dmn-motion z-50 flex flex-col justify-between rounded-popup ${CANVAS_POPUP_CHROME_CLASS} p-[8px]`}
+        className={`dmn-motion z-[var(--z-chrome-modal)] flex flex-col justify-between rounded-popup ${CANVAS_POPUP_CHROME_CLASS} p-[8px]`}
         contentMountStrategy="after-paint"
       >
         <Palette color={color} onColorChange={handleColorChange} />

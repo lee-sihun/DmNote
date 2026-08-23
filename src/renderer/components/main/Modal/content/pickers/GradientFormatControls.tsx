@@ -85,7 +85,7 @@ export const FormatSelectBar = ({
         placement="bottom-start"
         minWidth={triggerWidth}
         offset={4}
-        className="z-[60]"
+        className="z-[var(--z-chrome-submenu)]"
         portalToBody
         onClose={() => setOpen(false)}
         items={(['solid', 'gradient'] as ColorFormat[]).map((f) => ({

@@ -221,7 +221,7 @@ const Handle = ({
         width: HANDLE_HIT_SIZE,
         height: HANDLE_HIT_SIZE,
         cursor: cursorStyle,
-        zIndex: 25,
+        zIndex: 'var(--z-canvas-group-handle)',
         backgroundColor: 'transparent',
         display: 'flex',
         alignItems: 'center',
@@ -840,7 +840,7 @@ const GroupResizeHandles = ({
           border: `${GROUP_BORDER_WIDTH}px solid var(--ui-selection-border-strong)`,
           borderRadius: '6px',
           pointerEvents: 'none' as const,
-          zIndex: 22,
+          zIndex: 'var(--z-canvas-group-outline)',
         }}
       />
 
@@ -869,7 +869,7 @@ const GroupResizeHandles = ({
               border: '2px dashed rgba(251, 146, 60, 0.9)',
               borderRadius: '4px',
               pointerEvents: 'none' as const,
-              zIndex: 21,
+              zIndex: 'var(--z-canvas-selection-handle)',
             }}
             title="크기 조절 불가능한 요소"
           />

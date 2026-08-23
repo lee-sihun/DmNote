@@ -631,8 +631,8 @@ const GradientAxisOverlay = ({
     <div
       ref={rootRef}
       className="absolute inset-0 pointer-events-none"
-      // 리사이즈 핸들(21~25) 위, 사이드 패널(z-30) 아래 — 패널 위로 새지 않게
-      style={{ zIndex: 26 }}
+      // 캔버스 리사이즈 핸들보다 위에 두는 내부 편집 층
+      style={{ zIndex: 'var(--z-canvas-gradient-editor)' }}
       data-dmn-gradient-overlay="true"
     >
       {/* 축 선 (시각) */}

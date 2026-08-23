@@ -47,10 +47,10 @@ describe('ListPopup 표면 옵션', () => {
     expect(surface()?.style.minWidth).toBe('172px');
   });
 
-  it('기본 z는 z-40', async () => {
+  it('기본 z는 팝업 토큰', async () => {
     await render({});
 
-    expect(surface()?.className).toContain('z-40');
+    expect(surface()?.className).toContain('z-[var(--z-chrome-popup)]');
   });
 
   // 호출부가 z를 주면 기본값을 빼야 한다. 둘 다 붙으면 특이도가 같아
@@ -60,7 +60,7 @@ describe('ListPopup 표면 옵션', () => {
 
     const className = surface()?.className ?? '';
     expect(className).toContain('z-[60]');
-    expect(className).not.toContain('z-40');
+    expect(className).not.toContain('z-[var(--z-chrome-popup)]');
   });
 
   it('z가 아닌 className은 기본 z와 함께 붙는다', async () => {
@@ -68,7 +68,7 @@ describe('ListPopup 표면 옵션', () => {
 
     const className = surface()?.className ?? '';
     expect(className).toContain('w-[172px]');
-    expect(className).toContain('z-40');
+    expect(className).toContain('z-[var(--z-chrome-popup)]');
   });
 
   it('긴 항목 이름은 전체 문구를 유지한 채 180px 표면 안에서 말줄임한다', async () => {
