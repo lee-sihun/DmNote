@@ -99,6 +99,8 @@ interface OverlaySceneProps {
   contentSize?: { width: number; height: number };
   // 전환 중 콘텐츠 페이드 - 네이티브 창 알파 미지원 환경에서 리사이즈 아티팩트를 가린다
   contentFade?: { opacity: number; durationMs: number } | null;
+  // 초기 리빌 게이트 - false면 모든 요소가 자리 잡을 때까지 화면을 감춘다
+  revealed?: boolean;
   positionOffset?: { x: number; y: number };
   onMouseDownCapture?: (e: React.MouseEvent<HTMLDivElement>) => void;
   /** PluginElementsRenderer 표시 여부 (Tauri 컨텍스트에서만 true) */
@@ -124,6 +126,7 @@ const OverlayScene = ({
   keyCounterEnabled,
   contentSize,
   contentFade,
+  revealed = true,
   positionOffset,
   onMouseDownCapture,
   showPluginElements = true,
@@ -134,6 +137,9 @@ const OverlayScene = ({
     <div
       className="relative w-full h-screen m-0 overflow-hidden"
       style={{
+        // 리빌 전에는 게이트가 우선 - visibility라 레이아웃·측정은 그대로 진행되고,
+        // 리빌 후에는 인라인 스타일이 사라져 유저 CSS가 다시 최우선이 된다
+        ...(revealed ? null : { visibility: 'hidden' as const }),
         ...(contentFade && {
           opacity: contentFade.opacity,
           transition: `opacity ${contentFade.durationMs}ms linear`,

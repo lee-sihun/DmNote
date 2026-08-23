@@ -39,22 +39,21 @@ export function usePluginDisplayElementsResponder() {
     };
   }, []);
 
-  // 준비 완료로 전환되면 1회 push - 요소가 하나도 없어도 오버레이가
-  // "기다릴 것이 없다"는 사실을 반드시 받도록 (요소 변경 push에만 의존하지 않음)
+  // 준비 완료로 전환될 때마다 push - 요소가 하나도 없어도 오버레이가
+  // "기다릴 것이 없다"는 사실을 반드시 받도록 (요소 변경 push에만 의존하지 않음).
+  // 재주입마다 준비 상태가 false로 돌아가므로 1회성 래치가 아니라 전환 감지
   useEffect(() => {
-    if (isLocalPluginRuntimeReady()) {
-      pushDisplayElementsToOverlay();
-      return;
-    }
+    let lastReady = false;
 
-    let notified = false;
-    const unsubscribe = subscribePluginReadiness(() => {
-      if (notified || !isLocalPluginRuntimeReady()) return;
-      notified = true;
-      pushDisplayElementsToOverlay();
-    });
+    const pushOnReadyTransition = () => {
+      const ready = isLocalPluginRuntimeReady();
+      if (ready === lastReady) return;
+      lastReady = ready;
+      if (ready) pushDisplayElementsToOverlay();
+    };
 
-    return unsubscribe;
+    pushOnReadyTransition();
+    return subscribePluginReadiness(pushOnReadyTransition);
   }, []);
 
   // 오버레이의 메뉴 predicate용 상태 동기화 수신 (contextMenuStateKeys)

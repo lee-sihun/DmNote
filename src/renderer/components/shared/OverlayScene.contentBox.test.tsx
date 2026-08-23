@@ -88,6 +88,20 @@ describe('OverlayScene 콘텐츠 박스', () => {
     expect(layer?.style.backgroundColor).toBe('transparent');
   });
 
+  it('리빌 전에는 루트를 감추고 리빌 후에는 인라인 visibility를 남기지 않는다', () => {
+    render({ revealed: false });
+    expect(rootDiv().style.visibility).toBe('hidden');
+
+    render({ revealed: true });
+    expect(rootDiv().style.visibility).toBe('');
+  });
+
+  it('리빌 전에도 전환 페이드 스타일과 함께 감춤이 유지된다', () => {
+    render({ revealed: false, contentFade: { opacity: 1, durationMs: 140 } });
+    expect(rootDiv().style.visibility).toBe('hidden');
+    expect(rootDiv().style.opacity).toBe('1');
+  });
+
   it('contentFade 전달 시 루트에 opacity 전환이 붙고 미전달 시 없다', () => {
     render({ contentFade: { opacity: 0, durationMs: 80 } });
     expect(rootDiv().style.opacity).toBe('0');

@@ -316,12 +316,14 @@ ${plugin.content}
   let injectGeneration = 0;
 
   const injectAll = () => {
+    // 주입 사이클이 끝나야 리빌 게이트가 열린다 - 모든 종료 경로에서 해제.
+    // removeAll보다 먼저 - teardown이 내보내는 빈 요소 sync가 준비 완료로
+    // 표시되면 그 순간 붙은 오버레이가 요소 0개 상태로 공개된다
+    const endInjectionWork = beginPluginWork();
     setReloading(true);
     removeAll();
     injectGeneration += 1;
     const generation = injectGeneration;
-    // 주입 사이클이 끝나야 리빌 게이트가 열린다 - 모든 종료 경로에서 해제
-    const endInjectionWork = beginPluginWork();
 
     void resetPluginAuthorityForRuntime().then((resetOk) => {
       if (disposed || generation !== injectGeneration) {

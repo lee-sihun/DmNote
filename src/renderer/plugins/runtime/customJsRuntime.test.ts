@@ -281,3 +281,50 @@ describe('customJsRuntime 준비 신호', () => {
     expect(isLocalPluginRuntimeReady()).toBe(true);
   });
 });
+
+describe('customJsRuntime 재주입 중 sync 페이로드', () => {
+  let runtime: CustomJsRuntime | null = null;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    resetPluginRuntimeReadiness();
+    jsGetMock.mockReset().mockResolvedValue({ plugins: [{ ...pluginA }] });
+    jsGetUseMock.mockReset().mockResolvedValue(true);
+    onUseMock.mockClear();
+    onStateMock.mockClear();
+    sendBridgeMock.mockClear();
+    authorityResetMock
+      .mockReset()
+      .mockResolvedValue({ authorityGeneration: 1, modelRevision: 1 });
+    (window as { __dmn_window_type?: string }).__dmn_window_type = 'main';
+
+    const { createCustomJsRuntime } = await import('./customJsRuntime');
+    runtime = createCustomJsRuntime();
+    runtime.initialize();
+    await flush();
+  });
+
+  afterEach(async () => {
+    runtime?.dispose();
+    runtime = null;
+    await vi.runOnlyPendingTimersAsync();
+    vi.useRealTimers();
+    resetPluginRuntimeReadiness();
+    delete (window as { __dmn_window_type?: string }).__dmn_window_type;
+    scripts().forEach((element) => element.remove());
+  });
+
+  it('teardown 단계의 빈 요소 sync를 준비 완료로 표시하지 않는다', async () => {
+    sendBridgeMock.mockClear();
+
+    // 재주입 - removeAll이 요소를 비우고 오버레이로 push한다
+    stateListener()({ plugins: [{ ...pluginA, content: 'void 1;' }] });
+
+    const readyFlags = sendBridgeMock.mock.calls
+      .filter((call) => call[1] === 'plugin:displayElements:sync')
+      .map((call) => (call[2] as { ready?: boolean }).ready);
+
+    expect(readyFlags.length).toBeGreaterThan(0);
+    expect(readyFlags).not.toContain(true);
+  });
+});
