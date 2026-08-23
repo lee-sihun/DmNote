@@ -1,11 +1,17 @@
 import { useEffect } from 'react';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  pushDisplayElementsToOverlay,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  isLocalPluginRuntimeReady,
+  subscribePluginReadiness,
+} from '@plugins/runtime/pluginRuntimeReadiness';
 import {
   clearPluginMenuRuntimeState,
   normalizeStateKeys,
   setPluginMenuRuntimeState,
 } from '@utils/plugin/pluginMenuRuntimeState';
-import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 
 // 다중 OBS 클라이언트 동시 재연결 시 요청 버스트를 응답 1회로 코얼레싱
 const RESPOND_DEBOUNCE_MS = 100;
@@ -22,12 +28,7 @@ export function usePluginDisplayElementsResponder() {
         if (timer) return;
         timer = setTimeout(() => {
           timer = null;
-          const elements = usePluginDisplayElementStore.getState().elements;
-          sendBridgeMessageBestEffort(
-            'overlay',
-            'plugin:displayElements:sync',
-            { elements },
-          );
+          pushDisplayElementsToOverlay();
         }, RESPOND_DEBOUNCE_MS);
       },
     );
@@ -36,6 +37,24 @@ export function usePluginDisplayElementsResponder() {
       if (timer) clearTimeout(timer);
       unsubscribe();
     };
+  }, []);
+
+  // 준비 완료로 전환되면 1회 push - 요소가 하나도 없어도 오버레이가
+  // "기다릴 것이 없다"는 사실을 반드시 받도록 (요소 변경 push에만 의존하지 않음)
+  useEffect(() => {
+    if (isLocalPluginRuntimeReady()) {
+      pushDisplayElementsToOverlay();
+      return;
+    }
+
+    let notified = false;
+    const unsubscribe = subscribePluginReadiness(() => {
+      if (notified || !isLocalPluginRuntimeReady()) return;
+      notified = true;
+      pushDisplayElementsToOverlay();
+    });
+
+    return unsubscribe;
   }, []);
 
   // 오버레이의 메뉴 predicate용 상태 동기화 수신 (contextMenuStateKeys)

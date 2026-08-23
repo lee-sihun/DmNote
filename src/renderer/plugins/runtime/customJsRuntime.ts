@@ -17,8 +17,10 @@ import { internalApi } from '@api/internalApi';
 import { setPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
+import {
+  pushDisplayElementsToOverlay,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import {
   beginPluginWork,
@@ -154,9 +156,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
         usePluginDisplayElementStore.getState().setElements([]);
         displayElementInstanceRegistry.clearAll();
 
-        sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
-          elements: [],
-        });
+        pushDisplayElementsToOverlay();
       } catch (error) {
         console.error('Failed to clear plugin UI elements', error);
       }
@@ -180,11 +180,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
           usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
           displayElementInstanceRegistry.clearByPluginId(pluginId);
 
-          sendBridgeMessageBestEffort(
-            'overlay',
-            'plugin:displayElements:sync',
-            { elements: usePluginDisplayElementStore.getState().elements },
-          );
+          pushDisplayElementsToOverlay();
         } catch (error) {
           console.error(
             `Failed to clear UI elements for plugin '${pluginId}'`,
