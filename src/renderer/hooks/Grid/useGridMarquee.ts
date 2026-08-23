@@ -219,11 +219,23 @@ export function useGridMarquee({
     endMarqueeSelection();
   };
 
+  const cancelMarqueeSelection = () => {
+    if (!isMarqueeSelecting) return;
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+    pendingClientPointRef.current = null;
+    endMarqueeSelection();
+  };
+
   // 마퀴 선택 이벤트 등록
   useEffect(() => {
     if (isMarqueeSelecting) {
       document.addEventListener('mousemove', handleMarqueeMouseMove);
       document.addEventListener('mouseup', handleMarqueeMouseUp);
+      document.addEventListener('contextmenu', cancelMarqueeSelection, true);
+      window.addEventListener('blur', cancelMarqueeSelection);
 
       return () => {
         if (frameRef.current !== null) {
@@ -233,6 +245,12 @@ export function useGridMarquee({
         pendingClientPointRef.current = null;
         document.removeEventListener('mousemove', handleMarqueeMouseMove);
         document.removeEventListener('mouseup', handleMarqueeMouseUp);
+        document.removeEventListener(
+          'contextmenu',
+          cancelMarqueeSelection,
+          true,
+        );
+        window.removeEventListener('blur', cancelMarqueeSelection);
       };
     }
   });

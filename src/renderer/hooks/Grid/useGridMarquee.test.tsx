@@ -98,4 +98,42 @@ describe('useGridMarquee frame coalescing', () => {
     expect(callbacks.size).toBe(0);
     expect(useGridSelectionStore.getState().isMarqueeSelecting).toBe(false);
   });
+
+  it('컨텍스트 메뉴가 열리면 마퀴를 취소하되 기존 선택은 남긴다', () => {
+    const kept = [{ type: 'key' as const, id: 'key-1', index: 0 }];
+    act(() => useGridSelectionStore.setState({ selectedElements: kept }));
+    act(() =>
+      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true })),
+    );
+    expect(callbacks.size).toBe(1);
+
+    // 메뉴가 열리기 전에 끝나야 하므로 캡처 단계를 쓴다.
+    // 중첩 노드에서 올려야 캡처와 버블이 구분된다
+    act(() =>
+      host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })),
+    );
+
+    expect(useGridSelectionStore.getState()).toMatchObject({
+      isMarqueeSelecting: false,
+      marqueeStart: null,
+      marqueeEnd: null,
+    });
+    // 취소는 확정과 다르다 - 예약된 프레임을 버리고 선택을 건드리지 않는다
+    expect(callbacks.size).toBe(0);
+    expect(useGridSelectionStore.getState().selectedElements).toEqual(kept);
+  });
+
+  it('창이 포커스를 잃으면 마퀴를 취소하되 기존 선택은 남긴다', () => {
+    const kept = [{ type: 'key' as const, id: 'key-1', index: 0 }];
+    act(() => useGridSelectionStore.setState({ selectedElements: kept }));
+
+    act(() => window.dispatchEvent(new Event('blur')));
+
+    expect(useGridSelectionStore.getState()).toMatchObject({
+      isMarqueeSelecting: false,
+      marqueeStart: null,
+      marqueeEnd: null,
+    });
+    expect(useGridSelectionStore.getState().selectedElements).toEqual(kept);
+  });
 });
