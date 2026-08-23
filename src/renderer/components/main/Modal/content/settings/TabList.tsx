@@ -1,17 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import TrashIcon from '@assets/svgs/trash.svg';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useLenis } from '@hooks/useLenis';
-import SearchField from '@components/main/common/SearchField';
-import AddIconButton from '@components/main/common/AddIconButton';
 import Alert from '../dialogs/Alert.jsx';
 import TabNameModal from '../editors/TabNameModal';
 import { keysApi } from '@api/modules/keysApi';
 
 const MAX_CUSTOM_TABS = 30;
 const VISIBLE_TAB_COUNT = 5;
-const TAB_ROW_HEIGHT = 28;
+const TAB_ROW_HEIGHT = 26;
 const TAB_ROW_GAP = 4;
 const TAB_LIST_MAX_HEIGHT =
   VISIBLE_TAB_COUNT * TAB_ROW_HEIGHT + (VISIBLE_TAB_COUNT - 1) * TAB_ROW_GAP;
@@ -28,26 +25,18 @@ const TabList = () => {
     name: string;
   } | null>(null);
   const [showNameModal, setShowNameModal] = useState(false);
-  const [query, setQuery] = useState('');
   const deletingTabsRef = useRef(new Set<string>());
 
   const { scrollContainerRef: scrollRef, lenisInstance } = useLenis();
 
   const maxReached = customTabs.length >= MAX_CUSTOM_TABS;
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const visibleTabs = normalizedQuery
-    ? customTabs.filter((tab) =>
-        tab.name.toLowerCase().includes(normalizedQuery),
-      )
-    : customTabs;
-
   useEffect(() => {
     const rafId = requestAnimationFrame(() => {
       lenisInstance.current?.resize?.();
     });
     return () => cancelAnimationFrame(rafId);
-  }, [visibleTabs.length, lenisInstance]);
+  }, [customTabs.length, lenisInstance]);
 
   const handleCreate = async (name: string) => {
     const result = await keysApi.customTabs.create(name);
@@ -87,76 +76,83 @@ const TabList = () => {
   return (
     // 표면 클래스는 TabTool이 소유 - 여기서는 내용만 낸다
     <>
-      {/* 탭 리스트 - 드롭다운 메뉴와 같은 플랫 행 문법, 팝업 표면에 바로 배치 */}
-      {customTabs.length > 0 && (
-        <div
-          ref={scrollRef}
-          className="flex flex-col w-full gap-[4px] overflow-y-auto modal-content-scroll dmn-scroll-fade"
-          style={{ maxHeight: `${TAB_LIST_MAX_HEIGHT}px` }}
-        >
-          {visibleTabs
-            .slice()
-            .reverse()
-            .map((tab) => {
-              const isSelected = selectedKeyType === tab.id;
-              // 인터랙티브 요소 중첩 금지 — 행 래퍼는 비인터랙티브,
-              // 선택은 행 전체를 덮는 스트레치드 버튼, 삭제는 형제 button
-              return (
-                <div
-                  key={tab.id}
-                  className={`group relative w-full h-[28px] shrink-0 flex items-center gap-[4px] px-[8px] rounded-md text-body cursor-pointer transition-colors duration-fast ${
-                    isSelected
-                      ? 'bg-accent-muted text-fg'
-                      : 'text-fg-muted hover:bg-fill hover:text-fg'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    aria-label={tab.name}
-                    aria-current={isSelected || undefined}
-                    className="absolute inset-0 rounded-md"
-                    onClick={() => handleSelect(tab.id)}
-                  />
-                  <span className="relative flex-1 min-w-0 truncate text-left pointer-events-none">
-                    {tab.name}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={t('tabs.delete')}
-                    className="relative w-[18px] h-[18px] -mr-[4px] shrink-0 flex items-center justify-center rounded-[4px] text-fg-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-fg transition-all duration-fast"
-                    onClick={() =>
-                      setDeleteTarget({ id: tab.id, name: tab.name })
-                    }
+      {/* 탭 리스트 - 드롭다운 메뉴와 같은 플랫 행 문법, 팝업 표면에 바로 배치.
+          추가는 목록이 할 수 있는 일이라 같은 행 리듬을 쓴다 - 바깥 래퍼가 4px 간격을 소유 */}
+      <div className="flex flex-col w-full gap-[4px]">
+        {customTabs.length > 0 && (
+          <div
+            ref={scrollRef}
+            className="flex flex-col w-full gap-[4px] overflow-y-auto modal-content-scroll dmn-scroll-fade"
+            style={{ maxHeight: `${TAB_LIST_MAX_HEIGHT}px` }}
+          >
+            {customTabs
+              .slice()
+              .reverse()
+              .map((tab) => {
+                const isSelected = selectedKeyType === tab.id;
+                // 인터랙티브 요소 중첩 금지 — 행 래퍼는 비인터랙티브,
+                // 선택은 행 전체를 덮는 스트레치드 버튼, 삭제는 형제 button
+                return (
+                  <div
+                    key={tab.id}
+                    className={`group relative w-full h-[26px] shrink-0 flex items-center px-[8px] rounded-md text-body cursor-pointer transition-colors duration-fast ${
+                      isSelected
+                        ? 'bg-accent-muted text-fg'
+                        : 'text-fg-muted hover:bg-fill hover:text-fg'
+                    }`}
                   >
-                    <TrashIcon className="w-[10px] h-[11px]" />
-                  </button>
-                </div>
-              );
-            })}
+                    <button
+                      type="button"
+                      aria-label={tab.name}
+                      aria-current={isSelected || undefined}
+                      className="absolute inset-0 rounded-md"
+                      onClick={() => handleSelect(tab.id)}
+                    />
+                    <span className="relative flex-1 min-w-0 truncate text-left pointer-events-none">
+                      {tab.name}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={t('tabs.delete')}
+                      className="relative flex items-center justify-center h-full w-[20px] -mr-[6px] shrink-0 text-label leading-none text-fg-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-fg transition-opacity duration-fast"
+                      onClick={() =>
+                        setDeleteTarget({ id: tab.id, name: tab.name })
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        )}
 
-          {/* 검색 결과 없음 */}
-          {normalizedQuery && visibleTabs.length === 0 && (
-            <div className="h-[28px] shrink-0 flex items-center px-[8px] text-body text-fg-faint select-none">
-              {t('tabs.search.empty')}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 하단 컨트롤 행: 앵커(그리드 버튼) 쪽 고정, 목록이 위로 자라도 위치 불변 */}
-      <div className="flex items-center gap-[6px]">
-        <SearchField
-          value={query}
-          onChange={setQuery}
-          placeholder={t('tabs.search.placeholder')}
-          className="flex-1 min-w-0"
-        />
+        {/* 선행 글리프가 이 행을 탭이 아니라 동작으로 구분한다 - 라벨이 탭 이름 줄에서
+            비켜나는 것도 같은 이유 */}
         {!maxReached && (
-          <AddIconButton
-            label={t('tabs.createTitle')}
+          <button
+            type="button"
             onClick={() => setShowNameModal(true)}
-            className="ml-auto"
-          />
+            className="w-full h-[26px] shrink-0 flex items-center gap-[6px] px-[8px] rounded-md text-body text-fg-muted hover:bg-fill hover:text-fg transition-colors duration-fast"
+          >
+            {/* 마크 7px, 굵기 1.2 - 서브메뉴 화살표, 삭제 x와 같은 무게 */}
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              className="shrink-0"
+              aria-hidden="true"
+            >
+              <path
+                d="M5 1.5V8.5M1.5 5H8.5"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="min-w-0 truncate">{t('tabs.createTitle')}</span>
+          </button>
         )}
       </div>
 

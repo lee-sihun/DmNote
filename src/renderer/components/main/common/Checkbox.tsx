@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
 import { useSwitchDrag } from '@hooks/useSwitchDrag';
 import {
@@ -10,6 +10,8 @@ interface CheckboxProps {
   checked: boolean;
   onChange: () => void;
   commitStrategy?: BooleanCommitStrategy;
+  /** 드래그로 노브가 넘어간 쪽까지 반영한 표시 값. 확정 전 값이라 표시 전용으로만 쓴다 */
+  onDisplayChange?: (value: boolean) => void;
 }
 
 // 토글 스위치 — 이름은 기존 사용처 호환을 위해 유지.
@@ -18,6 +20,7 @@ const Checkbox = ({
   checked,
   onChange,
   commitStrategy = 'sync',
+  onDisplayChange,
 }: CheckboxProps) => {
   // 트랙 ref는 두 훅이 나눠 쓴다. 커밋 프레임과 표식 프레임 모두 트랙이 사는 창 기준
   const trackRef = useRef<HTMLDivElement>(null);
@@ -40,6 +43,12 @@ const Checkbox = ({
   // aria-checked에는 싣지 않는다 - 확정 안 된 값을 보조기술이 읽으면 안 된다.
   // 노브 위치는 드래그 중 인라인 translate가 소유하므로 aria 규칙과 어긋나지 않는다
   const displayChecked = drag.dragValue ?? visualChecked;
+
+  // 트랙 색만 쓰던 값을 부모도 볼 수 있게 흘린다 - 노브를 끄는 동안
+  // 아래 설명이 함께 바뀌어야 손을 떼기 전에 결과를 알 수 있다
+  useEffect(() => {
+    onDisplayChange?.(displayChecked);
+  }, [displayChecked, onDisplayChange]);
 
   // 드래그로 끝난 제스처의 click은 훅이 창 캡처 단계에서 이미 삼킨다
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {

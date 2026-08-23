@@ -73,6 +73,8 @@ interface SettingToggleRowProps {
   commitStrategy?: BooleanCommitStrategy;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  /** 드래그 중 노브 위치까지 반영한 표시 값 */
+  onDisplayChange?: (value: boolean) => void;
 }
 
 // 토글 행 전체가 button role=switch라 키보드로도 조작 가능
@@ -84,6 +86,7 @@ export const SettingToggleRow = ({
   commitStrategy = 'sync',
   onMouseEnter,
   onMouseLeave,
+  onDisplayChange,
 }: SettingToggleRowProps) => {
   const rowRef = useRef<HTMLButtonElement>(null);
   const { value: visualChecked, toggle } = useOptimisticBooleanCommit({
@@ -110,7 +113,11 @@ export const SettingToggleRow = ({
           이미 갖고 있으므로 여기는 aria-hidden으로 남기고, 클릭 이중 발화는
           Checkbox가 stopPropagation으로 끊는다 */}
       <span aria-hidden="true">
-        <Checkbox checked={visualChecked} onChange={toggle} />
+        <Checkbox
+          checked={visualChecked}
+          onChange={toggle}
+          onDisplayChange={onDisplayChange}
+        />
       </span>
     </button>
   );

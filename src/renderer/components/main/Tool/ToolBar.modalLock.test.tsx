@@ -81,6 +81,9 @@ describe('ToolBar modal lock', () => {
     return layer;
   };
 
+  const dimOf = (toolbar: HTMLElement) =>
+    toolbar.querySelector<HTMLElement>('[data-dmn-modal-dim]');
+
   it('활성 모달 동안 툴바 전체를 inert와 비활성 색으로 표시한다', async () => {
     await registerLayer('modal');
     const toolbar = host.querySelector<HTMLElement>('[data-dmn-toolbar]')!;
@@ -88,7 +91,10 @@ describe('ToolBar modal lock', () => {
     expect(toolbar.hasAttribute('inert')).toBe(true);
     expect(toolbar.getAttribute('aria-disabled')).toBe('true');
     expect(toolbar.dataset.dmnModalLocked).toBe('true');
-    expect(toolbar.className).toContain('opacity-40');
+    // 딤은 조상이 아니라 형제 오버레이가 소유해야 한다. 조상 opacity는
+    // backdrop root를 만들어 툴바 안 글래스 팝업의 블러를 죽인다
+    expect(toolbar.className).not.toMatch(/\bopacity-/);
+    expect(dimOf(toolbar)?.className).toContain('opacity-60');
     expect(
       host.querySelector<HTMLButtonElement>('[data-testid="canvas"]')?.disabled,
     ).toBe(true);
@@ -104,7 +110,8 @@ describe('ToolBar modal lock', () => {
 
     expect(toolbar.hasAttribute('inert')).toBe(false);
     expect(toolbar.dataset.dmnModalLocked).toBeUndefined();
-    expect(toolbar.className).not.toContain('opacity-40');
+    expect(toolbar.className).not.toMatch(/\bopacity-/);
+    expect(dimOf(toolbar)?.className).toContain('opacity-0');
   });
 
   it('모달 진입 시 툴바 포털 팔레트를 닫도록 요청한다', async () => {

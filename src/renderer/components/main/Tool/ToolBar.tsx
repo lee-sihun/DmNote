@@ -68,9 +68,7 @@ const ToolBar = ({
       data-dmn-modal-locked={modalLayerActive ? 'true' : undefined}
       aria-disabled={modalLayerActive || undefined}
       inert={modalLayerActive ? true : undefined}
-      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-app border-t border-line justify-between transition-opacity duration-fast ${
-        modalLayerActive ? 'opacity-40' : ''
-      }`}
+      className="relative flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-app border-t border-line justify-between"
     >
       {isSettingsOpen ? (
         <TooltipGroup>
@@ -133,6 +131,20 @@ const ToolBar = ({
           // onOpenNoteSetting={onOpenNoteSetting}
         />
       </div>
+
+      {/* 모달 딤은 조상 opacity가 아니라 형제 오버레이가 소유한다. opacity < 1인
+          조상은 backdrop root가 되어 안쪽 글래스 팝업의 블러를 죽이고, 페이드가
+          끝나 opacity가 1에 닿는 순간 블러가 튀어 돌아온다.
+          알파 합성은 backdrop 재필터를 만들지 않아 Windows 비용도 늘지 않는다.
+          입력 차단은 그대로 inert가 맡는다.
+          -top-px는 padding box 밖에 남는 border-t까지 덮는다 */}
+      <div
+        aria-hidden="true"
+        data-dmn-modal-dim="true"
+        className={`absolute inset-x-0 -top-px bottom-0 bg-app pointer-events-none transition-opacity duration-fast ${
+          modalLayerActive ? 'opacity-60' : 'opacity-0'
+        }`}
+      />
     </div>
   );
 };

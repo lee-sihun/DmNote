@@ -425,7 +425,7 @@ const GridMinimap = ({
             <path
               d="M2 4.5V2H4.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -433,7 +433,7 @@ const GridMinimap = ({
             <path
               d="M7.5 2H10V4.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -441,7 +441,7 @@ const GridMinimap = ({
             <path
               d="M2 7.5V10H4.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -449,7 +449,7 @@ const GridMinimap = ({
             <path
               d="M7.5 10H10V7.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -461,7 +461,7 @@ const GridMinimap = ({
             <path
               d="M6 3V9M3 6H9"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
             />
           </svg>
@@ -472,7 +472,7 @@ const GridMinimap = ({
             <path
               d="M3 6H9"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
             />
           </svg>

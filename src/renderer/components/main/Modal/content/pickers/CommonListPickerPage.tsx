@@ -83,7 +83,7 @@ export default function CommonListPickerPage<T>({
             <path
               d="M5.5 1.5L1.5 6L5.5 10.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />

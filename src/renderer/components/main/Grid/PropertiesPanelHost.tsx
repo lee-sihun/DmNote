@@ -76,6 +76,9 @@ interface PropertiesPanelHostProps {
  * 분리는 그 호스트 엘리먼트를 자식 창 문서로 adoptNode해 옮기는 것 - 컨테이너가 같으므로
  * React는 리마운트하지 않고, 위임 리스너도 컨테이너에 붙어 있어 문서를 옮겨도 살아 있다
  */
+// 분리 창 모달 딤의 등퇴장 시간
+const DIM_FADE_MS = 150;
+
 const PropertiesPanelHost = ({
   dockAreaRef,
   onKeyMappingChange,
@@ -105,22 +108,46 @@ const PropertiesPanelHost = ({
     };
   }, [childWindow]);
 
-  // 분리 패널의 picker와 메뉴는 host 밖의 child body로 포털될 수 있다
+  // 분리 패널의 picker와 메뉴는 host 밖의 child body로 포털될 수 있다.
+  // 딤은 body opacity가 아니라 덮개 한 장이 소유한다 - opacity < 1인 body는
+  // backdrop root가 되어 이 창 안 모든 글래스의 블러를 죽이고, 딤이 풀리는
+  // 순간 블러가 튀어 돌아온다. 입력 차단은 그대로 inert가 맡는다
   useLayoutEffect(() => {
     const body = childBodyRef.current;
     if (!body || !modalLayerActive) return;
     const previousInert = body.inert;
-    const previousOpacity = body.style.opacity;
-    const previousTransition = body.style.transition;
     body.inert = true;
     body.dataset.dmnModalLocked = 'true';
-    body.style.opacity = '0.4';
-    body.style.transition = 'opacity 150ms ease';
+
+    const dim = body.ownerDocument.createElement('div');
+    dim.dataset.dmnModalDim = 'true';
+    dim.setAttribute('aria-hidden', 'true');
+    Object.assign(dim.style, {
+      position: 'fixed',
+      inset: '0',
+      background: 'var(--ui-bg-app)',
+      opacity: '0',
+      pointerEvents: 'none',
+      transition: `opacity ${DIM_FADE_MS}ms ease`,
+      zIndex: 'var(--z-chrome-tooltip)',
+    });
+    // 앞선 세션의 잔여 덮개가 남아 있으면 먼저 걷는다
+    body
+      .querySelectorAll('[data-dmn-modal-dim]')
+      .forEach((stale) => stale.remove());
+    body.appendChild(dim);
+    // 첫 프레임에 0으로 확정한 뒤 올려야 트랜지션이 산다
+    const raf = body.ownerDocument.defaultView?.requestAnimationFrame(() => {
+      dim.style.opacity = '0.6';
+    });
+
     return () => {
       body.inert = previousInert;
       delete body.dataset.dmnModalLocked;
-      body.style.opacity = previousOpacity;
-      body.style.transition = previousTransition;
+      if (raf) body.ownerDocument.defaultView?.cancelAnimationFrame(raf);
+      // 걷힐 때도 같은 시간으로 되돌린다 - 즉시 제거하면 딤이 툭 끊긴다
+      dim.style.opacity = '0';
+      setTimeout(() => dim.remove(), DIM_FADE_MS);
     };
   }, [childWindow, modalLayerActive]);
 

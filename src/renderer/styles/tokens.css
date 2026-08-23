@@ -246,6 +246,13 @@
   --ui-icon-swap-blur: 2px;
   --ui-icon-swap-scale: 0.25;
 
+  /* 글자 스왑 - 아이콘과 달리 스케일 대신 세로 이동. 글자가 커졌다 작아지면
+     자간이 흔들려 읽는 눈이 따라가지 못한다 */
+  --ui-text-swap-duration: var(--ui-duration-fast);
+  --ui-text-swap-ease: ease-in-out;
+  --ui-text-swap-blur: 2px;
+  --ui-text-swap-shift: 4px;
+
   /* 툴바 아이콘 호버 모션 - 호버 진입에 한 번 재생되고 멈춘다. 반복 없음.
      400ms 아래로 내리면 무슨 동작인지 읽기 전에 끝나므로 다른 모션보다 느긋하다.
      동작마다 자연스러운 clock이 달라 지속 시간은 용도별로 따로 둔다 */

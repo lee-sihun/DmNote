@@ -99,6 +99,7 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
   }
 };
 
+// 24 그리드를 12px로 렌더 - 스트로크 2.4가 화면상 1.2
 const RenameIcon: React.FC = () => (
   <svg
     width="12"
@@ -110,14 +111,14 @@ const RenameIcon: React.FC = () => (
     <path
       d="M12 20H21"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />

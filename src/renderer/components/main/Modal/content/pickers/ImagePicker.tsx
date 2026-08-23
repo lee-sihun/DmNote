@@ -223,13 +223,15 @@ const ImagePicker = ({
               handleReset();
             }}
             title={t('imagePicker.reset')}
-            className="absolute top-[4px] right-[4px] z-10 w-[18px] h-[18px] flex items-center justify-center rounded-[5px] bg-glass-dim backdrop-glass-popup shadow-elevation-chrome text-fg-faint hover:text-fg opacity-0 group-hover:opacity-100 transition-opacity duration-fast"
+            // 18px 칩에 라이브 블러는 보이지도 않는다. 게다가 바깥 글래스 표면이
+            // backdrop root라 이 칩은 그 표면 안쪽만 샘플하면서 재필터만 한 겹 더 든다
+            className="absolute top-[4px] right-[4px] z-10 w-[18px] h-[18px] flex items-center justify-center rounded-[5px] bg-glass-dim-solid shadow-elevation-chrome text-fg-faint hover:text-fg opacity-0 group-hover:opacity-100 transition-opacity duration-fast"
           >
             <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
               <path
                 d="M1 1L7 7M7 1L1 7"
                 stroke="currentColor"
-                strokeWidth="1.5"
+                strokeWidth="1.2"
                 strokeLinecap="round"
               />
             </svg>

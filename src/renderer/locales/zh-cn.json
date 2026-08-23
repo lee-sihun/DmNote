@@ -78,10 +78,11 @@
     "jsPluginToggleFailed": "切换插件状态失败.",
     "jsPluginRemoveFailed": "移除插件失败.",
     "pluginDataDeleteTitle": "删除插件数据",
-    "pluginDataDeleteMessage": "'{{name}}' 插件存储了数据. 是否要一并删除?",
-    "pluginDataDeleteWarning": "删除数据将永久移除插件设置、历史记录等. 此操作无法撤销.",
-    "deleteWithData": "包含数据删除",
-    "deletePluginOnly": "仅删除插件",
+    "pluginDataDeleteMessage": "“{{name}}”有已保存的数据。",
+    "pluginDataDeleteToggle": "一并删除数据",
+    "pluginDataScope": "设置与历史记录",
+    "pluginDataKeepTail": "会保留。",
+    "pluginDataWipeTail": "将永久消失。",
     "language": "语言",
     "selectLanguage": "选择语言",
     "shortcuts": "快捷键",
@@ -287,11 +288,7 @@
     "createTitle": "创建标签页",
     "create": "创建",
     "delete": "删除",
-    "deleteConfirm": "删除 '{{name}}' 标签页?",
-    "search": {
-      "placeholder": "搜索自定义标签页",
-      "empty": "无结果"
-    },
+    "deleteConfirm": "删除 '{{name}}' 标签页？",
     "name": {
       "placeholder": "例如: 我的自定义",
       "required": "请输入名称",
@@ -612,11 +609,12 @@
     "edit": "编辑",
     "rename": "重命名",
     "delete": "删除",
-    "enabledToggle": "启用",
+    "enable": "启用",
+    "disable": "禁用",
     "saveFailed": "字体设置保存失败。",
     "editorLoadFailed": "无法加载网络字体编辑器，请重试。",
     "editTargetMissing": "找不到要编辑的网络字体，可能已被移除。",
-    "deleteConfirm": "确定删除该字体？使用它的元素将以默认字体显示。",
+    "deleteConfirm": "确定删除该字体？\n使用它的元素将以默认字体显示。",
     "add": "添加字体",
     "invalidFont": "无法读取该字体文件。"
   },
@@ -635,7 +633,7 @@
     "deleteFailed": "音频删除失败",
     "renameFailed": "音频重命名失败",
     "hideFailed": "无法更改音效显示状态",
-    "deleteConfirm": "确定删除该音频？文件将被删除，并从所有使用它的元素中移除。",
+    "deleteConfirm": "确定删除该音频？\n将从所有使用它的元素中移除。",
     "add": "添加音效"
   },
   "soundTrimModal": {

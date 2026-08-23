@@ -612,7 +612,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                       height="10"
                       rx="1.5"
                       stroke="currentColor"
-                      strokeWidth="1.5"
+                      strokeWidth="1.2"
                     />
                   )}
                   {(keyPosition.noteBorderSide ?? 'all') === 'vertical' && (
@@ -623,7 +623,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                         x2="1.5"
                         y2="12"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                       />
                       <line
@@ -632,7 +632,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                         x2="11.5"
                         y2="12"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                       />
                     </>
@@ -645,7 +645,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                         x2="12"
                         y2="1.5"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                       />
                       <line
@@ -654,7 +654,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                         x2="12"
                         y2="11.5"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                       />
                     </>

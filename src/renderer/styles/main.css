@@ -322,6 +322,10 @@ body.dmn-dragging * {
   transform: translateX(var(--ui-page-slide-distance));
 }
 
+/* blur(0)은 항등이지만 filter가 none이 아니라 이 페이지는 항상 backdrop root다
+   (Filter Effects 2 §3). 그래서 페이지 안에 라이브 글래스를 직접 두면 블러가
+   페이지 경계 안쪽만 샘플한다 - 피커·메뉴는 반드시 body로 포털할 것.
+   none으로 되돌리면 WKWebView가 보간을 못 해 전환이 깨진다 (아래 아이콘 스왑 주석 참조) */
 .dmn-panel-page[data-active='true'] {
   opacity: 1;
   transform: translateX(0);
@@ -360,6 +364,55 @@ body.dmn-dragging * {
 
 @media (prefers-reduced-motion: reduce) {
   .dmn-icon-swap > [data-icon] {
+    transition: none;
+  }
+}
+
+/* 글자 스왑 — 바뀌는 부분만 겹쳐두고 크로스페이드.
+   나가는 글자는 위로 밀리며 흐려지고, 들어오는 글자는 아래에서 올라온다.
+   inline-grid라 두 글자가 같은 칸을 쓰므로 폭이 긴 쪽으로 고정된다 —
+   교체 순간 줄이 밀리지 않는 게 이 구조를 쓰는 이유다 */
+.dmn-text-swap {
+  display: inline-grid;
+  justify-items: start;
+  /* 앞 글자와 같은 기준선에 앉아야 한다. bottom이나 center로 맞추면 줄 바닥이나
+     상자 중심에 걸려 글자가 반 칸 뜬다. 겹친 두 꼬리끼리도 baseline으로 묶인다 */
+  align-items: baseline;
+  /* 자간·행간은 바깥 문장에서 그대로 물려받는다 - 여기서 다시 정하지 않는다 */
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.dmn-text-swap > [data-text] {
+  grid-area: 1 / 1;
+  /* pre인 이유 - 로케일에 따라 앞부분과 사이에 공백이 필요한데(영어·러시아어)
+     nowrap은 선행 공백을 삼킨다. 한국어는 조사가 붙어 공백이 없다 */
+  white-space: pre;
+  /* 보이는 상태를 명시 — filter: none에서 시작하면 WKWebView가 보간을 못 함 */
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0);
+  transition: opacity var(--ui-text-swap-duration) var(--ui-text-swap-ease),
+    filter var(--ui-text-swap-duration) var(--ui-text-swap-ease),
+    transform var(--ui-text-swap-duration) var(--ui-text-swap-ease);
+}
+
+.dmn-text-swap[data-state='on'] > [data-text='off'] {
+  opacity: 0;
+  filter: blur(var(--ui-text-swap-blur));
+  transform: translateY(calc(var(--ui-text-swap-shift) * -1));
+  pointer-events: none;
+}
+
+.dmn-text-swap[data-state='off'] > [data-text='on'] {
+  opacity: 0;
+  filter: blur(var(--ui-text-swap-blur));
+  transform: translateY(var(--ui-text-swap-shift));
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-text-swap > [data-text] {
     transition: none;
   }
 }

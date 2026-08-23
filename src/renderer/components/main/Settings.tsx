@@ -1449,8 +1449,11 @@ const Settings = ({
             setDataDeleteModalOpen(false);
             setPluginToDelete(null);
           }}
-          onDeleteWithData={() => removePluginWithData(shownPluginToDelete.id)}
-          onDeletePluginOnly={() => removePluginOnly(shownPluginToDelete.id)}
+          onConfirm={(withData) =>
+            withData
+              ? removePluginWithData(shownPluginToDelete.id)
+              : removePluginOnly(shownPluginToDelete.id)
+          }
           pluginName={getPluginDisplayName(shownPluginToDelete.name)}
           t={t}
         />

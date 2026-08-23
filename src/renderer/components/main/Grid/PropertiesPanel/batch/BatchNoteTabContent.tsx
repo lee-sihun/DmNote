@@ -257,7 +257,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                       height="10"
                       rx="1.5"
                       stroke="currentColor"
-                      strokeWidth="1.5"
+                      strokeWidth="1.2"
                     />
                   )}
                   {getMixedValue((pos) => pos.noteBorderSide, 'all').value ===
@@ -269,7 +269,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                         x2="1.5"
                         y2="12"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                       />
                       <line
@@ -278,7 +278,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                         x2="11.5"
                         y2="12"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                       />
                     </>
@@ -292,7 +292,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                         x2="12"
                         y2="1.5"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                       />
                       <line
@@ -301,7 +301,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                         x2="12"
                         y2="11.5"
                         stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                       />
                     </>

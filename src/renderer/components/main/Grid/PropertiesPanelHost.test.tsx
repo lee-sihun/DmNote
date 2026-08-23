@@ -540,7 +540,10 @@ describe('PropertiesPanelHost', () => {
     )!;
     expect(childBody.inert).toBe(true);
     expect(childBody.dataset.dmnModalLocked).toBe('true');
-    expect(childBody.style.opacity).toBe('0.4');
+    // 딤은 body가 아니라 덮개가 소유해야 한다. body opacity는 backdrop root를
+    // 만들어 이 창 안 모든 글래스의 블러를 죽인다
+    expect(childBody.style.opacity).toBe('');
+    expect(childBody.querySelector('[data-dmn-modal-dim]')).not.toBeNull();
     expect(panelRoot.hasAttribute('inert')).toBe(true);
 
     await act(async () => unregister());

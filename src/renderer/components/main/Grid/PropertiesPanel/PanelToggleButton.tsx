@@ -123,7 +123,7 @@ const PanelToggleButton = ({
             height="12.5"
             rx="2"
             stroke="currentColor"
-            strokeWidth="1.5"
+            strokeWidth="1.2"
             fill="none"
           />
           <line
@@ -133,7 +133,7 @@ const PanelToggleButton = ({
             x2="10"
             y2="13"
             stroke="currentColor"
-            strokeWidth="1.5"
+            strokeWidth="1.2"
           />
           <g
             className="dmn-panel-toggle-lines"

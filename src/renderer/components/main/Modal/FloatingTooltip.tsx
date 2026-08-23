@@ -9,6 +9,7 @@ import {
   autoUpdate,
 } from '@floating-ui/react';
 import { TooltipGroupContext } from './TooltipGroupContext';
+import { useModalLayerActive } from './popupLayer';
 
 interface FloatingTooltipProps {
   content: React.ReactNode;
@@ -29,6 +30,7 @@ const FloatingTooltip = ({
   const arrowRef = useRef<HTMLDivElement | null>(null);
   const id = useId();
   const group = useContext(TooltipGroupContext);
+  const modalLayerActive = useModalLayerActive();
 
   const { x, y, refs, strategy, middlewareData } = useFloating({
     placement,
@@ -111,6 +113,15 @@ const FloatingTooltip = ({
       cancelOpenTimer();
     };
   }, []);
+
+  // 모달 진입 순간 열려 있던 툴팁을 닫는다. 잠긴 크롬은 inert라 mouseleave가
+  // 오지 않아 스스로 닫히지 못하고, 인라인 z-70이 스태킹 컨텍스트 없는 조상
+  // 밖에서 모달 위로 떠 버린다. 모달 안 툴팁은 이 전환 뒤에 열리므로 무관
+  React.useEffect(() => {
+    if (!modalLayerActive) return;
+    cancelOpenTimer();
+    setOpen(false);
+  }, [modalLayerActive]);
 
   const arrowX = middlewareData.arrow?.x ?? 0;
   const arrowY = middlewareData.arrow?.y ?? 0;

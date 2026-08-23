@@ -216,8 +216,11 @@ const FontPicker = ({
         },
         {
           id: 'toggle',
-          label: t('fontPicker.enabledToggle') || '활성화',
-          checked: menuTargetFont.enabled,
+          // 상태를 체크로 보이면 이 목록에서 유일하게 체크 가능한 항목 하나 때문에
+          // 나머지 행까지 체크 칸만큼 밀린다. 라벨이 직접 동작을 말하게 둔다
+          label: menuTargetFont.enabled
+            ? t('fontPicker.disable') || '비활성화'
+            : t('fontPicker.enable') || '활성화',
           // 복원 실패로 파일 경로가 없는 로컬 폰트는 재활성화 불가
           disabled:
             menuTargetFont.type === 'local' && !menuTargetFont.localPath,

@@ -28,7 +28,7 @@ const AddIconButton = ({
       <path
         d="M4 1V7M1 4H7"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.2"
         strokeLinecap="round"
       />
     </svg>

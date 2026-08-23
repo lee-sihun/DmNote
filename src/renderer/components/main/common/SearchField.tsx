@@ -46,11 +46,11 @@ const SearchField = ({
         fill="none"
         className="absolute left-[10px] top-1/2 -translate-y-1/2 text-fg-faint pointer-events-none"
       >
-        <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+        <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.2" />
         <path
           d="M8 8L10.5 10.5"
           stroke="currentColor"
-          strokeWidth="1.5"
+          strokeWidth="1.2"
           strokeLinecap="round"
         />
       </svg>

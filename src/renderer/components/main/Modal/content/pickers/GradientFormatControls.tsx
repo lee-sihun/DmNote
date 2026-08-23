@@ -59,6 +59,7 @@ export const FormatSelectBar = ({
         }`}
       >
         <span className="truncate">{labels[format]}</span>
+        {/* viewBox 14를 8px로 렌더 - 스트로크 2.1이 화면상 1.2 */}
         <svg
           width="8"
           height="5"
@@ -71,7 +72,7 @@ export const FormatSelectBar = ({
           <path
             d="M1 1L7 7L13 1"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="2.1"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
