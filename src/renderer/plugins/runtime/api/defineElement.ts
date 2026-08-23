@@ -32,6 +32,7 @@ import {
 } from '../displayElement/instancesCommitQueue';
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
 import { getPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
+import { trackPluginWork } from '@plugins/runtime/pluginRuntimeReadiness';
 import {
   useHistoryStatusStore,
   syncHistoryStatus,
@@ -1147,6 +1148,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           });
         },
       );
+      // 인스턴스 복구까지 끝나야 오버레이 리빌 게이트가 열린다
       const restoreWork = scheduledRestore.then(
         async () => {
           if (instanceSaveBarrier.finishRestoration()) {
@@ -1159,6 +1161,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           throw error;
         },
       );
+      trackPluginWork(restoreWork);
       void trackEditorWrite(restoreWork).catch((error) => {
         console.error(
           `[Plugin ${pluginId}] Failed to restore instances:`,
