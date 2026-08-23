@@ -17,7 +17,7 @@ import { useLenis } from '@hooks/useLenis';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { CANVAS_POPUP_CHROME_CLASS } from './popupChrome';
 
-export type ListItem = {
+export type ListMenuItem = {
   id: string;
   label: string;
   disabled?: boolean;
@@ -27,6 +27,23 @@ export type ListItem = {
   /** 서브메뉴 항목 */
   children?: ListItem[];
 };
+
+/** 성격이 다른 묶음을 가르는 선. 포커스도 키보드 순회도 받지 않는다.
+ *  항목 전용 필드를 undefined로 열어둬 목록을 훑는 쪽이 매번 좁히지 않아도 되게 한다 */
+export type ListSeparator = {
+  id: string;
+  separator: true;
+  label?: undefined;
+  disabled?: undefined;
+  isPlugin?: undefined;
+  checked?: undefined;
+  children?: undefined;
+};
+
+export type ListItem = ListMenuItem | ListSeparator;
+
+const isSeparator = (item: ListItem): item is ListSeparator =>
+  'separator' in item;
 
 interface ListPopupProps {
   open: boolean;
@@ -127,6 +144,8 @@ const handleMenuNavigation = (event: React.KeyboardEvent<HTMLElement>) => {
 /** 서브메뉴 컴포넌트 (호버 시 표시) */
 const SubMenu = ({
   ariaLabel,
+  instant,
+  registerSurface,
   items,
   onSelect,
   onCloseAll,
@@ -139,6 +158,10 @@ const SubMenu = ({
   onRequestClose,
 }: {
   ariaLabel: string;
+  /** 형제 서브메뉴에서 곧바로 넘어온 열림 - 진입 모션을 재생하지 않는다 */
+  instant: boolean;
+  /** 부모 행이 위치를 읽어 커서 의도를 판정한다 */
+  registerSurface?: (node: HTMLDivElement | null) => void;
   items: ListItem[];
   onSelect?: (id: string) => void;
   onCloseAll: () => void;
@@ -153,10 +176,7 @@ const SubMenu = ({
   const { window: ownerWindow, document: ownerDocument } = usePanelHost();
   const subMenuRef = useRef<HTMLDivElement>(null);
   const parentMotionState = useContext(FloatingPopupMotionContext);
-  const siblingActiveRef = useRef<{
-    id: string | null;
-    close: (() => void) | null;
-  }>({ id: null, close: null });
+  const siblingActiveRef = useRef<SiblingActive>(emptySiblingActive());
   // 실측 기반 배치 — 히든 렌더 후 페인트 전에 측정·확정 (추정치 없음)
   const [pos, setPos] = useState<{
     left?: number;
@@ -237,8 +257,11 @@ const SubMenu = ({
   const { needsScroll, maxHeight } = getListScrollMetrics(
     items.length,
     viewportHeight,
+    items.filter(isSeparator).length,
   );
-  const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
+  const hasCheckColumn = items.some(
+    (it) => !isSeparator(it) && typeof it.checked === 'boolean',
+  );
 
   const { scrollContainerRef: subLenisRef } = useLenis({
     wheelMultiplier: 0.7,
@@ -252,7 +275,11 @@ const SubMenu = ({
   // 뷰포트 좌표가 어긋나는 것 방지. 호버 유지는 onMouseEnter/Leave 콜백으로 연결
   return createPortal(
     <div
-      ref={subMenuRef as React.MutableRefObject<HTMLDivElement | null>}
+      ref={(node) => {
+        (subMenuRef as React.MutableRefObject<HTMLDivElement | null>).current =
+          node;
+        registerSurface?.(node);
+      }}
       data-dmn-popup-submenu="true"
       data-dmn-popup-layer="true"
       role="menu"
@@ -269,7 +296,9 @@ const SubMenu = ({
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`fixed z-[60] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface p-[4px] flex flex-col tooltip-fade-in`}
+      className={`fixed z-[60] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface p-[4px] flex flex-col${
+        instant ? '' : ' tooltip-fade-in'
+      }`}
       style={{
         left: pos?.left,
         right: pos?.right,
@@ -283,6 +312,7 @@ const SubMenu = ({
       <div
         ref={needsScroll ? subLenisRef : undefined}
         role="none"
+        onMouseMove={(event) => trackPointer(siblingActiveRef, event)}
         className={`flex flex-col gap-[4px]${
           needsScroll ? ' listpopup-scroll dmn-scroll-fade' : ''
         }`}
@@ -290,22 +320,130 @@ const SubMenu = ({
           maxHeight ? { overflowY: 'auto', overflowX: 'hidden' } : undefined
         }
       >
-        {items.map((it) => (
-          <MenuItemRow
-            key={it.id}
-            item={it}
-            onSelect={onSelect}
-            onCloseAll={onCloseAll}
-            onMenuTab={onMenuTab}
-            siblingActiveRef={siblingActiveRef}
-            hasCheckColumn={hasCheckColumn}
-          />
-        ))}
+        {items.map((it) =>
+          isSeparator(it) ? (
+            <SeparatorRow key={it.id} />
+          ) : (
+            <MenuItemRow
+              key={it.id}
+              item={it}
+              onSelect={onSelect}
+              onCloseAll={onCloseAll}
+              onMenuTab={onMenuTab}
+              siblingActiveRef={siblingActiveRef}
+              hasCheckColumn={hasCheckColumn}
+            />
+          ),
+        )}
       </div>
     </div>,
     ownerDocument.body,
   );
 };
+
+// 부모 항목에서 서브메뉴로 갈 때 커서는 대각선을 그리며 중간 형제 항목을 스친다.
+// 닫고 다시 여는 대신, 서브메뉴로 향하는 동안에는 형제 전환을 아예 막는다 -
+// 닫힘 이벤트가 없으면 표면이 사라질 일도 없다
+interface SiblingActive {
+  id: string | null;
+  close: (() => void) | null;
+  /** 열려 있는 서브메뉴 표면의 현재 사각형 */
+  getRect: (() => DOMRect | null) | null;
+  /** 예약된 닫힘을 인계 시점 뒤로 미룬다 */
+  holdOpen: (() => void) | null;
+  /** 직전과 현재 커서 위치 - 진행 방향 판정용 */
+  from: { x: number; y: number } | null;
+  to: { x: number; y: number } | null;
+}
+
+const HOVER_OPEN_MS = 150;
+const HOVER_CLOSE_MS = 200;
+// 길목에 머물 때 형제가 넘겨받기까지. 이 값이 곧 서브메뉴까지 갈 수 있는 예산이라
+// 짧게 잡으면 느린 대각선 이동을 형제가 가로챈다
+const INTENT_GRACE_MS = 300;
+// 길목으로 판정되면 기존 표면의 닫힘을 인계 뒤로 미룬다. 인계가 먼저 끝나야
+// 닫기와 열기가 한 번의 갱신으로 묶여 표면이 끊기지 않는다
+const INTENT_HOLD_MS = INTENT_GRACE_MS + 100;
+const INTENT_PADDING_PX = 12;
+
+const emptySiblingActive = (): SiblingActive => ({
+  id: null,
+  close: null,
+  getRect: null,
+  holdOpen: null,
+  from: null,
+  to: null,
+});
+
+/** 이 행이 쥐고 있던 활성 표시를 놓는다. 커서 자취는 팝업 세션 것이라 남긴다 */
+const releaseSibling = (
+  ref: React.RefObject<SiblingActive> | undefined,
+  id: string,
+) => {
+  if (ref?.current.id !== id) return;
+  ref.current = {
+    ...ref.current,
+    id: null,
+    close: null,
+    getRect: null,
+    holdOpen: null,
+  };
+};
+
+/** 표면 위 커서 자취를 공유 ref에 남긴다 - 형제 전환 판정의 입력 */
+const trackPointer = (
+  ref: React.RefObject<SiblingActive>,
+  event: React.MouseEvent,
+) => {
+  const next = { x: event.clientX, y: event.clientY };
+  const previous = ref.current.to;
+  if (previous && previous.x === next.x && previous.y === next.y) return;
+  ref.current.from = previous;
+  ref.current.to = next;
+};
+
+/** 커서 진행 방향의 반직선이 서브메뉴 사각형을 지나는가 (slab 판정) */
+const isHeadingTo = (
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  rect: DOMRect,
+): boolean => {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (dx === 0 && dy === 0) return false;
+
+  const left = rect.left - INTENT_PADDING_PX;
+  const right = rect.right + INTENT_PADDING_PX;
+  const top = rect.top - INTENT_PADDING_PX;
+  const bottom = rect.bottom + INTENT_PADDING_PX;
+
+  let near = 0;
+  let far = Number.POSITIVE_INFINITY;
+
+  const slab = (origin: number, delta: number, min: number, max: number) => {
+    if (delta === 0) return origin >= min && origin <= max;
+    const t1 = (min - origin) / delta;
+    const t2 = (max - origin) / delta;
+    near = Math.max(near, Math.min(t1, t2));
+    far = Math.min(far, Math.max(t1, t2));
+    return true;
+  };
+
+  if (!slab(to.x, dx, left, right)) return false;
+  if (!slab(to.y, dy, top, bottom)) return false;
+  return near <= far;
+};
+
+/** 묶음 사이 선. 표면 가장자리(4px)에서 한 번 더 물러나 라벨 시작점보다 살짝 왼쪽에서
+ *  시작한다 - 행 하이라이트를 그대로 따라가면 가장자리까지 닿아 크롬처럼 보인다.
+ *  위아래 여백은 컨테이너 gap이 맡는다 */
+const SeparatorRow = () => (
+  <div
+    role="separator"
+    aria-orientation="horizontal"
+    className="mx-[4px] h-px bg-line"
+  />
+);
 
 /** 개별 메뉴 항목 행 */
 const MenuItemRow = ({
@@ -316,62 +454,98 @@ const MenuItemRow = ({
   siblingActiveRef,
   hasCheckColumn = false,
 }: {
-  item: ListItem;
+  item: ListMenuItem;
   onSelect?: (id: string) => void;
   onCloseAll: () => void;
   onMenuTab: (event: KeyboardEvent) => void;
-  /** 형제 항목 중 활성 서브메뉴를 추적하는 ref (즉시 전환용) */
-  siblingActiveRef?: React.RefObject<{
-    id: string | null;
-    close: (() => void) | null;
-  }>;
+  /** 형제 항목 중 활성 서브메뉴와 커서 자취를 공유하는 ref */
+  siblingActiveRef?: React.RefObject<SiblingActive>;
   /** 목록에 체크 가능한 항목이 있을 때만 좌측 체크 컬럼 렌더 */
   hasCheckColumn?: boolean;
 }) => {
   const [subMenuOpen, setSubMenuOpen] = useState(false);
+  // 형제에서 넘어온 열림인지 - 진입 모션 재생 여부를 가른다
+  const [instantOpen, setInstantOpen] = useState(false);
   const rowRef = useRef<HTMLButtonElement>(null);
+  // 유예 시간이 끝났을 때 아직 이 행 위에 있는지
+  const hoveredRef = useRef(false);
+  const subSurfaceRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [rowRect, setRowRect] = useState<DOMRect | null>(null);
   const [focusSubMenuOnOpen, setFocusSubMenuOnOpen] = useState(false);
 
   const hasChildren = item.children && item.children.length > 0;
 
-  const showSubMenu = (focusFirst: boolean) => {
-    if (!hasChildren || !rowRef.current) return;
+  const scheduleClose = (delay: number) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      setSubMenuOpen(false);
+      releaseSibling(siblingActiveRef, item.id);
+    }, delay);
+  };
+
+  const showSubMenu = (focusFirst: boolean, instant = false) => {
+    // 호버는 button이 아니라 감싼 div가 받으므로 disabled가 막아주지 않는다
+    if (item.disabled || !hasChildren || !rowRef.current) return;
     setRowRect(rowRef.current.getBoundingClientRect());
     setFocusSubMenuOnOpen(focusFirst);
+    setInstantOpen(instant);
     setSubMenuOpen(true);
     if (siblingActiveRef) {
       siblingActiveRef.current = {
+        ...siblingActiveRef.current,
         id: item.id,
         close: () => setSubMenuOpen(false),
+        getRect: () => subSurfaceRef.current?.getBoundingClientRect() ?? null,
+        holdOpen: () => scheduleClose(INTENT_HOLD_MS),
       };
     }
   };
 
-  const handleMouseEnter = () => {
+  const handleMouseEnter = (event: React.MouseEvent) => {
+    hoveredRef.current = true;
     if (!hasChildren) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    // 행에 막 들어온 좌표가 가장 새로운 자취다. 이걸 빼면 직전 행 안에서 찍힌
+    // 두 점으로 방향을 재게 되어 실제로 가로지른 방향과 어긋난다
+    if (siblingActiveRef) trackPointer(siblingActiveRef, event);
     const active = siblingActiveRef?.current;
     const hasActiveSibling = active?.id != null;
-    const delay = hasActiveSibling ? 0 : 150;
+    const delay = hasActiveSibling ? 0 : HOVER_OPEN_MS;
 
-    // 다른 형제의 서브메뉴가 열려있으면 즉시 닫기
-    if (hasActiveSibling && active?.id !== item.id && active?.close) {
-      active.close();
+    // 서브메뉴로 가는 길목이면 형제 전환을 미룬다. 커서가 그 자리에 머무르면
+    // 유예 시간 뒤에 이 행이 넘겨받는다
+    if (hasActiveSibling && active?.id !== item.id) {
+      const rect = active?.getRect?.();
+      const from = active?.from;
+      const to = active?.to;
+      if (rect && from && to && isHeadingTo(from, to, rect)) {
+        // 형제 행을 지나는 동안 기존 표면이 닫히면 의도 판정이 무의미해진다
+        active?.holdOpen?.();
+        hoverTimerRef.current = setTimeout(() => {
+          if (!hoveredRef.current) return;
+          // 형제 표면이 아직 떠 있을 때만 모션을 건너뛴다. 이미 닫혔다면
+          // 이어받는 게 아니라 새로 여는 것이라 페이드가 있어야 한다
+          const handover = siblingActiveRef?.current.id != null;
+          siblingActiveRef?.current.close?.();
+          showSubMenu(false, handover);
+        }, INTENT_GRACE_MS);
+        return;
+      }
+      active?.close?.();
     }
 
-    hoverTimerRef.current = setTimeout(() => showSubMenu(false), delay);
+    // 형제가 열려 있었다면 표면이 방금까지 떠 있었다 - 페이드를 다시 재생하면
+    // 유리 표면이 사라졌다 돌아오는 것처럼 보인다
+    hoverTimerRef.current = setTimeout(
+      () => showSubMenu(false, hasActiveSibling),
+      delay,
+    );
   };
 
   const handleMouseLeave = () => {
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = setTimeout(() => {
-      setSubMenuOpen(false);
-      if (siblingActiveRef?.current.id === item.id) {
-        siblingActiveRef.current = { id: null, close: null };
-      }
-    }, 200);
+    hoveredRef.current = false;
+    scheduleClose(HOVER_CLOSE_MS);
   };
 
   useEffect(() => {
@@ -472,7 +646,7 @@ const MenuItemRow = ({
             <path
               d="M1 1.5L4 5L1 8.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -484,6 +658,10 @@ const MenuItemRow = ({
       {hasChildren && subMenuOpen && (
         <SubMenu
           ariaLabel={item.label}
+          instant={instantOpen}
+          registerSurface={(node) => {
+            subSurfaceRef.current = node;
+          }}
           items={item.children!}
           onSelect={onSelect}
           onCloseAll={onCloseAll}
@@ -499,9 +677,7 @@ const MenuItemRow = ({
           onRequestClose={() => {
             if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
             setSubMenuOpen(false);
-            if (siblingActiveRef?.current.id === item.id) {
-              siblingActiveRef.current = { id: null, close: null };
-            }
+            releaseSibling(siblingActiveRef, item.id);
           }}
         />
       )}
@@ -552,13 +728,22 @@ const ListPopup = ({
   const { needsScroll, maxHeight } = getListScrollMetrics(
     items.length,
     viewportHeight,
+    items.filter(isSeparator).length,
   );
-  const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
+  const hasCheckColumn = items.some(
+    (it) => !isSeparator(it) && typeof it.checked === 'boolean',
+  );
 
-  const siblingActiveRef = useRef<{
-    id: string | null;
-    close: (() => void) | null;
-  }>({ id: null, close: null });
+  const siblingActiveRef = useRef<SiblingActive>(emptySiblingActive());
+
+  // ListPopup은 닫혀도 마운트를 유지한다(FloatingPopup이 표면만 거둔다).
+  // 세션 상태를 두면 다음 열림의 첫 호버가 형제 전환으로 오인돼 지연도 모션도 사라진다.
+  // 닫는 순간이 아니라 여는 순간에 비운다 - 닫힘 애니메이션 동안 살아 있는 행의
+  // 호버 타이머가 뒤늦게 ref를 다시 채워도 새 세션은 깨끗하게 시작한다
+  useEffect(() => {
+    if (!open) return;
+    siblingActiveRef.current = emptySiblingActive();
+  }, [open]);
 
   const { scrollContainerRef: lenisRef } = useLenis({
     wheelMultiplier: 0.7,
@@ -593,21 +778,26 @@ const ListPopup = ({
             : undefined
         }
         role="none"
+        onMouseMove={(event) => trackPointer(siblingActiveRef, event)}
         className={`flex flex-col gap-[4px]${
           needsScroll ? ' listpopup-scroll dmn-scroll-fade' : ''
         }`}
       >
-        {items.map((it) => (
-          <MenuItemRow
-            key={it.id}
-            item={it}
-            onSelect={onSelect}
-            onCloseAll={onClose}
-            onMenuTab={handleMenuTab}
-            siblingActiveRef={siblingActiveRef}
-            hasCheckColumn={hasCheckColumn}
-          />
-        ))}
+        {items.map((it) =>
+          isSeparator(it) ? (
+            <SeparatorRow key={it.id} />
+          ) : (
+            <MenuItemRow
+              key={it.id}
+              item={it}
+              onSelect={onSelect}
+              onCloseAll={onClose}
+              onMenuTab={handleMenuTab}
+              siblingActiveRef={siblingActiveRef}
+              hasCheckColumn={hasCheckColumn}
+            />
+          ),
+        )}
       </div>
     </FloatingPopup>
   );

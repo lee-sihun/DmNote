@@ -4,6 +4,7 @@ import {
   ITEM_GAP,
   ITEM_HEIGHT,
   SCROLL_EDGE_PADDING,
+  SEPARATOR_HEIGHT,
 } from './listScrollMetrics';
 
 const contentHeight = (count: number) =>
@@ -41,6 +42,33 @@ describe('메뉴 높이 예산', () => {
 
     expect(getListScrollMetrics(10, viewportHeight).needsScroll).toBe(false);
     expect(getListScrollMetrics(11, viewportHeight).needsScroll).toBe(true);
+  });
+
+  // 구분선은 1px 획이라 항목으로 세면 건당 25px을 부풀린다.
+  // 들어가는 목록에 스크롤이 붙으면 페이드와 관성 스크롤까지 딸려온다
+  it('구분선은 항목이 아니라 획 높이로 센다', () => {
+    // 항목 6개 + 구분선 1개가 딱 들어가는 화면 높이를 역산
+    const exact =
+      6 * (ITEM_HEIGHT + ITEM_GAP) +
+      (SEPARATOR_HEIGHT + ITEM_GAP) +
+      SCROLL_EDGE_PADDING +
+      5 * 2 +
+      4 * 2;
+
+    expect(getListScrollMetrics(7, exact, 1).needsScroll).toBe(false);
+    // 같은 높이라도 구분선을 항목으로 세면 넘친다고 잘못 판단한다
+    expect(getListScrollMetrics(7, exact).needsScroll).toBe(true);
+  });
+
+  it('구분선 개수만큼 오차가 쌓이지 않는다', () => {
+    const exact =
+      6 * (ITEM_HEIGHT + ITEM_GAP) +
+      3 * (SEPARATOR_HEIGHT + ITEM_GAP) +
+      SCROLL_EDGE_PADDING +
+      5 * 2 +
+      4 * 2;
+
+    expect(getListScrollMetrics(9, exact, 3).needsScroll).toBe(false);
   });
 
   it('화면이 아주 좁아도 최소 한 항목은 남긴다', () => {

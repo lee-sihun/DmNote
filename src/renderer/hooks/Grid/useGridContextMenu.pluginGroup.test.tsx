@@ -68,8 +68,9 @@ const item = (id: string, extra: Partial<StoreItem> = {}): StoreItem => ({
 
 interface CapturedItem {
   id: string;
-  label: string;
+  label?: string;
   disabled?: boolean;
+  separator?: true;
   children?: CapturedItem[];
 }
 
@@ -132,14 +133,13 @@ describe('빈 바닥 메뉴 플러그인 묶음', () => {
       'addStat',
       'addGraph',
       'addKnob',
+      'separator-1',
       PLUGIN_GROUP_ID,
-      'tabCss',
-      'tabNote',
-      'resetOverlayPosition',
-      'resetPanelPosition',
+      'tabGroup',
+      'resetGroup',
     ]);
-    expect(captured.grid[4].label).toBe('contextMenu.plugins');
-    expect(captured.grid[4].children).toHaveLength(4);
+    expect(captured.grid[5].label).toBe('contextMenu.plugins');
+    expect(captured.grid[5].children).toHaveLength(4);
   });
 
   it('position을 무시하고 등록 순서와 fullId를 그대로 넘긴다', () => {
@@ -189,8 +189,8 @@ describe('빈 바닥 메뉴 플러그인 묶음', () => {
 
     const group = captured.grid.find((entry) => entry.id === PLUGIN_GROUP_ID);
     expect(group?.children?.map((child) => child.id)).toEqual(['demo:sane']);
-    // 기본 항목 8개 + 묶음 1개, 던진 항목만 빠진다
-    expect(captured.grid).toHaveLength(9);
+    // 추가 4개 + 구분선 1개 + 묶음 3개
+    expect(captured.grid).toHaveLength(8);
     expect(error).toHaveBeenCalled();
   });
 
@@ -208,6 +208,28 @@ describe('빈 바닥 메뉴 플러그인 묶음', () => {
     const group = captured.grid.find((entry) => entry.id === PLUGIN_GROUP_ID);
     expect(group?.children?.[0].disabled).toBe(true);
     expect(error).toHaveBeenCalled();
+  });
+
+  it('플러그인 항목이 전부 잠기면 묶음 행도 잠근다', () => {
+    store.gridMenuItems = [
+      item('one', { disabled: true }),
+      item('two', { disabled: true }),
+    ];
+    mount();
+
+    const group = captured.grid.find((entry) => entry.id === PLUGIN_GROUP_ID);
+    expect(group?.disabled).toBe(true);
+  });
+
+  it('플러그인 항목 하나라도 살아 있으면 묶음 행은 열린다', () => {
+    store.gridMenuItems = [
+      item('one', { disabled: true }),
+      item('two', { disabled: false }),
+    ];
+    mount();
+
+    const group = captured.grid.find((entry) => entry.id === PLUGIN_GROUP_ID);
+    expect(group?.disabled).toBe(false);
   });
 
   it('키 메뉴는 접지 않고 position도 그대로 지킨다', () => {
