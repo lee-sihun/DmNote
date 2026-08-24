@@ -975,7 +975,10 @@ fn has_legacy_font_weight_state(data: &AppStoreData) -> bool {
                 .flatten()
                 .map(|position| &position.position),
         )
-        .any(|position| position.font_bold.is_none() || position.counter.font_bold.is_none())
+        .any(|position| {
+            (position.font_bold.is_none() && position.font_weight == Some(700))
+                || (position.counter.font_bold.is_none() && position.counter.font_weight == 700)
+        })
 }
 
 pub(crate) fn migrate_legacy_font_weight_state(data: &mut AppStoreData) -> bool {

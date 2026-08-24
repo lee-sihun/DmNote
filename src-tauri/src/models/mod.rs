@@ -1147,15 +1147,12 @@ impl Default for KeyCounterSettings {
 
 impl KeyCounterSettings {
     pub(crate) fn migrate_legacy_font_weight(&mut self) -> bool {
-        if self.font_bold.is_some() {
+        if self.font_bold.is_some() || self.font_weight != 700 {
             return false;
         }
 
-        let was_bold = self.font_weight == 700;
-        if was_bold {
-            self.font_weight = 400;
-        }
-        self.font_bold = Some(was_bold);
+        self.font_weight = 400;
+        self.font_bold = Some(true);
         true
     }
 
@@ -1183,6 +1180,7 @@ impl KeyCounterSettings {
             && self.gap == 6
             && self.font_size == 16
             && self.font_weight == 400
+            && self.font_bold.is_none()
             && self.font_family.is_none()
             && !self.font_italic
             && !self.font_underline
@@ -1195,6 +1193,7 @@ impl KeyCounterSettings {
             self.gap = default_gap();
             self.font_size = default_counter_font_size();
             self.font_weight = default_counter_font_weight();
+            self.font_bold = Some(false);
             self.animation = KeyCounterAnimationSettings::default();
             self.normalize();
             return true;
@@ -1212,6 +1211,7 @@ impl KeyCounterSettings {
             && self.gap == 6
             && self.font_size == 16
             && self.font_weight == 700
+            && self.font_bold.is_none()
             && self.font_family.is_none()
             && !self.font_italic
             && !self.font_underline
@@ -1223,6 +1223,7 @@ impl KeyCounterSettings {
             self.gap = default_gap();
             self.font_size = default_counter_font_size();
             self.font_weight = default_counter_font_weight();
+            self.font_bold = Some(false);
             self.normalize();
             return true;
         }
@@ -1254,12 +1255,9 @@ impl KeyCounterSettings {
 impl KeyPosition {
     pub(crate) fn migrate_legacy_font_weight(&mut self) -> bool {
         let mut changed = false;
-        if self.font_bold.is_none() {
-            let was_bold = self.font_weight.is_none() || self.font_weight == Some(700);
-            if was_bold {
-                self.font_weight = Some(400);
-            }
-            self.font_bold = Some(was_bold);
+        if self.font_bold.is_none() && self.font_weight == Some(700) {
+            self.font_weight = Some(400);
+            self.font_bold = Some(true);
             changed = true;
         }
 
@@ -2610,6 +2608,24 @@ mod tests {
         assert_eq!(position.counter.font_weight, 400);
         assert_eq!(position.counter.font_bold, Some(true));
         assert!(!position.migrate_legacy_font_weight());
+    }
+
+    #[test]
+    fn legacy_non_bold_weights_remain_sparse() {
+        let mut raw = serde_json::to_value(KeyPosition::default()).unwrap();
+        let object = raw.as_object_mut().unwrap();
+        object.insert("fontWeight".to_string(), serde_json::json!(600));
+        object.remove("fontBold");
+        let counter = object["counter"].as_object_mut().unwrap();
+        counter.insert("fontWeight".to_string(), serde_json::json!(500));
+        counter.remove("fontBold");
+
+        let mut position: KeyPosition = serde_json::from_value(raw).unwrap();
+        assert!(!position.migrate_legacy_font_weight());
+        assert_eq!(position.font_weight, Some(600));
+        assert_eq!(position.font_bold, None);
+        assert_eq!(position.counter.font_weight, 500);
+        assert_eq!(position.counter.font_bold, None);
     }
 
     #[test]

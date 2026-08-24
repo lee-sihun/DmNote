@@ -125,6 +125,22 @@ describe('커스텀 CSS 우선순위 계약', () => {
     expect(counterStyle.fontWeight).toBe(800);
   });
 
+  it('Bold 필드가 없던 사용자 지정 굵기는 기존 렌더 값을 유지한다', () => {
+    const { keyStyle } = computeKeyElementStyles({
+      active: false,
+      label: 'A',
+      position: {
+        dx: 0,
+        dy: 0,
+        width: 60,
+        fontWeight: 600,
+        useInlineStyles: true,
+      },
+    });
+
+    expect(keyStyle.fontWeight).toBe(600);
+  });
+
   it('전역 앱 외형은 특이도 0 규칙이고 공개 변수가 그라데이션을 끈다', () => {
     const css = readFileSync(
       resolve(process.cwd(), 'src/renderer/styles/global.css'),
