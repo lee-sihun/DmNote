@@ -26,6 +26,15 @@ describe('toCanonicalGradient', () => {
     ).toBe(270);
   });
 
+  it('-0 각도는 0으로 통일한다 (Rust normalize 미러, strict 검증이 -0 거부)', () => {
+    const healed = toCanonicalGradient({
+      angle: -0,
+      stops: [c('#000', 0), c('#fff', 1)],
+    }).angle;
+    expect(Object.is(healed, -0)).toBe(false);
+    expect(healed).toBe(0);
+  });
+
   it('stops 정렬·클램프', () => {
     const spec = toCanonicalGradient({
       stops: [c('#a', 1.2), c('#b', -0.5), c('#c', 0.5)],
@@ -346,6 +355,75 @@ describe('canonicalizePositionGradients — 노트 테두리 쌍', () => {
       noteBorderGradient: toCanonicalGradient({
         angle: 90,
         stops: [c('rgba(255,0,128,1)', 0), c('#000000', 1)],
+      }),
+    };
+    expect(canonicalizePositionGradients(pos)).toBe(pos);
+  });
+});
+
+describe('canonicalizePositionGradients — 본체·글로우 shadow 동기 (계약 §9-3)', () => {
+  it('sibling 존재 시 shadow 4필드를 재계산한다 (배율 부재 = 100)', () => {
+    const pos = {
+      noteColor: '#stale',
+      noteGradient: {
+        angle: 90,
+        stops: [c('rgba(255,0,128,0.5)', 0), c('#001122', 1)],
+      },
+    };
+    const next = canonicalizePositionGradients(pos) as Record<string, unknown>;
+    expect(next.noteColor).toEqual({
+      type: 'gradient',
+      top: '#FF0080',
+      bottom: '#001122',
+    });
+    // 배율 부재는 100으로 실체화 (Rust 미러)
+    expect(next.noteOpacity).toBe(100);
+    expect(next.noteOpacityTop).toBe(50);
+    expect(next.noteOpacityBottom).toBe(100);
+  });
+
+  it('배율이 있으면 shadow에 곱한다', () => {
+    const pos = {
+      noteGlowOpacity: 80,
+      noteGlowGradient: {
+        angle: 180,
+        stops: [c('rgba(0,0,0,0.5)', 0), c('#FFFFFF', 1)],
+      },
+    };
+    const next = canonicalizePositionGradients(pos) as Record<string, unknown>;
+    expect(next.noteGlowOpacityTop).toBe(40);
+    expect(next.noteGlowOpacityBottom).toBe(80);
+    expect(next.noteGlowColor).toEqual({
+      type: 'gradient',
+      top: '#000000',
+      bottom: '#FFFFFF',
+    });
+  });
+
+  it('§2A 밖 스톱은 sibling drop + 구형 필드 유지', () => {
+    const pos = {
+      noteColor: '#FFFFFF',
+      noteOpacityTop: 30,
+      noteGradient: {
+        angle: 90,
+        stops: [c('tomato', 0), c('#001122', 1)],
+      },
+    };
+    const next = canonicalizePositionGradients(pos);
+    expect('noteGradient' in next).toBe(false);
+    expect(next.noteColor).toBe('#FFFFFF');
+    expect(next.noteOpacityTop).toBe(30);
+  });
+
+  it('변경 없으면 동일 참조', () => {
+    const pos = {
+      noteColor: { type: 'gradient', top: '#FF0080', bottom: '#001122' },
+      noteOpacity: 100,
+      noteOpacityTop: 50,
+      noteOpacityBottom: 100,
+      noteGradient: toCanonicalGradient({
+        angle: 90,
+        stops: [c('rgba(255,0,128,0.5)', 0), c('#001122', 1)],
       }),
     };
     expect(canonicalizePositionGradients(pos)).toBe(pos);

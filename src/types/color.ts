@@ -32,9 +32,11 @@ export function toCanonicalGradient(input: {
   stops: GradientStop[];
 }): GradientSpec {
   const rawAngle = input.angle ?? GRADIENT_DEFAULT_ANGLE;
-  // 이미 [0,360)이면 원값 유지 — Rust rem_euclid와 부동소수 바이트 일치
-  const angle =
+  // 이미 [0,360)이면 원값 유지 — Rust rem_euclid와 부동소수 바이트 일치.
+  // -0은 0으로 통일 (Rust normalize 미러) — strict 검증이 -0을 거부한다
+  const wrapped =
     rawAngle >= 0 && rawAngle < 360 ? rawAngle : ((rawAngle % 360) + 360) % 360;
+  const angle = wrapped === 0 ? 0 : wrapped;
   const stops = input.stops
     .map((s) => ({ color: s.color, pos: Math.min(1, Math.max(0, s.pos)) }))
     .sort((a, b) => a.pos - b.pos)
@@ -241,6 +243,34 @@ export const hexRepresentative = (value: string): string | null => {
   return `#${channel(parsed.r)}${channel(parsed.g)}${channel(parsed.b)}`;
 };
 
+/** 스펙에서 §9-3 규칙으로 만든 구형 shadow 객체 (첫/끝 스톱 대문자 hex) */
+export const notePaintShadowColor = (
+  spec: GradientSpec,
+): { type: 'gradient'; top: string; bottom: string } | null => {
+  const top = hexRepresentative(spec.stops[0]?.color ?? '');
+  const bottom = hexRepresentative(
+    spec.stops[spec.stops.length - 1]?.color ?? '',
+  );
+  if (top === null || bottom === null) return null;
+  return { type: 'gradient', top, bottom };
+};
+
+/** §9-3 shadow Top/Bottom — round(끝 스톱 알파 × 배율) */
+export const notePaintShadowOpacity = (
+  spec: GradientSpec,
+  multiplier: number,
+): { top: number; bottom: number } => {
+  const firstAlpha =
+    parseStrictStopColor(spec.stops[0]?.color ?? '#FFFFFF')?.a ?? 1;
+  const lastAlpha =
+    parseStrictStopColor(spec.stops[spec.stops.length - 1]?.color ?? '#FFFFFF')
+      ?.a ?? 1;
+  return {
+    top: clampPercent(firstAlpha * multiplier),
+    bottom: clampPercent(lastAlpha * multiplier),
+  };
+};
+
 /** gradient 형제 쌍 필드 이름 매핑 */
 export const GRADIENT_SIBLING: Record<string, string> = {
   backgroundColor: 'backgroundGradient',
@@ -258,6 +288,56 @@ const COUNTER_PAINT_PAIRS: Array<
   ['stroke', 'idle', 'strokeIdleGradient'],
   ['stroke', 'active', 'strokeActiveGradient'],
 ];
+
+/** 본체·글로우의 신형 sibling과 구형 shadow 필드 매핑 (계약 §9-3) */
+const NOTE_PAINT_SHADOW_PAIRS = [
+  {
+    gradientField: 'noteGradient',
+    colorField: 'noteColor',
+    multiplierField: 'noteOpacity',
+    topField: 'noteOpacityTop',
+    bottomField: 'noteOpacityBottom',
+  },
+  {
+    gradientField: 'noteGlowGradient',
+    colorField: 'noteGlowColor',
+    multiplierField: 'noteGlowOpacity',
+    topField: 'noteGlowOpacityTop',
+    bottomField: 'noteGlowOpacityBottom',
+  },
+] as const;
+
+const clampPercent = (value: number): number =>
+  Math.min(Math.max(Math.round(value), 0), 100);
+
+/**
+ * §2A 스톱 검사(절단 전 원본 기준) + canonical 변환 — 위반·구조 불량은 null.
+ * Rust가 역직렬화 시점 원본 배열을 보는 것과 일치시킨다
+ */
+const strictCanonicalOrNull = (stored: unknown): GradientSpec | null => {
+  const rawStops =
+    stored && typeof stored === 'object' && !Array.isArray(stored)
+      ? (stored as Record<string, unknown>).stops
+      : null;
+  const hasUnsupportedRawStop =
+    Array.isArray(rawStops) &&
+    rawStops.some(
+      (stop) =>
+        stop &&
+        typeof stop === 'object' &&
+        typeof (stop as Record<string, unknown>).color === 'string' &&
+        !isStrictStopColor((stop as Record<string, unknown>).color as string),
+    );
+  if (hasUnsupportedRawStop) return null;
+  const canonical = canonicalGradientOrNull(stored);
+  if (
+    canonical === null ||
+    canonical.stops.some((stop) => !isStrictStopColor(stop.color))
+  ) {
+    return null;
+  }
+  return canonical;
+};
 
 /**
  * 관용 입력을 canonical spec으로, 구조가 깨진 값은 null로 —
@@ -333,29 +413,11 @@ export function canonicalizePositionGradients<
   // 절단(8개) 이전의 원본 배열 기준 — Rust가 역직렬화 시점 원본을 보는 것과 일치
   if ('noteBorderGradient' in position) {
     const stored = (next ?? position).noteBorderGradient;
-    const rawStops =
-      stored && typeof stored === 'object' && !Array.isArray(stored)
-        ? (stored as Record<string, unknown>).stops
-        : null;
-    const hasUnsupportedRawStop =
-      Array.isArray(rawStops) &&
-      rawStops.some(
-        (stop) =>
-          stop &&
-          typeof stop === 'object' &&
-          typeof (stop as Record<string, unknown>).color === 'string' &&
-          !isStrictStopColor((stop as Record<string, unknown>).color as string),
-      );
     if (stored == null) {
       delete ensure().noteBorderGradient;
     } else {
-      const canonical = hasUnsupportedRawStop
-        ? null
-        : canonicalGradientOrNull(stored);
-      if (
-        canonical === null ||
-        canonical.stops.some((stop) => !isStrictStopColor(stop.color))
-      ) {
+      const canonical = strictCanonicalOrNull(stored);
+      if (canonical === null) {
         delete ensure().noteBorderGradient;
       } else {
         if (JSON.stringify(canonical) !== JSON.stringify(stored)) {
@@ -371,6 +433,53 @@ export function canonicalizePositionGradients<
           ensure().noteBorderColor = repairedBase;
         }
       }
+    }
+  }
+
+  // 본체·글로우 쌍 — 신형(sibling 존재)일 때 구형 shadow 4필드를 atomic 동기
+  // (계약 §9-3, Rust 미러): noteColor는 첫/끝 스톱 대문자 hex의 구형 gradient
+  // 객체, Top/Bottom은 round(스톱 알파 × 배율). 배율 부재 = 100
+  for (const pair of NOTE_PAINT_SHADOW_PAIRS) {
+    if (!(pair.gradientField in position)) continue;
+    const stored = (next ?? position)[pair.gradientField];
+    if (stored == null) {
+      delete ensure()[pair.gradientField];
+      continue;
+    }
+    const canonical = strictCanonicalOrNull(stored);
+    if (canonical === null) {
+      delete ensure()[pair.gradientField];
+      continue;
+    }
+    if (JSON.stringify(canonical) !== JSON.stringify(stored)) {
+      ensure()[pair.gradientField] = canonical;
+    }
+    const shadowColor = notePaintShadowColor(canonical);
+    if (shadowColor === null) continue;
+    const current = next ?? position;
+    if (
+      JSON.stringify(current[pair.colorField]) !== JSON.stringify(shadowColor)
+    ) {
+      ensure()[pair.colorField] = shadowColor;
+    }
+    const rawMultiplier = current[pair.multiplierField];
+    const multiplier =
+      typeof rawMultiplier === 'number' && Number.isFinite(rawMultiplier)
+        ? rawMultiplier
+        : 100;
+    // 배율 부재는 100으로 실체화 (Rust default_missing_note_gradient_multipliers 미러)
+    if (multiplier === 100 && rawMultiplier !== 100) {
+      ensure()[pair.multiplierField] = 100;
+    }
+    const { top: topShadow, bottom: bottomShadow } = notePaintShadowOpacity(
+      canonical,
+      multiplier,
+    );
+    if (current[pair.topField] !== topShadow) {
+      ensure()[pair.topField] = topShadow;
+    }
+    if (current[pair.bottomField] !== bottomShadow) {
+      ensure()[pair.bottomField] = bottomShadow;
     }
   }
 

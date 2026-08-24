@@ -384,12 +384,25 @@ The counter fill gradient fields likewise take priority over `counter.fill.idle`
 and `counter.fill.active`. Counter stroke follows the same pattern:
 `counter.strokeIdleGradient` and `counter.strokeActiveGradient` take priority
 over `counter.stroke.idle` and `counter.stroke.active`, and the solid fields
-stay synced to the first stop color.
+stay synced to the first stop color. Known limitation: a gradient stroke paints
+the full glyph area behind the fill, so when the counter fill is
+semi-transparent the stroke gradient also shows through the glyph interior.
+Fully opaque fills render an outline-only ring as expected.
 
 For note borders, `noteBorderGradient` takes priority over `noteBorderColor`.
 `noteBorderColor` always stays a `#RRGGBB` hex value, so saving a gradient
 syncs it to the hex form of the first stop. Stop colors accept only hex
 (`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`) or `rgb()`/`rgba()` notation.
+
+Note bodies and glows support the same format. When `noteGradient` or
+`noteGlowGradient` is present, that surface switches to the new semantics:
+`noteOpacity`/`noteGlowOpacity` acts as a global multiplier (100 when absent),
+and the legacy fields (the two-color top/bottom object and the per-end
+opacities) stay synced as approximations for older versions. Stop color
+restrictions match the border. Writing a legacy color value or per-end opacity
+patch removes the new field and returns the surface to legacy semantics. Use
+the `{ color, opacity, gradient }` form of `notePaint`/`noteGlowPaint` to
+record the transition, multiplier, and synced values atomically.
 
 `shadow` and `activeShadow` control the idle and pressed shadows independently.
 When omitted, the built-in shadow remains unchanged. Store a spec with

@@ -34,6 +34,8 @@ const vertexShader = `
   attribute vec4 noteBorder; // x: width, yzw: RGB color
   attribute float noteBorderOpacity; // 0-1, 노트 배경 투명도와 독립
   attribute vec2 noteBorderGradientInfo; // x: LUT 행 (-1 = 단색), y: 각도 라디안
+  attribute vec3 noteBodyPaint; // x: LUT 행 (-1 = direct), y: 각도, z: 배율
+  attribute vec4 noteGlowPaint; // x: 행, y: 각도, z: 배율, w: LUT 알파 사용
   attribute float trackIndex;
 
   uniform mat4 projectionMatrix;
@@ -55,7 +57,9 @@ const vertexShader = `
   varying vec3 vGlowColorBottom;
   varying vec4 vBorder; // x: width, yzw: RGB color
   varying float vBorderOpacity;
-  varying vec3 vBorderGradient; // x: LUT 행, y: sin(각도), z: cos(각도)
+  varying vec2 vBorderGradient; // x: LUT 행, y: 각도 라디안
+  varying vec3 vBodyPaint;
+  varying vec4 vGlowPaint;
   varying float vTrackTopY;
   varying float vTrackBottomY;
 
@@ -152,11 +156,9 @@ const vertexShader = `
     vGlowColorBottom = noteGlowColorBottom;
     vBorder = noteBorder;
     vBorderOpacity = noteBorderOpacity;
-    vBorderGradient = vec3(
-      noteBorderGradientInfo.x,
-      sin(noteBorderGradientInfo.y),
-      cos(noteBorderGradientInfo.y)
-    );
+    vBorderGradient = noteBorderGradientInfo;
+    vBodyPaint = noteBodyPaint;
+    vGlowPaint = noteGlowPaint;
     vTrackTopY = trackTopY;
     vTrackBottomY = trackBottomY;
   }
@@ -182,9 +184,22 @@ const fragmentShader = `
   varying vec3 vGlowColorBottom;
   varying vec4 vBorder; // x: width, yzw: RGB color
   varying float vBorderOpacity;
-  varying vec3 vBorderGradient; // x: LUT 행, y: sin(각도), z: cos(각도)
+  varying vec2 vBorderGradient; // x: LUT 행, y: 각도 라디안
+  varying vec3 vBodyPaint; // x: 행 (-1 = direct), y: 각도, z: 배율
+  varying vec4 vGlowPaint; // x: 행, y: 각도, z: 배율, w: LUT 알파 사용
   varying float vTrackTopY;
   varying float vTrackBottomY;
+
+  // 트랙 rect 기준 CSS linear-gradient 투영으로 LUT 샘플 (전 표면 공유)
+  vec4 sampleGradientLUT(float row, float angleRad, float nx, float ny, float boxW, float boxH) {
+    float sinA = sin(angleRad);
+    float cosA = cos(angleRad);
+    float px = (nx - 0.5) * boxW;
+    float py = (ny - 0.5) * boxH;
+    float lineLen = max(abs(boxW * sinA) + abs(boxH * cosA), 0.0001);
+    float t = clamp(0.5 + (px * sinA - py * cosA) / lineLen, 0.0, 1.0);
+    return texture2D(uGradientLUT, vec2(t, (row + 0.5) / ${GRADIENT_LUT_ROWS}.0));
+  }
 
   void main() {
     // gl_FragCoord는 crop된 캔버스 기준 물리 픽셀 단위
@@ -198,6 +213,48 @@ const fragmentShader = `
     vec4 baseColor = mix(vColorTop, vColorBottom, gradientRatio);
     vec3 glowColor = mix(vGlowColorTop, vGlowColorBottom, gradientRatio);
     float glowOpacity = mix(vGlowOpacity.x, vGlowOpacity.y, gradientRatio);
+
+    // 신형 본체·글로우는 LUT 경로 (계약 §9-4) — direct 경로는 기존 그대로.
+    // paint는 premultiplied 규약으로 정규화: contrib = premultRGB × mask × fade
+    float boxW = max(vHalfSize.x * 2.0, 0.0001);
+    float nx = clamp((vLocalPos.x + vHalfSize.x) / boxW, 0.0, 1.0);
+
+    vec3 bodyPremultRGB;
+    float bodyStraightAlpha;
+    if (vBodyPaint.x >= 0.0) {
+      vec4 bodyTexel = sampleGradientLUT(
+        vBodyPaint.x, vBodyPaint.y, nx, trackRelativeY, boxW, trackHeight
+      );
+      bodyPremultRGB = bodyTexel.rgb * vBodyPaint.z;
+      bodyStraightAlpha = bodyTexel.a * vBodyPaint.z;
+    } else {
+      bodyPremultRGB = baseColor.rgb * baseColor.a;
+      bodyStraightAlpha = baseColor.a;
+    }
+
+    // 글로우 paint: 신형은 G.a×배율, 본체 상속(color-only 행)·direct는 기존 프로파일.
+    // 글로우는 노트 밖 halo까지 칠하므로 투영 박스를 halo 확장 폭으로 잡아
+    // 수평 성분 각도에서 여백이 가장자리 색으로 눌리지 않게 한다
+    vec3 glowPremultRGB;
+    float glowPaintAlpha;
+    if (vGlowPaint.x >= 0.0) {
+      float glowHalfW = vHalfSize.x + max(vGlowSize, 0.0);
+      float glowBoxW = max(glowHalfW * 2.0, 0.0001);
+      float glowNx = clamp((vLocalPos.x + glowHalfW) / glowBoxW, 0.0, 1.0);
+      vec4 glowTexel = sampleGradientLUT(
+        vGlowPaint.x, vGlowPaint.y, glowNx, trackRelativeY, glowBoxW, trackHeight
+      );
+      if (vGlowPaint.w > 0.5) {
+        glowPremultRGB = glowTexel.rgb * vGlowPaint.z;
+        glowPaintAlpha = glowTexel.a * vGlowPaint.z;
+      } else {
+        glowPremultRGB = glowTexel.rgb * glowOpacity;
+        glowPaintAlpha = glowTexel.a * glowOpacity;
+      }
+    } else {
+      glowPremultRGB = glowColor * glowOpacity;
+      glowPaintAlpha = glowOpacity;
+    }
 
     float r = clamp(vRadius, 0.0, min(vHalfSize.x, vHalfSize.y));
     vec2 q = abs(vLocalPos) - (vHalfSize - vec2(r));
@@ -241,41 +298,33 @@ const fragmentShader = `
       innerMask = outerMask;
     }
     float borderMask = outerMask - innerMask;
-    float bodyAlpha = baseColor.a * innerMask;
+    float bodyFactor = innerMask;
+    float bodyAlpha = bodyStraightAlpha * bodyFactor;
 
-    // 그라데이션 테두리: 트랙 rect 기준 CSS linear-gradient 투영으로 LUT 샘플.
-    // LUT 텍셀은 premultiplied라 paint에는 텍셀 알파를 다시 곱하지 않는다
+    // 그라데이션 테두리 — LUT 텍셀은 premultiplied라 paint에 텍셀 알파를 재곱하지 않는다
     vec3 borderPaint = borderColor;
     float borderTexAlpha = 1.0;
     if (vBorderGradient.x >= 0.0) {
-      float boxW = max(vHalfSize.x * 2.0, 0.0001);
-      float boxH = trackHeight;
-      float nx = clamp((vLocalPos.x + vHalfSize.x) / boxW, 0.0, 1.0);
-      float px = (nx - 0.5) * boxW;
-      float py = (trackRelativeY - 0.5) * boxH;
-      float sinA = vBorderGradient.y;
-      float cosA = vBorderGradient.z;
-      float lineLen = max(abs(boxW * sinA) + abs(boxH * cosA), 0.0001);
-      float t = clamp(0.5 + (px * sinA - py * cosA) / lineLen, 0.0, 1.0);
-      vec4 texel = texture2D(
-        uGradientLUT,
-        vec2(t, (vBorderGradient.x + 0.5) / ${GRADIENT_LUT_ROWS}.0)
+      vec4 borderTexel = sampleGradientLUT(
+        vBorderGradient.x, vBorderGradient.y, nx, trackRelativeY, boxW, trackHeight
       );
-      borderPaint = texel.rgb;
-      borderTexAlpha = texel.a;
+      borderPaint = borderTexel.rgb;
+      borderTexAlpha = borderTexel.a;
     }
 
-    // 테두리 투명도는 노트 배경(baseColor.a)과 독립
+    // 테두리 투명도는 노트 배경과 독립
     float borderFactor = vBorderOpacity * borderMask;
     float borderAlpha = borderFactor * borderTexAlpha;
 
-    float glowAlpha = 0.0;
+    // 글로우 (§9-4): glowAlpha = 본체유효알파 × 글로우알파 × falloff²
+    float glowFactor = 0.0;
     if (vGlowSize > 0.0) {
       float outside = max(dist, 0.0);
       float range = max(vGlowSize, 0.0001);
       float glowFalloff = clamp(1.0 - outside / range, 0.0, 1.0);
-      glowAlpha = baseColor.a * glowOpacity * pow(glowFalloff, 2.0);
+      glowFactor = bodyStraightAlpha * pow(glowFalloff, 2.0);
     }
+    float glowAlpha = glowPaintAlpha * glowFactor;
 
     float fadeMask = 1.0;
     if (uFadeTopPx > 0.0) {
@@ -286,14 +335,16 @@ const fragmentShader = `
       float bottomFadeRatio = uFadeBottomPx / trackHeight;
       fadeMask = min(fadeMask, clamp((1.0 - trackRelativeY) / bottomFadeRatio, 0.0, 1.0));
     }
+    bodyFactor *= fadeMask;
     bodyAlpha *= fadeMask;
     borderFactor *= fadeMask;
     borderAlpha *= fadeMask;
+    glowFactor *= fadeMask;
     glowAlpha *= fadeMask;
 
     float outAlpha = clamp(bodyAlpha + borderAlpha + glowAlpha, 0.0, 1.0);
     vec3 borderContrib = borderFactor > 0.0 ? borderPaint * borderFactor : vec3(0.0);
-    vec3 outColor = baseColor.rgb * bodyAlpha + borderContrib + glowColor * glowAlpha;
+    vec3 outColor = bodyPremultRGB * bodyFactor + borderContrib + glowPremultRGB * glowFactor;
     gl_FragColor = vec4(outColor, outAlpha);
   }
 `;
@@ -321,6 +372,8 @@ const INSTANCED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze([
   'noteBorder',
   'noteBorderOpacity',
   'noteBorderGradientInfo',
+  'noteBodyPaint',
+  'noteGlowPaint',
   'trackIndex',
 ]);
 
@@ -501,6 +554,8 @@ interface NoteBuffer {
   noteBorder: Float32Array;
   noteBorderOpacity: Float32Array;
   noteBorderGradientInfo: Float32Array;
+  noteBodyPaint: Float32Array;
+  noteGlowPaint: Float32Array;
   trackIndex: Float32Array;
   gradientLUT: Uint8Array;
   gradientLUTVersion: number;
@@ -646,6 +701,18 @@ export function WebGLTracksOGL({
       instanced: 1,
       size: 2,
       data: noteBuffer.noteBorderGradientInfo,
+      usage: gl.DYNAMIC_DRAW,
+    });
+    geometry.addAttribute('noteBodyPaint', {
+      instanced: 1,
+      size: 3,
+      data: noteBuffer.noteBodyPaint,
+      usage: gl.DYNAMIC_DRAW,
+    });
+    geometry.addAttribute('noteGlowPaint', {
+      instanced: 1,
+      size: 4,
+      data: noteBuffer.noteGlowPaint,
       usage: gl.DYNAMIC_DRAW,
     });
     geometry.addAttribute('trackIndex', {

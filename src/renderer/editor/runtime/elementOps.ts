@@ -2291,7 +2291,14 @@ const notePaintPropertyIntents = (
       .flat()
       .find((position) => position.id === id);
     if (!current) continue;
-    byId.set(id, projectNotePaintPatch(patch) as Record<string, unknown>);
+    // position 전달 - {opacity} 단독의 sibling shadow 재계산이 백엔드와 일치 (§9-5)
+    byId.set(
+      id,
+      projectNotePaintPatch(patch, current as unknown as KeyPosition) as Record<
+        string,
+        unknown
+      >,
+    );
   }
   return new Map([['key', byId]]);
 };

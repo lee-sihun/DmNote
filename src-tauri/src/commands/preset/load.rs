@@ -18,11 +18,12 @@ use crate::{
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        normalize_key_mappings, AppStoreData, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch,
-        EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec, GraphPositions,
-        KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPositions, LayerGroups, NoteSettings,
-        NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCss, TabCssOverrides,
-        TabNoteSettings, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        default_missing_note_gradient_multipliers, normalize_key_mappings, AppStoreData, CustomCss,
+        CustomCssPatch, CustomJs, CustomJsPatch, EditorCommitOrigin, EditorField, FontSettings,
+        FontType, GradientSpec, GraphPositions, KeyMappings, KeyPosition, KeyPositions, KeySlot,
+        KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch, SettingsPatchInput,
+        StatPositions, TabCss, TabCssOverrides, TabNoteSettings, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
+        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::{
@@ -40,12 +41,36 @@ use super::{
 
 fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
     let content = fs::read_to_string(path)?;
-    let value: serde_json::Value =
+    let mut value: serde_json::Value =
         serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
     if let Some(detail) = invalid_position_style_detail(&value) {
         return Err(CommandError::msg(format!("invalid-preset: {detail}")));
     }
+    default_preset_note_gradient_multipliers(&mut value);
     serde_json::from_value(value).map_err(|_| CommandError::msg("invalid-preset"))
+}
+
+fn default_preset_note_gradient_multipliers(value: &mut serde_json::Value) {
+    for collection in [
+        "keyPositions",
+        "statPositions",
+        "graphPositions",
+        "knobPositions",
+    ] {
+        let Some(modes) = value
+            .get_mut(collection)
+            .and_then(serde_json::Value::as_object_mut)
+        else {
+            continue;
+        };
+        for position in modes
+            .values_mut()
+            .filter_map(serde_json::Value::as_array_mut)
+            .flatten()
+        {
+            default_missing_note_gradient_multipliers(position);
+        }
+    }
 }
 
 fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
@@ -55,12 +80,14 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
         "graphPositions",
         "knobPositions",
     ];
-    const ELEMENT_FIELDS: [&str; 5] = [
+    const ELEMENT_FIELDS: [&str; 7] = [
         "backgroundGradient",
         "activeBackgroundGradient",
         "borderGradient",
         "activeBorderGradient",
         "noteBorderGradient",
+        "noteGradient",
+        "noteGlowGradient",
     ];
     const COUNTER_FIELDS: [&str; 4] = [
         "fillIdleGradient",
@@ -86,10 +113,16 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
                     continue;
                 };
                 for field in ELEMENT_FIELDS {
-                    let error = if field == "noteBorderGradient" {
-                        invalid_note_border_gradient_error(entry.get(field))
-                    } else {
-                        invalid_gradient_error(entry.get(field))
+                    let error = match field {
+                        "noteBorderGradient" => invalid_note_gradient_error(
+                            entry.get(field),
+                            "unsupported note border color",
+                        ),
+                        "noteGradient" | "noteGlowGradient" => invalid_note_gradient_error(
+                            entry.get(field),
+                            "unsupported note gradient color",
+                        ),
+                        _ => invalid_gradient_error(entry.get(field)),
                     };
                     if let Some(error) = error {
                         return Some(format!(
@@ -133,7 +166,10 @@ fn invalid_gradient_error(value: Option<&serde_json::Value>) -> Option<String> {
     })
 }
 
-fn invalid_note_border_gradient_error(value: Option<&serde_json::Value>) -> Option<String> {
+fn invalid_note_gradient_error(
+    value: Option<&serde_json::Value>,
+    color_error: &str,
+) -> Option<String> {
     let value = value?;
     let gradient = match serde_json::from_value::<Option<GradientSpec>>(value.clone()) {
         Ok(gradient) => gradient,
@@ -141,7 +177,7 @@ fn invalid_note_border_gradient_error(value: Option<&serde_json::Value>) -> Opti
     }?;
     gradient
         .note_border_invalid_stop_index()
-        .map(|index| format!("stops[{index}].color contains an unsupported note border color"))
+        .map(|index| format!("stops[{index}].color contains an {color_error}"))
 }
 
 fn invalid_shadow_error(value: &serde_json::Value) -> Option<(&'static str, &'static str)> {
@@ -1796,6 +1832,48 @@ mod tests {
     }
 
     #[test]
+    fn preset_missing_note_gradient_multipliers_default_to_one_hundred() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-note-gradient-default-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+        let source = serde_json::json!({
+            "keyPositions": {
+                "custom": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "noteGradient": {
+                        "angle": 45,
+                        "stops": [
+                            { "color": "#112233", "pos": 0 },
+                            { "color": "#445566", "pos": 1 }
+                        ]
+                    },
+                    "noteGlowGradient": {
+                        "angle": 135,
+                        "stops": [
+                            { "color": "#778899", "pos": 0 },
+                            { "color": "#AABBCC", "pos": 1 }
+                        ]
+                    }
+                }]
+            }
+        });
+        std::fs::write(&source_path, serde_json::to_vec_pretty(&source).unwrap()).unwrap();
+
+        let parsed = read_preset_file(&source_path).unwrap();
+        let position = &parsed.key_positions.unwrap()["custom"][0];
+        assert_eq!(position.note_opacity, 100);
+        assert_eq!(position.note_glow_opacity, 100);
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn damaged_gradient_preset_reports_element_and_field_with_existing_error_code() {
         let temp_dir = std::env::temp_dir().join(format!(
             "dmnote-preset-gradient-error-test-{}",
@@ -1906,9 +1984,56 @@ mod tests {
             );
         }
 
+        for collection in [
+            "keyPositions",
+            "statPositions",
+            "graphPositions",
+            "knobPositions",
+        ] {
+            for field in ["noteGradient", "noteGlowGradient"] {
+                let preset = serde_json::json!({
+                    (collection): {
+                        "custom mode": [{
+                            (field): {
+                                "angle": 90,
+                                "stops": [
+                                    { "color": "#112233", "pos": 0 },
+                                    { "color": "transparent", "pos": 1 }
+                                ]
+                            }
+                        }]
+                    }
+                });
+
+                assert_eq!(
+                    invalid_position_style_detail(&preset).as_deref(),
+                    Some(
+                        format!(
+                            "{collection}[\"custom mode\"][0].{field}: stops[1].color contains an unsupported note gradient color"
+                        )
+                        .as_str()
+                    )
+                );
+            }
+        }
+
         let valid = serde_json::json!({
             "keyPositions": {
                 "custom mode": [{
+                    "noteGradient": {
+                        "angle": 45,
+                        "stops": [
+                            { "color": "#1238", "pos": 0 },
+                            { "color": "rgb(4, 5, 6)", "pos": 1 }
+                        ]
+                    },
+                    "noteGlowGradient": {
+                        "angle": 135,
+                        "stops": [
+                            { "color": "rgba(7, 8, 9, .25)", "pos": 0 },
+                            { "color": "#ABC", "pos": 1 }
+                        ]
+                    },
                     "noteBorderGradient": {
                         "angle": 90,
                         "stops": [

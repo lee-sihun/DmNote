@@ -4,15 +4,15 @@ use crate::{
     errors::EditorCommitError,
     models::{
         compact_canonical_rgba, default_counter_animation_builtin_presets,
-        note_border_representative_hex, AppStoreData, CounterAnimationPreset, EditorBoundsV1,
-        EditorCounterAnimationPresetIntentV1, EditorCounterFillIntentV1,
+        note_border_representative_hex, note_gradient_shadow, AppStoreData, CounterAnimationPreset,
+        EditorBoundsV1, EditorCounterAnimationPresetIntentV1, EditorCounterFillIntentV1,
         EditorCounterStrokeIntentV1, EditorDocumentV1, EditorElementGroupTargetV1,
         EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
         EditorGroupUpdateV1, EditorNoteBorderPaintV1, EditorNoteColorV1, EditorNotePaintIntentV1,
         EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1,
         EditorPaintGradientV1, EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1,
-        ElementShadowSpec, GradientSpec, KeyPosition, LayerGroupDef, NoteColor, SHADOW_BLUR_MAX,
-        SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        ElementShadowSpec, GradientSpec, KeyPosition, LayerGroupDef, NoteColor, NoteGradientShadow,
+        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
 };
 
@@ -508,6 +508,7 @@ fn patch_shadow_enabled(
 fn validate_note_paint_intent(patch: &EditorNotePaintIntentV1) -> Result<(), EditorCommitError> {
     let valid_opacity = |value: u32| value <= 100;
     let valid = match patch {
+        EditorNotePaintIntentV1::Descriptor(patch) => valid_opacity(patch.opacity),
         EditorNotePaintIntentV1::Color(_) => true,
         EditorNotePaintIntentV1::Opacity(patch) => valid_opacity(patch.opacity),
         EditorNotePaintIntentV1::GradientOpacity(patch) => {
@@ -516,14 +517,41 @@ fn validate_note_paint_intent(patch: &EditorNotePaintIntentV1) -> Result<(), Edi
                 && valid_opacity(patch.opacity_bottom)
         }
     };
-    if valid {
-        Ok(())
-    } else {
-        Err(EditorCommitError::validation(
+    if !valid {
+        return Err(EditorCommitError::validation(
             "NOTE_OPACITY_OUT_OF_RANGE",
             "note opacity values must be integers between 0 and 100",
-        ))
+        ));
     }
+
+    let EditorNotePaintIntentV1::Descriptor(patch) = patch else {
+        return Ok(());
+    };
+    let Some(gradient) = patch.gradient.as_ref() else {
+        if matches!(patch.color, EditorNoteColorV1::Solid(_)) {
+            return Ok(());
+        }
+        return Err(EditorCommitError::validation(
+            "PAINT_COLOR_GRADIENT_MISMATCH",
+            "note paint without a gradient must use a solid color",
+        ));
+    };
+
+    validate_paint_gradient(gradient)?;
+    let gradient = gradient.to_gradient_spec();
+    let Some(shadow) = note_gradient_shadow(&gradient, patch.opacity) else {
+        return Err(EditorCommitError::validation(
+            "INVALID_PAINT_GRADIENT",
+            "note gradient contains an unsupported stop color",
+        ));
+    };
+    if editor_note_color(&patch.color) != shadow.color {
+        return Err(EditorCommitError::validation(
+            "PAINT_COLOR_GRADIENT_MISMATCH",
+            "note paint color must equal the derived gradient shadow color",
+        ));
+    }
+    Ok(())
 }
 
 fn editor_note_color(color: &EditorNoteColorV1) -> NoteColor {
@@ -536,58 +564,146 @@ fn editor_note_color(color: &EditorNoteColorV1) -> NoteColor {
     }
 }
 
+fn apply_note_gradient_shadow(
+    position: &mut KeyPosition,
+    glow: bool,
+    shadow: NoteGradientShadow,
+) -> bool {
+    if glow {
+        let changed = position.note_glow_color.as_ref() != Some(&shadow.color)
+            || position.note_glow_opacity_top != Some(shadow.opacity_top)
+            || position.note_glow_opacity_bottom != Some(shadow.opacity_bottom);
+        position.note_glow_color = Some(shadow.color);
+        position.note_glow_opacity_top = Some(shadow.opacity_top);
+        position.note_glow_opacity_bottom = Some(shadow.opacity_bottom);
+        changed
+    } else {
+        let changed = position.note_color != shadow.color
+            || position.note_opacity_top != Some(shadow.opacity_top)
+            || position.note_opacity_bottom != Some(shadow.opacity_bottom);
+        position.note_color = shadow.color;
+        position.note_opacity_top = Some(shadow.opacity_top);
+        position.note_opacity_bottom = Some(shadow.opacity_bottom);
+        changed
+    }
+}
+
 fn patch_note_paint(
     position: &mut KeyPosition,
     glow: bool,
     patch: &EditorNotePaintIntentV1,
 ) -> bool {
     match patch {
+        EditorNotePaintIntentV1::Descriptor(patch) => {
+            let color = editor_note_color(&patch.color);
+            let gradient = patch
+                .gradient
+                .as_ref()
+                .map(EditorPaintGradientV1::to_gradient_spec);
+            if let Some(gradient) = gradient {
+                let shadow = note_gradient_shadow(&gradient, patch.opacity)
+                    .expect("a validated note gradient has supported stop colors");
+                let changed = if glow {
+                    position.note_glow_gradient.as_ref() != Some(&gradient)
+                        || position.note_glow_opacity != patch.opacity
+                } else {
+                    position.note_gradient.as_ref() != Some(&gradient)
+                        || position.note_opacity != patch.opacity
+                };
+                if glow {
+                    position.note_glow_gradient = Some(gradient);
+                    position.note_glow_opacity = patch.opacity;
+                } else {
+                    position.note_gradient = Some(gradient);
+                    position.note_opacity = patch.opacity;
+                }
+                changed | apply_note_gradient_shadow(position, glow, shadow)
+            } else if glow {
+                let changed = position.note_glow_gradient.is_some()
+                    || position.note_glow_color.as_ref() != Some(&color)
+                    || position.note_glow_opacity != patch.opacity
+                    || position.note_glow_opacity_top != Some(patch.opacity)
+                    || position.note_glow_opacity_bottom != Some(patch.opacity);
+                position.note_glow_gradient = None;
+                position.note_glow_color = Some(color);
+                position.note_glow_opacity = patch.opacity;
+                position.note_glow_opacity_top = Some(patch.opacity);
+                position.note_glow_opacity_bottom = Some(patch.opacity);
+                changed
+            } else {
+                let changed = position.note_gradient.is_some()
+                    || position.note_color != color
+                    || position.note_opacity != patch.opacity
+                    || position.note_opacity_top != Some(patch.opacity)
+                    || position.note_opacity_bottom != Some(patch.opacity);
+                position.note_gradient = None;
+                position.note_color = color;
+                position.note_opacity = patch.opacity;
+                position.note_opacity_top = Some(patch.opacity);
+                position.note_opacity_bottom = Some(patch.opacity);
+                changed
+            }
+        }
         EditorNotePaintIntentV1::Color(patch) => {
             let color = editor_note_color(&patch.color);
             if glow {
-                if position.note_glow_color.as_ref() == Some(&color) {
-                    false
-                } else {
-                    position.note_glow_color = Some(color);
-                    true
-                }
-            } else if position.note_color == color {
-                false
+                let changed = position.note_glow_gradient.is_some()
+                    || position.note_glow_color.as_ref() != Some(&color);
+                position.note_glow_gradient = None;
+                position.note_glow_color = Some(color);
+                changed
             } else {
+                let changed = position.note_gradient.is_some() || position.note_color != color;
+                position.note_gradient = None;
                 position.note_color = color;
-                true
+                changed
             }
         }
         EditorNotePaintIntentV1::Opacity(patch) => {
-            let opacity = if glow {
-                &mut position.note_glow_opacity
+            let gradient = if glow {
+                position.note_glow_gradient.as_ref()
             } else {
-                &mut position.note_opacity
+                position.note_gradient.as_ref()
             };
-            if *opacity == patch.opacity {
-                false
+            // store canonicalize가 §2A를 보장해 실패는 도달 불가 - 발동해도
+            // 사용자 gradient를 지우지 않고 shadow 갱신만 건너뛴다 (비파괴)
+            let shadow =
+                gradient.and_then(|gradient| note_gradient_shadow(gradient, patch.opacity));
+            let mut changed = if glow {
+                let changed = position.note_glow_opacity != patch.opacity;
+                position.note_glow_opacity = patch.opacity;
+                changed
             } else {
-                *opacity = patch.opacity;
-                true
+                let changed = position.note_opacity != patch.opacity;
+                position.note_opacity = patch.opacity;
+                changed
+            };
+            if let Some(shadow) = shadow {
+                changed |= apply_note_gradient_shadow(position, glow, shadow);
             }
+            changed
         }
         EditorNotePaintIntentV1::GradientOpacity(patch) => {
-            let (opacity, opacity_top, opacity_bottom) = if glow {
+            let (gradient, opacity, opacity_top, opacity_bottom) = if glow {
                 (
+                    &mut position.note_glow_gradient,
                     &mut position.note_glow_opacity,
                     &mut position.note_glow_opacity_top,
                     &mut position.note_glow_opacity_bottom,
                 )
             } else {
                 (
+                    &mut position.note_gradient,
                     &mut position.note_opacity,
                     &mut position.note_opacity_top,
                     &mut position.note_opacity_bottom,
                 )
             };
-            let changed = *opacity != patch.opacity
+            let changed = gradient.is_some()
+                || *opacity != patch.opacity
                 || *opacity_top != Some(patch.opacity_top)
                 || *opacity_bottom != Some(patch.opacity_bottom);
+            *gradient = None;
             *opacity = patch.opacity;
             *opacity_top = Some(patch.opacity_top);
             *opacity_bottom = Some(patch.opacity_bottom);
@@ -7924,6 +8040,211 @@ mod tests {
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store.key_positions["4key"][0], original);
+        }
+    }
+
+    #[test]
+    fn note_gradient_descriptor_and_legacy_transitions_are_atomic() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_color = NoteColor::Solid("legacy".to_string());
+        position.note_opacity = 90;
+        position.note_opacity_top = Some(30);
+        position.note_opacity_bottom = Some(70);
+
+        let gradient = crate::models::EditorPaintGradientV1 {
+            angle: 45.0,
+            stops: vec![
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "rgba(17,34,51,.5)".to_string(),
+                    pos: 0.0,
+                },
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "#44556640".to_string(),
+                    pos: 1.0,
+                },
+            ],
+        };
+        let descriptor = EditorElementPropertyPatchV1::NotePaint(
+            EditorNotePaintIntentV1::Descriptor(crate::models::EditorNotePaintDescriptorIntentV1 {
+                color: EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                    kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                    top: "#112233".to_string(),
+                    bottom: "#445566".to_string(),
+                }),
+                opacity: 80,
+                gradient: Some(gradient.clone()),
+            }),
+        );
+        let first = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &id,
+                descriptor.clone(),
+            )],
+        )
+        .unwrap();
+        let position = &first.candidate.key_positions["4key"][0];
+        assert_eq!(position.note_gradient.as_ref().unwrap().angle, 45.0);
+        assert_eq!(position.note_opacity, 80);
+        assert_eq!(position.note_opacity_top, Some(40));
+        assert_eq!(position.note_opacity_bottom, Some(20));
+        assert_eq!(
+            position.note_color,
+            NoteColor::Gradient {
+                top: "#112233".to_string(),
+                bottom: "#445566".to_string(),
+            }
+        );
+
+        let replay = prepare_editor_ops_transition(
+            &first.scratch,
+            &[patch_property_op(EditorElementTypeV1::Key, &id, descriptor)],
+        )
+        .unwrap();
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+
+        let opacity = EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Opacity(
+            crate::models::EditorNotePaintOpacityIntentV1 { opacity: 40 },
+        ));
+        let second = prepare_editor_ops_transition(
+            &first.scratch,
+            &[patch_property_op(EditorElementTypeV1::Key, &id, opacity)],
+        )
+        .unwrap();
+        let position = &second.candidate.key_positions["4key"][0];
+        assert!(position.note_gradient.is_some());
+        assert_eq!(position.note_opacity_top, Some(20));
+        assert_eq!(position.note_opacity_bottom, Some(10));
+
+        let legacy_endpoints =
+            EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::GradientOpacity(
+                crate::models::EditorNotePaintGradientOpacityIntentV1 {
+                    opacity: 55,
+                    opacity_top: 11,
+                    opacity_bottom: 44,
+                },
+            ));
+        let third = prepare_editor_ops_transition(
+            &second.scratch,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &id,
+                legacy_endpoints,
+            )],
+        )
+        .unwrap();
+        let position = &third.candidate.key_positions["4key"][0];
+        assert!(position.note_gradient.is_none());
+        assert_eq!(position.note_opacity, 55);
+        assert_eq!(position.note_opacity_top, Some(11));
+        assert_eq!(position.note_opacity_bottom, Some(44));
+
+        let solid = EditorElementPropertyPatchV1::NoteGlowPaint(
+            EditorNotePaintIntentV1::Descriptor(crate::models::EditorNotePaintDescriptorIntentV1 {
+                color: EditorNoteColorV1::Solid("#AABBCC".to_string()),
+                opacity: 35,
+                gradient: None,
+            }),
+        );
+        let fourth = prepare_editor_ops_transition(
+            &third.scratch,
+            &[patch_property_op(EditorElementTypeV1::Key, &id, solid)],
+        )
+        .unwrap();
+        let position = &fourth.candidate.key_positions["4key"][0];
+        assert!(position.note_glow_gradient.is_none());
+        assert_eq!(
+            position.note_glow_color,
+            Some(NoteColor::Solid("#AABBCC".to_string()))
+        );
+        assert_eq!(position.note_glow_opacity, 35);
+        assert_eq!(position.note_glow_opacity_top, Some(35));
+        assert_eq!(position.note_glow_opacity_bottom, Some(35));
+    }
+
+    #[test]
+    fn note_gradient_descriptor_rejects_semantic_mismatches() {
+        let store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let gradient = |first: &str| crate::models::EditorPaintGradientV1 {
+            angle: 45.0,
+            stops: vec![
+                crate::models::EditorPaintGradientStopV1 {
+                    color: first.to_string(),
+                    pos: 0.0,
+                },
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "#445566".to_string(),
+                    pos: 1.0,
+                },
+            ],
+        };
+        let descriptor = |color, opacity, gradient| {
+            EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Descriptor(
+                crate::models::EditorNotePaintDescriptorIntentV1 {
+                    color,
+                    opacity,
+                    gradient,
+                },
+            ))
+        };
+
+        let cases = [
+            (
+                descriptor(
+                    EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                        kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                        top: "#000000".to_string(),
+                        bottom: "#445566".to_string(),
+                    }),
+                    80,
+                    Some(gradient("#112233")),
+                ),
+                "PAINT_COLOR_GRADIENT_MISMATCH",
+            ),
+            (
+                descriptor(
+                    EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                        kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                        top: "#112233".to_string(),
+                        bottom: "#445566".to_string(),
+                    }),
+                    80,
+                    None,
+                ),
+                "PAINT_COLOR_GRADIENT_MISMATCH",
+            ),
+            (
+                descriptor(
+                    EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                        kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                        top: "#112233".to_string(),
+                        bottom: "#445566".to_string(),
+                    }),
+                    80,
+                    Some(gradient("transparent")),
+                ),
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                descriptor(EditorNoteColorV1::Solid("#112233".to_string()), 101, None),
+                "NOTE_OPACITY_OUT_OF_RANGE",
+            ),
+        ];
+
+        for (patch, expected_code) in cases {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(EditorElementTypeV1::Key, &id, patch)],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(expected_code));
         }
     }
 

@@ -16,7 +16,9 @@ import {
 } from '@src/types/key/notePaint';
 import {
   isCounterFillPropertyPatchV1,
+  isCounterStrokePropertyPatchV1,
   projectCounterFillPatch,
+  projectCounterStrokePatch,
 } from '@src/types/key/counterFill';
 import {
   isFontColorPropertyPatchV1,
@@ -728,23 +730,10 @@ const applySemanticOps = (
                 },
               };
             }
-            if (
-              op.patch.property === 'counterStrokeIdle' ||
-              op.patch.property === 'counterStrokeActive'
-            ) {
-              const counter = position.counter as
-                | Record<string, unknown>
-                | undefined;
-              const stroke = (counter?.stroke ?? {}) as Record<string, unknown>;
+            if (isCounterStrokePropertyPatchV1(op.patch)) {
               return {
                 ...position,
-                counter: {
-                  ...counter,
-                  stroke:
-                    op.patch.property === 'counterStrokeIdle'
-                      ? { ...stroke, idle: op.patch.value }
-                      : { ...stroke, active: op.patch.value },
-                },
+                ...projectCounterStrokePatch(position as never, op.patch),
               };
             }
             if (op.patch.property === 'counterAnimationPreset') {
@@ -879,7 +868,11 @@ const applySemanticOps = (
               };
             }
             if (isNotePaintPropertyPatchV1(op.patch)) {
-              return { ...position, ...projectNotePaintPatch(op.patch) };
+              // position 전달 - {opacity} 단독의 sibling shadow 재계산 (§9-5)
+              return {
+                ...position,
+                ...projectNotePaintPatch(op.patch, position as never),
+              };
             }
             if (op.patch.property === 'displayText') {
               return { ...position, displayText: op.patch.value };

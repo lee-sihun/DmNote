@@ -4293,7 +4293,7 @@ mod tests {
             EditorPatchV1, EditorTargetGroupV1, EditorZUpdateV1, FontSettings, FontType,
             GestureCommitRequest, GesturePluginInstancesChange, GraphPosition, GraphStatType,
             GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
-            OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
+            NoteColor, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
             PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
             SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
             StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
@@ -13497,13 +13497,37 @@ mod tests {
             positions[3].note_glow_opacity = 61;
         })
         .unwrap();
+        let legacy_note_wire =
+            serde_json::to_vec(&setup.document.key_positions["4key"][0]).unwrap();
         let ops = vec![
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[0],
                 EditorElementPropertyPatchV1::NotePaint(
-                    crate::models::EditorNotePaintIntentV1::Opacity(
-                        crate::models::EditorNotePaintOpacityIntentV1 { opacity: 55 },
+                    crate::models::EditorNotePaintIntentV1::Descriptor(
+                        crate::models::EditorNotePaintDescriptorIntentV1 {
+                            color: crate::models::EditorNoteColorV1::Gradient(
+                                crate::models::EditorNoteGradientColorV1 {
+                                    kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                                    top: "#112233".to_string(),
+                                    bottom: "#445566".to_string(),
+                                },
+                            ),
+                            opacity: 80,
+                            gradient: Some(crate::models::EditorPaintGradientV1 {
+                                angle: 45.0,
+                                stops: vec![
+                                    crate::models::EditorPaintGradientStopV1 {
+                                        color: "rgba(17,34,51,.5)".to_string(),
+                                        pos: 0.0,
+                                    },
+                                    crate::models::EditorPaintGradientStopV1 {
+                                        color: "#44556640".to_string(),
+                                        pos: 1.0,
+                                    },
+                                ],
+                            }),
+                        },
                     ),
                 ),
             ),
@@ -13569,9 +13593,10 @@ mod tests {
             .iter()
             .all(|result| result.status == EditorOpResultStatusV1::Applied));
         let positions = &changed.document.key_positions["4key"];
-        assert_eq!(positions[0].note_opacity, 55);
-        assert_eq!(positions[0].note_opacity_top, Some(17));
-        assert_eq!(positions[0].note_opacity_bottom, Some(27));
+        assert_eq!(positions[0].note_opacity, 80);
+        assert_eq!(positions[0].note_opacity_top, Some(40));
+        assert_eq!(positions[0].note_opacity_bottom, Some(20));
+        assert_eq!(positions[0].note_gradient.as_ref().unwrap().angle, 45.0);
         assert_eq!(positions[1].note_glow_opacity, 70);
         assert_eq!(positions[1].note_glow_opacity_top, Some(20));
         assert_eq!(positions[1].note_glow_opacity_bottom, Some(80));
@@ -13633,6 +13658,11 @@ mod tests {
             .unwrap();
         drop(barrier);
         let undone = store.editor_get().document;
+        assert_eq!(
+            serde_json::to_vec(&undone.key_positions["4key"][0]).unwrap(),
+            legacy_note_wire
+        );
+        assert!(undone.key_positions["4key"][0].note_gradient.is_none());
         assert_eq!(undone.key_positions["4key"][0].note_opacity_top, Some(17));
         assert!(undone.key_positions["4key"][1]
             .note_glow_opacity_top
@@ -13663,7 +13693,12 @@ mod tests {
             .unwrap();
         drop(barrier);
         let redone = store.editor_get().document;
-        assert_eq!(redone.key_positions["4key"][0].note_opacity, 55);
+        assert_eq!(
+            serde_json::to_vec(&redone.key_positions["4key"][0]).unwrap(),
+            serde_json::to_vec(&changed.document.key_positions["4key"][0]).unwrap()
+        );
+        assert_eq!(redone.key_positions["4key"][0].note_opacity, 80);
+        assert!(redone.key_positions["4key"][0].note_gradient.is_some());
         assert_eq!(
             redone.key_positions["4key"][1].note_glow_opacity_top,
             Some(20)
@@ -19085,12 +19120,40 @@ mod tests {
     }
 
     #[test]
-    fn invalid_note_border_stop_repair_backs_up_persists_and_is_idempotent() {
+    fn invalid_note_gradient_stop_repair_backs_up_persists_and_is_idempotent() {
         let dir = test_directory("note-border-stop-repair-test");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("store.json");
         let mut data = super::initialize_default_state();
         let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+        position.note_color = NoteColor::Gradient {
+            top: "body-top".to_string(),
+            bottom: "body-bottom".to_string(),
+        };
+        position.note_opacity_top = Some(21);
+        position.note_opacity_bottom = Some(79);
+        position.note_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 45,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "transparent", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        position.note_glow_color = Some(NoteColor::Gradient {
+            top: "glow-top".to_string(),
+            bottom: "glow-bottom".to_string(),
+        });
+        position.note_glow_opacity_top = Some(31);
+        position.note_glow_opacity_bottom = Some(69);
+        position.note_glow_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 135,
+            "stops": [
+                { "color": "invalid", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        }))
+        .unwrap();
         position.note_border_color = Some("#445566".to_string());
         position.note_border_gradient = serde_json::from_value(serde_json::json!({
             "angle": 90,
@@ -19109,6 +19172,26 @@ mod tests {
         assert!(store.skip_asset_sweep);
         let repaired = store.snapshot();
         let position = &repaired.key_positions["4key"][0];
+        assert!(position.note_gradient.is_none());
+        assert_eq!(
+            position.note_color,
+            NoteColor::Gradient {
+                top: "body-top".to_string(),
+                bottom: "body-bottom".to_string(),
+            }
+        );
+        assert_eq!(position.note_opacity_top, Some(21));
+        assert_eq!(position.note_opacity_bottom, Some(79));
+        assert!(position.note_glow_gradient.is_none());
+        assert_eq!(
+            position.note_glow_color,
+            Some(NoteColor::Gradient {
+                top: "glow-top".to_string(),
+                bottom: "glow-bottom".to_string(),
+            })
+        );
+        assert_eq!(position.note_glow_opacity_top, Some(31));
+        assert_eq!(position.note_glow_opacity_bottom, Some(69));
         assert_eq!(position.note_border_color.as_deref(), Some("#445566"));
         assert!(position.note_border_gradient.is_none());
         assert_eq!(position.display_text.as_deref(), Some("preserved sibling"));
@@ -19117,6 +19200,12 @@ mod tests {
 
         let on_disk: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(on_disk["keyPositions"]["4key"][0]
+            .get("noteGradient")
+            .is_none());
+        assert!(on_disk["keyPositions"]["4key"][0]
+            .get("noteGlowGradient")
+            .is_none());
         assert!(on_disk["keyPositions"]["4key"][0]
             .get("noteBorderGradient")
             .is_none());

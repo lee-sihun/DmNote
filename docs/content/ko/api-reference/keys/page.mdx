@@ -178,11 +178,23 @@ interface ElementShadowSpec {
 우선합니다. 카운터 stroke도 같은 구조입니다. `counter.strokeIdleGradient`와
 `counter.strokeActiveGradient`가 각각 `counter.stroke.idle`,
 `counter.stroke.active`보다 우선하며, 단색 필드는 첫 스톱 색으로 동기화됩니다.
+알려진 제약: 그라데이션 stroke는 글리프 전체를 fill 뒤에서 칠하는 구조라
+카운터 fill이 반투명이면 글자 내부로도 비칩니다. 불투명 fill에서는 기대대로
+외곽선만 보입니다.
 
 노트 테두리는 `noteBorderGradient`가 `noteBorderColor`보다 우선합니다.
 `noteBorderColor`는 항상 `#RRGGBB` hex로 유지되므로 그라데이션 저장 시 첫
 스톱 색이 hex로 변환되어 동기화됩니다. 스톱 색은 hex(`#RGB`, `#RGBA`,
 `#RRGGBB`, `#RRGGBBAA`) 또는 `rgb()`/`rgba()` 형식만 허용합니다.
+
+노트 본체와 글로우도 같은 형식을 지원합니다. `noteGradient` 또는
+`noteGlowGradient`가 있으면 해당 표면은 신형 의미가 됩니다.
+`noteOpacity`/`noteGlowOpacity`는 전역 배율(없으면 100)로 동작하고, 구형
+필드(top/bottom 두 색 객체와 끝단 투명도)는 구버전 표시용 근사값으로 자동
+동기됩니다. 스톱 색 형식 제한은 테두리와 같습니다. 구형 색 값이나 끝단
+투명도 patch를 쓰면 신형 필드가 제거되고 구형 의미로 되돌아갑니다.
+`notePaint`/`noteGlowPaint`에 `{ color, opacity, gradient }` 형태를 쓰면
+전환·배율·동기값을 한 번에 원자적으로 기록합니다.
 
 `shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
 생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면

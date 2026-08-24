@@ -11,12 +11,15 @@ export type GradientCanvasAnchor =
   | { kind: 'batch' };
 
 /** 편집 중인 표면 — 캔버스 일시 페인트가 어느 필드를 덮을지 결정 */
+// 노트 3표면은 그리드에 페인트 소비자가 없고 축 핸들 세션만 사용한다
 export type GradientPreviewSurface =
   | 'background'
   | 'border'
   | 'counterFill'
   | 'counterStroke'
-  | 'noteBorder';
+  | 'noteBorder'
+  | 'noteBody'
+  | 'noteGlow';
 export type GradientPreviewState = 'idle' | 'active';
 
 export const supportsActiveVisualState = (

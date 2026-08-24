@@ -1,5 +1,9 @@
 import type { KeyPosition } from './keys';
-import { toCompactRgba, type GradientSpec } from '../color';
+import {
+  isStrictGradientSpec,
+  toCompactRgba,
+  type GradientSpec,
+} from '../color';
 
 export type CounterFillDescriptorV1 =
   | { color: string; gradient?: never }
@@ -23,40 +27,6 @@ const exactKeys = (value: Record<string, unknown>, keys: string[]) =>
   Object.keys(value).length === keys.length &&
   keys.every((key) => key in value);
 
-const isStrictGradient = (value: unknown): value is GradientSpec => {
-  if (!isRecord(value) || !exactKeys(value, ['angle', 'stops'])) return false;
-  if (
-    typeof value.angle !== 'number' ||
-    !Number.isFinite(value.angle) ||
-    Object.is(value.angle, -0) ||
-    value.angle < 0 ||
-    value.angle >= 360 ||
-    !Array.isArray(value.stops) ||
-    value.stops.length < 2 ||
-    value.stops.length > 8
-  ) {
-    return false;
-  }
-  let previous = -Infinity;
-  for (const stop of value.stops) {
-    if (
-      !isRecord(stop) ||
-      !exactKeys(stop, ['color', 'pos']) ||
-      typeof stop.color !== 'string' ||
-      typeof stop.pos !== 'number' ||
-      !Number.isFinite(stop.pos) ||
-      Object.is(stop.pos, -0) ||
-      stop.pos < 0 ||
-      stop.pos > 1 ||
-      stop.pos < previous
-    ) {
-      return false;
-    }
-    previous = stop.pos;
-  }
-  return true;
-};
-
 export const isCounterFillDescriptorV1 = (
   value: unknown,
 ): value is CounterFillDescriptorV1 => {
@@ -64,7 +34,7 @@ export const isCounterFillDescriptorV1 = (
   if (exactKeys(value, ['color'])) return true;
   return (
     exactKeys(value, ['color', 'gradient']) &&
-    isStrictGradient(value.gradient) &&
+    isStrictGradientSpec(value.gradient) &&
     toCompactRgba(value.gradient.stops[0]?.color ?? '#ffffff') === value.color
   );
 };

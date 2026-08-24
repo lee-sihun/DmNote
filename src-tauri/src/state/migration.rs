@@ -25,12 +25,13 @@ use crate::{
     },
     defaults::{default_keys, default_positions},
     models::{
-        normalize_key_slot, AppStoreData, CounterAnimationPreset, CustomCss, CustomCssHistoryEntry,
-        CustomFont, CustomJs, CustomTab, FontType, GradientSpec, GraphPosition, GraphPositions,
-        GraphStatType, GraphType, GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition,
-        KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups,
-        NoteSettings, OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition,
-        StatPositions, StatType, TabCss, TabNoteSettings,
+        default_missing_note_gradient_multipliers, normalize_key_slot, AppStoreData,
+        CounterAnimationPreset, CustomCss, CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab,
+        FontType, GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType,
+        GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KeySlot,
+        KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds,
+        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType, TabCss,
+        TabNoteSettings,
     },
 };
 
@@ -82,6 +83,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                 let seed_active_css_history = value.get("customCssHistory").is_none();
                 let explicit_invalid_element_id = has_explicit_invalid_element_id(&value);
                 let sound_library_migrated = migrate_sound_library_enabled(&mut value);
+                default_store_note_gradient_multipliers(&mut value);
                 match serde_json::from_value::<AppStoreData>(value.clone()) {
                     Ok(mut data) => {
                         let mut needs_persist = sound_library_migrated
@@ -202,6 +204,22 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
         needs_persist,
         repaired,
     })
+}
+
+fn default_store_note_gradient_multipliers(value: &mut Value) {
+    for collection in [
+        "keyPositions",
+        "statPositions",
+        "graphPositions",
+        "knobPositions",
+    ] {
+        let Some(modes) = value.get_mut(collection).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        for position in modes.values_mut().filter_map(Value::as_array_mut).flatten() {
+            default_missing_note_gradient_multipliers(position);
+        }
+    }
 }
 
 fn has_explicit_invalid_element_id(value: &Value) -> bool {
@@ -1936,7 +1954,7 @@ mod tests {
             AppStoreData, CustomCssHistoryEntry, CustomFont, CustomTab, FontType, GraphPosition,
             GraphStatType, GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor,
             KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
-            OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition, StatType, TabCss,
+            NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition, StatType, TabCss,
             TabNoteSettings,
         },
     };
@@ -1962,6 +1980,36 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         }
+    }
+
+    #[test]
+    fn missing_note_gradient_multipliers_default_to_one_hundred_on_all_collections() {
+        let gradient = serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        });
+        let mut value = serde_json::json!({
+            "keyPositions": { "mode": [{ "noteGradient": gradient.clone() }] },
+            "statPositions": { "mode": [{ "noteGlowGradient": gradient.clone() }] },
+            "graphPositions": { "mode": [{ "noteGradient": gradient.clone() }] },
+            "knobPositions": { "mode": [{
+                "noteGradient": gradient,
+                "noteGlowGradient": null
+            }] }
+        });
+
+        super::default_store_note_gradient_multipliers(&mut value);
+
+        assert_eq!(value["keyPositions"]["mode"][0]["noteOpacity"], 100);
+        assert_eq!(value["statPositions"]["mode"][0]["noteGlowOpacity"], 100);
+        assert_eq!(value["graphPositions"]["mode"][0]["noteOpacity"], 100);
+        assert_eq!(value["knobPositions"]["mode"][0]["noteOpacity"], 100);
+        assert!(value["knobPositions"]["mode"][0]
+            .get("noteGlowOpacity")
+            .is_none());
     }
 
     fn tauri_store_fixture_base() -> serde_json::Value {
@@ -2714,14 +2762,28 @@ mod tests {
         key_position.counter.animation.bezier = [0.1, 0.2, 0.7, 0.8];
         key_position.counter.animation.scale = 1.25;
         key_position.counter.animation.duration_ms = 777;
+        key_position.note_color = NoteColor::Gradient {
+            top: "legacy-top".to_string(),
+            bottom: "legacy-bottom".to_string(),
+        };
+        key_position.note_opacity_top = Some(23);
+        key_position.note_opacity_bottom = Some(67);
         let expected_key_counter = key_position.counter.clone();
+        let expected_key_note_color = key_position.note_color.clone();
 
         let mut stat_position = StatPosition {
             stat_type: StatType::Kps,
             position: key_position.clone(),
         };
         stat_position.position.counter.fill.idle = "#ABCDEF".to_string();
+        stat_position.position.note_glow_color = Some(NoteColor::Gradient {
+            top: "legacy-glow-top".to_string(),
+            bottom: "legacy-glow-bottom".to_string(),
+        });
+        stat_position.position.note_glow_opacity_top = Some(34);
+        stat_position.position.note_glow_opacity_bottom = Some(76);
         let expected_stat_counter = stat_position.position.counter.clone();
+        let expected_stat_glow_color = stat_position.position.note_glow_color.clone();
 
         let mut data = normalize_state(AppStoreData {
             keys: default_keys().clone(),
@@ -2733,6 +2795,10 @@ mod tests {
             .insert("4key".to_string(), vec![stat_position]);
         let mut raw = serde_json::to_value(data).unwrap();
         raw["keyPositions"]["4key"][0]["noteBorderGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#112233", "pos": 0 }]
+        });
+        raw["keyPositions"]["4key"][0]["noteGradient"] = serde_json::json!({
             "angle": 90,
             "stops": [{ "color": "#112233", "pos": 0 }]
         });
@@ -2752,6 +2818,10 @@ mod tests {
             "angle": 90,
             "stops": [{ "color": "#AABBCC", "pos": 1 }]
         });
+        raw["statPositions"]["4key"][0]["noteGlowGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#AABBCC", "pos": 1 }]
+        });
         std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
@@ -2762,6 +2832,29 @@ mod tests {
         assert!(loaded.repaired);
         assert_eq!(key_counter, &expected_key_counter);
         assert_eq!(stat_counter, &expected_stat_counter);
+        assert!(loaded.data.key_positions["4key"][0].note_gradient.is_none());
+        assert_eq!(
+            loaded.data.key_positions["4key"][0].note_color,
+            expected_key_note_color
+        );
+        assert_eq!(
+            loaded.data.key_positions["4key"][0].note_opacity_top,
+            Some(23)
+        );
+        assert_eq!(
+            loaded.data.key_positions["4key"][0].note_opacity_bottom,
+            Some(67)
+        );
+        assert!(loaded.data.stat_positions["4key"][0]
+            .position
+            .note_glow_gradient
+            .is_none());
+        assert_eq!(
+            loaded.data.stat_positions["4key"][0]
+                .position
+                .note_glow_color,
+            expected_stat_glow_color
+        );
         assert!(loaded.data.key_positions["4key"][0]
             .note_border_gradient
             .is_none());

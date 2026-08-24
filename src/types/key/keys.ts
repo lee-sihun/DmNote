@@ -335,6 +335,9 @@ export const keyPositionSchema = z.object({
     .optional(),
   // 테두리 그라데이션 형제 — 있으면 렌더 우선, noteBorderColor는 hex 대표색 폴백
   noteBorderGradient: gradientSpecSchema.optional(),
+  // 본체·글로우 형제 — 있으면 신형 의미(배율 모델), 구형 필드는 다운그레이드 shadow (계약 §9)
+  noteGradient: gradientSpecSchema.optional(),
+  noteGlowGradient: gradientSpecSchema.optional(),
   // 테두리 투명도 (0~100, 없으면 100). 노트 배경 투명도와 독립
   noteBorderOpacity: z.number().int().min(0).max(100).optional(),
   noteBorderSide: z.enum(['all', 'vertical', 'horizontal']).optional(),

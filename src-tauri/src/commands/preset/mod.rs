@@ -296,6 +296,8 @@ mod tests {
         .unwrap();
         let position = &preset.key_positions.as_ref().unwrap()["4key"][0];
 
+        assert!(position.note_gradient.is_none());
+        assert!(position.note_glow_gradient.is_none());
         assert!(position.note_border_gradient.is_none());
         assert!(position.counter.stroke_idle_gradient.is_none());
         assert!(position.counter.stroke_active_gradient.is_none());
@@ -317,6 +319,14 @@ mod tests {
         width: f64,
         count: u32,
         background_color: Option<String>,
+        note_color: NoteColor,
+        note_opacity: u32,
+        note_opacity_top: Option<u32>,
+        note_opacity_bottom: Option<u32>,
+        note_glow_color: Option<NoteColor>,
+        note_glow_opacity: u32,
+        note_glow_opacity_top: Option<u32>,
+        note_glow_opacity_bottom: Option<u32>,
         note_border_color: Option<String>,
         counter: PreFeaturePresetCounter,
     }
@@ -406,6 +416,36 @@ mod tests {
                     "dy": 0,
                     "width": 60,
                     "count": 0,
+                    "noteColor": {
+                        "type": "gradient",
+                        "top": "#112233",
+                        "bottom": "#445566"
+                    },
+                    "noteOpacity": 80,
+                    "noteOpacityTop": 40,
+                    "noteOpacityBottom": 20,
+                    "noteGradient": {
+                        "angle": 45,
+                        "stops": [
+                            { "color": "rgba(17,34,51,.5)", "pos": 0 },
+                            { "color": "#44556640", "pos": 1 }
+                        ]
+                    },
+                    "noteGlowColor": {
+                        "type": "gradient",
+                        "top": "#778899",
+                        "bottom": "#AABBCC"
+                    },
+                    "noteGlowOpacity": 60,
+                    "noteGlowOpacityTop": 30,
+                    "noteGlowOpacityBottom": 60,
+                    "noteGlowGradient": {
+                        "angle": 135,
+                        "stops": [
+                            { "color": "#77889980", "pos": 0 },
+                            { "color": "rgb(170,187,204)", "pos": 1 }
+                        ]
+                    },
                     "noteBorderColor": "#112233",
                     "noteBorderGradient": {
                         "angle": 90,
@@ -450,14 +490,42 @@ mod tests {
         let position = &restored.key_positions.as_ref().unwrap()["4key"][0];
 
         assert!(old_wire["keyPositions"]["4key"][0]
+            .get("noteGradient")
+            .is_none());
+        assert!(old_wire["keyPositions"]["4key"][0]
+            .get("noteGlowGradient")
+            .is_none());
+        assert!(old_wire["keyPositions"]["4key"][0]
             .get("noteBorderGradient")
             .is_none());
         assert!(old_wire["keyPositions"]["4key"][0]["counter"]
             .get("strokeIdleGradient")
             .is_none());
+        assert!(position.note_gradient.is_none());
+        assert!(position.note_glow_gradient.is_none());
         assert!(position.note_border_gradient.is_none());
         assert!(position.counter.stroke_idle_gradient.is_none());
         assert!(position.counter.stroke_active_gradient.is_none());
+        assert_eq!(
+            position.note_color,
+            NoteColor::Gradient {
+                top: "#112233".to_string(),
+                bottom: "#445566".to_string(),
+            }
+        );
+        assert_eq!(position.note_opacity, 80);
+        assert_eq!(position.note_opacity_top, Some(40));
+        assert_eq!(position.note_opacity_bottom, Some(20));
+        assert_eq!(
+            position.note_glow_color,
+            Some(NoteColor::Gradient {
+                top: "#778899".to_string(),
+                bottom: "#AABBCC".to_string(),
+            })
+        );
+        assert_eq!(position.note_glow_opacity, 60);
+        assert_eq!(position.note_glow_opacity_top, Some(30));
+        assert_eq!(position.note_glow_opacity_bottom, Some(60));
         assert_eq!(position.note_border_color.as_deref(), Some("#112233"));
         assert_eq!(position.counter.stroke.idle, "rgba(1,2,3,1)");
         assert_eq!(position.counter.stroke.active, "rgba(4,5,6,0.5)");

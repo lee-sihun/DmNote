@@ -409,9 +409,19 @@ where
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EditorNotePaintIntentV1 {
+    Descriptor(EditorNotePaintDescriptorIntentV1),
     Color(EditorNotePaintColorIntentV1),
     Opacity(EditorNotePaintOpacityIntentV1),
     GradientOpacity(EditorNotePaintGradientOpacityIntentV1),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNotePaintDescriptorIntentV1 {
+    pub color: EditorNoteColorV1,
+    pub opacity: u32,
+    #[serde(deserialize_with = "deserialize_required_nullable_paint_gradient")]
+    pub gradient: Option<EditorPaintGradientV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1154,6 +1164,26 @@ mod tests {
                 "value": {
                     "color": "#112233",
                     "opacity": 80,
+                    "gradient": gradient.clone()
+                }
+            }),
+            serde_json::json!({
+                "property": "notePaint",
+                "value": {
+                    "color": "#112233",
+                    "opacity": 80,
+                    "gradient": null
+                }
+            }),
+            serde_json::json!({
+                "property": "noteGlowPaint",
+                "value": {
+                    "color": {
+                        "type": "gradient",
+                        "top": "#112233",
+                        "bottom": "#445566"
+                    },
+                    "opacity": 80,
                     "gradient": gradient
                 }
             }),
@@ -1179,6 +1209,19 @@ mod tests {
             serde_json::json!({
                 "property": "noteBorderPaint",
                 "value": { "color": "#112233", "opacity": 80, "extra": true }
+            }),
+            serde_json::json!({
+                "property": "notePaint",
+                "value": { "color": "#112233", "opacity": 80 }
+            }),
+            serde_json::json!({
+                "property": "noteGlowPaint",
+                "value": {
+                    "color": "#112233",
+                    "opacity": 80,
+                    "gradient": null,
+                    "extra": true
+                }
             }),
         ] {
             assert!(serde_json::from_value::<EditorElementPropertyPatchV1>(wire).is_err());
