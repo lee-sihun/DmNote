@@ -1,5 +1,4 @@
 import { usePressAction } from '@hooks/usePressAction';
-import React from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import IconSwap from '@components/main/common/IconSwap';
 import { ModeToggleIcon } from './PropertyInputs';
@@ -17,6 +16,9 @@ interface PanelHeaderActionsProps {
   // 분리 창은 접기 토글이 없으므로 우측 예약 공간(40px) 없이 가장자리 정렬
   edgeAligned?: boolean;
 }
+
+// 분리/결합은 헤더 드래그로만 제공 — 버튼 UI 임시 비노출
+const SHOW_DETACH_ACTION = false;
 
 const DetachIcon = () => (
   <svg
@@ -78,6 +80,36 @@ const ReattachIcon = () => (
   </svg>
 );
 
+interface DetachActionButtonProps {
+  detachAction: 'detach' | 'reattach';
+  onDetachAction: () => void;
+}
+
+const DetachActionButton = ({
+  detachAction,
+  onDetachAction,
+}: DetachActionButtonProps) => {
+  const { t } = useTranslation();
+  const label =
+    detachAction === 'reattach'
+      ? t('propertiesPanel.attachPanel') || 'Attach panel'
+      : t('propertiesPanel.detachPanel') || 'Detach panel';
+  // 입력 blur 커밋 리렌더와의 경합으로 첫 click이 유실되는 것을 방어
+  const press = usePressAction(onDetachAction);
+
+  return (
+    <button
+      {...press}
+      onMouseDown={(event) => event.preventDefault()}
+      className="pointer-events-auto w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors text-fg-faint hover:text-fg cursor-pointer"
+      title={label}
+      aria-label={label}
+    >
+      {detachAction === 'reattach' ? <ReattachIcon /> : <DetachIcon />}
+    </button>
+  );
+};
+
 // 패널 헤더 우측 액션 — 패널 본문(루트 페이지 콘텐츠)이 통째로 교체되어도
 // 버튼 노드가 유지되도록 프레임의 루트 페이지 레이어에서 렌더.
 // 아이콘 스왑 전환이 발동하고, 리마운트로 인한 hover 깜빡임도 없음.
@@ -96,14 +128,11 @@ const PanelHeaderActions = ({
     mode === 'property'
       ? t('propertiesPanel.switchToLayer') || 'Switch to Layer'
       : t('propertiesPanel.switchToProperty') || 'Switch to Property';
-  const detachLabel =
-    detachAction === 'reattach'
-      ? t('propertiesPanel.attachPanel') || 'Attach panel'
-      : t('propertiesPanel.detachPanel') || 'Detach panel';
 
-  const showDetach = detachAction !== undefined && onDetachAction !== undefined;
-  // 입력 blur 커밋 리렌더와의 경합으로 첫 click이 유실되는 것을 방어
-  const detachPress = usePressAction(() => onDetachAction?.());
+  const showDetach =
+    SHOW_DETACH_ACTION &&
+    detachAction !== undefined &&
+    onDetachAction !== undefined;
   if (modeToggleHidden && !showDetach) return null;
 
   return (
@@ -115,16 +144,11 @@ const PanelHeaderActions = ({
       }`}
       onMouseDown={edgeAligned ? (event) => event.stopPropagation() : undefined}
     >
-      {showDetach && (
-        <button
-          {...detachPress}
-          onMouseDown={(event) => event.preventDefault()}
-          className="pointer-events-auto w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors text-fg-faint hover:text-fg cursor-pointer"
-          title={detachLabel}
-          aria-label={detachLabel}
-        >
-          {detachAction === 'reattach' ? <ReattachIcon /> : <DetachIcon />}
-        </button>
+      {showDetach && detachAction && onDetachAction && (
+        <DetachActionButton
+          detachAction={detachAction}
+          onDetachAction={onDetachAction}
+        />
       )}
       {!modeToggleHidden && (
         <button

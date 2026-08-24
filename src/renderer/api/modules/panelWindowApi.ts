@@ -23,6 +23,9 @@ export const panelWindowApi = {
   // 드래그 중 창 이동 (논리 좌표, 창 좌상단)
   moveTo: (x: number, y: number) =>
     invoke<void>('panel_window_move_to', { x, y }),
+  // 실제 mouseDown 소유 창과 분리 창의 네이티브 커서를 Rust에서 함께 전환
+  setDragCursor: (active: boolean) =>
+    invoke<void>('panel_window_set_drag_cursor', { active }),
   // 헤더 드래그 세션 컨텍스트 - 도크 존 판정 기준 좌표. content 원점은 백엔드 실측
   // (프레임리스+그림자 창의 인셋을 렌더러의 outerWidth-innerWidth로는 못 잡는다 - WebView2에선 0)
   dragContext: () =>

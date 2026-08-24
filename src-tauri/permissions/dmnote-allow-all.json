@@ -106,6 +106,7 @@
           "panel_window_move_to",
           "panel_window_present",
           "panel_window_present_at",
+          "panel_window_set_drag_cursor",
           "panel_window_start_dragging",
           "panel_window_take_restore_request",
           "plugin_authority_reset",

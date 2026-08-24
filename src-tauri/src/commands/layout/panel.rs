@@ -41,7 +41,14 @@ pub fn panel_window_present_at(
     focus: bool,
 ) -> CmdResult<()> {
     ensure_main_caller(&window, "presented")?;
-    Ok(state.present_panel_window(&app, Some(tauri::LogicalPosition::new(x, y)), focus)?)
+    if !focus {
+        super::panel_drag_cursor::set(&app, &window, true)?;
+    }
+    let result = state.present_panel_window(&app, Some(tauri::LogicalPosition::new(x, y)), focus);
+    if result.is_err() && !focus {
+        let _ = super::panel_drag_cursor::set(&app, &window, false);
+    }
+    Ok(result?)
 }
 
 // 드래그 중 창 이동 (논리 좌표, 창 좌상단)
@@ -55,6 +62,17 @@ pub fn panel_window_move_to(
 ) -> CmdResult<()> {
     ensure_main_caller(&window, "moved")?;
     Ok(state.move_panel_window_to(&app, x, y)?)
+}
+
+#[tauri::command]
+pub fn panel_window_set_drag_cursor(
+    app: AppHandle,
+    window: WebviewWindow,
+    active: bool,
+) -> CmdResult<()> {
+    ensure_main_caller(&window, "cursor-controlled")?;
+    super::panel_drag_cursor::set(&app, &window, active)?;
+    Ok(())
 }
 
 // 헤더 드래그 세션 컨텍스트 - 도크 존 판정 기준 좌표(메인 content 원점·outer 폴백)
