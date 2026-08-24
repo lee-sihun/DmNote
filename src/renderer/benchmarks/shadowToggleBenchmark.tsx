@@ -200,6 +200,7 @@ const BenchmarkApp = () => {
   const enabledCommitStrategy =
     query.get('strategy') === 'sync' ? 'sync' : 'after-paint';
   const selectionMode = query.get('selection') === 'batch' ? 'batch' : 'single';
+  const reportUrl = query.get('report');
   const renderDurationsRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -301,7 +302,6 @@ const BenchmarkApp = () => {
         `react=${result.reactCommitDurationMs.p95.toFixed(3)}`,
       ].join('|');
 
-      const reportUrl = query.get('report');
       if (reportUrl) {
         const response = await fetch(reportUrl, {
           method: 'POST',
@@ -339,6 +339,7 @@ const BenchmarkApp = () => {
     elementCount,
     enabledCommitStrategy,
     iterations,
+    reportUrl,
     selectionMode,
     warmupIterations,
   ]);

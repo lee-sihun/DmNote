@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/purity */
 import { useRef, useEffect } from 'react';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
 import { MAX_FALLBACK_CLOCK_SKEW_MS } from '@constants/inputTiming';

@@ -22,8 +22,8 @@ use crate::{
         CustomCssPatch, CustomJs, CustomJsPatch, EditorCommitOrigin, EditorField, FontSettings,
         FontType, GradientSpec, GraphPositions, KeyMappings, KeyPosition, KeyPositions, KeySlot,
         KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch, SettingsPatchInput,
-        StatPositions, TabCss, TabCssOverrides, TabNoteSettings, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
-        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        StatPositions, TabCss, TabCssOverrides, TabNoteSettings, POSITION_COLLECTION_FIELDS,
+        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::{
@@ -51,12 +51,7 @@ fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
 }
 
 fn default_preset_note_gradient_multipliers(value: &mut serde_json::Value) {
-    for collection in [
-        "keyPositions",
-        "statPositions",
-        "graphPositions",
-        "knobPositions",
-    ] {
+    for collection in POSITION_COLLECTION_FIELDS {
         let Some(modes) = value
             .get_mut(collection)
             .and_then(serde_json::Value::as_object_mut)
@@ -74,12 +69,6 @@ fn default_preset_note_gradient_multipliers(value: &mut serde_json::Value) {
 }
 
 fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
-    const COLLECTIONS: [&str; 4] = [
-        "keyPositions",
-        "statPositions",
-        "graphPositions",
-        "knobPositions",
-    ];
     const ELEMENT_FIELDS: [&str; 7] = [
         "backgroundGradient",
         "activeBackgroundGradient",
@@ -97,7 +86,7 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
     ];
     const SHADOW_FIELDS: [&str; 2] = ["shadow", "activeShadow"];
 
-    for collection_name in COLLECTIONS {
+    for collection_name in POSITION_COLLECTION_FIELDS {
         let Some(modes) = preset
             .get(collection_name)
             .and_then(serde_json::Value::as_object)
@@ -1954,12 +1943,7 @@ mod tests {
 
     #[test]
     fn note_border_gradient_preset_rejects_invalid_stop_color_with_index() {
-        for collection in [
-            "keyPositions",
-            "statPositions",
-            "graphPositions",
-            "knobPositions",
-        ] {
+        for collection in POSITION_COLLECTION_FIELDS {
             let preset = serde_json::json!({
                 (collection): {
                     "custom mode": [{
@@ -1984,12 +1968,7 @@ mod tests {
             );
         }
 
-        for collection in [
-            "keyPositions",
-            "statPositions",
-            "graphPositions",
-            "knobPositions",
-        ] {
+        for collection in POSITION_COLLECTION_FIELDS {
             for field in ["noteGradient", "noteGlowGradient"] {
                 let preset = serde_json::json!({
                     (collection): {

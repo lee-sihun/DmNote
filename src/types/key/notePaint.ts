@@ -19,7 +19,7 @@ export type StrictNoteColorV1 =
   | { type: 'gradient'; top: string; bottom: string };
 
 /**
- * 신형 full descriptor (계약 §9-5) — 전환·배율·shadow를 한 op으로.
+ * 신형 full descriptor (계약 §9-5) - 전환·배율·shadow를 한 op으로.
  * gradient 객체면 color는 첫/끝 스톱으로 만든 정확한 shadow 객체,
  * gradient null이면 color는 문자열(단색 확정)
  */
@@ -101,7 +101,7 @@ export interface NoteBorderPaintValueV1 {
   opacity: number;
 }
 
-// gradient 확장 형태 — null은 단색 확정(형제 필드 제거)과 동일 (api-contract v2 §4)
+// gradient 확장 형태 - null은 단색 확정(형제 필드 제거)과 동일 (api-contract v2 §4)
 export interface NoteBorderPaintGradientValueV1 {
   color: string;
   opacity: number;
@@ -127,7 +127,7 @@ export const projectNotePaintPatch = (
   position?: Pick<KeyPosition, 'noteGradient' | 'noteGlowGradient'>,
 ): Partial<KeyPosition> => {
   if (patch.property === 'noteBorderPaint') {
-    // 2키 형태·gradient null = 단색 확정(형제 필드 제거) — 전이 표는 atomic
+    // 2키 형태·gradient null = 단색 확정(형제 필드 제거) - 전이 표는 atomic
     const gradient =
       'gradient' in patch.value && patch.value.gradient
         ? structuredClone(patch.value.gradient)

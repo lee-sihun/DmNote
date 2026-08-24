@@ -1431,6 +1431,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   canvasAnchor,
   gradientSurface = 'background',
 }) => {
+  const i18n = React.useContext(I18nContext);
   // 외부 제어 모드인지 확인
   const isControlled =
     externalIsOpen !== undefined && externalOnToggle !== undefined;
@@ -1625,6 +1626,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
         ref={buttonRef}
         onClick={handleToggle}
         open={open}
+        aria-label={i18n?.t('noteColor.color') ?? 'noteColor.color'}
         aria-haspopup="dialog"
         aria-expanded={open}
         className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"

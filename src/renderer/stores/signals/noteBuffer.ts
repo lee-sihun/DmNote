@@ -8,7 +8,7 @@ import {
 
 const MAX_NOTES = 2048;
 
-// 테두리 그라데이션 LUT — 행마다 spec 하나를 256텍셀로 래스터라이즈
+// 테두리 그라데이션 LUT - 행마다 spec 하나를 256텍셀로 래스터라이즈
 const GRADIENT_LUT_WIDTH = 256;
 const GRADIENT_LUT_ROWS = 256;
 
@@ -48,7 +48,7 @@ const parseColor = (hex: string) => {
 const convertLinearToSRGB = (rgb: readonly number[]) =>
   [linearToSRGB(rgb[0]), linearToSRGB(rgb[1]), linearToSRGB(rgb[2])] as const;
 
-// spec 한 행을 premultiplied sRGB RGBA로 래스터라이즈 — CSS linear-gradient의
+// spec 한 행을 premultiplied sRGB RGBA로 래스터라이즈 - CSS linear-gradient의
 // premultiplied 보간 규칙과 일치 (투명 스톱에서 회색 번짐 방지)
 const rasterizeGradientRow = (
   spec: GradientSpec,
@@ -56,7 +56,7 @@ const rasterizeGradientRow = (
   offset: number,
 ) => {
   const stops = spec.stops.map((stop) => {
-    // 검증과 같은 §2A 파서 공유 — canonical store 값은 항상 파싱된다.
+    // 검증과 같은 §2A 파서 공유 - canonical store 값은 항상 파싱된다.
     // 방어 폴백(흰색)은 계약 밖 경로에서만 발동
     const parsed = parseStrictStopColor(stop.color) ?? {
       r: 255,
@@ -73,7 +73,7 @@ const rasterizeGradientRow = (
     };
   });
   if (stops.length === 0) {
-    // 도달 불가 방어 — 발동해도 이전 세대 잔여 바이트 대신 결정적 투명 행
+    // 도달 불가 방어 - 발동해도 이전 세대 잔여 바이트 대신 결정적 투명 행
     out.fill(0, offset, offset + GRADIENT_LUT_WIDTH * 4);
     return;
   }
@@ -104,6 +104,16 @@ const rasterizeGradientRow = (
     out[base + 3] = Math.round(Math.min(Math.max(a, 0), 1) * 255);
   }
 };
+
+const gradientStopsKey = (spec: GradientSpec): string =>
+  JSON.stringify(
+    spec.stops.map((stop) => {
+      const parsed = parseStrictStopColor(stop.color);
+      return parsed
+        ? [parsed.r, parsed.g, parsed.b, parsed.a, stop.pos]
+        : [stop.color.trim(), stop.pos];
+    }),
+  );
 
 const extractColorStops = (
   color:
@@ -156,7 +166,7 @@ export type TrackLayoutInput = {
   noteBorderGradient?: GradientSpec | null;
   noteBorderOpacity?: number;
   noteBorderSide?: 'all' | 'vertical' | 'horizontal';
-  // 신형 본체·글로우 (계약 §9) — 있으면 LUT 경로, 없으면 기존 direct 경로
+  // 신형 본체·글로우 (계약 §9) - 있으면 LUT 경로, 없으면 기존 direct 경로
   noteGradient?: GradientSpec | null;
   noteGlowGradient?: GradientSpec | null;
 };
@@ -196,7 +206,7 @@ type ResolvedTrackLayout = TrackLayoutInput & {
 const clampPercentToUnit = (value: number) =>
   Math.min(Math.max(value / 100, 0), 1);
 
-// 본체 spec에서 색만 취한 글로우 상속용 spec — hex 대표색이라 알파가 제거됨
+// 본체 spec에서 색만 취한 글로우 상속용 spec - hex 대표색이라 알파가 제거됨
 const colorOnlyGradient = (spec: GradientSpec): GradientSpec => ({
   angle: spec.angle,
   stops: spec.stops.map((stop) => ({
@@ -277,7 +287,7 @@ const resolveTrackLayout = (
     ? (borderGradient.angle * Math.PI) / 180
     : 0;
 
-  // 신형 본체 — row=-1(만석·구형)이면 shadow 필드 기반 direct 경로가 폴백을
+  // 신형 본체 - row=-1(만석·구형)이면 shadow 필드 기반 direct 경로가 폴백을
   // 담당하므로 별도 대표값 산출이 필요 없다 (§9-3 동기가 폴백 그 자체)
   const bodyGradient = layout.noteGradient ?? null;
   const bodyGradientRow = bodyGradient ? registerGradient(bodyGradient) : -1;
@@ -383,7 +393,7 @@ export class NoteBuffer {
 
   activeCount: number;
   version: number;
-  // LUT 내용 변경 시 증가 — 렌더러가 텍스처 재업로드 시점 판단에 사용
+  // LUT 내용 변경 시 증가 - 렌더러가 텍스처 재업로드 시점 판단에 사용
   gradientLUTVersion: number;
 
   constructor() {
@@ -464,10 +474,10 @@ export class NoteBuffer {
     this.dirtyIndexStart = Infinity;
   }
 
-  // 같은 스톱 배열은 같은 행 재사용 — 각도는 attribute로 가므로 행 identity에서
+  // 같은 스톱 배열은 같은 행 재사용 - 각도는 attribute로 가므로 행 identity에서
   // 제외 (각도 드래그가 행을 소모하지 않음). 행이 가득 차면 -1(단색 다운그레이드)
   private registerGradient = (spec: GradientSpec): number => {
-    const key = JSON.stringify(spec.stops);
+    const key = gradientStopsKey(spec);
     const existing = this.gradientRowBySpec.get(key);
     if (existing !== undefined) return existing;
     if (this.gradientRowCount >= GRADIENT_LUT_ROWS) return -1;
@@ -479,7 +489,7 @@ export class NoteBuffer {
     return row;
   };
 
-  // 참조 노트가 없을 때 팔레트를 비우고 현재 레이아웃 전체를 재등록 —
+  // 참조 노트가 없을 때 팔레트를 비우고 현재 레이아웃 전체를 재등록 -
   // 캐시된 행 인덱스가 전부 이 시점에 다시 발급되므로 stale 참조가 없다
   private rebuildGradientPalette(): void {
     this.gradientRowBySpec.clear();
@@ -516,6 +526,13 @@ export class NoteBuffer {
     );
   }
 
+  private hasDowngradedGradientRows(): boolean {
+    for (const layout of this.trackLayouts.values()) {
+      if (NoteBuffer.hasDowngradedGradientRow(layout)) return true;
+    }
+    return false;
+  }
+
   updateTrackLayouts(tracks: TrackLayoutInput[]) {
     const nextLayouts = new Map<string, ResolvedTrackLayout>();
     tracks.forEach((track) => {
@@ -527,7 +544,7 @@ export class NoteBuffer {
     this.trackLayouts = nextLayouts;
 
     // 참조하는 노트가 없고 새 레이아웃이 쓰지 않는 행이 남았을 때만 팔레트
-    // 재시작 — 편집 드래그로 쌓인 행 회수. 그라데이션과 무관한 레이아웃
+    // 재시작 - 편집 드래그로 쌓인 행 회수. 그라데이션과 무관한 레이아웃
     // 갱신은 행 집합이 그대로라 LUT 재업로드를 만들지 않는다
     if (this.activeCount === 0 && this.gradientRowCount > 0) {
       const referenced = new Set<number>();
@@ -563,12 +580,12 @@ export class NoteBuffer {
     if (this.activeCount >= MAX_NOTES) {
       return -1;
     }
-    // 만석 다운그레이드(-1) 회복 — 레이아웃 갱신 없이도 참조 노트가 모두
-    // 사라진 시점의 다음 allocate에서 팔레트를 재구축해 행을 되찾는다
+    // 만석 다운그레이드(-1) 회복 - 정상 행 트랙이 먼저 할당되어도 다른
+    // 트랙의 강등 상태까지 확인해 유휴 시점에 팔레트를 함께 재구축
     if (
       this.activeCount === 0 &&
       this.gradientRowCount > 0 &&
-      NoteBuffer.hasDowngradedGradientRow(layout)
+      this.hasDowngradedGradientRows()
     ) {
       this.rebuildGradientPalette();
     }

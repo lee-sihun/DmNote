@@ -316,7 +316,9 @@
     "gradient": "그레디언트",
     "gradientAngle": "각도",
     "idle": "대기",
-    "active": "입력"
+    "active": "입력",
+    "hex": "HEX 색상",
+    "alpha": "불투명도(%)"
   },
   "contextMenu": {
     "delete": "삭제",

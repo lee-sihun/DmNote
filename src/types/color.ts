@@ -32,8 +32,8 @@ export function toCanonicalGradient(input: {
   stops: GradientStop[];
 }): GradientSpec {
   const rawAngle = input.angle ?? GRADIENT_DEFAULT_ANGLE;
-  // 이미 [0,360)이면 원값 유지 — Rust rem_euclid와 부동소수 바이트 일치.
-  // -0은 0으로 통일 (Rust normalize 미러) — strict 검증이 -0을 거부한다
+  // 이미 [0,360)이면 원값 유지 - Rust rem_euclid와 부동소수 바이트 일치.
+  // -0은 0으로 통일 (Rust normalize 미러) - strict 검증이 -0을 거부한다
   const wrapped =
     rawAngle >= 0 && rawAngle < 360 ? rawAngle : ((rawAngle % 360) + 360) % 360;
   const angle = wrapped === 0 ? 0 : wrapped;
@@ -106,7 +106,7 @@ function formatAlpha(a: number): string {
 }
 
 /**
- * canonical GradientSpec 엄격 검증 — wire 경계(에디터 op·프리셋)에서 사용.
+ * canonical GradientSpec 엄격 검증 - wire 경계(에디터 op·프리셋)에서 사용.
  * 관용 입력을 받는 canonicalGradientOrNull과 달리 이미 canonical인 값만 통과
  */
 export const isStrictGradientSpec = (value: unknown): value is GradientSpec => {
@@ -153,7 +153,7 @@ export const isStrictGradientSpec = (value: unknown): value is GradientSpec => {
 };
 
 /**
- * 노트 테두리 그라데이션 스톱 색 문법 (api-contract v2 §2A) — Rust 경계와
+ * 노트 테두리 그라데이션 스톱 색 문법 (api-contract v2 §2A) - Rust 경계와
  * 공유 fixture(tests/fixtures/note-border-stop-colors.json)로 parity 고정
  */
 export const isStrictStopColor = (value: string): boolean => {
@@ -182,7 +182,7 @@ export const isStrictStopColor = (value: string): boolean => {
 };
 
 /**
- * 관용 CSS 색을 §2A 문법으로 강제 — 이미 적합하면 원문 유지, 변환 가능하면
+ * 관용 CSS 색을 §2A 문법으로 강제 - 이미 적합하면 원문 유지, 변환 가능하면
  * compact rgba로, 불가(named color 등)면 null. 팔레트처럼 표면 공용인 spec을
  * 노트 테두리 계약에 맞출 때 사용
  */
@@ -193,7 +193,7 @@ export const toStrictStopColor = (color: string): string | null => {
 };
 
 /**
- * §2A 스톱 색 파싱 — 검증·대표색·LUT 래스터라이즈가 이 파서 하나를 공유해
+ * §2A 스톱 색 파싱 - 검증·대표색·LUT 래스터라이즈가 이 파서 하나를 공유해
  * "검증은 통과하는데 렌더는 못 읽는" 도메인 분열을 차단한다. 문법 밖은 null
  */
 export const parseStrictStopColor = (
@@ -232,7 +232,7 @@ export const parseStrictStopColor = (
 };
 
 /**
- * §2A 스톱 색 → #RRGGBB 대문자 대표색 (알파 버림). 문법 밖이면 null —
+ * §2A 스톱 색 → #RRGGBB 대문자 대표색 (알파 버림). 문법 밖이면 null -
  * noteBorderColor의 hex 전용 계약과 rgba→hex 마이그레이션 형식에 맞춘다
  */
 export const hexRepresentative = (value: string): string | null => {
@@ -255,7 +255,7 @@ export const notePaintShadowColor = (
   return { type: 'gradient', top, bottom };
 };
 
-/** §9-3 shadow Top/Bottom — round(끝 스톱 알파 × 배율) */
+/** §9-3 shadow Top/Bottom - round(끝 스톱 알파 × 배율) */
 export const notePaintShadowOpacity = (
   spec: GradientSpec,
   multiplier: number,
@@ -311,7 +311,7 @@ const clampPercent = (value: number): number =>
   Math.min(Math.max(Math.round(value), 0), 100);
 
 /**
- * §2A 스톱 검사(절단 전 원본 기준) + canonical 변환 — 위반·구조 불량은 null.
+ * §2A 스톱 검사(절단 전 원본 기준) + canonical 변환 - 위반·구조 불량은 null.
  * Rust가 역직렬화 시점 원본 배열을 보는 것과 일치시킨다
  */
 const strictCanonicalOrNull = (stored: unknown): GradientSpec | null => {
@@ -408,9 +408,9 @@ export function canonicalizePositionGradients<
     }
   }
 
-  // note border 쌍 — 대표색은 hex 전용(마이그레이션 계약), §2A 밖 스톱은
+  // note border 쌍 - 대표색은 hex 전용(마이그레이션 계약), §2A 밖 스톱은
   // 필드 drop + base 유지 (Rust store 경계 미러). 스톱 검사는 canonical
-  // 절단(8개) 이전의 원본 배열 기준 — Rust가 역직렬화 시점 원본을 보는 것과 일치
+  // 절단(8개) 이전의 원본 배열 기준 - Rust가 역직렬화 시점 원본을 보는 것과 일치
   if ('noteBorderGradient' in position) {
     const stored = (next ?? position).noteBorderGradient;
     if (stored == null) {
@@ -436,7 +436,7 @@ export function canonicalizePositionGradients<
     }
   }
 
-  // 본체·글로우 쌍 — 신형(sibling 존재)일 때 구형 shadow 4필드를 atomic 동기
+  // 본체·글로우 쌍 - 신형(sibling 존재)일 때 구형 shadow 4필드를 atomic 동기
   // (계약 §9-3, Rust 미러): noteColor는 첫/끝 스톱 대문자 hex의 구형 gradient
   // 객체, Top/Bottom은 round(스톱 알파 × 배율). 배율 부재 = 100
   for (const pair of NOTE_PAINT_SHADOW_PAIRS) {

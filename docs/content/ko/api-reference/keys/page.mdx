@@ -118,11 +118,19 @@ interface KeyPosition {
   count: number;
   noteColor: string | { type: 'gradient'; top: string; bottom: string };
   noteOpacity: number;
+  noteOpacityTop?: number;
+  noteOpacityBottom?: number;
+  noteGradient?: GradientSpec | null;
   noteEffectEnabled: boolean;
   noteGlowEnabled: boolean;
   noteGlowSize: number;
   noteGlowOpacity: number;
+  noteGlowOpacityTop?: number;
+  noteGlowOpacityBottom?: number;
   noteGlowColor?: string | { type: 'gradient'; top: string; bottom: string };
+  noteGlowGradient?: GradientSpec | null;
+  noteBorderColor?: string;
+  noteBorderGradient?: GradientSpec | null;
   noteAutoYCorrection: boolean;
   className?: string;
   zIndex?: number;
@@ -143,8 +151,11 @@ interface KeyPosition {
 interface KeyCounterSettings {
   // ...배치, 글자, stroke, 애니메이션 필드...
   fill: { idle: string; active: string };
+  stroke: { idle: string; active: string };
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
+  strokeIdleGradient?: GradientSpec | null;
+  strokeActiveGradient?: GradientSpec | null;
 }
 
 interface GradientSpec {

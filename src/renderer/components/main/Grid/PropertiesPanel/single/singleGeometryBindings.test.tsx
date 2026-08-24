@@ -1186,37 +1186,44 @@ describe('single geometry input bindings', () => {
     },
   );
 
-  it('counter fill gradient 선택은 first-stop compact 대표값과 exact spec을 함께 commit한다', () => {
-    const fill = vi.fn();
-    const gradient = {
-      angle: 45,
-      stops: [
-        { color: '#112233', pos: 0 },
-        { color: '#445566', pos: 1 },
-      ],
-    };
-    act(() => {
-      root.render(
-        <CounterTabContent
-          keyIndex={0}
-          keyPosition={createDefaultKeyPosition()}
-          isStat={false}
-          onKeyUpdate={vi.fn()}
-          onCounterFillCommit={fill}
-          t={(key) => key}
-        />,
-      );
-    });
-    act(() => captured.swatches.at(-2)?.onClick());
-    act(() => captured.color?.onColorChange('local-only'));
-    expect(fill).not.toHaveBeenCalled();
-    act(() => captured.color?.onGradientSpecSelect?.(gradient));
+  it.each([
+    ['fill', -2, 'counterFillIdle'],
+    ['stroke', -1, 'counterStrokeIdle'],
+  ] as const)(
+    'counter %s gradient 선택은 first-stop 대표값과 exact spec을 함께 commit한다',
+    (_, swatchIndex, property) => {
+      const paint = vi.fn();
+      const gradient = {
+        angle: 45,
+        stops: [
+          { color: '#112233', pos: 0 },
+          { color: '#445566', pos: 1 },
+        ],
+      };
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            isStat={false}
+            onKeyUpdate={vi.fn()}
+            onCounterFillCommit={paint}
+            onCounterStrokeCommit={paint}
+            t={(key) => key}
+          />,
+        );
+      });
+      act(() => captured.swatches.at(swatchIndex)?.onClick());
+      act(() => captured.color?.onColorChange('local-only'));
+      expect(paint).not.toHaveBeenCalled();
+      act(() => captured.color?.onGradientSpecSelect?.(gradient));
 
-    expect(fill).toHaveBeenCalledWith({
-      property: 'counterFillIdle',
-      value: { color: 'rgba(17,34,51,1)', gradient },
-    });
-  });
+      expect(paint).toHaveBeenCalledWith({
+        property,
+        value: { color: 'rgba(17,34,51,1)', gradient },
+      });
+    },
+  );
 
   it.each([
     ['key', true],

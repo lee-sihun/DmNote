@@ -14,16 +14,21 @@ use crate::{
         load::read_preset_file_for_simulation, save::write_preset_file_for_simulation, PresetFile,
     },
     defaults::{default_keys, default_positions},
-    models::{AppStoreData, EditorCommitOrigin, EditorField, GradientSpec, KeyPosition},
+    models::{
+        AppStoreData, EditorCommitOrigin, EditorField, GradientSpec, KeyPosition,
+        POSITION_COLLECTION_FIELDS,
+    },
     state::migration::{canonicalize_gradient_pairs, load_store_from_path, normalize_state},
 };
 
-const GRADIENT_FIELDS: [&str; 9] = [
+const GRADIENT_FIELDS: [&str; 11] = [
     "backgroundGradient",
     "activeBackgroundGradient",
     "borderGradient",
     "activeBorderGradient",
     "noteBorderGradient",
+    "noteGradient",
+    "noteGlowGradient",
     "fillIdleGradient",
     "fillActiveGradient",
     "strokeIdleGradient",
@@ -187,12 +192,7 @@ fn collect_counter_colors(value: &Value, colors: &mut Vec<Value>) {
 
 fn counter_colors(value: &Value) -> Vec<Value> {
     let mut colors = Vec::new();
-    for field in [
-        "keyPositions",
-        "statPositions",
-        "graphPositions",
-        "knobPositions",
-    ] {
+    for field in POSITION_COLLECTION_FIELDS {
         if let Some(collection) = value.get(field) {
             collect_counter_colors(collection, &mut colors);
         }
@@ -287,12 +287,7 @@ fn editor_position_semantics_without_ids(data: &AppStoreData) -> Value {
         "graphPositions": data.graph_positions,
         "knobPositions": data.knob_positions,
     });
-    for field in [
-        "keyPositions",
-        "statPositions",
-        "graphPositions",
-        "knobPositions",
-    ] {
+    for field in POSITION_COLLECTION_FIELDS {
         for entries in value
             .get_mut(field)
             .and_then(Value::as_object_mut)
@@ -648,7 +643,7 @@ fn simulation_3_gradient_store_and_preset_chain_stays_canonical() {
     assert!(
         imported_ids
             .iter()
-            .all(|id| uuid::Uuid::parse_str(id).is_ok()),
+            .all(|id| crate::state::native_element_id::is_valid_element_id(id)),
         "imported element IDs must be valid UUIDs"
     );
     assert!(
@@ -852,6 +847,8 @@ fn simulation_5_inline_legacy_preset_imports_without_gradients() {
     assert!(position.border_gradient.is_none());
     assert!(position.active_border_gradient.is_none());
     assert!(position.note_border_gradient.is_none());
+    assert!(position.note_gradient.is_none());
+    assert!(position.note_glow_gradient.is_none());
     assert!(position.counter.fill_idle_gradient.is_none());
     assert!(position.counter.fill_active_gradient.is_none());
     assert!(position.counter.stroke_idle_gradient.is_none());

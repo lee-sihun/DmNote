@@ -214,7 +214,7 @@ const fragmentShader = `
     vec3 glowColor = mix(vGlowColorTop, vGlowColorBottom, gradientRatio);
     float glowOpacity = mix(vGlowOpacity.x, vGlowOpacity.y, gradientRatio);
 
-    // 신형 본체·글로우는 LUT 경로 (계약 §9-4) — direct 경로는 기존 그대로.
+    // 신형 본체·글로우는 LUT 경로 (계약 §9-4) - direct 경로는 기존 그대로.
     // paint는 premultiplied 규약으로 정규화: contrib = premultRGB × mask × fade
     float boxW = max(vHalfSize.x * 2.0, 0.0001);
     float nx = clamp((vLocalPos.x + vHalfSize.x) / boxW, 0.0, 1.0);
@@ -301,7 +301,7 @@ const fragmentShader = `
     float bodyFactor = innerMask;
     float bodyAlpha = bodyStraightAlpha * bodyFactor;
 
-    // 그라데이션 테두리 — LUT 텍셀은 premultiplied라 paint에 텍셀 알파를 재곱하지 않는다
+    // 그라데이션 테두리 - LUT 텍셀은 premultiplied라 paint에 텍셀 알파를 재곱하지 않는다
     vec3 borderPaint = borderColor;
     float borderTexAlpha = 1.0;
     if (vBorderGradient.x >= 0.0) {
@@ -724,7 +724,7 @@ export function WebGLTracksOGL({
     markInstancedAttributesDirty(geometry, noteBuffer.activeCount);
     geometryRef.current = geometry;
 
-    // 테두리 그라데이션 LUT — 고정 용량, 내용만 갱신 (행은 append-only)
+    // 테두리 그라데이션 LUT - 고정 용량, 내용만 갱신 (행은 append-only)
     const gradientLUTTexture = new Texture(gl, {
       image: noteBuffer.gradientLUT,
       width: GRADIENT_LUT_WIDTH,

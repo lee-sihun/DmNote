@@ -41,6 +41,12 @@ export const keyCounterAnimationSchema = z.object({
   durationMs: z.number().int().min(1).max(5000),
 });
 
+// 선택 그라데이션 하나가 손상돼도 나머지 카운터 설정은 보존
+const optionalCounterGradientSchema = gradientSpecSchema
+  .nullable()
+  .optional()
+  .catch(undefined);
+
 const keyCounterSettingsInputSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -57,10 +63,10 @@ const keyCounterSettingsInputSchema = z
     fontUnderline: z.boolean().optional(),
     fontStrikethrough: z.boolean().optional(),
     animation: keyCounterAnimationSchema.partial().optional(),
-    fillIdleGradient: gradientSpecSchema.nullable().optional(),
-    fillActiveGradient: gradientSpecSchema.nullable().optional(),
-    strokeIdleGradient: gradientSpecSchema.nullable().optional(),
-    strokeActiveGradient: gradientSpecSchema.nullable().optional(),
+    fillIdleGradient: optionalCounterGradientSchema,
+    fillActiveGradient: optionalCounterGradientSchema,
+    strokeIdleGradient: optionalCounterGradientSchema,
+    strokeActiveGradient: optionalCounterGradientSchema,
   })
   .partial();
 
@@ -85,7 +91,7 @@ export interface KeyCounterSettings {
   alignMode: KeyCounterAlignMode;
   fill: KeyCounterColor;
   stroke: KeyCounterColor;
-  // fill/stroke 그라데이션 형제 — 단색 필드는 대표색 폴백
+  // fill/stroke 그라데이션 형제 - 단색 필드는 대표색 폴백
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
   strokeIdleGradient?: GradientSpec | null;
@@ -333,9 +339,9 @@ export const keyPositionSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
     .optional(),
-  // 테두리 그라데이션 형제 — 있으면 렌더 우선, noteBorderColor는 hex 대표색 폴백
+  // 테두리 그라데이션 형제 - 있으면 렌더 우선, noteBorderColor는 hex 대표색 폴백
   noteBorderGradient: gradientSpecSchema.optional(),
-  // 본체·글로우 형제 — 있으면 신형 의미(배율 모델), 구형 필드는 다운그레이드 shadow (계약 §9)
+  // 본체·글로우 형제 - 있으면 신형 의미(배율 모델), 구형 필드는 다운그레이드 shadow (계약 §9)
   noteGradient: gradientSpecSchema.optional(),
   noteGlowGradient: gradientSpecSchema.optional(),
   // 테두리 투명도 (0~100, 없으면 100). 노트 배경 투명도와 독립

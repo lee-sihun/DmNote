@@ -331,6 +331,14 @@ gradient siblings:
 interface KeyPosition {
   id?: string; // stable element identity (UUID), assigned and owned by the app
   // ...position, image, note, and counter fields...
+  noteOpacityTop?: number;
+  noteOpacityBottom?: number;
+  noteGradient?: GradientSpec | null;
+  noteGlowOpacityTop?: number;
+  noteGlowOpacityBottom?: number;
+  noteGlowGradient?: GradientSpec | null;
+  noteBorderColor?: string;
+  noteBorderGradient?: GradientSpec | null;
   backgroundColor?: string;
   activeBackgroundColor?: string;
   borderColor?: string;
@@ -347,8 +355,11 @@ interface KeyPosition {
 interface KeyCounterSettings {
   // ...placement, typography, stroke, and animation fields...
   fill: { idle: string; active: string };
+  stroke: { idle: string; active: string };
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
+  strokeIdleGradient?: GradientSpec | null;
+  strokeActiveGradient?: GradientSpec | null;
 }
 
 interface GradientSpec {

@@ -126,6 +126,21 @@ const gradientLayout = (
   noteBorderGradient: { angle, stops },
 });
 
+const exhaustGradientPalette = (
+  buffer: ReturnType<typeof createNoteBuffer>,
+  trackKey: string,
+): void => {
+  for (let i = 0; i < 256; i += 1) {
+    const channel = i.toString(16).padStart(2, '0');
+    buffer.updateTrackLayouts([
+      gradientLayout(trackKey, [
+        { color: `#00${channel}00`, pos: 0 },
+        { color: '#FFFFFF', pos: 1 },
+      ]),
+    ]);
+  }
+};
+
 describe('NoteBuffer 테두리 그라데이션 LUT', () => {
   const stopsA = [
     { color: '#FF0000', pos: 0 },
@@ -171,6 +186,23 @@ describe('NoteBuffer 테두리 그라데이션 LUT', () => {
     );
   });
 
+  it('의미가 같은 스톱 색의 표기 차이는 같은 행을 공유한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      gradientLayout('Z', stopsA),
+      gradientLayout('X', [
+        { color: 'rgb(255, 0, 0)', pos: 0 },
+        { color: '#0000ff', pos: 1 },
+      ]),
+    ]);
+    buffer.allocate('Z', 'note-1', 1000);
+    buffer.allocate('X', 'note-2', 1001);
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+    expect(buffer.noteBorderGradientInfo[2]).toBe(0);
+    expect(buffer.gradientLUTVersion).toBe(1);
+  });
+
   it('스톱이 다르면 새 행을 append한다', () => {
     const buffer = createNoteBuffer();
     buffer.updateTrackLayouts([
@@ -213,7 +245,7 @@ describe('NoteBuffer 테두리 그라데이션 LUT', () => {
     buffer.updateTrackLayouts([gradientLayout('Z', stopsA)]);
     const versionBeforeLeak = buffer.gradientLUTVersion;
 
-    // stopsA 행이 누수 — 리셋 후 stopsB가 행 0부터 재등록
+    // stopsA 행이 누수 - 리셋 후 stopsB가 행 0부터 재등록
     buffer.updateTrackLayouts([gradientLayout('Z', stopsB)]);
     expect(buffer.gradientLUTVersion).toBeGreaterThan(versionBeforeLeak);
     const versionAfterReset = buffer.gradientLUTVersion;
@@ -274,15 +306,7 @@ describe('NoteBuffer 테두리 그라데이션 LUT', () => {
     const buffer = createNoteBuffer();
     buffer.updateTrackLayouts([gradientLayout('Z', stopsA)]);
     buffer.allocate('Z', 'hold', 1000);
-    for (let i = 0; i < 256; i += 1) {
-      const g = i.toString(16).padStart(2, '0');
-      buffer.updateTrackLayouts([
-        gradientLayout('Z', [
-          { color: `#00${g}00`, pos: 0 },
-          { color: '#FFFFFF', pos: 1 },
-        ]),
-      ]);
-    }
+    exhaustGradientPalette(buffer, 'Z');
     buffer.allocate('Z', 'over', 1001);
     expect(buffer.noteBorderGradientInfo[2]).toBe(-1);
 
@@ -299,18 +323,7 @@ describe('NoteBuffer 테두리 그라데이션 LUT', () => {
     buffer.allocate('Z', 'hold', 1000);
 
     // 활성 노트가 행 리셋을 막는 동안 고유 스톱으로 용량을 소진
-    for (let i = 0; i < 256; i += 1) {
-      const g = (i % 256).toString(16).padStart(2, '0');
-      const b = Math.floor(i / 256)
-        .toString(16)
-        .padStart(2, '0');
-      buffer.updateTrackLayouts([
-        gradientLayout('Z', [
-          { color: `#00${g}${b}`, pos: 0 },
-          { color: '#FFFFFF', pos: 1 },
-        ]),
-      ]);
-    }
+    exhaustGradientPalette(buffer, 'Z');
     buffer.allocate('Z', 'over', 1001);
     expect(buffer.noteBorderGradientInfo[2]).toBe(-1);
 
@@ -319,6 +332,25 @@ describe('NoteBuffer 테두리 그라데이션 LUT', () => {
     buffer.updateTrackLayouts([gradientLayout('Z', stopsB)]);
     buffer.allocate('Z', 'fresh', 1002);
     expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+  });
+
+  it('정상 행 트랙이 먼저 할당되어도 다른 다운그레이드 트랙을 함께 회복한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([gradientLayout('A', stopsA)]);
+    buffer.allocate('A', 'hold', 1000);
+    exhaustGradientPalette(buffer, 'A');
+
+    buffer.updateTrackLayouts([
+      gradientLayout('A', stopsA),
+      gradientLayout('B', stopsB),
+    ]);
+    buffer.release('hold');
+
+    buffer.allocate('A', 'normal-first', 1001);
+    buffer.allocate('B', 'recovered-second', 1002);
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+    expect(buffer.noteBorderGradientInfo[2]).toBe(1);
   });
 
   it('신형 본체는 행·각도·배율을, 구형은 -1(direct)을 기록한다', () => {

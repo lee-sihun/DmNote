@@ -316,7 +316,9 @@
     "gradient": "漸變",
     "gradientAngle": "角度",
     "idle": "閒置",
-    "active": "激活"
+    "active": "激活",
+    "hex": "HEX 顏色",
+    "alpha": "不透明度百分比"
   },
   "contextMenu": {
     "delete": "刪除",

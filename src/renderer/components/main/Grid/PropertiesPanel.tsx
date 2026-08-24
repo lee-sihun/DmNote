@@ -1679,7 +1679,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             .then((applied) => {
               // 가드 거부(false)는 rejection이 아니라서 별도 로그가 없으면 무음
               if (!applied) {
-                console.error('Note paint patch rejected by guard', patch);
+                reportElementOpSkipped('single note paint');
               }
             })
             .catch((error) => {
@@ -1786,7 +1786,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             .then((applied) => {
               // 가드 거부(false)는 rejection이 아니라서 별도 로그가 없으면 무음
               if (!applied) {
-                console.error('Counter stroke patch rejected by guard', patch);
+                reportElementOpSkipped('single counter stroke');
               }
             })
             .catch((error) => {

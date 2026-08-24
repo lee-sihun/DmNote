@@ -9,7 +9,7 @@ interface ColorTrackBenchmarkSurfaceProps {
   onRender?: (durationMs: number) => void;
 }
 
-export const COLOR_TRACK_INITIAL = hsvToColorObject({
+const COLOR_TRACK_INITIAL = hsvToColorObject({
   h: 220,
   s: 0,
   v: 100,

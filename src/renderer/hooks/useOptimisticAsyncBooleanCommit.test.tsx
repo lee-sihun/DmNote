@@ -174,4 +174,37 @@ describe('useOptimisticAsyncBooleanCommit', () => {
     expect(onCommit).toHaveBeenCalledWith(true);
     expect(getToggle()?.getAttribute('aria-checked')).toBe('true');
   });
+
+  it('paint 전 unmount는 예약을 취소하고 최신 의도를 한 번 커밋한다', async () => {
+    const onCommit = vi.fn(async () => undefined);
+    const UnmountHarness = () => {
+      const [mounted, setMounted] = useState(true);
+      return (
+        <>
+          {mounted && <AsyncToggleHarness onCommit={onCommit} />}
+          <button
+            type="button"
+            data-unmount="true"
+            onClick={() => setMounted(false)}
+          >
+            제거
+          </button>
+        </>
+      );
+    };
+    act(() => root.render(<UnmountHarness />));
+
+    act(() => getToggle()?.click());
+    expect(animationFrames.size).toBe(1);
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-unmount="true"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(animationFrames.size).toBe(0);
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(onCommit).toHaveBeenCalledWith(true);
+    await act(async () => vi.runOnlyPendingTimersAsync());
+    expect(onCommit).toHaveBeenCalledOnce();
+  });
 });

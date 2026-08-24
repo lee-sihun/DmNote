@@ -15,6 +15,12 @@ use std::path::Path;
 use uuid::Uuid;
 
 pub const MAX_SLOT_KEYS: usize = 8;
+pub const POSITION_COLLECTION_FIELDS: [&str; 4] = [
+    "keyPositions",
+    "statPositions",
+    "graphPositions",
+    "knobPositions",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

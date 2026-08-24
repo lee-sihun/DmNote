@@ -316,7 +316,9 @@
     "gradient": "Gradient",
     "gradientAngle": "Angle",
     "idle": "Idle",
-    "active": "Active"
+    "active": "Active",
+    "hex": "HEX color",
+    "alpha": "Opacity percentage"
   },
   "contextMenu": {
     "delete": "Delete",

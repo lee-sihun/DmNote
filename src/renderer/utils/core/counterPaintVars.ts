@@ -9,7 +9,7 @@ interface CounterPaintInput {
 }
 
 /**
- * 카운터 fill·stroke 페인트 CSS 변수 산출 — CountDisplay와 에디터 프리뷰
+ * 카운터 fill·stroke 페인트 CSS 변수 산출 - CountDisplay와 에디터 프리뷰
  * 레이어가 공유한다. 실제 속성 적용은 global.css의 fallback 체인이 담당하고,
  * 사용자 --counter-color / --counter-stroke-color가 항상 앱 그라데이션보다 우선
  */

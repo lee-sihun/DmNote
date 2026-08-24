@@ -838,6 +838,8 @@ const ColorPickerWrapper = ({
       {solidOnly || mode === MODES.solid ? (
         <Input
           value={inputValue}
+          colorLabel={t('colorPicker.hex')}
+          alphaLabel={t('colorPicker.alpha')}
           onValueChange={handleInputChange}
           onValueCommit={commitSolidInput}
           previewColor={selectedColor.hex}
@@ -1146,6 +1148,8 @@ function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
 
 interface InputProps {
   value?: string;
+  colorLabel: string;
+  alphaLabel: string;
   onValueChange?: (value: string) => void;
   onValueCommit?: () => void;
   previewColor?: string;
@@ -1158,6 +1162,8 @@ interface InputProps {
 
 const Input = ({
   value = '',
+  colorLabel,
+  alphaLabel,
   onValueChange,
   onValueCommit,
   previewColor,
@@ -1181,6 +1187,7 @@ const Input = ({
         />
         <input
           type="text"
+          aria-label={colorLabel}
           value={value}
           onChange={handleChange}
           onBlur={onValueCommit}
@@ -1198,6 +1205,7 @@ const Input = ({
           <input
             type="text"
             inputMode="numeric"
+            aria-label={alphaLabel}
             value={alphaPercentValue ?? ''}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
               onAlphaPercentChange?.(e.target.value)

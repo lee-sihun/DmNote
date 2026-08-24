@@ -316,7 +316,9 @@
     "gradient": "Градиент",
     "gradientAngle": "Угол",
     "idle": "Покой",
-    "active": "Нажат"
+    "active": "Нажат",
+    "hex": "Цвет HEX",
+    "alpha": "Процент непрозрачности"
   },
   "contextMenu": {
     "delete": "Удалить",

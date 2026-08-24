@@ -252,7 +252,7 @@ export function computeLayout(input: LayoutInput) {
           position.noteGlowOpacityTop ?? position.noteGlowOpacity ?? 70,
         noteGlowOpacityBottom:
           position.noteGlowOpacityBottom ?? position.noteGlowOpacity ?? 70,
-        // 본체 폴백은 resolve가 담당 — 명시 여부가 글로우 소스 우선순위 판별에 필요
+        // 본체 폴백은 resolve가 담당 - 명시 여부가 글로우 소스 우선순위 판별에 필요
         noteGlowColor: position.noteGlowColor,
         flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
         borderRadius: position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,

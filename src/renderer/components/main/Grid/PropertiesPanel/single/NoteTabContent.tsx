@@ -13,9 +13,9 @@ import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import {
-  toRgbHexColor,
   parseAlphaPercent,
   hexWithAlphaPercent,
+  toCanonicalCssRgba,
 } from '@utils/color/colorUtils';
 import {
   gradientToCss,
@@ -40,7 +40,17 @@ import {
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
 
-// 팔레트는 표면 공용이라 §2A 밖 스톱이 들어올 수 있다 — 가능한 색은
+const toNoteStopColor = (color: string): string | null =>
+  toStrictStopColor(color) ?? toCanonicalCssRgba(color);
+
+const toNoteHexColor = (color: string): string => {
+  const strict = toNoteStopColor(color);
+  return strict
+    ? hexRepresentative(strict) ?? DEFAULT_NOTE_COLOR
+    : DEFAULT_NOTE_COLOR;
+};
+
+// 팔레트는 표면 공용이라 §2A 밖 스톱이 들어올 수 있다 - 가능한 색은
 // compact rgba로 강제하고, 변환 불가면 실패 예정 커밋을 만들지 않는다
 const coerceStrictStops = (
   rawStops: GradientSpec['stops'],
@@ -48,7 +58,7 @@ const coerceStrictStops = (
 ): GradientSpec['stops'] | null => {
   const stops: GradientSpec['stops'] = [];
   for (const stop of rawStops) {
-    const color = toStrictStopColor(stop.color);
+    const color = toNoteStopColor(stop.color);
     if (color === null) {
       console.error(
         `[${logTag}] unsupported gradient stop color: ${stop.color}`,
@@ -82,7 +92,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   const glowColorButtonRef = useRef<HTMLButtonElement>(null);
   const borderColorButtonRef = useRef<HTMLButtonElement>(null);
 
-  // 단색 로컬 상태 — 그라데이션 세션 상태는 useGradientColorState가 관리
+  // 단색 로컬 상태 - 그라데이션 세션 상태는 useGradientColorState가 관리
   const [noteSolidColor, setNoteSolidColor] = useState<string>(() => {
     const noteColor = keyPosition.noteColor;
     return typeof noteColor === 'string' ? noteColor : DEFAULT_NOTE_COLOR;
@@ -154,10 +164,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
   const storedBorderGradient = keyPosition.noteBorderGradient ?? null;
 
-  // 테두리 그라데이션 커밋 — 대표색은 hex 전용 계약(api-contract v2 §2)
+  // 테두리 그라데이션 커밋 - 대표색은 hex 전용 계약(api-contract v2 §2)
   const handleBorderPaintCommit = (value: ColorModeValue) => {
     if (value.mode === 'solid') {
-      const hex = hexRepresentative(value.color) ?? toRgbHexColor(value.color);
+      const hex = toNoteHexColor(value.color);
       setBorderColor(hex);
       const patch = {
         property: 'noteBorderPaint',
@@ -201,7 +211,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         ? { kind: 'key', id: keyPosition.id }
         : undefined,
     canvasSurface: 'noteBorder',
-    // 드래그 중 중간값은 흘리지 않는다 — 기존 보더 픽커처럼 커밋(드래그 완료·
+    // 드래그 중 중간값은 흘리지 않는다 - 기존 보더 픽커처럼 커밋(드래그 완료·
     // 형식 전환·팔레트 선택) 시점에 preview+commit 쌍으로 오버레이에 반영
     onCommit: handleBorderPaintCommit,
   });
@@ -247,7 +257,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickerFor]);
 
-  // 본체·글로우 커밋 (계약 §9-5) — 전환·배율·shadow를 한 op으로
+  // 본체·글로우 커밋 (계약 §9-5) - 전환·배율·shadow를 한 op으로
   const makePaintCommit =
     (surface: 'note' | 'glow') => (value: ColorModeValue) => {
       const property = surface === 'note' ? 'notePaint' : 'noteGlowPaint';
@@ -265,7 +275,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
       if (value.mode === 'solid') {
         // 노트 단색은 hex 관례 유지 - 알파는 투명도 필드 소관
-        const solidHex = toRgbHexColor(value.color);
+        const solidHex = toNoteHexColor(value.color);
         setSolid(solidHex);
         if (!hadSpec) {
           // 단색·구형 → 단색: 구형 색 변경 (프로파일 보존, sibling 제거는 무해)
@@ -303,7 +313,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       commitGradientPaint(surface, value.spec, localOpacity);
     };
 
-  // 그라데이션 커밋 공통부 — 배율 슬라이더(형식 전환 겸용)와 색 커밋이 공유
+  // 그라데이션 커밋 공통부 - 배율 슬라이더(형식 전환 겸용)와 색 커밋이 공유
   const commitGradientPaint = (
     surface: 'note' | 'glow',
     rawSpec: GradientSpec,
@@ -340,7 +350,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       pickerFor === 'note'
         ? {
             // 임의 문자열 색(플러그인 기록 등)이 그라데이션 시드를 죽이지 않게 §2A로 정화
-            color: toStrictStopColor(noteSolidColor) ?? DEFAULT_NOTE_COLOR,
+            color: toNoteStopColor(noteSolidColor) ?? DEFAULT_NOTE_COLOR,
             gradient: storedNoteSpec,
           }
         : {},
@@ -363,7 +373,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     pair:
       pickerFor === 'glow'
         ? {
-            color: toStrictStopColor(glowSolidColor) ?? DEFAULT_NOTE_COLOR,
+            color: toNoteStopColor(glowSolidColor) ?? DEFAULT_NOTE_COLOR,
             gradient: storedGlowSpec,
           }
         : {},
@@ -815,7 +825,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                 borderGradientState.format !== 'gradient'
               ) {
                 // 보더 단색은 색 알파가 투명도를 겸하는 기존 규약 유지
-                setBorderColor(toRgbHexColor(c));
+                setBorderColor(toNoteHexColor(c));
                 setLocalBorderOpacity(parseAlphaPercent(c, localBorderOpacity));
                 return;
               }
@@ -827,7 +837,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                 pickerFor === 'border' &&
                 borderGradientState.format !== 'gradient'
               ) {
-                const hex = toRgbHexColor(c);
+                const hex = toNoteHexColor(c);
                 const opacity = parseAlphaPercent(c, localBorderOpacity);
                 setBorderColor(hex);
                 setLocalBorderOpacity(opacity);

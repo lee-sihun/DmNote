@@ -306,6 +306,15 @@ const toColorObject = (
   return null;
 };
 
+// 브라우저가 허용하는 CSS 색을 compact rgba로 정규화
+const toCanonicalCssRgba = (value: string): string | null => {
+  const parsed = toColorObject(value);
+  if (!parsed) return null;
+  const { r, g, b, a } = parsed.rgb;
+  const alpha = Math.round(a * 10_000) / 10_000;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
 const toCssRgba = (
   value: string | null | undefined,
   fallback: string = '#000000',
@@ -386,6 +395,7 @@ export {
   hsvToRgb,
   hsvToColorObject,
   toColorObject,
+  toCanonicalCssRgba,
   toCssRgba,
   parseAlphaPercent,
   hexWithAlphaPercent,

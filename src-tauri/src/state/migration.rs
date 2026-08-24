@@ -31,7 +31,7 @@ use crate::{
         GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KeySlot,
         KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds,
         ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType, TabCss,
-        TabNoteSettings,
+        TabNoteSettings, POSITION_COLLECTION_FIELDS,
     },
 };
 
@@ -207,12 +207,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
 }
 
 fn default_store_note_gradient_multipliers(value: &mut Value) {
-    for collection in [
-        "keyPositions",
-        "statPositions",
-        "graphPositions",
-        "knobPositions",
-    ] {
+    for collection in POSITION_COLLECTION_FIELDS {
         let Some(modes) = value.get_mut(collection).and_then(Value::as_object_mut) else {
             continue;
         };
@@ -223,23 +218,18 @@ fn default_store_note_gradient_multipliers(value: &mut Value) {
 }
 
 fn has_explicit_invalid_element_id(value: &Value) -> bool {
-    [
-        "keyPositions",
-        "statPositions",
-        "graphPositions",
-        "knobPositions",
-    ]
-    .into_iter()
-    .filter_map(|field| value.get(field).and_then(Value::as_object))
-    .flat_map(|modes| modes.values())
-    .filter_map(Value::as_array)
-    .flatten()
-    .filter_map(Value::as_object)
-    .filter_map(|element| element.get("id"))
-    .any(|id| {
-        id.as_str()
-            .is_none_or(|id| !super::native_element_id::is_valid_element_id(id))
-    })
+    POSITION_COLLECTION_FIELDS
+        .into_iter()
+        .filter_map(|field| value.get(field).and_then(Value::as_object))
+        .flat_map(|modes| modes.values())
+        .filter_map(Value::as_array)
+        .flatten()
+        .filter_map(Value::as_object)
+        .filter_map(|element| element.get("id"))
+        .any(|id| {
+            id.as_str()
+                .is_none_or(|id| !super::native_element_id::is_valid_element_id(id))
+        })
 }
 
 fn current_unix_millis() -> i64 {
@@ -1955,7 +1945,7 @@ mod tests {
             GraphStatType, GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor,
             KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
             NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition, StatType, TabCss,
-            TabNoteSettings,
+            TabNoteSettings, POSITION_COLLECTION_FIELDS,
         },
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -2108,12 +2098,7 @@ mod tests {
     }
 
     fn remove_all_native_ids(value: &mut serde_json::Value) {
-        for field in [
-            "keyPositions",
-            "statPositions",
-            "graphPositions",
-            "knobPositions",
-        ] {
+        for field in POSITION_COLLECTION_FIELDS {
             let Some(modes) = value
                 .get_mut(field)
                 .and_then(serde_json::Value::as_object_mut)

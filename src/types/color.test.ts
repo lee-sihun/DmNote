@@ -248,7 +248,7 @@ describe('resolveStatePair / gradientToCss', () => {
   });
 });
 
-describe('isStrictStopColor — 노트 테두리 스톱 문법 (계약 v2 §2A)', () => {
+describe('isStrictStopColor - 노트 테두리 스톱 문법 (계약 v2 §2A)', () => {
   it('허용 형태', () => {
     for (const value of [
       '#abc',
@@ -288,7 +288,7 @@ describe('isStrictStopColor — 노트 테두리 스톱 문법 (계약 v2 §2A)'
   });
 });
 
-describe('hexRepresentative — 대표색 hex 변환', () => {
+describe('hexRepresentative - 대표색 hex 변환', () => {
   it('축약·알파 hex와 rgba를 #RRGGBB 대문자로', () => {
     expect(hexRepresentative('#abc')).toBe('#AABBCC');
     expect(hexRepresentative('#abcd')).toBe('#AABBCC');
@@ -303,7 +303,7 @@ describe('hexRepresentative — 대표색 hex 변환', () => {
   });
 });
 
-describe('canonicalizePositionGradients — 노트 테두리 쌍', () => {
+describe('canonicalizePositionGradients - 노트 테두리 쌍', () => {
   it('대표색은 hex 전용으로 repair (rgba→hex 마이그레이션 핑퐁 방지)', () => {
     const pos = {
       noteBorderColor: '#stale',
@@ -361,7 +361,7 @@ describe('canonicalizePositionGradients — 노트 테두리 쌍', () => {
   });
 });
 
-describe('canonicalizePositionGradients — 본체·글로우 shadow 동기 (계약 §9-3)', () => {
+describe('canonicalizePositionGradients - 본체·글로우 shadow 동기 (계약 §9-3)', () => {
   it('sibling 존재 시 shadow 4필드를 재계산한다 (배율 부재 = 100)', () => {
     const pos = {
       noteColor: '#stale',
@@ -430,7 +430,7 @@ describe('canonicalizePositionGradients — 본체·글로우 shadow 동기 (계
   });
 });
 
-describe('canonicalizePositionGradients — counter stroke 쌍', () => {
+describe('canonicalizePositionGradients - counter stroke 쌍', () => {
   it('stroke 대표색은 compact rgba로 repair', () => {
     const pos = {
       counter: {

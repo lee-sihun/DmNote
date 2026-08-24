@@ -1693,6 +1693,8 @@ describe('ColorInput deferred picker mount', () => {
     act(() => root.render(<ColorInput value="#ffffff" onChange={() => {}} />));
     const button = container.querySelector('button')!;
 
+    expect(button.getAttribute('aria-label')).toBe('noteColor.color');
+
     act(() => button.click());
 
     expect(button.className).toContain('shadow-focus-ring');
