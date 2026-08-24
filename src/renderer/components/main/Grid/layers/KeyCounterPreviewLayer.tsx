@@ -107,6 +107,7 @@ const KeyCounterPreview = React.memo(function KeyCounterPreview({
               fontSize: counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE,
               fontFamily: counterSettings.fontFamily,
               fontWeight: counterSettings.fontWeight,
+              fontBold: counterSettings.fontBold,
               fontItalic: counterSettings.fontItalic,
               fontUnderline: counterSettings.fontUnderline,
               fontStrikethrough: counterSettings.fontStrikethrough,

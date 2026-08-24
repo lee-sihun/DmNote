@@ -281,6 +281,9 @@ const getFontStylePatch = (
   ) {
     return { property: 'fontWeight', value: values.fontWeight as number };
   }
+  if (keys[0] === 'fontBold' && typeof values.fontBold === 'boolean') {
+    return { property: 'fontBold', value: values.fontBold };
+  }
   if (keys[0] === 'fontItalic' && typeof values.fontItalic === 'boolean') {
     return { property: 'fontItalic', value: values.fontItalic };
   }

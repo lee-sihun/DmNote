@@ -29,7 +29,8 @@ export const DEFAULT_ELEMENT_BORDER_WIDTH = 1;
 export const DEFAULT_ELEMENT_HAIRLINE = DEFAULT_ELEMENT_BORDER;
 
 export const DEFAULT_ELEMENT_RADIUS = 4;
-export const DEFAULT_ELEMENT_FONT_WEIGHT = 700;
+export const DEFAULT_ELEMENT_BASE_FONT_WEIGHT = 400;
+export const DEFAULT_ELEMENT_FONT_BOLD = true;
 
 // 카운터 타이포 — 자간(0.06em)은 global.css .counter가 소유
 // 색은 키 텍스트와 동일 (백엔드 KeyCounterColor::default와 동기 유지)

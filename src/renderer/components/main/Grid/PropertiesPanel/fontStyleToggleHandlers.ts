@@ -1,7 +1,7 @@
 import type { FontStyleToggleProps } from './types';
 
 type FontStyleProperty =
-  | 'fontWeight'
+  | 'fontBold'
   | 'fontItalic'
   | 'fontUnderline'
   | 'fontStrikethrough';
@@ -15,7 +15,7 @@ export const createFontStyleToggleHandlers = (
   | 'onUnderlineChange'
   | 'onStrikethroughChange'
 > => ({
-  onBoldChange: (value) => onChange('fontWeight', value ? 700 : 400),
+  onBoldChange: (value) => onChange('fontBold', value),
   onItalicChange: (value) => onChange('fontItalic', value),
   onUnderlineChange: (value) => onChange('fontUnderline', value),
   onStrikethroughChange: (value) => onChange('fontStrikethrough', value),

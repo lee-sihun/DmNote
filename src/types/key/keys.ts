@@ -177,8 +177,8 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     fontBold:
       typeof fontBold === 'boolean'
         ? fontBold
-        : fontWeight === 700
-        ? true
+        : typeof fontWeight === 'number'
+        ? fontWeight === 700
         : fallback.fontBold,
     fontFamily:
       typeof fontFamily === 'string' ? fontFamily : fallback.fontFamily,

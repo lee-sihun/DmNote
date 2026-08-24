@@ -17,6 +17,7 @@ interface CountDisplayProps {
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: number;
+  fontBold?: boolean;
   fontItalic?: boolean;
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
@@ -37,6 +38,7 @@ const CountDisplay = ({
   fontSize,
   fontFamily,
   fontWeight,
+  fontBold,
   fontItalic,
   fontUnderline,
   fontStrikethrough,
@@ -146,6 +148,7 @@ const CountDisplay = ({
             fontSize,
             fontFamily,
             fontWeight,
+            fontBold,
             fontItalic,
             fontUnderline,
             fontStrikethrough,

@@ -1072,7 +1072,7 @@ describe('single geometry input bindings', () => {
       act(() => captured.fontStyle?.onStrikethroughChange(true));
       expect(typography.mock.calls).toEqual([
         [{ property: 'counterFontSize', value: 72 }],
-        [{ property: 'counterFontWeight', value: 700 }],
+        [{ property: 'counterFontBold', value: true }],
         [{ property: 'counterFontItalic', value: true }],
         [{ property: 'counterFontUnderline', value: true }],
         [{ property: 'counterFontStrikethrough', value: true }],

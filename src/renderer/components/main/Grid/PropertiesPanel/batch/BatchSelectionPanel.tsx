@@ -1023,6 +1023,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const batchCounterSettings = firstCounterPosition
     ? normalizeCounterSettings(firstCounterPosition.counter)
     : createDefaultCounterSettings();
+  const selectedCounterSettings = keysData.map(({ position }) =>
+    normalizeCounterSettings(position.counter),
+  );
   const firstPos = keysData[0]?.position;
   const batchKeyVisual = firstPos
     ? {
@@ -1342,6 +1345,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             <EditSessionBoundary>
               <BatchCounterTabContent
                 batchCounterSettings={batchCounterSettings}
+                selectedCounterSettings={selectedCounterSettings}
                 keyVisual={batchKeyVisual}
                 onCounterEnabledCommit={commitCounterEnabled}
                 onCounterAnimationEnabledCommit={commitCounterAnimationEnabled}

@@ -13,6 +13,7 @@ import {
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useFontStore } from '@stores/useFontStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
   DEFAULT_ELEMENT_BG,
@@ -23,7 +24,8 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
+  DEFAULT_ELEMENT_FONT_BOLD,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
@@ -51,6 +53,8 @@ import type {
   EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
 import type { BatchElementPropertyUpdate } from '../types';
+import FontWeightDropdown from '../FontWeightDropdown';
+import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -705,6 +709,30 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 />
               </PropertyRow>
 
+              {/* 글꼴 굵기 */}
+              <PropertyRow
+                label={t('propertiesPanel.fontWeight') || '글꼴 굵기'}
+              >
+                {(() => {
+                  const weightState = getMixedValue(
+                    (pos) => pos.fontWeight,
+                    DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
+                  );
+                  return (
+                    <FontWeightDropdown
+                      fontFamilies={getSelectedKeysData().map(
+                        ({ position }) => position?.fontFamily,
+                      )}
+                      value={weightState.value}
+                      isMixed={weightState.isMixed}
+                      onChange={(value) =>
+                        onElementPropertyCommit?.({ fontWeight: value })
+                      }
+                    />
+                  );
+                })()}
+              </PropertyRow>
+
               {/* 글꼴 색상 */}
               <PropertyRow
                 label={t('propertiesPanel.fontColor') || '글꼴 색상'}
@@ -766,8 +794,11 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   isBold={
                     getMixedValue(
                       (pos) =>
-                        (pos.fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT) >= 700,
-                      true,
+                        pos.fontBold ??
+                        (pos.fontWeight == null
+                          ? DEFAULT_ELEMENT_FONT_BOLD
+                          : pos.fontWeight === 700),
+                      DEFAULT_ELEMENT_FONT_BOLD,
                     ).value
                   }
                   isItalic={getMixedValue((pos) => pos.fontItalic, false).value}
@@ -919,7 +950,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
             onFontSelect={(fontName) => {
               if (fontName !== null) {
+                const currentWeight = getMixedValue(
+                  (pos) => pos.fontWeight,
+                  DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
+                ).value;
+                const nextWeight = resolveSupportedFontWeight(
+                  fontName,
+                  currentWeight,
+                  useFontStore.getState().getAllFonts(),
+                );
                 onElementPropertyCommit?.({ fontFamily: fontName });
+                if (nextWeight !== currentWeight) {
+                  onElementPropertyCommit?.({ fontWeight: nextWeight });
+                }
               }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}

@@ -1427,7 +1427,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ];
       const calls = [
         [targets, { property: 'counterFontSize', value: 72 }],
-        [targets, { property: 'counterFontWeight', value: 700 }],
+        [targets, { property: 'counterFontBold', value: true }],
         [targets, { property: 'counterFontItalic', value: true }],
         [targets, { property: 'counterFontUnderline', value: true }],
         [targets, { property: 'counterFontStrikethrough', value: true }],
