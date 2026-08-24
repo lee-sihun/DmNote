@@ -28,6 +28,7 @@ import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
+import FontPickerOpenButton from '../../../Modal/content/pickers/FontPickerOpenButton';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
 import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
@@ -933,19 +934,15 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
         {/* 폰트 */}
         <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
-          <button
-            type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
-            } text-fg text-body`}
-            onClick={() => {
-              setPickerFor(null);
-              if (activePageKey === FONT_PAGE_KEY) closePage();
-              else openPage(FONT_PAGE_KEY);
-            }}
+          <FontPickerOpenButton
+            activePageKey={activePageKey}
+            pageKey={FONT_PAGE_KEY}
+            onBeforeOpen={() => setPickerFor(null)}
+            onOpen={() => openPage(FONT_PAGE_KEY)}
+            onClose={closePage}
           >
             {t('propertiesPanel.configure') || '설정하기'}
-          </button>
+          </FontPickerOpenButton>
         </PropertyRow>
 
         {/* 글꼴 크기 */}

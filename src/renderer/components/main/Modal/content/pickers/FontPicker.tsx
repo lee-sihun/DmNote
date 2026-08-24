@@ -1,12 +1,16 @@
-import { startTransition, useEffect, useRef, useState } from 'react';
+import {
+  startTransition,
+  useEffect,
+  useInsertionEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
-import type { CustomFont } from '@src/types/settings/fonts';
 import {
   DEFAULT_FONT_FAMILY,
-  buildDraftPreviewCss,
+  type CustomFont,
 } from '@src/types/settings/fonts';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import { useRetainedValue } from '@hooks/ui/useRetainedValue';
 import CommonListPickerPage from './CommonListPickerPage';
@@ -21,6 +25,10 @@ import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { useFontLibrary } from '@hooks/useFontLibrary';
 import WebFontEditorSheet from './WebFontEditorSheet';
 import { preloadWebFontEditor } from './webFontEditorLoader';
+import {
+  getFontPickerPreviewFamily,
+  syncFontPickerPreviewCSS,
+} from './fontPickerPreload';
 
 interface FontPickerProps {
   open: boolean;
@@ -31,54 +39,6 @@ interface FontPickerProps {
 }
 
 type FilterType = 'all' | 'builtin' | 'local' | 'web';
-
-// preview용 font-family 이름 (syncFontCSS가 주입하는 원본 이름과 분리)
-const getPreviewFontFamily = (fontName: string) => `${fontName}__preview`;
-
-const injectPreviewCSS = (id: string, css: string) => {
-  const styleId = `fontpreview-${id}`;
-  const existing = document.getElementById(styleId);
-  if (existing) {
-    existing.textContent = css;
-  } else {
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = css;
-    document.head.appendChild(style);
-  }
-};
-
-const removePreviewCSS = (id: string) => {
-  const style = document.getElementById(`fontpreview-${id}`);
-  if (style) style.remove();
-};
-
-const buildPreviewCSS = (font: CustomFont): string | null => {
-  const previewFontFamily = getPreviewFontFamily(font.name);
-
-  if (font.type === 'local' && font.localPath) {
-    const url = convertFileSrc(font.localPath);
-    const ext = font.localPath.split('.').pop()?.toLowerCase() ?? '';
-    const format =
-      ext === 'otf'
-        ? 'opentype'
-        : ext === 'woff'
-        ? 'woff'
-        : ext === 'woff2'
-        ? 'woff2'
-        : 'truetype';
-    return `@font-face {\n  font-family: '${previewFontFamily}';\n  src: url('${url}') format('${format}');\n  font-weight: normal;\n  font-style: normal;\n  font-display: swap;\n}`;
-  }
-
-  if (font.type === 'web' && font.cssContent) {
-    // @font-face 블록만 추출해 미리보기 이름으로 치환 — 원문 전체를 주입하면
-    // 블록 밖 전역 규칙(body{display:none} 등)과 다른 face까지 앱에 새어든다.
-    // 저장 경로(useFontLibrary)의 validator와 동일한 추출기를 재사용
-    return buildDraftPreviewCss(font.cssContent, previewFontFamily) || null;
-  }
-
-  return null;
-};
 
 const FontPicker = ({
   open,
@@ -107,45 +67,11 @@ const FontPicker = ({
   const fontLibrary = useFontLibrary();
   const menu = usePickerItemMenu<string>();
 
-  // 비활성 폰트도 목록에서 실제 서체로 보이도록 preview CSS 주입
-  // (활성 폰트는 syncFontCSS가 원본 이름으로 주입)
-  const previewIdsRef = useRef<Set<string>>(new Set());
-  const previewCssCacheRef = useRef<Map<string, string>>(new Map());
-
-  useEffect(() => {
+  // 첫 페인트 전에 비활성 폰트의 목록 미리보기 face 동기화
+  useInsertionEffect(() => {
     if (!open) return;
-
-    const nextPreviewIds = new Set<string>();
-    customFonts
-      .filter((font) => !font.enabled)
-      .forEach((font) => {
-        const css = buildPreviewCSS(font);
-        if (!css) return;
-
-        nextPreviewIds.add(font.id);
-        if (previewCssCacheRef.current.get(font.id) !== css) {
-          injectPreviewCSS(font.id, css);
-          previewCssCacheRef.current.set(font.id, css);
-        }
-      });
-
-    previewIdsRef.current.forEach((id) => {
-      if (!nextPreviewIds.has(id)) {
-        removePreviewCSS(id);
-        previewCssCacheRef.current.delete(id);
-      }
-    });
-
-    previewIdsRef.current = nextPreviewIds;
+    syncFontPickerPreviewCSS(customFonts);
   }, [open, customFonts]);
-
-  // 언마운트 시 주입된 preview CSS 정리 (피커는 닫히면 언마운트됨)
-  useEffect(() => {
-    return () => {
-      // 주입 effect가 Set을 재할당하므로 언마운트 시점의 ref를 읽어야 함
-      previewIdsRef.current.forEach((id) => removePreviewCSS(id));
-    };
-  }, []);
 
   // 이름 변경 시작 시 입력에 포커스
   useEffect(() => {
@@ -291,7 +217,7 @@ const FontPicker = ({
           const isCustom = font.type !== 'builtin';
           const isDisabled = !font.enabled;
           const fontFamily = isDisabled
-            ? `${getPreviewFontFamily(font.name)}, ${font.name}`
+            ? `${getFontPickerPreviewFamily(font.name)}, ${font.name}`
             : font.name;
 
           return (

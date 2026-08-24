@@ -170,7 +170,7 @@ export function syncFontCSS(): void {
 
   // 전 폰트 강제 preload 금지 — enabled 폰트 전체를 즉시 디코드하면
   // 미사용 대형 폰트 하나로도 상주 메모리가 수십 MB 증가한다 (실측 +111MB).
-  // 실제 참조되는 폰트는 브라우저가 사용 시점에 로드하고 FontPicker도 열 때 자연 로드한다.
+  // 일반 화면은 실제 참조 시 로드하고 FontPicker 목록만 사용자 접근 시 선로딩한다.
 }
 
 // 모든 활성화된 폰트 CSS를 로드하는 함수

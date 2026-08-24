@@ -28,6 +28,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
+import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
 import {
   EMPTY_BATCH_ELEMENT_BINDING,
@@ -666,18 +667,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
                   <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
-                <button
-                  type="button"
-                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                    activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
-                  } text-fg text-body`}
-                  onClick={() => {
-                    if (activePageKey === FONT_PAGE_KEY) closePage();
-                    else openPage(FONT_PAGE_KEY);
-                  }}
+                <FontPickerOpenButton
+                  activePageKey={activePageKey}
+                  pageKey={FONT_PAGE_KEY}
+                  onOpen={() => openPage(FONT_PAGE_KEY)}
+                  onClose={closePage}
                 >
                   {t('propertiesPanel.configure') || '설정하기'}
-                </button>
+                </FontPickerOpenButton>
               </PropertyRow>
 
               {/* 글꼴 크기 */}

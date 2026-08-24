@@ -17,6 +17,7 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
+import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
 import { usePanelNav } from '../PanelNavContext';
@@ -269,18 +270,14 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
       <PropertySection>
         {/* 폰트 */}
         <PropertyRow label={t('counterSetting.font') || '폰트'}>
-          <button
-            type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
-            } text-fg text-body`}
-            onClick={() => {
-              if (activePageKey === FONT_PAGE_KEY) closePage();
-              else openPage(FONT_PAGE_KEY);
-            }}
+          <FontPickerOpenButton
+            activePageKey={activePageKey}
+            pageKey={FONT_PAGE_KEY}
+            onOpen={() => openPage(FONT_PAGE_KEY)}
+            onClose={closePage}
           >
             {t('propertiesPanel.configure') || '설정하기'}
-          </button>
+          </FontPickerOpenButton>
         </PropertyRow>
 
         {/* 폰트 크기 */}

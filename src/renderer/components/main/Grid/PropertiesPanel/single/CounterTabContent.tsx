@@ -15,6 +15,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
+import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import { usePanelNav } from '../PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
@@ -382,19 +383,15 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       <PropertySection>
         {/* 폰트 */}
         <PropertyRow label={t('counterSetting.font') || '폰트'}>
-          <button
-            type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
-            } text-fg text-body`}
-            onClick={() => {
-              setPickerFor(null);
-              if (activePageKey === FONT_PAGE_KEY) closePage();
-              else openPage(FONT_PAGE_KEY);
-            }}
+          <FontPickerOpenButton
+            activePageKey={activePageKey}
+            pageKey={FONT_PAGE_KEY}
+            onBeforeOpen={() => setPickerFor(null)}
+            onOpen={() => openPage(FONT_PAGE_KEY)}
+            onClose={closePage}
           >
             {t('propertiesPanel.configure') || '설정하기'}
-          </button>
+          </FontPickerOpenButton>
         </PropertyRow>
 
         {/* 폰트 크기 */}
