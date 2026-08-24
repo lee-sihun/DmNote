@@ -41,6 +41,10 @@ body,
   outline: none;
 }
 
+:where(input, textarea):focus::placeholder {
+  opacity: 0;
+}
+
 [app-region='drag'] {
   -webkit-app-region: drag;
 }
