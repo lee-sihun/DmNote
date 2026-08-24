@@ -26,12 +26,13 @@ use crate::{
     defaults::{default_keys, default_positions},
     models::{
         normalize_key_slot, AppStoreData, CounterAnimationPreset, CustomCss, CustomCssHistoryEntry,
-        CustomFont, CustomJs, CustomTab, FontType, GradientSpec, GraphPosition, GraphPositions,
-        GraphStatType, GraphType, GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition,
-        KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups,
-        NoteSettings, OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition,
+        CustomFont, CustomJs, CustomTab, FontType, FontWeightRange, GradientSpec, GraphPosition,
+        GraphPositions, GraphStatType, GraphType, GridSettings, JsPlugin, KeyCounters, KeyMappings,
+        KeyPosition, KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroupDef,
+        LayerGroups, NoteSettings, OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition,
         StatPositions, StatType, TabCss, TabNoteSettings,
     },
+    services::font_metadata::parse_font_metadata,
 };
 
 const LEGACY_OVERLAY_WIDTH: f64 = 860.0;
@@ -280,6 +281,14 @@ fn repair_semantic_identities(data: &mut AppStoreData) -> bool {
     changed |= data.font_settings.custom_fonts.len() != original_font_len;
 
     for font in data.font_settings.custom_fonts.iter_mut() {
+        let original_range_len = font.weight_ranges.len();
+        font.weight_ranges.retain(|range| {
+            (1..=1000).contains(&range.min)
+                && (1..=1000).contains(&range.max)
+                && range.min <= range.max
+        });
+        changed |= font.weight_ranges.len() != original_range_len;
+
         if font.font_type != FontType::Local {
             continue;
         }
@@ -433,6 +442,22 @@ pub(crate) fn migrate_local_fonts_to_app_data(
             font.enabled = false;
             changed = true;
         }
+    }
+
+    for font in data
+        .font_settings
+        .custom_fonts
+        .iter_mut()
+        .filter(|font| font.font_type == FontType::Local && font.weight_ranges.is_empty())
+    {
+        font.weight_ranges = font
+            .local_path
+            .as_deref()
+            .filter(|path| !path.trim().is_empty())
+            .and_then(|path| parse_font_metadata(Path::new(path)).ok())
+            .map(|metadata| metadata.weight_ranges)
+            .unwrap_or_else(|| vec![FontWeightRange { min: 400, max: 400 }]);
+        changed = true;
     }
 
     changed
@@ -1744,10 +1769,23 @@ fn recover_font_settings(value: &Value) -> Option<Value> {
 
     let mut recovered_fonts = Vec::with_capacity(custom_fonts.len());
     for (index, font) in custom_fonts.iter().enumerate() {
-        match serde_json::from_value::<CustomFont>(font.clone()) {
-            Ok(_) => recovered_fonts.push(font.clone()),
+        let mut candidate = font.clone();
+        let invalid_weight_ranges = candidate.get("weightRanges").is_some_and(|ranges| {
+            serde_json::from_value::<Vec<FontWeightRange>>(ranges.clone()).is_err()
+        });
+        if invalid_weight_ranges {
+            if let Some(object) = candidate.as_object_mut() {
+                object.remove("weightRanges");
+            }
+            log::warn!(
+                "[Store] Resetting invalid fontSettings.customFonts entry '[{index}].weightRanges' during recovery"
+            );
+        }
+
+        match serde_json::from_value::<CustomFont>(candidate.clone()) {
+            Ok(_) => recovered_fonts.push(candidate),
             Err(err) => {
-                if let Some(recovered) = recover_local_font_enabled(font) {
+                if let Some(recovered) = recover_local_font_enabled(&candidate) {
                     log::warn!(
                         "[Store] Disabling fontSettings.customFonts entry '[{index}]' with an invalid enabled field during recovery"
                     );
@@ -3252,6 +3290,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: Some("@font-face {}".to_string()),
+                weight_ranges: Vec::new(),
             },
             CustomFont {
                 id: "local-font".to_string(),
@@ -3261,6 +3300,7 @@ mod tests {
                 enabled: true,
                 local_path: Some("relative/font.ttf".to_string()),
                 css_content: None,
+                weight_ranges: Vec::new(),
             },
         ];
         data.knob_positions.insert(
@@ -3486,6 +3526,7 @@ mod tests {
             enabled: true,
             local_path: None,
             css_content: Some("@font-face { font-family: Custom; }".to_string()),
+            weight_ranges: Vec::new(),
         });
         expected.tab_css_overrides.insert(
             "custom-tab".to_string(),
@@ -4192,6 +4233,7 @@ mod tests {
             enabled: true,
             local_path: Some(font_path.to_string_lossy().to_string()),
             css_content: None,
+            weight_ranges: Vec::new(),
         };
         let mut recoverable_font = serde_json::to_value(&valid_font).unwrap();
         recoverable_font
@@ -4234,6 +4276,43 @@ mod tests {
             SoundLibraryEntry::default()
         );
         assert!(!loaded.data.sound_library.contains_key("relative.wav"));
+    }
+
+    #[test]
+    fn invalid_font_weight_ranges_are_reset_without_removing_the_font() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-font-weight-range-recovery-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture.as_object_mut().unwrap().insert(
+            "fontSettings".to_string(),
+            json!({
+                "customFonts": [{
+                    "id": "recoverable-web-font",
+                    "type": "web",
+                    "name": "Recoverable Web Font",
+                    "displayName": "Recoverable Web Font",
+                    "enabled": true,
+                    "cssContent": "@font-face { font-family: 'Recoverable Web Font'; src: url(font.woff2); }",
+                    "weightRanges": [{ "min": 900, "max": 100 }]
+                }]
+            }),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.repaired);
+        assert_eq!(loaded.data.font_settings.custom_fonts.len(), 1);
+        assert_eq!(
+            loaded.data.font_settings.custom_fonts[0].id,
+            "recoverable-web-font"
+        );
+        assert!(loaded.data.font_settings.custom_fonts[0]
+            .weight_ranges
+            .is_empty());
     }
 
     #[test]
@@ -4643,6 +4722,7 @@ mod tests {
             enabled: true,
             local_path: Some(absolute_fixture_path("font-sentinel.ttf")),
             css_content: None,
+            weight_ranges: Vec::new(),
         };
 
         let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
@@ -4787,6 +4867,7 @@ mod tests {
             enabled: true,
             local_path: Some(missing_path.to_string_lossy().to_string()),
             css_content: Some(css_content),
+            weight_ranges: Vec::new(),
         });
 
         assert!(migrate_local_fonts_to_app_data(&app_data_dir, &mut data));
@@ -4926,6 +5007,7 @@ mod tests {
             enabled: true,
             local_path: Some(foreign.to_string()),
             css_content: None,
+            weight_ranges: Vec::new(),
         });
 
         // store만 복사된 상태 — 로드 체인 순서(재귀화 → 폰트 마이그레이션) 재현
@@ -4967,6 +5049,7 @@ mod tests {
             enabled: true,
             local_path: Some(missing_local.to_string_lossy().into_owned()),
             css_content: None,
+            weight_ranges: Vec::new(),
         });
 
         // 마커가 있어도 현재 루트 하위의 단순 누락 참조는 기존대로 비활성화
@@ -5031,6 +5114,7 @@ mod tests {
                 r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\fonts\p.ttf".to_string(),
             ),
             css_content: None,
+            weight_ranges: Vec::new(),
         })
         .unwrap();
         font.as_object_mut()

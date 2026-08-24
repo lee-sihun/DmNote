@@ -313,6 +313,13 @@ pub enum FontType {
     Web,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FontWeightRange {
+    pub min: u16,
+    pub max: u16,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CustomFont {
@@ -326,6 +333,8 @@ pub struct CustomFont {
     pub local_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub css_content: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub weight_ranges: Vec<FontWeightRange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

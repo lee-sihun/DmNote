@@ -1072,14 +1072,20 @@ fn merge_prepared_tab_preset_fonts(
     existing_font_settings: &FontSettings,
     mut prepared: FontSettings,
 ) -> Option<FontSettings> {
-    let mut existing_names = existing_font_settings
+    let existing_names = existing_font_settings
         .custom_fonts
         .iter()
         .map(|font| font.name.clone())
         .collect::<HashSet<_>>();
+    let importable_names = prepared
+        .custom_fonts
+        .iter()
+        .filter(|font| !existing_names.contains(&font.name))
+        .map(|font| font.name.clone())
+        .collect::<HashSet<_>>();
     prepared
         .custom_fonts
-        .retain(|font| existing_names.insert(font.name.clone()));
+        .retain(|font| importable_names.contains(&font.name));
     if prepared.custom_fonts.is_empty() {
         return None;
     }
@@ -1656,8 +1662,8 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            CustomCssHistoryEntry, CustomFont, GraphPosition, GraphStatType, GraphType, JsPlugin,
-            KnobPosition, StatPosition, StatType,
+            CustomCssHistoryEntry, CustomFont, FontWeightRange, GraphPosition, GraphStatType,
+            GraphType, JsPlugin, KnobPosition, StatPosition, StatType,
         },
     };
 
@@ -2315,6 +2321,7 @@ mod tests {
                 enabled: true,
                 local_path: Some(existing_path.to_string_lossy().to_string()),
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let imported_font_id = "imported-id".to_string();
@@ -2327,6 +2334,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let embedded_fonts = vec![EmbeddedLocalFont {
@@ -2347,6 +2355,32 @@ mod tests {
             file_count_before
         );
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn tab_preset_keeps_all_local_faces_for_a_new_family() {
+        let face = |id: &str, weight: u16| CustomFont {
+            id: id.to_string(),
+            font_type: FontType::Local,
+            name: "Family".to_string(),
+            display_name: "Family".to_string(),
+            enabled: true,
+            local_path: Some(format!("/{id}.ttf")),
+            css_content: None,
+            weight_ranges: vec![FontWeightRange {
+                min: weight,
+                max: weight,
+            }],
+        };
+        let prepared = FontSettings {
+            custom_fonts: vec![face("regular", 400), face("bold", 700)],
+        };
+
+        let merged = merge_prepared_tab_preset_fonts(&FontSettings::default(), prepared).unwrap();
+
+        assert_eq!(merged.custom_fonts.len(), 2);
+        assert_eq!(merged.custom_fonts[0].weight_ranges[0].min, 400);
+        assert_eq!(merged.custom_fonts[1].weight_ranges[0].min, 700);
     }
 
     #[test]
@@ -2535,6 +2569,7 @@ mod tests {
                 enabled: true,
                 local_path: Some("/existing/font.ttf".to_string()),
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let before = existing.clone();
@@ -2547,6 +2582,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
 

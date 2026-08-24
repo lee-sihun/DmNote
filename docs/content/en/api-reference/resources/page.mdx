@@ -13,7 +13,13 @@ Opens the system file picker, imports a font, and returns its app-managed path.
 
 ```typescript
 const result = await dmn.font.load();
-// { success: boolean, error?: string, fontPath?: string }
+// {
+//   success: boolean,
+//   error?: string,
+//   fontName?: string,
+//   fontPath?: string,
+//   weightRanges?: Array<{ min: number, max: number }>
+// }
 ```
 
 ## Image
