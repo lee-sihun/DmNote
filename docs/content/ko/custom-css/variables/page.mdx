@@ -63,8 +63,10 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 | `--counter-fill-image`      | 텍스트 fill 이미지             | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
 | `--counter-fill-clip`       | fill 클립 영역                 | `<box>`    | `text`, `border-box`                 |
 | `--counter-text-fill-color` | WebKit 텍스트 채움색           | `<color>`  | `transparent`, `currentcolor`        |
-| `--counter-stroke-color`    | 텍스트 외곽선 색상             | `<color>`  | `#000000`, `transparent`             |
+| `--counter-stroke-color`    | 텍스트 외곽선 색상과 저장된 stroke 그라데이션 해제 | `<color>`  | `#000000`, `transparent`             |
 | `--counter-stroke-width`    | 텍스트 외곽선 두께             | `<length>` | `1px`, `2px`                         |
+| `--counter-stroke-image`    | 텍스트 외곽선 이미지           | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--counter-stroke-clip`     | 외곽선 클립 영역               | `<box>`    | `text`, `border-box`                 |
 
 `--counter-color`만 지정해도 앱에 저장된 카운터 fill 그라데이션은 자동으로
 해제됩니다. CSS로 새 fill 그라데이션을 만들 때는 다음 세 변수를 함께 사용합니다.
@@ -74,6 +76,20 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
   --counter-fill-image: linear-gradient(90deg, #f0f, #0ff);
   --counter-fill-clip: text;
   --counter-text-fill-color: transparent;
+}
+```
+
+stroke도 같은 규칙입니다. `--counter-stroke-color`만 지정하면 앱에 저장된
+stroke 그라데이션이 자동으로 해제되고 단색 외곽선이 우선합니다. CSS로 stroke
+그라데이션을 직접 만들 때는 다음 세 변수를 함께 사용합니다. 앱에 외곽선을
+설정하지 않았다면 기본 두께가 0px이라 `--counter-stroke-width`까지 지정해야
+보입니다.
+
+```css
+.counter {
+  --counter-stroke-image: linear-gradient(90deg, #f0f, #0ff);
+  --counter-stroke-clip: text;
+  --counter-stroke-width: 1px;
 }
 ```
 

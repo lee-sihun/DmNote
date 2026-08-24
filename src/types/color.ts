@@ -103,6 +103,144 @@ function formatAlpha(a: number): string {
   return String(Math.round(clamped * 10_000) / 10_000);
 }
 
+/**
+ * canonical GradientSpec 엄격 검증 — wire 경계(에디터 op·프리셋)에서 사용.
+ * 관용 입력을 받는 canonicalGradientOrNull과 달리 이미 canonical인 값만 통과
+ */
+export const isStrictGradientSpec = (value: unknown): value is GradientSpec => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length !== 2 || !('angle' in record) || !('stops' in record)) {
+    return false;
+  }
+  if (
+    typeof record.angle !== 'number' ||
+    !Number.isFinite(record.angle) ||
+    Object.is(record.angle, -0) ||
+    record.angle < 0 ||
+    record.angle >= 360 ||
+    !Array.isArray(record.stops) ||
+    record.stops.length < GRADIENT_STOPS_MIN ||
+    record.stops.length > GRADIENT_STOPS_MAX
+  ) {
+    return false;
+  }
+  let previous = -Infinity;
+  for (const stop of record.stops) {
+    if (!stop || typeof stop !== 'object' || Array.isArray(stop)) return false;
+    const stopRecord = stop as Record<string, unknown>;
+    const stopKeys = Object.keys(stopRecord);
+    if (
+      stopKeys.length !== 2 ||
+      !('color' in stopRecord) ||
+      !('pos' in stopRecord) ||
+      typeof stopRecord.color !== 'string' ||
+      typeof stopRecord.pos !== 'number' ||
+      !Number.isFinite(stopRecord.pos) ||
+      Object.is(stopRecord.pos, -0) ||
+      stopRecord.pos < 0 ||
+      stopRecord.pos > 1 ||
+      stopRecord.pos < previous
+    ) {
+      return false;
+    }
+    previous = stopRecord.pos;
+  }
+  return true;
+};
+
+/**
+ * 노트 테두리 그라데이션 스톱 색 문법 (api-contract v2 §2A) — Rust 경계와
+ * 공유 fixture(tests/fixtures/note-border-stop-colors.json)로 parity 고정
+ */
+export const isStrictStopColor = (value: string): boolean => {
+  const color = value.trim();
+  if (
+    /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(
+      color,
+    )
+  ) {
+    return true;
+  }
+  const fn = color.match(
+    /^(rgb|rgba)\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([0-9]*\.?[0-9]+)\s*)?\)$/i,
+  );
+  if (!fn) return false;
+  const hasAlpha = fn[5] !== undefined;
+  if ((fn[1].toLowerCase() === 'rgba') !== hasAlpha) return false;
+  if (Number(fn[2]) > 255 || Number(fn[3]) > 255 || Number(fn[4]) > 255) {
+    return false;
+  }
+  if (hasAlpha) {
+    const alpha = Number(fn[5]);
+    if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) return false;
+  }
+  return true;
+};
+
+/**
+ * 관용 CSS 색을 §2A 문법으로 강제 — 이미 적합하면 원문 유지, 변환 가능하면
+ * compact rgba로, 불가(named color 등)면 null. 팔레트처럼 표면 공용인 spec을
+ * 노트 테두리 계약에 맞출 때 사용
+ */
+export const toStrictStopColor = (color: string): string | null => {
+  if (isStrictStopColor(color)) return color;
+  const compact = toCompactRgba(color);
+  return isStrictStopColor(compact) ? compact : null;
+};
+
+/**
+ * §2A 스톱 색 파싱 — 검증·대표색·LUT 래스터라이즈가 이 파서 하나를 공유해
+ * "검증은 통과하는데 렌더는 못 읽는" 도메인 분열을 차단한다. 문법 밖은 null
+ */
+export const parseStrictStopColor = (
+  value: string,
+): { r: number; g: number; b: number; a: number } | null => {
+  if (!isStrictStopColor(value)) return null;
+  const color = value.trim();
+  const hex = color.match(
+    /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/,
+  );
+  if (hex) {
+    let body = hex[1];
+    if (body.length === 3 || body.length === 4) {
+      body = body
+        .split('')
+        .map((ch) => ch + ch)
+        .join('');
+    }
+    return {
+      r: parseInt(body.slice(0, 2), 16),
+      g: parseInt(body.slice(2, 4), 16),
+      b: parseInt(body.slice(4, 6), 16),
+      a: body.length === 8 ? parseInt(body.slice(6, 8), 16) / 255 : 1,
+    };
+  }
+  const fn = color.match(
+    /^(?:rgb|rgba)\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([0-9]*\.?[0-9]+)\s*)?\)$/i,
+  );
+  if (!fn) return null;
+  return {
+    r: Number(fn[1]),
+    g: Number(fn[2]),
+    b: Number(fn[3]),
+    a: fn[4] === undefined ? 1 : Number(fn[4]),
+  };
+};
+
+/**
+ * §2A 스톱 색 → #RRGGBB 대문자 대표색 (알파 버림). 문법 밖이면 null —
+ * noteBorderColor의 hex 전용 계약과 rgba→hex 마이그레이션 형식에 맞춘다
+ */
+export const hexRepresentative = (value: string): string | null => {
+  const parsed = parseStrictStopColor(value);
+  if (parsed === null) return null;
+  const channel = (raw: number) =>
+    raw.toString(16).padStart(2, '0').toUpperCase();
+  return `#${channel(parsed.r)}${channel(parsed.g)}${channel(parsed.b)}`;
+};
+
 /** gradient 형제 쌍 필드 이름 매핑 */
 export const GRADIENT_SIBLING: Record<string, string> = {
   backgroundColor: 'backgroundGradient',
@@ -112,9 +250,13 @@ export const GRADIENT_SIBLING: Record<string, string> = {
 };
 
 const KEY_PAIR_FIELDS = Object.entries(GRADIENT_SIBLING);
-const COUNTER_FILL_PAIRS: Array<['idle' | 'active', string]> = [
-  ['idle', 'fillIdleGradient'],
-  ['active', 'fillActiveGradient'],
+const COUNTER_PAINT_PAIRS: Array<
+  ['fill' | 'stroke', 'idle' | 'active', string]
+> = [
+  ['fill', 'idle', 'fillIdleGradient'],
+  ['fill', 'active', 'fillActiveGradient'],
+  ['stroke', 'idle', 'strokeIdleGradient'],
+  ['stroke', 'active', 'strokeActiveGradient'],
 ];
 
 /**
@@ -186,6 +328,52 @@ export function canonicalizePositionGradients<
     }
   }
 
+  // note border 쌍 — 대표색은 hex 전용(마이그레이션 계약), §2A 밖 스톱은
+  // 필드 drop + base 유지 (Rust store 경계 미러). 스톱 검사는 canonical
+  // 절단(8개) 이전의 원본 배열 기준 — Rust가 역직렬화 시점 원본을 보는 것과 일치
+  if ('noteBorderGradient' in position) {
+    const stored = (next ?? position).noteBorderGradient;
+    const rawStops =
+      stored && typeof stored === 'object' && !Array.isArray(stored)
+        ? (stored as Record<string, unknown>).stops
+        : null;
+    const hasUnsupportedRawStop =
+      Array.isArray(rawStops) &&
+      rawStops.some(
+        (stop) =>
+          stop &&
+          typeof stop === 'object' &&
+          typeof (stop as Record<string, unknown>).color === 'string' &&
+          !isStrictStopColor((stop as Record<string, unknown>).color as string),
+      );
+    if (stored == null) {
+      delete ensure().noteBorderGradient;
+    } else {
+      const canonical = hasUnsupportedRawStop
+        ? null
+        : canonicalGradientOrNull(stored);
+      if (
+        canonical === null ||
+        canonical.stops.some((stop) => !isStrictStopColor(stop.color))
+      ) {
+        delete ensure().noteBorderGradient;
+      } else {
+        if (JSON.stringify(canonical) !== JSON.stringify(stored)) {
+          ensure().noteBorderGradient = canonical;
+        }
+        const repairedBase = hexRepresentative(
+          canonical.stops[0]?.color ?? '#FFFFFF',
+        );
+        if (
+          repairedBase !== null &&
+          (next ?? position).noteBorderColor !== repairedBase
+        ) {
+          ensure().noteBorderColor = repairedBase;
+        }
+      }
+    }
+  }
+
   const counterSource = (next ?? position).counter;
   if (
     counterSource &&
@@ -197,7 +385,7 @@ export function canonicalizePositionGradients<
     const ensureCounter = (): Record<string, unknown> =>
       (counterNext ??= { ...counter });
 
-    for (const [stateKey, siblingField] of COUNTER_FILL_PAIRS) {
+    for (const [targetKey, stateKey, siblingField] of COUNTER_PAINT_PAIRS) {
       if (!(siblingField in counter)) continue;
       if (counter[siblingField] == null) {
         // null은 canonical 'None' — Rust 직렬화(필드 생략)와 동일 표현으로 수렴
@@ -212,12 +400,12 @@ export function canonicalizePositionGradients<
       if (JSON.stringify(canonical) !== JSON.stringify(counter[siblingField])) {
         ensureCounter()[siblingField] = canonical;
       }
-      const fill = (counterNext ?? counter).fill;
-      if (fill && typeof fill === 'object' && !Array.isArray(fill)) {
+      const target = (counterNext ?? counter)[targetKey];
+      if (target && typeof target === 'object' && !Array.isArray(target)) {
         const repaired = toCompactRgba(canonical.stops[0]?.color ?? '#ffffff');
-        if ((fill as Record<string, unknown>)[stateKey] !== repaired) {
-          ensureCounter().fill = {
-            ...(fill as Record<string, unknown>),
+        if ((target as Record<string, unknown>)[stateKey] !== repaired) {
+          ensureCounter()[targetKey] = {
+            ...(target as Record<string, unknown>),
             [stateKey]: repaired,
           };
         }

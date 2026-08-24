@@ -266,8 +266,8 @@ pub enum EditorElementPropertyPatchV1 {
     CounterFontFamily(String),
     CounterFillIdle(EditorCounterFillIntentV1),
     CounterFillActive(EditorCounterFillIntentV1),
-    CounterStrokeIdle(String),
-    CounterStrokeActive(String),
+    CounterStrokeIdle(EditorCounterStrokeIntentV1),
+    CounterStrokeActive(EditorCounterStrokeIntentV1),
     CounterAnimationPreset(EditorCounterAnimationPresetIntentV1),
     StatType(StatType),
     NoteEffectEnabled(bool),
@@ -352,6 +352,14 @@ where
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EditorCounterFillIntentV1 {
+    Solid(EditorCounterFillSolidIntentV1),
+    Gradient(EditorCounterFillGradientIntentV1),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EditorCounterStrokeIntentV1 {
+    Legacy(String),
     Solid(EditorCounterFillSolidIntentV1),
     Gradient(EditorCounterFillGradientIntentV1),
 }
@@ -448,11 +456,13 @@ pub enum EditorNoteGradientColorKindV1 {
     Gradient,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorNoteBorderPaintV1 {
     pub color: String,
     pub opacity: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<EditorPaintGradientV1>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1020,12 +1030,12 @@ mod tests {
                 json!({ "color": "#060606" }),
             ),
             (
-                P::CounterStrokeIdle("#070707".to_string()),
+                P::CounterStrokeIdle(EditorCounterStrokeIntentV1::Legacy("#070707".to_string())),
                 "counterStrokeIdle",
                 json!("#070707"),
             ),
             (
-                P::CounterStrokeActive("#080808".to_string()),
+                P::CounterStrokeActive(EditorCounterStrokeIntentV1::Legacy("#080808".to_string())),
                 "counterStrokeActive",
                 json!("#080808"),
             ),
@@ -1062,6 +1072,7 @@ mod tests {
                 P::NoteBorderPaint(EditorNoteBorderPaintV1 {
                     color: "#0a0b0c".to_string(),
                     opacity: 30,
+                    gradient: None,
                 }),
                 "noteBorderPaint",
                 json!({ "color": "#0a0b0c", "opacity": 30 }),
@@ -1102,6 +1113,75 @@ mod tests {
             );
             let decoded: EditorElementPropertyPatchV1 = serde_json::from_value(wire).unwrap();
             assert_eq!(decoded, patch, "roundtrip mismatch for {tag}");
+        }
+    }
+
+    #[test]
+    fn expanded_paint_values_keep_existing_property_tags_and_exact_keys() {
+        let gradient = serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        });
+        let cases = [
+            serde_json::json!({
+                "property": "counterStrokeIdle",
+                "value": "#112233"
+            }),
+            serde_json::json!({
+                "property": "counterStrokeIdle",
+                "value": { "color": "#112233" }
+            }),
+            serde_json::json!({
+                "property": "counterStrokeActive",
+                "value": {
+                    "color": "rgba(17,34,51,1)",
+                    "gradient": gradient.clone()
+                }
+            }),
+            serde_json::json!({
+                "property": "noteBorderPaint",
+                "value": { "color": "#112233", "opacity": 80 }
+            }),
+            serde_json::json!({
+                "property": "noteBorderPaint",
+                "value": { "color": "#112233", "opacity": 80, "gradient": null }
+            }),
+            serde_json::json!({
+                "property": "noteBorderPaint",
+                "value": {
+                    "color": "#112233",
+                    "opacity": 80,
+                    "gradient": gradient
+                }
+            }),
+        ];
+
+        for wire in cases {
+            let patch: EditorElementPropertyPatchV1 = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(
+                serde_json::to_value(&patch).unwrap()["property"],
+                wire["property"]
+            );
+        }
+
+        for wire in [
+            serde_json::json!({
+                "property": "counterStrokeIdle",
+                "value": { "color": "#112233", "extra": true }
+            }),
+            serde_json::json!({
+                "property": "counterStrokeIdle",
+                "value": { "color": "#112233", "gradient": null }
+            }),
+            serde_json::json!({
+                "property": "noteBorderPaint",
+                "value": { "color": "#112233", "opacity": 80, "extra": true }
+            }),
+        ] {
+            assert!(serde_json::from_value::<EditorElementPropertyPatchV1>(wire).is_err());
         }
     }
 

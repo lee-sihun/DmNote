@@ -18,13 +18,16 @@ use crate::{
     state::migration::{canonicalize_gradient_pairs, load_store_from_path, normalize_state},
 };
 
-const GRADIENT_FIELDS: [&str; 6] = [
+const GRADIENT_FIELDS: [&str; 9] = [
     "backgroundGradient",
     "activeBackgroundGradient",
     "borderGradient",
     "activeBorderGradient",
+    "noteBorderGradient",
     "fillIdleGradient",
     "fillActiveGradient",
+    "strokeIdleGradient",
+    "strokeActiveGradient",
 ];
 
 struct RealFixture {
@@ -848,8 +851,11 @@ fn simulation_5_inline_legacy_preset_imports_without_gradients() {
     assert!(position.active_background_gradient.is_none());
     assert!(position.border_gradient.is_none());
     assert!(position.active_border_gradient.is_none());
+    assert!(position.note_border_gradient.is_none());
     assert!(position.counter.fill_idle_gradient.is_none());
     assert!(position.counter.fill_active_gradient.is_none());
+    assert!(position.counter.stroke_idle_gradient.is_none());
+    assert!(position.counter.stroke_active_gradient.is_none());
     let imported_value = serde_json::to_value(&imported).unwrap();
     assert!(!contains_gradient_fields(&imported_value));
 

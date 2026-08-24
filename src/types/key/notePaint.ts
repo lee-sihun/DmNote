@@ -1,4 +1,10 @@
 import type { KeyPosition } from './keys';
+import type { GradientSpec } from '../color';
+import {
+  isStrictGradientSpec,
+  isStrictStopColor,
+  hexRepresentative,
+} from '../color';
 
 export type StrictNoteColorV1 =
   | string
@@ -29,10 +35,21 @@ export interface NoteBorderPaintValueV1 {
   opacity: number;
 }
 
+// gradient 확장 형태 — null은 단색 확정(형제 필드 제거)과 동일 (api-contract v2 §4)
+export interface NoteBorderPaintGradientValueV1 {
+  color: string;
+  opacity: number;
+  gradient: GradientSpec | null;
+}
+
+export type NoteBorderPaintPatchValueV1 =
+  | NoteBorderPaintValueV1
+  | NoteBorderPaintGradientValueV1;
+
 export type NotePaintPropertyPatchV1 =
   | { property: 'notePaint'; value: NotePaintValuePatchV1 }
   | { property: 'noteGlowPaint'; value: NotePaintValuePatchV1 }
-  | { property: 'noteBorderPaint'; value: NoteBorderPaintValueV1 };
+  | { property: 'noteBorderPaint'; value: NoteBorderPaintPatchValueV1 };
 
 const cloneNoteColor = (color: StrictNoteColorV1): StrictNoteColorV1 =>
   typeof color === 'string' ? color : { ...color };
@@ -41,9 +58,15 @@ export const projectNotePaintPatch = (
   patch: NotePaintPropertyPatchV1,
 ): Partial<KeyPosition> => {
   if (patch.property === 'noteBorderPaint') {
+    // 2키 형태·gradient null = 단색 확정(형제 필드 제거) — 전이 표는 atomic
+    const gradient =
+      'gradient' in patch.value && patch.value.gradient
+        ? structuredClone(patch.value.gradient)
+        : undefined;
     return {
       noteBorderColor: patch.value.color,
       noteBorderOpacity: patch.value.opacity,
+      noteBorderGradient: gradient,
     };
   }
   const glow = patch.property === 'noteGlowPaint';
@@ -123,6 +146,31 @@ export const isNoteBorderPaintValueV1 = (
   /^#[0-9A-Fa-f]{6}$/.test(value.color) &&
   isOpacity(value.opacity);
 
+/**
+ * 확장 형태 검증 (api-contract v2 §4): 2키 또는 3키 exact-keys.
+ * gradient 객체는 canonical spec + §2A 스톱 문법 + 대표색 일치까지 요구
+ */
+export const isNoteBorderPaintPatchValueV1 = (
+  value: unknown,
+): value is NoteBorderPaintPatchValueV1 => {
+  if (isNoteBorderPaintValueV1(value)) return true;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['color', 'opacity', 'gradient']) ||
+    typeof value.color !== 'string' ||
+    !/^#[0-9A-Fa-f]{6}$/.test(value.color) ||
+    !isOpacity(value.opacity)
+  ) {
+    return false;
+  }
+  if (value.gradient === null) return true;
+  return (
+    isStrictGradientSpec(value.gradient) &&
+    value.gradient.stops.every((stop) => isStrictStopColor(stop.color)) &&
+    hexRepresentative(value.gradient.stops[0]?.color ?? '') === value.color
+  );
+};
+
 export const isNotePaintPropertyPatchV1 = (
   value: unknown,
 ): value is NotePaintPropertyPatchV1 => {
@@ -139,6 +187,6 @@ export const isNotePaintPropertyPatchV1 = (
   }
   return (
     value.property === 'noteBorderPaint' &&
-    isNoteBorderPaintValueV1(value.value)
+    isNoteBorderPaintPatchValueV1(value.value)
   );
 };

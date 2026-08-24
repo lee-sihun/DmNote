@@ -1085,17 +1085,28 @@ describe('single geometry input bindings', () => {
     [
       'key',
       'idle',
-      { property: 'counterStrokeIdle', value: '  idle stroke  ' },
+      '  idle stroke  ',
+      // 단색 커밋은 fill과 동일한 descriptor 형태 (api-contract v2 §4)
+      { property: 'counterStrokeIdle', value: { color: '  idle stroke  ' } },
     ],
     [
       'key',
       'active',
-      { property: 'counterStrokeActive', value: '  active stroke  ' },
+      '  active stroke  ',
+      {
+        property: 'counterStrokeActive',
+        value: { color: '  active stroke  ' },
+      },
     ],
-    ['stat', 'idle', { property: 'counterStrokeIdle', value: '' }],
+    [
+      'stat',
+      'idle',
+      '',
+      { property: 'counterStrokeIdle', value: { color: '' } },
+    ],
   ] as const)(
     '%s counter stroke %s picker는 drag local-only 뒤 final exact commit한다',
-    (type, state, expected) => {
+    (type, state, input, expected) => {
       const stroke = vi.fn();
       const legacy = vi.fn();
       act(() => {
@@ -1114,10 +1125,9 @@ describe('single geometry input bindings', () => {
       if (state === 'active') {
         act(() => captured.color?.onStateModeChange?.('active'));
       }
-      const value = expected.value;
-      act(() => captured.color?.onColorChange(value));
+      act(() => captured.color?.onColorChange(input));
       expect(stroke).not.toHaveBeenCalled();
-      act(() => captured.color?.onColorChangeComplete(value));
+      act(() => captured.color?.onColorChangeComplete(input));
 
       expect(stroke).toHaveBeenCalledWith(expected);
       expect(legacy).not.toHaveBeenCalled();

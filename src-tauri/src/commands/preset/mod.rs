@@ -244,7 +244,7 @@ mod tests {
     #[cfg(not(target_os = "windows"))]
     use super::local_source_path_from_image_ref;
     use crate::models::{KeyCounterColor, KeySlot, NoteColor};
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
     use serde_json::json;
 
     #[test]
@@ -275,6 +275,33 @@ mod tests {
     }
 
     #[test]
+    fn legacy_preset_positions_default_new_surface_gradients_to_none() {
+        let preset: PresetFile = serde_json::from_value(json!({
+            "keyPositions": {
+                "4key": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "noteBorderColor": "#112233",
+                    "counter": {
+                        "stroke": {
+                            "idle": "transparent",
+                            "active": "transparent"
+                        }
+                    }
+                }]
+            }
+        }))
+        .unwrap();
+        let position = &preset.key_positions.as_ref().unwrap()["4key"][0];
+
+        assert!(position.note_border_gradient.is_none());
+        assert!(position.counter.stroke_idle_gradient.is_none());
+        assert!(position.counter.stroke_active_gradient.is_none());
+    }
+
+    #[test]
     fn preset_wire_schema_excludes_internal_store_fields() {
         let serialized = serde_json::to_value(PresetFile::default()).unwrap();
 
@@ -282,19 +309,25 @@ mod tests {
         assert!(serialized.get("panelBounds").is_none());
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct PreFeaturePresetPosition {
+        dx: f64,
+        dy: f64,
+        width: f64,
+        count: u32,
         background_color: Option<String>,
+        note_border_color: Option<String>,
         counter: PreFeaturePresetCounter,
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize)]
     struct PreFeaturePresetCounter {
         fill: KeyCounterColor,
+        stroke: KeyCounterColor,
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct PreFeaturePreset {
         key_positions: Option<std::collections::HashMap<String, Vec<PreFeaturePresetPosition>>>,
@@ -322,6 +355,10 @@ mod tests {
                         "fill": {
                             "idle": "rgba(255,255,255,1)",
                             "active": "rgba(20,20,24,0.9)"
+                        },
+                        "stroke": {
+                            "idle": "transparent",
+                            "active": "transparent"
                         },
                         "fillIdleGradient": {
                             "angle": 180,
@@ -357,6 +394,73 @@ mod tests {
             Some("rgba(16, 32, 48, 1)")
         );
         assert_eq!(shadow_position.counter.fill.idle, "rgba(255,255,255,1)");
+    }
+
+    #[test]
+    fn preset_1_6_1_shadow_round_trip_drops_new_gradients_but_keeps_representatives() {
+        let source = json!({
+            "keys": { "4key": ["Q"] },
+            "keyPositions": {
+                "4key": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "noteBorderColor": "#112233",
+                    "noteBorderGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": "rgba(17, 34, 51, .5)", "pos": 0 },
+                            { "color": "#ABC8", "pos": 1 }
+                        ]
+                    },
+                    "counter": {
+                        "fill": {
+                            "idle": "rgba(255,255,255,1)",
+                            "active": "rgba(20,20,24,0.9)"
+                        },
+                        "stroke": {
+                            "idle": "rgba(1,2,3,1)",
+                            "active": "rgba(4,5,6,0.5)"
+                        },
+                        "strokeIdleGradient": {
+                            "angle": 45,
+                            "stops": [
+                                { "color": "#010203", "pos": 0 },
+                                { "color": "transparent", "pos": 1 }
+                            ]
+                        },
+                        "strokeActiveGradient": {
+                            "angle": 135,
+                            "stops": [
+                                { "color": "rgba(4,5,6,.5)", "pos": 0 },
+                                { "color": "#FFFFFF", "pos": 1 }
+                            ]
+                        }
+                    }
+                }]
+            }
+        });
+        let current: PresetFile = serde_json::from_value(source).unwrap();
+        let current_wire = serde_json::to_value(current).unwrap();
+
+        let old: PreFeaturePreset = serde_json::from_value(current_wire).unwrap();
+        let old_wire = serde_json::to_value(old).unwrap();
+        let restored: PresetFile = serde_json::from_value(old_wire.clone()).unwrap();
+        let position = &restored.key_positions.as_ref().unwrap()["4key"][0];
+
+        assert!(old_wire["keyPositions"]["4key"][0]
+            .get("noteBorderGradient")
+            .is_none());
+        assert!(old_wire["keyPositions"]["4key"][0]["counter"]
+            .get("strokeIdleGradient")
+            .is_none());
+        assert!(position.note_border_gradient.is_none());
+        assert!(position.counter.stroke_idle_gradient.is_none());
+        assert!(position.counter.stroke_active_gradient.is_none());
+        assert_eq!(position.note_border_color.as_deref(), Some("#112233"));
+        assert_eq!(position.counter.stroke.idle, "rgba(1,2,3,1)");
+        assert_eq!(position.counter.stroke.active, "rgba(4,5,6,0.5)");
     }
 
     #[test]

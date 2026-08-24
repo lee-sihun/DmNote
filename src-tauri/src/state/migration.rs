@@ -838,6 +838,11 @@ fn has_convertible_note_border_color(data: &AppStoreData) -> bool {
             .values()
             .flatten()
             .any(|graph| convertible(&graph.position.note_border_color))
+        || data
+            .knob_positions
+            .values()
+            .flatten()
+            .any(|knob| convertible(&knob.position.note_border_color))
 }
 
 /// store 데이터 정규화 및 레거시 마이그레이션 적용
@@ -888,6 +893,11 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     for positions in data.graph_positions.values_mut() {
         for graph in positions.iter_mut() {
             migrate_note_border_color(&mut graph.position.note_border_color);
+        }
+    }
+    for positions in data.knob_positions.values_mut() {
+        for knob in positions.iter_mut() {
+            migrate_note_border_color(&mut knob.position.note_border_color);
         }
     }
 
@@ -1633,7 +1643,12 @@ fn recover_invalid_counter_gradient_children(entry_name: &str, value: &mut Value
     };
 
     let mut changed = false;
-    for field in ["fillIdleGradient", "fillActiveGradient"] {
+    for field in [
+        "fillIdleGradient",
+        "fillActiveGradient",
+        "strokeIdleGradient",
+        "strokeActiveGradient",
+    ] {
         let invalid = counter.get(field).is_some_and(|gradient| {
             serde_json::from_value::<Option<GradientSpec>>(gradient.clone()).is_err()
         });
@@ -2624,6 +2639,51 @@ mod tests {
     }
 
     #[test]
+    fn knob_note_border_gradient_and_rgba_migration_converge_in_either_order() {
+        let mut knob = KnobPosition {
+            axis_id: "axis".to_string(),
+            sensitivity: 1.0,
+            reverse: false,
+            position: KeyPosition::default(),
+        };
+        knob.position.note_border_color = Some("rgba(17, 34, 51, 0.5)".to_string());
+        knob.position.note_border_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "rgba(17, 34, 51, 0.5)", "pos": 0 },
+                { "color": "#ABC8", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        let mut source = AppStoreData::default();
+        source
+            .knob_positions
+            .insert("custom".to_string(), vec![knob]);
+
+        let mut canonical_first = source.clone();
+        assert_eq!(
+            super::canonicalize_gradient_pairs(&mut canonical_first),
+            (true, true)
+        );
+        let canonical_first = normalize_state(canonical_first);
+
+        let mut migration_first = normalize_state(source);
+        assert_eq!(
+            super::canonicalize_gradient_pairs(&mut migration_first),
+            (false, false)
+        );
+
+        assert_eq!(canonical_first, migration_first);
+        assert_eq!(
+            migration_first.knob_positions["custom"][0]
+                .position
+                .note_border_color
+                .as_deref(),
+            Some("#112233")
+        );
+    }
+
+    #[test]
     fn invalid_counter_gradient_children_recover_without_losing_counter_siblings() {
         let path = std::env::temp_dir().join(format!(
             "dmnote-counter-gradient-child-recovery-{}.json",
@@ -2672,13 +2732,25 @@ mod tests {
         data.stat_positions
             .insert("4key".to_string(), vec![stat_position]);
         let mut raw = serde_json::to_value(data).unwrap();
+        raw["keyPositions"]["4key"][0]["noteBorderGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#112233", "pos": 0 }]
+        });
         raw["keyPositions"]["4key"][0]["counter"]["fillIdleGradient"] = serde_json::json!({
             "angle": 90,
             "stops": [{ "color": "#FFFFFF", "pos": 0 }]
         });
+        raw["keyPositions"]["4key"][0]["counter"]["strokeIdleGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#778899", "pos": 0 }]
+        });
         raw["statPositions"]["4key"][0]["counter"]["fillActiveGradient"] = serde_json::json!({
             "angle": 90,
             "stops": [{ "color": "#000000", "pos": 1 }]
+        });
+        raw["statPositions"]["4key"][0]["counter"]["strokeActiveGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#AABBCC", "pos": 1 }]
         });
         std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
 
@@ -2690,8 +2762,13 @@ mod tests {
         assert!(loaded.repaired);
         assert_eq!(key_counter, &expected_key_counter);
         assert_eq!(stat_counter, &expected_stat_counter);
+        assert!(loaded.data.key_positions["4key"][0]
+            .note_border_gradient
+            .is_none());
         assert!(key_counter.fill_idle_gradient.is_none());
+        assert!(key_counter.stroke_idle_gradient.is_none());
         assert!(stat_counter.fill_active_gradient.is_none());
+        assert!(stat_counter.stroke_active_gradient.is_none());
         let _ = std::fs::remove_file(path);
     }
 

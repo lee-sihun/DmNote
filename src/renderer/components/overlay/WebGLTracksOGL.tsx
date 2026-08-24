@@ -1,5 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { Renderer, Camera, Transform, Program, Geometry, Mesh } from 'ogl';
+import {
+  Renderer,
+  Camera,
+  Transform,
+  Program,
+  Geometry,
+  Mesh,
+  Texture,
+} from 'ogl';
 import type { OGLRenderingContext } from 'ogl';
 import { animationScheduler } from '@utils/animation/animationScheduler';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
@@ -7,6 +15,8 @@ import { resolvedFadeValues } from '@src/types/settings/noteSettings';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 import {
   MAX_NOTES,
+  GRADIENT_LUT_WIDTH,
+  GRADIENT_LUT_ROWS,
   resolvedGlowSize,
   type TrackLayoutInput,
 } from '@stores/signals/noteBuffer';
@@ -23,6 +33,7 @@ const vertexShader = `
   attribute vec3 noteGlowColorBottom;
   attribute vec4 noteBorder; // x: width, yzw: RGB color
   attribute float noteBorderOpacity; // 0-1, 노트 배경 투명도와 독립
+  attribute vec2 noteBorderGradientInfo; // x: LUT 행 (-1 = 단색), y: 각도 라디안
   attribute float trackIndex;
 
   uniform mat4 projectionMatrix;
@@ -44,6 +55,7 @@ const vertexShader = `
   varying vec3 vGlowColorBottom;
   varying vec4 vBorder; // x: width, yzw: RGB color
   varying float vBorderOpacity;
+  varying vec3 vBorderGradient; // x: LUT 행, y: sin(각도), z: cos(각도)
   varying float vTrackTopY;
   varying float vTrackBottomY;
 
@@ -140,6 +152,11 @@ const vertexShader = `
     vGlowColorBottom = noteGlowColorBottom;
     vBorder = noteBorder;
     vBorderOpacity = noteBorderOpacity;
+    vBorderGradient = vec3(
+      noteBorderGradientInfo.x,
+      sin(noteBorderGradientInfo.y),
+      cos(noteBorderGradientInfo.y)
+    );
     vTrackTopY = trackTopY;
     vTrackBottomY = trackBottomY;
   }
@@ -152,6 +169,7 @@ const fragmentShader = `
   uniform float uDomPerPx;
   uniform float uFadeTopPx;
   uniform float uFadeBottomPx;
+  uniform sampler2D uGradientLUT;
 
   varying vec4 vColorTop;
   varying vec4 vColorBottom;
@@ -164,6 +182,7 @@ const fragmentShader = `
   varying vec3 vGlowColorBottom;
   varying vec4 vBorder; // x: width, yzw: RGB color
   varying float vBorderOpacity;
+  varying vec3 vBorderGradient; // x: LUT 행, y: sin(각도), z: cos(각도)
   varying float vTrackTopY;
   varying float vTrackBottomY;
 
@@ -223,8 +242,32 @@ const fragmentShader = `
     }
     float borderMask = outerMask - innerMask;
     float bodyAlpha = baseColor.a * innerMask;
+
+    // 그라데이션 테두리: 트랙 rect 기준 CSS linear-gradient 투영으로 LUT 샘플.
+    // LUT 텍셀은 premultiplied라 paint에는 텍셀 알파를 다시 곱하지 않는다
+    vec3 borderPaint = borderColor;
+    float borderTexAlpha = 1.0;
+    if (vBorderGradient.x >= 0.0) {
+      float boxW = max(vHalfSize.x * 2.0, 0.0001);
+      float boxH = trackHeight;
+      float nx = clamp((vLocalPos.x + vHalfSize.x) / boxW, 0.0, 1.0);
+      float px = (nx - 0.5) * boxW;
+      float py = (trackRelativeY - 0.5) * boxH;
+      float sinA = vBorderGradient.y;
+      float cosA = vBorderGradient.z;
+      float lineLen = max(abs(boxW * sinA) + abs(boxH * cosA), 0.0001);
+      float t = clamp(0.5 + (px * sinA - py * cosA) / lineLen, 0.0, 1.0);
+      vec4 texel = texture2D(
+        uGradientLUT,
+        vec2(t, (vBorderGradient.x + 0.5) / ${GRADIENT_LUT_ROWS}.0)
+      );
+      borderPaint = texel.rgb;
+      borderTexAlpha = texel.a;
+    }
+
     // 테두리 투명도는 노트 배경(baseColor.a)과 독립
-    float borderAlpha = vBorderOpacity * borderMask;
+    float borderFactor = vBorderOpacity * borderMask;
+    float borderAlpha = borderFactor * borderTexAlpha;
 
     float glowAlpha = 0.0;
     if (vGlowSize > 0.0) {
@@ -244,11 +287,12 @@ const fragmentShader = `
       fadeMask = min(fadeMask, clamp((1.0 - trackRelativeY) / bottomFadeRatio, 0.0, 1.0));
     }
     bodyAlpha *= fadeMask;
+    borderFactor *= fadeMask;
     borderAlpha *= fadeMask;
     glowAlpha *= fadeMask;
 
     float outAlpha = clamp(bodyAlpha + borderAlpha + glowAlpha, 0.0, 1.0);
-    vec3 borderContrib = borderAlpha > 0.0 ? borderColor * borderAlpha : vec3(0.0);
+    vec3 borderContrib = borderFactor > 0.0 ? borderPaint * borderFactor : vec3(0.0);
     vec3 outColor = baseColor.rgb * bodyAlpha + borderContrib + glowColor * glowAlpha;
     gl_FragColor = vec4(outColor, outAlpha);
   }
@@ -276,6 +320,7 @@ const INSTANCED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze([
   'noteGlowColorBottom',
   'noteBorder',
   'noteBorderOpacity',
+  'noteBorderGradientInfo',
   'trackIndex',
 ]);
 
@@ -455,7 +500,10 @@ interface NoteBuffer {
   noteGlowColorBottom: Float32Array;
   noteBorder: Float32Array;
   noteBorderOpacity: Float32Array;
+  noteBorderGradientInfo: Float32Array;
   trackIndex: Float32Array;
+  gradientLUT: Uint8Array;
+  gradientLUTVersion: number;
 }
 
 interface WebGLTracksOGLProps {
@@ -594,6 +642,12 @@ export function WebGLTracksOGL({
       data: noteBuffer.noteBorderOpacity,
       usage: gl.DYNAMIC_DRAW,
     });
+    geometry.addAttribute('noteBorderGradientInfo', {
+      instanced: 1,
+      size: 2,
+      data: noteBuffer.noteBorderGradientInfo,
+      usage: gl.DYNAMIC_DRAW,
+    });
     geometry.addAttribute('trackIndex', {
       instanced: 1,
       size: 1,
@@ -603,6 +657,21 @@ export function WebGLTracksOGL({
     markInstancedAttributesDirty(geometry, noteBuffer.activeCount);
     geometryRef.current = geometry;
 
+    // 테두리 그라데이션 LUT — 고정 용량, 내용만 갱신 (행은 append-only)
+    const gradientLUTTexture = new Texture(gl, {
+      image: noteBuffer.gradientLUT,
+      width: GRADIENT_LUT_WIDTH,
+      height: GRADIENT_LUT_ROWS,
+      generateMipmaps: false,
+      minFilter: gl.LINEAR,
+      magFilter: gl.LINEAR,
+      wrapS: gl.CLAMP_TO_EDGE,
+      wrapT: gl.CLAMP_TO_EDGE,
+      flipY: false,
+      premultiplyAlpha: false,
+    });
+    let appliedLUTVersion = noteBuffer.gradientLUTVersion;
+
     const program = new Program(gl, {
       vertex: vertexShader,
       fragment: fragmentShader,
@@ -611,6 +680,7 @@ export function WebGLTracksOGL({
       depthWrite: false,
       uniforms: {
         uTime: { value: 0 },
+        uGradientLUT: { value: gradientLUTTexture },
         uFlowSpeed: {
           value: noteSettings.speed || DEFAULT_NOTE_SETTINGS.speed,
         },
@@ -723,6 +793,12 @@ export function WebGLTracksOGL({
         pendingUpdateRef.current.dirtyKeys.clear();
         pendingUpdateRef.current.dirtySinceFrame = false;
         pendingUpdateRef.current.instancedCount = null;
+      }
+
+      // LUT에 새 행이 래스터라이즈됐으면 프레임 시작에 재업로드 예약
+      if (appliedLUTVersion !== noteBuffer.gradientLUTVersion) {
+        appliedLUTVersion = noteBuffer.gradientLUTVersion;
+        gradientLUTTexture.needsUpdate = true;
       }
 
       // uTime도 epoch 상대값 - noteInfo와 같은 기준이어야 길이·이동 계산이 성립

@@ -19,6 +19,16 @@ import {
   parseAlphaPercent,
   hexWithAlphaPercent,
 } from '@utils/color/colorUtils';
+import {
+  gradientToCss,
+  hexRepresentative,
+  toCanonicalGradient,
+  toStrictStopColor,
+  type ColorModeValue,
+  type GradientSpec,
+} from '@src/types/color';
+import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
@@ -281,6 +291,70 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     setBorderColor(keyPosition.noteBorderColor ?? '#FFFFFF');
     setLocalBorderOpacity(keyPosition.noteBorderOpacity ?? 100);
   }, [keyPosition.noteBorderColor, keyPosition.noteBorderOpacity, pickerFor]);
+
+  const storedBorderGradient = keyPosition.noteBorderGradient ?? null;
+
+  // 테두리 그라데이션 커밋 — 대표색은 hex 전용 계약(api-contract v2 §2)
+  const handleBorderPaintCommit = (value: ColorModeValue) => {
+    if (value.mode === 'solid') {
+      const hex = hexRepresentative(value.color) ?? toRgbHexColor(value.color);
+      setBorderColor(hex);
+      const patch = {
+        property: 'noteBorderPaint',
+        value: { color: hex, opacity: localBorderOpacity },
+      } as const;
+      onNotePaintPreview?.(patch);
+      onNotePaintCommit?.(patch);
+      return;
+    }
+    // 팔레트는 표면 공용이라 §2A 밖 스톱이 들어올 수 있다 — 가능한 색은
+    // compact rgba로 강제하고, 변환 불가면 실패 예정 커밋을 만들지 않는다
+    const stops: GradientSpec['stops'] = [];
+    for (const stop of value.spec.stops) {
+      const color = toStrictStopColor(stop.color);
+      if (color === null) {
+        console.error(
+          `[note-border] unsupported gradient stop color: ${stop.color}`,
+        );
+        return;
+      }
+      stops.push({ ...stop, color });
+    }
+    // exact-keys 검증이 앱에서 가장 엄격한 경로라 커밋 직전 canonical 강제
+    const spec = toCanonicalGradient({ ...value.spec, stops });
+    const hex =
+      hexRepresentative(spec.stops[0]?.color ?? '#FFFFFF') ?? '#FFFFFF';
+    setBorderColor(hex);
+    const patch = {
+      property: 'noteBorderPaint',
+      value: {
+        color: hex,
+        opacity: localBorderOpacity,
+        gradient: spec,
+      },
+    } as const;
+    onNotePaintPreview?.(patch);
+    onNotePaintCommit?.(patch);
+  };
+
+  const borderGradientState = useGradientColorState({
+    pair:
+      pickerFor === 'border'
+        ? { color: borderColor, gradient: storedBorderGradient }
+        : {},
+    fallbackColor: '#FFFFFF',
+    contextKey: `key:${keyPosition.id}:noteBorder`,
+    canvasAnchor:
+      pickerFor === 'border' &&
+      keyPosition.id &&
+      isNativeElementId(keyPosition.id)
+        ? { kind: 'key', id: keyPosition.id }
+        : undefined,
+    canvasSurface: 'noteBorder',
+    // 드래그 중 중간값은 흘리지 않는다 — 기존 보더 픽커처럼 커밋(드래그 완료·
+    // 형식 전환·팔레트 선택) 시점에 preview+commit 쌍으로 오버레이에 반영
+    onCommit: handleBorderPaintCommit,
+  });
 
   const interactiveRefs = [
     noteColorButtonRef,
@@ -598,6 +672,11 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
               surfaceClassName="rounded-md"
               color={borderColor}
+              image={
+                storedBorderGradient
+                  ? gradientToCss(storedBorderGradient)
+                  : undefined
+              }
               opacity={localBorderOpacity / 100}
             />
             <Dropdown
@@ -827,10 +906,18 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                 ? notePickerColor
                 : pickerFor === 'glow'
                 ? glowPickerColor
+                : borderGradientState.format === 'gradient'
+                ? borderGradientState.pickerColor
                 : hexWithAlphaPercent(borderColor, localBorderOpacity)
             }
             onColorChange={(c: NoteColor) => {
               if (pickerFor === 'border') {
+                if (borderGradientState.format === 'gradient') {
+                  if (typeof c === 'string') {
+                    borderGradientState.handlePickerColorChange(c, false);
+                  }
+                  return;
+                }
                 const raw = typeof c === 'string' ? c : undefined;
                 const hex = toRgbHexColor(raw);
                 const opacity = parseAlphaPercent(raw, localBorderOpacity);
@@ -842,6 +929,12 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             }}
             onColorChangeComplete={(c: NoteColor) => {
               if (pickerFor === 'border') {
+                if (borderGradientState.format === 'gradient') {
+                  if (typeof c === 'string') {
+                    borderGradientState.handlePickerColorChange(c, true);
+                  }
+                  return;
+                }
                 const raw = typeof c === 'string' ? c : undefined;
                 const hex = toRgbHexColor(raw);
                 const opacity = parseAlphaPercent(raw, localBorderOpacity);
@@ -860,6 +953,26 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onClose={() => setPickerFor(null)}
             interactiveRefs={interactiveRefs}
             solidOnly={pickerFor === 'border'}
+            headerSlot={
+              pickerFor === 'border'
+                ? borderGradientState.headerSlot
+                : undefined
+            }
+            footerSlot={
+              pickerFor === 'border'
+                ? borderGradientState.footerSlot
+                : undefined
+            }
+            gradientSpec={
+              pickerFor === 'border'
+                ? borderGradientState.paletteGradientSpec
+                : undefined
+            }
+            onGradientSpecSelect={
+              pickerFor === 'border'
+                ? borderGradientState.handleGradientSpecSelect
+                : undefined
+            }
             {...(pickerFor !== 'border' && {
               opacityPercent:
                 pickerFor === 'note'

@@ -112,11 +112,35 @@ input[type='number']::-webkit-outer-spin-button {
     --counter-stroke-width,
     var(--counter-stroke-width-default, 0px)
   );
+  /* 그라데이션 stroke는 배경 클립이 칠하므로 paint-default가 투명으로 옮겨감.
+     사용자 --counter-stroke-color를 지정하면 단색이 우선하고, 아래 이미지
+     체인은 색 값이 문법상 무효가 되어 자동 복귀 (fill과 동일 패턴) */
   -webkit-text-stroke-color: var(
     --counter-stroke-color,
-    var(--counter-stroke-color-default, transparent)
+    var(
+      --dmn-counter-stroke-paint-default,
+      var(--counter-stroke-color-default, transparent)
+    )
   );
   color: transparent;
+  background-image: var(
+    --counter-stroke-image,
+    var(--counter-stroke-color, var(--dmn-counter-stroke-image-default, none))
+  );
+  -webkit-background-clip: var(
+    --counter-stroke-clip,
+    var(
+      --counter-stroke-color,
+      var(--dmn-counter-stroke-clip-default, border-box)
+    )
+  );
+  background-clip: var(
+    --counter-stroke-clip,
+    var(
+      --counter-stroke-color,
+      var(--dmn-counter-stroke-clip-default, border-box)
+    )
+  );
 }
 
 .text-safe-inline {

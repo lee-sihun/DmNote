@@ -55,13 +55,19 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
         "graphPositions",
         "knobPositions",
     ];
-    const ELEMENT_FIELDS: [&str; 4] = [
+    const ELEMENT_FIELDS: [&str; 5] = [
         "backgroundGradient",
         "activeBackgroundGradient",
         "borderGradient",
         "activeBorderGradient",
+        "noteBorderGradient",
     ];
-    const COUNTER_FIELDS: [&str; 2] = ["fillIdleGradient", "fillActiveGradient"];
+    const COUNTER_FIELDS: [&str; 4] = [
+        "fillIdleGradient",
+        "fillActiveGradient",
+        "strokeIdleGradient",
+        "strokeActiveGradient",
+    ];
     const SHADOW_FIELDS: [&str; 2] = ["shadow", "activeShadow"];
 
     for collection_name in COLLECTIONS {
@@ -80,7 +86,12 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
                     continue;
                 };
                 for field in ELEMENT_FIELDS {
-                    if let Some(error) = invalid_gradient_error(entry.get(field)) {
+                    let error = if field == "noteBorderGradient" {
+                        invalid_note_border_gradient_error(entry.get(field))
+                    } else {
+                        invalid_gradient_error(entry.get(field))
+                    };
+                    if let Some(error) = error {
                         return Some(format!(
                             "{collection_name}[{mode:?}][{index}].{field}: {error}"
                         ));
@@ -114,8 +125,23 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
     None
 }
 
-fn invalid_gradient_error(value: Option<&serde_json::Value>) -> Option<serde_json::Error> {
-    value.and_then(|value| serde_json::from_value::<Option<GradientSpec>>(value.clone()).err())
+fn invalid_gradient_error(value: Option<&serde_json::Value>) -> Option<String> {
+    value.and_then(|value| {
+        serde_json::from_value::<Option<GradientSpec>>(value.clone())
+            .err()
+            .map(|error| error.to_string())
+    })
+}
+
+fn invalid_note_border_gradient_error(value: Option<&serde_json::Value>) -> Option<String> {
+    let value = value?;
+    let gradient = match serde_json::from_value::<Option<GradientSpec>>(value.clone()) {
+        Ok(gradient) => gradient,
+        Err(error) => return Some(error.to_string()),
+    }?;
+    gradient
+        .note_border_invalid_stop_index()
+        .map(|index| format!("stops[{index}].color contains an unsupported note border color"))
 }
 
 fn invalid_shadow_error(value: &serde_json::Value) -> Option<(&'static str, &'static str)> {
@@ -1787,8 +1813,11 @@ mod tests {
             ("statPositions", "activeBackgroundGradient", false),
             ("graphPositions", "borderGradient", false),
             ("knobPositions", "activeBorderGradient", false),
+            ("keyPositions", "noteBorderGradient", false),
             ("keyPositions", "fillIdleGradient", true),
             ("statPositions", "fillActiveGradient", true),
+            ("graphPositions", "strokeIdleGradient", true),
+            ("knobPositions", "strokeActiveGradient", true),
         ] {
             let mut gradient_fields = serde_json::Map::new();
             gradient_fields.insert(field.to_string(), damaged_gradient.clone());
@@ -1843,6 +1872,90 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn note_border_gradient_preset_rejects_invalid_stop_color_with_index() {
+        for collection in [
+            "keyPositions",
+            "statPositions",
+            "graphPositions",
+            "knobPositions",
+        ] {
+            let preset = serde_json::json!({
+                (collection): {
+                    "custom mode": [{
+                        "noteBorderGradient": {
+                            "angle": 90,
+                            "stops": [
+                                { "color": "#112233", "pos": 0 },
+                                { "color": "transparent", "pos": 1 }
+                            ]
+                        }
+                    }]
+                }
+            });
+
+            let error = invalid_position_style_detail(&preset)
+                .expect("unsupported note border stop color must be rejected");
+            assert_eq!(
+                error,
+                format!(
+                    "{collection}[\"custom mode\"][0].noteBorderGradient: stops[1].color contains an unsupported note border color"
+                )
+            );
+        }
+
+        let valid = serde_json::json!({
+            "keyPositions": {
+                "custom mode": [{
+                    "noteBorderGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": "rgba(17, 34, 51, .5)", "pos": 0 },
+                            { "color": "#ABC8", "pos": 1 }
+                        ]
+                    },
+                    "counter": {
+                        "strokeIdleGradient": {
+                            "angle": 180,
+                            "stops": [
+                                { "color": "transparent", "pos": 0 },
+                                { "color": "color(display-p3 1 0 0)", "pos": 1 }
+                            ]
+                        }
+                    }
+                }]
+            }
+        });
+        assert_eq!(invalid_position_style_detail(&valid), None);
+
+        let invalid_discarded_stop = serde_json::json!({
+            "keyPositions": {
+                "custom mode": [{
+                    "noteBorderGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": "#000000", "pos": 0.0 },
+                            { "color": "#111111", "pos": 0.1 },
+                            { "color": "#222222", "pos": 0.2 },
+                            { "color": "#333333", "pos": 0.3 },
+                            { "color": "#444444", "pos": 0.4 },
+                            { "color": "#555555", "pos": 0.5 },
+                            { "color": "#666666", "pos": 0.6 },
+                            { "color": "#777777", "pos": 0.7 },
+                            { "color": "invalid-discarded-stop", "pos": 1.0 }
+                        ]
+                    }
+                }]
+            }
+        });
+        assert_eq!(
+            invalid_position_style_detail(&invalid_discarded_stop).as_deref(),
+            Some(
+                "keyPositions[\"custom mode\"][0].noteBorderGradient: stops[8].color contains an unsupported note border color"
+            )
+        );
     }
 
     #[test]

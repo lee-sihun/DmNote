@@ -59,6 +59,8 @@ const keyCounterSettingsInputSchema = z
     animation: keyCounterAnimationSchema.partial().optional(),
     fillIdleGradient: gradientSpecSchema.nullable().optional(),
     fillActiveGradient: gradientSpecSchema.nullable().optional(),
+    strokeIdleGradient: gradientSpecSchema.nullable().optional(),
+    strokeActiveGradient: gradientSpecSchema.nullable().optional(),
   })
   .partial();
 
@@ -83,9 +85,11 @@ export interface KeyCounterSettings {
   alignMode: KeyCounterAlignMode;
   fill: KeyCounterColor;
   stroke: KeyCounterColor;
-  // fill 전용 그라데이션 형제 (stroke는 영구 제외)
+  // fill/stroke 그라데이션 형제 — 단색 필드는 대표색 폴백
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
+  strokeIdleGradient?: GradientSpec | null;
+  strokeActiveGradient?: GradientSpec | null;
   gap: number; // px 단위 간격
   fontSize: number; // px
   fontWeight: number; // CSS font-weight
@@ -125,6 +129,8 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     animation,
     fillIdleGradient,
     fillActiveGradient,
+    strokeIdleGradient,
+    strokeActiveGradient,
   } = parsed.data;
   const normalizedBezier: CounterAnimationBezier = [
     Number.isFinite(animation?.bezier?.[0])
@@ -157,6 +163,10 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     fillIdleGradient: fillIdleGradient ?? fallback.fillIdleGradient ?? null,
     fillActiveGradient:
       fillActiveGradient ?? fallback.fillActiveGradient ?? null,
+    strokeIdleGradient:
+      strokeIdleGradient ?? fallback.strokeIdleGradient ?? null,
+    strokeActiveGradient:
+      strokeActiveGradient ?? fallback.strokeActiveGradient ?? null,
     gap:
       typeof gap === 'number' && Number.isFinite(gap) && gap >= 0
         ? gap
@@ -323,6 +333,8 @@ export const keyPositionSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
     .optional(),
+  // 테두리 그라데이션 형제 — 있으면 렌더 우선, noteBorderColor는 hex 대표색 폴백
+  noteBorderGradient: gradientSpecSchema.optional(),
   // 테두리 투명도 (0~100, 없으면 100). 노트 배경 투명도와 독립
   noteBorderOpacity: z.number().int().min(0).max(100).optional(),
   noteBorderSide: z.enum(['all', 'vertical', 'horizontal']).optional(),

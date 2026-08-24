@@ -11,7 +11,12 @@ export type GradientCanvasAnchor =
   | { kind: 'batch' };
 
 /** 편집 중인 표면 — 캔버스 일시 페인트가 어느 필드를 덮을지 결정 */
-export type GradientPreviewSurface = 'background' | 'border' | 'counterFill';
+export type GradientPreviewSurface =
+  | 'background'
+  | 'border'
+  | 'counterFill'
+  | 'counterStroke'
+  | 'noteBorder';
 export type GradientPreviewState = 'idle' | 'active';
 
 export const supportsActiveVisualState = (

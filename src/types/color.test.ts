@@ -5,6 +5,8 @@ import {
   counterFillPair,
   gradientPairPatch,
   gradientToCss,
+  hexRepresentative,
+  isStrictStopColor,
   resolveStatePair,
   toCanonicalGradient,
   toCompactRgba,
@@ -234,6 +236,154 @@ describe('resolveStatePair / gradientToCss', () => {
     expect(
       gradientToCss({ angle: 45, stops: [c('#a', 0), c('#b', 0.333)] }),
     ).toBe('linear-gradient(45deg, #a 0%, #b 33.3%)');
+  });
+});
+
+describe('isStrictStopColor — 노트 테두리 스톱 문법 (계약 v2 §2A)', () => {
+  it('허용 형태', () => {
+    for (const value of [
+      '#abc',
+      '#ABCD',
+      '#AbCdEf',
+      '#abcdef12',
+      'rgb(0, 128, 255)',
+      'rgb(0,128,255)',
+      'RGBA(255, 255, 255, 0.5)',
+      'rgba(0,0,0,1)',
+      'rgba(0,0,0,0)',
+    ]) {
+      expect(isStrictStopColor(value), value).toBe(true);
+    }
+  });
+
+  it('불허 형태', () => {
+    for (const value of [
+      'tomato',
+      'transparent',
+      '#abcde',
+      'rgb(256,0,0)',
+      'rgb(0000,0,0)',
+      'rgb (0,0,0)',
+      'rgb(0,0,0,1)',
+      'rgba(0,0,0)',
+      'rgba(0,0,0,1.1)',
+      'rgba(0,0,0,-0.1)',
+      'rgba(0,0,0,1.)',
+      'rgba(0,0,0,1e-1)',
+      'rgba(0,0,0,50%)',
+      'rgba(0;0;0;1)',
+      'hsl(0,0%,0%)',
+    ]) {
+      expect(isStrictStopColor(value), value).toBe(false);
+    }
+  });
+});
+
+describe('hexRepresentative — 대표색 hex 변환', () => {
+  it('축약·알파 hex와 rgba를 #RRGGBB 대문자로', () => {
+    expect(hexRepresentative('#abc')).toBe('#AABBCC');
+    expect(hexRepresentative('#abcd')).toBe('#AABBCC');
+    expect(hexRepresentative('#abcdef12')).toBe('#ABCDEF');
+    expect(hexRepresentative('rgba(255, 0, 128, 0.5)')).toBe('#FF0080');
+    expect(hexRepresentative('rgb(0,0,0)')).toBe('#000000');
+  });
+
+  it('문법 밖은 null', () => {
+    expect(hexRepresentative('tomato')).toBeNull();
+    expect(hexRepresentative('rgb(300,0,0)')).toBeNull();
+  });
+});
+
+describe('canonicalizePositionGradients — 노트 테두리 쌍', () => {
+  it('대표색은 hex 전용으로 repair (rgba→hex 마이그레이션 핑퐁 방지)', () => {
+    const pos = {
+      noteBorderColor: '#stale',
+      noteBorderGradient: {
+        angle: 90,
+        stops: [c('rgba(255,0,128,0.5)', 0), c('#000000', 1)],
+      },
+    };
+    const next = canonicalizePositionGradients(pos);
+    expect(next.noteBorderColor).toBe('#FF0080');
+    expect(next.noteBorderGradient).toEqual(pos.noteBorderGradient);
+  });
+
+  it('§2A 밖 스톱이 있으면 필드 drop + base 유지', () => {
+    const pos = {
+      noteBorderColor: '#FFFFFF',
+      noteBorderGradient: {
+        angle: 90,
+        stops: [c('#000000', 0), c('tomato', 1)],
+      },
+    };
+    const next = canonicalizePositionGradients(pos);
+    expect('noteBorderGradient' in next).toBe(false);
+    expect(next.noteBorderColor).toBe('#FFFFFF');
+  });
+
+  it('절단으로 잘려 나갈 9번째 불허 스톱도 drop을 일으킨다 (Rust 원본 검사 미러)', () => {
+    const stops = Array.from({ length: 8 }, (_, i) =>
+      c(`#11223${i}`, i / 10),
+    ).concat([c('transparent', 1)]);
+    const pos = {
+      noteBorderColor: '#112230',
+      noteBorderGradient: { angle: 90, stops },
+    };
+    const next = canonicalizePositionGradients(pos);
+    expect('noteBorderGradient' in next).toBe(false);
+    expect(next.noteBorderColor).toBe('#112230');
+  });
+
+  it('null은 canonical None으로 필드 제거', () => {
+    const pos = { noteBorderColor: '#FFFFFF', noteBorderGradient: null };
+    const next = canonicalizePositionGradients(pos);
+    expect('noteBorderGradient' in next).toBe(false);
+  });
+
+  it('변경 없으면 동일 참조', () => {
+    const pos = {
+      noteBorderColor: '#FF0080',
+      noteBorderGradient: toCanonicalGradient({
+        angle: 90,
+        stops: [c('rgba(255,0,128,1)', 0), c('#000000', 1)],
+      }),
+    };
+    expect(canonicalizePositionGradients(pos)).toBe(pos);
+  });
+});
+
+describe('canonicalizePositionGradients — counter stroke 쌍', () => {
+  it('stroke 대표색은 compact rgba로 repair', () => {
+    const pos = {
+      counter: {
+        stroke: { idle: '#stale', active: '#000' },
+        strokeIdleGradient: {
+          angle: 90,
+          stops: [c('#FFFFFF', 0), c('#000', 1)],
+        },
+      },
+    };
+    const next = canonicalizePositionGradients(pos);
+    expect((next.counter as { stroke: { idle: string } }).stroke.idle).toBe(
+      'rgba(255,255,255,1)',
+    );
+    expect((next.counter as { stroke: { active: string } }).stroke.active).toBe(
+      '#000',
+    );
+  });
+
+  it('손상 stroke gradient는 필드만 drop', () => {
+    const pos = {
+      counter: {
+        stroke: { idle: 'transparent', active: 'transparent' },
+        strokeActiveGradient: { stops: [c('#fff', 0)] },
+      },
+    };
+    const next = canonicalizePositionGradients(pos);
+    expect('strokeActiveGradient' in (next.counter as object)).toBe(false);
+    expect((next.counter as { stroke: { idle: string } }).stroke.idle).toBe(
+      'transparent',
+    );
   });
 });
 

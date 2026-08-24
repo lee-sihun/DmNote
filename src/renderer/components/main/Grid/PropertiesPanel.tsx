@@ -1675,9 +1675,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             editGestureController.activeGestureId() ?? undefined;
           const persisted = patchNotePaintById(id, patch, { gestureId });
           editGestureController.settleCommit(persisted);
-          void persisted.catch((error) => {
-            console.error('Failed to update note paint', error);
-          });
+          void persisted
+            .then((applied) => {
+              // 가드 거부(false)는 rejection이 아니라서 별도 로그가 없으면 무음
+              if (!applied) {
+                console.error('Note paint patch rejected by guard', patch);
+              }
+            })
+            .catch((error) => {
+              console.error('Failed to update note paint', error);
+            });
         }
       : undefined;
 
@@ -1775,9 +1782,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id && isNativeElementId(id)
       ? (patch: EditorCounterStrokePropertyPatchV1) => {
           const persisted = patchCounterStrokeById(elementType, id, patch);
-          void persisted.catch((error) => {
-            console.error('Failed to update counter stroke', error);
-          });
+          void persisted
+            .then((applied) => {
+              // 가드 거부(false)는 rejection이 아니라서 별도 로그가 없으면 무음
+              if (!applied) {
+                console.error('Counter stroke patch rejected by guard', patch);
+              }
+            })
+            .catch((error) => {
+              console.error('Failed to update counter stroke', error);
+            });
         }
       : undefined;
 

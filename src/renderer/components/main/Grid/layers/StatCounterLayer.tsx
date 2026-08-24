@@ -3,12 +3,11 @@ import {
   useCounterSettings,
   computeOutsideStyle,
 } from '@hooks/overlay/useCounterSettings';
-import { toCssRgba } from '@utils/color/colorUtils';
-import { gradientToCss } from '@src/types/color';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 import { getCounterTypographyStyle } from '@utils/core/counterStyles';
+import { counterPaintVars } from '@utils/core/counterPaintVars';
 
 interface CounterPosition {
   id: string;
@@ -59,6 +58,8 @@ const StatCounter = React.memo(function StatCounter({
   const previewActive = previewSession?.stateMode === 'active';
   const previewFillSpec =
     previewSession?.surface === 'counterFill' ? previewSession.spec : null;
+  const previewStrokeSpec =
+    previewSession?.surface === 'counterStroke' ? previewSession.spec : null;
 
   if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
     return null;
@@ -87,10 +88,12 @@ const StatCounter = React.memo(function StatCounter({
       ? counterSettings.fillActiveGradient
       : counterSettings.fillIdleGradient) ??
     null;
-
-  const fill = toCssRgba(fillColor, '#FFFFFF');
-  const stroke = toCssRgba(strokeColor, 'transparent');
-  const strokeWidth = stroke.alpha > 0 ? '1px' : '0px';
+  const strokeGradient =
+    previewStrokeSpec ??
+    (previewActive
+      ? counterSettings.strokeActiveGradient
+      : counterSettings.strokeIdleGradient) ??
+    null;
 
   return (
     <div
@@ -113,18 +116,12 @@ const StatCounter = React.memo(function StatCounter({
               lineHeight: 1,
               useInlineStyles: position.useInlineStyles === true,
             }),
-            '--counter-color-default': fill.css,
-            '--counter-stroke-color-default': stroke.css,
-            '--counter-stroke-width-default': strokeWidth,
-            '--dmn-counter-fill-image-default': fillGradient
-              ? gradientToCss(fillGradient)
-              : 'none',
-            '--dmn-counter-fill-clip-default': fillGradient
-              ? 'text'
-              : 'border-box',
-            '--dmn-counter-text-fill-default': fillGradient
-              ? 'transparent'
-              : 'currentcolor',
+            ...counterPaintVars({
+              fillColor,
+              fillGradient,
+              strokeColor,
+              strokeGradient,
+            }),
           } as React.CSSProperties
         }
       >

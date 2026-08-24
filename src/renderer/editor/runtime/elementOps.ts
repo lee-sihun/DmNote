@@ -85,7 +85,9 @@ import {
 } from '@src/types/key/notePaint';
 import {
   isCounterFillPropertyPatchV1,
+  isCounterStrokePropertyPatchV1,
   projectCounterFillPatch,
+  projectCounterStrokePatch,
 } from '@src/types/key/counterFill';
 import {
   isFontColorPropertyPatchV1,
@@ -1529,13 +1531,11 @@ const counterStrokePropertyIntents = (
     ) {
       continue;
     }
-    const stroke = rawStroke as Record<string, unknown>;
-    const nextStroke =
-      patch.property === 'counterStrokeIdle'
-        ? { ...stroke, idle: patch.value }
-        : { ...stroke, active: patch.value };
     const byId = propertyIntents.get(elementType) ?? new Map();
-    byId.set(id, { counter: { ...counter, stroke: nextStroke } });
+    byId.set(
+      id,
+      projectCounterStrokePatch(current as unknown as KeyPosition, patch),
+    );
     propertyIntents.set(elementType, byId);
   }
   return propertyIntents;
@@ -1548,11 +1548,8 @@ export const patchCounterStrokeByTargets = (
 ): Promise<boolean> => {
   const active = patch.property === 'counterStrokeActive';
   if (
-    (active
-      ? typeof patch.value !== 'string' ||
-        targets.some(({ elementType }) => elementType !== 'key')
-      : patch.property !== 'counterStrokeIdle' ||
-        typeof patch.value !== 'string') ||
+    !isCounterStrokePropertyPatchV1(patch) ||
+    (active && targets.some(({ elementType }) => elementType !== 'key')) ||
     targets.length === 0 ||
     targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
@@ -1568,7 +1565,7 @@ export const patchCounterStrokeByTargets = (
       kind: 'patchElement' as const,
       elementType,
       id,
-      patch,
+      patch: structuredClone(patch),
     })),
     {
       preflight: options.preflight,

@@ -12895,8 +12895,26 @@ mod tests {
             |data| {
                 let key_positions = data.key_positions.get_mut("4key").unwrap();
                 for position in key_positions.iter_mut().take(2) {
-                    position.counter.stroke.idle = "idle-before".to_string();
-                    position.counter.stroke.active = "active-before".to_string();
+                    position.counter.stroke.idle = "old-idle".to_string();
+                    position.counter.stroke.active = "old-active".to_string();
+                    position.counter.stroke_idle_gradient =
+                        serde_json::from_value(serde_json::json!({
+                            "angle": 10,
+                            "stops": [
+                                { "color": "old-idle", "pos": 0 },
+                                { "color": "old-idle-end", "pos": 1 }
+                            ]
+                        }))
+                        .unwrap();
+                    position.counter.stroke_active_gradient =
+                        serde_json::from_value(serde_json::json!({
+                            "angle": 20,
+                            "stops": [
+                                { "color": "old-active", "pos": 0 },
+                                { "color": "old-active-end", "pos": 1 }
+                            ]
+                        }))
+                        .unwrap();
                     position.counter.fill.idle = "fill-sibling".to_string();
                     position.counter.font_family = Some("font-sibling".to_string());
                     position.counter.animation.preset_id = Some("builtin-linear".to_string());
@@ -12928,22 +12946,51 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[0],
-                EditorElementPropertyPatchV1::CounterStrokeIdle(String::new()),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIntentV1::Gradient(
+                        crate::models::EditorCounterFillGradientIntentV1 {
+                            color: "rgba(170,187,204,1)".to_string(),
+                            gradient: crate::models::EditorPaintGradientV1 {
+                                angle: 45.0,
+                                stops: vec![
+                                    crate::models::EditorPaintGradientStopV1 {
+                                        color: "#ABC".to_string(),
+                                        pos: 0.0,
+                                    },
+                                    crate::models::EditorPaintGradientStopV1 {
+                                        color: "transparent".to_string(),
+                                        pos: 1.0,
+                                    },
+                                ],
+                            },
+                        },
+                    ),
+                ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[1],
-                EditorElementPropertyPatchV1::CounterStrokeActive("  raw active  ".to_string()),
+                EditorElementPropertyPatchV1::CounterStrokeActive(
+                    crate::models::EditorCounterStrokeIntentV1::Solid(
+                        crate::models::EditorCounterFillSolidIntentV1 {
+                            color: "  raw active  ".to_string(),
+                        },
+                    ),
+                ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("raw stat".to_string()),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIntentV1::Legacy("raw stat".to_string()),
+                ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterStrokeIdle("missing".to_string()),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIntentV1::Legacy("missing".to_string()),
+                ),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -12979,9 +13026,21 @@ mod tests {
                 .clone(),
         ];
         let mut expected_counters = original_counters.clone();
-        expected_counters[0].stroke.idle.clear();
+        expected_counters[0].stroke.idle = "rgba(170,187,204,1)".to_string();
+        expected_counters[0].stroke_idle_gradient = Some(match &ops[0] {
+            EditorOpV1::PatchElement {
+                patch:
+                    EditorElementPropertyPatchV1::CounterStrokeIdle(
+                        crate::models::EditorCounterStrokeIntentV1::Gradient(intent),
+                    ),
+                ..
+            } => intent.gradient.to_gradient_spec(),
+            _ => unreachable!(),
+        });
         expected_counters[1].stroke.active = "  raw active  ".to_string();
+        expected_counters[1].stroke_active_gradient = None;
         expected_counters[2].stroke.idle = "raw stat".to_string();
+        expected_counters[2].stroke_idle_gradient = None;
         assert_eq!(changed_counters, expected_counters);
         let history_revision = store.history_status().history_revision;
 
@@ -12994,7 +13053,9 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &key_ids[0],
-            EditorElementPropertyPatchV1::CounterStrokeIdle("different".to_string()),
+            EditorElementPropertyPatchV1::CounterStrokeIdle(
+                crate::models::EditorCounterStrokeIntentV1::Legacy("different".to_string()),
+            ),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -13055,7 +13116,23 @@ mod tests {
             expected_counters
         );
 
+        let event_positions = changed
+            .event
+            .as_ref()
+            .unwrap()
+            .patch
+            .key_positions
+            .as_ref()
+            .unwrap();
+        assert_eq!(event_positions, &changed.document.key_positions);
+        assert_eq!(EditorDocumentV1::from_store(&store.snapshot()), redone);
+
         store.flush_and_shutdown().unwrap();
+        drop(store);
+        let reloaded =
+            crate::state::migration::load_store_from_path(&dir.join("store.json")).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert_eq!(EditorDocumentV1::from_store(&reloaded.data), redone);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -13408,6 +13485,14 @@ mod tests {
             positions[1].note_glow_opacity_bottom = None;
             positions[2].note_border_color = None;
             positions[2].note_border_opacity = 100;
+            positions[2].note_border_gradient = serde_json::from_value(serde_json::json!({
+                "angle": 45,
+                "stops": [
+                    { "color": "#010203", "pos": 0 },
+                    { "color": "#040506", "pos": 1 }
+                ]
+            }))
+            .unwrap();
             positions[3].note_glow_color = None;
             positions[3].note_glow_opacity = 61;
         })
@@ -13440,8 +13525,21 @@ mod tests {
                 &ids[2],
                 EditorElementPropertyPatchV1::NoteBorderPaint(
                     crate::models::EditorNoteBorderPaintV1 {
-                        color: "#FFFFFF".to_string(),
-                        opacity: 100,
+                        color: "#112233".to_string(),
+                        opacity: 73,
+                        gradient: Some(crate::models::EditorPaintGradientV1 {
+                            angle: 135.0,
+                            stops: vec![
+                                crate::models::EditorPaintGradientStopV1 {
+                                    color: "rgba(17, 34, 51, .5)".to_string(),
+                                    pos: 0.0,
+                                },
+                                crate::models::EditorPaintGradientStopV1 {
+                                    color: "#ABC8".to_string(),
+                                    pos: 1.0,
+                                },
+                            ],
+                        }),
                     },
                 ),
             ),
@@ -13478,8 +13576,12 @@ mod tests {
         assert_eq!(positions[1].note_glow_opacity_top, Some(20));
         assert_eq!(positions[1].note_glow_opacity_bottom, Some(80));
         assert!(positions[1].note_glow_color.is_none());
-        assert_eq!(positions[2].note_border_color.as_deref(), Some("#FFFFFF"));
-        assert_eq!(positions[2].note_border_opacity, 100);
+        assert_eq!(positions[2].note_border_color.as_deref(), Some("#112233"));
+        assert_eq!(positions[2].note_border_opacity, 73);
+        assert_eq!(
+            positions[2].note_border_gradient.as_ref().unwrap().angle,
+            135.0
+        );
         assert_eq!(
             positions[3].note_glow_color,
             Some(crate::models::NoteColor::Solid(String::new()))
@@ -13535,7 +13637,18 @@ mod tests {
         assert!(undone.key_positions["4key"][1]
             .note_glow_opacity_top
             .is_none());
-        assert!(undone.key_positions["4key"][2].note_border_color.is_none());
+        assert_eq!(
+            undone.key_positions["4key"][2].note_border_color.as_deref(),
+            Some("#010203")
+        );
+        assert_eq!(
+            undone.key_positions["4key"][2]
+                .note_border_gradient
+                .as_ref()
+                .unwrap()
+                .angle,
+            45.0
+        );
         assert!(undone.key_positions["4key"][3].note_glow_color.is_none());
 
         let redo_id = uuid::Uuid::new_v4().to_string();
@@ -13557,14 +13670,38 @@ mod tests {
         );
         assert_eq!(
             redone.key_positions["4key"][2].note_border_color.as_deref(),
-            Some("#FFFFFF")
+            Some("#112233")
+        );
+        assert_eq!(
+            redone.key_positions["4key"][2]
+                .note_border_gradient
+                .as_ref()
+                .unwrap()
+                .angle,
+            135.0
         );
         assert_eq!(
             redone.key_positions["4key"][3].note_glow_color,
             Some(crate::models::NoteColor::Solid(String::new()))
         );
 
+        let event_positions = changed
+            .event
+            .as_ref()
+            .unwrap()
+            .patch
+            .key_positions
+            .as_ref()
+            .unwrap();
+        assert_eq!(event_positions, &changed.document.key_positions);
+        assert_eq!(EditorDocumentV1::from_store(&store.snapshot()), redone);
+
         store.flush_and_shutdown().unwrap();
+        drop(store);
+        let reloaded =
+            crate::state::migration::load_store_from_path(&dir.join("store.json")).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert_eq!(EditorDocumentV1::from_store(&reloaded.data), redone);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -18944,6 +19081,56 @@ mod tests {
         assert!(serde_json::from_slice::<AppStoreData>(&std::fs::read(path).unwrap()).is_ok());
 
         drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn invalid_note_border_stop_repair_backs_up_persists_and_is_idempotent() {
+        let dir = test_directory("note-border-stop-repair-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("store.json");
+        let mut data = super::initialize_default_state();
+        let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+        position.note_border_color = Some("#445566".to_string());
+        position.note_border_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "transparent", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        position.display_text = Some("preserved sibling".to_string());
+        position.counter.font_size = 37;
+        let original = serde_json::to_vec_pretty(&data).unwrap();
+        std::fs::write(&path, &original).unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        assert!(store.skip_asset_sweep);
+        let repaired = store.snapshot();
+        let position = &repaired.key_positions["4key"][0];
+        assert_eq!(position.note_border_color.as_deref(), Some("#445566"));
+        assert!(position.note_border_gradient.is_none());
+        assert_eq!(position.display_text.as_deref(), Some("preserved sibling"));
+        assert_eq!(position.counter.font_size, 37);
+        assert_eq!(std::fs::read(dir.join("store.json.bak")).unwrap(), original);
+
+        let on_disk: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(on_disk["keyPositions"]["4key"][0]
+            .get("noteBorderGradient")
+            .is_none());
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+
+        let reloaded = super::load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(
+            reloaded.data.key_positions["4key"][0],
+            repaired.key_positions["4key"][0]
+        );
+
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -18,16 +18,18 @@ import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
-  isNoteBorderPaintValueV1,
+  isNoteBorderPaintPatchValueV1,
   isNotePaintValuePatchV1,
-  type NoteBorderPaintValueV1,
+  type NoteBorderPaintPatchValueV1,
   type NotePaintPropertyPatchV1,
   type NotePaintValuePatchV1,
 } from '@src/types/key/notePaint';
 import {
   isCounterFillDescriptorV1,
+  isCounterStrokePatchValueV1,
   type CounterFillDescriptorV1,
   type CounterFillPropertyPatchV1,
+  type CounterStrokePatchValueV1,
 } from '@src/types/key/counterFill';
 import { type FontColorPropertyPatchV1 } from '@src/types/key/fontColor';
 import {
@@ -227,8 +229,8 @@ interface EditorElementPropertyValuesV1 {
   counterFontUnderline: boolean;
   counterFontStrikethrough: boolean;
   counterFontFamily: string;
-  counterStrokeIdle: string;
-  counterStrokeActive: string;
+  counterStrokeIdle: CounterStrokePatchValueV1;
+  counterStrokeActive: CounterStrokePatchValueV1;
   counterFillIdle: CounterFillDescriptorV1;
   counterFillActive: CounterFillDescriptorV1;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
@@ -260,7 +262,7 @@ interface EditorElementPropertyValuesV1 {
   shadowEnabled: boolean;
   notePaint: NotePaintValuePatchV1;
   noteGlowPaint: NotePaintValuePatchV1;
-  noteBorderPaint: NoteBorderPaintValueV1;
+  noteBorderPaint: NoteBorderPaintPatchValueV1;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -1616,10 +1618,11 @@ const isEditorElementPropertyValueValid = (
         (value as number) <= 900
       );
     case 'counterFontFamily':
-    case 'counterStrokeIdle':
       return keyOrStat && typeof value === 'string';
+    case 'counterStrokeIdle':
+      return keyOrStat && isCounterStrokePatchValueV1(value);
     case 'counterStrokeActive':
-      return elementType === 'key' && typeof value === 'string';
+      return elementType === 'key' && isCounterStrokePatchValueV1(value);
     case 'counterFillIdle':
       return keyOrStat && isCounterFillDescriptorV1(value);
     case 'counterFillActive':
@@ -1644,7 +1647,7 @@ const isEditorElementPropertyValueValid = (
     case 'noteGlowPaint':
       return elementType === 'key' && isNotePaintValuePatchV1(value);
     case 'noteBorderPaint':
-      return elementType === 'key' && isNoteBorderPaintValueV1(value);
+      return elementType === 'key' && isNoteBorderPaintPatchValueV1(value);
     case 'noteOffsetX':
     case 'noteOffsetY':
       return (

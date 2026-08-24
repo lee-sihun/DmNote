@@ -175,7 +175,14 @@ interface ElementShadowSpec {
 그라데이션 필드를 `null`로 두고 단색 필드를 갱신하세요.
 
 카운터 fill 그라데이션도 각각 `counter.fill.idle`과 `counter.fill.active`보다
-우선합니다. 카운터 stroke는 단색만 지원합니다.
+우선합니다. 카운터 stroke도 같은 구조입니다. `counter.strokeIdleGradient`와
+`counter.strokeActiveGradient`가 각각 `counter.stroke.idle`,
+`counter.stroke.active`보다 우선하며, 단색 필드는 첫 스톱 색으로 동기화됩니다.
+
+노트 테두리는 `noteBorderGradient`가 `noteBorderColor`보다 우선합니다.
+`noteBorderColor`는 항상 `#RRGGBB` hex로 유지되므로 그라데이션 저장 시 첫
+스톱 색이 hex로 변환되어 동기화됩니다. 스톱 색은 hex(`#RGB`, `#RGBA`,
+`#RRGGBB`, `#RRGGBBAA`) 또는 `rgb()`/`rgba()` 형식만 허용합니다.
 
 `shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
 생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면

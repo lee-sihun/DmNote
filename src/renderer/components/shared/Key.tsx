@@ -141,6 +141,8 @@ const DraggableKey = React.memo(
     const previewActive = previewSession?.stateMode === 'active';
     const previewFillSpec =
       previewSession?.surface === 'counterFill' ? previewSession.spec : null;
+    const previewStrokeSpec =
+      previewSession?.surface === 'counterStroke' ? previewSession.spec : null;
 
     const isSelectionMode = isSelected;
 
@@ -312,10 +314,20 @@ const DraggableKey = React.memo(
           textStyle={textStyle}
           active={previewActive}
           counterSettings={
-            previewFillSpec
-              ? previewActive
-                ? { ...counterSettings, fillActiveGradient: previewFillSpec }
-                : { ...counterSettings, fillIdleGradient: previewFillSpec }
+            previewFillSpec || previewStrokeSpec
+              ? {
+                  ...counterSettings,
+                  ...(previewFillSpec
+                    ? previewActive
+                      ? { fillActiveGradient: previewFillSpec }
+                      : { fillIdleGradient: previewFillSpec }
+                    : null),
+                  ...(previewStrokeSpec
+                    ? previewActive
+                      ? { strokeActiveGradient: previewStrokeSpec }
+                      : { strokeIdleGradient: previewStrokeSpec }
+                    : null),
+                }
               : counterSettings
           }
           useInlineStyles={position.useInlineStyles === true}

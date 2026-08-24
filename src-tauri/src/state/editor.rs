@@ -2988,12 +2988,18 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("  raw-idle-stroke  ".to_string()),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIntentV1::Legacy(
+                        "  raw-idle-stroke  ".to_string(),
+                    ),
+                ),
                 serde_json::json!({ "property": "counterStrokeIdle", "value": "  raw-idle-stroke  " }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterStrokeActive(String::new()),
+                EditorElementPropertyPatchV1::CounterStrokeActive(
+                    crate::models::EditorCounterStrokeIntentV1::Legacy(String::new()),
+                ),
                 serde_json::json!({ "property": "counterStrokeActive", "value": "" }),
             ),
             (
@@ -3065,6 +3071,7 @@ mod tests {
                     crate::models::EditorNoteBorderPaintV1 {
                         color: "#A1b2C3".to_string(),
                         opacity: 55,
+                        gradient: None,
                     },
                 ),
                 serde_json::json!({ "property": "noteBorderPaint", "value": { "color": "#A1b2C3", "opacity": 55 } }),

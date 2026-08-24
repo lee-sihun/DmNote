@@ -195,6 +195,7 @@ pub struct GradientSpec {
     pub angle: f64,
     pub stops: Vec<GradientStop>,
     normalized_on_read: bool,
+    note_border_invalid_stop_index_on_read: Option<usize>,
 }
 
 impl PartialEq for GradientSpec {
@@ -205,11 +206,23 @@ impl PartialEq for GradientSpec {
 
 impl GradientSpec {
     pub(crate) fn from_canonical_parts(angle: f64, stops: Vec<GradientStop>) -> Self {
+        let note_border_invalid_stop_index_on_read = stops
+            .iter()
+            .position(|stop| note_border_representative_hex(&stop.color).is_none());
         Self {
             angle,
             stops,
             normalized_on_read: false,
+            note_border_invalid_stop_index_on_read,
         }
+    }
+
+    pub(crate) fn note_border_invalid_stop_index(&self) -> Option<usize> {
+        self.note_border_invalid_stop_index_on_read.or_else(|| {
+            self.stops
+                .iter()
+                .position(|stop| note_border_representative_hex(&stop.color).is_none())
+        })
     }
 
     fn normalize(&mut self) -> bool {
@@ -289,10 +302,14 @@ impl<'de> Deserialize<'de> for GradientSpec {
             return Err(D::Error::custom("gradient values must be finite"));
         }
 
+        let note_border_invalid_stop_index_on_read = stops
+            .iter()
+            .position(|stop| note_border_representative_hex(&stop.color).is_none());
         let mut gradient = Self {
             angle,
             stops,
             normalized_on_read: angle_value.is_none() || !input.is_empty(),
+            note_border_invalid_stop_index_on_read,
         };
         gradient.normalized_on_read |= gradient.normalize();
         Ok(gradient)
@@ -555,6 +572,8 @@ pub struct KeyPosition {
     /// 노트 테두리 색상
     #[serde(default)]
     pub note_border_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note_border_gradient: Option<GradientSpec>,
     /// 노트 테두리 투명도 (0~100). 노트 배경 투명도와 독립. 기본 100.
     #[serde(default = "default_note_border_opacity")]
     pub note_border_opacity: u32,
@@ -672,6 +691,7 @@ impl Default for KeyPosition {
             note_offset_y: None,
             note_border_width: None,
             note_border_color: None,
+            note_border_gradient: None,
             note_border_opacity: default_note_border_opacity(),
             note_border_side: None,
             class_name: None,
@@ -1078,6 +1098,10 @@ pub struct KeyCounterSettings {
     pub fill_active_gradient: Option<GradientSpec>,
     #[serde(default = "default_stroke_color")]
     pub stroke: KeyCounterColor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_idle_gradient: Option<GradientSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_active_gradient: Option<GradientSpec>,
     #[serde(default = "default_gap")]
     pub gap: u32,
     #[serde(default = "default_counter_font_size")]
@@ -1116,6 +1140,8 @@ impl Default for KeyCounterSettings {
             fill_idle_gradient: None,
             fill_active_gradient: None,
             stroke: default_stroke_color(),
+            stroke_idle_gradient: None,
+            stroke_active_gradient: None,
             gap: default_gap(),
             font_size: default_counter_font_size(),
             font_weight: default_counter_font_weight(),
@@ -1137,7 +1163,11 @@ impl KeyCounterSettings {
     /// This keeps existing user customizations intact, while fixing the old default
     /// active fill/stroke values (black text / outlined) that diverged from the renderer.
     pub fn migrate_legacy_defaults(&mut self) -> bool {
-        if self.fill_idle_gradient.is_some() || self.fill_active_gradient.is_some() {
+        if self.fill_idle_gradient.is_some()
+            || self.fill_active_gradient.is_some()
+            || self.stroke_idle_gradient.is_some()
+            || self.stroke_active_gradient.is_some()
+        {
             self.normalize();
             return false;
         }
@@ -1217,6 +1247,21 @@ impl KeyCounterSettings {
         changed |= active_changed;
         pair_repaired |= active_pair_repaired;
 
+        let (stroke_idle_changed, stroke_idle_pair_repaired) = canonicalize_counter_gradient_pair(
+            &mut self.stroke.idle,
+            &mut self.stroke_idle_gradient,
+        );
+        changed |= stroke_idle_changed;
+        pair_repaired |= stroke_idle_pair_repaired;
+
+        let (stroke_active_changed, stroke_active_pair_repaired) =
+            canonicalize_counter_gradient_pair(
+                &mut self.stroke.active,
+                &mut self.stroke_active_gradient,
+            );
+        changed |= stroke_active_changed;
+        pair_repaired |= stroke_active_pair_repaired;
+
         (changed, pair_repaired)
     }
 }
@@ -1225,6 +1270,14 @@ impl KeyPosition {
     pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
         let mut changed = false;
         let mut pair_repaired = false;
+
+        let (note_border_changed, note_border_pair_repaired) =
+            canonicalize_note_border_gradient_pair(
+                &mut self.note_border_color,
+                &mut self.note_border_gradient,
+            );
+        changed |= note_border_changed;
+        pair_repaired |= note_border_pair_repaired;
 
         for (base, gradient) in [
             (&mut self.background_color, &mut self.background_gradient),
@@ -1296,6 +1349,108 @@ fn canonicalize_counter_gradient_pair(
         changed = true;
     }
     (changed, pair_repaired)
+}
+
+fn canonicalize_note_border_gradient_pair(
+    base: &mut Option<String>,
+    gradient: &mut Option<GradientSpec>,
+) -> (bool, bool) {
+    let Some(current) = gradient.as_mut() else {
+        return (false, false);
+    };
+
+    let mut changed = current.canonicalize();
+    if current.note_border_invalid_stop_index().is_some() {
+        *gradient = None;
+        return (true, true);
+    }
+
+    let representative = note_border_representative_hex(
+        &current
+            .stops
+            .first()
+            .expect("a deserialized gradient always has at least two stops")
+            .color,
+    )
+    .expect("all note border stop colors were validated");
+    let pair_repaired = base.as_deref() != Some(representative.as_str());
+    if pair_repaired {
+        *base = Some(representative);
+        changed = true;
+    }
+    (changed, pair_repaired)
+}
+
+pub(crate) fn note_border_representative_hex(color: &str) -> Option<String> {
+    let trimmed = color.trim();
+    if let Some(hex) = trimmed.strip_prefix('#') {
+        if matches!(hex.len(), 3 | 4 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            let channels = if matches!(hex.len(), 3 | 4) {
+                hex.chars()
+                    .take(3)
+                    .flat_map(|character| [character, character])
+                    .collect::<String>()
+            } else {
+                hex[..6].to_string()
+            };
+            return Some(format!("#{}", channels.to_ascii_uppercase()));
+        }
+        return None;
+    }
+
+    let open = trimmed.find('(')?;
+    if !trimmed.ends_with(')') {
+        return None;
+    }
+    let name = &trimmed[..open];
+    let channels = trimmed[open + 1..trimmed.len() - 1]
+        .split(',')
+        .map(str::trim)
+        .collect::<Vec<_>>();
+    let expected_channels = if name.eq_ignore_ascii_case("rgb") {
+        3
+    } else if name.eq_ignore_ascii_case("rgba") {
+        4
+    } else {
+        return None;
+    };
+    if channels.len() != expected_channels {
+        return None;
+    }
+
+    let rgb = channels[..3]
+        .iter()
+        .map(|channel| {
+            if !(1..=3).contains(&channel.len())
+                || !channel.bytes().all(|byte| byte.is_ascii_digit())
+            {
+                return None;
+            }
+            channel.parse::<u16>().ok().filter(|value| *value <= 255)
+        })
+        .collect::<Option<Vec<_>>>()?;
+
+    if expected_channels == 4 {
+        let alpha = channels[3];
+        let mut parts = alpha.split('.');
+        let whole = parts.next().unwrap_or_default();
+        let fractional = parts.next();
+        let decimal_syntax = parts.next().is_none()
+            && whole.bytes().all(|byte| byte.is_ascii_digit())
+            && fractional.is_none_or(|digits| {
+                !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+            })
+            && (!whole.is_empty() || fractional.is_some());
+        if !decimal_syntax {
+            return None;
+        }
+        let alpha = alpha.parse::<f64>().ok()?;
+        if !alpha.is_finite() || !(0.0..=1.0).contains(&alpha) {
+            return None;
+        }
+    }
+
+    Some(format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]))
 }
 
 pub(crate) fn compact_canonical_rgba(color: &str) -> String {
@@ -2531,12 +2686,28 @@ pub struct SettingsPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_canonical_rgba, FadePosition, GradientSpec, GraphPosition, GraphStatType,
-        GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
-        KeyCounterSettings, KeyMappings, KeyPosition, KeySlot, KnobPosition, NoteColor,
-        NoteSettings, SlotMatch, StatPosition, StatType, MAX_SLOT_KEYS,
+        compact_canonical_rgba, note_border_representative_hex, FadePosition, GradientSpec,
+        GraphPosition, GraphStatType, GraphType, KeyCounterAlign, KeyCounterAlignMode,
+        KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition,
+        KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, StatPosition, StatType,
+        MAX_SLOT_KEYS,
     };
     use serde::Deserialize;
+
+    const NOTE_BORDER_STOP_COLOR_FIXTURE: &str =
+        include_str!("../../../tests/fixtures/note-border-stop-colors.json");
+
+    #[derive(Deserialize)]
+    struct NoteBorderStopColorFixture {
+        valid: Vec<ValidNoteBorderStopColor>,
+        invalid: Vec<String>,
+    }
+
+    #[derive(Deserialize)]
+    struct ValidNoteBorderStopColor {
+        input: String,
+        representative: String,
+    }
 
     #[test]
     fn legacy_string_key_mappings_round_trip_without_loss() {
@@ -2600,6 +2771,59 @@ mod tests {
         }))
         .unwrap();
         assert!(missing.id.is_empty());
+    }
+
+    #[test]
+    fn new_surface_gradients_flatten_into_every_position_collection() {
+        let mut position = KeyPosition {
+            note_border_gradient: serde_json::from_value(serde_json::json!({
+                "angle": 90,
+                "stops": [
+                    { "color": "#112233", "pos": 0 },
+                    { "color": "#445566", "pos": 1 }
+                ]
+            }))
+            .unwrap(),
+            ..KeyPosition::default()
+        };
+        position.counter.stroke_idle_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 180,
+            "stops": [
+                { "color": "#010203", "pos": 0 },
+                { "color": "#040506", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+
+        let values = [
+            serde_json::to_value(&position).unwrap(),
+            serde_json::to_value(StatPosition {
+                stat_type: StatType::Kps,
+                position: position.clone(),
+            })
+            .unwrap(),
+            serde_json::to_value(GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 100,
+                graph_color: "#123456".to_string(),
+                show_avg_line: true,
+                position: position.clone(),
+            })
+            .unwrap(),
+            serde_json::to_value(KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position,
+            })
+            .unwrap(),
+        ];
+
+        for value in values {
+            assert_eq!(value["noteBorderGradient"]["angle"], 90.0);
+            assert_eq!(value["counter"]["strokeIdleGradient"]["angle"], 180.0);
+        }
     }
 
     #[test]
@@ -2892,6 +3116,145 @@ mod tests {
     }
 
     #[test]
+    fn note_border_stop_color_parser_matches_shared_fixture() {
+        let fixture: NoteBorderStopColorFixture =
+            serde_json::from_str(NOTE_BORDER_STOP_COLOR_FIXTURE).unwrap();
+
+        for case in fixture.valid {
+            assert_eq!(
+                note_border_representative_hex(&case.input),
+                Some(case.representative),
+                "valid fixture mismatch for {:?}",
+                case.input
+            );
+        }
+        for input in fixture.invalid {
+            assert_eq!(
+                note_border_representative_hex(&input),
+                None,
+                "invalid fixture mismatch for {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn new_gradient_fields_round_trip_and_missing_fields_remain_none() {
+        let legacy: KeyPosition = serde_json::from_value(serde_json::json!({
+            "dx": 0,
+            "dy": 0,
+            "width": 60,
+            "count": 0
+        }))
+        .unwrap();
+        assert!(legacy.note_border_gradient.is_none());
+        assert!(legacy.counter.stroke_idle_gradient.is_none());
+        assert!(legacy.counter.stroke_active_gradient.is_none());
+
+        let value = serde_json::json!({
+            "dx": 0,
+            "dy": 0,
+            "width": 60,
+            "count": 0,
+            "noteBorderColor": "#112233",
+            "noteBorderGradient": {
+                "angle": 45,
+                "stops": [
+                    { "color": "rgba(17,34,51,.5)", "pos": 0 },
+                    { "color": "#ABC", "pos": 1 }
+                ]
+            },
+            "counter": {
+                "stroke": {
+                    "idle": "rgba(1,2,3,1)",
+                    "active": "rgba(4,5,6,1)"
+                },
+                "strokeIdleGradient": {
+                    "angle": 90,
+                    "stops": [
+                        { "color": "#010203", "pos": 0 },
+                        { "color": "#040506", "pos": 1 }
+                    ]
+                },
+                "strokeActiveGradient": {
+                    "angle": 180,
+                    "stops": [
+                        { "color": "#040506", "pos": 0 },
+                        { "color": "#070809", "pos": 1 }
+                    ]
+                }
+            }
+        });
+        let position: KeyPosition = serde_json::from_value(value).unwrap();
+        let serialized = serde_json::to_value(&position).unwrap();
+        assert!(serialized.get("noteBorderGradient").is_some());
+        assert!(serialized["counter"].get("strokeIdleGradient").is_some());
+        assert!(serialized["counter"].get("strokeActiveGradient").is_some());
+        assert_eq!(
+            serde_json::from_value::<KeyPosition>(serialized).unwrap(),
+            position
+        );
+    }
+
+    #[test]
+    fn note_border_gradient_canonicalization_uses_hex_and_drops_invalid_stop() {
+        let mut position: KeyPosition = serde_json::from_value(serde_json::json!({
+            "dx": 0,
+            "dy": 0,
+            "width": 60,
+            "count": 0,
+            "noteBorderColor": "#000000",
+            "noteBorderGradient": {
+                "angle": 90,
+                "stops": [
+                    { "color": "rgba(17, 34, 51, .5)", "pos": 0 },
+                    { "color": "#ABC", "pos": 1 }
+                ]
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(position.canonicalize_gradient_pairs(), (true, true));
+        assert_eq!(position.note_border_color.as_deref(), Some("#112233"));
+        assert!(position.note_border_gradient.is_some());
+        assert_eq!(position.canonicalize_gradient_pairs(), (false, false));
+
+        position.note_border_color = Some("#445566".to_string());
+        position.note_border_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "transparent", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(position.canonicalize_gradient_pairs(), (true, true));
+        assert_eq!(position.note_border_color.as_deref(), Some("#445566"));
+        assert!(position.note_border_gradient.is_none());
+
+        position.note_border_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#000000", "pos": 0.0 },
+                { "color": "#111111", "pos": 0.1 },
+                { "color": "#222222", "pos": 0.2 },
+                { "color": "#333333", "pos": 0.3 },
+                { "color": "#444444", "pos": 0.4 },
+                { "color": "#555555", "pos": 0.5 },
+                { "color": "#666666", "pos": 0.6 },
+                { "color": "#777777", "pos": 0.7 },
+                { "color": "invalid-discarded-stop", "pos": 1.0 }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(
+            position.note_border_gradient.as_ref().unwrap().stops.len(),
+            8
+        );
+        assert_eq!(position.canonicalize_gradient_pairs(), (true, true));
+        assert!(position.note_border_gradient.is_none());
+    }
+
+    #[test]
     fn counter_gradient_escape_differs_from_every_legacy_snapshot_literal() {
         let legacy_literals = [
             "#FFFFFF",
@@ -2910,6 +3273,38 @@ mod tests {
             assert_eq!(escaped, expected);
             assert!(legacy_literals.iter().all(|literal| escaped != *literal));
         }
+    }
+
+    #[test]
+    fn stroke_gradient_blocks_legacy_default_migration_and_syncs_compact_base() {
+        let mut counter: KeyCounterSettings = serde_json::from_value(serde_json::json!({
+            "placement": "inside",
+            "align": "top",
+            "alignMode": "center",
+            "fill": { "idle": "#FFFFFF", "active": "#000000" },
+            "stroke": { "idle": "#000000", "active": "#FFFFFF" },
+            "strokeIdleGradient": {
+                "angle": 90,
+                "stops": [
+                    { "color": "#000000", "pos": 0 },
+                    { "color": "#FFFFFF", "pos": 1 }
+                ]
+            },
+            "gap": 6,
+            "fontSize": 16,
+            "fontWeight": 400,
+            "fontFamily": null,
+            "fontItalic": false,
+            "fontUnderline": false,
+            "fontStrikethrough": false
+        }))
+        .unwrap();
+
+        assert!(!counter.migrate_legacy_defaults());
+        assert_eq!(counter.stroke.idle, "#000000");
+        assert_eq!(counter.canonicalize_gradient_pairs(), (true, true));
+        assert_eq!(counter.stroke.idle, "rgba(0,0,0,1)");
+        assert!(!counter.migrate_legacy_defaults());
     }
 
     #[derive(Deserialize)]

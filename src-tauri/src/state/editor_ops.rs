@@ -3,15 +3,16 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     errors::EditorCommitError,
     models::{
-        compact_canonical_rgba, default_counter_animation_builtin_presets, AppStoreData,
-        CounterAnimationPreset, EditorBoundsV1, EditorCounterAnimationPresetIntentV1,
-        EditorCounterFillIntentV1, EditorDocumentV1, EditorElementGroupTargetV1,
+        compact_canonical_rgba, default_counter_animation_builtin_presets,
+        note_border_representative_hex, AppStoreData, CounterAnimationPreset, EditorBoundsV1,
+        EditorCounterAnimationPresetIntentV1, EditorCounterFillIntentV1,
+        EditorCounterStrokeIntentV1, EditorDocumentV1, EditorElementGroupTargetV1,
         EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
-        EditorGroupUpdateV1, EditorNoteColorV1, EditorNotePaintIntentV1, EditorOpResultStatusV1,
-        EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1, EditorPaintGradientV1,
-        EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1, ElementShadowSpec,
-        GradientSpec, KeyPosition, LayerGroupDef, NoteColor, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
-        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        EditorGroupUpdateV1, EditorNoteBorderPaintV1, EditorNoteColorV1, EditorNotePaintIntentV1,
+        EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1,
+        EditorPaintGradientV1, EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1,
+        ElementShadowSpec, GradientSpec, KeyPosition, LayerGroupDef, NoteColor, SHADOW_BLUR_MAX,
+        SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
 };
 
@@ -195,6 +196,30 @@ fn validate_counter_fill_intent(
     Ok(())
 }
 
+fn validate_counter_stroke_intent(
+    intent: &EditorCounterStrokeIntentV1,
+) -> Result<(), EditorCommitError> {
+    let EditorCounterStrokeIntentV1::Gradient(intent) = intent else {
+        return Ok(());
+    };
+    validate_paint_gradient(&intent.gradient)?;
+    let representative = compact_canonical_rgba(
+        &intent
+            .gradient
+            .stops
+            .first()
+            .expect("a validated counter stroke gradient has at least two stops")
+            .color,
+    );
+    if intent.color != representative {
+        return Err(EditorCommitError::validation(
+            "COUNTER_STROKE_COLOR_GRADIENT_MISMATCH",
+            "counter stroke color must equal the compact first gradient stop color",
+        ));
+    }
+    Ok(())
+}
+
 fn has_stored_paint_value(color: &Option<String>, gradient: &Option<GradientSpec>) -> bool {
     color
         .as_deref()
@@ -293,6 +318,36 @@ fn patch_counter_fill(
         (
             &mut position.counter.fill.idle,
             &mut position.counter.fill_idle_gradient,
+        )
+    };
+    let changed = *color != next_color || *gradient != next_gradient;
+    *color = next_color;
+    *gradient = next_gradient;
+    changed
+}
+
+fn patch_counter_stroke(
+    position: &mut KeyPosition,
+    active: bool,
+    intent: &EditorCounterStrokeIntentV1,
+) -> bool {
+    let (next_color, next_gradient) = match intent {
+        EditorCounterStrokeIntentV1::Legacy(color) => (color.clone(), None),
+        EditorCounterStrokeIntentV1::Solid(intent) => (intent.color.clone(), None),
+        EditorCounterStrokeIntentV1::Gradient(intent) => (
+            intent.color.clone(),
+            Some(intent.gradient.to_gradient_spec()),
+        ),
+    };
+    let (color, gradient) = if active {
+        (
+            &mut position.counter.stroke.active,
+            &mut position.counter.stroke_active_gradient,
+        )
+    } else {
+        (
+            &mut position.counter.stroke.idle,
+            &mut position.counter.stroke_idle_gradient,
         )
     };
     let changed = *color != next_color || *gradient != next_gradient;
@@ -541,20 +596,49 @@ fn patch_note_paint(
     }
 }
 
-fn validate_note_border_paint(color: &str, opacity: u32) -> Result<(), EditorCommitError> {
-    let valid_color = color.len() == 7
-        && color.starts_with('#')
-        && color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit);
+fn validate_note_border_paint(patch: &EditorNoteBorderPaintV1) -> Result<(), EditorCommitError> {
+    let valid_color = patch.color.len() == 7
+        && patch.color.starts_with('#')
+        && patch.color.as_bytes()[1..]
+            .iter()
+            .all(u8::is_ascii_hexdigit);
     if !valid_color {
         return Err(EditorCommitError::validation(
             "INVALID_NOTE_BORDER_COLOR",
             "note border color must use #RRGGBB format",
         ));
     }
-    if opacity > 100 {
+    if patch.opacity > 100 {
         return Err(EditorCommitError::validation(
             "NOTE_OPACITY_OUT_OF_RANGE",
             "note border opacity must be an integer between 0 and 100",
+        ));
+    }
+
+    let Some(gradient) = patch.gradient.as_ref() else {
+        return Ok(());
+    };
+    validate_paint_gradient(gradient)?;
+    for (index, stop) in gradient.stops.iter().enumerate() {
+        if note_border_representative_hex(&stop.color).is_none() {
+            return Err(EditorCommitError::validation(
+                "INVALID_PAINT_GRADIENT",
+                format!("note border gradient stop {index} has an unsupported color"),
+            ));
+        }
+    }
+    let representative = note_border_representative_hex(
+        &gradient
+            .stops
+            .first()
+            .expect("a validated note border gradient has at least two stops")
+            .color,
+    )
+    .expect("all note border gradient stop colors were validated");
+    if patch.color != representative {
+        return Err(EditorCommitError::validation(
+            "PAINT_COLOR_GRADIENT_MISMATCH",
+            "note border color must equal the uppercase first gradient stop color",
         ));
     }
     Ok(())
@@ -1536,6 +1620,9 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     if let EditorElementPropertyPatchV1::CounterFillIdle(patch) = patch {
                         validate_counter_fill_intent(patch)?;
                     }
+                    if let EditorElementPropertyPatchV1::CounterStrokeIdle(patch) = patch {
+                        validate_counter_stroke_intent(patch)?;
+                    }
                 }
                 // key 전용 카운터 active 계열
                 EditorElementPropertyPatchV1::CounterFillActive(_)
@@ -1547,6 +1634,9 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     )?;
                     if let EditorElementPropertyPatchV1::CounterFillActive(patch) = patch {
                         validate_counter_fill_intent(patch)?;
+                    }
+                    if let EditorElementPropertyPatchV1::CounterStrokeActive(patch) = patch {
+                        validate_counter_stroke_intent(patch)?;
                     }
                 }
                 // key 전용 사운드·노트
@@ -1600,7 +1690,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             validate_note_paint_intent(patch)?;
                         }
                         EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
-                            validate_note_border_paint(&patch.color, patch.opacity)?;
+                            validate_note_border_paint(patch)?;
                         }
                         _ => {}
                     }
@@ -2301,21 +2391,11 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                     EditorElementPropertyPatchV1::CounterStrokeIdle(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.stroke.idle == *patch {
-                            false
-                        } else {
-                            position.counter.stroke.idle = patch.clone();
-                            true
-                        }
+                        patch_counter_stroke(position, false, patch)
                     }
                     EditorElementPropertyPatchV1::CounterStrokeActive(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.stroke.active == *patch {
-                            false
-                        } else {
-                            position.counter.stroke.active = patch.clone();
-                            true
-                        }
+                        patch_counter_stroke(position, true, patch)
                     }
                     EditorElementPropertyPatchV1::CounterAnimationPreset(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -2402,11 +2482,17 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                     EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
+                        let next_gradient = patch
+                            .gradient
+                            .as_ref()
+                            .map(EditorPaintGradientV1::to_gradient_spec);
                         let changed = position.note_border_color.as_deref()
                             != Some(patch.color.as_str())
-                            || position.note_border_opacity != patch.opacity;
+                            || position.note_border_opacity != patch.opacity
+                            || position.note_border_gradient != next_gradient;
                         position.note_border_color = Some(patch.color.clone());
                         position.note_border_opacity = patch.opacity;
+                        position.note_border_gradient = next_gradient;
                         changed
                     }
                     EditorElementPropertyPatchV1::NoteOffsetX(patch) => {
@@ -2864,6 +2950,32 @@ mod tests {
         })
     }
 
+    fn counter_stroke_solid(color: &str) -> EditorCounterStrokeIntentV1 {
+        EditorCounterStrokeIntentV1::Solid(crate::models::EditorCounterFillSolidIntentV1 {
+            color: color.to_string(),
+        })
+    }
+
+    fn counter_stroke_gradient(
+        color: &str,
+        angle: f64,
+        stops: &[(&str, f64)],
+    ) -> EditorCounterStrokeIntentV1 {
+        EditorCounterStrokeIntentV1::Gradient(crate::models::EditorCounterFillGradientIntentV1 {
+            color: color.to_string(),
+            gradient: crate::models::EditorPaintGradientV1 {
+                angle,
+                stops: stops
+                    .iter()
+                    .map(|(color, pos)| crate::models::EditorPaintGradientStopV1 {
+                        color: (*color).to_string(),
+                        pos: *pos,
+                    })
+                    .collect(),
+            },
+        })
+    }
+
     fn shadow_leaf_color(color: &str) -> EditorShadowLeafPatchV1 {
         EditorShadowLeafPatchV1::Color(color.to_string())
     }
@@ -3071,12 +3183,16 @@ mod tests {
             row(
                 "counterStrokeIdle",
                 KEY_STAT,
-                Patch::CounterStrokeIdle("#000000".to_string()),
+                Patch::CounterStrokeIdle(EditorCounterStrokeIntentV1::Legacy(
+                    "#000000".to_string(),
+                )),
             ),
             row(
                 "counterStrokeActive",
                 KEY_ONLY,
-                Patch::CounterStrokeActive("#000000".to_string()),
+                Patch::CounterStrokeActive(EditorCounterStrokeIntentV1::Legacy(
+                    "#000000".to_string(),
+                )),
             ),
             row(
                 "counterAnimationPreset",
@@ -3109,6 +3225,7 @@ mod tests {
                 Patch::NoteBorderPaint(crate::models::EditorNoteBorderPaintV1 {
                     color: "#112233".to_string(),
                     opacity: 80,
+                    gradient: None,
                 }),
             ),
             row("noteOffsetX", KEY_ONLY, Patch::NoteOffsetX(Some(10.0))),
@@ -7071,6 +7188,26 @@ mod tests {
                 }))
                 .unwrap(),
             );
+            counter.stroke_idle_gradient = Some(
+                serde_json::from_value(serde_json::json!({
+                    "angle": 10,
+                    "stops": [
+                        { "color": "old-idle", "pos": 0 },
+                        { "color": "old-idle-end", "pos": 1 }
+                    ]
+                }))
+                .unwrap(),
+            );
+            counter.stroke_active_gradient = Some(
+                serde_json::from_value(serde_json::json!({
+                    "angle": 20,
+                    "stops": [
+                        { "color": "old-active", "pos": 0 },
+                        { "color": "old-active-end", "pos": 1 }
+                    ]
+                }))
+                .unwrap(),
+            );
             counter.font_family = Some("font-sibling".to_string());
             counter.animation.preset_id = Some("builtin-linear".to_string());
         }
@@ -7083,24 +7220,32 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[0],
-                EditorElementPropertyPatchV1::CounterStrokeIdle(String::new()),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(counter_stroke_gradient(
+                    "rgba(170,187,204,1)",
+                    45.0,
+                    &[("#ABC", 0.0), ("transparent", 1.0)],
+                )),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_ids[1],
-                EditorElementPropertyPatchV1::CounterStrokeActive(
-                    "  raw active stroke  ".to_string(),
-                ),
+                EditorElementPropertyPatchV1::CounterStrokeActive(counter_stroke_solid(
+                    "  raw active stroke  ",
+                )),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("raw stat stroke".to_string()),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    EditorCounterStrokeIntentV1::Legacy("raw stat stroke".to_string()),
+                ),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterStrokeIdle("missing".to_string()),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    EditorCounterStrokeIntentV1::Legacy("missing".to_string()),
+                ),
             ),
         ];
 
@@ -7118,9 +7263,21 @@ mod tests {
                 .clone(),
         ];
         let mut expected = originals.clone();
-        expected[0].stroke.idle.clear();
+        expected[0].stroke.idle = "rgba(170,187,204,1)".to_string();
+        expected[0].stroke_idle_gradient = Some(match &ops[0] {
+            EditorOpV1::PatchElement {
+                patch:
+                    EditorElementPropertyPatchV1::CounterStrokeIdle(
+                        EditorCounterStrokeIntentV1::Gradient(intent),
+                    ),
+                ..
+            } => intent.gradient.to_gradient_spec(),
+            _ => unreachable!(),
+        });
         expected[1].stroke.active = "  raw active stroke  ".to_string();
+        expected[1].stroke_active_gradient = None;
         expected[2].stroke.idle = "raw stat stroke".to_string();
+        expected[2].stroke_idle_gradient = None;
         assert_eq!(actual, expected);
         assert_eq!(
             transition.changed_fields,
@@ -7156,14 +7313,45 @@ mod tests {
             ]
         );
 
+        for (invalid, code) in [
+            (
+                counter_stroke_gradient("#ABC", 45.0, &[("#ABC", 0.0), ("#fff", 1.0)]),
+                "COUNTER_STROKE_COLOR_GRADIENT_MISMATCH",
+            ),
+            (
+                counter_stroke_gradient(
+                    "rgba(170,187,204,1)",
+                    -0.0,
+                    &[("#ABC", 0.0), ("#fff", 1.0)],
+                ),
+                "INVALID_PAINT_GRADIENT",
+            ),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &key_ids[0],
+                    EditorElementPropertyPatchV1::CounterStrokeIdle(invalid),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(code));
+            assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
+        }
+
         for (element_type, patch) in [
             (
                 EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("wrong".to_string()),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    EditorCounterStrokeIntentV1::Legacy("wrong".to_string()),
+                ),
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeActive("wrong".to_string()),
+                EditorElementPropertyPatchV1::CounterStrokeActive(
+                    EditorCounterStrokeIntentV1::Legacy("wrong".to_string()),
+                ),
             ),
         ] {
             let error = prepare_editor_ops_transition(
@@ -7763,6 +7951,14 @@ mod tests {
         positions[2].note_glow_opacity_bottom = Some(73);
         positions[3].note_border_color = None;
         positions[3].note_border_opacity = 100;
+        positions[3].note_border_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 45,
+            "stops": [
+                { "color": "#010203", "pos": 0 },
+                { "color": "#040506", "pos": 1 }
+            ]
+        }))
+        .unwrap();
         let full = &mut store.key_positions.get_mut("5key").unwrap()[0];
         full.note_glow_opacity = 65;
         full.note_glow_opacity_top = None;
@@ -7792,6 +7988,7 @@ mod tests {
             EditorElementPropertyPatchV1::NoteBorderPaint(crate::models::EditorNoteBorderPaintV1 {
                 color: "#FFFFFF".to_string(),
                 opacity: 100,
+                gradient: None,
             });
         let glow_tuple =
             EditorElementPropertyPatchV1::NoteGlowPaint(EditorNotePaintIntentV1::GradientOpacity(
@@ -7854,6 +8051,7 @@ mod tests {
         assert_eq!(positions[2].note_glow_opacity_bottom, Some(73));
         assert_eq!(positions[3].note_border_color.as_deref(), Some("#FFFFFF"));
         assert_eq!(positions[3].note_border_opacity, 100);
+        assert!(positions[3].note_border_gradient.is_none());
         let full = &transition.candidate.key_positions["5key"][0];
         assert_eq!(full.note_glow_opacity, 65);
         assert_eq!(full.note_glow_opacity_top, Some(10));
@@ -7893,6 +8091,7 @@ mod tests {
                     crate::models::EditorNoteBorderPaintV1 {
                         color: "rgba(1,2,3,1)".to_string(),
                         opacity: 100,
+                        gradient: None,
                     },
                 ),
                 "INVALID_NOTE_BORDER_COLOR",
@@ -7935,6 +8134,137 @@ mod tests {
             )
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store, original);
+        }
+    }
+
+    #[test]
+    fn note_border_gradient_patch_is_atomic_canonical_and_strict() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_border_color = Some("#000000".to_string());
+        position.note_border_opacity = 25;
+        position.note_border_side = Some("vertical".to_string());
+        let original = store.clone();
+
+        let gradient = crate::models::EditorPaintGradientV1 {
+            angle: 135.0,
+            stops: vec![
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "rgba(17, 34, 51, .5)".to_string(),
+                    pos: 0.0,
+                },
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "#ABC8".to_string(),
+                    pos: 1.0,
+                },
+            ],
+        };
+        let patch =
+            EditorElementPropertyPatchV1::NoteBorderPaint(crate::models::EditorNoteBorderPaintV1 {
+                color: "#112233".to_string(),
+                opacity: 73,
+                gradient: Some(gradient.clone()),
+            });
+        let ops = [patch_property_op(
+            EditorElementTypeV1::Key,
+            &id,
+            patch.clone(),
+        )];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        let position = &transition.candidate.key_positions["4key"][0];
+        assert_eq!(position.note_border_color.as_deref(), Some("#112233"));
+        assert_eq!(position.note_border_opacity, 73);
+        assert_eq!(
+            position.note_border_gradient,
+            Some(gradient.to_gradient_spec())
+        );
+        assert_eq!(position.note_border_side.as_deref(), Some("vertical"));
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+
+        let invalid_cases = [
+            (
+                "#AABBCC",
+                crate::models::EditorPaintGradientV1 {
+                    angle: 90.0,
+                    stops: vec![
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#112233".to_string(),
+                            pos: 0.0,
+                        },
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#445566".to_string(),
+                            pos: 1.0,
+                        },
+                    ],
+                },
+                "PAINT_COLOR_GRADIENT_MISMATCH",
+            ),
+            (
+                "#112233",
+                crate::models::EditorPaintGradientV1 {
+                    angle: 90.0,
+                    stops: vec![
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#112233".to_string(),
+                            pos: 0.0,
+                        },
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "transparent".to_string(),
+                            pos: 1.0,
+                        },
+                    ],
+                },
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                "#112233",
+                crate::models::EditorPaintGradientV1 {
+                    angle: -0.0,
+                    stops: vec![
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#112233".to_string(),
+                            pos: 0.0,
+                        },
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#445566".to_string(),
+                            pos: 1.0,
+                        },
+                    ],
+                },
+                "INVALID_PAINT_GRADIENT",
+            ),
+        ];
+        for (color, gradient, code) in invalid_cases {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &id,
+                    EditorElementPropertyPatchV1::NoteBorderPaint(
+                        crate::models::EditorNoteBorderPaintV1 {
+                            color: color.to_string(),
+                            opacity: 73,
+                            gradient: Some(gradient),
+                        },
+                    ),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(code));
             assert_eq!(store, original);
         }
     }

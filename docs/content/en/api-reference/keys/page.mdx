@@ -381,7 +381,15 @@ To return to a solid color, set the gradient field to `null` and update the
 solid field.
 
 The counter fill gradient fields likewise take priority over `counter.fill.idle`
-and `counter.fill.active`. Counter stroke remains solid-only.
+and `counter.fill.active`. Counter stroke follows the same pattern:
+`counter.strokeIdleGradient` and `counter.strokeActiveGradient` take priority
+over `counter.stroke.idle` and `counter.stroke.active`, and the solid fields
+stay synced to the first stop color.
+
+For note borders, `noteBorderGradient` takes priority over `noteBorderColor`.
+`noteBorderColor` always stays a `#RRGGBB` hex value, so saving a gradient
+syncs it to the hex form of the first stop. Stop colors accept only hex
+(`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`) or `rgb()`/`rgba()` notation.
 
 `shadow` and `activeShadow` control the idle and pressed shadows independently.
 When omitted, the built-in shadow remains unchanged. Store a spec with

@@ -1176,6 +1176,11 @@ const CounterAnimationEditorModal = ({
                           ? counterSettings?.stroke.active ?? 'transparent'
                           : counterSettings?.stroke.idle ?? 'transparent'
                       }
+                      strokeGradient={
+                        keyActive
+                          ? counterSettings?.strokeActiveGradient ?? null
+                          : counterSettings?.strokeIdleGradient ?? null
+                      }
                       globalKey="preview"
                       active={keyActive}
                       fontSize={

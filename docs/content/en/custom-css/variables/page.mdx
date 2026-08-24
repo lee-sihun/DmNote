@@ -63,8 +63,10 @@ CSS variables applied to counter elements. Use with `.counter[data-counter-state
 | `--counter-fill-image`      | Text fill image                 | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
 | `--counter-fill-clip`       | Fill clipping area              | `<box>`    | `text`, `border-box`                 |
 | `--counter-text-fill-color` | WebKit text fill color          | `<color>`  | `transparent`, `currentcolor`        |
-| `--counter-stroke-color`    | Text outline color              | `<color>`  | `#000000`, `transparent`             |
+| `--counter-stroke-color`    | Text outline color and saved-stroke-gradient reset | `<color>`  | `#000000`, `transparent`             |
 | `--counter-stroke-width`    | Text outline thickness          | `<length>` | `1px`, `2px`                         |
+| `--counter-stroke-image`    | Text outline image              | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--counter-stroke-clip`     | Outline clipping area           | `<box>`    | `text`, `border-box`                 |
 
 Setting only `--counter-color` also disables a counter fill gradient saved in
 the app. To create a CSS fill gradient, set all three fill variables:
@@ -74,6 +76,20 @@ the app. To create a CSS fill gradient, set all three fill variables:
   --counter-fill-image: linear-gradient(90deg, #f0f, #0ff);
   --counter-fill-clip: text;
   --counter-text-fill-color: transparent;
+}
+```
+
+The stroke follows the same rule: setting only `--counter-stroke-color`
+disables a stroke gradient saved in the app and the solid outline wins. To
+create a CSS stroke gradient directly, set all three stroke variables. If no
+outline is configured in the app, the default width is 0px, so
+`--counter-stroke-width` is required for anything to show:
+
+```css
+.counter {
+  --counter-stroke-image: linear-gradient(90deg, #f0f, #0ff);
+  --counter-stroke-clip: text;
+  --counter-stroke-width: 1px;
 }
 ```
 
