@@ -114,6 +114,7 @@ function FALLBACK_COUNTER_SETTINGS(): KeyCounterSettings {
     gap: 4,
     fontSize: DEFAULT_COUNTER_FONT_SIZE,
     fontWeight: DEFAULT_COUNTER_FONT_WEIGHT,
+    fontBold: false,
     fontFamily: null,
     fontItalic: false,
     fontUnderline: false,

@@ -619,6 +619,9 @@ pub struct KeyPosition {
     /// 글꼴 굵기 (CSS font-weight 값, 예: 400, 700)
     #[serde(default)]
     pub font_weight: Option<u32>,
+    /// 선택 굵기에 +300을 적용하는 Bold 토글
+    #[serde(default)]
+    pub font_bold: Option<bool>,
     /// 이탤릭체 여부
     #[serde(default)]
     pub font_italic: Option<bool>,
@@ -699,7 +702,8 @@ impl Default for KeyPosition {
             active_image_fit: None,
             use_inline_styles: None,
             display_text: None,
-            font_weight: None,
+            font_weight: Some(400),
+            font_bold: Some(true),
             font_italic: None,
             font_underline: None,
             font_strikethrough: None,
@@ -1084,6 +1088,9 @@ pub struct KeyCounterSettings {
     pub font_size: u32,
     #[serde(default = "default_counter_font_weight")]
     pub font_weight: u32,
+    /// 선택 굵기에 +300을 적용하는 Bold 토글
+    #[serde(default)]
+    pub font_bold: Option<bool>,
     /// 카운터 글꼴 패밀리 (커스텀 폰트 이름)
     #[serde(default)]
     pub font_family: Option<String>,
@@ -1119,6 +1126,7 @@ impl Default for KeyCounterSettings {
             gap: default_gap(),
             font_size: default_counter_font_size(),
             font_weight: default_counter_font_weight(),
+            font_bold: Some(false),
             font_family: None,
             font_italic: false,
             font_underline: false,
@@ -1129,6 +1137,19 @@ impl Default for KeyCounterSettings {
 }
 
 impl KeyCounterSettings {
+    pub(crate) fn migrate_legacy_font_weight(&mut self) -> bool {
+        if self.font_bold.is_some() {
+            return false;
+        }
+
+        let was_bold = self.font_weight == 700;
+        if was_bold {
+            self.font_weight = 400;
+        }
+        self.font_bold = Some(was_bold);
+        true
+    }
+
     pub fn normalize(&mut self) {
         self.animation.normalize();
     }
@@ -1222,6 +1243,20 @@ impl KeyCounterSettings {
 }
 
 impl KeyPosition {
+    pub(crate) fn migrate_legacy_font_weight(&mut self) -> bool {
+        let mut changed = false;
+        if self.font_bold.is_none() {
+            let was_bold = self.font_weight.is_none() || self.font_weight == Some(700);
+            if was_bold {
+                self.font_weight = Some(400);
+            }
+            self.font_bold = Some(was_bold);
+            changed = true;
+        }
+
+        changed | self.counter.migrate_legacy_font_weight()
+    }
+
     pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
         let mut changed = false;
         let mut pair_repaired = false;
@@ -2547,6 +2582,25 @@ mod tests {
         let mappings: KeyMappings = serde_json::from_value(raw.clone()).unwrap();
 
         assert_eq!(serde_json::to_value(mappings).unwrap(), raw);
+    }
+
+    #[test]
+    fn legacy_700_weights_migrate_to_400_with_bold_modifier() {
+        let mut raw = serde_json::to_value(KeyPosition::default()).unwrap();
+        let object = raw.as_object_mut().unwrap();
+        object.insert("fontWeight".to_string(), serde_json::json!(700));
+        object.remove("fontBold");
+        let counter = object["counter"].as_object_mut().unwrap();
+        counter.insert("fontWeight".to_string(), serde_json::json!(700));
+        counter.remove("fontBold");
+
+        let mut position: KeyPosition = serde_json::from_value(raw).unwrap();
+        assert!(position.migrate_legacy_font_weight());
+        assert_eq!(position.font_weight, Some(400));
+        assert_eq!(position.font_bold, Some(true));
+        assert_eq!(position.counter.font_weight, 400);
+        assert_eq!(position.counter.font_bold, Some(true));
+        assert!(!position.migrate_legacy_font_weight());
     }
 
     #[test]

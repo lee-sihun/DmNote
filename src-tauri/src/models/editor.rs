@@ -225,6 +225,7 @@ pub enum EditorElementPropertyPatchV1 {
     AxisId(String),
     UseInlineStyles(bool),
     FontWeight(u32),
+    FontBold(bool),
     FontItalic(bool),
     FontUnderline(bool),
     FontStrikethrough(bool),
@@ -260,6 +261,7 @@ pub enum EditorElementPropertyPatchV1 {
     CounterGap(u32),
     CounterFontSize(u32),
     CounterFontWeight(u32),
+    CounterFontBold(bool),
     CounterFontItalic(bool),
     CounterFontUnderline(bool),
     CounterFontStrikethrough(bool),
@@ -831,7 +833,7 @@ mod tests {
         }
     }
 
-    // 71개 variant 전수: (patch, property 태그, value wire) 고정 표본
+    // 73개 variant 전수: (patch, property 태그, value wire) 고정 표본
     fn property_patch_samples() -> Vec<(
         EditorElementPropertyPatchV1,
         &'static str,
@@ -864,6 +866,7 @@ mod tests {
             (P::AxisId("axis-1".to_string()), "axisId", json!("axis-1")),
             (P::UseInlineStyles(true), "useInlineStyles", json!(true)),
             (P::FontWeight(700), "fontWeight", json!(700)),
+            (P::FontBold(true), "fontBold", json!(true)),
             (P::FontItalic(true), "fontItalic", json!(true)),
             (P::FontUnderline(false), "fontUnderline", json!(false)),
             (P::FontStrikethrough(true), "fontStrikethrough", json!(true)),
@@ -985,6 +988,7 @@ mod tests {
             (P::CounterGap(4), "counterGap", json!(4)),
             (P::CounterFontSize(16), "counterFontSize", json!(16)),
             (P::CounterFontWeight(500), "counterFontWeight", json!(500)),
+            (P::CounterFontBold(true), "counterFontBold", json!(true)),
             (P::CounterFontItalic(true), "counterFontItalic", json!(true)),
             (
                 P::CounterFontUnderline(false),
@@ -1092,7 +1096,7 @@ mod tests {
     #[test]
     fn property_patch_wire_pins_all_tag_value_pairs_and_roundtrips() {
         let samples = property_patch_samples();
-        assert_eq!(samples.len(), 71);
+        assert_eq!(samples.len(), 73);
         for (patch, tag, value) in samples {
             let wire = serde_json::to_value(&patch).unwrap();
             assert_eq!(

@@ -1403,6 +1403,8 @@ const counterTypographyPropertyIntents = (
         ? { ...counter, fontSize: patch.value }
         : patch.property === 'counterFontWeight'
         ? { ...counter, fontWeight: patch.value }
+        : patch.property === 'counterFontBold'
+        ? { ...counter, fontBold: patch.value }
         : patch.property === 'counterFontItalic'
         ? { ...counter, fontItalic: patch.value }
         : patch.property === 'counterFontUnderline'
@@ -1431,6 +1433,9 @@ const isCounterTypographyPatch = (
       patch.value >= 100 &&
       patch.value <= 900
     );
+  }
+  if (patch.property === 'counterFontBold') {
+    return typeof patch.value === 'boolean';
   }
   if (patch.property === 'counterFontItalic') {
     return typeof patch.value === 'boolean';

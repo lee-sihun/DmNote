@@ -3246,7 +3246,7 @@ describe('elementOps', () => {
     ).resolves.toBe(false);
   });
 
-  it('counter typography 5 leaf는 raw counter sibling을 보존해 key/stat N ops 한 commit으로 보낸다', async () => {
+  it('counter typography 6 leaf는 raw counter sibling을 보존해 key/stat N ops 한 commit으로 보낸다', async () => {
     const statId = '33333333-3333-4333-8333-333333333333';
     const rawCounter = {
       ...createDefaultKeyPosition().counter,
@@ -3290,6 +3290,7 @@ describe('elementOps', () => {
     const patches: EditorCounterTypographyPropertyPatchV1[] = [
       { property: 'counterFontSize', value: 72 },
       { property: 'counterFontWeight', value: 900 },
+      { property: 'counterFontBold', value: true },
       { property: 'counterFontItalic', value: true },
       { property: 'counterFontUnderline', value: true },
       { property: 'counterFontStrikethrough', value: true },
@@ -3313,6 +3314,7 @@ describe('elementOps', () => {
     ).toMatchObject({
       fontSize: 72,
       fontWeight: 900,
+      fontBold: true,
       fontItalic: true,
       fontUnderline: true,
       fontStrikethrough: true,

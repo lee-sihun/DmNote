@@ -1498,6 +1498,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 | EditorElementPropertyPatchV1::CounterGap(_)
                 | EditorElementPropertyPatchV1::CounterFontSize(_)
                 | EditorElementPropertyPatchV1::CounterFontWeight(_)
+                | EditorElementPropertyPatchV1::CounterFontBold(_)
                 | EditorElementPropertyPatchV1::CounterFontItalic(_)
                 | EditorElementPropertyPatchV1::CounterFontUnderline(_)
                 | EditorElementPropertyPatchV1::CounterFontStrikethrough(_)
@@ -1700,6 +1701,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 | EditorElementPropertyPatchV1::LayerName(_)
                 | EditorElementPropertyPatchV1::UseInlineStyles(_)
                 | EditorElementPropertyPatchV1::FontWeight(_)
+                | EditorElementPropertyPatchV1::FontBold(_)
                 | EditorElementPropertyPatchV1::FontItalic(_)
                 | EditorElementPropertyPatchV1::FontUnderline(_)
                 | EditorElementPropertyPatchV1::FontStrikethrough(_)
@@ -1947,6 +1949,15 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             false
                         } else {
                             position.font_weight = Some(*patch);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::FontBold(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.font_bold == Some(*patch) {
+                            false
+                        } else {
+                            position.font_bold = Some(*patch);
                             true
                         }
                     }
@@ -2252,6 +2263,15 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             false
                         } else {
                             position.counter.font_weight = *patch;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterFontBold(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.font_bold == Some(*patch) {
+                            false
+                        } else {
+                            position.counter.font_bold = Some(*patch);
                             true
                         }
                     }
@@ -2939,6 +2959,7 @@ mod tests {
             row("axisId", KNOB_ONLY, Patch::AxisId("axis-2".to_string())),
             row("useInlineStyles", ALL, Patch::UseInlineStyles(true)),
             row("fontWeight", ALL, Patch::FontWeight(700)),
+            row("fontBold", ALL, Patch::FontBold(true)),
             row("fontItalic", ALL, Patch::FontItalic(true)),
             row("fontUnderline", ALL, Patch::FontUnderline(true)),
             row("fontStrikethrough", ALL, Patch::FontStrikethrough(true)),
@@ -3038,6 +3059,7 @@ mod tests {
             row("counterGap", KEY_STAT, Patch::CounterGap(4)),
             row("counterFontSize", KEY_STAT, Patch::CounterFontSize(14)),
             row("counterFontWeight", KEY_STAT, Patch::CounterFontWeight(500)),
+            row("counterFontBold", KEY_STAT, Patch::CounterFontBold(true)),
             row(
                 "counterFontItalic",
                 KEY_STAT,

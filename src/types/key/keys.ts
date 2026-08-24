@@ -52,6 +52,7 @@ const keyCounterSettingsInputSchema = z
     gap: z.number().int().min(0).optional(),
     fontSize: z.number().int().min(8).max(72).optional(),
     fontWeight: z.number().int().min(100).max(900).optional(),
+    fontBold: z.boolean().optional(),
     fontFamily: z.string().nullable().optional(),
     fontItalic: z.boolean().optional(),
     fontUnderline: z.boolean().optional(),
@@ -89,6 +90,7 @@ export interface KeyCounterSettings {
   gap: number; // px 단위 간격
   fontSize: number; // px
   fontWeight: number; // CSS font-weight
+  fontBold: boolean; // 선택 굵기에 Bold 보정 적용
   fontFamily: string | null; // 커스텀 폰트
   fontItalic: boolean;
   fontUnderline: boolean;
@@ -118,6 +120,7 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     gap,
     fontSize,
     fontWeight,
+    fontBold,
     fontFamily,
     fontItalic,
     fontUnderline,
@@ -166,9 +169,17 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
         ? fontSize
         : fallback.fontSize,
     fontWeight:
-      typeof fontWeight === 'number' && Number.isFinite(fontWeight)
+      typeof fontBold !== 'boolean' && fontWeight === 700
+        ? 400
+        : typeof fontWeight === 'number' && Number.isFinite(fontWeight)
         ? fontWeight
         : fallback.fontWeight,
+    fontBold:
+      typeof fontBold === 'boolean'
+        ? fontBold
+        : fontWeight === 700
+        ? true
+        : fallback.fontBold,
     fontFamily:
       typeof fontFamily === 'string' ? fontFamily : fallback.fontFamily,
     fontItalic:
@@ -367,6 +378,7 @@ export const keyPositionSchema = z.object({
   groupId: z.string().optional(),
   // 글꼴 스타일 속성들
   fontWeight: z.number().optional(), // CSS font-weight 값 (400, 700 등)
+  fontBold: z.boolean().optional(),
   fontItalic: z.boolean().optional(),
   fontUnderline: z.boolean().optional(),
   fontStrikethrough: z.boolean().optional(),

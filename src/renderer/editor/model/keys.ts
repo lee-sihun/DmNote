@@ -51,6 +51,8 @@ export function createDefaultKeyPosition(
     noteGlowColor: '#FFFFFF',
     noteAutoYCorrection: true,
     className: '',
+    fontWeight: 400,
+    fontBold: true,
     counter: createDefaultCounterSettings(),
   } as KeyPosition & { id: string };
 }

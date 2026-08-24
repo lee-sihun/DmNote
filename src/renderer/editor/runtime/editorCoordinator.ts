@@ -683,6 +683,15 @@ const applySemanticOps = (
                 counter: { ...counter, fontWeight: op.patch.value },
               };
             }
+            if (op.patch.property === 'counterFontBold') {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, fontBold: op.patch.value },
+              };
+            }
             if (op.patch.property === 'counterFontItalic') {
               const counter = position.counter as
                 | Record<string, unknown>
@@ -784,6 +793,9 @@ const applySemanticOps = (
             }
             if (op.patch.property === 'fontWeight') {
               return { ...position, fontWeight: op.patch.value };
+            }
+            if (op.patch.property === 'fontBold') {
+              return { ...position, fontBold: op.patch.value };
             }
             if (op.patch.property === 'fontItalic') {
               return { ...position, fontItalic: op.patch.value };

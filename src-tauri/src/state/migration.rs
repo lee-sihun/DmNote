@@ -101,6 +101,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         if migrate_legacy_knob_sensitivity(&mut data) {
                             needs_persist = true;
                         }
+                        needs_persist |= has_legacy_font_weight_state(&data);
                         let editor_revision_repaired = repair_editor_revision(&mut data);
                         needs_persist |= editor_revision_repaired;
                         let semantic_repaired = repair_semantic_identities(&mut data);
@@ -920,9 +921,53 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
         }
     }
 
+    migrate_legacy_font_weight_state(&mut data);
+
     let _ = data.custom_js.normalize();
 
     data
+}
+
+fn has_legacy_font_weight_state(data: &AppStoreData) -> bool {
+    data.key_positions
+        .values()
+        .flatten()
+        .chain(
+            data.stat_positions
+                .values()
+                .flatten()
+                .map(|position| &position.position),
+        )
+        .chain(
+            data.graph_positions
+                .values()
+                .flatten()
+                .map(|position| &position.position),
+        )
+        .chain(
+            data.knob_positions
+                .values()
+                .flatten()
+                .map(|position| &position.position),
+        )
+        .any(|position| position.font_bold.is_none() || position.counter.font_bold.is_none())
+}
+
+pub(crate) fn migrate_legacy_font_weight_state(data: &mut AppStoreData) -> bool {
+    let mut changed = false;
+    for position in data.key_positions.values_mut().flatten() {
+        changed |= position.migrate_legacy_font_weight();
+    }
+    for position in data.stat_positions.values_mut().flatten() {
+        changed |= position.position.migrate_legacy_font_weight();
+    }
+    for position in data.graph_positions.values_mut().flatten() {
+        changed |= position.position.migrate_legacy_font_weight();
+    }
+    for position in data.knob_positions.values_mut().flatten() {
+        changed |= position.position.migrate_legacy_font_weight();
+    }
+    changed
 }
 
 fn remove_legacy_panel_detach_setting(data: &mut AppStoreData) -> bool {

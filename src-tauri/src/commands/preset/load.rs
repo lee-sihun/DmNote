@@ -256,6 +256,12 @@ fn preset_load_from_path(
     let mut stat_positions = preset.stat_positions.unwrap_or_default();
     let mut graph_positions = preset.graph_positions.unwrap_or_default();
     let mut knob_positions = preset.knob_positions.unwrap_or_default();
+    migrate_imported_font_weights(
+        &mut positions,
+        &mut stat_positions,
+        &mut graph_positions,
+        &mut knob_positions,
+    );
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
@@ -558,6 +564,13 @@ fn preset_load_tab_from_path(
     if let Some(v) = imported_knob_positions.get(&source_tab_id) {
         src_knob_positions.insert(current_tab_id.clone(), v.clone());
     }
+
+    migrate_imported_font_weights(
+        &mut src_key_positions,
+        &mut src_stat_positions,
+        &mut src_graph_positions,
+        &mut src_knob_positions,
+    );
 
     let has_tab_note_overrides = tab_note_overrides.is_some();
     let mut imported_tab_note_overrides = tab_note_overrides.unwrap_or_default();
@@ -923,6 +936,26 @@ fn align_imported_key_collections(keys: &mut KeyMappings, positions: &mut KeyPos
         let mode_keys = keys.entry(mode.clone()).or_default();
         let mode_positions = positions.entry(mode).or_default();
         align_imported_key_pair(mode_keys, mode_positions);
+    }
+}
+
+fn migrate_imported_font_weights(
+    key_positions: &mut KeyPositions,
+    stat_positions: &mut StatPositions,
+    graph_positions: &mut GraphPositions,
+    knob_positions: &mut KnobPositions,
+) {
+    for position in key_positions.values_mut().flatten() {
+        position.migrate_legacy_font_weight();
+    }
+    for position in stat_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
+    }
+    for position in graph_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
+    }
+    for position in knob_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
     }
 }
 
