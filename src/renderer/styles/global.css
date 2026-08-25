@@ -122,6 +122,33 @@ input[type='number']::-webkit-outer-spin-button {
   padding-inline: var(--dmn-text-safe-inline, 2px);
 }
 
+/* 키·스탯 라벨 페인트 - 사용자 --key-text-image 우선. --key-text-color(색상값)를
+   지정하면 image 자리에서 문법 무효가 되어 저장 그라데이션이 자동 해제되고,
+   text-fill이 currentcolor라 일반 color 선언도 그라데이션을 자연스럽게 덮는다 */
+:where([data-key-label]) {
+  background-image: var(
+    --key-text-image,
+    var(--key-text-color, var(--dmn-key-text-image-default, none))
+  );
+  /* 페인트 박스는 글리프 잉크 실측값이 기본 - 카운터 채움과 같은 계약 */
+  background-repeat: var(
+    --key-text-repeat,
+    var(--key-text-color, var(--dmn-key-text-repeat-default, repeat))
+  );
+  background-position: var(
+    --key-text-position,
+    var(--key-text-color, var(--dmn-key-text-position-default, 0% 0%))
+  );
+  background-size: var(
+    --key-text-size,
+    var(--key-text-color, var(--dmn-key-text-size-default, auto))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--key-text-color, var(--dmn-key-label-color-default, inherit));
+  -webkit-text-fill-color: currentcolor;
+}
+
 /*
  * 기본 키 디자인 — 표면 분리는 1px 헤어라인 보더(테두리 색상 UI로 수정 가능)가 담당
  * 커스텀 CSS([data-state] 셀렉터, head 뒤쪽 주입)가 덮어쓸 수 있도록

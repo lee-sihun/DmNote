@@ -231,8 +231,8 @@ pub enum EditorElementPropertyPatchV1 {
     FontFamily(String),
     DisplayText(String),
     ClassName(String),
-    FontColor(String),
-    ActiveFontColor(String),
+    FontPaint(EditorPaintDescriptorV1),
+    ActiveFontPaint(EditorPaintDescriptorV1),
     Shadow(EditorShadowLeafPatchV1),
     ActiveShadow(EditorShadowLeafPatchV1),
     ShadowEnabled(bool),
@@ -893,14 +893,14 @@ mod tests {
                 json!("class"),
             ),
             (
-                P::FontColor("#111111".to_string()),
-                "fontColor",
-                json!("#111111"),
+                P::FontPaint(paint("#111111")),
+                "fontPaint",
+                json!({ "color": "#111111", "gradient": null }),
             ),
             (
-                P::ActiveFontColor("#222222".to_string()),
-                "activeFontColor",
-                json!("#222222"),
+                P::ActiveFontPaint(paint("#222222")),
+                "activeFontPaint",
+                json!({ "color": "#222222", "gradient": null }),
             ),
             (
                 P::Shadow(EditorShadowLeafPatchV1::Color(

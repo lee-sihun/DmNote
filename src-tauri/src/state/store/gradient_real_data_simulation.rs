@@ -21,11 +21,13 @@ use crate::{
     state::migration::{canonicalize_gradient_pairs, load_store_from_path, normalize_state},
 };
 
-const GRADIENT_FIELDS: [&str; 9] = [
+const GRADIENT_FIELDS: [&str; 11] = [
     "backgroundGradient",
     "activeBackgroundGradient",
     "borderGradient",
     "activeBorderGradient",
+    "fontGradient",
+    "activeFontGradient",
     "noteBorderGradient",
     "noteGradient",
     "noteGlowGradient",

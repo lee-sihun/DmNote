@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeInkSpan } from './counterGlyphMetrics';
+import { composeInkSpan, scanAlphaBounds } from './counterGlyphMetrics';
 
 describe('composeInkSpan', () => {
   it('빈 입력은 null', () => {
@@ -34,5 +34,46 @@ describe('composeInkSpan', () => {
 
   it('잉크가 없는 글자만 있으면 null', () => {
     expect(composeInkSpan([{ advance: 5, left: 0, right: 0 }], 0)).toBeNull();
+  });
+});
+
+describe('scanAlphaBounds', () => {
+  const bitmap = (
+    width: number,
+    height: number,
+    points: Array<[number, number]>,
+  ) => {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (const [x, y] of points) {
+      data[(y * width + x) * 4 + 3] = 255;
+    }
+    return data;
+  };
+
+  it('알파가 전혀 없으면 null', () => {
+    expect(scanAlphaBounds(bitmap(4, 4, []), 4, 4)).toBeNull();
+  });
+
+  it('단일 픽셀은 자기 자신이 경계', () => {
+    expect(scanAlphaBounds(bitmap(5, 5, [[2, 3]]), 5, 5)).toEqual({
+      minX: 2,
+      minY: 3,
+      maxX: 2,
+      maxY: 3,
+    });
+  });
+
+  it('흩어진 픽셀은 최소·최대 좌표 봉투로 잡는다', () => {
+    const data = bitmap(8, 8, [
+      [1, 2],
+      [6, 5],
+      [3, 7],
+    ]);
+    expect(scanAlphaBounds(data, 8, 8)).toEqual({
+      minX: 1,
+      minY: 2,
+      maxX: 6,
+      maxY: 7,
+    });
   });
 });

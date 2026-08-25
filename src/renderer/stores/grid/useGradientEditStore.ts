@@ -15,6 +15,7 @@ export type GradientCanvasAnchor =
 export type GradientPreviewSurface =
   | 'background'
   | 'border'
+  | 'font'
   | 'counterFill'
   | 'noteBorder'
   | 'noteBody'
@@ -58,8 +59,13 @@ interface GradientEditState {
   /** 현재 소유 세션의 key - 세대 증가 판정 기준 */
   lastOwnerKey: string | null;
   /** 축 핸들이 요소 저장 박스 대신 쓸 실측 앵커 박스 (그리드 좌표).
-      카운터처럼 저장 박스와 실제 페인트 박스가 다른 표면이 등록한다 */
-  anchorBounds: { sessionKey: string; bounds: GradientAnchorBounds } | null;
+      카운터·라벨처럼 저장 박스와 실제 페인트 박스가 다른 표면이 등록한다.
+      origin은 등록 시점 요소 저장 좌표 - 이후 요소 이동을 델타로 추종 */
+  anchorBounds: {
+    sessionKey: string;
+    bounds: GradientAnchorBounds;
+    origin: { x: number; y: number } | null;
+  } | null;
   /** 피커 색 표면 드래그 중 - 축 오버레이가 스스로를 흐려 대상이 보이게 한다 */
   colorAdjusting: boolean;
   setSession: (session: GradientEditSession | null) => void;
@@ -72,6 +78,7 @@ interface GradientEditState {
   setAnchorBounds: (
     sessionKey: string,
     bounds: GradientAnchorBounds | null,
+    origin?: { x: number; y: number } | null,
   ) => void;
   setColorAdjusting: (adjusting: boolean) => void;
 }
@@ -109,7 +116,7 @@ export const useGradientEditStore = create<GradientEditState>((set) => ({
         ? { session: { ...state.session, ...patch } }
         : {},
     ),
-  setAnchorBounds: (sessionKey, bounds) =>
+  setAnchorBounds: (sessionKey, bounds, origin = null) =>
     set((state) => {
       if (state.session?.sessionKey !== sessionKey) return {};
       if (!bounds) {
@@ -124,11 +131,13 @@ export const useGradientEditStore = create<GradientEditState>((set) => ({
         previous.bounds.x === bounds.x &&
         previous.bounds.y === bounds.y &&
         previous.bounds.width === bounds.width &&
-        previous.bounds.height === bounds.height
+        previous.bounds.height === bounds.height &&
+        previous.origin?.x === origin?.x &&
+        previous.origin?.y === origin?.y
       ) {
         return {};
       }
-      return { anchorBounds: { sessionKey, bounds } };
+      return { anchorBounds: { sessionKey, bounds, origin } };
     }),
   setColorAdjusting: (adjusting) =>
     set((state) =>

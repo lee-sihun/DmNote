@@ -19,10 +19,6 @@ import {
   projectCounterFillPatch,
 } from '@src/types/key/counterFill';
 import {
-  isFontColorPropertyPatchV1,
-  projectFontColorPatch,
-} from '@src/types/key/fontColor';
-import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
@@ -785,22 +781,27 @@ const applySemanticOps = (
               op.patch.property === 'backgroundPaint' ||
               op.patch.property === 'activeBackgroundPaint' ||
               op.patch.property === 'borderPaint' ||
-              op.patch.property === 'activeBorderPaint'
+              op.patch.property === 'activeBorderPaint' ||
+              op.patch.property === 'fontPaint' ||
+              op.patch.property === 'activeFontPaint'
             ) {
               const field = op.patch.property;
               const paint = op.patch.value;
               const {
                 active,
+                surface,
                 colorField,
                 gradientField,
                 activeColorField,
                 activeGradientField,
               } = paintPropertyFields(field);
+              // 물질화 대상 - active 쌍을 가진 요소 (font는 키만)
+              const materializes =
+                surface === 'font'
+                  ? op.elementType === 'key'
+                  : op.elementType === 'key' || op.elementType === 'knob';
               const preservation: Record<string, unknown> = {};
-              if (
-                !active &&
-                (op.elementType === 'key' || op.elementType === 'knob')
-              ) {
+              if (!active && materializes) {
                 const inherited = inheritedPaintMaterialization(
                   {
                     color:
@@ -818,7 +819,9 @@ const applySemanticOps = (
                   },
                 );
                 if (inherited) {
-                  preservation[activeColorField] = inherited.color;
+                  if (inherited.color != null) {
+                    preservation[activeColorField] = inherited.color;
+                  }
                   if (inherited.gradient) {
                     preservation[activeGradientField] = inherited.gradient;
                   }
@@ -847,16 +850,6 @@ const applySemanticOps = (
               return {
                 ...position,
                 ...projectCounterFillPatch(position as never, op.patch),
-              };
-            }
-            if (isFontColorPropertyPatchV1(op.patch)) {
-              return {
-                ...position,
-                ...projectFontColorPatch(
-                  position as never,
-                  op.elementType,
-                  op.patch,
-                ),
               };
             }
             if (isNotePaintPropertyPatchV1(op.patch)) {

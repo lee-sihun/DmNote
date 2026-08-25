@@ -152,6 +152,14 @@ fn validate_paint_gradient(gradient: &EditorPaintGradientV1) -> Result<(), Edito
     }
     let mut previous_pos = None;
     for stop in &gradient.stops {
+        // 빈 stop 색은 로드 canonicalize가 빈 대표색을 만들어 blank 정규화와
+        // 매 시작 진동한다 - 커밋에서 차단
+        if stop.color.trim().is_empty() {
+            return Err(EditorCommitError::validation(
+                "INVALID_PAINT_GRADIENT",
+                "paint gradient stop colors must not be blank",
+            ));
+        }
         if !stop.pos.is_finite()
             || !(0.0..=1.0).contains(&stop.pos)
             || (stop.pos == 0.0 && stop.pos.is_sign_negative())
@@ -203,58 +211,41 @@ fn has_stored_paint_value(color: &Option<String>, gradient: &Option<GradientSpec
         || gradient.is_some()
 }
 
-fn preserve_active_paint_fallback(position: &mut KeyPosition, background: bool) -> bool {
-    let (idle_color, idle_gradient, active_color, active_gradient) = if background {
-        (
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PaintSurface {
+    Background,
+    Border,
+    Font,
+}
+
+fn preserve_active_paint_fallback(position: &mut KeyPosition, surface: PaintSurface) -> bool {
+    let (idle_color, idle_gradient, active_color, active_gradient) = match surface {
+        PaintSurface::Background => (
             position.background_color.clone(),
             position.background_gradient.clone(),
             &mut position.active_background_color,
             &mut position.active_background_gradient,
-        )
-    } else {
-        (
+        ),
+        PaintSurface::Border => (
             position.border_color.clone(),
             position.border_gradient.clone(),
             &mut position.active_border_color,
             &mut position.active_border_gradient,
-        )
+        ),
+        PaintSurface::Font => (
+            position.font_color.clone(),
+            position.font_gradient.clone(),
+            &mut position.active_font_color,
+            &mut position.active_font_gradient,
+        ),
     };
-    if has_stored_paint_value(active_color, active_gradient)
-        || !has_stored_paint_value(&idle_color, &idle_gradient)
-    {
+    if has_stored_paint_value(active_color, active_gradient) {
         return false;
     }
 
-    let next_color = idle_gradient
-        .as_ref()
-        .and_then(|gradient| gradient.stops.first())
-        .map(|stop| stop.color.clone())
-        .or_else(|| idle_color.filter(|color| !color.trim().is_empty()));
-    let changed = *active_color != next_color || *active_gradient != idle_gradient;
-    *active_color = next_color;
+    let changed = *active_color != idle_color || *active_gradient != idle_gradient;
+    *active_color = idle_color;
     *active_gradient = idle_gradient;
-    changed
-}
-
-fn preserve_active_string_fallback(
-    idle_value: &Option<String>,
-    active_value: &mut Option<String>,
-) -> bool {
-    if active_value
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
-    {
-        return false;
-    }
-    let Some(idle_value) = idle_value
-        .as_ref()
-        .filter(|value| !value.trim().is_empty())
-        .cloned()
-    else {
-        return false;
-    };
-    let changed = active_value.as_ref() != Some(&idle_value);
-    *active_value = Some(idle_value);
     changed
 }
 
@@ -264,6 +255,24 @@ fn apply_paint_descriptor(
     descriptor: &EditorPaintDescriptorV1,
 ) -> bool {
     let next_color = Some(descriptor.color.clone());
+    let next_gradient = descriptor
+        .gradient
+        .as_ref()
+        .map(|gradient| gradient.to_gradient_spec());
+    let changed = *color != next_color || *gradient != next_gradient;
+    *color = next_color;
+    *gradient = next_gradient;
+    changed
+}
+
+// font 전용: 빈 solid 색은 None으로 저장 - 로드 정규화(normalize_blank_font_colors)와
+// 같은 의미라 커밋 직후 문서와 재로드 문서가 갈리지 않는다
+fn apply_font_paint_descriptor(
+    color: &mut Option<String>,
+    gradient: &mut Option<GradientSpec>,
+    descriptor: &EditorPaintDescriptorV1,
+) -> bool {
+    let next_color = Some(descriptor.color.clone()).filter(|value| !value.trim().is_empty());
     let next_gradient = descriptor
         .gradient
         .as_ref()
@@ -1584,25 +1593,34 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     };
                     validate_paint_descriptor(descriptor)?;
                 }
-                // key·knob 한정 active font color
-                EditorElementPropertyPatchV1::ActiveFontColor(_) => {
-                    if !matches!(
-                        element_type,
-                        EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                    ) {
+                // key 전용 active font paint
+                EditorElementPropertyPatchV1::ActiveFontPaint(patch) => {
+                    if !matches!(element_type, EditorElementTypeV1::Key) {
                         return Err(EditorCommitError::validation(
                             "ELEMENT_TYPE_MISMATCH",
-                            format!(
-                                "editor op {op_index} active font color target must be key or knob"
-                            ),
+                            format!("editor op {op_index} active font paint target must be key"),
                         ));
                     }
+                    validate_paint_descriptor(patch)?;
                 }
                 // 타입 무제약, paint 값 검증만
                 EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
                     validate_paint_descriptor(patch)?;
                 }
                 EditorElementPropertyPatchV1::BorderPaint(patch) => {
+                    validate_paint_descriptor(patch)?;
+                }
+                // key·stat 한정 font paint
+                EditorElementPropertyPatchV1::FontPaint(patch) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key | EditorElementTypeV1::Stat
+                    ) {
+                        return Err(EditorCommitError::validation(
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!("editor op {op_index} font paint target must be key or stat"),
+                        ));
+                    }
                     validate_paint_descriptor(patch)?;
                 }
                 // key·knob 한정 active 이미지 상태
@@ -1851,7 +1869,6 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 | EditorElementPropertyPatchV1::FontFamily(_)
                 | EditorElementPropertyPatchV1::DisplayText(_)
                 | EditorElementPropertyPatchV1::ClassName(_)
-                | EditorElementPropertyPatchV1::FontColor(_)
                 | EditorElementPropertyPatchV1::InactiveImage(_)
                 | EditorElementPropertyPatchV1::IdleTransparent(_)
                 | EditorElementPropertyPatchV1::IdleImageFit(_) => {}
@@ -2149,27 +2166,23 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             true
                         }
                     }
-                    EditorElementPropertyPatchV1::FontColor(patch) => {
+                    EditorElementPropertyPatchV1::FontPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        let preserved = matches!(
-                            location.element_type,
-                            EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                        ) && preserve_active_string_fallback(
-                            &position.font_color,
-                            &mut position.active_font_color,
-                        );
-                        let changed = position.font_color.as_deref() != Some(patch.as_str());
-                        position.font_color = Some(patch.clone());
-                        changed || preserved
+                        let preserved = matches!(location.element_type, EditorElementTypeV1::Key)
+                            && preserve_active_paint_fallback(position, PaintSurface::Font);
+                        apply_font_paint_descriptor(
+                            &mut position.font_color,
+                            &mut position.font_gradient,
+                            patch,
+                        ) || preserved
                     }
-                    EditorElementPropertyPatchV1::ActiveFontColor(patch) => {
+                    EditorElementPropertyPatchV1::ActiveFontPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.active_font_color.as_deref() == Some(patch.as_str()) {
-                            false
-                        } else {
-                            position.active_font_color = Some(patch.clone());
-                            true
-                        }
+                        apply_font_paint_descriptor(
+                            &mut position.active_font_color,
+                            &mut position.active_font_gradient,
+                            patch,
+                        )
                     }
                     EditorElementPropertyPatchV1::Shadow(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -2185,10 +2198,11 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                     EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        let preserved = matches!(
-                            location.element_type,
-                            EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                        ) && preserve_active_paint_fallback(position, true);
+                        let preserved =
+                            matches!(
+                                location.element_type,
+                                EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                            ) && preserve_active_paint_fallback(position, PaintSurface::Background);
                         apply_paint_descriptor(
                             &mut position.background_color,
                             &mut position.background_gradient,
@@ -2205,10 +2219,11 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                     EditorElementPropertyPatchV1::BorderPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        let preserved = matches!(
-                            location.element_type,
-                            EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                        ) && preserve_active_paint_fallback(position, false);
+                        let preserved =
+                            matches!(
+                                location.element_type,
+                                EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                            ) && preserve_active_paint_fallback(position, PaintSurface::Border);
                         apply_paint_descriptor(
                             &mut position.border_color,
                             &mut position.border_gradient,
@@ -3081,11 +3096,15 @@ mod tests {
             row("fontFamily", ALL, Patch::FontFamily("Sans".to_string())),
             row("displayText", ALL, Patch::DisplayText("A".to_string())),
             row("className", ALL, Patch::ClassName("custom".to_string())),
-            row("fontColor", ALL, Patch::FontColor("#ffffff".to_string())),
             row(
-                "activeFontColor",
-                KEY_KNOB,
-                Patch::ActiveFontColor("#ff0000".to_string()),
+                "fontPaint",
+                KEY_STAT,
+                Patch::FontPaint(paint_descriptor("#ffffff", None)),
+            ),
+            row(
+                "activeFontPaint",
+                KEY_ONLY,
+                Patch::ActiveFontPaint(paint_descriptor("#ff0000", None)),
             ),
             row(
                 "shadow",
@@ -8643,7 +8662,7 @@ mod tests {
         let knob = &transition.candidate.knob_positions["4key"][0].position;
         assert_eq!(knob.border_color.as_deref(), Some("knob-new"));
         assert!(knob.border_gradient.is_none());
-        assert_eq!(knob.active_border_color.as_deref(), Some("knob-old"));
+        assert_eq!(knob.active_border_color.as_deref(), Some("stale-knob-base"));
         assert_eq!(
             knob.active_border_gradient,
             original.knob_positions["4key"][0].position.border_gradient
@@ -8871,64 +8890,135 @@ mod tests {
     }
 
     #[test]
-    fn font_color_patches_preserve_active_fallbacks_and_reject_wrong_active_types() {
+    fn blank_font_paint_normalizes_to_none_and_blank_gradient_stops_are_rejected() {
         let mut store = store_with_every_reorder_type();
         let key_id = store.key_positions["4key"][0].id.clone();
+        {
+            let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
+            key.font_color = Some("stale-idle".to_string());
+            key.font_gradient = None;
+            key.active_font_color = Some("stale-active".to_string());
+            key.active_font_gradient = None;
+        }
+        let original = store.clone();
+
+        // 빈 solid는 커밋 시 None - 로드 정규화(normalize_blank_font_colors)와 수렴
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("  ", None)),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor("", None)),
+            ),
+        ];
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        let position = &transition.candidate.key_positions["4key"][0];
+        assert!(position.font_color.is_none());
+        assert!(position.font_gradient.is_none());
+        assert!(position.active_font_color.is_none());
+        assert!(position.active_font_gradient.is_none());
+
+        // 빈 stop 색 gradient는 커밋 거부 - 로드 시 대표색 진동 차단
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor(
+                    " ",
+                    Some((45.0, &[(" ", 0.0), ("#445566", 1.0)])),
+                )),
+            )],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_PAINT_GRADIENT"));
+        assert_eq!(store, original);
+    }
+
+    #[test]
+    fn font_paint_patches_preserve_state_pairs_and_enforce_target_types() {
+        let mut store = store_with_every_reorder_type();
+        let key_ids = store.key_positions["4key"]
+            .iter()
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
         let stat_id = store.stat_positions["4key"][0].position.id.clone();
         let graph_id = store.graph_positions["4key"][0].position.id.clone();
         let knob_id = store.knob_positions["4key"][0].position.id.clone();
 
-        let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
-        key.font_color = Some(" key idle ".to_string());
-        key.active_font_color = None;
-        let stat = &mut store.stat_positions.get_mut("4key").unwrap()[0].position;
-        stat.font_color = None;
-        stat.active_font_color = Some("stat-active-sibling".to_string());
-        let graph = &mut store.graph_positions.get_mut("4key").unwrap()[0].position;
-        graph.font_color = Some("graph-old".to_string());
-        graph.active_font_color = Some("graph-active-sibling".to_string());
-        let knob = &mut store.knob_positions.get_mut("4key").unwrap()[0].position;
-        knob.font_color = Some(" knob idle ".to_string());
-        knob.active_font_color = Some("   ".to_string());
+        let idle_gradient = paint_descriptor(
+            "idle-first",
+            Some((30.0, &[("idle-first", 0.0), ("idle-last", 1.0)])),
+        )
+        .gradient
+        .unwrap()
+        .to_gradient_spec();
+        let active_gradient = paint_descriptor(
+            "active-first",
+            Some((75.0, &[("active-first", 0.0), ("active-last", 1.0)])),
+        )
+        .gradient
+        .unwrap()
+        .to_gradient_spec();
+        let keys = store.key_positions.get_mut("4key").unwrap();
+        keys[0].font_color = None;
+        keys[0].font_gradient = Some(idle_gradient.clone());
+        keys[0].active_font_color = None;
+        keys[0].active_font_gradient = None;
+        keys[1].font_color = Some("idle-first".to_string());
+        keys[1].font_gradient = Some(idle_gradient.clone());
+        keys[1].active_font_color = Some("active-solid".to_string());
+        keys[1].active_font_gradient = None;
+        keys[2].font_color = Some("idle-solid".to_string());
+        keys[2].font_gradient = None;
+        keys[2].active_font_color = None;
+        keys[2].active_font_gradient = Some(active_gradient.clone());
+        keys[3].font_color = Some("same-idle".to_string());
+        keys[3].font_gradient = None;
+        keys[3].active_font_color = None;
+        keys[3].active_font_gradient = None;
 
         let original = store.clone();
         let ops = vec![
             patch_property_op(
                 EditorElementTypeV1::Key,
-                &key_id,
-                EditorElementPropertyPatchV1::FontColor(" key idle ".to_string()),
+                &key_ids[0],
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("next-zero", None)),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[1],
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("next-one", None)),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[2],
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("next-two", None)),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[3],
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("same-idle", None)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::FontColor(String::new()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Graph,
-                &graph_id,
-                EditorElementPropertyPatchV1::FontColor(" graph new ".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Knob,
-                &knob_id,
-                EditorElementPropertyPatchV1::FontColor("knob-new".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ActiveFontColor("missing".to_string()),
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor(
+                    "stat-first",
+                    Some((90.0, &[("stat-first", 0.0), ("stat-last", 1.0)])),
+                )),
             ),
         ];
 
         let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
         assert_eq!(
             transition.changed_fields,
-            [
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-            ]
+            [EditorField::KeyPositions, EditorField::StatPositions]
         );
         assert_eq!(
             transition
@@ -8941,32 +9031,30 @@ mod tests {
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::TargetMissing,
+                EditorOpResultStatusV1::Applied,
             ]
         );
 
-        let mut expected_key = original.key_positions["4key"][0].clone();
-        expected_key.active_font_color = Some(" key idle ".to_string());
-        assert_eq!(transition.candidate.key_positions["4key"][0], expected_key);
-        let mut expected_stat = original.stat_positions["4key"][0].position.clone();
-        expected_stat.font_color = Some(String::new());
+        let keys = &transition.candidate.key_positions["4key"];
+        assert_eq!(keys[0].active_font_color, None);
+        assert_eq!(keys[0].active_font_gradient, Some(idle_gradient.clone()));
+        assert_eq!(keys[1].active_font_color.as_deref(), Some("active-solid"));
+        assert_eq!(keys[1].active_font_gradient, None);
+        assert_eq!(keys[2].active_font_color, None);
+        assert_eq!(keys[2].active_font_gradient, Some(active_gradient));
+        assert_eq!(keys[3].active_font_color.as_deref(), Some("same-idle"));
+        assert_eq!(keys[3].active_font_gradient, None);
         assert_eq!(
-            transition.candidate.stat_positions["4key"][0].position,
-            expected_stat
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .font_color
+                .as_deref(),
+            Some("stat-first")
         );
-        let mut expected_graph = original.graph_positions["4key"][0].position.clone();
-        expected_graph.font_color = Some(" graph new ".to_string());
-        assert_eq!(
-            transition.candidate.graph_positions["4key"][0].position,
-            expected_graph
-        );
-        let mut expected_knob = original.knob_positions["4key"][0].position.clone();
-        expected_knob.font_color = Some("knob-new".to_string());
-        expected_knob.active_font_color = Some(" knob idle ".to_string());
-        assert_eq!(
-            transition.candidate.knob_positions["4key"][0].position,
-            expected_knob
-        );
+        assert!(transition.candidate.stat_positions["4key"][0]
+            .position
+            .active_font_color
+            .is_none());
 
         let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
         assert!(replay.changed_fields.is_empty());
@@ -8981,58 +9069,96 @@ mod tests {
                 EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
-                EditorOpResultStatusV1::TargetMissing,
+                EditorOpResultStatusV1::NoChange,
             ]
         );
 
-        let mut active_store = store.clone();
-        let active_key_id = active_store.key_positions["4key"][1].id.clone();
-        active_store.key_positions.get_mut("4key").unwrap()[1].active_font_color = None;
+        let active_store = store.clone();
         let active = prepare_editor_ops_transition(
             &active_store,
-            &[
-                patch_property_op(
-                    EditorElementTypeV1::Key,
-                    active_key_id,
-                    EditorElementPropertyPatchV1::ActiveFontColor(String::new()),
-                ),
-                patch_property_op(
-                    EditorElementTypeV1::Knob,
-                    &knob_id,
-                    EditorElementPropertyPatchV1::ActiveFontColor(" active raw ".to_string()),
-                ),
-            ],
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[0],
+                EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor(
+                    "active-direct",
+                    Some((15.0, &[("active-direct", 0.0), ("active-end", 1.0)])),
+                )),
+            )],
         )
         .unwrap();
         assert_eq!(
-            active.candidate.key_positions["4key"][1]
+            active.candidate.key_positions["4key"][0]
                 .active_font_color
                 .as_deref(),
-            Some("")
+            Some("active-direct")
         );
-        assert_eq!(
-            active.candidate.knob_positions["4key"][0]
-                .position
-                .active_font_color
-                .as_deref(),
-            Some(" active raw ")
-        );
+        assert!(active.candidate.key_positions["4key"][0]
+            .active_font_gradient
+            .is_some());
 
-        for element_type in [EditorElementTypeV1::Stat, EditorElementTypeV1::Graph] {
+        for (element_type, id) in [
+            (EditorElementTypeV1::Stat, &stat_id),
+            (EditorElementTypeV1::Graph, &graph_id),
+            (EditorElementTypeV1::Knob, &knob_id),
+        ] {
             let error = prepare_editor_ops_transition(
                 &store,
                 &[
                     ops[0].clone(),
                     patch_property_op(
                         element_type,
-                        uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::ActiveFontColor("wrong-type".to_string()),
+                        id,
+                        EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor(
+                            "wrong-type",
+                            None,
+                        )),
                     ),
                 ],
             )
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store, original);
+        }
+
+        for (element_type, id) in [
+            (EditorElementTypeV1::Graph, &graph_id),
+            (EditorElementTypeV1::Knob, &knob_id),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    element_type,
+                    id,
+                    EditorElementPropertyPatchV1::FontPaint(paint_descriptor("wrong-type", None)),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        }
+
+        for patch in [
+            EditorElementPropertyPatchV1::FontPaint(paint_descriptor(
+                "mismatch",
+                Some((45.0, &[("first", 0.0), ("last", 1.0)])),
+            )),
+            EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor(
+                "mismatch",
+                Some((45.0, &[("first", 0.0), ("last", 1.0)])),
+            )),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &key_ids[0],
+                    patch,
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(
+                validation_code(&error),
+                Some("PAINT_COLOR_GRADIENT_MISMATCH")
+            );
         }
     }
 

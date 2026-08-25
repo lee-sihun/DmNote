@@ -239,7 +239,7 @@ export const GradientStopEditor = ({
   // 각도는 그리드 온캔버스 핸들로만 조절 — 폼 입력 없음
   return (
     <div
-      className="relative h-[23px] rounded-md shadow-[inset_0_0_0_1px_var(--ui-line)] cursor-copy touch-none select-none"
+      className="relative h-[23px] rounded-md shadow-[inset_0_0_0_1px_var(--ui-line)] cursor-default touch-none select-none"
       style={{
         background: `${gradientToCss({
           ...spec,
@@ -259,7 +259,7 @@ export const GradientStopEditor = ({
           data-stop-index={i}
           aria-label={`stop ${i + 1}`}
           onContextMenu={(e) => handleStopContextMenu(i, e)}
-          className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-[22px] h-[23px] flex items-center justify-center cursor-grab"
+          className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-[22px] h-[23px] flex items-center justify-center cursor-default"
           style={{ left: `${stop.pos * 100}%` }}
         >
           <i

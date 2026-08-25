@@ -51,7 +51,6 @@ import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
-  EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
@@ -99,7 +98,6 @@ import {
   patchCounterLayoutById,
   patchCounterTypographyById,
   patchCounterFillById,
-  patchFontColorById,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -1631,19 +1629,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
-  const stableFontColorCommitHandler = (
-    type: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorFontColorPropertyPatchV1) => {
-          const persisted = patchFontColorById(type, id, patch);
-          void persisted.catch((error) => {
-            console.error('Failed to update font color', error);
-          });
-        }
-      : undefined;
-
   const stableShadowCommitHandler = (
     type: 'key' | 'stat' | 'knob',
     id: string | undefined,
@@ -2568,6 +2553,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 배치 피커 토글
   const handleBatchPickerToggle = (target: BatchPickerTarget) => {
     if (target && target !== batchPickerFor) {
+      // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 배치로 리셋
+      setBatchCounterColorState('idle');
       const keysData = getSelectedKeysData();
       const keyOnly = getSelectedKeyOnlyPositions();
       const isNoteTabPicker =
@@ -3234,12 +3221,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           { settleGesture: true },
         )}
         onPaintCommit={stablePaintCommitHandler(
-          isSingleStat ? 'stat' : 'key',
-          isSingleStat
-            ? selectedStatElements[0]?.id
-            : selectedKeyElements[0]?.id,
-        )}
-        onFontColorCommit={stableFontColorCommitHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

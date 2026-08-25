@@ -573,14 +573,22 @@ mod tests {
                 serde_json::json!({ "property": "className", "value": "  raw class  " }),
             ),
             (
-                EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::FontColor(String::new()),
-                serde_json::json!({ "property": "fontColor", "value": "" }),
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::FontPaint(crate::models::EditorPaintDescriptorV1 {
+                    color: String::new(),
+                    gradient: None,
+                }),
+                serde_json::json!({ "property": "fontPaint", "value": { "color": "", "gradient": null } }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::ActiveFontColor("  raw active font  ".to_string()),
-                serde_json::json!({ "property": "activeFontColor", "value": "  raw active font  " }),
+                EditorElementPropertyPatchV1::ActiveFontPaint(
+                    crate::models::EditorPaintDescriptorV1 {
+                        color: "  raw active font  ".to_string(),
+                        gradient: None,
+                    },
+                ),
+                serde_json::json!({ "property": "activeFontPaint", "value": { "color": "  raw active font  ", "gradient": null } }),
             ),
             (
                 EditorElementTypeV1::Key,
@@ -949,11 +957,11 @@ mod tests {
         }
 
         for patch in [
-            serde_json::json!({ "property": "fontColor", "value": null }),
-            serde_json::json!({ "property": "fontColor", "value": false }),
-            serde_json::json!({ "property": "activeFontColor", "value": 1 }),
-            serde_json::json!({ "fontColor": "idle", "activeFontColor": "active" }),
-            serde_json::json!({ "fontColor": "idle", "unexpected": true }),
+            serde_json::json!({ "property": "fontPaint", "value": null }),
+            serde_json::json!({ "property": "fontPaint", "value": { "color": "idle" } }),
+            serde_json::json!({ "property": "activeFontPaint", "value": 1 }),
+            serde_json::json!({ "fontPaint": { "color": "idle", "gradient": null }, "activeFontPaint": { "color": "active", "gradient": null } }),
+            serde_json::json!({ "property": "fontPaint", "value": { "color": "idle", "gradient": null, "unexpected": true } }),
         ] {
             let mut invalid_font_color = layer_name_wire.clone();
             invalid_font_color["editorOps"][0]["patch"] = patch;

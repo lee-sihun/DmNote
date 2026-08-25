@@ -733,7 +733,7 @@ describe('single geometry input bindings', () => {
   ] as const)(
     '%s font color actual ColorPicker는 local drag 뒤 final raw leaf만 commit한다',
     (type, activeReachable) => {
-      const fontColor = vi.fn();
+      const paint = vi.fn();
       const legacy = vi.fn();
       act(() => {
         root.render(
@@ -744,7 +744,7 @@ describe('single geometry input bindings', () => {
             keyInfo={null}
             onPositionChange={vi.fn()}
             onKeyUpdate={legacy}
-            onFontColorCommit={fontColor}
+            onPaintCommit={paint}
             shadowActiveState={activeReachable}
             showSoundControls={false}
             panelElement={null}
@@ -755,20 +755,20 @@ describe('single geometry input bindings', () => {
       // 글꼴 색상은 마지막 스와치
       act(() => captured.swatches.at(-1)?.onClick());
       act(() => captured.color?.onColorChange('local-only'));
-      expect(fontColor).not.toHaveBeenCalled();
+      expect(paint).not.toHaveBeenCalled();
       act(() => captured.color?.onColorChangeComplete(' idle raw '));
-      expect(fontColor).toHaveBeenLastCalledWith({
-        property: 'fontColor',
-        value: ' idle raw ',
+      expect(paint).toHaveBeenLastCalledWith({
+        property: 'fontPaint',
+        value: { color: ' idle raw ', gradient: null },
       });
       if (activeReachable) {
         act(() => captured.color?.onStateModeChange?.('active'));
         act(() => captured.color?.onColorChange('active-local'));
-        expect(fontColor).toHaveBeenCalledOnce();
+        expect(paint).toHaveBeenCalledOnce();
         act(() => captured.color?.onColorChangeComplete(' active raw '));
-        expect(fontColor).toHaveBeenLastCalledWith({
-          property: 'activeFontColor',
-          value: ' active raw ',
+        expect(paint).toHaveBeenLastCalledWith({
+          property: 'activeFontPaint',
+          value: { color: ' active raw ', gradient: null },
         });
       } else {
         expect(captured.color?.onStateModeChange).toBeUndefined();

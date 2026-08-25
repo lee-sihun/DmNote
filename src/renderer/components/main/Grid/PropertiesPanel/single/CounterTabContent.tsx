@@ -104,6 +104,8 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
   const handlePickerToggle = (target: Exclude<PickerTarget, null>) => {
     setPickerFor((prev) => (prev === target ? null : target));
+    // 새로 열 때는 항상 대기 탭에서 시작
+    if (pickerFor !== target) setColorState('idle');
   };
 
   const getDisplayColor = (color: string): string => {

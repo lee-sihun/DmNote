@@ -353,6 +353,8 @@ export const keyPositionSchema = z.object({
   fontSize: z.number().optional(),
   fontColor: z.string().optional(),
   activeFontColor: z.string().optional(),
+  fontGradient: gradientSpecSchema.optional(),
+  activeFontGradient: gradientSpecSchema.optional(),
   graphAnimationEnabled: z.boolean().optional(),
   // 폰트 패밀리 (커스텀 폰트 이름)
   fontFamily: z.string().optional(),

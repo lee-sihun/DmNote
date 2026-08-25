@@ -42,10 +42,16 @@ export function useCustomCssInjection() {
       // 동일 내용 재대입은 스타일시트 재파싱으로 @keyframes 애니메이션을
       // 재시작시키므로 실제 변경 시에만 대입
       const setStyle = (content: string, disabled: boolean) => {
+        const changed =
+          styleEl.textContent !== content || styleEl.disabled !== disabled;
         if (styleEl.textContent !== content) {
           styleEl.textContent = content;
         }
         styleEl.disabled = disabled;
+        // 커스텀 CSS는 글리프 메트릭을 바꿀 수 있다 - 측정 캐시 무효화 신호
+        if (changed) {
+          window.dispatchEvent(new Event('dmn-custom-css-applied'));
+        }
       };
 
       const currentTab = useKeyStore.getState().selectedKeyType;

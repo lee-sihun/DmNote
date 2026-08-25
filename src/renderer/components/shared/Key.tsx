@@ -17,7 +17,9 @@ import {
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
+import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
+import KeyLabel from '@components/shared/KeyLabel';
 import { useCounterAxisAnchor } from '@hooks/shared/useCounterAxisAnchor';
 
 // DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
@@ -139,16 +141,33 @@ const DraggableKey = React.memo(
       elementId,
       isSelected,
     );
-    const previewActive = previewSession?.stateMode === 'active';
+    // 상태 프리뷰는 전용 스토어가 유일한 원천 - 단색·그림자·이미지 편집도
+    // 같은 규칙으로 대기/입력 시각을 뒤집는다 (세션은 spec 페인트 전용)
+    const previewActive = useEditStatePreviewActive(
+      previewAnchorKind,
+      elementId,
+      isSelected,
+    );
     const previewFillSpec =
       previewSession?.surface === 'counterFill' ? previewSession.spec : null;
 
     const keyRootRef = useRef<HTMLElement | null>(null);
+    const anchorOrigin = { x: position.dx, y: position.dy };
     useCounterAxisAnchor(
       previewSession,
       keyRootRef,
       counterPreviewValue,
       '.counter',
+      'counterFill',
+      anchorOrigin,
+    );
+    useCounterAxisAnchor(
+      previewSession,
+      keyRootRef,
+      position.displayText || displayName,
+      '[data-key-label]',
+      'font',
+      anchorOrigin,
     );
 
     const isSelectionMode = isSelected;
@@ -280,12 +299,20 @@ const DraggableKey = React.memo(
           ? { activeBorderGradient: previewSession.spec }
           : { borderGradient: previewSession.spec }
         : {}),
+      ...(previewSession?.surface === 'font'
+        ? previewActive
+          ? { activeFontGradient: previewSession.spec }
+          : { fontGradient: previewSession.spec }
+        : {}),
     };
     const {
       keyStyle: computedKeyStyle,
       borderRingStyle,
       imageStyle,
       textStyle,
+      labelPaintStyle,
+      labelHasGradient,
+      labelMetricsDep,
       currentImageSrc,
       hasCurrentImage,
       labelText,
@@ -324,6 +351,9 @@ const DraggableKey = React.memo(
           count={displayValue}
           labelText={labelText}
           textStyle={textStyle}
+          labelPaintStyle={labelPaintStyle}
+          labelHasGradient={labelHasGradient}
+          labelMetricsDep={labelMetricsDep}
           active={previewActive}
           counterSettings={
             previewFillSpec
@@ -385,7 +415,12 @@ const DraggableKey = React.memo(
             className="flex items-center justify-center h-full font-bold"
             style={textStyle}
           >
-            <span className="text-safe-inline">{labelText}</span>
+            <KeyLabel
+              text={labelText}
+              paintStyle={labelPaintStyle}
+              hasGradient={labelHasGradient}
+              metricsDep={labelMetricsDep}
+            />
           </div>
         )}
       </div>
@@ -411,6 +446,9 @@ export const Key = React.memo(function Key({
     borderRingStyle,
     imageStyle,
     textStyle,
+    labelPaintStyle,
+    labelHasGradient,
+    labelMetricsDep,
     inactiveImageSrc,
     activeImageSrc,
     currentImageSrc,
@@ -470,6 +508,9 @@ export const Key = React.memo(function Key({
           countSignal={counterSignal}
           labelText={labelText}
           textStyle={textStyle}
+          labelPaintStyle={labelPaintStyle}
+          labelHasGradient={labelHasGradient}
+          labelMetricsDep={labelMetricsDep}
           active={active}
           counterSettings={counterSettings}
           useInlineStyles={position.useInlineStyles === true}
@@ -479,7 +520,12 @@ export const Key = React.memo(function Key({
           className="flex items-center justify-center h-full font-bold"
           style={textStyle}
         >
-          <span className="text-safe-inline">{labelText}</span>
+          <KeyLabel
+            text={labelText}
+            paintStyle={labelPaintStyle}
+            hasGradient={labelHasGradient}
+            metricsDep={labelMetricsDep}
+          />
         </div>
       )}
     </div>

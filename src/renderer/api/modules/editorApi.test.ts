@@ -530,8 +530,29 @@ describe('editorCommitRaw semantic op protocol', () => {
       'stat',
       { property: 'counterFontFamily', value: '  Raw Counter Family  ' },
     ],
-    ['graph', { property: 'fontColor', value: '  Raw Idle Font  ' }],
-    ['knob', { property: 'activeFontColor', value: '' }],
+    [
+      'stat',
+      {
+        property: 'fontPaint',
+        value: { color: '  Raw Idle Font  ', gradient: null },
+      },
+    ],
+    [
+      'key',
+      {
+        property: 'activeFontPaint',
+        value: {
+          color: '#FF0080',
+          gradient: {
+            angle: 90,
+            stops: [
+              { color: '#FF0080', pos: 0 },
+              { color: '#001122', pos: 1 },
+            ],
+          },
+        },
+      },
+    ],
     ['stat', { property: 'counterFillIdle', value: { color: ' raw solid ' } }],
     [
       'key',
@@ -957,10 +978,21 @@ describe('editorCommitRaw semantic op protocol', () => {
       },
     ],
     ['graph', { property: 'counterFillIdle', value: { color: '#fff' } }],
-    ['stat', { property: 'activeFontColor', value: '#fff' }],
-    ['graph', { property: 'activeFontColor', value: '#fff' }],
-    ['key', { property: 'fontColor', value: 1 }],
-    ['key', { fontColor: '#fff', activeFontColor: '#000' }],
+    ['key', { property: 'fontColor', value: '#fff' }],
+    ['key', { property: 'activeFontColor', value: '#fff' }],
+    [
+      'graph',
+      { property: 'fontPaint', value: { color: '#fff', gradient: null } },
+    ],
+    [
+      'knob',
+      { property: 'fontPaint', value: { color: '#fff', gradient: null } },
+    ],
+    [
+      'stat',
+      { property: 'activeFontPaint', value: { color: '#fff', gradient: null } },
+    ],
+    ['key', { property: 'fontPaint', value: { color: '#fff' } }],
     ['stat', { property: 'counterFillActive', value: { color: '#fff' } }],
     [
       'key',

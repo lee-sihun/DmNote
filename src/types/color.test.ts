@@ -246,6 +246,16 @@ describe('resolveStatePair / gradientToCss', () => {
       gradientToCss({ angle: 45, stops: [c('#a', 0), c('#b', 0.333)] }),
     ).toBe('linear-gradient(45deg, #a 0%, #b 33.3%)');
   });
+
+  it('역순 스톱(드래그 프리뷰)도 정렬해 그린다 - 커밋과 화면 일치', () => {
+    expect(
+      gradientToCss({ angle: 90, stops: [c('#b', 0.8), c('#a', 0.2)] }),
+    ).toBe('linear-gradient(90deg, #a 20%, #b 80%)');
+    // 범위 밖 pos는 canonical과 같은 클램프
+    expect(gradientToCss({ angle: 0, stops: [c('#a', -1), c('#b', 2)] })).toBe(
+      'linear-gradient(0deg, #a 0%, #b 100%)',
+    );
+  });
 });
 
 describe('isStrictStopColor - 노트 테두리 스톱 문법 (계약 v2 §2A)', () => {

@@ -293,6 +293,8 @@ mod tests {
         assert!(position.note_gradient.is_none());
         assert!(position.note_glow_gradient.is_none());
         assert!(position.note_border_gradient.is_none());
+        assert!(position.font_gradient.is_none());
+        assert!(position.active_font_gradient.is_none());
     }
 
     #[test]
@@ -311,6 +313,8 @@ mod tests {
         width: f64,
         count: u32,
         background_color: Option<String>,
+        font_color: Option<String>,
+        active_font_color: Option<String>,
         note_color: NoteColor,
         note_opacity: u32,
         note_opacity_top: Option<u32>,
@@ -352,6 +356,22 @@ mod tests {
                             { "color": "rgba(64, 80, 96, 0.5)", "pos": 1 }
                         ]
                     },
+                    "fontColor": "#123456",
+                    "fontGradient": {
+                        "angle": 45,
+                        "stops": [
+                            { "color": "#123456", "pos": 0 },
+                            { "color": "#ABCDEF", "pos": 1 }
+                        ]
+                    },
+                    "activeFontColor": "#654321",
+                    "activeFontGradient": {
+                        "angle": 135,
+                        "stops": [
+                            { "color": "#654321", "pos": 0 },
+                            { "color": "#FEDCBA", "pos": 1 }
+                        ]
+                    },
                     "counter": {
                         "fill": {
                             "idle": "rgba(255,255,255,1)",
@@ -379,6 +399,10 @@ mod tests {
             Some(90.0)
         );
         assert_eq!(
+            serialized["keyPositions"]["4key"][0]["fontGradient"]["angle"].as_f64(),
+            Some(45.0)
+        );
+        assert_eq!(
             serialized["keyPositions"]["4key"][0]["counter"]["fillIdleGradient"]["angle"].as_f64(),
             Some(180.0)
         );
@@ -389,6 +413,11 @@ mod tests {
         assert_eq!(
             shadow_position.background_color.as_deref(),
             Some("rgba(16, 32, 48, 1)")
+        );
+        assert_eq!(shadow_position.font_color.as_deref(), Some("#123456"));
+        assert_eq!(
+            shadow_position.active_font_color.as_deref(),
+            Some("#654321")
         );
         assert_eq!(shadow_position.counter.fill.idle, "rgba(255,255,255,1)");
     }
@@ -441,6 +470,22 @@ mod tests {
                             { "color": "#ABC8", "pos": 1 }
                         ]
                     },
+                    "fontColor": "#123456",
+                    "fontGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": "#123456", "pos": 0 },
+                            { "color": "#ABCDEF", "pos": 1 }
+                        ]
+                    },
+                    "activeFontColor": "#654321",
+                    "activeFontGradient": {
+                        "angle": 135,
+                        "stops": [
+                            { "color": "#654321", "pos": 0 },
+                            { "color": "#FEDCBA", "pos": 1 }
+                        ]
+                    },
                     "counter": {
                         "fill": {
                             "idle": "rgba(255,255,255,1)",
@@ -467,9 +512,17 @@ mod tests {
         assert!(old_wire["keyPositions"]["4key"][0]
             .get("noteBorderGradient")
             .is_none());
+        assert!(old_wire["keyPositions"]["4key"][0]
+            .get("fontGradient")
+            .is_none());
+        assert!(old_wire["keyPositions"]["4key"][0]
+            .get("activeFontGradient")
+            .is_none());
         assert!(position.note_gradient.is_none());
         assert!(position.note_glow_gradient.is_none());
         assert!(position.note_border_gradient.is_none());
+        assert!(position.font_gradient.is_none());
+        assert!(position.active_font_gradient.is_none());
         assert_eq!(
             position.note_color,
             NoteColor::Gradient {
@@ -491,6 +544,8 @@ mod tests {
         assert_eq!(position.note_glow_opacity_top, Some(30));
         assert_eq!(position.note_glow_opacity_bottom, Some(60));
         assert_eq!(position.note_border_color.as_deref(), Some("#112233"));
+        assert_eq!(position.font_color.as_deref(), Some("#123456"));
+        assert_eq!(position.active_font_color.as_deref(), Some("#654321"));
     }
 
     #[test]

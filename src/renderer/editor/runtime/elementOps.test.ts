@@ -79,7 +79,6 @@ import {
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
   patchCounterFillByTargets,
-  patchFontColorByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -1913,43 +1912,49 @@ describe('elementOps', () => {
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 
-  it('idle font color는 key와 knob의 비어 있던 active를 pre-edit idle raw로 materialize한다', async () => {
+  it('idle font paint는 키의 비어 있던 active 쌍을 pre-edit idle로 materialize한다', async () => {
     const key = {
       ...keyAt(ID_A),
-      fontColor: '  key idle raw  ',
+      fontColor: '#112233',
       activeFontColor: '   ',
       className: 'key-sibling',
     };
-    const knobId = 'a3999999-9999-4999-8999-999999999999';
-    const knob = {
-      ...keyAt(knobId),
-      fontColor: '  knob idle raw  ',
-      activeFontColor: undefined,
-      className: 'knob-sibling',
-    } as never;
     useKeyStore.setState({
       canonicalPositions: { '4key': [key] },
       positions: { '4key': [key] },
     });
-    useKnobItemStore.setState({ positions: { '4key': [knob] } });
 
-    await patchFontColorByTargets(
-      [
-        { elementType: 'key', id: ID_A },
-        { elementType: 'knob', id: knobId },
-      ],
-      { property: 'fontColor', value: ' new idle ' },
-    );
+    await patchPaintByTargets([{ elementType: 'key', id: ID_A }], {
+      property: 'fontPaint',
+      value: { color: '#445566', gradient: null },
+    });
 
     expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
-      fontColor: ' new idle ',
-      activeFontColor: '  key idle raw  ',
+      fontColor: '#445566',
+      activeFontColor: '#112233',
       className: 'key-sibling',
     });
-    expect(useKnobItemStore.getState().positions['4key'][0]).toMatchObject({
-      fontColor: ' new idle ',
-      activeFontColor: '  knob idle raw  ',
-      className: 'knob-sibling',
+  });
+
+  it('idle font paint gradient는 스탯에도 적용되고 대표색을 함께 쓴다', async () => {
+    const stat = { ...keyAt(ID_A), fontColor: '#111111' } as never;
+    useStatItemStore.setState({ positions: { '4key': [stat] } });
+
+    const spec = {
+      angle: 90,
+      stops: [
+        { color: '#FF0080', pos: 0 },
+        { color: '#001122', pos: 1 },
+      ],
+    };
+    await patchPaintByTargets([{ elementType: 'stat', id: ID_A }], {
+      property: 'fontPaint',
+      value: { color: '#FF0080', gradient: spec },
+    });
+
+    expect(useStatItemStore.getState().positions['4key'][0]).toMatchObject({
+      fontColor: '#FF0080',
+      fontGradient: spec,
     });
   });
 
@@ -1957,23 +1962,33 @@ describe('elementOps', () => {
     [
       'active stat',
       [{ elementType: 'stat', id: ID_A }],
-      { property: 'activeFontColor', value: '#fff' },
+      { property: 'activeFontPaint', value: { color: '#fff', gradient: null } },
     ],
     [
-      'active graph',
+      'active knob',
+      [{ elementType: 'knob', id: ID_A }],
+      { property: 'activeFontPaint', value: { color: '#fff', gradient: null } },
+    ],
+    [
+      'idle graph',
       [{ elementType: 'graph', id: ID_A }],
-      { property: 'activeFontColor', value: '#fff' },
+      { property: 'fontPaint', value: { color: '#fff', gradient: null } },
+    ],
+    [
+      'idle knob',
+      [{ elementType: 'knob', id: ID_A }],
+      { property: 'fontPaint', value: { color: '#fff', gradient: null } },
     ],
     [
       'synthetic idle',
       [{ elementType: 'key', id: 'key-0' }],
-      { property: 'fontColor', value: '#fff' },
+      { property: 'fontPaint', value: { color: '#fff', gradient: null } },
     ],
   ] as const)(
-    'font color %s는 eager/wire 전에 거절한다',
+    'font paint %s는 eager/wire 전에 거절한다',
     async (_label, targets, patch) => {
       await expect(
-        patchFontColorByTargets(targets as never, patch as never),
+        patchPaintByTargets(targets as never, patch as never),
       ).resolves.toBe(false);
       expect(api.commitSemanticOps).not.toHaveBeenCalled();
     },
@@ -2277,7 +2292,7 @@ describe('elementOps', () => {
   });
 
   it.each(['stale', ''])(
-    'idle background paint는 gradient 대표색으로 active fallback을 materialize한다 (%j)',
+    'idle background paint는 idle 쌍을 있는 그대로 active fallback으로 materialize한다 (%j)',
     async (idleColor) => {
       const gradient = {
         angle: 45,
@@ -2310,7 +2325,8 @@ describe('elementOps', () => {
       ).toMatchObject({
         backgroundColor: '#next',
         backgroundGradient: undefined,
-        activeBackgroundColor: '#first',
+        // 백엔드 preserve와 동일 - 대표색 합성 없이 idle 색을 그대로 복제
+        activeBackgroundColor: idleColor,
         activeBackgroundGradient: gradient,
         borderColor: '#border-sibling',
       });

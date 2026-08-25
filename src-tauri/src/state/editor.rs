@@ -2800,13 +2800,21 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::FontColor("  raw font color  ".to_string()),
-                serde_json::json!({ "property": "fontColor", "value": "  raw font color  " }),
+                EditorElementPropertyPatchV1::FontPaint(crate::models::EditorPaintDescriptorV1 {
+                    color: "  raw font color  ".to_string(),
+                    gradient: None,
+                }),
+                serde_json::json!({ "property": "fontPaint", "value": { "color": "  raw font color  ", "gradient": null } }),
             ),
             (
-                EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::ActiveFontColor(String::new()),
-                serde_json::json!({ "property": "activeFontColor", "value": "" }),
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::ActiveFontPaint(
+                    crate::models::EditorPaintDescriptorV1 {
+                        color: String::new(),
+                        gradient: None,
+                    },
+                ),
+                serde_json::json!({ "property": "activeFontPaint", "value": { "color": "", "gradient": null } }),
             ),
             (
                 EditorElementTypeV1::Stat,
@@ -3151,11 +3159,11 @@ mod tests {
             serde_json::json!({ "property": "className", "value": 1 }),
             serde_json::json!({ "className": "class", "hidden": true }),
             serde_json::json!({ "className": "class", "unexpected": true }),
-            serde_json::json!({ "property": "fontColor", "value": null }),
-            serde_json::json!({ "property": "fontColor", "value": 1 }),
-            serde_json::json!({ "property": "activeFontColor", "value": false }),
-            serde_json::json!({ "fontColor": "idle", "activeFontColor": "active" }),
-            serde_json::json!({ "activeFontColor": "active", "unexpected": true }),
+            serde_json::json!({ "property": "fontPaint", "value": null }),
+            serde_json::json!({ "property": "fontPaint", "value": { "color": "idle" } }),
+            serde_json::json!({ "property": "activeFontPaint", "value": false }),
+            serde_json::json!({ "fontPaint": { "color": "idle", "gradient": null }, "activeFontPaint": { "color": "active", "gradient": null } }),
+            serde_json::json!({ "property": "activeFontPaint", "value": { "color": "active", "gradient": null, "unexpected": true } }),
             serde_json::json!({ "property": "shadow", "value": {} }),
             serde_json::json!({ "property": "shadow", "value": { "offsetX": 1, "blur": 2 } }),
             serde_json::json!({ "property": "shadow", "value": { "color": "shadow", "unexpected": true } }),

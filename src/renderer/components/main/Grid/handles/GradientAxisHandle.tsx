@@ -18,6 +18,7 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 
 /**
  * 온캔버스 그라데이션 축 - 피커가 그라데이션 형식으로 열려 있는 동안
@@ -75,6 +76,9 @@ type DragState =
       moved: boolean;
       /** 이동 없이 떼면 그 자리에 스톱 추가 - 축 히트 스트립 한정 */
       addOnClick: boolean;
+      /** 잡은 지점 보정 - 시작 각도와 프레스 포인터 각도의 차. 앵커 히트
+          영역 어디를 잡아도 첫 이동에서 축이 튀지 않는다 */
+      angleOffset: number;
       downX: number;
       downY: number;
     }
@@ -86,6 +90,9 @@ type DragState =
       ownerGeneration: number;
       startSpec: GradientSpec;
       lastPos: number;
+      /** 잡은 지점 보정 - 스톱 pos와 프레스 포인터 투영의 차. 스왓치가 축에서
+          띄워져 있어도(세로 축에서는 축 방향과 겹침) 첫 이동에 점프가 없다 */
+      posOffset: number;
       downX: number;
       downY: number;
     };
@@ -163,6 +170,10 @@ const GradientAxisOverlay = ({
   } | null>(null);
   // 드래그 세션 해제자 - begin에서 등록, 종료 경로 어디서든 1회 실행
   const detachRef = useRef<(() => void) | null>(null);
+  // 잡은 요소 - 캡처로 드래그 중 커서를 고정하고 해제 시 복원
+  const grabbedRef = useRef<{ el: HTMLElement; pointerId: number } | null>(
+    null,
+  );
   const moveSchedulerRef = useRef<ReturnType<
     typeof createRafLatestScheduler<PointerEvent>
   > | null>(null);
@@ -192,7 +203,28 @@ const GradientAxisOverlay = ({
     // 표면 소유 레이어가 실측 박스를 등록했으면 우선 사용 - 카운터 표면은
     // 요소(키) 박스가 아니라 실제 카운터 텍스트 박스가 축의 기준이다
     if (registeredAnchorBounds?.sessionKey === session.sessionKey) {
-      return registeredAnchorBounds.bounds;
+      const { bounds, origin } = registeredAnchorBounds;
+      const anchor = session.anchor;
+      // 등록 후 요소가 이동하면 저장 좌표 델타로 실측 박스를 추종
+      if (origin && anchor.kind !== 'batch') {
+        const collection =
+          anchor.kind === 'key'
+            ? positions[selectedKeyType]
+            : anchor.kind === 'stat'
+            ? statPositions[selectedKeyType]
+            : anchor.kind === 'graph'
+            ? graphPositions?.[selectedKeyType]
+            : knobPositions?.[selectedKeyType];
+        const pos = collection?.find((position) => position.id === anchor.id);
+        if (pos && (pos.dx !== origin.x || pos.dy !== origin.y)) {
+          return {
+            ...bounds,
+            x: bounds.x + (pos.dx - origin.x),
+            y: bounds.y + (pos.dy - origin.y),
+          };
+        }
+      }
+      return bounds;
     }
     const { anchor } = session;
     if (anchor.kind === 'batch') {
@@ -311,17 +343,21 @@ const GradientAxisOverlay = ({
     };
   };
 
-  const angleFromClient = (
+  // 포인터가 가리키는 축 각도 (보정·자석 이전의 원값)
+  const pointerAngleFromClient = (
     clientX: number,
     clientY: number,
     end: AxisEnd,
-    magnetDisabled: boolean,
   ): number => {
     const origin = clientOrigin();
     const raw =
       (Math.atan2(clientX - origin.x, origin.y - clientY) * 180) / Math.PI;
     // 시작점 쪽을 잡으면 축 반대 방향이 그라데이션 진행 방향
-    let next = normalizeAngle(Math.round(end === 'start' ? raw + 180 : raw));
+    return normalizeAngle(end === 'start' ? raw + 180 : raw);
+  };
+
+  const applyMagnet = (angle: number, magnetDisabled: boolean): number => {
+    let next = normalizeAngle(Math.round(angle));
     if (!magnetDisabled) {
       for (const magnet of geoRef.current?.magnetAngles ?? []) {
         if (circularDistance(next, magnet) <= MAGNET_THRESHOLD_DEG) {
@@ -333,17 +369,32 @@ const GradientAxisOverlay = ({
     return normalizeAngle(Math.round(next));
   };
 
-  // 포인터를 축에 사영해 pos(0~1) 계산
-  const posFromClient = (clientX: number, clientY: number): number => {
+  const angleFromClient = (
+    clientX: number,
+    clientY: number,
+    drag: Extract<DragState, { type: 'rotate' }>,
+    magnetDisabled: boolean,
+  ): number =>
+    applyMagnet(
+      pointerAngleFromClient(clientX, clientY, drag.end) + drag.angleOffset,
+      magnetDisabled,
+    );
+
+  // 포인터의 축 투영 원값 - 잡은 지점 보정 후 호출부가 클램프
+  const projectionFromClient = (clientX: number, clientY: number): number => {
     const origin = clientOrigin();
     const geo = geoRef.current;
     if (!geo || geo.halfLine === 0) return 0.5;
     const dx = clientX - origin.x;
     const dy = clientY - origin.y;
-    const projected =
-      (dx * geo.dirX + dy * geo.dirY) / (2 * geo.halfLine) + 0.5;
-    return Math.min(1, Math.max(0, projected));
+    return (dx * geo.dirX + dy * geo.dirY) / (2 * geo.halfLine) + 0.5;
   };
+
+  const clampPos = (pos: number): number => Math.min(1, Math.max(0, pos));
+
+  // 포인터를 축에 사영해 pos(0~1) 계산 - 클릭 지점 직접 사용 경로(스톱 추가)
+  const posFromClient = (clientX: number, clientY: number): number =>
+    clampPos(projectionFromClient(clientX, clientY));
 
   const currentSpec = () => sessionRef.current?.spec ?? session.spec;
 
@@ -422,7 +473,7 @@ const GradientAxisOverlay = ({
       const next = angleFromClient(
         e.clientX,
         e.clientY,
-        drag.end,
+        drag,
         e.ctrlKey || e.metaKey,
       );
       setDragAngle(next);
@@ -430,8 +481,10 @@ const GradientAxisOverlay = ({
       return;
     }
 
-    // 스톱은 항상 현재 축에 사영 - 위치만 이동, 각도 불변
-    const pos = posFromClient(e.clientX, e.clientY);
+    // 스톱은 항상 현재 축에 사영 - 위치만 이동, 각도 불변, 잡은 지점 보정
+    const pos = clampPos(
+      projectionFromClient(e.clientX, e.clientY) + drag.posOffset,
+    );
     drag.lastPos = pos;
     setDragStop({ index: drag.index, pos });
     live.apply(
@@ -470,7 +523,7 @@ const GradientAxisOverlay = ({
       const finalAngle = angleFromClient(
         e.clientX,
         e.clientY,
-        drag.end,
+        drag,
         e.ctrlKey || e.metaKey,
       );
       live.apply(
@@ -481,7 +534,10 @@ const GradientAxisOverlay = ({
     }
     if (!drag.moved) return; // 클릭 - 선택만
     // pointerup 좌표를 직접 사용해 마지막 프레임 사이 입력도 유실하지 않음
-    commitStopDrag(drag.index, posFromClient(e.clientX, e.clientY));
+    commitStopDrag(
+      drag.index,
+      clampPos(projectionFromClient(e.clientX, e.clientY) + drag.posOffset),
+    );
   };
 
   // 취소 - preview로 반영된 변경을 시작 시점 spec으로 복원
@@ -525,6 +581,32 @@ const GradientAxisOverlay = ({
     setTimeout(() => window.removeEventListener('click', swallow, true), 0);
   };
 
+  // 프레스 즉시 grabbing - 키와 같은 정책(호버 무변화, 잡는 동안만 grabbing).
+  // pointerdown preventDefault로 :active가 안 걸리고, 캡처 중에도 커서는
+  // 히트테스트 기준(크로뮴)이라 문서 전역 클래스로 드래그 내내 고정한다
+  const grabPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = e.currentTarget as HTMLElement;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // 미지원 환경은 커서 고정 없이 동작만 유지
+    }
+    beginDragCursor('grabbing', el.ownerDocument);
+    grabbedRef.current = { el, pointerId: e.pointerId };
+  };
+
+  const releaseGrabbed = () => {
+    const grabbed = grabbedRef.current;
+    if (!grabbed) return;
+    endDragCursor(grabbed.el.ownerDocument);
+    try {
+      grabbed.el.releasePointerCapture(grabbed.pointerId);
+    } catch {
+      // 이미 해제됐으면 무시
+    }
+    grabbedRef.current = null;
+  };
+
   const attachWindowDrag = () => {
     moveSchedulerRef.current = createRafLatestScheduler(
       applyWindowMove,
@@ -539,6 +621,7 @@ const GradientAxisOverlay = ({
       window.removeEventListener('pointerup', handleWindowUp);
       window.removeEventListener('pointercancel', handleWindowCancel);
       window.removeEventListener('blur', handleWindowBlur);
+      releaseGrabbed();
       moveSchedulerRef.current?.cancel();
       moveSchedulerRef.current = null;
       detachRef.current = null;
@@ -555,6 +638,7 @@ const GradientAxisOverlay = ({
     if (e.button !== 0) return;
     stopAll(e);
     detachRef.current?.();
+    grabPointer(e);
     dragRef.current = {
       type: 'rotate',
       pointerId: e.pointerId,
@@ -563,6 +647,8 @@ const GradientAxisOverlay = ({
       startSpec: session.spec,
       moved: false,
       addOnClick,
+      angleOffset:
+        session.spec.angle - pointerAngleFromClient(e.clientX, e.clientY, end),
       downX: e.clientX,
       downY: e.clientY,
     };
@@ -593,6 +679,7 @@ const GradientAxisOverlay = ({
       if (e.button !== 0) return;
       stopAll(e);
       detachRef.current?.();
+      grabPointer(e);
       session.selectStop(index);
       dragRef.current = {
         type: 'stop',
@@ -602,6 +689,9 @@ const GradientAxisOverlay = ({
         ownerGeneration: useGradientEditStore.getState().generation,
         startSpec: session.spec,
         lastPos: session.spec.stops[index]?.pos ?? 0.5,
+        posOffset:
+          (session.spec.stops[index]?.pos ?? 0.5) -
+          projectionFromClient(e.clientX, e.clientY),
         downX: e.clientX,
         downY: e.clientY,
       };
@@ -689,7 +779,7 @@ const GradientAxisOverlay = ({
             width: halfLine * 2,
             height: AXIS_HIT_THICKNESS,
             transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
-            cursor: isRotating ? 'grabbing' : 'grab',
+            cursor: isRotating ? 'grabbing' : 'default',
             pointerEvents: 'auto',
             touchAction: 'none',
           }}
@@ -714,7 +804,7 @@ const GradientAxisOverlay = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 transform: 'translate(-50%, -50%)',
-                cursor: isRotating ? 'grabbing' : 'grab',
+                cursor: isRotating ? 'grabbing' : 'default',
                 pointerEvents: 'auto',
                 touchAction: 'none',
               }}
@@ -776,7 +866,7 @@ const GradientAxisOverlay = ({
                       ? '0 0 0 2px var(--ui-selection-border-strong), 0 1px 4px rgba(0,0,0,0.5)'
                       : '0 1px 4px rgba(0,0,0,0.5)',
                   transform: 'translate(-50%, -50%)',
-                  cursor: dragStop?.index === i ? 'grabbing' : 'grab',
+                  cursor: dragStop?.index === i ? 'grabbing' : 'default',
                   pointerEvents: 'auto',
                   touchAction: 'none',
                 }}

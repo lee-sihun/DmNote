@@ -1,23 +1,36 @@
-import { useLayoutEffect, type RefObject } from 'react';
+import { useLayoutEffect, useRef, type RefObject } from 'react';
 import {
   useGradientEditStore,
   type GradientEditSession,
+  type GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
 import { gridAnchorBoundsFor } from '@utils/core/gridAnchorBounds';
 import { GLYPH_BOX_CHANGE_EVENT } from './useCounterGlyphPaint';
 
 /**
- * 카운터 표면 편집 세션 동안 실측 카운터 박스를 축 핸들 앵커로 등록한다.
- * 세션이 없거나 카운터 표면이 아니면 아무것도 하지 않는다 (오버레이 창 무해)
+ * 표면 편집 세션 동안 실측 박스를 축 핸들 앵커로 등록한다.
+ * 단일 요소 세션만 등록 - 배치는 같은 sessionKey를 여러 작성자가
+ * 덮어쓰므로 요소 합집합 폴백(GradientAxisHandle 기본 경로)을 쓴다.
+ * 세션이 없거나 표면이 다르면 아무것도 하지 않는다 (오버레이 창 무해)
  */
 export function useCounterAxisAnchor(
   session: GradientEditSession | null,
   hostRef: RefObject<HTMLElement | null>,
   textDep: string | number,
   selector?: string,
+  expectedSurface: GradientPreviewSurface = 'counterFill',
+  origin?: { x: number; y: number },
 ) {
   const sessionKey =
-    session?.surface === 'counterFill' ? session.sessionKey : null;
+    session?.surface === expectedSurface && session.anchor.kind !== 'batch'
+      ? session.sessionKey
+      : null;
+  // 등록 시점 요소 저장 좌표 - 축 핸들이 이후 이동을 델타로 추종.
+  // ref 경유로 읽어 좌표 변화가 재등록(레이아웃 읽기)을 유발하지 않게 한다
+  const originRef = useRef(origin);
+  useLayoutEffect(() => {
+    originRef.current = origin;
+  });
   useLayoutEffect(() => {
     if (!sessionKey) return;
     const host = hostRef.current;
@@ -39,13 +52,22 @@ export function useCounterAxisAnchor(
           height: glyph[3],
         };
       }
-      useGradientEditStore.getState().setAnchorBounds(sessionKey, bounds);
+      useGradientEditStore
+        .getState()
+        .setAnchorBounds(sessionKey, bounds, originRef.current ?? null);
     };
     register();
     // 세션 중 타이포그래피 변경·폰트 지연 로드로 페인트 박스가 이동하면 재등록
     element.addEventListener(GLYPH_BOX_CHANGE_EVENT, register);
+    // 라벨 줄바꿈·웹폰트 로드처럼 이벤트 없는 크기 변화도 추적
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => register())
+        : null;
+    observer?.observe(element);
     return () => {
       element.removeEventListener(GLYPH_BOX_CHANGE_EVENT, register);
+      observer?.disconnect();
       useGradientEditStore.getState().setAnchorBounds(sessionKey, null);
     };
   }, [sessionKey, hostRef, selector, textDep]);

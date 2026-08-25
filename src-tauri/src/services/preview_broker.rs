@@ -71,6 +71,8 @@ const KEY_POSITION_PATCH_FIELDS: &[&str] = &[
     "fontSize",
     "fontColor",
     "activeFontColor",
+    "fontGradient",
+    "activeFontGradient",
     "graphAnimationEnabled",
     "fontFamily",
     "idleImageFit",
@@ -427,7 +429,57 @@ fn validate_publish_request(request: &PreviewPublishRequest) -> Result<(), Strin
     {
         return Err(format!("preview patch field '{field}' is not allowed"));
     }
+    for (field, value) in &request.patch {
+        if field.ends_with("Gradient") {
+            validate_preview_gradient(field, value)?;
+        }
+    }
     validate_payload_size(request)
+}
+
+// 그라데이션 프리뷰 구조 검증 - 커밋 검증(validate_paint_gradient)의 프리뷰 대응.
+// 수신 창이 stops를 그대로 CSS로 그리므로 형태가 깨진 값은 여기서 끊는다.
+// 드래그 중 draft는 각도·순서가 canonical 이전일 수 있어 범위·정렬은 강제하지 않는다
+fn validate_preview_gradient(field: &str, value: &Value) -> Result<(), String> {
+    if value.is_null() {
+        return Ok(());
+    }
+    let Some(spec) = value.as_object() else {
+        return Err(format!(
+            "preview field '{field}' must be null or a gradient object"
+        ));
+    };
+    let angle_ok = spec
+        .get("angle")
+        .and_then(Value::as_f64)
+        .is_some_and(f64::is_finite);
+    if !angle_ok {
+        return Err(format!("preview field '{field}' must carry a finite angle"));
+    }
+    let Some(stops) = spec.get("stops").and_then(Value::as_array) else {
+        return Err(format!("preview field '{field}' must carry gradient stops"));
+    };
+    if !(2..=8).contains(&stops.len()) {
+        return Err(format!(
+            "preview field '{field}' must contain between 2 and 8 stops"
+        ));
+    }
+    for stop in stops {
+        let color_ok = stop
+            .get("color")
+            .and_then(Value::as_str)
+            .is_some_and(|color| !color.trim().is_empty());
+        let pos_ok = stop
+            .get("pos")
+            .and_then(Value::as_f64)
+            .is_some_and(|pos| pos.is_finite() && (0.0..=1.0).contains(&pos));
+        if !color_ok || !pos_ok {
+            return Err(format!(
+                "preview field '{field}' stops must carry a color and a pos between 0 and 1"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_session_id(session_id: &str) -> Result<(), String> {
@@ -640,6 +692,95 @@ mod tests {
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].source_label, "owner");
         assert_eq!(messages[0].kind, PreviewKind::Patch);
+    }
+
+    #[test]
+    fn font_gradient_preview_fields_are_allowed_without_widening_the_allowlist() {
+        let session_id = session_id();
+        let mut allowed = request(&session_id, 1);
+        allowed.patch = Map::from_iter([
+            (
+                "fontGradient".to_string(),
+                serde_json::json!({
+                    "angle": 45,
+                    "stops": [
+                        { "color": "#112233", "pos": 0 },
+                        { "color": "#445566", "pos": 1 }
+                    ]
+                }),
+            ),
+            ("activeFontGradient".to_string(), Value::Null),
+        ]);
+        validate_publish_request(&allowed).expect("font gradient preview fields are allowed");
+
+        let mut rejected = request(&session_id, 2);
+        rejected.patch = Map::from_iter([("fontPaint".to_string(), Value::Null)]);
+        assert_eq!(
+            validate_publish_request(&rejected).unwrap_err(),
+            "preview patch field 'fontPaint' is not allowed"
+        );
+    }
+
+    #[test]
+    fn malformed_gradient_preview_values_are_rejected_before_broadcast() {
+        let session_id = session_id();
+        let cases: [(&str, Value); 6] = [
+            // 객체 아님
+            ("fontGradient", serde_json::json!("broken")),
+            // stops 누락
+            ("activeFontGradient", serde_json::json!({ "angle": 45 })),
+            // angle이 숫자가 아님
+            (
+                "backgroundGradient",
+                serde_json::json!({
+                    "angle": "45",
+                    "stops": [
+                        { "color": "#112233", "pos": 0 },
+                        { "color": "#445566", "pos": 1 }
+                    ]
+                }),
+            ),
+            // stop 1개
+            (
+                "borderGradient",
+                serde_json::json!({
+                    "angle": 45,
+                    "stops": [{ "color": "#112233", "pos": 0 }]
+                }),
+            ),
+            // 빈 stop 색
+            (
+                "fontGradient",
+                serde_json::json!({
+                    "angle": 45,
+                    "stops": [
+                        { "color": " ", "pos": 0 },
+                        { "color": "#445566", "pos": 1 }
+                    ]
+                }),
+            ),
+            // pos 범위 밖
+            (
+                "activeBorderGradient",
+                serde_json::json!({
+                    "angle": 45,
+                    "stops": [
+                        { "color": "#112233", "pos": 2 },
+                        { "color": "#445566", "pos": 1 }
+                    ]
+                }),
+            ),
+        ];
+        for (seq, (field, value)) in cases.into_iter().enumerate() {
+            let mut rejected = request(&session_id, seq as u64 + 1);
+            rejected.patch = Map::from_iter([(field.to_string(), value)]);
+            let error = validate_publish_request(&rejected)
+                .expect_err("malformed gradient preview must be rejected");
+            assert!(
+                error.contains(&format!("preview field '{field}'")),
+                "unexpected error for {field}: {error}"
+            );
+        }
     }
 
     #[test]

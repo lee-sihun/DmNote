@@ -1532,16 +1532,37 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 
   const interactiveRefs = [buttonRef];
 
+  // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 이벤트에서 리셋해
+  // 첫 렌더·최초 발행부터 이전 "입력" 선택이 새지 않는다
+  const resetStateModeToIdle = () => {
+    if (!showStateTabs) return;
+    if (isStateControlled) {
+      externalOnStateModeChange('idle');
+    } else {
+      setInternalStateMode('idle');
+    }
+  };
+
   const handleToggle = () => {
     if (isControlled) {
+      if (!open) resetStateModeToIdle();
       externalOnToggle();
     } else if (internalOpen) {
       closeInternalPicker();
     } else {
+      resetStateModeToIdle();
       setInternalOpen(true);
       schedulePickerMount();
     }
   };
+
+  // controlled open을 부모가 토글 핸들러 없이 직접 여는 경로도 대기 시작 보장
+  // layout effect라 리셋 전 상태가 화면·프리뷰에 새지 않는다 (핸들러 리셋과 중복 무해)
+  const wasOpenRef = useRef(open);
+  useLayoutEffect(() => {
+    if (open && !wasOpenRef.current) resetStateModeToIdle();
+    wasOpenRef.current = open;
+  });
 
   const handleClose = () => {
     if (isControlled) {
@@ -1618,12 +1639,14 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       if (modeValue.mode === 'solid') handleColorChange(modeValue.color);
     },
     onCommit: (modeValue) => {
-      const base =
-        modeValue.mode === 'solid'
-          ? modeValue.color
-          : modeValue.spec.stops[0]?.color ?? '#ffffff';
-      if (showStateTabs && stateMode === 'active') setLocalActiveColor(base);
-      else setLocalColor(base);
+      if (modeValue.mode === 'solid') {
+        // 단색 확정은 일반 완료 파이프라인도 통과 - 부모의 드래그 정산 계약 유지
+        handleColorChangeComplete(modeValue.color);
+      } else {
+        const base = modeValue.spec.stops[0]?.color ?? '#ffffff';
+        if (showStateTabs && stateMode === 'active') setLocalActiveColor(base);
+        else setLocalColor(base);
+      }
       onModeCommit?.(stateMode, modeValue);
     },
   });

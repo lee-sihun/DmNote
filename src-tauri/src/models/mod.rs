@@ -625,8 +625,12 @@ pub struct KeyPosition {
     pub font_size: Option<f64>,
     #[serde(default)]
     pub font_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub active_font_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_font_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub graph_animation_enabled: Option<bool>,
     /// 글꼴 패밀리 (커스텀 폰트 이름)
@@ -723,7 +727,9 @@ impl Default for KeyPosition {
             active_shadow: None,
             font_size: None,
             font_color: None,
+            font_gradient: None,
             active_font_color: None,
+            active_font_gradient: None,
             graph_animation_enabled: None,
             font_family: None,
             image_fit: None,
@@ -1386,6 +1392,8 @@ impl KeyPosition {
                 &mut self.active_border_color,
                 &mut self.active_border_gradient,
             ),
+            (&mut self.font_color, &mut self.font_gradient),
+            (&mut self.active_font_color, &mut self.active_font_gradient),
         ] {
             let (pair_changed, base_repaired) = canonicalize_optional_gradient_pair(base, gradient);
             changed |= pair_changed;
@@ -2973,6 +2981,22 @@ mod tests {
                 ]
             }))
             .unwrap(),
+            font_gradient: serde_json::from_value(serde_json::json!({
+                "angle": 45,
+                "stops": [
+                    { "color": "#556677", "pos": 0 },
+                    { "color": "#8899AA", "pos": 1 }
+                ]
+            }))
+            .unwrap(),
+            active_font_gradient: serde_json::from_value(serde_json::json!({
+                "angle": 135,
+                "stops": [
+                    { "color": "#AABBCC", "pos": 0 },
+                    { "color": "#DDEEFF", "pos": 1 }
+                ]
+            }))
+            .unwrap(),
             ..KeyPosition::default()
         };
         let values = [
@@ -3002,6 +3026,8 @@ mod tests {
 
         for value in values {
             assert_eq!(value["noteBorderGradient"]["angle"], 90.0);
+            assert_eq!(value["fontGradient"]["angle"], 45.0);
+            assert_eq!(value["activeFontGradient"]["angle"], 135.0);
         }
     }
 
@@ -3328,6 +3354,8 @@ mod tests {
         assert!(legacy.note_gradient.is_none());
         assert!(legacy.note_glow_gradient.is_none());
         assert!(legacy.note_border_gradient.is_none());
+        assert!(legacy.font_gradient.is_none());
+        assert!(legacy.active_font_gradient.is_none());
 
         let value = serde_json::json!({
             "dx": 0,
@@ -3355,6 +3383,22 @@ mod tests {
                     { "color": "rgba(17,34,51,.5)", "pos": 0 },
                     { "color": "#ABC", "pos": 1 }
                 ]
+            },
+            "fontColor": "#112233",
+            "fontGradient": {
+                "angle": 90,
+                "stops": [
+                    { "color": "#112233", "pos": 0 },
+                    { "color": "#445566", "pos": 1 }
+                ]
+            },
+            "activeFontColor": "#778899",
+            "activeFontGradient": {
+                "angle": 180,
+                "stops": [
+                    { "color": "#778899", "pos": 0 },
+                    { "color": "#AABBCC", "pos": 1 }
+                ]
             }
         });
         let position: KeyPosition = serde_json::from_value(value).unwrap();
@@ -3362,6 +3406,8 @@ mod tests {
         assert!(serialized.get("noteGradient").is_some());
         assert!(serialized.get("noteGlowGradient").is_some());
         assert!(serialized.get("noteBorderGradient").is_some());
+        assert!(serialized.get("fontGradient").is_some());
+        assert!(serialized.get("activeFontGradient").is_some());
         assert_eq!(
             serde_json::from_value::<KeyPosition>(serialized).unwrap(),
             position
@@ -3457,6 +3503,42 @@ mod tests {
         assert_eq!(position.note_glow_opacity_top, Some(60));
         assert_eq!(position.note_glow_opacity_bottom, Some(0));
         assert_eq!(position.canonicalize_gradient_pairs(), (false, false));
+    }
+
+    #[test]
+    fn font_gradient_pairs_are_optional_and_canonicalize_representative_colors() {
+        let mut position = KeyPosition {
+            font_color: Some("stale-idle".to_string()),
+            font_gradient: serde_json::from_value(serde_json::json!({
+                "angle": 405,
+                "stops": [
+                    { "color": "rgba(17, 34, 51, .5)", "pos": 0 },
+                    { "color": "#445566", "pos": 1 }
+                ]
+            }))
+            .unwrap(),
+            active_font_color: None,
+            active_font_gradient: serde_json::from_value(serde_json::json!({
+                "angle": -45,
+                "stops": [
+                    { "color": "#778899", "pos": 0 },
+                    { "color": "rgb(170, 187, 204)", "pos": 1 }
+                ]
+            }))
+            .unwrap(),
+            ..KeyPosition::default()
+        };
+
+        assert_eq!(position.canonicalize_gradient_pairs(), (true, true));
+        assert_eq!(position.font_color.as_deref(), Some("rgba(17, 34, 51, .5)"));
+        assert_eq!(position.active_font_color.as_deref(), Some("#778899"));
+        assert_eq!(position.font_gradient.as_ref().unwrap().angle, 45.0);
+        assert_eq!(position.active_font_gradient.as_ref().unwrap().angle, 315.0);
+        assert_eq!(position.canonicalize_gradient_pairs(), (false, false));
+
+        let serialized_default = serde_json::to_value(KeyPosition::default()).unwrap();
+        assert!(serialized_default.get("fontGradient").is_none());
+        assert!(serialized_default.get("activeFontGradient").is_none());
     }
 
     #[test]

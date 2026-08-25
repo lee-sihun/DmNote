@@ -96,6 +96,7 @@ describe('카운터 글리프 재측정과 축 앵커 동기화', () => {
     expect(useGradientEditStore.getState().anchorBounds).toEqual({
       sessionKey: session.sessionKey,
       bounds: { x: 102, y: 203, width: 30, height: 12 },
+      origin: null,
     });
 
     // 세션 유지 중 폰트 크기 변경 - 앵커가 새 글리프 박스를 따라와야 한다
@@ -108,6 +109,7 @@ describe('카운터 글리프 재측정과 축 앵커 동기화', () => {
     expect(useGradientEditStore.getState().anchorBounds).toEqual({
       sessionKey: session.sessionKey,
       bounds: { x: 105, y: 206, width: 20, height: 10 },
+      origin: null,
     });
   });
 
@@ -126,6 +128,7 @@ describe('카운터 글리프 재측정과 축 앵커 동기화', () => {
     expect(useGradientEditStore.getState().anchorBounds).toEqual({
       sessionKey: session.sessionKey,
       bounds: { x: 100, y: 200, width: 40, height: 20 },
+      origin: null,
     });
   });
 });

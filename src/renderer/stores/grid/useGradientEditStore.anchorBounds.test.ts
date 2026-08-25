@@ -35,6 +35,26 @@ describe('gradient 앵커 박스 레지스트리', () => {
     expect(useGradientEditStore.getState().anchorBounds).toEqual({
       sessionKey: 'a',
       bounds: BOUNDS,
+      origin: null,
+    });
+  });
+
+  it('등록 origin은 함께 보관되고 origin만 달라져도 갱신된다', () => {
+    const store = useGradientEditStore.getState();
+    store.setSession(sessionFor('a'));
+    store.setAnchorBounds('a', BOUNDS, { x: 5, y: 7 });
+    expect(useGradientEditStore.getState().anchorBounds).toEqual({
+      sessionKey: 'a',
+      bounds: BOUNDS,
+      origin: { x: 5, y: 7 },
+    });
+    const before = useGradientEditStore.getState().anchorBounds;
+    store.setAnchorBounds('a', { ...BOUNDS }, { x: 5, y: 7 });
+    expect(useGradientEditStore.getState().anchorBounds).toBe(before);
+    store.setAnchorBounds('a', BOUNDS, { x: 6, y: 7 });
+    expect(useGradientEditStore.getState().anchorBounds?.origin).toEqual({
+      x: 6,
+      y: 7,
     });
   });
 

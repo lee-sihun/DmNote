@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import type { EditStateAnchor } from '@stores/grid/useEditStatePreviewStore';
 import { flushPluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
@@ -1059,7 +1060,15 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   const handlePickerToggle = (target: KnobColorTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
+    // 새로 열 때는 항상 대기 탭에서 시작
+    if (pickerFor !== target) setColorState('idle');
   };
+
+  // 그림자·이미지 피커의 캔버스 상태 프리뷰 대상 (색 피커는 세션 훅이 발행)
+  const knobPreviewAnchor: EditStateAnchor | null =
+    singleKnobPosition.id && isNativeElementId(singleKnobPosition.id)
+      ? { kind: 'knob', id: singleKnobPosition.id }
+      : null;
 
   // 라운딩 기본값: 미지정 시 원형(짧은 변의 절반)
   const effectiveBorderRadius =
@@ -1394,6 +1403,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             <ShadowControls
               idleShadow={knobIdleShadow}
               activeShadow={knobActiveShadow}
+              previewAnchor={knobPreviewAnchor}
               onChange={(state, _shadow, patch) => {
                 const leaf = elementShadowLeafFromPartial(patch);
                 if (!leaf) return;
@@ -1417,6 +1427,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         {showImagePicker && imageButtonRef.current ? (
           <ImagePicker
             open={showImagePicker}
+            previewAnchor={knobPreviewAnchor}
             referenceRef={imageButtonRef}
             panelElement={panelRef.current}
             completionBinding="element-id"
@@ -1540,7 +1551,6 @@ interface SingleKeyStatPanelProps {
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
-  onFontColorCommit?: StyleTabContentProps['onFontColorCommit'];
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   onNotePaintCommit?: NoteTabContentProps['onNotePaintCommit'];
   onNotePaintPreview?: NoteTabContentProps['onNotePaintPreview'];
@@ -1599,7 +1609,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintCommit,
-  onFontColorCommit,
   onShadowCommit,
   onNotePaintCommit,
   onNotePaintPreview,
@@ -1795,7 +1804,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onStylePropertyPreview={onStylePropertyPreview}
               onStylePropertyCommit={onStylePropertyCommit}
               onPaintCommit={onPaintCommit}
-              onFontColorCommit={onFontColorCommit}
               onShadowCommit={onShadowCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}

@@ -8,6 +8,7 @@ import type {
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import { paintPropertyFields } from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import { useEditStatePreviewPublisher } from '@stores/grid/useEditStatePreviewStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
   normalizeCounterSettings,
@@ -44,7 +45,6 @@ import {
   patchShadowByTargets,
   patchNotePaintByIds,
   patchCounterFillByTargets,
-  patchFontColorByTargets,
   patchStylePropertyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
@@ -69,11 +69,10 @@ import type {
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
-  EditorFontColorPropertyPatchV1,
 } from '@src/types/editor';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
 import {
-  previewBatchFontColor,
+  previewBatchPaint,
   previewBatchStyleProperty,
 } from '../previewPatchForwarders';
 import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
@@ -119,18 +118,26 @@ const createStylePropertyHandlers = (
   };
 };
 
-const paintPatchDetails = (patch: EditorPaintPropertyPatchV1) => {
-  const field = patch.property;
-  const descriptor = patch.value;
-  const { active, background } = paintPropertyFields(field);
-  return {
-    field,
-    descriptor,
-    active,
-    target: background
-      ? ('backgroundColor' as const)
-      : ('borderColor' as const),
-  };
+// 표면별 허용 타깃 - font는 라벨 렌더러가 있는 키·스탯(active는 키만)
+const paintRelevantTargets = <
+  T extends { elementType: 'key' | 'stat' | 'graph' | 'knob' },
+>(
+  targets: readonly T[],
+  patch: EditorPaintPropertyPatchV1,
+): readonly T[] => {
+  const { active, surface } = paintPropertyFields(patch.property);
+  if (surface === 'font') {
+    return targets.filter(({ elementType }) =>
+      active
+        ? elementType === 'key'
+        : elementType === 'key' || elementType === 'stat',
+    );
+  }
+  return active
+    ? targets.filter(
+        ({ elementType }) => elementType === 'key' || elementType === 'knob',
+      )
+    : targets;
 };
 
 const createPaintCommitHandler =
@@ -141,12 +148,7 @@ const createPaintCommitHandler =
     }[],
   ) =>
   (patch: EditorPaintPropertyPatchV1) => {
-    const details = paintPatchDetails(patch);
-    const relevant = details.active
-      ? targets.filter(
-          ({ elementType }) => elementType === 'key' || elementType === 'knob',
-        )
-      : targets;
+    const relevant = paintRelevantTargets(targets, patch);
     const stable =
       relevant.length > 0 &&
       relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
@@ -165,14 +167,8 @@ const createFontColorHandlers = (
   }[],
   selectedKeyType: string,
 ) => {
-  const relevantTargets = (patch: EditorFontColorPropertyPatchV1) =>
-    patch.property === 'activeFontColor'
-      ? targets.filter(
-          ({ elementType }) => elementType === 'key' || elementType === 'knob',
-        )
-      : targets;
-  const stableTargets = (patch: EditorFontColorPropertyPatchV1) => {
-    const relevant = relevantTargets(patch);
+  const stableTargets = (patch: EditorPaintPropertyPatchV1) => {
+    const relevant = paintRelevantTargets(targets, patch);
     return relevant.length > 0 &&
       relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
       new Set(relevant.map(({ id }) => id)).size === relevant.length
@@ -180,19 +176,19 @@ const createFontColorHandlers = (
       : null;
   };
   return {
-    previewFontColor: (patch: EditorFontColorPropertyPatchV1) => {
+    previewFontColor: (patch: EditorPaintPropertyPatchV1) => {
       const stable = stableTargets(patch);
       if (!stable) return;
-      previewBatchFontColor(stable, selectedKeyType, patch);
+      previewBatchPaint(stable, selectedKeyType, patch);
     },
-    commitFontColor: (patch: EditorFontColorPropertyPatchV1) => {
+    commitFontColor: (patch: EditorPaintPropertyPatchV1) => {
       const stable = stableTargets(patch);
       if (!stable) return;
-      const active = patch.property === 'activeFontColor';
+      const active = patch.property === 'activeFontPaint';
       const gestureId = active
         ? undefined
         : editGestureController.activeGestureId() ?? undefined;
-      const persisted = patchFontColorByTargets(
+      const persisted = patchPaintByTargets(
         stable,
         patch,
         gestureId ? { gestureId } : {},
@@ -1062,6 +1058,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
   ];
 
+  // 배치 카운터 채움은 세션 훅 없는 ColorPicker 직결 경로 - 상태 프리뷰 직접 발행
+  useEditStatePreviewPublisher(
+    batchPickerFor === 'fill' && selectedKeyElements.length > 0
+      ? { kind: 'batch' }
+      : null,
+    batchCounterColorState,
+  );
+
   const getCounterColorDisplay = (target: 'fill') => {
     const key = batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
 
@@ -1504,6 +1508,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
           {showBatchImagePicker && batchImageButtonRef.current ? (
             <ImagePicker
               open={showBatchImagePicker}
+              previewAnchor={{ kind: 'batch' }}
               referenceRef={batchImageButtonRef}
               panelElement={panelElement}
               idleImage={
@@ -2148,6 +2153,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
         {showBatchImagePicker && batchImageButtonRef.current ? (
           <ImagePicker
             open={showBatchImagePicker}
+            previewAnchor={{ kind: 'batch' }}
             referenceRef={batchImageButtonRef}
             panelElement={panelElement}
             idleImage={

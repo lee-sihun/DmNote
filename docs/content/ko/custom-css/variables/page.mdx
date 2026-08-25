@@ -20,6 +20,10 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 | `--key-border-image`  | 저장된 보더 링의 이미지 교체        | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
 | `--key-padding`       | 키 내부 여백                        | `<length>` | `0px`, `3px`                         |
 | `--key-text-color`    | 키 텍스트 색상                      | `<color>`  | `#ffffff`                            |
+| `--key-text-image`    | 저장된 텍스트 페인트의 이미지 교체  | `<image>`  | `linear-gradient(0deg, #f0f, #0ff)`  |
+| `--key-text-position` | 텍스트 페인트 박스 위치             | `<position>` | `0% 0%`                            |
+| `--key-text-size`     | 텍스트 페인트 박스 크기             | `<bg-size>`  | `auto`, `100% 100%`                |
+| `--key-text-repeat`   | 텍스트 페인트 반복 방식             | `<repeat-style>` | `no-repeat`                    |
 | `--key-shadow`        | 대기 및 공통 폴백 그림자            | `<shadow>` | `0 4px 10px rgba(0,0,0,.28)`, `none` |
 | `--key-active-shadow` | 입력 상태 그림자                    | `<shadow>` | `0 3px 8px rgba(0,0,0,.32)`, `none`  |
 | `--key-offset-x`      | 활성 상태에서 X축 이동량            | `<length>` | `0px`, `2px`                         |
@@ -31,6 +35,11 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
   배경 그라데이션이 자동으로 사라지고, `--key-border`를 지정하면 저장된
   그라데이션 보더 링과 링 여백이 함께 사라집니다. 사용자 그라데이션은
   `--key-bg-image`나 표준 `background` 속성으로 지정할 수 있습니다.
+  `--key-text-color`(또는 라벨에 거는 일반 `color` 규칙)를 지정하면 저장된
+  텍스트 그라데이션이 사라집니다. 사용자 텍스트 그라데이션은 `--key-text-image`와
+  `--key-text-color: transparent`를 함께 지정합니다. 글리프 채움을 비워야
+  그라데이션이 보이므로, 저장된 그라데이션이 없는 키에서 `--key-text-image`만
+  지정하면 불투명한 글자 색에 가려집니다.
 </Callout>
 
 ### 사용 예시

@@ -71,11 +71,13 @@ fn default_preset_note_gradient_multipliers(value: &mut serde_json::Value) {
 }
 
 fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
-    const ELEMENT_FIELDS: [&str; 7] = [
+    const ELEMENT_FIELDS: [&str; 9] = [
         "backgroundGradient",
         "activeBackgroundGradient",
         "borderGradient",
         "activeBorderGradient",
+        "fontGradient",
+        "activeFontGradient",
         "noteBorderGradient",
         "noteGradient",
         "noteGlowGradient",
@@ -1936,6 +1938,8 @@ mod tests {
             ("statPositions", "activeBackgroundGradient", false),
             ("graphPositions", "borderGradient", false),
             ("knobPositions", "activeBorderGradient", false),
+            ("keyPositions", "fontGradient", false),
+            ("statPositions", "activeFontGradient", false),
             ("keyPositions", "noteBorderGradient", false),
             ("keyPositions", "fillIdleGradient", true),
             ("statPositions", "fillActiveGradient", true),

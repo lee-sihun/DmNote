@@ -8,6 +8,7 @@ import {
 import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 
 // 디자인 조절점 — 내부 폭 148px 기준 비율 ≈1.42:1
 const SATURATION_HEIGHT = 104;
@@ -98,6 +99,8 @@ export const usePointerSession = (
     blurCleanupRef.current = null;
     const target = targetRef.current;
     targetRef.current = null;
+    // 드래그 전역 커서 복원 - 포인터가 트랙 밖에 있어도 grabbing 유지 후 해제
+    endDragCursor(target?.ownerDocument ?? document);
     if (target?.hasPointerCapture(pointerId)) {
       target.releasePointerCapture(pointerId);
     }
@@ -129,6 +132,8 @@ export const usePointerSession = (
       ? getEditSessionTarget()
       : null;
     target.setPointerCapture(event.pointerId);
+    // 잡는 동안 전역 grabbing - 캡처 중에도 커서는 히트테스트 기준(크로뮴)
+    beginDragCursor('grabbing', target.ownerDocument);
     // 트랙이 분리 패널 자식 창에 있으면 그 창의 blur·프레임을 쓴다
     const ownerWindow = target.ownerDocument.defaultView ?? window;
     const onWindowBlur = () => finish();
@@ -193,8 +198,9 @@ export const usePointerSession = (
 const knobShadow = '0 0 4px rgba(0, 0, 0, 0.7)';
 
 // 색 표면은 무테 — 원색 트랙·체커·필드가 스스로 경계를 정의, 밝은 링은 검정 영역에서 도드라짐
+// 커서는 캔버스 아이템과 같은 정책 - 호버 무변화, 잡는 동안만 grabbing
 const trackClassName =
-  'relative w-full cursor-pointer touch-none select-none rounded-full ' +
+  'relative w-full cursor-default touch-none select-none rounded-full ' +
   'outline-none focus-visible:shadow-focus-ring';
 
 interface SaturationAreaProps extends ColorTrackProps {
@@ -262,7 +268,7 @@ export const SaturationArea = ({
         color.hsv.s,
       )}%, Brightness ${Math.round(color.hsv.v)}%`}
       onKeyDown={onKeyDown}
-      className="relative w-full cursor-pointer touch-none select-none rounded-lg outline-none focus-visible:shadow-focus-ring"
+      className="relative w-full cursor-default touch-none select-none rounded-lg outline-none focus-visible:shadow-focus-ring"
       style={{ height }}
     >
       {/* 라운딩은 클립이 아니라 9-slice 마스크 — 클립은 페인트 연산별 AA 중첩으로

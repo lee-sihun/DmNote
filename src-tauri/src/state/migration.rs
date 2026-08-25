@@ -115,6 +115,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                             value.get("keyPositions"),
                         );
                         needs_persist |= layout_repaired;
+                        needs_persist |= normalize_blank_font_colors(&mut data);
                         let (gradient_changed, gradient_pair_repaired) =
                             canonicalize_gradient_pairs(&mut data);
                         needs_persist |= gradient_changed;
@@ -860,6 +861,7 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     remove_legacy_panel_detach_setting(&mut data);
     normalize_custom_css_history(&mut data.custom_css_history);
     repair_editor_revision(&mut data);
+    normalize_blank_font_colors(&mut data);
 
     if data.keys.is_empty() {
         data.keys = default_keys().clone();
@@ -942,6 +944,37 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     let _ = data.custom_js.normalize();
 
     data
+}
+
+fn normalize_blank_font_colors(data: &mut AppStoreData) -> bool {
+    fn normalize_position(position: &mut KeyPosition) -> bool {
+        let mut changed = false;
+        for color in [&mut position.font_color, &mut position.active_font_color] {
+            if color
+                .as_deref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                *color = None;
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    let mut changed = false;
+    for position in data.key_positions.values_mut().flatten() {
+        changed |= normalize_position(position);
+    }
+    for stat in data.stat_positions.values_mut().flatten() {
+        changed |= normalize_position(&mut stat.position);
+    }
+    for graph in data.graph_positions.values_mut().flatten() {
+        changed |= normalize_position(&mut graph.position);
+    }
+    for knob in data.knob_positions.values_mut().flatten() {
+        changed |= normalize_position(&mut knob.position);
+    }
+    changed
 }
 
 fn remove_legacy_panel_detach_setting(data: &mut AppStoreData) -> bool {
@@ -2689,6 +2722,14 @@ mod tests {
                 { "color": "rgba(139, 92, 246, 1)", "pos": -0.2 }
             ]
         });
+        position["fontColor"] = serde_json::json!("stale-font");
+        position["fontGradient"] = serde_json::json!({
+            "angle": -270,
+            "stops": [
+                { "color": "#123456", "pos": 0 },
+                { "color": "#ABCDEF", "pos": 1 }
+            ]
+        });
         position["counter"]["fill"]["idle"] = serde_json::json!("#FFFFFF");
         position["counter"]["fillIdleGradient"] = serde_json::json!({
             "stops": [
@@ -2711,6 +2752,8 @@ mod tests {
             position.background_gradient.as_ref().unwrap().stops[0].pos,
             0.0
         );
+        assert_eq!(position.font_color.as_deref(), Some("#123456"));
+        assert_eq!(position.font_gradient.as_ref().unwrap().angle, 90.0);
         assert_eq!(position.counter.fill.idle, "rgba(255,255,255,1)");
 
         std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
@@ -2718,6 +2761,47 @@ mod tests {
         assert!(!reloaded.needs_persist);
         assert!(!reloaded.repaired);
         assert_eq!(reloaded.data, loaded.data);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn blank_font_color_normalization_requests_one_canonical_persist() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-blank-font-color-reload-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+        let seeded = load_store_from_path(&path).unwrap();
+        std::fs::write(&path, serde_json::to_vec_pretty(&seeded.data).unwrap()).unwrap();
+        let canonical = load_store_from_path(&path).unwrap();
+        assert!(!canonical.needs_persist);
+        assert!(!canonical.repaired);
+
+        let mut raw = serde_json::to_value(&canonical.data).unwrap();
+        raw["keyPositions"]["4key"][0]["fontColor"] = serde_json::json!(" \t ");
+        raw["keyPositions"]["4key"][0]["activeFontColor"] = serde_json::json!("");
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let normalized = load_store_from_path(&path).unwrap();
+        assert!(normalized.needs_persist);
+        assert!(!normalized.repaired);
+        assert!(normalized.data.key_positions["4key"][0]
+            .font_color
+            .is_none());
+        assert!(normalized.data.key_positions["4key"][0]
+            .active_font_color
+            .is_none());
+
+        std::fs::write(&path, serde_json::to_vec_pretty(&normalized.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(reloaded.data, normalized.data);
         let _ = std::fs::remove_file(path);
     }
 
@@ -2883,6 +2967,114 @@ mod tests {
             .is_none());
         assert!(key_counter.fill_idle_gradient.is_none());
         assert!(stat_counter.fill_active_gradient.is_none());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn invalid_font_gradient_fields_recover_in_place_on_every_position_collection() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-font-gradient-field-recovery-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        let mut template = data.key_positions["4key"][0].clone();
+        template.font_color = Some("font-sibling".to_string());
+        template.active_font_color = Some("active-font-sibling".to_string());
+        let key_id = uuid::Uuid::new_v4().to_string();
+        let key = &mut data.key_positions.get_mut("4key").unwrap()[0];
+        key.id = key_id.clone();
+        key.font_color = Some("font-sibling".to_string());
+
+        let stat_id = uuid::Uuid::new_v4().to_string();
+        let graph_id = uuid::Uuid::new_v4().to_string();
+        let knob_id = uuid::Uuid::new_v4().to_string();
+        data.stat_positions.insert(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: KeyPosition {
+                    id: stat_id.clone(),
+                    ..template.clone()
+                },
+            }],
+        );
+        data.graph_positions.insert(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 1000,
+                graph_color: "graph-sibling".to_string(),
+                show_avg_line: true,
+                position: KeyPosition {
+                    id: graph_id.clone(),
+                    ..template.clone()
+                },
+            }],
+        );
+        data.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis-sibling".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: KeyPosition {
+                    id: knob_id.clone(),
+                    ..template
+                },
+            }],
+        );
+
+        let mut raw = serde_json::to_value(&data).unwrap();
+        let damaged = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#112233", "pos": 0 }]
+        });
+        raw["keyPositions"]["4key"][0]["fontGradient"] = damaged.clone();
+        raw["statPositions"]["4key"][0]["activeFontGradient"] = damaged.clone();
+        raw["graphPositions"]["4key"][0]["fontGradient"] = damaged.clone();
+        raw["knobPositions"]["4key"][0]["activeFontGradient"] = damaged;
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        assert_eq!(
+            loaded.data.key_positions["4key"].len(),
+            data.key_positions["4key"].len()
+        );
+        assert_eq!(loaded.data.stat_positions["4key"].len(), 1);
+        assert_eq!(loaded.data.graph_positions["4key"].len(), 1);
+        assert_eq!(loaded.data.knob_positions["4key"].len(), 1);
+        assert_eq!(loaded.data.key_positions["4key"][0].id, key_id);
+        assert_eq!(loaded.data.stat_positions["4key"][0].position.id, stat_id);
+        assert_eq!(loaded.data.graph_positions["4key"][0].position.id, graph_id);
+        assert_eq!(loaded.data.knob_positions["4key"][0].position.id, knob_id);
+        assert!(loaded.data.key_positions["4key"][0].font_gradient.is_none());
+        assert!(loaded.data.stat_positions["4key"][0]
+            .position
+            .active_font_gradient
+            .is_none());
+        assert!(loaded.data.graph_positions["4key"][0]
+            .position
+            .font_gradient
+            .is_none());
+        assert!(loaded.data.knob_positions["4key"][0]
+            .position
+            .active_font_gradient
+            .is_none());
+        for position in [
+            &loaded.data.key_positions["4key"][0],
+            &loaded.data.stat_positions["4key"][0].position,
+            &loaded.data.graph_positions["4key"][0].position,
+            &loaded.data.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.font_color.as_deref(), Some("font-sibling"));
+        }
         let _ = std::fs::remove_file(path);
     }
 
@@ -3155,6 +3347,60 @@ mod tests {
                 KeySlot::default(),
             ]
         );
+    }
+
+    #[test]
+    fn normalize_state_drops_blank_font_colors_on_every_position_collection() {
+        let blank_position = |id: &str| KeyPosition {
+            id: id.to_string(),
+            font_color: Some(" \t ".to_string()),
+            active_font_color: Some(String::new()),
+            ..KeyPosition::default()
+        };
+        let data = normalize_state(AppStoreData {
+            key_positions: crate::models::KeyPositions::from([(
+                "custom".to_string(),
+                vec![blank_position("key-id")],
+            )]),
+            stat_positions: crate::models::StatPositions::from([(
+                "custom".to_string(),
+                vec![StatPosition {
+                    stat_type: StatType::Kps,
+                    position: blank_position("stat-id"),
+                }],
+            )]),
+            graph_positions: crate::models::GraphPositions::from([(
+                "custom".to_string(),
+                vec![GraphPosition {
+                    stat_type: GraphStatType::Kps,
+                    graph_type: GraphType::Line,
+                    graph_speed: 1000,
+                    graph_color: "graph".to_string(),
+                    show_avg_line: false,
+                    position: blank_position("graph-id"),
+                }],
+            )]),
+            knob_positions: crate::models::KnobPositions::from([(
+                "custom".to_string(),
+                vec![KnobPosition {
+                    axis_id: "axis".to_string(),
+                    sensitivity: 1.0,
+                    reverse: false,
+                    position: blank_position("knob-id"),
+                }],
+            )]),
+            ..AppStoreData::default()
+        });
+
+        for position in [
+            &data.key_positions["custom"][0],
+            &data.stat_positions["custom"][0].position,
+            &data.graph_positions["custom"][0].position,
+            &data.knob_positions["custom"][0].position,
+        ] {
+            assert!(position.font_color.is_none());
+            assert!(position.active_font_color.is_none());
+        }
     }
 
     #[test]

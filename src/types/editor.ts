@@ -29,7 +29,6 @@ import {
   type CounterFillDescriptorV1,
   type CounterFillPropertyPatchV1,
 } from '@src/types/key/counterFill';
-import { type FontColorPropertyPatchV1 } from '@src/types/key/fontColor';
 import {
   canonicalizePositionGradients,
   type PaintDescriptorV1,
@@ -238,8 +237,8 @@ interface EditorElementPropertyValuesV1 {
   fontFamily: string;
   displayText: string;
   className: string;
-  fontColor: string;
-  activeFontColor: string;
+  fontPaint: PaintDescriptorV1;
+  activeFontPaint: PaintDescriptorV1;
   borderWidth: number;
   borderRadius: number;
   fontSize: number;
@@ -295,8 +294,8 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'fontFamily',
   'displayText',
   'className',
-  'fontColor',
-  'activeFontColor',
+  'fontPaint',
+  'activeFontPaint',
   'shadow',
   'activeShadow',
   'shadowEnabled',
@@ -436,8 +435,6 @@ export type EditorTextPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'displayText' | 'className'
 >;
 
-export type EditorFontColorPropertyPatchV1 = FontColorPropertyPatchV1;
-
 export type EditorNumericStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'borderWidth' | 'borderRadius' | 'fontSize'
 >;
@@ -459,6 +456,8 @@ export type EditorPaintPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'activeBackgroundPaint'
   | 'borderPaint'
   | 'activeBorderPaint'
+  | 'fontPaint'
+  | 'activeFontPaint'
 >;
 
 export type EditorShadowPropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -847,6 +846,8 @@ export const isEditorPaintPropertyPatchV1 = (
     'activeBackgroundPaint',
     'borderPaint',
     'activeBorderPaint',
+    'fontPaint',
+    'activeFontPaint',
   ].includes(value.property as string) &&
   isEditorPaintDescriptorV1(value.value);
 
@@ -1512,10 +1513,8 @@ const isEditorElementPropertyValueValid = (
     case 'fontFamily':
     case 'displayText':
     case 'className':
-    case 'fontColor':
     case 'inactiveImage':
       return typeof value === 'string';
-    case 'activeFontColor':
     case 'activeImage':
       return keyOrKnob && typeof value === 'string';
     case 'shadow':
@@ -1530,6 +1529,14 @@ const isEditorElementPropertyValueValid = (
     case 'activeBackgroundPaint':
     case 'activeBorderPaint':
       return keyOrKnob && isEditorPaintDescriptorV1(value);
+    // 라벨 렌더러가 있는 요소만 - idle은 키·스탯, active는 키 (스탯은 상태 없음)
+    case 'fontPaint':
+      return (
+        (elementType === 'key' || elementType === 'stat') &&
+        isEditorPaintDescriptorV1(value)
+      );
+    case 'activeFontPaint':
+      return elementType === 'key' && isEditorPaintDescriptorV1(value);
     case 'borderWidth':
       return (
         typeof value === 'number' &&

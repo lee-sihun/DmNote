@@ -110,7 +110,6 @@ const patches = vi.hoisted(() => ({
   patchCounterTypographyViaAuthority: vi.fn(async () => true),
   patchCounterFillByTargets: vi.fn(async () => true),
   patchCounterFillViaAuthority: vi.fn(async () => true),
-  patchFontColorByTargets: vi.fn(async () => true),
   patchFontColorViaAuthority: vi.fn(async () => true),
   patchPaintByTargets: vi.fn(async () => true),
   patchPaintViaAuthority: vi.fn(async () => true),
@@ -149,7 +148,6 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
   patchCounterFillByTargets: patches.patchCounterFillByTargets,
-  patchFontColorByTargets: patches.patchFontColorByTargets,
   patchPaintByTargets: patches.patchPaintByTargets,
   patchShadowByTargets: patches.patchShadowByTargets,
   patchNotePaintByIds: patches.patchNotePaintByIds,
@@ -1204,21 +1202,24 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(gestures.preview).not.toHaveBeenCalled();
       act(() => captured.color?.onColorChangeComplete(' final raw '));
 
+      // 라벨 렌더러가 있는 타깃만 - idle은 키·스탯, active는 키
       const targets = [
         { elementType: 'key' as const, id: idsB[0] },
         ...(state === 'idle'
-          ? [
-              { elementType: 'stat' as const, id: idsB[1] },
-              { elementType: 'graph' as const, id: idsB[2] },
-            ]
+          ? [{ elementType: 'stat' as const, id: idsB[1] }]
           : []),
-        { elementType: 'knob' as const, id: idsB[3] },
       ];
       const patch =
         state === 'active'
-          ? { property: 'activeFontColor', value: ' final raw ' }
-          : { property: 'fontColor', value: ' final raw ' };
-      const writer = patches.patchFontColorByTargets;
+          ? {
+              property: 'activeFontPaint',
+              value: { color: ' final raw ', gradient: null },
+            }
+          : {
+              property: 'fontPaint',
+              value: { color: ' final raw ', gradient: null },
+            };
+      const writer = patches.patchPaintByTargets;
       const gestureId =
         state === 'idle' ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' : undefined;
       expect(writer).toHaveBeenCalledWith(

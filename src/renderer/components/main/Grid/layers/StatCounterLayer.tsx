@@ -6,6 +6,7 @@ import {
 import { toCssRgba } from '@utils/color/colorUtils';
 import { gradientToCss } from '@src/types/color';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
+import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 import { getCounterTypographyStyle } from '@utils/core/counterStyles';
@@ -58,7 +59,12 @@ const StatCounter = React.memo(function StatCounter({
     position.id,
     isInBatchSelection,
   );
-  const previewActive = previewSession?.stateMode === 'active';
+  // 상태 프리뷰는 전용 스토어가 유일한 원천 (세션은 spec 페인트 전용)
+  const previewActive = useEditStatePreviewActive(
+    'stat',
+    position.id,
+    isInBatchSelection,
+  );
   const previewFillSpec =
     previewSession?.surface === 'counterFill' ? previewSession.spec : null;
 
@@ -86,7 +92,14 @@ const StatCounter = React.memo(function StatCounter({
       previewActive ? 'active' : 'inactive'
     }`,
   );
-  useCounterAxisAnchor(previewSession, counterSpanRef, count);
+  useCounterAxisAnchor(
+    previewSession,
+    counterSpanRef,
+    count,
+    undefined,
+    'counterFill',
+    { x: dx, y: dy },
+  );
 
   if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
     return null;

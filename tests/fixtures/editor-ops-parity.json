@@ -1092,16 +1092,70 @@
       }
     },
     {
-      "name": "patch-font-color-fallback",
-      "comment": "fontColor 변경 시 active fallback 물질화. key는 직전 idle 값을 activeFontColor로 보존, stat은 보존 없음",
+      "name": "patch-font-paint-fallback",
+      "comment": "fontPaint 변경 시 색·그라데이션 active fallback 물질화. active 쌍의 어느 한 값이 있으면 보존하고 stat은 active를 만들지 않음",
       "initialDocument": {
         "schemaVersion": 1,
-        "keys": { "4key": ["A"] },
+        "keys": { "4key": ["A", "B", "C", "D"] },
         "keyPositions": {
           "4key": [
             {
               "id": "11111111-1111-4111-8111-111111111111",
               "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontGradient": {
+                "angle": 30,
+                "stops": [
+                  { "color": "#111111", "pos": 0 },
+                  { "color": "#222222", "pos": 1 }
+                ]
+              }
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#333333",
+              "fontGradient": {
+                "angle": 45,
+                "stops": [
+                  { "color": "#333333", "pos": 0 },
+                  { "color": "#444444", "pos": 1 }
+                ]
+              },
+              "activeFontColor": "#AAAAAA"
+            },
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "dx": 160,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#555555",
+              "activeFontGradient": {
+                "angle": 60,
+                "stops": [
+                  { "color": "#BBBBBB", "pos": 0 },
+                  { "color": "#CCCCCC", "pos": 1 }
+                ]
+              }
+            },
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "dx": 240,
               "dy": 0,
               "width": 60,
               "height": 60,
@@ -1137,18 +1191,60 @@
           "kind": "patchElement",
           "elementType": "key",
           "id": "11111111-1111-4111-8111-111111111111",
-          "patch": { "property": "fontColor", "value": "#EEEEEE" }
+          "patch": {
+            "property": "fontPaint",
+            "value": { "color": "#010101", "gradient": null }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "patch": {
+            "property": "fontPaint",
+            "value": { "color": "#020202", "gradient": null }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "33333333-3333-4333-8333-333333333333",
+          "patch": {
+            "property": "fontPaint",
+            "value": { "color": "#030303", "gradient": null }
+          }
+        },
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "55555555-5555-4555-8555-555555555555",
+          "patch": {
+            "property": "fontPaint",
+            "value": { "color": "#DDDDDD", "gradient": null }
+          }
         },
         {
           "kind": "patchElement",
           "elementType": "stat",
           "id": "44444444-4444-4444-8444-444444444444",
-          "patch": { "property": "fontColor", "value": "#123123" }
+          "patch": {
+            "property": "fontPaint",
+            "value": {
+              "color": "#123123",
+              "gradient": {
+                "angle": 90,
+                "stops": [
+                  { "color": "#123123", "pos": 0 },
+                  { "color": "#456456", "pos": 1 }
+                ]
+              }
+            }
+          }
         }
       ],
       "expectedDocument": {
         "schemaVersion": 1,
-        "keys": { "4key": ["A"] },
+        "keys": { "4key": ["A", "B", "C", "D"] },
         "keyPositions": {
           "4key": [
             {
@@ -1160,7 +1256,55 @@
               "count": 0,
               "noteColor": "#FFFFFF",
               "noteOpacity": 90,
-              "fontColor": "#EEEEEE",
+              "fontColor": "#010101",
+              "activeFontGradient": {
+                "angle": 30,
+                "stops": [
+                  { "color": "#111111", "pos": 0 },
+                  { "color": "#222222", "pos": 1 }
+                ]
+              }
+            },
+            {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "dx": 80,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#020202",
+              "activeFontColor": "#AAAAAA"
+            },
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "dx": 160,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#030303",
+              "activeFontGradient": {
+                "angle": 60,
+                "stops": [
+                  { "color": "#BBBBBB", "pos": 0 },
+                  { "color": "#CCCCCC", "pos": 1 }
+                ]
+              }
+            },
+            {
+              "id": "55555555-5555-4555-8555-555555555555",
+              "dx": 240,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "fontColor": "#DDDDDD",
               "activeFontColor": "#DDDDDD"
             }
           ]
@@ -1177,7 +1321,14 @@
               "count": 0,
               "noteColor": "#FFFFFF",
               "noteOpacity": 90,
-              "fontColor": "#123123"
+              "fontColor": "#123123",
+              "fontGradient": {
+                "angle": 90,
+                "stops": [
+                  { "color": "#123123", "pos": 0 },
+                  { "color": "#456456", "pos": 1 }
+                ]
+              }
             }
           ]
         },

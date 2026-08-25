@@ -13958,73 +13958,50 @@ mod tests {
     }
 
     #[test]
-    fn font_color_batch_replays_fallbacks_and_round_trips_one_history_entry() {
-        let dir = test_directory("editor-font-color-history-test");
+    fn font_paint_batch_replays_fallbacks_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-font-paint-history-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let initial = store.editor_get().document;
         let key_idle_id = initial.key_positions["4key"][0].id.clone();
         let key_active_id = initial.key_positions["4key"][1].id.clone();
         let stat_id = uuid::Uuid::new_v4().to_string();
-        let graph_id = uuid::Uuid::new_v4().to_string();
-        let knob_id = uuid::Uuid::new_v4().to_string();
+        let active_descriptor = paint_descriptor(
+            "active-first",
+            Some((25.0, &[("active-first", 0.0), ("active-last", 1.0)])),
+        );
+        let stat_descriptor = paint_descriptor(
+            "stat-first",
+            Some((70.0, &[("stat-first", 0.0), ("stat-last", 1.0)])),
+        );
         let setup = legacy_editor_commit(
             &store,
-            &[
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-            ],
+            &[EditorField::KeyPositions, EditorField::StatPositions],
             |data| {
                 let template = data.key_positions["4key"][0].clone();
                 let key_idle = &mut data.key_positions.get_mut("4key").unwrap()[0];
                 key_idle.font_color = Some("same-idle".to_string());
+                key_idle.font_gradient = None;
                 key_idle.active_font_color = None;
+                key_idle.active_font_gradient = None;
                 key_idle.background_color = Some("key-background-sibling".to_string());
                 let key_active = &mut data.key_positions.get_mut("4key").unwrap()[1];
                 key_active.font_color = Some("key-idle-sibling".to_string());
+                key_active.font_gradient = None;
                 key_active.active_font_color = None;
+                key_active.active_font_gradient = None;
 
                 let mut stat_position = template.clone();
                 stat_position.id = stat_id.clone();
                 stat_position.font_color = None;
+                stat_position.font_gradient = None;
                 stat_position.active_font_color = Some("stat-active-sibling".to_string());
+                stat_position.active_font_gradient = None;
                 data.stat_positions.insert(
                     "4key".to_string(),
                     vec![StatPosition {
                         stat_type: StatType::Kps,
                         position: stat_position,
-                    }],
-                );
-
-                let mut graph_position = template.clone();
-                graph_position.id = graph_id.clone();
-                graph_position.font_color = Some("graph-old".to_string());
-                graph_position.active_font_color = Some("graph-active-sibling".to_string());
-                data.graph_positions.insert(
-                    "4key".to_string(),
-                    vec![GraphPosition {
-                        stat_type: GraphStatType::Kps,
-                        graph_type: GraphType::Line,
-                        graph_speed: 1000,
-                        graph_color: "graph-sibling".to_string(),
-                        show_avg_line: true,
-                        position: graph_position,
-                    }],
-                );
-
-                let mut knob_position = template;
-                knob_position.id = knob_id.clone();
-                knob_position.font_color = Some(" knob idle ".to_string());
-                knob_position.active_font_color = Some("   ".to_string());
-                data.knob_positions.insert(
-                    "4key".to_string(),
-                    vec![KnobPosition {
-                        axis_id: "axis-sibling".to_string(),
-                        sensitivity: 1.0,
-                        reverse: false,
-                        position: knob_position,
                     }],
                 );
             },
@@ -14034,32 +14011,22 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_idle_id,
-                EditorElementPropertyPatchV1::FontColor("same-idle".to_string()),
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("same-idle", None)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_active_id,
-                EditorElementPropertyPatchV1::ActiveFontColor(String::new()),
+                EditorElementPropertyPatchV1::ActiveFontPaint(active_descriptor.clone()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::FontColor(String::new()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Graph,
-                &graph_id,
-                EditorElementPropertyPatchV1::FontColor(" graph new ".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Knob,
-                &knob_id,
-                EditorElementPropertyPatchV1::FontColor("knob-new".to_string()),
+                EditorElementPropertyPatchV1::FontPaint(stat_descriptor.clone()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ActiveFontColor("missing".to_string()),
+                EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor("missing", None)),
             ),
         ];
         let history_before = store.history_status().history_revision;
@@ -14069,12 +14036,7 @@ mod tests {
         let changed = store.commit_editor_document(request.clone()).unwrap();
         assert_eq!(
             changed.result.changed_fields,
-            [
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-            ]
+            [EditorField::KeyPositions, EditorField::StatPositions]
         );
         assert_eq!(
             changed
@@ -14086,8 +14048,6 @@ mod tests {
                 .map(|result| result.status)
                 .collect::<Vec<_>>(),
             [
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
@@ -14110,42 +14070,28 @@ mod tests {
             changed.document.key_positions["4key"][1]
                 .active_font_color
                 .as_deref(),
-            Some("")
+            Some("active-first")
         );
+        assert!(changed.document.key_positions["4key"][1]
+            .active_font_gradient
+            .is_some());
         assert_eq!(
             changed.document.stat_positions["4key"][0]
                 .position
                 .font_color
                 .as_deref(),
-            Some("")
+            Some("stat-first")
         );
+        assert!(changed.document.stat_positions["4key"][0]
+            .position
+            .font_gradient
+            .is_some());
         assert_eq!(
             changed.document.stat_positions["4key"][0]
                 .position
                 .active_font_color
                 .as_deref(),
             Some("stat-active-sibling")
-        );
-        assert_eq!(
-            changed.document.graph_positions["4key"][0]
-                .position
-                .font_color
-                .as_deref(),
-            Some(" graph new ")
-        );
-        assert_eq!(
-            changed.document.knob_positions["4key"][0]
-                .position
-                .font_color
-                .as_deref(),
-            Some("knob-new")
-        );
-        assert_eq!(
-            changed.document.knob_positions["4key"][0]
-                .position
-                .active_font_color
-                .as_deref(),
-            Some(" knob idle ")
         );
         assert_eq!(store.history_status().history_revision, history_before + 1);
 
@@ -14158,7 +14104,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &key_idle_id,
-            EditorElementPropertyPatchV1::FontColor("different".to_string()),
+            EditorElementPropertyPatchV1::FontPaint(paint_descriptor("different", None)),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -14169,7 +14115,7 @@ mod tests {
             .commit_editor_document(editor_ops_request(
                 changed.result.revision,
                 uuid::Uuid::new_v4().to_string(),
-                ops[..5].to_vec(),
+                ops[..3].to_vec(),
             ))
             .unwrap();
         assert!(no_change.result.changed_fields.is_empty());
@@ -14191,24 +14137,17 @@ mod tests {
         let undone = store.editor_get().document;
         assert!(undone.key_positions["4key"][0].active_font_color.is_none());
         assert!(undone.key_positions["4key"][1].active_font_color.is_none());
+        assert!(undone.key_positions["4key"][1]
+            .active_font_gradient
+            .is_none());
         assert!(undone.stat_positions["4key"][0]
             .position
             .font_color
             .is_none());
-        assert_eq!(
-            undone.graph_positions["4key"][0]
-                .position
-                .font_color
-                .as_deref(),
-            Some("graph-old")
-        );
-        assert_eq!(
-            undone.knob_positions["4key"][0]
-                .position
-                .active_font_color
-                .as_deref(),
-            Some("   ")
-        );
+        assert!(undone.stat_positions["4key"][0]
+            .position
+            .font_gradient
+            .is_none());
 
         let redo_id = uuid::Uuid::new_v4().to_string();
         let barrier = gate.close(&redo_id).unwrap();
@@ -14228,15 +14167,15 @@ mod tests {
         );
         assert_eq!(
             redone.key_positions["4key"][1].active_font_color.as_deref(),
-            Some("")
+            Some("active-first")
         );
-        assert_eq!(
-            redone.knob_positions["4key"][0]
-                .position
-                .active_font_color
-                .as_deref(),
-            Some(" knob idle ")
-        );
+        assert!(redone.key_positions["4key"][1]
+            .active_font_gradient
+            .is_some());
+        assert!(redone.stat_positions["4key"][0]
+            .position
+            .font_gradient
+            .is_some());
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

@@ -6,10 +6,13 @@
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
-import { projectFontColorPatch } from '@src/types/key/fontColor';
+import {
+  inheritedPaintMaterialization,
+  paintPropertyFields,
+} from '@src/types/color';
 import type {
   EditorElementTypeV1,
-  EditorFontColorPropertyPatchV1,
+  EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
 } from '@src/types/editor';
 import type { KeyPosition } from '@src/types/key/keys';
@@ -84,10 +87,62 @@ export const previewBatchStyleProperty = (
   }
 };
 
-export const previewBatchFontColor = (
+// commit의 eager intent(paintPropertyIntents)와 같은 투영 - 물질화 포함
+const projectPreviewPaintPatch = (
+  current: KeyPosition,
+  elementType: PreviewTargetType,
+  patch: EditorPaintPropertyPatchV1,
+): Record<string, unknown> => {
+  const {
+    active,
+    surface,
+    colorField,
+    gradientField,
+    activeColorField,
+    activeGradientField,
+  } = paintPropertyFields(patch.property);
+  const record = current as unknown as Record<string, unknown>;
+  const next: Record<string, unknown> = {
+    [colorField]: patch.value.color,
+    [gradientField]: patch.value.gradient ?? undefined,
+  };
+  const materializes =
+    surface === 'font'
+      ? elementType === 'key'
+      : elementType === 'key' || elementType === 'knob';
+  if (!active && materializes) {
+    const inherited = inheritedPaintMaterialization(
+      {
+        color:
+          typeof record[colorField] === 'string'
+            ? (record[colorField] as string)
+            : undefined,
+        gradient: record[gradientField] as never,
+      },
+      {
+        color:
+          typeof record[activeColorField] === 'string'
+            ? (record[activeColorField] as string)
+            : undefined,
+        gradient: record[activeGradientField] as never,
+      },
+    );
+    if (inherited) {
+      if (inherited.color != null) {
+        next[activeColorField] = inherited.color;
+      }
+      if (inherited.gradient) {
+        next[activeGradientField] = inherited.gradient;
+      }
+    }
+  }
+  return next;
+};
+
+export const previewBatchPaint = (
   targets: readonly PreviewTarget[],
   selectedKeyType: string,
-  patch: EditorFontColorPropertyPatchV1,
+  patch: EditorPaintPropertyPatchV1,
 ): void => {
   const document = captureEditorDocument();
   const grouped = new Map<
@@ -110,10 +165,9 @@ export const previewBatchFontColor = (
       | undefined;
     if (!current) return;
     const entries = grouped.get(target.elementType) ?? [];
-    // commit의 eager intent와 동일하게 active fallback 보존을 포함해 투영
     entries.push({
       id: target.id,
-      patch: projectFontColorPatch(current, target.elementType, patch),
+      patch: projectPreviewPaintPatch(current, target.elementType, patch),
     });
     grouped.set(target.elementType, entries);
   }

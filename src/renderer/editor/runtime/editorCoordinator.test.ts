@@ -3807,7 +3807,7 @@ describe('commitSemanticOpsInternal', () => {
   });
 
   it.each(['stale', ''])(
-    'idle background paint ack는 gradient 대표색으로 active fallback을 materialize한다 (%j)',
+    'idle background paint ack는 idle 쌍을 있는 그대로 active fallback으로 materialize한다 (%j)',
     async (idleColor) => {
       const id = '00000000-0000-4000-8000-0000000000a6';
       const gradient = {
@@ -3844,7 +3844,8 @@ describe('commitSemanticOpsInternal', () => {
       expect(applied.document.keyPositions['4key'][0]).toMatchObject({
         backgroundColor: '#next',
         backgroundGradient: undefined,
-        activeBackgroundColor: '#first',
+        // 백엔드 preserve와 동일 - 대표색 합성 없이 idle 색을 그대로 복제
+        activeBackgroundColor: idleColor,
         activeBackgroundGradient: gradient,
         borderColor: '#border-sibling',
       });
@@ -4779,7 +4780,10 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { property: 'fontColor', value: '  idle raw  ' },
+        patch: {
+          property: 'fontPaint',
+          value: { color: '  idle raw  ', gradient: null },
+        },
       },
     ]);
 
@@ -4818,7 +4822,10 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id,
-        patch: { property: 'fontColor', value: 'new-idle' },
+        patch: {
+          property: 'fontPaint',
+          value: { color: 'new-idle', gradient: null },
+        },
       },
     ]);
 

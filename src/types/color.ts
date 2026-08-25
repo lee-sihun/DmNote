@@ -53,7 +53,13 @@ export const gradientSpecSchema = z
   .transform(toCanonicalGradient);
 
 export function gradientToCss(spec: GradientSpec): string {
+  // 드래그 프리뷰 spec은 선택 안정성을 위해 배열을 정렬하지 않는다.
+  // CSS는 역순 스톱을 클램프해 경계가 날카로워지므로, 렌더 시점에만
+  // canonical과 같은 규칙(pos 클램프 + 안정 정렬)으로 정렬해 커밋과
+  // 드래그 중 화면이 갈라지지 않게 한다
   const stops = spec.stops
+    .map((s) => ({ color: s.color, pos: Math.min(1, Math.max(0, s.pos)) }))
+    .sort((a, b) => a.pos - b.pos)
     .map((s) => `${s.color} ${+(s.pos * 100).toFixed(2)}%`)
     .join(', ');
   return `linear-gradient(${spec.angle}deg, ${stops})`;
@@ -277,6 +283,8 @@ export const GRADIENT_SIBLING: Record<string, string> = {
   activeBackgroundColor: 'activeBackgroundGradient',
   borderColor: 'borderGradient',
   activeBorderColor: 'activeBorderGradient',
+  fontColor: 'fontGradient',
+  activeFontColor: 'activeFontGradient',
 };
 
 const KEY_PAIR_FIELDS = Object.entries(GRADIENT_SIBLING);
@@ -543,55 +551,70 @@ export type PaintPropertyNameV1 =
   | 'backgroundPaint'
   | 'activeBackgroundPaint'
   | 'borderPaint'
-  | 'activeBorderPaint';
+  | 'activeBorderPaint'
+  | 'fontPaint'
+  | 'activeFontPaint';
+
+export type PaintSurfaceV1 = 'background' | 'border' | 'font';
+
+const PAINT_PROPERTY_MAP = {
+  backgroundPaint: { active: false, surface: 'background' },
+  activeBackgroundPaint: { active: true, surface: 'background' },
+  borderPaint: { active: false, surface: 'border' },
+  activeBorderPaint: { active: true, surface: 'border' },
+  fontPaint: { active: false, surface: 'font' },
+  activeFontPaint: { active: true, surface: 'font' },
+} as const satisfies Record<
+  PaintPropertyNameV1,
+  { active: boolean; surface: PaintSurfaceV1 }
+>;
+
+const PAINT_SURFACE_FIELDS = {
+  background: {
+    color: 'backgroundColor',
+    gradient: 'backgroundGradient',
+    activeColor: 'activeBackgroundColor',
+    activeGradient: 'activeBackgroundGradient',
+  },
+  border: {
+    color: 'borderColor',
+    gradient: 'borderGradient',
+    activeColor: 'activeBorderColor',
+    activeGradient: 'activeBorderGradient',
+  },
+  font: {
+    color: 'fontColor',
+    gradient: 'fontGradient',
+    activeColor: 'activeFontColor',
+    activeGradient: 'activeFontGradient',
+  },
+} as const;
 
 export function paintPropertyFields(field: PaintPropertyNameV1) {
-  const active =
-    field === 'activeBackgroundPaint' || field === 'activeBorderPaint';
-  const background =
-    field === 'backgroundPaint' || field === 'activeBackgroundPaint';
+  const { active, surface } = PAINT_PROPERTY_MAP[field];
+  const fields = PAINT_SURFACE_FIELDS[surface];
   return {
     active,
-    background,
-    colorField: active
-      ? background
-        ? 'activeBackgroundColor'
-        : 'activeBorderColor'
-      : background
-      ? 'backgroundColor'
-      : 'borderColor',
-    gradientField: active
-      ? background
-        ? 'activeBackgroundGradient'
-        : 'activeBorderGradient'
-      : background
-      ? 'backgroundGradient'
-      : 'borderGradient',
-    activeColorField: background
-      ? 'activeBackgroundColor'
-      : 'activeBorderColor',
-    activeGradientField: background
-      ? 'activeBackgroundGradient'
-      : 'activeBorderGradient',
+    surface,
+    colorField: active ? fields.activeColor : fields.color,
+    gradientField: active ? fields.activeGradient : fields.gradient,
+    activeColorField: fields.activeColor,
+    activeGradientField: fields.activeGradient,
   } as const;
 }
 
 export function inheritedPaintMaterialization(
   idlePair: ColorPair,
   activePair: ColorPair,
-): PaintDescriptorV1 | null {
+): { color: string | null; gradient: GradientSpec | null } | null {
   if (hasStoredPairValue(activePair)) return null;
-  const gradient = idlePair.gradient ?? null;
-  if (gradient) {
-    return {
-      color: gradient.stops[0]?.color ?? '#ffffff',
-      gradient: structuredClone(gradient),
-    };
-  }
-  if (typeof idlePair.color === 'string' && idlePair.color.trim().length > 0) {
-    return { color: idlePair.color, gradient: null };
-  }
-  return null;
+  if (!hasStoredPairValue(idlePair)) return null;
+  // 백엔드 preserve와 동일 - idle 쌍을 있는 그대로 복제 (색 합성 없음,
+  // 빈 문자열도 저장돼 있으면 그대로 복제)
+  return {
+    color: typeof idlePair.color === 'string' ? idlePair.color : null,
+    gradient: idlePair.gradient ? structuredClone(idlePair.gradient) : null,
+  };
 }
 
 const hasStoredPairValue = (pair: ColorPair): boolean =>
