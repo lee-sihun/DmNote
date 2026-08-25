@@ -8,9 +8,10 @@ import {
 export const FONT_WEIGHT_MIN = 100;
 export const FONT_WEIGHT_MAX = 900;
 export const FONT_WEIGHT_STEP = 100;
+export const FONT_WEIGHT_REGULAR = 400;
 export const FONT_BOLD_DELTA = 300;
 
-const FALLBACK_FONT_WEIGHTS = [400] as const;
+const FALLBACK_FONT_WEIGHTS = [FONT_WEIGHT_REGULAR] as const;
 
 const clampFontWeight = (weight: number): number =>
   Math.min(FONT_WEIGHT_MAX, Math.max(FONT_WEIGHT_MIN, Math.round(weight)));
@@ -18,7 +19,7 @@ const clampFontWeight = (weight: number): number =>
 export const resolveEffectiveFontWeight = (
   baseWeight: number,
   bold: boolean,
-): number => clampFontWeight(baseWeight + (bold ? FONT_BOLD_DELTA : 0));
+): number => Math.round(baseWeight) + (bold ? FONT_BOLD_DELTA : 0);
 
 export const expandFontWeightRanges = (
   ranges: readonly FontWeightRange[],
@@ -115,10 +116,9 @@ export const findNearestFontWeight = (
 
 export const resolveSupportedFontWeight = (
   fontFamily: string | null | undefined,
-  currentWeight: number,
   fonts: readonly CustomFont[],
 ): number =>
   findNearestFontWeight(
-    currentWeight,
+    FONT_WEIGHT_REGULAR,
     getSupportedFontWeights(fontFamily, fonts),
   );

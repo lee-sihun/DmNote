@@ -407,14 +407,13 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
               if (fontFamily !== null) {
                 const nextWeight = resolveSupportedFontWeight(
                   fontFamily,
-                  counterWeight,
                   useFontStore.getState().getAllFonts(),
                 );
                 onCounterTypographyCommit?.({
                   property: 'counterFontFamily',
                   value: fontFamily,
                 });
-                if (nextWeight !== counterWeight) {
+                if (counterWeightMixed || nextWeight !== counterWeight) {
                   onCounterTypographyCommit?.({
                     property: 'counterFontWeight',
                     value: nextWeight,

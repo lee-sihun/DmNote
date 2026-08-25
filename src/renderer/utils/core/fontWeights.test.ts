@@ -6,6 +6,7 @@ import {
   getCommonSupportedFontWeights,
   getSupportedFontWeights,
   resolveEffectiveFontWeight,
+  resolveSupportedFontWeight,
 } from './fontWeights';
 
 const font = (
@@ -50,9 +51,21 @@ describe('fontWeights', () => {
     expect(findNearestFontWeight(500, [400, 600])).toBe(600);
   });
 
-  it('Bold는 기본 굵기에 300을 더하고 CSS 범위로 제한한다', () => {
+  it('폰트 변경 시 Regular에서 가장 가까운 지원 굵기를 선택한다', () => {
+    const fonts = [
+      font('No Regular', 200, 200),
+      font('No Regular', 600, 600, 'no-regular-semibold'),
+      font('Heavy Only', 700, 700),
+    ];
+
+    expect(resolveSupportedFontWeight('No Regular', fonts)).toBe(600);
+    expect(resolveSupportedFontWeight('Heavy Only', fonts)).toBe(700);
+  });
+
+  it('Bold는 상한 없이 기본 굵기에 300을 더한다', () => {
     expect(resolveEffectiveFontWeight(400, true)).toBe(700);
-    expect(resolveEffectiveFontWeight(700, true)).toBe(900);
+    expect(resolveEffectiveFontWeight(700, true)).toBe(1000);
+    expect(resolveEffectiveFontWeight(900, true)).toBe(1200);
     expect(resolveEffectiveFontWeight(300, false)).toBe(300);
   });
 });

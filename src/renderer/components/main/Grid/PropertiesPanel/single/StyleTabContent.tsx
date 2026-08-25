@@ -1188,7 +1188,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 keyPosition.fontWeight ?? DEFAULT_ELEMENT_BASE_FONT_WEIGHT;
               const nextWeight = resolveSupportedFontWeight(
                 fontName,
-                currentWeight,
                 useFontStore.getState().getAllFonts(),
               );
               handleStyleChangeComplete('fontFamily', fontName);

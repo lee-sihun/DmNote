@@ -565,7 +565,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
                   counterSettings.fontWeight ?? DEFAULT_COUNTER_FONT_WEIGHT;
                 const nextWeight = resolveSupportedFontWeight(
                   fontName,
-                  currentWeight,
                   useFontStore.getState().getAllFonts(),
                 );
                 onCounterTypographyCommit?.({

@@ -950,17 +950,16 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
             onFontSelect={(fontName) => {
               if (fontName !== null) {
-                const currentWeight = getMixedValue(
+                const weightState = getMixedValue(
                   (pos) => pos.fontWeight,
                   DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
-                ).value;
+                );
                 const nextWeight = resolveSupportedFontWeight(
                   fontName,
-                  currentWeight,
                   useFontStore.getState().getAllFonts(),
                 );
                 onElementPropertyCommit?.({ fontFamily: fontName });
-                if (nextWeight !== currentWeight) {
+                if (weightState.isMixed || nextWeight !== weightState.value) {
                   onElementPropertyCommit?.({ fontWeight: nextWeight });
                 }
               }
