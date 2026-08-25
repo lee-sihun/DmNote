@@ -1467,16 +1467,18 @@ fn is_materializable_note_gradient(value: &serde_json::Value) -> bool {
         .is_ok_and(|gradient| gradient.note_border_invalid_stop_index().is_none())
 }
 
-pub(crate) fn default_missing_note_gradient_multipliers(position: &mut serde_json::Value) {
+pub(crate) fn default_missing_note_gradient_multipliers(position: &mut serde_json::Value) -> bool {
     let Some(position) = position.as_object_mut() else {
-        return;
+        return false;
     };
+    let mut changed = false;
     if position
         .get("noteGradient")
         .is_some_and(is_materializable_note_gradient)
         && !position.contains_key("noteOpacity")
     {
         position.insert("noteOpacity".to_string(), serde_json::Value::from(100));
+        changed = true;
     }
     if position
         .get("noteGlowGradient")
@@ -1484,7 +1486,9 @@ pub(crate) fn default_missing_note_gradient_multipliers(position: &mut serde_jso
         && !position.contains_key("noteGlowOpacity")
     {
         position.insert("noteGlowOpacity".to_string(), serde_json::Value::from(100));
+        changed = true;
     }
+    changed
 }
 
 fn canonicalize_note_gradient(

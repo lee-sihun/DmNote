@@ -84,11 +84,14 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                 let explicit_invalid_element_id = has_explicit_invalid_element_id(&value);
                 let sound_library_migrated = migrate_sound_library_enabled(&mut value);
                 let text_outline_scrubbed = scrub_removed_text_outline_fields(&mut value);
-                default_store_note_gradient_multipliers(&mut value);
+                // 메모리 보정만 하고 영속을 빼먹으면 시작마다 같은 보정이 반복된다
+                let gradient_multipliers_defaulted =
+                    default_store_note_gradient_multipliers(&mut value);
                 match serde_json::from_value::<AppStoreData>(value.clone()) {
                     Ok(mut data) => {
                         let mut needs_persist = text_outline_scrubbed
                             || sound_library_migrated
+                            || gradient_multipliers_defaulted
                             || data.font_settings.custom_fonts.iter().any(|font| {
                                 font.font_type == FontType::Local
                                     && font
@@ -209,15 +212,17 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
     })
 }
 
-fn default_store_note_gradient_multipliers(value: &mut Value) {
+fn default_store_note_gradient_multipliers(value: &mut Value) -> bool {
+    let mut changed = false;
     for collection in POSITION_COLLECTION_FIELDS {
         let Some(modes) = value.get_mut(collection).and_then(Value::as_object_mut) else {
             continue;
         };
         for position in modes.values_mut().filter_map(Value::as_array_mut).flatten() {
-            default_missing_note_gradient_multipliers(position);
+            changed |= default_missing_note_gradient_multipliers(position);
         }
     }
+    changed
 }
 
 fn has_explicit_invalid_element_id(value: &Value) -> bool {
@@ -2020,7 +2025,8 @@ mod tests {
             }] }
         });
 
-        super::default_store_note_gradient_multipliers(&mut value);
+        // 보정 발생 시 true 반환 - needs_persist로 전파되어 디스크에도 영속
+        assert!(super::default_store_note_gradient_multipliers(&mut value));
 
         assert_eq!(value["keyPositions"]["mode"][0]["noteOpacity"], 100);
         assert_eq!(value["statPositions"]["mode"][0]["noteGlowOpacity"], 100);
@@ -2029,6 +2035,9 @@ mod tests {
         assert!(value["knobPositions"]["mode"][0]
             .get("noteGlowOpacity")
             .is_none());
+
+        // 이미 보정된 store 재로드는 무변경 - 반복 영속 방지
+        assert!(!super::default_store_note_gradient_multipliers(&mut value));
     }
 
     fn tauri_store_fixture_base() -> serde_json::Value {
@@ -2187,6 +2196,37 @@ mod tests {
         assert_eq!(second_ids, first_ids);
         assert!(!reloaded.needs_persist);
         assert!(!reloaded.repaired);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn missing_note_gradient_multiplier_persists_on_first_load_and_converges() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-note-gradient-multiplier-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let position = &mut raw["keyPositions"]["4key"][0];
+        position["noteGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        });
+        position.as_object_mut().unwrap().remove("noteOpacity");
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        // 배율 부재 보정이 유일한 변경이어도 첫 로드는 영속 대상
+        let loaded = load_store_from_path(&path).unwrap();
+        assert_eq!(loaded.data.key_positions["4key"][0].note_opacity, 100);
+        assert!(loaded.needs_persist);
+
+        // 저장 후 재로드는 무변경으로 수렴 - 시작마다 보정 반복 방지
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert_eq!(reloaded.data.key_positions["4key"][0].note_opacity, 100);
+        assert!(!reloaded.needs_persist);
         let _ = std::fs::remove_file(path);
     }
 
