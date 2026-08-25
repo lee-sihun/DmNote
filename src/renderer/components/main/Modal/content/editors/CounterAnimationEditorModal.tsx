@@ -23,7 +23,6 @@ import {
   DEFAULT_COUNTER_FONT_SIZE,
   DEFAULT_COUNTER_FONT_WEIGHT,
 } from '@utils/core/elementDefaults';
-import { useKeyStore } from '@stores/data/useKeyStore';
 import {
   computeCounterAnimationPreviewKeyStyles,
   type CounterAnimationKeyVisual,
@@ -221,7 +220,6 @@ const CounterAnimationEditorModal = ({
 
   const [previewCount, setPreviewCount] = useState(0);
   const [previewActive, setPreviewActive] = useState(false);
-  const [previewCss, setPreviewCss] = useState('');
 
   const cancelAutoFit = () => {
     if (autoFitRafRef.current) {
@@ -400,39 +398,6 @@ const CounterAnimationEditorModal = ({
       window.removeEventListener('keyup', handleKeyUp);
       spaceHeldRef.current = false;
     };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const loadCss = async () => {
-      try {
-        const [globalCss, globalUse, tabOverrides] = await Promise.all([
-          window.api.css.get(),
-          window.api.css.getUse(),
-          window.api.css.tab.getAll(),
-        ]);
-        if (!globalUse) {
-          setPreviewCss('');
-          return;
-        }
-        const currentTab = useKeyStore.getState().selectedKeyType;
-        const tabCss = tabOverrides[currentTab];
-        if (tabCss) {
-          if (!tabCss.enabled) {
-            setPreviewCss('');
-            return;
-          }
-          if (tabCss.path && tabCss.content) {
-            setPreviewCss(tabCss.content);
-            return;
-          }
-        }
-        setPreviewCss(globalCss.content || '');
-      } catch {
-        setPreviewCss('');
-      }
-    };
-    void loadCss();
   }, [isOpen]);
 
   // window 리스너는 pointerup/pointercancel 시 자가 정리돼서 클린업 추가 안 해뒀어요
@@ -1094,9 +1059,6 @@ const CounterAnimationEditorModal = ({
               className="flex-1 min-h-0 flex items-center justify-center relative bg-inset rounded-md overflow-hidden cursor-pointer select-none"
               onPointerDown={handlePreviewPointerDown}
             >
-              {previewCss && (
-                <style dangerouslySetInnerHTML={{ __html: previewCss }} />
-              )}
               {/* 그리드 — 커브 캔버스와 동일 팔레트 */}
               <div
                 className="absolute inset-0 pointer-events-none"
@@ -1106,7 +1068,10 @@ const CounterAnimationEditorModal = ({
                   backgroundPosition: 'center center',
                 }}
               />
-              <div className="relative z-10 w-full h-full flex items-center justify-center">
+              <div
+                className="relative z-10 w-full h-full flex items-center justify-center"
+                data-dmn-user-css-scope=""
+              >
                 {(() => {
                   const PREVIEW_MAX_W = 200;
                   const PREVIEW_MAX_H = 160;

@@ -1,10 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { obsApi } from '@api/modules/obsApi';
+import { scopeUserCss } from '@utils/css/scopeUserCss';
 import type { TabCssOverrides } from '@src/types/plugin/css';
 import type { CustomCss } from '@src/types/plugin/css';
 
 const STYLE_ELEMENT_ID = 'dmn-custom-css';
+const SCOPE_CACHE_LIMIT = 4;
+
+interface CustomCssInjectionOptions {
+  // 지정 시 모든 셀렉터를 이 스코프 하위로 재작성해 주입 (메인창 미리보기 격리).
+  // 미지정이면 원문 주입 (오버레이·OBS)
+  scopeSelector?: string;
+}
 
 /**
  * CSS 적용 우선순위:
@@ -13,7 +21,8 @@ const STYLE_ELEMENT_ID = 'dmn-custom-css';
  * 3. 전역 CSS ON + 탭 enabled=true + 로컬 파일 있음 → 탭 CSS 적용
  * 4. 전역 CSS ON + (탭 설정 없음 또는 로컬 파일 없음) → 전역 CSS 적용
  */
-export function useCustomCssInjection() {
+export function useCustomCssInjection(options?: CustomCssInjectionOptions) {
+  const scopeSelector = options?.scopeSelector;
   // 상태 캐싱 ref
   const globalCssRef = useRef<CustomCss>({ path: null, content: '' });
   const globalUseRef = useRef<boolean>(false);
@@ -35,13 +44,30 @@ export function useCustomCssInjection() {
     /**
      * 현재 탭에 적용할 CSS 결정 및 적용
      */
+    // 스코프 변환은 결정적이라 원문 기준 캐시 - 탭별 CSS를 오가도 재파싱
+    // 없이 조회만 하도록 몇 장 유지 (대용량 시트는 변환에 수십 ms)
+    const scopeCache = new Map<string, string>();
+    const applyScope = (raw: string): string => {
+      if (!scopeSelector || !raw) return raw;
+      const hit = scopeCache.get(raw);
+      if (hit !== undefined) return hit;
+      const scoped = scopeUserCss(raw, scopeSelector);
+      if (scopeCache.size >= SCOPE_CACHE_LIMIT) {
+        const oldest = scopeCache.keys().next().value;
+        if (oldest !== undefined) scopeCache.delete(oldest);
+      }
+      scopeCache.set(raw, scoped);
+      return scoped;
+    };
+
     const applyCssForCurrentTab = () => {
       const styleEl = styleElRef.current;
       if (!styleEl) return;
 
       // 동일 내용 재대입은 스타일시트 재파싱으로 @keyframes 애니메이션을
-      // 재시작시키므로 실제 변경 시에만 대입
-      const setStyle = (content: string, disabled: boolean) => {
+      // 재시작시키므로 실제 변경 시에만 대입 (스코프 변환 후 문자열 기준)
+      const setStyle = (rawContent: string, disabled: boolean) => {
+        const content = applyScope(rawContent);
         const changed =
           styleEl.textContent !== content || styleEl.disabled !== disabled;
         if (styleEl.textContent !== content) {
@@ -152,7 +178,7 @@ export function useCustomCssInjection() {
       unsubTabCss();
       unsubKeyStore();
     };
-  }, []);
+  }, [scopeSelector]);
 
   // 참고: selectedKeyType 변경 시 CSS 재적용은 위 unsubKeyStore에서 처리
   // 별도 useEffect 불필요, 중복 실행 방지를 위해 제거됨

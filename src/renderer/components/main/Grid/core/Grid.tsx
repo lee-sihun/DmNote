@@ -1572,6 +1572,7 @@ const Grid = ({
           ref={gridContentRef}
           className="absolute"
           data-dmn-grid-space=""
+          data-dmn-user-css-scope=""
           style={gridViewportStyles.scale}
         >
           {renderKeys()}

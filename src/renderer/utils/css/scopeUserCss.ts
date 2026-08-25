@@ -1,0 +1,652 @@
+// 커스텀 CSS를 메인창 미리보기 영역에만 가두는 셀렉터 재작성.
+// 최소 지원 WKWebView가 @scope를 모르므로 CSSOM을 걷어 접두사를 붙인다.
+// 오버레이 창은 원문 주입을 유지하고 이 유틸을 거치지 않는다
+
+export const USER_CSS_SCOPE_ATTR = 'data-dmn-user-css-scope';
+// :where로 감싸 특이도 0 - 접두사가 오버레이와 다른 캐스케이드 결과를 내지 않게
+export const USER_CSS_SCOPE_SELECTOR = ':where([data-dmn-user-css-scope])';
+
+// 유저 keyframes 이름 접두사 - 앱 내부 이름과 겹쳐 설정 UI 애니메이션이
+// 바뀌는 것을 막는다. 참조(animation, animation-name)도 같이 재작성
+const KEYFRAMES_PREFIX = 'dmnu-';
+
+// keyframes 이름으로 쓰면 shorthand 참조 재작성이 모호해지는 키워드 -
+// 이런 정의는 이름을 바꿀 수 없어 전역으로 흘리지 않고 버린다
+const ANIMATION_KEYWORDS = new Set([
+  'none',
+  'initial',
+  'inherit',
+  'unset',
+  'revert',
+  'infinite',
+  'alternate',
+  'alternate-reverse',
+  'normal',
+  'reverse',
+  'forwards',
+  'backwards',
+  'both',
+  'running',
+  'paused',
+  'ease',
+  'ease-in',
+  'ease-out',
+  'ease-in-out',
+  'linear',
+  'step-start',
+  'step-end',
+]);
+
+// 이름을 안전하게 바꿔 참조까지 맞출 수 있는 단순 식별자만 지원
+const SIMPLE_IDENT = /^-?[A-Za-z_][\w-]*$/;
+
+// 스코프 밖으로 새지 않는 문서 전역 leaf at-rule만 통과. @layer 순서문은
+// 유저 시트 내부 우선순위를 정하므로 보존 (앱 layer 순서는 먼저 선언돼 불변).
+// @property는 앱이 등록한 이름과 겹치면 UI 토큰을 바꾸므로 제외
+const PASSTHROUGH_LEAF_AT_RULE =
+  /^@(font-face|counter-style|font-feature-values|font-palette-values|layer)\b/i;
+const KEYFRAMES_AT_RULE = /^@(?:-webkit-)?keyframes\b/i;
+// 시트 머리에만 유효한 규칙 - 재조립 시 최상단으로 hoisting
+const HEAD_AT_RULE = /^@(import|namespace)\b/i;
+const LEADING_STATEMENT = /^@(charset|import|namespace|layer)\b/i;
+
+const isWhitespace = (ch: string): boolean =>
+  ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f';
+
+// 시트 머리의 @charset/@import/@namespace 문(과 그 앞에 올 수 있는 @layer
+// 순서문)만 원문 그대로 추출 - 접두사 래핑 후에도 유효 위치를 지키려면
+// 최상단 hoisting이 필요하다. 블록 규칙이 나오면 중단 (그 뒤의 @import는
+// 브라우저도 무시하므로 파서에 맡겨 자연 드롭)
+const splitLeadingStatements = (
+  css: string,
+): { hoisted: string[]; body: string } => {
+  const hoisted: string[] = [];
+  let i = 0;
+  const len = css.length;
+  while (i < len) {
+    if (isWhitespace(css[i])) {
+      i += 1;
+      continue;
+    }
+    // 주석 통과 - 주석 속 @import를 되살리지 않게 통째로 건너뜀
+    if (css.startsWith('/*', i)) {
+      const end = css.indexOf('*/', i + 2);
+      if (end === -1) break;
+      i = end + 2;
+      continue;
+    }
+    if (!LEADING_STATEMENT.test(css.slice(i, i + 12))) break;
+    // 문자열·괄호·주석을 존중하며 종결 세미콜론까지 스캔. 블록이 먼저 열리면 문이 아니다
+    let j = i;
+    let quote: string | null = null;
+    let depth = 0;
+    let terminated = false;
+    while (j < len) {
+      const c = css[j];
+      if (quote) {
+        if (c === '\\') j += 1;
+        else if (c === quote) quote = null;
+      } else if (c === '/' && css[j + 1] === '*') {
+        // 문 중간의 주석 - 안의 ; { ( 는 구문이 아니다
+        const end = css.indexOf('*/', j + 2);
+        if (end === -1) break;
+        j = end + 2;
+        continue;
+      } else if (c === '"' || c === "'") {
+        quote = c;
+      } else if (c === '(') {
+        depth += 1;
+      } else if (c === ')') {
+        depth = depth > 0 ? depth - 1 : 0;
+      } else if (c === '{' && depth === 0) {
+        break;
+      } else if (c === ';' && depth === 0) {
+        terminated = true;
+        break;
+      }
+      j += 1;
+    }
+    if (!terminated) break;
+    hoisted.push(css.slice(i, j + 1));
+    i = j + 1;
+  }
+  return { hoisted, body: css.slice(i) };
+};
+
+// 따옴표·이스케이프·괄호 밖의 첫 블록 시작 중괄호 - 셀렉터 문자열 속 `{` 무시
+const findBlockStart = (text: string): number => {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(' || ch === '[') {
+      depth += 1;
+      continue;
+    }
+    if (ch === ')' || ch === ']') {
+      depth = depth > 0 ? depth - 1 : 0;
+      continue;
+    }
+    if (ch === '{' && depth === 0) return i;
+  }
+  return -1;
+};
+
+// 최상위 콤마 분리 - 괄호·대괄호·따옴표·이스케이프 안 콤마는 구분자가 아니다
+const splitSelectorList = (selectorText: string): string[] => {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let start = 0;
+  for (let i = 0; i < selectorText.length; i += 1) {
+    const ch = selectorText[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(' || ch === '[') {
+      depth += 1;
+      continue;
+    }
+    if (ch === ')' || ch === ']') {
+      depth = depth > 0 ? depth - 1 : 0;
+      continue;
+    }
+    if (ch === ',' && depth === 0) {
+      parts.push(selectorText.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(selectorText.slice(start));
+  return parts.map((part) => part.trim()).filter(Boolean);
+};
+
+// 따옴표·이스케이프 밖에서 조건을 만족하는 첫 위치 (괄호 깊이 조건부)
+const findTopLevel = (
+  text: string,
+  start: number,
+  isHit: (index: number) => boolean,
+  ignoreBrackets: boolean,
+): number => {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(' || ch === '[') {
+      depth += 1;
+      continue;
+    }
+    if (ch === ')' || ch === ']') {
+      depth = depth > 0 ? depth - 1 : 0;
+      continue;
+    }
+    if ((ignoreBrackets || depth === 0) && isHit(i)) return i;
+  }
+  return -1;
+};
+
+// compound 셀렉터의 끝 - 괄호·대괄호·따옴표 밖 첫 공백 또는 결합자 위치
+const scanCompoundEnd = (selector: string, start: number): number => {
+  const end = findTopLevel(
+    selector,
+    start,
+    (i) => {
+      const ch = selector[i];
+      return isWhitespace(ch) || ch === '>' || ch === '+' || ch === '~';
+    },
+    false,
+  );
+  return end === -1 ? selector.length : end;
+};
+
+// 중첩 셀렉터에서 `&`가 :not()/:is()/:has() 같은 괄호 안에만 있는지 - 그런
+// 형태는 대상이 부모 밖으로 확장될 수 있다. 최상위 compound에 `&`가 있으면
+// (body.dark &, & .child, &:hover) 대상이 부모 또는 그 주변으로 고정된다
+const hasEscapingAmpersand = (selector: string): boolean => {
+  const isAmpersand = (i: number) => selector[i] === '&';
+  return (
+    findTopLevel(selector, 0, isAmpersand, true) !== -1 &&
+    findTopLevel(selector, 0, isAmpersand, false) === -1
+  );
+};
+
+// compound 안 가상 요소 시작 위치 (::x 또는 구형 :before/:after 계열)
+const LEGACY_PSEUDO_ELEMENT =
+  /^:(before|after|first-line|first-letter)(?![\w-])/i;
+const findPseudoElementStart = (compound: string): number =>
+  findTopLevel(
+    compound,
+    0,
+    (i) =>
+      compound[i] === ':' &&
+      (compound[i + 1] === ':' ||
+        LEGACY_PSEUDO_ELEMENT.test(compound.slice(i))),
+    false,
+  );
+
+// 식별자 경계 강제 - body-card 같은 커스텀 요소를 body로 오인하지 않게
+const ROOT_TOKEN = /^(:root|html|body)(?![\w-])/i;
+
+type RootRemap =
+  | { kind: 'none' }
+  | { kind: 'drop' }
+  | { kind: 'remap'; selector: string };
+
+// 선행 :root/html/body 체인은 조상 조건으로 그대로 두고 실제 대상만 스코프
+// 안으로 옮긴다 (`:root .x` → `:root scope .x`, `body` → `body scope`,
+// `body::before` → `body scope::before`). 루트를 지우지 않아 원래 특이도가
+// 유지되고, 유저 CSS의 전역 변수·배경 관례는 스코프 요소에 실려 미리보기에
+// 상속된다. 루트의 형제 결합자(+, ~)는 스코프 자손으로 표현할 수 없어 드롭
+const remapLeadingRootChain = (selector: string, scope: string): RootRemap => {
+  let pos = 0;
+  let matched = false;
+  let chainEnd = 0;
+  let lastCompoundStart = 0;
+  let combinator = '';
+  let afterIndex = selector.length;
+  for (;;) {
+    const token = ROOT_TOKEN.exec(selector.slice(pos));
+    if (!token) break;
+    matched = true;
+    lastCompoundStart = pos;
+    chainEnd = scanCompoundEnd(selector, pos + token[0].length);
+    let j = chainEnd;
+    while (j < selector.length && isWhitespace(selector[j])) j += 1;
+    let comb = '';
+    if (j < selector.length && '>+~'.includes(selector[j])) {
+      comb = selector[j];
+      j += 1;
+      while (j < selector.length && isWhitespace(selector[j])) j += 1;
+    }
+    if (j >= selector.length) {
+      afterIndex = selector.length;
+      break;
+    }
+    if (ROOT_TOKEN.test(selector.slice(j))) {
+      // html > body 처럼 루트끼리 이어진 체인은 통째로 조상 조건
+      pos = j;
+      continue;
+    }
+    combinator = comb;
+    afterIndex = j;
+    break;
+  }
+  if (!matched) return { kind: 'none' };
+  if (combinator === '+' || combinator === '~') return { kind: 'drop' };
+
+  // 마지막 루트 compound의 가상 요소는 스코프 요소 쪽으로 옮긴다 -
+  // 가상 요소는 자손을 가질 수 없어 그대로 두면 절대 매치되지 않는다
+  const lastCompound = selector.slice(lastCompoundStart, chainEnd);
+  const pseudoAt = findPseudoElementStart(lastCompound);
+  let chain = selector.slice(0, chainEnd).trim();
+  let pseudo = '';
+  if (pseudoAt !== -1) {
+    pseudo = lastCompound.slice(pseudoAt);
+    chain = selector.slice(0, lastCompoundStart + pseudoAt).trim();
+  }
+  const rest = selector.slice(afterIndex).trim();
+  if (pseudo && rest) return { kind: 'drop' };
+  const trailing = combinator ? ` ${combinator} ` : ' ';
+  return {
+    kind: 'remap',
+    selector: rest
+      ? `${chain} ${scope}${trailing}${rest}`
+      : `${chain} ${scope}${pseudo}`,
+  };
+};
+
+// 최상위 규칙의 스코프된 셀렉터 리스트 - 전부 드롭되면 null (규칙을 버린다)
+const scopeSelectorText = (
+  selectorText: string,
+  scope: string,
+): string | null => {
+  const scoped: string[] = [];
+  for (const selector of splitSelectorList(selectorText)) {
+    const remap = remapLeadingRootChain(selector, scope);
+    if (remap.kind === 'drop') continue;
+    scoped.push(
+      remap.kind === 'remap' ? remap.selector : `${scope} ${selector}`,
+    );
+  }
+  return scoped.length ? scoped.join(', ') : null;
+};
+
+// 부모의 형제로 빠져나가는 중첩 셀렉터 - 선두 `+`/`~`(암묵 &의 형제) 또는
+// 최상위 `&` compound 바로 뒤의 `+`/`~`. 부모가 루트 치환으로 스코프 요소
+// 자체가 되면 그 형제는 미리보기 밖 앱 UI다
+const hasSiblingEscape = (selector: string): boolean => {
+  const first = selector[0];
+  if (first === '+' || first === '~') return true;
+  let from = 0;
+  for (;;) {
+    const amp = findTopLevel(selector, from, (i) => selector[i] === '&', false);
+    if (amp === -1) return false;
+    let j = scanCompoundEnd(selector, amp + 1);
+    while (j < selector.length && isWhitespace(selector[j])) j += 1;
+    if (selector[j] === '+' || selector[j] === '~') return true;
+    from = amp + 1;
+  }
+};
+
+// 중첩 규칙의 셀렉터 - `&`가 없거나 최상위에 있으면 부모(이미 스코프 안)에
+// 고정이라 그대로. 괄호 안에만 있거나(:not(&)·:is(x, &)·.x:has(&)) 부모의
+// 형제로 나가면 스코프 접두사를 붙여 대상이 스코프 자손임을 강제한다.
+// 접두사를 붙일 때 `&`가 없는 상대 셀렉터는 `&`를 명시해 의미를 유지
+const scopeNestedSelectorText = (selectorText: string, scope: string): string =>
+  splitSelectorList(selectorText)
+    .map((selector) => {
+      if (!hasEscapingAmpersand(selector) && !hasSiblingEscape(selector)) {
+        return selector;
+      }
+      const hasAmpersand =
+        findTopLevel(selector, 0, (i) => selector[i] === '&', true) !== -1;
+      return hasAmpersand ? `${scope} ${selector}` : `${scope} & ${selector}`;
+    })
+    .join(', ');
+
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// 시트 안에서 정의한 keyframes 이름 → 접두사 이름 (그룹·중첩 내부 포함).
+// 단순 식별자가 아니거나 키워드면 매핑하지 않는다 → 정의는 버려진다
+const collectKeyframeRenames = (
+  rules: CSSRuleList,
+  out: Map<string, string>,
+): void => {
+  for (let i = 0; i < rules.length; i += 1) {
+    const rule = rules[i];
+    if (KEYFRAMES_AT_RULE.test(rule.cssText)) {
+      const name = (rule as CSSKeyframesRule).name;
+      if (
+        name &&
+        SIMPLE_IDENT.test(name) &&
+        !ANIMATION_KEYWORDS.has(name.toLowerCase())
+      ) {
+        out.set(name, `${KEYFRAMES_PREFIX}${name}`);
+      }
+      continue;
+    }
+    const childRules = (rule as CSSGroupingRule).cssRules;
+    if (childRules) collectKeyframeRenames(childRules, out);
+  }
+};
+
+const ANIMATION_PROPERTY =
+  /^(\s*(?:-webkit-)?animation(?:-name)?\s*:\s*)([\s\S]*)$/i;
+
+// animation 값 안의 이름 참조를 한 번의 치환으로 - 생성된 이름을 다시 바꾸지
+// 않도록 원본 이름 전체를 한 alternation에 담는다 (긴 이름 우선).
+// var()로 전달한 이름은 값에 나타나지 않아 재작성 대상이 아니다 (문서화된 한계)
+const buildReferencePatterns = (renames: Map<string, string>) => {
+  const alternation = [...renames.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp)
+    .join('|');
+  return {
+    identifier: new RegExp(`(^|[\\s,])(${alternation})(?=$|[\\s,])`, 'g'),
+    quoted: new RegExp(`(["'])(${alternation})\\1`, 'g'),
+  };
+};
+
+// 선언 문자열을 top-level `;` 단위로 걸으며 animation 참조를 재작성.
+// 문자열·함수·custom property의 중괄호 블록 안은 건드리지 않는다
+// (jsdom이 못 파싱하는 입력을 검증할 수 있게 export)
+export const rewriteAnimationReferences = (
+  declarations: string,
+  renames: Map<string, string>,
+): string => {
+  if (!renames.size || !declarations) return declarations;
+  const { identifier, quoted } = buildReferencePatterns(renames);
+  const rewriteSegment = (segment: string): string => {
+    const match = ANIMATION_PROPERTY.exec(segment);
+    if (!match) return segment;
+    const value = match[2]
+      .replace(
+        quoted,
+        (_m, q: string, name: string) => `${q}${renames.get(name)}${q}`,
+      )
+      .replace(
+        identifier,
+        (_m, lead: string, name: string) => `${lead}${renames.get(name)}`,
+      );
+    return `${match[1]}${value}`;
+  };
+  let out = '';
+  let segmentStart = 0;
+  let parenDepth = 0;
+  let braceDepth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < declarations.length; i += 1) {
+    const ch = declarations[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') parenDepth += 1;
+    else if (ch === ')') parenDepth = parenDepth > 0 ? parenDepth - 1 : 0;
+    else if (ch === '{') braceDepth += 1;
+    else if (ch === '}') braceDepth = braceDepth > 0 ? braceDepth - 1 : 0;
+    else if (ch === ';' && parenDepth === 0 && braceDepth === 0) {
+      out += rewriteSegment(declarations.slice(segmentStart, i)) + ch;
+      segmentStart = i + 1;
+    }
+  }
+  return out + rewriteSegment(declarations.slice(segmentStart));
+};
+
+// keyframes 정의는 매핑된 이름으로만 내보낸다 - 바꿀 수 없는 이름은 전역
+// 레지스트리에 남기지 않고 버린다 (fail-closed)
+const renameKeyframesRule = (
+  rule: CSSRule,
+  renames: Map<string, string>,
+): string | null => {
+  const cssText = rule.cssText;
+  const renamed = renames.get((rule as CSSKeyframesRule).name);
+  if (!renamed) return null;
+  const brace = findBlockStart(cssText);
+  if (brace === -1) return null;
+  const prelude = cssText.slice(0, brace).trim();
+  const at = prelude.match(/^(@(?:-webkit-)?keyframes)\s+/i);
+  if (!at) return null;
+  return `${at[1]} ${renamed} ${cssText.slice(brace)}`;
+};
+
+interface ScopeContext {
+  scope: string;
+  renames: Map<string, string>;
+  hoisted: string[];
+  namespacesHoisted: boolean;
+}
+
+// 스타일 규칙 재구성 - 선언부는 CSSOM 직렬화, 중첩 규칙은 재귀 스코프.
+// 원문 블록을 통째로 보존하면 중첩 `&` 확장이 스코프 밖으로 새므로 재구성한다
+const scopeStyleRule = (
+  rule: CSSStyleRule,
+  selectorText: string,
+  ctx: ScopeContext,
+): string => {
+  const declarations = rewriteAnimationReferences(
+    rule.style.cssText,
+    ctx.renames,
+  );
+  const childRules = (rule as unknown as CSSGroupingRule).cssRules;
+  const nested = childRules ? scopeRuleList(childRules, ctx, true) : '';
+  const body = [declarations, nested].filter(Boolean).join('\n');
+  return `${selectorText} {\n${body}\n}`;
+};
+
+const scopeRuleList = (
+  rules: CSSRuleList,
+  ctx: ScopeContext,
+  nested: boolean,
+): string => {
+  const out: string[] = [];
+  for (let i = 0; i < rules.length; i += 1) {
+    const rule = rules[i];
+    const cssText = rule.cssText;
+    const selectorText = (rule as CSSStyleRule).selectorText;
+    if (typeof selectorText === 'string' && selectorText) {
+      const scoped = nested
+        ? scopeNestedSelectorText(selectorText, ctx.scope)
+        : scopeSelectorText(selectorText, ctx.scope);
+      if (scoped === null) continue;
+      out.push(scopeStyleRule(rule as CSSStyleRule, scoped, ctx));
+      continue;
+    }
+    if (KEYFRAMES_AT_RULE.test(cssText)) {
+      const renamed = renameKeyframesRule(rule, ctx.renames);
+      if (renamed) out.push(renamed);
+      continue;
+    }
+    if (!nested && HEAD_AT_RULE.test(cssText)) {
+      // 파서가 유효 위치로 받아들인 @import/@namespace - 최상단으로.
+      // 텍스트 단계에서 이미 hoisting한 @namespace는 파싱 입력에 다시 넣은
+      // 것이라 중복 출력하지 않는다
+      if (!(ctx.namespacesHoisted && /^@namespace\b/i.test(cssText))) {
+        ctx.hoisted.push(cssText);
+      }
+      continue;
+    }
+    const childRules = (rule as CSSGroupingRule).cssRules;
+    if (childRules) {
+      // 조건 그룹(@media/@supports/@layer/@container) - prelude 보존, 내부 재귀.
+      // @layer를 통과시키면 내부 규칙이 비스코프로 새므로 반드시 재귀 대상
+      const brace = findBlockStart(cssText);
+      if (brace === -1) continue;
+      const prelude = cssText.slice(0, brace).trim();
+      const inner = scopeRuleList(childRules, ctx, nested);
+      if (inner) out.push(`${prelude} {\n${inner}\n}`);
+      continue;
+    }
+    const style = (rule as CSSStyleRule).style;
+    if (nested && style) {
+      // 중첩 규칙 뒤에 오는 선언 묶음 - 부모 스코프 안이라 선언만 재작성
+      out.push(rewriteAnimationReferences(style.cssText, ctx.renames));
+      continue;
+    }
+    // 문서 전역 leaf at-rule은 격리 가능한 것만 통과, 나머지는 버린다
+    if (!nested && PASSTHROUGH_LEAF_AT_RULE.test(cssText)) out.push(cssText);
+  }
+  return out.join('\n');
+};
+
+// 파싱 호스트: detached 문서 우선(서브리소스 미로드·옵저버 소음 없음),
+// 미지원 환경은 비적용 상태로 본문서 body에 잠깐 붙였다 뗀다
+// (head가 아닌 body인 이유: 분리 패널 미러가 head만 관찰한다)
+const withParsedRules = <T>(
+  cssText: string,
+  fn: (rules: CSSRuleList) => T,
+): T | null => {
+  try {
+    const doc = document.implementation.createHTMLDocument('');
+    const style = doc.createElement('style');
+    style.textContent = cssText;
+    doc.head.appendChild(style);
+    if (style.sheet) return fn(style.sheet.cssRules);
+  } catch {
+    // detached 파싱 미지원 - 아래 폴백
+  }
+  const style = document.createElement('style');
+  style.media = 'not all';
+  style.textContent = cssText;
+  document.body.appendChild(style);
+  try {
+    return style.sheet ? fn(style.sheet.cssRules) : null;
+  } finally {
+    style.remove();
+  }
+};
+
+/**
+ * 유저 CSS의 모든 셀렉터를 scopeSelector 하위로 가둔다.
+ * 알려진 한계: hoisting된 @import의 시트 내용과 @font-face는 문서 전역이고,
+ * @property는 앱 등록 이름과 충돌할 수 있어 버리며, 단순 식별자가 아닌
+ * keyframes 이름과 var()로 전달한 animation 이름은 지원하지 않는다
+ */
+export function scopeUserCss(css: string, scopeSelector: string): string {
+  if (!css || !css.trim()) return '';
+  try {
+    const { hoisted, body } = splitLeadingStatements(css);
+    if (!body.trim()) return hoisted.join('\n');
+    // @namespace는 같은 시트 안에 선언이 있어야 svg|a 같은 접두 셀렉터가
+    // 파싱되므로 파싱 입력에도 넣는다 (@import는 폴백 파싱 시 실제 로드를
+    // 유발하므로 제외)
+    const namespaces = hoisted.filter((statement) =>
+      /^@namespace\b/i.test(statement),
+    );
+    const parseInput = namespaces.length
+      ? `${namespaces.join('\n')}\n${body}`
+      : body;
+    // default namespace가 있으면 스코프 compound의 암묵 universal에도 그
+    // namespace가 붙어 HTML 스코프 요소를 못 잡는다 - 명시적으로 무관하게.
+    // 키워드와 URI 사이의 주석은 걷어내고 첫 토큰이 접두사인지 URI인지 본다
+    const hasDefaultNamespace = namespaces.some((statement) =>
+      /^@namespace\s+(url\(|["'])/i.test(
+        statement.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' '),
+      ),
+    );
+    const ctx: ScopeContext = {
+      scope: hasDefaultNamespace ? `*|*${scopeSelector}` : scopeSelector,
+      renames: new Map(),
+      hoisted: [],
+      namespacesHoisted: namespaces.length > 0,
+    };
+    const scoped = withParsedRules(parseInput, (rules) => {
+      collectKeyframeRenames(rules, ctx.renames);
+      return scopeRuleList(rules, ctx, false);
+    });
+    if (scoped === null) {
+      // 파싱 실패 시 원문을 흘리지 않는다 - 에디터 크롬 보호가 우선
+      console.error('[custom-css] failed to parse stylesheet for scoping');
+      return hoisted.join('\n');
+    }
+    return [...hoisted, ...ctx.hoisted, scoped].filter(Boolean).join('\n');
+  } catch (error) {
+    console.error('[custom-css] scoping failed', error);
+    return '';
+  }
+}

@@ -6,6 +6,7 @@ import {
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
+import { USER_CSS_SCOPE_SELECTOR } from '@utils/css/scopeUserCss';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { usePanelCloseRequest } from '@hooks/panel/usePanelCloseRequest';
@@ -70,7 +71,8 @@ function getErrorMessage(error: unknown): string {
 export default function App() {
   const setGridAreaHovered = useUIStore((state) => state.setGridAreaHovered);
   const { selectedKeyType, setSelectedKeyType, isBootstrapped } = useKeyStore();
-  useCustomCssInjection();
+  // 메인창은 그리드 미리보기 영역에만 유저 CSS 적용 - 에디터 크롬은 순정 유지
+  useCustomCssInjection({ scopeSelector: USER_CSS_SCOPE_SELECTOR });
   useCustomJsInjection(isBootstrapped);
   useAppBootstrap();
   usePluginDisplayElementsResponder();
