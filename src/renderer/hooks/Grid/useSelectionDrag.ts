@@ -1,6 +1,10 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type React from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import {
+  resumeCustomCursorHover,
+  suspendCustomCursorHover,
+} from '@utils/grid/cursorUtils';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -126,6 +130,9 @@ export const useSelectionDrag = ({
     activePointerIdRef.current = pointerId;
     dragTarget.setPointerCapture(pointerId);
     dragTarget.style.userSelect = 'none';
+    // 개별 드래그(useDraggable)와 동일한 잡기 커서 - 잡는 동안 grabbing 유지
+    dragTarget.ownerDocument.body.classList.add('dmn-dragging');
+    suspendCustomCursorHover();
 
     useSmartGuidesStore.getState().clearGuides();
 
@@ -323,6 +330,8 @@ export const useSelectionDrag = ({
       dragTarget.removeEventListener('lostpointercapture', finishDrag);
       window.removeEventListener('blur', finishDrag);
       dragTarget.style.userSelect = previousUserSelect;
+      dragTarget.ownerDocument.body.classList.remove('dmn-dragging');
+      resumeCustomCursorHover();
       useSmartGuidesStore.getState().clearGuides();
       if (actuallyDragging) {
         useGridSelectionStore.getState().setDraggingOrResizing(false);

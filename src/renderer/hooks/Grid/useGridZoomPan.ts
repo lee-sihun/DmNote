@@ -1,3 +1,4 @@
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import { useEffect, useRef, useState } from 'react';
 import {
   useGridViewStore,
@@ -284,6 +285,8 @@ export function useGridZoomPan({
     setMiddleButtonDragging(true);
 
     // 드래그 중 커서를 grabbing으로 변경하고 요소들의 pointer-events를 비활성화
+    // 전역 고정도 병행 - 포인터가 컨테이너 밖(패널·툴바)으로 나가도 유지
+    beginDragCursor('grabbing');
     const container = containerRef.current;
     if (container) {
       container.style.cursor = 'grabbing';
@@ -335,6 +338,7 @@ export function useGridZoomPan({
       setTransformingState(false);
       setMiddleButtonDragging(false);
       // 커서 및 pointer-events 복원
+      endDragCursor();
       if (container) {
         container.style.cursor = '';
       }

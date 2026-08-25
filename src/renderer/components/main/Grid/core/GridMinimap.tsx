@@ -1,3 +1,4 @@
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import React, { useState, useRef, useEffect } from 'react';
 import { useGridViewStore } from '@stores/grid/useGridViewStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
@@ -321,6 +322,8 @@ const GridMinimap = ({
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
+    // 잡은 순간의 커서를 드래그 내내 유지 - 미니맵 밖으로 나가도 복귀하지 않게
+    beginDragCursor(getComputedStyle(e.currentTarget).cursor || 'pointer');
 
     const minimapRect = e.currentTarget.getBoundingClientRect();
 
@@ -342,6 +345,7 @@ const GridMinimap = ({
       moveScheduler.flush();
       moveScheduler.cancel();
       setIsDragging(false);
+      endDragCursor();
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };

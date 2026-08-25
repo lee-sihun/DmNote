@@ -1,3 +1,4 @@
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CounterAnimationBezier,
@@ -660,6 +661,7 @@ const CounterAnimationEditorModal = ({
 
       if (isPanningRef.current) {
         isPanningRef.current = false;
+        endDragCursor();
         if (svgRef.current) {
           svgRef.current.style.cursor = spaceHeldRef.current
             ? 'grab'
@@ -670,6 +672,7 @@ const CounterAnimationEditorModal = ({
 
       // 컨트롤 포인트 드래그 종료 후 auto-fit
       if (dragTargetRef.current) {
+        endDragCursor();
         animateViewToFit(localBezierRef.current);
       }
 
@@ -683,6 +686,8 @@ const CounterAnimationEditorModal = ({
 
     return () => {
       moveScheduler.cancel();
+      // 드래그 중 모달이 닫히면 전역 커서도 함께 복원
+      if (isPanningRef.current || dragTargetRef.current) endDragCursor();
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
@@ -706,6 +711,8 @@ const CounterAnimationEditorModal = ({
     event.preventDefault();
     event.stopPropagation();
     cancelAutoFit();
+    // 잡는 동안 grabbing 유지 - 좌표 클램프로 포인터가 핸들 밖에 있어도 복귀 방지
+    beginDragCursor('grabbing');
     dragTargetRef.current = target;
   };
 
@@ -793,6 +800,7 @@ const CounterAnimationEditorModal = ({
         offsetX: viewOffsetRef.current.x,
         offsetY: viewOffsetRef.current.y,
       };
+      beginDragCursor('grabbing');
       if (svgRef.current) {
         svgRef.current.style.cursor = 'grabbing';
       }

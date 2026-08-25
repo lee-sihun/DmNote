@@ -1,3 +1,4 @@
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
@@ -837,6 +838,8 @@ const SoundTrimModal = ({
       const canvas = canvasRef.current;
       if (canvas) canvas.style.cursor = '';
       host.style.cursor = 'grabbing';
+      // 잡는 동안 전역 유지 - 호스트 밖으로 나가도 복귀하지 않게
+      beginDragCursor('grabbing');
 
       const applyMouseMove = (moveEvent: MouseEvent) => {
         const deltaX = moveEvent.clientX - startX;
@@ -854,6 +857,7 @@ const SoundTrimModal = ({
       const cleanup = () => {
         moveScheduler.flush();
         moveScheduler.cancel();
+        endDragCursor();
         host.style.cursor = '';
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', cleanup);

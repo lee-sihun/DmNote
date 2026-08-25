@@ -5,6 +5,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { isMac } from '../core/platform';
+import { beginDragCursor, endDragCursor } from '../core/dragCursor';
 
 /** 커서 설정 응답 타입 */
 export interface CursorSettings {
@@ -448,7 +449,11 @@ export function lockCustomCursor(
   cursorType: CursorType,
   event?: MouseEvent | PointerEvent,
 ): void {
-  if (!isMac()) return;
+  if (!isMac()) {
+    // 비맥은 오버레이 대신 전역 고정 - 잡은 순간의 커서를 드래그 내내 유지
+    beginDragCursor(cursorType);
+    return;
+  }
   overlayState.lockedType = cursorType;
   updateOverlay(event);
 }
@@ -457,7 +462,10 @@ export function lockCustomCursor(
  * macOS 커스텀 커서 잠금을 해제합니다.
  */
 export function unlockCustomCursor(event?: MouseEvent | PointerEvent): void {
-  if (!isMac()) return;
+  if (!isMac()) {
+    endDragCursor();
+    return;
+  }
   overlayState.lockedType = null;
   updateOverlay(event);
 }
