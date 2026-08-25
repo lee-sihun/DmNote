@@ -18,6 +18,7 @@ import {
   type GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useEditStatePreviewPublisher } from '@stores/grid/useEditStatePreviewStore';
 
 interface UseGradientColorStateOptions {
   /** 현재 저장된 쌍 (base 색 + gradient 형제) */
@@ -70,6 +71,9 @@ export function useGradientColorState({
   onCommit,
 }: UseGradientColorStateOptions) {
   const storedSpec = pair.gradient ?? null;
+  // 상태 프리뷰 발행 - 앵커 존재(피커 오픈) 동안 형식과 무관하게 편집 중인
+  // 상태를 캔버스에 알린다. 그라데이션 세션과 달리 단색 편집도 포함
+  useEditStatePreviewPublisher(canvasAnchor ?? null, canvasState);
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
   );

@@ -10,11 +10,17 @@ import {
   PropertyRow,
   PropertySection,
 } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import {
+  useEditStatePreviewPublisher,
+  type EditStateAnchor,
+} from '@stores/grid/useEditStatePreviewStore';
 
 type ShadowState = 'idle' | 'active';
 
 interface ShadowPickerProps {
   open: boolean;
+  /** 캔버스 상태 프리뷰 대상 - 지정 시 열려 있는 동안 편집 상태를 발행 */
+  previewAnchor?: EditStateAnchor | null;
   referenceRef: React.RefObject<HTMLElement>;
   panelElement?: HTMLElement | null;
   idleShadow: ElementShadowSpec;
@@ -35,6 +41,7 @@ interface ShadowPickerProps {
 
 const ShadowPicker = ({
   open,
+  previewAnchor = null,
   referenceRef,
   panelElement = null,
   idleShadow,
@@ -52,6 +59,8 @@ const ShadowPicker = ({
   const colorButtonRef = useRef<HTMLButtonElement>(null);
   // 입력 탭이 숨겨진 요소(통계)는 이전 선택의 탭 상태와 무관하게 대기만 편집
   const effectiveState = showActiveState ? state : 'idle';
+  // 열려 있는 동안 편집 상태를 캔버스 프리뷰로 발행
+  useEditStatePreviewPublisher(open ? previewAnchor : null, effectiveState);
   const current = effectiveState === 'active' ? activeShadow : idleShadow;
   const mixed = effectiveState === 'active' ? activeMixed : idleMixed;
   const [draftColor, setDraftColor] = useState(current.color);

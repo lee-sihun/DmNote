@@ -5,6 +5,7 @@ import Checkbox from '@components/main/common/Checkbox';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 import PopupExit from '@components/main/Modal/PopupExit';
 import { PropertyRow, PropertySection } from './PropertyInputs';
+import type { EditStateAnchor } from '@stores/grid/useEditStatePreviewStore';
 
 type ShadowState = 'idle' | 'active';
 
@@ -26,6 +27,8 @@ interface ShadowControlsProps {
   enabledCommitStrategy?: 'after-paint' | 'sync';
   /** 눌림 상태가 없는 요소(통계)는 대기만 편집 */
   showActiveState?: boolean;
+  /** 캔버스 상태 프리뷰 대상 - 피커가 열려 있는 동안 편집 상태 발행 */
+  previewAnchor?: EditStateAnchor | null;
   panelElement?: HTMLElement | null;
   t: (key: string) => string | undefined;
 }
@@ -40,6 +43,7 @@ const ShadowControls = ({
   onEnabledChange,
   enabledCommitStrategy = 'after-paint',
   showActiveState = true,
+  previewAnchor = null,
   panelElement,
   t,
 }: ShadowControlsProps) => {
@@ -99,6 +103,7 @@ const ShadowControls = ({
         {pickerOpen ? (
           <ShadowPicker
             open
+            previewAnchor={previewAnchor}
             referenceRef={configButtonRef}
             panelElement={panelElement}
             idleShadow={idleShadow}
