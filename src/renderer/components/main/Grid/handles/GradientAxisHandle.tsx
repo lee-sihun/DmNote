@@ -19,6 +19,7 @@ import {
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 
 /**
  * 온캔버스 그라데이션 축 - 피커가 그라데이션 형식으로 열려 있는 동안
@@ -196,6 +197,19 @@ const GradientAxisOverlay = ({
     setDragAngle(null);
     setDragStop(null);
   }, [session]);
+
+  // undo/redo 반영 시 진행 중 드래그를 복원 preview 없이 종료 - 저장값이
+  // 되돌아간 뒤 pointerup이 마지막 포인터 좌표를 다시 커밋하지 않게
+  const historyTick = useCommittedApplyStore((state) => state.historyTick);
+  const historyTickRef = useRef(historyTick);
+  useEffect(() => {
+    if (historyTickRef.current === historyTick) return;
+    historyTickRef.current = historyTick;
+    if (!dragRef.current) return;
+    detachRef.current?.();
+    setDragAngle(null);
+    setDragStop(null);
+  }, [historyTick]);
 
   // 앵커 → 월드 bounds 해석
   const resolveBounds = (): Bounds | null => {

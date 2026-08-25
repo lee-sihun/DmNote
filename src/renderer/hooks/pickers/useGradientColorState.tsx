@@ -19,6 +19,7 @@ import {
 } from '@stores/grid/useGradientEditStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useEditStatePreviewPublisher } from '@stores/grid/useEditStatePreviewStore';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 
 interface UseGradientColorStateOptions {
   /** 현재 저장된 쌍 (base 색 + gradient 형제) */
@@ -112,6 +113,15 @@ export function useGradientColorState({
       return index === prev.index ? prev : { ...prev, index };
     });
   }, [contextKey, maxStopIndex]);
+  // undo/redo 반영 시 미커밋 초안 폐기 - 저장값이 되돌아간 뒤 옛 초안이
+  // 다음 커밋에 실리지 않게 (드래그 세션 자체는 프리미티브가 함께 취소)
+  const historyTick = useCommittedApplyStore((state) => state.historyTick);
+  const historyTickRef = useRef(historyTick);
+  useEffect(() => {
+    if (historyTickRef.current === historyTick) return;
+    historyTickRef.current = historyTick;
+    setDraft(null);
+  }, [historyTick]);
   const selectedStop =
     selection.key === contextKey
       ? Math.min(Math.max(selection.index, 0), maxStopIndex)

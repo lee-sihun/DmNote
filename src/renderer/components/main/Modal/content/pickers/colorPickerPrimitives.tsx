@@ -8,6 +8,7 @@ import {
 import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 
 // 디자인 조절점 — 내부 폭 148px 기준 비율 ≈1.42:1
@@ -185,6 +186,17 @@ export const usePointerSession = (
   };
   const finishOnUnmountRef = useLatest(finishOnUnmount);
   useEffect(() => () => finishOnUnmountRef.current(), [finishOnUnmountRef]);
+
+  // undo/redo 반영 시 진행 중 드래그를 커밋 없이 종료 - 이후 pointerup이나
+  // 캡처 상실이 마지막 draft로 Undo 결과를 되돌리지 않게
+  const historyTick = useCommittedApplyStore((state) => state.historyTick);
+  const historyTickRef = useRef(historyTick);
+  const teardownRef = useLatest(teardown);
+  useEffect(() => {
+    if (historyTickRef.current === historyTick) return;
+    historyTickRef.current = historyTick;
+    teardownRef.current();
+  }, [historyTick, teardownRef]);
 
   return {
     onPointerDown,
@@ -378,7 +390,11 @@ export const AlphaSlider = ({
   onChange,
   onChangeComplete,
   continuousInputStrategy,
-}: ColorTrackProps) => {
+  ariaLabel = 'Alpha',
+}: ColorTrackProps & {
+  // 스톱 알파와 전역 배율이 나란한 형식에서 역할 구분
+  ariaLabel?: string;
+}) => {
   const session = usePointerSession((x, _y, final) => {
     const next = hsvToColorObject({ ...color.hsv, a: x });
     onChange(next);
@@ -425,7 +441,7 @@ export const AlphaSlider = ({
       {...session}
       role="slider"
       tabIndex={0}
-      aria-label="Alpha"
+      aria-label={ariaLabel}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(color.hsv.a * 100)}

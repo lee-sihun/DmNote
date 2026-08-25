@@ -32,6 +32,7 @@ import {
   type GradientSpec,
 } from '@src/types/color';
 import { ColorSwatchButton, ColorSwatchSurface } from './ColorSwatch';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 
 type ColorValue = string | GradientColor;
 type PaletteValue = ColorValue | GradientSpecColor;
@@ -300,7 +301,15 @@ const ColorPickerWrapper = ({
     onClose?.();
   };
 
+  // undo/redo 반영은 진행 중 드래그를 프리미티브가 커밋 없이 끊는다 - complete가
+  // 오지 않으므로 여기서 드래그 잠금을 풀어 아래 동기화가 canonical을 따르게
+  const historyTick = useCommittedApplyStore((state) => state.historyTick);
+  const historyTickRef = useRef(historyTick);
   useEffect(() => {
+    if (historyTickRef.current !== historyTick) {
+      historyTickRef.current = historyTick;
+      isDraggingRef.current = false;
+    }
     // 드래그 중에는 외부 color prop 동기화 건너뜀
     if (isDraggingRef.current) {
       return;
@@ -373,7 +382,7 @@ const ColorPickerWrapper = ({
     }
 
     prevColorRef.current = color;
-  }, [color, gradientSelected, setSelectedColor]);
+  }, [color, gradientSelected, setSelectedColor, historyTick]);
 
   const [inputValue, setInputValue] = useState<string>(() =>
     selectedColor.hex
@@ -633,6 +642,9 @@ const ColorPickerWrapper = ({
     resolvedOpacityPercent !== null &&
     typeof onOpacityPercentChange === 'function';
 
+  // 투명도 조절기의 접근성 이름 - 색 알파 슬라이더와 역할이 구분되게
+  const opacityLabelText = opacityPercentLabel || 'Opacity';
+
   const resolvedOpacitySolid = resolvedOpacityPercent?.solid;
   const resolvedOpacityTop = resolvedOpacityPercent?.top;
   const resolvedOpacityBottom = resolvedOpacityPercent?.bottom;
@@ -811,6 +823,7 @@ const ColorPickerWrapper = ({
         {showOpacityControl && (
           <AlphaSlider
             color={opacitySliderColor}
+            ariaLabel={opacityLabelText}
             onChange={(c: ColorObject) => {
               const target = opacitySliderTarget;
               const next = clampOpacityPercent((c?.rgb?.a ?? 1) * 100);
@@ -844,7 +857,14 @@ const ColorPickerWrapper = ({
         <Input
           value={inputValue}
           colorLabel={t('colorPicker.hex')}
-          alphaLabel={t('colorPicker.alpha')}
+          alphaLabel={
+            // 이 필드가 전역 배율을 대신 표시하는 형식이면 이름도 배율 라벨로
+            solidOnly && !hideColorAlpha
+              ? t('colorPicker.alpha')
+              : showOpacityControl
+              ? opacityLabelText
+              : t('colorPicker.alpha')
+          }
           onValueChange={handleInputChange}
           onValueCommit={commitSolidInput}
           previewColor={selectedColor.hex}
