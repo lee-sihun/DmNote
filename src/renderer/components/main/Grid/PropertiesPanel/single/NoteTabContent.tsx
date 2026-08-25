@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+// 피커 열림 게이트로 저장값을 로컬 상태에 동기화하는 패턴 (ColorPicker와 동일)
 import React, { useEffect, useRef, useState } from 'react';
 import type { NoteTabContentProps } from '../types';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
@@ -15,59 +17,41 @@ import PopupExit from '@components/main/Modal/PopupExit';
 import {
   parseAlphaPercent,
   hexWithAlphaPercent,
-  toCanonicalCssRgba,
 } from '@utils/color/colorUtils';
 import {
   gradientToCss,
   hexRepresentative,
   toCanonicalGradient,
-  toStrictStopColor,
   type ColorModeValue,
   type GradientSpec,
 } from '@src/types/color';
+import {
+  DEFAULT_NOTE_COLOR,
+  coerceStrictStops,
+  toNoteStopColor,
+  toNoteHexColor,
+} from '../notePaintColorUtils';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
-import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
 import {
+  bodyInheritedGlowSpec,
+  foldGradientOpacity,
   legacyNoteColorToSpec,
   notePaintShadowColor,
 } from '@src/types/key/notePaint';
+import { parseStrictStopColor } from '@src/types/color';
 
-const DEFAULT_NOTE_COLOR = '#FFFFFF';
-
-const toNoteStopColor = (color: string): string | null =>
-  toStrictStopColor(color) ?? toCanonicalCssRgba(color);
-
-const toNoteHexColor = (color: string): string => {
+// 그라데이션 → 단색 전환: 첫 스톱 알파가 단색 투명도가 된다 (없으면 폴백)
+const stopAlphaPercent = (color: string, fallback: number): number => {
   const strict = toNoteStopColor(color);
-  return strict
-    ? hexRepresentative(strict) ?? DEFAULT_NOTE_COLOR
-    : DEFAULT_NOTE_COLOR;
-};
-
-// 팔레트는 표면 공용이라 §2A 밖 스톱이 들어올 수 있다 - 가능한 색은
-// compact rgba로 강제하고, 변환 불가면 실패 예정 커밋을 만들지 않는다
-const coerceStrictStops = (
-  rawStops: GradientSpec['stops'],
-  logTag: string,
-): GradientSpec['stops'] | null => {
-  const stops: GradientSpec['stops'] = [];
-  for (const stop of rawStops) {
-    const color = toNoteStopColor(stop.color);
-    if (color === null) {
-      console.error(
-        `[${logTag}] unsupported gradient stop color: ${stop.color}`,
-      );
-      return null;
-    }
-    stops.push({ ...stop, color });
-  }
-  return stops;
+  const parsed = strict ? parseStrictStopColor(strict) : null;
+  return parsed ? Math.round(parsed.a * 100) : fallback;
 };
 
 const NoteTabContent: React.FC<NoteTabContentProps> = ({
@@ -162,39 +146,61 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     setLocalBorderOpacity(keyPosition.noteBorderOpacity ?? 100);
   }, [keyPosition.noteBorderColor, keyPosition.noteBorderOpacity, pickerFor]);
 
-  const storedBorderGradient = keyPosition.noteBorderGradient ?? null;
+  // 제시 spec: 그라데이션 형식은 배율 UI가 없어 저장 배율을 스톱 알파에 접어 보인다
+  const storedBorderGradient = keyPosition.noteBorderGradient
+    ? foldGradientOpacity(
+        keyPosition.noteBorderGradient,
+        keyPosition.noteBorderOpacity ?? 100,
+      )
+    : null;
 
-  // 테두리 그라데이션 커밋 - 대표색은 hex 전용 계약(api-contract v2 §2)
-  const handleBorderPaintCommit = (value: ColorModeValue) => {
-    if (value.mode === 'solid') {
-      const hex = toNoteHexColor(value.color);
-      setBorderColor(hex);
-      const patch = {
-        property: 'noteBorderPaint',
-        value: { color: hex, opacity: localBorderOpacity },
-      } as const;
-      onNotePaintPreview?.(patch);
-      onNotePaintCommit?.(patch);
-      return;
-    }
-    const stops = coerceStrictStops(value.spec.stops, 'note-border');
+  // 테두리 그라데이션 커밋 - 배율은 항상 100으로 기록 (알파는 스톱이 전담)
+  const commitBorderGradientPaint = (rawSpec: GradientSpec) => {
+    const stops = coerceStrictStops(rawSpec.stops, 'note-border');
     if (stops === null) return;
-    // 테두리는 온캔버스 핸들로 각도 유지 - exact-keys 검증이 앱에서 가장
-    // 엄격한 경로라 커밋 직전 canonical 강제
-    const spec = toCanonicalGradient({ ...value.spec, stops });
+    // 노트는 각도 편집 UI가 없다 - 시드(180)나 저장값을 그대로 보존.
+    // exact-keys 검증이 앱에서 가장 엄격한 경로라 커밋 직전 canonical 강제
+    const spec = toCanonicalGradient({ ...rawSpec, stops });
     const hex =
       hexRepresentative(spec.stops[0]?.color ?? '#FFFFFF') ?? '#FFFFFF';
     setBorderColor(hex);
+    setLocalBorderOpacity(100);
     const patch = {
       property: 'noteBorderPaint',
       value: {
         color: hex,
-        opacity: localBorderOpacity,
+        opacity: 100,
         gradient: spec,
       },
     } as const;
     onNotePaintPreview?.(patch);
     onNotePaintCommit?.(patch);
+  };
+
+  // 테두리 커밋 - 대표색은 hex 전용 계약(api-contract v2 §2)
+  const handleBorderPaintCommit = (value: ColorModeValue) => {
+    if (value.mode === 'solid') {
+      const hex = toNoteHexColor(value.color);
+      // 그라데이션에서 돌아오면 첫 스톱 알파가 단색 투명도
+      const opacity = storedBorderGradient
+        ? stopAlphaPercent(value.color, localBorderOpacity)
+        : localBorderOpacity;
+      setBorderColor(hex);
+      setLocalBorderOpacity(opacity);
+      const patch = {
+        property: 'noteBorderPaint',
+        value: { color: hex, opacity },
+      } as const;
+      onNotePaintPreview?.(patch);
+      onNotePaintCommit?.(patch);
+      return;
+    }
+    // 단색에서 넘어오는 첫 커밋은 단색 투명도를 스톱 알파에 접는다
+    commitBorderGradientPaint(
+      storedBorderGradient
+        ? value.spec
+        : foldGradientOpacity(value.spec, localBorderOpacity),
+    );
   };
 
   const borderGradientState = useGradientColorState({
@@ -204,13 +210,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         : {},
     fallbackColor: '#FFFFFF',
     contextKey: `key:${keyPosition.id}:noteBorder`,
-    canvasAnchor:
-      pickerFor === 'border' &&
-      keyPosition.id &&
-      isNativeElementId(keyPosition.id)
-        ? { kind: 'key', id: keyPosition.id }
-        : undefined,
-    canvasSurface: 'noteBorder',
+    // 노트는 그리드에 그려지지 않으므로 온캔버스 앵커(각도 핸들)를 두지 않는다
     // 드래그 중 중간값은 흘리지 않는다 - 기존 보더 픽커처럼 커밋(드래그 완료·
     // 형식 전환·팔레트 선택) 시점에 preview+commit 쌍으로 오버레이에 반영
     onCommit: handleBorderPaintCommit,
@@ -228,46 +228,88 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     keyPosition.noteOpacityTop ?? keyPosition.noteOpacity ?? 80,
     keyPosition.noteOpacityBottom ?? keyPosition.noteOpacity ?? 80,
   );
-  const legacyGlowSpec = legacyNoteColorToSpec(
-    keyPosition.noteGlowColor ?? keyPosition.noteColor,
-    keyPosition.noteGlowOpacityTop ?? keyPosition.noteGlowOpacity ?? 70,
-    keyPosition.noteGlowOpacityBottom ?? keyPosition.noteGlowOpacity ?? 70,
-  );
-  const storedNoteSpec = keyPosition.noteGradient ?? legacyNoteSpec;
-  const storedGlowSpec = keyPosition.noteGlowGradient ?? legacyGlowSpec;
+  const glowOpacityTop =
+    keyPosition.noteGlowOpacityTop ?? keyPosition.noteGlowOpacity ?? 70;
+  const glowOpacityBottom =
+    keyPosition.noteGlowOpacityBottom ?? keyPosition.noteGlowOpacity ?? 70;
+  // 글로우 색이 없으면 렌더는 본체를 상속한다 - 신형 본체는 스톱·각도를 그대로
+  // 빌리므로(§9-4) 축약된 shadow가 아니라 본체 spec으로 제시
+  const legacyGlowSpec =
+    keyPosition.noteGlowColor == null && keyPosition.noteGradient
+      ? bodyInheritedGlowSpec(
+          keyPosition.noteGradient,
+          glowOpacityTop,
+          glowOpacityBottom,
+        )
+      : legacyNoteColorToSpec(
+          keyPosition.noteGlowColor ?? keyPosition.noteColor,
+          glowOpacityTop,
+          glowOpacityBottom,
+        );
+  // 신형 spec은 남은 저장 배율을 스톱 알파에 접어 제시 (커밋 시 100으로 수렴)
+  const storedNoteSpec = keyPosition.noteGradient
+    ? foldGradientOpacity(
+        keyPosition.noteGradient,
+        typeof keyPosition.noteOpacity === 'number'
+          ? keyPosition.noteOpacity
+          : 100,
+      )
+    : legacyNoteSpec;
+  const storedGlowSpec = keyPosition.noteGlowGradient
+    ? foldGradientOpacity(
+        keyPosition.noteGlowGradient,
+        typeof keyPosition.noteGlowOpacity === 'number'
+          ? keyPosition.noteGlowOpacity
+          : 100,
+      )
+    : legacyGlowSpec;
 
-  // 구형 제시 상태의 배율 기준선 정렬 (§9-6): 프로파일은 스톱 알파에 이관되므로
-  // 슬라이더는 100에서 시작해야 커밋 시 이중 곱 점프가 없다
+  // canonical 반영 직후에는 열린 피커의 로컬 상태도 저장값으로 재동기화 -
+  // 열림 게이트가 지킨 낡은 값이 다음 커밋에 재저장되는 회귀 방지 (undo/redo,
+  // 플러그인·다른 창 커밋 포함). 닫힌 표면은 위의 게이트 effect들이 추종한다
+  const commitTick = useCommittedApplyStore((state) => state.commitTick);
+  const commitTickRef = useRef(commitTick);
   useEffect(() => {
-    if (
-      pickerFor === 'note' &&
-      keyPosition.noteGradient == null &&
-      legacyNoteSpec !== null
-    ) {
-      setLocalNoteOpacity(100);
+    if (commitTickRef.current === commitTick) return;
+    commitTickRef.current = commitTick;
+    if (pickerFor === 'note') {
+      const noteColor = keyPosition.noteColor;
+      setNoteSolidColor(
+        typeof noteColor === 'string' ? noteColor : DEFAULT_NOTE_COLOR,
+      );
+      setLocalNoteOpacity(
+        typeof keyPosition.noteOpacity === 'number'
+          ? keyPosition.noteOpacity
+          : 80,
+      );
+      return;
     }
-    if (
-      pickerFor === 'glow' &&
-      keyPosition.noteGlowGradient == null &&
-      legacyGlowSpec !== null
-    ) {
-      setLocalGlowOpacity(100);
+    if (pickerFor === 'glow') {
+      const glowColor = keyPosition.noteGlowColor ?? keyPosition.noteColor;
+      setGlowSolidColor(
+        typeof glowColor === 'string' ? glowColor : DEFAULT_NOTE_COLOR,
+      );
+      setLocalGlowOpacity(
+        typeof keyPosition.noteGlowOpacity === 'number'
+          ? keyPosition.noteGlowOpacity
+          : 70,
+      );
+      return;
     }
-    // 제시 spec은 pickerFor가 열리는 시점 값만 기준으로 삼는다
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickerFor]);
+    if (pickerFor === 'border') {
+      setBorderColor(keyPosition.noteBorderColor ?? '#FFFFFF');
+      setLocalBorderOpacity(keyPosition.noteBorderOpacity ?? 100);
+    }
+  }, [commitTick, pickerFor, keyPosition]);
 
   // 본체·글로우 커밋 (계약 §9-5) - 전환·배율·shadow를 한 op으로
   const makePaintCommit =
     (surface: 'note' | 'glow') => (value: ColorModeValue) => {
       const property = surface === 'note' ? 'notePaint' : 'noteGlowPaint';
-      // 구형 제시 spec은 제외 - 신형 필드가 실제로 저장된 경우만 원자 op 대상.
-      // 구형 상태의 단색 전환까지 원자 op로 보내면 기준선 100이 저장돼
-      // 기존 투명도 프로파일이 소실된다
-      const hadSpec =
-        surface === 'note'
-          ? keyPosition.noteGradient != null
-          : keyPosition.noteGlowGradient != null;
+      // 그라데이션(신형·구형·상속 제시)에서 단색으로 가는 전환만 원자 op 대상.
+      // 단색 → 단색은 구형 {color}로 투명도 필드를 건드리지 않는다
+      const hadPresented =
+        surface === 'note' ? storedNoteSpec !== null : storedGlowSpec !== null;
       const setSolid =
         surface === 'note' ? setNoteSolidColor : setGlowSolidColor;
       const localOpacity =
@@ -277,52 +319,44 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         // 노트 단색은 hex 관례 유지 - 알파는 투명도 필드 소관
         const solidHex = toNoteHexColor(value.color);
         setSolid(solidHex);
-        if (!hadSpec) {
-          // 단색·구형 → 단색: 구형 색 변경 (프로파일 보존, sibling 제거는 무해)
-          // 구형 그라데이션 제시가 기준선(100)으로 올려 둔 배율은 저장값으로 복귀
-          if (surface === 'note') {
-            setLocalNoteOpacity(
-              typeof keyPosition.noteOpacity === 'number'
-                ? keyPosition.noteOpacity
-                : 80,
-            );
-          } else {
-            setLocalGlowOpacity(
-              typeof keyPosition.noteGlowOpacity === 'number'
-                ? keyPosition.noteGlowOpacity
-                : 70,
-            );
-          }
+        if (!hadPresented) {
           const patch = { property, value: { color: solidHex } } as const;
           onNotePaintPreview?.(patch);
           onNotePaintCommit?.(patch);
           return;
         }
-        // 그라데이션 → 단색 확정 원자 op: 투명도 3필드가 배율 동일값으로
+        // 그라데이션 → 단색 확정 원자 op: 첫 스톱 알파가 단색 투명도(3필드 동일값)
+        const opacity = stopAlphaPercent(value.color, localOpacity);
+        if (surface === 'note') setLocalNoteOpacity(opacity);
+        else setLocalGlowOpacity(opacity);
         const patch = {
           property,
-          value: { color: solidHex, opacity: localOpacity, gradient: null },
+          value: { color: solidHex, opacity, gradient: null },
         } as const;
         onNotePaintPreview?.(patch);
         onNotePaintCommit?.(patch);
         return;
       }
 
-      // 배율은 로컬 값 단일 규칙: 구형 그라데이션 제시는 기준선 effect가 100으로
-      // 정렬해 두고(§9-6), 단색 시드는 기존 투명도를 그대로 승계한다
-      commitGradientPaint(surface, value.spec, localOpacity);
+      // 단색에서 넘어오는 첫 커밋만 단색 투명도를 스톱 알파에 접는다.
+      // 신형·구형·상속 제시 spec은 알파가 이미 스톱에 실려 있다
+      commitGradientPaint(
+        surface,
+        hadPresented
+          ? value.spec
+          : foldGradientOpacity(value.spec, localOpacity),
+      );
     };
 
-  // 그라데이션 커밋 공통부 - 배율 슬라이더(형식 전환 겸용)와 색 커밋이 공유
+  // 그라데이션 커밋 공통부 - 배율은 항상 100으로 기록 (알파는 스톱이 전담)
   const commitGradientPaint = (
     surface: 'note' | 'glow',
     rawSpec: GradientSpec,
-    multiplier: number,
   ) => {
     const property = surface === 'note' ? 'notePaint' : 'noteGlowPaint';
     const stops = coerceStrictStops(rawSpec.stops, 'note-paint');
     if (stops === null) return;
-    // 각도는 온캔버스 축 핸들이 편집한 값을 보존 (테두리와 동일 방식)
+    // 각도는 편집 UI 없이 시드(180)나 저장값을 보존 (테두리와 동일 방식)
     const spec = toCanonicalGradient({ ...rawSpec, stops });
     const shadow = notePaintShadowColor(spec);
     if (shadow === null) {
@@ -331,15 +365,15 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       return;
     }
     if (surface === 'note') {
-      setLocalNoteOpacity(multiplier);
+      setLocalNoteOpacity(100);
       setNoteSolidColor(shadow.top);
     } else {
-      setLocalGlowOpacity(multiplier);
+      setLocalGlowOpacity(100);
       setGlowSolidColor(shadow.top);
     }
     const patch = {
       property,
-      value: { color: shadow, opacity: multiplier, gradient: spec },
+      value: { color: shadow, opacity: 100, gradient: spec },
     } as const;
     onNotePaintPreview?.(patch);
     onNotePaintCommit?.(patch);
@@ -356,13 +390,6 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         : {},
     fallbackColor: DEFAULT_NOTE_COLOR,
     contextKey: `key:${keyPosition.id}:noteBody`,
-    canvasAnchor:
-      pickerFor === 'note' &&
-      keyPosition.id &&
-      isNativeElementId(keyPosition.id)
-        ? { kind: 'key', id: keyPosition.id }
-        : undefined,
-    canvasSurface: 'noteBody',
     onPreview: (value) => {
       if (value.mode === 'solid') setNoteSolidColor(value.color);
     },
@@ -379,13 +406,6 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         : {},
     fallbackColor: DEFAULT_NOTE_COLOR,
     contextKey: `key:${keyPosition.id}:noteGlow`,
-    canvasAnchor:
-      pickerFor === 'glow' &&
-      keyPosition.id &&
-      isNativeElementId(keyPosition.id)
-        ? { kind: 'key', id: keyPosition.id }
-        : undefined,
-    canvasSurface: 'noteGlow',
     onPreview: (value) => {
       if (value.mode === 'solid') setGlowSolidColor(value.color);
     },
@@ -568,14 +588,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             surfaceClassName="rounded-md"
             color={storedNoteSpec ? undefined : noteSolidColor}
             image={storedNoteSpec ? gradientToCss(storedNoteSpec) : undefined}
-            opacity={
-              // 신형이면 배율을 곱해 표시, 구형 제시는 알파가 이미 이미지에 실림
-              storedNoteSpec
-                ? keyPosition.noteGradient != null
-                  ? localNoteOpacity / 100
-                  : undefined
-                : localNoteOpacity / 100
-            }
+            // 그라데이션은 알파가 이미지에 실려 있어 배율을 곱하지 않는다
+            opacity={storedNoteSpec ? undefined : localNoteOpacity / 100}
           />
         </PropertyRow>
 
@@ -595,7 +609,9 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                   ? gradientToCss(storedBorderGradient)
                   : undefined
               }
-              opacity={localBorderOpacity / 100}
+              opacity={
+                storedBorderGradient ? undefined : localBorderOpacity / 100
+              }
             />
             <Dropdown
               commitStrategy="after-paint"
@@ -764,13 +780,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             surfaceClassName="rounded-md"
             color={storedGlowSpec ? undefined : glowSolidColor}
             image={storedGlowSpec ? gradientToCss(storedGlowSpec) : undefined}
-            opacity={
-              storedGlowSpec
-                ? keyPosition.noteGlowGradient != null
-                  ? localGlowOpacity / 100
-                  : undefined
-                : localGlowOpacity / 100
-            }
+            opacity={storedGlowSpec ? undefined : localGlowOpacity / 100}
           />
         </PropertyRow>
 
@@ -858,56 +868,48 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             footerSlot={activePaintState.footerSlot}
             gradientSpec={activePaintState.paletteGradientSpec}
             onGradientSpecSelect={activePaintState.handleGradientSpecSelect}
-            {...(pickerFor !== 'border' && {
-              // 그라데이션 형식에선 단일 슬라이더가 전역 배율(§9-2),
-              // 단색 형식에선 기존 3필드 동일값 커밋을 유지
-              // 단색 형식의 색 알파는 저장 시 hex 변환으로 버려지므로 숨긴다 -
-              // 그라데이션 형식의 색 알파는 스톱 알파라 유지
-              hideColorAlpha:
-                (pickerFor === 'note' ? noteGradientState : glowGradientState)
-                  .format !== 'gradient',
-              opacityPercent:
-                pickerFor === 'note' ? localNoteOpacity : localGlowOpacity,
-              onOpacityPercentChange: (value: number) => {
-                if (pickerFor === 'note') {
-                  setLocalNoteOpacity(value);
-                  return;
-                }
-                setLocalGlowOpacity(value);
-              },
-              onOpacityPercentChangeComplete: (value: number) => {
-                const surface = pickerFor === 'note' ? 'note' : 'glow';
-                const state =
-                  surface === 'note' ? noteGradientState : glowGradientState;
-                if (state.format === 'gradient') {
-                  // 배율 커밋 - 구형 제시 상태면 이 커밋이 전환을 물질화
-                  const spec = state.paletteGradientSpec;
-                  if (spec) commitGradientPaint(surface, spec, value);
-                  return;
-                }
-                const property =
-                  surface === 'note' ? 'notePaint' : 'noteGlowPaint';
-                if (surface === 'note') {
-                  setLocalNoteOpacity(value);
-                } else {
-                  setLocalGlowOpacity(value);
-                }
-                const patch = {
-                  property,
-                  value: {
-                    opacity: value,
-                    opacityTop: value,
-                    opacityBottom: value,
+            {...(pickerFor !== 'border' &&
+            activePaintState.format !== 'gradient'
+              ? {
+                  // 단색 형식: 투명도 조절기가 알파를 대신하고 기존 3필드 동일값
+                  // 커밋을 유지한다. 색 알파는 저장 시 hex 변환으로 버려지므로 숨긴다.
+                  // 그라데이션 형식은 스톱 알파만 편집하므로 조절기를 두지 않는다
+                  hideColorAlpha: true,
+                  opacityPercent:
+                    pickerFor === 'note' ? localNoteOpacity : localGlowOpacity,
+                  onOpacityPercentChange: (value: number) => {
+                    if (pickerFor === 'note') {
+                      setLocalNoteOpacity(value);
+                      return;
+                    }
+                    setLocalGlowOpacity(value);
                   },
-                } as const;
-                onNotePaintPreview?.(patch);
-                onNotePaintCommit?.(patch);
-              },
-              opacityPercentLabel:
-                pickerFor === 'note'
-                  ? t('keySetting.noteOpacity') || '노트 투명도'
-                  : t('keySetting.noteGlowOpacity') || '글로우 투명도',
-            })}
+                  onOpacityPercentChangeComplete: (value: number) => {
+                    const surface = pickerFor === 'note' ? 'note' : 'glow';
+                    const property =
+                      surface === 'note' ? 'notePaint' : 'noteGlowPaint';
+                    if (surface === 'note') {
+                      setLocalNoteOpacity(value);
+                    } else {
+                      setLocalGlowOpacity(value);
+                    }
+                    const patch = {
+                      property,
+                      value: {
+                        opacity: value,
+                        opacityTop: value,
+                        opacityBottom: value,
+                      },
+                    } as const;
+                    onNotePaintPreview?.(patch);
+                    onNotePaintCommit?.(patch);
+                  },
+                  opacityPercentLabel:
+                    pickerFor === 'note'
+                      ? t('keySetting.noteOpacity') || '노트 투명도'
+                      : t('keySetting.noteGlowOpacity') || '글로우 투명도',
+                }
+              : {})}
           />
         ) : null}
       </PopupExit>

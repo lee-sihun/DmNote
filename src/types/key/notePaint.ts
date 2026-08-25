@@ -96,6 +96,60 @@ export const legacyNoteColorToSpec = (
   });
 };
 
+/**
+ * 글로우가 신형 본체를 상속하는 상태의 제시 spec (§9-4 렌더 규칙과 대칭).
+ * 렌더는 본체 스톱 색만 빌리고(알파 1) 프로파일은 글로우 끝단 투명도가
+ * 맡으므로, 각 스톱 위치에 보간한 프로파일 알파를 실어 제시한다.
+ * 색·각도·스톱 수를 보존해 한 번의 커밋이 상속 형태를 축약하지 않는다.
+ *
+ * 근사 한계: 렌더의 프로파일은 노트 세로축 기준이고 spec 알파는 그라데이션
+ * 축을 따르므로 각도 180이 아닌 본체(플러그인·프리셋 경로)에서는 커밋 후
+ * 프로파일 방향이 바뀐다. 세로 프로파일을 spec과 별도로 담으려면 계약 확장 필요
+ */
+export const bodyInheritedGlowSpec = (
+  bodyGradient: GradientSpec,
+  glowOpacityTop: number,
+  glowOpacityBottom: number,
+): GradientSpec | null => {
+  const stops: GradientSpec['stops'] = [];
+  for (const stop of bodyGradient.stops) {
+    const pos = Math.min(Math.max(stop.pos, 0), 1);
+    const alphaPercent =
+      glowOpacityTop + (glowOpacityBottom - glowOpacityTop) * pos;
+    const color = composeStopColor(stop.color, alphaPercent);
+    if (color === null) return null;
+    stops.push({ ...stop, color });
+  }
+  return toCanonicalGradient({ ...bodyGradient, stops });
+};
+
+/**
+ * 전역 배율을 스톱 알파에 접어 넣은 spec. 그라데이션 형식은 배율 UI가 없고
+ * 저장 배율을 항상 100으로 기록하므로, 남아 있는 배율은 제시·커밋 전에
+ * 여기서 흡수한다. 100이면 원본 그대로
+ */
+export const foldGradientOpacity = (
+  spec: GradientSpec,
+  opacityPercent: number,
+): GradientSpec => {
+  const factor = Math.min(Math.max(opacityPercent / 100, 0), 1);
+  if (factor === 1) return spec;
+  const stops = spec.stops.map((stop) => {
+    const strict = toStrictStopColor(stop.color);
+    const parsed = strict ? parseStrictStopColor(strict) : null;
+    if (!strict || !parsed) return stop;
+    const alpha = Math.round(parsed.a * factor * 10_000) / 10_000;
+    return {
+      ...stop,
+      color:
+        alpha === 1
+          ? hexRepresentative(strict) ?? stop.color
+          : `rgba(${parsed.r},${parsed.g},${parsed.b},${alpha})`,
+    };
+  });
+  return toCanonicalGradient({ ...spec, stops });
+};
+
 export interface NoteBorderPaintValueV1 {
   color: string;
   opacity: number;
