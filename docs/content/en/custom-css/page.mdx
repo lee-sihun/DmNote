@@ -14,6 +14,37 @@ You can implement various styles like neon signs, minimal designs, game themes, 
   reapplied when you modify/save the CSS file.
 </Callout>
 
+## Where It Applies
+
+The overlay window and the OBS browser source receive the CSS file as is. In
+the main editor window it applies only to the grid preview (keys, counters,
+graphs, knobs, and plugin elements) and to the counter animation editor
+preview; app UI such as the settings panel and toolbar is not reached by your
+selectors. To make that work, every selector in the main window is confined to
+the preview area, and rules written on `body` or `:root` apply to the preview
+area itself. The prefix used for confinement does not change specificity, so
+ordinary rules cascade the same way on the canvas and in the overlay. A few
+limits apply to the main window only:
+
+- `@keyframes` names are prefixed automatically so they never collide with the
+  app's own animations, and names written directly in `animation` or
+  `animation-name` are rewritten to match. Only plain identifiers (letters,
+  digits, hyphens) are supported; definitions whose name needs quoting or equals
+  a reserved word such as `linear` are left out of the main window. Animation
+  names passed through a CSS variable (`var()`) are not rewritten either and
+  will not run in the main window.
+- `@property` is ignored in the main window because it could collide with
+  properties the app registers.
+- `@font-face` and stylesheets pulled in with `@import` apply to the whole
+  document. Use them for web fonts only, and avoid `font-family` names that the
+  app UI itself uses.
+- Selectors that target siblings of `body`, such as `body + .x`, cannot be moved
+  inside the preview area and are ignored in the main window. The same applies
+  to the nested form, such as `body { & ~ .x { } }`.
+
+None of these limits apply to the overlay or OBS, where the CSS file is used as
+is.
+
 ## Basic Concepts
 
 ### CSS Variable System
