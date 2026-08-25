@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { toCssRgba } from '@utils/color/colorUtils';
 import { gradientToCss, type GradientSpec } from '@src/types/color';
 import {
+  bezierToCssString,
   COUNTER_DEFAULT_BEZIER,
   createCubicBezierEasing,
 } from '@utils/cubicBezier';
@@ -27,6 +28,53 @@ interface CountDisplayProps {
   useInlineStyles?: boolean;
 }
 
+interface ScaleAnimationOptions {
+  targetScale: number;
+  durationMs: number;
+  easing: (t: number) => number;
+}
+
+// WAAPI 미지원 환경(jsdom 등)용 rAF 폴백.
+// WAAPI와 같은 의미를 유지: 시작 즉시 target scale, 취소 시 즉시 scale(1) 복귀
+const startScaleFallbackAnimation = (
+  el: HTMLElement,
+  { targetScale, durationMs, easing }: ScaleAnimationOptions,
+): (() => void) => {
+  const startTime = performance.now();
+  let frame: number | null = null;
+  let currentScale = Number.NaN;
+
+  const applyScale = (value: number): void => {
+    currentScale = value;
+    el.style.transform = `scale(${value})`;
+  };
+
+  const animate = (timestamp: number): void => {
+    const progress = Math.min((timestamp - startTime) / durationMs, 1);
+    const nextScale = 1 + (targetScale - 1) * (1 - easing(progress));
+    if (Math.abs(currentScale - nextScale) > 0.0005) {
+      applyScale(nextScale);
+    }
+    if (progress < 1) {
+      frame = requestAnimationFrame(animate);
+      return;
+    }
+    if (currentScale !== 1) applyScale(1);
+    frame = null;
+  };
+
+  applyScale(targetScale);
+  frame = requestAnimationFrame(animate);
+
+  return () => {
+    if (frame !== null) {
+      cancelAnimationFrame(frame);
+      frame = null;
+    }
+    applyScale(1);
+  };
+};
+
 const CountDisplay = ({
   count,
   fillColor,
@@ -47,9 +95,9 @@ const CountDisplay = ({
   useInlineStyles = false,
 }: CountDisplayProps) => {
   const spanRef = useRef<HTMLSpanElement | null>(null);
-  const scaleRef = useRef<number>(1);
   const prevCount = useRef<number>(count);
-  const animationRef = useRef<number | null>(null);
+  const animationRef = useRef<Animation | null>(null);
+  const cancelFallbackRef = useRef<(() => void) | null>(null);
   const targetScale = Number.isFinite(Number(animationScale))
     ? Number(animationScale)
     : 1.1;
@@ -57,75 +105,52 @@ const CountDisplay = ({
     Math.max(Math.round(Number(animationDurationMs) || 300), 1),
     5000,
   );
-  const b0 = animationBezier?.[0];
-  const b1 = animationBezier?.[1];
-  const b2 = animationBezier?.[2];
-  const b3 = animationBezier?.[3];
-  const easing = useMemo(
-    () => createCubicBezierEasing(animationBezier),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [b0, b1, b2, b3],
-  );
+  // easing은 문자열(값 비교)이라 bezier 배열 identity와 무관하게 effect 의존성이 안정적
+  const cssEasing = bezierToCssString(animationBezier, 4);
+  // 폴백 전용 — 배열 identity를 effect 의존성에 넣지 않기 위해 ref로 전달
+  // (선언 순서상 아래 애니메이션 effect보다 먼저 실행됨)
+  const bezierRef = useRef(animationBezier);
+  useLayoutEffect(() => {
+    bezierRef.current = animationBezier;
+  });
 
-  useEffect(() => {
-    // 스케일은 React 상태 대신 DOM에 직접 반영 — 애니메이션 프레임당 커밋 방지
-    const applyScale = (value: number): void => {
-      scaleRef.current = value;
-      const el = spanRef.current;
-      if (el) el.style.transform = `scale(${value})`;
+  // 스케일 팝은 컴포지터 애니메이션(WAAPI)으로 실행 — 프레임당 JS·리페인트 없음.
+  // count가 재생 중 다시 바뀌면 cleanup(cancel) 직후 같은 프레임에 처음부터 재생.
+  // 인라인 transform: scale(1)이 종료 후 복귀값(fill: none)이므로 유지 필수
+  useLayoutEffect(() => {
+    const el = spanRef.current;
+    if (!el) return undefined;
+
+    const stop = (): void => {
+      animationRef.current?.cancel();
+      animationRef.current = null;
+      cancelFallbackRef.current?.();
+      cancelFallbackRef.current = null;
     };
 
     if (!animationEnabled) {
+      stop();
       prevCount.current = count;
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-      if (scaleRef.current !== 1) {
-        applyScale(1);
-      }
-      return;
+      return undefined;
     }
+    // 설정 변경으로만 재실행된 경우 — cleanup이 이미 취소했으므로 재생하지 않음
+    if (prevCount.current === count) return stop;
+    prevCount.current = count;
 
-    if (prevCount.current !== count) {
-      prevCount.current = count;
-
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-
-      const startTime = performance.now();
-
-      const animate = (timestamp: number) => {
-        const elapsed = timestamp - startTime;
-        const progress = Math.min(elapsed / durationMs, 1);
-        const easedProgress = easing(progress);
-        const nextScale = 1 + (targetScale - 1) * (1 - easedProgress);
-
-        if (Math.abs(scaleRef.current - nextScale) > 0.0005) {
-          applyScale(nextScale);
-        }
-
-        if (progress < 1) {
-          animationRef.current = requestAnimationFrame(animate);
-        } else {
-          if (scaleRef.current !== 1) {
-            applyScale(1);
-          }
-          animationRef.current = null;
-        }
-      };
-
-      animationRef.current = requestAnimationFrame(animate);
+    if (typeof el.animate === 'function') {
+      animationRef.current = el.animate(
+        [{ transform: `scale(${targetScale})` }, { transform: 'scale(1)' }],
+        { duration: durationMs, easing: cssEasing, fill: 'none' },
+      );
+    } else {
+      cancelFallbackRef.current = startScaleFallbackAnimation(el, {
+        targetScale,
+        durationMs,
+        easing: createCubicBezierEasing(bezierRef.current),
+      });
     }
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-    };
-  }, [count, durationMs, easing, targetScale, animationEnabled]);
+    return stop;
+  }, [count, durationMs, cssEasing, targetScale, animationEnabled]);
 
   const displayValue = count || 0;
   const fill = toCssRgba(fillColor, '#FFFFFF');
