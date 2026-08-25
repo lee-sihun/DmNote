@@ -206,10 +206,13 @@ jobs:
 
       # APPLE_SIGNING_IDENTITY / APPLE_API_KEY_PATH는 앞 스텝의 GITHUB_ENV로 주입됨
       # APPLE_API_ISSUER는 App Store Connect "팀 키"에만 존재 — 개인 키는 사용 불가
+      # TAURI_BUNDLER_DMG_IGNORE_CI: CI=true면 Tauri가 DMG 스크립트에 --skip-jenkins를 넘겨
+      # Finder 아이콘 배치(.DS_Store)를 건너뜀 → 로컬과 동일한 DMG 외형을 위해 해제
       - name: 유니버설 빌드 (서명 + 앱 공증 + staple)
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
+          TAURI_BUNDLER_DMG_IGNORE_CI: "1"
         run: npm run tauri:build:mac:universal
 
       # spctl은 파이프에 물리면 종료 코드가 가려지므로 단독 실행
