@@ -9,7 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Key } from '@components/shared/Key';
 import StatItem from './StatItem';
 import { setKeyActive } from '@stores/signals/keySignals';
-import { setKeyCounter } from '@stores/signals/keyCounterSignals';
+import {
+  resetAllCounters,
+  setKeyCounter,
+} from '@stores/signals/keyCounterSignals';
 import { applyStatsSnapshot } from '@stores/signals/statsSignals';
 
 const styleCalls = vi.hoisted(() => ({ count: 0 }));
@@ -44,15 +47,23 @@ const insideCounter = {
 let container: HTMLDivElement;
 let root: Root;
 let animateCalls: number;
+let cancelCalls: number;
 const proto = Element.prototype as unknown as { animate?: unknown };
 const originalAnimate = proto.animate;
 
 beforeEach(() => {
   animateCalls = 0;
+  cancelCalls = 0;
   proto.animate = () => {
     animateCalls += 1;
-    return { cancel: () => {} };
+    return {
+      cancel: () => {
+        cancelCalls += 1;
+      },
+    };
   };
+  // 시그널 Map은 모듈 전역 — 테스트 순서에 따라 count 변경 여부가 달라지지 않도록 리셋
+  resetAllCounters();
   container = document.createElement('div');
   document.body.appendChild(container);
   act(() => {
@@ -122,6 +133,8 @@ describe('Key inside 카운터', () => {
     expect(styleCalls.count).toBe(afterMount + 2);
     expect(counterText()).toBe('9');
     expect(animateCalls).toBe(1);
+    // active 변경 커밋이 재생 중 팝을 취소하지 않는다
+    expect(cancelCalls).toBe(0);
   });
 });
 

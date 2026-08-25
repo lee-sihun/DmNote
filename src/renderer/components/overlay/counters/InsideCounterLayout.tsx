@@ -9,17 +9,19 @@ import CountDisplay from './CountDisplay';
 import SignalCountDisplay from './SignalCountDisplay';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 
-interface InsideCounterLayoutProps {
-  // 오버레이는 countSignal(구독 격리), 에디터 프리뷰는 count(숫자) — 호출부는 둘 중 하나로 고정.
-  // 한 마운트에서 경로가 바뀌면 CountDisplay가 리마운트되어 팝 애니메이션 1회가 유실된다
-  count?: number;
-  countSignal?: Signal<number>;
+// 오버레이는 countSignal(구독 격리), 에디터 프리뷰는 count(숫자) — 타입으로 둘 중 하나만 허용.
+// 한 마운트에서 경로가 바뀌면 CountDisplay가 리마운트되어 팝 애니메이션 1회가 유실된다
+type CounterSource =
+  | { count: number; countSignal?: never }
+  | { countSignal: Signal<number>; count?: never };
+
+type InsideCounterLayoutProps = CounterSource & {
   labelText: string;
   textStyle: React.CSSProperties;
   active: boolean;
   counterSettings: KeyCounterSettings;
   useInlineStyles?: boolean;
-}
+};
 
 const InsideCounterLayout = ({
   count,
