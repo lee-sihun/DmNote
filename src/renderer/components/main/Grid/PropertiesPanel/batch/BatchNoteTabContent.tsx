@@ -18,8 +18,8 @@ import type { BatchElementPropertyUpdate } from '../types';
 
 interface SwatchDisplay {
   color?: string;
-  gradient?: { top: string; bottom: string };
-  opacity: number | { top: number; bottom: number };
+  image?: string;
+  opacity?: number | { top: number; bottom: number };
   label: string;
   isMixed: boolean;
 }
@@ -223,7 +223,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
             color={noteColorDisplay.color}
-            gradient={noteColorDisplay.gradient}
+            image={noteColorDisplay.image}
             opacity={noteColorDisplay.opacity}
             title={noteColorDisplay.label}
             type="button"
@@ -241,6 +241,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
               surfaceClassName="rounded-md"
               color={borderColorDisplay.color}
+              image={borderColorDisplay.image}
               opacity={borderColorDisplay.opacity}
               title={borderColorDisplay.label}
             />
@@ -414,7 +415,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
             color={glowColorDisplay.color}
-            gradient={glowColorDisplay.gradient}
+            image={glowColorDisplay.image}
             opacity={glowColorDisplay.opacity}
             title={glowColorDisplay.label}
             type="button"

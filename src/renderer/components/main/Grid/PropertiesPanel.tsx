@@ -30,11 +30,6 @@ import {
 } from '@plugins/runtime/settingsSections';
 import { updatePluginElement } from '@plugins/runtime/displayElement/pluginElementActions';
 import type { NativeLayerBoundsTarget } from '@plugins/runtime/displayElement/pluginElementActions';
-import {
-  toRgbHexColor,
-  parseAlphaPercent,
-  hexWithAlphaPercent,
-} from '@utils/color/colorUtils';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
@@ -1048,28 +1043,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   }, [selectedKeyElements.length]);
 
+  // 노트 표면(note/glow/border) 로컬 상태는 useBatchNotePaint가 소유
   const [batchLocalColors, setBatchLocalColors] = useState<{
-    noteColor: NoteColor;
-    glowColor: NoteColor;
-    borderColor: string;
-    borderOpacity: number;
     fillIdle: string;
     fillActive: string;
   }>({
-    noteColor: '#FFFFFF',
-    glowColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
-    borderOpacity: 100,
     fillIdle: '#FFFFFF',
     fillActive: '#FFFFFF',
-  });
-
-  const [batchLocalOpacities, setBatchLocalOpacities] = useState<{
-    noteOpacity: number;
-    glowOpacity: number;
-  }>({
-    noteOpacity: 80,
-    glowOpacity: 70,
   });
 
   // 선택이 변경되면 로컬 상태 초기화
@@ -2550,80 +2530,31 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     batchCounterFillButtonRef,
   ];
 
-  // 배치 피커 토글
+  // 배치 피커 토글 - 노트 표면 로컬 상태는 useBatchNotePaint가 소유
   const handleBatchPickerToggle = (target: BatchPickerTarget) => {
     if (target && target !== batchPickerFor) {
       // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 배치로 리셋
       setBatchCounterColorState('idle');
       const keysData = getSelectedKeysData();
       const keyOnly = getSelectedKeyOnlyPositions();
-      const isNoteTabPicker =
-        target === 'noteColor' ||
-        target === 'glowColor' ||
-        target === 'borderColor';
-      const isCounterPicker = target === 'fill';
       const firstPos =
-        (isNoteTabPicker || isCounterPicker) && keyOnly.length > 0
+        target === 'fill' && keyOnly.length > 0
           ? keyOnly[0].position
           : keysData[0]?.position;
       if (firstPos) {
         const counterSettings = normalizeCounterSettings(firstPos.counter);
         setBatchLocalColors({
-          noteColor: (() => {
-            const nc = firstPos.noteColor;
-            if (
-              nc &&
-              typeof nc === 'object' &&
-              'type' in nc &&
-              nc.type === 'gradient'
-            ) {
-              return { type: 'gradient', top: nc.top, bottom: nc.bottom };
-            }
-            return typeof nc === 'string' ? nc : '#FFFFFF';
-          })(),
-          glowColor: (() => {
-            const gc = firstPos.noteGlowColor ?? firstPos.noteColor;
-            if (
-              gc &&
-              typeof gc === 'object' &&
-              'type' in gc &&
-              gc.type === 'gradient'
-            ) {
-              return { type: 'gradient', top: gc.top, bottom: gc.bottom };
-            }
-            return typeof gc === 'string' ? gc : '#FFFFFF';
-          })(),
-          borderColor: firstPos.noteBorderColor ?? '#FFFFFF',
-          borderOpacity: firstPos.noteBorderOpacity ?? 100,
           fillIdle: counterSettings.fill.idle,
           fillActive: counterSettings.fill.active,
-        });
-        setBatchLocalOpacities({
-          noteOpacity:
-            typeof firstPos.noteOpacity === 'number'
-              ? firstPos.noteOpacity
-              : 80,
-          glowOpacity:
-            typeof firstPos.noteGlowOpacity === 'number'
-              ? firstPos.noteGlowOpacity
-              : 70,
         });
       }
     }
     setBatchPickerFor((prev) => (prev === target ? null : target));
   };
 
+  // 노트 표면(note/glow/border)의 피커 색은 useBatchNotePaint가 직접 공급
   const getBatchPickerColor = (): NoteColor | string => {
     switch (batchPickerFor) {
-      case 'noteColor':
-        return batchLocalColors.noteColor;
-      case 'glowColor':
-        return batchLocalColors.glowColor;
-      case 'borderColor':
-        return hexWithAlphaPercent(
-          batchLocalColors.borderColor,
-          batchLocalColors.borderOpacity,
-        );
       case 'fill':
         return effectiveBatchCounterColorState === 'active'
           ? batchLocalColors.fillActive
@@ -2649,90 +2580,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const handleBatchPickerColorChange = (newColor: NoteColor) => {
-    if (!batchPickerFor) return;
-
-    if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [batchPickerFor]: newColor,
-      }));
-    } else if (batchPickerFor === 'borderColor') {
-      const raw = typeof newColor === 'string' ? newColor : undefined;
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        borderColor: toRgbHexColor(raw),
-        borderOpacity: parseAlphaPercent(raw, prev.borderOpacity),
-      }));
-    } else if (batchPickerFor === 'fill') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const key =
-        effectiveBatchCounterColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle';
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [key]: solidColor,
-      }));
-    }
-  };
-
-  const completeBatchPickerColorChange = (
-    newColor: NoteColor,
-    onNotePaintCommit?: (patch: EditorNotePaintPropertyPatchV1) => void,
-  ) => {
-    if (!batchPickerFor) return;
-
-    if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [batchPickerFor]: newColor,
-      }));
-    } else if (batchPickerFor === 'borderColor') {
-      const raw = typeof newColor === 'string' ? newColor : undefined;
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        borderColor: toRgbHexColor(raw),
-        borderOpacity: parseAlphaPercent(raw, prev.borderOpacity),
-      }));
-    } else if (batchPickerFor === 'fill') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const key =
-        effectiveBatchCounterColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle';
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [key]: solidColor,
-      }));
-    }
-
-    if (batchPickerFor === 'noteColor') {
-      onNotePaintCommit?.({
-        property: 'notePaint',
-        value: { color: newColor },
-      });
-    } else if (batchPickerFor === 'glowColor') {
-      onNotePaintCommit?.({
-        property: 'noteGlowPaint',
-        value: { color: newColor },
-      });
-    } else if (batchPickerFor === 'borderColor') {
-      // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화(이슈 #73), 알파는 noteBorderOpacity로 분리
-      const raw = typeof newColor === 'string' ? newColor : undefined;
-      const solidColor = toRgbHexColor(raw);
-      const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
-      onNotePaintCommit?.({
-        property: 'noteBorderPaint',
-        value: { color: solidColor, opacity },
-      });
-    }
+    if (batchPickerFor !== 'fill') return;
+    const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+    const key =
+      effectiveBatchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+    setBatchLocalColors((prev) => ({
+      ...prev,
+      [key]: solidColor,
+    }));
   };
   const handleBatchPickerColorChangeComplete = (newColor: NoteColor) =>
-    completeBatchPickerColorChange(newColor);
-  const handleBatchNotePickerColorChangeComplete = (
-    newColor: NoteColor,
-    onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
-  ) => completeBatchPickerColorChange(newColor, onNotePaintCommit);
+    handleBatchPickerColorChange(newColor);
   const handleBatchFillPickerColorChangeComplete = (
     newColor: string,
     onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
@@ -2826,15 +2684,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           setBatchCounterColorState={setBatchCounterColorState}
           batchLocalColors={batchLocalColors}
           setBatchLocalColors={setBatchLocalColors}
-          batchLocalOpacities={batchLocalOpacities}
-          setBatchLocalOpacities={setBatchLocalOpacities}
           handleBatchPickerToggle={handleBatchPickerToggle}
           handleBatchPickerColorChange={handleBatchPickerColorChange}
           handleBatchPickerColorChangeComplete={
             handleBatchPickerColorChangeComplete
-          }
-          handleBatchNotePickerColorChangeComplete={
-            handleBatchNotePickerColorChangeComplete
           }
           handleBatchFillPickerColorChangeComplete={
             handleBatchFillPickerColorChangeComplete
