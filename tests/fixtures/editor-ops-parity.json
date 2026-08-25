@@ -1629,6 +1629,215 @@
       }
     },
     {
+      "name": "patch-note-glow-sync-enable",
+      "comment": "noteGlowSyncPaint 활성화 시 본체의 그라데이션과 투명도 shadow를 글로우에 즉시 복사",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": {
+                "type": "gradient",
+                "top": "#FF0000",
+                "bottom": "#00FF00"
+              },
+              "noteGradient": {
+                "angle": 180,
+                "stops": [
+                  { "color": "#FF0000", "pos": 0 },
+                  { "color": "rgba(0, 255, 0, 0.5)", "pos": 1 }
+                ]
+              },
+              "noteOpacity": 80,
+              "noteOpacityTop": 80,
+              "noteOpacityBottom": 40,
+              "noteGlowColor": "#FF0000",
+              "noteGlowOpacity": 70,
+              "noteGlowSyncPaint": false
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": {
+            "property": "noteGlowSyncPaint",
+            "value": true
+          }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": {
+                "type": "gradient",
+                "top": "#FF0000",
+                "bottom": "#00FF00"
+              },
+              "noteGradient": {
+                "angle": 180,
+                "stops": [
+                  { "color": "#FF0000", "pos": 0 },
+                  { "color": "rgba(0, 255, 0, 0.5)", "pos": 1 }
+                ]
+              },
+              "noteOpacity": 80,
+              "noteOpacityTop": 80,
+              "noteOpacityBottom": 40,
+              "noteGlowSyncPaint": true,
+              "noteGlowColor": {
+                "type": "gradient",
+                "top": "#FF0000",
+                "bottom": "#00FF00"
+              },
+              "noteGlowGradient": {
+                "angle": 180,
+                "stops": [
+                  { "color": "#FF0000", "pos": 0 },
+                  { "color": "rgba(0, 255, 0, 0.5)", "pos": 1 }
+                ]
+              },
+              "noteGlowOpacity": 80,
+              "noteGlowOpacityTop": 80,
+              "noteGlowOpacityBottom": 40
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
+      "name": "patch-note-paint-synced",
+      "comment": "동기화 상태의 notePaint descriptor가 본체와 글로우의 다섯 페인트 필드를 함께 갱신",
+      "initialDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": "#FFFFFF",
+              "noteOpacity": 90,
+              "noteGlowSyncPaint": true,
+              "noteGlowColor": "#FFFFFF",
+              "noteGlowOpacity": 90
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      },
+      "ops": [
+        {
+          "kind": "patchElement",
+          "elementType": "key",
+          "id": "11111111-1111-4111-8111-111111111111",
+          "patch": {
+            "property": "notePaint",
+            "value": {
+              "color": {
+                "type": "gradient",
+                "top": "#112233",
+                "bottom": "#445566"
+              },
+              "opacity": 60,
+              "gradient": {
+                "angle": 90,
+                "stops": [
+                  { "color": "#112233", "pos": 0 },
+                  { "color": "rgba(68, 85, 102, 0.5)", "pos": 1 }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "expectedDocument": {
+        "schemaVersion": 1,
+        "keys": { "4key": ["A"] },
+        "keyPositions": {
+          "4key": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "dx": 0,
+              "dy": 0,
+              "width": 60,
+              "height": 60,
+              "count": 0,
+              "noteColor": {
+                "type": "gradient",
+                "top": "#112233",
+                "bottom": "#445566"
+              },
+              "noteGradient": {
+                "angle": 90,
+                "stops": [
+                  { "color": "#112233", "pos": 0 },
+                  { "color": "rgba(68, 85, 102, 0.5)", "pos": 1 }
+                ]
+              },
+              "noteOpacity": 60,
+              "noteOpacityTop": 60,
+              "noteOpacityBottom": 30,
+              "noteGlowSyncPaint": true,
+              "noteGlowColor": {
+                "type": "gradient",
+                "top": "#112233",
+                "bottom": "#445566"
+              },
+              "noteGlowGradient": {
+                "angle": 90,
+                "stops": [
+                  { "color": "#112233", "pos": 0 },
+                  { "color": "rgba(68, 85, 102, 0.5)", "pos": 1 }
+                ]
+              },
+              "noteGlowOpacity": 60,
+              "noteGlowOpacityTop": 60,
+              "noteGlowOpacityBottom": 30
+            }
+          ]
+        },
+        "statPositions": {},
+        "graphPositions": {},
+        "knobPositions": {},
+        "layerGroups": {}
+      }
+    },
+    {
       "name": "patch-counter-fill-solid",
       "comment": "counterFill idle과 active의 단색 교체",
       "initialDocument": {

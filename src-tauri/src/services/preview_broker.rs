@@ -41,6 +41,7 @@ const KEY_POSITION_PATCH_FIELDS: &[&str] = &[
     "noteAlignment",
     "noteEffectEnabled",
     "noteGlowEnabled",
+    "noteGlowSyncPaint",
     "noteGlowSize",
     "noteGlowOpacity",
     "noteGlowOpacityTop",
@@ -719,6 +720,15 @@ mod tests {
             validate_publish_request(&rejected).unwrap_err(),
             "preview patch field 'fontPaint' is not allowed"
         );
+    }
+
+    #[test]
+    fn note_glow_sync_paint_preview_field_is_allowed() {
+        let session_id = session_id();
+        let mut allowed = request(&session_id, 1);
+        allowed.patch = Map::from_iter([("noteGlowSyncPaint".to_string(), Value::Bool(true))]);
+
+        validate_publish_request(&allowed).expect("note glow paint sync preview field is allowed");
     }
 
     #[test]

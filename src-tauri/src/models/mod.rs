@@ -556,6 +556,8 @@ pub struct KeyPosition {
     pub note_effect_enabled: bool,
     #[serde(default = "default_note_glow_enabled")]
     pub note_glow_enabled: bool,
+    #[serde(default)]
+    pub note_glow_sync_paint: bool,
     #[serde(default = "default_note_glow_size")]
     pub note_glow_size: f64,
     #[serde(default = "default_note_glow_opacity")]
@@ -696,6 +698,7 @@ impl Default for KeyPosition {
             note_alignment: NoteAlignment::default(),
             note_effect_enabled: default_note_effect_enabled(),
             note_glow_enabled: default_note_glow_enabled(),
+            note_glow_sync_paint: false,
             note_glow_size: default_note_glow_size(),
             note_glow_opacity: default_note_glow_opacity(),
             note_glow_opacity_top: None,
@@ -1340,6 +1343,23 @@ pub(crate) fn scrub_removed_text_outline_fields(value: &mut serde_json::Value) -
 }
 
 impl KeyPosition {
+    /// 본체 페인트를 글로우로 복사. 바뀐 게 있으면 true
+    pub(crate) fn mirror_note_body_to_glow(&mut self) -> bool {
+        let changed = self.note_glow_gradient != self.note_gradient
+            || self.note_glow_opacity != self.note_opacity
+            || self.note_glow_color.as_ref() != Some(&self.note_color)
+            || self.note_glow_opacity_top != self.note_opacity_top
+            || self.note_glow_opacity_bottom != self.note_opacity_bottom;
+        if changed {
+            self.note_glow_gradient = self.note_gradient.clone();
+            self.note_glow_opacity = self.note_opacity;
+            self.note_glow_color = Some(self.note_color.clone());
+            self.note_glow_opacity_top = self.note_opacity_top;
+            self.note_glow_opacity_bottom = self.note_opacity_bottom;
+        }
+        changed
+    }
+
     pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
         let mut changed = false;
         let mut pair_repaired = false;
@@ -1356,6 +1376,10 @@ impl KeyPosition {
             });
         changed |= note_changed;
         pair_repaired |= note_pair_repaired;
+
+        if self.note_glow_sync_paint {
+            changed |= self.mirror_note_body_to_glow();
+        }
 
         let (glow_changed, glow_pair_repaired) = canonicalize_note_gradient(
             &mut self.note_glow_gradient,
@@ -3518,6 +3542,61 @@ mod tests {
         );
         assert_eq!(position.note_glow_opacity_top, Some(60));
         assert_eq!(position.note_glow_opacity_bottom, Some(0));
+        assert_eq!(position.canonicalize_gradient_pairs(), (false, false));
+    }
+
+    #[test]
+    fn synced_note_glow_canonicalization_refreshes_stale_mirror_without_pair_repair() {
+        let mut position = KeyPosition {
+            note_glow_sync_paint: true,
+            note_color: NoteColor::Gradient {
+                top: "#112233".to_string(),
+                bottom: "#445566".to_string(),
+            },
+            note_gradient: serde_json::from_value(serde_json::json!({
+                "angle": 180,
+                "stops": [
+                    { "color": "#112233", "pos": 0 },
+                    { "color": "rgba(68, 85, 102, 0.5)", "pos": 1 }
+                ]
+            }))
+            .unwrap(),
+            note_opacity: 80,
+            note_opacity_top: Some(80),
+            note_opacity_bottom: Some(40),
+            note_glow_color: Some(NoteColor::Solid("stale".to_string())),
+            note_glow_opacity: 70,
+            note_glow_opacity_top: Some(70),
+            note_glow_opacity_bottom: Some(70),
+            ..KeyPosition::default()
+        };
+
+        assert_eq!(position.canonicalize_gradient_pairs(), (true, false));
+        assert_eq!(position.note_glow_gradient, position.note_gradient);
+        assert_eq!(position.note_glow_opacity, position.note_opacity);
+        assert_eq!(
+            position.note_glow_color.as_ref(),
+            Some(&position.note_color)
+        );
+        assert_eq!(position.note_glow_opacity_top, position.note_opacity_top);
+        assert_eq!(
+            position.note_glow_opacity_bottom,
+            position.note_opacity_bottom
+        );
+    }
+
+    #[test]
+    fn synced_note_glow_canonicalization_is_idempotent_when_mirror_matches() {
+        let mut position = KeyPosition {
+            note_glow_sync_paint: true,
+            note_color: NoteColor::Solid("#112233".to_string()),
+            note_opacity: 80,
+            note_opacity_top: Some(70),
+            note_opacity_bottom: Some(60),
+            ..KeyPosition::default()
+        };
+        assert!(position.mirror_note_body_to_glow());
+
         assert_eq!(position.canonicalize_gradient_pairs(), (false, false));
     }
 

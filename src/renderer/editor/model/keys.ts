@@ -46,6 +46,7 @@ export function createDefaultKeyPosition(
     noteAlignment: 'center',
     noteEffectEnabled: true,
     noteGlowEnabled: false,
+    noteGlowSyncPaint: false,
     noteGlowSize: 20,
     noteGlowOpacity: 70,
     noteGlowColor: '#FFFFFF',

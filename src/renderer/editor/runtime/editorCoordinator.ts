@@ -12,6 +12,7 @@ import {
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
   isNotePaintPropertyPatchV1,
+  mirrorBodyPaintToGlow,
   projectNotePaintPatch,
 } from '@src/types/key/notePaint';
 import {
@@ -921,6 +922,13 @@ const applySemanticOps = (
                 ...position,
                 noteGlowEnabled: op.patch.value,
               };
+            }
+            if (op.patch.property === 'noteGlowSyncPaint') {
+              // 켜는 순간 본체 페인트를 글로우로 복사 (Rust 적용기와 동일)
+              const next = { ...position, noteGlowSyncPaint: op.patch.value };
+              return op.patch.value
+                ? { ...next, ...mirrorBodyPaintToGlow(next as never) }
+                : next;
             }
             if (op.patch.property === 'noteAlignment') {
               return { ...position, noteAlignment: op.patch.value };

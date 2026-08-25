@@ -443,23 +443,25 @@ export function canonicalizePositionGradients<
   // 본체·글로우 쌍 - 신형(sibling 존재)일 때 구형 shadow 4필드를 atomic 동기
   // (계약 §9-3, Rust 미러): noteColor는 첫/끝 스톱 대문자 hex의 구형 gradient
   // 객체, Top/Bottom은 round(스톱 알파 × 배율). 배율 부재 = 100
-  for (const pair of NOTE_PAINT_SHADOW_PAIRS) {
-    if (!(pair.gradientField in position)) continue;
+  const syncNotePaintShadow = (
+    pair: (typeof NOTE_PAINT_SHADOW_PAIRS)[number],
+  ): void => {
+    if (!(pair.gradientField in (next ?? position))) return;
     const stored = (next ?? position)[pair.gradientField];
     if (stored == null) {
       delete ensure()[pair.gradientField];
-      continue;
+      return;
     }
     const canonical = strictCanonicalOrNull(stored);
     if (canonical === null) {
       delete ensure()[pair.gradientField];
-      continue;
+      return;
     }
     if (JSON.stringify(canonical) !== JSON.stringify(stored)) {
       ensure()[pair.gradientField] = canonical;
     }
     const shadowColor = notePaintShadowColor(canonical);
-    if (shadowColor === null) continue;
+    if (shadowColor === null) return;
     const current = next ?? position;
     if (
       JSON.stringify(current[pair.colorField]) !== JSON.stringify(shadowColor)
@@ -485,7 +487,37 @@ export function canonicalizePositionGradients<
     if (current[pair.bottomField] !== bottomShadow) {
       ensure()[pair.bottomField] = bottomShadow;
     }
+  };
+
+  // 글로우 따라가기(noteGlowSyncPaint)면 본체 정규화 뒤에 본체 5필드를 글로우로
+  // 복사 (Rust canonicalize_gradient_pairs 미러). 이어지는 글로우 정규화는 no-op
+  const mirrorNoteBodyToGlow = (): void => {
+    const current = next ?? position;
+    const copy = (from: string, to: string): void => {
+      const value = current[from];
+      if (value === undefined) {
+        if (to in current) delete ensure()[to];
+        return;
+      }
+      if (JSON.stringify(current[to]) === JSON.stringify(value)) return;
+      ensure()[to] =
+        typeof value === 'object' && value !== null
+          ? structuredClone(value)
+          : value;
+    };
+    copy('noteGradient', 'noteGlowGradient');
+    copy('noteColor', 'noteGlowColor');
+    copy('noteOpacity', 'noteGlowOpacity');
+    copy('noteOpacityTop', 'noteGlowOpacityTop');
+    copy('noteOpacityBottom', 'noteGlowOpacityBottom');
+  };
+
+  const [bodyPair, glowPair] = NOTE_PAINT_SHADOW_PAIRS;
+  syncNotePaintShadow(bodyPair);
+  if ((next ?? position).noteGlowSyncPaint === true) {
+    mirrorNoteBodyToGlow();
   }
+  syncNotePaintShadow(glowPair);
 
   const counterSource = (next ?? position).counter;
   if (

@@ -270,6 +270,7 @@ pub enum EditorElementPropertyPatchV1 {
     StatType(StatType),
     NoteEffectEnabled(bool),
     NoteGlowEnabled(bool),
+    NoteGlowSyncPaint(bool),
     NoteGlowSize(f64),
     NotePaint(EditorNotePaintIntentV1),
     NoteGlowPaint(EditorNotePaintIntentV1),
@@ -841,7 +842,7 @@ mod tests {
         }
     }
 
-    // 69개 variant 전수: (patch, property 태그, value wire) 고정 표본
+    // 70개 variant 전수: (patch, property 태그, value wire) 고정 표본
     fn property_patch_samples() -> Vec<(
         EditorElementPropertyPatchV1,
         &'static str,
@@ -1043,6 +1044,7 @@ mod tests {
             (P::StatType(StatType::Total), "statType", json!("total")),
             (P::NoteEffectEnabled(true), "noteEffectEnabled", json!(true)),
             (P::NoteGlowEnabled(false), "noteGlowEnabled", json!(false)),
+            (P::NoteGlowSyncPaint(true), "noteGlowSyncPaint", json!(true)),
             (P::NoteGlowSize(6.5), "noteGlowSize", json!(6.5)),
             (
                 P::NotePaint(EditorNotePaintIntentV1::Opacity(
@@ -1093,7 +1095,7 @@ mod tests {
     #[test]
     fn property_patch_wire_pins_all_tag_value_pairs_and_roundtrips() {
         let samples = property_patch_samples();
-        assert_eq!(samples.len(), 69);
+        assert_eq!(samples.len(), 70);
         for (patch, tag, value) in samples {
             let wire = serde_json::to_value(&patch).unwrap();
             assert_eq!(

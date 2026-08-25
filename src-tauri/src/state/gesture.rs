@@ -798,6 +798,11 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowSyncPaint(true),
+                serde_json::json!({ "property": "noteGlowSyncPaint", "value": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteGlowSize(19.75),
                 serde_json::json!({ "property": "noteGlowSize", "value": 19.75 }),
             ),
@@ -1093,6 +1098,7 @@ mod tests {
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset" }, "hidden": true }),
             serde_json::json!({ "property": "noteGlowSize", "value": null }),
             serde_json::json!({ "property": "noteGlowSize", "value": "20" }),
+            serde_json::json!({ "property": "noteGlowSyncPaint", "value": null }),
             serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
             serde_json::json!({ "noteGlowSize": 20, "unexpected": true }),
             serde_json::json!({ "property": "notePaint", "value": {} }),

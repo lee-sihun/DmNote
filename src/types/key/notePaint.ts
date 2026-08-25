@@ -174,11 +174,72 @@ export type NotePaintPropertyPatchV1 =
 const cloneNoteColor = (color: StrictNoteColorV1): StrictNoteColorV1 =>
   typeof color === 'string' ? color : { ...color };
 
+type NoteBodyPaintFields = Pick<
+  KeyPosition,
+  'noteColor' | 'noteOpacity' | 'noteOpacityTop' | 'noteOpacityBottom'
+> &
+  Partial<Pick<KeyPosition, 'noteGradient'>>;
+
+type NoteGlowPaintFields = Pick<
+  KeyPosition,
+  | 'noteGlowColor'
+  | 'noteGlowOpacity'
+  | 'noteGlowOpacityTop'
+  | 'noteGlowOpacityBottom'
+  | 'noteGlowGradient'
+>;
+
+/** 본체 페인트 5필드를 글로우 필드로 복사 (Rust mirror_note_body_to_glow 미러) */
+export const mirrorBodyPaintToGlow = (
+  position: NoteBodyPaintFields,
+): NoteGlowPaintFields => ({
+  noteGlowColor: cloneNoteColor(position.noteColor),
+  noteGlowOpacity: position.noteOpacity,
+  noteGlowOpacityTop: position.noteOpacityTop,
+  noteGlowOpacityBottom: position.noteOpacityBottom,
+  noteGlowGradient: position.noteGradient
+    ? structuredClone(position.noteGradient)
+    : undefined,
+});
+
+type NotePaintProjectionContext = Partial<
+  Pick<KeyPosition, 'noteGradient' | 'noteGlowGradient' | 'noteGlowSyncPaint'>
+> &
+  Partial<NoteBodyPaintFields>;
+
 export const projectNotePaintPatch = (
   patch: NotePaintPropertyPatchV1,
   // {opacity} 단독이 sibling 위 배율 갱신일 때 shadow 재계산에 필요 (§9-5).
+  // 동기화 켜진 키의 notePaint는 글로우 미러까지 같이 투영한다.
   // preview 등 position 없는 호출은 배율만 투영 (저장 경로는 반드시 전달)
-  position?: Pick<KeyPosition, 'noteGradient' | 'noteGlowGradient'>,
+  position?: NotePaintProjectionContext,
+): Partial<KeyPosition> => {
+  const projected = projectNotePaintPatchBase(patch, position);
+  if (
+    patch.property !== 'notePaint' ||
+    !position?.noteGlowSyncPaint ||
+    position.noteColor === undefined ||
+    position.noteOpacity === undefined
+  ) {
+    return projected;
+  }
+  const next = {
+    noteColor: position.noteColor,
+    noteOpacity: position.noteOpacity,
+    noteOpacityTop: position.noteOpacityTop,
+    noteOpacityBottom: position.noteOpacityBottom,
+    noteGradient: position.noteGradient,
+    ...projected,
+  };
+  return { ...projected, ...mirrorBodyPaintToGlow(next) };
+};
+
+const projectNotePaintPatchBase = (
+  patch: NotePaintPropertyPatchV1,
+  position?: Pick<
+    NotePaintProjectionContext,
+    'noteGradient' | 'noteGlowGradient'
+  >,
 ): Partial<KeyPosition> => {
   if (patch.property === 'noteBorderPaint') {
     // 2키 형태·gradient null = 단색 확정(형제 필드 제거) - 전이 표는 atomic

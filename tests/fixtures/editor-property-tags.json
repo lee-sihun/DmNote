@@ -58,6 +58,7 @@
     "statType",
     "noteEffectEnabled",
     "noteGlowEnabled",
+    "noteGlowSyncPaint",
     "noteGlowSize",
     "notePaint",
     "noteGlowPaint",

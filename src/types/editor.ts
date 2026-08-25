@@ -261,6 +261,7 @@ interface EditorElementPropertyValuesV1 {
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
+  noteGlowSyncPaint: boolean;
   noteAlignment: 'left' | 'center' | 'right';
   noteBorderSide: 'all' | 'vertical' | 'horizontal';
   statType: 'kps' | 'kpsAvg' | 'kpsMax' | 'total';
@@ -333,6 +334,7 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'statType',
   'noteEffectEnabled',
   'noteGlowEnabled',
+  'noteGlowSyncPaint',
   'noteGlowSize',
   'notePaint',
   'noteGlowPaint',
@@ -470,6 +472,7 @@ export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
   | 'noteAutoYCorrection'
   | 'noteGlowEnabled'
+  | 'noteGlowSyncPaint'
   | 'noteAlignment'
   | 'noteBorderSide'
 >;
@@ -1628,6 +1631,7 @@ const isEditorElementPropertyValueValid = (
     case 'noteEffectEnabled':
     case 'noteAutoYCorrection':
     case 'noteGlowEnabled':
+    case 'noteGlowSyncPaint':
       return elementType === 'key' && typeof value === 'boolean';
     case 'noteGlowSize':
       return (

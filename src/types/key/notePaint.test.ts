@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isNotePaintValuePatchV1,
   legacyNoteColorToSpec,
+  mirrorBodyPaintToGlow,
   notePaintShadowColor,
   notePaintShadowOpacity,
   projectNotePaintPatch,
@@ -143,6 +144,101 @@ describe('projectNotePaintPatch 전이 표 (계약 §9-5)', () => {
     expect(projected.noteOpacityTop).toBe(25);
     expect(projected.noteOpacityBottom).toBe(50);
     expect('noteGradient' in projected).toBe(false);
+  });
+});
+
+describe('projectNotePaintPatch 글로우 동기화 미러', () => {
+  const synced = {
+    noteGlowSyncPaint: true,
+    noteColor: '#FFFFFF',
+    noteOpacity: 90,
+    noteOpacityTop: 90,
+    noteOpacityBottom: 90,
+    noteGradient: undefined,
+  };
+
+  it('동기화 켜진 키의 notePaint descriptor는 글로우 5필드를 같이 투영한다', () => {
+    const projected = projectNotePaintPatch(
+      {
+        property: 'notePaint',
+        value: { color: shadow, opacity: 80, gradient: spec },
+      },
+      synced,
+    );
+    expect(projected).toEqual({
+      noteColor: shadow,
+      noteOpacity: 80,
+      noteOpacityTop: 40,
+      noteOpacityBottom: 80,
+      noteGradient: spec,
+      noteGlowColor: shadow,
+      noteGlowOpacity: 80,
+      noteGlowOpacityTop: 40,
+      noteGlowOpacityBottom: 80,
+      noteGlowGradient: spec,
+    });
+    expect(projected.noteGlowGradient).not.toBe(projected.noteGradient);
+  });
+
+  it('부분 patch는 position의 나머지 본체 필드를 합쳐 미러한다', () => {
+    expect(
+      projectNotePaintPatch(
+        { property: 'notePaint', value: { color: '#123456' } },
+        {
+          ...synced,
+          noteOpacity: 55,
+          noteOpacityTop: 10,
+          noteOpacityBottom: 20,
+        },
+      ),
+    ).toEqual({
+      noteColor: '#123456',
+      noteGradient: undefined,
+      noteGlowColor: '#123456',
+      noteGlowOpacity: 55,
+      noteGlowOpacityTop: 10,
+      noteGlowOpacityBottom: 20,
+      noteGlowGradient: undefined,
+    });
+  });
+
+  it('동기화 꺼짐·글로우 patch·position 없음은 미러하지 않는다', () => {
+    const patch = {
+      property: 'notePaint',
+      value: { color: '#123456' },
+    } as const;
+    expect(
+      projectNotePaintPatch(patch, { ...synced, noteGlowSyncPaint: false }),
+    ).toEqual({ noteColor: '#123456', noteGradient: undefined });
+    expect(projectNotePaintPatch(patch)).toEqual({
+      noteColor: '#123456',
+      noteGradient: undefined,
+    });
+    expect(
+      projectNotePaintPatch(
+        { property: 'noteGlowPaint', value: { color: '#123456' } },
+        synced,
+      ),
+    ).toEqual({ noteGlowColor: '#123456', noteGlowGradient: undefined });
+  });
+
+  it('mirrorBodyPaintToGlow는 본체 5필드를 복사하고 gradient를 분리한다', () => {
+    const mirrored = mirrorBodyPaintToGlow({
+      noteColor: shadow,
+      noteOpacity: 70,
+      noteOpacityTop: 35,
+      noteOpacityBottom: 70,
+      noteGradient: spec,
+    });
+    expect(mirrored).toEqual({
+      noteGlowColor: shadow,
+      noteGlowOpacity: 70,
+      noteGlowOpacityTop: 35,
+      noteGlowOpacityBottom: 70,
+      noteGlowGradient: spec,
+    });
+    expect(mirrored.noteGlowGradient).not.toBe(spec);
+    expect(mirrored.noteGlowColor).not.toBe(shadow);
   });
 });
 

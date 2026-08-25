@@ -313,6 +313,69 @@ describe('hexRepresentative - 대표색 hex 변환', () => {
   });
 });
 
+describe('canonicalizePositionGradients - 글로우 따라가기 미러', () => {
+  const body = {
+    angle: 90,
+    stops: [c('#112233', 0), c('rgba(68,85,102,0.5)', 1)],
+  };
+
+  it('noteGlowSyncPaint면 본체 정규화 결과를 글로우 5필드로 복사한다', () => {
+    const pos: Record<string, unknown> = {
+      noteGlowSyncPaint: true,
+      noteColor: '#stale',
+      noteOpacity: 80,
+      noteGradient: body,
+      noteGlowColor: '#FF0000',
+      noteGlowOpacity: 70,
+      noteGlowOpacityTop: 70,
+      noteGlowOpacityBottom: 70,
+    };
+    const next = canonicalizePositionGradients(pos);
+    expect(next.noteOpacityTop).toBe(80);
+    expect(next.noteOpacityBottom).toBe(40);
+    expect(next.noteGlowGradient).toEqual(next.noteGradient);
+    expect(next.noteGlowGradient).not.toBe(next.noteGradient);
+    expect(next.noteGlowColor).toEqual(next.noteColor);
+    expect(next.noteGlowOpacity).toBe(80);
+    expect(next.noteGlowOpacityTop).toBe(80);
+    expect(next.noteGlowOpacityBottom).toBe(40);
+  });
+
+  it('본체가 단색이면 글로우 gradient를 지우고, 이미 같으면 동일 참조', () => {
+    const pos: Record<string, unknown> = {
+      noteGlowSyncPaint: true,
+      noteColor: '#FFFFFF',
+      noteOpacity: 90,
+      noteGlowColor: '#FF0000',
+      noteGlowOpacity: 70,
+      noteGlowGradient: body,
+    };
+    const next = canonicalizePositionGradients(pos);
+    expect('noteGlowGradient' in next).toBe(false);
+    expect(next.noteGlowColor).toBe('#FFFFFF');
+    expect(next.noteGlowOpacity).toBe(90);
+
+    const same = {
+      noteGlowSyncPaint: true,
+      noteColor: '#FFFFFF',
+      noteOpacity: 90,
+      noteGlowColor: '#FFFFFF',
+      noteGlowOpacity: 90,
+    };
+    expect(canonicalizePositionGradients(same)).toBe(same);
+  });
+
+  it('noteGlowSyncPaint가 아니면 글로우를 건드리지 않는다', () => {
+    const pos = {
+      noteColor: '#FFFFFF',
+      noteOpacity: 90,
+      noteGlowColor: '#FF0000',
+      noteGlowOpacity: 70,
+    };
+    expect(canonicalizePositionGradients(pos)).toBe(pos);
+  });
+});
+
 describe('canonicalizePositionGradients - 노트 테두리 쌍', () => {
   it('대표색은 hex 전용으로 repair (rgba→hex 마이그레이션 핑퐁 방지)', () => {
     const pos = {

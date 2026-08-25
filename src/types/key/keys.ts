@@ -292,6 +292,8 @@ export const keyPositionSchema = z.object({
     .default('center'),
   noteEffectEnabled: z.boolean().optional().default(true),
   noteGlowEnabled: z.boolean().optional().default(false),
+  // 글로우 페인트를 본체 페인트와 같게 유지 (저장 시 미러)
+  noteGlowSyncPaint: z.boolean().optional().default(false),
   noteGlowSize: z.number().min(0).max(50).optional().default(20),
   noteGlowOpacity: z.number().int().min(0).max(100).optional().default(70),
   // 그라디언트용 글로우 투명도(Top/Bottom). 없으면 noteGlowOpacity를 사용.
