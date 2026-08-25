@@ -160,7 +160,7 @@ const StatCounter = React.memo(function StatCounter({
   isInBatchSelection = false,
 }: StatCounterProps) {
   const counterSettings = useCounterSettings(position?.counter);
-  // 편집 세션 일시 페인트 — 다른 표면을 편집해도 같은 대기/입력 상태 유지
+  // 편집 세션 일시 페인트 - 다른 표면을 편집해도 같은 대기/입력 상태 유지
   const previewSession = useGradientPreviewSession(
     'stat',
     position.id,
