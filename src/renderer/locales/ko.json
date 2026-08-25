@@ -156,6 +156,8 @@
     "cancel": "취소",
     "noteGlow": "글로우 효과",
     "noteGlowColor": "글로우 색상",
+    "noteGlowPaintFollow": "노트 색상 따라가기",
+    "noteGlowPaintCustom": "직접 지정",
     "noteAutoYCorrection": "Y축 자동 보정",
     "noteEffectEnabled": "노트 효과 표시",
     "noteAlignment": "노트 정렬",

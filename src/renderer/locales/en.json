@@ -156,6 +156,8 @@
     "save": "Apply",
     "cancel": "Cancel",
     "noteGlowColor": "Glow Color",
+    "noteGlowPaintFollow": "Follow Note Color",
+    "noteGlowPaintCustom": "Custom",
     "noteAutoYCorrection": "Auto Y Correction",
     "noteEffectEnabled": "Enable Note Effect",
     "noteAlignment": "Note Alignment",

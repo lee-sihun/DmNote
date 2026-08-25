@@ -20,6 +20,7 @@ export const createNoteLiteralHandlers = (
   toggleAutoYCorrection: () =>
     onChange('noteAutoYCorrection', !values.noteAutoYCorrection),
   toggleGlow: () => onChange('noteGlowEnabled', !values.noteGlowEnabled),
+  setGlowPaintFollow: (value: boolean) => onChange('noteGlowSyncPaint', value),
   setAlignment: (value: NoteAlignmentValue) => onChange('noteAlignment', value),
   setBorderSide: (value: NoteBorderSideValue) =>
     onChange('noteBorderSide', value),

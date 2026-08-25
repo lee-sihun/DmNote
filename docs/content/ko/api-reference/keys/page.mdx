@@ -123,6 +123,7 @@ interface KeyPosition {
   noteGradient?: GradientSpec | null;
   noteEffectEnabled: boolean;
   noteGlowEnabled: boolean;
+  noteGlowSyncPaint?: boolean;
   noteGlowSize: number;
   noteGlowOpacity: number;
   noteGlowOpacityTop?: number;
@@ -203,6 +204,12 @@ interface ElementShadowSpec {
 표면을 한 번의 쓰기로 전환하려면 같은 `updatePositions` 호출에서 그라데이션
 필드와 배율을 함께 설정하세요. 단색 필드와 구형 근사값은 저장 시 파생되어
 동기화됩니다.
+
+`noteGlowSyncPaint`가 `true`이면 글로우 페인트(`noteGlowColor`,
+`noteGlowGradient`, `noteGlowOpacity`, `noteGlowOpacityTop/Bottom`)는 저장
+시점에 본체 페인트와 같은 값으로 파생됩니다. 이 상태에서 글로우 필드를
+직접 써도 본체 값으로 덮이므로 글로우를 따로 바꾸려면 먼저 `false`로
+두세요. 기본값은 `false`입니다.
 
 `shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
 생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면

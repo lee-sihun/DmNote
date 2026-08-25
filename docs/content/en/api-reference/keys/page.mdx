@@ -334,6 +334,7 @@ interface KeyPosition {
   noteOpacityTop?: number;
   noteOpacityBottom?: number;
   noteGradient?: GradientSpec | null;
+  noteGlowSyncPaint?: boolean;
   noteGlowOpacityTop?: number;
   noteGlowOpacityBottom?: number;
   noteGlowGradient?: GradientSpec | null;
@@ -410,6 +411,12 @@ restrictions match the border. Writing an element without the gradient field
 switch a surface in one write, set the gradient field and its multiplier
 together in the same `updatePositions` call; the solid field and the legacy
 approximations are derived and synced on save.
+
+When `noteGlowSyncPaint` is `true`, the glow paint fields (`noteGlowColor`,
+`noteGlowGradient`, `noteGlowOpacity`, `noteGlowOpacityTop/Bottom`) are derived
+from the body paint on save. Any glow value written in that state is
+overwritten by the body value, so set it to `false` first to edit the glow
+independently. Defaults to `false`.
 
 `shadow` and `activeShadow` control the idle and pressed shadows independently.
 When omitted, the built-in shadow remains unchanged. Store a spec with

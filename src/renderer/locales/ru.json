@@ -156,6 +156,8 @@
     "save": "Применить",
     "cancel": "Отмена",
     "noteGlowColor": "Цвет свечения",
+    "noteGlowPaintFollow": "Следовать цвету ноты",
+    "noteGlowPaintCustom": "Свой цвет",
     "noteAutoYCorrection": "Авто-коррекция Y",
     "noteEffectEnabled": "Эффект ноты вкл.",
     "noteAlignment": "Выравнивание ноты",

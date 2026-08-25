@@ -39,6 +39,7 @@ import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorS
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
+import NoteGlowPaintSourceDropdown from '../NoteGlowPaintSourceDropdown';
 import {
   bodyInheritedGlowSpec,
   foldGradientOpacity,
@@ -302,9 +303,14 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     }
   }, [commitTick, pickerFor, keyPosition]);
 
+  // 따라가기 켜짐 = 글로우 페인트가 본체 미러라 편집 잠금
+  const glowPaintLocked = keyPosition.noteGlowSyncPaint ?? false;
+
   // 본체·글로우 커밋 (계약 §9-5) - 전환·배율·shadow를 한 op으로
   const makePaintCommit =
     (surface: 'note' | 'glow') => (value: ColorModeValue) => {
+      // 잠긴 뒤 늦게 도착한 피커 완료는 버린다 (백엔드가 거부하는 op)
+      if (surface === 'glow' && glowPaintLocked) return;
       const property = surface === 'note' ? 'notePaint' : 'noteGlowPaint';
       // 그라데이션(신형·구형·상속 제시)에서 단색으로 가는 전환만 원자 op 대상.
       // 단색 → 단색은 구형 {color}로 투명도 필드를 건드리지 않는다
@@ -419,8 +425,14 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       ? glowGradientState
       : borderGradientState;
 
+  // 다른 창·외부 커밋으로 따라가기가 켜지면 열려 있던 글로우 피커를 닫는다
+  useEffect(() => {
+    if (glowPaintLocked && pickerFor === 'glow') setPickerFor(null);
+  }, [glowPaintLocked, pickerFor]);
+
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
   const handlePickerToggle = (target: 'note' | 'glow' | 'border') => {
+    if (target === 'glow' && glowPaintLocked) return;
     setPickerFor((prev) => (prev === target ? null : target));
   };
 
@@ -441,6 +453,11 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     },
     handleStyleChangeComplete,
   );
+  // 따라가기로 바꾸는 순간 열려 있던 글로우 피커는 닫는다 (저장 경로가 글로우 편집을 거부)
+  const setGlowPaintFollow = (follow: boolean) => {
+    if (follow && pickerFor === 'glow') setPickerFor(null);
+    noteLiteralHandlers.setGlowPaintFollow(follow);
+  };
 
   return (
     <>
@@ -771,17 +788,29 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
         {/* 글로우 색상/크기/투명도 */}
         <PropertyRow label={t('keySetting.noteGlowColor') || '글로우 색상'}>
-          <ColorSwatchButton
-            ref={glowColorButtonRef}
-            type="button"
-            onClick={() => handlePickerToggle('glow')}
-            open={pickerFor === 'glow'}
-            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-            surfaceClassName="rounded-md"
-            color={storedGlowSpec ? undefined : glowSolidColor}
-            image={storedGlowSpec ? gradientToCss(storedGlowSpec) : undefined}
-            opacity={storedGlowSpec ? undefined : localGlowOpacity / 100}
-          />
+          <div className="flex items-center gap-[4px]">
+            <ColorSwatchButton
+              ref={glowColorButtonRef}
+              type="button"
+              onClick={() => handlePickerToggle('glow')}
+              open={pickerFor === 'glow'}
+              disabled={glowPaintLocked}
+              className={`w-[23px] h-[23px] rounded-md transition-shadow flex-shrink-0 ${
+                glowPaintLocked
+                  ? 'cursor-not-allowed opacity-50'
+                  : 'cursor-pointer'
+              }`}
+              surfaceClassName="rounded-md"
+              color={storedGlowSpec ? undefined : glowSolidColor}
+              image={storedGlowSpec ? gradientToCss(storedGlowSpec) : undefined}
+              opacity={storedGlowSpec ? undefined : localGlowOpacity / 100}
+            />
+            <NoteGlowPaintSourceDropdown
+              follow={glowPaintLocked}
+              onChange={setGlowPaintFollow}
+              t={t}
+            />
+          </div>
         </PropertyRow>
 
         <PropertyRow label={t('keySetting.noteGlowSize') || '글로우 크기'}>
@@ -886,6 +915,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                   },
                   onOpacityPercentChangeComplete: (value: number) => {
                     const surface = pickerFor === 'note' ? 'note' : 'glow';
+                    if (surface === 'glow' && glowPaintLocked) return;
                     const property =
                       surface === 'note' ? 'notePaint' : 'noteGlowPaint';
                     if (surface === 'note') {

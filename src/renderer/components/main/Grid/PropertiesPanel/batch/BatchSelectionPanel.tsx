@@ -63,6 +63,7 @@ import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -670,8 +671,25 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     new Set(notePaintIds).size === notePaintIds.length
       ? notePaintIds
       : null;
+  // 따라가기 대상이 하나라도 있으면 글로우 페인트는 보내지 않는다 - 백엔드가
+  // 그 키 때문에 배치 transition 전체를 거부한다. 잠긴 뒤 늦게 도착한 피커
+  // 콜백을 여기서 거른다
+  const glowPaintLockedForSelection = (
+    patch: EditorNotePaintPropertyPatchV1,
+  ): boolean => {
+    if (patch.property !== 'noteGlowPaint' || !stableNotePaintIds) return false;
+    const document = captureEditorDocument();
+    return stableNotePaintIds.some((id) => {
+      const locator = resolveElementById('key', id);
+      const current = locator
+        ? document.keyPositions[locator.mode]?.[locator.index]
+        : undefined;
+      return current?.id === id && current.noteGlowSyncPaint === true;
+    });
+  };
   const commitNotePaint = stableNotePaintIds
     ? (patch: EditorNotePaintPropertyPatchV1) => {
+        if (glowPaintLockedForSelection(patch)) return;
         const gestureId = editGestureController.activeGestureId() ?? undefined;
         const persisted = patchNotePaintByIds(stableNotePaintIds, patch, {
           gestureId,
@@ -682,16 +700,23 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     : undefined;
   const previewNotePaint = stableNotePaintIds
     ? (patch: EditorNotePaintPropertyPatchV1) => {
+        if (glowPaintLockedForSelection(patch)) return;
         const entries: Array<{
           id: string;
           patch: Partial<KeyPosition>;
         }> = [];
+        // canonical 전달 - 동기화 켜진 키의 글로우 미러가 낙관 적용과 같은 규칙
+        const document = captureEditorDocument();
         for (const id of stableNotePaintIds) {
           const locator = resolveElementById('key', id);
           if (!locator || locator.mode !== selectedKeyType) return;
+          const current = document.keyPositions[locator.mode]?.[locator.index];
           entries.push({
             id,
-            patch: projectNotePaintPatch(patch),
+            patch: projectNotePaintPatch(
+              patch,
+              current?.id === id ? current : undefined,
+            ),
           });
         }
         editGestureController.preview(selectedKeyType, entries, {

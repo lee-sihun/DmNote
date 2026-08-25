@@ -109,6 +109,7 @@ import type {
 } from '@src/renderer/editor/runtime/elementOps';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { computeBatchGeometryPlan } from '@src/renderer/editor/runtime/batchGeometryPlan';
 import { commitMixedBatchGeometry } from '@src/renderer/editor/runtime/mixedBatchGeometry';
 import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
@@ -327,6 +328,12 @@ const getNotePropertyPatch = (
     typeof values.noteGlowEnabled === 'boolean'
   ) {
     return { property: 'noteGlowEnabled', value: values.noteGlowEnabled };
+  }
+  if (
+    keys[0] === 'noteGlowSyncPaint' &&
+    typeof values.noteGlowSyncPaint === 'boolean'
+  ) {
+    return { property: 'noteGlowSyncPaint', value: values.noteGlowSyncPaint };
   }
   if (
     keys[0] === 'noteAlignment' &&
@@ -1647,9 +1654,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (patch: EditorNotePaintPropertyPatchV1) => {
           const locator = resolveElementById('key', id);
           if (!locator) return;
+          // canonical 전달 - 동기화 켜진 키의 글로우 미러가 낙관 적용과 같은 규칙
+          const current =
+            captureEditorDocument().keyPositions[locator.mode]?.[locator.index];
           editGestureController.preview(
             locator.mode,
-            [{ id, patch: projectNotePaintPatch(patch) }],
+            [
+              {
+                id,
+                patch: projectNotePaintPatch(
+                  patch,
+                  current?.id === id ? current : undefined,
+                ),
+              },
+            ],
             { domain: 'keyPosition' },
           );
         }

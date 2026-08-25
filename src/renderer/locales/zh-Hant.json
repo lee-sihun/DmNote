@@ -156,6 +156,8 @@
     "save": "應用",
     "cancel": "取消",
     "noteGlowColor": "發光顏色",
+    "noteGlowPaintFollow": "跟隨音符顏色",
+    "noteGlowPaintCustom": "自訂",
     "noteAutoYCorrection": "自動 Y 軸校正",
     "noteEffectEnabled": "啟用鍵雨",
     "noteAlignment": "鍵雨對齊",
