@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "benchmarkId": "OVL-01",
-  "variant": "baseline",
-  "measuredAt": "2026-08-25T11:29:18.706Z",
+  "variant": "optimized",
+  "measuredAt": "2026-08-25T11:29:11.075Z",
   "node": "v25.2.1",
   "environment": "jsdom",
-  "gitHead": "d1d35c99",
+  "gitHead": "19765ca0",
   "gitDirtyFiles": [],
   "notes": [
     "페인트·합성 비용 미포함 (jsdom)",
@@ -24,23 +24,23 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 0,
       "eventBlockingMs": {
-        "p50": 0.17162499999994907,
-        "p95": 0.7959170000012818,
-        "max": 6.115958000000319
+        "p50": 0.14104200000110723,
+        "p95": 0.18787499999962165,
+        "max": 1.5148750000007567
       },
       "reactCommitDurationMs": {
-        "p50": 0.06166499999835651,
-        "p95": 0.24816399999963323,
-        "max": 3.972667999996702
+        "p50": 0.04158699999425153,
+        "p95": 0.05866800000057992,
+        "max": 0.08812599999873783
       },
       "commitsPerPress": 2,
-      "normalizeCallsPerPress": 2,
+      "normalizeCallsPerPress": 0,
       "animateCallsPerPress": 0,
       "rafCallbacksPerFrame": 0,
       "frameJsMs": {
-        "p50": 0.00008400000115216244,
-        "p95": 0.0003749999996216502,
-        "max": 0.016999999999825377
+        "p50": 0.00008300000081362668,
+        "p95": 0.0001250000004802132,
+        "max": 0.006499999999505235
       },
       "framesPerBurst": 40
     },
@@ -53,25 +53,25 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 4,
       "eventBlockingMs": {
-        "p50": 0.39637500000026193,
-        "p95": 0.4960410000021511,
-        "max": 1.6052920000001905
+        "p50": 0.32295800000065356,
+        "p95": 0.3626250000015716,
+        "max": 1.2803339999991294
       },
       "reactCommitDurationMs": {
-        "p50": 0.25399799997830996,
-        "p95": 0.30129199999646517,
-        "max": 1.176210000005085
+        "p50": 0.1864579999964917,
+        "p95": 0.2137920000059239,
+        "max": 1.039375000000291
       },
       "commitsPerPress": 3,
-      "normalizeCallsPerPress": 6,
-      "animateCallsPerPress": 0,
-      "rafCallbacksPerFrame": 3.789473684210526,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
       "frameJsMs": {
-        "p50": 0.05537499999991269,
-        "p95": 0.0689170000005106,
-        "max": 0.7132920000003651
+        "p50": 0.00008299999899463728,
+        "p95": 0.00008400000297115184,
+        "max": 0.0005000000019208528
       },
-      "framesPerBurst": 57
+      "framesPerBurst": 40
     },
     {
       "keyCount": 4,
@@ -82,25 +82,25 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 4,
       "eventBlockingMs": {
-        "p50": 0.31137499999749707,
-        "p95": 0.3431249999994179,
-        "max": 1.1250829999989946
+        "p50": 0.28170899999531684,
+        "p95": 0.3128340000039316,
+        "max": 0.9812919999967562
       },
       "reactCommitDurationMs": {
-        "p50": 0.18620999998529442,
-        "p95": 0.20517300001665717,
-        "max": 0.8161319999926491
+        "p50": 0.15737899999658111,
+        "p95": 0.17674999999144347,
+        "max": 0.2317069999917294
       },
       "commitsPerPress": 3,
-      "normalizeCallsPerPress": 5,
-      "animateCallsPerPress": 0,
-      "rafCallbacksPerFrame": 3.789473684210526,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
       "frameJsMs": {
-        "p50": 0.052250000000640284,
-        "p95": 0.06166700000176206,
-        "max": 0.6874160000006668
+        "p50": 0.00008299999899463728,
+        "p95": 0.00008400000660913065,
+        "max": 0.00033399999665562063
       },
-      "framesPerBurst": 57
+      "framesPerBurst": 40
     },
     {
       "keyCount": 8,
@@ -111,23 +111,23 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 0,
       "eventBlockingMs": {
-        "p50": 0.13995799999975134,
-        "p95": 0.15454200000385754,
-        "max": 0.9118330000055721
+        "p50": 0.128458999999566,
+        "p95": 0.15174999999726424,
+        "max": 0.7462500000037835
       },
       "reactCommitDurationMs": {
-        "p50": 0.05262499998207204,
-        "p95": 0.058915999994496815,
-        "max": 0.7752060000348138
+        "p50": 0.04095799999049632,
+        "p95": 0.04966599998442689,
+        "max": 0.08158299999195151
       },
       "commitsPerPress": 2,
-      "normalizeCallsPerPress": 2,
+      "normalizeCallsPerPress": 0,
       "animateCallsPerPress": 0,
       "rafCallbacksPerFrame": 0,
       "frameJsMs": {
-        "p50": 0.00008299999171867967,
-        "p95": 0.00008399999933317304,
-        "max": 0.011333000002196059
+        "p50": 0.00008299999899463728,
+        "p95": 0.00008400000660913065,
+        "max": 0.0002499999973224476
       },
       "framesPerBurst": 40
     },
@@ -140,25 +140,25 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 8,
       "eventBlockingMs": {
-        "p50": 0.39229199998953845,
-        "p95": 0.43483300000661984,
-        "max": 1.2403330000088317
+        "p50": 0.31066699999792036,
+        "p95": 0.34387499999138527,
+        "max": 1.0072919999947771
       },
       "reactCommitDurationMs": {
-        "p50": 0.25011999999696855,
-        "p95": 0.27863300003809854,
-        "max": 0.39941800000087824
+        "p50": 0.18116799999552313,
+        "p95": 0.20533399998384994,
+        "max": 0.29628300000331365
       },
       "commitsPerPress": 3,
-      "normalizeCallsPerPress": 6,
-      "animateCallsPerPress": 0,
-      "rafCallbacksPerFrame": 7.017543859649122,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
       "frameJsMs": {
-        "p50": 0.10441699999500997,
-        "p95": 0.11716599999635946,
-        "max": 0.9857079999928828
+        "p50": 0.00008299999171867967,
+        "p95": 0.00008399999933317304,
+        "max": 0.012417000005370937
       },
-      "framesPerBurst": 57
+      "framesPerBurst": 40
     },
     {
       "keyCount": 8,
@@ -169,25 +169,25 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 8,
       "eventBlockingMs": {
-        "p50": 0.30766599999333266,
-        "p95": 0.33804200000304263,
-        "max": 1.0253749999974389
+        "p50": 0.2806249999994179,
+        "p95": 0.3114580000110436,
+        "max": 1.079291000001831
       },
       "reactCommitDurationMs": {
-        "p50": 0.18112399999517947,
-        "p95": 0.1979510000528535,
-        "max": 0.8557540000037989
+        "p50": 0.15499599996837787,
+        "p95": 0.1761619999742834,
+        "max": 0.21609099993656855
       },
       "commitsPerPress": 3,
-      "normalizeCallsPerPress": 5,
-      "animateCallsPerPress": 0,
-      "rafCallbacksPerFrame": 7.017543859649122,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
       "frameJsMs": {
-        "p50": 0.099833000000217,
-        "p95": 0.11349999999220017,
-        "max": 0.8924580000020796
+        "p50": 0.00008299999171867967,
+        "p95": 0.00008399999933317304,
+        "max": 0.0001669999910518527
       },
-      "framesPerBurst": 57
+      "framesPerBurst": 40
     },
     {
       "keyCount": 30,
@@ -198,23 +198,23 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 0,
       "eventBlockingMs": {
-        "p50": 0.14766600000439212,
-        "p95": 0.16649999999208376,
-        "max": 0.9341249999997672
+        "p50": 0.13524999999208376,
+        "p95": 0.1587500000023283,
+        "max": 1.0126250000030268
       },
       "reactCommitDurationMs": {
-        "p50": 0.05345600002328865,
-        "p95": 0.06054299999959767,
-        "max": 0.10567300004186109
+        "p50": 0.04229299999133218,
+        "p95": 0.05128599995805416,
+        "max": 0.7447560000437079
       },
       "commitsPerPress": 2,
-      "normalizeCallsPerPress": 2,
+      "normalizeCallsPerPress": 0,
       "animateCallsPerPress": 0,
       "rafCallbacksPerFrame": 0,
       "frameJsMs": {
         "p50": 0.00008299999171867967,
         "p95": 0.00008399999933317304,
-        "max": 0.0006250000005820766
+        "max": 0.00020799999765586108
       },
       "framesPerBurst": 40
     },
@@ -227,25 +227,25 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 30,
       "eventBlockingMs": {
-        "p50": 0.4157499999855645,
-        "p95": 0.5130829999980051,
-        "max": 1.339458000002196
+        "p50": 0.32120799999393057,
+        "p95": 0.3547090000065509,
+        "max": 1.395834000009927
       },
       "reactCommitDurationMs": {
-        "p50": 0.25026600001729093,
-        "p95": 0.2989240000024438,
-        "max": 1.1609570002183318
+        "p50": 0.18116800001007505,
+        "p95": 0.2019550000259187,
+        "max": 0.8756660000362899
       },
       "commitsPerPress": 3,
-      "normalizeCallsPerPress": 6,
-      "animateCallsPerPress": 0,
-      "rafCallbacksPerFrame": 12.631578947368421,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
       "frameJsMs": {
-        "p50": 0.1947500000242144,
-        "p95": 0.2617500000051223,
-        "max": 1.3707500000018626
+        "p50": 0.00008299999171867967,
+        "p95": 0.00008399999933317304,
+        "max": 0.0009169999975711107
       },
-      "framesPerBurst": 57
+      "framesPerBurst": 40
     },
     {
       "keyCount": 30,
@@ -256,25 +256,25 @@
       "warmupIterations": 3,
       "mountedCountDisplays": 30,
       "eventBlockingMs": {
-        "p50": 0.3422910000081174,
-        "p95": 1.8594999999913853,
-        "max": 10.000250000011874
+        "p50": 0.2994999999937136,
+        "p95": 0.32329200000094716,
+        "max": 1.3464999999996508
       },
       "reactCommitDurationMs": {
-        "p50": 0.19042300002183765,
-        "p95": 0.7899159999797121,
-        "max": 9.577305999875534
+        "p50": 0.15633499989053234,
+        "p95": 0.17374500003643334,
+        "max": 0.24190999986603856
       },
       "commitsPerPress": 3,
-      "normalizeCallsPerPress": 5,
-      "animateCallsPerPress": 0,
-      "rafCallbacksPerFrame": 12.385964912280702,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
       "frameJsMs": {
-        "p50": 0.21308300000964664,
-        "p95": 0.6547919999866281,
-        "max": 13.112332999997307
+        "p50": 0.00008299999171867967,
+        "p95": 0.00008399999933317304,
+        "max": 0.0010830000101123005
       },
-      "framesPerBurst": 57
+      "framesPerBurst": 40
     }
   ]
 }
