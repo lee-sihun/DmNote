@@ -1081,11 +1081,12 @@ describe('숫자 입력 방향키 스텝', () => {
     expect(input.value).toBe('584');
   });
 
-  it('Shift는 10씩, Alt는 소수 필드의 최소 단위로 움직인다', () => {
+  it('Shift는 10 눈금으로 스냅, Alt는 소수 필드의 최소 단위로 움직인다', () => {
+    // 585는 10 눈금 밖이라 위로는 가장 가까운 눈금 590에 붙는다
     const coarse = renderNumberInput();
     act(() => coarse.focus());
     act(() => pressKey(coarse, 'ArrowUp', { shiftKey: true }));
-    expect(coarse.value).toBe('595');
+    expect(coarse.value).toBe('590');
 
     act(() => root.unmount());
     root = createRoot(container);
@@ -1121,13 +1122,33 @@ describe('숫자 입력 방향키 스텝', () => {
     act(() => pressKey(input, 'ArrowUp'));
     expect(input.value).toBe('1.5');
 
-    // Shift는 굵은 눈금이라 step의 10배
+    // Shift는 굵은 눈금(step의 10배 = 5) 격자로 스냅 - 1.5는 격자 밖이라 5로
     act(() => pressKey(input, 'ArrowUp', { shiftKey: true }));
-    expect(input.value).toBe('6.5');
+    expect(input.value).toBe('5');
 
-    // Alt는 자릿수의 최소 단위 - step 격자와 별개
+    // Alt는 자릿수의 최소 단위 - step 격자와 별개로 순수 증분 유지
     act(() => pressKey(input, 'ArrowDown', { altKey: true }));
-    expect(input.value).toBe('6.4');
+    expect(input.value).toBe('4.9');
+  });
+
+  it('격자 밖 소수는 방향키 한 번으로 눈금에 붙고, 격자 위에서는 한 눈금씩 이동한다', () => {
+    const input = renderNumberInput({
+      value: 63.4,
+      allowDecimal: true,
+      decimalScale: 1,
+    });
+    act(() => input.focus());
+
+    // 63.4 → ↑ = 64.4가 아니라 다음 정수 64 (소수 꼬리 제거)
+    act(() => pressKey(input, 'ArrowUp'));
+    expect(input.value).toBe('64');
+
+    // 격자 위 64 → ↑ = 65, ↓↓ = 63
+    act(() => pressKey(input, 'ArrowUp'));
+    expect(input.value).toBe('65');
+    act(() => pressKey(input, 'ArrowDown'));
+    act(() => pressKey(input, 'ArrowDown'));
+    expect(input.value).toBe('63');
   });
 
   it('지수 표기로 표시되는 값도 그 수에서 스텝한다', () => {

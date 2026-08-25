@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   begin: vi.fn(),
   end: vi.fn(),
   updateElement: vi.fn(),
-  setDraggingOrResizing: vi.fn(),
+  setResizing: vi.fn(),
   clearGuides: vi.fn(),
   commitPatch: vi.fn(() => Promise.resolve()),
   beginMixedGesture: vi.fn(),
@@ -85,7 +85,7 @@ vi.mock('@stores/grid/useGridSelectionStore', () => ({
   ) => position?.id || `${type}-${index}`,
   useGridSelectionStore: {
     getState: () => ({
-      setDraggingOrResizing: mocks.setDraggingOrResizing,
+      setResizing: mocks.setResizing,
     }),
   },
 }));
@@ -212,7 +212,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.begin.mockReset();
     mocks.end.mockReset();
     mocks.updateElement.mockReset();
-    mocks.setDraggingOrResizing.mockReset();
+    mocks.setResizing.mockReset();
     mocks.clearGuides.mockReset();
     mocks.commitPatch.mockClear();
     mocks.commitGroupBounds.mockClear();
@@ -245,6 +245,21 @@ describe('useGridResize plugin gesture lifecycle', () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     host.remove();
+  });
+
+  it('리사이즈 전용 상태만 수명에 맞춰 켜고 끈다', async () => {
+    await renderHarness([stableKeySelection(STABLE_A)]);
+
+    await act(async () => {
+      api.handleResizeStart();
+    });
+    expect(mocks.setResizing).toHaveBeenLastCalledWith(true);
+
+    await act(async () => {
+      api.handleResize({ x: 10, y: 20, width: 120, height: 80 });
+      api.handleResizeComplete();
+    });
+    expect(mocks.setResizing).toHaveBeenLastCalledWith(false);
   });
 
   it('단일 plugin resize를 update와 editor 종료 뒤 끝내고 다음 resize와 분리한다', async () => {
@@ -622,5 +637,6 @@ describe('useGridResize plugin gesture lifecycle', () => {
     });
 
     expect(mocks.end).toHaveBeenCalledWith('plugin-a', 'token-1');
+    expect(mocks.setResizing).toHaveBeenLastCalledWith(false);
   });
 });

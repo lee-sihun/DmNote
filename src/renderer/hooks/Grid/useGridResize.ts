@@ -138,6 +138,10 @@ export function useGridResize({
   useEffect(
     () => () => {
       const gestureId = resizeGestureIdRef.current;
+      if (resizeStartRef.current) {
+        resizeStartRef.current = false;
+        useGridSelectionStore.getState().setResizing(false);
+      }
       endPluginResizeSessions();
       if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
     },
@@ -169,7 +173,7 @@ export function useGridResize({
     useSmartGuidesStore.getState().clearGuides();
 
     // 리사이즈 시작 시 애니메이션 비활성화
-    useGridSelectionStore.getState().setDraggingOrResizing(true);
+    useGridSelectionStore.getState().setResizing(true);
   };
 
   // 공용 리사이즈 프리뷰 처리 (스마트 가이드 포함)
@@ -181,6 +185,7 @@ export function useGridResize({
       width: number;
       height: number;
       handle?: ResizeHandle;
+      suppressSmartSnap?: boolean;
     },
   ) => {
     const smartGuidesStore = useSmartGuidesStore.getState();
@@ -194,8 +199,10 @@ export function useGridResize({
     let finalWidth = newBounds.width;
     let finalHeight = newBounds.height;
 
-    // 스마트 가이드 계산 (getOtherElements가 제공된 경우, 정렬 가이드가 활성화된 경우)
-    if (getOtherElements && alignmentGuidesEnabled) {
+    // 스마트 가이드 계산 - modifier 유지 중에는 일시 해제하고 그리드 스냅만 남긴다
+    if (newBounds.suppressSmartSnap) {
+      useSmartGuidesStore.getState().clearGuides();
+    } else if (getOtherElements && alignmentGuidesEnabled) {
       const otherElements = getOtherElements(elementId);
 
       // 리사이즈 중인 요소의 bounds 계산
@@ -488,6 +495,7 @@ export function useGridResize({
       width: number;
       height: number;
       handle?: ResizeHandle;
+      suppressSmartSnap?: boolean;
     },
   ) => {
     const smartGuidesStore = useSmartGuidesStore.getState();
@@ -501,8 +509,10 @@ export function useGridResize({
     let finalWidth = newBounds.width;
     let finalHeight = newBounds.height;
 
-    // 스마트 가이드 계산 (getOtherElements가 제공된 경우, 정렬 가이드가 활성화된 경우)
-    if (getOtherElements && alignmentGuidesEnabled) {
+    // 스마트 가이드 계산 - modifier 유지 중에는 일시 해제하고 그리드 스냅만 남긴다
+    if (newBounds.suppressSmartSnap) {
+      useSmartGuidesStore.getState().clearGuides();
+    } else if (getOtherElements && alignmentGuidesEnabled) {
       const otherElements = getOtherElements(fullId);
 
       // 리사이즈 중인 요소의 bounds 계산
@@ -785,6 +795,7 @@ export function useGridResize({
     width: number;
     height: number;
     handle?: ResizeHandle;
+    suppressSmartSnap?: boolean;
   }) => {
     if (selectedElements.length !== 1) return;
 
@@ -811,7 +822,7 @@ export function useGridResize({
     useSmartGuidesStore.getState().clearGuides();
 
     // 리사이즈 종료 시 애니메이션 복원
-    useGridSelectionStore.getState().setDraggingOrResizing(false);
+    useGridSelectionStore.getState().setResizing(false);
 
     // 최종 bounds를 실제 요소에 적용
     const finalBounds = finalBoundsRef.current;
@@ -908,7 +919,7 @@ export function useGridResize({
     useSmartGuidesStore.getState().clearGuides();
 
     // 리사이즈 종료 시 애니메이션 복원
-    useGridSelectionStore.getState().setDraggingOrResizing(false);
+    useGridSelectionStore.getState().setResizing(false);
 
     const finalData = finalGroupBoundsRef.current;
     if (finalData && finalData.elementBounds.length > 0) {

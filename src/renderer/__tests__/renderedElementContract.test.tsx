@@ -308,5 +308,46 @@ describe('렌더 DOM 계약', () => {
         '0px',
       );
     });
+
+    it('메인 편집 그래프는 2D 이동 승격과 편집 상태를 독립 적용한다', () => {
+      host.innerHTML = renderToStaticMarkup(
+        <GraphPanel
+          history={[1, 2, 3]}
+          interactive
+          dataEditing
+          promoteTransformLayer={false}
+        />,
+      );
+      const editingEl = host.querySelector<HTMLElement>(
+        '[data-graph-element="true"]',
+      );
+      expect(editingEl?.dataset.editing).toBe('true');
+      expect(editingEl?.style.transform).toBe(
+        'translate(calc(0px + var(--key-offset-x, 0px)), calc(0px + var(--key-offset-y, 0px)))',
+      );
+      expect(editingEl?.style.willChange).toBe('auto');
+      expect(editingEl?.style.backfaceVisibility).toBe('visible');
+      expect(editingEl?.style.transformStyle).toBe('flat');
+      expect(editingEl?.style.contain).toBe('layout style');
+
+      host.innerHTML = renderToStaticMarkup(
+        <GraphPanel
+          history={[1, 2, 3]}
+          interactive
+          dataEditing
+          promoteTransformLayer
+        />,
+      );
+      const dragEl = host.querySelector<HTMLElement>(
+        '[data-graph-element="true"]',
+      );
+      expect(dragEl?.dataset.editing).toBe('true');
+      expect(dragEl?.style.transform).toContain('translate(');
+      expect(dragEl?.style.transform).not.toContain('translate3d(');
+      expect(dragEl?.style.willChange).toBe('transform');
+      expect(dragEl?.style.backfaceVisibility).toBe('visible');
+      expect(dragEl?.style.transformStyle).toBe('flat');
+      expect(dragEl?.style.contain).toBe('layout style');
+    });
   });
 });

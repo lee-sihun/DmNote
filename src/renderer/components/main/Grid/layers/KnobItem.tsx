@@ -344,7 +344,7 @@ const KnobItem = ({
     }
   };
 
-  const transform = `translate3d(calc(${draggable.dx}px + var(--key-offset-x, 0px)), calc(${draggable.dy}px + var(--key-offset-y, 0px)), 0)`;
+  const transform = `translate(calc(${draggable.dx}px + var(--key-offset-x, 0px)), calc(${draggable.dy}px + var(--key-offset-y, 0px)))`;
 
   return (
     <div
@@ -355,8 +355,9 @@ const KnobItem = ({
         height: `${height}px`,
         transform,
         zIndex: position.zIndex ?? zIndex,
-        willChange:
-          isDraggingOrResizing || isViewportTransforming ? 'transform' : 'auto',
+        // 그리드 안 승격 금지 - WebKit은 합성 자식이 생기면 스케일 컨테이너를
+        // 레이어로 만들어 전체가 흐려진다
+        willChange: 'auto',
         contain: 'layout style',
       }}
       data-editing={isDraggingOrResizing ? 'true' : undefined}

@@ -109,6 +109,9 @@ interface GridSelectionState {
   // 드래그/리사이즈 중인 상태 (CSS 애니메이션 비활성화용)
   isDraggingOrResizing: boolean;
 
+  // 리사이즈 중인 상태 (이동 합성 레이어와 분리)
+  isResizing: boolean;
+
   // 액션
   selectElement: (element: SelectedElement, addToSelection?: boolean) => void;
   toggleSelection: (element: SelectedElement) => void;
@@ -138,10 +141,16 @@ interface GridSelectionState {
 
   // 드래그/리사이즈 상태 설정
   setDraggingOrResizing: (isDragging: boolean) => void;
+  setResizing: (isResizing: boolean) => void;
 
   // 선택된 요소들 일괄 이동
   moveSelectedElements: (deltaX: number, deltaY: number) => void;
 }
+
+export const selectGridTransformLayerPromotion = (state: {
+  isDraggingOrResizing: boolean;
+  isResizing: boolean;
+}): boolean => state.isDraggingOrResizing && !state.isResizing;
 
 export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   selectedElements: [],
@@ -154,6 +163,7 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   marqueeEnd: null,
   isMiddleButtonDragging: false,
   isDraggingOrResizing: false,
+  isResizing: false,
 
   selectElement: (element, addToSelection = false) => {
     set((state) => {
@@ -278,7 +288,11 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   },
 
   setDraggingOrResizing: (isDragging) => {
-    set({ isDraggingOrResizing: isDragging });
+    set({ isDraggingOrResizing: isDragging, isResizing: false });
+  },
+
+  setResizing: (isResizing) => {
+    set({ isDraggingOrResizing: isResizing, isResizing });
   },
 
   moveSelectedElements: (_deltaX, _deltaY) => {

@@ -5,6 +5,7 @@ import {
   MAX_ZOOM,
   ZOOM_STEP,
   clampZoom,
+  snapGridPositionToDevicePixel,
 } from '@stores/grid/useGridViewStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isMac } from '@utils/core/platform';
@@ -32,7 +33,9 @@ export function useGridZoomPan({
 }: UseGridZoomPanOptions) {
   const { getViewState, setZoom, setPan, resetView } = useGridViewStore();
   const viewState = getViewState(mode);
-  const { zoom, panX, panY } = viewState;
+  const { zoom, panX: rawPanX, panY: rawPanY } = viewState;
+  const panX = snapGridPositionToDevicePixel(rawPanX);
+  const panY = snapGridPositionToDevicePixel(rawPanY);
 
   const macOS = isMac();
 
@@ -154,7 +157,7 @@ export function useGridZoomPan({
    */
   const pan = (deltaX: number, deltaY: number) => {
     touchTransforming();
-    setPan(mode, panX + deltaX, panY + deltaY);
+    setPan(mode, rawPanX + deltaX, rawPanY + deltaY);
   };
 
   /**

@@ -32,7 +32,7 @@ import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import {
   isStaleRepeat,
   parseLeadingNumber,
-  resolveStepDelta,
+  resolveStepper,
 } from '@utils/core/numberStep';
 import {
   evaluateArithmeticExpression,
@@ -467,11 +467,15 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     emitValue(parsed);
   };
 
-  const stepBy = (delta: number, repeat: boolean, key: string): boolean => {
+  const stepBy = (
+    stepper: (base: number) => number,
+    repeat: boolean,
+    key: string,
+  ): boolean => {
     const base = resolveStepBase();
-    const next = clampValue(
-      (supportsDecimal ? base : Math.round(base)) + delta,
-    );
+    // 반올림은 스텝 뒤에 - 먼저 반올림하면 63.4 ↓가 63을 건너뛰고 62가 된다
+    const stepped = stepper(base);
+    const next = clampValue(supportsDecimal ? stepped : Math.round(stepped));
     const nextText = String(next);
     // 상·하한에 닿아 값이 그대로면 할 일이 없다
     if (nextText === draftRef.current) {
@@ -544,8 +548,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
     // 위아래 방향키는 값 조절. Ctrl/Cmd 조합은 캐럿 이동 관습이라 건드리지 않는다
     if (!e.ctrlKey && !e.metaKey) {
-      const delta = resolveStepDelta(e.key, e, resolvedDecimalScale, step);
-      if (delta !== null) {
+      const stepper = resolveStepper(e.key, e, resolvedDecimalScale, step);
+      if (stepper !== null) {
         // 버리는 이벤트도 기본 동작(캐럿 이동)은 막아야 한다
         e.preventDefault();
         if (isStaleRepeat(e.nativeEvent)) return;
@@ -565,13 +569,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           fieldError.clear();
           digitPop.clear();
           suppressDigitPopRef.current = true;
-          const stepped = stepBy(delta, e.repeat, e.key);
+          const stepped = stepBy(stepper, e.repeat, e.key);
           if (!stepped && evaluated !== lastEmittedRef.current) {
             emitValue(evaluated);
           }
           return;
         }
-        stepBy(delta, e.repeat, e.key);
+        stepBy(stepper, e.repeat, e.key);
         return;
       }
     }
@@ -974,11 +978,15 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     emitValue(clamped);
   };
 
-  const stepBy = (delta: number, repeat: boolean, key: string): boolean => {
+  const stepBy = (
+    stepper: (base: number) => number,
+    repeat: boolean,
+    key: string,
+  ): boolean => {
     const base = resolveStepBase();
-    const next = clampValue(
-      (supportsDecimal ? base : Math.round(base)) + delta,
-    );
+    // 반올림은 스텝 뒤에 - 먼저 반올림하면 63.4 ↓가 63을 건너뛰고 62가 된다
+    const stepped = stepper(base);
+    const next = clampValue(supportsDecimal ? stepped : Math.round(stepped));
     const nextText = String(next);
     // 상·하한에 닿아 값이 그대로면 할 일이 없다
     if (nextText === draftRef.current) {
@@ -1050,8 +1058,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 
     // 위아래 방향키는 값 조절. Ctrl/Cmd 조합은 캐럿 이동 관습이라 건드리지 않는다
     if (!e.ctrlKey && !e.metaKey) {
-      const delta = resolveStepDelta(e.key, e, resolvedDecimalScale);
-      if (delta !== null) {
+      const stepper = resolveStepper(e.key, e, resolvedDecimalScale);
+      if (stepper !== null) {
         // 버리는 이벤트도 기본 동작(캐럿 이동)은 막아야 한다
         e.preventDefault();
         if (isStaleRepeat(e.nativeEvent)) return;
@@ -1071,13 +1079,13 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
           fieldError.clear();
           digitPop.clear();
           suppressDigitPopRef.current = true;
-          const stepped = stepBy(delta, e.repeat, e.key);
+          const stepped = stepBy(stepper, e.repeat, e.key);
           if (!stepped && evaluated !== lastEmittedRef.current) {
             emitValue(evaluated);
           }
           return;
         }
-        stepBy(delta, e.repeat, e.key);
+        stepBy(stepper, e.repeat, e.key);
         return;
       }
     }
