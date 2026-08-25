@@ -1,0 +1,302 @@
+name: Release macOS
+
+# macOS 유니버설 DMG 빌드 → 서명 → 공증 → draft 릴리즈 첨부
+# - 태그 푸시(1.2.3 형식): draft 릴리즈 생성/갱신. Windows 자산은 수동 추가 후 사람이 publish
+# - workflow_dispatch(dry_run=true): 릴리즈 없이 빌드·검증만, 산출물은 workflow artifact
+# - 인증서는 이 워크플로가 직접 임시 키체인에 import (Tauri의 APPLE_CERTIFICATE 사용 금지 —
+#   beforeBundleCommand 훅 scripts/sign-macos-helper.sh가 번들 전에 키체인에서 identity를 찾음)
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+" # 컨벤션 위반 — preflight에서 명시적으로 실패시킴 (침묵 스킵 방지)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "릴리즈 생성 없이 빌드·서명·공증·검증만 수행 (산출물은 workflow artifact)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# 같은 태그 재실행 시 릴리즈 업로드가 겹치지 않도록 직렬화. 공증 대기 중 취소 금지
+concurrency:
+  group: release-macos
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: 버전·태그 검사
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 누락 시 맥 러너에서 빌드를 한참 돌린 뒤에야 실패하므로 여기서 먼저 검사 (값은 출력하지 않음)
+      - name: 필수 시크릿 확인
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          MISSING=""
+          for name in MACOS_CERT_P12_BASE64 MACOS_CERT_PASSWORD APPLE_API_KEY_ID APPLE_API_ISSUER_ID APPLE_API_KEY_P8_BASE64; do
+            [ -n "${!name}" ] || MISSING="$MISSING $name"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::시크릿 누락:$MISSING — docs/release_macos.md 1절 참고"
+            exit 1
+          fi
+          echo "필수 시크릿 5종 확인"
+
+      - id: check
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          PKG="$(node -p "require('./package.json').version")"
+          CONF="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          CARGO="$(grep -m1 '^version = ' src-tauri/Cargo.toml | sed -E 's/version = "(.*)"/\1/')"
+          echo "package.json=$PKG tauri.conf.json=$CONF Cargo.toml=$CARGO"
+          if [ "$PKG" != "$CONF" ] || [ "$PKG" != "$CARGO" ]; then
+            echo "::error::버전 불일치 — npm run sync-version 실행 후 다시 태깅"
+            exit 1
+          fi
+
+          if [ "$REF_TYPE" = "tag" ]; then
+            case "$REF_NAME" in
+              v*)
+                echo "::error::태그에 v 접두사 금지 — 이 저장소 컨벤션은 '$PKG' 형식 (예: 1.6.1). 태그를 지우고 '$PKG'로 다시 생성"
+                exit 1 ;;
+            esac
+            if [ "$REF_NAME" != "$PKG" ]; then
+              echo "::error::태그($REF_NAME) ↔ package.json($PKG) 불일치"
+              exit 1
+            fi
+          fi
+
+          RELEASE=false
+          if [ "$EVENT_NAME" = "push" ]; then
+            RELEASE=true
+          elif [ "$DRY_RUN" != "true" ]; then
+            if [ "$REF_TYPE" != "tag" ]; then
+              echo "::error::릴리즈 생성(dry_run=false)은 태그 ref에서만 가능 — Run workflow에서 태그를 선택"
+              exit 1
+            fi
+            RELEASE=true
+          fi
+          echo "version=$PKG" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE"
+
+  build-macos:
+    name: 유니버설 빌드·서명·공증
+    needs: preflight
+    runs-on: macos-15
+    # 콜드 빌드(~45분) + 앱 공증(Tauri 내부, 타임아웃 없음) + DMG 공증(60분)이 직렬로 쌓임
+    timeout-minutes: 180
+    permissions:
+      contents: write # draft 릴리즈 생성·자산 업로드
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      BUNDLE_DIR: src-tauri/target/universal-apple-darwin/release/bundle
+    steps:
+      # 이 job은 서명 키 + contents:write를 보유 — npm/cargo 스크립트에 토큰을 남기지 않음
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # build.rs의 헬퍼 빌드(xcrun swiftc/lipo)는 실패해도 cargo:warning만 내므로 먼저 명시 확인
+      - name: Xcode 도구 확인
+        run: |
+          set -euo pipefail
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk macosx swiftc --version
+          xcrun notarytool --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # @stable은 가변 브랜치라 SHA 핀 (서명 키를 쥔 job에서 서드파티 액션 탈취 방지). SHA 갱신 시 toolchain 입력 유지
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-05
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-on-failure: true
+
+      - run: npm ci
+
+      # set -x 금지 — security 인자에 암호가 노출됨
+      - name: 서명용 임시 키체인 구성
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          EXPECTED_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/dmnote-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          CERT_PATH="$RUNNER_TEMP/dmnote-cert.p12"
+
+          printf '%s' "$MACOS_CERT_P12_BASE64" | base64 --decode > "$CERT_PATH"
+          chmod 600 "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings "$KEYCHAIN_PATH" # 인자 없음 = 자동 잠금 없음
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -f pkcs12 \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          # 키체인 항목 덤프가 로그에 남지 않도록 stdout만 숨김
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          rm -f "$CERT_PATH"
+
+          # -s는 검색 목록을 치환하므로 기존 목록(login.keychain-db 등)을 보존해 합침
+          EXISTING=()
+          while IFS= read -r line; do
+            line="$(printf '%s' "$line" | sed -E 's/^[[:space:]]*"?//; s/"?[[:space:]]*$//')"
+            [ -n "$line" ] && EXISTING+=("$line")
+          done < <(security list-keychains -d user)
+          # bash 3.2에서 빈 배열 + set -u 조합 방어
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "${EXISTING[@]+"${EXISTING[@]}"}"
+
+          # identity는 시크릿이 아니라 키체인에서 파생 — 인증서 갱신 시 드리프트 방지
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -1)"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::임시 키체인에 Developer ID Application identity 없음 (.p12에 개인 키 포함 여부 확인)"
+            exit 1
+          fi
+          if [ -n "${EXPECTED_IDENTITY:-}" ] && [ "$IDENTITY" != "$EXPECTED_IDENTITY" ]; then
+            echo "::error::signing identity 불일치 — 키체인='$IDENTITY'"
+            exit 1
+          fi
+          echo "signing identity: $IDENTITY"
+          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: 공증 API 키 배치
+        env:
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          grep -q "BEGIN PRIVATE KEY" "$KEY_PATH" || { echo "::error::.p8 디코딩 결과가 개인 키가 아님"; exit 1; }
+          echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      # APPLE_SIGNING_IDENTITY / APPLE_API_KEY_PATH는 앞 스텝의 GITHUB_ENV로 주입됨
+      # APPLE_API_ISSUER는 App Store Connect "팀 키"에만 존재 — 개인 키는 사용 불가
+      - name: 유니버설 빌드 (서명 + 앱 공증 + staple)
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: npm run tauri:build:mac:universal
+
+      # spctl은 파이프에 물리면 종료 코드가 가려지므로 단독 실행
+      - name: 앱 번들 검증
+        run: |
+          set -euo pipefail
+          APP="$BUNDLE_DIR/macos/DM NOTE.app"
+          bash scripts/verify-macos-bundle.sh "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          xcrun stapler validate "$APP"
+          spctl -a -vvv -t exec "$APP"
+
+      # Tauri는 DMG를 서명만 하므로 DMG 자체 공증·staple은 여기서 수행
+      - name: DMG 공증 + staple
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          DMG="$BUNDLE_DIR/dmg/DM NOTE_${VERSION}_universal.dmg"
+          if [ ! -f "$DMG" ]; then
+            echo "::error::DMG 없음: $DMG"
+            ls -la "$BUNDLE_DIR/dmg" || true
+            exit 1
+          fi
+          # notarytool은 Invalid/타임아웃 시 비정상 종료 — set -e에 죽지 않게 종료 코드를 잡아 진단 로그를 남김
+          set +e
+          RESULT="$(xcrun notarytool submit "$DMG" \
+            --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" \
+            --wait --timeout 60m --output-format json)"
+          SUBMIT_RC=$?
+          set -e
+          SUBMISSION_ID="$(jq -r '.id // empty' <<<"$RESULT" 2>/dev/null || true)"
+          STATUS="$(jq -r '.status // "Unknown"' <<<"$RESULT" 2>/dev/null || echo Unknown)"
+          echo "submission=${SUBMISSION_ID:-?} status=$STATUS rc=$SUBMIT_RC"
+          if [ "$SUBMIT_RC" -ne 0 ] || [ "$STATUS" != "Accepted" ]; then
+            [ -n "$SUBMISSION_ID" ] && xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" || true
+            echo "::error::DMG 공증 실패: status=$STATUS rc=$SUBMIT_RC"
+            exit 1
+          fi
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          spctl -a -vvv -t open --context context:primary-signature "$DMG"
+
+          # 자산 이름은 GitHub의 공백→점 치환에 맡기지 않고 고정
+          ASSET_PATH="$RUNNER_TEMP/DM.NOTE_${VERSION}_universal.dmg"
+          cp "$DMG" "$ASSET_PATH"
+          shasum -a 256 "$ASSET_PATH"
+          echo "ASSET_PATH=$ASSET_PATH" >> "$GITHUB_ENV"
+
+      - name: 산출물 업로드 (드라이런)
+        if: needs.preflight.outputs.release != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmnote-macos-universal-${{ needs.preflight.outputs.version }}
+          path: ${{ env.ASSET_PATH }}
+          if-no-files-found: error
+          retention-days: 7
+
+      # 기존 릴리즈가 있으면 DMG만 덮어쓰기 — 노트·draft 상태·수동 업로드된 Windows 자산 보존
+      - name: draft 릴리즈 생성 / DMG 업로드
+        if: needs.preflight.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # 이미 publish된 릴리즈의 자산 교체는 수동으로만 (사용자가 받아간 파일이 바뀌는 것 방지)
+            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != "true" ]; then
+              echo "::error::릴리즈 $TAG 는 이미 publish됨 — 자동 덮어쓰기 거부. 필요하면 gh release upload --clobber 로 수동 교체"
+              exit 1
+            fi
+            echo "기존 draft 릴리즈 발견 — DMG 덮어쓰기"
+            gh release upload "$TAG" "$ASSET_PATH" --clobber
+          else
+            NOTES="**한국어** | [English](https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/releases/${VERSION}_en.md)"
+            NOTES="$NOTES"$'\n\n'"_(한국어 릴리즈 노트를 작성하고 Windows 자산을 추가한 뒤 publish)_"
+            gh release create "$TAG" "$ASSET_PATH" \
+              --draft --title "DM NOTE v $VERSION" --notes "$NOTES" --generate-notes
+          fi
+          gh release view "$TAG" --json isDraft,name,assets \
+            --jq '"draft=\(.isDraft) name=\(.name) assets=\([.assets[].name] | join(", "))"'
+
+      - name: 임시 키체인·키 정리
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/dmnote-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/dmnote-cert.p12"
