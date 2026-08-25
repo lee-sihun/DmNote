@@ -50,9 +50,19 @@ export function useCounterGlyphPaint(
     apply();
     // 커스텀 폰트 지연 로드 - 메트릭이 바뀌므로 로드 완료 시 재측정
     const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
-    if (!fonts?.addEventListener) return;
-    const onLoadingDone = () => apply();
-    fonts.addEventListener('loadingdone', onLoadingDone);
-    return () => fonts.removeEventListener('loadingdone', onLoadingDone);
+    fonts?.addEventListener?.('loadingdone', apply);
+    // 커스텀 CSS는 요소 크기를 안 바꿔도 메트릭을 바꿀 수 있다 (라벨 훅과 동일 계약)
+    window.addEventListener('dmn-custom-css-applied', apply);
+    // 뷰포트 상대 단위·컨테이너발 크기 변화 재측정
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => apply())
+        : null;
+    observer?.observe(el);
+    return () => {
+      fonts?.removeEventListener?.('loadingdone', apply);
+      window.removeEventListener('dmn-custom-css-applied', apply);
+      observer?.disconnect();
+    };
   }, [ref, hasGradient, textDep, typographyDep]);
 }
