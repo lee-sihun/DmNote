@@ -1,5 +1,5 @@
 'use no memo';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { getKeySignal } from '@stores/signals/keySignals';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import { useSignals } from '@preact/signals-react/runtime';
@@ -18,6 +18,7 @@ import {
 } from '@hooks/overlay/useKeyElementStyles';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
+import { useCounterAxisAnchor } from '@hooks/shared/useCounterAxisAnchor';
 
 // DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
 interface KeyPosition extends KeyElementPosition {
@@ -141,8 +142,14 @@ const DraggableKey = React.memo(
     const previewActive = previewSession?.stateMode === 'active';
     const previewFillSpec =
       previewSession?.surface === 'counterFill' ? previewSession.spec : null;
-    const previewStrokeSpec =
-      previewSession?.surface === 'counterStroke' ? previewSession.spec : null;
+
+    const keyRootRef = useRef<HTMLElement | null>(null);
+    useCounterAxisAnchor(
+      previewSession,
+      keyRootRef,
+      counterPreviewValue,
+      '.counter',
+    );
 
     const isSelectionMode = isSelected;
 
@@ -257,9 +264,8 @@ const DraggableKey = React.memo(
     const renderDx = draggable.dx;
     const renderDy = draggable.dy;
 
-    const shouldPromoteTransformLayer =
-      isDraggingOrResizing || isViewportTransforming;
-
+    // 뷰포트 이동은 그리드 부모가 이미 합성 레이어를 소유
+    // 키까지 중첩 승격하면 DOM 글자가 흐리게 래스터화됨
     const previewPosition: KeyPosition = {
       ...position,
       dx: renderDx,
@@ -288,10 +294,16 @@ const DraggableKey = React.memo(
       active: previewActive,
       label: displayName,
     });
+    // 그리드(스케일 레이어) 안에서는 승격 금지 - WebKit은 합성 자식이 하나라도
+    // 생기면 스케일 컨테이너 자체를 레이어로 만들어 내용 전체가 흐려진다.
+    // 이동 키는 매 프레임 손상 영역만 재페인트하는 쪽이 선명하고 충분히 싸다
     const keyStyle: React.CSSProperties = {
       ...computedKeyStyle,
       transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`,
-      willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
+      willChange: 'auto',
+      backfaceVisibility: 'visible',
+      transformStyle: 'flat',
+      contain: 'layout style',
       zIndex: position.zIndex ?? zIndex,
       cursor: undefined,
     };
@@ -314,20 +326,10 @@ const DraggableKey = React.memo(
           textStyle={textStyle}
           active={previewActive}
           counterSettings={
-            previewFillSpec || previewStrokeSpec
-              ? {
-                  ...counterSettings,
-                  ...(previewFillSpec
-                    ? previewActive
-                      ? { fillActiveGradient: previewFillSpec }
-                      : { fillIdleGradient: previewFillSpec }
-                    : null),
-                  ...(previewStrokeSpec
-                    ? previewActive
-                      ? { strokeActiveGradient: previewStrokeSpec }
-                      : { strokeIdleGradient: previewStrokeSpec }
-                    : null),
-                }
+            previewFillSpec
+              ? previewActive
+                ? { ...counterSettings, fillActiveGradient: previewFillSpec }
+                : { ...counterSettings, fillIdleGradient: previewFillSpec }
               : counterSettings
           }
           useInlineStyles={position.useInlineStyles === true}
@@ -336,6 +338,7 @@ const DraggableKey = React.memo(
     };
 
     const attachRef = (node: HTMLElement | null) => {
+      keyRootRef.current = node;
       if (!isSelectionMode) {
         draggable.ref(node);
       }
@@ -379,10 +382,10 @@ const DraggableKey = React.memo(
           renderInsideCounterPreview()
         ) : (
           <div
-            className="flex items-center justify-center h-full font-bold text-safe-inline"
+            className="flex items-center justify-center h-full font-bold"
             style={textStyle}
           >
-            {labelText}
+            <span className="text-safe-inline">{labelText}</span>
           </div>
         )}
       </div>
@@ -429,6 +432,7 @@ export const Key = React.memo(function Key({
 
   if (isTransparent) return null;
 
+
   const showInsideCounter =
     counterEnabled &&
     counterSettings.enabled &&
@@ -472,10 +476,10 @@ export const Key = React.memo(function Key({
         />
       ) : (
         <div
-          className="flex items-center justify-center h-full font-bold text-safe-inline"
+          className="flex items-center justify-center h-full font-bold"
           style={textStyle}
         >
-          {labelText}
+          <span className="text-safe-inline">{labelText}</span>
         </div>
       )}
     </div>

@@ -31,7 +31,7 @@ describe('normalizeCounterSettings 손상 필드 격리', () => {
       enabled: true,
       placement: 'outside',
       fill: { idle: '#111111', active: '#222222' },
-      strokeIdleGradient: { angle: 0, stops: [] },
+      fillIdleGradient: { angle: 0, stops: [] },
     });
 
     expect(normalized.enabled).toBe(true);
@@ -40,6 +40,22 @@ describe('normalizeCounterSettings 손상 필드 격리', () => {
       idle: '#111111',
       active: '#222222',
     });
-    expect(normalized.strokeIdleGradient).toBeNull();
+    expect(normalized.fillIdleGradient).toBeNull();
+  });
+
+  it('지원 종료된 stroke 필드는 통째로 버린다', () => {
+    const normalized = normalizeCounterSettings({
+      stroke: { idle: '#112233', active: '#445566' },
+      strokeIdleGradient: {
+        angle: 90,
+        stops: [
+          { color: '#112233', pos: 0 },
+          { color: '#FFFFFF', pos: 1 },
+        ],
+      },
+    });
+
+    expect('stroke' in normalized).toBe(false);
+    expect('strokeIdleGradient' in normalized).toBe(false);
   });
 });

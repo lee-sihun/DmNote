@@ -353,13 +353,10 @@ interface KeyPosition {
 }
 
 interface KeyCounterSettings {
-  // ...placement, typography, stroke, and animation fields...
+  // ...placement, typography, and animation fields...
   fill: { idle: string; active: string };
-  stroke: { idle: string; active: string };
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
-  strokeIdleGradient?: GradientSpec | null;
-  strokeActiveGradient?: GradientSpec | null;
 }
 
 interface GradientSpec {
@@ -392,13 +389,7 @@ To return to a solid color, set the gradient field to `null` and update the
 solid field.
 
 The counter fill gradient fields likewise take priority over `counter.fill.idle`
-and `counter.fill.active`. Counter stroke follows the same pattern:
-`counter.strokeIdleGradient` and `counter.strokeActiveGradient` take priority
-over `counter.stroke.idle` and `counter.stroke.active`, and the solid fields
-stay synced to the first stop color. Known limitation: a gradient stroke paints
-the full glyph area behind the fill, so when the counter fill is
-semi-transparent the stroke gradient also shows through the glyph interior.
-Fully opaque fills render an outline-only ring as expected.
+and `counter.fill.active`.
 
 For note borders, `noteBorderGradient` takes priority over `noteBorderColor`.
 `noteBorderColor` always stays a `#RRGGBB` hex value, so saving a gradient

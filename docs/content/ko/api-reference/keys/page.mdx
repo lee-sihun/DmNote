@@ -149,13 +149,10 @@ interface KeyPosition {
 }
 
 interface KeyCounterSettings {
-  // ...배치, 글자, stroke, 애니메이션 필드...
+  // ...배치, 글자, 애니메이션 필드...
   fill: { idle: string; active: string };
-  stroke: { idle: string; active: string };
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
-  strokeIdleGradient?: GradientSpec | null;
-  strokeActiveGradient?: GradientSpec | null;
 }
 
 interface GradientSpec {
@@ -186,12 +183,7 @@ interface ElementShadowSpec {
 그라데이션 필드를 `null`로 두고 단색 필드를 갱신하세요.
 
 카운터 fill 그라데이션도 각각 `counter.fill.idle`과 `counter.fill.active`보다
-우선합니다. 카운터 stroke도 같은 구조입니다. `counter.strokeIdleGradient`와
-`counter.strokeActiveGradient`가 각각 `counter.stroke.idle`,
-`counter.stroke.active`보다 우선하며, 단색 필드는 첫 스톱 색으로 동기화됩니다.
-알려진 제약: 그라데이션 stroke는 글리프 전체를 fill 뒤에서 칠하는 구조라
-카운터 fill이 반투명이면 글자 내부로도 비칩니다. 불투명 fill에서는 기대대로
-외곽선만 보입니다.
+우선합니다.
 
 노트 테두리는 `noteBorderGradient`가 `noteBorderColor`보다 우선합니다.
 `noteBorderColor`는 항상 `#RRGGBB` hex로 유지되므로 그라데이션 저장 시 첫

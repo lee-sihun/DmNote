@@ -54,7 +54,6 @@ const keyCounterSettingsInputSchema = z
     align: keyCounterAlignSchema.optional(),
     alignMode: keyCounterAlignModeSchema.optional(),
     fill: keyCounterColorSchema.partial().optional(),
-    stroke: keyCounterColorSchema.partial().optional(),
     gap: z.number().int().min(0).optional(),
     fontSize: z.number().int().min(8).max(72).optional(),
     fontWeight: z.number().int().min(100).max(900).optional(),
@@ -65,8 +64,6 @@ const keyCounterSettingsInputSchema = z
     animation: keyCounterAnimationSchema.partial().optional(),
     fillIdleGradient: optionalCounterGradientSchema,
     fillActiveGradient: optionalCounterGradientSchema,
-    strokeIdleGradient: optionalCounterGradientSchema,
-    strokeActiveGradient: optionalCounterGradientSchema,
   })
   .partial();
 
@@ -90,12 +87,9 @@ export interface KeyCounterSettings {
   align: KeyCounterAlign;
   alignMode: KeyCounterAlignMode;
   fill: KeyCounterColor;
-  stroke: KeyCounterColor;
-  // fill/stroke 그라데이션 형제 - 단색 필드는 대표색 폴백
+  // fill 그라데이션 형제 - 단색 필드는 대표색 폴백
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
-  strokeIdleGradient?: GradientSpec | null;
-  strokeActiveGradient?: GradientSpec | null;
   gap: number; // px 단위 간격
   fontSize: number; // px
   fontWeight: number; // CSS font-weight
@@ -124,7 +118,6 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     align,
     alignMode,
     fill,
-    stroke,
     gap,
     fontSize,
     fontWeight,
@@ -135,8 +128,6 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     animation,
     fillIdleGradient,
     fillActiveGradient,
-    strokeIdleGradient,
-    strokeActiveGradient,
   } = parsed.data;
   const normalizedBezier: CounterAnimationBezier = [
     Number.isFinite(animation?.bezier?.[0])
@@ -162,17 +153,9 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
       idle: fill?.idle ?? fallback.fill.idle,
       active: fill?.active ?? fallback.fill.active,
     },
-    stroke: {
-      idle: stroke?.idle ?? fallback.stroke.idle,
-      active: stroke?.active ?? fallback.stroke.active,
-    },
     fillIdleGradient: fillIdleGradient ?? fallback.fillIdleGradient ?? null,
     fillActiveGradient:
       fillActiveGradient ?? fallback.fillActiveGradient ?? null,
-    strokeIdleGradient:
-      strokeIdleGradient ?? fallback.strokeIdleGradient ?? null,
-    strokeActiveGradient:
-      strokeActiveGradient ?? fallback.strokeActiveGradient ?? null,
     gap:
       typeof gap === 'number' && Number.isFinite(gap) && gap >= 0
         ? gap

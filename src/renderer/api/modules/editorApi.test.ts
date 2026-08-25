@@ -530,12 +530,6 @@ describe('editorCommitRaw semantic op protocol', () => {
       'stat',
       { property: 'counterFontFamily', value: '  Raw Counter Family  ' },
     ],
-    ['key', { property: 'counterStrokeIdle', value: '  Raw Idle Stroke  ' }],
-    ['stat', { property: 'counterStrokeIdle', value: '' }],
-    [
-      'key',
-      { property: 'counterStrokeActive', value: '  Raw Active Stroke  ' },
-    ],
     ['graph', { property: 'fontColor', value: '  Raw Idle Font  ' }],
     ['knob', { property: 'activeFontColor', value: '' }],
     ['stat', { property: 'counterFillIdle', value: { color: ' raw solid ' } }],
@@ -914,10 +908,6 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['knob', { property: 'counterFontFamily', value: '' }],
     ['key', { property: 'counterFontFamily', value: null }],
     ['stat', { counterFontFamily: 'Counter', counterFontItalic: true }],
-    ['graph', { property: 'counterStrokeIdle', value: '#ffffff' }],
-    ['stat', { property: 'counterStrokeActive', value: '#ffffff' }],
-    ['key', { property: 'counterStrokeIdle', value: null }],
-    ['key', { counterStrokeIdle: '#fff', counterStrokeActive: '#000' }],
     ['key', { counterEnabled: true, counterAnimationEnabled: false }],
     [
       'graph',

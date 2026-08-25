@@ -49,10 +49,8 @@
 
 /* 카운터 스타일 예제 */
 
-/* 카운터 스타일 변수 
+/* 카운터 스타일 변수
 --counter-color: 텍스트 색상
---counter-stroke-color: 텍스트 외곽선 색상
---counter-stroke-width: 텍스트 외곽선 두께
 */
 
 /* 전역 카운터 스타일 */
@@ -64,13 +62,11 @@
 /* 전역 카운터 비활성 스타일 */
 .counter[data-counter-state="inactive"] {
   --counter-color: #474244;
-  --counter-stroke-color: transparent;
 }
 
 /* 전역 카운터 활성 스타일  */
 .counter[data-counter-state="active"] {
   --counter-color: #ff2b80;
-  --counter-stroke-color: transparent;
   text-shadow: 0px 0px 3px #ff2b80;
 }
 
@@ -80,6 +76,5 @@
 /* 클래스 조합 예제: .blue 클래스를 가진 키의 카운터 */
 .blue .counter[data-counter-state="active"] {
   --counter-color: #2ebef3;
-  --counter-stroke-color: transparent;
   text-shadow: 0px 0px 3px #2ebef3;
 }

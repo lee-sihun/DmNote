@@ -62,14 +62,15 @@ CSS variables applied to counter elements. Use with `.counter[data-counter-state
 | `--counter-color`           | Text color and saved-fill reset | `<color>`  | `#ffffff`                            |
 | `--counter-fill-image`      | Text fill image                 | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
 | `--counter-fill-clip`       | Fill clipping area              | `<box>`    | `text`, `border-box`                 |
+| `--counter-fill-position`   | Fill background position        | `<position>` | `0% 0%`, `4px 10px`                |
+| `--counter-fill-size`       | Fill background size            | `<bg-size>`  | `auto`, `100px 80px`               |
+| `--counter-fill-repeat`     | Fill repeat mode                | `<repeat-style>` | `no-repeat`                    |
 | `--counter-text-fill-color` | WebKit text fill color          | `<color>`  | `transparent`, `currentcolor`        |
-| `--counter-stroke-color`    | Text outline color and saved-stroke-gradient reset | `<color>`  | `#000000`, `transparent`             |
-| `--counter-stroke-width`    | Text outline thickness          | `<length>` | `1px`, `2px`                         |
-| `--counter-stroke-image`    | Text outline image              | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
-| `--counter-stroke-clip`     | Outline clipping area           | `<box>`    | `text`, `border-box`                 |
 
 Setting only `--counter-color` also disables a counter fill gradient saved in
-the app. To create a CSS fill gradient, set all three fill variables:
+the app. Gradients created in the app are laid over the glyph ink box; use
+`--counter-fill-position` and `--counter-fill-size` to take over the placement.
+To create a CSS fill gradient, set all three fill variables:
 
 ```css
 .counter {
@@ -79,33 +80,15 @@ the app. To create a CSS fill gradient, set all three fill variables:
 }
 ```
 
-The stroke follows the same rule: setting only `--counter-stroke-color`
-disables a stroke gradient saved in the app and the solid outline wins. To
-create a CSS stroke gradient directly, set all three stroke variables. If no
-outline is configured in the app, the default width is 0px, so
-`--counter-stroke-width` is required for anything to show:
-
-```css
-.counter {
-  --counter-stroke-image: linear-gradient(90deg, #f0f, #0ff);
-  --counter-stroke-clip: text;
-  --counter-stroke-width: 1px;
-}
-```
-
 ### Usage Example
 
 ```css
 .counter[data-counter-state='inactive'] {
   --counter-color: #666;
-  --counter-stroke-color: transparent;
-  --counter-stroke-width: 0px;
 }
 
 .counter[data-counter-state='active'] {
   --counter-color: #ff2b80;
-  --counter-stroke-color: #fff;
-  --counter-stroke-width: 1px;
 }
 ```
 

@@ -18,12 +18,13 @@ use crate::{
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        default_missing_note_gradient_multipliers, normalize_key_mappings, AppStoreData, CustomCss,
-        CustomCssPatch, CustomJs, CustomJsPatch, EditorCommitOrigin, EditorField, FontSettings,
-        FontType, GradientSpec, GraphPositions, KeyMappings, KeyPosition, KeyPositions, KeySlot,
-        KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch, SettingsPatchInput,
-        StatPositions, TabCss, TabCssOverrides, TabNoteSettings, POSITION_COLLECTION_FIELDS,
-        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        default_missing_note_gradient_multipliers, normalize_key_mappings,
+        scrub_removed_text_outline_fields, AppStoreData, CustomCss, CustomCssPatch, CustomJs,
+        CustomJsPatch, EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec,
+        GraphPositions, KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPositions,
+        LayerGroups, NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCss,
+        TabCssOverrides, TabNoteSettings, POSITION_COLLECTION_FIELDS, SHADOW_BLUR_MAX,
+        SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::{
@@ -43,6 +44,7 @@ fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
     let content = fs::read_to_string(path)?;
     let mut value: serde_json::Value =
         serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
+    scrub_removed_text_outline_fields(&mut value);
     if let Some(detail) = invalid_position_style_detail(&value) {
         return Err(CommandError::msg(format!("invalid-preset: {detail}")));
     }
@@ -78,12 +80,7 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
         "noteGradient",
         "noteGlowGradient",
     ];
-    const COUNTER_FIELDS: [&str; 4] = [
-        "fillIdleGradient",
-        "fillActiveGradient",
-        "strokeIdleGradient",
-        "strokeActiveGradient",
-    ];
+    const COUNTER_FIELDS: [&str; 2] = ["fillIdleGradient", "fillActiveGradient"];
     const SHADOW_FIELDS: [&str; 2] = ["shadow", "activeShadow"];
 
     for collection_name in POSITION_COLLECTION_FIELDS {
@@ -1855,9 +1852,68 @@ mod tests {
         std::fs::write(&source_path, serde_json::to_vec_pretty(&source).unwrap()).unwrap();
 
         let parsed = read_preset_file(&source_path).unwrap();
-        let position = &parsed.key_positions.unwrap()["custom"][0];
+        let positions = parsed.key_positions.unwrap();
+        let position = &positions["custom"][0];
         assert_eq!(position.note_opacity, 100);
         assert_eq!(position.note_glow_opacity, 100);
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn preset_removed_outline_fields_scrub_and_block_legacy_default_collision() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-removed-outline-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+        let source = serde_json::json!({
+            "keyPositions": {
+                "custom": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "fontStrokeColor": "#112233",
+                    "activeFontStrokeColor": "#445566",
+                    "counter": {
+                        "enabled": true,
+                        "placement": "inside",
+                        "align": "top",
+                        "alignMode": "center",
+                        "fill": { "idle": "#FFFFFF", "active": "#000000" },
+                        "stroke": { "idle": "#000000", "active": "#FFFFFF" },
+                        "strokeIdleGradient": {
+                            "angle": 90,
+                            "stops": [
+                                { "color": "#000000", "pos": 0 },
+                                { "color": "#FFFFFF", "pos": 1 }
+                            ]
+                        },
+                        "gap": 6,
+                        "fontSize": 16,
+                        "fontWeight": 400,
+                        "fontItalic": false,
+                        "fontUnderline": false,
+                        "fontStrikethrough": false
+                    }
+                }]
+            }
+        });
+        std::fs::write(&source_path, serde_json::to_vec_pretty(&source).unwrap()).unwrap();
+
+        let parsed = read_preset_file(&source_path).unwrap();
+        let position = &parsed.key_positions.unwrap()["custom"][0];
+        let mut counter = position.counter.clone();
+        assert_eq!(counter.fill.idle, "rgba(255,255,255,1)");
+        assert_eq!(counter.align, crate::models::KeyCounterAlign::Top);
+
+        let serialized = serde_json::to_value(&counter).unwrap();
+        assert!(serialized.get("stroke").is_none());
+        assert!(serialized.get("strokeIdleGradient").is_none());
+        assert!(!counter.migrate_legacy_defaults());
+        assert_eq!(counter.align, crate::models::KeyCounterAlign::Top);
 
         let _ = std::fs::remove_dir_all(temp_dir);
     }
@@ -1883,8 +1939,6 @@ mod tests {
             ("keyPositions", "noteBorderGradient", false),
             ("keyPositions", "fillIdleGradient", true),
             ("statPositions", "fillActiveGradient", true),
-            ("graphPositions", "strokeIdleGradient", true),
-            ("knobPositions", "strokeActiveGradient", true),
         ] {
             let mut gradient_fields = serde_json::Map::new();
             gradient_fields.insert(field.to_string(), damaged_gradient.clone());
@@ -2019,15 +2073,6 @@ mod tests {
                             { "color": "rgba(17, 34, 51, .5)", "pos": 0 },
                             { "color": "#ABC8", "pos": 1 }
                         ]
-                    },
-                    "counter": {
-                        "strokeIdleGradient": {
-                            "angle": 180,
-                            "stops": [
-                                { "color": "transparent", "pos": 0 },
-                                { "color": "color(display-p3 1 0 0)", "pos": 1 }
-                            ]
-                        }
                     }
                 }]
             }

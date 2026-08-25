@@ -34,7 +34,7 @@ import {
 const FONT_PAGE_KEY = 'single-counter:font';
 const ANIMATION_PAGE_KEY = 'single-counter:animation';
 
-type PickerTarget = 'fill' | 'stroke' | null;
+type PickerTarget = 'fill' | null;
 type ColorState = 'idle' | 'active';
 
 const CounterTabContent: React.FC<CounterTabContentProps> = ({
@@ -45,14 +45,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
   onCounterTypographyCommit,
-  onCounterStrokeCommit,
   onCounterFillCommit,
   onCounterAnimationPresetCommit,
   panelElement,
   t,
 }) => {
   const fillBtnRef = useRef<HTMLButtonElement>(null);
-  const strokeBtnRef = useRef<HTMLButtonElement>(null);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const pickerOpen = pickerFor !== null;
@@ -78,8 +76,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   const [localColors, setLocalColors] = useState({
     fillIdle: counterSettings.fill.idle,
     fillActive: counterSettings.fill.active,
-    strokeIdle: counterSettings.stroke.idle,
-    strokeActive: counterSettings.stroke.active,
   });
 
   // 피커가 닫혀있을 때만 외부 prop과 동기화
@@ -88,19 +84,11 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       setLocalColors({
         fillIdle: counterSettings.fill.idle,
         fillActive: counterSettings.fill.active,
-        strokeIdle: counterSettings.stroke.idle,
-        strokeActive: counterSettings.stroke.active,
       });
     }
-  }, [
-    pickerOpen,
-    counterSettings.fill.idle,
-    counterSettings.fill.active,
-    counterSettings.stroke.idle,
-    counterSettings.stroke.active,
-  ]);
+  }, [pickerOpen, counterSettings.fill.idle, counterSettings.fill.active]);
 
-  const colorPickerInteractiveRefs = [fillBtnRef, strokeBtnRef];
+  const colorPickerInteractiveRefs = [fillBtnRef];
 
   const handleAnimationUpdate = (
     nextAnimation: KeyCounterAnimationSettings,
@@ -125,34 +113,17 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     return '#ffffff';
   };
 
-  const activeColorFor = (
-    target: Exclude<PickerTarget, null>,
-    state: ColorState,
-  ): string => {
-    if (target === 'fill') {
-      return state === 'active' ? localColors.fillActive : localColors.fillIdle;
-    }
-    return state === 'active'
-      ? localColors.strokeActive
-      : localColors.strokeIdle;
-  };
+  const activeColorFor = (state: ColorState): string =>
+    state === 'active' ? localColors.fillActive : localColors.fillIdle;
 
   // 드래그 중 로컬 상태만 업데이트 (부모에게 전달 안함)
   const handleColorChange = (color: string) => {
     if (!pickerFor) return;
-    const key =
-      pickerFor === 'fill'
-        ? effectiveColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle'
-        : effectiveColorState === 'active'
-        ? 'strokeActive'
-        : 'strokeIdle';
-
+    const key = effectiveColorState === 'active' ? 'fillActive' : 'fillIdle';
     setLocalColors((prev) => ({ ...prev, [key]: color }));
   };
 
-  // ── fill·stroke 그라데이션 배선 ──
+  // ── fill 그라데이션 배선 ──
 
   const storedFillGradient =
     effectiveColorState === 'active'
@@ -184,7 +155,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     pair:
       pickerFor === 'fill'
         ? {
-            color: activeColorFor('fill', effectiveColorState),
+            color: activeColorFor(effectiveColorState),
             gradient: storedFillGradient,
           }
         : {},
@@ -206,62 +177,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     },
     onCommit: handleFillCommit,
   });
-
-  const storedStrokeGradient =
-    effectiveColorState === 'active'
-      ? counterSettings.strokeActiveGradient ?? null
-      : counterSettings.strokeIdleGradient ?? null;
-
-  const handleStrokeCommit = (value: ColorModeValue) => {
-    const pair = counterFillPair(value);
-    const key =
-      effectiveColorState === 'active' ? 'strokeActive' : 'strokeIdle';
-    setLocalColors((prev) => ({ ...prev, [key]: pair.color }));
-    onCounterStrokeCommit?.(
-      effectiveColorState === 'active'
-        ? {
-            property: 'counterStrokeActive',
-            value: pair.gradient
-              ? { color: pair.color, gradient: pair.gradient }
-              : { color: pair.color },
-          }
-        : {
-            property: 'counterStrokeIdle',
-            value: pair.gradient
-              ? { color: pair.color, gradient: pair.gradient }
-              : { color: pair.color },
-          },
-    );
-  };
-
-  const strokeGradientState = useGradientColorState({
-    pair:
-      pickerFor === 'stroke'
-        ? {
-            color: activeColorFor('stroke', effectiveColorState),
-            gradient: storedStrokeGradient,
-          }
-        : {},
-    fallbackColor: '#000000',
-    contextKey: `${isStat ? 'stat' : 'key'}:${selectedKeyType}:${
-      keyPosition.id
-    }:stroke:${effectiveColorState}`,
-    canvasAnchor:
-      pickerFor === 'stroke' &&
-      keyPosition.id &&
-      isNativeElementId(keyPosition.id)
-        ? { kind: isStat ? 'stat' : 'key', id: keyPosition.id }
-        : undefined,
-    canvasSurface: 'counterStroke',
-    canvasState: effectiveColorState,
-    onPreview: (value) => {
-      if (value.mode === 'solid') handleColorChange(value.color);
-    },
-    onCommit: handleStrokeCommit,
-  });
-
-  const activePickerState =
-    pickerFor === 'stroke' ? strokeGradientState : fillGradientState;
 
   return (
     <>
@@ -387,29 +302,9 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             open={pickerFor === 'fill'}
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
-            color={getDisplayColor(activeColorFor('fill', effectiveColorState))}
+            color={getDisplayColor(activeColorFor(effectiveColorState))}
             image={
               storedFillGradient ? gradientToCss(storedFillGradient) : undefined
-            }
-          />
-        </PropertyRow>
-
-        {/* 외곽선 색상 */}
-        <PropertyRow label={t('counterSetting.stroke') || '외곽선'}>
-          <ColorSwatchButton
-            ref={strokeBtnRef}
-            type="button"
-            onClick={() => handlePickerToggle('stroke')}
-            open={pickerFor === 'stroke'}
-            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-            surfaceClassName="rounded-md"
-            color={getDisplayColor(
-              activeColorFor('stroke', effectiveColorState),
-            )}
-            image={
-              storedStrokeGradient
-                ? gradientToCss(storedStrokeGradient)
-                : undefined
             }
           />
         </PropertyRow>
@@ -518,14 +413,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         {pickerFor ? (
           <ColorPicker
             open={pickerOpen}
-            referenceRef={pickerFor === 'fill' ? fillBtnRef : strokeBtnRef}
+            referenceRef={fillBtnRef}
             panelElement={panelElement}
-            color={activePickerState.pickerColor}
+            color={fillGradientState.pickerColor}
             onColorChange={(c: string) =>
-              activePickerState.handlePickerColorChange(c, false)
+              fillGradientState.handlePickerColorChange(c, false)
             }
             onColorChangeComplete={(c: string) =>
-              activePickerState.handlePickerColorChange(c, true)
+              fillGradientState.handlePickerColorChange(c, true)
             }
             onClose={() => setPickerFor(null)}
             solidOnly={true}
@@ -536,10 +431,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
                 ? (mode: string) => setColorState(mode as ColorState)
                 : undefined
             }
-            headerSlot={activePickerState.headerSlot}
-            footerSlot={activePickerState.footerSlot}
-            gradientSpec={activePickerState.paletteGradientSpec}
-            onGradientSpecSelect={activePickerState.handleGradientSpecSelect}
+            headerSlot={fillGradientState.headerSlot}
+            footerSlot={fillGradientState.footerSlot}
+            gradientSpec={fillGradientState.paletteGradientSpec}
+            onGradientSpecSelect={fillGradientState.handleGradientSpecSelect}
           />
         ) : null}
       </PopupExit>

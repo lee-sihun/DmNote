@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePointerSession } from './colorPickerPrimitives';
+import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 
 interface HarnessProps {
   emit: (x: number, y: number, final: boolean) => void;
@@ -105,6 +106,33 @@ describe('색상 트랙 pointer session', () => {
     });
     expect(emit).toHaveBeenLastCalledWith(0.8, 0.8, false);
     expect(emit).toHaveBeenCalledTimes(2);
+  });
+
+  it('드래그 동안 colorAdjusting 신호가 켜지고 종료 시 꺼진다', () => {
+    expect(useGradientEditStore.getState().colorAdjusting).toBe(false);
+    act(() => {
+      track().dispatchEvent(
+        pointerEvent('pointerdown', { clientX: 10, clientY: 20 }),
+      );
+    });
+    expect(useGradientEditStore.getState().colorAdjusting).toBe(true);
+    act(() => {
+      track().dispatchEvent(
+        pointerEvent('pointerup', { clientX: 40, clientY: 30 }),
+      );
+    });
+    expect(useGradientEditStore.getState().colorAdjusting).toBe(false);
+  });
+
+  it('드래그 중 언마운트돼도 colorAdjusting이 남지 않는다', () => {
+    act(() => {
+      track().dispatchEvent(
+        pointerEvent('pointerdown', { clientX: 10, clientY: 20 }),
+      );
+    });
+    expect(useGradientEditStore.getState().colorAdjusting).toBe(true);
+    act(() => root.unmount());
+    expect(useGradientEditStore.getState().colorAdjusting).toBe(false);
   });
 
   it('pointerup은 대기 프레임을 취소하고 최종 좌표를 한 번 커밋한다', () => {

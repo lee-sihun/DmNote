@@ -137,7 +137,6 @@ export function cloneKeyPositionForDuplicate(
   const clonedCounter: KeyCounterSettings = {
     ...sourceCounter,
     fill: { ...sourceCounter.fill },
-    stroke: { ...sourceCounter.stroke },
     animation: {
       ...sourceCounter.animation,
       presetId: sourceCounter.animation.presetId ?? null,

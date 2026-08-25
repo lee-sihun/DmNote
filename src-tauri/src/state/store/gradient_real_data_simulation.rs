@@ -15,13 +15,13 @@ use crate::{
     },
     defaults::{default_keys, default_positions},
     models::{
-        AppStoreData, EditorCommitOrigin, EditorField, GradientSpec, KeyPosition,
-        POSITION_COLLECTION_FIELDS,
+        AppStoreData, EditorCommitOrigin, EditorField, GradientSpec, GraphPosition, GraphStatType,
+        GraphType, KeyPosition, KnobPosition, StatPosition, StatType, POSITION_COLLECTION_FIELDS,
     },
     state::migration::{canonicalize_gradient_pairs, load_store_from_path, normalize_state},
 };
 
-const GRADIENT_FIELDS: [&str; 11] = [
+const GRADIENT_FIELDS: [&str; 9] = [
     "backgroundGradient",
     "activeBackgroundGradient",
     "borderGradient",
@@ -31,8 +31,6 @@ const GRADIENT_FIELDS: [&str; 11] = [
     "noteGlowGradient",
     "fillIdleGradient",
     "fillActiveGradient",
-    "strokeIdleGradient",
-    "strokeActiveGradient",
 ];
 
 struct RealFixture {
@@ -156,6 +154,43 @@ fn serialized_position(data: &AppStoreData, location: &PositionLocation) -> Valu
         .expect("key position must remain serializable")
 }
 
+fn normalized_store_with_every_position_collection() -> AppStoreData {
+    let mut data = normalize_state(AppStoreData {
+        keys: default_keys().clone(),
+        key_positions: default_positions().clone(),
+        ..AppStoreData::default()
+    });
+    data.stat_positions.insert(
+        "4key".to_string(),
+        vec![StatPosition {
+            stat_type: StatType::Kps,
+            position: KeyPosition::default(),
+        }],
+    );
+    data.graph_positions.insert(
+        "4key".to_string(),
+        vec![GraphPosition {
+            stat_type: GraphStatType::Kps,
+            graph_type: GraphType::Line,
+            graph_speed: 100,
+            graph_color: "#112233".to_string(),
+            show_avg_line: true,
+            position: KeyPosition::default(),
+        }],
+    );
+    data.knob_positions.insert(
+        "4key".to_string(),
+        vec![KnobPosition {
+            axis_id: "axis".to_string(),
+            sensitivity: 1.0,
+            reverse: false,
+            position: KeyPosition::default(),
+        }],
+    );
+    crate::state::native_element_id::backfill_store_element_ids(&mut data);
+    data
+}
+
 fn contains_gradient_fields(value: &Value) -> bool {
     match value {
         Value::Array(values) => values.iter().any(contains_gradient_fields),
@@ -177,9 +212,6 @@ fn collect_counter_colors(value: &Value, colors: &mut Vec<Value>) {
             if let Some(counter) = fields.get("counter").and_then(Value::as_object) {
                 if let Some(fill) = counter.get("fill") {
                     colors.push(fill.clone());
-                }
-                if let Some(stroke) = counter.get("stroke") {
-                    colors.push(stroke.clone());
                 }
             }
             for value in fields.values() {
@@ -442,12 +474,74 @@ fn set_damage_control_values(position: &mut Map<String, Value>) {
         .expect("serialized counter must contain fill colors");
     fill.insert("idle".to_string(), json!("#505050"));
     fill.insert("active".to_string(), json!("#606060"));
-    let stroke = counter
-        .get_mut("stroke")
-        .and_then(Value::as_object_mut)
-        .expect("serialized counter must contain stroke colors");
-    stroke.insert("idle".to_string(), json!("#707070"));
-    stroke.insert("active".to_string(), json!("#808080"));
+}
+
+fn insert_removed_outline_fields(value: &mut Value) -> usize {
+    let mut inserted = 0;
+    for collection in POSITION_COLLECTION_FIELDS {
+        let Some(modes) = value.get_mut(collection).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        for position in modes.values_mut().filter_map(Value::as_array_mut).flatten() {
+            let position = position
+                .as_object_mut()
+                .expect("editor position must remain an object");
+            position.insert("fontStrokeColor".to_string(), json!("#102030"));
+            position.insert("activeFontStrokeColor".to_string(), json!("#405060"));
+            let counter = position
+                .get_mut("counter")
+                .and_then(Value::as_object_mut)
+                .expect("serialized editor position must contain counter settings");
+            counter.insert(
+                "stroke".to_string(),
+                json!({ "idle": "#112233", "active": "#445566" }),
+            );
+            counter.insert(
+                "strokeIdleGradient".to_string(),
+                json!({
+                    "angle": 45,
+                    "stops": [
+                        { "color": "#112233", "pos": 0 },
+                        { "color": "#AABBCC", "pos": 1 }
+                    ]
+                }),
+            );
+            counter.insert(
+                "strokeActiveGradient".to_string(),
+                json!({
+                    "angle": 135,
+                    "stops": [
+                        { "color": "#445566", "pos": 0 },
+                        { "color": "#DDEEFF", "pos": 1 }
+                    ]
+                }),
+            );
+            inserted += 1;
+        }
+    }
+    inserted
+}
+
+fn removed_outline_field_count(value: &Value) -> usize {
+    let mut count = 0;
+    for collection in POSITION_COLLECTION_FIELDS {
+        let Some(modes) = value.get(collection).and_then(Value::as_object) else {
+            continue;
+        };
+        for position in modes.values().filter_map(Value::as_array).flatten() {
+            let Some(position) = position.as_object() else {
+                continue;
+            };
+            count += usize::from(position.contains_key("fontStrokeColor"));
+            count += usize::from(position.contains_key("activeFontStrokeColor"));
+            if let Some(counter) = position.get("counter").and_then(Value::as_object) {
+                count += usize::from(counter.contains_key("stroke"));
+                count += usize::from(counter.contains_key("strokeIdleGradient"));
+                count += usize::from(counter.contains_key("strokeActiveGradient"));
+            }
+        }
+    }
+    count
 }
 
 // 실행: DMNOTE_SIM_STORE_PATH=/path/to/store.json cargo test -- --ignored
@@ -851,12 +945,196 @@ fn simulation_5_inline_legacy_preset_imports_without_gradients() {
     assert!(position.note_glow_gradient.is_none());
     assert!(position.counter.fill_idle_gradient.is_none());
     assert!(position.counter.fill_active_gradient.is_none());
-    assert!(position.counter.stroke_idle_gradient.is_none());
-    assert!(position.counter.stroke_active_gradient.is_none());
     let imported_value = serde_json::to_value(&imported).unwrap();
     assert!(!contains_gradient_fields(&imported_value));
 
     println!(
         "SIMULATION 5 PASS: legacyPresetParsed=true imported=true baseAndCounterColorsPreserved=true gradientsAbsent=true"
+    );
+}
+
+#[test]
+fn simulation_6_removed_outline_fields_are_scrubbed_and_persisted_in_place() {
+    let seed = normalized_store_with_every_position_collection();
+    let mut raw = serde_json::to_value(seed).unwrap();
+    let key_counts = collection_counts(&raw, "keyPositions");
+    let stat_counts = collection_counts(&raw, "statPositions");
+    let graph_counts = collection_counts(&raw, "graphPositions");
+    let knob_counts = collection_counts(&raw, "knobPositions");
+    let position_count = insert_removed_outline_fields(&mut raw);
+    assert!(position_count > 0);
+    assert_eq!(removed_outline_field_count(&raw), position_count * 5);
+
+    let directory = SimulationDir::new("removed-outline-persistence");
+    let path = write_store_copy(
+        &directory,
+        "store.json",
+        &serde_json::to_vec_pretty(&raw).unwrap(),
+    );
+    let loaded = load_store_from_path(&path).expect("removed outline fields must not block load");
+    assert!(loaded.needs_persist);
+    assert!(!loaded.repaired);
+    assert_eq!(
+        removed_outline_field_count(&serde_json::to_value(&loaded.data).unwrap()),
+        0
+    );
+
+    let store = AppStore::initialize_in_dir(directory.path())
+        .expect("outline scrub store must initialize and persist");
+    assert!(!store.skip_asset_sweep);
+    let persisted_snapshot = store.snapshot();
+    store.flush_and_shutdown().unwrap();
+    drop(store);
+
+    let persisted_value: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(removed_outline_field_count(&persisted_value), 0);
+    assert_eq!(
+        collection_counts(&persisted_value, "keyPositions"),
+        key_counts
+    );
+    assert_eq!(
+        collection_counts(&persisted_value, "statPositions"),
+        stat_counts
+    );
+    assert_eq!(
+        collection_counts(&persisted_value, "graphPositions"),
+        graph_counts
+    );
+    assert_eq!(
+        collection_counts(&persisted_value, "knobPositions"),
+        knob_counts
+    );
+
+    let reloaded = load_store_from_path(&path).expect("scrubbed store must reload cleanly");
+    assert!(!reloaded.needs_persist);
+    assert!(!reloaded.repaired);
+    assert_eq!(reloaded.data, persisted_snapshot);
+
+    println!(
+        "SIMULATION 6 PASS: allCollectionsScrubbed=true indexesPreserved=true persisted=true repaired=false sweepEnabled=true reloadIdempotent=true"
+    );
+}
+
+#[test]
+fn simulation_7_removed_stroke_evidence_blocks_default_promotion_after_persistence() {
+    let seed = normalized_store_with_every_position_collection();
+    let mut raw = serde_json::to_value(seed).unwrap();
+    let position_count = insert_removed_outline_fields(&mut raw);
+    assert!(position_count > 0);
+    assert_eq!(removed_outline_field_count(&raw), position_count * 5);
+    let location = first_position_location(&raw);
+    let promoted_location = PositionLocation {
+        mode: location.mode.clone(),
+        index: location.index + 1,
+    };
+    let position = position_object_mut(&mut raw, &location);
+    position.insert(
+        "counter".to_string(),
+        json!({
+            "enabled": true,
+            "placement": "inside",
+            "align": "top",
+            "alignMode": "center",
+            "fill": { "idle": "#FFFFFF", "active": "#000000" },
+            "stroke": { "idle": "#123456", "active": "#FFFFFF" },
+            "strokeIdleGradient": {
+                "angle": 90,
+                "stops": [
+                    { "color": "#123456", "pos": 0 },
+                    { "color": "#FFFFFF", "pos": 1 }
+                ]
+            },
+            "strokeActiveGradient": {
+                "angle": 180,
+                "stops": [
+                    { "color": "#FFFFFF", "pos": 0 },
+                    { "color": "#123456", "pos": 1 }
+                ]
+            },
+            "gap": 6,
+            "fontSize": 16,
+            "fontWeight": 400,
+            "fontFamily": null,
+            "fontItalic": false,
+            "fontUnderline": false,
+            "fontStrikethrough": false
+        }),
+    );
+    position.insert("fontStrokeColor".to_string(), json!("#112233"));
+    position.insert("activeFontStrokeColor".to_string(), json!("#445566"));
+    position_object_mut(&mut raw, &promoted_location).insert(
+        "counter".to_string(),
+        json!({
+            "enabled": true,
+            "placement": "inside",
+            "align": "top",
+            "alignMode": "center",
+            "fill": { "idle": "#FFFFFF", "active": "#000000" },
+            "stroke": { "idle": "#000000", "active": "#FFFFFF" },
+            "gap": 6,
+            "fontSize": 16,
+            "fontWeight": 400,
+            "fontFamily": null,
+            "fontItalic": false,
+            "fontUnderline": false,
+            "fontStrikethrough": false
+        }),
+    );
+
+    let directory = SimulationDir::new("removed-stroke-default-collision");
+    let path = write_store_copy(
+        &directory,
+        "store.json",
+        &serde_json::to_vec_pretty(&raw).unwrap(),
+    );
+    let loaded =
+        load_store_from_path(&path).expect("legacy-default collision store must load cleanly");
+    assert!(loaded.needs_persist);
+    assert!(!loaded.repaired);
+    let counter = &position_from_store(&loaded.data, &location).counter;
+    assert_eq!(counter.fill.idle, "rgba(255,255,255,1)");
+    assert_eq!(counter.fill.active, "rgba(0,0,0,1)");
+    assert_eq!(counter.align, crate::models::KeyCounterAlign::Top);
+    assert_eq!(counter.gap, 6);
+    assert_eq!(
+        position_from_store(&loaded.data, &promoted_location).counter,
+        crate::models::KeyCounterSettings::default()
+    );
+
+    let store = AppStore::initialize_in_dir(directory.path())
+        .expect("legacy-default collision store must persist scrubbed data");
+    assert!(!store.skip_asset_sweep);
+    let persisted_snapshot = store.snapshot();
+    store.flush_and_shutdown().unwrap();
+    drop(store);
+
+    let persisted_value: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(removed_outline_field_count(&persisted_value), 0);
+    let persisted_counter = persisted_value["keyPositions"][&location.mode][location.index]
+        ["counter"]
+        .as_object()
+        .unwrap();
+    assert_eq!(
+        persisted_counter["fill"]["idle"],
+        json!("rgba(255,255,255,1)")
+    );
+    assert_eq!(persisted_counter["fill"]["active"], json!("rgba(0,0,0,1)"));
+
+    let reloaded =
+        load_store_from_path(&path).expect("scrubbed collision store must reload cleanly");
+    assert!(!reloaded.needs_persist);
+    assert!(!reloaded.repaired);
+    let counter = &position_from_store(&reloaded.data, &location).counter;
+    assert_eq!(counter.align, crate::models::KeyCounterAlign::Top);
+    assert_eq!(counter.fill.idle, "rgba(255,255,255,1)");
+    assert_eq!(counter.fill.active, "rgba(0,0,0,1)");
+    assert_eq!(
+        position_from_store(&reloaded.data, &promoted_location).counter,
+        crate::models::KeyCounterSettings::default()
+    );
+    assert_eq!(reloaded.data, persisted_snapshot);
+
+    println!(
+        "SIMULATION 7 PASS: removedEvidencePreserved=true falsePromotionBlocked=true persisted=true repaired=false sweepEnabled=true reloadIdempotent=true"
     );
 }

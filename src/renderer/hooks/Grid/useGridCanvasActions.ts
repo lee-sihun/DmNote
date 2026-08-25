@@ -222,7 +222,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       ? {
           ...position.counter,
           fill: { ...position.counter.fill },
-          stroke: { ...position.counter.stroke },
           ...(position.counter.animation
             ? {
                 animation: {

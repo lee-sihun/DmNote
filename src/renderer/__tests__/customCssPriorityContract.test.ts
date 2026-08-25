@@ -122,6 +122,17 @@ describe('커스텀 CSS 우선순위 계약', () => {
     expect(css).toMatch(
       /:where\(\.counter\)\s*\{[\s\S]*?--counter-fill-image,[\s\S]*?--counter-color,/,
     );
+    // 글리프 페인트 박스 변수도 같은 계약: 사용자 변수 → --counter-color 복귀 → 앱 기본
+    for (const channel of ['repeat', 'position', 'size'] as const) {
+      expect(css).toMatch(
+        new RegExp(
+          `:where\\(\\.counter\\)\\s*\\{[\\s\\S]*?--counter-fill-${channel},[\\s\\S]*?--counter-color,[\\s\\S]*?--dmn-counter-fill-${channel}-default`,
+        ),
+      );
+    }
+    // 지원 종료된 테두리 표면이 되살아나지 않게
+    expect(css).not.toContain('counter-stroke');
+    expect(css).not.toContain('key-text-stroke');
     expect(css).toMatch(/:where\(\[data-graph-element\]\)/);
     expect(css).toMatch(/:where\(\[data-knob-element\]\)/);
   });
@@ -137,6 +148,8 @@ describe('커스텀 CSS 우선순위 계약', () => {
       );
       expect(docs).not.toContain('--key-bg: #ff2b80 !important');
       expect(docs).toContain('background: #ff2b80 !important');
+      expect(docs).not.toContain('counter-stroke');
+      expect(docs).not.toContain('key-text-stroke');
     }
   });
 });

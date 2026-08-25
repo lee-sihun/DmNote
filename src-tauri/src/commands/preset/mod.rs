@@ -283,13 +283,7 @@ mod tests {
                     "dy": 0,
                     "width": 60,
                     "count": 0,
-                    "noteBorderColor": "#112233",
-                    "counter": {
-                        "stroke": {
-                            "idle": "transparent",
-                            "active": "transparent"
-                        }
-                    }
+                    "noteBorderColor": "#112233"
                 }]
             }
         }))
@@ -299,8 +293,6 @@ mod tests {
         assert!(position.note_gradient.is_none());
         assert!(position.note_glow_gradient.is_none());
         assert!(position.note_border_gradient.is_none());
-        assert!(position.counter.stroke_idle_gradient.is_none());
-        assert!(position.counter.stroke_active_gradient.is_none());
     }
 
     #[test]
@@ -334,7 +326,6 @@ mod tests {
     #[derive(Serialize, Deserialize)]
     struct PreFeaturePresetCounter {
         fill: KeyCounterColor,
-        stroke: KeyCounterColor,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -365,10 +356,6 @@ mod tests {
                         "fill": {
                             "idle": "rgba(255,255,255,1)",
                             "active": "rgba(20,20,24,0.9)"
-                        },
-                        "stroke": {
-                            "idle": "transparent",
-                            "active": "transparent"
                         },
                         "fillIdleGradient": {
                             "angle": 180,
@@ -458,24 +445,6 @@ mod tests {
                         "fill": {
                             "idle": "rgba(255,255,255,1)",
                             "active": "rgba(20,20,24,0.9)"
-                        },
-                        "stroke": {
-                            "idle": "rgba(1,2,3,1)",
-                            "active": "rgba(4,5,6,0.5)"
-                        },
-                        "strokeIdleGradient": {
-                            "angle": 45,
-                            "stops": [
-                                { "color": "#010203", "pos": 0 },
-                                { "color": "transparent", "pos": 1 }
-                            ]
-                        },
-                        "strokeActiveGradient": {
-                            "angle": 135,
-                            "stops": [
-                                { "color": "rgba(4,5,6,.5)", "pos": 0 },
-                                { "color": "#FFFFFF", "pos": 1 }
-                            ]
                         }
                     }
                 }]
@@ -498,14 +467,9 @@ mod tests {
         assert!(old_wire["keyPositions"]["4key"][0]
             .get("noteBorderGradient")
             .is_none());
-        assert!(old_wire["keyPositions"]["4key"][0]["counter"]
-            .get("strokeIdleGradient")
-            .is_none());
         assert!(position.note_gradient.is_none());
         assert!(position.note_glow_gradient.is_none());
         assert!(position.note_border_gradient.is_none());
-        assert!(position.counter.stroke_idle_gradient.is_none());
-        assert!(position.counter.stroke_active_gradient.is_none());
         assert_eq!(
             position.note_color,
             NoteColor::Gradient {
@@ -527,8 +491,6 @@ mod tests {
         assert_eq!(position.note_glow_opacity_top, Some(30));
         assert_eq!(position.note_glow_opacity_bottom, Some(60));
         assert_eq!(position.note_border_color.as_deref(), Some("#112233"));
-        assert_eq!(position.counter.stroke.idle, "rgba(1,2,3,1)");
-        assert_eq!(position.counter.stroke.active, "rgba(4,5,6,0.5)");
     }
 
     #[test]

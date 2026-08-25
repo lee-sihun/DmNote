@@ -54,8 +54,6 @@
     "counterFontFamily",
     "counterFillIdle",
     "counterFillActive",
-    "counterStrokeIdle",
-    "counterStrokeActive",
     "counterAnimationPreset",
     "statType",
     "noteEffectEnabled",

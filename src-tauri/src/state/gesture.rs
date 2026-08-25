@@ -762,22 +762,6 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    crate::models::EditorCounterStrokeIntentV1::Legacy(
-                        "  raw-idle-stroke  ".to_string(),
-                    ),
-                ),
-                serde_json::json!({ "property": "counterStrokeIdle", "value": "  raw-idle-stroke  " }),
-            ),
-            (
-                EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterStrokeActive(
-                    crate::models::EditorCounterStrokeIntentV1::Legacy(String::new()),
-                ),
-                serde_json::json!({ "property": "counterStrokeActive", "value": "" }),
-            ),
-            (
-                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterAnimationPreset(
                     crate::models::EditorCounterAnimationPresetIntentV1 {
                         preset_id: "builtin-ease-out".to_string(),
@@ -1093,13 +1077,6 @@ mod tests {
             serde_json::json!({ "property": "counterFillActive", "value": { "color": "first", "gradient": { "angle": 45, "stops": [{ "color": "first", "pos": 0, "unexpected": true }, { "color": "last", "pos": 1 }] } } }),
             serde_json::json!({ "property": "counterFillIdle", "value": { "color": "solid", "unexpected": true } }),
             serde_json::json!({ "counterFillActive": { "color": "active" }, "hidden": false }),
-            serde_json::json!({ "property": "counterStrokeIdle", "value": null }),
-            serde_json::json!({ "property": "counterStrokeIdle", "value": 1 }),
-            serde_json::json!({ "counterStrokeIdle": "idle", "counterStrokeActive": "active" }),
-            serde_json::json!({ "counterStrokeIdle": "idle", "unexpected": true }),
-            serde_json::json!({ "property": "counterStrokeActive", "value": null }),
-            serde_json::json!({ "property": "counterStrokeActive", "value": 1 }),
-            serde_json::json!({ "counterStrokeActive": "active", "hidden": true }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": null }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": {} }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": { "presetId": "preset", "enabled": false } }),

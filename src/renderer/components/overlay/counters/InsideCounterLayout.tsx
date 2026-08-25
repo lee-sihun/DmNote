@@ -38,9 +38,6 @@ const InsideCounterLayout = ({
   const fillGradient = active
     ? counterSettings.fillActiveGradient
     : counterSettings.fillIdleGradient;
-  const strokeColor = active
-    ? counterSettings.stroke.active
-    : counterSettings.stroke.idle;
   const contentGap = Number.isFinite(counterSettings.gap)
     ? counterSettings.gap
     : 4;
@@ -48,7 +45,6 @@ const InsideCounterLayout = ({
   const counterProps = {
     fillColor,
     fillGradient,
-    strokeColor,
     active,
     fontSize: counterSettings.fontSize,
     fontFamily: counterSettings.fontFamily,

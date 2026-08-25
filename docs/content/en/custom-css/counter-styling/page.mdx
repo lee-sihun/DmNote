@@ -38,14 +38,17 @@ Counters support the following CSS variables:
 | `--counter-color`           | Text color and saved-fill reset | `#FFFFFF`      |
 | `--counter-fill-image`      | Text fill image                 | `none`         |
 | `--counter-fill-clip`       | Fill clipping area              | `border-box`   |
+| `--counter-fill-position`   | Fill background position        | `0% 0%`        |
+| `--counter-fill-size`       | Fill background size            | `auto`         |
+| `--counter-fill-repeat`     | Fill repeat mode                | `repeat`       |
 | `--counter-text-fill-color` | WebKit text fill color          | `currentcolor` |
-| `--counter-stroke-color`    | Text outline color              | `transparent`  |
-| `--counter-stroke-width`    | Text outline thickness          | `0px`          |
 
 <Callout type="info">
   With **Inline Styles Priority** disabled on the key or stat item, regular CSS
   also takes priority over counter typography. Setting `--counter-color`
-  automatically removes a fill gradient saved in the properties panel.
+  automatically removes a fill gradient saved in the properties panel. Fill
+  gradients created in the app are laid over the glyph ink box, and you can take
+  over with `--counter-fill-position` and `--counter-fill-size`.
 </Callout>
 
 ## Inactive State Style
@@ -56,9 +59,6 @@ Counter style when the key is not pressed:
 .counter[data-counter-state='inactive'] {
   /* Text color */
   --counter-color: #474244;
-
-  /* Disable outline */
-  --counter-stroke-color: transparent;
 }
 ```
 
@@ -70,9 +70,6 @@ Counter style when the key is being pressed:
 .counter[data-counter-state='active'] {
   /* Text color */
   --counter-color: #ff2b80;
-
-  /* Outline */
-  --counter-stroke-color: transparent;
 
   /* Glow effect */
   text-shadow: 0px 0px 3px #ff2b80;
@@ -94,7 +91,6 @@ Combine class selectors to style counters of specific keys differently.
 /* Counter for keys with .blue class - active state */
 .blue .counter[data-counter-state='active'] {
   --counter-color: #2ebef3;
-  --counter-stroke-color: transparent;
   text-shadow: 0px 0px 3px #2ebef3;
 }
 ```
@@ -121,27 +117,6 @@ Combine class selectors to style counters of specific keys differently.
 .counter[data-counter-state='active'] {
   --counter-color: #00ff88;
   text-shadow: 0px 0px 2px #00ff88, 0px 0px 4px #00ff88, 0px 0px 8px #00ff88;
-}
-```
-
-### Outline Style
-
-```css
-.counter {
-  font-size: 28px;
-  font-weight: 900;
-}
-
-.counter[data-counter-state='inactive'] {
-  --counter-color: #fff;
-  --counter-stroke-color: #333;
-  --counter-stroke-width: 2px;
-}
-
-.counter[data-counter-state='active'] {
-  --counter-color: #fff;
-  --counter-stroke-color: #ff2b80;
-  --counter-stroke-width: 2px;
 }
 ```
 

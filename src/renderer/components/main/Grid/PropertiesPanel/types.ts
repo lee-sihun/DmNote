@@ -9,7 +9,6 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
-  EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -246,7 +245,6 @@ export interface CounterTabContentProps {
   onCounterTypographyCommit?: (
     patch: EditorCounterTypographyPropertyPatchV1,
   ) => void;
-  onCounterStrokeCommit?: (patch: EditorCounterStrokePropertyPatchV1) => void;
   onCounterFillCommit?: (patch: EditorCounterFillPropertyPatchV1) => void;
   onCounterAnimationPresetCommit?: (
     intent: EditorCounterAnimationPresetIntentV1,

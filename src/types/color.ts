@@ -280,13 +280,9 @@ export const GRADIENT_SIBLING: Record<string, string> = {
 };
 
 const KEY_PAIR_FIELDS = Object.entries(GRADIENT_SIBLING);
-const COUNTER_PAINT_PAIRS: Array<
-  ['fill' | 'stroke', 'idle' | 'active', string]
-> = [
-  ['fill', 'idle', 'fillIdleGradient'],
-  ['fill', 'active', 'fillActiveGradient'],
-  ['stroke', 'idle', 'strokeIdleGradient'],
-  ['stroke', 'active', 'strokeActiveGradient'],
+const COUNTER_FILL_PAIRS: Array<['idle' | 'active', string]> = [
+  ['idle', 'fillIdleGradient'],
+  ['active', 'fillActiveGradient'],
 ];
 
 /** 본체·글로우의 신형 sibling과 구형 shadow 필드 매핑 (계약 §9-3) */
@@ -494,7 +490,7 @@ export function canonicalizePositionGradients<
     const ensureCounter = (): Record<string, unknown> =>
       (counterNext ??= { ...counter });
 
-    for (const [targetKey, stateKey, siblingField] of COUNTER_PAINT_PAIRS) {
+    for (const [stateKey, siblingField] of COUNTER_FILL_PAIRS) {
       if (!(siblingField in counter)) continue;
       if (counter[siblingField] == null) {
         // null은 canonical 'None' — Rust 직렬화(필드 생략)와 동일 표현으로 수렴
@@ -509,12 +505,12 @@ export function canonicalizePositionGradients<
       if (JSON.stringify(canonical) !== JSON.stringify(counter[siblingField])) {
         ensureCounter()[siblingField] = canonical;
       }
-      const target = (counterNext ?? counter)[targetKey];
-      if (target && typeof target === 'object' && !Array.isArray(target)) {
+      const fill = (counterNext ?? counter).fill;
+      if (fill && typeof fill === 'object' && !Array.isArray(fill)) {
         const repaired = toCompactRgba(canonical.stops[0]?.color ?? '#ffffff');
-        if ((target as Record<string, unknown>)[stateKey] !== repaired) {
-          ensureCounter()[targetKey] = {
-            ...(target as Record<string, unknown>),
+        if ((fill as Record<string, unknown>)[stateKey] !== repaired) {
+          ensureCounter().fill = {
+            ...(fill as Record<string, unknown>),
             [stateKey]: repaired,
           };
         }

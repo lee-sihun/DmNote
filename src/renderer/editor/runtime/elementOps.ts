@@ -47,7 +47,6 @@ import type {
   EditorCounterBooleanPropertyPatchV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
-  EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorFontColorPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
@@ -85,9 +84,7 @@ import {
 } from '@src/types/key/notePaint';
 import {
   isCounterFillPropertyPatchV1,
-  isCounterStrokePropertyPatchV1,
   projectCounterFillPatch,
-  projectCounterStrokePatch,
 } from '@src/types/key/counterFill';
 import {
   isFontColorPropertyPatchV1,
@@ -1495,101 +1492,6 @@ export const patchCounterTypographyById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> =>
   patchCounterTypographyByTargets([{ elementType, id }], patch, options);
-
-const counterStrokePropertyIntents = (
-  targets: readonly CounterAnimationTarget[],
-  patch: EditorCounterStrokePropertyPatchV1,
-): PropertyIntents => {
-  const document = captureEditorDocument();
-  const propertyIntents = new Map<
-    NativeElementType,
-    Map<string, Record<string, unknown>>
-  >();
-  for (const { elementType, id } of targets) {
-    const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
-    const record = document[field] as Record<
-      string,
-      Array<Record<string, unknown> & { id: string }>
-    >;
-    const current = Object.values(record)
-      .flat()
-      .find((position) => position.id === id);
-    if (
-      !current ||
-      current.counter === null ||
-      typeof current.counter !== 'object' ||
-      Array.isArray(current.counter)
-    ) {
-      continue;
-    }
-    const counter = current.counter as Record<string, unknown>;
-    const rawStroke = counter.stroke;
-    if (
-      rawStroke === null ||
-      typeof rawStroke !== 'object' ||
-      Array.isArray(rawStroke)
-    ) {
-      continue;
-    }
-    const byId = propertyIntents.get(elementType) ?? new Map();
-    byId.set(
-      id,
-      projectCounterStrokePatch(current as unknown as KeyPosition, patch),
-    );
-    propertyIntents.set(elementType, byId);
-  }
-  return propertyIntents;
-};
-
-export const patchCounterStrokeByTargets = (
-  targets: readonly CounterAnimationTarget[],
-  patch: EditorCounterStrokePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  const active = patch.property === 'counterStrokeActive';
-  if (
-    !isCounterStrokePropertyPatchV1(patch) ||
-    (active && targets.some(({ elementType }) => elementType !== 'key')) ||
-    targets.length === 0 ||
-    targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
-    new Set(targets.map(({ id }) => id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  const receipt = applyPropertyIntentsEagerly(
-    counterStrokePropertyIntents(targets, patch),
-  );
-  let enrolled = false;
-  return commitSemanticOps(
-    targets.map(({ elementType, id }) => ({
-      kind: 'patchElement' as const,
-      elementType,
-      id,
-      patch: structuredClone(patch),
-    })),
-    {
-      preflight: options.preflight,
-      onEnrolled: () => {
-        enrolled = true;
-      },
-    },
-  )
-    .then((outcome) =>
-      outcome.opResults.some((result) => result.status !== 'targetMissing'),
-    )
-    .catch((error) => {
-      if (!enrolled) receipt?.rollback();
-      throw error;
-    });
-};
-
-export const patchCounterStrokeById = (
-  elementType: 'key' | 'stat',
-  id: string,
-  patch: EditorCounterStrokePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> =>
-  patchCounterStrokeByTargets([{ elementType, id }], patch, options);
 
 export const patchCounterEnabledByTargets = (
   targets: readonly CounterAnimationTarget[],

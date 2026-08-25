@@ -7,12 +7,12 @@ import {
   createCubicBezierEasing,
 } from '@utils/cubicBezier';
 import { getCounterTypographyStyle } from '@utils/core/counterStyles';
+import { useCounterGlyphPaint } from '@hooks/shared/useCounterGlyphPaint';
 
 export interface CountDisplayProps {
   count: number;
   fillColor?: string;
   fillGradient?: GradientSpec | null;
-  strokeColor?: string;
   globalKey?: string;
   active?: boolean;
   fontSize?: number;
@@ -79,7 +79,6 @@ const CountDisplay = ({
   count,
   fillColor,
   fillGradient,
-  strokeColor,
   globalKey: _globalKey,
   active,
   fontSize,
@@ -154,8 +153,16 @@ const CountDisplay = ({
 
   const displayValue = count || 0;
   const fill = toCssRgba(fillColor, '#FFFFFF');
-  const stroke = toCssRgba(strokeColor, 'transparent');
-  const strokeWidth = stroke.alpha > 0 ? '1px' : '0px';
+
+  useCounterGlyphPaint(
+    spanRef,
+    Boolean(fillGradient),
+    displayValue,
+    // 상태 포함 - data-counter-state 스코프 커스텀 CSS가 메트릭을 바꿀 수 있다
+    `${fontSize}|${fontFamily}|${fontWeight}|${fontItalic}|${
+      active ? 'active' : 'inactive'
+    }`,
+  );
 
   return (
     <span
@@ -179,8 +186,6 @@ const CountDisplay = ({
           pointerEvents: 'none',
           userSelect: 'none',
           '--counter-color-default': fill.css,
-          '--counter-stroke-color-default': stroke.css,
-          '--counter-stroke-width-default': strokeWidth,
           // 실제 속성은 global.css의 .counter fallback 규칙이 적용 —
           // 사용자 --counter-color/일반 CSS가 앱 그라데이션보다 우선
           '--dmn-counter-fill-image-default': fillGradient
@@ -192,6 +197,9 @@ const CountDisplay = ({
           '--dmn-counter-text-fill-default': fillGradient
             ? 'transparent'
             : 'currentcolor',
+          '--dmn-counter-fill-repeat-default': fillGradient
+            ? 'no-repeat'
+            : 'repeat',
         } as React.CSSProperties
       }
     >

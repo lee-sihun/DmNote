@@ -50,7 +50,6 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
-  EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -99,8 +98,6 @@ import {
   patchCounterEnabledById,
   patchCounterLayoutById,
   patchCounterTypographyById,
-  patchCounterStrokeById,
-  patchCounterStrokeByTargets,
   patchCounterFillById,
   patchFontColorById,
   patchFontStyleByTargets,
@@ -716,7 +713,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const batchGlowColorButtonRef = useRef<HTMLButtonElement>(null);
   const batchBorderColorButtonRef = useRef<HTMLButtonElement>(null);
   const batchCounterFillButtonRef = useRef<HTMLButtonElement>(null);
-  const batchCounterStrokeButtonRef = useRef<HTMLButtonElement>(null);
 
   // 패널 ref (컬러픽커/이미지픽커 위치 기준)
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
@@ -1039,7 +1035,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     | 'glowColor'
     | 'borderColor'
     | 'fill'
-    | 'stroke'
     | null;
   const [batchPickerFor, setBatchPickerFor] = useState<BatchPickerTarget>(null);
   const [batchCounterColorState, setBatchCounterColorState] = useState<
@@ -1051,9 +1046,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     if (selectedKeyElements.length === 0) {
       setBatchCounterColorState('idle');
-      setBatchPickerFor((current) =>
-        current === 'fill' || current === 'stroke' ? null : current,
-      );
+      setBatchPickerFor((current) => (current === 'fill' ? null : current));
     }
   }, [selectedKeyElements.length]);
 
@@ -1064,8 +1057,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     borderOpacity: number;
     fillIdle: string;
     fillActive: string;
-    strokeIdle: string;
-    strokeActive: string;
   }>({
     noteColor: '#FFFFFF',
     glowColor: '#FFFFFF',
@@ -1073,8 +1064,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     borderOpacity: 100,
     fillIdle: '#FFFFFF',
     fillActive: '#FFFFFF',
-    strokeIdle: '#000000',
-    strokeActive: '#000000',
   });
 
   const [batchLocalOpacities, setBatchLocalOpacities] = useState<{
@@ -1772,26 +1761,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           void persisted.catch((error) => {
             console.error('Failed to update counter typography', error);
           });
-        }
-      : undefined;
-
-  const stableCounterStrokeHandler = (
-    elementType: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorCounterStrokePropertyPatchV1) => {
-          const persisted = patchCounterStrokeById(elementType, id, patch);
-          void persisted
-            .then((applied) => {
-              // 가드 거부(false)는 rejection이 아니라서 별도 로그가 없으면 무음
-              if (!applied) {
-                reportElementOpSkipped('single counter stroke');
-              }
-            })
-            .catch((error) => {
-              console.error('Failed to update counter stroke', error);
-            });
         }
       : undefined;
 
@@ -2594,7 +2563,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     batchGlowColorButtonRef,
     batchBorderColorButtonRef,
     batchCounterFillButtonRef,
-    batchCounterStrokeButtonRef,
   ];
 
   // 배치 피커 토글
@@ -2606,7 +2574,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         target === 'noteColor' ||
         target === 'glowColor' ||
         target === 'borderColor';
-      const isCounterPicker = target === 'fill' || target === 'stroke';
+      const isCounterPicker = target === 'fill';
       const firstPos =
         (isNoteTabPicker || isCounterPicker) && keyOnly.length > 0
           ? keyOnly[0].position
@@ -2642,8 +2610,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           borderOpacity: firstPos.noteBorderOpacity ?? 100,
           fillIdle: counterSettings.fill.idle,
           fillActive: counterSettings.fill.active,
-          strokeIdle: counterSettings.stroke.idle,
-          strokeActive: counterSettings.stroke.active,
         });
         setBatchLocalOpacities({
           noteOpacity:
@@ -2675,10 +2641,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return effectiveBatchCounterColorState === 'active'
           ? batchLocalColors.fillActive
           : batchLocalColors.fillIdle;
-      case 'stroke':
-        return effectiveBatchCounterColorState === 'active'
-          ? batchLocalColors.strokeActive
-          : batchLocalColors.strokeIdle;
       default:
         return '#FFFFFF';
     }
@@ -2694,8 +2656,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return batchBorderColorButtonRef;
       case 'fill':
         return batchCounterFillButtonRef;
-      case 'stroke':
-        return batchCounterStrokeButtonRef;
       default:
         return null;
     }
@@ -2722,16 +2682,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         effectiveBatchCounterColorState === 'active'
           ? 'fillActive'
           : 'fillIdle';
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [key]: solidColor,
-      }));
-    } else if (batchPickerFor === 'stroke') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const key =
-        effectiveBatchCounterColorState === 'active'
-          ? 'strokeActive'
-          : 'strokeIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2767,16 +2717,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         ...prev,
         [key]: solidColor,
       }));
-    } else if (batchPickerFor === 'stroke') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const key =
-        effectiveBatchCounterColorState === 'active'
-          ? 'strokeActive'
-          : 'strokeIdle';
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [key]: solidColor,
-      }));
     }
 
     if (batchPickerFor === 'noteColor') {
@@ -2797,34 +2737,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       onNotePaintCommit?.({
         property: 'noteBorderPaint',
         value: { color: solidColor, opacity },
-      });
-    } else if (batchPickerFor === 'fill') {
-      return;
-    } else if (batchPickerFor === 'stroke') {
-      const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const active = effectiveBatchCounterColorState === 'active';
-      const targets = [
-        ...selectedKeyElements.map(({ id }) => ({
-          elementType: 'key' as const,
-          id,
-        })),
-        ...(active
-          ? []
-          : selectedStatElements.map(({ id }) => ({
-              elementType: 'stat' as const,
-              id,
-            }))),
-      ];
-      const stableTargets =
-        targets.length > 0 &&
-        targets.every(({ id }) => id.length > 0 && isNativeElementId(id));
-      if (!stableTargets) return;
-      const patch: EditorCounterStrokePropertyPatchV1 = active
-        ? { property: 'counterStrokeActive', value: strokeColor }
-        : { property: 'counterStrokeIdle', value: strokeColor };
-      const persisted = patchCounterStrokeByTargets(targets, patch);
-      void persisted.catch((error) => {
-        console.error('Failed to update batch counter stroke', error);
       });
     }
   };
@@ -2918,7 +2830,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           batchGlowColorButtonRef={batchGlowColorButtonRef}
           batchBorderColorButtonRef={batchBorderColorButtonRef}
           batchCounterFillButtonRef={batchCounterFillButtonRef}
-          batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
           batchImageButtonRef={batchImageButtonRef}
           showBatchImagePicker={showBatchImagePicker}
           setShowBatchImagePicker={setShowBatchImagePicker}
@@ -3375,12 +3286,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             : selectedKeyElements[0]?.id,
         )}
         onCounterTypographyCommit={stableCounterTypographyHandler(
-          isSingleStat ? 'stat' : 'key',
-          isSingleStat
-            ? selectedStatElements[0]?.id
-            : selectedKeyElements[0]?.id,
-        )}
-        onCounterStrokeCommit={stableCounterStrokeHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

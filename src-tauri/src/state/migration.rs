@@ -25,13 +25,13 @@ use crate::{
     },
     defaults::{default_keys, default_positions},
     models::{
-        default_missing_note_gradient_multipliers, normalize_key_slot, AppStoreData,
-        CounterAnimationPreset, CustomCss, CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab,
-        FontType, GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType,
-        GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KeySlot,
-        KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds,
-        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType, TabCss,
-        TabNoteSettings, POSITION_COLLECTION_FIELDS,
+        default_missing_note_gradient_multipliers, normalize_key_slot,
+        scrub_removed_text_outline_fields, AppStoreData, CounterAnimationPreset, CustomCss,
+        CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab, FontType, GradientSpec,
+        GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings, JsPlugin,
+        KeyCounters, KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPosition, KnobPositions,
+        LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds, ShortcutsState, SoundLibraryEntry,
+        StatPosition, StatPositions, StatType, TabCss, TabNoteSettings, POSITION_COLLECTION_FIELDS,
     },
 };
 
@@ -83,10 +83,12 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                 let seed_active_css_history = value.get("customCssHistory").is_none();
                 let explicit_invalid_element_id = has_explicit_invalid_element_id(&value);
                 let sound_library_migrated = migrate_sound_library_enabled(&mut value);
+                let text_outline_scrubbed = scrub_removed_text_outline_fields(&mut value);
                 default_store_note_gradient_multipliers(&mut value);
                 match serde_json::from_value::<AppStoreData>(value.clone()) {
                     Ok(mut data) => {
-                        let mut needs_persist = sound_library_migrated
+                        let mut needs_persist = text_outline_scrubbed
+                            || sound_library_migrated
                             || data.font_settings.custom_fonts.iter().any(|font| {
                                 font.font_type == FontType::Local
                                     && font
@@ -937,7 +939,6 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
             pos.position.counter.migrate_legacy_defaults();
         }
     }
-
     let _ = data.custom_js.normalize();
 
     data
@@ -1535,7 +1536,7 @@ where
 
             let entry_name = format!("{field}.{mode}[{index}]");
             let mut candidate = entry.clone();
-            recover_invalid_counter_gradient_children(&entry_name, &mut candidate);
+            recover_invalid_counter_fill_gradient_children(&entry_name, &mut candidate);
             if serde_json::from_value::<T>(candidate.clone()).is_ok() {
                 recovered_entries.push(candidate);
                 continue;
@@ -1619,7 +1620,7 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
                 Err(err) => {
                     let entry_name = format!("{field}.{mode}[{index}]");
                     let mut candidate = entry.clone();
-                    recover_invalid_counter_gradient_children(&entry_name, &mut candidate);
+                    recover_invalid_counter_fill_gradient_children(&entry_name, &mut candidate);
                     let recovered = if serde_json::from_value::<KeyPosition>(candidate.clone())
                         .is_ok()
                     {
@@ -1645,18 +1646,13 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
     Some(Value::Object(recovered_modes))
 }
 
-fn recover_invalid_counter_gradient_children(entry_name: &str, value: &mut Value) -> bool {
+fn recover_invalid_counter_fill_gradient_children(entry_name: &str, value: &mut Value) -> bool {
     let Some(counter) = value.get_mut("counter").and_then(Value::as_object_mut) else {
         return false;
     };
 
     let mut changed = false;
-    for field in [
-        "fillIdleGradient",
-        "fillActiveGradient",
-        "strokeIdleGradient",
-        "strokeActiveGradient",
-    ] {
+    for field in ["fillIdleGradient", "fillActiveGradient"] {
         let invalid = counter.get(field).is_some_and(|gradient| {
             serde_json::from_value::<Option<GradientSpec>>(gradient.clone()).is_err()
         });
@@ -2158,6 +2154,60 @@ mod tests {
         assert_eq!(second_ids, first_ids);
         assert!(!reloaded.needs_persist);
         assert!(!reloaded.repaired);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn serialized_undo_history_with_removed_outline_fields_loads_as_opaque_data() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-removed-outline-history-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let baseline = store_with_each_native_collection();
+        let mut raw = serde_json::to_value(&baseline).unwrap();
+        let saved_history = serde_json::json!({
+            "past": [{
+                "scope": "editor",
+                "before": {
+                    "kind": "editor",
+                    "value": {
+                        "changedFields": ["keyPositions"],
+                        "before": {
+                            "keyPositions": {
+                                "4key": [{
+                                    "fontStrokeColor": "#112233",
+                                    "activeFontStrokeColor": "#445566",
+                                    "counter": {
+                                        "stroke": {
+                                            "idle": "#000000",
+                                            "active": "#FFFFFF"
+                                        },
+                                        "strokeIdleGradient": {
+                                            "angle": 90,
+                                            "stops": []
+                                        }
+                                    }
+                                }]
+                            }
+                        }
+                    }
+                }
+            }],
+            "future": []
+        });
+        raw.as_object_mut()
+            .unwrap()
+            .insert("history".to_string(), saved_history.clone());
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(!loaded.needs_persist);
+        assert!(!loaded.repaired);
+        assert_eq!(loaded.data.key_positions, baseline.key_positions);
+        assert_eq!(loaded.data.stat_positions, baseline.stat_positions);
+        assert_eq!(loaded.data.graph_positions, baseline.graph_positions);
+        assert_eq!(loaded.data.knob_positions, baseline.knob_positions);
+        assert_eq!(loaded.data.plugin_data.get("history"), Some(&saved_history));
         let _ = std::fs::remove_file(path);
     }
 
@@ -2731,10 +2781,6 @@ mod tests {
             idle: "#112233".to_string(),
             active: "#445566".to_string(),
         };
-        key_position.counter.stroke = KeyCounterColor {
-            idle: "#778899".to_string(),
-            active: "#AABBCC".to_string(),
-        };
         key_position.counter.gap = 17;
         key_position.counter.font_size = 33;
         key_position.counter.font_weight = 600;
@@ -2791,17 +2837,9 @@ mod tests {
             "angle": 90,
             "stops": [{ "color": "#FFFFFF", "pos": 0 }]
         });
-        raw["keyPositions"]["4key"][0]["counter"]["strokeIdleGradient"] = serde_json::json!({
-            "angle": 90,
-            "stops": [{ "color": "#778899", "pos": 0 }]
-        });
         raw["statPositions"]["4key"][0]["counter"]["fillActiveGradient"] = serde_json::json!({
             "angle": 90,
             "stops": [{ "color": "#000000", "pos": 1 }]
-        });
-        raw["statPositions"]["4key"][0]["counter"]["strokeActiveGradient"] = serde_json::json!({
-            "angle": 90,
-            "stops": [{ "color": "#AABBCC", "pos": 1 }]
         });
         raw["statPositions"]["4key"][0]["noteGlowGradient"] = serde_json::json!({
             "angle": 90,
@@ -2844,9 +2882,7 @@ mod tests {
             .note_border_gradient
             .is_none());
         assert!(key_counter.fill_idle_gradient.is_none());
-        assert!(key_counter.stroke_idle_gradient.is_none());
         assert!(stat_counter.fill_active_gradient.is_none());
-        assert!(stat_counter.stroke_active_gradient.is_none());
         let _ = std::fs::remove_file(path);
     }
 

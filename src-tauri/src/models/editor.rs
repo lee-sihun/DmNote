@@ -266,8 +266,6 @@ pub enum EditorElementPropertyPatchV1 {
     CounterFontFamily(String),
     CounterFillIdle(EditorCounterFillIntentV1),
     CounterFillActive(EditorCounterFillIntentV1),
-    CounterStrokeIdle(EditorCounterStrokeIntentV1),
-    CounterStrokeActive(EditorCounterStrokeIntentV1),
     CounterAnimationPreset(EditorCounterAnimationPresetIntentV1),
     StatType(StatType),
     NoteEffectEnabled(bool),
@@ -352,14 +350,6 @@ where
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EditorCounterFillIntentV1 {
-    Solid(EditorCounterFillSolidIntentV1),
-    Gradient(EditorCounterFillGradientIntentV1),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum EditorCounterStrokeIntentV1 {
-    Legacy(String),
     Solid(EditorCounterFillSolidIntentV1),
     Gradient(EditorCounterFillGradientIntentV1),
 }
@@ -851,7 +841,7 @@ mod tests {
         }
     }
 
-    // 71개 variant 전수: (patch, property 태그, value wire) 고정 표본
+    // 69개 variant 전수: (patch, property 태그, value wire) 고정 표본
     fn property_patch_samples() -> Vec<(
         EditorElementPropertyPatchV1,
         &'static str,
@@ -1040,16 +1030,6 @@ mod tests {
                 json!({ "color": "#060606" }),
             ),
             (
-                P::CounterStrokeIdle(EditorCounterStrokeIntentV1::Legacy("#070707".to_string())),
-                "counterStrokeIdle",
-                json!("#070707"),
-            ),
-            (
-                P::CounterStrokeActive(EditorCounterStrokeIntentV1::Legacy("#080808".to_string())),
-                "counterStrokeActive",
-                json!("#080808"),
-            ),
-            (
                 P::CounterAnimationPreset(EditorCounterAnimationPresetIntentV1 {
                     preset_id: "preset".to_string(),
                     apply_preset_id: None,
@@ -1113,7 +1093,7 @@ mod tests {
     #[test]
     fn property_patch_wire_pins_all_tag_value_pairs_and_roundtrips() {
         let samples = property_patch_samples();
-        assert_eq!(samples.len(), 71);
+        assert_eq!(samples.len(), 69);
         for (patch, tag, value) in samples {
             let wire = serde_json::to_value(&patch).unwrap();
             assert_eq!(
@@ -1136,21 +1116,6 @@ mod tests {
             ]
         });
         let cases = [
-            serde_json::json!({
-                "property": "counterStrokeIdle",
-                "value": "#112233"
-            }),
-            serde_json::json!({
-                "property": "counterStrokeIdle",
-                "value": { "color": "#112233" }
-            }),
-            serde_json::json!({
-                "property": "counterStrokeActive",
-                "value": {
-                    "color": "rgba(17,34,51,1)",
-                    "gradient": gradient.clone()
-                }
-            }),
             serde_json::json!({
                 "property": "noteBorderPaint",
                 "value": { "color": "#112233", "opacity": 80 }
@@ -1198,14 +1163,6 @@ mod tests {
         }
 
         for wire in [
-            serde_json::json!({
-                "property": "counterStrokeIdle",
-                "value": { "color": "#112233", "extra": true }
-            }),
-            serde_json::json!({
-                "property": "counterStrokeIdle",
-                "value": { "color": "#112233", "gradient": null }
-            }),
             serde_json::json!({
                 "property": "noteBorderPaint",
                 "value": { "color": "#112233", "opacity": 80, "extra": true }

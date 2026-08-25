@@ -16,9 +16,7 @@ import {
 } from '@src/types/key/notePaint';
 import {
   isCounterFillPropertyPatchV1,
-  isCounterStrokePropertyPatchV1,
   projectCounterFillPatch,
-  projectCounterStrokePatch,
 } from '@src/types/key/counterFill';
 import {
   isFontColorPropertyPatchV1,
@@ -728,12 +726,6 @@ const applySemanticOps = (
                   ...counter,
                   fontFamily: op.patch.value,
                 },
-              };
-            }
-            if (isCounterStrokePropertyPatchV1(op.patch)) {
-              return {
-                ...position,
-                ...projectCounterStrokePatch(position as never, op.patch),
               };
             }
             if (op.patch.property === 'counterAnimationPreset') {

@@ -6,9 +6,9 @@ use crate::{
         compact_canonical_rgba, default_counter_animation_builtin_presets,
         note_border_representative_hex, note_gradient_shadow, AppStoreData, CounterAnimationPreset,
         EditorBoundsV1, EditorCounterAnimationPresetIntentV1, EditorCounterFillIntentV1,
-        EditorCounterStrokeIntentV1, EditorDocumentV1, EditorElementGroupTargetV1,
-        EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
-        EditorGroupUpdateV1, EditorNoteBorderPaintV1, EditorNoteColorV1, EditorNotePaintIntentV1,
+        EditorDocumentV1, EditorElementGroupTargetV1, EditorElementPropertyPatchV1,
+        EditorElementTypeV1, EditorField, EditorFrozenElementV1, EditorGroupUpdateV1,
+        EditorNoteBorderPaintV1, EditorNoteColorV1, EditorNotePaintIntentV1,
         EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1,
         EditorPaintGradientV1, EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1,
         ElementShadowSpec, GradientSpec, KeyPosition, LayerGroupDef, NoteColor, NoteGradientShadow,
@@ -196,30 +196,6 @@ fn validate_counter_fill_intent(
     Ok(())
 }
 
-fn validate_counter_stroke_intent(
-    intent: &EditorCounterStrokeIntentV1,
-) -> Result<(), EditorCommitError> {
-    let EditorCounterStrokeIntentV1::Gradient(intent) = intent else {
-        return Ok(());
-    };
-    validate_paint_gradient(&intent.gradient)?;
-    let representative = compact_canonical_rgba(
-        &intent
-            .gradient
-            .stops
-            .first()
-            .expect("a validated counter stroke gradient has at least two stops")
-            .color,
-    );
-    if intent.color != representative {
-        return Err(EditorCommitError::validation(
-            "COUNTER_STROKE_COLOR_GRADIENT_MISMATCH",
-            "counter stroke color must equal the compact first gradient stop color",
-        ));
-    }
-    Ok(())
-}
-
 fn has_stored_paint_value(color: &Option<String>, gradient: &Option<GradientSpec>) -> bool {
     color
         .as_deref()
@@ -260,24 +236,25 @@ fn preserve_active_paint_fallback(position: &mut KeyPosition, background: bool) 
     changed
 }
 
-fn preserve_active_font_color_fallback(position: &mut KeyPosition) -> bool {
-    if position
-        .active_font_color
+fn preserve_active_string_fallback(
+    idle_value: &Option<String>,
+    active_value: &mut Option<String>,
+) -> bool {
+    if active_value
         .as_deref()
-        .is_some_and(|color| !color.trim().is_empty())
+        .is_some_and(|value| !value.trim().is_empty())
     {
         return false;
     }
-    let Some(idle_color) = position
-        .font_color
+    let Some(idle_value) = idle_value
         .as_ref()
-        .filter(|color| !color.trim().is_empty())
+        .filter(|value| !value.trim().is_empty())
         .cloned()
     else {
         return false;
     };
-    let changed = position.active_font_color.as_ref() != Some(&idle_color);
-    position.active_font_color = Some(idle_color);
+    let changed = active_value.as_ref() != Some(&idle_value);
+    *active_value = Some(idle_value);
     changed
 }
 
@@ -318,36 +295,6 @@ fn patch_counter_fill(
         (
             &mut position.counter.fill.idle,
             &mut position.counter.fill_idle_gradient,
-        )
-    };
-    let changed = *color != next_color || *gradient != next_gradient;
-    *color = next_color;
-    *gradient = next_gradient;
-    changed
-}
-
-fn patch_counter_stroke(
-    position: &mut KeyPosition,
-    active: bool,
-    intent: &EditorCounterStrokeIntentV1,
-) -> bool {
-    let (next_color, next_gradient) = match intent {
-        EditorCounterStrokeIntentV1::Legacy(color) => (color.clone(), None),
-        EditorCounterStrokeIntentV1::Solid(intent) => (intent.color.clone(), None),
-        EditorCounterStrokeIntentV1::Gradient(intent) => (
-            intent.color.clone(),
-            Some(intent.gradient.to_gradient_spec()),
-        ),
-    };
-    let (color, gradient) = if active {
-        (
-            &mut position.counter.stroke.active,
-            &mut position.counter.stroke_active_gradient,
-        )
-    } else {
-        (
-            &mut position.counter.stroke.idle,
-            &mut position.counter.stroke_idle_gradient,
         )
     };
     let changed = *color != next_color || *gradient != next_gradient;
@@ -1702,8 +1649,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 | EditorElementPropertyPatchV1::CounterFontUnderline(_)
                 | EditorElementPropertyPatchV1::CounterFontStrikethrough(_)
                 | EditorElementPropertyPatchV1::CounterFontFamily(_)
-                | EditorElementPropertyPatchV1::CounterFillIdle(_)
-                | EditorElementPropertyPatchV1::CounterStrokeIdle(_) => {
+                | EditorElementPropertyPatchV1::CounterFillIdle(_) => {
                     if !matches!(
                         element_type,
                         EditorElementTypeV1::Key | EditorElementTypeV1::Stat
@@ -1736,13 +1682,9 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     if let EditorElementPropertyPatchV1::CounterFillIdle(patch) = patch {
                         validate_counter_fill_intent(patch)?;
                     }
-                    if let EditorElementPropertyPatchV1::CounterStrokeIdle(patch) = patch {
-                        validate_counter_stroke_intent(patch)?;
-                    }
                 }
                 // key 전용 카운터 active 계열
-                EditorElementPropertyPatchV1::CounterFillActive(_)
-                | EditorElementPropertyPatchV1::CounterStrokeActive(_) => {
+                EditorElementPropertyPatchV1::CounterFillActive(_) => {
                     validate_editor_op_target_type(
                         op_index,
                         EditorElementTypeV1::Key,
@@ -1750,9 +1692,6 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     )?;
                     if let EditorElementPropertyPatchV1::CounterFillActive(patch) = patch {
                         validate_counter_fill_intent(patch)?;
-                    }
-                    if let EditorElementPropertyPatchV1::CounterStrokeActive(patch) = patch {
-                        validate_counter_stroke_intent(patch)?;
                     }
                 }
                 // key 전용 사운드·노트
@@ -2215,7 +2154,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         let preserved = matches!(
                             location.element_type,
                             EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                        ) && preserve_active_font_color_fallback(position);
+                        ) && preserve_active_string_fallback(
+                            &position.font_color,
+                            &mut position.active_font_color,
+                        );
                         let changed = position.font_color.as_deref() != Some(patch.as_str());
                         position.font_color = Some(patch.clone());
                         changed || preserved
@@ -2504,14 +2446,6 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     EditorElementPropertyPatchV1::CounterFillActive(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
                         patch_counter_fill(position, true, patch)
-                    }
-                    EditorElementPropertyPatchV1::CounterStrokeIdle(patch) => {
-                        let position = position_at_mut(&mut candidate, location)?;
-                        patch_counter_stroke(position, false, patch)
-                    }
-                    EditorElementPropertyPatchV1::CounterStrokeActive(patch) => {
-                        let position = position_at_mut(&mut candidate, location)?;
-                        patch_counter_stroke(position, true, patch)
                     }
                     EditorElementPropertyPatchV1::CounterAnimationPreset(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -3066,32 +3000,6 @@ mod tests {
         })
     }
 
-    fn counter_stroke_solid(color: &str) -> EditorCounterStrokeIntentV1 {
-        EditorCounterStrokeIntentV1::Solid(crate::models::EditorCounterFillSolidIntentV1 {
-            color: color.to_string(),
-        })
-    }
-
-    fn counter_stroke_gradient(
-        color: &str,
-        angle: f64,
-        stops: &[(&str, f64)],
-    ) -> EditorCounterStrokeIntentV1 {
-        EditorCounterStrokeIntentV1::Gradient(crate::models::EditorCounterFillGradientIntentV1 {
-            color: color.to_string(),
-            gradient: crate::models::EditorPaintGradientV1 {
-                angle,
-                stops: stops
-                    .iter()
-                    .map(|(color, pos)| crate::models::EditorPaintGradientStopV1 {
-                        color: (*color).to_string(),
-                        pos: *pos,
-                    })
-                    .collect(),
-            },
-        })
-    }
-
     fn shadow_leaf_color(color: &str) -> EditorShadowLeafPatchV1 {
         EditorShadowLeafPatchV1::Color(color.to_string())
     }
@@ -3295,20 +3203,6 @@ mod tests {
                 "counterFillActive",
                 KEY_ONLY,
                 Patch::CounterFillActive(counter_fill_solid("#ffffff")),
-            ),
-            row(
-                "counterStrokeIdle",
-                KEY_STAT,
-                Patch::CounterStrokeIdle(EditorCounterStrokeIntentV1::Legacy(
-                    "#000000".to_string(),
-                )),
-            ),
-            row(
-                "counterStrokeActive",
-                KEY_ONLY,
-                Patch::CounterStrokeActive(EditorCounterStrokeIntentV1::Legacy(
-                    "#000000".to_string(),
-                )),
             ),
             row(
                 "counterAnimationPreset",
@@ -6709,7 +6603,7 @@ mod tests {
             counter.align_mode = crate::models::KeyCounterAlignMode::Between;
             counter.gap = 7;
             counter.fill.idle = "fill-sibling".to_string();
-            counter.stroke.active = "stroke-sibling".to_string();
+            counter.fill.active = "active-fill-sibling".to_string();
             counter.font_family = Some("font-sibling".to_string());
             counter.animation.enabled = false;
             counter.animation.preset_id = Some("builtin-linear".to_string());
@@ -6859,7 +6753,7 @@ mod tests {
             counter.font_strikethrough = false;
             counter.font_family = Some("font-sibling".to_string());
             counter.fill.idle = "fill-sibling".to_string();
-            counter.stroke.active = "stroke-sibling".to_string();
+            counter.fill.active = "active-fill-sibling".to_string();
             counter.placement = crate::models::KeyCounterPlacement::Outside;
             counter.animation.preset_id = Some("builtin-linear".to_string());
         }
@@ -7107,7 +7001,7 @@ mod tests {
                     },
                 ],
             ));
-            counter.stroke.idle = "stroke-sibling".to_string();
+            counter.gap = 19;
             counter.font_family = Some("font-sibling".to_string());
             counter.animation.preset_id = Some("builtin-linear".to_string());
         }
@@ -7258,216 +7152,6 @@ mod tests {
             (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterFillActive(counter_fill_solid("active")),
-            ),
-        ] {
-            let error = prepare_editor_ops_transition(
-                &store,
-                &[
-                    ops[0].clone(),
-                    patch_property_op(element_type, uuid::Uuid::new_v4().to_string(), patch),
-                ],
-            )
-            .unwrap_err();
-            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
-            assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
-        }
-    }
-
-    #[test]
-    fn counter_stroke_patches_preserve_every_other_counter_leaf() {
-        let mut store = store_with_every_reorder_type();
-        let key_ids = store.key_positions["4key"]
-            .iter()
-            .take(2)
-            .map(|position| position.id.clone())
-            .collect::<Vec<_>>();
-        let stat_id = store.stat_positions["4key"][0].position.id.clone();
-        for counter in store.key_positions.get_mut("4key").unwrap()[..2]
-            .iter_mut()
-            .map(|position| &mut position.counter)
-            .chain(std::iter::once(
-                &mut store.stat_positions.get_mut("4key").unwrap()[0]
-                    .position
-                    .counter,
-            ))
-        {
-            counter.stroke.idle = "idle-before".to_string();
-            counter.stroke.active = "active-before".to_string();
-            counter.fill.idle = "fill-sibling".to_string();
-            counter.fill_idle_gradient = Some(
-                serde_json::from_value(serde_json::json!({
-                    "angle": 45,
-                    "stops": [
-                        { "color": "#111111", "pos": 0 },
-                        { "color": "#eeeeee", "pos": 1 }
-                    ]
-                }))
-                .unwrap(),
-            );
-            counter.stroke_idle_gradient = Some(
-                serde_json::from_value(serde_json::json!({
-                    "angle": 10,
-                    "stops": [
-                        { "color": "old-idle", "pos": 0 },
-                        { "color": "old-idle-end", "pos": 1 }
-                    ]
-                }))
-                .unwrap(),
-            );
-            counter.stroke_active_gradient = Some(
-                serde_json::from_value(serde_json::json!({
-                    "angle": 20,
-                    "stops": [
-                        { "color": "old-active", "pos": 0 },
-                        { "color": "old-active-end", "pos": 1 }
-                    ]
-                }))
-                .unwrap(),
-            );
-            counter.font_family = Some("font-sibling".to_string());
-            counter.animation.preset_id = Some("builtin-linear".to_string());
-        }
-        let originals = [
-            store.key_positions["4key"][0].counter.clone(),
-            store.key_positions["4key"][1].counter.clone(),
-            store.stat_positions["4key"][0].position.counter.clone(),
-        ];
-        let ops = vec![
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                &key_ids[0],
-                EditorElementPropertyPatchV1::CounterStrokeIdle(counter_stroke_gradient(
-                    "rgba(170,187,204,1)",
-                    45.0,
-                    &[("#ABC", 0.0), ("transparent", 1.0)],
-                )),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                &key_ids[1],
-                EditorElementPropertyPatchV1::CounterStrokeActive(counter_stroke_solid(
-                    "  raw active stroke  ",
-                )),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Stat,
-                &stat_id,
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    EditorCounterStrokeIntentV1::Legacy("raw stat stroke".to_string()),
-                ),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    EditorCounterStrokeIntentV1::Legacy("missing".to_string()),
-                ),
-            ),
-        ];
-
-        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
-        let actual = [
-            transition.candidate.key_positions["4key"][0]
-                .counter
-                .clone(),
-            transition.candidate.key_positions["4key"][1]
-                .counter
-                .clone(),
-            transition.candidate.stat_positions["4key"][0]
-                .position
-                .counter
-                .clone(),
-        ];
-        let mut expected = originals.clone();
-        expected[0].stroke.idle = "rgba(170,187,204,1)".to_string();
-        expected[0].stroke_idle_gradient = Some(match &ops[0] {
-            EditorOpV1::PatchElement {
-                patch:
-                    EditorElementPropertyPatchV1::CounterStrokeIdle(
-                        EditorCounterStrokeIntentV1::Gradient(intent),
-                    ),
-                ..
-            } => intent.gradient.to_gradient_spec(),
-            _ => unreachable!(),
-        });
-        expected[1].stroke.active = "  raw active stroke  ".to_string();
-        expected[1].stroke_active_gradient = None;
-        expected[2].stroke.idle = "raw stat stroke".to_string();
-        expected[2].stroke_idle_gradient = None;
-        assert_eq!(actual, expected);
-        assert_eq!(
-            transition.changed_fields,
-            [EditorField::KeyPositions, EditorField::StatPositions]
-        );
-        assert_eq!(
-            transition
-                .op_results
-                .iter()
-                .map(|result| result.status)
-                .collect::<Vec<_>>(),
-            [
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::TargetMissing,
-            ]
-        );
-
-        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
-        assert!(replay.changed_fields.is_empty());
-        assert_eq!(
-            replay
-                .op_results
-                .iter()
-                .map(|result| result.status)
-                .collect::<Vec<_>>(),
-            [
-                EditorOpResultStatusV1::NoChange,
-                EditorOpResultStatusV1::NoChange,
-                EditorOpResultStatusV1::NoChange,
-                EditorOpResultStatusV1::TargetMissing,
-            ]
-        );
-
-        for (invalid, code) in [
-            (
-                counter_stroke_gradient("#ABC", 45.0, &[("#ABC", 0.0), ("#fff", 1.0)]),
-                "COUNTER_STROKE_COLOR_GRADIENT_MISMATCH",
-            ),
-            (
-                counter_stroke_gradient(
-                    "rgba(170,187,204,1)",
-                    -0.0,
-                    &[("#ABC", 0.0), ("#fff", 1.0)],
-                ),
-                "INVALID_PAINT_GRADIENT",
-            ),
-        ] {
-            let error = prepare_editor_ops_transition(
-                &store,
-                &[patch_property_op(
-                    EditorElementTypeV1::Key,
-                    &key_ids[0],
-                    EditorElementPropertyPatchV1::CounterStrokeIdle(invalid),
-                )],
-            )
-            .unwrap_err();
-            assert_eq!(validation_code(&error), Some(code));
-            assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
-        }
-
-        for (element_type, patch) in [
-            (
-                EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::CounterStrokeIdle(
-                    EditorCounterStrokeIntentV1::Legacy("wrong".to_string()),
-                ),
-            ),
-            (
-                EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeActive(
-                    EditorCounterStrokeIntentV1::Legacy("wrong".to_string()),
-                ),
             ),
         ] {
             let error = prepare_editor_ops_transition(

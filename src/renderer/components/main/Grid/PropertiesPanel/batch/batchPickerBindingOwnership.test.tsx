@@ -108,8 +108,6 @@ const patches = vi.hoisted(() => ({
   patchCounterLayoutViaAuthority: vi.fn(async () => true),
   patchCounterTypographyByTargets: vi.fn(async () => true),
   patchCounterTypographyViaAuthority: vi.fn(async () => true),
-  patchCounterStrokeByTargets: vi.fn(async () => true),
-  patchCounterStrokeViaAuthority: vi.fn(async () => true),
   patchCounterFillByTargets: vi.fn(async () => true),
   patchCounterFillViaAuthority: vi.fn(async () => true),
   patchFontColorByTargets: vi.fn(async () => true),
@@ -150,7 +148,6 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
     patches.patchCounterAnimationEnabledByTargets,
   patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
-  patchCounterStrokeByTargets: patches.patchCounterStrokeByTargets,
   patchCounterFillByTargets: patches.patchCounterFillByTargets,
   patchFontColorByTargets: patches.patchFontColorByTargets,
   patchPaintByTargets: patches.patchPaintByTargets,
@@ -175,7 +172,6 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
   patchCounterLayoutViaAuthority: patches.patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority:
     patches.patchCounterTypographyViaAuthority,
-  patchCounterStrokeViaAuthority: patches.patchCounterStrokeViaAuthority,
   patchCounterFillViaAuthority: patches.patchCounterFillViaAuthority,
   patchFontColorViaAuthority: patches.patchFontColorViaAuthority,
   patchPaintViaAuthority: patches.patchPaintViaAuthority,
@@ -492,7 +488,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       batchGlowColorButtonRef: createRef<HTMLButtonElement>(),
       batchBorderColorButtonRef: createRef<HTMLButtonElement>(),
       batchCounterFillButtonRef: createRef<HTMLButtonElement>(),
-      batchCounterStrokeButtonRef: createRef<HTMLButtonElement>(),
       batchImageButtonRef: {
         current: document.createElement('button'),
       },
@@ -509,8 +504,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         borderOpacity: 100,
         fillIdle: '#ffffff',
         fillActive: '#ffffff',
-        strokeIdle: '#ffffff',
-        strokeActive: '#ffffff',
       },
       setBatchLocalColors: vi.fn(),
       batchLocalOpacities: { noteColor: 100, glowColor: 100 },
@@ -1465,42 +1458,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       );
       expect(patches.patchCounterTypographyViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['idle', 'active'] as const)(
-    'batch counter stroke %s actual ColorPicker는 drag와 final callback을 분리한다',
-    (state) => {
-      const preview = vi.fn();
-      const commit = vi.fn();
-      const props = panelProps();
-      props.activeTab = 'counter';
-      props.batchPickerFor = 'stroke';
-      props.batchCounterColorState = state;
-      props.handleBatchPickerColorChange = preview;
-      props.handleBatchPickerColorChangeComplete = commit;
-      act(() => {
-        root.render(
-          <PanelNavProvider
-            value={{
-              activePageKey: null,
-              renderPageKey: null,
-              openPage: vi.fn(),
-              closePage: vi.fn(),
-              pageHost,
-            }}
-          >
-            <BatchKeyLikePanel {...props} />
-          </PanelNavProvider>,
-        );
-      });
-
-      expect(captured.color?.stateMode).toBe(state);
-      act(() => captured.color?.onColorChange('  local only  '));
-      expect(preview).toHaveBeenCalledWith('  local only  ');
-      expect(commit).not.toHaveBeenCalled();
-      act(() => captured.color?.onColorChangeComplete('  final raw  '));
-      expect(commit).toHaveBeenCalledWith('  final raw  ');
     },
   );
 

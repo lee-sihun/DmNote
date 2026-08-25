@@ -20,7 +20,7 @@ import {
 } from '@utils/animation/rafLatestScheduler';
 
 /**
- * 온캔버스 그라데이션 축 — 피커가 그라데이션 형식으로 열려 있는 동안
+ * 온캔버스 그라데이션 축 - 피커가 그라데이션 형식으로 열려 있는 동안
  * 대상 요소 위에 축 선·앵커 점·색 스왓치를 그린다.
  * 축과 색은 완전 분리: 축 선·끝 앵커(흰 점) 드래그 = 각도만,
  * 색 스왓치(앵커 점 바로 위 태그) 드래그 = 축 위 위치만.
@@ -49,16 +49,16 @@ interface GradientAxisOverlayProps {
   continuousInputStrategy?: ContinuousInputStrategy;
 }
 
-// 축 끝 회전 앵커 — 시각 점과 히트 영역(px)
+// 축 끝 회전 앵커 - 시각 점과 히트 영역(px)
 const ANCHOR_DOT_SIZE = 7;
 const ANCHOR_HIT_SIZE = 18;
-// 스톱 표식 — 앵커 점은 선 위, 색 스왓치는 그 바로 위에 붙는 태그
+// 스톱 표식 - 앵커 점은 선 위, 색 스왓치는 그 바로 위에 붙는 태그
 const STOP_ANCHOR_DOT_SIZE = 5;
 const SWATCH_SIZE = 15;
 const SWATCH_LIFT = 16;
-// 축 선의 드래그 히트 두께(px) — 시각 선은 1.5px, 잡는 영역은 넓게
+// 축 선의 드래그 히트 두께(px) - 시각 선은 1.5px, 잡는 영역은 넓게
 const AXIS_HIT_THICKNESS = 12;
-// 자석 스냅 판정 각도(도) — 모서리·변 중앙 방향에 이 범위 안이면 흡착
+// 자석 스냅 판정 각도(도) - 모서리·변 중앙 방향에 이 범위 안이면 흡착
 const MAGNET_THRESHOLD_DEG = 6;
 // 클릭이 드래그로 승격되는 이동 임계값(px)
 const DRAG_THRESHOLD_PX = 3;
@@ -73,7 +73,7 @@ type DragState =
       ownerGeneration: number;
       startSpec: GradientSpec;
       moved: boolean;
-      /** 이동 없이 떼면 그 자리에 스톱 추가 — 축 히트 스트립 한정 */
+      /** 이동 없이 떼면 그 자리에 스톱 추가 - 축 히트 스트립 한정 */
       addOnClick: boolean;
       downX: number;
       downY: number;
@@ -133,6 +133,12 @@ const GradientAxisOverlay = ({
 }: GradientAxisOverlayProps) => {
   const { t } = useTranslation();
   const session = useGradientEditStore((state) => state.session);
+  // 카운터처럼 요소 저장 박스와 페인트 박스가 다른 표면이 등록한 실측 박스
+  const registeredAnchorBounds = useGradientEditStore(
+    (state) => state.anchorBounds,
+  );
+  // 피커 색 드래그 중 - 오버레이를 흐려 대상의 실제 색이 보이게 한다
+  const colorAdjusting = useGradientEditStore((state) => state.colorAdjusting);
   const dragRef = useRef<DragState | null>(null);
   const [dragAngle, setDragAngle] = useState<number | null>(null);
   const [dragStop, setDragStop] = useState<{
@@ -155,7 +161,7 @@ const GradientAxisOverlay = ({
     worldH: number;
     zoom: number;
   } | null>(null);
-  // 드래그 세션 해제자 — begin에서 등록, 종료 경로 어디서든 1회 실행
+  // 드래그 세션 해제자 - begin에서 등록, 종료 경로 어디서든 1회 실행
   const detachRef = useRef<(() => void) | null>(null);
   const moveSchedulerRef = useRef<ReturnType<
     typeof createRafLatestScheduler<PointerEvent>
@@ -183,6 +189,11 @@ const GradientAxisOverlay = ({
   // 앵커 → 월드 bounds 해석
   const resolveBounds = (): Bounds | null => {
     if (!session) return null;
+    // 표면 소유 레이어가 실측 박스를 등록했으면 우선 사용 - 카운터 표면은
+    // 요소(키) 박스가 아니라 실제 카운터 텍스트 박스가 축의 기준이다
+    if (registeredAnchorBounds?.sessionKey === session.sessionKey) {
+      return registeredAnchorBounds.bounds;
+    }
     const { anchor } = session;
     if (anchor.kind === 'batch') {
       let minX = Infinity;
@@ -259,10 +270,10 @@ const GradientAxisOverlay = ({
 
   const angle = dragAngle ?? session.spec.angle;
   const rad = (angle * Math.PI) / 180;
-  // CSS linear-gradient: 0deg = 위, 시계 방향 — 화면 좌표(y 아래)로 변환
+  // CSS linear-gradient: 0deg = 위, 시계 방향 - 화면 좌표(y 아래)로 변환
   const dirX = Math.sin(rad);
   const dirY = -Math.cos(rad);
-  // CSS 그라데이션 라인 절반 길이 — pos 0/1이 이 지점에 해당
+  // CSS 그라데이션 라인 절반 길이 - pos 0/1이 이 지점에 해당
   const halfLine =
     ((Math.abs(bounds.width * Math.sin(rad)) +
       Math.abs(bounds.height * Math.cos(rad))) /
@@ -289,7 +300,7 @@ const GradientAxisOverlay = ({
     zoom,
   };
 
-  // 화면(client) 기준 중심 — 드래그 중 휠 팬·줌으로 좌표가 움직여도
+  // 화면(client) 기준 중심 - 드래그 중 휠 팬·줌으로 좌표가 움직여도
   // 매 이벤트에서 최신 지오메트리로 재계산한다
   const clientOrigin = () => {
     const hostRect = rootRef.current?.getBoundingClientRect();
@@ -353,7 +364,7 @@ const GradientAxisOverlay = ({
     live.apply(next, true);
   };
 
-  // 축 클릭 스톱 추가 — 색은 선택 스톱 기준 (피커 스톱 바와 동일 규칙)
+  // 축 클릭 스톱 추가 - 색은 선택 스톱 기준 (피커 스톱 바와 동일 규칙)
   const addStopAt = (pos: number) => {
     const live = sessionRef.current;
     if (!live) return;
@@ -374,7 +385,7 @@ const GradientAxisOverlay = ({
     live.apply(next, true);
   };
 
-  // 드래그 소유 세션 검증 — 세션이 사라지거나 한 번이라도 교체되면 중단.
+  // 드래그 소유 세션 검증 - 세션이 사라지거나 한 번이라도 교체되면 중단.
   // 세대 비교라 포인터 이벤트 사이의 A→B→새 A 왕복도 잡는다
   const ownedDrag = (e: PointerEvent): DragState | null => {
     const drag = dragRef.current;
@@ -419,7 +430,7 @@ const GradientAxisOverlay = ({
       return;
     }
 
-    // 스톱은 항상 현재 축에 사영 — 위치만 이동, 각도 불변
+    // 스톱은 항상 현재 축에 사영 - 위치만 이동, 각도 불변
     const pos = posFromClient(e.clientX, e.clientY);
     drag.lastPos = pos;
     setDragStop({ index: drag.index, pos });
@@ -452,7 +463,7 @@ const GradientAxisOverlay = ({
     if (!live) return;
     if (drag.type === 'rotate') {
       if (!drag.moved) {
-        // 클릭 — 축 히트 스트립이면 그 위치에 스톱 추가
+        // 클릭 - 축 히트 스트립이면 그 위치에 스톱 추가
         if (drag.addOnClick) addStopAt(posFromClient(e.clientX, e.clientY));
         return;
       }
@@ -468,12 +479,12 @@ const GradientAxisOverlay = ({
       );
       return;
     }
-    if (!drag.moved) return; // 클릭 — 선택만
+    if (!drag.moved) return; // 클릭 - 선택만
     // pointerup 좌표를 직접 사용해 마지막 프레임 사이 입력도 유실하지 않음
     commitStopDrag(drag.index, posFromClient(e.clientX, e.clientY));
   };
 
-  // 취소 — preview로 반영된 변경을 시작 시점 spec으로 복원
+  // 취소 - preview로 반영된 변경을 시작 시점 spec으로 복원
   const cancelActiveDrag = () => {
     const drag = dragRef.current;
     if (!drag) return;
@@ -481,7 +492,7 @@ const GradientAxisOverlay = ({
     setDragAngle(null);
     setDragStop(null);
     const live = sessionRef.current;
-    // 세대가 드래그 시작 시점 그대로일 때만 복원 — 포인터 이벤트 없이
+    // 세대가 드래그 시작 시점 그대로일 때만 복원 - 포인터 이벤트 없이
     // A→B→새 A로 교체된 세션에 stale 롤백이 새지 않게
     if (
       live &&
@@ -499,7 +510,7 @@ const GradientAxisOverlay = ({
     cancelActiveDrag();
   };
 
-  // 창 포커스 상실 — pointerup이 오지 않으므로 유령 드래그 방지 취소
+  // 창 포커스 상실 - pointerup이 오지 않으므로 유령 드래그 방지 취소
   const handleWindowBlur = () => cancelActiveDrag();
 
   // 드래그 제스처의 후속 click이 그리드 선택 해제로 새지 않게 1회 억제
@@ -510,7 +521,7 @@ const GradientAxisOverlay = ({
       window.removeEventListener('click', swallow, true);
     };
     window.addEventListener('click', swallow, true);
-    // click이 아예 안 오는 경로(cancel 등) 대비 — 다음 틱에 정리
+    // click이 아예 안 오는 경로(cancel 등) 대비 - 다음 틱에 정리
     setTimeout(() => window.removeEventListener('click', swallow, true), 0);
   };
 
@@ -558,9 +569,9 @@ const GradientAxisOverlay = ({
     attachWindowDrag();
   };
 
-  // 축 히트 스트립 — 잡은 지점이 축의 어느 절반인지로 회전 기준 방향 결정
+  // 축 히트 스트립 - 잡은 지점이 축의 어느 절반인지로 회전 기준 방향 결정
   const beginStripPointer = (e: React.PointerEvent<HTMLDivElement>) => {
-    // preventDefault가 기본 포커스 이동을 막으므로 명시 부여 — 화살표 각도 조절이
+    // preventDefault가 기본 포커스 이동을 막으므로 명시 부여 - 화살표 각도 조절이
     // 그리드 키 이동으로 새지 않게 슬라이더가 포커스를 가져간다
     if (e.button === 0) {
       e.currentTarget.focus({ preventScroll: true });
@@ -597,7 +608,7 @@ const GradientAxisOverlay = ({
       attachWindowDrag();
     };
 
-  // 키보드 각도 조절 — 화살표 ±1°, Shift ±15° (슬라이더 시맨틱)
+  // 키보드 각도 조절 - 화살표 ±1°, Shift ±15° (슬라이더 시맨틱)
   const handleRotateKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     let delta = 0;
     if (e.key === 'ArrowRight' || e.key === 'ArrowUp') delta = 1;
@@ -610,7 +621,7 @@ const GradientAxisOverlay = ({
     session.apply(toCanonicalGradient({ ...session.spec, angle: next }), true);
   };
 
-  // 우클릭 삭제 — 최소 2개 유지 (피커 스톱 바와 동일 규칙)
+  // 우클릭 삭제 - 최소 2개 유지 (피커 스톱 바와 동일 규칙)
   const handleStopContextMenu = (index: number) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -631,138 +642,149 @@ const GradientAxisOverlay = ({
     <div
       ref={rootRef}
       className="absolute inset-0 pointer-events-none"
-      // 리사이즈 핸들(21~25) 위, 사이드 패널(z-30) 아래 — 패널 위로 새지 않게
+      // 리사이즈 핸들(21~25) 위, 사이드 패널(z-30) 아래 - 패널 위로 새지 않게
       style={{ zIndex: 26 }}
       data-dmn-gradient-overlay="true"
     >
-      {/* 축 선 (시각) */}
+      {/* 조작 UI 묶음 - 핸들 드래그나 피커 색 드래그 동안 흐려져
+          가려진 대상의 실제 색이 보인다. 값 배지는 묶음 밖이라 선명 유지 */}
       <div
+        className="absolute inset-0 pointer-events-none"
+        data-dmn-gradient-axis-ui="true"
         style={{
-          position: 'absolute',
-          left: cx,
-          top: cy,
-          width: halfLine * 2,
-          height: 0,
-          borderTop: '1.5px solid var(--ui-selection-border-strong)',
-          transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
-          opacity: 0.9,
-          pointerEvents: 'none',
+          opacity: colorAdjusting || isRotating || dragStop ? 0.12 : 1,
+          transition: 'opacity 120ms ease',
         }}
-      />
-      {/* 축 히트 스트립 — 드래그 = 회전, 클릭 = 스톱 추가, 화살표 = 미세 조절 */}
-      <div
-        role="slider"
-        tabIndex={0}
-        aria-label={t('colorPicker.gradientAngle')}
-        aria-valuemin={0}
-        aria-valuemax={359}
-        aria-valuenow={Math.round(angle)}
-        className="outline-none focus-visible:shadow-focus-ring"
-        onPointerDown={beginStripPointer}
-        onKeyDown={handleRotateKeyDown}
-        onMouseDown={stopAll}
-        style={{
-          position: 'absolute',
-          left: cx,
-          top: cy,
-          width: halfLine * 2,
-          height: AXIS_HIT_THICKNESS,
-          transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
-          cursor: isRotating ? 'grabbing' : 'grab',
-          pointerEvents: 'auto',
-          touchAction: 'none',
-        }}
-      />
-      {/* 축 끝 앵커 — 선 끝점 위 흰 점, 드래그로 각도만 조절 */}
-      {(['start', 'end'] as AxisEnd[]).map((end) => {
-        const point = stopPoint(end === 'end' ? 1 : 0);
-        return (
-          <div
-            key={`axis-${end}`}
-            data-axis-anchor={end}
-            aria-hidden="true"
-            onPointerDown={beginAnchorRotate(end)}
-            onMouseDown={stopAll}
-            style={{
-              position: 'absolute',
-              left: point.x,
-              top: point.y,
-              width: ANCHOR_HIT_SIZE,
-              height: ANCHOR_HIT_SIZE,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transform: 'translate(-50%, -50%)',
-              cursor: isRotating ? 'grabbing' : 'grab',
-              pointerEvents: 'auto',
-              touchAction: 'none',
-            }}
-          >
-            <i
-              style={{
-                display: 'block',
-                width: ANCHOR_DOT_SIZE,
-                height: ANCHOR_DOT_SIZE,
-                borderRadius: '50%',
-                background: 'white',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
-              }}
-            />
-          </div>
-        );
-      })}
-      {/* 스톱 — 앵커 점은 선 위, 색 스왓치는 바로 위 태그. 드래그 = 위치, 우클릭 = 삭제 */}
-      {session.spec.stops.map((stop, i) => {
-        const point = stopPoint(stop.pos);
-        const isAxisEnd = stop.pos === 0 || stop.pos === 1;
-        return (
-          <React.Fragment key={`stop-${i}`}>
-            {!isAxisEnd && (
-              <div
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  left: point.x,
-                  top: point.y,
-                  width: STOP_ANCHOR_DOT_SIZE,
-                  height: STOP_ANCHOR_DOT_SIZE,
-                  borderRadius: '50%',
-                  background: 'white',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
-                  transform: 'translate(-50%, -50%)',
-                  pointerEvents: 'none',
-                }}
-              />
-            )}
+      >
+        {/* 축 선 (시각) */}
+        <div
+          style={{
+            position: 'absolute',
+            left: cx,
+            top: cy,
+            width: halfLine * 2,
+            height: 0,
+            borderTop: '1.5px solid var(--ui-selection-border-strong)',
+            transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
+            opacity: 0.9,
+            pointerEvents: 'none',
+          }}
+        />
+        {/* 축 히트 스트립 - 드래그 = 회전, 클릭 = 스톱 추가, 화살표 = 미세 조절 */}
+        <div
+          role="slider"
+          tabIndex={0}
+          aria-label={t('colorPicker.gradientAngle')}
+          aria-valuemin={0}
+          aria-valuemax={359}
+          aria-valuenow={Math.round(angle)}
+          className="outline-none focus-visible:shadow-focus-ring"
+          onPointerDown={beginStripPointer}
+          onKeyDown={handleRotateKeyDown}
+          onMouseDown={stopAll}
+          style={{
+            position: 'absolute',
+            left: cx,
+            top: cy,
+            width: halfLine * 2,
+            height: AXIS_HIT_THICKNESS,
+            transform: `translate(-50%, -50%) rotate(${angle - 90}deg)`,
+            cursor: isRotating ? 'grabbing' : 'grab',
+            pointerEvents: 'auto',
+            touchAction: 'none',
+          }}
+        />
+        {/* 축 끝 앵커 - 선 끝점 위 흰 점, 드래그로 각도만 조절 */}
+        {(['start', 'end'] as AxisEnd[]).map((end) => {
+          const point = stopPoint(end === 'end' ? 1 : 0);
+          return (
             <div
-              role="button"
-              aria-label={`stop ${i + 1}`}
-              onPointerDown={beginStopDrag(i)}
+              key={`axis-${end}`}
+              data-axis-anchor={end}
+              aria-hidden="true"
+              onPointerDown={beginAnchorRotate(end)}
               onMouseDown={stopAll}
-              onContextMenu={handleStopContextMenu(i)}
               style={{
                 position: 'absolute',
                 left: point.x,
-                top: point.y - SWATCH_LIFT,
-                width: SWATCH_SIZE,
-                height: SWATCH_SIZE,
-                borderRadius: 4,
-                // 반투명 색은 격자 위 합성으로 표시 — 뒤 요소 비침 방지
-                background: `linear-gradient(${stop.color}, ${stop.color}), var(--ui-checker-pattern) center / var(--ui-checker-size-sm) var(--ui-checker-size-sm) repeat`,
-                border: '1.5px solid white',
-                boxShadow:
-                  i === session.selectedIndex
-                    ? '0 0 0 2px var(--ui-selection-border-strong), 0 1px 4px rgba(0,0,0,0.5)'
-                    : '0 1px 4px rgba(0,0,0,0.5)',
+                top: point.y,
+                width: ANCHOR_HIT_SIZE,
+                height: ANCHOR_HIT_SIZE,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 transform: 'translate(-50%, -50%)',
-                cursor: dragStop?.index === i ? 'grabbing' : 'grab',
+                cursor: isRotating ? 'grabbing' : 'grab',
                 pointerEvents: 'auto',
                 touchAction: 'none',
               }}
-            />
-          </React.Fragment>
-        );
-      })}
+            >
+              <i
+                style={{
+                  display: 'block',
+                  width: ANCHOR_DOT_SIZE,
+                  height: ANCHOR_DOT_SIZE,
+                  borderRadius: '50%',
+                  background: 'white',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                }}
+              />
+            </div>
+          );
+        })}
+        {/* 스톱 - 앵커 점은 선 위, 색 스왓치는 바로 위 태그. 드래그 = 위치, 우클릭 = 삭제 */}
+        {session.spec.stops.map((stop, i) => {
+          const point = stopPoint(stop.pos);
+          const isAxisEnd = stop.pos === 0 || stop.pos === 1;
+          return (
+            <React.Fragment key={`stop-${i}`}>
+              {!isAxisEnd && (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    left: point.x,
+                    top: point.y,
+                    width: STOP_ANCHOR_DOT_SIZE,
+                    height: STOP_ANCHOR_DOT_SIZE,
+                    borderRadius: '50%',
+                    background: 'white',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                    transform: 'translate(-50%, -50%)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              <div
+                role="button"
+                aria-label={`stop ${i + 1}`}
+                onPointerDown={beginStopDrag(i)}
+                onMouseDown={stopAll}
+                onContextMenu={handleStopContextMenu(i)}
+                style={{
+                  position: 'absolute',
+                  left: point.x,
+                  top: point.y - SWATCH_LIFT,
+                  width: SWATCH_SIZE,
+                  height: SWATCH_SIZE,
+                  borderRadius: 4,
+                  // 반투명 색은 격자 위 합성으로 표시 - 뒤 요소 비침 방지
+                  background: `linear-gradient(${stop.color}, ${stop.color}), var(--ui-checker-pattern) center / var(--ui-checker-size-sm) var(--ui-checker-size-sm) repeat`,
+                  border: '1.5px solid white',
+                  boxShadow:
+                    i === session.selectedIndex
+                      ? '0 0 0 2px var(--ui-selection-border-strong), 0 1px 4px rgba(0,0,0,0.5)'
+                      : '0 1px 4px rgba(0,0,0,0.5)',
+                  transform: 'translate(-50%, -50%)',
+                  cursor: dragStop?.index === i ? 'grabbing' : 'grab',
+                  pointerEvents: 'auto',
+                  touchAction: 'none',
+                }}
+              />
+            </React.Fragment>
+          );
+        })}
+      </div>
       {/* 드래그 중 각도 표시 */}
       {isRotating && (
         <div

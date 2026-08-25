@@ -81,6 +81,7 @@ const captured = vi.hoisted(() => ({
     ) => void;
   },
   color: null as null | {
+    color?: string;
     stateMode?: string;
     onStateModeChange?: (mode: string) => void;
     onColorChange: (color: string) => void;
@@ -751,6 +752,7 @@ describe('single geometry input bindings', () => {
           />,
         );
       });
+      // 글꼴 색상은 마지막 스와치
       act(() => captured.swatches.at(-1)?.onClick());
       act(() => captured.color?.onColorChange('local-only'));
       expect(fontColor).not.toHaveBeenCalled();
@@ -1085,62 +1087,6 @@ describe('single geometry input bindings', () => {
     [
       'key',
       'idle',
-      '  idle stroke  ',
-      // 단색 커밋은 fill과 동일한 descriptor 형태 (api-contract v2 §4)
-      { property: 'counterStrokeIdle', value: { color: '  idle stroke  ' } },
-    ],
-    [
-      'key',
-      'active',
-      '  active stroke  ',
-      {
-        property: 'counterStrokeActive',
-        value: { color: '  active stroke  ' },
-      },
-    ],
-    [
-      'stat',
-      'idle',
-      '',
-      { property: 'counterStrokeIdle', value: { color: '' } },
-    ],
-  ] as const)(
-    '%s counter stroke %s picker는 drag local-only 뒤 final exact commit한다',
-    (type, state, input, expected) => {
-      const stroke = vi.fn();
-      const legacy = vi.fn();
-      act(() => {
-        root.render(
-          <CounterTabContent
-            keyIndex={0}
-            keyPosition={createDefaultKeyPosition()}
-            isStat={type === 'stat'}
-            onKeyUpdate={legacy}
-            onCounterStrokeCommit={stroke}
-            t={(key) => key}
-          />,
-        );
-      });
-      act(() => captured.swatches.at(-1)?.onClick());
-      if (state === 'active') {
-        act(() => captured.color?.onStateModeChange?.('active'));
-      }
-      act(() => captured.color?.onColorChange(input));
-      expect(stroke).not.toHaveBeenCalled();
-      act(() => captured.color?.onColorChangeComplete(input));
-
-      expect(stroke).toHaveBeenCalledWith(expected);
-      expect(legacy).not.toHaveBeenCalled();
-      if (type === 'stat') {
-        expect(captured.color?.onStateModeChange).toBeUndefined();
-      }
-    },
-  );
-
-  it.each([
-    [
-      'key',
-      'idle',
       { property: 'counterFillIdle', value: { color: ' final fill ' } },
     ],
     [
@@ -1170,7 +1116,7 @@ describe('single geometry input bindings', () => {
           />,
         );
       });
-      act(() => captured.swatches.at(-2)?.onClick());
+      act(() => captured.swatches.at(-1)?.onClick());
       if (state === 'active') {
         act(() => captured.color?.onStateModeChange?.('active'));
       }
@@ -1186,44 +1132,37 @@ describe('single geometry input bindings', () => {
     },
   );
 
-  it.each([
-    ['fill', -2, 'counterFillIdle'],
-    ['stroke', -1, 'counterStrokeIdle'],
-  ] as const)(
-    'counter %s gradient 선택은 first-stop 대표값과 exact spec을 함께 commit한다',
-    (_, swatchIndex, property) => {
-      const paint = vi.fn();
-      const gradient = {
-        angle: 45,
-        stops: [
-          { color: '#112233', pos: 0 },
-          { color: '#445566', pos: 1 },
-        ],
-      };
-      act(() => {
-        root.render(
-          <CounterTabContent
-            keyIndex={0}
-            keyPosition={createDefaultKeyPosition()}
-            isStat={false}
-            onKeyUpdate={vi.fn()}
-            onCounterFillCommit={paint}
-            onCounterStrokeCommit={paint}
-            t={(key) => key}
-          />,
-        );
-      });
-      act(() => captured.swatches.at(swatchIndex)?.onClick());
-      act(() => captured.color?.onColorChange('local-only'));
-      expect(paint).not.toHaveBeenCalled();
-      act(() => captured.color?.onGradientSpecSelect?.(gradient));
+  it('counter fill gradient 선택은 first-stop compact 대표값과 exact spec을 함께 commit한다', () => {
+    const fill = vi.fn();
+    const gradient = {
+      angle: 45,
+      stops: [
+        { color: '#112233', pos: 0 },
+        { color: '#445566', pos: 1 },
+      ],
+    };
+    act(() => {
+      root.render(
+        <CounterTabContent
+          keyIndex={0}
+          keyPosition={createDefaultKeyPosition()}
+          isStat={false}
+          onKeyUpdate={vi.fn()}
+          onCounterFillCommit={fill}
+          t={(key) => key}
+        />,
+      );
+    });
+    act(() => captured.swatches.at(-1)?.onClick());
+    act(() => captured.color?.onColorChange('local-only'));
+    expect(fill).not.toHaveBeenCalled();
+    act(() => captured.color?.onGradientSpecSelect?.(gradient));
 
-      expect(paint).toHaveBeenCalledWith({
-        property,
-        value: { color: 'rgba(17,34,51,1)', gradient },
-      });
-    },
-  );
+    expect(fill).toHaveBeenCalledWith({
+      property: 'counterFillIdle',
+      value: { color: 'rgba(17,34,51,1)', gradient },
+    });
+  });
 
   it.each([
     ['key', true],

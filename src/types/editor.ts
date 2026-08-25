@@ -26,10 +26,8 @@ import {
 } from '@src/types/key/notePaint';
 import {
   isCounterFillDescriptorV1,
-  isCounterStrokePatchValueV1,
   type CounterFillDescriptorV1,
   type CounterFillPropertyPatchV1,
-  type CounterStrokePatchValueV1,
 } from '@src/types/key/counterFill';
 import { type FontColorPropertyPatchV1 } from '@src/types/key/fontColor';
 import {
@@ -229,8 +227,6 @@ interface EditorElementPropertyValuesV1 {
   counterFontUnderline: boolean;
   counterFontStrikethrough: boolean;
   counterFontFamily: string;
-  counterStrokeIdle: CounterStrokePatchValueV1;
-  counterStrokeActive: CounterStrokePatchValueV1;
   counterFillIdle: CounterFillDescriptorV1;
   counterFillActive: CounterFillDescriptorV1;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
@@ -334,8 +330,6 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'counterFontFamily',
   'counterFillIdle',
   'counterFillActive',
-  'counterStrokeIdle',
-  'counterStrokeActive',
   'counterAnimationPreset',
   'statType',
   'noteEffectEnabled',
@@ -429,9 +423,6 @@ export type EditorCounterTypographyPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'counterFontFamily'
 >;
 
-export type EditorCounterStrokePropertyPatchV1 = EditorPropertyPatchUnionV1<
-  'counterStrokeIdle' | 'counterStrokeActive'
->;
 export type EditorCounterFillPropertyPatchV1 = CounterFillPropertyPatchV1;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -1619,10 +1610,6 @@ const isEditorElementPropertyValueValid = (
       );
     case 'counterFontFamily':
       return keyOrStat && typeof value === 'string';
-    case 'counterStrokeIdle':
-      return keyOrStat && isCounterStrokePatchValueV1(value);
-    case 'counterStrokeActive':
-      return elementType === 'key' && isCounterStrokePatchValueV1(value);
     case 'counterFillIdle':
       return keyOrStat && isCounterFillDescriptorV1(value);
     case 'counterFillActive':

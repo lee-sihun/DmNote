@@ -446,7 +446,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             <PropertySection>
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
-                  value={Math.round(singleGraphPosition.dx || 0)}
+                  value={singleGraphPosition.dx || 0}
                   onChange={(value) => {
                     handleGeometryCommit?.('dx', value);
                   }}
@@ -454,9 +454,11 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
+                  allowDecimal
+                  decimalScale={1}
                 />
                 <NumberInput
-                  value={Math.round(singleGraphPosition.dy || 0)}
+                  value={singleGraphPosition.dy || 0}
                   onChange={(value) => {
                     handleGeometryCommit?.('dy', value);
                   }}
@@ -464,6 +466,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
+                  allowDecimal
+                  decimalScale={1}
                 />
               </PropertyRow>
 
@@ -1169,7 +1173,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             <PropertySection>
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
-                  value={Math.round(singleKnobPosition.dx || 0)}
+                  value={singleKnobPosition.dx || 0}
                   onChange={(value) => {
                     handleGeometryCommit?.('dx', value);
                   }}
@@ -1177,9 +1181,11 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
+                  allowDecimal
+                  decimalScale={1}
                 />
                 <NumberInput
-                  value={Math.round(singleKnobPosition.dy || 0)}
+                  value={singleKnobPosition.dy || 0}
                   onChange={(value) => {
                     handleGeometryCommit?.('dy', value);
                   }}
@@ -1187,6 +1193,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
+                  allowDecimal
+                  decimalScale={1}
                 />
               </PropertyRow>
 
@@ -1541,7 +1549,6 @@ interface SingleKeyStatPanelProps {
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
   onCounterLayoutCommit?: CounterTabContentProps['onCounterLayoutCommit'];
   onCounterTypographyCommit?: CounterTabContentProps['onCounterTypographyCommit'];
-  onCounterStrokeCommit?: CounterTabContentProps['onCounterStrokeCommit'];
   onCounterFillCommit?: CounterTabContentProps['onCounterFillCommit'];
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
@@ -1601,7 +1608,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
   onCounterTypographyCommit,
-  onCounterStrokeCommit,
   onCounterFillCommit,
   showImagePicker,
   setShowImagePicker,
@@ -1854,7 +1860,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onCounterAnimationEnabledCommit={onCounterAnimationEnabledCommit}
               onCounterLayoutCommit={onCounterLayoutCommit}
               onCounterTypographyCommit={onCounterTypographyCommit}
-              onCounterStrokeCommit={onCounterStrokeCommit}
               onCounterFillCommit={onCounterFillCommit}
               onCounterAnimationPresetCommit={onCounterAnimationPresetCommit}
               panelElement={panelElement}

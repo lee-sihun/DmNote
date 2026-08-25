@@ -78,11 +78,7 @@ type ActiveStyleColorProperty =
   | 'activeBackgroundColor'
   | 'activeBorderColor'
   | 'activeFontColor';
-type StyleColorProperty =
-  | StyleColorTarget
-  | 'activeBackgroundColor'
-  | 'activeBorderColor'
-  | 'activeFontColor';
+type StyleColorProperty = StyleColorTarget | ActiveStyleColorProperty;
 
 interface StyleTabContentInternalProps extends StyleTabContentProps {
   // 로컬 상태 (단일 선택 시에만 사용, 개별 편집 모드에서는 사용하지 않음)

@@ -406,7 +406,6 @@ type BatchPickerTarget =
   | 'glowColor'
   | 'borderColor'
   | 'fill'
-  | 'stroke'
   | null;
 
 type MixedValueResult<T> = { isMixed: boolean; value: T };
@@ -429,8 +428,6 @@ interface BatchLocalColors {
   borderOpacity: number;
   fillIdle: string;
   fillActive: string;
-  strokeIdle: string;
-  strokeActive: string;
 }
 
 interface BatchKeyLikePanelProps {
@@ -494,7 +491,6 @@ interface BatchKeyLikePanelProps {
   batchGlowColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchBorderColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchCounterFillButtonRef: React.RefObject<HTMLButtonElement | null>;
-  batchCounterStrokeButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
   // state
   showBatchImagePicker: boolean;
@@ -574,7 +570,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   batchGlowColorButtonRef,
   batchBorderColorButtonRef,
   batchCounterFillButtonRef,
-  batchCounterStrokeButtonRef,
   batchImageButtonRef,
   showBatchImagePicker,
   setShowBatchImagePicker,
@@ -1067,27 +1062,16 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
   ];
 
-  const getCounterColorDisplay = (target: 'fill' | 'stroke') => {
-    const key =
-      target === 'fill'
-        ? batchCounterColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle'
-        : batchCounterColorState === 'active'
-        ? 'strokeActive'
-        : 'strokeIdle';
+  const getCounterColorDisplay = (target: 'fill') => {
+    const key = batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
 
     if (batchPickerFor === target) {
       return batchLocalColors[key];
     }
 
-    return target === 'fill'
-      ? batchCounterColorState === 'active'
-        ? batchCounterSettings.fill.active
-        : batchCounterSettings.fill.idle
-      : batchCounterColorState === 'active'
-      ? batchCounterSettings.stroke.active
-      : batchCounterSettings.stroke.idle;
+    return batchCounterColorState === 'active'
+      ? batchCounterSettings.fill.active
+      : batchCounterSettings.fill.idle;
   };
 
   return (
@@ -1350,11 +1334,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 colorState={batchCounterColorState}
                 getCounterColorDisplay={getCounterColorDisplay}
                 onFillPickerToggle={() => handleBatchPickerToggle('fill')}
-                onStrokePickerToggle={() => handleBatchPickerToggle('stroke')}
                 batchCounterFillButtonRef={batchCounterFillButtonRef}
-                batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
                 isFillPickerOpen={batchPickerFor === 'fill'}
-                isStrokePickerOpen={batchPickerFor === 'stroke'}
                 animationBinding={animationBinding}
                 t={t}
               />
@@ -1438,14 +1419,12 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 batchPickerFor !== 'noteColor' && batchPickerFor !== 'glowColor'
               }
               stateMode={
-                (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
-                selectedKeyElements.length > 0
+                batchPickerFor === 'fill' && selectedKeyElements.length > 0
                   ? batchCounterColorState
                   : undefined
               }
               onStateModeChange={
-                (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
-                selectedKeyElements.length > 0
+                batchPickerFor === 'fill' && selectedKeyElements.length > 0
                   ? setBatchCounterColorState
                   : undefined
               }

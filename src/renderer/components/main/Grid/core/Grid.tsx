@@ -55,6 +55,7 @@ import {
   getElementBounds,
   isElementResizable,
 } from '../handles/groupResizeUtils';
+import { getGridViewportLayerStyles } from '@utils/core/gridViewportStyles';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
@@ -217,6 +218,12 @@ const Grid = ({
     containerRef: gridContainerRef,
     contentRef: gridContentRef,
   });
+  const gridViewportStyles = getGridViewportLayerStyles(
+    panX,
+    panY,
+    zoom,
+    isTransforming,
+  );
 
   // 컨텍스트 메뉴 훅 사용
   const {
@@ -1557,65 +1564,65 @@ const Grid = ({
         panX={panX}
         panY={panY}
       />
-      {/* 줌/팬이 적용되는 콘텐츠 영역 */}
-      <div
-        key={selectedKeyType}
-        ref={gridContentRef}
-        className="absolute"
-        style={{
-          transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-          transformOrigin: '0 0',
-          willChange: isTransforming ? 'transform' : 'auto',
-        }}
-      >
-        {renderKeys()}
-        {renderStatItems()}
-        {renderGraphItems()}
-        {renderKnobItems()}
-        {/* Outside 카운터 미리보기 레이어 */}
-        {keyCounterEnabled && (
-          <KeyCounterPreviewLayer
-            positions={positions[selectedKeyType]}
-            previewValue={0}
+      {/* 팬과 줌을 같은 합성 레이어에 넣으면 이동 중 기존 배율의 래스터가
+          다시 샘플링된다 - 이동 레이어는 최종 배율로 그려진 안쪽만 옮김 */}
+      <div className="absolute" style={gridViewportStyles.pan}>
+        <div
+          key={selectedKeyType}
+          ref={gridContentRef}
+          className="absolute"
+          data-dmn-grid-space=""
+          style={gridViewportStyles.scale}
+        >
+          {renderKeys()}
+          {renderStatItems()}
+          {renderGraphItems()}
+          {renderKnobItems()}
+          {/* Outside 카운터 미리보기 레이어 */}
+          {keyCounterEnabled && (
+            <KeyCounterPreviewLayer
+              positions={positions[selectedKeyType]}
+              previewValue={0}
+              selectedElements={selectedElements}
+            />
+          )}
+          <StatCounterLayer
+            positions={statPositions?.[selectedKeyType] || []}
             selectedElements={selectedElements}
           />
-        )}
-        <StatCounterLayer
-          positions={statPositions?.[selectedKeyType] || []}
-          selectedElements={selectedElements}
-        />
-        {renderDuplicateGhost()}
-        <PluginElementsRenderer
-          windowType="main"
-          activeTool={activeTool}
-          zoom={zoom}
-          panX={panX}
-          panY={panY}
-          isViewportTransforming={isTransforming}
-          onSelectionContextMenu={({
-            elementId,
-            clientX,
-            clientY,
-            referenceElement,
-          }) => {
-            if (duplicateState) {
-              setDuplicateState(null);
-              setDuplicateCursor(null);
-            }
-            if (!shouldOpenMixedSelectionMenu(elementId)) return false;
-            openMixedSelectionContextMenu(
+          {renderDuplicateGhost()}
+          <PluginElementsRenderer
+            windowType="main"
+            activeTool={activeTool}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+            isViewportTransforming={isTransforming}
+            onSelectionContextMenu={({
+              elementId,
               clientX,
               clientY,
-              referenceElement || null,
-            );
-            return true;
-          }}
-          onMultiDrag={(deltaX, deltaY) =>
-            moveSelectedElements(deltaX, deltaY, undefined, false)
-          }
-          onMultiDragStart={beginSelectedPluginInstancesDrag}
-          onMultiDragEnd={commitSelectedElementsDrag}
-        />
+              referenceElement,
+            }) => {
+              if (duplicateState) {
+                setDuplicateState(null);
+                setDuplicateCursor(null);
+              }
+              if (!shouldOpenMixedSelectionMenu(elementId)) return false;
+              openMixedSelectionContextMenu(
+                clientX,
+                clientY,
+                referenceElement || null,
+              );
+              return true;
+            }}
+            onMultiDrag={(deltaX, deltaY) =>
+              moveSelectedElements(deltaX, deltaY, undefined, false)
+            }
+            onMultiDragStart={beginSelectedPluginInstancesDrag}
+            onMultiDragEnd={commitSelectedElementsDrag}
+          />
+        </div>
       </div>
       {/* 스마트 가이드 오버레이 */}
       <SmartGuidesOverlay zoom={zoom} panX={panX} panY={panY} />
@@ -2020,7 +2027,6 @@ const Grid = ({
                     ? {
                         ...position.counter,
                         fill: { ...position.counter.fill },
-                        stroke: { ...position.counter.stroke },
                         ...(position.counter.animation
                           ? {
                               animation: {

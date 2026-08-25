@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   useCounterSettings,
   computeOutsideStyle,
 } from '@hooks/overlay/useCounterSettings';
+import { toCssRgba } from '@utils/color/colorUtils';
+import { gradientToCss } from '@src/types/color';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 import { getCounterTypographyStyle } from '@utils/core/counterStyles';
-import { counterPaintVars } from '@utils/core/counterPaintVars';
+import { useCounterAxisAnchor } from '@hooks/shared/useCounterAxisAnchor';
+import { useCounterGlyphPaint } from '@hooks/shared/useCounterGlyphPaint';
 
 interface CounterPosition {
   id: string;
@@ -59,8 +62,31 @@ const KeyCounterPreview = React.memo(function KeyCounterPreview({
   const previewActive = previewSession?.stateMode === 'active';
   const previewFillSpec =
     previewSession?.surface === 'counterFill' ? previewSession.spec : null;
-  const previewStrokeSpec =
-    previewSession?.surface === 'counterStroke' ? previewSession.spec : null;
+
+  const fillColor = previewActive
+    ? counterSettings.fill.active
+    : counterSettings.fill.idle;
+  const fillGradient =
+    previewFillSpec ??
+    (previewActive
+      ? counterSettings.fillActiveGradient
+      : counterSettings.fillIdleGradient) ??
+    null;
+
+  const counterSpanRef = useRef<HTMLSpanElement | null>(null);
+  // 글리프 페인트 박스 측정이 축 앵커보다 먼저 - 앵커가 dataset을 읽는다
+  useCounterGlyphPaint(
+    counterSpanRef,
+    Boolean(fillGradient),
+    previewValue,
+    // 상태 포함 - data-counter-state 스코프 커스텀 CSS가 메트릭을 바꿀 수 있다
+    `${counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}|${
+      counterSettings.fontFamily
+    }|${counterSettings.fontWeight}|${counterSettings.fontItalic}|${
+      previewActive ? 'active' : 'inactive'
+    }`,
+  );
+  useCounterAxisAnchor(previewSession, counterSpanRef, previewValue);
 
   // 개별 키의 카운터가 비활성화되었거나 outside가 아니면 렌더링하지 않음
   if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
@@ -76,24 +102,7 @@ const KeyCounterPreview = React.memo(function KeyCounterPreview({
     counterSettings.gap,
   );
 
-  const fillColor = previewActive
-    ? counterSettings.fill.active
-    : counterSettings.fill.idle;
-  const strokeColor = previewActive
-    ? counterSettings.stroke.active
-    : counterSettings.stroke.idle;
-  const fillGradient =
-    previewFillSpec ??
-    (previewActive
-      ? counterSettings.fillActiveGradient
-      : counterSettings.fillIdleGradient) ??
-    null;
-  const strokeGradient =
-    previewStrokeSpec ??
-    (previewActive
-      ? counterSettings.strokeActiveGradient
-      : counterSettings.strokeIdleGradient) ??
-    null;
+  const fill = toCssRgba(fillColor, '#FFFFFF');
 
   return (
     <div
@@ -101,6 +110,7 @@ const KeyCounterPreview = React.memo(function KeyCounterPreview({
       style={style}
     >
       <span
+        ref={counterSpanRef}
         className="counter pointer-events-none select-none"
         data-text={previewValue}
         data-counter-state={previewActive ? 'active' : 'inactive'}
@@ -116,12 +126,19 @@ const KeyCounterPreview = React.memo(function KeyCounterPreview({
               lineHeight: 1,
               useInlineStyles: position.useInlineStyles === true,
             }),
-            ...counterPaintVars({
-              fillColor,
-              fillGradient,
-              strokeColor,
-              strokeGradient,
-            }),
+            '--counter-color-default': fill.css,
+            '--dmn-counter-fill-image-default': fillGradient
+              ? gradientToCss(fillGradient)
+              : 'none',
+            '--dmn-counter-fill-clip-default': fillGradient
+              ? 'text'
+              : 'border-box',
+            '--dmn-counter-text-fill-default': fillGradient
+              ? 'transparent'
+              : 'currentcolor',
+            '--dmn-counter-fill-repeat-default': fillGradient
+              ? 'no-repeat'
+              : 'repeat',
           } as React.CSSProperties
         }
       >

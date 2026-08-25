@@ -430,41 +430,6 @@ describe('canonicalizePositionGradients - 본체·글로우 shadow 동기 (계�
   });
 });
 
-describe('canonicalizePositionGradients - counter stroke 쌍', () => {
-  it('stroke 대표색은 compact rgba로 repair', () => {
-    const pos = {
-      counter: {
-        stroke: { idle: '#stale', active: '#000' },
-        strokeIdleGradient: {
-          angle: 90,
-          stops: [c('#FFFFFF', 0), c('#000', 1)],
-        },
-      },
-    };
-    const next = canonicalizePositionGradients(pos);
-    expect((next.counter as { stroke: { idle: string } }).stroke.idle).toBe(
-      'rgba(255,255,255,1)',
-    );
-    expect((next.counter as { stroke: { active: string } }).stroke.active).toBe(
-      '#000',
-    );
-  });
-
-  it('손상 stroke gradient는 필드만 drop', () => {
-    const pos = {
-      counter: {
-        stroke: { idle: 'transparent', active: 'transparent' },
-        strokeActiveGradient: { stops: [c('#fff', 0)] },
-      },
-    };
-    const next = canonicalizePositionGradients(pos);
-    expect('strokeActiveGradient' in (next.counter as object)).toBe(false);
-    expect((next.counter as { stroke: { idle: string } }).stroke.idle).toBe(
-      'transparent',
-    );
-  });
-});
-
 function c(color: string, pos: number) {
   return { color, pos };
 }

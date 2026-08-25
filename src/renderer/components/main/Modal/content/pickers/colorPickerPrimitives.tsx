@@ -7,6 +7,7 @@ import {
 } from '@utils/animation/rafLatestScheduler';
 import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
+import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 
 // 디자인 조절점 — 내부 폭 148px 기준 비율 ≈1.42:1
 const SATURATION_HEIGHT = 104;
@@ -88,6 +89,7 @@ export const usePointerSession = (
     const pointerId = activePointerRef.current;
     if (pointerId === null) return;
     activePointerRef.current = null;
+    useGradientEditStore.getState().setColorAdjusting(false);
     rectRef.current = null;
     previewSchedulerRef.current?.cancel();
     previewSchedulerRef.current = null;
@@ -121,6 +123,8 @@ export const usePointerSession = (
     activePointerRef.current = event.pointerId;
     targetRef.current = target;
     rectRef.current = rect;
+    // 색 조정 드래그 신호 - 그라데이션 축 오버레이가 스스로를 흐린다
+    useGradientEditStore.getState().setColorAdjusting(true);
     sessionTargetRef.current = editSessionScoped
       ? getEditSessionTarget()
       : null;

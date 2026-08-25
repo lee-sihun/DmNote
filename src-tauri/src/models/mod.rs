@@ -1108,12 +1108,6 @@ pub struct KeyCounterSettings {
     pub fill_idle_gradient: Option<GradientSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_active_gradient: Option<GradientSpec>,
-    #[serde(default = "default_stroke_color")]
-    pub stroke: KeyCounterColor,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stroke_idle_gradient: Option<GradientSpec>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stroke_active_gradient: Option<GradientSpec>,
     #[serde(default = "default_gap")]
     pub gap: u32,
     #[serde(default = "default_counter_font_size")]
@@ -1133,14 +1127,6 @@ pub struct KeyCounterSettings {
     pub animation: KeyCounterAnimationSettings,
 }
 
-fn default_stroke_color() -> KeyCounterColor {
-    KeyCounterColor {
-        // 기본값: 외곽선 없음 (렌더러 기본값과 일치)
-        idle: "transparent".to_string(),
-        active: "transparent".to_string(),
-    }
-}
-
 impl Default for KeyCounterSettings {
     fn default() -> Self {
         Self {
@@ -1151,9 +1137,6 @@ impl Default for KeyCounterSettings {
             fill: KeyCounterColor::default(),
             fill_idle_gradient: None,
             fill_active_gradient: None,
-            stroke: default_stroke_color(),
-            stroke_idle_gradient: None,
-            stroke_active_gradient: None,
             gap: default_gap(),
             font_size: default_counter_font_size(),
             font_weight: default_counter_font_weight(),
@@ -1172,23 +1155,12 @@ impl KeyCounterSettings {
     }
 
     /// Migrate legacy defaults that were previously serialized into store.json.
-    /// This keeps existing user customizations intact, while fixing the old default
-    /// active fill/stroke values (black text / outlined) that diverged from the renderer.
-    pub fn migrate_legacy_defaults(&mut self) -> bool {
-        if self.fill_idle_gradient.is_some()
-            || self.fill_active_gradient.is_some()
-            || self.stroke_idle_gradient.is_some()
-            || self.stroke_active_gradient.is_some()
-        {
-            self.normalize();
-            return false;
-        }
-
-        // 당시 직렬화되던 스냅샷 값 고정 — 현재 기본값 함수와 결합 금지
-        let looks_like_legacy_default = self.fill.idle == "#FFFFFF"
+    /// This keeps existing user customizations intact, while fixing old defaults
+    /// that diverged from the renderer.
+    // 당시 직렬화되던 스냅샷 값 고정
+    fn matches_legacy_default_snapshot(&self) -> bool {
+        self.fill.idle == "#FFFFFF"
             && self.fill.active == "#000000"
-            && self.stroke.idle == "#000000"
-            && self.stroke.active == "#FFFFFF"
             && matches!(self.placement, KeyCounterPlacement::Inside)
             && matches!(self.align, KeyCounterAlign::Top)
             && matches!(self.align_mode, KeyCounterAlignMode::Center)
@@ -1198,26 +1170,13 @@ impl KeyCounterSettings {
             && self.font_family.is_none()
             && !self.font_italic
             && !self.font_underline
-            && !self.font_strikethrough;
+            && !self.font_strikethrough
+    }
 
-        if looks_like_legacy_default {
-            self.fill = KeyCounterColor::default();
-            self.stroke = default_stroke_color();
-            self.align = KeyCounterAlign::Bottom;
-            self.gap = default_gap();
-            self.font_size = default_counter_font_size();
-            self.font_weight = default_counter_font_weight();
-            self.animation = KeyCounterAnimationSettings::default();
-            self.normalize();
-            return true;
-        }
-
-        // 직전 기본값 스냅샷(회색 카운터·16px·700·상단 배치) → 글래스 기본 디자인으로 승격
-        // 전 필드 일치일 때만 — 하나라도 다르면 사용자 커스텀으로 보고 유지
-        let looks_like_previous_default = self.fill.idle == "rgba(121, 121, 121, 0.9)"
+    // 직전 기본값 스냅샷(회색 카운터·16px·700·상단 배치) 전 필드 일치 검사
+    fn matches_previous_default_snapshot(&self) -> bool {
+        self.fill.idle == "rgba(121, 121, 121, 0.9)"
             && self.fill.active == "#FFFFFF"
-            && self.stroke.idle == "transparent"
-            && self.stroke.active == "transparent"
             && matches!(self.placement, KeyCounterPlacement::Inside)
             && matches!(self.align, KeyCounterAlign::Top)
             && matches!(self.align_mode, KeyCounterAlignMode::Center)
@@ -1227,9 +1186,27 @@ impl KeyCounterSettings {
             && self.font_family.is_none()
             && !self.font_italic
             && !self.font_underline
-            && !self.font_strikethrough;
+            && !self.font_strikethrough
+    }
 
-        if looks_like_previous_default {
+    pub fn migrate_legacy_defaults(&mut self) -> bool {
+        if self.fill_idle_gradient.is_some() || self.fill_active_gradient.is_some() {
+            self.normalize();
+            return false;
+        }
+
+        if self.matches_legacy_default_snapshot() {
+            self.fill = KeyCounterColor::default();
+            self.align = KeyCounterAlign::Bottom;
+            self.gap = default_gap();
+            self.font_size = default_counter_font_size();
+            self.font_weight = default_counter_font_weight();
+            self.animation = KeyCounterAnimationSettings::default();
+            self.normalize();
+            return true;
+        }
+
+        if self.matches_previous_default_snapshot() {
             self.fill = KeyCounterColor::default();
             self.align = KeyCounterAlign::Bottom;
             self.gap = default_gap();
@@ -1259,23 +1236,101 @@ impl KeyCounterSettings {
         changed |= active_changed;
         pair_repaired |= active_pair_repaired;
 
-        let (stroke_idle_changed, stroke_idle_pair_repaired) = canonicalize_counter_gradient_pair(
-            &mut self.stroke.idle,
-            &mut self.stroke_idle_gradient,
-        );
-        changed |= stroke_idle_changed;
-        pair_repaired |= stroke_idle_pair_repaired;
-
-        let (stroke_active_changed, stroke_active_pair_repaired) =
-            canonicalize_counter_gradient_pair(
-                &mut self.stroke.active,
-                &mut self.stroke_active_gradient,
-            );
-        changed |= stroke_active_changed;
-        pair_repaired |= stroke_active_pair_repaired;
-
         (changed, pair_repaired)
     }
+}
+
+fn removed_counter_stroke_matches(
+    stroke: Option<&serde_json::Value>,
+    expected_idle: &str,
+    expected_active: &str,
+) -> bool {
+    let Some(stroke) = stroke else {
+        return expected_idle == "transparent" && expected_active == "transparent";
+    };
+    let Some(stroke) = stroke.as_object() else {
+        return false;
+    };
+    stroke.get("idle").and_then(serde_json::Value::as_str) == Some(expected_idle)
+        && stroke.get("active").and_then(serde_json::Value::as_str) == Some(expected_active)
+}
+
+fn escape_removed_counter_stroke_collision(
+    counter: &mut serde_json::Map<String, serde_json::Value>,
+    removed_stroke: Option<&serde_json::Value>,
+    had_removed_gradient: bool,
+) {
+    let Ok(parsed) =
+        serde_json::from_value::<KeyCounterSettings>(serde_json::Value::Object(counter.clone()))
+    else {
+        return;
+    };
+    let legacy_collision = parsed.matches_legacy_default_snapshot();
+    let previous_collision = parsed.matches_previous_default_snapshot();
+    let custom_stroke = (legacy_collision
+        && !removed_counter_stroke_matches(removed_stroke, "#000000", "#FFFFFF"))
+        || (previous_collision
+            && !removed_counter_stroke_matches(removed_stroke, "transparent", "transparent"));
+    if !(had_removed_gradient || custom_stroke) || !(legacy_collision || previous_collision) {
+        return;
+    }
+    let Some(fill) = counter
+        .get_mut("fill")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    for state in ["idle", "active"] {
+        let Some(color) = fill.get(state).and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        fill.insert(
+            state.to_string(),
+            serde_json::Value::String(compact_canonical_rgba(color)),
+        );
+    }
+}
+
+fn scrub_removed_text_outline_from_position(position: &mut serde_json::Value) -> bool {
+    let Some(position) = position.as_object_mut() else {
+        return false;
+    };
+    let mut changed = position.remove("fontStrokeColor").is_some();
+    changed |= position.remove("activeFontStrokeColor").is_some();
+
+    let Some(counter) = position
+        .get_mut("counter")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return changed;
+    };
+    let removed_stroke = counter.remove("stroke");
+    let had_removed_gradient = counter.remove("strokeIdleGradient").is_some()
+        | counter.remove("strokeActiveGradient").is_some();
+    changed |= removed_stroke.is_some() || had_removed_gradient;
+    escape_removed_counter_stroke_collision(counter, removed_stroke.as_ref(), had_removed_gradient);
+    changed
+}
+
+// 제거된 텍스트 외곽선 필드 정리
+pub(crate) fn scrub_removed_text_outline_fields(value: &mut serde_json::Value) -> bool {
+    let mut changed = false;
+    for collection in POSITION_COLLECTION_FIELDS {
+        let Some(modes) = value
+            .get_mut(collection)
+            .and_then(serde_json::Value::as_object_mut)
+        else {
+            continue;
+        };
+        for position in modes
+            .values_mut()
+            .filter_map(serde_json::Value::as_array_mut)
+            .flatten()
+        {
+            changed |= scrub_removed_text_outline_from_position(position);
+        }
+    }
+    changed
 }
 
 impl KeyPosition {
@@ -2820,11 +2875,11 @@ pub struct SettingsPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_canonical_rgba, note_border_representative_hex, FadePosition, GradientSpec,
-        GraphPosition, GraphStatType, GraphType, KeyCounterAlign, KeyCounterAlignMode,
-        KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition,
-        KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, StatPosition, StatType,
-        MAX_SLOT_KEYS,
+        compact_canonical_rgba, note_border_representative_hex, scrub_removed_text_outline_fields,
+        FadePosition, GradientSpec, GraphPosition, GraphStatType, GraphType, KeyCounterAlign,
+        KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings,
+        KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, StatPosition,
+        StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
     };
     use serde::Deserialize;
 
@@ -2909,7 +2964,7 @@ mod tests {
 
     #[test]
     fn new_surface_gradients_flatten_into_every_position_collection() {
-        let mut position = KeyPosition {
+        let position = KeyPosition {
             note_border_gradient: serde_json::from_value(serde_json::json!({
                 "angle": 90,
                 "stops": [
@@ -2920,15 +2975,6 @@ mod tests {
             .unwrap(),
             ..KeyPosition::default()
         };
-        position.counter.stroke_idle_gradient = serde_json::from_value(serde_json::json!({
-            "angle": 180,
-            "stops": [
-                { "color": "#010203", "pos": 0 },
-                { "color": "#040506", "pos": 1 }
-            ]
-        }))
-        .unwrap();
-
         let values = [
             serde_json::to_value(&position).unwrap(),
             serde_json::to_value(StatPosition {
@@ -2956,7 +3002,6 @@ mod tests {
 
         for value in values {
             assert_eq!(value["noteBorderGradient"]["angle"], 90.0);
-            assert_eq!(value["counter"]["strokeIdleGradient"]["angle"], 180.0);
         }
     }
 
@@ -3283,8 +3328,6 @@ mod tests {
         assert!(legacy.note_gradient.is_none());
         assert!(legacy.note_glow_gradient.is_none());
         assert!(legacy.note_border_gradient.is_none());
-        assert!(legacy.counter.stroke_idle_gradient.is_none());
-        assert!(legacy.counter.stroke_active_gradient.is_none());
 
         let value = serde_json::json!({
             "dx": 0,
@@ -3312,26 +3355,6 @@ mod tests {
                     { "color": "rgba(17,34,51,.5)", "pos": 0 },
                     { "color": "#ABC", "pos": 1 }
                 ]
-            },
-            "counter": {
-                "stroke": {
-                    "idle": "rgba(1,2,3,1)",
-                    "active": "rgba(4,5,6,1)"
-                },
-                "strokeIdleGradient": {
-                    "angle": 90,
-                    "stops": [
-                        { "color": "#010203", "pos": 0 },
-                        { "color": "#040506", "pos": 1 }
-                    ]
-                },
-                "strokeActiveGradient": {
-                    "angle": 180,
-                    "stops": [
-                        { "color": "#040506", "pos": 0 },
-                        { "color": "#070809", "pos": 1 }
-                    ]
-                }
             }
         });
         let position: KeyPosition = serde_json::from_value(value).unwrap();
@@ -3339,12 +3362,47 @@ mod tests {
         assert!(serialized.get("noteGradient").is_some());
         assert!(serialized.get("noteGlowGradient").is_some());
         assert!(serialized.get("noteBorderGradient").is_some());
-        assert!(serialized["counter"].get("strokeIdleGradient").is_some());
-        assert!(serialized["counter"].get("strokeActiveGradient").is_some());
         assert_eq!(
             serde_json::from_value::<KeyPosition>(serialized).unwrap(),
             position
         );
+    }
+
+    #[test]
+    fn removed_text_outline_fields_scrub_every_collection_in_place() {
+        let position = serde_json::json!({
+            "id": "keep-entry",
+            "fontStrokeColor": "#111111",
+            "activeFontStrokeColor": "#222222",
+            "counter": {
+                "stroke": { "idle": "#333333", "active": "#444444" },
+                "strokeIdleGradient": { "stops": [] },
+                "strokeActiveGradient": { "stops": [] },
+                "fill": { "idle": "keep-idle", "active": "keep-active" }
+            }
+        });
+        let mut value = serde_json::json!({
+            "keyPositions": { "4key": [position.clone()] },
+            "statPositions": { "4key": [position.clone()] },
+            "graphPositions": { "4key": [position.clone()] },
+            "knobPositions": { "4key": [position] }
+        });
+
+        assert!(scrub_removed_text_outline_fields(&mut value));
+        for collection in POSITION_COLLECTION_FIELDS {
+            let entries = value[collection]["4key"].as_array().unwrap();
+            assert_eq!(entries.len(), 1);
+            let position = entries[0].as_object().unwrap();
+            assert_eq!(position["id"], "keep-entry");
+            assert!(!position.contains_key("fontStrokeColor"));
+            assert!(!position.contains_key("activeFontStrokeColor"));
+            let counter = position["counter"].as_object().unwrap();
+            assert!(!counter.contains_key("stroke"));
+            assert!(!counter.contains_key("strokeIdleGradient"));
+            assert!(!counter.contains_key("strokeActiveGradient"));
+            assert_eq!(counter["fill"]["idle"], "keep-idle");
+        }
+        assert!(!scrub_removed_text_outline_fields(&mut value));
     }
 
     #[test]
@@ -3513,35 +3571,61 @@ mod tests {
     }
 
     #[test]
-    fn stroke_gradient_blocks_legacy_default_migration_and_syncs_compact_base() {
-        let mut counter: KeyCounterSettings = serde_json::from_value(serde_json::json!({
-            "placement": "inside",
-            "align": "top",
-            "alignMode": "center",
-            "fill": { "idle": "#FFFFFF", "active": "#000000" },
-            "stroke": { "idle": "#000000", "active": "#FFFFFF" },
-            "strokeIdleGradient": {
-                "angle": 90,
-                "stops": [
-                    { "color": "#000000", "pos": 0 },
-                    { "color": "#FFFFFF", "pos": 1 }
-                ]
-            },
-            "gap": 6,
-            "fontSize": 16,
-            "fontWeight": 400,
-            "fontFamily": null,
-            "fontItalic": false,
-            "fontUnderline": false,
-            "fontStrikethrough": false
-        }))
-        .unwrap();
+    fn removed_custom_stroke_evidence_blocks_legacy_default_migration_permanently() {
+        let legacy_counter = |stroke: serde_json::Value, gradient: bool| {
+            let mut counter = serde_json::json!({
+                "placement": "inside",
+                "align": "top",
+                "alignMode": "center",
+                "fill": { "idle": "#FFFFFF", "active": "#000000" },
+                "stroke": stroke,
+                "gap": 6,
+                "fontSize": 16,
+                "fontWeight": 400,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false
+            });
+            if gradient {
+                counter["strokeIdleGradient"] = serde_json::json!({ "stops": [] });
+            }
+            counter
+        };
 
-        assert!(!counter.migrate_legacy_defaults());
-        assert_eq!(counter.stroke.idle, "#000000");
-        assert_eq!(counter.canonicalize_gradient_pairs(), (true, true));
-        assert_eq!(counter.stroke.idle, "rgba(0,0,0,1)");
-        assert!(!counter.migrate_legacy_defaults());
+        for counter in [
+            legacy_counter(
+                serde_json::json!({ "idle": "#123456", "active": "#FFFFFF" }),
+                false,
+            ),
+            legacy_counter(
+                serde_json::json!({ "idle": "#000000", "active": "#FFFFFF" }),
+                true,
+            ),
+        ] {
+            let mut raw =
+                serde_json::json!({ "keyPositions": { "4key": [{ "counter": counter }] } });
+            assert!(scrub_removed_text_outline_fields(&mut raw));
+            let mut parsed: KeyCounterSettings =
+                serde_json::from_value(raw["keyPositions"]["4key"][0]["counter"].clone()).unwrap();
+            assert_eq!(parsed.fill.idle, "rgba(255,255,255,1)");
+            assert!(!parsed.migrate_legacy_defaults());
+            assert_eq!(parsed.align, KeyCounterAlign::Top);
+        }
+
+        let mut raw = serde_json::json!({
+            "keyPositions": { "4key": [{
+                "counter": legacy_counter(
+                    serde_json::json!({ "idle": "#000000", "active": "#FFFFFF" }),
+                    false,
+                )
+            }] }
+        });
+        assert!(scrub_removed_text_outline_fields(&mut raw));
+        let mut parsed: KeyCounterSettings =
+            serde_json::from_value(raw["keyPositions"]["4key"][0]["counter"].clone()).unwrap();
+        assert!(parsed.migrate_legacy_defaults());
+        assert_eq!(parsed.align, KeyCounterAlign::Bottom);
     }
 
     #[derive(Deserialize)]
@@ -3572,7 +3656,6 @@ mod tests {
     #[serde(rename_all = "camelCase")]
     struct PreFeatureCounterSettings {
         fill: KeyCounterColor,
-        stroke: KeyCounterColor,
         placement: KeyCounterPlacement,
         align: KeyCounterAlign,
         align_mode: KeyCounterAlignMode,
@@ -3598,13 +3681,9 @@ mod tests {
                 && !self.font_strikethrough;
             let oldest = self.fill.idle == "#FFFFFF"
                 && self.fill.active == "#000000"
-                && self.stroke.idle == "#000000"
-                && self.stroke.active == "#FFFFFF"
                 && self.font_weight == 400;
             let previous = self.fill.idle == "rgba(121, 121, 121, 0.9)"
                 && self.fill.active == "#FFFFFF"
-                && self.stroke.idle == "transparent"
-                && self.stroke.active == "transparent"
                 && self.font_weight == 700;
             shared && (oldest || previous)
         }
@@ -3648,11 +3727,6 @@ mod tests {
                             { "color": first_stop, "pos": 0 },
                             { "color": "#654321", "pos": 1 }
                         ]
-                    },
-                    "stroke": if legacy_fill == "#FFFFFF" {
-                        serde_json::json!({ "idle": "#000000", "active": "#FFFFFF" })
-                    } else {
-                        serde_json::json!({ "idle": "transparent", "active": "transparent" })
                     },
                     "gap": 6,
                     "fontSize": 16,
