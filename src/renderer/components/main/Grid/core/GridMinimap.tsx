@@ -318,6 +318,10 @@ const GridMinimap = ({
     setPan(mode, newPanX, newPanY);
   };
 
+  // 진행 중 드래그의 복구 함수 - unmount 시에도 전역 커서 원복
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanupRef.current?.(), []);
+
   // 드래그 시작
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -348,10 +352,17 @@ const GridMinimap = ({
       endDragCursor();
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
+      dragCleanupRef.current = null;
     };
 
+    dragCleanupRef.current = handleMouseUp;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    // 드래그 중 포커스 상실·포인터 취소 시에도 커서·드래그 상태 복구
+    window.addEventListener('blur', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
   };
 
   // 키 개수와 플러그인 요소가 모두 없으면 미니맵 숨김

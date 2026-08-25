@@ -270,6 +270,9 @@ export function useGridZoomPan({
     }
   };
 
+  // 진행 중 미들 드래그의 복구 함수 - unmount 시에도 커서·pointer-events 원복
+  const middleDragCleanupRef = useRef<(() => void) | null>(null);
+
   /**
    * 미들 버튼 드래그 핸들러
    */
@@ -347,10 +350,17 @@ export function useGridZoomPan({
       }
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
+      middleDragCleanupRef.current = null;
     };
 
+    middleDragCleanupRef.current = handleMouseUp;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    // 드래그 중 포커스 상실·포인터 취소 시에도 커서·pointer-events 복구
+    window.addEventListener('blur', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
   };
 
   // 핸들러를 ref에 저장하여 이벤트 리스너 안정화
@@ -405,6 +415,7 @@ export function useGridZoomPan({
 
   useEffect(() => {
     return () => {
+      middleDragCleanupRef.current?.();
       if (wheelFrameRef.current !== null) {
         cancelAnimationFrame(wheelFrameRef.current);
         wheelFrameRef.current = null;

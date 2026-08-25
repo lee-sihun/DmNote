@@ -861,12 +861,17 @@ const SoundTrimModal = ({
         host.style.cursor = '';
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', cleanup);
+        window.removeEventListener('blur', cleanup);
+        window.removeEventListener('pointercancel', cleanup);
         middleDragCleanupRef.current = null;
       };
 
       middleDragCleanupRef.current = cleanup;
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', cleanup);
+      // 드래그 중 포커스 상실·포인터 취소 시에도 커서 복구
+      window.addEventListener('blur', cleanup);
+      window.addEventListener('pointercancel', cleanup);
     },
     [continuousInputStrategy],
   );
@@ -1023,11 +1028,16 @@ const SoundTrimModal = ({
       unlockCustomCursor();
       window.removeEventListener('pointermove', registeredMove);
       window.removeEventListener('pointerup', registeredUp);
+      window.removeEventListener('pointercancel', registeredUp);
+      window.removeEventListener('blur', registeredUp);
       handleDragCleanupRef.current = null;
     };
 
     window.addEventListener('pointermove', registeredMove);
     window.addEventListener('pointerup', registeredUp);
+    // 드래그 중 포커스 상실·포인터 취소 시에도 커서·드래그 상태 복구
+    window.addEventListener('pointercancel', registeredUp);
+    window.addEventListener('blur', registeredUp);
   };
 
   const handleSave = async () => {
