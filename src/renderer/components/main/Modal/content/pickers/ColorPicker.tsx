@@ -57,6 +57,8 @@ interface ColorPickerWrapperProps {
   onColorChangeComplete?: (color: ColorValue) => void;
   onClose?: () => void;
   solidOnly?: boolean;
+  /** 색 알파 UI 숨김 - 외부 투명도 조절기가 알파를 대신하는 단색 형식용 */
+  hideColorAlpha?: boolean;
   /** 상태 스위치 아래에 삽입되는 커스텀 헤더 (그라데이션 스톱 에디터) */
   headerSlot?: React.ReactNode;
   /** 팔레트 아래 삽입되는 커스텀 푸터 (형식 셀렉트 바) */
@@ -113,6 +115,7 @@ const ColorPickerWrapper = ({
   onColorChangeComplete,
   onClose,
   solidOnly = false,
+  hideColorAlpha = false,
   headerSlot = undefined,
   footerSlot = undefined,
   gradientSpec = undefined,
@@ -790,7 +793,9 @@ const ColorPickerWrapper = ({
           onChange={handleChange}
           onChangeComplete={handleChangeComplete}
         />
-        {solidOnly && (
+        {/* 단색 형식에서 투명도 조절기가 알파를 대신하면 색 알파 슬라이더 숨김.
+            그라데이션 형식에서는 색 알파가 스톱 알파라 배율과 역할이 다르다 */}
+        {solidOnly && !hideColorAlpha && (
           <AlphaSlider
             color={selectedColor}
             onChange={(color: ColorObject) => {
@@ -844,35 +849,35 @@ const ColorPickerWrapper = ({
           onValueCommit={commitSolidInput}
           previewColor={selectedColor.hex}
           alpha={
-            solidOnly
+            solidOnly && !hideColorAlpha
               ? alpha
               : showOpacityControl
-              ? clampOpacityPercent(opacityPercent as number) / 100
+              ? clampOpacityPercent(resolvedOpacitySolid!) / 100
               : undefined
           }
           alphaPercentValue={
-            solidOnly
+            solidOnly && !hideColorAlpha
               ? alphaPercentInput
               : showOpacityControl
               ? opacityPercentSolidInput
               : undefined
           }
           onAlphaPercentChange={
-            solidOnly
+            solidOnly && !hideColorAlpha
               ? handleAlphaPercentChange
               : showOpacityControl
               ? handleOpacityPercentSolidChange
               : undefined
           }
           onAlphaPercentCommit={
-            solidOnly
+            solidOnly && !hideColorAlpha
               ? commitAlphaPercent
               : showOpacityControl
               ? commitOpacityPercentSolid
               : undefined
           }
           onAlphaPercentFocusChange={
-            solidOnly
+            solidOnly && !hideColorAlpha
               ? setIsAlphaPercentFocused
               : showOpacityControl
               ? (focused: boolean) =>

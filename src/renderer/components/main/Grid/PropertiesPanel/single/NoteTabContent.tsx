@@ -861,6 +861,11 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             {...(pickerFor !== 'border' && {
               // 그라데이션 형식에선 단일 슬라이더가 전역 배율(§9-2),
               // 단색 형식에선 기존 3필드 동일값 커밋을 유지
+              // 단색 형식의 색 알파는 저장 시 hex 변환으로 버려지므로 숨긴다 -
+              // 그라데이션 형식의 색 알파는 스톱 알파라 유지
+              hideColorAlpha:
+                (pickerFor === 'note' ? noteGradientState : glowGradientState)
+                  .format !== 'gradient',
               opacityPercent:
                 pickerFor === 'note' ? localNoteOpacity : localGlowOpacity,
               onOpacityPercentChange: (value: number) => {
