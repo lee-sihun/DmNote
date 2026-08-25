@@ -4,11 +4,16 @@
  */
 
 import React from 'react';
+import type { Signal } from '@preact/signals-react';
 import CountDisplay from './CountDisplay';
+import SignalCountDisplay from './SignalCountDisplay';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 
 interface InsideCounterLayoutProps {
-  count: number;
+  // 오버레이는 countSignal(구독 격리), 에디터 프리뷰는 count(숫자) — 호출부는 둘 중 하나로 고정.
+  // 한 마운트에서 경로가 바뀌면 CountDisplay가 리마운트되어 팝 애니메이션 1회가 유실된다
+  count?: number;
+  countSignal?: Signal<number>;
   labelText: string;
   textStyle: React.CSSProperties;
   active: boolean;
@@ -18,6 +23,7 @@ interface InsideCounterLayoutProps {
 
 const InsideCounterLayout = ({
   count,
+  countSignal,
   labelText,
   textStyle,
   active,
@@ -37,26 +43,33 @@ const InsideCounterLayout = ({
     ? counterSettings.gap
     : 4;
 
-  const counterElement = (
-    <CountDisplay
+  const counterProps = {
+    fillColor,
+    fillGradient,
+    strokeColor,
+    active,
+    fontSize: counterSettings.fontSize,
+    fontFamily: counterSettings.fontFamily,
+    fontWeight: counterSettings.fontWeight,
+    fontItalic: counterSettings.fontItalic,
+    fontUnderline: counterSettings.fontUnderline,
+    fontStrikethrough: counterSettings.fontStrikethrough,
+    animationEnabled: counterSettings.animation.enabled,
+    animationBezier: counterSettings.animation.bezier,
+    animationScale: counterSettings.animation.scale,
+    animationDurationMs: counterSettings.animation.durationMs,
+    useInlineStyles,
+  };
+
+  // 이 파일은 컴파일 대상 — 시그널 .value를 여기서 읽지 말 것 (SignalCountDisplay가 구독)
+  const counterElement = countSignal ? (
+    <SignalCountDisplay
       key="counter"
-      count={count}
-      fillColor={fillColor}
-      fillGradient={fillGradient}
-      strokeColor={strokeColor}
-      active={active}
-      fontSize={counterSettings.fontSize}
-      fontFamily={counterSettings.fontFamily}
-      fontWeight={counterSettings.fontWeight}
-      fontItalic={counterSettings.fontItalic}
-      fontUnderline={counterSettings.fontUnderline}
-      fontStrikethrough={counterSettings.fontStrikethrough}
-      animationEnabled={counterSettings.animation.enabled}
-      animationBezier={counterSettings.animation.bezier}
-      animationScale={counterSettings.animation.scale}
-      animationDurationMs={counterSettings.animation.durationMs}
-      useInlineStyles={useInlineStyles}
+      countSignal={countSignal}
+      {...counterProps}
     />
+  ) : (
+    <CountDisplay key="counter" count={count ?? 0} {...counterProps} />
   );
 
   const nameElement = (

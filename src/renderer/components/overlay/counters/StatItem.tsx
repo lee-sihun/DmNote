@@ -54,9 +54,10 @@ const StatItem = React.memo(
       counterSettings.enabled &&
       counterSettings.placement === 'inside';
 
-    const counterValue = showInsideCounter
-      ? (getStatValueSignal(statType as StatItemType).value ?? 0) | 0
-      : 0;
+    // 시그널 객체만 넘기고 .value는 읽지 않음 — KPS 틱/press마다 StatItem 전체가 리렌더되지 않도록
+    const counterSignal = showInsideCounter
+      ? getStatValueSignal(statType as StatItemType)
+      : undefined;
 
     if (position?.hidden || isTransparent) return null;
 
@@ -82,9 +83,9 @@ const StatItem = React.memo(
             style={imageStyle}
             draggable={false}
           />
-        ) : showInsideCounter ? (
+        ) : showInsideCounter && counterSignal ? (
           <InsideCounterLayout
-            count={counterValue}
+            countSignal={counterSignal}
             labelText={labelText}
             textStyle={textStyle}
             active={active}

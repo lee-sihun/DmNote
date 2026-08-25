@@ -8,7 +8,7 @@ import {
 } from '@utils/cubicBezier';
 import { getCounterTypographyStyle } from '@utils/core/counterStyles';
 
-interface CountDisplayProps {
+export interface CountDisplayProps {
   count: number;
   fillColor?: string;
   fillGradient?: GradientSpec | null;

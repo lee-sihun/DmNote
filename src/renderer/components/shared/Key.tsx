@@ -422,10 +422,10 @@ export const Key = React.memo(function Key({
     counterSettings.enabled &&
     counterSettings.placement === 'inside';
 
+  // 시그널 객체만 넘기고 .value는 읽지 않음 — 카운터 갱신이 Key 전체 리렌더를 만들지 않도록
   const counterSignal = showInsideCounter
     ? getKeyCounterSignal(mode ?? '', globalKey)
     : undefined;
-  const counterValue = counterSignal?.value ?? 0;
 
   return (
     <div
@@ -449,9 +449,9 @@ export const Key = React.memo(function Key({
           style={imageStyle}
           draggable={false}
         />
-      ) : showInsideCounter ? (
+      ) : showInsideCounter && counterSignal ? (
         <InsideCounterLayout
-          count={counterValue}
+          countSignal={counterSignal}
           labelText={labelText}
           textStyle={textStyle}
           active={active}
