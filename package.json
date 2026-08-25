@@ -23,6 +23,7 @@
     "tauri:build:portable:webview2-fixed:143": "node scripts/build-portable-win.js --major 143 --arch x64",
     "tauri:build:single-exe:webview2-fixed:143": "node scripts/build-single-exe-win.js --major 143 --arch x64",
     "tauri:build:mac:universal": "tauri build --target universal-apple-darwin",
+    "sign:mac-helper": "bash scripts/sign-macos-helper.sh",
     "//": "버전 업데이트: patch(1.4.0->1.4.1), minor(1.4.0->1.5.0), major(1.4.0->2.0.0)",
     "sync-version": "node scripts/sync-version.js",
     "version": "npm run sync-version && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml README.md docs/readme_en.md docs/readme_zh-cn.md",
