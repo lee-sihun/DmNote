@@ -6,11 +6,8 @@ import { useSignals } from '@preact/signals-react/runtime';
 import { isMac } from '@utils/core/platform';
 import { useDraggable } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
-import {
-  createDefaultCounterSettings,
-  normalizeCounterSettings,
-  type KeyCounterSettings,
-} from '@src/types/key/keys';
+import type { KeyCounterSettings } from '@src/types/key/keys';
+import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -114,9 +111,7 @@ const DraggableKey = React.memo(
     const displayName = keyName;
     const { dx, dy, width, height = 60, className, counter } = position;
 
-    const counterSettings = normalizeCounterSettings(
-      counter ?? createDefaultCounterSettings(),
-    );
+    const counterSettings = useCounterSettings(counter);
 
     const showInsideCounter =
       counterEnabled &&
@@ -418,11 +413,10 @@ export const Key = React.memo(function Key({
     warmupImageSource(activeImageSrc);
   }, [inactiveImageSrc, activeImageSrc]);
 
+  const counterSettings = useCounterSettings(position?.counter);
+
   if (isTransparent) return null;
 
-  const counterSettings = normalizeCounterSettings(
-    position?.counter ?? createDefaultCounterSettings(),
-  );
   const showInsideCounter =
     counterEnabled &&
     counterSettings.enabled &&
