@@ -30,7 +30,9 @@ const syncCacheOwner = (): void => {
  * Normalizes a raw counter config into a full `KeyCounterSettings` object.
  * Returns the default settings when the input is falsy.
  * 같은 입력 객체에는 같은 결과 객체를 돌려주므로 반환값을 변형하지 말 것.
- * 훅이 아님 — 콜백·조건문 안에서는 이 이름으로 호출
+ * 훅이 아님 — 콜백·조건문 안에서는 이 이름으로 호출.
+ * 결과가 getDefaults() 스냅샷에도 의존하므로 React Compiler 대상 컴포넌트에서
+ * 입력 객체만으로 메모되면 defaults 전환을 놓친다 — 'use no memo' 파일에서만 사용
  */
 export function resolveCounterSettings(
   counter: unknown | undefined,

@@ -4,6 +4,7 @@
 // count 변경당 Element.animate 호출. jsdom이라 페인트/합성 비용은 포함되지 않으며
 // React Compiler도 적용되지 않는다(vitest 설정에 plugin-react 없음).
 import React, { act } from 'react';
+import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
@@ -84,14 +85,23 @@ benchmarkDescribe('OVL-01 오버레이 키 카운터 핫패스', () => {
   });
 
   afterEach(() => {
-    act(() => root.unmount());
-    host.remove();
-    frames.restore();
-    animate.restore();
+    // 패치된 performance.now·rAF 스텁이 워커에 남지 않도록 실패 시에도 복원
+    try {
+      act(() => root.unmount());
+      host.remove();
+    } finally {
+      frames.restore();
+      animate.restore();
+      globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
   });
 
   it('press 버스트의 이벤트·커밋·프레임 작업량 분포를 기록한다', async () => {
-    expect(ITERATIONS).toBeGreaterThan(0);
+    expect(Number.isInteger(ITERATIONS) && ITERATIONS > 0).toBe(true);
+    expect(Number.isInteger(WARMUP_ITERATIONS) && WARMUP_ITERATIONS >= 0).toBe(
+      true,
+    );
+    expect(Number.isInteger(BURST_SIZE) && BURST_SIZE > 0).toBe(true);
     expect(KEY_COUNTS.length).toBeGreaterThan(0);
     const cases = [];
 
@@ -207,6 +217,19 @@ benchmarkDescribe('OVL-01 오버레이 키 카운터 핫패스', () => {
       }
     }
 
+    // 어떤 코드 상태에서 측정했는지 기록 — dirty 파일 목록으로 런타임/하네스 차이를 구분
+    const git = (...args: string[]): string =>
+      execFileSync('git', args, {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+      });
+    const gitHead = git('rev-parse', '--short', 'HEAD').trim();
+    // porcelain 첫 열은 공백일 수 있어 전체 trim 금지 — 줄 단위로 상태 열 3자만 제거
+    const gitDirtyFiles = git('status', '--porcelain', '--untracked-files=no')
+      .split('\n')
+      .filter((line) => line.length > 3)
+      .map((line) => line.slice(3));
+
     const outputPath = resolve(process.cwd(), OUTPUT_PATH);
     await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(
@@ -219,10 +242,14 @@ benchmarkDescribe('OVL-01 오버레이 키 카운터 핫패스', () => {
           measuredAt: new Date().toISOString(),
           node: process.version,
           environment: 'jsdom',
+          gitHead,
+          gitDirtyFiles,
           notes: [
             '페인트·합성 비용 미포함 (jsdom)',
             'React Compiler 미적용 (vitest에 plugin-react 없음)',
-            'Element.animate는 기록형 스텁 — 호출 수만 집계',
+            'Element.animate는 no-op 스텁 — animateCallsPerPress는 호출 수, WAAPI 분기의 프레임 비용은 0으로 나오며 측정값이 아님',
+            'rafCallbacksPerFrame·frameJsMs는 rAF 경로(baseline)에서만 실제 작업량을 뜻함',
+            '모든 키가 같은 counter 객체를 공유 — identity 캐시 최선 케이스. 프로덕션 identity 안정성은 별도 확인 필요',
           ],
           cases,
         },

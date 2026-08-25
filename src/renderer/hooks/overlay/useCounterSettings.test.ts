@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { useCounterSettings } from './useCounterSettings';
-import { initDefaults } from '@src/renderer/defaults';
+import { getDefaults, initDefaults } from '@src/renderer/defaults';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
@@ -18,6 +18,12 @@ const rawCounter = () => ({
 });
 
 describe('useCounterSettings 캐시', () => {
+  // defaults 전역을 건드리는 테스트가 같은 파일의 다른 테스트로 새지 않도록 복원
+  const originalDefaults = getDefaults();
+  afterEach(() => {
+    initDefaults(originalDefaults as DefaultsPayload);
+  });
+
   it('같은 counter 객체에는 같은 정규화 결과를 재사용한다', () => {
     const counter = rawCounter();
     const first = useCounterSettings(counter);
