@@ -470,7 +470,6 @@ export const Key = React.memo(function Key({
 
   if (isTransparent) return null;
 
-
   const showInsideCounter =
     counterEnabled &&
     counterSettings.enabled &&
