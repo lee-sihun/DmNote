@@ -59,6 +59,8 @@
     "benchmark:interaction:color-track": "node scripts/run-interaction-color-track.mjs",
     "benchmark:interaction:grid-keyboard:raw": "cross-env DMN_GRID_KEYBOARD_BENCHMARK=1 vitest run src/renderer/benchmarks/gridKeyboard.performance.test.tsx --reporter=verbose",
     "benchmark:interaction:grid-keyboard": "node scripts/run-interaction-grid-keyboard.mjs",
+    "benchmark:interaction:overlay-counter:raw": "cross-env DMN_OVERLAY_COUNTER_BENCHMARK=1 vitest run src/renderer/benchmarks/overlayCounter.performance.test.tsx --reporter=verbose",
+    "benchmark:interaction:overlay-counter": "node scripts/run-interaction-overlay-counter.mjs",
     "benchmark:interaction:panel-toggle:raw": "cross-env DMN_PANEL_TOGGLE_BENCHMARK=1 vitest run src/renderer/benchmarks/panelToggle.performance.test.tsx --reporter=verbose",
     "benchmark:interaction:panel-toggle": "node scripts/run-interaction-panel-toggle.mjs",
     "benchmark:interaction:plugin-input:raw": "cross-env DMN_PLUGIN_INPUT_BENCHMARK=1 vitest run src/renderer/benchmarks/pluginInput.performance.test.ts --reporter=verbose",
