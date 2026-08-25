@@ -1412,10 +1412,22 @@ fn canonicalize_optional_gradient_pair(
     base: &mut Option<String>,
     gradient: &mut Option<GradientSpec>,
 ) -> (bool, bool) {
-    let Some(gradient) = gradient else {
+    let Some(current) = gradient.as_mut() else {
         return (false, false);
     };
 
+    // 공백 stop 색은 대표색 동기와 공백 색 정규화가 서로 되돌려 로드 복구가
+    // 수렴하지 않으므로 그라데이션 자체를 내린다 (note 계열의 invalid stop 처리와 동일)
+    if current
+        .stops
+        .iter()
+        .any(|stop| stop.color.trim().is_empty())
+    {
+        *gradient = None;
+        return (true, true);
+    }
+
+    let gradient = current;
     let mut changed = gradient.canonicalize();
     let representative = gradient
         .stops

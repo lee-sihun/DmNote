@@ -147,11 +147,17 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
 }
 
 fn invalid_gradient_error(value: Option<&serde_json::Value>) -> Option<String> {
-    value.and_then(|value| {
-        serde_json::from_value::<Option<GradientSpec>>(value.clone())
-            .err()
-            .map(|error| error.to_string())
-    })
+    let value = value?;
+    let gradient = match serde_json::from_value::<Option<GradientSpec>>(value.clone()) {
+        Ok(gradient) => gradient,
+        Err(error) => return Some(error.to_string()),
+    }?;
+    // 공백 stop 색은 로드 복구가 수렴하지 않는 손상 값이라 문에서 거부
+    gradient
+        .stops
+        .iter()
+        .position(|stop| stop.color.trim().is_empty())
+        .map(|index| format!("stops[{index}].color must not be blank"))
 }
 
 fn invalid_note_gradient_error(
@@ -1997,6 +2003,51 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn general_gradient_preset_rejects_blank_stop_color_with_index() {
+        // 공백 stop은 로드 복구가 수렴하지 않는 손상 값 - 문에서 거부
+        for field in ["fontGradient", "backgroundGradient", "borderGradient"] {
+            let preset = serde_json::json!({
+                "keyPositions": {
+                    "custom mode": [{
+                        (field): {
+                            "angle": 45,
+                            "stops": [
+                                { "color": "   ", "pos": 0 },
+                                { "color": "#445566", "pos": 1 }
+                            ]
+                        }
+                    }]
+                }
+            });
+
+            assert_eq!(
+                invalid_position_style_detail(&preset).as_deref(),
+                Some(
+                    format!(
+                        "keyPositions[\"custom mode\"][0].{field}: stops[0].color must not be blank"
+                    )
+                    .as_str()
+                )
+            );
+        }
+
+        let valid = serde_json::json!({
+            "keyPositions": {
+                "custom mode": [{
+                    "fontGradient": {
+                        "angle": 45,
+                        "stops": [
+                            { "color": "#112233", "pos": 0 },
+                            { "color": "#445566", "pos": 1 }
+                        ]
+                    }
+                }]
+            }
+        });
+        assert_eq!(invalid_position_style_detail(&valid), None);
     }
 
     #[test]

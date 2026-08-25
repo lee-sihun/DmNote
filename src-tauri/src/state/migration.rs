@@ -2846,6 +2846,52 @@ mod tests {
     }
 
     #[test]
+    fn blank_font_gradient_stop_repairs_once_and_converges_on_reload() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-blank-font-gradient-stop-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+        let seeded = load_store_from_path(&path).unwrap();
+        std::fs::write(&path, serde_json::to_vec_pretty(&seeded.data).unwrap()).unwrap();
+        let canonical = load_store_from_path(&path).unwrap();
+        assert!(!canonical.needs_persist);
+        assert!(!canonical.repaired);
+
+        // 공백 첫 stop: 대표색 동기와 공백 정규화가 서로 되돌려 복구가 반복되던 입력
+        let mut raw = serde_json::to_value(&canonical.data).unwrap();
+        raw["keyPositions"]["4key"][0]["fontGradient"] = serde_json::json!({
+            "angle": 45,
+            "stops": [
+                { "color": "   ", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        // 첫 로드는 그라데이션을 내리고 한 번만 복구로 기록
+        let repaired = load_store_from_path(&path).unwrap();
+        assert!(repaired.needs_persist);
+        assert!(repaired.repaired);
+        assert!(repaired.data.key_positions["4key"][0]
+            .font_gradient
+            .is_none());
+
+        // 저장 후 재로드는 무변경 - repaired 반복으로 자산 sweep이 계속 막히지 않게
+        std::fs::write(&path, serde_json::to_vec_pretty(&repaired.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(reloaded.data, repaired.data);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn knob_note_border_gradient_and_rgba_migration_converge_in_either_order() {
         let mut knob = KnobPosition {
             axis_id: "axis".to_string(),
