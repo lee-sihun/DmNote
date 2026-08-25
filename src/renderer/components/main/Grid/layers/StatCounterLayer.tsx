@@ -36,35 +36,27 @@ interface StatCounterLayerProps {
   selectedElements?: SelectedElement[];
 }
 
-// 프리뷰로 위치 하나가 바뀌면 컴파일러가 map 전체를 한 단위로 캐시하고 있어
-// 목록이 통째로 다시 돈다. 이때 leaf를 memo로 격리하지 않으면 안 바뀐 항목까지
-// Zod 정규화를 다시 돌린다 - useCounterSettings는 use 접두사라 컴파일러가
-// 훅으로 보고 절대 메모하지 않는다.
-// 위치 객체는 프리뷰 합성에서 바뀐 대상만 새로 만들어지므로 얕은 비교로 충분하다.
-// 그라디언트 편집 세션은 leaf가 직접 구독하므로 memo가 막지 않는다
-const StatCounter = React.memo(function StatCounter({
+interface StatCounterBodyProps {
+  position: CounterPosition;
+  previewValue: number;
+  counterSettings: ReturnType<typeof useCounterSettings>;
+  previewSession: ReturnType<typeof useGradientPreviewSession>;
+  previewActive: boolean;
+}
+
+// outside 게이트 뒤에서만 마운트 - 글리프 측정 훅이 span 생성과 항상 함께 돈다
+const StatCounterBody = ({
   position,
-  previewValue = 0,
-  isInBatchSelection = false,
-}: StatCounterProps) {
+  previewValue,
+  counterSettings,
+  previewSession,
+  previewActive,
+}: StatCounterBodyProps) => {
   const dx = Number.isFinite(position?.dx) ? position.dx! : 0;
   const dy = Number.isFinite(position?.dy) ? position.dy! : 0;
   const width = Number.isFinite(position?.width) ? position.width! : 60;
   const height = Number.isFinite(position?.height) ? position.height! : 60;
 
-  const counterSettings = useCounterSettings(position?.counter);
-  // 편집 세션 일시 페인트 — 다른 표면을 편집해도 같은 대기/입력 상태 유지
-  const previewSession = useGradientPreviewSession(
-    'stat',
-    position.id,
-    isInBatchSelection,
-  );
-  // 상태 프리뷰는 전용 스토어가 유일한 원천 (세션은 spec 페인트 전용)
-  const previewActive = useEditStatePreviewActive(
-    'stat',
-    position.id,
-    isInBatchSelection,
-  );
   const previewFillSpec =
     previewSession?.surface === 'counterFill' ? previewSession.spec : null;
 
@@ -100,10 +92,6 @@ const StatCounter = React.memo(function StatCounter({
     'counterFill',
     { x: dx, y: dy },
   );
-
-  if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
-    return null;
-  }
 
   const style = computeOutsideStyle(
     counterSettings.align,
@@ -157,6 +145,46 @@ const StatCounter = React.memo(function StatCounter({
         {count}
       </span>
     </div>
+  );
+};
+
+// 프리뷰로 위치 하나가 바뀌면 컴파일러가 map 전체를 한 단위로 캐시하고 있어
+// 목록이 통째로 다시 돈다. 이때 leaf를 memo로 격리하지 않으면 안 바뀐 항목까지
+// Zod 정규화를 다시 돌린다 - useCounterSettings는 use 접두사라 컴파일러가
+// 훅으로 보고 절대 메모하지 않는다.
+// 위치 객체는 프리뷰 합성에서 바뀐 대상만 새로 만들어지므로 얕은 비교로 충분하다.
+// 그라디언트 편집 세션은 leaf가 직접 구독하므로 memo가 막지 않는다
+const StatCounter = React.memo(function StatCounter({
+  position,
+  previewValue = 0,
+  isInBatchSelection = false,
+}: StatCounterProps) {
+  const counterSettings = useCounterSettings(position?.counter);
+  // 편집 세션 일시 페인트 — 다른 표면을 편집해도 같은 대기/입력 상태 유지
+  const previewSession = useGradientPreviewSession(
+    'stat',
+    position.id,
+    isInBatchSelection,
+  );
+  // 상태 프리뷰는 전용 스토어가 유일한 원천 (세션은 spec 페인트 전용)
+  const previewActive = useEditStatePreviewActive(
+    'stat',
+    position.id,
+    isInBatchSelection,
+  );
+
+  if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
+    return null;
+  }
+
+  return (
+    <StatCounterBody
+      position={position}
+      previewValue={previewValue}
+      counterSettings={counterSettings}
+      previewSession={previewSession}
+      previewActive={previewActive}
+    />
   );
 });
 
