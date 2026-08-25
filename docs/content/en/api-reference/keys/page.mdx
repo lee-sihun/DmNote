@@ -405,10 +405,11 @@ Note bodies and glows support the same format. When `noteGradient` or
 `noteOpacity`/`noteGlowOpacity` acts as a global multiplier (100 when absent),
 and the legacy fields (the two-color top/bottom object and the per-end
 opacities) stay synced as approximations for older versions. Stop color
-restrictions match the border. Writing a legacy color value or per-end opacity
-patch removes the new field and returns the surface to legacy semantics. Use
-the `{ color, opacity, gradient }` form of `notePaint`/`noteGlowPaint` to
-record the transition, multiplier, and synced values atomically.
+restrictions match the border. Writing an element without the gradient field
+(or with it set to `null`) returns that surface to legacy semantics. To
+switch a surface in one write, set the gradient field and its multiplier
+together in the same `updatePositions` call; the solid field and the legacy
+approximations are derived and synced on save.
 
 `shadow` and `activeShadow` control the idle and pressed shadows independently.
 When omitted, the built-in shadow remains unchanged. Store a spec with
