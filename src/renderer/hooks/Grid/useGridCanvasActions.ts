@@ -34,8 +34,6 @@ import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_ACTIVE_BG,
   DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_ACTIVE_FONT,
-  DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
 } from '@utils/core/elementDefaults';
 
@@ -356,8 +354,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       className: '',
       counter: createDefaultCounterSettings(),
       backgroundColor: DEFAULT_ELEMENT_BG,
-      borderColor: DEFAULT_ELEMENT_HAIRLINE,
-      borderWidth: 1,
       borderRadius: DEFAULT_ELEMENT_RADIUS,
       fontColor: DEFAULT_ELEMENT_FONT,
       activeFontColor: DEFAULT_ELEMENT_FONT,
@@ -425,9 +421,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       counter: createDefaultCounterSettings(),
       backgroundColor: DEFAULT_ELEMENT_BG,
       activeBackgroundColor: DEFAULT_ELEMENT_ACTIVE_BG,
-      borderColor: DEFAULT_ELEMENT_FONT,
-      activeBorderColor: DEFAULT_ELEMENT_ACTIVE_FONT,
-      borderWidth: 0,
     };
     void addKnobAt(selectedKeyType, position).catch(reportElementOpError);
   };

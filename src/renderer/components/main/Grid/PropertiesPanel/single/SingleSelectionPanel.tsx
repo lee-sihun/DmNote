@@ -33,14 +33,15 @@ import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { axisEventBus } from '@utils/core/axisEventBus';
 import {
   DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
+  DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_ACTIVE_BG,
-  DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_ACTIVE_FONT,
-  DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
@@ -401,6 +402,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
     (singleGraphPosition.statType as StatItemType) || 'kps';
   const graphDefaultTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
   const graphTitle = singleGraphPosition.layerName || graphDefaultTitle;
+  // 미지정 테두리는 앱 기본 립을 그대로 보여 준다 (렌더와 같은 해석기)
+  const graphBorderDisplay = resolveElementBorder(singleGraphPosition, false);
 
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
@@ -642,12 +645,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 label={t('propertiesPanel.borderColor') || 'Border Color'}
               >
                 <ColorInput
-                  value={
-                    singleGraphPosition.borderColor || DEFAULT_ELEMENT_HAIRLINE
-                  }
+                  value={graphBorderDisplay.color}
                   onChange={() => {}}
                   onChangeComplete={() => {}}
-                  gradientValue={singleGraphPosition.borderGradient ?? null}
+                  gradientValue={graphBorderDisplay.gradient}
                   canvasAnchor={
                     singleGraphPosition.id &&
                     isNativeElementId(singleGraphPosition.id)
@@ -925,9 +926,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   // 대기/입력 색상 (키 패널과 동일한 기본값/전환 로직)
   const DEFAULT_KNOB_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
-  const DEFAULT_KNOB_BORDER_COLOR = DEFAULT_ELEMENT_FONT;
+  const DEFAULT_KNOB_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
   const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
-  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
+  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
 
   type KnobColorTarget = 'backgroundColor' | 'borderColor';
   type KnobColorProperty =
@@ -1020,6 +1021,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   // ── 그라데이션 배선 (키 패널과 동일 패턴) — 단색 커밋도 이 경로로 통합 ──
 
+  // 테두리 미지정이면 렌더와 같은 기본 립을 편집 대상으로 보여 준다
+  const defaultKnobBorderGradientFor = (
+    active: boolean,
+  ): GradientSpec | null => {
+    const resolved = resolveElementBorder(singleKnobPosition, active);
+    return resolved.isDefault ? resolved.gradient : null;
+  };
+
   const storedGradientOf = (prop: KnobColorProperty): GradientSpec | null => {
     switch (prop) {
       case 'backgroundColor':
@@ -1027,9 +1036,15 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       case 'activeBackgroundColor':
         return singleKnobPosition.activeBackgroundGradient ?? null;
       case 'borderColor':
-        return singleKnobPosition.borderGradient ?? null;
+        return (
+          singleKnobPosition.borderGradient ??
+          defaultKnobBorderGradientFor(false)
+        );
       case 'activeBorderColor':
-        return singleKnobPosition.activeBorderGradient ?? null;
+        return (
+          singleKnobPosition.activeBorderGradient ??
+          defaultKnobBorderGradientFor(true)
+        );
       default:
         return null;
     }
@@ -1356,7 +1371,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 label={t('propertiesPanel.borderWidth') || '테두리 두께'}
               >
                 <NumberInput
-                  value={singleKnobPosition.borderWidth ?? 0}
+                  value={
+                    singleKnobPosition.borderWidth ??
+                    DEFAULT_ELEMENT_BORDER_WIDTH
+                  }
                   onChange={(value) =>
                     onStylePropertyCommit?.({
                       property: 'borderWidth',

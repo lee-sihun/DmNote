@@ -33,7 +33,12 @@ CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[d
   With **Inline Styles Priority** disabled, property-panel colors, gradients,
   borders, typography, and shadows are low-priority defaults only. Setting
   `--key-bg` automatically removes a saved background gradient. Setting
-  `--key-border` removes the saved gradient border ring and its spacing. Use
+  `--key-border` removes the saved gradient border ring and its spacing. The
+  default border of an element with no border set is also a 1px gradient ring
+  that fades from top to bottom, so it is replaced the same way. The ring is a
+  child element, so a plain `border` rule on the key only changes the root
+  border; reset it with `--key-border` or hide
+  `[data-key-element] > [data-gradient-border-ring]`. Use
   `--key-bg-image` or the standard `background` property for a custom gradient.
   Setting `--key-text-color` (or a plain `color` rule on the label) removes a
   saved text gradient. For a custom text gradient, set `--key-text-image`
@@ -105,6 +110,8 @@ To create a CSS fill gradient, set all three fill variables:
 
 CSS variables available for graph elements.
 Disable **Inline Styles Priority** on the graph to control these via CSS.
+A graph with no border set draws the same default 1px gradient ring as keys;
+`--graph-border` resets it together with its spacing.
 
 | Variable               | Description                        | Type       | Example                              |
 | ---------------------- | ---------------------------------- | ---------- | ------------------------------------ |
@@ -130,7 +137,9 @@ Disable **Inline Styles Priority** on the graph to control these via CSS.
 
 Disable **Inline Styles Priority** on a knob to use these variables. The custom
 class is on the position wrapper, so target `.knob-class [data-knob-element]`
-when applying standard properties directly to the visible surface.
+when applying standard properties directly to the visible surface. A knob with
+no border set draws the same default 1px gradient ring as keys; `--knob-border`
+resets it together with its spacing.
 
 | Variable               | Description                        | Type       | Example                              |
 | ---------------------- | ---------------------------------- | ---------- | ------------------------------------ |
@@ -232,6 +241,21 @@ property declaration:
 [data-state='active'] {
   background: #ff2b80 !important;
   box-shadow: 0px 0px 8px #ff2b80 !important;
+}
+```
+
+`border: none !important` clears only the root border. The gradient border
+ring (the app default and any saved ring) is a child element, so reset it with
+the border variable, which needs no `!important`, or hide the ring directly:
+
+```css
+.my-key {
+  --key-border: none;
+}
+
+/* or */
+.my-key [data-gradient-border-ring] {
+  display: none;
 }
 ```
 

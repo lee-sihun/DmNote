@@ -15,15 +15,13 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BG,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_ACTIVE_FONT,
-  DEFAULT_ELEMENT_BORDER,
-  DEFAULT_ELEMENT_ACTIVE_BORDER,
-  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
   DEFAULT_ELEMENT_FONT_BOLD,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
 import {
   elementShadowToCss,
   resolveElementShadow,
@@ -160,12 +158,6 @@ export function computeKeyElementStyles({
     },
   );
   const stateBgPair = active ? activeBgPair : idleBgPair;
-  const borderPair = resolveStatePair(
-    active,
-    { color: borderColor, gradient: position.borderGradient },
-    { color: activeBorderColor, gradient: position.activeBorderGradient },
-  );
-  const stateBorderColor = borderPair.color;
   const fontPair = resolveStatePair(
     active,
     { color: fontColor, gradient: position.fontGradient },
@@ -197,9 +189,6 @@ export function computeKeyElementStyles({
     : active
     ? DEFAULT_ELEMENT_ACTIVE_BG
     : DEFAULT_ELEMENT_BG;
-  const defaultBorderColor = active
-    ? DEFAULT_ELEMENT_ACTIVE_BORDER
-    : DEFAULT_ELEMENT_BORDER;
   const defaultTextColor =
     active && !activeImageSrc
       ? DEFAULT_ELEMENT_ACTIVE_FONT
@@ -207,31 +196,41 @@ export function computeKeyElementStyles({
 
   // 그라데이션 모드 — 대표 단색은 칠하지 않음 (반투명 스톱 이중 합성 방지)
   const bgGradient = rootHasImage ? null : rootBgPair.gradient ?? null;
-  const borderGradientSpec = borderPair.gradient ?? null;
 
-  // 보더 판정 — 명시값 우선, 아무 값도 없으면 기본 1px 헤어라인이 표면 분리
-  // 담당(패널 표시값과 일치). 두께 0은 명시적 무보더, 이미지 키는 헤어라인 제외
-  const hasExplicitBorder =
-    borderWidth != null ? borderWidth > 0 : stateBorderColor != null;
-  const showDefaultHairline =
-    !hasExplicitBorder && borderWidth == null && !hasCurrentImage;
-  const explicitBorder = `${
-    borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH
-  }px solid ${stateBorderColor || defaultBorderColor}`;
+  // 보더 판정은 공용 해석기 - 패널 표시값과 같은 규칙. 이미지 키는 기본 립 제외
+  const borderFields = {
+    borderColor,
+    activeBorderColor,
+    borderGradient: position.borderGradient,
+    activeBorderGradient: position.activeBorderGradient,
+    borderWidth,
+  };
+  const resolvedElementBorder = resolveElementBorder(borderFields, active, {
+    suppressDefault: hasCurrentImage,
+  });
+  const borderGradientSpec = resolvedElementBorder.gradient;
+  const gradientRingWidth = resolvedElementBorder.width;
+  const showBorderRing =
+    borderGradientSpec != null && resolvedElementBorder.width > 0;
   const resolvedBorder =
-    hasExplicitBorder || showDefaultHairline ? explicitBorder : 'none';
-  // 그라데이션 보더는 명시 보더와 같은 두께 규칙 — width 0은 명시적 비활성
-  const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
-  const ringEnabled = borderWidth != null ? borderWidth > 0 : true;
-  const showBorderRing = borderGradientSpec != null && ringEnabled;
-  // 한쪽 상태만 링이어도 반대 상태에 같은 패딩을 예약 — 눌림 시 콘텐츠 박스
-  // 이동 방지. 실보더·헤어라인 상태는 보더가 이미 같은 인셋을 만들므로 제외
-  const pairHasRing =
-    ringEnabled &&
-    (position.borderGradient != null || position.activeBorderGradient != null);
+    !showBorderRing && resolvedElementBorder.width > 0
+      ? `${resolvedElementBorder.width}px solid ${resolvedElementBorder.color}`
+      : 'none';
+  // 반대 상태만 링이고 이 상태는 보더가 없으면 같은 패딩을 예약 - 눌림 시
+  // 콘텐츠 박스 이동 방지. 보더가 있는 상태는 이미 같은 인셋을 만든다
+  const otherStateBorder = resolveElementBorder(borderFields, !active, {
+    suppressDefault: Boolean(
+      active ? inactiveImageSrc : activeImageSrc || inactiveImageSrc,
+    ),
+  });
   const reserveRingPadding =
     showBorderRing ||
-    (pairHasRing && !hasExplicitBorder && !showDefaultHairline);
+    (resolvedElementBorder.width <= 0 &&
+      otherStateBorder.gradient != null &&
+      otherStateBorder.width > 0);
+  const reservedRingWidth = showBorderRing
+    ? gradientRingWidth
+    : otherStateBorder.width;
 
   const textDecorations: string[] = [];
   if (fontUnderline) textDecorations.push('underline');
@@ -279,7 +278,7 @@ export function computeKeyElementStyles({
               ? `${borderRadius}px`
               : `${DEFAULT_ELEMENT_RADIUS}px`,
           border: showBorderRing ? 'none' : resolvedBorder,
-          ...(reserveRingPadding ? { padding: `${gradientRingWidth}px` } : {}),
+          ...(reserveRingPadding ? { padding: `${reservedRingWidth}px` } : {}),
           color: stateFontColor || defaultTextColor,
           fontSize: fontSize ? `${fontSize}px` : undefined,
           fontFamily: fontFamily ? resolvedFontFamily : undefined,
@@ -302,7 +301,7 @@ export function computeKeyElementStyles({
               ? `${borderRadius}px`
               : `${DEFAULT_ELEMENT_RADIUS}px`,
           '--dmn-key-padding-default': reserveRingPadding
-            ? `${gradientRingWidth}px`
+            ? `${reservedRingWidth}px`
             : '0px',
           '--dmn-key-text-color-default': stateFontColor || defaultTextColor,
           '--dmn-key-text-image-default': fontGradient

@@ -30,6 +30,10 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import {
+  elementShowsImage,
+  resolveElementBorder,
+} from '@utils/core/elementBorder';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
@@ -242,14 +246,11 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         },
       );
     }
-    return resolveStatePair(
-      active,
-      { color: position.borderColor, gradient: position.borderGradient },
-      {
-        color: position.activeBorderColor,
-        gradient: position.activeBorderGradient,
-      },
-    );
+    // 테두리는 미지정 시 앱 기본 립이 들어가므로 렌더와 같은 해석기로 읽는다
+    const border = resolveElementBorder(position, active, {
+      suppressDefault: elementShowsImage(position, active),
+    });
+    return { color: border.color, gradient: border.gradient };
   };
 
   // 피커 칸은 hex와 알파를 따로 판단한다. 색이 같고 알파만 갈리면 hex는 공통값이다

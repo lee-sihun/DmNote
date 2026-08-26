@@ -56,6 +56,10 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import {
+  elementShowsImage,
+  resolveElementBorder,
+} from '@utils/core/elementBorder';
 import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 import {
   elementShadowLeafFromPartial,
@@ -423,6 +427,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const gradientSpecFor = (
     target: GradientColorTarget,
   ): GradientSpec | null => {
+    // 테두리는 상태별 이미지 억제까지 렌더와 같은 해석기 결과를 그대로 쓴다.
+    // 활성 이미지로 억제된 null이 대기 기본 립으로 되돌아가면 안 된다
+    if (target === 'borderColor') {
+      const active = effectiveColorState === 'active';
+      return resolveElementBorder(keyPosition, active, {
+        suppressDefault: elementShowsImage(keyPosition, active),
+      }).gradient;
+    }
     const idleGradient = storedGradientOf(target);
     if (effectiveColorState !== 'active') return idleGradient;
     const activeProp = activeColorPropertyFor(target);

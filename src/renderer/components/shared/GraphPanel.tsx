@@ -2,9 +2,9 @@
 import React, { forwardRef, useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
 import {
   gradientToCss,
   gradientRingStyle,
@@ -183,10 +183,10 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       graphColor = '#86EFAC',
       showAvgLine = true,
       backgroundColor = DEFAULT_ELEMENT_BG,
-      borderColor = DEFAULT_ELEMENT_HAIRLINE,
+      borderColor,
       backgroundGradient = null,
-      borderGradient = null,
-      borderWidth = 1,
+      borderGradient,
+      borderWidth,
       borderRadius = DEFAULT_ELEMENT_RADIUS,
       imageSrc = null,
       imageFit = 'cover',
@@ -394,26 +394,34 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       resolvedGraphType === 'bar' ? animatedBarHistory : normalizedHistory;
     const barPath = buildBarPath(barHistory, safeMax, width, height);
 
-    const resolvedBorderWidth = Number.isFinite(Number(borderWidth))
-      ? Math.max(0, Number(borderWidth))
-      : 1;
-    const resolvedBorderRadius = Number.isFinite(Number(borderRadius))
-      ? Math.max(0, Number(borderRadius))
-      : DEFAULT_ELEMENT_RADIUS;
+    // store는 미지정을 null로 직렬화한다. Number(null)은 0이라 유한수 검사만으로는
+    // 무보더·반경 0으로 잘못 읽히므로 null·undefined를 먼저 미지정으로 본다
+    const explicitBorderWidth =
+      borderWidth != null && Number.isFinite(Number(borderWidth))
+        ? Math.max(0, Number(borderWidth))
+        : undefined;
+    const resolvedBorderRadius =
+      borderRadius != null && Number.isFinite(Number(borderRadius))
+        ? Math.max(0, Number(borderRadius))
+        : DEFAULT_ELEMENT_RADIUS;
     const useInline = useInlineStyles === true;
     const resolvedBackgroundColor = backgroundGradient
       ? gradientToCss(backgroundGradient)
       : backgroundColor || DEFAULT_ELEMENT_BG;
-    // 그라데이션 보더는 보더 대신 동일 두께 padding — overflow:hidden이
-    // 패딩 박스에서 클리핑되므로 링 자식이 가장자리에 정확히 그려짐
-    const showBorderRing = Boolean(borderGradient) && resolvedBorderWidth > 0;
-    const fallbackBorder =
-      resolvedBorderWidth <= 0
-        ? 'none'
-        : `${resolvedBorderWidth}px solid ${
-            borderColor || DEFAULT_ELEMENT_HAIRLINE
-          }`;
-    const resolvedBorder = showBorderRing ? 'none' : fallbackBorder;
+    // 보더는 키와 같은 공용 해석기. 그라데이션 보더는 보더 대신 동일 두께
+    // padding - overflow:hidden이 패딩 박스에서 클리핑되므로 링 자식이
+    // 가장자리에 정확히 그려짐
+    const resolvedGraphBorder = resolveElementBorder(
+      { borderColor, borderGradient, borderWidth: explicitBorderWidth },
+      false,
+    );
+    const resolvedBorderWidth = resolvedGraphBorder.width;
+    const borderRingSpec = resolvedGraphBorder.gradient;
+    const showBorderRing = borderRingSpec != null && resolvedBorderWidth > 0;
+    const resolvedBorder =
+      !showBorderRing && resolvedBorderWidth > 0
+        ? `${resolvedBorderWidth}px solid ${resolvedGraphBorder.color}`
+        : 'none';
     const resolvedGraphColor = graphColor || '#86EFAC';
     const graphStrokeColor = useInline
       ? resolvedGraphColor
@@ -496,14 +504,14 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
             }}
           />
         ) : null}
-        {showBorderRing && borderGradient && (
+        {showBorderRing && borderRingSpec && (
           <span
             aria-hidden="true"
             data-gradient-border-ring="true"
             style={{
-              ...gradientRingStyle(borderGradient, resolvedBorderWidth),
+              ...gradientRingStyle(borderRingSpec, resolvedBorderWidth),
               ...(useInline
-                ? { background: gradientToCss(borderGradient) }
+                ? { background: gradientToCss(borderRingSpec) }
                 : {}),
               zIndex: 1,
             }}
