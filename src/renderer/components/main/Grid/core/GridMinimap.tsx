@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGridViewStore } from '@stores/grid/useGridViewStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import DigitPopLayer from '@components/main/common/DigitPopLayer';
+import { useDigitPop } from '@hooks/ui/useDigitPop';
 import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
@@ -98,6 +100,36 @@ const GridMinimap = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const minimapRef = useRef<HTMLDivElement>(null);
+
+  // 배율 라벨 - 바뀐 자릿수만 튀어오르는 숫자 스텝 팝인을 NumberInput과 같은 경로로 재생
+  const zoomText = `${Math.round(zoom * 100)}%`;
+  const { pop: zoomDigitPopState, play: playZoomDigitPop } = useDigitPop();
+  const zoomTextRef = useRef(zoomText);
+  // 버튼 스텝에서만 재생한다. 휠 줌은 프레임마다 값이 바뀌어 재생이 겹치면
+  // 숫자가 계속 깜빡여 눈으로 좇을 수 없다
+  const zoomStepPendingRef = useRef(false);
+  const stepZoom = (action: () => void) => () => {
+    zoomStepPendingRef.current = true;
+    action();
+  };
+  useEffect(() => {
+    const prevText = zoomTextRef.current;
+    if (prevText === zoomText) return;
+    zoomTextRef.current = zoomText;
+    const fromStep = zoomStepPendingRef.current;
+    zoomStepPendingRef.current = false;
+    if (!fromStep) return;
+    playZoomDigitPop(
+      prevText,
+      zoomText,
+      parseInt(zoomText, 10) > parseInt(prevText, 10) ? 1 : -1,
+    );
+  }, [zoomText, playZoomDigitPop]);
+  // 표시값과 어긋난 재생은 접는다 - 연속 줌 중 늦게 온 오버레이가 옛 숫자를 남기지 않게
+  const zoomPop =
+    zoomDigitPopState && zoomDigitPopState.text === zoomText
+      ? zoomDigitPopState
+      : null;
   const [containerSize, setContainerSize] = useState({
     width: 400,
     height: 300,
@@ -416,7 +448,7 @@ const GridMinimap = ({
       >
         {/* 초기화 버튼 */}
         <ZoomButton
-          onClick={onResetZoom}
+          onClick={stepZoom(onResetZoom)}
           title="Reset zoom (Ctrl+0)"
           style={{ borderTopLeftRadius: 3, borderBottomLeftRadius: 3 }}
         >
@@ -456,7 +488,7 @@ const GridMinimap = ({
           </svg>
         </ZoomButton>
         {/* 확대 버튼 */}
-        <ZoomButton onClick={onZoomIn} title="Zoom in (Ctrl++)">
+        <ZoomButton onClick={stepZoom(onZoomIn)} title="Zoom in (Ctrl++)">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path
               d="M6 3V9M3 6H9"
@@ -467,7 +499,7 @@ const GridMinimap = ({
           </svg>
         </ZoomButton>
         {/* 축소 버튼 */}
-        <ZoomButton onClick={onZoomOut} title="Zoom out (Ctrl+-)">
+        <ZoomButton onClick={stepZoom(onZoomOut)} title="Zoom out (Ctrl+-)">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path
               d="M3 6H9"
@@ -479,10 +511,19 @@ const GridMinimap = ({
         </ZoomButton>
         {/* 현재 배율 */}
         <span
-          className="w-[42px] h-full flex items-center justify-center text-fg-muted text-xs"
+          className={`relative w-[42px] h-full flex items-center justify-center text-fg-muted text-xs tabular-nums${
+            zoomPop ? ' dmn-digit-pop-host' : ''
+          }`}
           style={{ borderTopRightRadius: 4, borderBottomRightRadius: 4 }}
         >
-          {Math.round(zoom * 100)}%
+          {zoomText}
+          {zoomPop && (
+            <DigitPopLayer
+              key={zoomPop.cycle}
+              pop={zoomPop}
+              className="text-fg-muted text-xs tabular-nums"
+            />
+          )}
         </span>
       </div>
       {/* 미니맵 */}
