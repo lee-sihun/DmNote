@@ -67,6 +67,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     typeof vi.fn<(spec: GradientSpec, commit: boolean) => void>
   >;
   let selectStop: ReturnType<typeof vi.fn<(index: number) => void>>;
+  let cancel: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     host = document.createElement('div');
@@ -74,6 +75,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     root = createRoot(host);
     apply = vi.fn<(spec: GradientSpec, commit: boolean) => void>();
     selectStop = vi.fn<(index: number) => void>();
+    cancel = vi.fn<() => void>();
     act(() => {
       useGradientEditStore.getState().setSession({
         anchor: { kind: 'key', id: ELEMENT_A_ID },
@@ -84,6 +86,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         selectedIndex: 0,
         selectStop,
         apply,
+        cancel,
       });
       root.render(
         <GradientAxisOverlay
@@ -274,7 +277,37 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     act(() => root.render(null));
 
     expect(apply).toHaveBeenLastCalledWith(SPEC, false);
+    expect(cancel).toHaveBeenCalledOnce();
     expect(apply.mock.calls.some(([, commit]) => commit)).toBe(false);
+  });
+
+  it('pointercancel은 시작 spec을 복원하고 외부 preview 제스처를 폐기한다', () => {
+    act(() => {
+      strip().dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 11,
+          clientX: 260,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 11,
+          clientX: 260,
+          clientY: 90,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointercancel', {
+          pointerId: 11,
+          clientX: 260,
+          clientY: 90,
+        }),
+      );
+    });
+
+    expect(apply).toHaveBeenLastCalledWith(SPEC, false);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('축 끝 앵커를 끌면 각도만 바뀐다', () => {

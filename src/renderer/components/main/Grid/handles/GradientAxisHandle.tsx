@@ -488,6 +488,7 @@ const GradientAxisOverlay = ({
       drag.ownerGeneration === useGradientEditStore.getState().generation
     ) {
       live.apply(drag.startSpec, false);
+      live.cancel?.();
     }
   };
   // eslint-disable-next-line react-hooks/refs

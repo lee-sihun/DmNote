@@ -434,6 +434,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       if (modeValue.mode === 'solid') setLocalColorForState(modeValue.color);
       onModePreview?.(stateMode, modeValue);
     },
+    onCancel,
     onCommit: (modeValue) => {
       const base =
         modeValue.mode === 'solid'

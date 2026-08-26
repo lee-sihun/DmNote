@@ -63,12 +63,7 @@ const FONT_PAGE_KEY = 'single-style:font';
 const SOUND_PAGE_KEY = 'single-style:sound';
 
 // 피커 타겟 타입
-type PickerTarget =
-  | 'backgroundColor'
-  | 'borderColor'
-  | 'fontColor'
-  | 'image'
-  | null;
+type PickerTarget = 'backgroundColor' | 'borderColor' | 'fontColor' | null;
 
 type ColorState = 'idle' | 'active';
 type StyleColorTarget = 'backgroundColor' | 'borderColor' | 'fontColor';
@@ -260,7 +255,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 폰트 버튼 ref
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
-  const internalImageButtonRef = useRef<HTMLButtonElement>(null);
 
   // 인-패널 내비게이션 (사운드/폰트 서브 페이지)
   const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
@@ -338,22 +332,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     fontColorBtnRef,
   ];
 
-  // 실제 사용할 이미지 버튼 ref (외부에서 제공되면 외부 것 사용)
-  const _actualImageButtonRef = imageButtonRef || internalImageButtonRef;
-
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
   const handlePickerToggle = (target: PickerTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
-  };
-
-  // 이미지 피커 토글 (외부 핸들러가 있으면 사용, 없으면 내부 상태 사용)
-  const _handleImagePickerToggle = () => {
-    if (onToggleImagePicker) {
-      onToggleImagePicker();
-      setPickerFor(null); // 다른 피커 닫기
-    } else {
-      handlePickerToggle('image');
-    }
   };
 
   const resolveColorProperty = (
@@ -505,6 +486,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     canvasSurface: gradientTarget === 'borderColor' ? 'border' : 'background',
     canvasState: effectiveColorState,
     onPreview: handleGradientPreview,
+    onCancel: () => editGestureController.cancel(),
     onCommit: handleGradientCommit,
   });
 
@@ -644,11 +626,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const handleClassNameBlur = (value: string) => {
     onStylePropertyCommit?.({ property: 'className', value: value });
   };
-
-  // 이미지 피커 열림 상태 (외부 또는 내부)
-  const _isImagePickerOpen = onToggleImagePicker
-    ? showImagePicker
-    : pickerFor === 'image';
 
   // 색상 표시용 헬퍼 함수
   const getDisplayColor = (color: string): string => {
@@ -1135,8 +1112,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       </PopupExit>
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
-      <PopupExit open={Boolean(pickerFor && pickerFor !== 'image')}>
-        {pickerFor && pickerFor !== 'image' ? (
+      <PopupExit open={Boolean(pickerFor)}>
+        {pickerFor ? (
           <ColorPicker
             open={!!pickerFor}
             referenceRef={

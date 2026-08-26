@@ -1084,6 +1084,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           : 'borderPaint';
       onPaintPreview?.({ property: paintField, value: descriptor } as never);
     },
+    onCancel: () => editGestureController.cancel(),
     onCommit: handleGradientCommit,
   });
 
