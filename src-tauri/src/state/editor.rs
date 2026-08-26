@@ -2084,7 +2084,8 @@ fn validate_bounds_metrics(
             candidate.height,
         ),
     ] {
-        if (allow_legacy_finite_bounds && candidate.is_finite())
+        // 과거 프리셋의 범위 초과 치수는 관용하되 0·음수는 어떤 경로로도 허용하지 않는다
+        if (allow_legacy_finite_bounds && candidate.is_finite() && candidate > 0.0)
             || dimension_within_limit(candidate)
             || current.is_some_and(|value| {
                 !dimension_within_limit(value)
@@ -4762,6 +4763,36 @@ mod tests {
             GrandfatherKeying::LegacyPresetModeIndex,
         )
         .is_err());
+    }
+
+    #[test]
+    fn legacy_preset_keying_still_rejects_non_positive_dimensions() {
+        let store = store_with_each_position_collection();
+        let current = EditorDocumentV1::from_store(&store);
+
+        for (width, height) in [(0.0, 60.0), (-1.0, 60.0), (60.0, 0.0)] {
+            let mut candidate = current.clone();
+            let position = position_mut(&mut candidate, "keyPositions");
+            position.width = width;
+            position.height = height;
+            let mut candidate_store = store.clone();
+            candidate.apply_to_store(&mut candidate_store);
+            crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+            let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+            let error = validate_document_transition_with_keying(
+                &current,
+                &candidate,
+                &store,
+                &candidate_store,
+                GrandfatherKeying::LegacyPresetModeIndex,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.details.unwrap().validation_code.as_deref(),
+                Some("DIMENSION_OUT_OF_RANGE")
+            );
+        }
     }
 
     #[test]
