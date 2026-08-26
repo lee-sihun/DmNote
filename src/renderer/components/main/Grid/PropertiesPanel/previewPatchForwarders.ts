@@ -7,9 +7,11 @@ import { editGestureController } from '@src/renderer/editor/runtime/editGestureC
 import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { projectFontColorPatch } from '@src/types/key/fontColor';
+import { paintPropertyFields, projectPaintDescriptor } from '@src/types/color';
 import type {
   EditorElementTypeV1,
   EditorFontColorPropertyPatchV1,
+  EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
 } from '@src/types/editor';
 import type { KeyPosition } from '@src/types/key/keys';
@@ -122,4 +124,98 @@ export const previewBatchFontColor = (
       domain: previewDomainOf(type),
     });
   }
+};
+
+export const previewSingleFontColor = (
+  type: PreviewTargetType,
+  id: string,
+  patch: EditorFontColorPropertyPatchV1,
+): void => {
+  const locator = resolveElementById(type, id);
+  if (!locator) return;
+  previewBatchFontColor([{ elementType: type, id }], locator.mode, patch);
+};
+
+export const previewBatchPaint = (
+  targets: readonly PreviewTarget[],
+  selectedKeyType: string,
+  patch: EditorPaintPropertyPatchV1,
+): void => {
+  const document = captureEditorDocument();
+  const active = paintPropertyFields(patch.property).active;
+  const grouped = new Map<
+    PreviewTargetType,
+    Array<{ id: string; patch: Record<string, unknown> }>
+  >();
+  for (const target of targets) {
+    if (
+      active &&
+      target.elementType !== 'key' &&
+      target.elementType !== 'knob'
+    ) {
+      continue;
+    }
+    const locator = resolveElementById(target.elementType, target.id);
+    if (!locator || locator.mode !== selectedKeyType) return;
+    const collection =
+      target.elementType === 'key'
+        ? document.keyPositions
+        : target.elementType === 'stat'
+        ? document.statPositions
+        : target.elementType === 'graph'
+        ? document.graphPositions
+        : document.knobPositions;
+    const current = collection[locator.mode]?.[locator.index] as
+      | (Record<string, unknown> & { id: string })
+      | undefined;
+    if (!current) return;
+    const entries = grouped.get(target.elementType) ?? [];
+    entries.push({
+      id: target.id,
+      patch: projectPaintDescriptor(
+        current,
+        target.elementType,
+        patch.property,
+        patch.value,
+      ),
+    });
+    grouped.set(target.elementType, entries);
+  }
+  for (const [type, entries] of grouped) {
+    editGestureController.preview(selectedKeyType, entries, {
+      domain: previewDomainOf(type),
+    });
+  }
+};
+
+export const previewSinglePaint = (
+  type: PreviewTargetType,
+  id: string,
+  patch: EditorPaintPropertyPatchV1,
+): void => {
+  const locator = resolveElementById(type, id);
+  if (!locator) return;
+  previewBatchPaint([{ elementType: type, id }], locator.mode, patch);
+};
+
+export const previewBatchGraphColor = (
+  ids: readonly string[],
+  selectedKeyType: string,
+  color: string,
+): void => {
+  const entries: Array<{ id: string; patch: Record<string, unknown> }> = [];
+  for (const id of ids) {
+    const locator = resolveElementById('graph', id);
+    if (!locator || locator.mode !== selectedKeyType) return;
+    entries.push({ id, patch: { graphColor: color } });
+  }
+  editGestureController.preview(selectedKeyType, entries, {
+    domain: 'graphPosition',
+  });
+};
+
+export const previewSingleGraphColor = (id: string, color: string): void => {
+  const locator = resolveElementById('graph', id);
+  if (!locator) return;
+  previewBatchGraphColor([id], locator.mode, color);
 };

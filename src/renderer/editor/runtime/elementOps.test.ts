@@ -63,6 +63,7 @@ import {
   patchShadowByTargets,
   patchNotePaintById,
   patchNotePaintByIds,
+  patchGraphColorsByIds,
   patchGraphPropertiesByIds,
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
@@ -1905,6 +1906,30 @@ describe('elementOps', () => {
     expect(api.commitSemanticOps).toHaveBeenCalledOnce();
   });
 
+  it('graphColor batch는 preview gestureId를 semantic commit에 전달한다', async () => {
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [graphAt(ID_A, { graphColor: '#old' })],
+      },
+    });
+
+    await patchGraphColorsByIds([ID_A], '#new', {
+      gestureId: 'graph-color-gesture',
+    });
+
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'graph',
+          id: ID_A,
+          patch: { property: 'graphColor', value: '#new' },
+        },
+      ],
+      expect.objectContaining({ gestureId: 'graph-color-gesture' }),
+    );
+  });
+
   it('graphType batch의 빈 ID와 중복 ID는 eager와 wire 전에 거절한다', async () => {
     await expect(patchGraphTypesByIds([ID_A, ''], 'bar')).resolves.toBe(false);
     await expect(patchGraphTypesByIds([ID_A, ID_A], 'bar')).resolves.toBe(
@@ -2301,10 +2326,14 @@ describe('elementOps', () => {
       });
       api.captureEditorDocument.mockReturnValue(documentFromStores());
 
-      await patchPaintByTargets([{ elementType: 'key', id: ID_A }], {
-        property: 'backgroundPaint',
-        value: { color: '#next', gradient: null },
-      });
+      await patchPaintByTargets(
+        [{ elementType: 'key', id: ID_A }],
+        {
+          property: 'backgroundPaint',
+          value: { color: '#next', gradient: null },
+        },
+        { gestureId: 'paint-gesture' },
+      );
 
       expect(
         useKeyStore.getState().canonicalPositions['4key'][0],
@@ -2327,7 +2356,7 @@ describe('elementOps', () => {
             },
           },
         ],
-        expect.anything(),
+        expect.objectContaining({ gestureId: 'paint-gesture' }),
       );
     },
   );

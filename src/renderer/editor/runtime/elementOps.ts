@@ -74,10 +74,7 @@ import type { KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import {
-  inheritedPaintMaterialization,
-  paintPropertyFields,
-} from '@src/types/color';
+import { projectPaintDescriptor } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
   isNotePaintPropertyPatchV1,
@@ -1086,7 +1083,7 @@ export const patchGraphTypesByIds = (
 export const patchGraphColorsByIds = (
   ids: readonly string[],
   graphColor: string,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> =>
   patchElementPropertyByTargets(
     idTargets('graph', ids),
@@ -1902,13 +1899,6 @@ const paintPropertyIntents = (
   const document = captureEditorDocument();
   const fieldName = patch.property;
   const descriptor = patch.value;
-  const {
-    active,
-    colorField,
-    gradientField,
-    activeColorField,
-    activeGradientField,
-  } = paintPropertyFields(fieldName);
   const intents = new Map<
     NativeElementType,
     Map<string, Record<string, unknown>>
@@ -1928,34 +1918,12 @@ const paintPropertyIntents = (
       | (Record<string, unknown> & { id: string })
       | undefined;
     if (!current) continue;
-    const next: Record<string, unknown> = {
-      [colorField]: descriptor.color,
-      [gradientField]: descriptor.gradient ?? undefined,
-    };
-    if (!active && (elementType === 'key' || elementType === 'knob')) {
-      const inherited = inheritedPaintMaterialization(
-        {
-          color:
-            typeof current[colorField] === 'string'
-              ? (current[colorField] as string)
-              : undefined,
-          gradient: current[gradientField] as never,
-        },
-        {
-          color:
-            typeof current[activeColorField] === 'string'
-              ? (current[activeColorField] as string)
-              : undefined,
-          gradient: current[activeGradientField] as never,
-        },
-      );
-      if (inherited) {
-        next[activeColorField] = inherited.color;
-        if (inherited.gradient) {
-          next[activeGradientField] = inherited.gradient;
-        }
-      }
-    }
+    const next = projectPaintDescriptor(
+      current,
+      elementType,
+      fieldName,
+      descriptor,
+    );
     const byId =
       intents.get(elementType) ?? new Map<string, Record<string, unknown>>();
     byId.set(id, next);
@@ -1967,7 +1935,7 @@ const paintPropertyIntents = (
 export const patchPaintByTargets = (
   targets: readonly PaintTarget[],
   patch: EditorPaintPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => {
   const active =
     patch.property === 'activeBackgroundPaint' ||
@@ -1997,6 +1965,7 @@ export const patchPaintByTargets = (
       patch: structuredClone(patch),
     })),
     {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
       preflight: options.preflight,
       onEnrolled: () => {
         enrolled = true;
@@ -2016,7 +1985,7 @@ export const patchPaintById = (
   elementType: NativeElementType,
   id: string,
   patch: EditorPaintPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> =>
   patchPaintByTargets([{ elementType, id }], patch, options);
 

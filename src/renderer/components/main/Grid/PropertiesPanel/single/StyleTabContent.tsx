@@ -124,7 +124,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
+  onFontColorPreview,
   onFontColorCommit,
   onShadowCommit,
   imageButtonRef,
@@ -407,10 +409,16 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     return localColors[resolveColorProperty(target)];
   };
 
-  // 드래그 중 로컬 상태만 업데이트
+  // 드래그와 텍스트 입력은 같은 preview patch를 사용
   const handleColorChange = (target: StyleColorTarget, color: string) => {
     const prop = resolveColorProperty(target);
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
+    if (target !== 'fontColor') return;
+    onFontColorPreview?.(
+      prop === 'activeFontColor'
+        ? { property: 'activeFontColor', value: color }
+        : { property: 'fontColor', value: color },
+    );
   };
 
   // 드래그 완료 시 부모에게 전달
@@ -451,7 +459,18 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   const handleGradientPreview = (value: ColorModeValue) => {
     if (!gradientTarget) return;
-    if (value.mode === 'solid') handleColorChange(gradientTarget, value.color);
+    const prop = resolveColorProperty(gradientTarget);
+    const descriptor = paintDescriptor(value);
+    setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+    const paintField =
+      effectiveColorState === 'active'
+        ? gradientTarget === 'backgroundColor'
+          ? 'activeBackgroundPaint'
+          : 'activeBorderPaint'
+        : gradientTarget === 'backgroundColor'
+        ? 'backgroundPaint'
+        : 'borderPaint';
+    onPaintPreview?.({ property: paintField, value: descriptor } as never);
   };
 
   const handleGradientCommit = (value: ColorModeValue) => {
@@ -1143,6 +1162,19 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 ? gradientState.handlePickerColorChange(c, true)
                 : handleColorChangeComplete(pickerFor as StyleColorTarget, c)
             }
+            onInputCancel={(_target, restoredColor) => {
+              gradientState.cancelPreview();
+              if (typeof restoredColor === 'string') {
+                const prop = resolveColorProperty(
+                  pickerFor as StyleColorTarget,
+                );
+                setLocalColors((prev) => ({
+                  ...prev,
+                  [prop]: restoredColor,
+                }));
+              }
+              editGestureController.cancel();
+            }}
             onClose={() => setPickerFor(null)}
             solidOnly={true}
             stateMode={shadowActiveState ? effectiveColorState : undefined}

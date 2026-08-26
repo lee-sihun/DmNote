@@ -42,6 +42,10 @@ const captured = vi.hoisted(() => ({
     onStateModeChange?: (mode: string) => void;
     onColorChange: (color: string) => void;
     onColorChangeComplete: (color: string) => void;
+    onInputCancel?: (
+      target: 'solid' | 'top' | 'bottom',
+      restoredColor: string,
+    ) => void;
     onOpacityPercentChange?: (value: number) => void;
     onOpacityPercentChangeComplete?: (value: number) => void;
   },
@@ -733,7 +737,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         property: 'activeBackgroundPaint',
         value: { color: 'active-final', gradient: null },
       } as const;
-      expect(patches.patchPaintByTargets).toHaveBeenCalledWith(targets, patch);
+      expect(patches.patchPaintByTargets).toHaveBeenCalledWith(targets, patch, {
+        gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      });
       expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
@@ -741,6 +747,15 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   it('batch active paint는 irrelevant synthetic stat/graph를 무시하고 stable key/knob만 쓴다', async () => {
     const legacy = vi.fn();
+    const key = keyAt(ID_A);
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      positions: { '4key': [key] },
+      canonicalPositions: { '4key': [key] },
+    });
+    useKnobItemStore.setState({
+      positions: { '4key': [keyAt(ID_B)] } as never,
+    });
     useGridSelectionStore.setState({
       selectedElements: [
         { type: 'key', id: ID_A, index: 0 },
@@ -762,6 +777,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         property: 'activeBackgroundPaint',
         value: { color: 'active-stable', gradient: null },
       },
+      { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
     );
     expect(legacy).not.toHaveBeenCalled();
   });
@@ -1176,6 +1192,33 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
+  it('graph batch ColorInput은 preview patch와 Escape cancel을 정식 채널로 전달한다', async () => {
+    const ids = selectImageTargets('graph', 'a').map(({ id }) => id);
+    renderImagePanel('graph', vi.fn());
+    const label = Array.from(host.querySelectorAll('p')).find(
+      (element) => element.textContent === 'propertiesPanel.graphColor',
+    );
+    const button = label?.parentElement?.querySelector<HTMLButtonElement>(
+      'button[aria-haspopup="dialog"]',
+    );
+    expect(button).not.toBeNull();
+    act(() => button?.click());
+    await waitForColorPicker(button!);
+    gestures.preview.mockClear();
+    gestures.cancel.mockClear();
+
+    act(() => captured.color?.onColorChange('#123456'));
+
+    expect(gestures.preview).toHaveBeenCalledWith(
+      '4key',
+      ids.map((id) => ({ id, patch: { graphColor: '#123456' } })),
+      { domain: 'graphPosition' },
+    );
+
+    act(() => captured.color?.onInputCancel?.('solid', '#86EFAC'));
+    expect(gestures.cancel).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['main idle', 'main', 'idle'],
     ['main active', 'main', 'active'],
@@ -1209,7 +1252,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       gestures.settleCommit.mockClear();
 
       act(() => captured.color?.onColorChange('local-only'));
-      expect(gestures.preview).not.toHaveBeenCalled();
+      expect(gestures.preview).toHaveBeenCalled();
       act(() => captured.color?.onColorChangeComplete(' final raw '));
 
       const targets = [
@@ -1227,22 +1270,11 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           ? { property: 'activeFontColor', value: ' final raw ' }
           : { property: 'fontColor', value: ' final raw ' };
       const writer = patches.patchFontColorByTargets;
-      const gestureId =
-        state === 'idle' ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' : undefined;
-      expect(writer).toHaveBeenCalledWith(
-        targets,
-        patch,
-        gestureId === undefined ? {} : { gestureId },
+      const gestureId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      expect(writer).toHaveBeenCalledWith(targets, patch, { gestureId });
+      expect(gestures.settleCommit).toHaveBeenCalledWith(
+        writer.mock.results[0]?.value,
       );
-      if (state === 'idle') {
-        expect(gestures.preview).toHaveBeenCalled();
-        expect(gestures.settleCommit).toHaveBeenCalledWith(
-          writer.mock.results[0]?.value,
-        );
-      } else {
-        expect(gestures.preview).not.toHaveBeenCalled();
-        expect(gestures.settleCommit).not.toHaveBeenCalled();
-      }
       expect(legacyPreview).not.toHaveBeenCalled();
       expect(legacyCommit).not.toHaveBeenCalled();
     },
@@ -1756,6 +1788,34 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         index,
       })),
     });
+    const typeList = [...types] as Array<'key' | 'stat' | 'graph' | 'knob'>;
+    const idFor = (type: 'key' | 'stat' | 'graph' | 'knob') =>
+      ids[typeList.indexOf(type)] ?? '';
+    if (typeList.includes('key')) {
+      const position = keyAt(idFor('key'));
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        positions: { '4key': [position] },
+        canonicalPositions: { '4key': [position] },
+      });
+    }
+    if (typeList.includes('stat')) {
+      useStatItemStore.setState({
+        positions: {
+          '4key': [{ ...keyAt(idFor('stat')), statType: 'kps' }],
+        },
+      });
+    }
+    if (typeList.includes('graph')) {
+      useGraphItemStore.setState({
+        positions: { '4key': [keyAt(idFor('graph'))] } as never,
+      });
+    }
+    if (typeList.includes('knob')) {
+      useKnobItemStore.setState({
+        positions: { '4key': [keyAt(idFor('knob'))] } as never,
+      });
+    }
     return types.map((elementType, index) => ({
       elementType,
       id: ids[index],
@@ -1926,6 +1986,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       captured.color?.onColorChange('local-drag');
       await Promise.resolve();
     });
+    expect(gestures.preview).toHaveBeenCalled();
     expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
     expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
     await act(async () => {
@@ -1952,8 +2013,12 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           property: 'backgroundPaint',
           value: { color: ' raw final ', gradient: null },
         },
+        { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
       ] as const;
       expect(patches.patchPaintByTargets).toHaveBeenCalledWith(...args);
+      expect(gestures.settleCommit).toHaveBeenCalledWith(
+        patches.patchPaintByTargets.mock.results[0]?.value,
+      );
       expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
     },
@@ -1971,14 +2036,21 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
       await commitBackgroundPaint(state, `${kind}-${state}`);
 
-      expect(patches.patchPaintByTargets).toHaveBeenCalledWith(targets, {
-        property:
-          state === 'active' ? 'activeBackgroundPaint' : 'backgroundPaint',
-        value: {
-          color: `${kind}-${state}`,
-          gradient: null,
+      expect(patches.patchPaintByTargets).toHaveBeenCalledWith(
+        targets,
+        {
+          property:
+            state === 'active' ? 'activeBackgroundPaint' : 'backgroundPaint',
+          value: {
+            color: `${kind}-${state}`,
+            gradient: null,
+          },
         },
-      });
+        { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+      );
+      expect(gestures.settleCommit).toHaveBeenCalledWith(
+        patches.patchPaintByTargets.mock.results[0]?.value,
+      );
       expect(legacy).not.toHaveBeenCalled();
     },
   );

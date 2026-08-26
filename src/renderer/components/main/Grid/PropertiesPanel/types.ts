@@ -57,11 +57,15 @@ export type {
 export interface ColorInputProps {
   value: string;
   onChange: (value: string) => void;
+  /** 드래그·타이핑 중 대기 색상 preview */
+  onPreview?: (value: string) => void;
   /** 내부 ColorPicker mount를 첫 paint 뒤로 미뤄 스와치 피드백을 우선 반영 */
   pickerMountStrategy?: CommitStrategy;
   onChangeComplete?: (value: string) => void;
   activeValue?: string;
   onActiveChange?: (value: string) => void;
+  /** 드래그·타이핑 중 입력 색상 preview */
+  onActivePreview?: (value: string) => void;
   onActiveChangeComplete?: (value: string) => void;
   showStateTabs?: boolean;
   stateMode?: 'idle' | 'active';
@@ -77,6 +81,10 @@ export interface ColorInputProps {
   activeGradientValue?: GradientSpec | null;
   /** gradient 지원 커밋 경로 — 단색/그라데이션 확정을 한 콜백으로 수신 */
   onModeCommit?: (state: 'idle' | 'active', value: ColorModeValue) => void;
+  /** gradient 지원 preview 경로. 단색/그라데이션을 같은 표현으로 수신 */
+  onModePreview?: (state: 'idle' | 'active', value: ColorModeValue) => void;
+  /** Escape·유효하지 않은 blur에서 호출부 preview 세션 취소 */
+  onCancel?: () => void;
   /** 온캔버스 각도 핸들 앵커 */
   canvasAnchor?: GradientCanvasAnchor;
   /** 편집 표면 — 캔버스 일시 페인트 대상 필드 (기본 background) */
@@ -176,7 +184,9 @@ export interface StyleTabContentProps {
   onSoundVolumeCommit?: (soundVolume: number) => void;
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onFontColorPreview?: (patch: EditorFontColorPropertyPatchV1) => void;
   onFontColorCommit?: (patch: EditorFontColorPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
@@ -187,6 +197,8 @@ export interface StyleTabContentProps {
 
 export interface NoteTabContentProps {
   keyPosition: KeyPosition;
+  /** preview overlay를 제외한 Escape 원복 기준 */
+  canonicalKeyPosition?: KeyPosition;
   onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;

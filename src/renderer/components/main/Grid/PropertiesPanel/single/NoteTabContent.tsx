@@ -45,6 +45,7 @@ const toGradient = (top: string, bottom: string) => ({
 
 const NoteTabContent: React.FC<NoteTabContentProps> = ({
   keyPosition,
+  canonicalKeyPosition = keyPosition,
   onElementPropertyCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
@@ -288,8 +289,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     borderColorButtonRef,
   ];
 
-  // 통합 색상 변경 핸들러 (pickerFor 기반)
-  const handleColorChange = (target: 'note' | 'glow', newColor: NoteColor) => {
+  const applyLocalColor = (target: 'note' | 'glow', newColor: NoteColor) => {
     if (target === 'note') {
       if (
         newColor &&
@@ -321,6 +321,16 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         setGlowGradientBottom(solidColor);
       }
     }
+  };
+
+  // 드래그와 텍스트 입력은 같은 preview patch를 사용
+  const handleColorChange = (target: 'note' | 'glow', newColor: NoteColor) => {
+    applyLocalColor(target, newColor);
+    onNotePaintPreview?.(
+      target === 'note'
+        ? { property: 'notePaint', value: { color: newColor } }
+        : { property: 'noteGlowPaint', value: { color: newColor } },
+    );
   };
 
   const handleColorChangeComplete = (
@@ -354,7 +364,6 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         property: 'notePaint',
         value: { color: colorValue },
       } as const;
-      onNotePaintPreview?.(patch);
       onNotePaintCommit?.(patch);
     } else {
       if (
@@ -381,7 +390,6 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         property: 'noteGlowPaint',
         value: { color: colorValue },
       } as const;
-      onNotePaintPreview?.(patch);
       onNotePaintCommit?.(patch);
     }
   };
@@ -400,6 +408,22 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     }
     return glowColorTop;
   })();
+
+  const restoreCanonicalOpacity = (target: 'note' | 'glow') => {
+    if (target === 'note') {
+      const base = canonicalKeyPosition.noteOpacity ?? 80;
+      setLocalNoteOpacity(base);
+      setLocalNoteOpacityTop(canonicalKeyPosition.noteOpacityTop ?? base);
+      setLocalNoteOpacityBottom(canonicalKeyPosition.noteOpacityBottom ?? base);
+      return;
+    }
+    const base = canonicalKeyPosition.noteGlowOpacity ?? 70;
+    setLocalGlowOpacity(base);
+    setLocalGlowOpacityTop(canonicalKeyPosition.noteGlowOpacityTop ?? base);
+    setLocalGlowOpacityBottom(
+      canonicalKeyPosition.noteGlowOpacityBottom ?? base,
+    );
+  };
 
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
   const handlePickerToggle = (target: 'note' | 'glow' | 'border') => {
@@ -836,6 +860,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                 const opacity = parseAlphaPercent(raw, localBorderOpacity);
                 setBorderColor(hex);
                 setLocalBorderOpacity(opacity);
+                onNotePaintPreview?.({
+                  property: 'noteBorderPaint',
+                  value: { color: hex, opacity },
+                });
                 return;
               }
               handleColorChange(pickerFor, c);
@@ -851,11 +879,23 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                   property: 'noteBorderPaint',
                   value: { color: hex, opacity },
                 } as const;
-                onNotePaintPreview?.(patch);
                 onNotePaintCommit?.(patch);
                 return;
               }
               handleColorChangeComplete(pickerFor, c);
+            }}
+            onInputCancel={(_target, restoredColor) => {
+              if (pickerFor === 'border') {
+                const raw =
+                  typeof restoredColor === 'string' ? restoredColor : undefined;
+                setBorderColor(toRgbHexColor(raw));
+                setLocalBorderOpacity(
+                  parseAlphaPercent(raw, localBorderOpacity),
+                );
+              } else {
+                applyLocalColor(pickerFor, restoredColor);
+              }
+              editGestureController.cancel();
             }}
             onClose={() => setPickerFor(null)}
             interactiveRefs={interactiveRefs}
@@ -881,19 +921,35 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                     setLocalNoteOpacity(value);
                     setLocalNoteOpacityTop(value);
                     setLocalNoteOpacityBottom(value);
+                    onNotePaintPreview?.({
+                      property: 'notePaint',
+                      value: {
+                        opacity: value,
+                        opacityTop: value,
+                        opacityBottom: value,
+                      },
+                    });
                     return;
                   }
+                  const nextTop =
+                    target === 'top' ? value : localNoteOpacityTop;
+                  const nextBottom =
+                    target === 'bottom' ? value : localNoteOpacityBottom;
                   if (target === 'top') {
                     setLocalNoteOpacityTop(value);
-                    setLocalNoteOpacity(
-                      Math.round((value + localNoteOpacityBottom) / 2),
-                    );
-                    return;
+                  } else {
+                    setLocalNoteOpacityBottom(value);
                   }
-                  setLocalNoteOpacityBottom(value);
-                  setLocalNoteOpacity(
-                    Math.round((localNoteOpacityTop + value) / 2),
-                  );
+                  const nextBase = Math.round((nextTop + nextBottom) / 2);
+                  setLocalNoteOpacity(nextBase);
+                  onNotePaintPreview?.({
+                    property: 'notePaint',
+                    value: {
+                      opacity: nextBase,
+                      opacityTop: nextTop,
+                      opacityBottom: nextBottom,
+                    },
+                  });
                   return;
                 }
 
@@ -901,19 +957,34 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                   setLocalGlowOpacity(value);
                   setLocalGlowOpacityTop(value);
                   setLocalGlowOpacityBottom(value);
+                  onNotePaintPreview?.({
+                    property: 'noteGlowPaint',
+                    value: {
+                      opacity: value,
+                      opacityTop: value,
+                      opacityBottom: value,
+                    },
+                  });
                   return;
                 }
+                const nextTop = target === 'top' ? value : localGlowOpacityTop;
+                const nextBottom =
+                  target === 'bottom' ? value : localGlowOpacityBottom;
                 if (target === 'top') {
                   setLocalGlowOpacityTop(value);
-                  setLocalGlowOpacity(
-                    Math.round((value + localGlowOpacityBottom) / 2),
-                  );
-                  return;
+                } else {
+                  setLocalGlowOpacityBottom(value);
                 }
-                setLocalGlowOpacityBottom(value);
-                setLocalGlowOpacity(
-                  Math.round((localGlowOpacityTop + value) / 2),
-                );
+                const nextBase = Math.round((nextTop + nextBottom) / 2);
+                setLocalGlowOpacity(nextBase);
+                onNotePaintPreview?.({
+                  property: 'noteGlowPaint',
+                  value: {
+                    opacity: nextBase,
+                    opacityTop: nextTop,
+                    opacityBottom: nextBottom,
+                  },
+                });
               },
               onOpacityPercentChangeComplete: (
                 value: number,
@@ -932,7 +1003,6 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                         opacityBottom: value,
                       },
                     } as const;
-                    onNotePaintPreview?.(patch);
                     onNotePaintCommit?.(patch);
                     return;
                   }
@@ -954,7 +1024,6 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                       opacityBottom: nextBottom,
                     },
                   } as const;
-                  onNotePaintPreview?.(patch);
                   onNotePaintCommit?.(patch);
                   return;
                 }
@@ -971,7 +1040,6 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                       opacityBottom: value,
                     },
                   } as const;
-                  onNotePaintPreview?.(patch);
                   onNotePaintCommit?.(patch);
                   return;
                 }
@@ -992,8 +1060,11 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                     opacityBottom: nextBottom,
                   },
                 } as const;
-                onNotePaintPreview?.(patch);
                 onNotePaintCommit?.(patch);
+              },
+              onOpacityPercentCancel: () => {
+                restoreCanonicalOpacity(pickerFor);
+                editGestureController.cancel();
               },
               opacityPercentLabel:
                 pickerFor === 'note'

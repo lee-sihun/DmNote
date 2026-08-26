@@ -291,6 +291,10 @@ export function useGradientColorState({
     applySpec(spec, true);
   };
 
+  const cancelPreview = () => {
+    setDraft(null);
+  };
+
   return {
     format,
     headerSlot,
@@ -299,5 +303,6 @@ export function useGradientColorState({
     handlePickerColorChange,
     paletteGradientSpec,
     handleGradientSpecSelect,
+    cancelPreview,
   };
 }

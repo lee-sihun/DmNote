@@ -158,7 +158,12 @@ import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
-import { previewSingleStyleProperty } from './PropertiesPanel/previewPatchForwarders';
+import {
+  previewSingleGraphColor,
+  previewSingleFontColor,
+  previewSinglePaint,
+  previewSingleStyleProperty,
+} from './PropertiesPanel/previewPatchForwarders';
 import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
@@ -553,6 +558,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     : -1;
   const singleKeyPosition =
     singleKeyIndex >= 0 ? positions[selectedKeyType]?.[singleKeyIndex] : null;
+  const singleCanonicalKeyPosition = singleKeyId
+    ? (canonicalPositions[selectedKeyType] ?? []).find(
+        (position) => position.id === singleKeyId,
+      ) ?? null
+    : null;
   const singleKeySlot =
     singleKeyIndex >= 0
       ? keyMappings[selectedKeyType]?.[singleKeyIndex] ?? null
@@ -1483,7 +1493,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id && isNativeElementId(id)
       ? (patch: EditorElementPropertyPatchV1) => {
           // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
-          const persisted = patchElementPropertyById(type, id, patch);
+          const settlesGesture =
+            type === 'graph' && patch.property === 'graphColor';
+          const gestureId = settlesGesture
+            ? editGestureController.activeGestureId() ?? undefined
+            : undefined;
+          const persisted = patchElementPropertyById(
+            type,
+            id,
+            patch,
+            settlesGesture ? { gestureId } : {},
+          );
+          if (settlesGesture) {
+            editGestureController.settleCommit(persisted);
+          }
           void persisted.catch((error) => {
             console.error('Failed to update element property', error);
           });
@@ -1644,11 +1667,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorPaintPropertyPatchV1) => {
-          const persisted = patchPaintById(type, id, patch);
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted = patchPaintById(type, id, patch, { gestureId });
+          editGestureController.settleCommit(persisted);
           void persisted.catch((error) => {
             console.error('Failed to update paint', error);
           });
         }
+      : undefined;
+
+  const stablePaintPreviewHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorPaintPropertyPatchV1) =>
+          previewSinglePaint(type, id, patch)
       : undefined;
 
   const stableFontColorCommitHandler = (
@@ -1657,11 +1692,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorFontColorPropertyPatchV1) => {
-          const persisted = patchFontColorById(type, id, patch);
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted = patchFontColorById(
+            type,
+            id,
+            patch,
+            gestureId ? { gestureId } : {},
+          );
+          editGestureController.settleCommit(persisted);
           void persisted.catch((error) => {
             console.error('Failed to update font color', error);
           });
         }
+      : undefined;
+
+  const stableFontColorPreviewHandler = (
+    type: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorFontColorPropertyPatchV1) =>
+          previewSingleFontColor(type, id, patch)
       : undefined;
 
   const stableShadowCommitHandler = (
@@ -2357,7 +2409,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       stableGraphIds.length > 0 &&
       stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
-      const commit = patchGraphColorsByIds(stableGraphIds, graphColor);
+      const gestureId = editGestureController.activeGestureId() ?? undefined;
+      const commit = patchGraphColorsByIds(stableGraphIds, graphColor, {
+        gestureId,
+      });
+      editGestureController.settleCommit(commit);
       void commit.catch((error) => {
         console.error('Failed to batch update graph color', error);
       });
@@ -3170,6 +3226,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          onPaintPreview={stablePaintPreviewHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           onPaintCommit={stablePaintCommitHandler(
             'knob',
             selectedKnobElements[0]?.id,
@@ -3205,6 +3265,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'graph',
             selectedGraphElements[0]?.id,
           )}
+          onGraphColorPreview={
+            selectedGraphElements[0]?.id &&
+            isNativeElementId(selectedGraphElements[0].id)
+              ? (color) =>
+                  previewSingleGraphColor(selectedGraphElements[0].id, color)
+              : undefined
+          }
           onInactiveImageCommit={stableInactiveImageHandler(
             'graph',
             selectedGraphElements[0]?.id,
@@ -3226,6 +3293,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             selectedGraphElements[0]?.id,
           )}
           onPaintCommit={stablePaintCommitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onPaintPreview={stablePaintPreviewHandler(
             'graph',
             selectedGraphElements[0]?.id,
           )}
@@ -3257,6 +3328,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         singleKeyIndex={singleKeyIndex}
         singleStatIndex={singleStatIndex}
         singleKeyPosition={singleKeyPosition}
+        canonicalKeyPosition={singleCanonicalKeyPosition}
         singleStatPosition={singleStatPosition}
         singleKeyCode={singleKeyCode}
         singleKeySlot={singleKeySlot}
@@ -3348,7 +3420,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             : selectedKeyElements[0]?.id,
           { settleGesture: true },
         )}
+        onPaintPreview={stablePaintPreviewHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
         onPaintCommit={stablePaintCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onFontColorPreview={stableFontColorPreviewHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

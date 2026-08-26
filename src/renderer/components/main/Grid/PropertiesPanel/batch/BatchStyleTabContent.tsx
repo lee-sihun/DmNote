@@ -78,6 +78,7 @@ interface BatchStyleTabContentProps {
   onSoundVolumeCommit?: (soundVolume: number) => void;
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onFontColorPreview?: (patch: EditorFontColorPropertyPatchV1) => void;
   onFontColorCommit?: (patch: EditorFontColorPropertyPatchV1) => void;
@@ -149,6 +150,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
   onFontColorPreview,
   onFontColorCommit,
@@ -449,6 +451,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onChange={() => {}}
             onChangeComplete={() => {}}
             onActiveChangeComplete={() => {}}
+            onCancel={() => editGestureController.cancel()}
             panelElement={panelElement}
             canvasAnchor={{ kind: 'batch' }}
             gradientValue={
@@ -464,6 +467,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   colorPairFor(pos, 'backgroundColor', true).gradient ?? null,
                 null,
               ).value
+            }
+            onModePreview={(state, modeValue) =>
+              onPaintPreview?.(
+                state === 'active'
+                  ? {
+                      property: 'activeBackgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    }
+                  : {
+                      property: 'backgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    },
+              )
             }
             onModeCommit={(state, modeValue) =>
               onPaintCommit?.(
@@ -528,6 +544,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onChange={() => {}}
             onChangeComplete={() => {}}
             onActiveChangeComplete={() => {}}
+            onCancel={() => editGestureController.cancel()}
             panelElement={panelElement}
             canvasAnchor={{ kind: 'batch' }}
             gradientValue={
@@ -543,6 +560,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   colorPairFor(pos, 'borderColor', true).gradient ?? null,
                 null,
               ).value
+            }
+            onModePreview={(state, modeValue) =>
+              onPaintPreview?.(
+                state === 'active'
+                  ? {
+                      property: 'activeBorderPaint',
+                      value: paintDescriptor(modeValue),
+                    }
+                  : {
+                      property: 'borderPaint',
+                      value: paintDescriptor(modeValue),
+                    },
+              )
             }
             onModeCommit={(state, modeValue) =>
               onPaintCommit?.(
@@ -788,12 +818,18 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   showStateTabs={shadowActiveState}
                   stateMode={effectiveColorState}
                   onStateModeChange={setColorState}
-                  onChange={(color) =>
-                    onFontColorPreview?.(
-                      effectiveColorState === 'active'
-                        ? { property: 'activeFontColor', value: color }
-                        : { property: 'fontColor', value: color },
-                    )
+                  onChange={() => {}}
+                  onPreview={(color) =>
+                    onFontColorPreview?.({
+                      property: 'fontColor',
+                      value: color,
+                    })
+                  }
+                  onActivePreview={(color) =>
+                    onFontColorPreview?.({
+                      property: 'activeFontColor',
+                      value: color,
+                    })
                   }
                   onChangeComplete={(color) =>
                     onFontColorCommit?.({ property: 'fontColor', value: color })
@@ -804,6 +840,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                       value: color,
                     })
                   }
+                  onCancel={() => editGestureController.cancel()}
                   panelElement={panelElement}
                 />
               </PropertyRow>

@@ -73,7 +73,9 @@ import type {
 } from '@src/types/editor';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
 import {
+  previewBatchGraphColor,
   previewBatchFontColor,
+  previewBatchPaint,
   previewBatchStyleProperty,
 } from '../previewPatchForwarders';
 import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
@@ -133,14 +135,14 @@ const paintPatchDetails = (patch: EditorPaintPropertyPatchV1) => {
   };
 };
 
-const createPaintCommitHandler =
-  (
-    targets: readonly {
-      elementType: 'key' | 'stat' | 'graph' | 'knob';
-      id: string;
-    }[],
-  ) =>
-  (patch: EditorPaintPropertyPatchV1) => {
+const createPaintHandlers = (
+  targets: readonly {
+    elementType: 'key' | 'stat' | 'graph' | 'knob';
+    id: string;
+  }[],
+  selectedKeyType: string,
+) => {
+  const stableTargets = (patch: EditorPaintPropertyPatchV1) => {
     const details = paintPatchDetails(patch);
     const relevant = details.active
       ? targets.filter(
@@ -151,12 +153,24 @@ const createPaintCommitHandler =
       relevant.length > 0 &&
       relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
       new Set(relevant.map(({ id }) => id)).size === relevant.length;
-    if (!stable) {
-      return;
-    }
-    const persisted = patchPaintByTargets(relevant, patch);
-    void persisted.catch(reportElementOpError);
+    return stable ? relevant : null;
   };
+  return {
+    previewPaint: (patch: EditorPaintPropertyPatchV1) => {
+      const stable = stableTargets(patch);
+      if (!stable) return;
+      previewBatchPaint(stable, selectedKeyType, patch);
+    },
+    commitPaint: (patch: EditorPaintPropertyPatchV1) => {
+      const stable = stableTargets(patch);
+      if (!stable) return;
+      const gestureId = editGestureController.activeGestureId() ?? undefined;
+      const persisted = patchPaintByTargets(stable, patch, { gestureId });
+      editGestureController.settleCommit(persisted);
+      void persisted.catch(reportElementOpError);
+    },
+  };
+};
 
 const createFontColorHandlers = (
   targets: readonly {
@@ -188,16 +202,13 @@ const createFontColorHandlers = (
     commitFontColor: (patch: EditorFontColorPropertyPatchV1) => {
       const stable = stableTargets(patch);
       if (!stable) return;
-      const active = patch.property === 'activeFontColor';
-      const gestureId = active
-        ? undefined
-        : editGestureController.activeGestureId() ?? undefined;
+      const gestureId = editGestureController.activeGestureId() ?? undefined;
       const persisted = patchFontColorByTargets(
         stable,
         patch,
         gestureId ? { gestureId } : {},
       );
-      if (!active) editGestureController.settleCommit(persisted);
+      editGestureController.settleCommit(persisted);
       void persisted.catch(reportElementOpError);
     },
   };
@@ -672,7 +683,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   );
   const { previewStyleProperty, commitStyleProperty } =
     createStylePropertyHandlers(textPropertyTargets, selectedKeyType);
-  const commitPaint = createPaintCommitHandler(textPropertyTargets);
+  const { previewPaint, commitPaint } = createPaintHandlers(
+    textPropertyTargets,
+    selectedKeyType,
+  );
   const { previewFontColor, commitFontColor } = createFontColorHandlers(
     textPropertyTargets,
     selectedKeyType,
@@ -1288,6 +1302,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 onSoundVolumeCommit={commitSoundVolume}
                 onStylePropertyPreview={previewStyleProperty}
                 onStylePropertyCommit={commitStyleProperty}
+                onPaintPreview={previewPaint}
                 onPaintCommit={commitPaint}
                 onFontColorPreview={previewFontColor}
                 onFontColorCommit={commitFontColor}
@@ -1382,11 +1397,19 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                           hexMixed={graphColorMixed.hex}
                           alphaMixed={graphColorMixed.alpha}
                           onChange={() => {}}
+                          onPreview={(value) =>
+                            previewBatchGraphColor(
+                              selectedGraphElements.map(({ id }) => id),
+                              selectedKeyType,
+                              value,
+                            )
+                          }
                           onChangeComplete={(value) =>
                             handleGraphBatchSharedSetting({
                               graphColor: value,
                             })
                           }
+                          onCancel={() => editGestureController.cancel()}
                           colorId={`graph-batch-mixed-color-${selectedKeyType}`}
                           panelElement={panelElement}
                         />
@@ -1519,15 +1542,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               onColorChange={(color) => {
                 handleBatchPickerColorChange(color);
                 if (!previewNotePaint) return;
-                if (
-                  batchPickerFor === 'noteColor' &&
-                  typeof color === 'string'
-                ) {
+                if (batchPickerFor === 'noteColor') {
                   previewNotePaint({ property: 'notePaint', value: { color } });
-                } else if (
-                  batchPickerFor === 'glowColor' &&
-                  typeof color === 'string'
-                ) {
+                } else if (batchPickerFor === 'glowColor') {
                   previewNotePaint({
                     property: 'noteGlowPaint',
                     value: { color },
@@ -1577,6 +1594,58 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   return;
                 }
                 handleBatchPickerColorChangeComplete(color);
+              }}
+              onInputCancel={() => {
+                if (batchPickerFor === 'noteColor') {
+                  editGestureController.cancel();
+                  const noteColor = getMixedValueCanonical(
+                    (pos) => pos.noteColor,
+                    '#FFFFFF' as NoteColor,
+                  ).value;
+                  setBatchLocalColors((prev) => ({
+                    ...prev,
+                    noteColor,
+                  }));
+                } else if (batchPickerFor === 'glowColor') {
+                  editGestureController.cancel();
+                  const glowColor = getMixedValueCanonical(
+                    (pos) => pos.noteGlowColor ?? pos.noteColor,
+                    '#FFFFFF' as NoteColor,
+                  ).value;
+                  setBatchLocalColors((prev) => ({
+                    ...prev,
+                    glowColor,
+                  }));
+                } else if (batchPickerFor === 'borderColor') {
+                  editGestureController.cancel();
+                  const borderColor = getMixedValueCanonical(
+                    (pos) => pos.noteBorderColor,
+                    '#FFFFFF',
+                  ).value;
+                  const borderOpacity = getMixedValueCanonical(
+                    (pos) => pos.noteBorderOpacity,
+                    100,
+                  ).value;
+                  setBatchLocalColors((prev) => ({
+                    ...prev,
+                    borderColor,
+                    borderOpacity,
+                  }));
+                } else if (
+                  batchPickerFor === 'fill' ||
+                  batchPickerFor === 'stroke'
+                ) {
+                  const target = batchPickerFor;
+                  const state =
+                    batchCounterColorState === 'active' ? 'active' : 'idle';
+                  const key = `${target}${
+                    state === 'active' ? 'Active' : 'Idle'
+                  }` as const;
+                  setBatchLocalColors((prev) => ({
+                    ...prev,
+                    [key]: batchCounterSettings[target][state],
+                  }));
+                }
               }}
               onClose={() => setBatchPickerFor(null)}
               interactiveRefs={batchColorPickerInteractiveRefs}
@@ -1881,11 +1950,12 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
       })),
       selectedKeyType,
     );
-  const commitPaint = createPaintCommitHandler(
+  const { previewPaint, commitPaint } = createPaintHandlers(
     selectedGraphElements.map(({ id }) => ({
       elementType: 'graph',
       id,
     })),
+    selectedKeyType,
   );
 
   const graphShapeOptions = [
@@ -1959,6 +2029,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               totalCount={totalCount ?? selectedGraphElements.length}
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
+              onPaintPreview={previewPaint}
               onPaintCommit={commitPaint}
               hideDisplayText
               hideFontControls
@@ -2043,9 +2114,17 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                       hexMixed={graphColorMixed.hex}
                       alphaMixed={graphColorMixed.alpha}
                       onChange={() => {}}
+                      onPreview={(value) =>
+                        previewBatchGraphColor(
+                          selectedGraphElements.map(({ id }) => id),
+                          selectedKeyType,
+                          value,
+                        )
+                      }
                       onChangeComplete={(value) =>
                         handleGraphBatchSharedSetting({ graphColor: value })
                       }
+                      onCancel={() => editGestureController.cancel()}
                       colorId={`graph-batch-color-${selectedKeyType}`}
                       panelElement={panelElement}
                     />
@@ -2244,11 +2323,12 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
       })),
       selectedKeyType,
     );
-  const commitPaint = createPaintCommitHandler(
+  const { previewPaint, commitPaint } = createPaintHandlers(
     selectedKnobElements.map(({ id }) => ({
       elementType: 'knob',
       id,
     })),
+    selectedKeyType,
   );
   const commitShadow = createShadowCommitHandler(
     selectedKnobElements.map(({ id }) => ({
@@ -2293,6 +2373,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               totalCount={totalCount ?? selectedKnobElements.length}
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
+              onPaintPreview={previewPaint}
               onPaintCommit={commitPaint}
               onShadowCommit={commitShadow}
               hideDisplayText

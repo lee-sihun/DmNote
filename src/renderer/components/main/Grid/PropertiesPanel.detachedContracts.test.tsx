@@ -41,6 +41,7 @@ const {
   patchFontFamilyTargetsMock,
   patchFontFamilyViaAuthorityMock,
   patchDisplayTextMock,
+  patchElementPropertyMock,
   patchDisplayTextViaAuthorityMock,
   patchInactiveImageMock,
   patchInactiveImageViaAuthorityMock,
@@ -130,6 +131,7 @@ const {
   patchFontFamilyTargetsMock: vi.fn(() => Promise.resolve(true)),
   patchFontFamilyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchDisplayTextMock: vi.fn(() => Promise.resolve(true)),
+  patchElementPropertyMock: vi.fn(() => Promise.resolve(true)),
   patchDisplayTextViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchInactiveImageMock: vi.fn(() => Promise.resolve(true)),
   patchInactiveImageViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -249,6 +251,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontFamilyById: patchFontFamilyMock,
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
   patchStylePropertyById: patchDisplayTextMock,
+  patchElementPropertyById: patchElementPropertyMock,
   patchPaintById: patchPaintMock,
   patchShadowById: patchShadowMock,
   patchNotePaintById: patchNotePaintMock,
@@ -427,6 +430,7 @@ const resetStores = () => {
   patchGraphColorsMock.mockClear();
   patchGraphColorsViaAuthorityMock.mockClear();
   patchGraphPropertiesMock.mockClear();
+  patchElementPropertyMock.mockClear();
   patchGraphPropertiesViaAuthorityMock.mockClear();
   patchGraphTypesMock.mockClear();
   patchGraphTypesViaAuthorityMock.mockClear();
@@ -658,6 +662,7 @@ describe('PropertiesPanel canonical native contract', () => {
       handleGeometryCommit?: (field: 'dx', value: number) => void;
       handleGeometryPreview?: (field: 'dx', value: number) => void;
       onElementPropertyCommit?: (patch: Record<string, unknown>) => void;
+      onPaintCommit?: (patch: Record<string, unknown>) => void;
       onCounterEnabledCommit?: (enabled: boolean) => void;
       onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
     };
@@ -710,6 +715,95 @@ describe('PropertiesPanel canonical native contract', () => {
       '4key',
       [{ id, patch: { dx: 17 } }],
       { domain: 'keyPosition' },
+    );
+  });
+
+  it('single graph color와 paint 확정은 활성 gestureId로 정산한다', () => {
+    const id = '63333333-3333-4333-8333-333333333333';
+    const gestureId = '64444444-4444-4444-8444-444444444444';
+    activeGestureIdMock.mockReturnValue(gestureId);
+    installSingle('graph', id);
+    mounted = mountPanel();
+    const props = latestSingleProps('graph');
+
+    act(() =>
+      props.onElementPropertyCommit?.({
+        property: 'graphColor',
+        value: '#123456',
+      }),
+    );
+
+    expect(patchElementPropertyMock).toHaveBeenCalledWith(
+      'graph',
+      id,
+      { property: 'graphColor', value: '#123456' },
+      { gestureId },
+    );
+    expect(settleCommitMock).toHaveBeenCalledWith(
+      patchElementPropertyMock.mock.results[0]?.value,
+    );
+
+    act(() =>
+      props.onPaintCommit?.({
+        property: 'backgroundPaint',
+        value: { color: '#654321', gradient: null },
+      }),
+    );
+
+    expect(patchPaintMock).toHaveBeenCalledWith(
+      'graph',
+      id,
+      {
+        property: 'backgroundPaint',
+        value: { color: '#654321', gradient: null },
+      },
+      { gestureId },
+    );
+    expect(settleCommitMock).toHaveBeenCalledWith(
+      patchPaintMock.mock.results[0]?.value,
+    );
+  });
+
+  it('batch graph color 확정은 활성 gestureId로 정산한다', () => {
+    const ids = [
+      '65555555-5555-4555-8555-555555555555',
+      '66666666-6666-4666-8666-666666666666',
+    ];
+    const gestureId = '67777777-7777-4777-8777-777777777777';
+    const base = createDefaultKeyPosition();
+    activeGestureIdMock.mockReturnValue(gestureId);
+    useGraphItemStore.setState({
+      positions: {
+        '4key': ids.map((id) => ({
+          ...base,
+          id,
+          statType: 'kps',
+          graphType: 'line',
+          graphSpeed: 1,
+          graphColor: '#ffffff',
+        })),
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: ids.map((id, index) => ({
+        type: 'graph',
+        id,
+        index,
+      })),
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel();
+    const props = batchGraphPropsMock.mock.lastCall?.[0] as {
+      handleGraphBatchSharedSetting?: (updates: { graphColor: string }) => void;
+    };
+
+    act(() => props.handleGraphBatchSharedSetting?.({ graphColor: '#abcdef' }));
+
+    expect(patchGraphColorsMock).toHaveBeenCalledWith(ids, '#abcdef', {
+      gestureId,
+    });
+    expect(settleCommitMock).toHaveBeenCalledWith(
+      patchGraphColorsMock.mock.results[0]?.value,
     );
   });
 

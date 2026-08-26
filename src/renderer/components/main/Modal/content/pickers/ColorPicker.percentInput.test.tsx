@@ -474,7 +474,9 @@ describe('ColorPicker 불투명도 % 입력', () => {
     });
 
     it('Mixed hex 칸을 손대지 않고 blur하면 대표값을 확정하지 않는다', () => {
-      const { onColorChangeComplete } = renderMixedSolid({ hexMixed: true });
+      const { onColorChange, onColorChangeComplete } = renderMixedSolid({
+        hexMixed: true,
+      });
       const input = hexInput();
 
       act(() => input.focus());
@@ -483,6 +485,25 @@ describe('ColorPicker 불투명도 % 입력', () => {
 
       expect(onColorChangeComplete).not.toHaveBeenCalled();
       expect(input.placeholder).toBe('Mixed');
+
+      act(() =>
+        root.render(
+          <ColorPicker
+            open
+            referenceRef={referenceRef()}
+            color="rgba(255, 255, 255, 1)"
+            solidOnly
+            hexMixed={false}
+            onColorChange={onColorChange}
+            onColorChangeComplete={onColorChangeComplete}
+            onClose={vi.fn()}
+          />,
+        ),
+      );
+
+      expect(hexInput().value).toBe('FFFFFF');
+      expect(onColorChange).not.toHaveBeenCalled();
+      expect(onColorChangeComplete).not.toHaveBeenCalled();
     });
 
     it('Mixed hex 칸에 값을 치고 Enter하면 그 값이 전체에 확정된다', () => {
@@ -572,6 +593,156 @@ describe('ColorPicker 불투명도 % 입력', () => {
       expect(top.value).toBe('');
       expect(top.placeholder).toBe('Mixed');
       expect(bottom.value).toBe('70');
+    });
+  });
+
+  describe('hex 입력 게스처', () => {
+    const hexInputs = () =>
+      Array.from(
+        container.querySelectorAll<HTMLInputElement>('input:not([inputmode])'),
+      );
+
+    it('유효한 solid hex는 즉시 preview하고 Enter는 complete만 한 번 보낸다', () => {
+      const { onColorChange, onColorChangeComplete } = renderSolid();
+      const input = hexInputs()[0];
+
+      act(() => input.focus());
+      act(() => setInputValue(input, '00FF00'));
+
+      expect(String(onColorChange.mock.lastCall?.[0])).toMatch(
+        /^rgba\(0, 255, 0, 0.5\)$/,
+      );
+      expect(onColorChangeComplete).not.toHaveBeenCalled();
+      const previewCount = onColorChange.mock.calls.length;
+
+      act(() => pressKey(input, 'Enter'));
+
+      expect(onColorChange).toHaveBeenCalledTimes(previewCount);
+      expect(onColorChangeComplete).toHaveBeenCalledTimes(1);
+      expect(String(onColorChangeComplete.mock.lastCall?.[0])).toMatch(
+        /^rgba\(0, 255, 0, 0.5\)$/,
+      );
+    });
+
+    it('유효하지 않은 solid draft의 blur는 마지막 preview를 시작값으로 되돌리고 확정하지 않는다', () => {
+      const { onColorChange, onColorChangeComplete } = renderSolid();
+      const input = hexInputs()[0];
+
+      act(() => input.focus());
+      act(() => setInputValue(input, '00FF00'));
+      act(() => setInputValue(input, '00F'));
+      act(() => input.blur());
+
+      expect(String(onColorChange.mock.lastCall?.[0])).toMatch(
+        /^rgba\(255, 0, 0, 0.5\)$/,
+      );
+      expect(onColorChangeComplete).not.toHaveBeenCalled();
+      expect(input.value).toBe('FF0000');
+    });
+
+    it('Mixed hex Escape는 cancel 채널에 맡기고 대표값 preview를 다시 내지 않는다', () => {
+      const onColorChange = vi.fn();
+      const onColorChangeComplete = vi.fn();
+      const onInputCancel = vi.fn();
+      act(() =>
+        root.render(
+          <ColorPicker
+            open
+            referenceRef={referenceRef()}
+            color="rgba(255, 255, 255, 1)"
+            solidOnly
+            hexMixed
+            onColorChange={onColorChange}
+            onColorChangeComplete={onColorChangeComplete}
+            onInputCancel={onInputCancel}
+            onClose={vi.fn()}
+          />,
+        ),
+      );
+      const input = hexInputs()[0];
+
+      act(() => input.focus());
+      act(() => setInputValue(input, 'FF0000'));
+      expect(onColorChange).toHaveBeenCalledTimes(1);
+      onColorChange.mockClear();
+      let keydown!: KeyboardEvent;
+      act(() => {
+        keydown = pressKey(input, 'Escape');
+      });
+
+      expect(keydown.defaultPrevented).toBe(true);
+      expect(onInputCancel).toHaveBeenCalledWith(
+        'solid',
+        'rgba(255, 255, 255, 1)',
+      );
+      expect(onColorChange).not.toHaveBeenCalled();
+      expect(onColorChangeComplete).not.toHaveBeenCalled();
+      expect(input.placeholder).toBe('Mixed');
+    });
+
+    it('그라데이션 top hex는 즉시 gradient preview하고 Enter는 complete만 보낸다', () => {
+      const onColorChange = vi.fn();
+      const onColorChangeComplete = vi.fn();
+      act(() =>
+        root.render(
+          <ColorPicker
+            open
+            referenceRef={referenceRef()}
+            color={{
+              type: 'gradient',
+              top: '#FF0000',
+              bottom: '#0000FF',
+            }}
+            onColorChange={onColorChange}
+            onColorChangeComplete={onColorChangeComplete}
+            onClose={vi.fn()}
+          />,
+        ),
+      );
+      const top = hexInputs().find((input) => input.placeholder === 'Top')!;
+
+      act(() => top.focus());
+      act(() => setInputValue(top, '00FF00'));
+      expect(onColorChange).toHaveBeenLastCalledWith({
+        type: 'gradient',
+        top: '#00FF00',
+        bottom: '#0000FF',
+      });
+      const previewCount = onColorChange.mock.calls.length;
+
+      act(() => pressKey(top, 'Enter'));
+      expect(onColorChange).toHaveBeenCalledTimes(previewCount);
+      expect(onColorChangeComplete).toHaveBeenCalledTimes(1);
+      expect(onColorChangeComplete).toHaveBeenLastCalledWith({
+        type: 'gradient',
+        top: '#00FF00',
+        bottom: '#0000FF',
+      });
+    });
+
+    it('non-solid 8자리 hex는 alpha를 버리지 않고 preview와 complete에 보존한다', () => {
+      const onColorChange = vi.fn();
+      const onColorChangeComplete = vi.fn();
+      act(() =>
+        root.render(
+          <ColorPicker
+            open
+            referenceRef={referenceRef()}
+            color="#FF0000"
+            onColorChange={onColorChange}
+            onColorChangeComplete={onColorChangeComplete}
+            onClose={vi.fn()}
+          />,
+        ),
+      );
+      const input = hexInputs()[0];
+
+      act(() => input.focus());
+      act(() => setInputValue(input, '11223380'));
+      expect(onColorChange).toHaveBeenLastCalledWith('#11223380');
+
+      act(() => pressKey(input, 'Enter'));
+      expect(onColorChangeComplete).toHaveBeenLastCalledWith('#11223380');
     });
   });
 });

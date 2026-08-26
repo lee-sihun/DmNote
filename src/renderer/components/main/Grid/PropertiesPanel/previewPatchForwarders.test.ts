@@ -14,7 +14,9 @@ import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
 import {
+  previewBatchGraphColor,
   previewBatchFontColor,
+  previewBatchPaint,
   previewBatchStyleProperty,
   previewSingleStyleProperty,
 } from './previewPatchForwarders';
@@ -60,6 +62,8 @@ const keyFixture = (): CanonicalEditorDocumentV1['keyPositions'] =>
         ...createDefaultKeyPosition(),
         id: KEY_ID,
         fontColor: '#old-idle',
+        backgroundColor: '#old-background',
+        activeBackgroundColor: undefined,
         borderWidth: 1,
         noteOffsetX: 42,
       },
@@ -89,6 +93,12 @@ const composedKnob = () =>
   composePreviewPositions(
     'knobPosition',
     useKnobItemStore.getState().positions,
+  )['4key'][0] as Record<string, unknown>;
+
+const composedGraph = () =>
+  composePreviewPositions(
+    'graphPosition',
+    useGraphItemStore.getState().positions,
   )['4key'][0] as Record<string, unknown>;
 
 // 태그 patch가 원본 그대로 스프레드되면 위치 객체에 property/value
@@ -185,6 +195,38 @@ describe('preview patch forwarders (forwarder → overlay 실경로)', () => {
     expect(composed.activeFontColor).toBe('#new-active');
     expect(composed.fontColor).toBe('#old-idle');
     expectNoWirePollution(composed);
+  });
+
+  it('batch paint는 commit과 같은 projection으로 idle fallback까지 투영한다', () => {
+    previewBatchPaint([{ elementType: 'key', id: KEY_ID }], '4key', {
+      property: 'backgroundPaint',
+      value: { color: '#new-background', gradient: null },
+    });
+
+    const composed = composedKey();
+    expect(composed.backgroundColor).toBe('#new-background');
+    expect(composed.backgroundGradient).toBeUndefined();
+    expect(composed.activeBackgroundColor).toBe('#old-background');
+    expectNoWirePollution(composed);
+  });
+
+  it('batch graph color는 graphPosition preview에만 투영한다', () => {
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...createDefaultKeyPosition(),
+            id: KEY_ID_A,
+            graphColor: '#old-graph',
+          },
+        ],
+      } as never,
+    });
+
+    previewBatchGraphColor([KEY_ID_A], '4key', '#new-graph');
+
+    expect(composedGraph().graphColor).toBe('#new-graph');
+    expectNoWirePollution(composedGraph());
   });
 
   it('배치 프리뷰 중 비대상 삭제로 index가 밀려도 요소별 patch가 제 요소에 누적된다', () => {

@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { flushPluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
@@ -337,10 +338,12 @@ interface SingleGraphPanelProps {
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
   onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onGraphColorPreview?: (color: string) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
@@ -367,10 +370,12 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleRenameCancel,
   handleRenameStart,
   onElementPropertyCommit,
+  onGraphColorPreview,
   onInactiveImageCommit,
   onIdleTransparentCommit,
   onIdleImageFitCommit,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
   handleGeometryCommit,
   singleScrollRefFor,
@@ -556,12 +561,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <ColorInput
                   value={singleGraphPosition.graphColor || '#86EFAC'}
                   onChange={() => {}}
+                  onPreview={(value) => onGraphColorPreview?.(value)}
                   onChangeComplete={(value) =>
                     onElementPropertyCommit?.({
                       property: 'graphColor',
                       value: value,
                     })
                   }
+                  onCancel={() => editGestureController.cancel()}
                   colorId={`graph-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   panelElement={panelElement}
                 />
@@ -605,12 +612,19 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                       ? { kind: 'graph', id: singleGraphPosition.id }
                       : undefined
                   }
+                  onModePreview={(_state, modeValue) =>
+                    onPaintPreview?.({
+                      property: 'backgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    })
+                  }
                   onModeCommit={(_state, modeValue) =>
                     onPaintCommit?.({
                       property: 'backgroundPaint',
                       value: paintDescriptor(modeValue),
                     })
                   }
+                  onCancel={() => editGestureController.cancel()}
                   colorId={`graph-bg-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   panelElement={panelElement}
                 />
@@ -632,12 +646,19 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                       ? { kind: 'graph', id: singleGraphPosition.id }
                       : undefined
                   }
+                  onModePreview={(_state, modeValue) =>
+                    onPaintPreview?.({
+                      property: 'borderPaint',
+                      value: paintDescriptor(modeValue),
+                    })
+                  }
                   onModeCommit={(_state, modeValue) =>
                     onPaintCommit?.({
                       property: 'borderPaint',
                       value: paintDescriptor(modeValue),
                     })
                   }
+                  onCancel={() => editGestureController.cancel()}
                   colorId={`graph-border-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   gradientSurface="border"
                   panelElement={panelElement}
@@ -800,6 +821,7 @@ interface SingleKnobPanelProps {
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
@@ -829,6 +851,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   onIdleImageFitCommit,
   onActiveImageFitCommit,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
   onShadowCommit,
   handleGeometryCommit,
@@ -1047,9 +1070,19 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     canvasSurface: pickerFor === 'borderColor' ? 'border' : 'background',
     canvasState: colorState,
     onPreview: (value) => {
-      if (value.mode === 'solid' && pickerFor) {
-        handleColorChange(pickerFor, value.color);
-      }
+      if (!pickerFor) return;
+      const prop = resolveColorProperty(pickerFor);
+      const descriptor = paintDescriptor(value);
+      setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+      const paintField =
+        colorState === 'active'
+          ? pickerFor === 'backgroundColor'
+            ? 'activeBackgroundPaint'
+            : 'activeBorderPaint'
+          : pickerFor === 'backgroundColor'
+          ? 'backgroundPaint'
+          : 'borderPaint';
+      onPaintPreview?.({ property: paintField, value: descriptor } as never);
     },
     onCommit: handleGradientCommit,
   });
@@ -1470,6 +1503,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             onColorChangeComplete={(c: string) =>
               knobGradientState.handlePickerColorChange(c, true)
             }
+            onInputCancel={(_target, restoredColor) => {
+              knobGradientState.cancelPreview();
+              if (pickerFor && typeof restoredColor === 'string') {
+                handleColorChange(pickerFor, restoredColor);
+              }
+              editGestureController.cancel();
+            }}
             onClose={() => setPickerFor(null)}
             solidOnly={true}
             stateMode={colorState}
@@ -1498,6 +1538,7 @@ interface SingleKeyStatPanelProps {
   singleKeyIndex: number | null;
   singleStatIndex: number | null;
   singleKeyPosition: KeyPosition | null;
+  canonicalKeyPosition: KeyPosition | null;
   singleStatPosition: StatItemPosition | null;
   singleKeyCode: string | null;
   singleKeySlot: KeySlot | null;
@@ -1532,7 +1573,9 @@ interface SingleKeyStatPanelProps {
   onSoundVolumeCommit?: (soundVolume: number) => void;
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onFontColorPreview?: StyleTabContentProps['onFontColorPreview'];
   onFontColorCommit?: StyleTabContentProps['onFontColorCommit'];
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   onNotePaintCommit?: NoteTabContentProps['onNotePaintCommit'];
@@ -1560,6 +1603,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   singleKeyIndex,
   singleStatIndex,
   singleKeyPosition,
+  canonicalKeyPosition,
   singleStatPosition,
   singleKeyCode,
   singleKeySlot,
@@ -1592,7 +1636,9 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
+  onFontColorPreview,
   onFontColorCommit,
   onShadowCommit,
   onNotePaintCommit,
@@ -1789,7 +1835,9 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onSoundVolumeCommit={onSoundVolumeCommit}
               onStylePropertyPreview={onStylePropertyPreview}
               onStylePropertyCommit={onStylePropertyCommit}
+              onPaintPreview={onPaintPreview}
               onPaintCommit={onPaintCommit}
+              onFontColorPreview={onFontColorPreview}
               onFontColorCommit={onFontColorCommit}
               onShadowCommit={onShadowCommit}
               imageButtonRef={imageButtonRef}
@@ -1827,6 +1875,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             <EditSessionBoundary>
               <NoteTabContent
                 keyPosition={singleKeyPosition!}
+                canonicalKeyPosition={canonicalKeyPosition ?? undefined}
                 onElementPropertyCommit={onElementPropertyCommit}
                 onStylePropertyPreview={onStylePropertyPreview}
                 onStylePropertyCommit={onStylePropertyCommit}

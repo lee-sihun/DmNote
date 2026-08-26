@@ -78,6 +78,8 @@ interface ColorPickerWrapperProps {
   ) => void;
   /** % 입력의 Escape 원복. 배치 편집은 게스처 취소로만 항목별 값을 되살릴 수 있다 */
   onOpacityPercentCancel?: (target: OpacityTarget) => void;
+  /** hex/solid alpha 입력의 Escape 원복. 피커는 로컬 시작값을, 호출부는 preview 세션을 되돌린다 */
+  onInputCancel?: (target: OpacityTarget, restoredColor: ColorValue) => void;
   opacityPercentLabel?: string;
   /** 배치 선택의 % 칸 값(opacity 또는 solidOnly alpha)이 서로 다르면 대표값 대신 Mixed.
    *  그라데이션은 상·하단이 따로 갈릴 수 있어 객체도 받는다 */
@@ -130,6 +132,7 @@ const ColorPickerWrapper = ({
   onOpacityPercentChange = undefined,
   onOpacityPercentChangeComplete = undefined,
   onOpacityPercentCancel = undefined,
+  onInputCancel = undefined,
   opacityPercentLabel = undefined,
   opacityPercentMixed = false,
   hexMixed = false,
@@ -162,7 +165,6 @@ const ColorPickerWrapper = ({
     isGradientColor(color) ? color.bottom.replace('#', '') : 'FFFFFF',
   );
   const suppressGradientResetRef = useRef<boolean>(false);
-  const suppressGradientBroadcastRef = useRef<boolean>(false);
   // 드래그 중인지 추적 (드래그 중에는 외부 color prop 동기화 건너뜀)
   const isDraggingRef = useRef<boolean>(false);
   // 한번이라도 그라디언트 모드에 진입(또는 그라디언트 값을 받은) 이후엔
@@ -244,7 +246,6 @@ const ColorPickerWrapper = ({
         } else if (mode === MODES.gradient) {
           // 그라디언트 모드에서 솔리드 팔레트 클릭 시, 선택된 stop에 적용
           const newHex = parsed.hex.replace('#', '').toUpperCase();
-          suppressGradientBroadcastRef.current = true;
           if (gradientSelected === 'top') {
             setGradientTop(newHex);
             const gradient = buildGradient(parsed.hex, `#${gradientBottom}`);
@@ -282,7 +283,6 @@ const ColorPickerWrapper = ({
           );
           return;
         }
-        suppressGradientBroadcastRef.current = true;
         setGradientTop(gradientColor.top.replace('#', '').toUpperCase());
         setGradientBottom(gradientColor.bottom.replace('#', '').toUpperCase());
         setMode(MODES.gradient);
@@ -320,7 +320,6 @@ const ColorPickerWrapper = ({
     if (isGradientNow) {
       const topHex = color.top.replace('#', '').toUpperCase();
       const bottomHex = color.bottom.replace('#', '').toUpperCase();
-      suppressGradientBroadcastRef.current = true;
       setGradientTop(topHex);
       setGradientBottom(bottomHex);
       hasSeededGradientFromSolidRef.current = true;
@@ -363,7 +362,6 @@ const ColorPickerWrapper = ({
           !suppressGradientResetRef.current &&
           !hasSeededGradientFromSolidRef.current
         ) {
-          suppressGradientBroadcastRef.current = true;
           setGradientTop(parsed.hex.replace('#', ''));
           setGradientBottom('FFFFFF');
         }
@@ -386,15 +384,31 @@ const ColorPickerWrapper = ({
   // 이번 편집에서 hex를 실제로 쳤는지. Mixed 상태에서 손대지 않은 blur가
   // 대표값을 선택 전체에 확정해 항목별 값을 지우는 일을 막는다
   const hexDirtyRef = useRef(false);
+  const solidInputEditRef = useRef<{
+    inputValue: string;
+    color: ColorValue;
+    selectedColor: ColorObject;
+    alpha: number;
+    previewed: boolean;
+  } | null>(null);
+  const gradientInputEditRef = useRef<{
+    side: GradientSide;
+    top: string;
+    bottom: string;
+    color: GradientColor;
+    selectedColor: ColorObject;
+    dirty: boolean;
+    previewed: boolean;
+  } | null>(null);
 
   useEffect(() => {
+    if (solidInputEditRef.current) return;
     setInputValue(
       selectedColor.hex
         .replace('#', '')
         .toUpperCase()
         .slice(0, solidOnly ? 6 : 8),
     );
-    hexDirtyRef.current = false;
   }, [selectedColor.hex, solidOnly]);
 
   // solidOnly 모드에서 Alpha 값 변경 반영 - useEffect 제거하여 무한 루프 방지
@@ -427,17 +441,6 @@ const ColorPickerWrapper = ({
     }
   };
 
-  useEffect(() => {
-    if (mode !== MODES.gradient || solidOnly) {
-      return;
-    }
-    if (suppressGradientBroadcastRef.current) {
-      suppressGradientBroadcastRef.current = false;
-      return;
-    }
-    onColorChange?.(buildGradient(`#${gradientTop}`, `#${gradientBottom}`));
-  }, [mode, gradientTop, gradientBottom, onColorChange, solidOnly]);
-
   const applyColor = (
     next: string | Partial<ColorObject>,
     isComplete: boolean = false,
@@ -449,7 +452,6 @@ const ColorPickerWrapper = ({
       // 그라디언트 모드에서 Saturation/Hue 편집 시 선택된 stop 업데이트
       const newHex = parsed.hex.replace('#', '').toUpperCase();
 
-      suppressGradientBroadcastRef.current = true;
       if (gradientSelected === 'top') {
         setGradientTop(newHex);
         const gradient = buildGradient(parsed.hex, `#${gradientBottom}`);
@@ -490,70 +492,100 @@ const ColorPickerWrapper = ({
     isDraggingRef.current = false;
   };
 
+  const validHexDraft = (value: string, allowAlpha: boolean): boolean =>
+    value.length === 6 || (allowAlpha && value.length === 8);
+
+  const solidOutput = (parsed: ColorObject, draft: string): string =>
+    solidOnly
+      ? buildRgbaFromHexAndAlpha(parsed.hex, alpha)
+      : draft.length === 8
+      ? `#${draft}`
+      : parsed.hex;
+
+  const startSolidInputEdit = () => {
+    const baseColor = solidOnly
+      ? buildRgbaFromHexAndAlpha(selectedColor.hex, alpha)
+      : inputValue.length === 8
+      ? `#${inputValue}`
+      : selectedColor.hex;
+    solidInputEditRef.current = {
+      inputValue,
+      color: baseColor,
+      selectedColor,
+      alpha,
+      previewed: false,
+    };
+    hexDirtyRef.current = false;
+    // Mixed 필드는 빈 칸에서 시작한다. 대표값을 띄우면 공통값처럼 읽힌다
+    if (hexMixed) setInputValue('');
+  };
+
   const handleInputChange = (raw: string) => {
     const sanitized = raw
       .replace(/[^0-9a-fA-F]/g, '')
       .slice(0, solidOnly ? 6 : 8)
       .toUpperCase();
+    if (!solidInputEditRef.current) startSolidInputEdit();
     hexDirtyRef.current = true;
     setInputValue(sanitized);
+    if (!validHexDraft(sanitized, !solidOnly)) return;
+    const parsed = parseHexColor(sanitized);
+    if (!parsed) return;
+    const nextSelected = solidOnly
+      ? {
+          ...parsed,
+          rgb: { ...parsed.rgb, a: alpha },
+          hsv: { ...parsed.hsv, a: alpha },
+        }
+      : parsed;
+    setSelectedColor(nextSelected);
+    if (solidInputEditRef.current) {
+      solidInputEditRef.current.previewed = true;
+    }
+    onColorChange?.(solidOutput(parsed, sanitized));
   };
 
-  // Mixed 필드는 빈 칸에서 시작한다. 대표값을 띄우면 공통값처럼 읽힌다
-  const handleInputFocus = () => {
-    if (hexMixed) setInputValue('');
+  const restoreSolidInput = () => {
+    const edit = solidInputEditRef.current;
+    if (!edit) return;
+    setInputValue(edit.inputValue);
+    setSelectedColor(edit.selectedColor);
+    setAlpha(edit.alpha);
+    hexDirtyRef.current = false;
+    solidInputEditRef.current = null;
+    if (!edit.previewed) return;
+    if (onInputCancel) {
+      onInputCancel('solid', edit.color);
+    } else if (!hexMixed) {
+      onColorChange?.(edit.color);
+    }
   };
 
   const commitSolidInput = () => {
-    if (hexMixed && !hexDirtyRef.current) {
-      setInputValue(
-        selectedColor.hex
-          .replace('#', '')
-          .toUpperCase()
-          .slice(0, solidOnly ? 6 : 8),
-      );
+    if (!hexDirtyRef.current) {
+      const edit = solidInputEditRef.current;
+      if (edit) setInputValue(edit.inputValue);
+      solidInputEditRef.current = null;
+      return;
+    }
+    if (!validHexDraft(inputValue, !solidOnly)) {
+      restoreSolidInput();
+      return;
+    }
+    const parsed = parseHexColor(inputValue);
+    if (!parsed) {
+      restoreSolidInput();
       return;
     }
     hexDirtyRef.current = false;
-    if (!inputValue) {
-      setInputValue(
-        selectedColor.hex
-          .replace('#', '')
-          .toUpperCase()
-          .slice(0, solidOnly ? 6 : 8),
-      );
-      return;
-    }
+    solidInputEditRef.current = null;
+    onColorChangeComplete?.(solidOutput(parsed, inputValue));
+  };
 
-    const parsed = parseHexColor(inputValue);
-    if (!parsed) {
-      setInputValue(
-        selectedColor.hex
-          .replace('#', '')
-          .toUpperCase()
-          .slice(0, solidOnly ? 6 : 8),
-      );
-      return;
-    }
-
-    setSelectedColor(
-      solidOnly
-        ? {
-            ...parsed,
-            rgb: { ...parsed.rgb, a: alpha },
-            hsv: { ...parsed.hsv, a: alpha },
-          }
-        : parsed,
-    );
-
-    if (solidOnly) {
-      const rgbaValue = buildRgbaFromHexAndAlpha(parsed.hex, alpha);
-      onColorChange?.(rgbaValue);
-      onColorChangeComplete?.(rgbaValue);
-    } else {
-      onColorChange?.(parsed.hex);
-      onColorChangeComplete?.(parsed.hex);
-    }
+  const cancelSolidInput = (): boolean => {
+    if (!hexDirtyRef.current) return false;
+    restoreSolidInput();
+    return true;
   };
 
   // 입력은 NumberInput이 0~100으로 재운 값만 넘긴다
@@ -575,6 +607,17 @@ const ColorPickerWrapper = ({
 
   const cancelAlphaPercent = () => {
     const base = alphaEditBaseRef.current;
+    const restoredColor = buildRgbaFromHexAndAlpha(selectedColor.hex, base);
+    if (onInputCancel) {
+      setAlpha(base);
+      setSelectedColor((prev) => ({
+        ...prev,
+        rgb: { ...prev.rgb, a: base },
+        hsv: { ...prev.hsv, a: base },
+      }));
+      onInputCancel('solid', restoredColor);
+      return;
+    }
     if (onOpacityPercentCancel) {
       // 호출부가 게스처를 가지면 preview를 내지 않고 조용히 되돌린 뒤 맡긴다.
       // 대표값 preview는 선택 전체를 평탄화한다
@@ -597,19 +640,98 @@ const ColorPickerWrapper = ({
       return;
     }
     setSelectedColor(parsedTop);
-    const gradient = buildGradient(parsedTop.hex, parsedBottom.hex);
+    const gradient = buildGradient(`#${gradientTop}`, `#${gradientBottom}`);
     onColorChange?.(gradient);
     onColorChangeComplete?.(gradient);
   };
 
-  const handleGradientInputChange =
-    (setter: React.Dispatch<React.SetStateAction<string>>) => (raw: string) => {
-      const sanitized = raw
-        .replace(/[^0-9a-fA-F]/g, '')
-        .slice(0, 8)
-        .toUpperCase();
-      setter(sanitized);
+  const startGradientInputEdit = (side: GradientSide) => {
+    const selectedValue = side === 'top' ? gradientTop : gradientBottom;
+    const parsed = parseHexColor(selectedValue) ?? selectedColor;
+    setGradientSelected(side);
+    setSelectedColor(parsed);
+    gradientInputEditRef.current = {
+      side,
+      top: gradientTop,
+      bottom: gradientBottom,
+      color: buildGradient(`#${gradientTop}`, `#${gradientBottom}`),
+      selectedColor: parsed,
+      dirty: false,
+      previewed: false,
     };
+  };
+
+  const handleGradientInputChange = (side: GradientSide, raw: string) => {
+    const sanitized = raw
+      .replace(/[^0-9a-fA-F]/g, '')
+      .slice(0, 8)
+      .toUpperCase();
+    if (gradientInputEditRef.current?.side !== side) {
+      startGradientInputEdit(side);
+    }
+    const edit = gradientInputEditRef.current;
+    if (edit) edit.dirty = true;
+    if (side === 'top') setGradientTop(sanitized);
+    else setGradientBottom(sanitized);
+    if (!validHexDraft(sanitized, true)) return;
+    const parsed = parseHexColor(sanitized);
+    const other = parseHexColor(side === 'top' ? gradientBottom : gradientTop);
+    if (!parsed || !other) return;
+    setSelectedColor(parsed);
+    if (edit) edit.previewed = true;
+    onColorChange?.(
+      side === 'top'
+        ? buildGradient(`#${sanitized}`, `#${gradientBottom}`)
+        : buildGradient(`#${gradientTop}`, `#${sanitized}`),
+    );
+  };
+
+  const restoreGradientInput = () => {
+    const edit = gradientInputEditRef.current;
+    if (!edit) return;
+    setGradientTop(edit.top);
+    setGradientBottom(edit.bottom);
+    setSelectedColor(edit.selectedColor);
+    setGradientSelected(edit.side);
+    gradientInputEditRef.current = null;
+    if (!edit.previewed) return;
+    if (onInputCancel) onInputCancel(edit.side, edit.color);
+    else onColorChange?.(edit.color);
+  };
+
+  const commitGradientInput = (side: GradientSide) => {
+    const edit = gradientInputEditRef.current;
+    if (!edit?.dirty) {
+      gradientInputEditRef.current = null;
+      return;
+    }
+    if (
+      !validHexDraft(gradientTop, true) ||
+      !validHexDraft(gradientBottom, true)
+    ) {
+      restoreGradientInput();
+      return;
+    }
+    const parsedTop = parseHexColor(gradientTop);
+    const parsedBottom = parseHexColor(gradientBottom);
+    if (!parsedTop || !parsedBottom) {
+      restoreGradientInput();
+      return;
+    }
+    setGradientSelected(side);
+    setSelectedColor(side === 'top' ? parsedTop : parsedBottom);
+    gradientInputEditRef.current = null;
+    onColorChangeComplete?.(
+      buildGradient(`#${gradientTop}`, `#${gradientBottom}`),
+    );
+  };
+
+  const cancelGradientInput = (side: GradientSide): boolean => {
+    const edit = gradientInputEditRef.current;
+    if (!edit || edit.side !== side || !edit.dirty) return false;
+    restoreGradientInput();
+    return true;
+  };
 
   const selectGradient = (side: GradientSide) => {
     setGradientSelected(side);
@@ -812,8 +934,9 @@ const ColorPickerWrapper = ({
           value={inputValue}
           mixed={hexMixed}
           onValueChange={handleInputChange}
-          onValueFocus={handleInputFocus}
+          onValueFocus={startSolidInputEdit}
           onValueCommit={commitSolidInput}
+          onValueCancel={cancelSolidInput}
           previewColor={selectedColor.hex}
           alpha={
             solidOnly
@@ -828,16 +951,14 @@ const ColorPickerWrapper = ({
         <GradientInputs
           topValue={gradientTop}
           bottomValue={gradientBottom}
-          onTopChange={handleGradientInputChange(setGradientTop)}
-          onBottomChange={handleGradientInputChange(setGradientBottom)}
-          onTopCommit={() => {
-            commitGradient();
-            selectGradient('top');
-          }}
-          onBottomCommit={() => {
-            commitGradient();
-            selectGradient('bottom');
-          }}
+          onTopChange={(value) => handleGradientInputChange('top', value)}
+          onBottomChange={(value) => handleGradientInputChange('bottom', value)}
+          onTopFocus={() => startGradientInputEdit('top')}
+          onBottomFocus={() => startGradientInputEdit('bottom')}
+          onTopCommit={() => commitGradientInput('top')}
+          onBottomCommit={() => commitGradientInput('bottom')}
+          onTopCancel={() => cancelGradientInput('top')}
+          onBottomCancel={() => cancelGradientInput('bottom')}
           selected={gradientSelected}
           onSelect={(s: GradientSide) => selectGradient(s)}
           rightTopPercent={opacityPercentControl('top')}
@@ -1107,6 +1228,7 @@ interface InputProps {
   onValueChange?: (value: string) => void;
   onValueFocus?: () => void;
   onValueCommit?: () => void;
+  onValueCancel?: () => boolean;
   previewColor?: string;
   alpha?: number;
   alphaPercent?: PercentInputProps;
@@ -1118,11 +1240,13 @@ const Input = ({
   onValueChange,
   onValueFocus,
   onValueCommit,
+  onValueCancel,
   previewColor,
   alpha,
   alphaPercent,
 }: InputProps) => {
   const [editing, setEditing] = useState(false);
+  const cancelledRef = useRef(false);
   const showMixed = mixed && !editing;
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onValueChange?.(e.target.value);
@@ -1142,16 +1266,26 @@ const Input = ({
           placeholder={showMixed ? 'Mixed' : undefined}
           onChange={handleChange}
           onFocus={() => {
+            cancelledRef.current = false;
             setEditing(true);
             onValueFocus?.();
           }}
           onBlur={() => {
             setEditing(false);
+            if (cancelledRef.current) {
+              cancelledRef.current = false;
+              return;
+            }
             onValueCommit?.();
           }}
           onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
             if (event.key === 'Enter') {
-              onValueCommit?.();
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape' && onValueCancel?.()) {
+              event.preventDefault();
+              cancelledRef.current = true;
+              event.currentTarget.blur();
             }
           }}
           className="block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body text-fg uppercase placeholder:text-fg-faint placeholder:italic placeholder:normal-case"
@@ -1168,8 +1302,12 @@ interface GradientInputsProps {
   bottomValue: string;
   onTopChange: (value: string) => void;
   onBottomChange: (value: string) => void;
+  onTopFocus: () => void;
+  onBottomFocus: () => void;
   onTopCommit: () => void;
   onBottomCommit: () => void;
+  onTopCancel: () => boolean;
+  onBottomCancel: () => boolean;
   selected: GradientSide;
   onSelect?: (side: GradientSide) => void;
   rightTopPercent?: PercentInputProps;
@@ -1181,8 +1319,12 @@ function GradientInputs({
   bottomValue,
   onTopChange,
   onBottomChange,
+  onTopFocus,
+  onBottomFocus,
   onTopCommit,
   onBottomCommit,
+  onTopCancel,
+  onBottomCancel,
   selected,
   onSelect,
   rightTopPercent,
@@ -1194,7 +1336,9 @@ function GradientInputs({
         label="Top"
         value={topValue}
         onChange={onTopChange}
+        onFocus={onTopFocus}
         onCommit={onTopCommit}
+        onCancel={onTopCancel}
         selected={selected === 'top'}
         onSelect={() => onSelect?.('top')}
         rightPercent={rightTopPercent}
@@ -1203,7 +1347,9 @@ function GradientInputs({
         label="Bottom"
         value={bottomValue}
         onChange={onBottomChange}
+        onFocus={onBottomFocus}
         onCommit={onBottomCommit}
+        onCancel={onBottomCancel}
         selected={selected === 'bottom'}
         onSelect={() => onSelect?.('bottom')}
         rightPercent={rightBottomPercent}
@@ -1216,7 +1362,9 @@ interface GradientInputProps {
   label: string;
   value: string;
   onChange?: (value: string) => void;
+  onFocus?: () => void;
   onCommit?: () => void;
+  onCancel?: () => boolean;
   selected: boolean;
   onSelect?: () => void;
   rightPercent?: PercentInputProps;
@@ -1226,11 +1374,14 @@ function GradientInput({
   label,
   value,
   onChange,
+  onFocus,
   onCommit,
+  onCancel,
   selected,
   onSelect,
   rightPercent,
 }: GradientInputProps) {
+  const cancelledRef = useRef(false);
   return (
     <div className="flex items-center gap-[6px] w-full">
       <div className="relative flex-1 min-w-0">
@@ -1250,11 +1401,26 @@ function GradientInput({
           onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
             onChange?.(event.target.value)
           }
-          onFocus={() => onSelect?.()}
-          onBlur={onCommit}
+          onFocus={() => {
+            cancelledRef.current = false;
+            onSelect?.();
+            onFocus?.();
+          }}
+          onBlur={() => {
+            if (cancelledRef.current) {
+              cancelledRef.current = false;
+              return;
+            }
+            onCommit?.();
+          }}
           onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
             if (event.key === 'Enter') {
-              onCommit?.();
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape' && onCancel?.()) {
+              event.preventDefault();
+              cancelledRef.current = true;
+              event.currentTarget.blur();
             }
           }}
           placeholder={label}

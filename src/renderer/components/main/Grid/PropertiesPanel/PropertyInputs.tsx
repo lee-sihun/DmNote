@@ -223,10 +223,12 @@ export const TextInput: React.FC<TextInputProps> = ({
 export const ColorInput: React.FC<ColorInputProps> = ({
   value,
   onChange,
+  onPreview,
   pickerMountStrategy = 'after-paint',
   onChangeComplete,
   activeValue,
   onActiveChange,
+  onActivePreview,
   onActiveChangeComplete,
   showStateTabs = false,
   stateMode: externalStateMode,
@@ -239,6 +241,8 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   gradientValue,
   activeGradientValue,
   onModeCommit,
+  onModePreview,
+  onCancel,
   canvasAnchor,
   gradientSurface = 'background',
   hexMixed = false,
@@ -355,14 +359,22 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     }
   };
 
-  // 드래그 중 로컬 상태만 업데이트
-  const handleColorChange = (color: string) => {
+  const setLocalColorForState = (color: string) => {
     if (showStateTabs && stateMode === 'active') {
       setLocalActiveColor(color);
       return;
     }
     setLocalColor(color);
-    // onChange는 호출하지 않음 - 드래그 중 부모 상태 변경 방지
+  };
+
+  // 드래그와 텍스트 입력은 같은 preview 채널을 쓴다
+  const handleColorPreview = (color: string) => {
+    setLocalColorForState(color);
+    if (showStateTabs && stateMode === 'active') {
+      onActivePreview?.(color);
+      return;
+    }
+    onPreview?.(color);
   };
 
   // 드래그 완료 시 부모에게 전달
@@ -419,7 +431,8 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     canvasSurface: gradientSurface,
     canvasState: stateMode,
     onPreview: (modeValue) => {
-      if (modeValue.mode === 'solid') handleColorChange(modeValue.color);
+      if (modeValue.mode === 'solid') setLocalColorForState(modeValue.color);
+      onModePreview?.(stateMode, modeValue);
     },
     onCommit: (modeValue) => {
       const base =
@@ -431,6 +444,17 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       onModeCommit?.(stateMode, modeValue);
     },
   });
+
+  const handleInputCancel = (
+    _target: 'solid' | 'top' | 'bottom',
+    restoredColor: string | { type: 'gradient'; top: string; bottom: string },
+  ) => {
+    gradientState.cancelPreview();
+    if (typeof restoredColor === 'string') {
+      setLocalColorForState(restoredColor);
+    }
+    onCancel?.();
+  };
 
   return (
     <>
@@ -469,7 +493,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
             onColorChange={
               supportsGradient
                 ? (c: string) => gradientState.handlePickerColorChange(c, false)
-                : handleColorChange
+                : handleColorPreview
             }
             onColorChangeComplete={
               supportsGradient
@@ -477,6 +501,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
                 : handleColorChangeComplete
             }
             onClose={handleClose}
+            onInputCancel={handleInputCancel}
             interactiveRefs={interactiveRefs}
             solidOnly={solidOnly}
             hexMixed={hexMixed}
