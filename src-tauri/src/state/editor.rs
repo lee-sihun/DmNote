@@ -268,14 +268,23 @@ where
     Ok(request)
 }
 
+fn carries_value(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Array(items) => !items.is_empty(),
+        _ => true,
+    }
+}
+
 fn first_unknown_json_key(raw: &Value, canonical: &Value, path: &str) -> Option<String> {
     match (raw, canonical) {
         (Value::Object(raw), Value::Object(canonical)) => raw.iter().find_map(|(key, value)| {
             let child_path = format!("{path}.{key}");
             canonical.get(key).map_or_else(
-                // None 필드는 재직렬화에서 생략된다 - 프론트가 명시한 null은
-                // 같은 뜻이라 미지의 키로 보지 않는다
-                || (!value.is_null()).then(|| child_path.clone()),
+                // None·빈 배열은 재직렬화에서 생략된다(skip_serializing_if).
+                // 프론트가 명시한 null·[]은 같은 뜻이고 실린 값이 없으므로
+                // 미지의 키로 보지 않는다 - 값이 있는 키만 거절
+                || carries_value(value).then(|| child_path.clone()),
                 |canonical| first_unknown_json_key(value, canonical, &child_path),
             )
         }),
@@ -2708,6 +2717,11 @@ mod tests {
             "fillActiveGradient": null,
         })))
         .unwrap();
+
+        // 빈 배열로 명시한 생략 필드(gestureIds)도 같은 규칙
+        let mut with_empty_gesture_ids = frozen(serde_json::json!({ "enabled": true }));
+        with_empty_gesture_ids["gestureIds"] = serde_json::json!([]);
+        decode_editor_commit_request(with_empty_gesture_ids).unwrap();
 
         // 값이 실린 미지의 키는 여전히 거절
         let error = decode_editor_commit_request(frozen(serde_json::json!({
