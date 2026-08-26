@@ -118,6 +118,8 @@ pub(crate) enum HistoryAuxChange {
     CustomTabs {
         snapshot: Box<CustomTabsHistorySnapshot>,
         changed_tab_css_ids: Vec<String>,
+        plugin_ids: Vec<String>,
+        revision: u64,
     },
     PresetFull {
         snapshot: Box<PresetFullHistorySnapshot>,
@@ -236,6 +238,14 @@ struct EditorTransactionHistoryOptions {
 pub(crate) enum PluginInstancesResetScope {
     All,
     Mode(String),
+}
+
+pub(crate) struct AuxEditorResetTransactionOptions<'a> {
+    pub(crate) scope: HistoryScope,
+    pub(crate) observed_history_epoch: Option<u64>,
+    pub(crate) origin: EditorCommitOrigin,
+    pub(crate) touched_fields: &'a [EditorField],
+    pub(crate) plugin_instances_reset: PluginInstancesResetScope,
 }
 
 struct PersistTicket {
@@ -591,7 +601,7 @@ impl AppStore {
                     let opposite = require_history_entry(
                         guard.history.prepare_custom_tabs_entry(current_snapshot)?,
                     )?;
-                    let change = self
+                    let (change, plugin_ids, revision) = self
                         .commit_custom_tabs_history_locked(
                             &mut guard,
                             &before,
@@ -603,8 +613,10 @@ impl AppStore {
                         opposite,
                         change,
                         Some(HistoryAuxChange::CustomTabs {
-                            snapshot: Box::new(before),
+                            snapshot: before,
                             changed_tab_css_ids,
+                            plugin_ids,
+                            revision,
                         }),
                     )
                 }
@@ -705,7 +717,7 @@ impl AppStore {
                             HistorySnapshot::Editor { changed_fields, .. } => {
                                 opposite_snapshots.push(HistorySnapshot::Editor {
                                     changed_fields: changed_fields.clone(),
-                                    before: current.patch_for_fields(changed_fields),
+                                    before: Box::new(current.patch_for_fields(changed_fields)),
                                 });
                             }
                             HistorySnapshot::PluginElements(before) => {
@@ -1196,7 +1208,7 @@ impl AppStore {
         if !changed_fields.is_empty() {
             history_snapshots.push(HistorySnapshot::Editor {
                 changed_fields: changed_fields.clone(),
-                before: current_editor.patch_for_fields(&changed_fields),
+                before: Box::new(current_editor.patch_for_fields(&changed_fields)),
             });
         }
 
@@ -1486,7 +1498,8 @@ impl AppStore {
         target: &CustomTabsHistorySnapshot,
         operation_id: &str,
         origin: EditorCommitOrigin,
-    ) -> std::result::Result<Option<CommittedEditorChange>, EditorCommitError> {
+    ) -> std::result::Result<(Option<CommittedEditorChange>, Vec<String>, u64), EditorCommitError>
+    {
         let current_store = guard.data.clone();
         if target.matches_store(&current_store) {
             return Err(EditorCommitError::validation(
@@ -1523,11 +1536,27 @@ impl AppStore {
         };
         let selected_key_type = scratch.selected_key_type.clone();
         let key_counters = scratch.key_counters.clone();
+        let plugin_ids = target
+            .changed_plugin_ids()
+            .into_iter()
+            .filter(|plugin_id| {
+                let key = plugin_instances_storage_key(plugin_id);
+                current_store.plugin_data.get(&key) != scratch.plugin_data.get(&key)
+            })
+            .collect::<Vec<_>>();
+        let plugin_model_revision = if plugin_ids.is_empty() {
+            guard.plugin_model_revision
+        } else {
+            next_plugin_model_revision(guard.plugin_model_revision).map_err(|error| {
+                EditorCommitError::validation("PLUGIN_MODEL_REVISION_OUT_OF_RANGE", error)
+            })?
+        };
         self.commit_locked(guard, scratch, ())
             .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        guard.plugin_model_revision = plugin_model_revision;
 
         if changed_fields.is_empty() {
-            return Ok(None);
+            return Ok((None, plugin_ids, plugin_model_revision));
         }
         let event = origin.event_name().map(|origin| EditorCommittedV1 {
             schema_version: EDITOR_SCHEMA_VERSION,
@@ -1539,21 +1568,25 @@ impl AppStore {
             changed_fields: changed_fields.clone(),
             patch: candidate.patch_for_fields(&changed_fields),
         });
-        Ok(Some(CommittedEditorChange {
-            result: EditorCommitResult {
-                revision,
-                changed_fields,
-                op_results: None,
-            },
-            event,
-            replayed: false,
-            document: candidate,
-            selected_key_type,
-            key_counters,
-            history_status: None,
-            plugin_instances_changes: Vec::new(),
-            runtime_publication_generation: guard.revision,
-        }))
+        Ok((
+            Some(CommittedEditorChange {
+                result: EditorCommitResult {
+                    revision,
+                    changed_fields,
+                    op_results: None,
+                },
+                event,
+                replayed: false,
+                document: candidate,
+                selected_key_type,
+                key_counters,
+                history_status: None,
+                plugin_instances_changes: Vec::new(),
+                runtime_publication_generation: guard.revision,
+            }),
+            plugin_ids,
+            plugin_model_revision,
+        ))
     }
 
     fn commit_preset_full_history_locked(
@@ -1876,6 +1909,32 @@ impl AppStore {
         )
     }
 
+    pub(crate) fn commit_aux_editor_reset_transaction_with_admission<T>(
+        &self,
+        options: AuxEditorResetTransactionOptions<'_>,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        if !matches!(options.scope, HistoryScope::CustomTabs | HistoryScope::Mode) {
+            return Err(EditorCommitError::validation(
+                "INVALID_AUX_HISTORY_SCOPE",
+                "aux editor transaction requires a custom tabs or mode scope",
+            ));
+        }
+        self.commit_editor_transaction_with_history_admission(
+            options.origin,
+            options.touched_fields,
+            EditorTransactionHistoryOptions {
+                scope: Some(options.scope),
+                observed_epoch: options.observed_history_epoch,
+                plugin_instances_reset: Some(options.plugin_instances_reset),
+                ..EditorTransactionHistoryOptions::default()
+            },
+            admission,
+            updater,
+        )
+    }
+
     #[cfg(test)]
     fn commit_editor_transaction_with_history<T>(
         &self,
@@ -1967,12 +2026,13 @@ impl AppStore {
                     PluginInstancesResetScope::All => true,
                     PluginInstancesResetScope::Mode(mode) => {
                         crate::defaults::default_keys().contains_key(mode)
-                            || scratch.custom_tabs.iter().any(|tab| tab.id == *mode)
+                            || current_store.custom_tabs.iter().any(|tab| tab.id == *mode)
                     }
                 });
         let affected_plugin_ids = history_options
             .plugin_instances_reset
             .as_ref()
+            .filter(|_| plugin_reset_applied)
             .map(|scope| reset_plugin_instances_for_scope(&mut scratch, scope))
             .transpose()?
             .unwrap_or_default();
@@ -2076,6 +2136,9 @@ impl AppStore {
         guard.plugin_model_revision = plugin_model_revision;
         let history_status = if let Some(plan) = history_plan {
             guard.history.apply_record_plan(plan);
+            if plugin_reset_applied {
+                guard.history.advance_epoch();
+            }
             Some(guard.history.issue_status(self.history_gate.is_closed()))
         } else if plugin_reset_applied {
             // reset 전에 만들어져 이미 비행 중인 인스턴스 저장이 삭제 결과를
@@ -3188,13 +3251,6 @@ fn reset_plugin_instances_for_scope(
     store: &mut AppStoreData,
     scope: &PluginInstancesResetScope,
 ) -> std::result::Result<Vec<String>, EditorCommitError> {
-    if let PluginInstancesResetScope::Mode(mode) = scope {
-        let mode_exists = crate::defaults::default_keys().contains_key(mode)
-            || store.custom_tabs.iter().any(|tab| tab.id == *mode);
-        if !mode_exists {
-            return Ok(Vec::new());
-        }
-    }
     let mut keys = store
         .plugin_data
         .keys()
@@ -4433,10 +4489,12 @@ mod tests {
     use super::{
         collect_local_font_paths, collect_local_image_path_keys, collect_local_image_paths,
         collect_local_sound_path_keys, collect_local_sound_paths, initialize_default_state,
-        purge_expired_trash_sessions_at, recover_interrupted_processed_wav_replacements_with,
+        plugin_instances_storage_key, purge_expired_trash_sessions_at,
+        recover_interrupted_processed_wav_replacements_with,
         recover_interrupted_sound_deletions_with, stage_sound_files_for_deletion,
-        sweep_unreferenced_asset_files, system_time_millis, AppStore, HistoryAuxChange,
-        PluginInstancesResetScope, TrashSession, PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
+        sweep_unreferenced_asset_files, system_time_millis, AppStore,
+        AuxEditorResetTransactionOptions, HistoryAuxChange, PluginInstancesResetScope,
+        TrashSession, PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
     };
     use crate::{
         commands::keys::keys::reset_mode_data_for_test,
@@ -17513,6 +17571,7 @@ mod tests {
         let Some(HistoryAuxChange::CustomTabs {
             snapshot,
             changed_tab_css_ids,
+            ..
         }) = undo.aux_change.as_ref()
         else {
             panic!("custom tabs history change expected");
@@ -17538,6 +17597,7 @@ mod tests {
         let Some(HistoryAuxChange::CustomTabs {
             snapshot,
             changed_tab_css_ids,
+            ..
         }) = redo.aux_change.as_ref()
         else {
             panic!("custom tabs history change expected");
@@ -17552,6 +17612,175 @@ mod tests {
             store.snapshot().tab_note_overrides[&other_tab_id],
             other_note
         );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn custom_tab_delete_history_restores_plugin_instances_atomically() {
+        let dir = test_directory("custom-tab-plugin-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let tab_id = "history-plugin-tab".to_string();
+        let create_tab_id = tab_id.clone();
+        let create = store
+            .commit_aux_editor_transaction(
+                HistoryScope::CustomTabs,
+                None,
+                EditorCommitOrigin::LegacyAdapter("custom_tab_plugin_create".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.custom_tabs.push(CustomTab {
+                        id: create_tab_id.clone(),
+                        name: "Plugin History".to_string(),
+                    });
+                    data.keys.insert(create_tab_id.clone(), Vec::new());
+                    data.key_positions.insert(create_tab_id.clone(), Vec::new());
+                    data.selected_key_type = create_tab_id;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(create);
+
+        let mut target = saved_plugin_instance(11.0);
+        target.tab_id = Some(tab_id.clone());
+        target.group_id = Some("group-plugin".to_string());
+        let mut retained = saved_plugin_instance(22.0);
+        retained.tab_id = Some("4key".to_string());
+        let plugin_a_key = plugin_instances_storage_key("plugin-a");
+        let plugin_b_key = plugin_instances_storage_key("plugin-b");
+        let plugin_a_before = serde_json::json!([
+            target,
+            { "broken": true },
+            retained,
+        ]);
+        let plugin_b_before = serde_json::json!([
+            {
+                "instanceId": "00000000-0000-4000-8000-000000000033",
+                "position": { "x": 33.0, "y": 20.0 },
+                "tabId": tab_id,
+                "hidden": false,
+                "groupId": "group-plugin"
+            }
+        ]);
+        store
+            .update(|data| {
+                data.plugin_data
+                    .insert(plugin_a_key.clone(), plugin_a_before.clone());
+                data.plugin_data
+                    .insert(plugin_b_key.clone(), plugin_b_before.clone());
+            })
+            .unwrap();
+
+        let before_plugin_revision = store.plugin_model_revision();
+        let before_epoch = store.history_status().history_epoch;
+        let delete_tab_id = "history-plugin-tab".to_string();
+        let admission = store.admit_editor_mutation().unwrap();
+        let delete = store
+            .commit_aux_editor_reset_transaction_with_admission(
+                AuxEditorResetTransactionOptions {
+                    scope: HistoryScope::CustomTabs,
+                    observed_history_epoch: Some(before_epoch),
+                    origin: EditorCommitOrigin::LegacyAdapter(
+                        "custom_tab_plugin_delete".to_string(),
+                    ),
+                    touched_fields: &[
+                        EditorField::Keys,
+                        EditorField::KeyPositions,
+                        EditorField::StatPositions,
+                        EditorField::GraphPositions,
+                        EditorField::KnobPositions,
+                        EditorField::LayerGroups,
+                    ],
+                    plugin_instances_reset: PluginInstancesResetScope::Mode(delete_tab_id.clone()),
+                },
+                admission,
+                |data| {
+                    data.custom_tabs.retain(|tab| tab.id != delete_tab_id);
+                    data.keys.remove(&delete_tab_id);
+                    data.key_positions.remove(&delete_tab_id);
+                    data.stat_positions.remove(&delete_tab_id);
+                    data.graph_positions.remove(&delete_tab_id);
+                    data.knob_positions.remove(&delete_tab_id);
+                    data.layer_groups.remove(&delete_tab_id);
+                    data.key_counters.remove(&delete_tab_id);
+                    data.selected_key_type = "4key".to_string();
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert_eq!(store.plugin_model_revision(), before_plugin_revision + 1);
+        assert_eq!(store.history_status().history_epoch, before_epoch + 1);
+        assert_eq!(delete.change.plugin_instances_changes.len(), 2);
+        let after_delete = store.snapshot();
+        assert_eq!(
+            after_delete.plugin_data[&plugin_a_key],
+            serde_json::json!([{ "broken": true }, retained])
+        );
+        assert!(!after_delete.plugin_data.contains_key(&plugin_b_key));
+        let mut stale_instance = saved_plugin_instance(44.0);
+        stale_instance.tab_id = Some("history-plugin-tab".to_string());
+        let mut stale_request = plugin_instances_request(
+            "plugin-b",
+            vec![stale_instance],
+            uuid::Uuid::new_v4().to_string(),
+            None,
+            Some(store.plugin_model_revision()),
+        );
+        stale_request.observed_history_epoch = Some(before_epoch);
+        assert_eq!(
+            store.commit_plugin_instances(stale_request).unwrap_err(),
+            "HISTORY_EPOCH_CONFLICT"
+        );
+        assert!(!store.snapshot().plugin_data.contains_key(&plugin_b_key));
+        drop(delete);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {})
+            .unwrap();
+        drop(undo_barrier);
+        let Some(HistoryAuxChange::CustomTabs {
+            plugin_ids,
+            revision,
+            ..
+        }) = undo.aux_change.as_ref()
+        else {
+            panic!("custom tabs history change expected");
+        };
+        assert_eq!(
+            plugin_ids,
+            &["plugin-a".to_string(), "plugin-b".to_string()]
+        );
+        assert_eq!(*revision, before_plugin_revision + 2);
+        let restored = store.snapshot();
+        assert_eq!(restored.plugin_data[&plugin_a_key], plugin_a_before);
+        assert_eq!(restored.plugin_data[&plugin_b_key], plugin_b_before);
+        assert!(restored
+            .custom_tabs
+            .iter()
+            .any(|tab| tab.id == delete_tab_id));
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &current_counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+        let redone = store.snapshot();
+        assert_eq!(
+            redone.plugin_data[&plugin_a_key],
+            serde_json::json!([{ "broken": true }, retained])
+        );
+        assert!(!redone.plugin_data.contains_key(&plugin_b_key));
+        assert!(!redone.custom_tabs.iter().any(|tab| tab.id == delete_tab_id));
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

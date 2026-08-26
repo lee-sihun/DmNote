@@ -20,7 +20,7 @@ use crate::{
         editor::validate_history_restore_metadata,
         history::HistoryScope,
         plugin::{for_each_stored_plugin_instances, normalize_plugin_instance_tab_id},
-        store::PluginInstancesResetScope,
+        store::{AuxEditorResetTransactionOptions, PluginInstancesResetScope},
         AppState,
     },
 };
@@ -744,31 +744,36 @@ pub fn custom_tabs_delete(
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabDeleteResult> {
     let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction = state.store.commit_aux_editor_transaction_with_admission(
-        HistoryScope::CustomTabs,
-        observed_history_epoch,
-        EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
-        &[
-            EditorField::Keys,
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-            EditorField::LayerGroups,
-        ],
-        admission,
-        |store| {
-            let Some(plan) = plan_custom_tab_delete(store, &id) else {
-                return Ok(Err(store.selected_key_type.clone()));
-            };
-            delete_custom_tab_data(store, &id, &plan);
-            Ok(Ok((
-                store.custom_tabs.clone(),
-                store.selected_key_type.clone(),
-                store.tab_note_overrides.clone(),
-            )))
-        },
-    )?;
+    let transaction = state
+        .store
+        .commit_aux_editor_reset_transaction_with_admission(
+            AuxEditorResetTransactionOptions {
+                scope: HistoryScope::CustomTabs,
+                observed_history_epoch,
+                origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
+                touched_fields: &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                plugin_instances_reset: PluginInstancesResetScope::Mode(id.clone()),
+            },
+            admission,
+            |store| {
+                let Some(plan) = plan_custom_tab_delete(store, &id) else {
+                    return Ok(Err(store.selected_key_type.clone()));
+                };
+                delete_custom_tab_data(store, &id, &plan);
+                Ok(Ok((
+                    store.custom_tabs.clone(),
+                    store.selected_key_type.clone(),
+                    store.tab_note_overrides.clone(),
+                )))
+            },
+        )?;
     let (custom_tabs, selected_key_type, tab_note_overrides) = match transaction.value {
         Ok(result) => result,
         Err(selected) => {
@@ -780,6 +785,7 @@ pub fn custom_tabs_delete(
         }
     };
     publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_reset_plugin_instances(&app, &transaction.change);
     state.unwatch_tab_css(&id);
 
     emit_best_effort(

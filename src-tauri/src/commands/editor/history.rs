@@ -246,6 +246,8 @@ fn publish_history_aux_change(
         Some(HistoryAuxChange::CustomTabs {
             snapshot,
             changed_tab_css_ids,
+            plugin_ids,
+            revision,
         }) => {
             let restored_store = state.store.snapshot();
             emit_best_effort(
@@ -273,6 +275,16 @@ fn publish_history_aux_change(
                     &crate::commands::editor::css::TabCssResponse {
                         tab_id: tab_id.clone(),
                         css: restored_store.tab_css_overrides.get(tab_id).cloned(),
+                    },
+                );
+            }
+            for plugin_id in plugin_ids {
+                publish_plugin_instances_changed(
+                    app,
+                    &PluginInstancesChangedPayload {
+                        plugin_id: plugin_id.clone(),
+                        revision: *revision,
+                        origin_mutation_id: None,
                     },
                 );
             }
