@@ -47,12 +47,6 @@
     "keySoundOutput": "按键音输出",
     "keySoundOutputDefault": "默认设备",
     "keySoundOutputBuffer": "ASIO 缓冲区大小",
-    "keySoundOutputError": {
-      "asioUnavailableBuild": "此版本未包含 ASIO 支持。",
-      "asioDeviceNotFound": "找不到 ASIO 设备。",
-      "asioOpenFailed": "无法打开 ASIO 设备，将使用默认输出播放。",
-      "defaultOpenFailed": "无法打开可用的输出设备。"
-    },
     "topLeft": "左上",
     "bottomLeft": "左下",
     "topRight": "右上",

@@ -47,12 +47,6 @@
     "keySoundOutput": "키 사운드 출력",
     "keySoundOutputDefault": "기본 재생 장치",
     "keySoundOutputBuffer": "ASIO 버퍼 크기",
-    "keySoundOutputError": {
-      "asioUnavailableBuild": "ASIO를 지원하지 않는 빌드입니다.",
-      "asioDeviceNotFound": "ASIO 장치를 찾을 수 없습니다.",
-      "asioOpenFailed": "ASIO 장치를 열 수 없어 기본 출력으로 재생합니다.",
-      "defaultOpenFailed": "사용 가능한 출력 장치를 열 수 없습니다."
-    },
     "topLeft": "좌상단",
     "bottomLeft": "좌하단",
     "topRight": "우상단",

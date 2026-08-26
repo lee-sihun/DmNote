@@ -1026,6 +1026,8 @@ pub struct AppState {
     /// Raw input stream subscriber count - emit only when > 0
     raw_input_subscribers: Arc<std::sync::atomic::AtomicU32>,
     key_sound: Arc<KeySoundEngine>,
+    key_sound_output_generation: Arc<AtomicU64>,
+    key_sound_output_persistence_lock: Arc<Mutex<()>>,
     /// 전역 CSS 상태와 워처 전환 직렬화
     css_operation_lock: Mutex<()>,
     /// 현재 세션에서 사용자가 승인한 CSS 경로
@@ -1058,13 +1060,48 @@ impl AppState {
         Self::sync_counters_with_keys_impl(&mut initial_key_counters, &snapshot.keys);
         let key_counters = Arc::new(RwLock::new(initial_key_counters));
         let key_counter_enabled = Arc::new(AtomicBool::new(snapshot.key_counter_enabled));
-        // 저장된 출력 백엔드로 엔진을 처음부터 초기화 → "기본 장치 → ASIO" 전환 깜빡임 제거.
+        // 저장된 출력 백엔드 초기화, 전환 깜빡임 방지
         let initial_backend = snapshot
             .key_sound_output_backend
             .clone()
             .map(output_backend_from_persist)
             .unwrap_or_default();
-        let key_sound = Arc::new(KeySoundEngine::with_output_backend(initial_backend));
+        let key_sound_output_generation = Arc::new(AtomicU64::new(0));
+        let key_sound_output_persistence_lock = Arc::new(Mutex::new(()));
+        let fallback_store = Arc::clone(&store);
+        let fallback_generation = Arc::clone(&key_sound_output_generation);
+        let fallback_persistence_lock = Arc::clone(&key_sound_output_persistence_lock);
+        let key_sound = Arc::new(KeySoundEngine::with_output_backend(
+            initial_backend,
+            Arc::new(move |failed, settled| {
+                let fallback_store = Arc::clone(&fallback_store);
+                let fallback_generation = Arc::clone(&fallback_generation);
+                let fallback_persistence_lock = Arc::clone(&fallback_persistence_lock);
+                let generation = fallback_generation.load(Ordering::Acquire);
+                if let Err(err) =
+                    thread::Builder::new()
+                        .name("key-sound-fallback-persist".to_string())
+                        .spawn(move || {
+                            let _persistence_guard = fallback_persistence_lock.lock();
+                            let failed = output_backend_to_persist(failed);
+                            let settled = output_backend_to_persist(settled);
+                            if let Err(err) = fallback_store.update(move |state| {
+                                if fallback_generation.load(Ordering::Acquire) == generation
+                                    && state.key_sound_output_backend.as_ref().is_some_and(
+                                        |current| output_backend_targets_match(current, &failed),
+                                    )
+                                {
+                                    state.key_sound_output_backend = Some(settled);
+                                }
+                            }) {
+                                log::warn!("failed to persist fallback output backend: {err:#}");
+                            }
+                        })
+                {
+                    log::warn!("failed to spawn fallback output persistence thread: {err}");
+                }
+            }),
+        ));
         let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
         let authorized_css_paths = collect_authorized_css_paths(&snapshot);
         let panel_bounds_persistence =
@@ -1099,6 +1136,8 @@ impl AppState {
             key_counter_enabled,
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             key_sound,
+            key_sound_output_generation,
+            key_sound_output_persistence_lock,
             css_operation_lock: Mutex::new(()),
             authorized_css_paths: RwLock::new(authorized_css_paths),
             css_watcher: RwLock::new(None),
@@ -4275,20 +4314,16 @@ impl AppState {
         &self,
         backend: KeySoundOutputBackend,
     ) -> Result<KeySoundOutputState> {
-        let requested = match &backend {
-            KeySoundOutputBackend::DefaultDevice => KeySoundOutputBackend::DefaultDevice,
-            KeySoundOutputBackend::Asio {
-                driver_name,
-                buffer_size,
-            } => KeySoundOutputBackend::Asio {
-                driver_name: driver_name.trim().to_string(),
-                buffer_size: buffer_size.filter(|size| *size > 0),
-            },
-        };
+        let _persistence_guard = self.key_sound_output_persistence_lock.lock();
+        self.key_sound_output_generation
+            .fetch_add(1, Ordering::AcqRel);
+        // 엔진 콜백은 저장 스레드만 생성하므로 동기 대기 중 교착 없음
+        let output_state = self.key_sound.set_output_backend(backend);
+        let requested = output_state.requested.clone();
         self.store.update(|state| {
             state.key_sound_output_backend = Some(output_backend_to_persist(requested));
         })?;
-        Ok(self.key_sound.set_output_backend(backend))
+        Ok(output_state)
     }
 
     pub fn key_sound_get_output_state(&self) -> KeySoundOutputState {
@@ -4461,6 +4496,9 @@ impl Drop for AppState {
 fn output_backend_from_persist(value: KeySoundOutputBackendPersist) -> KeySoundOutputBackend {
     match value {
         KeySoundOutputBackendPersist::DefaultDevice => KeySoundOutputBackend::DefaultDevice,
+        KeySoundOutputBackendPersist::Device { id, name } => {
+            KeySoundOutputBackend::Device { id, name }
+        }
         KeySoundOutputBackendPersist::Asio {
             driver_name,
             buffer_size,
@@ -4474,6 +4512,9 @@ fn output_backend_from_persist(value: KeySoundOutputBackendPersist) -> KeySoundO
 fn output_backend_to_persist(value: KeySoundOutputBackend) -> KeySoundOutputBackendPersist {
     match value {
         KeySoundOutputBackend::DefaultDevice => KeySoundOutputBackendPersist::DefaultDevice,
+        KeySoundOutputBackend::Device { id, name } => {
+            KeySoundOutputBackendPersist::Device { id, name }
+        }
         KeySoundOutputBackend::Asio {
             driver_name,
             buffer_size,
@@ -4481,6 +4522,112 @@ fn output_backend_to_persist(value: KeySoundOutputBackend) -> KeySoundOutputBack
             driver_name,
             buffer_size,
         },
+    }
+}
+
+fn output_backend_targets_match(
+    left: &KeySoundOutputBackendPersist,
+    right: &KeySoundOutputBackendPersist,
+) -> bool {
+    match (left, right) {
+        (
+            KeySoundOutputBackendPersist::DefaultDevice,
+            KeySoundOutputBackendPersist::DefaultDevice,
+        ) => true,
+        (
+            KeySoundOutputBackendPersist::Device { id: left_id, .. },
+            KeySoundOutputBackendPersist::Device { id: right_id, .. },
+        ) => left_id == right_id,
+        (
+            KeySoundOutputBackendPersist::Asio {
+                driver_name: left_driver,
+                ..
+            },
+            KeySoundOutputBackendPersist::Asio {
+                driver_name: right_driver,
+                ..
+            },
+        ) => left_driver == right_driver,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod output_backend_tests {
+    use super::{
+        output_backend_from_persist, output_backend_targets_match, output_backend_to_persist,
+    };
+    use crate::{audio::KeySoundOutputBackend, models::KeySoundOutputBackendPersist};
+
+    #[test]
+    fn device_output_backend_persist_round_trip() {
+        let backend = KeySoundOutputBackend::Device {
+            id: "coreaudio:device-id".to_string(),
+            name: "Speakers".to_string(),
+        };
+        let persisted = output_backend_to_persist(backend.clone());
+
+        assert_eq!(
+            persisted,
+            KeySoundOutputBackendPersist::Device {
+                id: "coreaudio:device-id".to_string(),
+                name: "Speakers".to_string(),
+            }
+        );
+        assert_eq!(output_backend_from_persist(persisted), backend);
+    }
+
+    #[test]
+    fn device_output_backend_uses_camel_case_json() {
+        let persisted = KeySoundOutputBackendPersist::Device {
+            id: "wasapi:device-id".to_string(),
+            name: "Headphones".to_string(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(persisted).unwrap(),
+            serde_json::json!({
+                "kind": "device",
+                "id": "wasapi:device-id",
+                "name": "Headphones"
+            })
+        );
+    }
+
+    #[test]
+    fn output_backend_target_match_uses_stable_identifiers() {
+        let default = KeySoundOutputBackendPersist::DefaultDevice;
+        let device = KeySoundOutputBackendPersist::Device {
+            id: "device-id".to_string(),
+            name: "Old name".to_string(),
+        };
+        let renamed_device = KeySoundOutputBackendPersist::Device {
+            id: "device-id".to_string(),
+            name: "New name".to_string(),
+        };
+        let other_device = KeySoundOutputBackendPersist::Device {
+            id: "other-device-id".to_string(),
+            name: "Old name".to_string(),
+        };
+        let asio = KeySoundOutputBackendPersist::Asio {
+            driver_name: "ASIO Driver".to_string(),
+            buffer_size: Some(128),
+        };
+        let resized_asio = KeySoundOutputBackendPersist::Asio {
+            driver_name: "ASIO Driver".to_string(),
+            buffer_size: Some(256),
+        };
+        let other_asio = KeySoundOutputBackendPersist::Asio {
+            driver_name: "Other ASIO Driver".to_string(),
+            buffer_size: Some(128),
+        };
+
+        assert!(output_backend_targets_match(&default, &default));
+        assert!(output_backend_targets_match(&device, &renamed_device));
+        assert!(!output_backend_targets_match(&device, &other_device));
+        assert!(output_backend_targets_match(&asio, &resized_asio));
+        assert!(!output_backend_targets_match(&asio, &other_asio));
+        assert!(!output_backend_targets_match(&default, &device));
     }
 }
 

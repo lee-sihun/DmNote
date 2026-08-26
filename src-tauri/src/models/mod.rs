@@ -392,6 +392,10 @@ pub struct PendingProcessedWavReplacement {
 )]
 pub enum KeySoundOutputBackendPersist {
     DefaultDevice,
+    Device {
+        id: String,
+        name: String,
+    },
     Asio {
         driver_name: String,
         /// ASIO 버퍼 크기(프레임). None이면 엔진 기본값 사용

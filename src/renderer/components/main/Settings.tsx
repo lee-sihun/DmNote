@@ -62,6 +62,7 @@ import { obsApi } from '@api/modules/obsApi';
 import { keySoundOutputApi } from '@api/modules/resourceApi';
 import type {
   KeySoundOutputBackend,
+  KeySoundOutputDevices,
   KeySoundOutputState,
 } from '@api/modules/resourceApi';
 import type { ObsStatus } from '@src/types/obs';
@@ -93,18 +94,18 @@ const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
 // 기본 버퍼 크기 (게임 기본값과 동일한 최저값)
 const DEFAULT_ASIO_BUFFER = 64;
 
-const KEY_SOUND_OUTPUT_ERROR_KEYS: Record<string, string> = {
-  asioUnavailableBuild: 'settings.keySoundOutputError.asioUnavailableBuild',
-  asioDeviceNotFound: 'settings.keySoundOutputError.asioDeviceNotFound',
-  asioOpenFailed: 'settings.keySoundOutputError.asioOpenFailed',
-  defaultOpenFailed: 'settings.keySoundOutputError.defaultOpenFailed',
-};
-
 // 설정 패널은 열 때마다 재마운트되므로, 마지막 출력 상태를 모듈에 캐시해
-// 재진입 시 '기본 장치 → ASIO' 드롭다운 깜빡임을 방지한다.
+// 재진입 시 '기본 장치 → 선택 장치' 드롭다운 깜빡임을 방지한다.
 let cachedKeySoundOutput: KeySoundOutputState | null = null;
-let cachedAsioDrivers: string[] = [];
-let cachedAsioDriversLoaded = false;
+// null이면 목록 미로딩
+let cachedOutputDevices: KeySoundOutputDevices | null = null;
+
+const KEY_SOUND_DEVICE_PREFIX = 'device:';
+const KEY_SOUND_ASIO_PREFIX = 'asio:';
+
+// 드롭다운 라벨용 축약
+const truncateDeviceName = (name: string) =>
+  name.length > 16 ? `${name.slice(0, 16)}…` : name;
 
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
@@ -210,14 +211,12 @@ const Settings = ({
   });
   const obsTogglingRef = useRef(false);
 
-  // 키음 출력 백엔드 (기본 장치 / ASIO) — 캐시로 초기화해 재진입 깜빡임 방지
+  // 키음 출력 백엔드 (기본 장치 / 시스템 장치 / ASIO) — 캐시로 초기화해 재진입 깜빡임 방지
   const [keySoundOutput, setKeySoundOutputRaw] =
     useState<KeySoundOutputState | null>(cachedKeySoundOutput);
-  const [asioDrivers, setAsioDrivers] = useState<string[]>(cachedAsioDrivers);
-  // 목록 로딩 완료 전에는 드롭다운을 잠그지 않음 (첫 마운트 비활성 깜빡임 방지)
-  const [asioDriversLoaded, setAsioDriversLoaded] = useState(
-    cachedAsioDriversLoaded,
-  );
+  // 목록 로딩 완료(null 아님) 전에는 드롭다운을 잠그지 않음 (첫 마운트 비활성 깜빡임 방지)
+  const [outputDevices, setOutputDevices] =
+    useState<KeySoundOutputDevices | null>(cachedOutputDevices);
   const pendingKeySoundOutputRef = useRef<KeySoundOutputBackend | null>(null);
   const applyingKeySoundOutputRef = useRef(false);
 
@@ -241,10 +240,8 @@ const Settings = ({
           keySoundOutputApi.getState(),
         ]);
         if (cancelled) return;
-        cachedAsioDrivers = devices.asio;
-        cachedAsioDriversLoaded = true;
-        setAsioDrivers(devices.asio);
-        setAsioDriversLoaded(true);
+        cachedOutputDevices = devices;
+        setOutputDevices(devices);
         if (
           !applyingKeySoundOutputRef.current &&
           !pendingKeySoundOutputRef.current
@@ -302,16 +299,29 @@ const Settings = ({
   };
 
   const handleKeySoundOutputChange = (val: string) => {
-    enqueueKeySoundOutput(
-      val.startsWith('asio:')
-        ? {
-            kind: 'asio',
-            driverName: val.slice('asio:'.length),
-            // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
-            bufferSize: DEFAULT_ASIO_BUFFER,
-          }
-        : { kind: 'defaultDevice' },
-    );
+    if (val.startsWith(KEY_SOUND_ASIO_PREFIX)) {
+      enqueueKeySoundOutput({
+        kind: 'asio',
+        driverName: val.slice(KEY_SOUND_ASIO_PREFIX.length),
+        // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
+        bufferSize: DEFAULT_ASIO_BUFFER,
+      });
+      return;
+    }
+    if (val.startsWith(KEY_SOUND_DEVICE_PREFIX)) {
+      const id = val.slice(KEY_SOUND_DEVICE_PREFIX.length);
+      const requested = keySoundOutput?.requested;
+      // 목록에 없는 장치는 저장된(분리된) 선택 항목뿐
+      const name =
+        outputDevices?.system.find((item) => item.id === id)?.name ??
+        (requested?.kind === 'device' && requested.id === id
+          ? requested.name
+          : null);
+      if (name === null) return;
+      enqueueKeySoundOutput({ kind: 'device', id, name });
+      return;
+    }
+    enqueueKeySoundOutput({ kind: 'defaultDevice' });
   };
 
   // ASIO 버퍼 크기 변경 (게임과 동일 버퍼로 맞춰야 ASIO 공존 가능)
@@ -990,14 +1000,40 @@ const Settings = ({
     });
   };
 
+  const requestedBackend = keySoundOutput?.requested;
   const requestedAsioDriver =
-    keySoundOutput?.requested.kind === 'asio'
-      ? keySoundOutput.requested.driverName
-      : null;
+    requestedBackend?.kind === 'asio' ? requestedBackend.driverName : null;
+  const asioDrivers = outputDevices?.asio ?? [];
   const visibleAsioDrivers =
     requestedAsioDriver && !asioDrivers.includes(requestedAsioDriver)
       ? [...asioDrivers, requestedAsioDriver]
       : asioDrivers;
+  // 저장된 장치가 현재 목록에 없어도(분리됨) 선택 상태가 보이도록 병합
+  const requestedDevice =
+    requestedBackend?.kind === 'device' ? requestedBackend : null;
+  const systemDevices = outputDevices?.system ?? [];
+  const visibleSystemDevices =
+    requestedDevice && !systemDevices.some((d) => d.id === requestedDevice.id)
+      ? [
+          ...systemDevices,
+          { id: requestedDevice.id, name: requestedDevice.name },
+        ]
+      : systemDevices;
+  // 같은 이름 장치는 순번으로 구분, 순번은 축약 밖에 붙여 항상 보이게
+  const systemDeviceLabels = new Map<string, string>();
+  const nameCounts = new Map<string, number>();
+  for (const device of visibleSystemDevices) {
+    const seen = (nameCounts.get(device.name) ?? 0) + 1;
+    nameCounts.set(device.name, seen);
+    const base = truncateDeviceName(device.name);
+    systemDeviceLabels.set(device.id, seen > 1 ? `${base} (${seen})` : base);
+  }
+  const keySoundOutputValue =
+    requestedBackend?.kind === 'asio'
+      ? `${KEY_SOUND_ASIO_PREFIX}${requestedBackend.driverName}`
+      : requestedBackend?.kind === 'device'
+      ? `${KEY_SOUND_DEVICE_PREFIX}${requestedBackend.id}`
+      : 'defaultDevice';
   const requestedAsioBuffer =
     keySoundOutput?.requested.kind === 'asio'
       ? keySoundOutput.requested.bufferSize || DEFAULT_ASIO_BUFFER
@@ -1007,12 +1043,6 @@ const Settings = ({
   )
     ? ASIO_BUFFER_SIZES
     : [...ASIO_BUFFER_SIZES, requestedAsioBuffer].sort((a, b) => a - b);
-  const keySoundOutputErrorKey =
-    keySoundOutput?.errorCode &&
-    KEY_SOUND_OUTPUT_ERROR_KEYS[keySoundOutput.errorCode];
-  const keySoundOutputError = keySoundOutputErrorKey
-    ? t(keySoundOutputErrorKey)
-    : keySoundOutput?.error;
 
   return (
     <div className="relative w-full h-full">
@@ -1220,26 +1250,20 @@ const Settings = ({
                       label:
                         t('settings.keySoundOutputDefault') || '기본 재생 장치',
                     },
-                    ...visibleAsioDrivers.map((name) => {
-                      // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
-                      const failed =
-                        name === requestedAsioDriver && !!keySoundOutputError;
-                      return {
-                        value: `asio:${name}`,
-                        // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
-                        label: failed
-                          ? `⚠ ${keySoundOutputError}`
-                          : `ASIO: ${
-                              name.length > 16 ? `${name.slice(0, 16)}…` : name
-                            }`,
-                      };
-                    }),
+                    // 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유)
+                    // 장치를 못 열면 백엔드가 선택을 기본 장치로 되돌리므로 경고 라벨 없음
+                    ...visibleSystemDevices.map((device) => ({
+                      value: `${KEY_SOUND_DEVICE_PREFIX}${device.id}`,
+                      label:
+                        systemDeviceLabels.get(device.id) ??
+                        truncateDeviceName(device.name),
+                    })),
+                    ...visibleAsioDrivers.map((name) => ({
+                      value: `${KEY_SOUND_ASIO_PREFIX}${name}`,
+                      label: `ASIO: ${truncateDeviceName(name)}`,
+                    })),
                   ]}
-                  value={
-                    keySoundOutput?.requested.kind === 'asio'
-                      ? `asio:${keySoundOutput.requested.driverName}`
-                      : 'defaultDevice'
-                  }
+                  value={keySoundOutputValue}
                   onChange={handleKeySoundOutputChange}
                   placeholder={
                     t('settings.keySoundOutputDefault') || '기본 재생 장치'
@@ -1247,7 +1271,9 @@ const Settings = ({
                   align="right"
                   widthClass="max-w-[160px]"
                   disabled={
-                    asioDriversLoaded && visibleAsioDrivers.length === 0
+                    outputDevices !== null &&
+                    visibleSystemDevices.length + visibleAsioDrivers.length ===
+                      0
                   }
                 />
               </SettingRow>
