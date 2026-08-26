@@ -211,3 +211,24 @@ describe('resolveUserCssImports', () => {
     expect(out).toContain('url("https://cdn.example/dir/icon).svg")');
   });
 });
+
+describe('resolveUserCssImports 최상위 URL 경계', () => {
+  it('최상위 protocol-relative @import는 https로 해석한다', async () => {
+    const out = await resolveUserCssImports(
+      '@import url(//cdn.example/nested.css);\n.x { top: 0; }',
+      fetcher,
+    );
+    expect(out).toContain('.key { color: blue; }');
+    expect(out).not.toContain('@import');
+  });
+
+  it('블록 구분자가 섞인 @import prelude는 버린다', async () => {
+    const out = await resolveUserCssImports(
+      '@import url("https://cdn.example/nested.css") screen};\n.x { top: 0; }',
+      fetcher,
+    );
+    expect(out).not.toContain('@media');
+    expect(out).not.toContain('.key');
+    expect(out).toContain('.x { top: 0; }');
+  });
+});

@@ -369,11 +369,23 @@ const resolveSheet = async (
     }
     const parsed = parseImportStatement(statement);
     if (!parsed) continue;
+    // prelude에 블록 구분자가 섞이면 래퍼 at-rule 구조가 깨지므로 버린다
+    if (
+      [parsed.media, parsed.supports, parsed.layer].some(
+        (part) => typeof part === 'string' && /[{}]/.test(part),
+      )
+    ) {
+      console.warn('[custom-css] @import with malformed prelude dropped');
+      continue;
+    }
     let absolute: string;
     try {
-      absolute = baseUrl
-        ? new URL(parsed.href, baseUrl).href
-        : new URL(parsed.href).href;
+      // 최상위 원문에는 기준 URL이 없다 - protocol-relative는 https로 해석
+      const href =
+        !baseUrl && parsed.href.startsWith('//')
+          ? `https:${parsed.href}`
+          : parsed.href;
+      absolute = baseUrl ? new URL(href, baseUrl).href : new URL(href).href;
     } catch {
       console.warn(
         '[custom-css] @import with unresolvable URL dropped',

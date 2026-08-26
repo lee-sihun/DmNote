@@ -12,6 +12,8 @@ import type { CustomCss } from '@src/types/plugin/css';
 
 const STYLE_ELEMENT_ID = 'dmn-custom-css';
 const SCOPE_CACHE_LIMIT = 4;
+// @import 해석 실패 후 재시도 유예
+const IMPORT_RETRY_DELAY_MS = 30_000;
 
 interface CustomCssInjectionOptions {
   // 지정 시 모든 셀렉터를 이 스코프 하위로 재작성해 주입 (메인창 미리보기 격리).
@@ -56,6 +58,16 @@ export function useCustomCssInjection(options?: CustomCssInjectionOptions) {
     // 인라인·스코프한 결과가 준비되면 같은 원문일 때 다시 적용한다. 원문이
     // 바뀌면 진행 중이던 해석은 중단한다
     const importResolvedCache = new Map<string, string>();
+    // 실패한 원문은 잠시 재시도하지 않는다 - 탭 전환·재적용마다 import 체인을
+    // 다시 받지 않게 (원문이 바뀌거나 유예가 지나면 다시 시도)
+    const importFailedAt = new Map<string, number>();
+    const importRecentlyFailed = (raw: string): boolean => {
+      const failedAt = importFailedAt.get(raw);
+      if (failedAt === undefined) return false;
+      if (Date.now() - failedAt < IMPORT_RETRY_DELAY_MS) return true;
+      importFailedAt.delete(raw);
+      return false;
+    };
     let pendingImport: { raw: string; controller: AbortController } | null =
       null;
     let disposed = false;
@@ -81,11 +93,14 @@ export function useCustomCssInjection(options?: CustomCssInjectionOptions) {
       })
         .then((inlined) => {
           if (disposed || controller.signal.aborted) return;
+          importFailedAt.delete(raw);
           remember(importResolvedCache, raw, scopeUserCss(inlined, scope));
           reapply?.();
         })
         .catch((error: unknown) => {
           if (controller.signal.aborted) return;
+          if (importFailedAt.size >= SCOPE_CACHE_LIMIT) importFailedAt.clear();
+          importFailedAt.set(raw, Date.now());
           console.warn('[custom-css] @import resolve failed', error);
         })
         .finally(() => {
@@ -101,7 +116,9 @@ export function useCustomCssInjection(options?: CustomCssInjectionOptions) {
         scoped = scopeUserCss(raw, scopeSelector);
         remember(scopeCache, raw, scoped);
       }
-      if (hasLeadingImports(raw)) resolveImports(raw, scopeSelector);
+      if (hasLeadingImports(raw) && !importRecentlyFailed(raw)) {
+        resolveImports(raw, scopeSelector);
+      }
       return scoped;
     };
 
