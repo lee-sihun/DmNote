@@ -133,8 +133,12 @@ const vertexShader = `
     float centerCanvasY = (noteTopY + noteBottomY) / 2.0;
     float centerWorldY = uScreenHeight - centerCanvasY;
 
-    float expandedWidth = noteWidth + glowSize * 2.0;
-    float expandedLength = noteLength + glowSize * 2.0;
+    // SDF의 1px AA가 primitive 경계에서 잘리지 않게 최소 halo 보장
+    // 길이 0·글로우 없음은 기존처럼 degenerate quad를 유지
+    float edgeAAHalo = noteLength > 0.0 ? 1.0 : 0.0;
+    float quadHalo = max(glowSize, edgeAAHalo);
+    float expandedWidth = noteWidth + quadHalo * 2.0;
+    float expandedLength = noteLength + quadHalo * 2.0;
 
     vec3 transformed = vec3(position.x, position.y, position.z);
     transformed.x *= expandedWidth;
