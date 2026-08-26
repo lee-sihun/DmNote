@@ -2451,6 +2451,11 @@ impl AppStore {
         value: Value,
         admission: HistoryAdmissionLease,
     ) -> Result<AdmittedPluginStorageMutation<()>> {
+        // canonical 배치 버킷은 revision·history·이벤트를 우회하는 일반 storage 경로로
+        // 쓰거나 지울 수 없다 (namespace 전체 clear만 배치를 함께 지운다)
+        if is_plugin_instances_storage_key(key) {
+            return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
+        }
         let mut guard = self.lock_for_update()?;
         admission
             .revalidate_for(&self.history_gate)
@@ -2491,6 +2496,9 @@ impl AppStore {
         key: &str,
         admission: HistoryAdmissionLease,
     ) -> Result<AdmittedPluginStorageMutation<()>> {
+        if is_plugin_instances_storage_key(key) {
+            return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
+        }
         let mut guard = self.lock_for_update()?;
         admission
             .revalidate_for(&self.history_gate)
@@ -8613,7 +8621,7 @@ mod tests {
     }
 
     #[test]
-    fn generic_instances_storage_can_overwrite_the_reserved_canonical_key() {
+    fn generic_instance_storage_set_and_remove_are_reserved() {
         let dir = test_directory("plugin-instances-reserved-key-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
@@ -8639,20 +8647,18 @@ mod tests {
         assert!(store.history_status().can_redo);
         let revision = store.plugin_model_revision();
 
-        store
+        let set_error = store
             .set_plugin_data(
                 "plugin_data_demo-plugin/instances",
                 serde_json::to_value(vec![saved_plugin_instance(90.0)]).unwrap(),
             )
-            .unwrap();
-        assert_eq!(
-            store.plugin_instances_get("demo-plugin").unwrap().0.len(),
-            1
-        );
-        store
+            .unwrap_err();
+        let remove_error = store
             .remove_plugin_data("plugin_data_demo-plugin/instances")
-            .unwrap();
+            .unwrap_err();
 
+        assert_eq!(set_error.to_string(), "PLUGIN_INSTANCES_KEY_RESERVED");
+        assert_eq!(remove_error.to_string(), "PLUGIN_INSTANCES_KEY_RESERVED");
         assert_eq!(store.plugin_model_revision(), revision);
         assert!(store.history_status().can_redo);
         assert!(store
