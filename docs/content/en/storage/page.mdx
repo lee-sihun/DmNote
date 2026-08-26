@@ -19,6 +19,12 @@ Simply use keys without worrying about conflicts with other plugins.
 await dmn.plugin.storage.set("settings", { theme: "dark" });
 ```
 
+<Callout type="warning">
+  The `instances` key is reserved for the app's saved plugin element placements
+  (`defineElement`). Writing to it directly collides with placements and it is
+  cleared by Reset Data. Use a different key.
+</Callout>
+
 ## API Reference
 
 ### get(key)

@@ -214,7 +214,8 @@ console.log('Mode changed:', result.success);
 
 ### `dmn.keys.resetMode(mode): Promise<KeysModeResponse>`
 
-Resets one key mode and its positions to the built-in defaults.
+Resets one key mode, its positions, and plugin display elements placed in that
+mode to the built-in defaults. Other plugin storage is preserved.
 
 ```javascript
 await dmn.keys.resetMode('4key');
@@ -222,7 +223,12 @@ await dmn.keys.resetMode('4key');
 
 ### `dmn.keys.resetAll(): Promise<KeysResetAllResponse>`
 
-Resets all keys, positions, counters, and custom tabs to their built-in defaults.
+Resets all keys, positions, counters, custom tabs, and plugin display element
+placements to their built-in defaults. Installed plugins and other plugin
+storage are preserved. The reset targets saved `defineElement` placements.
+Runtime elements created directly by plugin startup code with
+`displayElement.add()` can remain or be created again while the plugin remains
+installed.
 
 ```javascript
 const result = await dmn.keys.resetAll();

@@ -11,9 +11,7 @@ import {
   reportElementOpSkipped,
 } from '@src/renderer/editor/runtime/elementIntent';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
-import { removeDisplayElementsInternal } from '@plugins/runtime/displayElement/displayElementApi';
 import type { KeySlot } from '@src/types/key/keys';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { keysApi } from '@api/modules/keysApi';
@@ -47,13 +45,6 @@ export function useKeyManager() {
       const res = await keysApi.resetMode(selectedKeyType);
       // 백엔드가 초기화를 수행한 경우에만 후속 정리 — 커스텀 탭도 이제 지원됨
       if (!res.success) return;
-      // 이 탭에 놓인 플러그인 표시 요소도 함께 제거 (백엔드 저장소와 별개)
-      const staleElements = usePluginDisplayElementStore
-        .getState()
-        .elements.filter((el) => el.tabId === selectedKeyType);
-      removeDisplayElementsInternal(
-        staleElements.map((element) => element.fullId),
-      );
       useGridSelectionStore.getState().clearSelection();
     } catch (error) {
       console.error('Failed to reset current mode', error);
@@ -61,7 +52,6 @@ export function useKeyManager() {
   };
 
   // undo/redo는 백엔드 authority가 실행 - 복원 결과는 canonical 이벤트로 각 창에 전파
-  // 플러그인 표시 요소는 백엔드 canonical 승격 전까지 undo 대상이 아님
   const executeHistoryAction = async (
     direction: 'undo' | 'redo',
   ): Promise<void> => {

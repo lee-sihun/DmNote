@@ -63,7 +63,7 @@
     "renderMode": "選擇渲染模式",
     "resetData": "重置資料",
     "restartConfirm": "應用設定需要重啟. 是否立即重啟?",
-    "resetAllConfirm": "確定要重置所有設定嗎?",
+    "resetAllConfirm": "將重設所有編輯資料。\n外掛資料將保留。",
     "initialize": "初始化",
     "cssLoaded": "CSS 檔案已載入.",
     "cssLoadFailed": "CSS 檔案載入失敗",

@@ -63,7 +63,7 @@
     "renderMode": "Select Rendering Mode",
     "resetData": "Reset Data",
     "restartConfirm": "Restart is required to apply settings. Restart now?",
-    "resetAllConfirm": "Are you sure you want to reset all settings?",
+    "resetAllConfirm": "All editor data will be reset.\nPlugin data is kept.",
     "initialize": "Initialize",
     "cssLoaded": "CSS file loaded.",
     "cssLoadFailed": "CSS file load failed",

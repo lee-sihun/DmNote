@@ -2392,7 +2392,7 @@ mod tests {
     }
 
     fn stored_plugin_instance_ids(data: &AppStoreData, plugin_id: &str) -> Vec<String> {
-        data.plugin_data[&format!("plugin_data_{plugin_id}/instances")]
+        data.plugin_data[&crate::state::plugin::plugin_instances_storage_key(plugin_id)]
             .as_array()
             .unwrap()
             .iter()
@@ -2457,6 +2457,43 @@ mod tests {
     }
 
     #[test]
+    fn backfill_plugin_instances_preserves_malformed_siblings_across_reload() {
+        let path = plugin_backfill_fixture_path("mixed");
+        let existing_id = uuid::Uuid::new_v4().to_string();
+        let malformed = serde_json::json!({ "position": "broken", "keep": true });
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        raw.as_object_mut().unwrap().insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([
+                saved_plugin_instance_json(1.0, Some(&existing_id)),
+                saved_plugin_instance_json(2.0, None),
+                malformed.clone()
+            ]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        let key = crate::state::plugin::plugin_instances_storage_key("alpha");
+        let entries = loaded.data.plugin_data[&key].as_array().unwrap();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0]["instanceId"], existing_id);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            entries[1]["instanceId"].as_str().unwrap()
+        ));
+        assert_eq!(entries[2], malformed);
+        let persisted_bucket = loaded.data.plugin_data[&key].clone();
+
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(reloaded.data.plugin_data[&key], persisted_bucket);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn backfill_plugin_instances_preserves_existing_valid_ids() {
         let path = plugin_backfill_fixture_path("partial");
         let existing_id = uuid::Uuid::new_v4().to_string();
@@ -2480,7 +2517,8 @@ mod tests {
             &ids[1]
         ));
         // 값 필드와 순서 보존
-        let instances = loaded.data.plugin_data["plugin_data_alpha/instances"]
+        let instances = loaded.data.plugin_data
+            [&crate::state::plugin::plugin_instances_storage_key("alpha")]
             .as_array()
             .unwrap();
         assert_eq!(instances[0]["position"]["x"], 1.0);
@@ -2563,8 +2601,7 @@ mod tests {
         std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
-        // 교차 플러그인 중복만으로는 수리 대상이 아니다 - 불필요한 백업과
-        // sweep 스킵을 유발하지 않게 무변경
+        // 교차 플러그인 중복만으로는 수리 대상이 아니다
         assert!(!loaded.needs_persist);
         assert!(!loaded.repaired);
         assert_eq!(
@@ -2655,6 +2692,7 @@ mod tests {
         std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
+        // 빈 배열은 사용자 storage로 보존
         assert!(!loaded.needs_persist);
         assert!(!loaded.repaired);
         assert_eq!(

@@ -988,6 +988,10 @@ impl HistoryService {
         self.history_epoch
     }
 
+    pub(crate) fn advance_epoch(&mut self) {
+        self.history_epoch = self.history_epoch.saturating_add(1);
+    }
+
     pub(crate) fn finish_barrier(&mut self) {
         self.busy = false;
     }

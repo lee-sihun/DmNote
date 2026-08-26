@@ -63,7 +63,7 @@
     "renderMode": "렌더링 모드 선택",
     "resetData": "데이터 초기화",
     "restartConfirm": "설정을 적용하려면 재시작해야 합니다. 지금 재시작하시겠습니까?",
-    "resetAllConfirm": "모든 설정을 초기화하시겠습니까?",
+    "resetAllConfirm": "편집 데이터를 모두 초기화합니다.\n플러그인 데이터는 그대로 남습니다.",
     "initialize": "초기화",
     "cssLoaded": "CSS 파일이 로드되었습니다.",
     "cssLoadFailed": "CSS 파일 로드 실패",

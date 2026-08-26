@@ -818,6 +818,7 @@ pub struct CommittedEditorChange {
     pub selected_key_type: String,
     pub key_counters: KeyCounters,
     pub history_status: Option<HistoryStatus>,
+    pub(crate) plugin_instances_changes: Vec<super::PluginInstancesChangedPayload>,
     pub(crate) runtime_publication_generation: u64,
 }
 

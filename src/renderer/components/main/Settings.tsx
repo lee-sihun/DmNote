@@ -578,10 +578,13 @@ const Settings = ({
         plugin.content,
         plugin.name,
       );
+      const pluginStorageNamespace = `${pluginNamespace}/`;
 
       // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
       // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
-      const hasData: boolean = await pluginApi.storage.hasData(pluginNamespace);
+      const hasData: boolean = await pluginApi.storage.hasData(
+        pluginStorageNamespace,
+      );
       console.warn(
         '[PluginRemove] namespace=',
         pluginNamespace,
@@ -647,6 +650,7 @@ const Settings = ({
         plugin.content,
         plugin.name,
       );
+      const pluginStorageNamespace = `${pluginNamespace}/`;
 
       // 1) 먼저 플러그인 제거 → 클린업이 실행되며 일부 플러그인은 저장을 시도할 수 있음
       const result: JsRemoveResult = await jsApi.remove(pluginId);
@@ -655,7 +659,7 @@ const Settings = ({
       }
 
       // 2) 그 다음 스토리지 정리 → 클린업 중 재생성된 값까지 함께 제거
-      await pluginApi.storage.clearByPrefix(pluginNamespace);
+      await pluginApi.storage.clearByPrefix(pluginStorageNamespace);
     } catch (error) {
       console.error('Failed to remove JS plugin with data', error);
       showAlert?.(t('settings.jsPluginRemoveFailed'));

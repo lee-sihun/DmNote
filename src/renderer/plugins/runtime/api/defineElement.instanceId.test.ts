@@ -12,13 +12,14 @@ const mocks = vi.hoisted(() => ({
   instancesReconcile: vi.fn(() =>
     Promise.resolve({ modelRevision: 1, changed: false }),
   ),
+  instancesGet: vi.fn(),
 }));
 
 vi.mock('@api/modules/pluginInstancesApi', () => ({
   pluginInstancesApi: {
     commit: mocks.instancesCommit,
     reconcile: mocks.instancesReconcile,
-    get: vi.fn(),
+    get: mocks.instancesGet,
     onChanged: vi.fn(() => () => undefined),
   },
 }));
@@ -109,6 +110,12 @@ describe('plugin instance id restore round-trip', () => {
   const cleanups: Array<() => void> = [];
 
   const defineWithStorage = (stored: SavedInstance[] | null) => {
+    mocks.instancesGet.mockResolvedValue({
+      pluginId: 'plugin-a',
+      instances: stored ?? [],
+      modelRevision: 1,
+      authorityGeneration: 1,
+    });
     createDefineElement({
       pluginId: 'plugin-a',
       api: {
@@ -121,7 +128,6 @@ describe('plugin instance id restore round-trip', () => {
           displayElement: { update: vi.fn() },
         },
       },
-      namespacedStorage: { get: vi.fn().mockResolvedValue(stored) },
       registerCleanup: (cleanup: () => void) => cleanups.push(cleanup),
       wrapFunctionWithContext: (fn: (...args: unknown[]) => unknown) => fn,
       isReloading: () => false,
@@ -138,6 +144,7 @@ describe('plugin instance id restore round-trip', () => {
     window.__dmn_window_type = 'main';
     window.__dmn_current_plugin_id = 'plugin-a';
     mocks.reappliers.clear();
+    mocks.instancesGet.mockReset();
     useKeyStore.setState({
       isBootstrapped: true,
       customTabs: [],

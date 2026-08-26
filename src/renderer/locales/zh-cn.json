@@ -63,7 +63,7 @@
     "renderMode": "选择渲染模式",
     "resetData": "重置数据",
     "restartConfirm": "应用设置需要重启. 是否立即重启?",
-    "resetAllConfirm": "确定要重置所有设置吗?",
+    "resetAllConfirm": "将重置所有编辑数据。\n插件数据将保留。",
     "initialize": "初始化",
     "cssLoaded": "CSS 文件已加载.",
     "cssLoadFailed": "CSS 文件加载失败",
