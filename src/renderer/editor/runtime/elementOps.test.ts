@@ -92,6 +92,7 @@ import {
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
   rebindKeySlotById,
+  patchElementPropertyById,
 } from './elementOps';
 
 import {
@@ -3259,6 +3260,80 @@ describe('elementOps', () => {
         value: 'inside',
       }),
     ).resolves.toBe(false);
+  });
+
+  it('fontWeight 패치는 Bold 미확정 요소의 암묵 Bold를 함께 고정하고 gestureId를 전파한다', async () => {
+    // (700, 미확정) 키 - 레거시 Bold. 굵기를 바꾸면 Bold true로 고정 (editor_ops와 동일 규칙)
+    const legacyBold = { ...keyAt(ID_A), fontWeight: 700, fontBold: undefined };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [legacyBold] },
+      positions: { '4key': [legacyBold] },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    await patchElementPropertyById(
+      'key',
+      ID_A,
+      { property: 'fontWeight', value: 500 },
+      { gestureId: 'font-gesture' },
+    );
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      fontWeight: 500,
+      fontBold: true,
+    });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { property: 'fontWeight', value: 500 },
+        },
+      ],
+      expect.objectContaining({ gestureId: 'font-gesture' }),
+    );
+
+    // Bold가 확정된 요소는 건드리지 않는다
+    const explicit = { ...keyAt(ID_A), fontWeight: 700, fontBold: false };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [explicit] },
+      positions: { '4key': [explicit] },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    await patchElementPropertyById('key', ID_A, {
+      property: 'fontWeight',
+      value: 600,
+    });
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      fontWeight: 600,
+      fontBold: false,
+    });
+
+    // 카운터 (400, 미확정) → non-bold 고정: (700, false)라 재시작 시 레거시로 오인되지 않는다
+    const counterKey = {
+      ...keyAt(ID_A),
+      counter: {
+        ...createDefaultKeyPosition().counter,
+        fontWeight: 400,
+        fontBold: undefined,
+      },
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [counterKey] },
+      positions: { '4key': [counterKey] },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    await patchCounterTypographyByTargets(
+      [{ elementType: 'key', id: ID_A }],
+      { property: 'counterFontWeight', value: 700 },
+      { gestureId: 'counter-gesture' },
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({ fontWeight: 700, fontBold: false });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ gestureId: 'counter-gesture' }),
+    );
   });
 
   it('counter typography 6 leaf는 raw counter sibling을 보존해 key/stat N ops 한 commit으로 보낸다', async () => {

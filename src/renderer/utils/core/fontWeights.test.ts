@@ -62,10 +62,23 @@ describe('fontWeights', () => {
     expect(resolveSupportedFontWeight('Heavy Only', fonts)).toBe(700);
   });
 
-  it('Bold는 상한 없이 기본 굵기에 300을 더한다', () => {
+  it('Bold는 기본 굵기에 300을 더하되 CSS 유효 범위(1–1000)로 클램프한다', () => {
     expect(resolveEffectiveFontWeight(400, true)).toBe(700);
     expect(resolveEffectiveFontWeight(700, true)).toBe(1000);
-    expect(resolveEffectiveFontWeight(900, true)).toBe(1200);
+    // 1100·1200은 CSS에서 무효 선언이라 글자가 오히려 얇아진다
+    expect(resolveEffectiveFontWeight(800, true)).toBe(1000);
+    expect(resolveEffectiveFontWeight(900, true)).toBe(1000);
     expect(resolveEffectiveFontWeight(300, false)).toBe(300);
+  });
+
+  it('100 단위 값이 없는 범위는 경계값으로 대표하고 빈 목록은 400으로 폴백한다', () => {
+    expect(expandFontWeightRanges([{ min: 210, max: 250 }])).toEqual([
+      210, 250,
+    ]);
+    expect(expandFontWeightRanges([{ min: 950, max: 1000 }])).toEqual([900]);
+    expect(expandFontWeightRanges([{ min: 1000, max: 1000 }])).toEqual([900]);
+    expect(
+      getSupportedFontWeights('Broken', [font('Broken', Number.NaN, 400)]),
+    ).toEqual([400]);
   });
 });

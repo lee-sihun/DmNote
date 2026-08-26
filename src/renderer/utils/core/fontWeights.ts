@@ -10,8 +10,19 @@ export const FONT_WEIGHT_MAX = 900;
 export const FONT_WEIGHT_STEP = 100;
 export const FONT_WEIGHT_REGULAR = 400;
 export const FONT_BOLD_DELTA = 300;
+// CSS font-weight 유효 범위 - 벗어난 값은 선언 자체가 무효화되어 상속값으로 떨어진다
+const CSS_FONT_WEIGHT_MIN = 1;
+const CSS_FONT_WEIGHT_MAX = 1000;
 
 const FALLBACK_FONT_WEIGHTS = [FONT_WEIGHT_REGULAR] as const;
+
+// 백엔드 editor_ops와 같은 규칙 - Bold 미확정 요소의 굵기를 바꾸기 전에 암묵 Bold를
+// 고정한다. 고정하지 않으면 (700, 미확정)이 새로 생겨 재시작 마이그레이션이 레거시
+// 700으로 오인하고, 낙관 투영과 저장값이 갈라진다
+export const implicitElementFontBold = (fontWeight: unknown): boolean =>
+  fontWeight == null || fontWeight === 700;
+export const implicitCounterFontBold = (fontWeight: unknown): boolean =>
+  fontWeight === 700;
 
 const clampFontWeight = (weight: number): number =>
   Math.min(FONT_WEIGHT_MAX, Math.max(FONT_WEIGHT_MIN, Math.round(weight)));
@@ -19,7 +30,14 @@ const clampFontWeight = (weight: number): number =>
 export const resolveEffectiveFontWeight = (
   baseWeight: number,
   bold: boolean,
-): number => Math.round(baseWeight) + (bold ? FONT_BOLD_DELTA : 0);
+): number =>
+  Math.min(
+    CSS_FONT_WEIGHT_MAX,
+    Math.max(
+      CSS_FONT_WEIGHT_MIN,
+      Math.round(baseWeight) + (bold ? FONT_BOLD_DELTA : 0),
+    ),
+  );
 
 export const expandFontWeightRanges = (
   ranges: readonly FontWeightRange[],
@@ -30,18 +48,26 @@ export const expandFontWeightRanges = (
     if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) continue;
 
     if (min === max) {
-      if (min >= FONT_WEIGHT_MIN && min <= FONT_WEIGHT_MAX) {
-        weights.add(Math.round(min));
-      }
+      // 950·1000 같은 정적 페이스도 표현 가능한 경계값으로 대표
+      weights.add(clampFontWeight(min));
       continue;
     }
 
+    let added = false;
     for (
       let weight = FONT_WEIGHT_MIN;
       weight <= FONT_WEIGHT_MAX;
       weight += FONT_WEIGHT_STEP
     ) {
-      if (weight >= min && weight <= max) weights.add(weight);
+      if (weight >= min && weight <= max) {
+        weights.add(weight);
+        added = true;
+      }
+    }
+    // 100 단위 값이 하나도 없는 범위(200–250, 950–1000)는 경계값으로 대표
+    if (!added) {
+      weights.add(clampFontWeight(min));
+      weights.add(clampFontWeight(max));
     }
   }
 
@@ -69,9 +95,8 @@ export const getSupportedFontWeights = (
   const ranges = fonts
     .filter((font) => normalizeFontFamilyName(font.name) === normalizedFamily)
     .flatMap(getFontRanges);
-  if (ranges.length === 0) return [...FALLBACK_FONT_WEIGHTS];
   const weights = expandFontWeightRanges(ranges);
-  return weights;
+  return weights.length === 0 ? [...FALLBACK_FONT_WEIGHTS] : weights;
 };
 
 export const getCommonSupportedFontWeights = (

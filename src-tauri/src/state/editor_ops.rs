@@ -2111,6 +2111,12 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         if position.font_weight == Some(*patch) {
                             false
                         } else {
+                            // Bold 미확정 요소는 굵기 변경 전 암묵 상태를 고정 - (700, None)이
+                            // 새로 생기면 재시작 마이그레이션이 레거시 700으로 오인한다
+                            if position.font_bold.is_none() {
+                                position.font_bold =
+                                    Some(matches!(position.font_weight, None | Some(700)));
+                            }
                             position.font_weight = Some(*patch);
                             true
                         }
@@ -2426,6 +2432,10 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         if position.counter.font_weight == *patch {
                             false
                         } else {
+                            if position.counter.font_bold.is_none() {
+                                position.counter.font_bold =
+                                    Some(position.counter.font_weight == 700);
+                            }
                             position.counter.font_weight = *patch;
                             true
                         }
@@ -4786,6 +4796,55 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].use_inline_styles, None);
+    }
+
+    #[test]
+    fn font_weight_patch_pins_implicit_bold_before_changing_weight() {
+        let mut store = store_with_every_reorder_type();
+        {
+            let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
+            key.font_weight = Some(700);
+            key.font_bold = None;
+            key.counter.font_weight = 400;
+            key.counter.font_bold = None;
+        }
+        {
+            let stat = &mut store.stat_positions.get_mut("4key").unwrap()[0].position;
+            stat.font_weight = None;
+            stat.font_bold = None;
+        }
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::FontWeight(500),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::CounterFontWeight(700),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::FontWeight(600),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let key = &transition.candidate.key_positions["4key"][0];
+        // 레거시 (700, None)은 Bold였으므로 고정하고 굵기만 바꾼다
+        assert_eq!(key.font_weight, Some(500));
+        assert_eq!(key.font_bold, Some(true));
+        // 카운터 (400, None)은 non-bold 고정 - (700, Some(false))라 재시작 시 레거시로 오인되지 않는다
+        assert_eq!(key.counter.font_weight, 700);
+        assert_eq!(key.counter.font_bold, Some(false));
+        // 미설정 키 텍스트의 암묵 상태는 기본 Bold
+        let stat = &transition.candidate.stat_positions["4key"][0].position;
+        assert_eq!(stat.font_weight, Some(600));
+        assert_eq!(stat.font_bold, Some(true));
     }
 
     #[test]
