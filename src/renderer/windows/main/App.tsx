@@ -6,6 +6,7 @@ import {
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
+import { USER_CSS_SCOPE_SELECTOR } from '@utils/css/scopeUserCss';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { usePanelCloseRequest } from '@hooks/panel/usePanelCloseRequest';
@@ -17,6 +18,7 @@ import { usePalette } from '@hooks/Modal/usePalette';
 import CustomAlert from '@components/main/Modal/content/dialogs/Alert';
 import NoteSettingModal from '@components/main/Modal/content/settings/NoteSetting';
 import UpdateModal from '@components/main/Modal/content/dialogs/UpdateModal';
+import { resolveAutoUpdateActionLabel } from '@components/main/Modal/content/dialogs/updateActionLabel';
 import PropertiesPanelHost from '@components/main/Grid/PropertiesPanelHost';
 import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -32,6 +34,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { usePluginDisplayElementsResponder } from '@hooks/app/usePluginDisplayElementsResponder';
 import {
+  UpdateInstalledRestartFailedError,
   useUpdateCheck,
   hasPendingPostUpdateReleaseNotice,
   clearPendingPostUpdateReleaseNotice,
@@ -73,7 +76,8 @@ function getErrorMessage(error: unknown): string {
 export default function App() {
   const setGridAreaHovered = useUIStore((state) => state.setGridAreaHovered);
   const { selectedKeyType, setSelectedKeyType, isBootstrapped } = useKeyStore();
-  useCustomCssInjection();
+  // 메인창은 그리드 미리보기 영역에만 유저 CSS 적용 - 에디터 크롬은 순정 유지
+  useCustomCssInjection({ scopeSelector: USER_CSS_SCOPE_SELECTOR });
   useCustomJsInjection(isBootstrapped);
   useAppBootstrap();
   usePluginDisplayElementsResponder();
@@ -89,6 +93,8 @@ export default function App() {
     checkForUpdates,
     runAutoUpdate,
     isAutoUpdating,
+    autoUpdatePhase,
+    autoUpdateProgress,
   } = useUpdateCheck();
 
   const [pendingPostUpdateNotice, setPendingPostUpdateNotice] = useState(() =>
@@ -404,6 +410,20 @@ export default function App() {
     try {
       await runAutoUpdate(updateInfo.latestVersion);
     } catch (error) {
+      if (error instanceof UpdateInstalledRestartFailedError) {
+        // 대개 에디터 저장 실패로 재시작이 취소된 경우 — 원인을 함께 보여줌
+        console.error(
+          'Update installed but restart failed:',
+          error.originalError,
+        );
+        const restartDetail = getErrorMessage(error.originalError);
+        showAlert(
+          restartDetail
+            ? `${t('update.installedRestartFailed')}\n${restartDetail}`
+            : t('update.installedRestartFailed'),
+        );
+        return;
+      }
       const detail = getErrorMessage(error);
       console.error('Automatic update failed:', error);
       if (detail) {
@@ -849,13 +869,13 @@ export default function App() {
           onSkipVersion={skipVersion}
           isLatestVersion={shownUpdate.isLatestVersion}
           onPrimaryAction={handleUpdatePrimaryAction}
-          primaryActionLabel={
-            autoUpdateEnabled
-              ? isAutoUpdating
-                ? t('update.autoUpdating')
-                : t('update.autoUpdate')
-              : t('update.goToRelease')
-          }
+          primaryActionLabel={resolveAutoUpdateActionLabel({
+            autoUpdateEnabled,
+            isAutoUpdating,
+            phase: autoUpdatePhase,
+            progress: autoUpdateProgress,
+            t,
+          })}
           primaryActionDisabled={isAutoUpdating}
         />
       )}

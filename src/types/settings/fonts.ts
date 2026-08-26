@@ -9,6 +9,15 @@ export const fontTypeSchema = z.union([
 
 export type FontType = z.infer<typeof fontTypeSchema>;
 
+export const fontWeightRangeSchema = z
+  .object({
+    min: z.number().int().min(1).max(1000),
+    max: z.number().int().min(1).max(1000),
+  })
+  .refine(({ min, max }) => min <= max);
+
+export type FontWeightRange = z.infer<typeof fontWeightRangeSchema>;
+
 // 커스텀 폰트 스키마
 export const customFontSchema = z.object({
   id: z.string(),
@@ -20,6 +29,8 @@ export const customFontSchema = z.object({
   localPath: z.string().optional(),
   // 웹폰트 전용
   cssContent: z.string().optional(),
+  // 실제 폰트 파일/CSS가 제공하는 굵기 범위
+  weightRanges: z.array(fontWeightRangeSchema).optional(),
 });
 
 export type CustomFont = z.infer<typeof customFontSchema>;
@@ -40,17 +51,11 @@ export type WebFontCssValidationStatus =
   | 'missingSrc'
   | 'multipleFamilies';
 
-// 블록별 font-weight 선언 — 가변 폰트는 min/max 범위, 단일 굵기는 min === max
-export interface WebFontWeightRange {
-  min: number;
-  max: number;
-}
-
 export interface WebFontCssValidationResult {
   status: WebFontCssValidationStatus;
   detectedFontFamily: string | null;
   familyNames: string[];
-  detectedWeights: WebFontWeightRange[];
+  detectedWeights: FontWeightRange[];
 }
 
 // 앱 기본 폰트 (전역 로드 — global.css @font-face)
@@ -64,6 +69,7 @@ export const BUILTIN_FONTS: CustomFont[] = [
     name: DEFAULT_FONT_FAMILY,
     displayName: 'Pretendard Variable',
     enabled: true,
+    weightRanges: [{ min: 45, max: 930 }],
   },
   {
     id: 'suit',
@@ -71,6 +77,7 @@ export const BUILTIN_FONTS: CustomFont[] = [
     name: 'SUIT-Regular',
     displayName: 'SUIT',
     enabled: true,
+    weightRanges: [{ min: 400, max: 400 }],
     cssContent: `@font-face {
   font-family: 'SUIT-Regular';
   src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2') format('woff2');
@@ -84,6 +91,7 @@ export const BUILTIN_FONTS: CustomFont[] = [
     name: 'IsYun',
     displayName: '이서윤체',
     enabled: true,
+    weightRanges: [{ min: 400, max: 400 }],
     cssContent: `@font-face {
       font-family: 'IsYun';
       src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2202-2@1.0/LeeSeoyun.woff') format('woff');
@@ -97,6 +105,7 @@ export const BUILTIN_FONTS: CustomFont[] = [
     name: 'RoundedFixedsys',
     displayName: '둥근모꼴',
     enabled: true,
+    weightRanges: [{ min: 400, max: 400 }],
     cssContent: `@font-face {
       font-family: 'RoundedFixedsys';
       src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/DungGeunMo.woff') format('woff');
@@ -363,7 +372,7 @@ function parseFontWeightToken(token: string): number | null {
 }
 
 // 선언 누락·해석 불가 값은 브라우저 기본과 같은 400 취급
-function parseFontWeightValue(value: string | null): WebFontWeightRange {
+function parseFontWeightValue(value: string | null): FontWeightRange {
   if (!value) return { min: 400, max: 400 };
 
   const tokens = value.trim().split(/\s+/);
@@ -424,7 +433,7 @@ function createValidationResult(
   options?: {
     detectedFontFamily?: string | null;
     familyNames?: string[];
-    detectedWeights?: WebFontWeightRange[];
+    detectedWeights?: FontWeightRange[];
   },
 ): WebFontCssValidationResult {
   return {
@@ -457,7 +466,7 @@ export function validateWebFontFaceCss(
   }
 
   const familyMap = new Map<string, string>();
-  const weightMap = new Map<string, WebFontWeightRange>();
+  const weightMap = new Map<string, FontWeightRange>();
 
   for (const body of bodies) {
     const declarations = splitTopLevelDeclarations(body);
@@ -505,11 +514,6 @@ export function validateWebFontFaceCss(
     familyNames,
     detectedWeights,
   });
-}
-
-// CSS에서 font-family 이름 추출
-export function extractFontFamilyFromCSS(css: string): string | null {
-  return validateWebFontFaceCss(css).detectedFontFamily;
 }
 
 // 미리보기 초안 CSS 생성 — 최상위 @font-face 블록만 추출해 family를 초안 이름으로 치환

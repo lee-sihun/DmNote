@@ -431,24 +431,6 @@ export const setMixedLayerGroupHidden = (
   const pluginIds = [...new Set(pluginMembers.map(({ pluginId }) => pluginId))];
   const targetedFullIds = new Set(pluginMembers.map(({ fullId }) => fullId));
 
-  if (nativeMembers.length === 0) {
-    // plugin-only 그룹 - editor 변경이 없어 단일 plugin 커밋으로 충분
-    const runPluginOnly = async (): Promise<boolean> => {
-      options.preflight?.();
-      // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
-      const gestureId = crypto.randomUUID();
-      pluginIds.forEach((pluginId) =>
-        rotatePluginInstancesEditSession(pluginId, gestureId),
-      );
-      const store = usePluginDisplayElementStore.getState();
-      targetedFullIds.forEach((fullId) => {
-        store.updateElement(fullId, { hidden });
-      });
-      return true;
-    };
-    return runPluginOnly();
-  }
-
   const nativeMemberIds = new Set(nativeMembers.map(({ id }) => id));
 
   const projectDesiredPlugins = (
@@ -533,6 +515,13 @@ export const setMixedLayerGroupHidden = (
             id,
             patch: { property: 'hidden', value: hidden },
           }));
+          if (ops.length === 0) {
+            return {
+              kind: 'patch',
+              patch: null,
+              desiredPluginProjection: projectDesiredPlugins(pluginProjection),
+            };
+          }
           return {
             kind: 'ops',
             ops,

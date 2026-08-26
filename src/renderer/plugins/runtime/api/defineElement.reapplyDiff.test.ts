@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   flushEditSession: vi.fn(),
   stagedReleaseListeners: new Map<string, (gestureId: string) => void>(),
   syncHistoryStatus: vi.fn(() => Promise.resolve()),
+  historyEpoch: 1,
+  enqueueGate: null as Promise<void> | null,
 }));
 
 vi.mock('@api/modules/pluginInstancesApi', () => ({
@@ -53,7 +55,7 @@ vi.mock('../displayElement/instancesCommitQueue', () => ({
   enqueuePluginInstancesCommit: (
     _pluginId: string,
     task: () => Promise<unknown>,
-  ) => task(),
+  ) => (mocks.enqueueGate ? mocks.enqueueGate.then(() => task()) : task()),
   flushPluginInstancesEditSession: mocks.flushEditSession,
   hasActivePluginInstancesEditContext: mocks.hasActiveContext,
   hasConflictingPluginInstancesGesture: mocks.hasConflicting,
@@ -92,7 +94,9 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
 }));
 
 vi.mock('@stores/data/useHistoryStatusStore', () => ({
-  useHistoryStatusStore: { getState: () => ({ historyEpoch: 1 }) },
+  useHistoryStatusStore: {
+    getState: () => ({ historyEpoch: mocks.historyEpoch }),
+  },
   syncHistoryStatus: mocks.syncHistoryStatus,
 }));
 
@@ -145,6 +149,12 @@ describe('plugin instance reapply diff-patch', () => {
     definitionOverrides: Record<string, unknown> = {},
   ) => {
     window.__dmn_current_plugin_id = pluginId;
+    mocks.instancesGet.mockResolvedValue({
+      pluginId,
+      instances: stored ?? [],
+      modelRevision: 1,
+      authorityGeneration: 1,
+    });
     createDefineElement({
       pluginId,
       api: {
@@ -157,7 +167,6 @@ describe('plugin instance reapply diff-patch', () => {
           displayElement: { update: vi.fn() },
         },
       },
-      namespacedStorage: { get: vi.fn().mockResolvedValue(stored) },
       registerCleanup: (cleanup: () => void) => cleanups.push(cleanup),
       wrapFunctionWithContext: (fn: (...args: unknown[]) => unknown) => fn,
       isReloading: () => false,
@@ -209,6 +218,8 @@ describe('plugin instance reapply diff-patch', () => {
     mocks.flushEditSession.mockClear();
     mocks.stagedReleaseListeners.clear();
     mocks.syncHistoryStatus.mockClear();
+    mocks.historyEpoch = 1;
+    mocks.enqueueGate = null;
     useKeyStore.setState({
       isBootstrapped: true,
       customTabs: [],
@@ -583,6 +594,7 @@ describe('plugin instance reapply diff-patch', () => {
     const defineWithLocalEdit = async (pluginId: string) => {
       defineFor(pluginId, canonical(1));
       await vi.waitFor(() => expect(defElements(pluginId)).toHaveLength(1));
+      mocks.instancesGet.mockClear();
       usePluginDisplayElementStore
         .getState()
         .updateElement(`${pluginId}::${ID_A}`, { position: { x: 50, y: 50 } });
@@ -625,6 +637,31 @@ describe('plugin instance reapply diff-patch', () => {
         x: 1,
         y: 1,
       });
+    });
+
+    it('큐 대기 중 history가 바뀌어도 스냅샷 캡처 시점 epoch를 보낸다', async () => {
+      const pluginId = 'plugin-captured-epoch';
+      const debounce = await defineWithLocalEdit(pluginId);
+      let releaseQueue!: () => void;
+      mocks.enqueueGate = new Promise<void>((resolve) => {
+        releaseQueue = resolve;
+      });
+
+      const saving = debounce.save({
+        gestureId: 'gesture-before-history',
+        captureCurrentSnapshot: true,
+      });
+      await Promise.resolve();
+      mocks.historyEpoch = 2;
+      releaseQueue();
+      await saving;
+
+      expect(mocks.instancesCommit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gestureId: 'gesture-before-history',
+          observedHistoryEpoch: 1,
+        }),
+      );
     });
 
     it('다른 gesture가 소유 중이면 거절 복구 재주입을 건너뛴다', async () => {

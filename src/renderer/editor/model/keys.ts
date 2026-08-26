@@ -46,11 +46,14 @@ export function createDefaultKeyPosition(
     noteAlignment: 'center',
     noteEffectEnabled: true,
     noteGlowEnabled: false,
+    noteGlowSyncPaint: false,
     noteGlowSize: 20,
     noteGlowOpacity: 70,
     noteGlowColor: '#FFFFFF',
     noteAutoYCorrection: true,
     className: '',
+    fontWeight: 400,
+    fontBold: true,
     counter: createDefaultCounterSettings(),
   } as KeyPosition & { id: string };
 }
@@ -137,7 +140,6 @@ export function cloneKeyPositionForDuplicate(
   const clonedCounter: KeyCounterSettings = {
     ...sourceCounter,
     fill: { ...sourceCounter.fill },
-    stroke: { ...sourceCounter.stroke },
     animation: {
       ...sourceCounter.animation,
       presetId: sourceCounter.animation.presetId ?? null,

@@ -8,12 +8,14 @@ use std::{
 
 use parking_lot::{Condvar, Mutex};
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::models::{
     AppStoreData, CustomCss, CustomJs, CustomTab, EditorDocumentV1, EditorField, EditorPatchV1,
     FontSettings, HistoryStatus, HistoryTruncated, KeyCounters, NoteSettings, SavedPluginInstance,
     TabCss, TabCssOverrides, TabNoteOverrides, TabNoteSettings,
 };
+use crate::state::plugin::{is_plugin_instances_storage_key, plugin_id_from_instances_storage_key};
 
 pub(crate) const HISTORY_ENTRY_MAX_BYTES: usize = 8 * 1024 * 1024;
 const HISTORY_TOTAL_MAX_BYTES: usize = 32 * 1024 * 1024;
@@ -83,6 +85,7 @@ pub(crate) struct CustomTabsHistorySnapshot {
     pub(crate) key_counters: KeyCounters,
     pub(crate) tab_css_patch: HashMap<String, Option<TabCss>>,
     pub(crate) tab_note_patch: HashMap<String, Option<TabNoteSettings>>,
+    pub(crate) plugin_instances_patch: HashMap<String, Option<Value>>,
 }
 
 impl CustomTabsHistorySnapshot {
@@ -97,6 +100,10 @@ impl CustomTabsHistorySnapshot {
                 &before.tab_note_overrides,
                 &after.tab_note_overrides,
             ),
+            plugin_instances_patch: changed_value_patch(&before.plugin_data, &after.plugin_data)
+                .into_iter()
+                .filter(|(key, _)| is_plugin_instances_storage_key(key))
+                .collect(),
         }
     }
 
@@ -114,6 +121,10 @@ impl CustomTabsHistorySnapshot {
                 &store.tab_note_overrides,
                 target.tab_note_patch.keys(),
             ),
+            plugin_instances_patch: current_values_for_keys(
+                &store.plugin_data,
+                target.plugin_instances_patch.keys(),
+            ),
         }
     }
 
@@ -124,11 +135,25 @@ impl CustomTabsHistorySnapshot {
             && self.key_counters == store.key_counters
             && patch_matches(&self.tab_css_patch, &store.tab_css_overrides)
             && patch_matches(&self.tab_note_patch, &store.tab_note_overrides)
+            && patch_matches(&self.plugin_instances_patch, &store.plugin_data)
     }
 
     pub(crate) fn apply_override_patches(&self, store: &mut AppStoreData) {
         apply_value_patch(&self.tab_css_patch, &mut store.tab_css_overrides);
         apply_value_patch(&self.tab_note_patch, &mut store.tab_note_overrides);
+        apply_value_patch(&self.plugin_instances_patch, &mut store.plugin_data);
+    }
+
+    pub(crate) fn changed_plugin_ids(&self) -> Vec<String> {
+        let mut plugin_ids = self
+            .plugin_instances_patch
+            .keys()
+            .filter_map(|key| plugin_id_from_instances_storage_key(key))
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        plugin_ids.sort_unstable();
+        plugin_ids.dedup();
+        plugin_ids
     }
 }
 
@@ -266,9 +291,9 @@ fn preserve_editor_before_values(merged: &mut EditorPatchV1, first: &EditorPatch
 pub(crate) enum HistorySnapshot {
     Editor {
         changed_fields: Vec<EditorField>,
-        before: EditorPatchV1,
+        before: Box<EditorPatchV1>,
     },
-    CustomTabs(CustomTabsHistorySnapshot),
+    CustomTabs(Box<CustomTabsHistorySnapshot>),
     Mode(String),
     Counters(KeyCounters),
     PresetFull(Box<PresetFullHistorySnapshot>),
@@ -308,7 +333,7 @@ fn merged_editor_before(
     preserve_editor_before_values(&mut merged_before, first_before);
     HistorySnapshot::Editor {
         changed_fields: merged_fields,
-        before: merged_before,
+        before: Box::new(merged_before),
     }
 }
 
@@ -332,7 +357,7 @@ fn merge_editor_snapshot(
                 existing.clone(),
                 HistorySnapshot::Editor {
                     changed_fields,
-                    before,
+                    before: Box::new(before),
                 },
             ],
         }),
@@ -355,7 +380,7 @@ fn merge_editor_snapshot(
             } else {
                 merged.push(HistorySnapshot::Editor {
                     changed_fields,
-                    before,
+                    before: Box::new(before),
                 });
             }
             Ok(HistorySnapshot::Compound { snapshots: merged })
@@ -410,7 +435,7 @@ fn merge_gesture_snapshots(
             HistorySnapshot::Editor {
                 changed_fields,
                 before,
-            } => merge_editor_snapshot(&merged, changed_fields.clone(), before.clone())?,
+            } => merge_editor_snapshot(&merged, changed_fields.clone(), before.as_ref().clone())?,
             HistorySnapshot::PluginElements(before) => {
                 merge_plugin_elements_snapshot(&merged, before.clone())?
             }
@@ -479,7 +504,7 @@ fn remove_net_zero_editor_snapshot(entry: &mut HistoryEntry, canonical: &EditorD
             HistorySnapshot::Editor {
                 changed_fields,
                 before,
-            } if canonical.patch_for_fields(changed_fields) == *before
+            } if canonical.patch_for_fields(changed_fields) == **before
         )
     };
     match &mut entry.before {
@@ -645,7 +670,7 @@ impl HistoryService {
             HistoryScope::Editor,
             HistorySnapshot::Editor {
                 changed_fields,
-                before,
+                before: Box::new(before),
             },
             gesture_ids,
             None,
@@ -663,7 +688,7 @@ impl HistoryService {
             HistoryScope::Editor,
             HistorySnapshot::Editor {
                 changed_fields,
-                before,
+                before: Box::new(before),
             },
             gesture_id,
             None,
@@ -676,7 +701,7 @@ impl HistoryService {
     ) -> Result<HistoryRecordPlan, String> {
         self.prepare_snapshot(
             HistoryScope::CustomTabs,
-            HistorySnapshot::CustomTabs(before),
+            HistorySnapshot::CustomTabs(Box::new(before)),
             None,
             None,
         )
@@ -988,6 +1013,10 @@ impl HistoryService {
         self.history_epoch
     }
 
+    pub(crate) fn advance_epoch(&mut self) {
+        self.history_epoch = self.history_epoch.saturating_add(1);
+    }
+
     pub(crate) fn finish_barrier(&mut self) {
         self.busy = false;
     }
@@ -1172,8 +1201,11 @@ fn snapshot_contains_plugin_elements(snapshot: &HistorySnapshot, plugin_id: Opti
         HistorySnapshot::Compound { snapshots } => snapshots
             .iter()
             .any(|snapshot| snapshot_contains_plugin_elements(snapshot, plugin_id)),
+        HistorySnapshot::CustomTabs(snapshot) => snapshot
+            .changed_plugin_ids()
+            .iter()
+            .any(|candidate| plugin_id.is_none_or(|plugin_id| candidate == plugin_id)),
         HistorySnapshot::Editor { .. }
-        | HistorySnapshot::CustomTabs(_)
         | HistorySnapshot::Mode(_)
         | HistorySnapshot::Counters(_)
         | HistorySnapshot::PresetFull(_) => false,
@@ -1653,7 +1685,7 @@ mod tests {
             .prepare_gesture_entry(
                 vec![HistorySnapshot::Editor {
                     changed_fields: vec![EditorField::Keys],
-                    before: patch("before"),
+                    before: Box::new(patch("before")),
                 }],
                 gesture_id.clone(),
             )
@@ -1687,7 +1719,7 @@ mod tests {
                     vec![
                         HistorySnapshot::Editor {
                             changed_fields: vec![EditorField::Keys],
-                            before: patch(text),
+                            before: Box::new(patch(text)),
                         },
                         HistorySnapshot::PluginElements(plugin_snapshot("plugin-a")),
                     ],
@@ -1726,7 +1758,7 @@ mod tests {
             .prepare_gesture_entry(
                 vec![HistorySnapshot::Editor {
                     changed_fields: vec![EditorField::Keys],
-                    before: patch("before"),
+                    before: Box::new(patch("before")),
                 }],
                 uuid::Uuid::new_v4().to_string(),
             )
@@ -1742,7 +1774,7 @@ mod tests {
         let gesture_id = uuid::Uuid::new_v4().to_string();
         let editor_snapshots = vec![HistorySnapshot::Editor {
             changed_fields: vec![EditorField::Keys],
-            before: patch("before"),
+            before: Box::new(patch("before")),
         }];
         let mut probe = HistoryService::default();
         let plugin = probe
@@ -1875,14 +1907,14 @@ mod tests {
             history.past.front().unwrap().before,
             HistorySnapshot::Editor {
                 changed_fields: vec![EditorField::Keys],
-                before: patch("two"),
+                before: Box::new(patch("two")),
             }
         );
         assert_eq!(
             history.past.back().unwrap().before,
             HistorySnapshot::Editor {
                 changed_fields: vec![EditorField::Keys],
-                before: patch("three"),
+                before: Box::new(patch("three")),
             }
         );
     }

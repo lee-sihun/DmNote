@@ -33,6 +33,11 @@ open = "5.1"
 rfd = "0.14"
 dirs-next = "2.0"
 uuid = { version = "1", features = ["v4"] }
+# 자동 업데이트 (Windows exe 교체 / macOS DMG 교체 공통)
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+semver = "1"
+tempfile = "3"
+plist = "1"
 url = "2"
 unicode-normalization = "0.1"
 zip = "0.6"
@@ -45,6 +50,8 @@ tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 local-ip-address = "0.6.10"
+ttf-parser = "0.25.1"
+wuff = "0.2.8"
 
 [dev-dependencies]
 libc = "0.2"
@@ -67,10 +74,7 @@ windows = { version = "0.61.3", features = [
 	"Win32_UI_Shell"
 ] }
 thread-priority = "1.2"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
-semver = "1"
 self-replace = "1.5"
-tempfile = "3"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 libc = "0.2"

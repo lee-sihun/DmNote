@@ -24,10 +24,13 @@ import {
 import { createFontStyleToggleHandlers } from '../fontStyleToggleHandlers';
 import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useFontStore } from '@stores/useFontStore';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
+import FontPickerOpenButton from '../../../Modal/content/pickers/FontPickerOpenButton';
+import FontWeightDropdown from '../FontWeightDropdown';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
 import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
@@ -48,10 +51,12 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
+  DEFAULT_ELEMENT_FONT_BOLD,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
@@ -67,16 +72,12 @@ type PickerTarget = 'backgroundColor' | 'borderColor' | 'fontColor' | null;
 
 type ColorState = 'idle' | 'active';
 type StyleColorTarget = 'backgroundColor' | 'borderColor' | 'fontColor';
-type GradientColorTarget = 'backgroundColor' | 'borderColor';
+type GradientColorTarget = StyleColorTarget;
 type ActiveStyleColorProperty =
   | 'activeBackgroundColor'
   | 'activeBorderColor'
   | 'activeFontColor';
-type StyleColorProperty =
-  | StyleColorTarget
-  | 'activeBackgroundColor'
-  | 'activeBorderColor'
-  | 'activeFontColor';
+type StyleColorProperty = StyleColorTarget | ActiveStyleColorProperty;
 
 interface StyleTabContentInternalProps extends StyleTabContentProps {
   // 로컬 상태 (단일 선택 시에만 사용, 개별 편집 모드에서는 사용하지 않음)
@@ -121,8 +122,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onStylePropertyCommit,
   onPaintPreview,
   onPaintCommit,
-  onFontColorPreview,
-  onFontColorCommit,
   onShadowCommit,
   imageButtonRef,
   panelElement,
@@ -335,6 +334,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
   const handlePickerToggle = (target: PickerTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
+    // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 배치로 리셋해
+    // 첫 렌더부터 이전 "입력" 선택이 새지 않는다
+    if (pickerFor !== target) setColorState('idle');
   };
 
   const resolveColorProperty = (
@@ -377,6 +379,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         return keyPosition.borderGradient ?? null;
       case 'activeBorderColor':
         return keyPosition.activeBorderGradient ?? null;
+      case 'fontColor':
+        return keyPosition.fontGradient ?? null;
+      case 'activeFontColor':
+        return keyPosition.activeFontGradient ?? null;
       default:
         return null;
     }
@@ -390,39 +396,27 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     return localColors[resolveColorProperty(target)];
   };
 
-  // 드래그와 텍스트 입력은 같은 preview patch를 사용
+  // 드래그 중 로컬 상태만 갱신 - preview는 그라데이션 상태(handleGradientPreview)가 담당
   const handleColorChange = (target: StyleColorTarget, color: string) => {
     const prop = resolveColorProperty(target);
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
-    if (target !== 'fontColor') return;
-    onFontColorPreview?.(
-      prop === 'activeFontColor'
-        ? { property: 'activeFontColor', value: color }
-        : { property: 'fontColor', value: color },
-    );
   };
 
-  // 드래그 완료 시 부모에게 전달
+  // 드래그 완료 시 로컬 반영 - 커밋은 그라데이션 상태(handleGradientCommit)가 담당
   const handleColorChangeComplete = (
     target: StyleColorTarget,
     color: string,
   ) => {
     const prop = resolveColorProperty(target);
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
-
-    if (target === 'fontColor') {
-      onFontColorCommit?.(
-        prop === 'activeFontColor'
-          ? { property: 'activeFontColor', value: color }
-          : { property: 'fontColor', value: color },
-      );
-    }
   };
 
-  // ── 그라데이션 배선 (배경·테두리 전용, 글꼴 색상은 단색 유지) ──
+  // ── 그라데이션 배선 (배경·테두리·글꼴 공통) ──
 
   const gradientTarget: GradientColorTarget | null =
-    pickerFor === 'backgroundColor' || pickerFor === 'borderColor'
+    pickerFor === 'backgroundColor' ||
+    pickerFor === 'borderColor' ||
+    pickerFor === 'fontColor'
       ? pickerFor
       : null;
 
@@ -438,36 +432,41 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     return activeHasValue ? activeGradient : idleGradient;
   };
 
+  // 배경·테두리·글꼴 표면과 상태 조합을 paint 필드로
+  const paintFieldFor = (target: GradientColorTarget) =>
+    target === 'backgroundColor'
+      ? effectiveColorState === 'active'
+        ? 'activeBackgroundPaint'
+        : 'backgroundPaint'
+      : target === 'borderColor'
+      ? effectiveColorState === 'active'
+        ? 'activeBorderPaint'
+        : 'borderPaint'
+      : effectiveColorState === 'active'
+      ? 'activeFontPaint'
+      : 'fontPaint';
+
+  // 드래그와 텍스트 입력은 같은 preview patch를 사용
   const handleGradientPreview = (value: ColorModeValue) => {
     if (!gradientTarget) return;
     const prop = resolveColorProperty(gradientTarget);
     const descriptor = paintDescriptor(value);
     setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-    const paintField =
-      effectiveColorState === 'active'
-        ? gradientTarget === 'backgroundColor'
-          ? 'activeBackgroundPaint'
-          : 'activeBorderPaint'
-        : gradientTarget === 'backgroundColor'
-        ? 'backgroundPaint'
-        : 'borderPaint';
-    onPaintPreview?.({ property: paintField, value: descriptor } as never);
+    onPaintPreview?.({
+      property: paintFieldFor(gradientTarget),
+      value: descriptor,
+    });
   };
 
   const handleGradientCommit = (value: ColorModeValue) => {
     if (!gradientTarget) return;
     const prop = resolveColorProperty(gradientTarget);
     const descriptor = paintDescriptor(value);
-    const paintField =
-      effectiveColorState === 'active'
-        ? gradientTarget === 'backgroundColor'
-          ? 'activeBackgroundPaint'
-          : 'activeBorderPaint'
-        : gradientTarget === 'backgroundColor'
-        ? 'backgroundPaint'
-        : 'borderPaint';
     setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-    onPaintCommit?.({ property: paintField, value: descriptor } as never);
+    onPaintCommit?.({
+      property: paintFieldFor(gradientTarget),
+      value: descriptor,
+    });
   };
 
   const gradientState = useGradientColorState({
@@ -483,7 +482,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       canvasAnchor?.kind === 'batch' ? 'batch' : canvasAnchor?.id
     }:${pickerFor ?? 'none'}:${effectiveColorState}`,
     canvasAnchor: gradientTarget ? canvasAnchor : undefined,
-    canvasSurface: gradientTarget === 'borderColor' ? 'border' : 'background',
+    canvasSurface:
+      gradientTarget === 'borderColor'
+        ? 'border'
+        : gradientTarget === 'fontColor'
+        ? 'font'
+        : 'background',
     canvasState: effectiveColorState,
     onPreview: handleGradientPreview,
     onCancel: () => editGestureController.cancel(),
@@ -551,6 +555,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const handleStyleChangeComplete = (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
+    options?: { gestureId?: string },
   ) => {
     if (
       onStylePropertyCommit &&
@@ -570,10 +575,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     }
     // property와 value의 상관은 TS가 못 잡아 캐스트가 남는다. 모양은 wire 계약과
     // 같고 값 유효성은 하류 검증이 잡는다. 단일 키 객체를 보내면 조용히 폐기된다
-    onElementPropertyCommit?.({
-      property,
-      value,
-    } as EditorElementPropertyPatchV1);
+    onElementPropertyCommit?.(
+      {
+        property,
+        value,
+      } as EditorElementPropertyPatchV1,
+      options,
+    );
   };
 
   // 이미지 변경 핸들러
@@ -893,6 +901,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         idleShadow={idleShadow}
         activeShadow={activeShadow}
         showActiveState={shadowActiveState}
+        previewAnchor={canvasAnchor ?? null}
         onChange={(state, _shadow, patch) => {
           const leaf = elementShadowLeafFromPartial(patch);
           if (!leaf) return;
@@ -929,19 +938,15 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
         {/* 폰트 */}
         <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
-          <button
-            type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
-            } text-fg text-body`}
-            onClick={() => {
-              setPickerFor(null);
-              if (activePageKey === FONT_PAGE_KEY) closePage();
-              else openPage(FONT_PAGE_KEY);
-            }}
+          <FontPickerOpenButton
+            activePageKey={activePageKey}
+            pageKey={FONT_PAGE_KEY}
+            onBeforeOpen={() => setPickerFor(null)}
+            onOpen={() => openPage(FONT_PAGE_KEY)}
+            onClose={closePage}
           >
             {t('propertiesPanel.configure') || '설정하기'}
-          </button>
+          </FontPickerOpenButton>
         </PropertyRow>
 
         {/* 글꼴 크기 */}
@@ -956,6 +961,15 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             max={72}
             allowDecimal
             decimalScale={1}
+          />
+        </PropertyRow>
+
+        {/* 글꼴 굵기 */}
+        <PropertyRow label={t('propertiesPanel.fontWeight') || '글꼴 굵기'}>
+          <FontWeightDropdown
+            fontFamilies={[keyPosition.fontFamily]}
+            value={keyPosition.fontWeight ?? DEFAULT_ELEMENT_BASE_FONT_WEIGHT}
+            onChange={(value) => handleStyleChangeComplete('fontWeight', value)}
           />
         </PropertyRow>
 
@@ -976,7 +990,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
           <FontStyleToggle
             isBold={
-              (keyPosition.fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT) >= 700
+              keyPosition.fontBold ??
+              (keyPosition.fontWeight == null
+                ? DEFAULT_ELEMENT_FONT_BOLD
+                : keyPosition.fontWeight === 700)
             }
             isItalic={keyPosition.fontItalic ?? false}
             isUnderline={keyPosition.fontUnderline ?? false}
@@ -1084,6 +1101,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         {showImagePicker && onToggleImagePicker && imageButtonRef ? (
           <ImagePicker
             open={showImagePicker}
+            previewAnchor={canvasAnchor ?? null}
             referenceRef={imageButtonRef}
             panelElement={panelElement}
             completionBinding="element-id"
@@ -1179,7 +1197,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             open
             selectedFont={keyPosition.fontFamily || null}
             onFontSelect={(fontName) => {
-              handleStyleChangeComplete('fontFamily', fontName);
+              if (fontName === null) return;
+              const currentWeight =
+                keyPosition.fontWeight ?? DEFAULT_ELEMENT_BASE_FONT_WEIGHT;
+              const nextWeight = resolveSupportedFontWeight(
+                fontName,
+                useFontStore.getState().getAllFonts(),
+              );
+              // 굵기 재선택은 폰트 변경과 한 undo 단계 - 따로 되돌리면 새 폰트에
+              // 지원하지 않는 굵기가 남는다
+              const gestureId = crypto.randomUUID();
+              handleStyleChangeComplete('fontFamily', fontName, { gestureId });
+              if (nextWeight !== currentWeight) {
+                handleStyleChangeComplete('fontWeight', nextWeight, {
+                  gestureId,
+                });
+              }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}
             onBack={closePage}

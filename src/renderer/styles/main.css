@@ -66,6 +66,14 @@ body.dmn-custom-cursor * {
   cursor: grabbing !important;
 }
 
+/* 전역 드래그 커서 고정 - 크로뮴 계열은 포인터 캡처 중에도 커서를
+   히트테스트로 정하므로, 잡은 동안 문서 전체를 지정 커서로 덮는다.
+   부착·해제는 utils/core/dragCursor.ts 경유 (축 핸들·피커·슬라이더 공용) */
+html.dmn-drag-cursor,
+html.dmn-drag-cursor * {
+  cursor: var(--dmn-drag-cursor, grabbing) !important;
+}
+
 /* 패널 레이어 행 드래그 커서 - 호버 무변화, 잡는 동안만 grabbing
    행 내부 버튼·입력은 자체 커서 선언을 유지해야 하므로 상속 강제 없음 */
 .dmn-row-grabbable {

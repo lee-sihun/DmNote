@@ -32,9 +32,11 @@ export function toCanonicalGradient(input: {
   stops: GradientStop[];
 }): GradientSpec {
   const rawAngle = input.angle ?? GRADIENT_DEFAULT_ANGLE;
-  // 이미 [0,360)이면 원값 유지 — Rust rem_euclid와 부동소수 바이트 일치
-  const angle =
+  // 이미 [0,360)이면 원값 유지 - Rust rem_euclid와 부동소수 바이트 일치.
+  // -0은 0으로 통일 (Rust normalize 미러) - strict 검증이 -0을 거부한다
+  const wrapped =
     rawAngle >= 0 && rawAngle < 360 ? rawAngle : ((rawAngle % 360) + 360) % 360;
+  const angle = wrapped === 0 ? 0 : wrapped;
   const stops = input.stops
     .map((s) => ({ color: s.color, pos: Math.min(1, Math.max(0, s.pos)) }))
     .sort((a, b) => a.pos - b.pos)
@@ -51,7 +53,13 @@ export const gradientSpecSchema = z
   .transform(toCanonicalGradient);
 
 export function gradientToCss(spec: GradientSpec): string {
+  // 드래그 프리뷰 spec은 선택 안정성을 위해 배열을 정렬하지 않는다.
+  // CSS는 역순 스톱을 클램프해 경계가 날카로워지므로, 렌더 시점에만
+  // canonical과 같은 규칙(pos 클램프 + 안정 정렬)으로 정렬해 커밋과
+  // 드래그 중 화면이 갈라지지 않게 한다
   const stops = spec.stops
+    .map((s) => ({ color: s.color, pos: Math.min(1, Math.max(0, s.pos)) }))
+    .sort((a, b) => a.pos - b.pos)
     .map((s) => `${s.color} ${+(s.pos * 100).toFixed(2)}%`)
     .join(', ');
   return `linear-gradient(${spec.angle}deg, ${stops})`;
@@ -103,12 +111,180 @@ function formatAlpha(a: number): string {
   return String(Math.round(clamped * 10_000) / 10_000);
 }
 
+/**
+ * canonical GradientSpec 엄격 검증 - wire 경계(에디터 op·프리셋)에서 사용.
+ * 관용 입력을 받는 canonicalGradientOrNull과 달리 이미 canonical인 값만 통과
+ */
+export const isStrictGradientSpec = (value: unknown): value is GradientSpec => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length !== 2 || !('angle' in record) || !('stops' in record)) {
+    return false;
+  }
+  if (
+    typeof record.angle !== 'number' ||
+    !Number.isFinite(record.angle) ||
+    Object.is(record.angle, -0) ||
+    record.angle < 0 ||
+    record.angle >= 360 ||
+    !Array.isArray(record.stops) ||
+    record.stops.length < GRADIENT_STOPS_MIN ||
+    record.stops.length > GRADIENT_STOPS_MAX
+  ) {
+    return false;
+  }
+  let previous = -Infinity;
+  for (const stop of record.stops) {
+    if (!stop || typeof stop !== 'object' || Array.isArray(stop)) return false;
+    const stopRecord = stop as Record<string, unknown>;
+    const stopKeys = Object.keys(stopRecord);
+    if (
+      stopKeys.length !== 2 ||
+      !('color' in stopRecord) ||
+      !('pos' in stopRecord) ||
+      typeof stopRecord.color !== 'string' ||
+      typeof stopRecord.pos !== 'number' ||
+      !Number.isFinite(stopRecord.pos) ||
+      Object.is(stopRecord.pos, -0) ||
+      stopRecord.pos < 0 ||
+      stopRecord.pos > 1 ||
+      stopRecord.pos < previous
+    ) {
+      return false;
+    }
+    previous = stopRecord.pos;
+  }
+  return true;
+};
+
+/**
+ * 노트 테두리 그라데이션 스톱 색 문법 (api-contract v2 §2A) - Rust 경계와
+ * 공유 fixture(tests/fixtures/note-border-stop-colors.json)로 parity 고정
+ */
+export const isStrictStopColor = (value: string): boolean => {
+  const color = value.trim();
+  if (
+    /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(
+      color,
+    )
+  ) {
+    return true;
+  }
+  const fn = color.match(
+    /^(rgb|rgba)\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([0-9]*\.?[0-9]+)\s*)?\)$/i,
+  );
+  if (!fn) return false;
+  const hasAlpha = fn[5] !== undefined;
+  if ((fn[1].toLowerCase() === 'rgba') !== hasAlpha) return false;
+  if (Number(fn[2]) > 255 || Number(fn[3]) > 255 || Number(fn[4]) > 255) {
+    return false;
+  }
+  if (hasAlpha) {
+    const alpha = Number(fn[5]);
+    if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) return false;
+  }
+  return true;
+};
+
+/**
+ * 관용 CSS 색을 §2A 문법으로 강제 - 이미 적합하면 원문 유지, 변환 가능하면
+ * compact rgba로, 불가(named color 등)면 null. 팔레트처럼 표면 공용인 spec을
+ * 노트 테두리 계약에 맞출 때 사용
+ */
+export const toStrictStopColor = (color: string): string | null => {
+  if (isStrictStopColor(color)) return color;
+  const compact = toCompactRgba(color);
+  return isStrictStopColor(compact) ? compact : null;
+};
+
+/**
+ * §2A 스톱 색 파싱 - 검증·대표색·LUT 래스터라이즈가 이 파서 하나를 공유해
+ * "검증은 통과하는데 렌더는 못 읽는" 도메인 분열을 차단한다. 문법 밖은 null
+ */
+export const parseStrictStopColor = (
+  value: string,
+): { r: number; g: number; b: number; a: number } | null => {
+  if (!isStrictStopColor(value)) return null;
+  const color = value.trim();
+  const hex = color.match(
+    /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/,
+  );
+  if (hex) {
+    let body = hex[1];
+    if (body.length === 3 || body.length === 4) {
+      body = body
+        .split('')
+        .map((ch) => ch + ch)
+        .join('');
+    }
+    return {
+      r: parseInt(body.slice(0, 2), 16),
+      g: parseInt(body.slice(2, 4), 16),
+      b: parseInt(body.slice(4, 6), 16),
+      a: body.length === 8 ? parseInt(body.slice(6, 8), 16) / 255 : 1,
+    };
+  }
+  const fn = color.match(
+    /^(?:rgb|rgba)\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([0-9]*\.?[0-9]+)\s*)?\)$/i,
+  );
+  if (!fn) return null;
+  return {
+    r: Number(fn[1]),
+    g: Number(fn[2]),
+    b: Number(fn[3]),
+    a: fn[4] === undefined ? 1 : Number(fn[4]),
+  };
+};
+
+/**
+ * §2A 스톱 색 → #RRGGBB 대문자 대표색 (알파 버림). 문법 밖이면 null -
+ * noteBorderColor의 hex 전용 계약과 rgba→hex 마이그레이션 형식에 맞춘다
+ */
+export const hexRepresentative = (value: string): string | null => {
+  const parsed = parseStrictStopColor(value);
+  if (parsed === null) return null;
+  const channel = (raw: number) =>
+    raw.toString(16).padStart(2, '0').toUpperCase();
+  return `#${channel(parsed.r)}${channel(parsed.g)}${channel(parsed.b)}`;
+};
+
+/** 스펙에서 §9-3 규칙으로 만든 구형 shadow 객체 (첫/끝 스톱 대문자 hex) */
+export const notePaintShadowColor = (
+  spec: GradientSpec,
+): { type: 'gradient'; top: string; bottom: string } | null => {
+  const top = hexRepresentative(spec.stops[0]?.color ?? '');
+  const bottom = hexRepresentative(
+    spec.stops[spec.stops.length - 1]?.color ?? '',
+  );
+  if (top === null || bottom === null) return null;
+  return { type: 'gradient', top, bottom };
+};
+
+/** §9-3 shadow Top/Bottom - round(끝 스톱 알파 × 배율) */
+export const notePaintShadowOpacity = (
+  spec: GradientSpec,
+  multiplier: number,
+): { top: number; bottom: number } => {
+  const firstAlpha =
+    parseStrictStopColor(spec.stops[0]?.color ?? '#FFFFFF')?.a ?? 1;
+  const lastAlpha =
+    parseStrictStopColor(spec.stops[spec.stops.length - 1]?.color ?? '#FFFFFF')
+      ?.a ?? 1;
+  return {
+    top: clampPercent(firstAlpha * multiplier),
+    bottom: clampPercent(lastAlpha * multiplier),
+  };
+};
+
 /** gradient 형제 쌍 필드 이름 매핑 */
 export const GRADIENT_SIBLING: Record<string, string> = {
   backgroundColor: 'backgroundGradient',
   activeBackgroundColor: 'activeBackgroundGradient',
   borderColor: 'borderGradient',
   activeBorderColor: 'activeBorderGradient',
+  fontColor: 'fontGradient',
+  activeFontColor: 'activeFontGradient',
 };
 
 const KEY_PAIR_FIELDS = Object.entries(GRADIENT_SIBLING);
@@ -116,6 +292,56 @@ const COUNTER_FILL_PAIRS: Array<['idle' | 'active', string]> = [
   ['idle', 'fillIdleGradient'],
   ['active', 'fillActiveGradient'],
 ];
+
+/** 본체·글로우의 신형 sibling과 구형 shadow 필드 매핑 (계약 §9-3) */
+const NOTE_PAINT_SHADOW_PAIRS = [
+  {
+    gradientField: 'noteGradient',
+    colorField: 'noteColor',
+    multiplierField: 'noteOpacity',
+    topField: 'noteOpacityTop',
+    bottomField: 'noteOpacityBottom',
+  },
+  {
+    gradientField: 'noteGlowGradient',
+    colorField: 'noteGlowColor',
+    multiplierField: 'noteGlowOpacity',
+    topField: 'noteGlowOpacityTop',
+    bottomField: 'noteGlowOpacityBottom',
+  },
+] as const;
+
+const clampPercent = (value: number): number =>
+  Math.min(Math.max(Math.round(value), 0), 100);
+
+/**
+ * §2A 스톱 검사(절단 전 원본 기준) + canonical 변환 - 위반·구조 불량은 null.
+ * Rust가 역직렬화 시점 원본 배열을 보는 것과 일치시킨다
+ */
+const strictCanonicalOrNull = (stored: unknown): GradientSpec | null => {
+  const rawStops =
+    stored && typeof stored === 'object' && !Array.isArray(stored)
+      ? (stored as Record<string, unknown>).stops
+      : null;
+  const hasUnsupportedRawStop =
+    Array.isArray(rawStops) &&
+    rawStops.some(
+      (stop) =>
+        stop &&
+        typeof stop === 'object' &&
+        typeof (stop as Record<string, unknown>).color === 'string' &&
+        !isStrictStopColor((stop as Record<string, unknown>).color as string),
+    );
+  if (hasUnsupportedRawStop) return null;
+  const canonical = canonicalGradientOrNull(stored);
+  if (
+    canonical === null ||
+    canonical.stops.some((stop) => !isStrictStopColor(stop.color))
+  ) {
+    return null;
+  }
+  return canonical;
+};
 
 /**
  * 관용 입력을 canonical spec으로, 구조가 깨진 값은 null로 —
@@ -186,6 +412,113 @@ export function canonicalizePositionGradients<
     }
   }
 
+  // note border 쌍 - 대표색은 hex 전용(마이그레이션 계약), §2A 밖 스톱은
+  // 필드 drop + base 유지 (Rust store 경계 미러). 스톱 검사는 canonical
+  // 절단(8개) 이전의 원본 배열 기준 - Rust가 역직렬화 시점 원본을 보는 것과 일치
+  if ('noteBorderGradient' in position) {
+    const stored = (next ?? position).noteBorderGradient;
+    if (stored == null) {
+      delete ensure().noteBorderGradient;
+    } else {
+      const canonical = strictCanonicalOrNull(stored);
+      if (canonical === null) {
+        delete ensure().noteBorderGradient;
+      } else {
+        if (JSON.stringify(canonical) !== JSON.stringify(stored)) {
+          ensure().noteBorderGradient = canonical;
+        }
+        const repairedBase = hexRepresentative(
+          canonical.stops[0]?.color ?? '#FFFFFF',
+        );
+        if (
+          repairedBase !== null &&
+          (next ?? position).noteBorderColor !== repairedBase
+        ) {
+          ensure().noteBorderColor = repairedBase;
+        }
+      }
+    }
+  }
+
+  // 본체·글로우 쌍 - 신형(sibling 존재)일 때 구형 shadow 4필드를 atomic 동기
+  // (계약 §9-3, Rust 미러): noteColor는 첫/끝 스톱 대문자 hex의 구형 gradient
+  // 객체, Top/Bottom은 round(스톱 알파 × 배율). 배율 부재 = 100
+  const syncNotePaintShadow = (
+    pair: (typeof NOTE_PAINT_SHADOW_PAIRS)[number],
+  ): void => {
+    if (!(pair.gradientField in (next ?? position))) return;
+    const stored = (next ?? position)[pair.gradientField];
+    if (stored == null) {
+      delete ensure()[pair.gradientField];
+      return;
+    }
+    const canonical = strictCanonicalOrNull(stored);
+    if (canonical === null) {
+      delete ensure()[pair.gradientField];
+      return;
+    }
+    if (JSON.stringify(canonical) !== JSON.stringify(stored)) {
+      ensure()[pair.gradientField] = canonical;
+    }
+    const shadowColor = notePaintShadowColor(canonical);
+    if (shadowColor === null) return;
+    const current = next ?? position;
+    if (
+      JSON.stringify(current[pair.colorField]) !== JSON.stringify(shadowColor)
+    ) {
+      ensure()[pair.colorField] = shadowColor;
+    }
+    const rawMultiplier = current[pair.multiplierField];
+    const multiplier =
+      typeof rawMultiplier === 'number' && Number.isFinite(rawMultiplier)
+        ? rawMultiplier
+        : 100;
+    // 배율 부재는 100으로 실체화 (Rust default_missing_note_gradient_multipliers 미러)
+    if (multiplier === 100 && rawMultiplier !== 100) {
+      ensure()[pair.multiplierField] = 100;
+    }
+    const { top: topShadow, bottom: bottomShadow } = notePaintShadowOpacity(
+      canonical,
+      multiplier,
+    );
+    if (current[pair.topField] !== topShadow) {
+      ensure()[pair.topField] = topShadow;
+    }
+    if (current[pair.bottomField] !== bottomShadow) {
+      ensure()[pair.bottomField] = bottomShadow;
+    }
+  };
+
+  // 글로우 따라가기(noteGlowSyncPaint)면 본체 정규화 뒤에 본체 5필드를 글로우로
+  // 복사 (Rust canonicalize_gradient_pairs 미러). 이어지는 글로우 정규화는 no-op
+  const mirrorNoteBodyToGlow = (): void => {
+    const current = next ?? position;
+    const copy = (from: string, to: string): void => {
+      const value = current[from];
+      if (value === undefined) {
+        if (to in current) delete ensure()[to];
+        return;
+      }
+      if (JSON.stringify(current[to]) === JSON.stringify(value)) return;
+      ensure()[to] =
+        typeof value === 'object' && value !== null
+          ? structuredClone(value)
+          : value;
+    };
+    copy('noteGradient', 'noteGlowGradient');
+    copy('noteColor', 'noteGlowColor');
+    copy('noteOpacity', 'noteGlowOpacity');
+    copy('noteOpacityTop', 'noteGlowOpacityTop');
+    copy('noteOpacityBottom', 'noteGlowOpacityBottom');
+  };
+
+  const [bodyPair, glowPair] = NOTE_PAINT_SHADOW_PAIRS;
+  syncNotePaintShadow(bodyPair);
+  if ((next ?? position).noteGlowSyncPaint === true) {
+    mirrorNoteBodyToGlow();
+  }
+  syncNotePaintShadow(glowPair);
+
   const counterSource = (next ?? position).counter;
   if (
     counterSource &&
@@ -250,55 +583,70 @@ export type PaintPropertyNameV1 =
   | 'backgroundPaint'
   | 'activeBackgroundPaint'
   | 'borderPaint'
-  | 'activeBorderPaint';
+  | 'activeBorderPaint'
+  | 'fontPaint'
+  | 'activeFontPaint';
+
+export type PaintSurfaceV1 = 'background' | 'border' | 'font';
+
+const PAINT_PROPERTY_MAP = {
+  backgroundPaint: { active: false, surface: 'background' },
+  activeBackgroundPaint: { active: true, surface: 'background' },
+  borderPaint: { active: false, surface: 'border' },
+  activeBorderPaint: { active: true, surface: 'border' },
+  fontPaint: { active: false, surface: 'font' },
+  activeFontPaint: { active: true, surface: 'font' },
+} as const satisfies Record<
+  PaintPropertyNameV1,
+  { active: boolean; surface: PaintSurfaceV1 }
+>;
+
+const PAINT_SURFACE_FIELDS = {
+  background: {
+    color: 'backgroundColor',
+    gradient: 'backgroundGradient',
+    activeColor: 'activeBackgroundColor',
+    activeGradient: 'activeBackgroundGradient',
+  },
+  border: {
+    color: 'borderColor',
+    gradient: 'borderGradient',
+    activeColor: 'activeBorderColor',
+    activeGradient: 'activeBorderGradient',
+  },
+  font: {
+    color: 'fontColor',
+    gradient: 'fontGradient',
+    activeColor: 'activeFontColor',
+    activeGradient: 'activeFontGradient',
+  },
+} as const;
 
 export function paintPropertyFields(field: PaintPropertyNameV1) {
-  const active =
-    field === 'activeBackgroundPaint' || field === 'activeBorderPaint';
-  const background =
-    field === 'backgroundPaint' || field === 'activeBackgroundPaint';
+  const { active, surface } = PAINT_PROPERTY_MAP[field];
+  const fields = PAINT_SURFACE_FIELDS[surface];
   return {
     active,
-    background,
-    colorField: active
-      ? background
-        ? 'activeBackgroundColor'
-        : 'activeBorderColor'
-      : background
-      ? 'backgroundColor'
-      : 'borderColor',
-    gradientField: active
-      ? background
-        ? 'activeBackgroundGradient'
-        : 'activeBorderGradient'
-      : background
-      ? 'backgroundGradient'
-      : 'borderGradient',
-    activeColorField: background
-      ? 'activeBackgroundColor'
-      : 'activeBorderColor',
-    activeGradientField: background
-      ? 'activeBackgroundGradient'
-      : 'activeBorderGradient',
+    surface,
+    colorField: active ? fields.activeColor : fields.color,
+    gradientField: active ? fields.activeGradient : fields.gradient,
+    activeColorField: fields.activeColor,
+    activeGradientField: fields.activeGradient,
   } as const;
 }
 
 export function inheritedPaintMaterialization(
   idlePair: ColorPair,
   activePair: ColorPair,
-): PaintDescriptorV1 | null {
+): { color: string | null; gradient: GradientSpec | null } | null {
   if (hasStoredPairValue(activePair)) return null;
-  const gradient = idlePair.gradient ?? null;
-  if (gradient) {
-    return {
-      color: gradient.stops[0]?.color ?? '#ffffff',
-      gradient: structuredClone(gradient),
-    };
-  }
-  if (typeof idlePair.color === 'string' && idlePair.color.trim().length > 0) {
-    return { color: idlePair.color, gradient: null };
-  }
-  return null;
+  if (!hasStoredPairValue(idlePair)) return null;
+  // 백엔드 preserve와 동일 - idle 쌍을 있는 그대로 복제 (색 합성 없음,
+  // 빈 문자열도 저장돼 있으면 그대로 복제)
+  return {
+    color: typeof idlePair.color === 'string' ? idlePair.color : null,
+    gradient: idlePair.gradient ? structuredClone(idlePair.gradient) : null,
+  };
 }
 
 export function projectPaintDescriptor(
@@ -309,6 +657,7 @@ export function projectPaintDescriptor(
 ): Record<string, unknown> {
   const {
     active,
+    surface,
     colorField,
     gradientField,
     activeColorField,
@@ -318,7 +667,12 @@ export function projectPaintDescriptor(
     [colorField]: descriptor.color,
     [gradientField]: descriptor.gradient ?? undefined,
   };
-  if (!active && (elementType === 'key' || elementType === 'knob')) {
+  // 물질화 대상은 active 쌍을 가진 요소 (font는 키만)
+  const materializes =
+    surface === 'font'
+      ? elementType === 'key'
+      : elementType === 'key' || elementType === 'knob';
+  if (!active && materializes) {
     const inherited = inheritedPaintMaterialization(
       {
         color:
@@ -339,7 +693,9 @@ export function projectPaintDescriptor(
       },
     );
     if (inherited) {
-      next[activeColorField] = inherited.color;
+      if (inherited.color != null) {
+        next[activeColorField] = inherited.color;
+      }
       if (inherited.gradient) {
         next[activeGradientField] = inherited.gradient;
       }

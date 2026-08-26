@@ -1,3 +1,4 @@
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import { useEffect, useRef, useState } from 'react';
 import {
   useGridViewStore,
@@ -5,6 +6,7 @@ import {
   MAX_ZOOM,
   ZOOM_STEP,
   clampZoom,
+  snapGridPositionToDevicePixel,
 } from '@stores/grid/useGridViewStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isMac } from '@utils/core/platform';
@@ -33,7 +35,9 @@ export function useGridZoomPan({
 }: UseGridZoomPanOptions) {
   const { getViewState, setZoom, setPan, resetView } = useGridViewStore();
   const viewState = getViewState(mode);
-  const { zoom, panX, panY } = viewState;
+  const { zoom, panX: rawPanX, panY: rawPanY } = viewState;
+  const panX = snapGridPositionToDevicePixel(rawPanX);
+  const panY = snapGridPositionToDevicePixel(rawPanY);
 
   const macOS = isMac();
 
@@ -155,7 +159,7 @@ export function useGridZoomPan({
    */
   const pan = (deltaX: number, deltaY: number) => {
     touchTransforming();
-    setPan(mode, panX + deltaX, panY + deltaY);
+    setPan(mode, rawPanX + deltaX, rawPanY + deltaY);
   };
 
   /**
@@ -269,6 +273,9 @@ export function useGridZoomPan({
     }
   };
 
+  // 진행 중 미들 드래그의 복구 함수 - unmount 시에도 커서·pointer-events 원복
+  const middleDragCleanupRef = useRef<(() => void) | null>(null);
+
   /**
    * 미들 버튼 드래그 핸들러
    */
@@ -285,6 +292,8 @@ export function useGridZoomPan({
     setMiddleButtonDragging(true);
 
     // 드래그 중 커서를 grabbing으로 변경하고 요소들의 pointer-events를 비활성화
+    // 전역 고정도 병행 - 포인터가 컨테이너 밖(패널·툴바)으로 나가도 유지
+    beginDragCursor('grabbing');
     const container = containerRef.current;
     if (container) {
       container.style.cursor = 'grabbing';
@@ -336,6 +345,7 @@ export function useGridZoomPan({
       setTransformingState(false);
       setMiddleButtonDragging(false);
       // 커서 및 pointer-events 복원
+      endDragCursor();
       if (container) {
         container.style.cursor = '';
       }
@@ -344,10 +354,17 @@ export function useGridZoomPan({
       }
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
+      middleDragCleanupRef.current = null;
     };
 
+    middleDragCleanupRef.current = handleMouseUp;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    // 드래그 중 포커스 상실·포인터 취소 시에도 커서·pointer-events 복구
+    window.addEventListener('blur', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
   };
 
   // 핸들러를 ref에 저장하여 이벤트 리스너 안정화
@@ -402,6 +419,7 @@ export function useGridZoomPan({
 
   useEffect(() => {
     return () => {
+      middleDragCleanupRef.current?.();
       if (wheelFrameRef.current !== null) {
         cancelAnimationFrame(wheelFrameRef.current);
         wheelFrameRef.current = null;

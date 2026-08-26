@@ -1,9 +1,12 @@
 import type React from 'react';
+import { DEFAULT_COUNTER_FONT_WEIGHT } from './elementDefaults';
+import { resolveEffectiveFontWeight } from './fontWeights';
 
 interface CounterTypographyOptions {
   fontSize?: number;
   fontFamily?: string | null;
   fontWeight?: number;
+  fontBold?: boolean;
   fontItalic?: boolean;
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
@@ -15,6 +18,7 @@ export const getCounterTypographyStyle = ({
   fontSize,
   fontFamily,
   fontWeight,
+  fontBold,
   fontItalic,
   fontUnderline,
   fontStrikethrough,
@@ -29,7 +33,10 @@ export const getCounterTypographyStyle = ({
   const resolvedFontFamily = fontFamily
     ? `"${fontFamily}", "Pretendard Variable", sans-serif`
     : 'inherit';
-  const resolvedFontWeight = Number.isFinite(fontWeight) ? fontWeight : 400;
+  const resolvedFontWeight = resolveEffectiveFontWeight(
+    Number.isFinite(fontWeight) ? fontWeight! : DEFAULT_COUNTER_FONT_WEIGHT,
+    fontBold === true,
+  );
   const resolvedFontStyle = fontItalic ? 'italic' : 'normal';
   const resolvedTextDecoration =
     decorations.length > 0 ? decorations.join(' ') : 'none';
@@ -43,7 +50,9 @@ export const getCounterTypographyStyle = ({
       textDecoration: resolvedTextDecoration,
       textAlign: 'center',
       lineHeight,
-    };
+      // 카운터 굵기 폴백 변수 - inline 모드에서도 공급
+      '--dmn-counter-font-weight-default': String(resolvedFontWeight),
+    } as React.CSSProperties;
   }
 
   return {

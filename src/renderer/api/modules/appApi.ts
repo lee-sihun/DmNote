@@ -1,6 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { AppAutoUpdateResult } from '@src/types/plugin/api';
+import type {
+  AppAutoUpdateResult,
+  ReadyUnsubscribe,
+  UpdateProgressEvent,
+} from '@src/types/plugin/api';
+import { subscribe } from './shared';
 import { assertCanonicalEditorDocument } from '@src/types/editor';
 
 import type {
@@ -71,14 +76,16 @@ export const appApi = {
         new Error('automatic update is only available in the main window'),
       );
     }
-    return runAfterEditorFlush('app update', async () => {
-      const result = await invoke<AppAutoUpdateResult>('app_auto_update', {
-        tag,
-      });
-      await invoke<void>('app_restart');
-      return result;
-    });
+    // 설치만 수행 — 재시작은 호출자가 appApi.restart()로 이어서 요청 (실패를 구분하기 위해 분리)
+    return runAfterEditorFlush('app update', () =>
+      invoke<AppAutoUpdateResult>('app_auto_update', { tag }),
+    );
   },
+  // 자동 업데이트 진행 단계 (다운로드 % / 검증 / 설치)
+  onUpdateProgress: (
+    listener: (event: UpdateProgressEvent) => void,
+  ): ReadyUnsubscribe =>
+    subscribe<UpdateProgressEvent>('update:progress', listener),
   openExternal: (url: string) => invoke<void>('app_open_external', { url }),
   restart: () =>
     runAfterEditorFlush('app restart', () => invoke<void>('app_restart')),

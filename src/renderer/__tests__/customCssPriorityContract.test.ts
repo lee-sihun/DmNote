@@ -57,6 +57,91 @@ describe('커스텀 CSS 우선순위 계약', () => {
     expect(textStyle.fontWeight).toBe('inherit');
   });
 
+  it('텍스트 그라데이션은 라벨 변수로만 공급되고 쌍 단위로 폴백한다', () => {
+    const spec = {
+      angle: 0,
+      stops: [
+        { color: '#FF0080', pos: 0 },
+        { color: '#001122', pos: 1 },
+      ],
+    };
+    const base = {
+      dx: 0,
+      dy: 0,
+      width: 60,
+      height: 60,
+      useInlineStyles: false,
+    };
+
+    const gradientIdle = computeKeyElementStyles({
+      active: false,
+      label: 'A',
+      position: { ...base, fontColor: '#FF0080', fontGradient: spec },
+    });
+    expect(gradientIdle.keyStyle['--dmn-key-text-image-default']).toContain(
+      'linear-gradient',
+    );
+    expect(gradientIdle.keyStyle['--dmn-key-label-color-default']).toBe(
+      'transparent',
+    );
+    // 변수 모드는 라벨 인라인 승격 없음 - 전역 [data-key-label] 규칙이 소비
+    expect(gradientIdle.labelPaintStyle).toEqual({});
+
+    const solid = computeKeyElementStyles({
+      active: false,
+      label: 'A',
+      position: { ...base, fontColor: '#abcdef' },
+    });
+    expect(solid.keyStyle['--dmn-key-text-image-default']).toBe('none');
+    expect(solid.keyStyle['--dmn-key-label-color-default']).toBe('inherit');
+
+    // active 쌍에 저장값이 없으면 idle 쌍 통째 폴백 (그라데이션 유지)
+    const activeInherits = computeKeyElementStyles({
+      active: true,
+      label: 'A',
+      position: { ...base, fontColor: '#FF0080', fontGradient: spec },
+    });
+    expect(activeInherits.keyStyle['--dmn-key-text-image-default']).toContain(
+      'linear-gradient',
+    );
+
+    // active 단색이 저장돼 있으면 쌍 전체가 단색 - idle 그라데이션 누출 금지
+    const activeSolid = computeKeyElementStyles({
+      active: true,
+      label: 'A',
+      position: {
+        ...base,
+        fontColor: '#FF0080',
+        fontGradient: spec,
+        activeFontColor: '#123456',
+      },
+    });
+    expect(activeSolid.keyStyle['--dmn-key-text-image-default']).toBe('none');
+    expect(activeSolid.keyStyle['--dmn-key-text-color-default']).toBe(
+      '#123456',
+    );
+
+    // textStyle이 color를 인라인으로 실으면 [data-key-label] 규칙의
+    // transparent 클립을 항상 이겨버린다 - 소유권은 전역 규칙에 있다
+    expect(gradientIdle.textStyle.color).toBeUndefined();
+    expect(solid.textStyle.color).toBeUndefined();
+
+    // 인라인 우선 모드만 라벨 노드에 클립을 직접 승격
+    const inline = computeKeyElementStyles({
+      active: false,
+      label: 'A',
+      position: {
+        ...base,
+        fontColor: '#FF0080',
+        fontGradient: spec,
+        useInlineStyles: true,
+      },
+    });
+    expect(inline.labelPaintStyle.backgroundImage).toContain('linear-gradient');
+    expect(inline.labelPaintStyle.WebkitBackgroundClip).toBe('text');
+    expect(inline.labelPaintStyle.color).toBe('transparent');
+  });
+
   it('인라인 우선 모드에서만 속성 패널 외형을 inline으로 승격한다', () => {
     const { keyStyle, borderRingStyle } = computeKeyElementStyles({
       active: false,
@@ -102,6 +187,45 @@ describe('커스텀 CSS 우선순위 계약', () => {
     expect(inline.fontWeight).toBe(700);
   });
 
+  it('키와 카운터의 Bold는 선택 굵기에 300을 더한다', () => {
+    const { keyStyle } = computeKeyElementStyles({
+      active: false,
+      label: 'A',
+      position: {
+        dx: 0,
+        dy: 0,
+        width: 60,
+        fontWeight: 500,
+        fontBold: true,
+        useInlineStyles: true,
+      },
+    });
+    const counterStyle = getCounterTypographyStyle({
+      fontWeight: 500,
+      fontBold: true,
+      useInlineStyles: true,
+    });
+
+    expect(keyStyle.fontWeight).toBe(800);
+    expect(counterStyle.fontWeight).toBe(800);
+  });
+
+  it('Bold 필드가 없던 사용자 지정 굵기는 기존 렌더 값을 유지한다', () => {
+    const { keyStyle } = computeKeyElementStyles({
+      active: false,
+      label: 'A',
+      position: {
+        dx: 0,
+        dy: 0,
+        width: 60,
+        fontWeight: 600,
+        useInlineStyles: true,
+      },
+    });
+
+    expect(keyStyle.fontWeight).toBe(600);
+  });
+
   it('전역 앱 외형은 특이도 0 규칙이고 공개 변수가 그라데이션을 끈다', () => {
     const css = readFileSync(
       resolve(process.cwd(), 'src/renderer/styles/global.css'),
@@ -122,6 +246,25 @@ describe('커스텀 CSS 우선순위 계약', () => {
     expect(css).toMatch(
       /:where\(\.counter\)\s*\{[\s\S]*?--counter-fill-image,[\s\S]*?--counter-color,/,
     );
+    // 글리프 페인트 박스 변수도 같은 계약: 사용자 변수 → --counter-color 복귀 → 앱 기본
+    for (const channel of ['repeat', 'position', 'size'] as const) {
+      expect(css).toMatch(
+        new RegExp(
+          `:where\\(\\.counter\\)\\s*\\{[\\s\\S]*?--counter-fill-${channel},[\\s\\S]*?--counter-color,[\\s\\S]*?--dmn-counter-fill-${channel}-default`,
+        ),
+      );
+    }
+    // 라벨 페인트도 같은 계약: 사용자 --key-text-image → --key-text-color 복귀 → 앱 기본
+    expect(css).toMatch(
+      /:where\(\[data-key-label\]\)\s*\{[\s\S]*?--key-text-image,[\s\S]*?--key-text-color,[\s\S]*?--dmn-key-text-image-default/,
+    );
+    // 일반 color 선언이 그라데이션을 자연스럽게 덮도록 text-fill은 currentcolor 고정
+    expect(css).toMatch(
+      /:where\(\[data-key-label\]\)\s*\{[\s\S]*?-webkit-text-fill-color:\s*currentcolor/,
+    );
+    // 지원 종료된 테두리 표면이 되살아나지 않게
+    expect(css).not.toContain('counter-stroke');
+    expect(css).not.toContain('key-text-stroke');
     expect(css).toMatch(/:where\(\[data-graph-element\]\)/);
     expect(css).toMatch(/:where\(\[data-knob-element\]\)/);
   });
@@ -137,6 +280,9 @@ describe('커스텀 CSS 우선순위 계약', () => {
       );
       expect(docs).not.toContain('--key-bg: #ff2b80 !important');
       expect(docs).toContain('background: #ff2b80 !important');
+      expect(docs).not.toContain('counter-stroke');
+      expect(docs).not.toContain('key-text-stroke');
+      expect(docs).toContain('--key-text-image');
     }
   });
 });

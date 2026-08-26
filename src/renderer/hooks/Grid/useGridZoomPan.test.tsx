@@ -12,9 +12,18 @@ import type { ShortcutsState } from '@src/types/settings/shortcuts';
 const Harness = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  useGridZoomPan({ mode: 'benchmark', containerRef, contentRef });
+  const { panX, panY } = useGridZoomPan({
+    mode: 'benchmark',
+    containerRef,
+    contentRef,
+  });
   return (
-    <div ref={containerRef} data-testid="container">
+    <div
+      ref={containerRef}
+      data-testid="container"
+      data-pan-x={panX}
+      data-pan-y={panY}
+    >
       <div ref={contentRef} />
     </div>
   );
@@ -228,5 +237,35 @@ describe('useGridZoomPan frame coalescing', () => {
       { zoom: 1, panX: 0, panY: 0 },
     );
     act(() => document.dispatchEvent(new MouseEvent('mouseup')));
+  });
+
+  it('작은 wheel delta는 원본 좌표에 누적하고 화면 좌표만 픽셀 정렬한다', () => {
+    const previousRatio = window.devicePixelRatio;
+    Object.defineProperty(window, 'devicePixelRatio', {
+      configurable: true,
+      value: 2,
+    });
+    const container = host.querySelector<HTMLElement>(
+      '[data-testid="container"]',
+    )!;
+
+    container.dispatchEvent(
+      new WheelEvent('wheel', { deltaX: 0.2, cancelable: true }),
+    );
+    flushFrame();
+    container.dispatchEvent(
+      new WheelEvent('wheel', { deltaX: 0.2, cancelable: true }),
+    );
+    flushFrame();
+
+    expect(
+      useGridViewStore.getState().getViewState('benchmark').panX,
+    ).toBeCloseTo(-0.4);
+    expect(container.dataset.panX).toBe('-0.5');
+
+    Object.defineProperty(window, 'devicePixelRatio', {
+      configurable: true,
+      value: previousRatio,
+    });
   });
 });

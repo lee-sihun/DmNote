@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
     mainContentOrigin: { x: number; y: number } | null;
   },
   dock: vi.fn(() => Promise.resolve()),
+  setDragCursor: vi.fn((_active: boolean) => Promise.resolve()),
   flushResult: true,
 }));
 
@@ -42,6 +43,7 @@ vi.mock('@api/modules/panelWindowApi', () => ({
     moveTo: (x: number, y: number) => mocks.moveTo(x, y),
     presentAt: () => Promise.resolve(),
     dock: () => mocks.dock(),
+    setDragCursor: (active: boolean) => mocks.setDragCursor(active),
   },
 }));
 vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({

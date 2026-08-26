@@ -17,10 +17,18 @@ import { internalApi } from '@api/internalApi';
 import { setPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  pushDisplayElementsToOverlay,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import { usePluginHealthStore } from '@stores/plugin/usePluginHealthStore';
-import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
+import {
+  beginPluginWork,
+  noteEnabledPluginCount,
+  notePluginFetchSettled,
+  resetPluginRuntimeReadiness,
+} from './pluginRuntimeReadiness';
 import { handlerRegistry } from './handlers';
 import { displayElementInstanceRegistry } from './displayElement';
 import { createPluginApiProxy } from './api';
@@ -68,6 +76,16 @@ export function createCustomJsRuntime(): CustomJsRuntime {
         plugin.enabled,
       ]),
     );
+
+  // 오버레이 리빌 게이트용 - 실제로 주입될 플러그인이 있는지 공표
+  const publishEnabledPluginCount = () => {
+    noteEnabledPluginCount(
+      enabled
+        ? currentPlugins.filter((plugin) => plugin.enabled && plugin.content)
+            .length
+        : 0,
+    );
+  };
 
   // 전역 플래그: removeAll/injectAll 실행 중에는 저장 비활성화
   let isReloading = false;
@@ -123,9 +141,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
       usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
       displayElementInstanceRegistry.clearByPluginId(pluginId);
 
-      sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
-        elements: usePluginDisplayElementStore.getState().elements,
-      });
+      pushDisplayElementsToOverlay();
     } catch (error) {
       console.error(
         `Failed to clear UI elements for plugin '${pluginId}'`,
@@ -177,9 +193,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
         usePluginDisplayElementStore.getState().setElements([]);
         displayElementInstanceRegistry.clearAll();
 
-        sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
-          elements: [],
-        });
+        pushDisplayElementsToOverlay();
       } catch (error) {
         console.error('Failed to clear plugin UI elements', error);
       }
@@ -398,49 +412,67 @@ ${plugin.content}
   };
 
   const injectAll = () => {
+    // 주입 사이클이 끝나야 리빌 게이트가 열린다 - 모든 종료 경로에서 해제.
+    // removeAll보다 먼저 - teardown이 내보내는 빈 요소 sync가 준비 완료로
+    // 표시되면 그 순간 붙은 오버레이가 요소 0개 상태로 공개된다
+    const endInjectionWork = beginPluginWork();
     setReloading(true);
     removeAll();
     injectGeneration += 1;
     const generation = injectGeneration;
 
-    void resetPluginAuthorityForRuntime().then((resetOk) => {
-      if (disposed || generation !== injectGeneration) return;
-      if (!resetOk) {
-        // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
-        console.error('Skipping plugin injection: authority reset failed');
-        // 주입이 아예 일어나지 않았다. 빈 결과를 성공으로 읽히게 두면 안 된다
-        publishHealth('aborted');
-        setReloading(false);
-        return;
-      }
-      if (!enabled) {
-        publishHealth('skipped');
-        setReloading(false);
-        return;
-      }
+    void resetPluginAuthorityForRuntime()
+      .then((resetOk) => {
+        if (disposed || generation !== injectGeneration) {
+          endInjectionWork();
+          return;
+        }
+        if (!resetOk) {
+          // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
+          console.error('Skipping plugin injection: authority reset failed');
+          // 주입이 아예 일어나지 않았다. 빈 결과를 성공으로 읽히게 두면 안 된다
+          publishHealth('aborted');
+          setReloading(false);
+          endInjectionWork();
+          return;
+        }
+        if (!enabled) {
+          publishHealth('skipped');
+          setReloading(false);
+          endInjectionWork();
+          return;
+        }
 
-      const health: PluginHealthMap = {};
-      currentPlugins
-        .filter((plugin) => plugin.enabled && plugin.content)
-        .forEach((plugin) => {
-          health[plugin.id] = injectPlugin(plugin);
-        });
-      publishHealth('settled', health);
-      // 주입이 실제 실행된 시점에만 기록 - reset 실패로 중단된 뒤 같은
-      // 내용이 다시 오면 재시도가 가능해야 한다
-      appliedSignature = pluginsSignature(currentPlugins);
+        const health: PluginHealthMap = {};
+        currentPlugins
+          .filter((plugin) => plugin.enabled && plugin.content)
+          .forEach((plugin) => {
+            health[plugin.id] = injectPlugin(plugin);
+          });
+        publishHealth('settled', health);
+        // 주입이 실제 실행된 시점에만 기록 - reset 실패로 중단된 뒤 같은
+        // 내용이 다시 오면 재시도가 가능해야 한다
+        appliedSignature = pluginsSignature(currentPlugins);
 
-      // 모든 플러그인의 복원이 완료될 때까지 딜레이 후 리로드 플래그 해제
-      setTimeout(() => {
-        if (generation !== injectGeneration) return;
-        setReloading(false);
-      }, 100);
-    });
+        // 모든 플러그인의 복원이 완료될 때까지 딜레이 후 리로드 플래그 해제
+        setTimeout(() => {
+          endInjectionWork();
+          if (generation !== injectGeneration) return;
+          setReloading(false);
+        }, 100);
+      })
+      .catch((error) => {
+        // 주입 콜백 예외에도 리빌 게이트 카운터가 잔류하지 않게
+        console.error('Plugin injection cycle failed', error);
+        endInjectionWork();
+        if (generation === injectGeneration) setReloading(false);
+      });
   };
 
   const syncPlugins = (next: JsPlugin[], options?: { forced?: boolean }) => {
     const nextSignature = pluginsSignature(next);
     currentPlugins = next.map((plugin) => ({ ...plugin }));
+    publishEnabledPluginCount();
     if (enabled) {
       // 내용 불변 재발행(프리셋 로드, JS 무관 undo 등)은 재주입 생략 -
       // 전 플러그인 teardown이 런타임 state·핸들을 파괴하는 것을 방지.
@@ -461,6 +493,11 @@ ${plugin.content}
       })
       .catch((error) => {
         console.error('Failed to fetch JS plugins', error);
+      })
+      // 조회 실패는 fail-open - 게이트가 데드라인까지 닫혀 있지 않게 한다.
+      // dispose 후 settle은 재생성된 사이클의 카운터를 건드리지 않는다
+      .finally(() => {
+        if (!disposed) notePluginFetchSettled();
       });
 
     internalApi.js
@@ -468,6 +505,7 @@ ${plugin.content}
       .then((value) => {
         if (disposed) return;
         enabled = value;
+        publishEnabledPluginCount();
         if (enabled) {
           injectAll();
         } else {
@@ -476,12 +514,16 @@ ${plugin.content}
       })
       .catch((error) => {
         console.error('Failed to fetch JS plugin toggle state', error);
+      })
+      .finally(() => {
+        if (!disposed) notePluginFetchSettled();
       });
   };
 
   const setupListeners = () => {
     const unsubUse = internalApi.js.onUse(({ enabled: next }) => {
       enabled = next;
+      publishEnabledPluginCount();
       if (enabled) {
         injectAll();
       } else {
@@ -517,6 +559,7 @@ ${plugin.content}
     cleanupSubscriptions();
     removeAll();
     setReloading(false);
+    resetPluginRuntimeReadiness();
   };
 
   return { initialize, dispose };

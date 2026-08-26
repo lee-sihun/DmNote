@@ -14,8 +14,6 @@ use crate::{
     },
 };
 
-const MAIN_WINDOW_LABEL: &str = "main";
-
 #[tauri::command]
 pub fn commit_gesture(
     state: State<'_, AppState>,
@@ -26,7 +24,7 @@ pub fn commit_gesture(
 ) -> CmdResult<GestureCommitResult> {
     let request = decode_gesture_commit_request(request)?;
     validate_gesture_commit_request(&request)?;
-    if window.label() != MAIN_WINDOW_LABEL {
+    if window.label() != super::MAIN_WINDOW_LABEL {
         return Err(crate::errors::CommandError::msg(
             "GESTURE_MUTATION_NOT_ALLOWED",
         ));

@@ -79,9 +79,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
-  patchCounterStrokeByTargets,
   patchCounterFillByTargets,
-  patchFontColorByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -95,6 +93,7 @@ import {
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
   rebindKeySlotById,
+  patchElementPropertyById,
 } from './elementOps';
 
 import {
@@ -1939,43 +1938,49 @@ describe('elementOps', () => {
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 
-  it('idle font color는 key와 knob의 비어 있던 active를 pre-edit idle raw로 materialize한다', async () => {
+  it('idle font paint는 키의 비어 있던 active 쌍을 pre-edit idle로 materialize한다', async () => {
     const key = {
       ...keyAt(ID_A),
-      fontColor: '  key idle raw  ',
+      fontColor: '#112233',
       activeFontColor: '   ',
       className: 'key-sibling',
     };
-    const knobId = 'a3999999-9999-4999-8999-999999999999';
-    const knob = {
-      ...keyAt(knobId),
-      fontColor: '  knob idle raw  ',
-      activeFontColor: undefined,
-      className: 'knob-sibling',
-    } as never;
     useKeyStore.setState({
       canonicalPositions: { '4key': [key] },
       positions: { '4key': [key] },
     });
-    useKnobItemStore.setState({ positions: { '4key': [knob] } });
 
-    await patchFontColorByTargets(
-      [
-        { elementType: 'key', id: ID_A },
-        { elementType: 'knob', id: knobId },
-      ],
-      { property: 'fontColor', value: ' new idle ' },
-    );
+    await patchPaintByTargets([{ elementType: 'key', id: ID_A }], {
+      property: 'fontPaint',
+      value: { color: '#445566', gradient: null },
+    });
 
     expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
-      fontColor: ' new idle ',
-      activeFontColor: '  key idle raw  ',
+      fontColor: '#445566',
+      activeFontColor: '#112233',
       className: 'key-sibling',
     });
-    expect(useKnobItemStore.getState().positions['4key'][0]).toMatchObject({
-      fontColor: ' new idle ',
-      activeFontColor: '  knob idle raw  ',
-      className: 'knob-sibling',
+  });
+
+  it('idle font paint gradient는 스탯에도 적용되고 대표색을 함께 쓴다', async () => {
+    const stat = { ...keyAt(ID_A), fontColor: '#111111' } as never;
+    useStatItemStore.setState({ positions: { '4key': [stat] } });
+
+    const spec = {
+      angle: 90,
+      stops: [
+        { color: '#FF0080', pos: 0 },
+        { color: '#001122', pos: 1 },
+      ],
+    };
+    await patchPaintByTargets([{ elementType: 'stat', id: ID_A }], {
+      property: 'fontPaint',
+      value: { color: '#FF0080', gradient: spec },
+    });
+
+    expect(useStatItemStore.getState().positions['4key'][0]).toMatchObject({
+      fontColor: '#FF0080',
+      fontGradient: spec,
     });
   });
 
@@ -1983,23 +1988,33 @@ describe('elementOps', () => {
     [
       'active stat',
       [{ elementType: 'stat', id: ID_A }],
-      { property: 'activeFontColor', value: '#fff' },
+      { property: 'activeFontPaint', value: { color: '#fff', gradient: null } },
     ],
     [
-      'active graph',
+      'active knob',
+      [{ elementType: 'knob', id: ID_A }],
+      { property: 'activeFontPaint', value: { color: '#fff', gradient: null } },
+    ],
+    [
+      'idle graph',
       [{ elementType: 'graph', id: ID_A }],
-      { property: 'activeFontColor', value: '#fff' },
+      { property: 'fontPaint', value: { color: '#fff', gradient: null } },
+    ],
+    [
+      'idle knob',
+      [{ elementType: 'knob', id: ID_A }],
+      { property: 'fontPaint', value: { color: '#fff', gradient: null } },
     ],
     [
       'synthetic idle',
       [{ elementType: 'key', id: 'key-0' }],
-      { property: 'fontColor', value: '#fff' },
+      { property: 'fontPaint', value: { color: '#fff', gradient: null } },
     ],
   ] as const)(
-    'font color %s는 eager/wire 전에 거절한다',
+    'font paint %s는 eager/wire 전에 거절한다',
     async (_label, targets, patch) => {
       await expect(
-        patchFontColorByTargets(targets as never, patch as never),
+        patchPaintByTargets(targets as never, patch as never),
       ).resolves.toBe(false);
       expect(api.commitSemanticOps).not.toHaveBeenCalled();
     },
@@ -2303,7 +2318,7 @@ describe('elementOps', () => {
   });
 
   it.each(['stale', ''])(
-    'idle background paint는 gradient 대표색으로 active fallback을 materialize한다 (%j)',
+    'idle background paint는 idle 쌍을 있는 그대로 active fallback으로 materialize한다 (%j)',
     async (idleColor) => {
       const gradient = {
         angle: 45,
@@ -2340,7 +2355,8 @@ describe('elementOps', () => {
       ).toMatchObject({
         backgroundColor: '#next',
         backgroundGradient: undefined,
-        activeBackgroundColor: '#first',
+        // 백엔드 preserve와 동일 - 대표색 합성 없이 idle 색을 그대로 복제
+        activeBackgroundColor: idleColor,
         activeBackgroundGradient: gradient,
         borderColor: '#border-sibling',
       });
@@ -3275,7 +3291,81 @@ describe('elementOps', () => {
     ).resolves.toBe(false);
   });
 
-  it('counter typography 5 leaf는 raw counter sibling을 보존해 key/stat N ops 한 commit으로 보낸다', async () => {
+  it('fontWeight 패치는 Bold 미확정 요소의 암묵 Bold를 함께 고정하고 gestureId를 전파한다', async () => {
+    // (700, 미확정) 키 - 레거시 Bold. 굵기를 바꾸면 Bold true로 고정 (editor_ops와 동일 규칙)
+    const legacyBold = { ...keyAt(ID_A), fontWeight: 700, fontBold: undefined };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [legacyBold] },
+      positions: { '4key': [legacyBold] },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    await patchElementPropertyById(
+      'key',
+      ID_A,
+      { property: 'fontWeight', value: 500 },
+      { gestureId: 'font-gesture' },
+    );
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      fontWeight: 500,
+      fontBold: true,
+    });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { property: 'fontWeight', value: 500 },
+        },
+      ],
+      expect.objectContaining({ gestureId: 'font-gesture' }),
+    );
+
+    // Bold가 확정된 요소는 건드리지 않는다
+    const explicit = { ...keyAt(ID_A), fontWeight: 700, fontBold: false };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [explicit] },
+      positions: { '4key': [explicit] },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    await patchElementPropertyById('key', ID_A, {
+      property: 'fontWeight',
+      value: 600,
+    });
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      fontWeight: 600,
+      fontBold: false,
+    });
+
+    // 카운터 (400, 미확정) → non-bold 고정: (700, false)라 재시작 시 레거시로 오인되지 않는다
+    const counterKey = {
+      ...keyAt(ID_A),
+      counter: {
+        ...createDefaultKeyPosition().counter,
+        fontWeight: 400,
+        fontBold: undefined,
+      },
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [counterKey] },
+      positions: { '4key': [counterKey] },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    await patchCounterTypographyByTargets(
+      [{ elementType: 'key', id: ID_A }],
+      { property: 'counterFontWeight', value: 700 },
+      { gestureId: 'counter-gesture' },
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({ fontWeight: 700, fontBold: false });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ gestureId: 'counter-gesture' }),
+    );
+  });
+
+  it('counter typography 6 leaf는 raw counter sibling을 보존해 key/stat N ops 한 commit으로 보낸다', async () => {
     const statId = '33333333-3333-4333-8333-333333333333';
     const rawCounter = {
       ...createDefaultKeyPosition().counter,
@@ -3319,6 +3409,7 @@ describe('elementOps', () => {
     const patches: EditorCounterTypographyPropertyPatchV1[] = [
       { property: 'counterFontSize', value: 72 },
       { property: 'counterFontWeight', value: 900 },
+      { property: 'counterFontBold', value: true },
       { property: 'counterFontItalic', value: true },
       { property: 'counterFontUnderline', value: true },
       { property: 'counterFontStrikethrough', value: true },
@@ -3342,6 +3433,7 @@ describe('elementOps', () => {
     ).toMatchObject({
       fontSize: 72,
       fontWeight: 900,
+      fontBold: true,
       fontItalic: true,
       fontUnderline: true,
       fontStrikethrough: true,
@@ -3384,69 +3476,6 @@ describe('elementOps', () => {
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
-  });
-
-  it('counter stroke는 raw nested sibling을 보존하고 active stat을 wire 전에 거절한다', async () => {
-    const statId = '33333333-3333-4333-8333-333333333333';
-    const rawCounter = {
-      ...createDefaultKeyPosition().counter,
-      stroke: { idle: 'old-idle', active: 'old-active', custom: 'keep' },
-      customSentinel: 'keep-raw',
-    };
-    useKeyStore.setState({
-      canonicalPositions: {
-        '4key': [{ ...keyAt(ID_A), counter: rawCounter }],
-      },
-      positions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
-    });
-    useStatItemStore.setState({
-      positions: {
-        '4key': [
-          {
-            ...keyAt(statId),
-            statType: 'kps',
-            counter: structuredClone(rawCounter),
-          },
-        ],
-      },
-    });
-    const idleTargets = [
-      { elementType: 'key' as const, id: ID_A },
-      { elementType: 'stat' as const, id: statId },
-    ];
-    api.captureEditorDocument.mockReturnValue(documentFromStores());
-
-    await patchCounterStrokeByTargets(idleTargets, {
-      property: 'counterStrokeIdle',
-      value: '  raw idle  ',
-    });
-    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
-      idleTargets.map(({ elementType, id }) => ({
-        kind: 'patchElement',
-        elementType,
-        id,
-        patch: { property: 'counterStrokeIdle', value: '  raw idle  ' },
-      })),
-      expect.anything(),
-    );
-    expect(
-      useKeyStore.getState().canonicalPositions['4key'][0].counter,
-    ).toMatchObject({
-      stroke: { idle: '  raw idle  ', active: 'old-active', custom: 'keep' },
-      customSentinel: 'keep-raw',
-    });
-    expect(
-      useStatItemStore.getState().positions['4key'][0].counter,
-    ).toMatchObject({
-      stroke: { idle: '  raw idle  ', active: 'old-active', custom: 'keep' },
-      customSentinel: 'keep-raw',
-    });
-    await expect(
-      patchCounterStrokeByTargets([{ elementType: 'stat', id: statId }], {
-        property: 'counterStrokeActive',
-        value: 'wrong',
-      }),
-    ).resolves.toBe(false);
   });
 
   it('counter fontFamily raw string은 siblings를 보존해 key/stat N ops 한 commit으로 보낸다', async () => {

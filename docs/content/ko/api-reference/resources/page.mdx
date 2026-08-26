@@ -13,8 +13,16 @@ description: 폰트, 이미지, 사운드 리소스 API
 
 ```typescript
 const result = await dmn.font.load();
-// { success: boolean, error?: string, fontPath?: string }
+// {
+//   success: boolean,
+//   error?: string,
+//   fontName?: string,
+//   fontPath?: string,
+//   weightRanges?: Array<{ min: number, max: number }>
+// }
 ```
+
+`fontName`은 폰트 파일 내부 메타데이터의 family 이름입니다(읽을 수 있는 family 레코드가 없을 때만 파일명을 사용). 그래서 같은 family의 여러 파일이 하나의 family로 등록됩니다. 폰트로 파싱할 수 없는 파일이면 `success`가 `false`이고 아무것도 복사되지 않습니다.
 
 ## 이미지
 

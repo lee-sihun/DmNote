@@ -13,8 +13,16 @@ Opens the system file picker, imports a font, and returns its app-managed path.
 
 ```typescript
 const result = await dmn.font.load();
-// { success: boolean, error?: string, fontPath?: string }
+// {
+//   success: boolean,
+//   error?: string,
+//   fontName?: string,
+//   fontPath?: string,
+//   weightRanges?: Array<{ min: number, max: number }>
+// }
 ```
+
+`fontName` is the family name read from the font file's own metadata (the file name is used only when the font has no readable family record), so several files of one family import as one family. If the file cannot be parsed as a font, `success` is `false` and nothing is copied.
 
 ## Image
 

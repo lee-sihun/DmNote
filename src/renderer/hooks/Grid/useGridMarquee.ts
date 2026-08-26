@@ -11,6 +11,8 @@ import {
 } from '@stores/grid/useGridSelectionStore';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
+import { getActiveElement } from '@utils/dom/activeElement';
+import { isHTMLElementNode } from '@utils/dom/isElementNode';
 
 interface UseGridMarqueeParams {
   positions: CanonicalEditorDocumentV1['keyPositions'];
@@ -69,6 +71,26 @@ export function useGridMarquee({
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
   const frameRef = useRef<number | null>(null);
   const pendingClientPointRef = useRef<{ x: number; y: number } | null>(null);
+
+  // 빈 공간 프레스 즉시 선택 해제 - 피커 클릭어웨이(mousedown)와 같은 이벤트라
+  // 상태 프리뷰 복귀와 포커스 해제가 한 프레임에 함께 꺼진다. 마퀴는 어차피
+  // 선택을 통째로 교체하므로 미리 비워도 최종 결과가 같다.
+  // 단 포커스된 편집 입력이 있으면 즉시 해제를 건너뛴다 - 여기서 비우면 입력이
+  // blur 전에 언마운트돼 미확정 draft가 사라진다 (언마운트는 blur를 만들지 않고
+  // cleanup은 finalize를 부르지 않는다). 이 경우 브라우저 기본 blur가 finalize를
+  // 마친 뒤 mouseup 정산(작은 마퀴 = 선택 해제)이 비운다
+  const beginMarqueeSelection = (x: number, y: number) => {
+    if (useGridSelectionStore.getState().selectedElements.length > 0) {
+      const active = getActiveElement();
+      const editing =
+        isHTMLElementNode(active) &&
+        active.matches('input, textarea, [contenteditable="true"]');
+      if (!editing) {
+        clearSelection();
+      }
+    }
+    startMarqueeSelection(x, y);
+  };
 
   const applyPendingMarquee = () => {
     const point = pendingClientPointRef.current;
@@ -259,7 +281,7 @@ export function useGridMarquee({
     isMarqueeSelecting,
     marqueeStart,
     marqueeEnd,
-    startMarqueeSelection,
+    startMarqueeSelection: beginMarqueeSelection,
     handleMarqueeMouseMove,
     handleMarqueeMouseUp,
   };

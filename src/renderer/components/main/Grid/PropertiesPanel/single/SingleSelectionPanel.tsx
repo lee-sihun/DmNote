@@ -4,6 +4,7 @@ import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import type { EditStateAnchor } from '@stores/grid/useEditStatePreviewStore';
 import { flushPluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
@@ -304,7 +305,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                   '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'}
               </p>
             )}
-            {showSettings &&
+            {settingsRenderable &&
               renderPluginSettingsForm(
                 selectedPluginDefinition?.settings,
                 resolvedPluginSettings,
@@ -337,7 +338,10 @@ interface SingleGraphPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (
+    patch: EditorElementPropertyPatchV1,
+    options?: { gestureId?: string },
+  ) => void;
   onGraphColorPreview?: (color: string) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
@@ -452,7 +456,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             <PropertySection>
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
-                  value={Math.round(singleGraphPosition.dx || 0)}
+                  value={singleGraphPosition.dx || 0}
                   onChange={(value) => {
                     handleGeometryCommit?.('dx', value);
                   }}
@@ -460,9 +464,11 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
+                  allowDecimal
+                  decimalScale={1}
                 />
                 <NumberInput
-                  value={Math.round(singleGraphPosition.dy || 0)}
+                  value={singleGraphPosition.dy || 0}
                   onChange={(value) => {
                     handleGeometryCommit?.('dy', value);
                   }}
@@ -470,6 +476,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
+                  allowDecimal
+                  decimalScale={1}
                 />
               </PropertyRow>
 
@@ -813,7 +821,10 @@ interface SingleKnobPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (
+    patch: EditorElementPropertyPatchV1,
+    options?: { gestureId?: string },
+  ) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
@@ -1090,7 +1101,15 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   const handlePickerToggle = (target: KnobColorTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
+    // 새로 열 때는 항상 대기 탭에서 시작
+    if (pickerFor !== target) setColorState('idle');
   };
+
+  // 그림자·이미지 피커의 캔버스 상태 프리뷰 대상 (색 피커는 세션 훅이 발행)
+  const knobPreviewAnchor: EditStateAnchor | null =
+    singleKnobPosition.id && isNativeElementId(singleKnobPosition.id)
+      ? { kind: 'knob', id: singleKnobPosition.id }
+      : null;
 
   // 라운딩 기본값: 미지정 시 원형(짧은 변의 절반)
   const effectiveBorderRadius =
@@ -1204,7 +1223,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             <PropertySection>
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
-                  value={Math.round(singleKnobPosition.dx || 0)}
+                  value={singleKnobPosition.dx || 0}
                   onChange={(value) => {
                     handleGeometryCommit?.('dx', value);
                   }}
@@ -1212,9 +1231,11 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
+                  allowDecimal
+                  decimalScale={1}
                 />
                 <NumberInput
-                  value={Math.round(singleKnobPosition.dy || 0)}
+                  value={singleKnobPosition.dy || 0}
                   onChange={(value) => {
                     handleGeometryCommit?.('dy', value);
                   }}
@@ -1222,6 +1243,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
+                  allowDecimal
+                  decimalScale={1}
                 />
               </PropertyRow>
 
@@ -1421,6 +1444,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             <ShadowControls
               idleShadow={knobIdleShadow}
               activeShadow={knobActiveShadow}
+              previewAnchor={knobPreviewAnchor}
               onChange={(state, _shadow, patch) => {
                 const leaf = elementShadowLeafFromPartial(patch);
                 if (!leaf) return;
@@ -1444,6 +1468,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         {showImagePicker && imageButtonRef.current ? (
           <ImagePicker
             open={showImagePicker}
+            previewAnchor={knobPreviewAnchor}
             referenceRef={imageButtonRef}
             panelElement={panelRef.current}
             completionBinding="element-id"
@@ -1576,8 +1601,6 @@ interface SingleKeyStatPanelProps {
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
-  onFontColorPreview?: StyleTabContentProps['onFontColorPreview'];
-  onFontColorCommit?: StyleTabContentProps['onFontColorCommit'];
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   onNotePaintCommit?: NoteTabContentProps['onNotePaintCommit'];
   onNotePaintPreview?: NoteTabContentProps['onNotePaintPreview'];
@@ -1586,7 +1609,6 @@ interface SingleKeyStatPanelProps {
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
   onCounterLayoutCommit?: CounterTabContentProps['onCounterLayoutCommit'];
   onCounterTypographyCommit?: CounterTabContentProps['onCounterTypographyCommit'];
-  onCounterStrokeCommit?: CounterTabContentProps['onCounterStrokeCommit'];
   onCounterFillCommit?: CounterTabContentProps['onCounterFillCommit'];
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
@@ -1639,8 +1661,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onStylePropertyCommit,
   onPaintPreview,
   onPaintCommit,
-  onFontColorPreview,
-  onFontColorCommit,
   onShadowCommit,
   onNotePaintCommit,
   onNotePaintPreview,
@@ -1649,7 +1669,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
   onCounterTypographyCommit,
-  onCounterStrokeCommit,
   onCounterFillCommit,
   showImagePicker,
   setShowImagePicker,
@@ -1838,8 +1857,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onStylePropertyCommit={onStylePropertyCommit}
               onPaintPreview={onPaintPreview}
               onPaintCommit={onPaintCommit}
-              onFontColorPreview={onFontColorPreview}
-              onFontColorCommit={onFontColorCommit}
               onShadowCommit={onShadowCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
@@ -1905,7 +1922,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onCounterAnimationEnabledCommit={onCounterAnimationEnabledCommit}
               onCounterLayoutCommit={onCounterLayoutCommit}
               onCounterTypographyCommit={onCounterTypographyCommit}
-              onCounterStrokeCommit={onCounterStrokeCommit}
               onCounterFillCommit={onCounterFillCommit}
               onCounterAnimationPresetCommit={onCounterAnimationPresetCommit}
               panelElement={panelElement}

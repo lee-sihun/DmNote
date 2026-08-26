@@ -40,7 +40,7 @@ export const useOptimisticAsyncBooleanCommit = ({
     }
   }, [updateOptimisticValue]);
 
-  const drainPendingValue = async () => {
+  const drainPendingValue = useCallback(async () => {
     if (runningPromiseRef.current) {
       await runningPromiseRef.current;
       return;
@@ -79,7 +79,7 @@ export const useOptimisticAsyncBooleanCommit = ({
     } finally {
       if (runningPromiseRef.current === run) runningPromiseRef.current = null;
     }
-  };
+  }, [reconcileCanonicalValue, updateOptimisticValue]);
 
   const flush = async () => {
     if (commitFrameRef.current !== null) {
@@ -125,7 +125,7 @@ export const useOptimisticAsyncBooleanCommit = ({
         void drainPendingValue();
       }
     };
-  }, []);
+  }, [drainPendingValue]);
 
   const toggle = () => {
     const current = optimisticValueRef.current ?? canonicalValueRef.current;

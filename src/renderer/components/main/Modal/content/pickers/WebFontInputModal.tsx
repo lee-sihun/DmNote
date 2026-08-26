@@ -26,7 +26,7 @@ import {
   buildDraftPreviewCss,
   validateWebFontFaceCss,
 } from '@src/types/settings/fonts';
-import type { WebFontWeightRange } from '@src/types/settings/fonts';
+import type { FontWeightRange } from '@src/types/settings/fonts';
 import type { CSSProperties } from 'react';
 
 interface WebFontInputModalProps {
@@ -48,7 +48,7 @@ const DRAFT_PREVIEW_FAMILY = 'DmnWebFontDraftPreview';
 const DRAFT_PREVIEW_STYLE_ID = 'webfont-draft-preview';
 
 // 가변 범위는 경계값 + 안쪽 400/700 대표 스톱으로 압축해 행 수를 억제
-const expandWeightStops = (ranges: WebFontWeightRange[]): number[] => {
+const expandWeightStops = (ranges: FontWeightRange[]): number[] => {
   const stops = new Set<number>();
   for (const { min, max } of ranges) {
     stops.add(min);

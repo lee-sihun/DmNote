@@ -25,13 +25,16 @@ use crate::{
     },
     defaults::{default_keys, default_positions},
     models::{
-        normalize_key_slot, AppStoreData, CounterAnimationPreset, CustomCss, CustomCssHistoryEntry,
-        CustomFont, CustomJs, CustomTab, FontType, GradientSpec, GraphPosition, GraphPositions,
-        GraphStatType, GraphType, GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition,
-        KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups,
-        NoteSettings, OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition,
-        StatPositions, StatType, TabCss, TabNoteSettings,
+        default_missing_note_gradient_multipliers, normalize_key_slot,
+        scrub_removed_text_outline_fields, AppStoreData, CounterAnimationPreset, CustomCss,
+        CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab, FontType, FontWeightRange,
+        GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
+        JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPosition,
+        KnobPositions, LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds, ShortcutsState,
+        SoundLibraryEntry, StatPosition, StatPositions, StatType, TabCss, TabNoteSettings,
+        POSITION_COLLECTION_FIELDS,
     },
+    services::font_metadata::parse_font_metadata,
 };
 
 const LEGACY_OVERLAY_WIDTH: f64 = 860.0;
@@ -82,9 +85,15 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                 let seed_active_css_history = value.get("customCssHistory").is_none();
                 let explicit_invalid_element_id = has_explicit_invalid_element_id(&value);
                 let sound_library_migrated = migrate_sound_library_enabled(&mut value);
+                let text_outline_scrubbed = scrub_removed_text_outline_fields(&mut value);
+                // 메모리 보정만 하고 영속을 빼먹으면 시작마다 같은 보정이 반복된다
+                let gradient_multipliers_defaulted =
+                    default_store_note_gradient_multipliers(&mut value);
                 match serde_json::from_value::<AppStoreData>(value.clone()) {
                     Ok(mut data) => {
-                        let mut needs_persist = sound_library_migrated
+                        let mut needs_persist = text_outline_scrubbed
+                            || sound_library_migrated
+                            || gradient_multipliers_defaulted
                             || data.font_settings.custom_fonts.iter().any(|font| {
                                 font.font_type == FontType::Local
                                     && font
@@ -101,6 +110,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         if migrate_legacy_knob_sensitivity(&mut data) {
                             needs_persist = true;
                         }
+                        needs_persist |= has_legacy_font_weight_state(&data);
                         let editor_revision_repaired = repair_editor_revision(&mut data);
                         needs_persist |= editor_revision_repaired;
                         let semantic_repaired = repair_semantic_identities(&mut data);
@@ -111,6 +121,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                             value.get("keyPositions"),
                         );
                         needs_persist |= layout_repaired;
+                        needs_persist |= normalize_blank_font_colors(&mut data);
                         let (gradient_changed, gradient_pair_repaired) =
                             canonicalize_gradient_pairs(&mut data);
                         needs_persist |= gradient_changed;
@@ -204,24 +215,32 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
     })
 }
 
+fn default_store_note_gradient_multipliers(value: &mut Value) -> bool {
+    let mut changed = false;
+    for collection in POSITION_COLLECTION_FIELDS {
+        let Some(modes) = value.get_mut(collection).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        for position in modes.values_mut().filter_map(Value::as_array_mut).flatten() {
+            changed |= default_missing_note_gradient_multipliers(position);
+        }
+    }
+    changed
+}
+
 fn has_explicit_invalid_element_id(value: &Value) -> bool {
-    [
-        "keyPositions",
-        "statPositions",
-        "graphPositions",
-        "knobPositions",
-    ]
-    .into_iter()
-    .filter_map(|field| value.get(field).and_then(Value::as_object))
-    .flat_map(|modes| modes.values())
-    .filter_map(Value::as_array)
-    .flatten()
-    .filter_map(Value::as_object)
-    .filter_map(|element| element.get("id"))
-    .any(|id| {
-        id.as_str()
-            .is_none_or(|id| !super::native_element_id::is_valid_element_id(id))
-    })
+    POSITION_COLLECTION_FIELDS
+        .into_iter()
+        .filter_map(|field| value.get(field).and_then(Value::as_object))
+        .flat_map(|modes| modes.values())
+        .filter_map(Value::as_array)
+        .flatten()
+        .filter_map(Value::as_object)
+        .filter_map(|element| element.get("id"))
+        .any(|id| {
+            id.as_str()
+                .is_none_or(|id| !super::native_element_id::is_valid_element_id(id))
+        })
 }
 
 fn current_unix_millis() -> i64 {
@@ -279,6 +298,14 @@ fn repair_semantic_identities(data: &mut AppStoreData) -> bool {
     changed |= data.font_settings.custom_fonts.len() != original_font_len;
 
     for font in data.font_settings.custom_fonts.iter_mut() {
+        let original_range_len = font.weight_ranges.len();
+        font.weight_ranges.retain(|range| {
+            (1..=1000).contains(&range.min)
+                && (1..=1000).contains(&range.max)
+                && range.min <= range.max
+        });
+        changed |= font.weight_ranges.len() != original_range_len;
+
         if font.font_type != FontType::Local {
             continue;
         }
@@ -432,6 +459,22 @@ pub(crate) fn migrate_local_fonts_to_app_data(
             font.enabled = false;
             changed = true;
         }
+    }
+
+    for font in data
+        .font_settings
+        .custom_fonts
+        .iter_mut()
+        .filter(|font| font.font_type == FontType::Local && font.weight_ranges.is_empty())
+    {
+        font.weight_ranges = font
+            .local_path
+            .as_deref()
+            .filter(|path| !path.trim().is_empty())
+            .and_then(|path| parse_font_metadata(Path::new(path)).ok())
+            .map(|metadata| metadata.weight_ranges)
+            .unwrap_or_else(|| vec![FontWeightRange { min: 400, max: 400 }]);
+        changed = true;
     }
 
     changed
@@ -838,6 +881,11 @@ fn has_convertible_note_border_color(data: &AppStoreData) -> bool {
             .values()
             .flatten()
             .any(|graph| convertible(&graph.position.note_border_color))
+        || data
+            .knob_positions
+            .values()
+            .flatten()
+            .any(|knob| convertible(&knob.position.note_border_color))
 }
 
 /// store 데이터 정규화 및 레거시 마이그레이션 적용
@@ -845,6 +893,7 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     remove_legacy_panel_detach_setting(&mut data);
     normalize_custom_css_history(&mut data.custom_css_history);
     repair_editor_revision(&mut data);
+    normalize_blank_font_colors(&mut data);
 
     if data.keys.is_empty() {
         data.keys = default_keys().clone();
@@ -890,6 +939,11 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
             migrate_note_border_color(&mut graph.position.note_border_color);
         }
     }
+    for positions in data.knob_positions.values_mut() {
+        for knob in positions.iter_mut() {
+            migrate_note_border_color(&mut knob.position.note_border_color);
+        }
+    }
 
     // 레거시 마이그레이션: fadePosition enum → 방향별 픽셀 fade 값
     data.note_settings.migrate_fade_position();
@@ -920,9 +974,87 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
         }
     }
 
+    migrate_legacy_font_weight_state(&mut data);
+
     let _ = data.custom_js.normalize();
 
     data
+}
+
+fn has_legacy_font_weight_state(data: &AppStoreData) -> bool {
+    data.key_positions
+        .values()
+        .flatten()
+        .chain(
+            data.stat_positions
+                .values()
+                .flatten()
+                .map(|position| &position.position),
+        )
+        .chain(
+            data.graph_positions
+                .values()
+                .flatten()
+                .map(|position| &position.position),
+        )
+        .chain(
+            data.knob_positions
+                .values()
+                .flatten()
+                .map(|position| &position.position),
+        )
+        .any(|position| {
+            (position.font_bold.is_none() && position.font_weight == Some(700))
+                || (position.counter.font_bold.is_none() && position.counter.font_weight == 700)
+        })
+}
+
+pub(crate) fn migrate_legacy_font_weight_state(data: &mut AppStoreData) -> bool {
+    let mut changed = false;
+    for position in data.key_positions.values_mut().flatten() {
+        changed |= position.migrate_legacy_font_weight();
+    }
+    for position in data.stat_positions.values_mut().flatten() {
+        changed |= position.position.migrate_legacy_font_weight();
+    }
+    for position in data.graph_positions.values_mut().flatten() {
+        changed |= position.position.migrate_legacy_font_weight();
+    }
+    for position in data.knob_positions.values_mut().flatten() {
+        changed |= position.position.migrate_legacy_font_weight();
+    }
+    changed
+}
+
+fn normalize_blank_font_colors(data: &mut AppStoreData) -> bool {
+    fn normalize_position(position: &mut KeyPosition) -> bool {
+        let mut changed = false;
+        for color in [&mut position.font_color, &mut position.active_font_color] {
+            if color
+                .as_deref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                *color = None;
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    let mut changed = false;
+    for position in data.key_positions.values_mut().flatten() {
+        changed |= normalize_position(position);
+    }
+    for stat in data.stat_positions.values_mut().flatten() {
+        changed |= normalize_position(&mut stat.position);
+    }
+    for graph in data.graph_positions.values_mut().flatten() {
+        changed |= normalize_position(&mut graph.position);
+    }
+    for knob in data.knob_positions.values_mut().flatten() {
+        changed |= normalize_position(&mut knob.position);
+    }
+    changed
 }
 
 fn remove_legacy_panel_detach_setting(data: &mut AppStoreData) -> bool {
@@ -1517,7 +1649,7 @@ where
 
             let entry_name = format!("{field}.{mode}[{index}]");
             let mut candidate = entry.clone();
-            recover_invalid_counter_gradient_children(&entry_name, &mut candidate);
+            recover_invalid_counter_fill_gradient_children(&entry_name, &mut candidate);
             if serde_json::from_value::<T>(candidate.clone()).is_ok() {
                 recovered_entries.push(candidate);
                 continue;
@@ -1601,7 +1733,7 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
                 Err(err) => {
                     let entry_name = format!("{field}.{mode}[{index}]");
                     let mut candidate = entry.clone();
-                    recover_invalid_counter_gradient_children(&entry_name, &mut candidate);
+                    recover_invalid_counter_fill_gradient_children(&entry_name, &mut candidate);
                     let recovered = if serde_json::from_value::<KeyPosition>(candidate.clone())
                         .is_ok()
                     {
@@ -1627,7 +1759,7 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
     Some(Value::Object(recovered_modes))
 }
 
-fn recover_invalid_counter_gradient_children(entry_name: &str, value: &mut Value) -> bool {
+fn recover_invalid_counter_fill_gradient_children(entry_name: &str, value: &mut Value) -> bool {
     let Some(counter) = value.get_mut("counter").and_then(Value::as_object_mut) else {
         return false;
     };
@@ -1699,10 +1831,23 @@ fn recover_font_settings(value: &Value) -> Option<Value> {
 
     let mut recovered_fonts = Vec::with_capacity(custom_fonts.len());
     for (index, font) in custom_fonts.iter().enumerate() {
-        match serde_json::from_value::<CustomFont>(font.clone()) {
-            Ok(_) => recovered_fonts.push(font.clone()),
+        let mut candidate = font.clone();
+        let invalid_weight_ranges = candidate.get("weightRanges").is_some_and(|ranges| {
+            serde_json::from_value::<Vec<FontWeightRange>>(ranges.clone()).is_err()
+        });
+        if invalid_weight_ranges {
+            if let Some(object) = candidate.as_object_mut() {
+                object.remove("weightRanges");
+            }
+            log::warn!(
+                "[Store] Resetting invalid fontSettings.customFonts entry '[{index}].weightRanges' during recovery"
+            );
+        }
+
+        match serde_json::from_value::<CustomFont>(candidate.clone()) {
+            Ok(_) => recovered_fonts.push(candidate),
             Err(err) => {
-                if let Some(recovered) = recover_local_font_enabled(font) {
+                if let Some(recovered) = recover_local_font_enabled(&candidate) {
                     log::warn!(
                         "[Store] Disabling fontSettings.customFonts entry '[{index}]' with an invalid enabled field during recovery"
                     );
@@ -1921,8 +2066,8 @@ mod tests {
             AppStoreData, CustomCssHistoryEntry, CustomFont, CustomTab, FontType, GraphPosition,
             GraphStatType, GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor,
             KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
-            OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition, StatType, TabCss,
-            TabNoteSettings,
+            NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition, StatType, TabCss,
+            TabNoteSettings, POSITION_COLLECTION_FIELDS,
         },
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -1947,6 +2092,40 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         }
+    }
+
+    #[test]
+    fn missing_note_gradient_multipliers_default_to_one_hundred_on_all_collections() {
+        let gradient = serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        });
+        let mut value = serde_json::json!({
+            "keyPositions": { "mode": [{ "noteGradient": gradient.clone() }] },
+            "statPositions": { "mode": [{ "noteGlowGradient": gradient.clone() }] },
+            "graphPositions": { "mode": [{ "noteGradient": gradient.clone() }] },
+            "knobPositions": { "mode": [{
+                "noteGradient": gradient,
+                "noteGlowGradient": null
+            }] }
+        });
+
+        // 보정 발생 시 true 반환 - needs_persist로 전파되어 디스크에도 영속
+        assert!(super::default_store_note_gradient_multipliers(&mut value));
+
+        assert_eq!(value["keyPositions"]["mode"][0]["noteOpacity"], 100);
+        assert_eq!(value["statPositions"]["mode"][0]["noteGlowOpacity"], 100);
+        assert_eq!(value["graphPositions"]["mode"][0]["noteOpacity"], 100);
+        assert_eq!(value["knobPositions"]["mode"][0]["noteOpacity"], 100);
+        assert!(value["knobPositions"]["mode"][0]
+            .get("noteGlowOpacity")
+            .is_none());
+
+        // 이미 보정된 store 재로드는 무변경 - 반복 영속 방지
+        assert!(!super::default_store_note_gradient_multipliers(&mut value));
     }
 
     fn tauri_store_fixture_base() -> serde_json::Value {
@@ -2045,12 +2224,7 @@ mod tests {
     }
 
     fn remove_all_native_ids(value: &mut serde_json::Value) {
-        for field in [
-            "keyPositions",
-            "statPositions",
-            "graphPositions",
-            "knobPositions",
-        ] {
+        for field in POSITION_COLLECTION_FIELDS {
             let Some(modes) = value
                 .get_mut(field)
                 .and_then(serde_json::Value::as_object_mut)
@@ -2110,6 +2284,91 @@ mod tests {
         assert_eq!(second_ids, first_ids);
         assert!(!reloaded.needs_persist);
         assert!(!reloaded.repaired);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn missing_note_gradient_multiplier_persists_on_first_load_and_converges() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-note-gradient-multiplier-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let position = &mut raw["keyPositions"]["4key"][0];
+        position["noteGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        });
+        position.as_object_mut().unwrap().remove("noteOpacity");
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        // 배율 부재 보정이 유일한 변경이어도 첫 로드는 영속 대상
+        let loaded = load_store_from_path(&path).unwrap();
+        assert_eq!(loaded.data.key_positions["4key"][0].note_opacity, 100);
+        assert!(loaded.needs_persist);
+
+        // 저장 후 재로드는 무변경으로 수렴 - 시작마다 보정 반복 방지
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert_eq!(reloaded.data.key_positions["4key"][0].note_opacity, 100);
+        assert!(!reloaded.needs_persist);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn serialized_undo_history_with_removed_outline_fields_loads_as_opaque_data() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-removed-outline-history-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let baseline = store_with_each_native_collection();
+        let mut raw = serde_json::to_value(&baseline).unwrap();
+        let saved_history = serde_json::json!({
+            "past": [{
+                "scope": "editor",
+                "before": {
+                    "kind": "editor",
+                    "value": {
+                        "changedFields": ["keyPositions"],
+                        "before": {
+                            "keyPositions": {
+                                "4key": [{
+                                    "fontStrokeColor": "#112233",
+                                    "activeFontStrokeColor": "#445566",
+                                    "counter": {
+                                        "stroke": {
+                                            "idle": "#000000",
+                                            "active": "#FFFFFF"
+                                        },
+                                        "strokeIdleGradient": {
+                                            "angle": 90,
+                                            "stops": []
+                                        }
+                                    }
+                                }]
+                            }
+                        }
+                    }
+                }
+            }],
+            "future": []
+        });
+        raw.as_object_mut()
+            .unwrap()
+            .insert("history".to_string(), saved_history.clone());
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(!loaded.needs_persist);
+        assert!(!loaded.repaired);
+        assert_eq!(loaded.data.key_positions, baseline.key_positions);
+        assert_eq!(loaded.data.stat_positions, baseline.stat_positions);
+        assert_eq!(loaded.data.graph_positions, baseline.graph_positions);
+        assert_eq!(loaded.data.knob_positions, baseline.knob_positions);
+        assert_eq!(loaded.data.plugin_data.get("history"), Some(&saved_history));
         let _ = std::fs::remove_file(path);
     }
 
@@ -2221,7 +2480,7 @@ mod tests {
     }
 
     fn stored_plugin_instance_ids(data: &AppStoreData, plugin_id: &str) -> Vec<String> {
-        data.plugin_data[&format!("plugin_data_{plugin_id}/instances")]
+        data.plugin_data[&crate::state::plugin::plugin_instances_storage_key(plugin_id)]
             .as_array()
             .unwrap()
             .iter()
@@ -2286,6 +2545,43 @@ mod tests {
     }
 
     #[test]
+    fn backfill_plugin_instances_preserves_malformed_siblings_across_reload() {
+        let path = plugin_backfill_fixture_path("mixed");
+        let existing_id = uuid::Uuid::new_v4().to_string();
+        let malformed = serde_json::json!({ "position": "broken", "keep": true });
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        raw.as_object_mut().unwrap().insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([
+                saved_plugin_instance_json(1.0, Some(&existing_id)),
+                saved_plugin_instance_json(2.0, None),
+                malformed.clone()
+            ]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        let key = crate::state::plugin::plugin_instances_storage_key("alpha");
+        let entries = loaded.data.plugin_data[&key].as_array().unwrap();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0]["instanceId"], existing_id);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            entries[1]["instanceId"].as_str().unwrap()
+        ));
+        assert_eq!(entries[2], malformed);
+        let persisted_bucket = loaded.data.plugin_data[&key].clone();
+
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(reloaded.data.plugin_data[&key], persisted_bucket);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn backfill_plugin_instances_preserves_existing_valid_ids() {
         let path = plugin_backfill_fixture_path("partial");
         let existing_id = uuid::Uuid::new_v4().to_string();
@@ -2309,7 +2605,8 @@ mod tests {
             &ids[1]
         ));
         // 값 필드와 순서 보존
-        let instances = loaded.data.plugin_data["plugin_data_alpha/instances"]
+        let instances = loaded.data.plugin_data
+            [&crate::state::plugin::plugin_instances_storage_key("alpha")]
             .as_array()
             .unwrap();
         assert_eq!(instances[0]["position"]["x"], 1.0);
@@ -2392,8 +2689,7 @@ mod tests {
         std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
-        // 교차 플러그인 중복만으로는 수리 대상이 아니다 - 불필요한 백업과
-        // sweep 스킵을 유발하지 않게 무변경
+        // 교차 플러그인 중복만으로는 수리 대상이 아니다
         assert!(!loaded.needs_persist);
         assert!(!loaded.repaired);
         assert_eq!(
@@ -2484,6 +2780,7 @@ mod tests {
         std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
+        // 빈 배열은 사용자 storage로 보존
         assert!(!loaded.needs_persist);
         assert!(!loaded.repaired);
         assert_eq!(
@@ -2591,6 +2888,14 @@ mod tests {
                 { "color": "rgba(139, 92, 246, 1)", "pos": -0.2 }
             ]
         });
+        position["fontColor"] = serde_json::json!("stale-font");
+        position["fontGradient"] = serde_json::json!({
+            "angle": -270,
+            "stops": [
+                { "color": "#123456", "pos": 0 },
+                { "color": "#ABCDEF", "pos": 1 }
+            ]
+        });
         position["counter"]["fill"]["idle"] = serde_json::json!("#FFFFFF");
         position["counter"]["fillIdleGradient"] = serde_json::json!({
             "stops": [
@@ -2613,6 +2918,8 @@ mod tests {
             position.background_gradient.as_ref().unwrap().stops[0].pos,
             0.0
         );
+        assert_eq!(position.font_color.as_deref(), Some("#123456"));
+        assert_eq!(position.font_gradient.as_ref().unwrap().angle, 90.0);
         assert_eq!(position.counter.fill.idle, "rgba(255,255,255,1)");
 
         std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
@@ -2621,6 +2928,138 @@ mod tests {
         assert!(!reloaded.repaired);
         assert_eq!(reloaded.data, loaded.data);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn blank_font_color_normalization_requests_one_canonical_persist() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-blank-font-color-reload-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+        let seeded = load_store_from_path(&path).unwrap();
+        std::fs::write(&path, serde_json::to_vec_pretty(&seeded.data).unwrap()).unwrap();
+        let canonical = load_store_from_path(&path).unwrap();
+        assert!(!canonical.needs_persist);
+        assert!(!canonical.repaired);
+
+        let mut raw = serde_json::to_value(&canonical.data).unwrap();
+        raw["keyPositions"]["4key"][0]["fontColor"] = serde_json::json!(" \t ");
+        raw["keyPositions"]["4key"][0]["activeFontColor"] = serde_json::json!("");
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let normalized = load_store_from_path(&path).unwrap();
+        assert!(normalized.needs_persist);
+        assert!(!normalized.repaired);
+        assert!(normalized.data.key_positions["4key"][0]
+            .font_color
+            .is_none());
+        assert!(normalized.data.key_positions["4key"][0]
+            .active_font_color
+            .is_none());
+
+        std::fs::write(&path, serde_json::to_vec_pretty(&normalized.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(reloaded.data, normalized.data);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn blank_font_gradient_stop_repairs_once_and_converges_on_reload() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-blank-font-gradient-stop-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+        let seeded = load_store_from_path(&path).unwrap();
+        std::fs::write(&path, serde_json::to_vec_pretty(&seeded.data).unwrap()).unwrap();
+        let canonical = load_store_from_path(&path).unwrap();
+        assert!(!canonical.needs_persist);
+        assert!(!canonical.repaired);
+
+        // 공백 첫 stop: 대표색 동기와 공백 정규화가 서로 되돌려 복구가 반복되던 입력
+        let mut raw = serde_json::to_value(&canonical.data).unwrap();
+        raw["keyPositions"]["4key"][0]["fontGradient"] = serde_json::json!({
+            "angle": 45,
+            "stops": [
+                { "color": "   ", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        // 첫 로드는 그라데이션을 내리고 한 번만 복구로 기록
+        let repaired = load_store_from_path(&path).unwrap();
+        assert!(repaired.needs_persist);
+        assert!(repaired.repaired);
+        assert!(repaired.data.key_positions["4key"][0]
+            .font_gradient
+            .is_none());
+
+        // 저장 후 재로드는 무변경 - repaired 반복으로 자산 sweep이 계속 막히지 않게
+        std::fs::write(&path, serde_json::to_vec_pretty(&repaired.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(reloaded.data, repaired.data);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn knob_note_border_gradient_and_rgba_migration_converge_in_either_order() {
+        let mut knob = KnobPosition {
+            axis_id: "axis".to_string(),
+            sensitivity: 1.0,
+            reverse: false,
+            position: KeyPosition::default(),
+        };
+        knob.position.note_border_color = Some("rgba(17, 34, 51, 0.5)".to_string());
+        knob.position.note_border_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "rgba(17, 34, 51, 0.5)", "pos": 0 },
+                { "color": "#ABC8", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        let mut source = AppStoreData::default();
+        source
+            .knob_positions
+            .insert("custom".to_string(), vec![knob]);
+
+        let mut canonical_first = source.clone();
+        assert_eq!(
+            super::canonicalize_gradient_pairs(&mut canonical_first),
+            (true, true)
+        );
+        let canonical_first = normalize_state(canonical_first);
+
+        let mut migration_first = normalize_state(source);
+        assert_eq!(
+            super::canonicalize_gradient_pairs(&mut migration_first),
+            (false, false)
+        );
+
+        assert_eq!(canonical_first, migration_first);
+        assert_eq!(
+            migration_first.knob_positions["custom"][0]
+                .position
+                .note_border_color
+                .as_deref(),
+            Some("#112233")
+        );
     }
 
     #[test]
@@ -2638,10 +3077,6 @@ mod tests {
             idle: "#112233".to_string(),
             active: "#445566".to_string(),
         };
-        key_position.counter.stroke = KeyCounterColor {
-            idle: "#778899".to_string(),
-            active: "#AABBCC".to_string(),
-        };
         key_position.counter.gap = 17;
         key_position.counter.font_size = 33;
         key_position.counter.font_weight = 600;
@@ -2654,14 +3089,28 @@ mod tests {
         key_position.counter.animation.bezier = [0.1, 0.2, 0.7, 0.8];
         key_position.counter.animation.scale = 1.25;
         key_position.counter.animation.duration_ms = 777;
+        key_position.note_color = NoteColor::Gradient {
+            top: "legacy-top".to_string(),
+            bottom: "legacy-bottom".to_string(),
+        };
+        key_position.note_opacity_top = Some(23);
+        key_position.note_opacity_bottom = Some(67);
         let expected_key_counter = key_position.counter.clone();
+        let expected_key_note_color = key_position.note_color.clone();
 
         let mut stat_position = StatPosition {
             stat_type: StatType::Kps,
             position: key_position.clone(),
         };
         stat_position.position.counter.fill.idle = "#ABCDEF".to_string();
+        stat_position.position.note_glow_color = Some(NoteColor::Gradient {
+            top: "legacy-glow-top".to_string(),
+            bottom: "legacy-glow-bottom".to_string(),
+        });
+        stat_position.position.note_glow_opacity_top = Some(34);
+        stat_position.position.note_glow_opacity_bottom = Some(76);
         let expected_stat_counter = stat_position.position.counter.clone();
+        let expected_stat_glow_color = stat_position.position.note_glow_color.clone();
 
         let mut data = normalize_state(AppStoreData {
             keys: default_keys().clone(),
@@ -2672,6 +3121,14 @@ mod tests {
         data.stat_positions
             .insert("4key".to_string(), vec![stat_position]);
         let mut raw = serde_json::to_value(data).unwrap();
+        raw["keyPositions"]["4key"][0]["noteBorderGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#112233", "pos": 0 }]
+        });
+        raw["keyPositions"]["4key"][0]["noteGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#112233", "pos": 0 }]
+        });
         raw["keyPositions"]["4key"][0]["counter"]["fillIdleGradient"] = serde_json::json!({
             "angle": 90,
             "stops": [{ "color": "#FFFFFF", "pos": 0 }]
@@ -2679,6 +3136,10 @@ mod tests {
         raw["statPositions"]["4key"][0]["counter"]["fillActiveGradient"] = serde_json::json!({
             "angle": 90,
             "stops": [{ "color": "#000000", "pos": 1 }]
+        });
+        raw["statPositions"]["4key"][0]["noteGlowGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#AABBCC", "pos": 1 }]
         });
         std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
 
@@ -2690,8 +3151,142 @@ mod tests {
         assert!(loaded.repaired);
         assert_eq!(key_counter, &expected_key_counter);
         assert_eq!(stat_counter, &expected_stat_counter);
+        assert!(loaded.data.key_positions["4key"][0].note_gradient.is_none());
+        assert_eq!(
+            loaded.data.key_positions["4key"][0].note_color,
+            expected_key_note_color
+        );
+        assert_eq!(
+            loaded.data.key_positions["4key"][0].note_opacity_top,
+            Some(23)
+        );
+        assert_eq!(
+            loaded.data.key_positions["4key"][0].note_opacity_bottom,
+            Some(67)
+        );
+        assert!(loaded.data.stat_positions["4key"][0]
+            .position
+            .note_glow_gradient
+            .is_none());
+        assert_eq!(
+            loaded.data.stat_positions["4key"][0]
+                .position
+                .note_glow_color,
+            expected_stat_glow_color
+        );
+        assert!(loaded.data.key_positions["4key"][0]
+            .note_border_gradient
+            .is_none());
         assert!(key_counter.fill_idle_gradient.is_none());
         assert!(stat_counter.fill_active_gradient.is_none());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn invalid_font_gradient_fields_recover_in_place_on_every_position_collection() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-font-gradient-field-recovery-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        let mut template = data.key_positions["4key"][0].clone();
+        template.font_color = Some("font-sibling".to_string());
+        template.active_font_color = Some("active-font-sibling".to_string());
+        let key_id = uuid::Uuid::new_v4().to_string();
+        let key = &mut data.key_positions.get_mut("4key").unwrap()[0];
+        key.id = key_id.clone();
+        key.font_color = Some("font-sibling".to_string());
+
+        let stat_id = uuid::Uuid::new_v4().to_string();
+        let graph_id = uuid::Uuid::new_v4().to_string();
+        let knob_id = uuid::Uuid::new_v4().to_string();
+        data.stat_positions.insert(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: KeyPosition {
+                    id: stat_id.clone(),
+                    ..template.clone()
+                },
+            }],
+        );
+        data.graph_positions.insert(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 1000,
+                graph_color: "graph-sibling".to_string(),
+                show_avg_line: true,
+                position: KeyPosition {
+                    id: graph_id.clone(),
+                    ..template.clone()
+                },
+            }],
+        );
+        data.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis-sibling".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: KeyPosition {
+                    id: knob_id.clone(),
+                    ..template
+                },
+            }],
+        );
+
+        let mut raw = serde_json::to_value(&data).unwrap();
+        let damaged = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#112233", "pos": 0 }]
+        });
+        raw["keyPositions"]["4key"][0]["fontGradient"] = damaged.clone();
+        raw["statPositions"]["4key"][0]["activeFontGradient"] = damaged.clone();
+        raw["graphPositions"]["4key"][0]["fontGradient"] = damaged.clone();
+        raw["knobPositions"]["4key"][0]["activeFontGradient"] = damaged;
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        assert_eq!(
+            loaded.data.key_positions["4key"].len(),
+            data.key_positions["4key"].len()
+        );
+        assert_eq!(loaded.data.stat_positions["4key"].len(), 1);
+        assert_eq!(loaded.data.graph_positions["4key"].len(), 1);
+        assert_eq!(loaded.data.knob_positions["4key"].len(), 1);
+        assert_eq!(loaded.data.key_positions["4key"][0].id, key_id);
+        assert_eq!(loaded.data.stat_positions["4key"][0].position.id, stat_id);
+        assert_eq!(loaded.data.graph_positions["4key"][0].position.id, graph_id);
+        assert_eq!(loaded.data.knob_positions["4key"][0].position.id, knob_id);
+        assert!(loaded.data.key_positions["4key"][0].font_gradient.is_none());
+        assert!(loaded.data.stat_positions["4key"][0]
+            .position
+            .active_font_gradient
+            .is_none());
+        assert!(loaded.data.graph_positions["4key"][0]
+            .position
+            .font_gradient
+            .is_none());
+        assert!(loaded.data.knob_positions["4key"][0]
+            .position
+            .active_font_gradient
+            .is_none());
+        for position in [
+            &loaded.data.key_positions["4key"][0],
+            &loaded.data.stat_positions["4key"][0].position,
+            &loaded.data.graph_positions["4key"][0].position,
+            &loaded.data.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.font_color.as_deref(), Some("font-sibling"));
+        }
         let _ = std::fs::remove_file(path);
     }
 
@@ -2967,6 +3562,60 @@ mod tests {
     }
 
     #[test]
+    fn normalize_state_drops_blank_font_colors_on_every_position_collection() {
+        let blank_position = |id: &str| KeyPosition {
+            id: id.to_string(),
+            font_color: Some(" \t ".to_string()),
+            active_font_color: Some(String::new()),
+            ..KeyPosition::default()
+        };
+        let data = normalize_state(AppStoreData {
+            key_positions: crate::models::KeyPositions::from([(
+                "custom".to_string(),
+                vec![blank_position("key-id")],
+            )]),
+            stat_positions: crate::models::StatPositions::from([(
+                "custom".to_string(),
+                vec![StatPosition {
+                    stat_type: StatType::Kps,
+                    position: blank_position("stat-id"),
+                }],
+            )]),
+            graph_positions: crate::models::GraphPositions::from([(
+                "custom".to_string(),
+                vec![GraphPosition {
+                    stat_type: GraphStatType::Kps,
+                    graph_type: GraphType::Line,
+                    graph_speed: 1000,
+                    graph_color: "graph".to_string(),
+                    show_avg_line: false,
+                    position: blank_position("graph-id"),
+                }],
+            )]),
+            knob_positions: crate::models::KnobPositions::from([(
+                "custom".to_string(),
+                vec![KnobPosition {
+                    axis_id: "axis".to_string(),
+                    sensitivity: 1.0,
+                    reverse: false,
+                    position: blank_position("knob-id"),
+                }],
+            )]),
+            ..AppStoreData::default()
+        });
+
+        for position in [
+            &data.key_positions["custom"][0],
+            &data.stat_positions["custom"][0].position,
+            &data.graph_positions["custom"][0].position,
+            &data.knob_positions["custom"][0].position,
+        ] {
+            assert!(position.font_color.is_none());
+            assert!(position.active_font_color.is_none());
+        }
+    }
+
+    #[test]
     fn normalize_state_keeps_single_count_and_separates_any_all_counters() {
         let keys = vec![
             KeySlot::Single("A".to_string()),
@@ -3207,6 +3856,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: Some("@font-face {}".to_string()),
+                weight_ranges: Vec::new(),
             },
             CustomFont {
                 id: "local-font".to_string(),
@@ -3216,6 +3866,7 @@ mod tests {
                 enabled: true,
                 local_path: Some("relative/font.ttf".to_string()),
                 css_content: None,
+                weight_ranges: Vec::new(),
             },
         ];
         data.knob_positions.insert(
@@ -3441,6 +4092,7 @@ mod tests {
             enabled: true,
             local_path: None,
             css_content: Some("@font-face { font-family: Custom; }".to_string()),
+            weight_ranges: Vec::new(),
         });
         expected.tab_css_overrides.insert(
             "custom-tab".to_string(),
@@ -4147,6 +4799,7 @@ mod tests {
             enabled: true,
             local_path: Some(font_path.to_string_lossy().to_string()),
             css_content: None,
+            weight_ranges: Vec::new(),
         };
         let mut recoverable_font = serde_json::to_value(&valid_font).unwrap();
         recoverable_font
@@ -4189,6 +4842,43 @@ mod tests {
             SoundLibraryEntry::default()
         );
         assert!(!loaded.data.sound_library.contains_key("relative.wav"));
+    }
+
+    #[test]
+    fn invalid_font_weight_ranges_are_reset_without_removing_the_font() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-font-weight-range-recovery-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture.as_object_mut().unwrap().insert(
+            "fontSettings".to_string(),
+            json!({
+                "customFonts": [{
+                    "id": "recoverable-web-font",
+                    "type": "web",
+                    "name": "Recoverable Web Font",
+                    "displayName": "Recoverable Web Font",
+                    "enabled": true,
+                    "cssContent": "@font-face { font-family: 'Recoverable Web Font'; src: url(font.woff2); }",
+                    "weightRanges": [{ "min": 900, "max": 100 }]
+                }]
+            }),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.repaired);
+        assert_eq!(loaded.data.font_settings.custom_fonts.len(), 1);
+        assert_eq!(
+            loaded.data.font_settings.custom_fonts[0].id,
+            "recoverable-web-font"
+        );
+        assert!(loaded.data.font_settings.custom_fonts[0]
+            .weight_ranges
+            .is_empty());
     }
 
     #[test]
@@ -4598,6 +5288,7 @@ mod tests {
             enabled: true,
             local_path: Some(absolute_fixture_path("font-sentinel.ttf")),
             css_content: None,
+            weight_ranges: Vec::new(),
         };
 
         let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
@@ -4742,6 +5433,7 @@ mod tests {
             enabled: true,
             local_path: Some(missing_path.to_string_lossy().to_string()),
             css_content: Some(css_content),
+            weight_ranges: Vec::new(),
         });
 
         assert!(migrate_local_fonts_to_app_data(&app_data_dir, &mut data));
@@ -4881,6 +5573,7 @@ mod tests {
             enabled: true,
             local_path: Some(foreign.to_string()),
             css_content: None,
+            weight_ranges: Vec::new(),
         });
 
         // store만 복사된 상태 — 로드 체인 순서(재귀화 → 폰트 마이그레이션) 재현
@@ -4922,6 +5615,7 @@ mod tests {
             enabled: true,
             local_path: Some(missing_local.to_string_lossy().into_owned()),
             css_content: None,
+            weight_ranges: Vec::new(),
         });
 
         // 마커가 있어도 현재 루트 하위의 단순 누락 참조는 기존대로 비활성화
@@ -4986,6 +5680,7 @@ mod tests {
                 r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\fonts\p.ttf".to_string(),
             ),
             css_content: None,
+            weight_ranges: Vec::new(),
         })
         .unwrap();
         font.as_object_mut()

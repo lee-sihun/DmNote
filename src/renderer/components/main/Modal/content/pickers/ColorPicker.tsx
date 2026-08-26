@@ -34,6 +34,7 @@ import {
   type GradientSpec,
 } from '@src/types/color';
 import { ColorSwatchButton, ColorSwatchSurface } from './ColorSwatch';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 
 type ColorValue = string | GradientColor;
 type PaletteValue = ColorValue | GradientSpecColor;
@@ -59,6 +60,8 @@ interface ColorPickerWrapperProps {
   onColorChangeComplete?: (color: ColorValue) => void;
   onClose?: () => void;
   solidOnly?: boolean;
+  /** 색 알파 UI 숨김 - 외부 투명도 조절기가 알파를 대신하는 단색 형식용 */
+  hideColorAlpha?: boolean;
   /** 상태 스위치 아래에 삽입되는 커스텀 헤더 (그라데이션 스톱 에디터) */
   headerSlot?: React.ReactNode;
   /** 팔레트 아래 삽입되는 커스텀 푸터 (형식 셀렉트 바) */
@@ -123,6 +126,7 @@ const ColorPickerWrapper = ({
   onColorChangeComplete,
   onClose,
   solidOnly = false,
+  hideColorAlpha = false,
   headerSlot = undefined,
   footerSlot = undefined,
   gradientSpec = undefined,
@@ -310,7 +314,15 @@ const ColorPickerWrapper = ({
     onClose?.();
   };
 
+  // undo/redo 반영은 진행 중 드래그를 프리미티브가 커밋 없이 끊는다 - complete가
+  // 오지 않으므로 여기서 드래그 잠금을 풀어 아래 동기화가 canonical을 따르게
+  const historyTick = useCommittedApplyStore((state) => state.historyTick);
+  const historyTickRef = useRef(historyTick);
   useEffect(() => {
+    if (historyTickRef.current !== historyTick) {
+      historyTickRef.current = historyTick;
+      isDraggingRef.current = false;
+    }
     // 드래그 중에는 외부 color prop 동기화 건너뜀
     if (isDraggingRef.current) {
       return;
@@ -381,7 +393,7 @@ const ColorPickerWrapper = ({
     }
 
     prevColorRef.current = color;
-  }, [color, gradientSelected, setSelectedColor]);
+  }, [color, gradientSelected, setSelectedColor, historyTick]);
 
   const [inputValue, setInputValue] = useState<string>(() =>
     selectedColor.hex
@@ -795,6 +807,9 @@ const ColorPickerWrapper = ({
     resolvedOpacityPercent !== null &&
     typeof onOpacityPercentChange === 'function';
 
+  // 투명도 조절기의 접근성 이름 - 색 알파 슬라이더와 역할이 구분되게
+  const opacityLabelText = opacityPercentLabel || 'Opacity';
+
   const resolvedOpacitySolid = resolvedOpacityPercent?.solid;
   const resolvedOpacityTop = resolvedOpacityPercent?.top;
   const resolvedOpacityBottom = resolvedOpacityPercent?.bottom;
@@ -832,7 +847,7 @@ const ColorPickerWrapper = ({
     showOpacityControl && resolvedOpacityPercent
       ? {
           value: resolvedOpacityPercent[target],
-          label: opacityPercentLabel,
+          label: opacityLabelText,
           isMixed: opacityMixedFor(target),
           onPreview: (percent) => previewOpacityPercent(target, percent),
           onCommit: (percent) => commitOpacityPercent(target, percent),
@@ -846,7 +861,7 @@ const ColorPickerWrapper = ({
   const solidPercentControl: PercentInputProps | undefined = solidOnly
     ? {
         value: Math.round(alpha * 100),
-        label: opacityPercentLabel ?? t('propertiesPanel.opacity'),
+        label: t('colorPicker.alpha'),
         isMixed: opacityMixedFor('solid'),
         disabled: alphaEditingDisabled,
         onEditStart: startAlphaEdit,
@@ -916,7 +931,9 @@ const ColorPickerWrapper = ({
           onChange={handleChange}
           onChangeComplete={handleChangeComplete}
         />
-        {solidOnly && (
+        {/* 단색 형식에서 투명도 조절기가 알파를 대신하면 색 알파 슬라이더 숨김.
+            그라데이션 형식에서는 색 알파가 스톱 알파라 배율과 역할이 다르다 */}
+        {solidOnly && !hideColorAlpha && (
           <AlphaSlider
             color={selectedColor}
             disabled={alphaEditingDisabled}
@@ -933,6 +950,7 @@ const ColorPickerWrapper = ({
         {showOpacityControl && (
           <AlphaSlider
             color={opacitySliderColor}
+            ariaLabel={opacityLabelText}
             onChange={(c: ColorObject) => {
               previewOpacityPercent(
                 opacitySliderTarget,
@@ -949,7 +967,7 @@ const ColorPickerWrapper = ({
       {solidOnly || mode === MODES.solid ? (
         <Input
           value={inputValue}
-          ariaLabel={t('noteColor.color')}
+          ariaLabel={t('colorPicker.hex')}
           mixed={hexMixed}
           disabled={rgbEditingDisabled}
           onValueChange={handleInputChange}
@@ -958,7 +976,7 @@ const ColorPickerWrapper = ({
           onValueCancel={cancelSolidInput}
           previewColor={selectedColor.hex}
           alpha={
-            solidOnly
+            solidOnly && !hideColorAlpha
               ? alpha
               : showOpacityControl && resolvedOpacityPercent
               ? clampOpacityPercent(resolvedOpacityPercent.solid) / 100

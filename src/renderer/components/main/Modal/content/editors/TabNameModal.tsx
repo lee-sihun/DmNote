@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import { usePressAction } from '@hooks/usePressAction';
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from '../../Modal';

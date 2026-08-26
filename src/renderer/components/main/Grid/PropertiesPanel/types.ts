@@ -9,9 +9,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
-  EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
-  EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
@@ -157,7 +155,11 @@ export interface StyleTabContentProps {
     field: 'dx' | 'dy' | 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  // gestureId를 공유하면 연속 커밋(폰트 변경 + 굵기 재선택)이 한 undo 단계가 된다
+  onElementPropertyCommit?: (
+    patch: EditorElementPropertyPatchV1,
+    options?: { gestureId?: string },
+  ) => void;
   onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
   // 편집 대상 슬롯 (칩 에디터용)
   keySlot?: KeySlot | null;
@@ -186,8 +188,6 @@ export interface StyleTabContentProps {
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
-  onFontColorPreview?: (patch: EditorFontColorPropertyPatchV1) => void;
-  onFontColorCommit?: (patch: EditorFontColorPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
@@ -217,8 +217,8 @@ export interface CounterTabContentProps {
   onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
   onCounterTypographyCommit?: (
     patch: EditorCounterTypographyPropertyPatchV1,
+    options?: { gestureId?: string },
   ) => void;
-  onCounterStrokeCommit?: (patch: EditorCounterStrokePropertyPatchV1) => void;
   onCounterFillCommit?: (patch: EditorCounterFillPropertyPatchV1) => void;
   onCounterAnimationPresetCommit?: (
     intent: EditorCounterAnimationPresetIntentV1,

@@ -11,9 +11,15 @@ import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessio
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import { imageApi } from '@api/modules/resourceApi';
+import {
+  useEditStatePreviewPublisher,
+  type EditStateAnchor,
+} from '@stores/grid/useEditStatePreviewStore';
 
 interface ImagePickerProps {
   open: boolean;
+  /** 캔버스 상태 프리뷰 대상 - 지정 시 열려 있는 동안 편집 상태를 발행 */
+  previewAnchor?: EditStateAnchor | null;
   referenceRef: React.RefObject<HTMLElement>;
   panelElement?: HTMLElement | null;
   idleImage?: string;
@@ -45,6 +51,7 @@ const STATE_MODES = {
 
 const ImagePicker = ({
   open,
+  previewAnchor = null,
   referenceRef,
   panelElement = null,
   idleImage,
@@ -74,6 +81,8 @@ const ImagePicker = ({
   const loadingImageRef = useRef(false);
   const canBindCompletion = useEditSessionCompletionGuard(completionBinding);
   const effectiveMode = showActiveState ? mode : STATE_MODES.idle;
+  // 열려 있는 동안 편집 상태를 캔버스 프리뷰로 발행
+  useEditStatePreviewPublisher(open ? previewAnchor : null, effectiveMode);
 
   useEffect(() => {
     if (!showActiveState) setMode(STATE_MODES.idle);

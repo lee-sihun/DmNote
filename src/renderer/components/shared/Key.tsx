@@ -1,16 +1,13 @@
 'use no memo';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { getKeySignal } from '@stores/signals/keySignals';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import { useSignals } from '@preact/signals-react/runtime';
 import { isMac } from '@utils/core/platform';
 import { useDraggable } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
-import {
-  createDefaultCounterSettings,
-  normalizeCounterSettings,
-  type KeyCounterSettings,
-} from '@src/types/key/keys';
+import type { KeyCounterSettings } from '@src/types/key/keys';
+import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -20,7 +17,10 @@ import {
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
+import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
+import KeyLabel from '@components/shared/KeyLabel';
+import { useCounterAxisAnchor } from '@hooks/shared/useCounterAxisAnchor';
 
 // DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
 interface KeyPosition extends KeyElementPosition {
@@ -114,9 +114,7 @@ const DraggableKey = React.memo(
     const displayName = keyName;
     const { dx, dy, width, height = 60, className, counter } = position;
 
-    const counterSettings = normalizeCounterSettings(
-      counter ?? createDefaultCounterSettings(),
-    );
+    const counterSettings = useCounterSettings(counter);
 
     const showInsideCounter =
       counterEnabled &&
@@ -143,9 +141,34 @@ const DraggableKey = React.memo(
       elementId,
       isSelected,
     );
-    const previewActive = previewSession?.stateMode === 'active';
+    // 상태 프리뷰는 전용 스토어가 유일한 원천 - 단색·그림자·이미지 편집도
+    // 같은 규칙으로 대기/입력 시각을 뒤집는다 (세션은 spec 페인트 전용)
+    const previewActive = useEditStatePreviewActive(
+      previewAnchorKind,
+      elementId,
+      isSelected,
+    );
     const previewFillSpec =
       previewSession?.surface === 'counterFill' ? previewSession.spec : null;
+
+    const keyRootRef = useRef<HTMLElement | null>(null);
+    const anchorOrigin = { x: position.dx, y: position.dy };
+    useCounterAxisAnchor(
+      previewSession,
+      keyRootRef,
+      counterPreviewValue,
+      '.counter',
+      'counterFill',
+      anchorOrigin,
+    );
+    useCounterAxisAnchor(
+      previewSession,
+      keyRootRef,
+      position.displayText || displayName,
+      '[data-key-label]',
+      'font',
+      anchorOrigin,
+    );
 
     const isSelectionMode = isSelected;
 
@@ -260,9 +283,8 @@ const DraggableKey = React.memo(
     const renderDx = draggable.dx;
     const renderDy = draggable.dy;
 
-    const shouldPromoteTransformLayer =
-      isDraggingOrResizing || isViewportTransforming;
-
+    // 뷰포트 이동은 그리드 부모가 이미 합성 레이어를 소유
+    // 키까지 중첩 승격하면 DOM 글자가 흐리게 래스터화됨
     const previewPosition: KeyPosition = {
       ...position,
       dx: renderDx,
@@ -277,12 +299,20 @@ const DraggableKey = React.memo(
           ? { activeBorderGradient: previewSession.spec }
           : { borderGradient: previewSession.spec }
         : {}),
+      ...(previewSession?.surface === 'font'
+        ? previewActive
+          ? { activeFontGradient: previewSession.spec }
+          : { fontGradient: previewSession.spec }
+        : {}),
     };
     const {
       keyStyle: computedKeyStyle,
       borderRingStyle,
       imageStyle,
       textStyle,
+      labelPaintStyle,
+      labelHasGradient,
+      labelMetricsDep,
       currentImageSrc,
       hasCurrentImage,
       labelText,
@@ -291,10 +321,16 @@ const DraggableKey = React.memo(
       active: previewActive,
       label: displayName,
     });
+    // 그리드(스케일 레이어) 안에서는 승격 금지 - WebKit은 합성 자식이 하나라도
+    // 생기면 스케일 컨테이너 자체를 레이어로 만들어 내용 전체가 흐려진다.
+    // 이동 키는 매 프레임 손상 영역만 재페인트하는 쪽이 선명하고 충분히 싸다
     const keyStyle: React.CSSProperties = {
       ...computedKeyStyle,
       transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`,
-      willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
+      willChange: 'auto',
+      backfaceVisibility: 'visible',
+      transformStyle: 'flat',
+      contain: 'layout style',
       zIndex: position.zIndex ?? zIndex,
       cursor: undefined,
     };
@@ -315,6 +351,9 @@ const DraggableKey = React.memo(
           count={displayValue}
           labelText={labelText}
           textStyle={textStyle}
+          labelPaintStyle={labelPaintStyle}
+          labelHasGradient={labelHasGradient}
+          labelMetricsDep={labelMetricsDep}
           active={previewActive}
           counterSettings={
             previewFillSpec
@@ -329,6 +368,7 @@ const DraggableKey = React.memo(
     };
 
     const attachRef = (node: HTMLElement | null) => {
+      keyRootRef.current = node;
       if (!isSelectionMode) {
         draggable.ref(node);
       }
@@ -372,10 +412,15 @@ const DraggableKey = React.memo(
           renderInsideCounterPreview()
         ) : (
           <div
-            className="flex items-center justify-center h-full font-bold text-safe-inline"
+            className="flex items-center justify-center h-full font-bold"
             style={textStyle}
           >
-            {labelText}
+            <KeyLabel
+              text={labelText}
+              paintStyle={labelPaintStyle}
+              hasGradient={labelHasGradient}
+              metricsDep={labelMetricsDep}
+            />
           </div>
         )}
       </div>
@@ -401,6 +446,9 @@ export const Key = React.memo(function Key({
     borderRingStyle,
     imageStyle,
     textStyle,
+    labelPaintStyle,
+    labelHasGradient,
+    labelMetricsDep,
     inactiveImageSrc,
     activeImageSrc,
     currentImageSrc,
@@ -418,20 +466,19 @@ export const Key = React.memo(function Key({
     warmupImageSource(activeImageSrc);
   }, [inactiveImageSrc, activeImageSrc]);
 
+  const counterSettings = useCounterSettings(position?.counter);
+
   if (isTransparent) return null;
 
-  const counterSettings = normalizeCounterSettings(
-    position?.counter ?? createDefaultCounterSettings(),
-  );
   const showInsideCounter =
     counterEnabled &&
     counterSettings.enabled &&
     counterSettings.placement === 'inside';
 
+  // 시그널 객체만 넘기고 .value는 읽지 않음 — 카운터 갱신이 Key 전체 리렌더를 만들지 않도록
   const counterSignal = showInsideCounter
     ? getKeyCounterSignal(mode ?? '', globalKey)
     : undefined;
-  const counterValue = counterSignal?.value ?? 0;
 
   return (
     <div
@@ -455,21 +502,29 @@ export const Key = React.memo(function Key({
           style={imageStyle}
           draggable={false}
         />
-      ) : showInsideCounter ? (
+      ) : showInsideCounter && counterSignal ? (
         <InsideCounterLayout
-          count={counterValue}
+          countSignal={counterSignal}
           labelText={labelText}
           textStyle={textStyle}
+          labelPaintStyle={labelPaintStyle}
+          labelHasGradient={labelHasGradient}
+          labelMetricsDep={labelMetricsDep}
           active={active}
           counterSettings={counterSettings}
           useInlineStyles={position.useInlineStyles === true}
         />
       ) : (
         <div
-          className="flex items-center justify-center h-full font-bold text-safe-inline"
+          className="flex items-center justify-center h-full font-bold"
           style={textStyle}
         >
-          {labelText}
+          <KeyLabel
+            text={labelText}
+            paintStyle={labelPaintStyle}
+            hasGradient={labelHasGradient}
+            metricsDep={labelMetricsDep}
+          />
         </div>
       )}
     </div>

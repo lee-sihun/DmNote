@@ -3,6 +3,7 @@ import React from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import { getKeySignal } from '@stores/signals/keySignals';
+import { resolveCounterSettings } from '@hooks/overlay/useCounterSettings';
 import OutsideCounter from './OutsideCounter';
 
 interface KeyPosition {
@@ -58,6 +59,14 @@ const KeyCounterLayer = React.memo(
         {keys.map((key: string, index: number) => {
           const position = positions[index];
           if (!position || position.hidden) return null;
+          // inside 배치는 Key가 직접 그림 — outside만 마운트해 불필요한 시그널 구독 제거
+          const counterSettings = resolveCounterSettings(position.counter);
+          if (
+            !counterSettings.enabled ||
+            counterSettings.placement !== 'outside'
+          ) {
+            return null;
+          }
           return (
             <KeyCounter
               key={`${mode}-${key}-${index}`}

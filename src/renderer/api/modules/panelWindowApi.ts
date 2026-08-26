@@ -26,6 +26,9 @@ export const panelWindowApi = {
   // 저장된 위치·크기를 버리고 기본 배치(메인 창 옆)로 되돌린다.
   // 창이 없으면 저장값만 비운다 - 창을 새로 보이거나 포커스를 옮기지 않는다
   resetPosition: () => invoke<void>('panel_window_reset_position'),
+  // 실제 mouseDown 소유 창과 분리 창의 네이티브 커서를 Rust에서 함께 전환
+  setDragCursor: (active: boolean) =>
+    invoke<void>('panel_window_set_drag_cursor', { active }),
   // 헤더 드래그 세션 컨텍스트 - 도크 존 판정 기준 좌표. content 원점은 백엔드 실측
   // (프레임리스+그림자 창의 인셋을 렌더러의 outerWidth-innerWidth로는 못 잡는다 - WebView2에선 0)
   dragContext: () =>

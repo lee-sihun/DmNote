@@ -57,7 +57,6 @@ export const createPluginApiProxy = (
   const defineElement = createDefineElement({
     pluginId,
     api: sourceApi,
-    namespacedStorage,
     registerCleanup,
     wrapFunctionWithContext: wrapWithContext,
     isReloading,

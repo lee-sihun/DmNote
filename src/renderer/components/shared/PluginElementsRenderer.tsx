@@ -25,6 +25,7 @@ import type {
 import { invokeExposedAction } from '@utils/displayElementActions';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { obsApi } from '@api/modules/obsApi';
+import { noteMainPluginsReady } from '@plugins/runtime/pluginRuntimeReadiness';
 import {
   useGridSelectionStore,
   SelectedElement,
@@ -191,7 +192,12 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
 
     const unsubscribe = window.api.bridge.on<{
       elements: PluginDisplayElementInternal[];
+      ready?: boolean;
     }>('plugin:displayElements:sync', (data) => {
+      // 메인이 요소 권위 - 준비 완료를 받아야 오버레이 리빌 게이트가 열린다
+      if (data?.ready) {
+        noteMainPluginsReady();
+      }
       if (data?.elements) {
         // Main에서 온 데이터와 Overlay의 기존 state를 병합
         const currentElements =

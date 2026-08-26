@@ -12,16 +12,13 @@ import {
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
   isNotePaintPropertyPatchV1,
+  mirrorBodyPaintToGlow,
   projectNotePaintPatch,
 } from '@src/types/key/notePaint';
 import {
   isCounterFillPropertyPatchV1,
   projectCounterFillPatch,
 } from '@src/types/key/counterFill';
-import {
-  isFontColorPropertyPatchV1,
-  projectFontColorPatch,
-} from '@src/types/key/fontColor';
 import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
@@ -64,6 +61,10 @@ import type {
   EditorPatchV1,
   EditorLegacyPatchV1,
 } from '@src/types/editor';
+import {
+  implicitCounterFontBold,
+  implicitElementFontBold,
+} from '@utils/core/fontWeights';
 
 export type EditorApplyReason =
   | 'initial'
@@ -678,9 +679,25 @@ const applySemanticOps = (
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
+              // 백엔드와 같은 암묵 Bold 고정 (fontWeights.implicitCounterFontBold)
               return {
                 ...position,
-                counter: { ...counter, fontWeight: op.patch.value },
+                counter: {
+                  ...counter,
+                  fontWeight: op.patch.value,
+                  ...(typeof counter?.fontBold !== 'boolean'
+                    ? { fontBold: implicitCounterFontBold(counter?.fontWeight) }
+                    : {}),
+                },
+              };
+            }
+            if (op.patch.property === 'counterFontBold') {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, fontBold: op.patch.value },
               };
             }
             if (op.patch.property === 'counterFontItalic') {
@@ -728,25 +745,6 @@ const applySemanticOps = (
                 },
               };
             }
-            if (
-              op.patch.property === 'counterStrokeIdle' ||
-              op.patch.property === 'counterStrokeActive'
-            ) {
-              const counter = position.counter as
-                | Record<string, unknown>
-                | undefined;
-              const stroke = (counter?.stroke ?? {}) as Record<string, unknown>;
-              return {
-                ...position,
-                counter: {
-                  ...counter,
-                  stroke:
-                    op.patch.property === 'counterStrokeIdle'
-                      ? { ...stroke, idle: op.patch.value }
-                      : { ...stroke, active: op.patch.value },
-                },
-              };
-            }
             if (op.patch.property === 'counterAnimationPreset') {
               const counter = position.counter as
                 | Record<string, unknown>
@@ -783,7 +781,17 @@ const applySemanticOps = (
               };
             }
             if (op.patch.property === 'fontWeight') {
-              return { ...position, fontWeight: op.patch.value };
+              // 백엔드와 같은 암묵 Bold 고정 (fontWeights.implicitElementFontBold)
+              return {
+                ...position,
+                fontWeight: op.patch.value,
+                ...(position.fontBold == null
+                  ? { fontBold: implicitElementFontBold(position.fontWeight) }
+                  : {}),
+              };
+            }
+            if (op.patch.property === 'fontBold') {
+              return { ...position, fontBold: op.patch.value };
             }
             if (op.patch.property === 'fontItalic') {
               return { ...position, fontItalic: op.patch.value };
@@ -804,22 +812,27 @@ const applySemanticOps = (
               op.patch.property === 'backgroundPaint' ||
               op.patch.property === 'activeBackgroundPaint' ||
               op.patch.property === 'borderPaint' ||
-              op.patch.property === 'activeBorderPaint'
+              op.patch.property === 'activeBorderPaint' ||
+              op.patch.property === 'fontPaint' ||
+              op.patch.property === 'activeFontPaint'
             ) {
               const field = op.patch.property;
               const paint = op.patch.value;
               const {
                 active,
+                surface,
                 colorField,
                 gradientField,
                 activeColorField,
                 activeGradientField,
               } = paintPropertyFields(field);
+              // 물질화 대상 - active 쌍을 가진 요소 (font는 키만)
+              const materializes =
+                surface === 'font'
+                  ? op.elementType === 'key'
+                  : op.elementType === 'key' || op.elementType === 'knob';
               const preservation: Record<string, unknown> = {};
-              if (
-                !active &&
-                (op.elementType === 'key' || op.elementType === 'knob')
-              ) {
+              if (!active && materializes) {
                 const inherited = inheritedPaintMaterialization(
                   {
                     color:
@@ -837,7 +850,9 @@ const applySemanticOps = (
                   },
                 );
                 if (inherited) {
-                  preservation[activeColorField] = inherited.color;
+                  if (inherited.color != null) {
+                    preservation[activeColorField] = inherited.color;
+                  }
                   if (inherited.gradient) {
                     preservation[activeGradientField] = inherited.gradient;
                   }
@@ -868,18 +883,12 @@ const applySemanticOps = (
                 ...projectCounterFillPatch(position as never, op.patch),
               };
             }
-            if (isFontColorPropertyPatchV1(op.patch)) {
+            if (isNotePaintPropertyPatchV1(op.patch)) {
+              // position 전달 - {opacity} 단독의 sibling shadow 재계산 (§9-5)
               return {
                 ...position,
-                ...projectFontColorPatch(
-                  position as never,
-                  op.elementType,
-                  op.patch,
-                ),
+                ...projectNotePaintPatch(op.patch, position as never),
               };
-            }
-            if (isNotePaintPropertyPatchV1(op.patch)) {
-              return { ...position, ...projectNotePaintPatch(op.patch) };
             }
             if (op.patch.property === 'displayText') {
               return { ...position, displayText: op.patch.value };
@@ -943,6 +952,13 @@ const applySemanticOps = (
                 ...position,
                 noteGlowEnabled: op.patch.value,
               };
+            }
+            if (op.patch.property === 'noteGlowSyncPaint') {
+              // 켜는 순간 본체 페인트를 글로우로 복사 (Rust 적용기와 동일)
+              const next = { ...position, noteGlowSyncPaint: op.patch.value };
+              return op.patch.value
+                ? { ...next, ...mirrorBodyPaintToGlow(next as never) }
+                : next;
             }
             if (op.patch.property === 'noteAlignment') {
               return { ...position, noteAlignment: op.patch.value };

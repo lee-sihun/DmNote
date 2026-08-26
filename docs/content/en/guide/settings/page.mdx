@@ -106,14 +106,25 @@ Load JavaScript plugins to extend program functionality.
   Started](/docs/getting-started).
 </Callout>
 
-## Reset Settings
+## Reset Data
 
-To reset all settings to defaults:
+This resets keys and placements, saved plugin display-element placements,
+counters, custom tabs, layer groups, per-tab note and CSS overrides, and note,
+background, and custom CSS visual options.
 
-1. Click the **Reset Settings** button.
+Installed plugins and their non-layout storage, language, shortcuts, and
+update or startup options are not removed.
+
+Elements placed by the user through `defineElement` are removed from storage
+and the grid. An element that plugin startup code creates directly with the
+low-level `displayElement.add()` API is not a saved placement. Because the
+plugin remains installed, it can remain or be created again immediately or
+after an app restart.
+
+1. Click the **Reset Data** button.
 2. Select **Confirm** in the confirmation message.
 
 <Callout type="warning">
-  Settings reset cannot be undone. Save important settings as presets
+  Resetting data cannot be undone. Save important settings as presets
   beforehand.
 </Callout>

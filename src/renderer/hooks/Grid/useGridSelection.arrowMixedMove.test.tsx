@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   runMixedGestureIntent: vi.fn((_options: unknown) =>
     Promise.resolve({ committed: true, satisfied: true }),
   ),
+  runMixedOpsIntent: vi.fn((_options: unknown) => Promise.resolve()),
   runMixedDeleteIntent: vi.fn(() => Promise.resolve()),
   commitPatch: vi.fn(() => Promise.resolve()),
   deletePluginElements: vi.fn(),
@@ -64,6 +65,10 @@ vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
   runMixedGestureElementIntent: (options: unknown) => {
     mocks.order.push('settle');
     return mocks.runMixedGestureIntent(options);
+  },
+  runMixedElementOpsIntent: (options: unknown) => {
+    mocks.order.push('settlePluginOnly');
+    return mocks.runMixedOpsIntent(options);
   },
   runMixedElementDeleteIntent: mocks.runMixedDeleteIntent,
 }));
@@ -151,6 +156,7 @@ describe('useGridSelection 화살표 혼합 이동 staging 순서', () => {
     mocks.order.length = 0;
     mocks.lastAck = null;
     mocks.runMixedGestureIntent.mockClear();
+    mocks.runMixedOpsIntent.mockClear();
     mocks.runMixedDeleteIntent.mockClear();
     mocks.commitPatch.mockClear();
     mocks.deletePluginElements.mockClear();
@@ -271,7 +277,7 @@ describe('useGridSelection 화살표 혼합 이동 staging 순서', () => {
     expect(mocks.cancelUncommittedMixedGesture).toHaveBeenCalledWith(gestureId);
   });
 
-  it('plugin 전용 이동은 staging 없이 기존 debounce 경로를 유지한다', async () => {
+  it('plugin 전용 이동도 staging 뒤 plugin-only transaction으로 정산한다', async () => {
     await act(async () => {
       useGridSelectionStore
         .getState()
@@ -280,8 +286,16 @@ describe('useGridSelection 화살표 혼합 이동 staging 순서', () => {
 
     await act(async () => api.moveSelectedElements(1, 0, gestureId));
 
-    expect(mocks.beginMixedGesture).not.toHaveBeenCalled();
-    expect(mocks.cancelUncommittedMixedGesture).not.toHaveBeenCalled();
+    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(gestureId, [
+      'plugin-a',
+    ]);
+    expect(mocks.runMixedOpsIntent).toHaveBeenCalledWith({
+      gestureId,
+      pluginIds: ['plugin-a'],
+      ops: [],
+      receipt: null,
+    });
+    expect(mocks.cancelUncommittedMixedGesture).toHaveBeenCalledWith(gestureId);
     expect(mocks.rotateSession).toHaveBeenCalledWith('plugin-a', gestureId);
   });
 

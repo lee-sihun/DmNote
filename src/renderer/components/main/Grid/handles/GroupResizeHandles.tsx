@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { isMac } from '@utils/core/platform';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -497,7 +498,10 @@ const GroupResizeHandles = ({
       // === 스마트 가이드 스냅 적용 (그룹 바운딩 박스 기준) ===
       const smartGuidesStore = useSmartGuidesStore.getState();
       const gridSettings = useSettingsStore.getState().gridSettings;
-      const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
+      // 플랫폼 primary modifier로 스마트 스냅 일시 해제 (그리드 스냅은 유지)
+      const suppressSmartSnap = isMac() ? moveEvent.metaKey : moveEvent.ctrlKey;
+      const alignmentGuidesEnabled =
+        gridSettings?.alignmentGuides !== false && !suppressSmartSnap;
       const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
       const sizeMatchGuidesEnabled = gridSettings?.sizeMatchGuides !== false;
 
@@ -505,7 +509,9 @@ const GroupResizeHandles = ({
       // 선택 id와 가이드 bounds id가 같은 생성자(position.id)를 쓰므로 그대로 넘긴다
       const selectedIds = selectedElements.map((el) => el.id);
 
-      if (getOtherElements && alignmentGuidesEnabled) {
+      if (suppressSmartSnap) {
+        smartGuidesStore.clearGuides();
+      } else if (getOtherElements && alignmentGuidesEnabled) {
         const otherElements = getOtherElements(selectedIds);
 
         // 그룹 바운딩 박스를 기준으로 스냅 계산

@@ -52,6 +52,20 @@ export const clampGridPosition = (value: number): number => {
   return Math.min(Math.max(value, MIN_GRID_POSITION), MAX_GRID_POSITION);
 };
 
+// 소수 CSS 좌표에서 합성 레이어가 재샘플링되지 않도록 물리 픽셀에 정렬
+export const snapGridPositionToDevicePixel = (
+  value: number,
+  devicePixelRatio = typeof window === 'undefined'
+    ? 1
+    : window.devicePixelRatio,
+): number => {
+  const pixelRatio =
+    Number.isFinite(devicePixelRatio) && devicePixelRatio > 0
+      ? devicePixelRatio
+      : 1;
+  return Math.round(value * pixelRatio) / pixelRatio;
+};
+
 export const useGridViewStore = create<GridViewStore>()(
   persist(
     (set, get) => ({

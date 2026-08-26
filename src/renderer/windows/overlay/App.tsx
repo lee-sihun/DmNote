@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   currentMonitor,
   getCurrentWindow,
@@ -15,6 +15,7 @@ import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
 import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransition';
+import { useOverlayReveal } from '@hooks/overlay/useOverlayReveal';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { obsApi } from '@api/modules/obsApi';
 import { overlayApi } from '@api/modules/overlayApi';
@@ -839,6 +840,9 @@ export default function App() {
     updateTrackLayouts(webglTracks);
   }, [webglTracks, updateTrackLayouts]);
 
+  // 응답 대기 중인 resize 수 - 초기 리빌이 창 리사이즈보다 먼저 일어나지 않게 한다
+  const [resizeInFlight, setResizeInFlight] = useState(0);
+
   // 이전 resize 값을 추적하여 실제로 변경되었을 때만 resize 호출
   const lastResizeParams = useRef<{
     width: number;
@@ -895,6 +899,7 @@ export default function App() {
       minY: currentMinY,
     };
 
+    setResizeInFlight((count) => count + 1);
     overlayApi
       .resize({
         width: totalWidth,
@@ -912,8 +917,14 @@ export default function App() {
         console.error('Failed to resize overlay window', error);
         // 실패한 요청이 기준선으로 남으면 같은 크기 재시도가 영구히 차단된다
         lastResizeParams.current = null;
+      })
+      .finally(() => {
+        setResizeInFlight((count) => Math.max(0, count - 1));
       });
   }, [bounds, contentSize, topOffset, overlayAnchor, overlayPadding]);
+
+  // 모든 요소가 자리 잡은 뒤 한 번에 공개 - 플러그인 요소가 늦게 뜨며 생기던 덜컥거림 제거
+  const revealed = useOverlayReveal(isBootstrapped, resizeInFlight > 0);
 
   return (
     <OverlayScene
@@ -928,6 +939,7 @@ export default function App() {
       noteEffect={noteEffect}
       contentSize={contentSize}
       contentFade={contentFade}
+      revealed={revealed}
       noteSettings={noteSettings}
       webglTracks={webglTracks}
       notesRef={notesRef}

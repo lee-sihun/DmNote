@@ -47,9 +47,7 @@ import type {
   EditorCounterBooleanPropertyPatchV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
-  EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
-  EditorFontColorPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
@@ -74,7 +72,7 @@ import type { KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import { projectPaintDescriptor } from '@src/types/color';
+import { paintPropertyFields, projectPaintDescriptor } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
   isNotePaintPropertyPatchV1,
@@ -85,13 +83,13 @@ import {
   projectCounterFillPatch,
 } from '@src/types/key/counterFill';
 import {
-  isFontColorPropertyPatchV1,
-  projectFontColorPatch,
-} from '@src/types/key/fontColor';
-import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import {
+  implicitCounterFontBold,
+  implicitElementFontBold,
+} from '@utils/core/fontWeights';
 
 // 메뉴·확인 모달처럼 대상 확정과 실행 사이가 긴 파괴적 액션의 semantic op.
 // 대상은 {type, id}로 받고, eager 반영과 wire 생성 각각이 실행 시점의
@@ -656,6 +654,33 @@ export const rebindKeySlotById = (
     });
 };
 
+const POSITION_FIELD_BY_TYPE: Record<NativeElementType, string> = {
+  key: 'keyPositions',
+  stat: 'statPositions',
+  graph: 'graphPositions',
+  knob: 'knobPositions',
+};
+
+// 현재 문서의 요소 레코드 (없으면 null)
+const findCurrentPosition = (
+  document: Record<string, unknown> | null | undefined,
+  elementType: NativeElementType,
+  id: string,
+): (Record<string, unknown> & { id: string }) | null => {
+  const record = document?.[POSITION_FIELD_BY_TYPE[elementType]];
+  if (!record || typeof record !== 'object') return null;
+  return (
+    Object.values(record as Record<string, unknown>)
+      .flat()
+      .find(
+        (position): position is Record<string, unknown> & { id: string } =>
+          typeof position === 'object' &&
+          position !== null &&
+          (position as { id?: unknown }).id === id,
+      ) ?? null
+  );
+};
+
 // 단건 property의 즉시 반영 투영. 도킹·분리, 단건·다건 네 경로가 같은 걸 쓴다
 const elementPropertyIntents = (
   targets: readonly { elementType: NativeElementType; id: string }[],
@@ -665,10 +690,24 @@ const elementPropertyIntents = (
     NativeElementType,
     Map<string, Record<string, unknown>>
   >();
+  // 굵기 변경은 백엔드와 같은 암묵 Bold 고정을 함께 투영한다
+  const document =
+    patch.property === 'fontWeight'
+      ? (captureEditorDocument() as unknown as Record<string, unknown> | null)
+      : null;
   for (const { elementType, id } of targets) {
     // nullable leaf의 null은 위치 조각에서 undefined로, 나머지는 1:1 투영
     const byId = intents.get(elementType) ?? new Map();
-    byId.set(id, { [patch.property]: patch.value ?? undefined });
+    const intent: Record<string, unknown> = {
+      [patch.property]: patch.value ?? undefined,
+    };
+    if (patch.property === 'fontWeight') {
+      const current = findCurrentPosition(document, elementType, id);
+      if (current && current.fontBold == null) {
+        intent.fontBold = implicitElementFontBold(current.fontWeight);
+      }
+    }
+    byId.set(id, intent);
     intents.set(elementType, byId);
   }
   return intents;
@@ -1399,7 +1438,15 @@ const counterTypographyPropertyIntents = (
       patch.property === 'counterFontSize'
         ? { ...counter, fontSize: patch.value }
         : patch.property === 'counterFontWeight'
-        ? { ...counter, fontWeight: patch.value }
+        ? {
+            ...counter,
+            fontWeight: patch.value,
+            ...(typeof counter.fontBold !== 'boolean'
+              ? { fontBold: implicitCounterFontBold(counter.fontWeight) }
+              : {}),
+          }
+        : patch.property === 'counterFontBold'
+        ? { ...counter, fontBold: patch.value }
         : patch.property === 'counterFontItalic'
         ? { ...counter, fontItalic: patch.value }
         : patch.property === 'counterFontUnderline'
@@ -1429,6 +1476,9 @@ const isCounterTypographyPatch = (
       patch.value <= 900
     );
   }
+  if (patch.property === 'counterFontBold') {
+    return typeof patch.value === 'boolean';
+  }
   if (patch.property === 'counterFontItalic') {
     return typeof patch.value === 'boolean';
   }
@@ -1446,7 +1496,7 @@ const isCounterTypographyPatch = (
 export const patchCounterTypographyByTargets = (
   targets: readonly CounterAnimationTarget[],
   patch: EditorCounterTypographyPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => {
   if (
     !isCounterTypographyPatch(patch) ||
@@ -1468,6 +1518,7 @@ export const patchCounterTypographyByTargets = (
       patch,
     })),
     {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
       preflight: options.preflight,
       onEnrolled: () => {
         enrolled = true;
@@ -1487,109 +1538,9 @@ export const patchCounterTypographyById = (
   elementType: 'key' | 'stat',
   id: string,
   patch: EditorCounterTypographyPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> =>
   patchCounterTypographyByTargets([{ elementType, id }], patch, options);
-
-const counterStrokePropertyIntents = (
-  targets: readonly CounterAnimationTarget[],
-  patch: EditorCounterStrokePropertyPatchV1,
-): PropertyIntents => {
-  const document = captureEditorDocument();
-  const propertyIntents = new Map<
-    NativeElementType,
-    Map<string, Record<string, unknown>>
-  >();
-  for (const { elementType, id } of targets) {
-    const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
-    const record = document[field] as Record<
-      string,
-      Array<Record<string, unknown> & { id: string }>
-    >;
-    const current = Object.values(record)
-      .flat()
-      .find((position) => position.id === id);
-    if (
-      !current ||
-      current.counter === null ||
-      typeof current.counter !== 'object' ||
-      Array.isArray(current.counter)
-    ) {
-      continue;
-    }
-    const counter = current.counter as Record<string, unknown>;
-    const rawStroke = counter.stroke;
-    if (
-      rawStroke === null ||
-      typeof rawStroke !== 'object' ||
-      Array.isArray(rawStroke)
-    ) {
-      continue;
-    }
-    const stroke = rawStroke as Record<string, unknown>;
-    const nextStroke =
-      patch.property === 'counterStrokeIdle'
-        ? { ...stroke, idle: patch.value }
-        : { ...stroke, active: patch.value };
-    const byId = propertyIntents.get(elementType) ?? new Map();
-    byId.set(id, { counter: { ...counter, stroke: nextStroke } });
-    propertyIntents.set(elementType, byId);
-  }
-  return propertyIntents;
-};
-
-export const patchCounterStrokeByTargets = (
-  targets: readonly CounterAnimationTarget[],
-  patch: EditorCounterStrokePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> => {
-  const active = patch.property === 'counterStrokeActive';
-  if (
-    (active
-      ? typeof patch.value !== 'string' ||
-        targets.some(({ elementType }) => elementType !== 'key')
-      : patch.property !== 'counterStrokeIdle' ||
-        typeof patch.value !== 'string') ||
-    targets.length === 0 ||
-    targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
-    new Set(targets.map(({ id }) => id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  const receipt = applyPropertyIntentsEagerly(
-    counterStrokePropertyIntents(targets, patch),
-  );
-  let enrolled = false;
-  return commitSemanticOps(
-    targets.map(({ elementType, id }) => ({
-      kind: 'patchElement' as const,
-      elementType,
-      id,
-      patch,
-    })),
-    {
-      preflight: options.preflight,
-      onEnrolled: () => {
-        enrolled = true;
-      },
-    },
-  )
-    .then((outcome) =>
-      outcome.opResults.some((result) => result.status !== 'targetMissing'),
-    )
-    .catch((error) => {
-      if (!enrolled) receipt?.rollback();
-      throw error;
-    });
-};
-
-export const patchCounterStrokeById = (
-  elementType: 'key' | 'stat',
-  id: string,
-  patch: EditorCounterStrokePropertyPatchV1,
-  options: { preflight?: () => void } = {},
-): Promise<boolean> =>
-  patchCounterStrokeByTargets([{ elementType, id }], patch, options);
 
 export const patchCounterEnabledByTargets = (
   targets: readonly CounterAnimationTarget[],
@@ -1881,13 +1832,13 @@ export const patchUseInlineStylesByTargets = (
 export const patchFontStyleByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   patch: EditorFontStylePropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => patchElementPropertyByTargets(targets, patch, options);
 
 export const patchFontFamilyByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   patch: EditorFontFamilyPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => patchElementPropertyByTargets(targets, patch, options);
 
 type PaintTarget = { elementType: NativeElementType; id: string };
@@ -1937,17 +1888,20 @@ export const patchPaintByTargets = (
   patch: EditorPaintPropertyPatchV1,
   options: PropertyCommitOptions = {},
 ): Promise<boolean> => {
-  const active =
-    patch.property === 'activeBackgroundPaint' ||
-    patch.property === 'activeBorderPaint';
+  const { active, surface } = paintPropertyFields(patch.property);
+  // 표면별 허용 타깃 - font는 라벨 렌더러가 있는 키·스탯(active는 키만)
+  const rejectsTarget = (elementType: NativeElementType): boolean =>
+    surface === 'font'
+      ? active
+        ? elementType !== 'key'
+        : elementType !== 'key' && elementType !== 'stat'
+      : active && elementType !== 'key' && elementType !== 'knob';
   if (
     !isEditorPaintPropertyPatchV1(patch) ||
     targets.length === 0 ||
     targets.some(
       ({ elementType, id }) =>
-        id.length === 0 ||
-        !isNativeElementId(id) ||
-        (active && elementType !== 'key' && elementType !== 'knob'),
+        id.length === 0 || !isNativeElementId(id) || rejectsTarget(elementType),
     ) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
   ) {
@@ -2069,92 +2023,6 @@ export const patchCounterFillById = (
   options: { preflight?: () => void } = {},
 ) => patchCounterFillByTargets([{ elementType, id }], patch, options);
 
-type FontColorTarget = { elementType: NativeElementType; id: string };
-
-const fontColorPropertyIntents = (
-  targets: readonly FontColorTarget[],
-  patch: EditorFontColorPropertyPatchV1,
-): PropertyIntents => {
-  const document = captureEditorDocument();
-  const intents = new Map<
-    NativeElementType,
-    Map<string, Record<string, unknown>>
-  >();
-  for (const { elementType, id } of targets) {
-    const collection =
-      elementType === 'key'
-        ? document.keyPositions
-        : elementType === 'stat'
-        ? document.statPositions
-        : elementType === 'graph'
-        ? document.graphPositions
-        : document.knobPositions;
-    const current = Object.values(collection)
-      .flat()
-      .find((position) => position.id === id) as KeyPosition | undefined;
-    if (!current) continue;
-    const byId =
-      intents.get(elementType) ?? new Map<string, Record<string, unknown>>();
-    byId.set(id, projectFontColorPatch(current, elementType, patch));
-    intents.set(elementType, byId);
-  }
-  return intents;
-};
-
-export const patchFontColorByTargets = (
-  targets: readonly FontColorTarget[],
-  patch: EditorFontColorPropertyPatchV1,
-  options: { preflight?: () => void; gestureId?: string } = {},
-): Promise<boolean> => {
-  const active = patch.property === 'activeFontColor';
-  if (
-    !isFontColorPropertyPatchV1(patch) ||
-    targets.length === 0 ||
-    targets.some(
-      ({ elementType, id }) =>
-        !id ||
-        !isNativeElementId(id) ||
-        (active && elementType !== 'key' && elementType !== 'knob'),
-    ) ||
-    new Set(targets.map(({ id }) => id)).size !== targets.length
-  ) {
-    return Promise.resolve(false);
-  }
-  const receipt = applyPropertyIntentsEagerly(
-    fontColorPropertyIntents(targets, patch),
-  );
-  let enrolled = false;
-  return commitSemanticOps(
-    targets.map(({ elementType, id }) => ({
-      kind: 'patchElement' as const,
-      elementType,
-      id,
-      patch: structuredClone(patch),
-    })),
-    {
-      gestureId: options.gestureId,
-      preflight: options.preflight,
-      onEnrolled: () => {
-        enrolled = true;
-      },
-    },
-  )
-    .then((outcome) =>
-      outcome.opResults.some((result) => result.status !== 'targetMissing'),
-    )
-    .catch((error) => {
-      if (!enrolled) receipt?.rollback();
-      throw error;
-    });
-};
-
-export const patchFontColorById = (
-  elementType: NativeElementType,
-  id: string,
-  patch: EditorFontColorPropertyPatchV1,
-  options: { preflight?: () => void; gestureId?: string } = {},
-) => patchFontColorByTargets([{ elementType, id }], patch, options);
-
 type ShadowTarget = {
   elementType: NativeElementType;
   id: string;
@@ -2263,7 +2131,14 @@ const notePaintPropertyIntents = (
       .flat()
       .find((position) => position.id === id);
     if (!current) continue;
-    byId.set(id, projectNotePaintPatch(patch) as Record<string, unknown>);
+    // position 전달 - {opacity} 단독의 sibling shadow 재계산이 백엔드와 일치 (§9-5)
+    byId.set(
+      id,
+      projectNotePaintPatch(patch, current as unknown as KeyPosition) as Record<
+        string,
+        unknown
+      >,
+    );
   }
   return new Map([['key', byId]]);
 };

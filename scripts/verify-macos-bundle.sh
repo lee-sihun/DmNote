@@ -100,6 +100,22 @@ for arch in $MAIN_ARCHS; do
   echo "[OK] main $arch minos=$minos"
 done
 
+# 서명된 빌드(main이 Developer ID)라면 nested 헬퍼도 서명 + hardened runtime 필수
+# — Tauri 앱 서명은 Resources 안 nested code를 서명하지 않아 sign-macos-helper.sh 훅이 담당
+MAIN_SIGN_INFO="$(codesign -dvv "$APP_BUNDLE" 2>&1 || true)"
+if grep -q "^Authority=Developer ID Application" <<<"$MAIN_SIGN_INFO"; then
+  codesign --verify --strict "$HELPER_BUNDLE" 2>/dev/null \
+    || fail "helper 서명 검증 실패 (sign-macos-helper.sh 훅 미실행?): $HELPER_BUNDLE"
+  HELPER_SIGN_INFO="$(codesign -dvv "$HELPER_BUNDLE" 2>&1 || true)"
+  grep -q "^Authority=Developer ID Application" <<<"$HELPER_SIGN_INFO" \
+    || fail "helper가 Developer ID로 서명되지 않음"
+  grep -q "^CodeDirectory .*flags=.*runtime" <<<"$HELPER_SIGN_INFO" \
+    || fail "helper에 hardened runtime이 없음"
+  echo "[OK] helper Developer ID 서명 + hardened runtime"
+else
+  echo "[SKIP] main이 Developer ID 서명이 아님 — helper 서명 검사 생략"
+fi
+
 echo "[OK] helper 경로: $HELPER_BUNDLE"
 echo "[OK] notices 경로: $NOTICES"
 echo "[OK] macOS 번들 검증 완료"

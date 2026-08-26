@@ -15,12 +15,18 @@ import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
+import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
+import FontWeightDropdown from '../FontWeightDropdown';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import { usePanelNav } from '../PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
-import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
+import {
+  DEFAULT_COUNTER_FONT_SIZE,
+  DEFAULT_COUNTER_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useFontStore } from '@stores/useFontStore';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { createCounterAnimationPresetIntent } from '@src/types/key/counterAnimation';
@@ -29,12 +35,13 @@ import {
   gradientToCss,
   type ColorModeValue,
 } from '@src/types/color';
+import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-counter:font';
 const ANIMATION_PAGE_KEY = 'single-counter:animation';
 
-type PickerTarget = 'fill' | 'stroke' | null;
+type PickerTarget = 'fill' | null;
 type ColorState = 'idle' | 'active';
 
 const CounterTabContent: React.FC<CounterTabContentProps> = ({
@@ -45,14 +52,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
   onCounterTypographyCommit,
-  onCounterStrokeCommit,
   onCounterFillCommit,
   onCounterAnimationPresetCommit,
   panelElement,
   t,
 }) => {
   const fillBtnRef = useRef<HTMLButtonElement>(null);
-  const strokeBtnRef = useRef<HTMLButtonElement>(null);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const pickerOpen = pickerFor !== null;
@@ -78,8 +83,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   const [localColors, setLocalColors] = useState({
     fillIdle: counterSettings.fill.idle,
     fillActive: counterSettings.fill.active,
-    strokeIdle: counterSettings.stroke.idle,
-    strokeActive: counterSettings.stroke.active,
   });
 
   // 피커가 닫혀있을 때만 외부 prop과 동기화
@@ -88,19 +91,11 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       setLocalColors({
         fillIdle: counterSettings.fill.idle,
         fillActive: counterSettings.fill.active,
-        strokeIdle: counterSettings.stroke.idle,
-        strokeActive: counterSettings.stroke.active,
       });
     }
-  }, [
-    pickerOpen,
-    counterSettings.fill.idle,
-    counterSettings.fill.active,
-    counterSettings.stroke.idle,
-    counterSettings.stroke.active,
-  ]);
+  }, [pickerOpen, counterSettings.fill.idle, counterSettings.fill.active]);
 
-  const colorPickerInteractiveRefs = [fillBtnRef, strokeBtnRef];
+  const colorPickerInteractiveRefs = [fillBtnRef];
 
   const handleAnimationUpdate = (
     nextAnimation: KeyCounterAnimationSettings,
@@ -116,6 +111,8 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
   const handlePickerToggle = (target: Exclude<PickerTarget, null>) => {
     setPickerFor((prev) => (prev === target ? null : target));
+    // 새로 열 때는 항상 대기 탭에서 시작
+    if (pickerFor !== target) setColorState('idle');
   };
 
   const getDisplayColor = (color: string): string => {
@@ -125,60 +122,17 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     return '#ffffff';
   };
 
-  const activeColorFor = (
-    target: Exclude<PickerTarget, null>,
-    state: ColorState,
-  ): string => {
-    if (target === 'fill') {
-      return state === 'active' ? localColors.fillActive : localColors.fillIdle;
-    }
-    return state === 'active'
-      ? localColors.strokeActive
-      : localColors.strokeIdle;
-  };
+  const activeColorFor = (state: ColorState): string =>
+    state === 'active' ? localColors.fillActive : localColors.fillIdle;
 
   // 드래그 중 로컬 상태만 업데이트 (부모에게 전달 안함)
   const handleColorChange = (color: string) => {
     if (!pickerFor) return;
-    const key =
-      pickerFor === 'fill'
-        ? effectiveColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle'
-        : effectiveColorState === 'active'
-        ? 'strokeActive'
-        : 'strokeIdle';
-
+    const key = effectiveColorState === 'active' ? 'fillActive' : 'fillIdle';
     setLocalColors((prev) => ({ ...prev, [key]: color }));
   };
 
-  // 드래그 완료 시 부모에게 전달
-  const handleColorChangeComplete = (color: string) => {
-    if (!pickerFor) return;
-
-    const key =
-      pickerFor === 'fill'
-        ? effectiveColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle'
-        : effectiveColorState === 'active'
-        ? 'strokeActive'
-        : 'strokeIdle';
-
-    setLocalColors((prev) => ({ ...prev, [key]: color }));
-
-    if (pickerFor === 'fill') {
-      return;
-    }
-
-    onCounterStrokeCommit?.(
-      effectiveColorState === 'active'
-        ? { property: 'counterStrokeActive', value: color }
-        : { property: 'counterStrokeIdle', value: color },
-    );
-  };
-
-  // ── fill 그라데이션 배선 (stroke는 단색 유지) ──
+  // ── fill 그라데이션 배선 ──
 
   const storedFillGradient =
     effectiveColorState === 'active'
@@ -210,7 +164,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     pair:
       pickerFor === 'fill'
         ? {
-            color: activeColorFor('fill', effectiveColorState),
+            color: activeColorFor(effectiveColorState),
             gradient: storedFillGradient,
           }
         : {},
@@ -358,25 +312,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             open={pickerFor === 'fill'}
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
-            color={getDisplayColor(activeColorFor('fill', effectiveColorState))}
+            color={getDisplayColor(activeColorFor(effectiveColorState))}
             image={
               storedFillGradient ? gradientToCss(storedFillGradient) : undefined
             }
-          />
-        </PropertyRow>
-
-        {/* 외곽선 색상 */}
-        <PropertyRow label={t('counterSetting.stroke') || '외곽선'}>
-          <ColorSwatchButton
-            ref={strokeBtnRef}
-            type="button"
-            onClick={() => handlePickerToggle('stroke')}
-            open={pickerFor === 'stroke'}
-            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-            surfaceClassName="rounded-md"
-            color={getDisplayColor(
-              activeColorFor('stroke', effectiveColorState),
-            )}
           />
         </PropertyRow>
       </PropertySection>
@@ -384,19 +323,15 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       <PropertySection>
         {/* 폰트 */}
         <PropertyRow label={t('counterSetting.font') || '폰트'}>
-          <button
-            type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
-            } text-fg text-body`}
-            onClick={() => {
-              setPickerFor(null);
-              if (activePageKey === FONT_PAGE_KEY) closePage();
-              else openPage(FONT_PAGE_KEY);
-            }}
+          <FontPickerOpenButton
+            activePageKey={activePageKey}
+            pageKey={FONT_PAGE_KEY}
+            onBeforeOpen={() => setPickerFor(null)}
+            onOpen={() => openPage(FONT_PAGE_KEY)}
+            onClose={closePage}
           >
             {t('propertiesPanel.configure') || '설정하기'}
-          </button>
+          </FontPickerOpenButton>
         </PropertyRow>
 
         {/* 폰트 크기 */}
@@ -416,17 +351,36 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           />
         </PropertyRow>
 
+        {/* 폰트 굵기 */}
+        <PropertyRow label={t('counterSetting.fontWeight') || '폰트 굵기'}>
+          <FontWeightDropdown
+            fontFamilies={[
+              counterSettings.fontFamily ??
+                (counterSettings.placement === 'inside'
+                  ? keyPosition.fontFamily ?? null
+                  : null),
+            ]}
+            value={counterSettings.fontWeight ?? DEFAULT_COUNTER_FONT_WEIGHT}
+            onChange={(value) => {
+              onCounterTypographyCommit?.({
+                property: 'counterFontWeight',
+                value,
+              });
+            }}
+          />
+        </PropertyRow>
+
         {/* 폰트 스타일 */}
         <PropertyRow label={t('counterSetting.fontStyle') || '폰트 스타일'}>
           <FontStyleToggle
-            isBold={(counterSettings.fontWeight ?? 400) >= 700}
+            isBold={counterSettings.fontBold ?? false}
             isItalic={counterSettings.fontItalic ?? false}
             isUnderline={counterSettings.fontUnderline ?? false}
             isStrikethrough={counterSettings.fontStrikethrough ?? false}
             onBoldChange={(value) => {
               onCounterTypographyCommit?.({
-                property: 'counterFontWeight',
-                value: value ? 700 : 400,
+                property: 'counterFontBold',
+                value,
               });
             }}
             onItalicChange={(value) => {
@@ -488,25 +442,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         {pickerFor ? (
           <ColorPicker
             open={pickerOpen}
-            referenceRef={pickerFor === 'fill' ? fillBtnRef : strokeBtnRef}
+            referenceRef={fillBtnRef}
             panelElement={panelElement}
-            color={
-              pickerFor === 'fill'
-                ? fillGradientState.pickerColor
-                : activeColorFor(
-                    pickerFor as 'fill' | 'stroke',
-                    effectiveColorState,
-                  )
-            }
+            color={fillGradientState.pickerColor}
             onColorChange={(c: string) =>
-              pickerFor === 'fill'
-                ? fillGradientState.handlePickerColorChange(c, false)
-                : handleColorChange(c)
+              fillGradientState.handlePickerColorChange(c, false)
             }
             onColorChangeComplete={(c: string) =>
-              pickerFor === 'fill'
-                ? fillGradientState.handlePickerColorChange(c, true)
-                : handleColorChangeComplete(c)
+              fillGradientState.handlePickerColorChange(c, true)
             }
             onInputCancel={() => {
               fillGradientState.cancelPreview();
@@ -521,22 +464,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
                 ? (mode: string) => setColorState(mode as ColorState)
                 : undefined
             }
-            headerSlot={
-              pickerFor === 'fill' ? fillGradientState.headerSlot : undefined
-            }
-            footerSlot={
-              pickerFor === 'fill' ? fillGradientState.footerSlot : undefined
-            }
-            gradientSpec={
-              pickerFor === 'fill'
-                ? fillGradientState.paletteGradientSpec
-                : undefined
-            }
-            onGradientSpecSelect={
-              pickerFor === 'fill'
-                ? fillGradientState.handleGradientSpecSelect
-                : undefined
-            }
+            headerSlot={fillGradientState.headerSlot}
+            footerSlot={fillGradientState.footerSlot}
+            gradientSpec={fillGradientState.paletteGradientSpec}
+            onGradientSpecSelect={fillGradientState.handleGradientSpecSelect}
           />
         ) : null}
       </PopupExit>
@@ -550,10 +481,24 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             selectedFont={counterSettings.fontFamily || null}
             onFontSelect={(fontName) => {
               if (fontName !== null) {
-                onCounterTypographyCommit?.({
-                  property: 'counterFontFamily',
-                  value: fontName,
-                });
+                const currentWeight =
+                  counterSettings.fontWeight ?? DEFAULT_COUNTER_FONT_WEIGHT;
+                const nextWeight = resolveSupportedFontWeight(
+                  fontName,
+                  useFontStore.getState().getAllFonts(),
+                );
+                // 굵기 재선택은 폰트 변경과 한 undo 단계
+                const gestureId = crypto.randomUUID();
+                onCounterTypographyCommit?.(
+                  { property: 'counterFontFamily', value: fontName },
+                  { gestureId },
+                );
+                if (nextWeight !== currentWeight) {
+                  onCounterTypographyCommit?.(
+                    { property: 'counterFontWeight', value: nextWeight },
+                    { gestureId },
+                  );
+                }
               }
             }}
             pageTitle={t('counterSetting.font') || '폰트'}

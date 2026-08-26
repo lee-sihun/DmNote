@@ -119,13 +119,16 @@ export const createCubicBezierEasing = (
   };
 };
 
+// fractionDigits 기본 2자리는 기존 계약(테스트) 유지용, 애니메이션 easing은 사용자 곡선 보존을 위해 4자리
 export const bezierToCssString = (
   bezier: CounterAnimationBezier | number[],
+  fractionDigits = 2,
 ): string => {
   const [x1, y1, x2, y2] = clampCounterBezier(bezier);
-  return `cubic-bezier(${x1.toFixed(2)}, ${y1.toFixed(2)}, ${x2.toFixed(
-    2,
-  )}, ${y2.toFixed(2)})`;
+  const format = (value: number) => value.toFixed(fractionDigits);
+  return `cubic-bezier(${format(x1)}, ${format(y1)}, ${format(x2)}, ${format(
+    y2,
+  )})`;
 };
 
 export const findBezierPresetId = (

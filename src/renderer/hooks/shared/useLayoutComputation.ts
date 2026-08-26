@@ -252,13 +252,17 @@ export function computeLayout(input: LayoutInput) {
           position.noteGlowOpacityTop ?? position.noteGlowOpacity ?? 70,
         noteGlowOpacityBottom:
           position.noteGlowOpacityBottom ?? position.noteGlowOpacity ?? 70,
-        noteGlowColor: position.noteGlowColor ?? position.noteColor,
+        // 본체 폴백은 resolve가 담당 - 명시 여부가 글로우 소스 우선순위 판별에 필요
+        noteGlowColor: position.noteGlowColor,
         flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
         borderRadius: position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
         noteBorderWidth: position.noteBorderWidth ?? 0,
         noteBorderColor: position.noteBorderColor,
+        noteBorderGradient: position.noteBorderGradient ?? null,
         noteBorderOpacity: position.noteBorderOpacity ?? 100,
         noteBorderSide: position.noteBorderSide ?? 'all',
+        noteGradient: position.noteGradient ?? null,
+        noteGlowGradient: position.noteGlowGradient ?? null,
       };
     })
     .filter(Boolean);

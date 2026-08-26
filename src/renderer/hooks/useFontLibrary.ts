@@ -3,9 +3,9 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore, syncFontCSS } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
 import {
-  extractFontFamilyFromCSS,
   generateFontId,
   normalizeFontFamilyName,
+  validateWebFontFaceCss,
 } from '@src/types/settings/fonts';
 import { settingsApi } from '@api/modules/settingsApi';
 import { fontApi } from '@api/modules/resourceApi';
@@ -108,7 +108,14 @@ export const useFontLibrary = () => {
       const result = await fontApi.load();
 
       if (result.success && result.fontName && result.fontPath) {
-        if (isDuplicateFontFamily(result.fontName)) {
+        const normalizedFamily = normalizeFontFamilyName(result.fontName);
+        const matchingFonts = useFontStore
+          .getState()
+          .getAllFonts()
+          .filter(
+            (font) => normalizeFontFamilyName(font.name) === normalizedFamily,
+          );
+        if (matchingFonts.some((font) => font.type !== 'local')) {
           showDuplicateFontFamilyAlert(result.fontName);
           return;
         }
@@ -119,15 +126,39 @@ export const useFontLibrary = () => {
           return;
         }
 
+        const existingLocalFont = matchingFonts.find(
+          (font) => font.type === 'local',
+        );
+
         const newFont: CustomFont = {
           id: generateFontId(),
           type: 'local',
           name: result.fontName,
-          displayName: result.fontName,
-          enabled: true,
+          displayName: existingLocalFont?.displayName ?? result.fontName,
+          enabled: existingLocalFont?.enabled ?? true,
           localPath: result.fontPath,
+          weightRanges:
+            result.weightRanges && result.weightRanges.length > 0
+              ? result.weightRanges
+              : [{ min: 400, max: 400 }],
         };
-        const nextFonts = [...useFontStore.getState().customFonts, newFont];
+        const newRanges = JSON.stringify(newFont.weightRanges);
+        const nextFonts = [
+          ...useFontStore.getState().customFonts.filter((font) => {
+            if (
+              font.type !== 'local' ||
+              normalizeFontFamilyName(font.name) !== normalizedFamily
+            ) {
+              return true;
+            }
+            const ranges =
+              font.weightRanges && font.weightRanges.length > 0
+                ? font.weightRanges
+                : [{ min: 400, max: 400 }];
+            return JSON.stringify(ranges) !== newRanges;
+          }),
+          newFont,
+        ];
         persistFonts(nextFonts);
       } else if (result.errorCode) {
         // errorCode가 없는 실패는 사용자 취소
@@ -147,7 +178,8 @@ export const useFontLibrary = () => {
     displayName: string,
     editingWebFontId: string | null,
   ): boolean => {
-    const fontFamily = extractFontFamilyFromCSS(css);
+    const validation = validateWebFontFaceCss(css);
+    const fontFamily = validation.detectedFontFamily;
     if (!fontFamily) {
       console.error('Failed to extract font-family from CSS');
       return false;
@@ -166,6 +198,7 @@ export const useFontLibrary = () => {
       displayName: displayName || fontFamily,
       enabled: true,
       cssContent: css,
+      weightRanges: validation.detectedWeights,
     };
 
     const nextFonts: CustomFont[] = editingWebFontId
@@ -176,6 +209,7 @@ export const useFontLibrary = () => {
                 name: fontFamily,
                 displayName: displayName || fontFamily,
                 cssContent: css,
+                weightRanges: validation.detectedWeights,
               }
             : font,
         )
@@ -186,18 +220,33 @@ export const useFontLibrary = () => {
   };
 
   const removeFont = (id: string) => {
-    const nextFonts = useFontStore
-      .getState()
-      .customFonts.filter((font) => font.id !== id);
+    const currentFonts = useFontStore.getState().customFonts;
+    const target = currentFonts.find((font) => font.id === id);
+    const targetFamily = target ? normalizeFontFamilyName(target.name) : '';
+    const nextFonts = currentFonts.filter(
+      (font) =>
+        font.id !== id &&
+        !(
+          target?.type === 'local' &&
+          font.type === 'local' &&
+          normalizeFontFamilyName(font.name) === targetFamily
+        ),
+    );
     persistFonts(nextFonts);
   };
 
   const toggleFont = (id: string, enabled: boolean) => {
-    const nextFonts = useFontStore
-      .getState()
-      .customFonts.map((font) =>
-        font.id === id ? { ...font, enabled } : font,
-      );
+    const currentFonts = useFontStore.getState().customFonts;
+    const target = currentFonts.find((font) => font.id === id);
+    const targetFamily = target ? normalizeFontFamilyName(target.name) : '';
+    const nextFonts = currentFonts.map((font) =>
+      font.id === id ||
+      (target?.type === 'local' &&
+        font.type === 'local' &&
+        normalizeFontFamilyName(font.name) === targetFamily)
+        ? { ...font, enabled }
+        : font,
+    );
     persistFonts(nextFonts);
   };
 
@@ -205,11 +254,17 @@ export const useFontLibrary = () => {
   const renameFont = (id: string, displayName: string) => {
     const trimmed = displayName.trim();
     if (!trimmed) return;
-    const nextFonts = useFontStore
-      .getState()
-      .customFonts.map((font) =>
-        font.id === id ? { ...font, displayName: trimmed } : font,
-      );
+    const currentFonts = useFontStore.getState().customFonts;
+    const target = currentFonts.find((font) => font.id === id);
+    const targetFamily = target ? normalizeFontFamilyName(target.name) : '';
+    const nextFonts = currentFonts.map((font) =>
+      font.id === id ||
+      (target?.type === 'local' &&
+        font.type === 'local' &&
+        normalizeFontFamilyName(font.name) === targetFamily)
+        ? { ...font, displayName: trimmed }
+        : font,
+    );
     persistFonts(nextFonts);
   };
 

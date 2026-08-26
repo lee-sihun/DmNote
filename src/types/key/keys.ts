@@ -41,6 +41,12 @@ export const keyCounterAnimationSchema = z.object({
   durationMs: z.number().int().min(1).max(5000),
 });
 
+// 선택 그라데이션 하나가 손상돼도 나머지 카운터 설정은 보존
+const optionalCounterGradientSchema = gradientSpecSchema
+  .nullable()
+  .optional()
+  .catch(undefined);
+
 const keyCounterSettingsInputSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -48,17 +54,18 @@ const keyCounterSettingsInputSchema = z
     align: keyCounterAlignSchema.optional(),
     alignMode: keyCounterAlignModeSchema.optional(),
     fill: keyCounterColorSchema.partial().optional(),
-    stroke: keyCounterColorSchema.partial().optional(),
     gap: z.number().int().min(0).optional(),
     fontSize: z.number().int().min(8).max(72).optional(),
     fontWeight: z.number().int().min(100).max(900).optional(),
+    // Rust Option은 IPC에서 null로 올 수 있다 - 거부하면 카운터 설정 전체가 폴백된다
+    fontBold: z.boolean().nullable().optional(),
     fontFamily: z.string().nullable().optional(),
     fontItalic: z.boolean().optional(),
     fontUnderline: z.boolean().optional(),
     fontStrikethrough: z.boolean().optional(),
     animation: keyCounterAnimationSchema.partial().optional(),
-    fillIdleGradient: gradientSpecSchema.nullable().optional(),
-    fillActiveGradient: gradientSpecSchema.nullable().optional(),
+    fillIdleGradient: optionalCounterGradientSchema,
+    fillActiveGradient: optionalCounterGradientSchema,
   })
   .partial();
 
@@ -82,13 +89,13 @@ export interface KeyCounterSettings {
   align: KeyCounterAlign;
   alignMode: KeyCounterAlignMode;
   fill: KeyCounterColor;
-  stroke: KeyCounterColor;
-  // fill 전용 그라데이션 형제 (stroke는 영구 제외)
+  // fill 그라데이션 형제 - 단색 필드는 대표색 폴백
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
   gap: number; // px 단위 간격
   fontSize: number; // px
   fontWeight: number; // CSS font-weight
+  fontBold: boolean; // 선택 굵기에 Bold 보정 적용
   fontFamily: string | null; // 커스텀 폰트
   fontItalic: boolean;
   fontUnderline: boolean;
@@ -114,10 +121,10 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     align,
     alignMode,
     fill,
-    stroke,
     gap,
     fontSize,
     fontWeight,
+    fontBold,
     fontFamily,
     fontItalic,
     fontUnderline,
@@ -150,10 +157,6 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
       idle: fill?.idle ?? fallback.fill.idle,
       active: fill?.active ?? fallback.fill.active,
     },
-    stroke: {
-      idle: stroke?.idle ?? fallback.stroke.idle,
-      active: stroke?.active ?? fallback.stroke.active,
-    },
     fillIdleGradient: fillIdleGradient ?? fallback.fillIdleGradient ?? null,
     fillActiveGradient:
       fillActiveGradient ?? fallback.fillActiveGradient ?? null,
@@ -166,9 +169,17 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
         ? fontSize
         : fallback.fontSize,
     fontWeight:
-      typeof fontWeight === 'number' && Number.isFinite(fontWeight)
+      typeof fontBold !== 'boolean' && fontWeight === 700
+        ? 400
+        : typeof fontWeight === 'number' && Number.isFinite(fontWeight)
         ? fontWeight
         : fallback.fontWeight,
+    fontBold:
+      typeof fontBold === 'boolean'
+        ? fontBold
+        : typeof fontWeight === 'number'
+        ? fontWeight === 700
+        : fallback.fontBold,
     fontFamily:
       typeof fontFamily === 'string' ? fontFamily : fallback.fontFamily,
     fontItalic:
@@ -293,6 +304,8 @@ export const keyPositionSchema = z.object({
     .default('center'),
   noteEffectEnabled: z.boolean().optional().default(true),
   noteGlowEnabled: z.boolean().optional().default(false),
+  // 글로우 페인트를 본체 페인트와 같게 유지 (저장 시 미러)
+  noteGlowSyncPaint: z.boolean().optional().default(false),
   noteGlowSize: z.number().min(0).max(50).optional().default(20),
   noteGlowOpacity: z.number().int().min(0).max(100).optional().default(70),
   // 그라디언트용 글로우 투명도(Top/Bottom). 없으면 noteGlowOpacity를 사용.
@@ -323,6 +336,11 @@ export const keyPositionSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
     .optional(),
+  // 테두리 그라데이션 형제 - 있으면 렌더 우선, noteBorderColor는 hex 대표색 폴백
+  noteBorderGradient: gradientSpecSchema.optional(),
+  // 본체·글로우 형제 - 있으면 신형 의미(배율 모델), 구형 필드는 다운그레이드 shadow (계약 §9)
+  noteGradient: gradientSpecSchema.optional(),
+  noteGlowGradient: gradientSpecSchema.optional(),
   // 테두리 투명도 (0~100, 없으면 100). 노트 배경 투명도와 독립
   noteBorderOpacity: z.number().int().min(0).max(100).optional(),
   noteBorderSide: z.enum(['all', 'vertical', 'horizontal']).optional(),
@@ -349,6 +367,8 @@ export const keyPositionSchema = z.object({
   fontSize: z.number().optional(),
   fontColor: z.string().optional(),
   activeFontColor: z.string().optional(),
+  fontGradient: gradientSpecSchema.optional(),
+  activeFontGradient: gradientSpecSchema.optional(),
   graphAnimationEnabled: z.boolean().optional(),
   // 폰트 패밀리 (커스텀 폰트 이름)
   fontFamily: z.string().optional(),
@@ -367,6 +387,7 @@ export const keyPositionSchema = z.object({
   groupId: z.string().optional(),
   // 글꼴 스타일 속성들
   fontWeight: z.number().optional(), // CSS font-weight 값 (400, 700 등)
+  fontBold: z.boolean().optional(),
   fontItalic: z.boolean().optional(),
   fontUnderline: z.boolean().optional(),
   fontStrikethrough: z.boolean().optional(),

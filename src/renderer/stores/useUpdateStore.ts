@@ -1,5 +1,26 @@
 import { create } from 'zustand';
 import { appApi } from '@api/modules/appApi';
+import type { UpdateProgressEvent } from '@src/types/plugin/api';
+
+export type AutoUpdatePhase =
+  | 'idle'
+  | 'downloading'
+  | 'verifying'
+  | 'installing'
+  | 'restarting'
+  | 'installed'; // 설치는 끝났지만 재시작 요청 실패 — 사용자가 직접 다시 실행
+
+// 설치는 끝났지만 재시작 요청이 실패한 경우 — 새 버전은 다음 실행에 적용됨
+export class UpdateInstalledRestartFailedError extends Error {
+  readonly code = 'UPDATE_INSTALLED_RESTART_FAILED';
+  readonly originalError: unknown;
+
+  constructor(cause: unknown) {
+    super(getErrorMessage(cause));
+    this.name = 'UpdateInstalledRestartFailedError';
+    this.originalError = cause;
+  }
+}
 
 const GITHUB_REPO = 'DmNote-App/DmNote';
 const STORAGE_KEY = 'dmnote:skipped-version';
@@ -31,6 +52,8 @@ interface UpdateState {
   updateInfo: UpdateInfo | null;
   isChecking: boolean;
   isAutoUpdating: boolean;
+  autoUpdatePhase: AutoUpdatePhase;
+  autoUpdateProgress: number | null; // 다운로드 % (알 수 없으면 null)
   error: string | null;
   dismissed: boolean;
   cacheUntil: number | null;
@@ -162,6 +185,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   updateInfo: null,
   isChecking: false,
   isAutoUpdating: false,
+  autoUpdatePhase: 'idle',
+  autoUpdateProgress: null,
   error: null,
   dismissed: false,
   cacheUntil: getCacheUntil(),
@@ -299,25 +324,76 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
     set({
       isAutoUpdating: true,
+      autoUpdatePhase: 'idle',
+      autoUpdateProgress: null,
       error: null,
     });
 
     // 성공적으로 재시작된 다음 실행에서 릴리즈 노트 모달을 1회 노출
     setPostUpdateNoticeVersion(normalizedTag);
 
+    // 백엔드 진행 단계 반영 — 성공/실패 모두 finally에서 해제.
+    // 해제는 비동기라 완료 직후 도착한 늦은 이벤트가 restarting을 덮지 않도록 settled로 차단
+    let settled = false;
+    const unsubscribe = appApi.onUpdateProgress(
+      (event: UpdateProgressEvent) => {
+        if (settled) return;
+        set({
+          autoUpdatePhase: event.phase,
+          autoUpdateProgress:
+            event.phase === 'downloading' ? event.percent : null,
+        });
+      },
+    );
+
     try {
       await appApi.autoUpdate(normalizedTag);
-      set({ isAutoUpdating: false });
     } catch (e) {
+      settled = true;
+      unsubscribe();
       clearPendingPostUpdateReleaseNotice();
       const message = getErrorMessage(e);
-      set({ isAutoUpdating: false, error: message });
+      set({
+        isAutoUpdating: false,
+        autoUpdatePhase: 'idle',
+        autoUpdateProgress: null,
+        error: message,
+      });
       throw e;
+    }
+
+    settled = true;
+    unsubscribe();
+    // 설치 완료 → 재시작 요청. isAutoUpdating은 유지해 재클릭(중복 설치)을 막고,
+    // 재시작이 취소되면 dismissUpdate로 초기화
+    set({
+      autoUpdatePhase: 'restarting',
+      autoUpdateProgress: null,
+    });
+
+    try {
+      await appApi.restart();
+    } catch (e) {
+      // 새 버전은 이미 디스크에 있음 — 릴리즈 노트 예약은 유지하고 재시작만 실패로 알림.
+      // isAutoUpdating을 유지해 중복 설치를 막고, 모달을 닫으면(dismissUpdate) 초기화
+      set({
+        autoUpdatePhase: 'installed',
+        autoUpdateProgress: null,
+      });
+      throw new UpdateInstalledRestartFailedError(e);
     }
   },
 
   dismissUpdate: () => {
-    set({ dismissed: true, updateAvailable: false, isLatestVersion: false });
+    set({
+      dismissed: true,
+      updateAvailable: false,
+      isLatestVersion: false,
+      // 재시작 대기 상태에서 닫으면 다시 시도할 수 있게 초기화
+      isAutoUpdating: false,
+      autoUpdatePhase: 'idle',
+      autoUpdateProgress: null,
+    });
   },
 
   skipVersion: () => {
@@ -339,6 +415,8 @@ export function useUpdateCheck() {
     updateInfo: store.updateInfo,
     isChecking: store.isChecking,
     isAutoUpdating: store.isAutoUpdating,
+    autoUpdatePhase: store.autoUpdatePhase,
+    autoUpdateProgress: store.autoUpdateProgress,
     error: store.error,
     dismissUpdate: store.dismissUpdate,
     skipVersion: store.skipVersion,

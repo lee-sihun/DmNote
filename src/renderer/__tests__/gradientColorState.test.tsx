@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import type { ColorModeValue, ColorPair, GradientSpec } from '@src/types/color';
 
 type GradientState = ReturnType<typeof useGradientColorState>;
@@ -101,10 +102,13 @@ describe('useGradientColorState 편집 수명', () => {
     changeFormat('solid');
     act(() => root.render(<Harness pair={{ color: '#ff0000' }} />));
     changeFormat('gradient');
-    expect(onCommit).toHaveBeenLastCalledWith({
-      mode: 'gradient',
-      spec: oldGradient,
-    });
+    expect(onCommit).toHaveBeenLastCalledWith(
+      {
+        mode: 'gradient',
+        spec: oldGradient,
+      },
+      { gradientSource: 'remembered' },
+    );
 
     act(() =>
       root.render(
@@ -123,16 +127,46 @@ describe('useGradientColorState 편집 수명', () => {
     act(() => root.render(<Harness pair={{ color: '#0000ff' }} />));
     changeFormat('gradient');
 
-    expect(onCommit).toHaveBeenLastCalledWith({
-      mode: 'gradient',
-      spec: {
-        angle: 180,
-        stops: [
-          { color: '#0000ff', pos: 0 },
-          { color: 'rgba(0,0,255,0)', pos: 1 },
-        ],
+    expect(onCommit).toHaveBeenLastCalledWith(
+      {
+        mode: 'gradient',
+        spec: {
+          angle: 180,
+          stops: [
+            { color: '#0000ff', pos: 0 },
+            { color: 'rgba(0,0,255,0)', pos: 1 },
+          ],
+        },
       },
-    });
+      { gradientSource: 'seed' },
+    );
+  });
+
+  it('undo/redo 뒤에는 미래 형식의 왕복 spec을 되살리지 않는다', () => {
+    act(() =>
+      root.render(
+        <Harness pair={{ color: '#ff0000', gradient: oldGradient }} />,
+      ),
+    );
+
+    changeFormat('solid');
+    act(() => root.render(<Harness pair={{ color: '#00ff00' }} />));
+    act(() => useCommittedApplyStore.getState().bump('historyUndo'));
+    changeFormat('gradient');
+
+    expect(onCommit).toHaveBeenLastCalledWith(
+      {
+        mode: 'gradient',
+        spec: {
+          angle: 180,
+          stops: [
+            { color: '#00ff00', pos: 0 },
+            { color: 'rgba(0,255,0,0)', pos: 1 },
+          ],
+        },
+      },
+      { gradientSource: 'seed' },
+    );
   });
 
   it('외부 spec 축소 뒤 선택 스톱을 마지막 유효 스톱으로 강등한다', () => {
@@ -155,13 +189,19 @@ describe('useGradientColorState 편집 수명', () => {
     );
     act(() => latest().handlePickerColorChange('#abcdef', true));
 
-    expect(onCommit).toHaveBeenLastCalledWith({
-      mode: 'gradient',
-      spec: {
-        ...twoStops,
-        stops: [twoStops.stops[0], { ...twoStops.stops[1], color: '#abcdef' }],
+    expect(onCommit).toHaveBeenLastCalledWith(
+      {
+        mode: 'gradient',
+        spec: {
+          ...twoStops,
+          stops: [
+            twoStops.stops[0],
+            { ...twoStops.stops[1], color: '#abcdef' },
+          ],
+        },
       },
-    });
+      { gradientSource: 'edit' },
+    );
   });
 
   it('스톱 추가 직후 새 스톱을 선택한다', () => {

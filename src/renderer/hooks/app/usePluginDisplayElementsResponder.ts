@@ -1,11 +1,17 @@
 import { useEffect } from 'react';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  pushDisplayElementsToOverlay,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  isLocalPluginRuntimeReady,
+  subscribePluginReadiness,
+} from '@plugins/runtime/pluginRuntimeReadiness';
 import {
   clearPluginMenuRuntimeState,
   normalizeStateKeys,
   setPluginMenuRuntimeState,
 } from '@utils/plugin/pluginMenuRuntimeState';
-import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 
 // 다중 OBS 클라이언트 동시 재연결 시 요청 버스트를 응답 1회로 코얼레싱
 const RESPOND_DEBOUNCE_MS = 100;
@@ -22,12 +28,7 @@ export function usePluginDisplayElementsResponder() {
         if (timer) return;
         timer = setTimeout(() => {
           timer = null;
-          const elements = usePluginDisplayElementStore.getState().elements;
-          sendBridgeMessageBestEffort(
-            'overlay',
-            'plugin:displayElements:sync',
-            { elements },
-          );
+          pushDisplayElementsToOverlay();
         }, RESPOND_DEBOUNCE_MS);
       },
     );
@@ -36,6 +37,23 @@ export function usePluginDisplayElementsResponder() {
       if (timer) clearTimeout(timer);
       unsubscribe();
     };
+  }, []);
+
+  // 준비 완료로 전환될 때마다 push - 요소가 하나도 없어도 오버레이가
+  // "기다릴 것이 없다"는 사실을 반드시 받도록 (요소 변경 push에만 의존하지 않음).
+  // 재주입마다 준비 상태가 false로 돌아가므로 1회성 래치가 아니라 전환 감지
+  useEffect(() => {
+    let lastReady = false;
+
+    const pushOnReadyTransition = () => {
+      const ready = isLocalPluginRuntimeReady();
+      if (ready === lastReady) return;
+      lastReady = ready;
+      if (ready) pushDisplayElementsToOverlay();
+    };
+
+    pushOnReadyTransition();
+    return subscribePluginReadiness(pushOnReadyTransition);
   }, []);
 
   // 오버레이의 메뉴 predicate용 상태 동기화 수신 (contextMenuStateKeys)

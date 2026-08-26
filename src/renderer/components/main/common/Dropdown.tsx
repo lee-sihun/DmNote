@@ -36,6 +36,8 @@ interface DropdownProps {
   align?: 'left' | 'right';
   /** 트리거/메뉴 너비 고정용 Tailwind 클래스 (예: 'w-[160px]'). 길면 말줄임(...) 처리됨 */
   widthClass?: string;
+  /** 아이콘 트리거의 접근 가능한 이름 - 아이콘만 있는 버튼은 용도·현재 값이 안 읽힌다 */
+  ariaLabel?: string;
   /** 트리거 크기 — sm: 24px 크롬(기본), lg: 30px 크롬(패널 페이지) */
   size?: 'sm' | 'lg';
 }
@@ -63,6 +65,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   align = 'left',
   widthClass = '',
   size = 'sm',
+  ariaLabel,
 }) => {
   // 분리 패널 창 안에서는 그 창 기준으로 배치·포털·바깥 클릭 처리
   const { window: ownerWindow, document: ownerDocument } = usePanelHost();
@@ -471,6 +474,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
+          aria-label={ariaLabel}
           className={`flex items-center justify-center w-[23px] h-[23px] rounded-md cursor-pointer bg-fill hover:bg-fill-hover transition-colors duration-fast ${
             open ? 'shadow-focus-ring' : ''
           }`}

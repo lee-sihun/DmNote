@@ -41,6 +41,10 @@ body,
   outline: none;
 }
 
+:where(input, textarea):focus::placeholder {
+  opacity: 0;
+}
+
 [app-region='drag'] {
   -webkit-app-region: drag;
 }
@@ -73,7 +77,7 @@ input[type='number']::-webkit-outer-spin-button {
   letter-spacing: 0.06em;
   font-size: var(--dmn-counter-font-size-default, 16px);
   font-family: var(--dmn-counter-font-family-default, inherit);
-  font-weight: var(--dmn-counter-font-weight-default, 400);
+  font-weight: var(--dmn-counter-font-weight-default, 500);
   font-style: var(--dmn-counter-font-style-default, normal);
   text-decoration: var(--dmn-counter-text-decoration-default, none);
   text-align: var(--dmn-counter-text-align-default, center);
@@ -97,27 +101,52 @@ input[type='number']::-webkit-outer-spin-button {
     --counter-text-fill-color,
     var(--counter-color, var(--dmn-counter-text-fill-default, currentcolor))
   );
-}
-
-:where(.counter)::before {
-  content: attr(data-text);
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  -webkit-text-stroke-width: var(
-    --counter-stroke-width,
-    var(--counter-stroke-width-default, 0px)
+  /* 앱 그라데이션은 글리프 잉크 박스에 맞춰 깔린다 - 측정값은 스팬 인라인
+     변수로 공급. 사용자 --counter-color 지정 시 위 image와 함께 자동 복귀 */
+  background-repeat: var(
+    --counter-fill-repeat,
+    var(--counter-color, var(--dmn-counter-fill-repeat-default, repeat))
   );
-  -webkit-text-stroke-color: var(
-    --counter-stroke-color,
-    var(--counter-stroke-color-default, transparent)
+  background-position: var(
+    --counter-fill-position,
+    var(--counter-color, var(--dmn-counter-fill-position-default, 0% 0%))
   );
-  color: transparent;
+  background-size: var(
+    --counter-fill-size,
+    var(--counter-color, var(--dmn-counter-fill-size-default, auto))
+  );
 }
 
 .text-safe-inline {
   box-sizing: border-box;
   padding-inline: var(--dmn-text-safe-inline, 2px);
+}
+
+/* 키·스탯 라벨 페인트 - 사용자 --key-text-image 우선. --key-text-color(색상값)를
+   지정하면 image 자리에서 문법 무효가 되어 저장 그라데이션이 자동 해제되고,
+   text-fill이 currentcolor라 일반 color 선언도 그라데이션을 자연스럽게 덮는다 */
+:where([data-key-label]) {
+  background-image: var(
+    --key-text-image,
+    var(--key-text-color, var(--dmn-key-text-image-default, none))
+  );
+  /* 페인트 박스는 글리프 잉크 실측값이 기본 - 카운터 채움과 같은 계약 */
+  background-repeat: var(
+    --key-text-repeat,
+    var(--key-text-color, var(--dmn-key-text-repeat-default, repeat))
+  );
+  background-position: var(
+    --key-text-position,
+    var(--key-text-color, var(--dmn-key-text-position-default, 0% 0%))
+  );
+  background-size: var(
+    --key-text-size,
+    var(--key-text-color, var(--dmn-key-text-size-default, auto))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--key-text-color, var(--dmn-key-label-color-default, inherit));
+  -webkit-text-fill-color: currentcolor;
 }
 
 /*

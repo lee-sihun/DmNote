@@ -1,10 +1,18 @@
 use std::{
+    io::Read,
+    net::{IpAddr, Ipv6Addr, SocketAddr, ToSocketAddrs},
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, OnceLock},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use reqwest::{
+    blocking::Client,
+    header::{ACCEPT, LOCATION},
+};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tokio::sync::Semaphore;
 
 use crate::{
     commands::{dialog::parented_file_dialog, editor::state::emit_best_effort},
@@ -22,6 +30,13 @@ use crate::{
         store::AdmittedHistoryOverlapMutation, AppState,
     },
 };
+
+const CSS_IMPORT_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_CONCURRENT_CSS_IMPORT_FETCHES: usize = 4;
+const MAX_CSS_IMPORT_BYTES: usize = 1024 * 1024;
+const MAX_CSS_IMPORT_REDIRECTS: usize = 3;
+const CSS_IMPORT_USER_AGENT: &str = concat!("DmNote/", env!("CARGO_PKG_VERSION"));
+static CSS_IMPORT_FETCH_LIMIT: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 /// OBS 브릿지에 CSS 설정 변경을 settings_diff로 전달 (전체 스냅샷 브로드캐스트 방지)
 fn notify_obs_css(state: &AppState) {
@@ -56,6 +71,193 @@ pub struct CssLoadResponse {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CssImportFetchResult {
+    pub final_url: String,
+    pub text: String,
+}
+
+// 클라우드 메타데이터 주소 - IPv4-mapped IPv6 표기(::ffff:a9fe:a9fe)도 같은 주소로 본다
+fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => matches!(
+            ip.octets(),
+            [169, 254, 169, 254] | [169, 254, 170, 2] | [100, 100, 100, 200] | [192, 0, 0, 192]
+        ),
+        IpAddr::V6(ip) => match ip.to_ipv4_mapped() {
+            Some(mapped) => is_cloud_metadata_ip(IpAddr::V4(mapped)),
+            None => ip == Ipv6Addr::new(0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254),
+        },
+    }
+}
+
+fn is_cloud_metadata_url(url: &url::Url) -> bool {
+    match url.host() {
+        Some(url::Host::Domain(host)) => matches!(
+            host.trim_end_matches('.').to_ascii_lowercase().as_str(),
+            "metadata.google.internal" | "metadata.azure.internal"
+        ),
+        Some(url::Host::Ipv4(ip)) => is_cloud_metadata_ip(IpAddr::V4(ip)),
+        Some(url::Host::Ipv6(ip)) => is_cloud_metadata_ip(IpAddr::V6(ip)),
+        None => false,
+    }
+}
+
+// 호스트를 먼저 해석해 메타데이터 주소로 향하는 DNS 이름·리바인딩을 차단하고,
+// 실제 요청은 검사한 주소에만 고정한다
+fn resolve_css_import_addrs(url: &url::Url) -> CmdResult<Vec<SocketAddr>> {
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| CommandError::msg("CSS import URL has no port"))?;
+    let addrs: Vec<SocketAddr> = match url.host() {
+        Some(url::Host::Ipv4(ip)) => vec![SocketAddr::new(IpAddr::V4(ip), port)],
+        Some(url::Host::Ipv6(ip)) => vec![SocketAddr::new(IpAddr::V6(ip), port)],
+        Some(url::Host::Domain(domain)) => (domain.trim_end_matches('.'), port)
+            .to_socket_addrs()
+            .map_err(|error| {
+                CommandError::msg(format!(
+                    "failed to resolve CSS import host '{domain}': {error}"
+                ))
+            })?
+            .collect(),
+        None => return Err(CommandError::msg("CSS import URL has no host")),
+    };
+    if addrs.is_empty() {
+        return Err(CommandError::msg(
+            "CSS import host resolved to no addresses",
+        ));
+    }
+    if addrs.iter().any(|addr| is_cloud_metadata_ip(addr.ip())) {
+        return Err(CommandError::msg(
+            "CSS import access to cloud metadata endpoints is blocked",
+        ));
+    }
+    Ok(addrs)
+}
+
+fn validate_css_import_url(raw: &str) -> CmdResult<url::Url> {
+    let url = url::Url::parse(raw)
+        .map_err(|error| CommandError::msg(format!("invalid CSS import URL: {error}")))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(CommandError::msg(format!(
+            "unsupported CSS import URL scheme '{}': only http and https are allowed",
+            url.scheme()
+        )));
+    }
+    if is_cloud_metadata_url(&url) {
+        return Err(CommandError::msg(
+            "CSS import access to cloud metadata endpoints is blocked",
+        ));
+    }
+    Ok(url)
+}
+
+fn read_css_import_body(reader: impl Read) -> CmdResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader
+        .take((MAX_CSS_IMPORT_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            CommandError::msg(format!("failed to read CSS import response: {error}"))
+        })?;
+    if bytes.len() > MAX_CSS_IMPORT_BYTES {
+        return Err(CommandError::msg(format!(
+            "CSS import response exceeds {MAX_CSS_IMPORT_BYTES} bytes"
+        )));
+    }
+    Ok(bytes)
+}
+
+fn ensure_css_import_window(window_label: &str) -> CmdResult<()> {
+    if window_label != super::MAIN_WINDOW_LABEL {
+        return Err(CommandError::msg(
+            "CSS import fetch is only available in the main window",
+        ));
+    }
+    Ok(())
+}
+
+fn css_import_fetch_limit() -> &'static Arc<Semaphore> {
+    CSS_IMPORT_FETCH_LIMIT
+        .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_CSS_IMPORT_FETCHES)))
+}
+
+// hop마다 검증·해석·주소 고정이 필요하므로 리다이렉트는 직접 따라간다
+fn css_import_client(url: &url::Url, pinned: &[SocketAddr]) -> CmdResult<Client> {
+    let mut builder = Client::builder()
+        .timeout(CSS_IMPORT_FETCH_TIMEOUT)
+        .user_agent(CSS_IMPORT_USER_AGENT)
+        .redirect(reqwest::redirect::Policy::none());
+    if let Some(url::Host::Domain(domain)) = url.host() {
+        builder = builder.resolve_to_addrs(domain, pinned);
+    }
+    builder.build().map_err(|error| {
+        CommandError::msg(format!("failed to initialize CSS import client: {error}"))
+    })
+}
+
+fn fetch_css_import(url: String) -> CmdResult<CssImportFetchResult> {
+    let mut url = validate_css_import_url(&url)?;
+    for _ in 0..=MAX_CSS_IMPORT_REDIRECTS {
+        let pinned = resolve_css_import_addrs(&url)?;
+        let response = css_import_client(&url, &pinned)?
+            .get(url.clone())
+            .header(ACCEPT, "text/css,*/*;q=0.1")
+            .send()
+            .map_err(|error| CommandError::msg(format!("failed to fetch CSS import: {error}")))?;
+        if response.status().is_redirection() {
+            let location = response
+                .headers()
+                .get(LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| CommandError::msg("CSS import redirect without Location header"))?;
+            let next = url
+                .join(location)
+                .map_err(|error| CommandError::msg(format!("error following redirect: {error}")))?;
+            url = validate_css_import_url(next.as_str())
+                .map_err(|error| CommandError::msg(format!("error following redirect: {error}")))?;
+            continue;
+        }
+        let response = response
+            .error_for_status()
+            .map_err(|error| CommandError::msg(format!("CSS import request failed: {error}")))?;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_CSS_IMPORT_BYTES as u64)
+        {
+            return Err(CommandError::msg(format!(
+                "CSS import response exceeds {MAX_CSS_IMPORT_BYTES} bytes"
+            )));
+        }
+        let final_url = response.url().to_string();
+        let bytes = read_css_import_body(response)?;
+        return Ok(CssImportFetchResult {
+            final_url,
+            text: String::from_utf8_lossy(&bytes).into_owned(),
+        });
+    }
+    Err(CommandError::msg("CSS import exceeded redirect limit"))
+}
+
+#[tauri::command]
+pub async fn css_fetch_import(
+    window: WebviewWindow,
+    url: String,
+) -> CmdResult<CssImportFetchResult> {
+    ensure_css_import_window(window.label())?;
+    let permit = Arc::clone(css_import_fetch_limit())
+        .acquire_owned()
+        .await
+        .map_err(|error| CommandError::msg(format!("CSS import fetch limit closed: {error}")))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        fetch_css_import(url)
+    })
+    .await
+    .map_err(|error| CommandError::msg(format!("CSS import fetch task failed: {error}")))?
 }
 
 #[derive(Serialize, Clone)]
@@ -984,8 +1186,10 @@ fn css_tab_export_from_path(
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_css_extension, prepare_tab_css_for_set_with, replace_tab_css_override,
-        write_tab_css_export,
+        ensure_css_extension, ensure_css_import_window, fetch_css_import, is_cloud_metadata_ip,
+        prepare_tab_css_for_set_with, read_css_import_body, replace_tab_css_override,
+        resolve_css_import_addrs, validate_css_import_url, write_tab_css_export,
+        MAX_CSS_IMPORT_BYTES,
     };
     use crate::models::{AppStoreData, TabCss};
     use parking_lot::Mutex;
@@ -1001,6 +1205,157 @@ mod tests {
             "dmnote-css-command-{label}-{}",
             uuid::Uuid::new_v4()
         ))
+    }
+
+    #[test]
+    fn css_import_url_accepts_only_http_and_https() {
+        assert_eq!(
+            validate_css_import_url("https://example.com/theme.css")
+                .unwrap()
+                .scheme(),
+            "https"
+        );
+        assert_eq!(
+            validate_css_import_url("http://example.com/theme.css")
+                .unwrap()
+                .scheme(),
+            "http"
+        );
+        for invalid in ["file:///tmp/theme.css", "data:text/css,body{}", "theme.css"] {
+            assert!(validate_css_import_url(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn css_import_fetch_is_limited_to_the_main_window() {
+        ensure_css_import_window(super::super::MAIN_WINDOW_LABEL).unwrap();
+        for label in ["overlay", "panel"] {
+            assert_eq!(
+                ensure_css_import_window(label).unwrap_err().to_string(),
+                "CSS import fetch is only available in the main window"
+            );
+        }
+    }
+
+    #[test]
+    fn css_import_blocks_only_explicit_metadata_targets() {
+        for allowed in [
+            "http://127.0.0.1:5500/theme.css",
+            "http://10.0.0.1/theme.css",
+            "https://example.com/theme.css",
+        ] {
+            validate_css_import_url(allowed).unwrap();
+        }
+        for blocked in [
+            "http://169.254.169.254/latest/meta-data",
+            "http://169.254.170.2/v2/credentials",
+            "http://100.100.100.200/latest/meta-data",
+            "http://192.0.0.192/metadata",
+            "http://[fd00:ec2::254]/latest/meta-data",
+            "http://metadata.google.internal/computeMetadata/v1",
+            "http://metadata.azure.internal/metadata/instance",
+        ] {
+            assert!(validate_css_import_url(blocked).is_err(), "{blocked}");
+        }
+    }
+
+    #[test]
+    fn css_import_blocks_ipv4_mapped_metadata_literals_and_pins_resolved_addresses() {
+        assert!(
+            validate_css_import_url("http://[::ffff:169.254.169.254]/latest/meta-data").is_err()
+        );
+        assert!(is_cloud_metadata_ip(
+            "::ffff:169.254.169.254".parse().unwrap()
+        ));
+        assert!(is_cloud_metadata_ip("fd00:ec2::254".parse().unwrap()));
+        assert!(!is_cloud_metadata_ip("::1".parse().unwrap()));
+        assert!(!is_cloud_metadata_ip("127.0.0.1".parse().unwrap()));
+
+        let literal = url::Url::parse("http://127.0.0.1:5500/theme.css").unwrap();
+        assert_eq!(
+            resolve_css_import_addrs(&literal).unwrap(),
+            vec!["127.0.0.1:5500".parse::<std::net::SocketAddr>().unwrap()]
+        );
+        let mapped = url::Url::parse("http://[::ffff:169.254.169.254]/latest").unwrap();
+        assert!(resolve_css_import_addrs(&mapped).is_err());
+    }
+
+    #[test]
+    fn css_import_follows_local_redirect_without_prompt() {
+        use std::io::{Read as _, Write as _};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            for request_index in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 2_048];
+                let _ = stream.read(&mut request).unwrap();
+                if request_index == 0 {
+                    stream
+                        .write_all(
+                            b"HTTP/1.1 302 Found\r\nLocation: /theme.css\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        )
+                        .unwrap();
+                } else {
+                    stream
+                        .write_all(
+                            b"HTTP/1.1 200 OK\r\nContent-Length: 22\r\nConnection: close\r\n\r\n.counter { color:red }",
+                        )
+                        .unwrap();
+                }
+            }
+        });
+        let fetched = fetch_css_import(format!("http://{address}/start.css")).unwrap();
+
+        server.join().unwrap();
+        assert_eq!(fetched.final_url, format!("http://{address}/theme.css"));
+        assert_eq!(fetched.text, ".counter { color:red }");
+    }
+
+    #[test]
+    fn css_import_blocks_metadata_redirect_before_requesting_it() {
+        use std::io::{Read as _, Write as _};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 2_048];
+            let _ = stream.read(&mut request).unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: http://169.254.169.254/latest/meta-data\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        });
+
+        let error = fetch_css_import(format!("http://{address}/start.css")).unwrap_err();
+
+        server.join().unwrap();
+        assert!(
+            error.to_string().contains("error following redirect"),
+            "unexpected redirect error: {error}"
+        );
+    }
+
+    #[test]
+    fn css_import_body_enforces_the_one_mibibyte_limit() {
+        let accepted = vec![b'a'; MAX_CSS_IMPORT_BYTES];
+        assert_eq!(
+            read_css_import_body(std::io::Cursor::new(accepted.clone())).unwrap(),
+            accepted
+        );
+
+        let rejected = vec![b'a'; MAX_CSS_IMPORT_BYTES + 1];
+        assert_eq!(
+            read_css_import_body(std::io::Cursor::new(rejected))
+                .unwrap_err()
+                .to_string(),
+            format!("CSS import response exceeds {MAX_CSS_IMPORT_BYTES} bytes")
+        );
     }
 
     #[test]

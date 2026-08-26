@@ -9,7 +9,7 @@ import {
 } from '../src/types/editor';
 
 // Rust 테스트(src-tauri/src/models/editor.rs)와 같은 fixture를 공유해
-// 양 언어의 property 태그 71개가 기계적으로 일치함을 고정한다
+// 양 언어의 property 태그 목록이 기계적으로 일치함을 고정한다
 const FIXTURE_PATH = join(__dirname, 'fixtures', 'editor-property-tags.json');
 
 interface PropertyTagFixture {
@@ -23,7 +23,7 @@ const fixture = (): PropertyTagFixture =>
 describe('editor property wire parity', () => {
   it('canonical property 태그 배열은 공유 fixture와 순서까지 일치한다', () => {
     const { properties } = fixture();
-    expect(properties).toHaveLength(71);
+    expect(properties).toHaveLength(72);
     expect([...EDITOR_ELEMENT_PROPERTY_KEYS]).toEqual(properties);
   });
 

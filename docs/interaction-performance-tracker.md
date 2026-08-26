@@ -1389,6 +1389,48 @@ handler workload 500개와 `input` 100회 burst, 기준선·개선 각 30회와 
 | 정확성 검증 | flush lock·overlay App 22개 테스트 통과                                                                              |
 | 결론        | JS 경로 감사 완료, OS 네이티브 창 drag는 최적화 범위 밖으로 보류                                                     |
 
+### EXP-031: 오버레이 키 카운터 핫패스
+
+| 필드        | 내용                                                                                                                                                                                                  |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 항목 ID     | OVL-01                                                                                                                                                                                                |
+| 배경        | 카운터 ON 연타 시 미세한 버벅임 제보. press당 커밋 3회(OFF 2회)·렌더마다 zod 정규화, 300ms rAF 스케일 루프가 키 레이어를 매 프레임 리페인트                                                           |
+| 변경 내용   | 정규화 결과 identity 캐시(`useCounterSettings`), 카운터 레이어 outside 배치만 마운트, `CountDisplay` 스케일 팝을 WAAPI(`Element.animate`)로 전환(재생 중 갱신 시 cancel 후 재생 유지, jsdom rAF 폴백) |
+| 측정 경로   | `npm run benchmark:interaction:overlay-counter -- <variant>` — Key + KeyCounterLayer 실제 마운트, 40 press 버스트(press마다 1프레임) × 20회, 키 4/8/30, 배치 off/inside/outside                       |
+| 구현 커밋   | `faba5775`(정규화 캐시), `f069b91a`(레이어 게이팅), `6986f6ae`(WAAPI), `2d561ba6`(inside 구독 격리), 하네스 `6a2a8328`·`19765ca0`                                                                     |
+| 정확성 검증 | `overlayCommitBudget`(폴백·WAAPI 경로), `counterLayers`, `insideCounterSubscription`, `useCounterSettings`, 카운터 애니메이션 모달 테스트 통과. 전 케이스 마운트된 카운터 수 baseline=optimized       |
+| 결론        | JS 측 이벤트·커밋 비용 감소 확인. 컴포지터 오프로드 이득과 WebKit 확대 블러 리스크는 jsdom에 나타나지 않으므로 실기기(macOS WKWebView·Windows WebView2) 육안·프로파일 확인 필요                       |
+
+측정값 — `benchmarks/results/ovl-01-counter-{baseline,optimized}.json`. baseline은 `d1d35c99`(main 런타임) worktree에 `19765ca0`의 하네스 파일만 추가해 측정, optimized는 `19765ca0` clean 트리. jsdom·Node 실행, React Compiler 미적용, 페인트·합성 비용 미포함.
+
+| 키  | 배치    | 이벤트 p50 ms | 이벤트 p95 ms | 커밋 p50 ms   | normalize/press | rAF/frame (baseline) |
+| --- | ------- | ------------- | ------------- | ------------- | --------------- | -------------------- |
+| 4   | off     | 0.172 → 0.141 | 0.796 → 0.188 | 0.062 → 0.042 | 2.00 → 0.00     | 0                    |
+| 4   | inside  | 0.396 → 0.323 | 0.496 → 0.363 | 0.254 → 0.186 | 6.00 → 0.00     | 3.79                 |
+| 8   | inside  | 0.392 → 0.311 | 0.435 → 0.344 | 0.250 → 0.181 | 6.00 → 0.00     | 7.02                 |
+| 8   | outside | 0.308 → 0.281 | 0.338 → 0.311 | 0.181 → 0.155 | 5.00 → 0.00     | 7.02                 |
+| 30  | inside  | 0.416 → 0.321 | 0.513 → 0.355 | 0.250 → 0.181 | 6.00 → 0.00     | 12.63                |
+| 30  | outside | 0.342 → 0.299 | 1.859 → 0.323 | 0.190 → 0.156 | 5.00 → 0.00     | 12.39                |
+
+- `normalize/press`(정확한 호출 수)와 `커밋 p50`(inside는 KeyCounter 래퍼 렌더 제거 효과)이 caveat 없이 유효한 수치.
+- `rAF/frame`은 baseline의 rAF 루프 작업량(프레임당 콜백 수 ≈ 동시 재생 중인 키 수). optimized는 `Element.animate`가 jsdom no-op 스텁이라 0이 **구조적으로** 나오며 컴포지터 비용은 미측정 — 실기기 프로파일에서 확인할 항목.
+- 버스트당 프레임 수는 baseline 57(drain 17프레임 포함) vs optimized 40 — 프레임 지표는 like-for-like 분포가 아니므로 문서에서 제외.
+- 이벤트 p95의 4:off `0.796`·30:outside `1.859`는 동종 행 대비 5~6배 튄 단발 아웃라이어 — 개선 폭으로 읽지 말 것.
+- `CountDisplay`는 eslint-disable 제거로 이제 React Compiler 컴파일 대상(이전엔 bailout). 벤치는 컴파일 미적용이지만 `cssEasing` 문자열 값 비교와 identity 캐시 덕에 동작은 동일.
+- press당 React 커밋 수(ON 3회)는 그대로 — DOWN·counter·UP이 별도 IPC task로 도착하므로 병합은 별도 과제.
+- 하네스는 모든 키가 같은 `counter` 객체를 공유하는 identity 캐시 최선 케이스. 프로덕션 `position.counter` identity 안정성(`applyOffset`·`resolveZIndexFallback` WeakMap 캐시)은 리뷰에서 코드로 확인.
+
+후속 — inside 카운터 시그널 구독 격리(`2d561ba6`, `benchmarks/results/ovl-01-counter-optimized-split.json`, clean 트리). Key/StatItem 본문이 카운터 값을 읽지 않고 `SignalCountDisplay` 래퍼만 구독:
+
+| 키  | 배치    | 이벤트 p50 ms (WAAPI → 구독 격리) | 커밋 p50 ms (WAAPI → 구독 격리) |
+| --- | ------- | --------------------------------- | ------------------------------- |
+| 4   | inside  | 0.323 → 0.293                     | 0.186 → 0.169                   |
+| 8   | inside  | 0.311 → 0.284                     | 0.181 → 0.164                   |
+| 30  | inside  | 0.321 → 0.295                     | 0.181 → 0.166                   |
+| 8   | outside | 0.281 → 0.282                     | 0.155 → 0.158                   |
+
+inside만 −9% 내외로 줄고 outside/off는 노이즈 범위 — counter 커밋이 Key 전체에서 span 하나로 축소된 효과. 검토 후 제외: `keys:counter`를 오버레이 창 전용 emit으로 축소하는 안은 `dmn.keys.onCounterChanged`(창 제한 없는 공개 플러그인 API)·카운터 딜레이 타이머·OBS 포워딩에 영향이 있어 보류.
+
 ## 8. 완료 게이트
 
 성능이 빨라졌더라도 다음 항목 중 하나가 깨지면 완료 처리하지 않는다.

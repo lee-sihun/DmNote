@@ -3,15 +3,16 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     errors::EditorCommitError,
     models::{
-        compact_canonical_rgba, default_counter_animation_builtin_presets, AppStoreData,
-        CounterAnimationPreset, EditorBoundsV1, EditorCounterAnimationPresetIntentV1,
-        EditorCounterFillIntentV1, EditorDocumentV1, EditorElementGroupTargetV1,
-        EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
-        EditorGroupUpdateV1, EditorNoteColorV1, EditorNotePaintIntentV1, EditorOpResultStatusV1,
-        EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1, EditorPaintGradientV1,
-        EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1, ElementShadowSpec,
-        GradientSpec, KeyPosition, LayerGroupDef, NoteColor, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
-        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        compact_canonical_rgba, default_counter_animation_builtin_presets,
+        note_border_representative_hex, note_gradient_shadow, AppStoreData, CounterAnimationPreset,
+        EditorBoundsV1, EditorCounterAnimationPresetIntentV1, EditorCounterFillIntentV1,
+        EditorDocumentV1, EditorElementGroupTargetV1, EditorElementPropertyPatchV1,
+        EditorElementTypeV1, EditorField, EditorFrozenElementV1, EditorGroupUpdateV1,
+        EditorNoteBorderPaintV1, EditorNoteColorV1, EditorNotePaintIntentV1,
+        EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1,
+        EditorPaintGradientV1, EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1,
+        ElementShadowSpec, GradientSpec, KeyPosition, LayerGroupDef, NoteColor, NoteGradientShadow,
+        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
 };
 
@@ -151,6 +152,14 @@ fn validate_paint_gradient(gradient: &EditorPaintGradientV1) -> Result<(), Edito
     }
     let mut previous_pos = None;
     for stop in &gradient.stops {
+        // 빈 stop 색은 로드 canonicalize가 빈 대표색을 만들어 blank 정규화와
+        // 매 시작 진동한다 - 커밋에서 차단
+        if stop.color.trim().is_empty() {
+            return Err(EditorCommitError::validation(
+                "INVALID_PAINT_GRADIENT",
+                "paint gradient stop colors must not be blank",
+            ));
+        }
         if !stop.pos.is_finite()
             || !(0.0..=1.0).contains(&stop.pos)
             || (stop.pos == 0.0 && stop.pos.is_sign_negative())
@@ -202,57 +211,41 @@ fn has_stored_paint_value(color: &Option<String>, gradient: &Option<GradientSpec
         || gradient.is_some()
 }
 
-fn preserve_active_paint_fallback(position: &mut KeyPosition, background: bool) -> bool {
-    let (idle_color, idle_gradient, active_color, active_gradient) = if background {
-        (
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PaintSurface {
+    Background,
+    Border,
+    Font,
+}
+
+fn preserve_active_paint_fallback(position: &mut KeyPosition, surface: PaintSurface) -> bool {
+    let (idle_color, idle_gradient, active_color, active_gradient) = match surface {
+        PaintSurface::Background => (
             position.background_color.clone(),
             position.background_gradient.clone(),
             &mut position.active_background_color,
             &mut position.active_background_gradient,
-        )
-    } else {
-        (
+        ),
+        PaintSurface::Border => (
             position.border_color.clone(),
             position.border_gradient.clone(),
             &mut position.active_border_color,
             &mut position.active_border_gradient,
-        )
+        ),
+        PaintSurface::Font => (
+            position.font_color.clone(),
+            position.font_gradient.clone(),
+            &mut position.active_font_color,
+            &mut position.active_font_gradient,
+        ),
     };
-    if has_stored_paint_value(active_color, active_gradient)
-        || !has_stored_paint_value(&idle_color, &idle_gradient)
-    {
+    if has_stored_paint_value(active_color, active_gradient) {
         return false;
     }
 
-    let next_color = idle_gradient
-        .as_ref()
-        .and_then(|gradient| gradient.stops.first())
-        .map(|stop| stop.color.clone())
-        .or_else(|| idle_color.filter(|color| !color.trim().is_empty()));
-    let changed = *active_color != next_color || *active_gradient != idle_gradient;
-    *active_color = next_color;
+    let changed = *active_color != idle_color || *active_gradient != idle_gradient;
+    *active_color = idle_color;
     *active_gradient = idle_gradient;
-    changed
-}
-
-fn preserve_active_font_color_fallback(position: &mut KeyPosition) -> bool {
-    if position
-        .active_font_color
-        .as_deref()
-        .is_some_and(|color| !color.trim().is_empty())
-    {
-        return false;
-    }
-    let Some(idle_color) = position
-        .font_color
-        .as_ref()
-        .filter(|color| !color.trim().is_empty())
-        .cloned()
-    else {
-        return false;
-    };
-    let changed = position.active_font_color.as_ref() != Some(&idle_color);
-    position.active_font_color = Some(idle_color);
     changed
 }
 
@@ -262,6 +255,24 @@ fn apply_paint_descriptor(
     descriptor: &EditorPaintDescriptorV1,
 ) -> bool {
     let next_color = Some(descriptor.color.clone());
+    let next_gradient = descriptor
+        .gradient
+        .as_ref()
+        .map(|gradient| gradient.to_gradient_spec());
+    let changed = *color != next_color || *gradient != next_gradient;
+    *color = next_color;
+    *gradient = next_gradient;
+    changed
+}
+
+// font 전용: 빈 solid 색은 None으로 저장 - 로드 정규화(normalize_blank_font_colors)와
+// 같은 의미라 커밋 직후 문서와 재로드 문서가 갈리지 않는다
+fn apply_font_paint_descriptor(
+    color: &mut Option<String>,
+    gradient: &mut Option<GradientSpec>,
+    descriptor: &EditorPaintDescriptorV1,
+) -> bool {
+    let next_color = Some(descriptor.color.clone()).filter(|value| !value.trim().is_empty());
     let next_gradient = descriptor
         .gradient
         .as_ref()
@@ -453,6 +464,7 @@ fn patch_shadow_enabled(
 fn validate_note_paint_intent(patch: &EditorNotePaintIntentV1) -> Result<(), EditorCommitError> {
     let valid_opacity = |value: u32| value <= 100;
     let valid = match patch {
+        EditorNotePaintIntentV1::Descriptor(patch) => valid_opacity(patch.opacity),
         EditorNotePaintIntentV1::Color(_) => true,
         EditorNotePaintIntentV1::Opacity(patch) => valid_opacity(patch.opacity),
         EditorNotePaintIntentV1::GradientOpacity(patch) => {
@@ -461,14 +473,41 @@ fn validate_note_paint_intent(patch: &EditorNotePaintIntentV1) -> Result<(), Edi
                 && valid_opacity(patch.opacity_bottom)
         }
     };
-    if valid {
-        Ok(())
-    } else {
-        Err(EditorCommitError::validation(
+    if !valid {
+        return Err(EditorCommitError::validation(
             "NOTE_OPACITY_OUT_OF_RANGE",
             "note opacity values must be integers between 0 and 100",
-        ))
+        ));
     }
+
+    let EditorNotePaintIntentV1::Descriptor(patch) = patch else {
+        return Ok(());
+    };
+    let Some(gradient) = patch.gradient.as_ref() else {
+        if matches!(patch.color, EditorNoteColorV1::Solid(_)) {
+            return Ok(());
+        }
+        return Err(EditorCommitError::validation(
+            "PAINT_COLOR_GRADIENT_MISMATCH",
+            "note paint without a gradient must use a solid color",
+        ));
+    };
+
+    validate_paint_gradient(gradient)?;
+    let gradient = gradient.to_gradient_spec();
+    let Some(shadow) = note_gradient_shadow(&gradient, patch.opacity) else {
+        return Err(EditorCommitError::validation(
+            "INVALID_PAINT_GRADIENT",
+            "note gradient contains an unsupported stop color",
+        ));
+    };
+    if editor_note_color(&patch.color) != shadow.color {
+        return Err(EditorCommitError::validation(
+            "PAINT_COLOR_GRADIENT_MISMATCH",
+            "note paint color must equal the derived gradient shadow color",
+        ));
+    }
+    Ok(())
 }
 
 fn editor_note_color(color: &EditorNoteColorV1) -> NoteColor {
@@ -481,58 +520,146 @@ fn editor_note_color(color: &EditorNoteColorV1) -> NoteColor {
     }
 }
 
+fn apply_note_gradient_shadow(
+    position: &mut KeyPosition,
+    glow: bool,
+    shadow: NoteGradientShadow,
+) -> bool {
+    if glow {
+        let changed = position.note_glow_color.as_ref() != Some(&shadow.color)
+            || position.note_glow_opacity_top != Some(shadow.opacity_top)
+            || position.note_glow_opacity_bottom != Some(shadow.opacity_bottom);
+        position.note_glow_color = Some(shadow.color);
+        position.note_glow_opacity_top = Some(shadow.opacity_top);
+        position.note_glow_opacity_bottom = Some(shadow.opacity_bottom);
+        changed
+    } else {
+        let changed = position.note_color != shadow.color
+            || position.note_opacity_top != Some(shadow.opacity_top)
+            || position.note_opacity_bottom != Some(shadow.opacity_bottom);
+        position.note_color = shadow.color;
+        position.note_opacity_top = Some(shadow.opacity_top);
+        position.note_opacity_bottom = Some(shadow.opacity_bottom);
+        changed
+    }
+}
+
 fn patch_note_paint(
     position: &mut KeyPosition,
     glow: bool,
     patch: &EditorNotePaintIntentV1,
 ) -> bool {
     match patch {
+        EditorNotePaintIntentV1::Descriptor(patch) => {
+            let color = editor_note_color(&patch.color);
+            let gradient = patch
+                .gradient
+                .as_ref()
+                .map(EditorPaintGradientV1::to_gradient_spec);
+            if let Some(gradient) = gradient {
+                let shadow = note_gradient_shadow(&gradient, patch.opacity)
+                    .expect("a validated note gradient has supported stop colors");
+                let changed = if glow {
+                    position.note_glow_gradient.as_ref() != Some(&gradient)
+                        || position.note_glow_opacity != patch.opacity
+                } else {
+                    position.note_gradient.as_ref() != Some(&gradient)
+                        || position.note_opacity != patch.opacity
+                };
+                if glow {
+                    position.note_glow_gradient = Some(gradient);
+                    position.note_glow_opacity = patch.opacity;
+                } else {
+                    position.note_gradient = Some(gradient);
+                    position.note_opacity = patch.opacity;
+                }
+                changed | apply_note_gradient_shadow(position, glow, shadow)
+            } else if glow {
+                let changed = position.note_glow_gradient.is_some()
+                    || position.note_glow_color.as_ref() != Some(&color)
+                    || position.note_glow_opacity != patch.opacity
+                    || position.note_glow_opacity_top != Some(patch.opacity)
+                    || position.note_glow_opacity_bottom != Some(patch.opacity);
+                position.note_glow_gradient = None;
+                position.note_glow_color = Some(color);
+                position.note_glow_opacity = patch.opacity;
+                position.note_glow_opacity_top = Some(patch.opacity);
+                position.note_glow_opacity_bottom = Some(patch.opacity);
+                changed
+            } else {
+                let changed = position.note_gradient.is_some()
+                    || position.note_color != color
+                    || position.note_opacity != patch.opacity
+                    || position.note_opacity_top != Some(patch.opacity)
+                    || position.note_opacity_bottom != Some(patch.opacity);
+                position.note_gradient = None;
+                position.note_color = color;
+                position.note_opacity = patch.opacity;
+                position.note_opacity_top = Some(patch.opacity);
+                position.note_opacity_bottom = Some(patch.opacity);
+                changed
+            }
+        }
         EditorNotePaintIntentV1::Color(patch) => {
             let color = editor_note_color(&patch.color);
             if glow {
-                if position.note_glow_color.as_ref() == Some(&color) {
-                    false
-                } else {
-                    position.note_glow_color = Some(color);
-                    true
-                }
-            } else if position.note_color == color {
-                false
+                let changed = position.note_glow_gradient.is_some()
+                    || position.note_glow_color.as_ref() != Some(&color);
+                position.note_glow_gradient = None;
+                position.note_glow_color = Some(color);
+                changed
             } else {
+                let changed = position.note_gradient.is_some() || position.note_color != color;
+                position.note_gradient = None;
                 position.note_color = color;
-                true
+                changed
             }
         }
         EditorNotePaintIntentV1::Opacity(patch) => {
-            let opacity = if glow {
-                &mut position.note_glow_opacity
+            let gradient = if glow {
+                position.note_glow_gradient.as_ref()
             } else {
-                &mut position.note_opacity
+                position.note_gradient.as_ref()
             };
-            if *opacity == patch.opacity {
-                false
+            // store canonicalize가 §2A를 보장해 실패는 도달 불가 - 발동해도
+            // 사용자 gradient를 지우지 않고 shadow 갱신만 건너뛴다 (비파괴)
+            let shadow =
+                gradient.and_then(|gradient| note_gradient_shadow(gradient, patch.opacity));
+            let mut changed = if glow {
+                let changed = position.note_glow_opacity != patch.opacity;
+                position.note_glow_opacity = patch.opacity;
+                changed
             } else {
-                *opacity = patch.opacity;
-                true
+                let changed = position.note_opacity != patch.opacity;
+                position.note_opacity = patch.opacity;
+                changed
+            };
+            if let Some(shadow) = shadow {
+                changed |= apply_note_gradient_shadow(position, glow, shadow);
             }
+            changed
         }
         EditorNotePaintIntentV1::GradientOpacity(patch) => {
-            let (opacity, opacity_top, opacity_bottom) = if glow {
+            let (gradient, opacity, opacity_top, opacity_bottom) = if glow {
                 (
+                    &mut position.note_glow_gradient,
                     &mut position.note_glow_opacity,
                     &mut position.note_glow_opacity_top,
                     &mut position.note_glow_opacity_bottom,
                 )
             } else {
                 (
+                    &mut position.note_gradient,
                     &mut position.note_opacity,
                     &mut position.note_opacity_top,
                     &mut position.note_opacity_bottom,
                 )
             };
-            let changed = *opacity != patch.opacity
+            let changed = gradient.is_some()
+                || *opacity != patch.opacity
                 || *opacity_top != Some(patch.opacity_top)
                 || *opacity_bottom != Some(patch.opacity_bottom);
+            *gradient = None;
             *opacity = patch.opacity;
             *opacity_top = Some(patch.opacity_top);
             *opacity_bottom = Some(patch.opacity_bottom);
@@ -541,20 +668,49 @@ fn patch_note_paint(
     }
 }
 
-fn validate_note_border_paint(color: &str, opacity: u32) -> Result<(), EditorCommitError> {
-    let valid_color = color.len() == 7
-        && color.starts_with('#')
-        && color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit);
+fn validate_note_border_paint(patch: &EditorNoteBorderPaintV1) -> Result<(), EditorCommitError> {
+    let valid_color = patch.color.len() == 7
+        && patch.color.starts_with('#')
+        && patch.color.as_bytes()[1..]
+            .iter()
+            .all(u8::is_ascii_hexdigit);
     if !valid_color {
         return Err(EditorCommitError::validation(
             "INVALID_NOTE_BORDER_COLOR",
             "note border color must use #RRGGBB format",
         ));
     }
-    if opacity > 100 {
+    if patch.opacity > 100 {
         return Err(EditorCommitError::validation(
             "NOTE_OPACITY_OUT_OF_RANGE",
             "note border opacity must be an integer between 0 and 100",
+        ));
+    }
+
+    let Some(gradient) = patch.gradient.as_ref() else {
+        return Ok(());
+    };
+    validate_paint_gradient(gradient)?;
+    for (index, stop) in gradient.stops.iter().enumerate() {
+        if note_border_representative_hex(&stop.color).is_none() {
+            return Err(EditorCommitError::validation(
+                "INVALID_PAINT_GRADIENT",
+                format!("note border gradient stop {index} has an unsupported color"),
+            ));
+        }
+    }
+    let representative = note_border_representative_hex(
+        &gradient
+            .stops
+            .first()
+            .expect("a validated note border gradient has at least two stops")
+            .color,
+    )
+    .expect("all note border gradient stop colors were validated");
+    if patch.color != representative {
+        return Err(EditorCommitError::validation(
+            "PAINT_COLOR_GRADIENT_MISMATCH",
+            "note border color must equal the uppercase first gradient stop color",
         ));
     }
     Ok(())
@@ -1437,25 +1593,34 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     };
                     validate_paint_descriptor(descriptor)?;
                 }
-                // key·knob 한정 active font color
-                EditorElementPropertyPatchV1::ActiveFontColor(_) => {
-                    if !matches!(
-                        element_type,
-                        EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                    ) {
+                // key 전용 active font paint
+                EditorElementPropertyPatchV1::ActiveFontPaint(patch) => {
+                    if !matches!(element_type, EditorElementTypeV1::Key) {
                         return Err(EditorCommitError::validation(
                             "ELEMENT_TYPE_MISMATCH",
-                            format!(
-                                "editor op {op_index} active font color target must be key or knob"
-                            ),
+                            format!("editor op {op_index} active font paint target must be key"),
                         ));
                     }
+                    validate_paint_descriptor(patch)?;
                 }
                 // 타입 무제약, paint 값 검증만
                 EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
                     validate_paint_descriptor(patch)?;
                 }
                 EditorElementPropertyPatchV1::BorderPaint(patch) => {
+                    validate_paint_descriptor(patch)?;
+                }
+                // key·stat 한정 font paint
+                EditorElementPropertyPatchV1::FontPaint(patch) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key | EditorElementTypeV1::Stat
+                    ) {
+                        return Err(EditorCommitError::validation(
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!("editor op {op_index} font paint target must be key or stat"),
+                        ));
+                    }
                     validate_paint_descriptor(patch)?;
                 }
                 // key·knob 한정 active 이미지 상태
@@ -1498,12 +1663,12 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 | EditorElementPropertyPatchV1::CounterGap(_)
                 | EditorElementPropertyPatchV1::CounterFontSize(_)
                 | EditorElementPropertyPatchV1::CounterFontWeight(_)
+                | EditorElementPropertyPatchV1::CounterFontBold(_)
                 | EditorElementPropertyPatchV1::CounterFontItalic(_)
                 | EditorElementPropertyPatchV1::CounterFontUnderline(_)
                 | EditorElementPropertyPatchV1::CounterFontStrikethrough(_)
                 | EditorElementPropertyPatchV1::CounterFontFamily(_)
-                | EditorElementPropertyPatchV1::CounterFillIdle(_)
-                | EditorElementPropertyPatchV1::CounterStrokeIdle(_) => {
+                | EditorElementPropertyPatchV1::CounterFillIdle(_) => {
                     if !matches!(
                         element_type,
                         EditorElementTypeV1::Key | EditorElementTypeV1::Stat
@@ -1538,8 +1703,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                 }
                 // key 전용 카운터 active 계열
-                EditorElementPropertyPatchV1::CounterFillActive(_)
-                | EditorElementPropertyPatchV1::CounterStrokeActive(_) => {
+                EditorElementPropertyPatchV1::CounterFillActive(_) => {
                     validate_editor_op_target_type(
                         op_index,
                         EditorElementTypeV1::Key,
@@ -1555,6 +1719,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 | EditorElementPropertyPatchV1::SoundVolume(_)
                 | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
                 | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
+                | EditorElementPropertyPatchV1::NoteGlowSyncPaint(_)
                 | EditorElementPropertyPatchV1::NoteGlowSize(_)
                 | EditorElementPropertyPatchV1::NotePaint(_)
                 | EditorElementPropertyPatchV1::NoteGlowPaint(_)
@@ -1600,7 +1765,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             validate_note_paint_intent(patch)?;
                         }
                         EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
-                            validate_note_border_paint(&patch.color, patch.opacity)?;
+                            validate_note_border_paint(patch)?;
                         }
                         _ => {}
                     }
@@ -1700,13 +1865,13 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                 | EditorElementPropertyPatchV1::LayerName(_)
                 | EditorElementPropertyPatchV1::UseInlineStyles(_)
                 | EditorElementPropertyPatchV1::FontWeight(_)
+                | EditorElementPropertyPatchV1::FontBold(_)
                 | EditorElementPropertyPatchV1::FontItalic(_)
                 | EditorElementPropertyPatchV1::FontUnderline(_)
                 | EditorElementPropertyPatchV1::FontStrikethrough(_)
                 | EditorElementPropertyPatchV1::FontFamily(_)
                 | EditorElementPropertyPatchV1::DisplayText(_)
                 | EditorElementPropertyPatchV1::ClassName(_)
-                | EditorElementPropertyPatchV1::FontColor(_)
                 | EditorElementPropertyPatchV1::InactiveImage(_)
                 | EditorElementPropertyPatchV1::IdleTransparent(_)
                 | EditorElementPropertyPatchV1::IdleImageFit(_) => {}
@@ -1946,7 +2111,22 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         if position.font_weight == Some(*patch) {
                             false
                         } else {
+                            // Bold 미확정 요소는 굵기 변경 전 암묵 상태를 고정 - (700, None)이
+                            // 새로 생기면 재시작 마이그레이션이 레거시 700으로 오인한다
+                            if position.font_bold.is_none() {
+                                position.font_bold =
+                                    Some(matches!(position.font_weight, None | Some(700)));
+                            }
                             position.font_weight = Some(*patch);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::FontBold(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.font_bold == Some(*patch) {
+                            false
+                        } else {
+                            position.font_bold = Some(*patch);
                             true
                         }
                     }
@@ -2004,24 +2184,23 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             true
                         }
                     }
-                    EditorElementPropertyPatchV1::FontColor(patch) => {
+                    EditorElementPropertyPatchV1::FontPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        let preserved = matches!(
-                            location.element_type,
-                            EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                        ) && preserve_active_font_color_fallback(position);
-                        let changed = position.font_color.as_deref() != Some(patch.as_str());
-                        position.font_color = Some(patch.clone());
-                        changed || preserved
+                        let preserved = matches!(location.element_type, EditorElementTypeV1::Key)
+                            && preserve_active_paint_fallback(position, PaintSurface::Font);
+                        apply_font_paint_descriptor(
+                            &mut position.font_color,
+                            &mut position.font_gradient,
+                            patch,
+                        ) || preserved
                     }
-                    EditorElementPropertyPatchV1::ActiveFontColor(patch) => {
+                    EditorElementPropertyPatchV1::ActiveFontPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        if position.active_font_color.as_deref() == Some(patch.as_str()) {
-                            false
-                        } else {
-                            position.active_font_color = Some(patch.clone());
-                            true
-                        }
+                        apply_font_paint_descriptor(
+                            &mut position.active_font_color,
+                            &mut position.active_font_gradient,
+                            patch,
+                        )
                     }
                     EditorElementPropertyPatchV1::Shadow(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -2037,10 +2216,11 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                     EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        let preserved = matches!(
-                            location.element_type,
-                            EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                        ) && preserve_active_paint_fallback(position, true);
+                        let preserved =
+                            matches!(
+                                location.element_type,
+                                EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                            ) && preserve_active_paint_fallback(position, PaintSurface::Background);
                         apply_paint_descriptor(
                             &mut position.background_color,
                             &mut position.background_gradient,
@@ -2057,10 +2237,11 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                     EditorElementPropertyPatchV1::BorderPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        let preserved = matches!(
-                            location.element_type,
-                            EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                        ) && preserve_active_paint_fallback(position, false);
+                        let preserved =
+                            matches!(
+                                location.element_type,
+                                EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                            ) && preserve_active_paint_fallback(position, PaintSurface::Border);
                         apply_paint_descriptor(
                             &mut position.border_color,
                             &mut position.border_gradient,
@@ -2251,7 +2432,20 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         if position.counter.font_weight == *patch {
                             false
                         } else {
+                            if position.counter.font_bold.is_none() {
+                                position.counter.font_bold =
+                                    Some(position.counter.font_weight == 700);
+                            }
                             position.counter.font_weight = *patch;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterFontBold(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.font_bold == Some(*patch) {
+                            false
+                        } else {
+                            position.counter.font_bold = Some(*patch);
                             true
                         }
                     }
@@ -2298,24 +2492,6 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     EditorElementPropertyPatchV1::CounterFillActive(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
                         patch_counter_fill(position, true, patch)
-                    }
-                    EditorElementPropertyPatchV1::CounterStrokeIdle(patch) => {
-                        let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.stroke.idle == *patch {
-                            false
-                        } else {
-                            position.counter.stroke.idle = patch.clone();
-                            true
-                        }
-                    }
-                    EditorElementPropertyPatchV1::CounterStrokeActive(patch) => {
-                        let position = position_at_mut(&mut candidate, location)?;
-                        if position.counter.stroke.active == *patch {
-                            false
-                        } else {
-                            position.counter.stroke.active = patch.clone();
-                            true
-                        }
                     }
                     EditorElementPropertyPatchV1::CounterAnimationPreset(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -2383,6 +2559,15 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::NoteGlowSyncPaint(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        let mut changed = position.note_glow_sync_paint != *patch;
+                        position.note_glow_sync_paint = *patch;
+                        if *patch {
+                            changed |= position.mirror_note_body_to_glow();
+                        }
+                        changed
+                    }
                     EditorElementPropertyPatchV1::NoteGlowSize(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
                         if position.note_glow_size == *patch {
@@ -2394,19 +2579,37 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     }
                     EditorElementPropertyPatchV1::NotePaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
-                        patch_note_paint(position, false, patch)
+                        let mut changed = patch_note_paint(position, false, patch);
+                        if position.note_glow_sync_paint {
+                            changed |= position.mirror_note_body_to_glow();
+                        }
+                        changed
                     }
                     EditorElementPropertyPatchV1::NoteGlowPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_glow_sync_paint {
+                            return Err(EditorCommitError::validation(
+                                "NOTE_GLOW_PAINT_SYNC_LOCKED",
+                                format!(
+                                    "editor op {op_index} note glow paint cannot be edited while paint sync is enabled"
+                                ),
+                            ));
+                        }
                         patch_note_paint(position, true, patch)
                     }
                     EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
+                        let next_gradient = patch
+                            .gradient
+                            .as_ref()
+                            .map(EditorPaintGradientV1::to_gradient_spec);
                         let changed = position.note_border_color.as_deref()
                             != Some(patch.color.as_str())
-                            || position.note_border_opacity != patch.opacity;
+                            || position.note_border_opacity != patch.opacity
+                            || position.note_border_gradient != next_gradient;
                         position.note_border_color = Some(patch.color.clone());
                         position.note_border_opacity = patch.opacity;
+                        position.note_border_gradient = next_gradient;
                         changed
                     }
                     EditorElementPropertyPatchV1::NoteOffsetX(patch) => {
@@ -2819,6 +3022,20 @@ mod tests {
             .and_then(|details| details.validation_code.as_deref())
     }
 
+    fn assert_note_body_glow_paint_equal(position: &KeyPosition) {
+        assert_eq!(position.note_glow_gradient, position.note_gradient);
+        assert_eq!(position.note_glow_opacity, position.note_opacity);
+        assert_eq!(
+            position.note_glow_color.as_ref(),
+            Some(&position.note_color)
+        );
+        assert_eq!(position.note_glow_opacity_top, position.note_opacity_top);
+        assert_eq!(
+            position.note_glow_opacity_bottom,
+            position.note_opacity_bottom
+        );
+    }
+
     fn paint_descriptor(
         color: &str,
         gradient: Option<(f64, &[(&str, f64)])>,
@@ -2939,17 +3156,22 @@ mod tests {
             row("axisId", KNOB_ONLY, Patch::AxisId("axis-2".to_string())),
             row("useInlineStyles", ALL, Patch::UseInlineStyles(true)),
             row("fontWeight", ALL, Patch::FontWeight(700)),
+            row("fontBold", ALL, Patch::FontBold(true)),
             row("fontItalic", ALL, Patch::FontItalic(true)),
             row("fontUnderline", ALL, Patch::FontUnderline(true)),
             row("fontStrikethrough", ALL, Patch::FontStrikethrough(true)),
             row("fontFamily", ALL, Patch::FontFamily("Sans".to_string())),
             row("displayText", ALL, Patch::DisplayText("A".to_string())),
             row("className", ALL, Patch::ClassName("custom".to_string())),
-            row("fontColor", ALL, Patch::FontColor("#ffffff".to_string())),
             row(
-                "activeFontColor",
-                KEY_KNOB,
-                Patch::ActiveFontColor("#ff0000".to_string()),
+                "fontPaint",
+                KEY_STAT,
+                Patch::FontPaint(paint_descriptor("#ffffff", None)),
+            ),
+            row(
+                "activeFontPaint",
+                KEY_ONLY,
+                Patch::ActiveFontPaint(paint_descriptor("#ff0000", None)),
             ),
             row(
                 "shadow",
@@ -3038,6 +3260,7 @@ mod tests {
             row("counterGap", KEY_STAT, Patch::CounterGap(4)),
             row("counterFontSize", KEY_STAT, Patch::CounterFontSize(14)),
             row("counterFontWeight", KEY_STAT, Patch::CounterFontWeight(500)),
+            row("counterFontBold", KEY_STAT, Patch::CounterFontBold(true)),
             row(
                 "counterFontItalic",
                 KEY_STAT,
@@ -3069,16 +3292,6 @@ mod tests {
                 Patch::CounterFillActive(counter_fill_solid("#ffffff")),
             ),
             row(
-                "counterStrokeIdle",
-                KEY_STAT,
-                Patch::CounterStrokeIdle("#000000".to_string()),
-            ),
-            row(
-                "counterStrokeActive",
-                KEY_ONLY,
-                Patch::CounterStrokeActive("#000000".to_string()),
-            ),
-            row(
                 "counterAnimationPreset",
                 KEY_STAT,
                 Patch::CounterAnimationPreset(EditorCounterAnimationPresetIntentV1 {
@@ -3096,6 +3309,11 @@ mod tests {
                 Patch::NoteEffectEnabled(true),
             ),
             row("noteGlowEnabled", KEY_ONLY, Patch::NoteGlowEnabled(true)),
+            row(
+                "noteGlowSyncPaint",
+                KEY_ONLY,
+                Patch::NoteGlowSyncPaint(true),
+            ),
             row("noteGlowSize", KEY_ONLY, Patch::NoteGlowSize(10.0)),
             row("notePaint", KEY_ONLY, Patch::NotePaint(note_opacity(80))),
             row(
@@ -3109,6 +3327,7 @@ mod tests {
                 Patch::NoteBorderPaint(crate::models::EditorNoteBorderPaintV1 {
                     color: "#112233".to_string(),
                     opacity: 80,
+                    gradient: None,
                 }),
             ),
             row("noteOffsetX", KEY_ONLY, Patch::NoteOffsetX(Some(10.0))),
@@ -4577,6 +4796,55 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].use_inline_styles, None);
+    }
+
+    #[test]
+    fn font_weight_patch_pins_implicit_bold_before_changing_weight() {
+        let mut store = store_with_every_reorder_type();
+        {
+            let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
+            key.font_weight = Some(700);
+            key.font_bold = None;
+            key.counter.font_weight = 400;
+            key.counter.font_bold = None;
+        }
+        {
+            let stat = &mut store.stat_positions.get_mut("4key").unwrap()[0].position;
+            stat.font_weight = None;
+            stat.font_bold = None;
+        }
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::FontWeight(500),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::CounterFontWeight(700),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::FontWeight(600),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let key = &transition.candidate.key_positions["4key"][0];
+        // 레거시 (700, None)은 Bold였으므로 고정하고 굵기만 바꾼다
+        assert_eq!(key.font_weight, Some(500));
+        assert_eq!(key.font_bold, Some(true));
+        // 카운터 (400, None)은 non-bold 고정 - (700, Some(false))라 재시작 시 레거시로 오인되지 않는다
+        assert_eq!(key.counter.font_weight, 700);
+        assert_eq!(key.counter.font_bold, Some(false));
+        // 미설정 키 텍스트의 암묵 상태는 기본 Bold
+        let stat = &transition.candidate.stat_positions["4key"][0].position;
+        assert_eq!(stat.font_weight, Some(600));
+        assert_eq!(stat.font_bold, Some(true));
     }
 
     #[test]
@@ -6476,7 +6744,7 @@ mod tests {
             counter.align_mode = crate::models::KeyCounterAlignMode::Between;
             counter.gap = 7;
             counter.fill.idle = "fill-sibling".to_string();
-            counter.stroke.active = "stroke-sibling".to_string();
+            counter.fill.active = "active-fill-sibling".to_string();
             counter.font_family = Some("font-sibling".to_string());
             counter.animation.enabled = false;
             counter.animation.preset_id = Some("builtin-linear".to_string());
@@ -6626,7 +6894,7 @@ mod tests {
             counter.font_strikethrough = false;
             counter.font_family = Some("font-sibling".to_string());
             counter.fill.idle = "fill-sibling".to_string();
-            counter.stroke.active = "stroke-sibling".to_string();
+            counter.fill.active = "active-fill-sibling".to_string();
             counter.placement = crate::models::KeyCounterPlacement::Outside;
             counter.animation.preset_id = Some("builtin-linear".to_string());
         }
@@ -6874,7 +7142,7 @@ mod tests {
                     },
                 ],
             ));
-            counter.stroke.idle = "stroke-sibling".to_string();
+            counter.gap = 19;
             counter.font_family = Some("font-sibling".to_string());
             counter.animation.preset_id = Some("builtin-linear".to_string());
         }
@@ -7025,145 +7293,6 @@ mod tests {
             (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterFillActive(counter_fill_solid("active")),
-            ),
-        ] {
-            let error = prepare_editor_ops_transition(
-                &store,
-                &[
-                    ops[0].clone(),
-                    patch_property_op(element_type, uuid::Uuid::new_v4().to_string(), patch),
-                ],
-            )
-            .unwrap_err();
-            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
-            assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
-        }
-    }
-
-    #[test]
-    fn counter_stroke_patches_preserve_every_other_counter_leaf() {
-        let mut store = store_with_every_reorder_type();
-        let key_ids = store.key_positions["4key"]
-            .iter()
-            .take(2)
-            .map(|position| position.id.clone())
-            .collect::<Vec<_>>();
-        let stat_id = store.stat_positions["4key"][0].position.id.clone();
-        for counter in store.key_positions.get_mut("4key").unwrap()[..2]
-            .iter_mut()
-            .map(|position| &mut position.counter)
-            .chain(std::iter::once(
-                &mut store.stat_positions.get_mut("4key").unwrap()[0]
-                    .position
-                    .counter,
-            ))
-        {
-            counter.stroke.idle = "idle-before".to_string();
-            counter.stroke.active = "active-before".to_string();
-            counter.fill.idle = "fill-sibling".to_string();
-            counter.fill_idle_gradient = Some(
-                serde_json::from_value(serde_json::json!({
-                    "angle": 45,
-                    "stops": [
-                        { "color": "#111111", "pos": 0 },
-                        { "color": "#eeeeee", "pos": 1 }
-                    ]
-                }))
-                .unwrap(),
-            );
-            counter.font_family = Some("font-sibling".to_string());
-            counter.animation.preset_id = Some("builtin-linear".to_string());
-        }
-        let originals = [
-            store.key_positions["4key"][0].counter.clone(),
-            store.key_positions["4key"][1].counter.clone(),
-            store.stat_positions["4key"][0].position.counter.clone(),
-        ];
-        let ops = vec![
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                &key_ids[0],
-                EditorElementPropertyPatchV1::CounterStrokeIdle(String::new()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                &key_ids[1],
-                EditorElementPropertyPatchV1::CounterStrokeActive(
-                    "  raw active stroke  ".to_string(),
-                ),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Stat,
-                &stat_id,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("raw stat stroke".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterStrokeIdle("missing".to_string()),
-            ),
-        ];
-
-        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
-        let actual = [
-            transition.candidate.key_positions["4key"][0]
-                .counter
-                .clone(),
-            transition.candidate.key_positions["4key"][1]
-                .counter
-                .clone(),
-            transition.candidate.stat_positions["4key"][0]
-                .position
-                .counter
-                .clone(),
-        ];
-        let mut expected = originals.clone();
-        expected[0].stroke.idle.clear();
-        expected[1].stroke.active = "  raw active stroke  ".to_string();
-        expected[2].stroke.idle = "raw stat stroke".to_string();
-        assert_eq!(actual, expected);
-        assert_eq!(
-            transition.changed_fields,
-            [EditorField::KeyPositions, EditorField::StatPositions]
-        );
-        assert_eq!(
-            transition
-                .op_results
-                .iter()
-                .map(|result| result.status)
-                .collect::<Vec<_>>(),
-            [
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::TargetMissing,
-            ]
-        );
-
-        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
-        assert!(replay.changed_fields.is_empty());
-        assert_eq!(
-            replay
-                .op_results
-                .iter()
-                .map(|result| result.status)
-                .collect::<Vec<_>>(),
-            [
-                EditorOpResultStatusV1::NoChange,
-                EditorOpResultStatusV1::NoChange,
-                EditorOpResultStatusV1::NoChange,
-                EditorOpResultStatusV1::TargetMissing,
-            ]
-        );
-
-        for (element_type, patch) in [
-            (
-                EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("wrong".to_string()),
-            ),
-            (
-                EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeActive("wrong".to_string()),
             ),
         ] {
             let error = prepare_editor_ops_transition(
@@ -7619,6 +7748,230 @@ mod tests {
     }
 
     #[test]
+    fn note_glow_sync_enable_mirrors_body_paint_and_replays_as_no_change() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_color = NoteColor::Gradient {
+            top: "#112233".to_string(),
+            bottom: "#445566".to_string(),
+        };
+        position.note_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 180,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "rgba(68, 85, 102, 0.5)", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        position.note_opacity = 80;
+        position.note_opacity_top = Some(80);
+        position.note_opacity_bottom = Some(40);
+        position.note_glow_color = Some(NoteColor::Solid("stale".to_string()));
+        position.note_glow_opacity = 70;
+
+        let op = patch_property_op(
+            EditorElementTypeV1::Key,
+            &id,
+            EditorElementPropertyPatchV1::NoteGlowSyncPaint(true),
+        );
+        let transition = prepare_editor_ops_transition(&store, std::slice::from_ref(&op)).unwrap();
+        let changed = &transition.candidate.key_positions["4key"][0];
+        assert!(changed.note_glow_sync_paint);
+        assert_note_body_glow_paint_equal(changed);
+        assert_eq!(
+            transition.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &[op]).unwrap();
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+    }
+
+    #[test]
+    fn synced_note_paint_variants_mirror_every_body_paint_field() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_glow_sync_paint = true;
+        position.note_color = NoteColor::Gradient {
+            top: "#010203".to_string(),
+            bottom: "#040506".to_string(),
+        };
+        position.note_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 45,
+            "stops": [
+                { "color": "#010203", "pos": 0 },
+                { "color": "#040506", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        position.note_opacity = 90;
+        position.note_opacity_top = Some(90);
+        position.note_opacity_bottom = Some(90);
+        assert!(position.mirror_note_body_to_glow());
+
+        let descriptor = EditorElementPropertyPatchV1::NotePaint(
+            EditorNotePaintIntentV1::Descriptor(crate::models::EditorNotePaintDescriptorIntentV1 {
+                color: EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                    kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                    top: "#112233".to_string(),
+                    bottom: "#445566".to_string(),
+                }),
+                opacity: 60,
+                gradient: Some(crate::models::EditorPaintGradientV1 {
+                    angle: 90.0,
+                    stops: vec![
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#112233".to_string(),
+                            pos: 0.0,
+                        },
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "rgba(68, 85, 102, 0.5)".to_string(),
+                            pos: 1.0,
+                        },
+                    ],
+                }),
+            }),
+        );
+        let color = EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Color(
+            crate::models::EditorNotePaintColorIntentV1 {
+                color: EditorNoteColorV1::Solid("#AABBCC".to_string()),
+            },
+        ));
+        let opacity = EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Opacity(
+            crate::models::EditorNotePaintOpacityIntentV1 { opacity: 55 },
+        ));
+        let gradient_opacity =
+            EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::GradientOpacity(
+                crate::models::EditorNotePaintGradientOpacityIntentV1 {
+                    opacity: 70,
+                    opacity_top: 65,
+                    opacity_bottom: 35,
+                },
+            ));
+
+        for patch in [descriptor, color, opacity, gradient_opacity] {
+            let transition = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(EditorElementTypeV1::Key, &id, patch)],
+            )
+            .unwrap();
+            let changed = &transition.candidate.key_positions["4key"][0];
+            assert_note_body_glow_paint_equal(changed);
+            assert_eq!(
+                transition.op_results[0].status,
+                EditorOpResultStatusV1::Applied
+            );
+        }
+    }
+
+    #[test]
+    fn synced_note_glow_paint_rejects_the_whole_transition() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_glow_sync_paint = true;
+        assert!(position.mirror_note_body_to_glow());
+        let original = store.clone();
+
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &id,
+                    EditorElementPropertyPatchV1::Hidden(true),
+                ),
+                patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &id,
+                    EditorElementPropertyPatchV1::NoteGlowPaint(EditorNotePaintIntentV1::Opacity(
+                        crate::models::EditorNotePaintOpacityIntentV1 { opacity: 70 },
+                    )),
+                ),
+            ],
+        )
+        .unwrap_err();
+
+        assert_eq!(validation_code(&error), Some("NOTE_GLOW_PAINT_SYNC_LOCKED"));
+        assert_eq!(store, original);
+    }
+
+    #[test]
+    fn note_glow_sync_disable_preserves_the_mirrored_paint() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_glow_sync_paint = true;
+        position.note_color = NoteColor::Solid("#123456".to_string());
+        position.note_opacity = 73;
+        position.note_opacity_top = Some(63);
+        position.note_opacity_bottom = Some(53);
+        assert!(position.mirror_note_body_to_glow());
+        let before = position.clone();
+
+        let transition = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &id,
+                EditorElementPropertyPatchV1::NoteGlowSyncPaint(false),
+            )],
+        )
+        .unwrap();
+        let changed = &transition.candidate.key_positions["4key"][0];
+        assert!(!changed.note_glow_sync_paint);
+        assert_eq!(changed.note_glow_gradient, before.note_glow_gradient);
+        assert_eq!(changed.note_glow_opacity, before.note_glow_opacity);
+        assert_eq!(changed.note_glow_color, before.note_glow_color);
+        assert_eq!(changed.note_glow_opacity_top, before.note_glow_opacity_top);
+        assert_eq!(
+            changed.note_glow_opacity_bottom,
+            before.note_glow_opacity_bottom
+        );
+    }
+
+    #[test]
+    fn unsynced_note_paint_preserves_glow_paint() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_glow_sync_paint = false;
+        position.note_glow_color = Some(NoteColor::Solid("glow".to_string()));
+        position.note_glow_opacity = 71;
+        position.note_glow_opacity_top = Some(61);
+        position.note_glow_opacity_bottom = Some(51);
+        let before = position.clone();
+
+        let transition = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &id,
+                EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Color(
+                    crate::models::EditorNotePaintColorIntentV1 {
+                        color: EditorNoteColorV1::Solid("#AABBCC".to_string()),
+                    },
+                )),
+            )],
+        )
+        .unwrap();
+        let changed = &transition.candidate.key_positions["4key"][0];
+        assert_eq!(changed.note_glow_gradient, before.note_glow_gradient);
+        assert_eq!(changed.note_glow_opacity, before.note_glow_opacity);
+        assert_eq!(changed.note_glow_color, before.note_glow_color);
+        assert_eq!(changed.note_glow_opacity_top, before.note_glow_opacity_top);
+        assert_eq!(
+            changed.note_glow_opacity_bottom,
+            before.note_glow_opacity_bottom
+        );
+    }
+
+    #[test]
     fn note_glow_size_is_key_only_bounded_and_preserves_note_siblings() {
         let mut store = base_store();
         let id = store.key_positions["4key"][0].id.clone();
@@ -7740,6 +8093,211 @@ mod tests {
     }
 
     #[test]
+    fn note_gradient_descriptor_and_legacy_transitions_are_atomic() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_color = NoteColor::Solid("legacy".to_string());
+        position.note_opacity = 90;
+        position.note_opacity_top = Some(30);
+        position.note_opacity_bottom = Some(70);
+
+        let gradient = crate::models::EditorPaintGradientV1 {
+            angle: 45.0,
+            stops: vec![
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "rgba(17,34,51,.5)".to_string(),
+                    pos: 0.0,
+                },
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "#44556640".to_string(),
+                    pos: 1.0,
+                },
+            ],
+        };
+        let descriptor = EditorElementPropertyPatchV1::NotePaint(
+            EditorNotePaintIntentV1::Descriptor(crate::models::EditorNotePaintDescriptorIntentV1 {
+                color: EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                    kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                    top: "#112233".to_string(),
+                    bottom: "#445566".to_string(),
+                }),
+                opacity: 80,
+                gradient: Some(gradient.clone()),
+            }),
+        );
+        let first = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &id,
+                descriptor.clone(),
+            )],
+        )
+        .unwrap();
+        let position = &first.candidate.key_positions["4key"][0];
+        assert_eq!(position.note_gradient.as_ref().unwrap().angle, 45.0);
+        assert_eq!(position.note_opacity, 80);
+        assert_eq!(position.note_opacity_top, Some(40));
+        assert_eq!(position.note_opacity_bottom, Some(20));
+        assert_eq!(
+            position.note_color,
+            NoteColor::Gradient {
+                top: "#112233".to_string(),
+                bottom: "#445566".to_string(),
+            }
+        );
+
+        let replay = prepare_editor_ops_transition(
+            &first.scratch,
+            &[patch_property_op(EditorElementTypeV1::Key, &id, descriptor)],
+        )
+        .unwrap();
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+
+        let opacity = EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Opacity(
+            crate::models::EditorNotePaintOpacityIntentV1 { opacity: 40 },
+        ));
+        let second = prepare_editor_ops_transition(
+            &first.scratch,
+            &[patch_property_op(EditorElementTypeV1::Key, &id, opacity)],
+        )
+        .unwrap();
+        let position = &second.candidate.key_positions["4key"][0];
+        assert!(position.note_gradient.is_some());
+        assert_eq!(position.note_opacity_top, Some(20));
+        assert_eq!(position.note_opacity_bottom, Some(10));
+
+        let legacy_endpoints =
+            EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::GradientOpacity(
+                crate::models::EditorNotePaintGradientOpacityIntentV1 {
+                    opacity: 55,
+                    opacity_top: 11,
+                    opacity_bottom: 44,
+                },
+            ));
+        let third = prepare_editor_ops_transition(
+            &second.scratch,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &id,
+                legacy_endpoints,
+            )],
+        )
+        .unwrap();
+        let position = &third.candidate.key_positions["4key"][0];
+        assert!(position.note_gradient.is_none());
+        assert_eq!(position.note_opacity, 55);
+        assert_eq!(position.note_opacity_top, Some(11));
+        assert_eq!(position.note_opacity_bottom, Some(44));
+
+        let solid = EditorElementPropertyPatchV1::NoteGlowPaint(
+            EditorNotePaintIntentV1::Descriptor(crate::models::EditorNotePaintDescriptorIntentV1 {
+                color: EditorNoteColorV1::Solid("#AABBCC".to_string()),
+                opacity: 35,
+                gradient: None,
+            }),
+        );
+        let fourth = prepare_editor_ops_transition(
+            &third.scratch,
+            &[patch_property_op(EditorElementTypeV1::Key, &id, solid)],
+        )
+        .unwrap();
+        let position = &fourth.candidate.key_positions["4key"][0];
+        assert!(position.note_glow_gradient.is_none());
+        assert_eq!(
+            position.note_glow_color,
+            Some(NoteColor::Solid("#AABBCC".to_string()))
+        );
+        assert_eq!(position.note_glow_opacity, 35);
+        assert_eq!(position.note_glow_opacity_top, Some(35));
+        assert_eq!(position.note_glow_opacity_bottom, Some(35));
+    }
+
+    #[test]
+    fn note_gradient_descriptor_rejects_semantic_mismatches() {
+        let store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let gradient = |first: &str| crate::models::EditorPaintGradientV1 {
+            angle: 45.0,
+            stops: vec![
+                crate::models::EditorPaintGradientStopV1 {
+                    color: first.to_string(),
+                    pos: 0.0,
+                },
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "#445566".to_string(),
+                    pos: 1.0,
+                },
+            ],
+        };
+        let descriptor = |color, opacity, gradient| {
+            EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Descriptor(
+                crate::models::EditorNotePaintDescriptorIntentV1 {
+                    color,
+                    opacity,
+                    gradient,
+                },
+            ))
+        };
+
+        let cases = [
+            (
+                descriptor(
+                    EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                        kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                        top: "#000000".to_string(),
+                        bottom: "#445566".to_string(),
+                    }),
+                    80,
+                    Some(gradient("#112233")),
+                ),
+                "PAINT_COLOR_GRADIENT_MISMATCH",
+            ),
+            (
+                descriptor(
+                    EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                        kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                        top: "#112233".to_string(),
+                        bottom: "#445566".to_string(),
+                    }),
+                    80,
+                    None,
+                ),
+                "PAINT_COLOR_GRADIENT_MISMATCH",
+            ),
+            (
+                descriptor(
+                    EditorNoteColorV1::Gradient(crate::models::EditorNoteGradientColorV1 {
+                        kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                        top: "#112233".to_string(),
+                        bottom: "#445566".to_string(),
+                    }),
+                    80,
+                    Some(gradient("transparent")),
+                ),
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                descriptor(EditorNoteColorV1::Solid("#112233".to_string()), 101, None),
+                "NOTE_OPACITY_OUT_OF_RANGE",
+            ),
+        ];
+
+        for (patch, expected_code) in cases {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(EditorElementTypeV1::Key, &id, patch)],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(expected_code));
+        }
+    }
+
+    #[test]
     fn note_paint_masks_preserve_siblings_materialize_options_and_reject_invalid_plans() {
         let mut store = base_store();
         let ids = [
@@ -7763,6 +8321,14 @@ mod tests {
         positions[2].note_glow_opacity_bottom = Some(73);
         positions[3].note_border_color = None;
         positions[3].note_border_opacity = 100;
+        positions[3].note_border_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 45,
+            "stops": [
+                { "color": "#010203", "pos": 0 },
+                { "color": "#040506", "pos": 1 }
+            ]
+        }))
+        .unwrap();
         let full = &mut store.key_positions.get_mut("5key").unwrap()[0];
         full.note_glow_opacity = 65;
         full.note_glow_opacity_top = None;
@@ -7792,6 +8358,7 @@ mod tests {
             EditorElementPropertyPatchV1::NoteBorderPaint(crate::models::EditorNoteBorderPaintV1 {
                 color: "#FFFFFF".to_string(),
                 opacity: 100,
+                gradient: None,
             });
         let glow_tuple =
             EditorElementPropertyPatchV1::NoteGlowPaint(EditorNotePaintIntentV1::GradientOpacity(
@@ -7854,6 +8421,7 @@ mod tests {
         assert_eq!(positions[2].note_glow_opacity_bottom, Some(73));
         assert_eq!(positions[3].note_border_color.as_deref(), Some("#FFFFFF"));
         assert_eq!(positions[3].note_border_opacity, 100);
+        assert!(positions[3].note_border_gradient.is_none());
         let full = &transition.candidate.key_positions["5key"][0];
         assert_eq!(full.note_glow_opacity, 65);
         assert_eq!(full.note_glow_opacity_top, Some(10));
@@ -7893,6 +8461,7 @@ mod tests {
                     crate::models::EditorNoteBorderPaintV1 {
                         color: "rgba(1,2,3,1)".to_string(),
                         opacity: 100,
+                        gradient: None,
                     },
                 ),
                 "INVALID_NOTE_BORDER_COLOR",
@@ -7935,6 +8504,137 @@ mod tests {
             )
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store, original);
+        }
+    }
+
+    #[test]
+    fn note_border_gradient_patch_is_atomic_canonical_and_strict() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_border_color = Some("#000000".to_string());
+        position.note_border_opacity = 25;
+        position.note_border_side = Some("vertical".to_string());
+        let original = store.clone();
+
+        let gradient = crate::models::EditorPaintGradientV1 {
+            angle: 135.0,
+            stops: vec![
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "rgba(17, 34, 51, .5)".to_string(),
+                    pos: 0.0,
+                },
+                crate::models::EditorPaintGradientStopV1 {
+                    color: "#ABC8".to_string(),
+                    pos: 1.0,
+                },
+            ],
+        };
+        let patch =
+            EditorElementPropertyPatchV1::NoteBorderPaint(crate::models::EditorNoteBorderPaintV1 {
+                color: "#112233".to_string(),
+                opacity: 73,
+                gradient: Some(gradient.clone()),
+            });
+        let ops = [patch_property_op(
+            EditorElementTypeV1::Key,
+            &id,
+            patch.clone(),
+        )];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        let position = &transition.candidate.key_positions["4key"][0];
+        assert_eq!(position.note_border_color.as_deref(), Some("#112233"));
+        assert_eq!(position.note_border_opacity, 73);
+        assert_eq!(
+            position.note_border_gradient,
+            Some(gradient.to_gradient_spec())
+        );
+        assert_eq!(position.note_border_side.as_deref(), Some("vertical"));
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+
+        let invalid_cases = [
+            (
+                "#AABBCC",
+                crate::models::EditorPaintGradientV1 {
+                    angle: 90.0,
+                    stops: vec![
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#112233".to_string(),
+                            pos: 0.0,
+                        },
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#445566".to_string(),
+                            pos: 1.0,
+                        },
+                    ],
+                },
+                "PAINT_COLOR_GRADIENT_MISMATCH",
+            ),
+            (
+                "#112233",
+                crate::models::EditorPaintGradientV1 {
+                    angle: 90.0,
+                    stops: vec![
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#112233".to_string(),
+                            pos: 0.0,
+                        },
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "transparent".to_string(),
+                            pos: 1.0,
+                        },
+                    ],
+                },
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                "#112233",
+                crate::models::EditorPaintGradientV1 {
+                    angle: -0.0,
+                    stops: vec![
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#112233".to_string(),
+                            pos: 0.0,
+                        },
+                        crate::models::EditorPaintGradientStopV1 {
+                            color: "#445566".to_string(),
+                            pos: 1.0,
+                        },
+                    ],
+                },
+                "INVALID_PAINT_GRADIENT",
+            ),
+        ];
+        for (color, gradient, code) in invalid_cases {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &id,
+                    EditorElementPropertyPatchV1::NoteBorderPaint(
+                        crate::models::EditorNoteBorderPaintV1 {
+                            color: color.to_string(),
+                            opacity: 73,
+                            gradient: Some(gradient),
+                        },
+                    ),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(code));
             assert_eq!(store, original);
         }
     }
@@ -8308,7 +9008,7 @@ mod tests {
         let knob = &transition.candidate.knob_positions["4key"][0].position;
         assert_eq!(knob.border_color.as_deref(), Some("knob-new"));
         assert!(knob.border_gradient.is_none());
-        assert_eq!(knob.active_border_color.as_deref(), Some("knob-old"));
+        assert_eq!(knob.active_border_color.as_deref(), Some("stale-knob-base"));
         assert_eq!(
             knob.active_border_gradient,
             original.knob_positions["4key"][0].position.border_gradient
@@ -8536,64 +9236,135 @@ mod tests {
     }
 
     #[test]
-    fn font_color_patches_preserve_active_fallbacks_and_reject_wrong_active_types() {
+    fn blank_font_paint_normalizes_to_none_and_blank_gradient_stops_are_rejected() {
         let mut store = store_with_every_reorder_type();
         let key_id = store.key_positions["4key"][0].id.clone();
+        {
+            let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
+            key.font_color = Some("stale-idle".to_string());
+            key.font_gradient = None;
+            key.active_font_color = Some("stale-active".to_string());
+            key.active_font_gradient = None;
+        }
+        let original = store.clone();
+
+        // 빈 solid는 커밋 시 None - 로드 정규화(normalize_blank_font_colors)와 수렴
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("  ", None)),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor("", None)),
+            ),
+        ];
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        let position = &transition.candidate.key_positions["4key"][0];
+        assert!(position.font_color.is_none());
+        assert!(position.font_gradient.is_none());
+        assert!(position.active_font_color.is_none());
+        assert!(position.active_font_gradient.is_none());
+
+        // 빈 stop 색 gradient는 커밋 거부 - 로드 시 대표색 진동 차단
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor(
+                    " ",
+                    Some((45.0, &[(" ", 0.0), ("#445566", 1.0)])),
+                )),
+            )],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_PAINT_GRADIENT"));
+        assert_eq!(store, original);
+    }
+
+    #[test]
+    fn font_paint_patches_preserve_state_pairs_and_enforce_target_types() {
+        let mut store = store_with_every_reorder_type();
+        let key_ids = store.key_positions["4key"]
+            .iter()
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
         let stat_id = store.stat_positions["4key"][0].position.id.clone();
         let graph_id = store.graph_positions["4key"][0].position.id.clone();
         let knob_id = store.knob_positions["4key"][0].position.id.clone();
 
-        let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
-        key.font_color = Some(" key idle ".to_string());
-        key.active_font_color = None;
-        let stat = &mut store.stat_positions.get_mut("4key").unwrap()[0].position;
-        stat.font_color = None;
-        stat.active_font_color = Some("stat-active-sibling".to_string());
-        let graph = &mut store.graph_positions.get_mut("4key").unwrap()[0].position;
-        graph.font_color = Some("graph-old".to_string());
-        graph.active_font_color = Some("graph-active-sibling".to_string());
-        let knob = &mut store.knob_positions.get_mut("4key").unwrap()[0].position;
-        knob.font_color = Some(" knob idle ".to_string());
-        knob.active_font_color = Some("   ".to_string());
+        let idle_gradient = paint_descriptor(
+            "idle-first",
+            Some((30.0, &[("idle-first", 0.0), ("idle-last", 1.0)])),
+        )
+        .gradient
+        .unwrap()
+        .to_gradient_spec();
+        let active_gradient = paint_descriptor(
+            "active-first",
+            Some((75.0, &[("active-first", 0.0), ("active-last", 1.0)])),
+        )
+        .gradient
+        .unwrap()
+        .to_gradient_spec();
+        let keys = store.key_positions.get_mut("4key").unwrap();
+        keys[0].font_color = None;
+        keys[0].font_gradient = Some(idle_gradient.clone());
+        keys[0].active_font_color = None;
+        keys[0].active_font_gradient = None;
+        keys[1].font_color = Some("idle-first".to_string());
+        keys[1].font_gradient = Some(idle_gradient.clone());
+        keys[1].active_font_color = Some("active-solid".to_string());
+        keys[1].active_font_gradient = None;
+        keys[2].font_color = Some("idle-solid".to_string());
+        keys[2].font_gradient = None;
+        keys[2].active_font_color = None;
+        keys[2].active_font_gradient = Some(active_gradient.clone());
+        keys[3].font_color = Some("same-idle".to_string());
+        keys[3].font_gradient = None;
+        keys[3].active_font_color = None;
+        keys[3].active_font_gradient = None;
 
         let original = store.clone();
         let ops = vec![
             patch_property_op(
                 EditorElementTypeV1::Key,
-                &key_id,
-                EditorElementPropertyPatchV1::FontColor(" key idle ".to_string()),
+                &key_ids[0],
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("next-zero", None)),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[1],
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("next-one", None)),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[2],
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("next-two", None)),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[3],
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("same-idle", None)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::FontColor(String::new()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Graph,
-                &graph_id,
-                EditorElementPropertyPatchV1::FontColor(" graph new ".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Knob,
-                &knob_id,
-                EditorElementPropertyPatchV1::FontColor("knob-new".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ActiveFontColor("missing".to_string()),
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor(
+                    "stat-first",
+                    Some((90.0, &[("stat-first", 0.0), ("stat-last", 1.0)])),
+                )),
             ),
         ];
 
         let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
         assert_eq!(
             transition.changed_fields,
-            [
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-            ]
+            [EditorField::KeyPositions, EditorField::StatPositions]
         );
         assert_eq!(
             transition
@@ -8606,32 +9377,30 @@ mod tests {
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::TargetMissing,
+                EditorOpResultStatusV1::Applied,
             ]
         );
 
-        let mut expected_key = original.key_positions["4key"][0].clone();
-        expected_key.active_font_color = Some(" key idle ".to_string());
-        assert_eq!(transition.candidate.key_positions["4key"][0], expected_key);
-        let mut expected_stat = original.stat_positions["4key"][0].position.clone();
-        expected_stat.font_color = Some(String::new());
+        let keys = &transition.candidate.key_positions["4key"];
+        assert_eq!(keys[0].active_font_color, None);
+        assert_eq!(keys[0].active_font_gradient, Some(idle_gradient.clone()));
+        assert_eq!(keys[1].active_font_color.as_deref(), Some("active-solid"));
+        assert_eq!(keys[1].active_font_gradient, None);
+        assert_eq!(keys[2].active_font_color, None);
+        assert_eq!(keys[2].active_font_gradient, Some(active_gradient));
+        assert_eq!(keys[3].active_font_color.as_deref(), Some("same-idle"));
+        assert_eq!(keys[3].active_font_gradient, None);
         assert_eq!(
-            transition.candidate.stat_positions["4key"][0].position,
-            expected_stat
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .font_color
+                .as_deref(),
+            Some("stat-first")
         );
-        let mut expected_graph = original.graph_positions["4key"][0].position.clone();
-        expected_graph.font_color = Some(" graph new ".to_string());
-        assert_eq!(
-            transition.candidate.graph_positions["4key"][0].position,
-            expected_graph
-        );
-        let mut expected_knob = original.knob_positions["4key"][0].position.clone();
-        expected_knob.font_color = Some("knob-new".to_string());
-        expected_knob.active_font_color = Some(" knob idle ".to_string());
-        assert_eq!(
-            transition.candidate.knob_positions["4key"][0].position,
-            expected_knob
-        );
+        assert!(transition.candidate.stat_positions["4key"][0]
+            .position
+            .active_font_color
+            .is_none());
 
         let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
         assert!(replay.changed_fields.is_empty());
@@ -8646,58 +9415,96 @@ mod tests {
                 EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
-                EditorOpResultStatusV1::TargetMissing,
+                EditorOpResultStatusV1::NoChange,
             ]
         );
 
-        let mut active_store = store.clone();
-        let active_key_id = active_store.key_positions["4key"][1].id.clone();
-        active_store.key_positions.get_mut("4key").unwrap()[1].active_font_color = None;
+        let active_store = store.clone();
         let active = prepare_editor_ops_transition(
             &active_store,
-            &[
-                patch_property_op(
-                    EditorElementTypeV1::Key,
-                    active_key_id,
-                    EditorElementPropertyPatchV1::ActiveFontColor(String::new()),
-                ),
-                patch_property_op(
-                    EditorElementTypeV1::Knob,
-                    &knob_id,
-                    EditorElementPropertyPatchV1::ActiveFontColor(" active raw ".to_string()),
-                ),
-            ],
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[0],
+                EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor(
+                    "active-direct",
+                    Some((15.0, &[("active-direct", 0.0), ("active-end", 1.0)])),
+                )),
+            )],
         )
         .unwrap();
         assert_eq!(
-            active.candidate.key_positions["4key"][1]
+            active.candidate.key_positions["4key"][0]
                 .active_font_color
                 .as_deref(),
-            Some("")
+            Some("active-direct")
         );
-        assert_eq!(
-            active.candidate.knob_positions["4key"][0]
-                .position
-                .active_font_color
-                .as_deref(),
-            Some(" active raw ")
-        );
+        assert!(active.candidate.key_positions["4key"][0]
+            .active_font_gradient
+            .is_some());
 
-        for element_type in [EditorElementTypeV1::Stat, EditorElementTypeV1::Graph] {
+        for (element_type, id) in [
+            (EditorElementTypeV1::Stat, &stat_id),
+            (EditorElementTypeV1::Graph, &graph_id),
+            (EditorElementTypeV1::Knob, &knob_id),
+        ] {
             let error = prepare_editor_ops_transition(
                 &store,
                 &[
                     ops[0].clone(),
                     patch_property_op(
                         element_type,
-                        uuid::Uuid::new_v4().to_string(),
-                        EditorElementPropertyPatchV1::ActiveFontColor("wrong-type".to_string()),
+                        id,
+                        EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor(
+                            "wrong-type",
+                            None,
+                        )),
                     ),
                 ],
             )
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store, original);
+        }
+
+        for (element_type, id) in [
+            (EditorElementTypeV1::Graph, &graph_id),
+            (EditorElementTypeV1::Knob, &knob_id),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    element_type,
+                    id,
+                    EditorElementPropertyPatchV1::FontPaint(paint_descriptor("wrong-type", None)),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        }
+
+        for patch in [
+            EditorElementPropertyPatchV1::FontPaint(paint_descriptor(
+                "mismatch",
+                Some((45.0, &[("first", 0.0), ("last", 1.0)])),
+            )),
+            EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor(
+                "mismatch",
+                Some((45.0, &[("first", 0.0), ("last", 1.0)])),
+            )),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &key_ids[0],
+                    patch,
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(
+                validation_code(&error),
+                Some("PAINT_COLOR_GRADIENT_MISMATCH")
+            );
         }
     }
 

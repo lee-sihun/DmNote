@@ -32,6 +32,7 @@ import {
 } from '../displayElement/instancesCommitQueue';
 import { noteBackendPluginRevision } from '@plugins/runtime/pluginModelRevision';
 import { getPluginAuthorityGeneration } from '@plugins/runtime/pluginAuthorityGeneration';
+import { trackPluginWork } from '@plugins/runtime/pluginRuntimeReadiness';
 import {
   useHistoryStatusStore,
   syncHistoryStatus,
@@ -57,7 +58,6 @@ import {
   normalizeSettingsSections,
   omitLayoutSettingValues,
 } from '../settingsSections';
-import type { NamespacedStorage } from '../context';
 import type {
   PluginDefinition,
   PluginDefinitionInternal,
@@ -102,7 +102,6 @@ export const buildSavedPluginInstances = (
 interface DefineElementDependencies {
   pluginId: string;
   api: DMNoteAPI;
-  namespacedStorage: NamespacedStorage;
   registerCleanup: (cleanup: () => void) => void;
   wrapFunctionWithContext: (
     fn: (...args: unknown[]) => unknown,
@@ -118,7 +117,6 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
   const {
     pluginId,
     api,
-    namespacedStorage,
     registerCleanup,
     wrapFunctionWithContext,
     isReloading,
@@ -135,8 +133,6 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     };
 
     usePluginDisplayElementStore.getState().registerDefinition(internalDef);
-
-    const INSTANCES_KEY = 'instances';
 
     let pendingRestorationSave: {
       resolve: () => void;
@@ -177,6 +173,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     const commitInstancesInner = async (
       instances: SavedInstance[],
       gestureId: string,
+      observedHistoryEpoch: number,
     ) => {
       const buildRequest = () => {
         const mutationId = crypto.randomUUID();
@@ -186,7 +183,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           instances,
           mutationId,
           gestureId,
-          observedHistoryEpoch: useHistoryStatusStore.getState().historyEpoch,
+          observedHistoryEpoch,
           authorityGeneration: getPluginAuthorityGeneration(),
         };
       };
@@ -227,14 +224,17 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                 }
               }),
             loadInstances: async () => {
-              const stored = await namespacedStorage.get(INSTANCES_KEY);
-              return Array.isArray(stored) ? (stored as SavedInstance[]) : null;
+              const snapshot = await pluginInstancesApi.get(pluginId);
+              noteBackendPluginRevision(snapshot.modelRevision);
+              return snapshot.instances as SavedInstance[];
             },
             // 탭 정리는 백엔드 단일 write-lock에서 원자 수행 - get과 commit
             // 사이에 bulk clear 등이 끼어 지워진 인스턴스가 부활하지 않음.
             // 유효 탭은 큐 실행 시점 파생, invoke 비행 중 탭 undo는 epoch가 거절
-            reconcilePersist: () =>
-              enqueuePluginInstancesCommit(pluginId, async () => {
+            reconcilePersist: () => {
+              const observedHistoryEpoch =
+                useHistoryStatusStore.getState().historyEpoch;
+              return enqueuePluginInstancesCommit(pluginId, async () => {
                 const validTabIds = buildValidTabIdSet(
                   useKeyStore.getState().customTabs.map((tab) => tab.id),
                 );
@@ -245,8 +245,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                     pluginId,
                     validTabIds: [...validTabIds],
                     mutationId,
-                    observedHistoryEpoch:
-                      useHistoryStatusStore.getState().historyEpoch,
+                    observedHistoryEpoch,
                     authorityGeneration: getPluginAuthorityGeneration(),
                   });
                   noteBackendPluginRevision(result.modelRevision);
@@ -260,7 +259,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                   }
                   throw error;
                 }
-              }),
+              });
+            },
             getMemoryInstances: () =>
               usePluginDisplayElementStore
                 .getState()
@@ -299,6 +299,10 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       if (!instanceLifecycle) return;
 
       const generationAtCapture = instanceSaveGeneration;
+      // 스냅샷과 같은 시점의 epoch를 고정 - 앞선 큐가 끝난 뒤 현재 epoch를
+      // 다시 읽으면 undo/reset 전 저장이 새 장벽을 통과할 수 있음
+      const observedHistoryEpoch =
+        useHistoryStatusStore.getState().historyEpoch;
       const capturedInstances = captureCurrentSnapshot
         ? buildInstancesFromStore().map((instance) => ({
             ...instance,
@@ -321,6 +325,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         await commitInstancesInner(
           capturedInstances ?? buildInstancesFromStore(),
           gestureId ?? touchPluginInstancesEditSession(pluginId),
+          observedHistoryEpoch,
         );
       });
     };
@@ -1147,6 +1152,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           });
         },
       );
+      // 인스턴스 복구까지 끝나야 오버레이 리빌 게이트가 열린다
       const restoreWork = scheduledRestore.then(
         async () => {
           if (instanceSaveBarrier.finishRestoration()) {
@@ -1159,6 +1165,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           throw error;
         },
       );
+      trackPluginWork(restoreWork);
       void trackEditorWrite(restoreWork).catch((error) => {
         console.error(
           `[Plugin ${pluginId}] Failed to restore instances:`,

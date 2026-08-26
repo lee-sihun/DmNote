@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "OVL-01",
+  "variant": "optimized-split",
+  "measuredAt": "2026-08-25T11:57:19.840Z",
+  "node": "v25.2.1",
+  "environment": "jsdom",
+  "gitHead": "2d561ba6",
+  "gitDirtyFiles": [],
+  "notes": [
+    "페인트·합성 비용 미포함 (jsdom)",
+    "React Compiler 미적용 (vitest에 plugin-react 없음)",
+    "Element.animate는 no-op 스텁 — animateCallsPerPress는 호출 수, WAAPI 분기의 프레임 비용은 0으로 나오며 측정값이 아님",
+    "rafCallbacksPerFrame·frameJsMs는 rAF 경로(baseline)에서만 실제 작업량을 뜻함",
+    "모든 키가 같은 counter 객체를 공유 — identity 캐시 최선 케이스. 프로덕션 identity 안정성은 별도 확인 필요"
+  ],
+  "cases": [
+    {
+      "keyCount": 4,
+      "placement": "off",
+      "counterEnabled": false,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 0,
+      "eventBlockingMs": {
+        "p50": 0.13720800000010058,
+        "p95": 0.17937499999970896,
+        "max": 2.054124999999658
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.04058199999781209,
+        "p95": 0.0562459999996463,
+        "max": 1.8802089999962845
+      },
+      "commitsPerPress": 2,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 0,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.00008300000081362668,
+        "p95": 0.0001250000004802132,
+        "max": 0.0010839999995368998
+      },
+      "framesPerBurst": 40
+    },
+    {
+      "keyCount": 4,
+      "placement": "inside",
+      "counterEnabled": true,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 4,
+      "eventBlockingMs": {
+        "p50": 0.29320799999914016,
+        "p95": 0.33220799999980954,
+        "max": 1.105375000002823
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.16858100000172271,
+        "p95": 0.19237500001327135,
+        "max": 0.2747490000037942
+      },
+      "commitsPerPress": 3,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.00008299999899463728,
+        "p95": 0.00008400000297115184,
+        "max": 0.004166999999142718
+      },
+      "framesPerBurst": 40
+    },
+    {
+      "keyCount": 4,
+      "placement": "outside",
+      "counterEnabled": true,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 4,
+      "eventBlockingMs": {
+        "p50": 0.27924999999959255,
+        "p95": 0.31700000000273576,
+        "max": 0.9647499999991851
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.15632999999070307,
+        "p95": 0.1779550000137533,
+        "max": 0.7485799999994924
+      },
+      "commitsPerPress": 3,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.00008299999899463728,
+        "p95": 0.00008400000660913065,
+        "max": 0.00041700000292621553
+      },
+      "framesPerBurst": 40
+    },
+    {
+      "keyCount": 8,
+      "placement": "off",
+      "counterEnabled": false,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 0,
+      "eventBlockingMs": {
+        "p50": 0.12625000000116415,
+        "p95": 0.14766700000473065,
+        "max": 0.8073749999966822
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.04058499999518972,
+        "p95": 0.05033799999364419,
+        "max": 0.07579499999701511
+      },
+      "commitsPerPress": 2,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 0,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.00008299999899463728,
+        "p95": 0.00008399999933317304,
+        "max": 0.00020799999765586108
+      },
+      "framesPerBurst": 40
+    },
+    {
+      "keyCount": 8,
+      "placement": "inside",
+      "counterEnabled": true,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 8,
+      "eventBlockingMs": {
+        "p50": 0.2838750000082655,
+        "p95": 0.3166250000067521,
+        "max": 1.0289999999949941
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.16449799998372328,
+        "p95": 0.18466700000863057,
+        "max": 0.23937599996861536
+      },
+      "commitsPerPress": 3,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.00008299999171867967,
+        "p95": 0.00008399999933317304,
+        "max": 0.008749999993597157
+      },
+      "framesPerBurst": 40
+    },
+    {
+      "keyCount": 8,
+      "placement": "outside",
+      "counterEnabled": true,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 8,
+      "eventBlockingMs": {
+        "p50": 0.28245899999456014,
+        "p95": 0.3170830000017304,
+        "max": 1.1022090000042226
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.15837400002055801,
+        "p95": 0.17521899995335843,
+        "max": 0.850378999923123
+      },
+      "commitsPerPress": 3,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.0000830000062705949,
+        "p95": 0.00008399999933317304,
+        "max": 0.0002919999969890341
+      },
+      "framesPerBurst": 40
+    },
+    {
+      "keyCount": 30,
+      "placement": "off",
+      "counterEnabled": false,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 0,
+      "eventBlockingMs": {
+        "p50": 0.13387499999953434,
+        "p95": 0.15550000000803266,
+        "max": 0.7796249999955762
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.04195500002242625,
+        "p95": 0.04974999999103602,
+        "max": 0.07237399996665772
+      },
+      "commitsPerPress": 2,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 0,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.00008299999171867967,
+        "p95": 0.00008399999933317304,
+        "max": 0.000750000006519258
+      },
+      "framesPerBurst": 40
+    },
+    {
+      "keyCount": 30,
+      "placement": "inside",
+      "counterEnabled": true,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 30,
+      "eventBlockingMs": {
+        "p50": 0.2950410000048578,
+        "p95": 0.32233300000370946,
+        "max": 1.1992089999985183
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.16570999998657499,
+        "p95": 0.18328899993503,
+        "max": 0.8456189999560593
+      },
+      "commitsPerPress": 3,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.0000830000062705949,
+        "p95": 0.00008399999933317304,
+        "max": 0.00016700000560376793
+      },
+      "framesPerBurst": 40
+    },
+    {
+      "keyCount": 30,
+      "placement": "outside",
+      "counterEnabled": true,
+      "burstSize": 40,
+      "iterations": 20,
+      "warmupIterations": 3,
+      "mountedCountDisplays": 30,
+      "eventBlockingMs": {
+        "p50": 0.30179200001293793,
+        "p95": 0.33095800000592135,
+        "max": 1.2891249999956926
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.15908300003502518,
+        "p95": 0.1773310000426136,
+        "max": 1.085657999967225
+      },
+      "commitsPerPress": 3,
+      "normalizeCallsPerPress": 0,
+      "animateCallsPerPress": 1,
+      "rafCallbacksPerFrame": 0,
+      "frameJsMs": {
+        "p50": 0.00008299999171867967,
+        "p95": 0.00008399999933317304,
+        "max": 0.0002500000118743628
+      },
+      "framesPerBurst": 40
+    }
+  ]
+}

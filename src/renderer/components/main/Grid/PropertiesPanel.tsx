@@ -30,11 +30,6 @@ import {
 } from '@plugins/runtime/settingsSections';
 import { updatePluginElement } from '@plugins/runtime/displayElement/pluginElementActions';
 import type { NativeLayerBoundsTarget } from '@plugins/runtime/displayElement/pluginElementActions';
-import {
-  toRgbHexColor,
-  parseAlphaPercent,
-  hexWithAlphaPercent,
-} from '@utils/color/colorUtils';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
@@ -50,9 +45,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
-  EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
-  EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
@@ -99,10 +92,7 @@ import {
   patchCounterEnabledById,
   patchCounterLayoutById,
   patchCounterTypographyById,
-  patchCounterStrokeById,
-  patchCounterStrokeByTargets,
   patchCounterFillById,
-  patchFontColorById,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -119,6 +109,7 @@ import type {
 } from '@src/renderer/editor/runtime/elementOps';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { computeBatchGeometryPlan } from '@src/renderer/editor/runtime/batchGeometryPlan';
 import { commitMixedBatchGeometry } from '@src/renderer/editor/runtime/mixedBatchGeometry';
 import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
@@ -160,7 +151,6 @@ import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
 import {
   previewSingleGraphColor,
-  previewSingleFontColor,
   previewSinglePaint,
   previewSingleStyleProperty,
 } from './PropertiesPanel/previewPatchForwarders';
@@ -286,6 +276,9 @@ const getFontStylePatch = (
   ) {
     return { property: 'fontWeight', value: values.fontWeight as number };
   }
+  if (keys[0] === 'fontBold' && typeof values.fontBold === 'boolean') {
+    return { property: 'fontBold', value: values.fontBold };
+  }
   if (keys[0] === 'fontItalic' && typeof values.fontItalic === 'boolean') {
     return { property: 'fontItalic', value: values.fontItalic };
   }
@@ -342,6 +335,12 @@ const getNotePropertyPatch = (
     typeof values.noteGlowEnabled === 'boolean'
   ) {
     return { property: 'noteGlowEnabled', value: values.noteGlowEnabled };
+  }
+  if (
+    keys[0] === 'noteGlowSyncPaint' &&
+    typeof values.noteGlowSyncPaint === 'boolean'
+  ) {
+    return { property: 'noteGlowSyncPaint', value: values.noteGlowSyncPaint };
   }
   if (
     keys[0] === 'noteAlignment' &&
@@ -727,7 +726,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const batchGlowColorButtonRef = useRef<HTMLButtonElement>(null);
   const batchBorderColorButtonRef = useRef<HTMLButtonElement>(null);
   const batchCounterFillButtonRef = useRef<HTMLButtonElement>(null);
-  const batchCounterStrokeButtonRef = useRef<HTMLButtonElement>(null);
 
   // 패널 ref (컬러픽커/이미지픽커 위치 기준)
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
@@ -1050,7 +1048,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     | 'glowColor'
     | 'borderColor'
     | 'fill'
-    | 'stroke'
     | null;
   const [batchPickerFor, setBatchPickerFor] = useState<BatchPickerTarget>(null);
   const [batchCounterColorState, setBatchCounterColorState] = useState<
@@ -1062,46 +1059,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     if (selectedKeyElements.length === 0) {
       setBatchCounterColorState('idle');
-      setBatchPickerFor((current) =>
-        current === 'fill' || current === 'stroke' ? null : current,
-      );
+      setBatchPickerFor((current) => (current === 'fill' ? null : current));
     }
   }, [selectedKeyElements.length]);
 
+  // 노트 표면(note/glow/border) 로컬 상태는 useBatchNotePaint가 소유
   const [batchLocalColors, setBatchLocalColors] = useState<{
-    noteColor: NoteColor;
-    glowColor: NoteColor;
-    borderColor: string;
-    borderOpacity: number;
     fillIdle: string;
     fillActive: string;
-    strokeIdle: string;
-    strokeActive: string;
   }>({
-    noteColor: '#FFFFFF',
-    glowColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
-    borderOpacity: 100,
     fillIdle: '#FFFFFF',
     fillActive: '#FFFFFF',
-    strokeIdle: '#000000',
-    strokeActive: '#000000',
-  });
-
-  const [batchLocalOpacities, setBatchLocalOpacities] = useState<{
-    noteOpacity: number;
-    noteOpacityTop: number;
-    noteOpacityBottom: number;
-    glowOpacity: number;
-    glowOpacityTop: number;
-    glowOpacityBottom: number;
-  }>({
-    noteOpacity: 80,
-    noteOpacityTop: 80,
-    noteOpacityBottom: 80,
-    glowOpacity: 70,
-    glowOpacityTop: 70,
-    glowOpacityBottom: 70,
   });
 
   // 선택이 변경되면 로컬 상태 초기화
@@ -1491,18 +1459,24 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id: string | undefined,
   ) =>
     id && isNativeElementId(id)
-      ? (patch: EditorElementPropertyPatchV1) => {
+      ? (
+          patch: EditorElementPropertyPatchV1,
+          options?: { gestureId?: string },
+        ) => {
           // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
+          // 그래프 색은 preview 게스처를 정산하고, 그 외는 호출부가 준 gestureId만 공유
           const settlesGesture =
             type === 'graph' && patch.property === 'graphColor';
-          const gestureId = settlesGesture
-            ? editGestureController.activeGestureId() ?? undefined
-            : undefined;
+          const gestureId =
+            options?.gestureId ??
+            (settlesGesture
+              ? editGestureController.activeGestureId() ?? undefined
+              : undefined);
           const persisted = patchElementPropertyById(
             type,
             id,
             patch,
-            settlesGesture ? { gestureId } : {},
+            gestureId ? { gestureId } : {},
           );
           if (settlesGesture) {
             editGestureController.settleCommit(persisted);
@@ -1686,36 +1660,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           previewSinglePaint(type, id, patch)
       : undefined;
 
-  const stableFontColorCommitHandler = (
-    type: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorFontColorPropertyPatchV1) => {
-          const gestureId =
-            editGestureController.activeGestureId() ?? undefined;
-          const persisted = patchFontColorById(
-            type,
-            id,
-            patch,
-            gestureId ? { gestureId } : {},
-          );
-          editGestureController.settleCommit(persisted);
-          void persisted.catch((error) => {
-            console.error('Failed to update font color', error);
-          });
-        }
-      : undefined;
-
-  const stableFontColorPreviewHandler = (
-    type: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorFontColorPropertyPatchV1) =>
-          previewSingleFontColor(type, id, patch)
-      : undefined;
-
   const stableShadowCommitHandler = (
     type: 'key' | 'stat' | 'knob',
     id: string | undefined,
@@ -1736,9 +1680,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             editGestureController.activeGestureId() ?? undefined;
           const persisted = patchNotePaintById(id, patch, { gestureId });
           editGestureController.settleCommit(persisted);
-          void persisted.catch((error) => {
-            console.error('Failed to update note paint', error);
-          });
+          void persisted
+            .then((applied) => {
+              // 가드 거부(false)는 rejection이 아니라서 별도 로그가 없으면 무음
+              if (!applied) {
+                reportElementOpSkipped('single note paint');
+              }
+            })
+            .catch((error) => {
+              console.error('Failed to update note paint', error);
+            });
         }
       : undefined;
 
@@ -1747,9 +1698,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ? (patch: EditorNotePaintPropertyPatchV1) => {
           const locator = resolveElementById('key', id);
           if (!locator) return;
+          // canonical 전달 - 동기화 켜진 키의 글로우 미러가 낙관 적용과 같은 규칙
+          const current =
+            captureEditorDocument().keyPositions[locator.mode]?.[locator.index];
           editGestureController.preview(
             locator.mode,
-            [{ id, patch: projectNotePaintPatch(patch) }],
+            [
+              {
+                id,
+                patch: projectNotePaintPatch(
+                  patch,
+                  current?.id === id ? current : undefined,
+                ),
+              },
+            ],
             { domain: 'keyPosition' },
           );
         }
@@ -1821,23 +1783,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id: string | undefined,
   ) =>
     id && isNativeElementId(id)
-      ? (patch: EditorCounterTypographyPropertyPatchV1) => {
-          const persisted = patchCounterTypographyById(elementType, id, patch);
+      ? (
+          patch: EditorCounterTypographyPropertyPatchV1,
+          options?: { gestureId?: string },
+        ) => {
+          const persisted = options?.gestureId
+            ? patchCounterTypographyById(elementType, id, patch, {
+                gestureId: options.gestureId,
+              })
+            : patchCounterTypographyById(elementType, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update counter typography', error);
-          });
-        }
-      : undefined;
-
-  const stableCounterStrokeHandler = (
-    elementType: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorCounterStrokePropertyPatchV1) => {
-          const persisted = patchCounterStrokeById(elementType, id, patch);
-          void persisted.catch((error) => {
-            console.error('Failed to update counter stroke', error);
           });
         }
       : undefined;
@@ -2259,6 +2215,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 단일 키 업데이트 객체를 받는다. 아래 get*Patch 헬퍼가 태그 유니온으로 바꿔 wire에 올린다
   const handleBatchElementPropertyCommit = (
     patch: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
   ) => {
     const fontStylePatch = getFontStylePatch(patch);
     const fontFamilyPatch = getFontFamilyPatch(patch);
@@ -2273,11 +2230,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       targets.some((target) => !isNativeElementId(target.id))
     )
       return;
+    const gestureId = options?.gestureId;
     const commit =
       fontStylePatch !== null
-        ? patchFontStyleByTargets(targets, fontStylePatch)
+        ? gestureId
+          ? patchFontStyleByTargets(targets, fontStylePatch, { gestureId })
+          : patchFontStyleByTargets(targets, fontStylePatch)
         : fontFamilyPatch !== null
-        ? patchFontFamilyByTargets(targets, fontFamilyPatch)
+        ? gestureId
+          ? patchFontFamilyByTargets(targets, fontFamilyPatch, { gestureId })
+          : patchFontFamilyByTargets(targets, fontFamilyPatch)
         : patchUseInlineStylesByTargets(targets, useInlineStyles!);
     void commit.catch((error) => {
       console.error('Failed to batch update element style property', error);
@@ -2671,95 +2633,37 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     batchGlowColorButtonRef,
     batchBorderColorButtonRef,
     batchCounterFillButtonRef,
-    batchCounterStrokeButtonRef,
   ];
 
-  // 배치 피커 토글
+  // 배치 피커 토글 - 노트 표면 로컬 상태는 useBatchNotePaint가 소유
   const handleBatchPickerToggle = (target: BatchPickerTarget) => {
     if (target && target !== batchPickerFor) {
+      // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 배치로 리셋
+      setBatchCounterColorState('idle');
       const keysData = getSelectedKeysData();
       const keyOnly = getSelectedKeyOnlyPositions();
-      const isNoteTabPicker =
-        target === 'noteColor' ||
-        target === 'glowColor' ||
-        target === 'borderColor';
-      const isCounterPicker = target === 'fill' || target === 'stroke';
       const firstPos =
-        (isNoteTabPicker || isCounterPicker) && keyOnly.length > 0
+        target === 'fill' && keyOnly.length > 0
           ? keyOnly[0].position
           : keysData[0]?.position;
       if (firstPos) {
         const counterSettings = normalizeCounterSettings(firstPos.counter);
         setBatchLocalColors({
-          noteColor: (() => {
-            const nc = firstPos.noteColor;
-            if (
-              nc &&
-              typeof nc === 'object' &&
-              'type' in nc &&
-              nc.type === 'gradient'
-            ) {
-              return { type: 'gradient', top: nc.top, bottom: nc.bottom };
-            }
-            return typeof nc === 'string' ? nc : '#FFFFFF';
-          })(),
-          glowColor: (() => {
-            const gc = firstPos.noteGlowColor ?? firstPos.noteColor;
-            if (
-              gc &&
-              typeof gc === 'object' &&
-              'type' in gc &&
-              gc.type === 'gradient'
-            ) {
-              return { type: 'gradient', top: gc.top, bottom: gc.bottom };
-            }
-            return typeof gc === 'string' ? gc : '#FFFFFF';
-          })(),
-          borderColor: firstPos.noteBorderColor ?? '#FFFFFF',
-          borderOpacity: firstPos.noteBorderOpacity ?? 100,
           fillIdle: counterSettings.fill.idle,
           fillActive: counterSettings.fill.active,
-          strokeIdle: counterSettings.stroke.idle,
-          strokeActive: counterSettings.stroke.active,
-        });
-        const noteOpacity =
-          typeof firstPos.noteOpacity === 'number' ? firstPos.noteOpacity : 80;
-        const glowOpacity =
-          typeof firstPos.noteGlowOpacity === 'number'
-            ? firstPos.noteGlowOpacity
-            : 70;
-        setBatchLocalOpacities({
-          noteOpacity,
-          noteOpacityTop: firstPos.noteOpacityTop ?? noteOpacity,
-          noteOpacityBottom: firstPos.noteOpacityBottom ?? noteOpacity,
-          glowOpacity,
-          glowOpacityTop: firstPos.noteGlowOpacityTop ?? glowOpacity,
-          glowOpacityBottom: firstPos.noteGlowOpacityBottom ?? glowOpacity,
         });
       }
     }
     setBatchPickerFor((prev) => (prev === target ? null : target));
   };
 
+  // 노트 표면(note/glow/border)의 피커 색은 useBatchNotePaint가 직접 공급
   const getBatchPickerColor = (): NoteColor | string => {
     switch (batchPickerFor) {
-      case 'noteColor':
-        return batchLocalColors.noteColor;
-      case 'glowColor':
-        return batchLocalColors.glowColor;
-      case 'borderColor':
-        return hexWithAlphaPercent(
-          batchLocalColors.borderColor,
-          batchLocalColors.borderOpacity,
-        );
       case 'fill':
         return effectiveBatchCounterColorState === 'active'
           ? batchLocalColors.fillActive
           : batchLocalColors.fillIdle;
-      case 'stroke':
-        return effectiveBatchCounterColorState === 'active'
-          ? batchLocalColors.strokeActive
-          : batchLocalColors.strokeIdle;
       default:
         return '#FFFFFF';
     }
@@ -2775,146 +2679,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return batchBorderColorButtonRef;
       case 'fill':
         return batchCounterFillButtonRef;
-      case 'stroke':
-        return batchCounterStrokeButtonRef;
       default:
         return null;
     }
   };
 
   const handleBatchPickerColorChange = (newColor: NoteColor) => {
-    if (!batchPickerFor) return;
-
-    if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [batchPickerFor]: newColor,
-      }));
-    } else if (batchPickerFor === 'borderColor') {
-      const raw = typeof newColor === 'string' ? newColor : undefined;
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        borderColor: toRgbHexColor(raw),
-        borderOpacity: parseAlphaPercent(raw, prev.borderOpacity),
-      }));
-    } else if (batchPickerFor === 'fill') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const key =
-        effectiveBatchCounterColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle';
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [key]: solidColor,
-      }));
-    } else if (batchPickerFor === 'stroke') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const key =
-        effectiveBatchCounterColorState === 'active'
-          ? 'strokeActive'
-          : 'strokeIdle';
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [key]: solidColor,
-      }));
-    }
-  };
-
-  const completeBatchPickerColorChange = (
-    newColor: NoteColor,
-    onNotePaintCommit?: (patch: EditorNotePaintPropertyPatchV1) => void,
-  ) => {
-    if (!batchPickerFor) return;
-
-    if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [batchPickerFor]: newColor,
-      }));
-    } else if (batchPickerFor === 'borderColor') {
-      const raw = typeof newColor === 'string' ? newColor : undefined;
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        borderColor: toRgbHexColor(raw),
-        borderOpacity: parseAlphaPercent(raw, prev.borderOpacity),
-      }));
-    } else if (batchPickerFor === 'fill') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const key =
-        effectiveBatchCounterColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle';
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [key]: solidColor,
-      }));
-    } else if (batchPickerFor === 'stroke') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const key =
-        effectiveBatchCounterColorState === 'active'
-          ? 'strokeActive'
-          : 'strokeIdle';
-      setBatchLocalColors((prev) => ({
-        ...prev,
-        [key]: solidColor,
-      }));
-    }
-
-    if (batchPickerFor === 'noteColor') {
-      onNotePaintCommit?.({
-        property: 'notePaint',
-        value: { color: newColor },
-      });
-    } else if (batchPickerFor === 'glowColor') {
-      onNotePaintCommit?.({
-        property: 'noteGlowPaint',
-        value: { color: newColor },
-      });
-    } else if (batchPickerFor === 'borderColor') {
-      // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화(이슈 #73), 알파는 noteBorderOpacity로 분리
-      const raw = typeof newColor === 'string' ? newColor : undefined;
-      const solidColor = toRgbHexColor(raw);
-      const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
-      onNotePaintCommit?.({
-        property: 'noteBorderPaint',
-        value: { color: solidColor, opacity },
-      });
-    } else if (batchPickerFor === 'fill') {
-      return;
-    } else if (batchPickerFor === 'stroke') {
-      const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      const active = effectiveBatchCounterColorState === 'active';
-      const targets = [
-        ...selectedKeyElements.map(({ id }) => ({
-          elementType: 'key' as const,
-          id,
-        })),
-        ...(active
-          ? []
-          : selectedStatElements.map(({ id }) => ({
-              elementType: 'stat' as const,
-              id,
-            }))),
-      ];
-      const stableTargets =
-        targets.length > 0 &&
-        targets.every(({ id }) => id.length > 0 && isNativeElementId(id));
-      if (!stableTargets) return;
-      const patch: EditorCounterStrokePropertyPatchV1 = active
-        ? { property: 'counterStrokeActive', value: strokeColor }
-        : { property: 'counterStrokeIdle', value: strokeColor };
-      const persisted = patchCounterStrokeByTargets(targets, patch);
-      void persisted.catch((error) => {
-        console.error('Failed to update batch counter stroke', error);
-      });
-    }
+    if (batchPickerFor !== 'fill') return;
+    const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+    const key =
+      effectiveBatchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+    setBatchLocalColors((prev) => ({
+      ...prev,
+      [key]: solidColor,
+    }));
   };
   const handleBatchPickerColorChangeComplete = (newColor: NoteColor) =>
-    completeBatchPickerColorChange(newColor);
-  const handleBatchNotePickerColorChangeComplete = (
-    newColor: NoteColor,
-    onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
-  ) => completeBatchPickerColorChange(newColor, onNotePaintCommit);
+    handleBatchPickerColorChange(newColor);
   const handleBatchFillPickerColorChangeComplete = (
     newColor: string,
     onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
@@ -3000,7 +2781,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           batchGlowColorButtonRef={batchGlowColorButtonRef}
           batchBorderColorButtonRef={batchBorderColorButtonRef}
           batchCounterFillButtonRef={batchCounterFillButtonRef}
-          batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
           batchImageButtonRef={batchImageButtonRef}
           showBatchImagePicker={showBatchImagePicker}
           setShowBatchImagePicker={setShowBatchImagePicker}
@@ -3010,15 +2790,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           setBatchCounterColorState={setBatchCounterColorState}
           batchLocalColors={batchLocalColors}
           setBatchLocalColors={setBatchLocalColors}
-          batchLocalOpacities={batchLocalOpacities}
-          setBatchLocalOpacities={setBatchLocalOpacities}
           handleBatchPickerToggle={handleBatchPickerToggle}
           handleBatchPickerColorChange={handleBatchPickerColorChange}
           handleBatchPickerColorChangeComplete={
             handleBatchPickerColorChangeComplete
-          }
-          handleBatchNotePickerColorChangeComplete={
-            handleBatchNotePickerColorChangeComplete
           }
           handleBatchFillPickerColorChangeComplete={
             handleBatchFillPickerColorChangeComplete
@@ -3432,18 +3207,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? selectedStatElements[0]?.id
             : selectedKeyElements[0]?.id,
         )}
-        onFontColorPreview={stableFontColorPreviewHandler(
-          isSingleStat ? 'stat' : 'key',
-          isSingleStat
-            ? selectedStatElements[0]?.id
-            : selectedKeyElements[0]?.id,
-        )}
-        onFontColorCommit={stableFontColorCommitHandler(
-          isSingleStat ? 'stat' : 'key',
-          isSingleStat
-            ? selectedStatElements[0]?.id
-            : selectedKeyElements[0]?.id,
-        )}
         onShadowCommit={stableShadowCommitHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
@@ -3485,12 +3248,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             : selectedKeyElements[0]?.id,
         )}
         onCounterTypographyCommit={stableCounterTypographyHandler(
-          isSingleStat ? 'stat' : 'key',
-          isSingleStat
-            ? selectedStatElements[0]?.id
-            : selectedKeyElements[0]?.id,
-        )}
-        onCounterStrokeCommit={stableCounterStrokeHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

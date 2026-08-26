@@ -225,14 +225,15 @@ pub enum EditorElementPropertyPatchV1 {
     AxisId(String),
     UseInlineStyles(bool),
     FontWeight(u32),
+    FontBold(bool),
     FontItalic(bool),
     FontUnderline(bool),
     FontStrikethrough(bool),
     FontFamily(String),
     DisplayText(String),
     ClassName(String),
-    FontColor(String),
-    ActiveFontColor(String),
+    FontPaint(EditorPaintDescriptorV1),
+    ActiveFontPaint(EditorPaintDescriptorV1),
     Shadow(EditorShadowLeafPatchV1),
     ActiveShadow(EditorShadowLeafPatchV1),
     ShadowEnabled(bool),
@@ -260,18 +261,18 @@ pub enum EditorElementPropertyPatchV1 {
     CounterGap(u32),
     CounterFontSize(u32),
     CounterFontWeight(u32),
+    CounterFontBold(bool),
     CounterFontItalic(bool),
     CounterFontUnderline(bool),
     CounterFontStrikethrough(bool),
     CounterFontFamily(String),
     CounterFillIdle(EditorCounterFillIntentV1),
     CounterFillActive(EditorCounterFillIntentV1),
-    CounterStrokeIdle(String),
-    CounterStrokeActive(String),
     CounterAnimationPreset(EditorCounterAnimationPresetIntentV1),
     StatType(StatType),
     NoteEffectEnabled(bool),
     NoteGlowEnabled(bool),
+    NoteGlowSyncPaint(bool),
     NoteGlowSize(f64),
     NotePaint(EditorNotePaintIntentV1),
     NoteGlowPaint(EditorNotePaintIntentV1),
@@ -401,9 +402,19 @@ where
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EditorNotePaintIntentV1 {
+    Descriptor(EditorNotePaintDescriptorIntentV1),
     Color(EditorNotePaintColorIntentV1),
     Opacity(EditorNotePaintOpacityIntentV1),
     GradientOpacity(EditorNotePaintGradientOpacityIntentV1),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNotePaintDescriptorIntentV1 {
+    pub color: EditorNoteColorV1,
+    pub opacity: u32,
+    #[serde(deserialize_with = "deserialize_required_nullable_paint_gradient")]
+    pub gradient: Option<EditorPaintGradientV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -448,11 +459,13 @@ pub enum EditorNoteGradientColorKindV1 {
     Gradient,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorNoteBorderPaintV1 {
     pub color: String,
     pub opacity: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<EditorPaintGradientV1>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -807,6 +820,7 @@ pub struct CommittedEditorChange {
     pub selected_key_type: String,
     pub key_counters: KeyCounters,
     pub history_status: Option<HistoryStatus>,
+    pub(crate) plugin_instances_changes: Vec<super::PluginInstancesChangedPayload>,
     pub(crate) runtime_publication_generation: u64,
 }
 
@@ -831,7 +845,7 @@ mod tests {
         }
     }
 
-    // 71개 variant 전수: (patch, property 태그, value wire) 고정 표본
+    // 72개 variant 전수: (patch, property 태그, value wire) 고정 표본
     fn property_patch_samples() -> Vec<(
         EditorElementPropertyPatchV1,
         &'static str,
@@ -864,6 +878,7 @@ mod tests {
             (P::AxisId("axis-1".to_string()), "axisId", json!("axis-1")),
             (P::UseInlineStyles(true), "useInlineStyles", json!(true)),
             (P::FontWeight(700), "fontWeight", json!(700)),
+            (P::FontBold(true), "fontBold", json!(true)),
             (P::FontItalic(true), "fontItalic", json!(true)),
             (P::FontUnderline(false), "fontUnderline", json!(false)),
             (P::FontStrikethrough(true), "fontStrikethrough", json!(true)),
@@ -883,14 +898,14 @@ mod tests {
                 json!("class"),
             ),
             (
-                P::FontColor("#111111".to_string()),
-                "fontColor",
-                json!("#111111"),
+                P::FontPaint(paint("#111111")),
+                "fontPaint",
+                json!({ "color": "#111111", "gradient": null }),
             ),
             (
-                P::ActiveFontColor("#222222".to_string()),
-                "activeFontColor",
-                json!("#222222"),
+                P::ActiveFontPaint(paint("#222222")),
+                "activeFontPaint",
+                json!({ "color": "#222222", "gradient": null }),
             ),
             (
                 P::Shadow(EditorShadowLeafPatchV1::Color(
@@ -985,6 +1000,7 @@ mod tests {
             (P::CounterGap(4), "counterGap", json!(4)),
             (P::CounterFontSize(16), "counterFontSize", json!(16)),
             (P::CounterFontWeight(500), "counterFontWeight", json!(500)),
+            (P::CounterFontBold(true), "counterFontBold", json!(true)),
             (P::CounterFontItalic(true), "counterFontItalic", json!(true)),
             (
                 P::CounterFontUnderline(false),
@@ -1020,16 +1036,6 @@ mod tests {
                 json!({ "color": "#060606" }),
             ),
             (
-                P::CounterStrokeIdle("#070707".to_string()),
-                "counterStrokeIdle",
-                json!("#070707"),
-            ),
-            (
-                P::CounterStrokeActive("#080808".to_string()),
-                "counterStrokeActive",
-                json!("#080808"),
-            ),
-            (
                 P::CounterAnimationPreset(EditorCounterAnimationPresetIntentV1 {
                     preset_id: "preset".to_string(),
                     apply_preset_id: None,
@@ -1043,6 +1049,7 @@ mod tests {
             (P::StatType(StatType::Total), "statType", json!("total")),
             (P::NoteEffectEnabled(true), "noteEffectEnabled", json!(true)),
             (P::NoteGlowEnabled(false), "noteGlowEnabled", json!(false)),
+            (P::NoteGlowSyncPaint(true), "noteGlowSyncPaint", json!(true)),
             (P::NoteGlowSize(6.5), "noteGlowSize", json!(6.5)),
             (
                 P::NotePaint(EditorNotePaintIntentV1::Opacity(
@@ -1062,6 +1069,7 @@ mod tests {
                 P::NoteBorderPaint(EditorNoteBorderPaintV1 {
                     color: "#0a0b0c".to_string(),
                     opacity: 30,
+                    gradient: None,
                 }),
                 "noteBorderPaint",
                 json!({ "color": "#0a0b0c", "opacity": 30 }),
@@ -1092,7 +1100,7 @@ mod tests {
     #[test]
     fn property_patch_wire_pins_all_tag_value_pairs_and_roundtrips() {
         let samples = property_patch_samples();
-        assert_eq!(samples.len(), 71);
+        assert_eq!(samples.len(), 72);
         for (patch, tag, value) in samples {
             let wire = serde_json::to_value(&patch).unwrap();
             assert_eq!(
@@ -1102,6 +1110,85 @@ mod tests {
             );
             let decoded: EditorElementPropertyPatchV1 = serde_json::from_value(wire).unwrap();
             assert_eq!(decoded, patch, "roundtrip mismatch for {tag}");
+        }
+    }
+
+    #[test]
+    fn expanded_paint_values_keep_existing_property_tags_and_exact_keys() {
+        let gradient = serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        });
+        let cases = [
+            serde_json::json!({
+                "property": "noteBorderPaint",
+                "value": { "color": "#112233", "opacity": 80 }
+            }),
+            serde_json::json!({
+                "property": "noteBorderPaint",
+                "value": { "color": "#112233", "opacity": 80, "gradient": null }
+            }),
+            serde_json::json!({
+                "property": "noteBorderPaint",
+                "value": {
+                    "color": "#112233",
+                    "opacity": 80,
+                    "gradient": gradient.clone()
+                }
+            }),
+            serde_json::json!({
+                "property": "notePaint",
+                "value": {
+                    "color": "#112233",
+                    "opacity": 80,
+                    "gradient": null
+                }
+            }),
+            serde_json::json!({
+                "property": "noteGlowPaint",
+                "value": {
+                    "color": {
+                        "type": "gradient",
+                        "top": "#112233",
+                        "bottom": "#445566"
+                    },
+                    "opacity": 80,
+                    "gradient": gradient
+                }
+            }),
+        ];
+
+        for wire in cases {
+            let patch: EditorElementPropertyPatchV1 = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(
+                serde_json::to_value(&patch).unwrap()["property"],
+                wire["property"]
+            );
+        }
+
+        for wire in [
+            serde_json::json!({
+                "property": "noteBorderPaint",
+                "value": { "color": "#112233", "opacity": 80, "extra": true }
+            }),
+            serde_json::json!({
+                "property": "notePaint",
+                "value": { "color": "#112233", "opacity": 80 }
+            }),
+            serde_json::json!({
+                "property": "noteGlowPaint",
+                "value": {
+                    "color": "#112233",
+                    "opacity": 80,
+                    "gradient": null,
+                    "extra": true
+                }
+            }),
+        ] {
+            assert!(serde_json::from_value::<EditorElementPropertyPatchV1>(wire).is_err());
         }
     }
 

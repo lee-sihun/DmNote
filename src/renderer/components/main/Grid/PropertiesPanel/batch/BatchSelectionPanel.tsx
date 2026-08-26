@@ -8,6 +8,7 @@ import type {
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import { paintPropertyFields } from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import { useEditStatePreviewPublisher } from '@stores/grid/useEditStatePreviewStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
   normalizeCounterSettings,
@@ -44,7 +45,6 @@ import {
   patchShadowByTargets,
   patchNotePaintByIds,
   patchCounterFillByTargets,
-  patchFontColorByTargets,
   patchStylePropertyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
@@ -63,23 +63,27 @@ import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
-  EditorFontColorPropertyPatchV1,
 } from '@src/types/editor';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
 import {
   previewBatchGraphColor,
-  previewBatchFontColor,
   previewBatchPaint,
   previewBatchStyleProperty,
 } from '../previewPatchForwarders';
-import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
+import {
+  hexWithAlphaPercent,
+  parseAlphaPercent,
+  toRgbHexColor,
+} from '@utils/color/colorUtils';
 import type { BatchElementPropertyUpdate } from '../types';
+import { useBatchNotePaint, type BatchNoteSurface } from './useBatchNotePaint';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 
@@ -121,6 +125,28 @@ const createStylePropertyHandlers = (
   };
 };
 
+// 표면별 허용 타깃 - font는 라벨 렌더러가 있는 키·스탯(active는 키만)
+const paintRelevantTargets = <
+  T extends { elementType: 'key' | 'stat' | 'graph' | 'knob' },
+>(
+  targets: readonly T[],
+  patch: EditorPaintPropertyPatchV1,
+): readonly T[] => {
+  const { active, surface } = paintPropertyFields(patch.property);
+  if (surface === 'font') {
+    return targets.filter(({ elementType }) =>
+      active
+        ? elementType === 'key'
+        : elementType === 'key' || elementType === 'stat',
+    );
+  }
+  return active
+    ? targets.filter(
+        ({ elementType }) => elementType === 'key' || elementType === 'knob',
+      )
+    : targets;
+};
+
 const createPaintHandlers = (
   targets: readonly {
     elementType: 'key' | 'stat' | 'graph' | 'knob';
@@ -129,11 +155,7 @@ const createPaintHandlers = (
   selectedKeyType: string,
 ) => {
   const stableTargets = (patch: EditorPaintPropertyPatchV1) => {
-    const relevant = paintPropertyFields(patch.property).active
-      ? targets.filter(
-          ({ elementType }) => elementType === 'key' || elementType === 'knob',
-        )
-      : targets;
+    const relevant = paintRelevantTargets(targets, patch);
     const stable =
       relevant.length > 0 &&
       relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
@@ -151,48 +173,6 @@ const createPaintHandlers = (
       if (!stable) return;
       const gestureId = editGestureController.activeGestureId() ?? undefined;
       const persisted = patchPaintByTargets(stable, patch, { gestureId });
-      editGestureController.settleCommit(persisted);
-      void persisted.catch(reportElementOpError);
-    },
-  };
-};
-
-const createFontColorHandlers = (
-  targets: readonly {
-    elementType: 'key' | 'stat' | 'graph' | 'knob';
-    id: string;
-  }[],
-  selectedKeyType: string,
-) => {
-  const relevantTargets = (patch: EditorFontColorPropertyPatchV1) =>
-    patch.property === 'activeFontColor'
-      ? targets.filter(
-          ({ elementType }) => elementType === 'key' || elementType === 'knob',
-        )
-      : targets;
-  const stableTargets = (patch: EditorFontColorPropertyPatchV1) => {
-    const relevant = relevantTargets(patch);
-    return relevant.length > 0 &&
-      relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
-      new Set(relevant.map(({ id }) => id)).size === relevant.length
-      ? relevant
-      : null;
-  };
-  return {
-    previewFontColor: (patch: EditorFontColorPropertyPatchV1) => {
-      const stable = stableTargets(patch);
-      if (!stable) return;
-      previewBatchFontColor(stable, selectedKeyType, patch);
-    },
-    commitFontColor: (patch: EditorFontColorPropertyPatchV1) => {
-      const stable = stableTargets(patch);
-      if (!stable) return;
-      const gestureId = editGestureController.activeGestureId() ?? undefined;
-      const persisted = patchFontColorByTargets(
-        stable,
-        patch,
-        gestureId ? { gestureId } : {},
-      );
       editGestureController.settleCommit(persisted);
       void persisted.catch(reportElementOpError);
     },
@@ -403,7 +383,6 @@ type BatchPickerTarget =
   | 'glowColor'
   | 'borderColor'
   | 'fill'
-  | 'stroke'
   | null;
 
 type MixedValueResult<T> = { isMixed: boolean; value: T };
@@ -420,26 +399,9 @@ interface KeyData {
 }
 
 interface BatchLocalColors {
-  noteColor: NoteColor;
-  glowColor: NoteColor;
-  borderColor: string;
-  borderOpacity: number;
   fillIdle: string;
   fillActive: string;
-  strokeIdle: string;
-  strokeActive: string;
 }
-
-interface BatchLocalOpacities {
-  noteOpacity: number;
-  noteOpacityTop: number;
-  noteOpacityBottom: number;
-  glowOpacity: number;
-  glowOpacityTop: number;
-  glowOpacityBottom: number;
-}
-
-type OpacityTarget = 'solid' | 'top' | 'bottom';
 
 interface BatchKeyLikePanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
@@ -482,7 +444,10 @@ interface BatchKeyLikePanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onElementPropertyCommit?: (
+    updates: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
+  ) => void;
   onNoteElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
@@ -504,7 +469,6 @@ interface BatchKeyLikePanelProps {
   batchGlowColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchBorderColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchCounterFillButtonRef: React.RefObject<HTMLButtonElement | null>;
-  batchCounterStrokeButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
   // state
   showBatchImagePicker: boolean;
@@ -515,17 +479,9 @@ interface BatchKeyLikePanelProps {
   setBatchCounterColorState: (value: 'idle' | 'active') => void;
   batchLocalColors: BatchLocalColors;
   setBatchLocalColors: React.Dispatch<React.SetStateAction<BatchLocalColors>>;
-  batchLocalOpacities: BatchLocalOpacities;
-  setBatchLocalOpacities: React.Dispatch<
-    React.SetStateAction<BatchLocalOpacities>
-  >;
   handleBatchPickerToggle: (target: BatchPickerTarget) => void;
   handleBatchPickerColorChange: (newColor: NoteColor) => void;
   handleBatchPickerColorChangeComplete: (newColor: NoteColor) => void;
-  handleBatchNotePickerColorChangeComplete: (
-    newColor: NoteColor,
-    onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
-  ) => void;
   handleBatchFillPickerColorChangeComplete: (
     newColor: string,
     onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
@@ -585,7 +541,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   batchGlowColorButtonRef,
   batchBorderColorButtonRef,
   batchCounterFillButtonRef,
-  batchCounterStrokeButtonRef,
   batchImageButtonRef,
   showBatchImagePicker,
   setShowBatchImagePicker,
@@ -595,12 +550,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   setBatchCounterColorState,
   batchLocalColors,
   setBatchLocalColors,
-  batchLocalOpacities,
-  setBatchLocalOpacities,
   handleBatchPickerToggle,
   handleBatchPickerColorChange,
   handleBatchPickerColorChangeComplete,
-  handleBatchNotePickerColorChangeComplete,
   handleBatchFillPickerColorChangeComplete,
   getBatchPickerColor,
   getBatchPickerRef,
@@ -672,10 +624,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     textPropertyTargets,
     selectedKeyType,
   );
-  const { previewFontColor, commitFontColor } = createFontColorHandlers(
-    textPropertyTargets,
-    selectedKeyType,
-  );
   const shadowTargets = [
     ...selectedKeyElements.map(({ id }) => ({
       elementType: 'key' as const,
@@ -707,65 +655,60 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     new Set(notePaintIds).size === notePaintIds.length
       ? notePaintIds
       : null;
-
-  const restoreFailedNotePaint = (patch: EditorNotePaintPropertyPatchV1) => {
-    if (editGestureController.activeGestureId() !== null) return;
-    if (patch.property === 'notePaint') {
-      const noteColor = getMixedValueCanonical(
-        (pos) => pos.noteColor,
-        '#FFFFFF' as NoteColor,
-      ).value;
-      setBatchLocalColors((prev) => ({ ...prev, noteColor }));
-      return;
-    }
-    if (patch.property === 'noteGlowPaint') {
-      const glowColor = getMixedValueCanonical(
-        (pos) => pos.noteGlowColor ?? pos.noteColor,
-        '#FFFFFF' as NoteColor,
-      ).value;
-      setBatchLocalColors((prev) => ({ ...prev, glowColor }));
-      return;
-    }
-    const borderColor = getMixedValueCanonical(
-      (pos) => pos.noteBorderColor,
-      '#FFFFFF',
-    ).value;
-    const borderOpacity = getMixedValueCanonical(
-      (pos) => pos.noteBorderOpacity,
-      100,
-    ).value;
-    setBatchLocalColors((prev) => ({
-      ...prev,
-      borderColor,
-      borderOpacity,
-    }));
+  // 따라가기 대상이 하나라도 있으면 글로우 페인트는 보내지 않는다 - 백엔드가
+  // 그 키 때문에 배치 transition 전체를 거부한다. 잠긴 뒤 늦게 도착한 피커
+  // 콜백을 여기서 거른다
+  const glowPaintLockedForSelection = (
+    patch: EditorNotePaintPropertyPatchV1,
+  ): boolean => {
+    if (patch.property !== 'noteGlowPaint' || !stableNotePaintIds) return false;
+    const document = captureEditorDocument();
+    return stableNotePaintIds.some((id) => {
+      const locator = resolveElementById('key', id);
+      const current = locator
+        ? document.keyPositions[locator.mode]?.[locator.index]
+        : undefined;
+      return current?.id === id && current.noteGlowSyncPaint === true;
+    });
   };
-
+  // 영구 실패 시 로컬 대표값 복원 - 피커 로컬 상태(useBatchNotePaint)가 아래에서
+  // 만들어지므로 실패 콜백 시점에 읽도록 늦게 묶는다
+  const notePaintFailureRestore: {
+    current?: (patch: EditorNotePaintPropertyPatchV1) => void;
+  } = {};
   const commitNotePaint = stableNotePaintIds
     ? (patch: EditorNotePaintPropertyPatchV1) => {
+        if (glowPaintLockedForSelection(patch)) return;
         const gestureId = editGestureController.activeGestureId() ?? undefined;
         const persisted = patchNotePaintByIds(stableNotePaintIds, patch, {
           gestureId,
         });
         editGestureController.settleCommit(persisted);
         void persisted.catch((error) => {
-          restoreFailedNotePaint(patch);
+          notePaintFailureRestore.current?.(patch);
           reportElementOpError(error);
         });
       }
     : undefined;
   const previewNotePaint = stableNotePaintIds
     ? (patch: EditorNotePaintPropertyPatchV1) => {
+        if (glowPaintLockedForSelection(patch)) return;
         const entries: Array<{
           id: string;
           patch: Partial<KeyPosition>;
         }> = [];
+        // canonical 전달 - 동기화 켜진 키의 글로우 미러가 낙관 적용과 같은 규칙
+        const document = captureEditorDocument();
         for (const id of stableNotePaintIds) {
           const locator = resolveElementById('key', id);
           if (!locator || locator.mode !== selectedKeyType) return;
+          const current = document.keyPositions[locator.mode]?.[locator.index];
           entries.push({
             id,
-            patch: projectNotePaintPatch(patch),
+            patch: projectNotePaintPatch(
+              patch,
+              current?.id === id ? current : undefined,
+            ),
           });
         }
         editGestureController.preview(selectedKeyType, entries, {
@@ -859,11 +802,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const commitCounterTypography = stableCounterTargets
     ? (
         patch: import('@src/types/editor').EditorCounterTypographyPropertyPatchV1,
+        options?: { gestureId?: string },
       ) => {
-        const persisted = patchCounterTypographyByTargets(
-          stableCounterTargets,
-          patch,
-        );
+        const persisted = options?.gestureId
+          ? patchCounterTypographyByTargets(stableCounterTargets, patch, {
+              gestureId: options.gestureId,
+            })
+          : patchCounterTypographyByTargets(stableCounterTargets, patch);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -880,200 +825,87 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     ? getSelectedBatchStyleData
     : getSelectedKeysData;
 
-  // opacity가 mixed면 첫 항목 값을 공통값처럼 단언하지 않고 원색으로 표시
-  const opacityOrFull = (mixed: { isMixed: boolean; value: number }) =>
-    mixed.isMixed ? 1 : mixed.value / 100;
-
-  const getBatchNoteColorDisplay = () => {
-    if (batchPickerFor === 'noteColor') {
-      const value = batchLocalColors.noteColor;
-      if (
-        value &&
-        typeof value === 'object' &&
-        'type' in value &&
-        value.type === 'gradient'
-      ) {
-        return {
-          color: undefined,
-          gradient: { top: value.top, bottom: value.bottom },
-          opacity: batchLocalOpacities.noteOpacity / 100,
-          label: 'Gradient',
-          isMixed: false,
-        };
-      }
-      const color = typeof value === 'string' ? value : '#FFFFFF';
-      return {
-        color,
-        gradient: undefined,
-        opacity: batchLocalOpacities.noteOpacity / 100,
-        label: color.replace(/^#/, ''),
-        isMixed: false,
-      };
-    }
-
-    const mixedFn =
-      selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
-    const { isMixed, value } = mixedFn(
-      (pos) => pos.noteColor,
-      '#FFFFFF' as NoteColor,
-    );
-    if (isMixed)
-      return {
-        color: 'var(--ui-fg-disabled)',
-        gradient: undefined,
-        opacity: 1,
-        label: 'Mixed',
-        isMixed: true,
-      };
-    const opacity = opacityOrFull(mixedFn((pos) => pos.noteOpacity, 80));
-    if (
-      value &&
-      typeof value === 'object' &&
-      'type' in value &&
-      value.type === 'gradient'
-    ) {
-      return {
-        color: undefined,
-        gradient: { top: value.top, bottom: value.bottom },
-        opacity: {
-          top: opacityOrFull(
-            mixedFn((pos) => pos.noteOpacityTop ?? pos.noteOpacity, 80),
-          ),
-          bottom: opacityOrFull(
-            mixedFn((pos) => pos.noteOpacityBottom ?? pos.noteOpacity, 80),
-          ),
-        },
-        label: 'Gradient',
-        isMixed: false,
-      };
-    }
-    const color = typeof value === 'string' ? value : '#FFFFFF';
-    return {
-      color,
-      gradient: undefined,
-      opacity,
-      label: color.replace(/^#/, ''),
-      isMixed: false,
-    };
-  };
-
-  const getBatchGlowColorDisplay = () => {
-    if (batchPickerFor === 'glowColor') {
-      const value = batchLocalColors.glowColor;
-      if (
-        value &&
-        typeof value === 'object' &&
-        'type' in value &&
-        value.type === 'gradient'
-      ) {
-        return {
-          color: undefined,
-          gradient: { top: value.top, bottom: value.bottom },
-          opacity: batchLocalOpacities.glowOpacity / 100,
-          label: 'Gradient',
-          isMixed: false,
-        };
-      }
-      const color = typeof value === 'string' ? value : '#FFFFFF';
-      return {
-        color,
-        gradient: undefined,
-        opacity: batchLocalOpacities.glowOpacity / 100,
-        label: color.replace(/^#/, ''),
-        isMixed: false,
-      };
-    }
-
-    const mixedFn =
-      selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
-    const { isMixed, value } = mixedFn(
-      (pos) => pos.noteGlowColor ?? pos.noteColor,
-      '#FFFFFF' as NoteColor,
-    );
-    if (isMixed)
-      return {
-        color: 'var(--ui-fg-disabled)',
-        gradient: undefined,
-        opacity: 1,
-        label: 'Mixed',
-        isMixed: true,
-      };
-    const opacity = opacityOrFull(mixedFn((pos) => pos.noteGlowOpacity, 70));
-    if (
-      value &&
-      typeof value === 'object' &&
-      'type' in value &&
-      value.type === 'gradient'
-    ) {
-      return {
-        color: undefined,
-        gradient: { top: value.top, bottom: value.bottom },
-        opacity: {
-          top: opacityOrFull(
-            mixedFn((pos) => pos.noteGlowOpacityTop ?? pos.noteGlowOpacity, 70),
-          ),
-          bottom: opacityOrFull(
-            mixedFn(
-              (pos) => pos.noteGlowOpacityBottom ?? pos.noteGlowOpacity,
-              70,
-            ),
-          ),
-        },
-        label: 'Gradient',
-        isMixed: false,
-      };
-    }
-    const color = typeof value === 'string' ? value : '#FFFFFF';
-    return {
-      color,
-      gradient: undefined,
-      opacity,
-      label: color.replace(/^#/, ''),
-      isMixed: false,
-    };
-  };
-
-  // 테두리 색은 단색만 지원. 피커 열림 시 로컬값, 닫힘 시 실제 공통값/Mixed 표시
-  const getBatchBorderColorDisplay = () => {
-    if (batchPickerFor === 'borderColor') {
-      const color = batchLocalColors.borderColor;
-      return {
-        color,
-        gradient: undefined,
-        opacity: batchLocalColors.borderOpacity / 100,
-        label: color.replace(/^#/, ''),
-        isMixed: false,
-      };
-    }
-
-    const mixedFn =
-      selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
-    const { isMixed, value } = mixedFn((pos) => pos.noteBorderColor, '#FFFFFF');
-    if (isMixed)
-      return {
-        color: 'var(--ui-fg-disabled)',
-        gradient: undefined,
-        opacity: 1,
-        label: 'Mixed',
-        isMixed: true,
-      };
-    const color = typeof value === 'string' ? value : '#FFFFFF';
-    return {
-      color,
-      gradient: undefined,
-      opacity: opacityOrFull(mixedFn((pos) => pos.noteBorderOpacity, 100)),
-      label: color.replace(/^#/, ''),
-      isMixed: false,
-    };
-  };
-
   const keysData = getSelectedKeysData();
   const keyOnlyPositions = getSelectedKeyOnlyPositions();
+
+  // 배치 노트 페인트 - GradientSpec 집계·편집 (본체·글로우·테두리)
+  const openNoteSurface: BatchNoteSurface | null =
+    batchPickerFor === 'noteColor'
+      ? 'note'
+      : batchPickerFor === 'glowColor'
+      ? 'glow'
+      : batchPickerFor === 'borderColor'
+      ? 'border'
+      : null;
+  const batchNotePositions =
+    selectedKeyElements.length > 0
+      ? keyOnlyPositions.map(({ position }) => position)
+      : keysData
+          .map(({ position }) => position)
+          .filter((position): position is KeyPosition => position != null);
+  // 선택 구성 시그니처 - 형식 왕복 기억·세션 소유가 다른 선택과 교차하지 않게
+  const batchNoteSelectionKey = `${selectedKeyType}:${[...notePaintIds]
+    .sort()
+    .join(',')}`;
+  const batchNotePaint = useBatchNotePaint({
+    positions: batchNotePositions,
+    open: openNoteSurface,
+    selectionKey: batchNoteSelectionKey,
+    commitNotePaint,
+    previewNotePaint,
+  });
+  // 영구 실패는 canonical 재반영 신호(commitTick)가 오지 않는다. 열린 피커의
+  // 로컬 대표값을 canonical에서 다시 읽어 옛 편집값이 다음 커밋에 실리지 않게
+  notePaintFailureRestore.current = (patch) => {
+    if (editGestureController.activeGestureId() !== null) return;
+    const surface: BatchNoteSurface =
+      patch.property === 'notePaint'
+        ? 'note'
+        : patch.property === 'noteGlowPaint'
+        ? 'glow'
+        : 'border';
+    const state = batchNotePaint.states[surface];
+    if (state.format === 'gradient') {
+      // 스톱 초안만 버리면 저장값 spec이 다시 제시된다
+      state.cancelPreview();
+      return;
+    }
+    if (surface === 'border') {
+      batchNotePaint.previewBorderSolid(
+        hexWithAlphaPercent(
+          getMixedValueCanonical((pos) => pos.noteBorderColor, '#FFFFFF').value,
+          getMixedValueCanonical((pos) => pos.noteBorderOpacity, 100).value,
+        ),
+      );
+      return;
+    }
+    const color = getMixedValueCanonical(
+      (pos) =>
+        surface === 'note' ? pos.noteColor : pos.noteGlowColor ?? pos.noteColor,
+      '#FFFFFF' as NoteColor,
+    ).value;
+    if (typeof color === 'string') state.handlePickerColorChange(color, false);
+    if (surface === 'note') {
+      batchNotePaint.setNoteOpacity(
+        getMixedValueCanonical((pos) => pos.noteOpacity, 80).value,
+      );
+    } else {
+      batchNotePaint.setGlowOpacity(
+        getMixedValueCanonical((pos) => pos.noteGlowOpacity, 70).value,
+      );
+    }
+  };
+  const getBatchNoteColorDisplay = () => batchNotePaint.displays.note;
+  const getBatchGlowColorDisplay = () => batchNotePaint.displays.glow;
+  const getBatchBorderColorDisplay = () => batchNotePaint.displays.border;
   const firstCounterPosition =
     keyOnlyPositions[0]?.position ?? keysData[0]?.position;
   const batchCounterSettings = firstCounterPosition
     ? normalizeCounterSettings(firstCounterPosition.counter)
     : createDefaultCounterSettings();
+  const selectedCounterSettings = keysData.map(({ position }) =>
+    normalizeCounterSettings(position.counter),
+  );
   const firstPos = keysData[0]?.position;
   const batchKeyVisual = firstPos
     ? {
@@ -1086,28 +918,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const noteMixedFn =
     selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
   const noteOpacityMixed = noteMixedFn((pos) => pos.noteOpacity, 80).isMixed;
-  const noteOpacityEdgesMixed = {
-    top: noteMixedFn((pos) => pos.noteOpacityTop ?? pos.noteOpacity, 80)
-      .isMixed,
-    bottom: noteMixedFn((pos) => pos.noteOpacityBottom ?? pos.noteOpacity, 80)
-      .isMixed,
-  };
   const glowOpacityMixed = noteMixedFn(
     (pos) => pos.noteGlowOpacity,
     70,
   ).isMixed;
-  const glowOpacityEdgesMixed = {
-    top: noteMixedFn((pos) => pos.noteGlowOpacityTop ?? pos.noteGlowOpacity, 70)
-      .isMixed,
-    bottom: noteMixedFn(
-      (pos) => pos.noteGlowOpacityBottom ?? pos.noteGlowOpacity,
-      70,
-    ).isMixed,
-  };
-  const isGradientNoteColor = (value: NoteColor) =>
-    typeof value === 'object' && value !== null && 'type' in value;
-  const batchNoteIsGradient = isGradientNoteColor(batchLocalColors.noteColor);
-  const batchGlowIsGradient = isGradientNoteColor(batchLocalColors.glowColor);
   const batchSpacing = getBatchSpacingValue();
   const graphTypeState = getMixedValueGraphs(
     (pos) => pos.graphType || 'line',
@@ -1150,19 +964,30 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
   ];
 
+  // 배치 카운터 채움은 세션 훅 없는 ColorPicker 직결 경로 - 상태 프리뷰 직접 발행
+  useEditStatePreviewPublisher(
+    batchPickerFor === 'fill' && selectedKeyElements.length > 0
+      ? { kind: 'batch' }
+      : null,
+    batchCounterColorState,
+  );
+
   // 열린 배치 피커의 hex 칸·% 칸 Mixed. 두 칸은 따로 판단하고, 저장 표현(대소문자·rgba·hex8)이
-  // 달라도 같은 색이면 공통값으로 본다
-  const batchPickerMixed = ((): {
-    hex: boolean;
-    alpha: boolean | { top: boolean; bottom: boolean };
-  } => {
+  // 달라도 같은 색이면 공통값으로 본다. 그라데이션 형식은 선택 스톱을 편집하므로 칸 Mixed를 두지 않는다
+  const batchPickerMixed = ((): { hex: boolean; alpha: boolean } => {
     const paintHex = (value: NoteColor | undefined) =>
       typeof value === 'string' ? toRgbHexColor(value) : value;
+    if (
+      openNoteSurface &&
+      batchNotePaint.states[openNoteSurface].format === 'gradient'
+    ) {
+      return { hex: false, alpha: false };
+    }
     switch (batchPickerFor) {
       case 'noteColor':
         return {
           hex: noteMixedFn((pos) => paintHex(pos.noteColor), '#FFFFFF').isMixed,
-          alpha: batchNoteIsGradient ? noteOpacityEdgesMixed : noteOpacityMixed,
+          alpha: noteOpacityMixed,
         };
       case 'glowColor':
         return {
@@ -1170,7 +995,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             (pos) => paintHex(pos.noteGlowColor ?? pos.noteColor),
             '#FFFFFF',
           ).isMixed,
-          alpha: batchGlowIsGradient ? glowOpacityEdgesMixed : glowOpacityMixed,
+          alpha: glowOpacityMixed,
         };
       case 'borderColor':
         return {
@@ -1178,14 +1003,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             .isMixed,
           alpha: noteMixedFn((pos) => pos.noteBorderOpacity, 100).isMixed,
         };
-      case 'fill':
-      case 'stroke': {
+      case 'fill': {
         // 입력 상태 색은 통계를 편집하지 않으므로 Mixed도 같은 집합으로
         const state = batchCounterColorState === 'active' ? 'active' : 'idle';
         const mixedFn =
           state === 'active' ? getMixedValueActiveCapable : getMixedValue;
         const colorOf = (pos: KeyPosition) =>
-          normalizeCounterSettings(pos.counter)[batchPickerFor][state];
+          normalizeCounterSettings(pos.counter).fill[state];
         return {
           hex: mixedFn((pos) => toRgbHexColor(colorOf(pos)), '').isMixed,
           alpha: mixedFn((pos) => parseAlphaPercent(colorOf(pos)), 100).isMixed,
@@ -1196,78 +1020,16 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     }
   })();
 
-  // 단일 선택과 같은 규칙: 상·하단은 각자 바꾸고 base는 평균, 단색은 셋을 같은 값으로.
-  // base만 저장하면 남아 있는 상·하단이 우선해 바꾼 값이 보이지 않는다
-  const nextNoteOpacities = (
-    kind: 'note' | 'glow',
-    value: number,
-    target: OpacityTarget,
-  ) => {
-    if (target === 'solid') {
-      return { opacity: value, opacityTop: value, opacityBottom: value };
-    }
-    const local = batchLocalOpacities;
-    const top = kind === 'note' ? local.noteOpacityTop : local.glowOpacityTop;
-    const bottom =
-      kind === 'note' ? local.noteOpacityBottom : local.glowOpacityBottom;
-    const nextTop = target === 'top' ? value : top;
-    const nextBottom = target === 'bottom' ? value : bottom;
-    return {
-      opacity: Math.round((nextTop + nextBottom) / 2),
-      opacityTop: nextTop,
-      opacityBottom: nextBottom,
-    };
-  };
-
-  const applyNoteOpacities = (
-    kind: 'note' | 'glow',
-    next: { opacity: number; opacityTop: number; opacityBottom: number },
-  ) => {
-    setBatchLocalOpacities((prev) =>
-      kind === 'note'
-        ? {
-            ...prev,
-            noteOpacity: next.opacity,
-            noteOpacityTop: next.opacityTop,
-            noteOpacityBottom: next.opacityBottom,
-          }
-        : {
-            ...prev,
-            glowOpacity: next.opacity,
-            glowOpacityTop: next.opacityTop,
-            glowOpacityBottom: next.opacityBottom,
-          },
-    );
-  };
-
-  const batchOpacityKind =
-    batchPickerFor === 'noteColor'
-      ? 'note'
-      : batchPickerFor === 'glowColor'
-      ? 'glow'
-      : null;
-
-  const getCounterColorDisplay = (target: 'fill' | 'stroke') => {
-    const key =
-      target === 'fill'
-        ? batchCounterColorState === 'active'
-          ? 'fillActive'
-          : 'fillIdle'
-        : batchCounterColorState === 'active'
-        ? 'strokeActive'
-        : 'strokeIdle';
+  const getCounterColorDisplay = (target: 'fill') => {
+    const key = batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
 
     if (batchPickerFor === target) {
       return batchLocalColors[key];
     }
 
-    return target === 'fill'
-      ? batchCounterColorState === 'active'
-        ? batchCounterSettings.fill.active
-        : batchCounterSettings.fill.idle
-      : batchCounterColorState === 'active'
-      ? batchCounterSettings.stroke.active
-      : batchCounterSettings.stroke.idle;
+    return batchCounterColorState === 'active'
+      ? batchCounterSettings.fill.active
+      : batchCounterSettings.fill.idle;
   };
 
   return (
@@ -1326,8 +1088,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 onStylePropertyCommit={commitStyleProperty}
                 onPaintPreview={previewPaint}
                 onPaintCommit={commitPaint}
-                onFontColorPreview={previewFontColor}
-                onFontColorCommit={commitFontColor}
+                onFontColorPreview={previewPaint}
+                onFontColorCommit={commitPaint}
                 onShadowCommit={commitShadow}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
@@ -1533,6 +1295,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             <EditSessionBoundary>
               <BatchCounterTabContent
                 batchCounterSettings={batchCounterSettings}
+                selectedCounterSettings={selectedCounterSettings}
                 keyVisual={batchKeyVisual}
                 onCounterEnabledCommit={commitCounterEnabled}
                 onCounterAnimationEnabledCommit={commitCounterAnimationEnabled}
@@ -1541,11 +1304,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 colorState={batchCounterColorState}
                 getCounterColorDisplay={getCounterColorDisplay}
                 onFillPickerToggle={() => handleBatchPickerToggle('fill')}
-                onStrokePickerToggle={() => handleBatchPickerToggle('stroke')}
                 batchCounterFillButtonRef={batchCounterFillButtonRef}
-                batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
                 isFillPickerOpen={batchPickerFor === 'fill'}
-                isStrokePickerOpen={batchPickerFor === 'stroke'}
                 animationBinding={animationBinding}
                 t={t}
               />
@@ -1560,41 +1320,48 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               open={!!batchPickerFor}
               referenceRef={getBatchPickerRef()}
               panelElement={panelElement}
-              color={getBatchPickerColor()}
+              color={
+                openNoteSurface
+                  ? openNoteSurface === 'border' &&
+                    batchNotePaint.states.border.format !== 'gradient'
+                    ? hexWithAlphaPercent(
+                        batchNotePaint.borderSolid,
+                        batchNotePaint.borderOpacity,
+                      )
+                    : batchNotePaint.activeState.pickerColor
+                  : getBatchPickerColor()
+              }
               onColorChange={(color) => {
-                handleBatchPickerColorChange(color);
-                if (!previewNotePaint) return;
-                if (batchPickerFor === 'noteColor') {
-                  previewNotePaint({ property: 'notePaint', value: { color } });
-                } else if (batchPickerFor === 'glowColor') {
-                  previewNotePaint({
-                    property: 'noteGlowPaint',
-                    value: { color },
-                  });
-                } else if (batchPickerFor === 'borderColor') {
-                  const raw = typeof color === 'string' ? color : undefined;
-                  previewNotePaint({
-                    property: 'noteBorderPaint',
-                    value: {
-                      color: toRgbHexColor(raw),
-                      opacity: parseAlphaPercent(
-                        raw,
-                        batchLocalColors.borderOpacity,
-                      ),
-                    },
-                  });
+                if (openNoteSurface) {
+                  if (typeof color !== 'string') return;
+                  if (
+                    openNoteSurface === 'border' &&
+                    batchNotePaint.states.border.format !== 'gradient'
+                  ) {
+                    batchNotePaint.previewBorderSolid(color);
+                    return;
+                  }
+                  batchNotePaint.activeState.handlePickerColorChange(
+                    color,
+                    false,
+                  );
+                  return;
                 }
+                handleBatchPickerColorChange(color);
               }}
               onColorChangeComplete={(color) => {
-                if (
-                  commitNotePaint &&
-                  (batchPickerFor === 'noteColor' ||
-                    batchPickerFor === 'glowColor' ||
-                    batchPickerFor === 'borderColor')
-                ) {
-                  handleBatchNotePickerColorChangeComplete(
+                if (openNoteSurface) {
+                  if (typeof color !== 'string') return;
+                  if (
+                    openNoteSurface === 'border' &&
+                    batchNotePaint.states.border.format !== 'gradient'
+                  ) {
+                    batchNotePaint.commitBorderSolid(color);
+                    return;
+                  }
+                  batchNotePaint.activeState.handlePickerColorChange(
                     color,
-                    commitNotePaint,
+                    true,
                   );
                   return;
                 }
@@ -1617,161 +1384,134 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 }
                 handleBatchPickerColorChangeComplete(color);
               }}
-              onInputCancel={() => {
-                if (batchPickerFor === 'noteColor') {
-                  editGestureController.cancel();
-                  const noteColor = getMixedValueCanonical(
-                    (pos) => pos.noteColor,
-                    '#FFFFFF' as NoteColor,
-                  ).value;
-                  setBatchLocalColors((prev) => ({
-                    ...prev,
-                    noteColor,
-                  }));
-                } else if (batchPickerFor === 'glowColor') {
-                  editGestureController.cancel();
-                  const glowColor = getMixedValueCanonical(
-                    (pos) => pos.noteGlowColor ?? pos.noteColor,
-                    '#FFFFFF' as NoteColor,
-                  ).value;
-                  setBatchLocalColors((prev) => ({
-                    ...prev,
-                    glowColor,
-                  }));
-                } else if (batchPickerFor === 'borderColor') {
-                  editGestureController.cancel();
-                  const borderColor = getMixedValueCanonical(
-                    (pos) => pos.noteBorderColor,
-                    '#FFFFFF',
-                  ).value;
-                  const borderOpacity = getMixedValueCanonical(
-                    (pos) => pos.noteBorderOpacity,
-                    100,
-                  ).value;
-                  setBatchLocalColors((prev) => ({
-                    ...prev,
-                    borderColor,
-                    borderOpacity,
-                  }));
-                } else if (
-                  batchPickerFor === 'fill' ||
-                  batchPickerFor === 'stroke'
-                ) {
-                  const target = batchPickerFor;
-                  const state =
-                    batchCounterColorState === 'active' ? 'active' : 'idle';
-                  const key = `${target}${
-                    state === 'active' ? 'Active' : 'Idle'
-                  }` as const;
-                  setBatchLocalColors((prev) => ({
-                    ...prev,
-                    [key]: batchCounterSettings[target][state],
-                  }));
-                }
-              }}
               onClose={() => setBatchPickerFor(null)}
               interactiveRefs={batchColorPickerInteractiveRefs}
-              solidOnly={
-                batchPickerFor !== 'noteColor' && batchPickerFor !== 'glowColor'
-              }
+              solidOnly={true}
               stateMode={
-                (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
-                selectedKeyElements.length > 0
+                batchPickerFor === 'fill' && selectedKeyElements.length > 0
                   ? batchCounterColorState
                   : undefined
               }
               onStateModeChange={
-                (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
-                selectedKeyElements.length > 0
+                batchPickerFor === 'fill' && selectedKeyElements.length > 0
                   ? setBatchCounterColorState
                   : undefined
               }
-              opacityPercent={
-                batchPickerFor === 'noteColor'
-                  ? batchNoteIsGradient
-                    ? {
-                        top: batchLocalOpacities.noteOpacityTop,
-                        bottom: batchLocalOpacities.noteOpacityBottom,
-                      }
-                    : batchLocalOpacities.noteOpacity
-                  : batchPickerFor === 'glowColor'
-                  ? batchGlowIsGradient
-                    ? {
-                        top: batchLocalOpacities.glowOpacityTop,
-                        bottom: batchLocalOpacities.glowOpacityBottom,
-                      }
-                    : batchLocalOpacities.glowOpacity
-                  : undefined
-              }
-              onOpacityPercentChange={(value, target) => {
-                if (!batchOpacityKind) return;
-                const next = nextNoteOpacities(batchOpacityKind, value, target);
-                applyNoteOpacities(batchOpacityKind, next);
-                previewNotePaint?.({
-                  property:
-                    batchOpacityKind === 'note' ? 'notePaint' : 'noteGlowPaint',
-                  value: next,
-                });
-              }}
-              onOpacityPercentChangeComplete={(value, target) => {
-                if (!batchOpacityKind) return;
-                const next = nextNoteOpacities(batchOpacityKind, value, target);
-                applyNoteOpacities(batchOpacityKind, next);
-                commitNotePaint?.({
-                  property:
-                    batchOpacityKind === 'note' ? 'notePaint' : 'noteGlowPaint',
-                  value: next,
-                });
-              }}
-              onOpacityPercentCancel={() => {
-                // Escape는 게스처를 통째로 되돌린다. 로컬 대표값도 canonical에서 다시 읽어야
-                // 입력이 blur 뒤 옛 preview 값으로 재동기화되지 않는다
-                // solidOnly 대상의 alpha 취소는 onInputCancel에서 처리
-                if (batchPickerFor === 'noteColor') {
+              onInputCancel={(_target, restoredColor) => {
+                if (openNoteSurface) {
+                  if (typeof restoredColor !== 'string') return;
+                  const state = batchNotePaint.states[openNoteSurface];
+                  if (
+                    openNoteSurface === 'border' &&
+                    state.format !== 'gradient'
+                  ) {
+                    batchNotePaint.previewBorderSolid(restoredColor);
+                  } else {
+                    state.handlePickerColorChange(restoredColor, false);
+                  }
                   editGestureController.cancel();
-                  const base = getMixedValueCanonical(
-                    (pos) => pos.noteOpacity,
-                    80,
-                  ).value;
-                  applyNoteOpacities('note', {
-                    opacity: base,
-                    opacityTop: getMixedValueCanonical(
-                      (pos) => pos.noteOpacityTop ?? pos.noteOpacity,
-                      base,
-                    ).value,
-                    opacityBottom: getMixedValueCanonical(
-                      (pos) => pos.noteOpacityBottom ?? pos.noteOpacity,
-                      base,
-                    ).value,
-                  });
-                } else if (batchPickerFor === 'glowColor') {
-                  editGestureController.cancel();
-                  const base = getMixedValueCanonical(
-                    (pos) => pos.noteGlowOpacity,
-                    70,
-                  ).value;
-                  applyNoteOpacities('glow', {
-                    opacity: base,
-                    opacityTop: getMixedValueCanonical(
-                      (pos) => pos.noteGlowOpacityTop ?? pos.noteGlowOpacity,
-                      base,
-                    ).value,
-                    opacityBottom: getMixedValueCanonical(
-                      (pos) => pos.noteGlowOpacityBottom ?? pos.noteGlowOpacity,
-                      base,
-                    ).value,
-                  });
+                  return;
+                }
+                if (batchPickerFor === 'fill') {
+                  const state =
+                    batchCounterColorState === 'active' ? 'active' : 'idle';
+                  setBatchLocalColors((prev) => ({
+                    ...prev,
+                    [state === 'active' ? 'fillActive' : 'fillIdle']:
+                      batchCounterSettings.fill[state],
+                  }));
                 }
               }}
-              opacityPercentLabel={
-                batchPickerFor === 'noteColor'
-                  ? t('keySetting.noteOpacity') || '노트 투명도'
-                  : batchPickerFor === 'glowColor'
-                  ? t('keySetting.noteGlowOpacity') || '글로우 투명도'
+              hexMixed={batchPickerMixed.hex}
+              opacityPercentMixed={batchPickerMixed.alpha}
+              headerSlot={
+                openNoteSurface
+                  ? batchNotePaint.activeState.headerSlot
                   : undefined
               }
-              opacityPercentMixed={batchPickerMixed.alpha}
-              hexMixed={batchPickerMixed.hex}
+              footerSlot={
+                openNoteSurface
+                  ? batchNotePaint.activeState.footerSlot
+                  : undefined
+              }
+              gradientSpec={
+                openNoteSurface
+                  ? batchNotePaint.activeState.paletteGradientSpec
+                  : undefined
+              }
+              onGradientSpecSelect={
+                openNoteSurface
+                  ? batchNotePaint.activeState.handleGradientSpecSelect
+                  : undefined
+              }
+              {...((openNoteSurface === 'note' || openNoteSurface === 'glow') &&
+              batchNotePaint.states[openNoteSurface].format !== 'gradient'
+                ? {
+                    // 단색 형식의 색 알파는 저장 시 hex 변환으로 버려지므로 항상 숨긴다.
+                    // 그라데이션 형식은 스톱 알파만 편집하므로 조절기를 두지 않는다
+                    hideColorAlpha: true,
+                  }
+                : {})}
+              {...((openNoteSurface === 'note' || openNoteSurface === 'glow') &&
+              batchNotePaint.states[openNoteSurface].format !== 'gradient' &&
+              !batchNotePaint.anyPresented[openNoteSurface]
+                ? {
+                    // 전부 단색인 선택에서만 투명도 조절기가 알파를 대신한다
+                    opacityPercent:
+                      openNoteSurface === 'note'
+                        ? batchNotePaint.noteOpacity
+                        : batchNotePaint.glowOpacity,
+                    onOpacityPercentChange: (value: number) => {
+                      if (openNoteSurface === 'note') {
+                        batchNotePaint.setNoteOpacity(value);
+                        previewNotePaint?.({
+                          property: 'notePaint',
+                          value: { opacity: value },
+                        });
+                        return;
+                      }
+                      batchNotePaint.setGlowOpacity(value);
+                      previewNotePaint?.({
+                        property: 'noteGlowPaint',
+                        value: { opacity: value },
+                      });
+                    },
+                    onOpacityPercentChangeComplete: (value: number) => {
+                      const surface = openNoteSurface;
+                      if (surface === 'note') {
+                        batchNotePaint.setNoteOpacity(value);
+                      } else {
+                        batchNotePaint.setGlowOpacity(value);
+                      }
+                      // 단색 형식은 기존 배치 규약대로 {opacity} 단독 커밋 유지
+                      commitNotePaint?.({
+                        property:
+                          surface === 'note' ? 'notePaint' : 'noteGlowPaint',
+                        value: { opacity: value },
+                      });
+                    },
+                    onOpacityPercentCancel: () => {
+                      // Escape는 게스처를 통째로 되돌린다. 로컬 대표값도 canonical에서
+                      // 다시 읽어야 입력이 blur 뒤 옛 preview 값으로 재동기화되지 않는다
+                      editGestureController.cancel();
+                      if (openNoteSurface === 'note') {
+                        batchNotePaint.setNoteOpacity(
+                          getMixedValueCanonical((pos) => pos.noteOpacity, 80)
+                            .value,
+                        );
+                        return;
+                      }
+                      batchNotePaint.setGlowOpacity(
+                        getMixedValueCanonical((pos) => pos.noteGlowOpacity, 70)
+                          .value,
+                      );
+                    },
+                    opacityPercentLabel:
+                      openNoteSurface === 'note'
+                        ? t('keySetting.noteOpacity') || '노트 투명도'
+                        : t('keySetting.noteGlowOpacity') || '글로우 투명도',
+                  }
+                : {})}
             />
           ) : null}
         </PopupExit>
@@ -1781,6 +1521,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
           {showBatchImagePicker && batchImageButtonRef.current ? (
             <ImagePicker
               open={showBatchImagePicker}
+              previewAnchor={{ kind: 'batch' }}
               referenceRef={batchImageButtonRef}
               panelElement={panelElement}
               idleImage={
@@ -1878,7 +1619,10 @@ interface BatchGraphOnlyPanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onElementPropertyCommit?: (
+    updates: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
+  ) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -2251,7 +1995,10 @@ interface BatchKnobOnlyPanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onElementPropertyCommit?: (
+    updates: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
+  ) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
@@ -2450,6 +2197,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
         {showBatchImagePicker && batchImageButtonRef.current ? (
           <ImagePicker
             open={showBatchImagePicker}
+            previewAnchor={{ kind: 'batch' }}
             referenceRef={batchImageButtonRef}
             panelElement={panelElement}
             idleImage={

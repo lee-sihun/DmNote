@@ -60,6 +60,7 @@ interface DragSession {
   moveFrame: number | null;
   ownerDocument: Document;
   ownerWindow: Window;
+  nativeCursorReady: Promise<void>;
   cleanup: () => void;
 }
 
@@ -142,6 +143,9 @@ export const usePanelHeaderDrag = ({
       setDockHint(false);
       document.body.classList.remove('dmn-dragging');
       session.ownerDocument.body.classList.remove('dmn-dragging');
+      void session.nativeCursorReady
+        .then(() => panelWindowApi.setDragCursor(false))
+        .catch(() => {});
     };
 
     // 도크 존: 그리드 영역의 오른쪽 PANEL_WIDTH 스트립(±여유), 화면 논리 좌표
@@ -216,7 +220,12 @@ export const usePanelHeaderDrag = ({
         position: windowPositionFor(session),
         keepMainFocus: true,
       }).then((outcome) => {
-        if (sessionRef.current !== session) return;
+        if (sessionRef.current !== session) {
+          if (outcome === 'done') {
+            void panelWindowApi.setDragCursor(false).catch(() => {});
+          }
+          return;
+        }
         session.tearingOff = false;
         if (outcome !== 'done') {
           endSession();
@@ -301,6 +310,9 @@ export const usePanelHeaderDrag = ({
       // 헤더 아래(본문)에서 시작한 건 드래그가 아니다
       if (event.clientY - frameRect.top > PANEL_HEADER_HEIGHT) return;
       event.preventDefault();
+      const nativeCursorReady = panelWindowApi
+        .setDragCursor(true)
+        .catch(() => {});
 
       const session: DragSession = {
         origin: usePanelHostStore.getState().placement,
@@ -318,6 +330,7 @@ export const usePanelHeaderDrag = ({
         moveFrame: null,
         ownerDocument: doc,
         ownerWindow: win,
+        nativeCursorReady,
         cleanup: () => {
           doc.removeEventListener('mousemove', handleMouseMove);
           doc.removeEventListener('mouseup', handleMouseUp);

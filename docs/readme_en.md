@@ -74,7 +74,7 @@ https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
 
 ### 🧩 Custom CSS & Plugin Support
 
-- Fully customizable program interface and overlay styles with custom CSS
+- Fully customizable overlay styles with custom CSS, mirrored live in the editor preview
 - Custom plugin support
 
 ### 💾 Presets & Settings Management

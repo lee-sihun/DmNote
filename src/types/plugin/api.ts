@@ -118,6 +118,7 @@ export type FontLoadResult = {
   errorCode?: string;
   fontName?: string;
   fontPath?: string;
+  weightRanges?: Array<{ min: number; max: number }>;
 };
 
 export type ImageLoadResult = {
@@ -344,6 +345,11 @@ export type AppAutoUpdateResult = {
   previousVersion: string;
   updatedTo: string;
   downloadUrl: string;
+};
+export type UpdateProgressPhase = 'downloading' | 'verifying' | 'installing';
+export type UpdateProgressEvent = {
+  phase: UpdateProgressPhase;
+  percent: number | null;
 };
 
 export type BridgeMessage<T = unknown> = { type: string; data?: T };
@@ -900,6 +906,9 @@ export interface DMNoteAPI {
   app: {
     bootstrap(): Promise<BootstrapPayload>;
     autoUpdate(tag: string): Promise<AppAutoUpdateResult>;
+    onUpdateProgress(
+      listener: (event: UpdateProgressEvent) => void,
+    ): ReadyUnsubscribe;
     openExternal(url: string): Promise<void>;
     restart(): Promise<void>;
     quit(): Promise<void>;

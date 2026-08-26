@@ -5,6 +5,7 @@ import {
   PluginPanelElementView,
 } from '@src/types/plugin/api';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
+import { isLocalPluginRuntimeReady } from '@plugins/runtime/pluginRuntimeReadiness';
 import {
   registerLoadedPluginIdsProvider,
   registerPluginGroupMemberProvider,
@@ -375,10 +376,17 @@ export const selectPropertyPanelPluginElements = (
 ): PluginPanelElementView[] => state.elements;
 
 // 메인 윈도우에서 오버레이로 동기화 (즉시 실행)
+// ready: 메인의 플러그인 주입·인스턴스 복구가 끝났는지 — 오버레이 리빌 게이트의 근거
 function syncToOverlay(elements: PluginDisplayElementInternal[]) {
   sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
     elements,
+    ready: isLocalPluginRuntimeReady(),
   });
+}
+
+// 메인의 현재 요소 스냅샷을 오버레이로 즉시 push - 페이로드 형태를 한 곳에서 유지
+export function pushDisplayElementsToOverlay() {
+  syncToOverlay(usePluginDisplayElementStore.getState().elements);
 }
 
 // 쓰로틀링된 동기화 (빈번한 호출 방지)

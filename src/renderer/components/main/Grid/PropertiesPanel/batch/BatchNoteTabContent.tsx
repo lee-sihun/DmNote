@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
@@ -13,13 +13,14 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
+import NoteGlowPaintSourceDropdown from '../NoteGlowPaintSourceDropdown';
 import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
 import type { BatchElementPropertyUpdate } from '../types';
 
 interface SwatchDisplay {
   color?: string;
-  gradient?: { top: string; bottom: string };
-  opacity: number | { top: number; bottom: number };
+  image?: string;
+  opacity?: number | { top: number; bottom: number };
   label: string;
   isMixed: boolean;
 }
@@ -77,6 +78,13 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   const noteColorDisplay = getBatchNoteColorDisplay();
   const glowColorDisplay = getBatchGlowColorDisplay();
   const borderColorDisplay = getBatchBorderColorDisplay();
+  const glowSyncMixed = getMixedValue((pos) => pos.noteGlowSyncPaint, false);
+  // 하나라도 따라가기면 글로우 피커 잠금 - 백엔드가 그 키의 글로우 편집을 거부한다
+  const glowPaintLocked = glowSyncMixed.value || glowSyncMixed.isMixed;
+  // 선택 변화나 외부 커밋으로 잠기면 열려 있던 글로우 피커를 닫는다
+  useEffect(() => {
+    if (glowPaintLocked && isGlowColorPickerOpen) onGlowColorPickerToggle();
+  }, [glowPaintLocked, isGlowColorPickerOpen, onGlowColorPickerToggle]);
   const noteLiteralHandlers = createNoteLiteralHandlers(
     {
       noteEffectEnabled: getMixedValue((pos) => pos.noteEffectEnabled, true)
@@ -223,7 +231,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
             color={noteColorDisplay.color}
-            gradient={noteColorDisplay.gradient}
+            image={noteColorDisplay.image}
             opacity={noteColorDisplay.opacity}
             title={noteColorDisplay.label}
             type="button"
@@ -241,6 +249,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
               surfaceClassName="rounded-md"
               color={borderColorDisplay.color}
+              image={borderColorDisplay.image}
               opacity={borderColorDisplay.opacity}
               title={borderColorDisplay.label}
             />
@@ -407,18 +416,30 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
 
         {/* 글로우 색상 */}
         <PropertyRow label={t('keySetting.noteGlowColor') || '글로우 색상'}>
-          <ColorSwatchButton
-            ref={batchGlowColorButtonRef}
-            onClick={onGlowColorPickerToggle}
-            open={isGlowColorPickerOpen}
-            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-            surfaceClassName="rounded-md"
-            color={glowColorDisplay.color}
-            gradient={glowColorDisplay.gradient}
-            opacity={glowColorDisplay.opacity}
-            title={glowColorDisplay.label}
-            type="button"
-          />
+          <div className="flex items-center gap-[4px]">
+            <ColorSwatchButton
+              ref={batchGlowColorButtonRef}
+              onClick={glowPaintLocked ? undefined : onGlowColorPickerToggle}
+              open={isGlowColorPickerOpen}
+              disabled={glowPaintLocked}
+              className={`w-[23px] h-[23px] rounded-md transition-shadow flex-shrink-0 ${
+                glowPaintLocked
+                  ? 'cursor-not-allowed opacity-50'
+                  : 'cursor-pointer'
+              }`}
+              surfaceClassName="rounded-md"
+              color={glowColorDisplay.color}
+              image={glowColorDisplay.image}
+              opacity={glowColorDisplay.opacity}
+              title={glowColorDisplay.label}
+              type="button"
+            />
+            <NoteGlowPaintSourceDropdown
+              follow={glowSyncMixed.value}
+              onChange={noteLiteralHandlers.setGlowPaintFollow}
+              t={t}
+            />
+          </div>
         </PropertyRow>
 
         {/* 글로우 크기 */}

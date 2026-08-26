@@ -1,3 +1,4 @@
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
@@ -817,52 +818,63 @@ const SoundTrimModal = ({
   }, [continuousInputStrategy, isOpen, waveformHost]);
 
   // 중간 버튼 드래그: 줌 시 수평 패닝
-  const handleMiddleDown = (e: MouseEvent) => {
-    if (e.button !== 1) return;
-    if (!audioBufferRef.current) return;
-    e.preventDefault();
+  const handleMiddleDown = useCallback(
+    (e: MouseEvent) => {
+      if (e.button !== 1) return;
+      if (!audioBufferRef.current) return;
+      e.preventDefault();
 
-    const host = waveformRef.current;
-    if (!host) return;
-    const rect = host.getBoundingClientRect();
-    const drawableW = rect.width - WAVEFORM_PAD_X * 2;
+      const host = waveformRef.current;
+      if (!host) return;
+      const rect = host.getBoundingClientRect();
+      const drawableW = rect.width - WAVEFORM_PAD_X * 2;
 
-    const startX = e.clientX;
-    const startPan = viewPanRatioRef.current;
-    const curZoom = viewZoomRef.current;
-    const viewSpan = 1 / curZoom;
+      const startX = e.clientX;
+      const startPan = viewPanRatioRef.current;
+      const curZoom = viewZoomRef.current;
+      const viewSpan = 1 / curZoom;
 
-    setCustomCursorHover(null);
-    const canvas = canvasRef.current;
-    if (canvas) canvas.style.cursor = '';
-    host.style.cursor = 'grabbing';
+      setCustomCursorHover(null);
+      const canvas = canvasRef.current;
+      if (canvas) canvas.style.cursor = '';
+      host.style.cursor = 'grabbing';
+      // 잡는 동안 전역 유지 - 호스트 밖으로 나가도 복귀하지 않게
+      beginDragCursor('grabbing');
 
-    const applyMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      let newPan = startPan - (deltaX / Math.max(1, drawableW)) * viewSpan;
-      newPan = clamp(newPan, 0, Math.max(0, 1 - viewSpan));
-      setViewPanRatio(newPan);
-    };
-    const moveScheduler = createRafLatestScheduler(
-      applyMouseMove,
-      continuousInputStrategy,
-    );
-    const handleMouseMove = (moveEvent: MouseEvent) =>
-      moveScheduler.push(moveEvent);
+      const applyMouseMove = (moveEvent: MouseEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        let newPan = startPan - (deltaX / Math.max(1, drawableW)) * viewSpan;
+        newPan = clamp(newPan, 0, Math.max(0, 1 - viewSpan));
+        setViewPanRatio(newPan);
+      };
+      const moveScheduler = createRafLatestScheduler(
+        applyMouseMove,
+        continuousInputStrategy,
+      );
+      const handleMouseMove = (moveEvent: MouseEvent) =>
+        moveScheduler.push(moveEvent);
 
-    const cleanup = () => {
-      moveScheduler.flush();
-      moveScheduler.cancel();
-      host.style.cursor = '';
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', cleanup);
-      middleDragCleanupRef.current = null;
-    };
+      const cleanup = () => {
+        moveScheduler.flush();
+        moveScheduler.cancel();
+        endDragCursor();
+        host.style.cursor = '';
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', cleanup);
+        window.removeEventListener('blur', cleanup);
+        window.removeEventListener('pointercancel', cleanup);
+        middleDragCleanupRef.current = null;
+      };
 
-    middleDragCleanupRef.current = cleanup;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', cleanup);
-  };
+      middleDragCleanupRef.current = cleanup;
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', cleanup);
+      // 드래그 중 포커스 상실·포인터 취소 시에도 커서 복구
+      window.addEventListener('blur', cleanup);
+      window.addEventListener('pointercancel', cleanup);
+    },
+    [continuousInputStrategy],
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -873,7 +885,7 @@ const SoundTrimModal = ({
       node.removeEventListener('mousedown', handleMiddleDown);
       middleDragCleanupRef.current?.();
     };
-  }, [isOpen, waveformHost]);
+  }, [handleMiddleDown, isOpen, waveformHost]);
 
   // 커서 overlay 루트가 모달 포털보다 DOM 순서상 위에 위치하도록 보장
   useEffect(() => {
@@ -1016,11 +1028,16 @@ const SoundTrimModal = ({
       unlockCustomCursor();
       window.removeEventListener('pointermove', registeredMove);
       window.removeEventListener('pointerup', registeredUp);
+      window.removeEventListener('pointercancel', registeredUp);
+      window.removeEventListener('blur', registeredUp);
       handleDragCleanupRef.current = null;
     };
 
     window.addEventListener('pointermove', registeredMove);
     window.addEventListener('pointerup', registeredUp);
+    // 드래그 중 포커스 상실·포인터 취소 시에도 커서·드래그 상태 복구
+    window.addEventListener('pointercancel', registeredUp);
+    window.addEventListener('blur', registeredUp);
   };
 
   const handleSave = async () => {

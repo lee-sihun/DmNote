@@ -41,6 +41,10 @@ vi.mock('@hooks/app/useBlockBrowserShortcuts', () => ({
   useBlockBrowserShortcuts: vi.fn(),
 }));
 vi.mock('@hooks/app/useAppBootstrap', () => ({ useAppBootstrap: vi.fn() }));
+// 이 파일은 키 딜레이 타이머 개수를 정확히 세므로 리빌 게이트의 데드라인 타이머를 배제
+vi.mock('@hooks/overlay/useOverlayReveal', () => ({
+  useOverlayReveal: () => true,
+}));
 vi.mock('@hooks/overlay/useBuiltinStatsSubscription', () => ({
   useBuiltinStatsSubscription: vi.fn(),
 }));

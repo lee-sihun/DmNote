@@ -1,3 +1,4 @@
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import {
   useCallback,
   useEffect,
@@ -201,6 +202,7 @@ export const useSwitchDrag = ({
       }
 
       lockTextSelection(session.ownerDocument, false);
+      endDragCursor(session.ownerDocument);
       // 노브 중심이 중앙선을 넘었는지만 본다. 원위치로 돌아왔으면 시작값과 같아져 취소된다.
       // 취소는 지금 값으로 돌려준다 - 끄는 사이 외부에서 바뀌었을 수 있다
       const target = commit
@@ -277,6 +279,7 @@ export const useSwitchDrag = ({
         handBack(session);
         if (session.intent === 'drag') {
           lockTextSelection(session.ownerDocument, false);
+          endDragCursor(session.ownerDocument);
         }
       }
     },
@@ -336,6 +339,11 @@ export const useSwitchDrag = ({
       // 기존 누름 감각을 건드린다
       session.track.setAttribute(DRAG_ATTR, '');
       lockTextSelection(session.ownerDocument, true);
+      // 잡은 순간의 커서(트랙의 pointer)를 드래그 내내 유지
+      beginDragCursor(
+        getComputedStyle(session.track).cursor || 'pointer',
+        session.ownerDocument,
+      );
     }
     session.offset = clamp(session.startOffset + dx, 0, session.travel);
     session.scheduler.push(session.offset);

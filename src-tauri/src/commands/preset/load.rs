@@ -18,11 +18,13 @@ use crate::{
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        normalize_key_mappings, AppStoreData, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch,
-        EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec, GraphPositions,
-        KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPositions, LayerGroups, NoteSettings,
-        NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCss, TabCssOverrides,
-        TabNoteSettings, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        default_missing_note_gradient_multipliers, normalize_key_mappings,
+        scrub_removed_text_outline_fields, AppStoreData, CustomCss, CustomCssPatch, CustomJs,
+        CustomJsPatch, EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec,
+        GraphPositions, KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPositions,
+        LayerGroups, NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCss,
+        TabCssOverrides, TabNoteSettings, POSITION_COLLECTION_FIELDS, SHADOW_BLUR_MAX,
+        SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::{
@@ -40,31 +42,50 @@ use super::{
 
 fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
     let content = fs::read_to_string(path)?;
-    let value: serde_json::Value =
+    let mut value: serde_json::Value =
         serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
+    scrub_removed_text_outline_fields(&mut value);
     if let Some(detail) = invalid_position_style_detail(&value) {
         return Err(CommandError::msg(format!("invalid-preset: {detail}")));
     }
+    default_preset_note_gradient_multipliers(&mut value);
     serde_json::from_value(value).map_err(|_| CommandError::msg("invalid-preset"))
 }
 
+fn default_preset_note_gradient_multipliers(value: &mut serde_json::Value) {
+    for collection in POSITION_COLLECTION_FIELDS {
+        let Some(modes) = value
+            .get_mut(collection)
+            .and_then(serde_json::Value::as_object_mut)
+        else {
+            continue;
+        };
+        for position in modes
+            .values_mut()
+            .filter_map(serde_json::Value::as_array_mut)
+            .flatten()
+        {
+            default_missing_note_gradient_multipliers(position);
+        }
+    }
+}
+
 fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
-    const COLLECTIONS: [&str; 4] = [
-        "keyPositions",
-        "statPositions",
-        "graphPositions",
-        "knobPositions",
-    ];
-    const ELEMENT_FIELDS: [&str; 4] = [
+    const ELEMENT_FIELDS: [&str; 9] = [
         "backgroundGradient",
         "activeBackgroundGradient",
         "borderGradient",
         "activeBorderGradient",
+        "fontGradient",
+        "activeFontGradient",
+        "noteBorderGradient",
+        "noteGradient",
+        "noteGlowGradient",
     ];
     const COUNTER_FIELDS: [&str; 2] = ["fillIdleGradient", "fillActiveGradient"];
     const SHADOW_FIELDS: [&str; 2] = ["shadow", "activeShadow"];
 
-    for collection_name in COLLECTIONS {
+    for collection_name in POSITION_COLLECTION_FIELDS {
         let Some(modes) = preset
             .get(collection_name)
             .and_then(serde_json::Value::as_object)
@@ -80,7 +101,18 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
                     continue;
                 };
                 for field in ELEMENT_FIELDS {
-                    if let Some(error) = invalid_gradient_error(entry.get(field)) {
+                    let error = match field {
+                        "noteBorderGradient" => invalid_note_gradient_error(
+                            entry.get(field),
+                            "unsupported note border color",
+                        ),
+                        "noteGradient" | "noteGlowGradient" => invalid_note_gradient_error(
+                            entry.get(field),
+                            "unsupported note gradient color",
+                        ),
+                        _ => invalid_gradient_error(entry.get(field)),
+                    };
+                    if let Some(error) = error {
                         return Some(format!(
                             "{collection_name}[{mode:?}][{index}].{field}: {error}"
                         ));
@@ -114,8 +146,32 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
     None
 }
 
-fn invalid_gradient_error(value: Option<&serde_json::Value>) -> Option<serde_json::Error> {
-    value.and_then(|value| serde_json::from_value::<Option<GradientSpec>>(value.clone()).err())
+fn invalid_gradient_error(value: Option<&serde_json::Value>) -> Option<String> {
+    let value = value?;
+    let gradient = match serde_json::from_value::<Option<GradientSpec>>(value.clone()) {
+        Ok(gradient) => gradient,
+        Err(error) => return Some(error.to_string()),
+    }?;
+    // 공백 stop 색은 로드 복구가 수렴하지 않는 손상 값이라 문에서 거부
+    gradient
+        .stops
+        .iter()
+        .position(|stop| stop.color.trim().is_empty())
+        .map(|index| format!("stops[{index}].color must not be blank"))
+}
+
+fn invalid_note_gradient_error(
+    value: Option<&serde_json::Value>,
+    color_error: &str,
+) -> Option<String> {
+    let value = value?;
+    let gradient = match serde_json::from_value::<Option<GradientSpec>>(value.clone()) {
+        Ok(gradient) => gradient,
+        Err(error) => return Some(error.to_string()),
+    }?;
+    gradient
+        .note_border_invalid_stop_index()
+        .map(|index| format!("stops[{index}].color contains an {color_error}"))
 }
 
 fn invalid_shadow_error(value: &serde_json::Value) -> Option<(&'static str, &'static str)> {
@@ -256,6 +312,12 @@ fn preset_load_from_path(
     let mut stat_positions = preset.stat_positions.unwrap_or_default();
     let mut graph_positions = preset.graph_positions.unwrap_or_default();
     let mut knob_positions = preset.knob_positions.unwrap_or_default();
+    migrate_imported_font_weights(
+        &mut positions,
+        &mut stat_positions,
+        &mut graph_positions,
+        &mut knob_positions,
+    );
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
@@ -558,6 +620,13 @@ fn preset_load_tab_from_path(
     if let Some(v) = imported_knob_positions.get(&source_tab_id) {
         src_knob_positions.insert(current_tab_id.clone(), v.clone());
     }
+
+    migrate_imported_font_weights(
+        &mut src_key_positions,
+        &mut src_stat_positions,
+        &mut src_graph_positions,
+        &mut src_knob_positions,
+    );
 
     let has_tab_note_overrides = tab_note_overrides.is_some();
     let mut imported_tab_note_overrides = tab_note_overrides.unwrap_or_default();
@@ -926,6 +995,26 @@ fn align_imported_key_collections(keys: &mut KeyMappings, positions: &mut KeyPos
     }
 }
 
+fn migrate_imported_font_weights(
+    key_positions: &mut KeyPositions,
+    stat_positions: &mut StatPositions,
+    graph_positions: &mut GraphPositions,
+    knob_positions: &mut KnobPositions,
+) {
+    for position in key_positions.values_mut().flatten() {
+        position.migrate_legacy_font_weight();
+    }
+    for position in stat_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
+    }
+    for position in graph_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
+    }
+    for position in knob_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
+    }
+}
+
 fn rekey_full_preset_elements(store: &mut AppStoreData) {
     crate::state::native_element_id::rekey_store_element_ids(store);
 }
@@ -1003,16 +1092,19 @@ fn prepare_tab_preset_fonts(
     mut imported_font_settings: FontSettings,
     restore_fonts: impl FnOnce(&mut FontSettings) -> CmdResult<()>,
 ) -> CmdResult<Option<FontSettings>> {
-    let mut existing_names: HashSet<String> = existing_font_settings
+    let existing_names: HashSet<String> = existing_font_settings
         .custom_fonts
         .iter()
         .map(|font| font.name.clone())
         .collect();
 
-    // 같은 이름은 기존 정의 유지 — 수용한 이름도 반영해 프리셋 내부 중복 방어
-    imported_font_settings
-        .custom_fonts
-        .retain(|font| existing_names.insert(font.name.clone()));
+    // 같은 이름은 기존 정의 유지. 같은 family의 다른 페이스(파일)는 개별 자산이라
+    // 이름으로 묶지 않고, 프리셋 내부 중복은 id 기준으로만 방어
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    imported_font_settings.custom_fonts.retain(|font| {
+        !existing_names.contains(&font.name)
+            && (font.id.is_empty() || seen_ids.insert(font.id.clone()))
+    });
     if imported_font_settings.custom_fonts.is_empty() {
         return Ok(None);
     }
@@ -1039,14 +1131,20 @@ fn merge_prepared_tab_preset_fonts(
     existing_font_settings: &FontSettings,
     mut prepared: FontSettings,
 ) -> Option<FontSettings> {
-    let mut existing_names = existing_font_settings
+    let existing_names = existing_font_settings
         .custom_fonts
         .iter()
         .map(|font| font.name.clone())
         .collect::<HashSet<_>>();
+    let importable_names = prepared
+        .custom_fonts
+        .iter()
+        .filter(|font| !existing_names.contains(&font.name))
+        .map(|font| font.name.clone())
+        .collect::<HashSet<_>>();
     prepared
         .custom_fonts
-        .retain(|font| existing_names.insert(font.name.clone()));
+        .retain(|font| importable_names.contains(&font.name));
     if prepared.custom_fonts.is_empty() {
         return None;
     }
@@ -1623,8 +1721,8 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            CustomCssHistoryEntry, CustomFont, GraphPosition, GraphStatType, GraphType, JsPlugin,
-            KnobPosition, StatPosition, StatType,
+            CustomCssHistoryEntry, CustomFont, FontWeightRange, GraphPosition, GraphStatType,
+            GraphType, JsPlugin, KnobPosition, StatPosition, StatType,
         },
     };
 
@@ -1770,6 +1868,107 @@ mod tests {
     }
 
     #[test]
+    fn preset_missing_note_gradient_multipliers_default_to_one_hundred() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-note-gradient-default-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+        let source = serde_json::json!({
+            "keyPositions": {
+                "custom": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "noteGradient": {
+                        "angle": 45,
+                        "stops": [
+                            { "color": "#112233", "pos": 0 },
+                            { "color": "#445566", "pos": 1 }
+                        ]
+                    },
+                    "noteGlowGradient": {
+                        "angle": 135,
+                        "stops": [
+                            { "color": "#778899", "pos": 0 },
+                            { "color": "#AABBCC", "pos": 1 }
+                        ]
+                    }
+                }]
+            }
+        });
+        std::fs::write(&source_path, serde_json::to_vec_pretty(&source).unwrap()).unwrap();
+
+        let parsed = read_preset_file(&source_path).unwrap();
+        let positions = parsed.key_positions.unwrap();
+        let position = &positions["custom"][0];
+        assert_eq!(position.note_opacity, 100);
+        assert_eq!(position.note_glow_opacity, 100);
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn preset_removed_outline_fields_scrub_and_block_legacy_default_collision() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-removed-outline-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+        let source = serde_json::json!({
+            "keyPositions": {
+                "custom": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "fontStrokeColor": "#112233",
+                    "activeFontStrokeColor": "#445566",
+                    "counter": {
+                        "enabled": true,
+                        "placement": "inside",
+                        "align": "top",
+                        "alignMode": "center",
+                        "fill": { "idle": "#FFFFFF", "active": "#000000" },
+                        "stroke": { "idle": "#000000", "active": "#FFFFFF" },
+                        "strokeIdleGradient": {
+                            "angle": 90,
+                            "stops": [
+                                { "color": "#000000", "pos": 0 },
+                                { "color": "#FFFFFF", "pos": 1 }
+                            ]
+                        },
+                        "gap": 6,
+                        "fontSize": 16,
+                        "fontWeight": 400,
+                        "fontItalic": false,
+                        "fontUnderline": false,
+                        "fontStrikethrough": false
+                    }
+                }]
+            }
+        });
+        std::fs::write(&source_path, serde_json::to_vec_pretty(&source).unwrap()).unwrap();
+
+        let parsed = read_preset_file(&source_path).unwrap();
+        let position = &parsed.key_positions.unwrap()["custom"][0];
+        let mut counter = position.counter.clone();
+        assert_eq!(counter.fill.idle, "rgba(255,255,255,1)");
+        assert_eq!(counter.align, crate::models::KeyCounterAlign::Top);
+
+        let serialized = serde_json::to_value(&counter).unwrap();
+        assert!(serialized.get("stroke").is_none());
+        assert!(serialized.get("strokeIdleGradient").is_none());
+        assert!(!counter.migrate_legacy_defaults());
+        assert_eq!(counter.align, crate::models::KeyCounterAlign::Top);
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn damaged_gradient_preset_reports_element_and_field_with_existing_error_code() {
         let temp_dir = std::env::temp_dir().join(format!(
             "dmnote-preset-gradient-error-test-{}",
@@ -1787,6 +1986,9 @@ mod tests {
             ("statPositions", "activeBackgroundGradient", false),
             ("graphPositions", "borderGradient", false),
             ("knobPositions", "activeBorderGradient", false),
+            ("keyPositions", "fontGradient", false),
+            ("statPositions", "activeFontGradient", false),
+            ("keyPositions", "noteBorderGradient", false),
             ("keyPositions", "fillIdleGradient", true),
             ("statPositions", "fillActiveGradient", true),
         ] {
@@ -1843,6 +2045,163 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn general_gradient_preset_rejects_blank_stop_color_with_index() {
+        // 공백 stop은 로드 복구가 수렴하지 않는 손상 값 - 문에서 거부
+        for field in ["fontGradient", "backgroundGradient", "borderGradient"] {
+            let preset = serde_json::json!({
+                "keyPositions": {
+                    "custom mode": [{
+                        (field): {
+                            "angle": 45,
+                            "stops": [
+                                { "color": "   ", "pos": 0 },
+                                { "color": "#445566", "pos": 1 }
+                            ]
+                        }
+                    }]
+                }
+            });
+
+            assert_eq!(
+                invalid_position_style_detail(&preset).as_deref(),
+                Some(
+                    format!(
+                        "keyPositions[\"custom mode\"][0].{field}: stops[0].color must not be blank"
+                    )
+                    .as_str()
+                )
+            );
+        }
+
+        let valid = serde_json::json!({
+            "keyPositions": {
+                "custom mode": [{
+                    "fontGradient": {
+                        "angle": 45,
+                        "stops": [
+                            { "color": "#112233", "pos": 0 },
+                            { "color": "#445566", "pos": 1 }
+                        ]
+                    }
+                }]
+            }
+        });
+        assert_eq!(invalid_position_style_detail(&valid), None);
+    }
+
+    #[test]
+    fn note_border_gradient_preset_rejects_invalid_stop_color_with_index() {
+        for collection in POSITION_COLLECTION_FIELDS {
+            let preset = serde_json::json!({
+                (collection): {
+                    "custom mode": [{
+                        "noteBorderGradient": {
+                            "angle": 90,
+                            "stops": [
+                                { "color": "#112233", "pos": 0 },
+                                { "color": "transparent", "pos": 1 }
+                            ]
+                        }
+                    }]
+                }
+            });
+
+            let error = invalid_position_style_detail(&preset)
+                .expect("unsupported note border stop color must be rejected");
+            assert_eq!(
+                error,
+                format!(
+                    "{collection}[\"custom mode\"][0].noteBorderGradient: stops[1].color contains an unsupported note border color"
+                )
+            );
+        }
+
+        for collection in POSITION_COLLECTION_FIELDS {
+            for field in ["noteGradient", "noteGlowGradient"] {
+                let preset = serde_json::json!({
+                    (collection): {
+                        "custom mode": [{
+                            (field): {
+                                "angle": 90,
+                                "stops": [
+                                    { "color": "#112233", "pos": 0 },
+                                    { "color": "transparent", "pos": 1 }
+                                ]
+                            }
+                        }]
+                    }
+                });
+
+                assert_eq!(
+                    invalid_position_style_detail(&preset).as_deref(),
+                    Some(
+                        format!(
+                            "{collection}[\"custom mode\"][0].{field}: stops[1].color contains an unsupported note gradient color"
+                        )
+                        .as_str()
+                    )
+                );
+            }
+        }
+
+        let valid = serde_json::json!({
+            "keyPositions": {
+                "custom mode": [{
+                    "noteGradient": {
+                        "angle": 45,
+                        "stops": [
+                            { "color": "#1238", "pos": 0 },
+                            { "color": "rgb(4, 5, 6)", "pos": 1 }
+                        ]
+                    },
+                    "noteGlowGradient": {
+                        "angle": 135,
+                        "stops": [
+                            { "color": "rgba(7, 8, 9, .25)", "pos": 0 },
+                            { "color": "#ABC", "pos": 1 }
+                        ]
+                    },
+                    "noteBorderGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": "rgba(17, 34, 51, .5)", "pos": 0 },
+                            { "color": "#ABC8", "pos": 1 }
+                        ]
+                    }
+                }]
+            }
+        });
+        assert_eq!(invalid_position_style_detail(&valid), None);
+
+        let invalid_discarded_stop = serde_json::json!({
+            "keyPositions": {
+                "custom mode": [{
+                    "noteBorderGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": "#000000", "pos": 0.0 },
+                            { "color": "#111111", "pos": 0.1 },
+                            { "color": "#222222", "pos": 0.2 },
+                            { "color": "#333333", "pos": 0.3 },
+                            { "color": "#444444", "pos": 0.4 },
+                            { "color": "#555555", "pos": 0.5 },
+                            { "color": "#666666", "pos": 0.6 },
+                            { "color": "#777777", "pos": 0.7 },
+                            { "color": "invalid-discarded-stop", "pos": 1.0 }
+                        ]
+                    }
+                }]
+            }
+        });
+        assert_eq!(
+            invalid_position_style_detail(&invalid_discarded_stop).as_deref(),
+            Some(
+                "keyPositions[\"custom mode\"][0].noteBorderGradient: stops[8].color contains an unsupported note border color"
+            )
+        );
     }
 
     #[test]
@@ -2282,6 +2641,7 @@ mod tests {
                 enabled: true,
                 local_path: Some(existing_path.to_string_lossy().to_string()),
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let imported_font_id = "imported-id".to_string();
@@ -2294,6 +2654,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let embedded_fonts = vec![EmbeddedLocalFont {
@@ -2314,6 +2675,51 @@ mod tests {
             file_count_before
         );
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn tab_preset_keeps_all_local_faces_for_a_new_family() {
+        let face = |id: &str, weight: u16| CustomFont {
+            id: id.to_string(),
+            font_type: FontType::Local,
+            name: "Family".to_string(),
+            display_name: "Family".to_string(),
+            enabled: true,
+            local_path: Some(format!("/{id}.ttf")),
+            css_content: None,
+            weight_ranges: vec![FontWeightRange {
+                min: weight,
+                max: weight,
+            }],
+        };
+        let imported = FontSettings {
+            custom_fonts: vec![
+                face("regular", 400),
+                face("bold", 700),
+                // 프리셋 내부 중복(id 동일)은 한 번만 수용
+                face("bold", 700),
+            ],
+        };
+
+        // 실제 탭 로드 경로(prepare → restore → merge) 전체를 통과시킨다
+        let merged = merge_tab_preset_fonts(&FontSettings::default(), imported, |_| Ok(()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(merged.custom_fonts.len(), 2);
+        assert_eq!(merged.custom_fonts[0].weight_ranges[0].min, 400);
+        assert_eq!(merged.custom_fonts[1].weight_ranges[0].min, 700);
+
+        // 기존에 같은 이름이 있으면 그 family 전체를 기존 정의로 유지
+        let existing = FontSettings {
+            custom_fonts: vec![face("existing", 400)],
+        };
+        let imported = FontSettings {
+            custom_fonts: vec![face("regular", 400), face("bold", 700)],
+        };
+        assert!(merge_tab_preset_fonts(&existing, imported, |_| Ok(()))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -2502,6 +2908,7 @@ mod tests {
                 enabled: true,
                 local_path: Some("/existing/font.ttf".to_string()),
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let before = existing.clone();
@@ -2514,6 +2921,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
 

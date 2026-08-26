@@ -35,7 +35,10 @@ export const ModalBenchmarkSurface = ({
           contentMountStrategy={commitStrategy}
           onClick={() => setOpen(false)}
         >
-          <div data-benchmark-modal-content="true">
+          <div
+            data-benchmark-modal-content="true"
+            className="max-h-[calc(100vh-114px)] overflow-y-auto"
+          >
             {Array.from({ length: itemCount }, (_, index) => (
               <div
                 key={index}
