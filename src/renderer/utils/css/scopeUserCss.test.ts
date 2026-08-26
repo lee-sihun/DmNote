@@ -75,6 +75,73 @@ describe('scopeUserCss', () => {
     ).toBe(`html body ${SCOPE} > .counter { color: red; }`);
   });
 
+  it('모든 분기가 루트인 :is와 :where도 루트 조건으로 보존한다', () => {
+    expect(
+      compact(scopeUserCss(':is(body, html) .counter { color: red; }', SCOPE)),
+    ).toBe(`:is(body, html) ${SCOPE} .counter { color: red; }`);
+    expect(
+      compact(
+        scopeUserCss(
+          ':where(:root, body.dark) > .counter { color: red; }',
+          SCOPE,
+        ),
+      ),
+    ).toBe(`:where(:root, body.dark) ${SCOPE} > .counter { color: red; }`);
+    expect(
+      compact(
+        scopeUserCss(
+          ':is(:where(body, html), :root) .counter { color: red; }',
+          SCOPE,
+        ),
+      ),
+    ).toBe(`:is(:where(body, html), :root) ${SCOPE} .counter { color: red; }`);
+  });
+
+  it('혼합 함수형 셀렉터는 루트 분기의 안쪽 적용만 복원하고 나머지는 가둔다', () => {
+    const out = scopeUserCss(
+      ':is(body, #settings) .counter { color: red; }',
+      SCOPE,
+    );
+    expect(compact(out)).toBe(
+      `${SCOPE} :is(body, #settings) .counter, :is(body, #settings) ${SCOPE} .counter { color: red; }`,
+    );
+
+    mountCascade(
+      '.counter.special { color: blue; }',
+      ':is(body, #settings) .counter { color: red; }',
+      '<span class="counter special">C</span>',
+    );
+    const inside = document.querySelector(
+      `[data-dmn-user-css-scope] .counter`,
+    ) as HTMLElement;
+    const outside = document.querySelector('#outside .counter') as HTMLElement;
+    expect(getComputedStyle(inside).color).toBe('rgb(255, 0, 0)');
+    expect(getComputedStyle(outside).color).not.toBe('rgb(255, 0, 0)');
+  });
+
+  it('중첩 혼합 함수와 뒤따르는 루트 체인도 마지막 루트 뒤로 옮긴다', () => {
+    expect(
+      compact(
+        scopeUserCss(
+          ':is(:where(body, #settings), #other) .counter { color: red; }',
+          SCOPE,
+        ),
+      ),
+    ).toBe(
+      `${SCOPE} :is(:where(body, #settings), #other) .counter, :is(:where(body, #settings), #other) ${SCOPE} .counter { color: red; }`,
+    );
+    expect(
+      compact(
+        scopeUserCss(
+          ':is(html, #settings) body .counter { color: red; }',
+          SCOPE,
+        ),
+      ),
+    ).toBe(
+      `${SCOPE} :is(html, #settings) body .counter, :is(html, #settings) body ${SCOPE} .counter { color: red; }`,
+    );
+  });
+
   it('루트 compound와 속성값 속 결합자는 원문 그대로 보존한다', () => {
     expect(
       compact(scopeUserCss('body.dark .counter { color: red; }', SCOPE)),
@@ -217,21 +284,46 @@ describe('scopeUserCss', () => {
     expect(flat).toContain(`${SCOPE} .counter { color: red; }`);
   });
 
-  it('시트 머리의 @import·@namespace는 스코프 없이 최상단으로 끌어올린다', () => {
+  it('메인창에서는 @import를 버리고 @namespace만 최상단에 보존한다', () => {
     const out = scopeUserCss(
       '@import url("https://fonts.example/css?family=Pixel");\n@namespace svg url(http://www.w3.org/2000/svg);\n.counter { font-family: Pixel; }\nsvg|a { color: red; }',
       SCOPE,
     );
     expect(
-      out.startsWith(
-        '@import url("https://fonts.example/css?family=Pixel");\n@namespace svg url(http://www.w3.org/2000/svg);',
-      ),
+      out.startsWith('@namespace svg url(http://www.w3.org/2000/svg);'),
     ).toBe(true);
+    expect(out).not.toContain('@import');
     const flat = compact(out);
     expect(flat).toContain(`${SCOPE} .counter { font-family: Pixel; }`);
     // 파싱 입력에도 namespace를 넣어 접두 셀렉터가 살아남고, 출력엔 한 번만
     expect(flat).toContain(`${SCOPE} svg|a { color: red; }`);
     expect(flat.match(/@namespace/g)?.length).toBe(1);
+  });
+
+  it('body나 html 이름의 namespace 접두사를 문서 루트로 오인하지 않는다', () => {
+    const out = scopeUserCss(
+      '@namespace body url(http://www.w3.org/1999/xhtml);\nbody|div.counter { color: red; }',
+      SCOPE,
+    );
+    const flat = compact(out);
+    expect(flat).toContain(`${SCOPE} body|div.counter { color: red; }`);
+    expect(flat).not.toContain(`body|div.counter ${SCOPE}`);
+  });
+
+  it('namespace-qualified html과 body는 문서 루트로 재매핑한다', () => {
+    const out = scopeUserCss(
+      [
+        '@namespace x url(http://www.w3.org/1999/xhtml);',
+        'x|body .counter { color: red; }',
+        '*|html > body .key { color: blue; }',
+        '|body .graph { color: green; }',
+      ].join('\n'),
+      SCOPE,
+    );
+    const flat = compact(out);
+    expect(flat).toContain(`x|body ${SCOPE} .counter { color: red; }`);
+    expect(flat).toContain(`*|html > body ${SCOPE} .key { color: blue; }`);
+    expect(flat).toContain(`|body ${SCOPE} .graph { color: green; }`);
   });
 
   it('주석 속 @import는 끌어올리지 않는다', () => {
@@ -241,6 +333,16 @@ describe('scopeUserCss', () => {
     );
     expect(out).not.toContain('@import');
     expect(compact(out)).toBe(`${SCOPE} .counter { color: red; }`);
+  });
+
+  it('escape로 작성해 CSSOM이 정규화한 @import도 버린다', () => {
+    const out = scopeUserCss(
+      String.raw`@\69mport url("data:text/css,button%7Bcolor%3Ared%7D");
+.counter { color: blue; }`,
+      SCOPE,
+    );
+    expect(out.toLowerCase()).not.toContain('@import');
+    // jsdom은 escaped at-keyword 시트를 통째로 거부할 수 있다. fail-closed도 안전한 결과
   });
 
   it('중첩 규칙은 외부 셀렉터만 스코프하고 내부는 원문 보존한다', () => {
@@ -280,6 +382,20 @@ describe('scopeUserCss', () => {
     const outside = document.querySelector('#outside span') as HTMLElement;
     expect(getComputedStyle(inside).color).toBe('rgb(255, 0, 0)');
     expect(getComputedStyle(outside).color).toBe('rgb(0, 0, 255)');
+  });
+
+  it('함수형 루트 조건은 스코프 안에만 적용한다', () => {
+    mountCascade(
+      '',
+      ':is(body, html) .safe { color: red; }',
+      '<span class="safe">1</span>',
+    );
+    const inside = document.querySelector(
+      '[data-dmn-user-css-scope] span',
+    ) as HTMLElement;
+    const outside = document.querySelector('#outside span') as HTMLElement;
+    expect(getComputedStyle(inside).color).toBe('rgb(255, 0, 0)');
+    expect(getComputedStyle(outside).color).not.toBe('rgb(255, 0, 0)');
   });
 
   it('중첩 규칙에서 &가 부모 밖으로 확장되는 셀렉터도 스코프 안에 가둔다', () => {
@@ -391,12 +507,13 @@ describe('scopeUserCss', () => {
     );
   });
 
-  it('대문자 @IMPORT와 @layer 순서문 뒤의 @import도 최상단에 보존한다', () => {
+  it('대문자 @IMPORT와 @layer 순서문 뒤의 @import도 메인창에서는 버린다', () => {
     const out = scopeUserCss(
       '@layer base;\n@IMPORT url("a.css");\n.x { color: red; }',
       SCOPE,
     );
-    expect(out.startsWith('@layer base;\n@IMPORT url("a.css");')).toBe(true);
+    expect(out.startsWith('@layer base;')).toBe(true);
+    expect(out).not.toContain('@IMPORT');
     expect(compact(out)).toContain(`${SCOPE} .x { color: red; }`);
   });
 

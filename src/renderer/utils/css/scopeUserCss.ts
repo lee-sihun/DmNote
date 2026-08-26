@@ -40,14 +40,15 @@ const ANIMATION_KEYWORDS = new Set([
 // 이름을 안전하게 바꿔 참조까지 맞출 수 있는 단순 식별자만 지원
 const SIMPLE_IDENT = /^-?[A-Za-z_][\w-]*$/;
 
-// 스코프 밖으로 새지 않는 문서 전역 leaf at-rule만 통과. @layer 순서문은
-// 유저 시트 내부 우선순위를 정하므로 보존 (앱 layer 순서는 먼저 선언돼 불변).
-// @property는 앱이 등록한 이름과 겹치면 UI 토큰을 바꾸므로 제외
+// 문서 전역 leaf at-rule 중 그리드 미리보기에 필요한 것은 통과 (@font-face는
+// 글꼴 등록만 하고 UI를 꾸미지 않는다). @property는 앱이 등록한 이름과 겹치면
+// UI 토큰을 바꾸므로 제외
 const PASSTHROUGH_LEAF_AT_RULE =
   /^@(font-face|counter-style|font-feature-values|font-palette-values|layer)\b/i;
 const KEYFRAMES_AT_RULE = /^@(?:-webkit-)?keyframes\b/i;
 // 시트 머리에만 유효한 규칙 - 재조립 시 최상단으로 hoisting
-const HEAD_AT_RULE = /^@(import|namespace)\b/i;
+const HEAD_AT_RULE = /^@namespace\b/i;
+const IMPORT_AT_RULE = /^@import\b/i;
 const LEADING_STATEMENT = /^@(charset|import|namespace|layer)\b/i;
 
 const isWhitespace = (ch: string): boolean =>
@@ -260,7 +261,81 @@ const findPseudoElementStart = (compound: string): number =>
   );
 
 // 식별자 경계 강제 - body-card 같은 커스텀 요소를 body로 오인하지 않게
-const ROOT_TOKEN = /^(:root|html|body)(?![\w-])/i;
+// namespace-qualified type selector도 local name이 html/body면 문서 루트다.
+// 반대로 body|div는 namespace 접두사일 뿐이므로 루트로 보지 않는다
+const ROOT_TOKEN =
+  /^(?::root(?![\w-])|(?:(?:[\w-]+|\*)?\|)?(?:html|body)(?![\w-]|\|))/i;
+
+interface FunctionalRootInfo {
+  length: number;
+  rootBranches: string[];
+  allBranchesAreRoots: boolean;
+}
+
+// :is(body, html)처럼 문서 루트가 포함된 함수형 compound의 분기 정보
+function functionalRootInfo(selector: string): FunctionalRootInfo | null {
+  const match = /^:(is|where)\(/i.exec(selector);
+  if (!match) return null;
+  const open = match[0].length - 1;
+  let depth = 1;
+  let quote: string | null = null;
+  let close = -1;
+  for (let i = open + 1; i < selector.length; i += 1) {
+    const ch = selector[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') depth += 1;
+    else if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  if (close === -1) return null;
+  const branches = splitSelectorList(selector.slice(open + 1, close));
+  if (!branches.length) return null;
+  const rootBranches = branches.filter((branch) => {
+    const tokenLength = leadingPotentialRootTokenLength(branch);
+    return (
+      tokenLength !== null &&
+      scanCompoundEnd(branch, tokenLength) === branch.length
+    );
+  });
+  if (!rootBranches.length) return null;
+  return {
+    length: close + 1,
+    rootBranches,
+    allBranchesAreRoots: rootBranches.length === branches.length,
+  };
+}
+
+function functionalRootTokenLength(selector: string): number | null {
+  const info = functionalRootInfo(selector);
+  return info?.allBranchesAreRoots ? info.length : null;
+}
+
+function leadingRootTokenLength(selector: string): number | null {
+  const token = ROOT_TOKEN.exec(selector);
+  return token?.[0].length ?? functionalRootTokenLength(selector);
+}
+
+function leadingPotentialRootTokenLength(selector: string): number | null {
+  const token = ROOT_TOKEN.exec(selector);
+  return token?.[0].length ?? functionalRootInfo(selector)?.length ?? null;
+}
 
 type RootRemap =
   | { kind: 'none' }
@@ -272,7 +347,11 @@ type RootRemap =
 // `body::before` → `body scope::before`). 루트를 지우지 않아 원래 특이도가
 // 유지되고, 유저 CSS의 전역 변수·배경 관례는 스코프 요소에 실려 미리보기에
 // 상속된다. 루트의 형제 결합자(+, ~)는 스코프 자손으로 표현할 수 없어 드롭
-const remapLeadingRootChain = (selector: string, scope: string): RootRemap => {
+const remapLeadingRootChainWith = (
+  selector: string,
+  scope: string,
+  findRootToken: (selector: string) => number | null,
+): RootRemap => {
   let pos = 0;
   let matched = false;
   let chainEnd = 0;
@@ -280,11 +359,11 @@ const remapLeadingRootChain = (selector: string, scope: string): RootRemap => {
   let combinator = '';
   let afterIndex = selector.length;
   for (;;) {
-    const token = ROOT_TOKEN.exec(selector.slice(pos));
-    if (!token) break;
+    const tokenLength = findRootToken(selector.slice(pos));
+    if (tokenLength === null) break;
     matched = true;
     lastCompoundStart = pos;
-    chainEnd = scanCompoundEnd(selector, pos + token[0].length);
+    chainEnd = scanCompoundEnd(selector, pos + tokenLength);
     let j = chainEnd;
     while (j < selector.length && isWhitespace(selector[j])) j += 1;
     let comb = '';
@@ -297,7 +376,7 @@ const remapLeadingRootChain = (selector: string, scope: string): RootRemap => {
       afterIndex = selector.length;
       break;
     }
-    if (ROOT_TOKEN.test(selector.slice(j))) {
+    if (findRootToken(selector.slice(j)) !== null) {
       // html > body 처럼 루트끼리 이어진 체인은 통째로 조상 조건
       pos = j;
       continue;
@@ -330,6 +409,12 @@ const remapLeadingRootChain = (selector: string, scope: string): RootRemap => {
   };
 };
 
+const remapLeadingRootChain = (selector: string, scope: string): RootRemap =>
+  remapLeadingRootChainWith(selector, scope, leadingRootTokenLength);
+
+const remapMixedFunctionalRoot = (selector: string, scope: string): RootRemap =>
+  remapLeadingRootChainWith(selector, scope, leadingPotentialRootTokenLength);
+
 // 최상위 규칙의 스코프된 셀렉터 리스트 - 전부 드롭되면 null (규칙을 버린다)
 const scopeSelectorText = (
   selectorText: string,
@@ -339,9 +424,20 @@ const scopeSelectorText = (
   for (const selector of splitSelectorList(selectorText)) {
     const remap = remapLeadingRootChain(selector, scope);
     if (remap.kind === 'drop') continue;
-    scoped.push(
-      remap.kind === 'remap' ? remap.selector : `${scope} ${selector}`,
-    );
+    if (remap.kind === 'remap') {
+      scoped.push(remap.selector);
+      continue;
+    }
+
+    scoped.push(`${scope} ${selector}`);
+    const functional = functionalRootInfo(selector);
+    if (!functional || functional.allBranchesAreRoots) continue;
+    // 함수 자체를 조상 조건으로 유지해 :is의 최대 분기 특이도와 :where의
+    // 0 특이도를 보존한다. 대상은 scope 뒤에만 있어 메인 UI로 빠지지 않는다
+    const rootRemap = remapMixedFunctionalRoot(selector, scope);
+    if (rootRemap.kind === 'remap' && !scoped.includes(rootRemap.selector)) {
+      scoped.push(rootRemap.selector);
+    }
   }
   return scoped.length ? scoped.join(', ') : null;
 };
@@ -542,10 +638,11 @@ const scopeRuleList = (
       if (renamed) out.push(renamed);
       continue;
     }
+    // escaped at-keyword도 CSSOM에서는 @import로 정규화된다
+    if (!nested && IMPORT_AT_RULE.test(cssText)) continue;
     if (!nested && HEAD_AT_RULE.test(cssText)) {
-      // 파서가 유효 위치로 받아들인 @import/@namespace - 최상단으로.
-      // 텍스트 단계에서 이미 hoisting한 @namespace는 파싱 입력에 다시 넣은
-      // 것이라 중복 출력하지 않는다
+      // 파서가 유효 위치로 받아들인 @namespace - 최상단으로.
+      // 텍스트 단계에서 이미 hoisting했다면 파싱 입력의 사본은 중복 출력하지 않는다
       if (!(ctx.namespacesHoisted && /^@namespace\b/i.test(cssText))) {
         ctx.hoisted.push(cssText);
       }
@@ -603,19 +700,24 @@ const withParsedRules = <T>(
 
 /**
  * 유저 CSS의 모든 셀렉터를 scopeSelector 하위로 가둔다.
- * 알려진 한계: hoisting된 @import의 시트 내용과 @font-face는 문서 전역이고,
- * @property는 앱 등록 이름과 충돌할 수 있어 버리며, 단순 식별자가 아닌
- * keyframes 이름과 var()로 전달한 animation 이름은 지원하지 않는다
+ * 알려진 한계: 인라인되지 않은 @import와 @property는 버리며, 단순 식별자가
+ * 아닌 keyframes 이름과 var()로 전달한 animation 이름은 지원하지 않는다
  */
 export function scopeUserCss(css: string, scopeSelector: string): string {
   if (!css || !css.trim()) return '';
   try {
     const { hoisted, body } = splitLeadingStatements(css);
-    if (!body.trim()) return hoisted.join('\n');
+    // @import는 이 함수에 오기 전에 resolveUserCssImports가 시트를 받아 인라인한다.
+    // 여기까지 남은 @import는 받지 못한 것이라 버린다 (스코프 불가한 외부 규칙이
+    // 설정 UI로 새는 것을 막는다). 오버레이와 OBS는 이 변환기를 거치지 않는다
+    const safeHoisted = hoisted.filter(
+      (statement) => !IMPORT_AT_RULE.test(statement),
+    );
+    if (!body.trim()) return safeHoisted.join('\n');
     // @namespace는 같은 시트 안에 선언이 있어야 svg|a 같은 접두 셀렉터가
     // 파싱되므로 파싱 입력에도 넣는다 (@import는 폴백 파싱 시 실제 로드를
     // 유발하므로 제외)
-    const namespaces = hoisted.filter((statement) =>
+    const namespaces = safeHoisted.filter((statement) =>
       /^@namespace\b/i.test(statement),
     );
     const parseInput = namespaces.length
@@ -642,9 +744,9 @@ export function scopeUserCss(css: string, scopeSelector: string): string {
     if (scoped === null) {
       // 파싱 실패 시 원문을 흘리지 않는다 - 에디터 크롬 보호가 우선
       console.error('[custom-css] failed to parse stylesheet for scoping');
-      return hoisted.join('\n');
+      return safeHoisted.join('\n');
     }
-    return [...hoisted, ...ctx.hoisted, scoped].filter(Boolean).join('\n');
+    return [...safeHoisted, ...ctx.hoisted, scoped].filter(Boolean).join('\n');
   } catch (error) {
     console.error('[custom-css] scoping failed', error);
     return '';

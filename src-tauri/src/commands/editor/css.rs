@@ -1,10 +1,14 @@
 use std::{
+    io::Read,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, OnceLock},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use reqwest::blocking::Client;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tokio::sync::Semaphore;
 
 use crate::{
     commands::{dialog::parented_file_dialog, editor::state::emit_best_effort},
@@ -22,6 +26,13 @@ use crate::{
         store::AdmittedHistoryOverlapMutation, AppState,
     },
 };
+
+const CSS_IMPORT_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_CONCURRENT_CSS_IMPORT_FETCHES: usize = 4;
+const MAX_CSS_IMPORT_BYTES: usize = 1024 * 1024;
+const MAX_CSS_IMPORT_REDIRECTS: usize = 3;
+static CSS_IMPORT_CLIENT: OnceLock<Result<Client, String>> = OnceLock::new();
+static CSS_IMPORT_FETCH_LIMIT: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 /// OBS 브릿지에 CSS 설정 변경을 settings_diff로 전달 (전체 스냅샷 브로드캐스트 방지)
 fn notify_obs_css(state: &AppState) {
@@ -56,6 +67,111 @@ pub struct CssLoadResponse {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CssImportFetchResult {
+    pub final_url: String,
+    pub text: String,
+}
+
+fn validate_css_import_url(raw: &str) -> CmdResult<url::Url> {
+    let url = url::Url::parse(raw)
+        .map_err(|error| CommandError::msg(format!("invalid CSS import URL: {error}")))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(CommandError::msg(format!(
+            "unsupported CSS import URL scheme '{}': only http and https are allowed",
+            url.scheme()
+        )));
+    }
+    Ok(url)
+}
+
+fn read_css_import_body(reader: impl Read) -> CmdResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader
+        .take((MAX_CSS_IMPORT_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            CommandError::msg(format!("failed to read CSS import response: {error}"))
+        })?;
+    if bytes.len() > MAX_CSS_IMPORT_BYTES {
+        return Err(CommandError::msg(format!(
+            "CSS import response exceeds {MAX_CSS_IMPORT_BYTES} bytes"
+        )));
+    }
+    Ok(bytes)
+}
+
+fn ensure_css_import_window(window_label: &str) -> CmdResult<()> {
+    if window_label != super::MAIN_WINDOW_LABEL {
+        return Err(CommandError::msg(
+            "CSS import fetch is only available in the main window",
+        ));
+    }
+    Ok(())
+}
+
+fn css_import_client() -> CmdResult<&'static Client> {
+    CSS_IMPORT_CLIENT
+        .get_or_init(|| {
+            Client::builder()
+                .timeout(CSS_IMPORT_FETCH_TIMEOUT)
+                .redirect(reqwest::redirect::Policy::limited(MAX_CSS_IMPORT_REDIRECTS))
+                .build()
+                .map_err(|error| format!("failed to initialize CSS import client: {error}"))
+        })
+        .as_ref()
+        .map_err(|error| CommandError::msg(error.clone()))
+}
+
+fn css_import_fetch_limit() -> &'static Arc<Semaphore> {
+    CSS_IMPORT_FETCH_LIMIT
+        .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_CSS_IMPORT_FETCHES)))
+}
+
+fn fetch_css_import(url: String) -> CmdResult<CssImportFetchResult> {
+    let url = validate_css_import_url(&url)?;
+    let response = css_import_client()?
+        .get(url)
+        .send()
+        .map_err(|error| CommandError::msg(format!("failed to fetch CSS import: {error}")))?;
+    let response = response
+        .error_for_status()
+        .map_err(|error| CommandError::msg(format!("CSS import request failed: {error}")))?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_CSS_IMPORT_BYTES as u64)
+    {
+        return Err(CommandError::msg(format!(
+            "CSS import response exceeds {MAX_CSS_IMPORT_BYTES} bytes"
+        )));
+    }
+    let final_url = response.url().to_string();
+    let bytes = read_css_import_body(response)?;
+    Ok(CssImportFetchResult {
+        final_url,
+        text: String::from_utf8_lossy(&bytes).into_owned(),
+    })
+}
+
+#[tauri::command]
+pub async fn css_fetch_import(
+    window: WebviewWindow,
+    url: String,
+) -> CmdResult<CssImportFetchResult> {
+    ensure_css_import_window(window.label())?;
+    let permit = Arc::clone(css_import_fetch_limit())
+        .acquire_owned()
+        .await
+        .map_err(|error| CommandError::msg(format!("CSS import fetch limit closed: {error}")))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        fetch_css_import(url)
+    })
+    .await
+    .map_err(|error| CommandError::msg(format!("CSS import fetch task failed: {error}")))?
 }
 
 #[derive(Serialize, Clone)]
@@ -984,8 +1100,9 @@ fn css_tab_export_from_path(
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_css_extension, prepare_tab_css_for_set_with, replace_tab_css_override,
-        write_tab_css_export,
+        css_import_client, ensure_css_extension, ensure_css_import_window,
+        prepare_tab_css_for_set_with, read_css_import_body, replace_tab_css_override,
+        validate_css_import_url, write_tab_css_export, MAX_CSS_IMPORT_BYTES,
     };
     use crate::models::{AppStoreData, TabCss};
     use parking_lot::Mutex;
@@ -1001,6 +1118,61 @@ mod tests {
             "dmnote-css-command-{label}-{}",
             uuid::Uuid::new_v4()
         ))
+    }
+
+    #[test]
+    fn css_import_url_accepts_only_http_and_https() {
+        assert_eq!(
+            validate_css_import_url("https://example.com/theme.css")
+                .unwrap()
+                .scheme(),
+            "https"
+        );
+        assert_eq!(
+            validate_css_import_url("http://example.com/theme.css")
+                .unwrap()
+                .scheme(),
+            "http"
+        );
+        for invalid in ["file:///tmp/theme.css", "data:text/css,body{}", "theme.css"] {
+            assert!(validate_css_import_url(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn css_import_fetch_is_limited_to_the_main_window() {
+        ensure_css_import_window(super::super::MAIN_WINDOW_LABEL).unwrap();
+        for label in ["overlay", "panel"] {
+            assert_eq!(
+                ensure_css_import_window(label).unwrap_err().to_string(),
+                "CSS import fetch is only available in the main window"
+            );
+        }
+    }
+
+    #[test]
+    fn css_import_client_is_reused() {
+        let first = css_import_client().unwrap();
+        let second = css_import_client().unwrap();
+
+        assert!(std::ptr::eq(first, second));
+    }
+
+    #[test]
+    fn css_import_body_enforces_the_one_mibibyte_limit() {
+        let accepted = vec![b'a'; MAX_CSS_IMPORT_BYTES];
+        assert_eq!(
+            read_css_import_body(std::io::Cursor::new(accepted.clone())).unwrap(),
+            accepted
+        );
+
+        let rejected = vec![b'a'; MAX_CSS_IMPORT_BYTES + 1];
+        assert_eq!(
+            read_css_import_body(std::io::Cursor::new(rejected))
+                .unwrap_err()
+                .to_string(),
+            format!("CSS import response exceeds {MAX_CSS_IMPORT_BYTES} bytes")
+        );
     }
 
     #[test]

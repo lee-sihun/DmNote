@@ -33,11 +33,14 @@ limits apply to the main window only:
   a reserved word such as `linear` are left out of the main window. Animation
   names passed through a CSS variable (`var()`) are not rewritten either and
   will not run in the main window.
-- `@property` is ignored in the main window because it could collide with
-  properties the app registers.
-- `@font-face` and stylesheets pulled in with `@import` apply to the whole
-  document. Use them for web fonts only, and avoid `font-family` names that the
-  app UI itself uses.
+- Stylesheets pulled in with `@import` are fetched by the app and confined to
+  the preview area the same way. A sheet that cannot be fetched (offline, error
+  response, over 1 MiB, nested more than three levels deep) is skipped in the
+  main window only.
+- `@font-face` and `@counter-style` register for the whole document and pass
+  through unchanged, so avoid `font-family` names that the app UI uses.
+  `@property` can collide with names the app registers and is ignored in the
+  main window.
 - Selectors that target siblings of `body`, such as `body + .x`, cannot be moved
   inside the preview area and are ignored in the main window. The same applies
   to the nested form, such as `body { & ~ .x { } }`.

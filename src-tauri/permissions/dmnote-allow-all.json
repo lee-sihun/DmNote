@@ -18,6 +18,7 @@
           "counter_animation_delete",
           "counter_animation_list",
           "counter_animation_update",
+          "css_fetch_import",
           "css_get",
           "css_get_use",
           "css_history_activate",

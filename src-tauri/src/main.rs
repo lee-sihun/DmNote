@@ -218,6 +218,7 @@ fn main() {
             commands::app::obs::obs_status,
             commands::app::obs::obs_regenerate_token,
             // 에디터 콘텐츠
+            commands::editor::css::css_fetch_import,
             commands::editor::css::css_get,
             commands::editor::css::css_get_use,
             commands::editor::css::css_toggle,

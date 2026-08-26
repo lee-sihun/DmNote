@@ -2,6 +2,11 @@ import { useEffect, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { obsApi } from '@api/modules/obsApi';
 import { scopeUserCss } from '@utils/css/scopeUserCss';
+import {
+  hasLeadingImports,
+  resolveUserCssImports,
+} from '@utils/css/resolveUserCssImports';
+import { fetchCustomCssImport } from '@api/modules/customCssImportApi';
 import type { TabCssOverrides } from '@src/types/plugin/css';
 import type { CustomCss } from '@src/types/plugin/css';
 
@@ -47,16 +52,56 @@ export function useCustomCssInjection(options?: CustomCssInjectionOptions) {
     // 스코프 변환은 결정적이라 원문 기준 캐시 - 탭별 CSS를 오가도 재파싱
     // 없이 조회만 하도록 몇 장 유지 (대용량 시트는 변환에 수십 ms)
     const scopeCache = new Map<string, string>();
+    // @import는 시트를 받아야 해서 비동기. 우선 import를 뺀 결과를 넣고, 받아서
+    // 인라인·스코프한 결과가 준비되면 같은 원문일 때 다시 적용한다. 원문이
+    // 바뀌면 진행 중이던 해석은 중단한다
+    const importResolvedCache = new Map<string, string>();
+    let pendingImport: { raw: string; controller: AbortController } | null =
+      null;
+    let disposed = false;
+    let reapply: (() => void) | null = null;
+    const remember = (
+      cache: Map<string, string>,
+      raw: string,
+      value: string,
+    ) => {
+      if (cache.size >= SCOPE_CACHE_LIMIT) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined) cache.delete(oldest);
+      }
+      cache.set(raw, value);
+    };
+    const resolveImports = (raw: string, scope: string) => {
+      if (pendingImport?.raw === raw) return;
+      pendingImport?.controller.abort();
+      const controller = new AbortController();
+      pendingImport = { raw, controller };
+      void resolveUserCssImports(raw, fetchCustomCssImport, {
+        signal: controller.signal,
+      })
+        .then((inlined) => {
+          if (disposed || controller.signal.aborted) return;
+          remember(importResolvedCache, raw, scopeUserCss(inlined, scope));
+          reapply?.();
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return;
+          console.warn('[custom-css] @import resolve failed', error);
+        })
+        .finally(() => {
+          if (pendingImport?.controller === controller) pendingImport = null;
+        });
+    };
     const applyScope = (raw: string): string => {
       if (!scopeSelector || !raw) return raw;
-      const hit = scopeCache.get(raw);
-      if (hit !== undefined) return hit;
-      const scoped = scopeUserCss(raw, scopeSelector);
-      if (scopeCache.size >= SCOPE_CACHE_LIMIT) {
-        const oldest = scopeCache.keys().next().value;
-        if (oldest !== undefined) scopeCache.delete(oldest);
+      const resolved = importResolvedCache.get(raw);
+      if (resolved !== undefined) return resolved;
+      let scoped = scopeCache.get(raw);
+      if (scoped === undefined) {
+        scoped = scopeUserCss(raw, scopeSelector);
+        remember(scopeCache, raw, scoped);
       }
-      scopeCache.set(raw, scoped);
+      if (hasLeadingImports(raw)) resolveImports(raw, scopeSelector);
       return scoped;
     };
 
@@ -113,6 +158,8 @@ export function useCustomCssInjection(options?: CustomCssInjectionOptions) {
         setStyle('', true);
       }
     };
+
+    reapply = applyCssForCurrentTab;
 
     // 초기 데이터 로드 (OBS 재동기화 시에도 재사용)
     const refetchAll = async () => {
@@ -172,6 +219,8 @@ export function useCustomCssInjection(options?: CustomCssInjectionOptions) {
     });
 
     return () => {
+      disposed = true;
+      pendingImport?.controller.abort();
       unsubResync();
       unsubGlobalUse();
       unsubGlobalContent();
