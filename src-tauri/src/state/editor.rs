@@ -273,7 +273,9 @@ fn first_unknown_json_key(raw: &Value, canonical: &Value, path: &str) -> Option<
         (Value::Object(raw), Value::Object(canonical)) => raw.iter().find_map(|(key, value)| {
             let child_path = format!("{path}.{key}");
             canonical.get(key).map_or_else(
-                || Some(child_path.clone()),
+                // None 필드는 재직렬화에서 생략된다 - 프론트가 명시한 null은
+                // 같은 뜻이라 미지의 키로 보지 않는다
+                || (!value.is_null()).then(|| child_path.clone()),
                 |canonical| first_unknown_json_key(value, canonical, &child_path),
             )
         }),
@@ -2671,6 +2673,51 @@ mod tests {
         });
         let error = decode_editor_commit_request(delete_with_bounds).unwrap_err();
         assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+    }
+
+    #[test]
+    fn frozen_insert_wire_accepts_explicit_null_for_skipped_optional_fields() {
+        let frozen = |counter: serde_json::Value| {
+            serde_json::json!({
+                "baseRevision": 0,
+                "mutationId": Uuid::new_v4().to_string(),
+                "opsVersion": EDITOR_OPS_VERSION,
+                "ops": [{
+                    "kind": "insertFrozenElements",
+                    "mode": "4key",
+                    "elements": [{
+                        "elementType": "key",
+                        "slot": "A",
+                        "position": {
+                            "id": Uuid::new_v4().to_string(),
+                            "dx": 0.0, "dy": 0.0, "width": 60.0, "height": 60.0, "count": 0,
+                            "counter": counter,
+                        },
+                    }],
+                    "groups": [],
+                    "zUpdates": [],
+                }],
+            })
+        };
+
+        // 프론트 정규화는 미지정 그라데이션을 null로 보낸다 - None은 재직렬화에서
+        // 생략되지만 같은 뜻이므로 통과해야 한다
+        decode_editor_commit_request(frozen(serde_json::json!({
+            "enabled": true,
+            "fillIdleGradient": null,
+            "fillActiveGradient": null,
+        })))
+        .unwrap();
+
+        // 값이 실린 미지의 키는 여전히 거절
+        let error = decode_editor_commit_request(frozen(serde_json::json!({
+            "enabled": true,
+            "fillActiveGradient": null,
+            "fillHoverGradient": { "angle": 0, "stops": [] },
+        })))
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+        assert!(error.message.contains("fillHoverGradient"));
     }
 
     #[test]
