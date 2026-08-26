@@ -1703,7 +1703,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               }}
               onOpacityPercentCancel={() => {
                 // Escape는 게스처를 통째로 되돌린다. 로컬 대표값도 canonical에서 다시 읽어야
-                // 입력이 blur 뒤 옛 preview 값으로 재동기화되지 않는다
+                // 입력이 blur 뒤 옛 preview 값으로 재동기화되지 않는다.
+                // solidOnly 대상(테두리·카운터)은 alpha 취소가 onInputCancel로만 들어온다
                 if (batchPickerFor === 'noteColor') {
                   editGestureController.cancel();
                   const base = getMixedValueCanonical(
@@ -1738,36 +1739,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                       base,
                     ).value,
                   });
-                } else if (batchPickerFor === 'borderColor') {
-                  editGestureController.cancel();
-                  const borderColor = getMixedValueCanonical(
-                    (pos) => pos.noteBorderColor,
-                    '#FFFFFF',
-                  ).value;
-                  const borderOpacity = getMixedValueCanonical(
-                    (pos) => pos.noteBorderOpacity,
-                    100,
-                  ).value;
-                  setBatchLocalColors((prev) => ({
-                    ...prev,
-                    borderColor,
-                    borderOpacity,
-                  }));
-                } else if (
-                  batchPickerFor === 'fill' ||
-                  batchPickerFor === 'stroke'
-                ) {
-                  // 카운터 색 preview는 로컬에만 머물러 게스처가 없다. 표시 중인 확정값으로 되돌린다
-                  const target = batchPickerFor;
-                  const state =
-                    batchCounterColorState === 'active' ? 'active' : 'idle';
-                  const key = `${target}${
-                    state === 'active' ? 'Active' : 'Idle'
-                  }` as const;
-                  setBatchLocalColors((prev) => ({
-                    ...prev,
-                    [key]: batchCounterSettings[target][state],
-                  }));
                 }
               }}
               opacityPercentLabel={
