@@ -169,7 +169,8 @@ fn send_download_request(
     })
 }
 
-/// 자산을 메모리로 다운로드 (소형 자산용)
+/// 자산을 메모리로 다운로드 (소형 자산용 — Windows exe/서명)
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn download_asset(
     client: &reqwest::blocking::Client,
     url: &str,

@@ -195,6 +195,8 @@ fn main() {
                 state::macos_termination::install(app.handle())
                     .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
                 launch_macos_dock_helper();
+                // 이전 자동 업데이트가 남긴 .app.old/.app.new 정리 (시작 지연 없이 백그라운드)
+                std::thread::spawn(commands::app::update_macos::cleanup_stale_leftovers);
             }
             Ok(())
         })
