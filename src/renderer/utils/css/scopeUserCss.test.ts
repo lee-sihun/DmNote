@@ -265,23 +265,107 @@ describe('scopeUserCss', () => {
     expect(flat).toContain('animation: var(--anim) 1s;');
   });
 
-  it('@font-face는 통과하고 @property와 격리 불가한 기타 at-rule은 버린다', () => {
+  it('@font-face 이름과 참조를 바꾸고 격리 불가한 기타 at-rule은 버린다', () => {
     const out = scopeUserCss(
       [
         '@font-face { font-family: "Pixel"; src: url("a.woff2"); }',
         "@property --dmn-fade-top { syntax: '<color>'; inherits: false; initial-value: red; }",
         '@page { margin: 0; }',
-        '.counter { color: red; }',
+        '.counter { font: 12px "Pixel"; color: red; }',
       ].join('\n'),
       SCOPE,
     );
     const flat = compact(out);
-    // jsdom의 @font-face 직렬화는 src를 떨어뜨리므로 font-family 존재만 확인
+    // 원래 family를 등록하지 않아 같은 이름을 쓰는 메인 UI가 바뀌지 않게
     expect(flat).toContain('@font-face {');
-    expect(flat).toContain('font-family: "Pixel"');
+    const alias = flat.match(/font-family: ["']?(dmnu-font-[\w-]+)/)?.[1];
+    expect(alias).toBeTruthy();
+    expect(flat).not.toMatch(/@font-face \{[^}]*font-family: ["']Pixel["']/);
     expect(flat).not.toContain('@property');
     expect(flat).not.toContain('@page');
-    expect(flat).toContain(`${SCOPE} .counter { color: red; }`);
+    expect(flat).toContain(`${SCOPE} .counter {`);
+    expect(flat).toContain(`font-family: ${alias};`);
+  });
+
+  it('font custom property 체인도 격리된 family로 바꾼다', () => {
+    const out = scopeUserCss(
+      [
+        '@font-face { font-family: Pixel; src: url("a.woff2"); }',
+        ':root { --face-base: Pixel; --face: var(--face-base); --unrelated: Pixel; }',
+        '.counter { font-family: var(--face); }',
+      ].join('\n'),
+      SCOPE,
+    );
+    const flat = compact(out);
+    expect(flat).toMatch(/--face-base: dmnu-font-[\w-]+;/);
+    expect(flat).toContain('--face: var(--face-base);');
+    expect(flat).toContain('--unrelated: Pixel;');
+  });
+
+  it('font-family의 var() fallback 안 이름도 격리된 family로 바꾼다', () => {
+    const out = compact(
+      scopeUserCss(
+        [
+          '@font-face { font-family: Pixel; src: url("a.woff2"); }',
+          '.counter { font-family: var(--face, Pixel); }',
+          '.quoted { font-family: var(--face, "Pixel"), sans-serif; }',
+        ].join('\n'),
+        SCOPE,
+      ),
+    );
+    const alias = out.match(/font-family: ["']?(dmnu-font-[\w-]+)/)?.[1];
+
+    expect(alias).toBeTruthy();
+    expect(out).toContain(`font-family: var(--face, ${alias});`);
+    expect(out).toContain(`font-family: var(--face, "${alias}"), sans-serif;`);
+  });
+
+  it('인라인한 import의 font 이름과 부모 규칙 참조를 같은 이름으로 바꾼다', () => {
+    const scoped = compact(
+      scopeUserCss(
+        [
+          '@font-face { font-family: ImportedPixel; src: url("a.woff2"); }',
+          ':root { --imported-face: ImportedPixel; } .direct { font: 12px ImportedPixel; } .variable { font-family: var(--imported-face); }',
+        ].join('\n'),
+        SCOPE,
+      ),
+    );
+    const alias = scoped.match(/font-family: ["']?(dmnu-font-[\w-]+)/)?.[1];
+
+    expect(alias).toBeTruthy();
+    expect(scoped).toContain(`font-family: ${alias};`);
+    expect(scoped).toContain(`--imported-face: ${alias};`);
+  });
+
+  it('격리할 이름이 없는 font feature와 counter style도 보존한다', () => {
+    const out = compact(
+      scopeUserCss(
+        [
+          '@font-feature-values "System Font" { @styleset { fancy: 1; } }',
+          '@counter-style custom-counter { system: cyclic; symbols: "x"; }',
+        ].join('\n'),
+        SCOPE,
+      ),
+    );
+
+    expect(out).toContain('@font-feature-values');
+    expect(out).toContain('@counter-style');
+  });
+
+  it('격리한 font family를 참조하는 font feature 이름도 같이 바꾼다', () => {
+    const out = compact(
+      scopeUserCss(
+        [
+          '@font-face { font-family: Pixel; src: url("a.woff2"); }',
+          '@font-feature-values Pixel { @styleset { fancy: 1; } }',
+        ].join('\n'),
+        SCOPE,
+      ),
+    );
+    const alias = out.match(/font-family: ["']?(dmnu-font-[\w-]+)/)?.[1];
+
+    expect(alias).toBeTruthy();
+    expect(out).toContain(`@font-feature-values ${alias}`);
   });
 
   it('메인창에서는 @import를 버리고 @namespace만 최상단에 보존한다', () => {

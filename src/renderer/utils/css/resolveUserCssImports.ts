@@ -32,7 +32,7 @@ const LEADING_STATEMENT = /^@(charset|import|namespace|layer)\b/i;
 const IMPORT_AT_RULE = /^@import\b/i;
 const CHARSET_AT_RULE = /^@charset\b/i;
 const NAMESPACE_AT_RULE = /^@namespace\b/i;
-const ABSOLUTE_OR_SPECIAL_URL = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i;
+const ABSOLUTE_OR_SPECIAL_URL = /^(?:[a-z][a-z0-9+.-]*:|#)/i;
 
 const isWhitespace = (ch: string): boolean =>
   ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r' || ch === '\f';
@@ -152,6 +152,69 @@ const parseImportStatement = (statement: string): ParsedImport | null => {
 const isIdentChar = (ch: string | undefined): boolean =>
   ch !== undefined && /[\w-]/.test(ch);
 
+const consumeCssEscape = (
+  value: string,
+  slashIndex: number,
+): { decoded: string; next: number } | null => {
+  if (value[slashIndex] !== '\\' || slashIndex + 1 >= value.length) return null;
+  const first = value[slashIndex + 1];
+  if (first === '\n' || first === '\f') {
+    return { decoded: '', next: slashIndex + 2 };
+  }
+  if (first === '\r') {
+    return {
+      decoded: '',
+      next: slashIndex + (value[slashIndex + 2] === '\n' ? 3 : 2),
+    };
+  }
+  if (/[0-9a-f]/i.test(first)) {
+    let end = slashIndex + 1;
+    while (
+      end < value.length &&
+      end < slashIndex + 7 &&
+      /[0-9a-f]/i.test(value[end])
+    ) {
+      end += 1;
+    }
+    const codePoint = Number.parseInt(value.slice(slashIndex + 1, end), 16);
+    if (end < value.length && isWhitespace(value[end])) end += 1;
+    const decoded =
+      codePoint === 0 ||
+      codePoint > 0x10ffff ||
+      (codePoint >= 0xd800 && codePoint <= 0xdfff)
+        ? '\uFFFD'
+        : String.fromCodePoint(codePoint);
+    return { decoded, next: end };
+  }
+  return { decoded: first, next: slashIndex + 2 };
+};
+
+const decodeCssEscapes = (value: string): string | null => {
+  let decoded = '';
+  for (let i = 0; i < value.length; ) {
+    if (value[i] !== '\\') {
+      decoded += value[i];
+      i += 1;
+      continue;
+    }
+    const escape = consumeCssEscape(value, i);
+    if (!escape) return null;
+    decoded += escape.decoded;
+    i = escape.next;
+  }
+  return decoded;
+};
+
+const cssString = (value: string): string =>
+  value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r\n?|\n|\f/g, (lineBreak) =>
+      [...lineBreak]
+        .map((char) => `\\${char.codePointAt(0)!.toString(16)} `)
+        .join(''),
+    );
+
 // 시트 안의 상대 url()을 시트 위치 기준 절대 경로로. 인라인되면 문서 기준으로
 // 해석되어 글꼴·이미지가 깨지기 때문. 주석과 따옴표 문자열 안의 url( 텍스트는
 // 토큰이 아니라 건드리지 않는다
@@ -195,11 +258,22 @@ export const absolutizeCssUrls = (css: string, baseUrl: string): string => {
       let valueEnd = valueStart;
       if (quote) {
         while (valueEnd < len && css[valueEnd] !== quote) {
-          if (css[valueEnd] === '\\') valueEnd += 1;
-          valueEnd += 1;
+          if (css[valueEnd] === '\\') {
+            const escape = consumeCssEscape(css, valueEnd);
+            valueEnd = escape?.next ?? len;
+          } else {
+            valueEnd += 1;
+          }
         }
       } else {
-        while (valueEnd < len && css[valueEnd] !== ')') valueEnd += 1;
+        while (valueEnd < len && css[valueEnd] !== ')') {
+          if (css[valueEnd] === '\\') {
+            const escape = consumeCssEscape(css, valueEnd);
+            valueEnd = escape?.next ?? len;
+          } else {
+            valueEnd += 1;
+          }
+        }
       }
       const close = css.indexOf(')', quote ? valueEnd + 1 : valueEnd);
       if (close === -1) {
@@ -208,12 +282,15 @@ export const absolutizeCssUrls = (css: string, baseUrl: string): string => {
       }
       const raw = css.slice(valueStart, valueEnd).trim();
       let replaced: string | null = null;
-      if (raw && !ABSOLUTE_OR_SPECIAL_URL.test(raw)) {
+      const decoded = decodeCssEscapes(raw);
+      if (decoded && !ABSOLUTE_OR_SPECIAL_URL.test(decoded)) {
         try {
-          replaced = `url("${new URL(raw, baseUrl).href}")`;
+          replaced = `url("${cssString(new URL(decoded, baseUrl).href)}")`;
         } catch {
           replaced = null;
         }
+      } else if (decoded && decoded !== raw) {
+        replaced = `url("${cssString(decoded)}")`;
       }
       out += replaced ?? css.slice(i, close + 1);
       i = close + 1;

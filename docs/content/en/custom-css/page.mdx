@@ -36,11 +36,19 @@ limits apply to the main window only:
 - Stylesheets pulled in with `@import` are fetched by the app and confined to
   the preview area the same way. A sheet that cannot be fetched (offline, error
   response, over 1 MiB, nested more than three levels deep) is skipped in the
-  main window only.
-- `@font-face` and `@counter-style` register for the whole document and pass
-  through unchanged, so avoid `font-family` names that the app UI uses.
-  `@property` can collide with names the app registers and is ignored in the
-  main window.
+  main window only. `localhost` and private-network imports work without a
+  prompt; explicit cloud metadata URLs are rejected. If an imported sheet and
+  its parent declare the same `@namespace` prefix with different URLs, the
+  parent's declaration wins in the main preview.
+- `@font-face` family names receive private names in the main window. Matching
+  references in CSS rules, `@font-feature-values`, and static custom properties
+  are rewritten as well, so a web font still works in the grid preview without
+  changing app UI that uses the original family name. A name added later by
+  JavaScript or an element's inline style cannot be rewritten for the main
+  preview. `@counter-style`, `@font-palette-values`, and unrelated
+  `@font-feature-values` rules pass through unchanged for compatibility.
+  `@property` can collide with names the app registers and is ignored in the main
+  window.
 - Selectors that target siblings of `body`, such as `body + .x`, cannot be moved
   inside the preview area and are ignored in the main window. The same applies
   to the nested form, such as `body { & ~ .x { } }`.

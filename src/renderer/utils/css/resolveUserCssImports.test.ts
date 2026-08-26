@@ -4,6 +4,7 @@ import {
   hasLeadingImports,
   resolveUserCssImports,
 } from './resolveUserCssImports';
+import { scopeUserCss } from './scopeUserCss';
 
 const sheets: Record<string, string> = {
   'https://fonts.example/css?family=Pixel':
@@ -135,22 +136,43 @@ describe('resolveUserCssImports', () => {
     ).rejects.toMatchObject({ name: 'AbortError' });
   });
 
-  it('부모·자식 @namespace는 최상단으로 모으고 같은 접두사 재선언은 버린다', async () => {
+  it('부모 namespace를 우선해 단일 시트로 합치고 충돌은 경고한다', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const fetcherNs = vi.fn(async (url: string) => ({
       finalUrl: url,
       text: '@namespace svg url(http://www.w3.org/2000/svg);\n@namespace x url(http://other);\nsvg|circle { fill: red; }',
     }));
-    const out = await resolveUserCssImports(
+    const resolved = await resolveUserCssImports(
       '@import url("https://cdn.example/ns.css");\n@namespace x url(http://mine);\nx|a { color: red; }',
       fetcherNs,
     );
-    const lines = out.split('\n');
-    expect(lines[0]).toBe('@namespace x url(http://mine);');
-    expect(lines[1]).toBe('@namespace svg url(http://www.w3.org/2000/svg);');
-    expect(out).not.toContain('http://other');
-    expect(out.indexOf('svg|circle')).toBeGreaterThan(
-      out.indexOf('@namespace svg'),
+    expect(resolved).toContain(
+      '@namespace svg url(http://www.w3.org/2000/svg);',
     );
+    expect(resolved).toContain('@namespace x url(http://mine);');
+    expect(resolved).not.toContain('@namespace x url(http://other);');
+    expect(resolved).toContain('svg|circle { fill: red; }');
+    expect(resolved).toContain('x|a { color: red; }');
+    expect(warning).toHaveBeenCalledWith(
+      '[custom-css] conflicting @namespace dropped',
+      '@namespace x url(http://other);',
+    );
+    warning.mockRestore();
+  });
+
+  it('import의 keyframes와 부모 시트 참조를 한 이름으로 스코프한다', async () => {
+    const fetcherAnimation = vi.fn(async (url: string) => ({
+      finalUrl: url,
+      text: '@keyframes pulse { to { opacity: 0; } }',
+    }));
+    const inlined = await resolveUserCssImports(
+      '@import url("https://cdn.example/animation.css");\n.counter { animation: pulse 1s; }',
+      fetcherAnimation,
+    );
+    const scoped = scopeUserCss(inlined, '[data-dmn-user-css-scope]');
+
+    expect(scoped).toContain('@keyframes dmnu-pulse');
+    expect(scoped).toContain('animation: dmnu-pulse 1s;');
   });
 
   it('absolutizeCssUrls는 주석과 문자열 안의 url( 텍스트를 건드리지 않는다', () => {
@@ -170,5 +192,22 @@ describe('resolveUserCssImports', () => {
     expect(out).toContain('url("data:font/woff2;base64,AA")');
     expect(out).toContain('url(#m)');
     expect(out).toContain('url(https://x.example/y.png)');
+  });
+
+  it('protocol-relative URL은 가져온 시트의 scheme으로 고정한다', () => {
+    const out = absolutizeCssUrls(
+      'a { background: url(//assets.example/icon.png) }',
+      'https://cdn.example/dir/sheet.css',
+    );
+    expect(out).toContain('url("https://assets.example/icon.png")');
+  });
+
+  it('CSS escape가 포함된 unquoted URL을 디코드한 뒤 절대화한다', () => {
+    const out = absolutizeCssUrls(
+      String.raw`a { background: url(my\ image.png) } b { mask: url(icon\29 .svg) }`,
+      'https://cdn.example/dir/sheet.css',
+    );
+    expect(out).toContain('url("https://cdn.example/dir/my%20image.png")');
+    expect(out).toContain('url("https://cdn.example/dir/icon).svg")');
   });
 });

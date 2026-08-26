@@ -9,6 +9,7 @@ export const USER_CSS_SCOPE_SELECTOR = ':where([data-dmn-user-css-scope])';
 // 유저 keyframes 이름 접두사 - 앱 내부 이름과 겹쳐 설정 UI 애니메이션이
 // 바뀌는 것을 막는다. 참조(animation, animation-name)도 같이 재작성
 const KEYFRAMES_PREFIX = 'dmnu-';
+const FONT_FAMILY_PREFIX = 'dmnu-font-';
 
 // keyframes 이름으로 쓰면 shorthand 참조 재작성이 모호해지는 키워드 -
 // 이런 정의는 이름을 바꿀 수 없어 전역으로 흘리지 않고 버린다
@@ -40,12 +41,13 @@ const ANIMATION_KEYWORDS = new Set([
 // 이름을 안전하게 바꿔 참조까지 맞출 수 있는 단순 식별자만 지원
 const SIMPLE_IDENT = /^-?[A-Za-z_][\w-]*$/;
 
-// 문서 전역 leaf at-rule 중 그리드 미리보기에 필요한 것은 통과 (@font-face는
-// 글꼴 등록만 하고 UI를 꾸미지 않는다). @property는 앱이 등록한 이름과 겹치면
-// UI 토큰을 바꾸므로 제외
+// font는 앱 UI와 충돌하지 않게 이름을 격리한다. 나머지 전역 leaf at-rule은
+// 기존 커스텀 CSS 호환을 위해 원문 통과한다
 const PASSTHROUGH_LEAF_AT_RULE =
-  /^@(font-face|counter-style|font-feature-values|font-palette-values|layer)\b/i;
+  /^@(counter-style|font-palette-values|layer)\b/i;
 const KEYFRAMES_AT_RULE = /^@(?:-webkit-)?keyframes\b/i;
+const FONT_FACE_AT_RULE = /^@font-face\b/i;
+const FONT_FEATURE_VALUES_AT_RULE = /^@font-feature-values\b/i;
 // 시트 머리에만 유효한 규칙 - 재조립 시 최상단으로 hoisting
 const HEAD_AT_RULE = /^@namespace\b/i;
 const IMPORT_AT_RULE = /^@import\b/i;
@@ -502,6 +504,190 @@ const collectKeyframeRenames = (
   }
 };
 
+const decodeCssEscapes = (value: string): string => {
+  let out = '';
+  for (let i = 0; i < value.length; i += 1) {
+    if (value[i] !== '\\') {
+      out += value[i];
+      continue;
+    }
+    i += 1;
+    if (i >= value.length) break;
+    if (value[i] === '\n' || value[i] === '\f') continue;
+    if (value[i] === '\r') {
+      if (value[i + 1] === '\n') i += 1;
+      continue;
+    }
+    const hex = value.slice(i).match(/^[0-9a-f]{1,6}/i)?.[0];
+    if (!hex) {
+      out += value[i];
+      continue;
+    }
+    const codePoint = Number.parseInt(hex, 16);
+    out +=
+      codePoint === 0 || codePoint > 0x10ffff
+        ? '\ufffd'
+        : String.fromCodePoint(codePoint);
+    i += hex.length - 1;
+    if (isWhitespace(value[i + 1])) i += 1;
+  }
+  return out;
+};
+
+const normalizeCssName = (value: string): string => {
+  const trimmed = value.trim();
+  const first = trimmed[0];
+  const inner =
+    (first === '"' || first === "'") && trimmed.at(-1) === first
+      ? trimmed.slice(1, -1)
+      : trimmed;
+  return decodeCssEscapes(inner).replace(/\s+/g, ' ').trim();
+};
+
+// 읽을 수 있는 이름 뒤에 짧은 hash를 붙여 devtools에서 원래 family를 알아보게
+const registryAlias = (prefix: string, name: string): string => {
+  let hash = 0x811c9dc5;
+  for (const character of name) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  const readable = name.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '');
+  return `${prefix}${readable ? `${readable}-` : ''}${hash
+    .toString(16)
+    .padStart(8, '0')}`;
+};
+
+const collectGlobalRegistryRenames = (
+  rules: CSSRuleList,
+  fonts: Map<string, string>,
+): void => {
+  for (let i = 0; i < rules.length; i += 1) {
+    const rule = rules[i];
+    const cssText = rule.cssText;
+    const style = (rule as unknown as { style?: CSSStyleDeclaration }).style;
+    if (FONT_FACE_AT_RULE.test(cssText) && style) {
+      const family = normalizeCssName(style.getPropertyValue('font-family'));
+      if (family) {
+        fonts.set(
+          family.toLowerCase(),
+          registryAlias(FONT_FAMILY_PREFIX, family.toLowerCase()),
+        );
+      }
+      continue;
+    }
+    const childRules = (rule as CSSGroupingRule).cssRules;
+    if (childRules) {
+      collectGlobalRegistryRenames(childRules, fonts);
+    }
+  }
+};
+
+const rewriteNameList = (
+  value: string,
+  renames: Map<string, string>,
+  caseInsensitive = true,
+): string =>
+  splitSelectorList(value)
+    .map((name) => {
+      const normalized = normalizeCssName(name);
+      return (
+        renames.get(caseInsensitive ? normalized.toLowerCase() : normalized) ??
+        name
+      );
+    })
+    .join(', ');
+
+const rewriteNamedTokens = (
+  value: string,
+  renames: Map<string, string>,
+  caseInsensitive = false,
+): string => {
+  let out = value;
+  for (const [name, alias] of [...renames.entries()].sort(
+    ([left], [right]) => right.length - left.length,
+  )) {
+    const escaped = escapeRegExp(name);
+    out = out
+      .replace(
+        new RegExp(`(["'])${escaped}\\1`, caseInsensitive ? 'gi' : 'g'),
+        (_match, quote: string) => `${quote}${alias}${quote}`,
+      )
+      .replace(
+        new RegExp(
+          `(^|[^A-Za-z0-9_-])${escaped}(?=$|[^A-Za-z0-9_-])`,
+          caseInsensitive ? 'gi' : 'g',
+        ),
+        (_match, lead: string) => `${lead}${alias}`,
+      );
+  }
+  return out;
+};
+
+const collectVarNames = (value: string, out: Set<string>): void => {
+  const pattern = /var\(\s*(--[\w-]+)/gi;
+  for (let match = pattern.exec(value); match; match = pattern.exec(value)) {
+    out.add(match[1]);
+  }
+};
+
+interface RegistryVariableState {
+  references: Set<string>;
+  customValues: Map<string, string[]>;
+}
+
+const createRegistryVariableState = (): RegistryVariableState => ({
+  references: new Set(),
+  customValues: new Map(),
+});
+
+const collectRegistryVariableState = (
+  rules: CSSRuleList,
+  state: RegistryVariableState,
+): void => {
+  const walk = (current: CSSRuleList): void => {
+    for (let i = 0; i < current.length; i += 1) {
+      const rule = current[i];
+      const selectorText = (rule as CSSStyleRule).selectorText;
+      const style = (rule as unknown as { style?: CSSStyleDeclaration }).style;
+      if (typeof selectorText === 'string' && selectorText && style) {
+        collectVarNames(
+          `${style.getPropertyValue('font')} ${style.getPropertyValue(
+            'font-family',
+          )}`,
+          state.references,
+        );
+        for (let index = 0; index < style.length; index += 1) {
+          const property = style.item(index);
+          if (!property.startsWith('--')) continue;
+          const values = state.customValues.get(property) ?? [];
+          values.push(style.getPropertyValue(property));
+          state.customValues.set(property, values);
+        }
+      }
+      const childRules = (rule as CSSGroupingRule).cssRules;
+      if (childRules) walk(childRules);
+    }
+  };
+  walk(rules);
+};
+
+const resolveRegistryVariableReferences = (
+  state: RegistryVariableState,
+): Set<string> => {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const name of [...state.references]) {
+      for (const value of state.customValues.get(name) ?? []) {
+        const before = state.references.size;
+        collectVarNames(value, state.references);
+        if (state.references.size !== before) changed = true;
+      }
+    }
+  }
+  return state.references;
+};
+
 const ANIMATION_PROPERTY =
   /^(\s*(?:-webkit-)?animation(?:-name)?\s*:\s*)([\s\S]*)$/i;
 
@@ -591,9 +777,65 @@ const renameKeyframesRule = (
   return `${at[1]} ${renamed} ${cssText.slice(brace)}`;
 };
 
+const serializeDeclaration = (
+  property: string,
+  value: string,
+  priority: string,
+): string => `${property}: ${value}${priority ? ` !${priority}` : ''};`;
+
+const serializeRuleStyle = (
+  style: CSSStyleDeclaration,
+  overrides: Map<string, string>,
+): string => {
+  const declarations: string[] = [];
+  for (let index = 0; index < style.length; index += 1) {
+    const property = style.item(index);
+    declarations.push(
+      serializeDeclaration(
+        property,
+        overrides.get(property) ?? style.getPropertyValue(property),
+        style.getPropertyPriority(property),
+      ),
+    );
+  }
+  return declarations.join(' ');
+};
+
+const renameFontFaceRule = (
+  rule: CSSRule,
+  renames: Map<string, string>,
+): string | null => {
+  const style = (rule as unknown as { style?: CSSStyleDeclaration }).style;
+  if (!style) return null;
+  const family = normalizeCssName(style.getPropertyValue('font-family'));
+  const alias = renames.get(family.toLowerCase());
+  if (!alias) return null;
+  return `@font-face { ${serializeRuleStyle(
+    style,
+    new Map([['font-family', `"${alias}"`]]),
+  )} }`;
+};
+
+const renameFontFeatureValuesRule = (
+  rule: CSSRule,
+  renames: Map<string, string>,
+): string | null => {
+  const cssText = rule.cssText;
+  const brace = findBlockStart(cssText);
+  if (brace === -1) return null;
+  const prelude = cssText.slice(0, brace).trim();
+  const match = prelude.match(/^(@font-feature-values\s+)([\s\S]+)$/i);
+  if (!match) return null;
+  const families = rewriteNameList(match[2], renames);
+  if (families === match[2]) return null;
+  return `${match[1]}${families} ${cssText.slice(brace)}`;
+};
+
 interface ScopeContext {
   scope: string;
   renames: Map<string, string>;
+  fontRenames: Map<string, string>;
+  fontVariables: Set<string>;
   hoisted: string[];
   namespacesHoisted: boolean;
 }
@@ -605,10 +847,47 @@ const scopeStyleRule = (
   selectorText: string,
   ctx: ScopeContext,
 ): string => {
-  const declarations = rewriteAnimationReferences(
+  let declarations = rewriteAnimationReferences(
     rule.style.cssText,
     ctx.renames,
   );
+  const additions: string[] = [];
+  const fontFamily = rule.style.getPropertyValue('font-family');
+  if (fontFamily) {
+    // 목록 항목 단위로 바꾼 뒤 var() fallback 안의 이름도 토큰 단위로 재작성
+    const rewritten = rewriteNamedTokens(
+      rewriteNameList(fontFamily, ctx.fontRenames),
+      ctx.fontRenames,
+      true,
+    );
+    if (rewritten !== fontFamily) {
+      additions.push(
+        serializeDeclaration(
+          'font-family',
+          rewritten,
+          rule.style.getPropertyPriority('font-family'),
+        ),
+      );
+    }
+  }
+  for (let index = 0; index < rule.style.length; index += 1) {
+    const property = rule.style.item(index);
+    if (!property.startsWith('--')) continue;
+    let rewritten = rule.style.getPropertyValue(property);
+    if (ctx.fontVariables.has(property)) {
+      rewritten = rewriteNamedTokens(rewritten, ctx.fontRenames, true);
+    }
+    if (rewritten !== rule.style.getPropertyValue(property)) {
+      additions.push(
+        serializeDeclaration(
+          property,
+          rewritten,
+          rule.style.getPropertyPriority(property),
+        ),
+      );
+    }
+  }
+  if (additions.length) declarations = `${declarations} ${additions.join(' ')}`;
   const childRules = (rule as unknown as CSSGroupingRule).cssRules;
   const nested = childRules ? scopeRuleList(childRules, ctx, true) : '';
   const body = [declarations, nested].filter(Boolean).join('\n');
@@ -624,6 +903,25 @@ const scopeRuleList = (
   for (let i = 0; i < rules.length; i += 1) {
     const rule = rules[i];
     const cssText = rule.cssText;
+    if (KEYFRAMES_AT_RULE.test(cssText)) {
+      const renamed = renameKeyframesRule(rule, ctx.renames);
+      if (renamed) out.push(renamed);
+      continue;
+    }
+    if (FONT_FACE_AT_RULE.test(cssText)) {
+      const renamed = renameFontFaceRule(rule, ctx.fontRenames);
+      if (renamed) out.push(renamed);
+      continue;
+    }
+    if (!nested && FONT_FEATURE_VALUES_AT_RULE.test(cssText)) {
+      out.push(renameFontFeatureValuesRule(rule, ctx.fontRenames) ?? cssText);
+      continue;
+    }
+    const childRules = (rule as CSSGroupingRule).cssRules;
+    if (!nested && PASSTHROUGH_LEAF_AT_RULE.test(cssText) && !childRules) {
+      out.push(cssText);
+      continue;
+    }
     const selectorText = (rule as CSSStyleRule).selectorText;
     if (typeof selectorText === 'string' && selectorText) {
       const scoped = nested
@@ -631,11 +929,6 @@ const scopeRuleList = (
         : scopeSelectorText(selectorText, ctx.scope);
       if (scoped === null) continue;
       out.push(scopeStyleRule(rule as CSSStyleRule, scoped, ctx));
-      continue;
-    }
-    if (KEYFRAMES_AT_RULE.test(cssText)) {
-      const renamed = renameKeyframesRule(rule, ctx.renames);
-      if (renamed) out.push(renamed);
       continue;
     }
     // escaped at-keyword도 CSSOM에서는 @import로 정규화된다
@@ -648,7 +941,6 @@ const scopeRuleList = (
       }
       continue;
     }
-    const childRules = (rule as CSSGroupingRule).cssRules;
     if (childRules) {
       // 조건 그룹(@media/@supports/@layer/@container) - prelude 보존, 내부 재귀.
       // @layer를 통과시키면 내부 규칙이 비스코프로 새므로 반드시 재귀 대상
@@ -665,8 +957,7 @@ const scopeRuleList = (
       out.push(rewriteAnimationReferences(style.cssText, ctx.renames));
       continue;
     }
-    // 문서 전역 leaf at-rule은 격리 가능한 것만 통과, 나머지는 버린다
-    if (!nested && PASSTHROUGH_LEAF_AT_RULE.test(cssText)) out.push(cssText);
+    // 격리할 수 없는 나머지 문서 전역 leaf at-rule은 버린다
   }
   return out.join('\n');
 };
@@ -734,11 +1025,17 @@ export function scopeUserCss(css: string, scopeSelector: string): string {
     const ctx: ScopeContext = {
       scope: hasDefaultNamespace ? `*|*${scopeSelector}` : scopeSelector,
       renames: new Map(),
+      fontRenames: new Map(),
+      fontVariables: new Set(),
       hoisted: [],
       namespacesHoisted: namespaces.length > 0,
     };
     const scoped = withParsedRules(parseInput, (rules) => {
       collectKeyframeRenames(rules, ctx.renames);
+      collectGlobalRegistryRenames(rules, ctx.fontRenames);
+      const variableState = createRegistryVariableState();
+      collectRegistryVariableState(rules, variableState);
+      ctx.fontVariables = resolveRegistryVariableReferences(variableState);
       return scopeRuleList(rules, ctx, false);
     });
     if (scoped === null) {
