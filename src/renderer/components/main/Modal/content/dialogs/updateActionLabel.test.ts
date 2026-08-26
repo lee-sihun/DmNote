@@ -67,5 +67,11 @@ describe('resolveAutoUpdateActionLabel', () => {
         phase: 'restarting',
       }),
     ).toBe('update.phaseRestarting');
+    expect(
+      resolveAutoUpdateActionLabel({
+        ...base,
+        phase: 'installed',
+      }),
+    ).toBe('update.phaseInstalled');
   });
 });

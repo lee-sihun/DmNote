@@ -8,6 +8,7 @@ vi.hoisted(() => {
 
 const {
   autoUpdateMock,
+  restartMock,
   onUpdateProgressMock,
   unsubscribeMock,
   progressListeners,
@@ -18,6 +19,7 @@ const {
     progressListeners,
     unsubscribeMock,
     autoUpdateMock: vi.fn(),
+    restartMock: vi.fn(),
     onUpdateProgressMock: vi.fn(
       (listener: (event: UpdateProgressEvent) => void) => {
         progressListeners.push(listener);
@@ -30,11 +32,15 @@ const {
 vi.mock('@api/modules/appApi', () => ({
   appApi: {
     autoUpdate: autoUpdateMock,
+    restart: restartMock,
     onUpdateProgress: onUpdateProgressMock,
   },
 }));
 
-import { useUpdateStore } from '@stores/useUpdateStore';
+import {
+  UpdateInstalledRestartFailedError,
+  useUpdateStore,
+} from '@stores/useUpdateStore';
 
 const emitProgress = (event: UpdateProgressEvent) => {
   progressListeners.forEach((listener) => listener(event));
@@ -45,6 +51,8 @@ describe('useUpdateStore.runAutoUpdate', () => {
     localStorage.clear();
     progressListeners.length = 0;
     autoUpdateMock.mockReset();
+    restartMock.mockReset();
+    restartMock.mockResolvedValue(undefined);
     onUpdateProgressMock.mockClear();
     unsubscribeMock.mockClear();
     useUpdateStore.setState({
@@ -92,6 +100,7 @@ describe('useUpdateStore.runAutoUpdate', () => {
     expect(state.autoUpdatePhase).toBe('restarting');
     expect(state.error).toBeNull();
     expect(unsubscribeMock).toHaveBeenCalledTimes(1);
+    expect(restartMock).toHaveBeenCalledTimes(1);
 
     // 구독 해제 전에 도착한 늦은 이벤트는 무시
     emitProgress({ phase: 'installing', percent: null });
@@ -122,6 +131,34 @@ describe('useUpdateStore.runAutoUpdate', () => {
     expect(
       localStorage.getItem('dmnote:post-update-release-notice-version'),
     ).toBeNull();
+  });
+
+  it('설치는 됐지만 재시작 요청이 실패하면 전용 오류로 구분하고 릴리즈 노트 예약은 유지', async () => {
+    autoUpdateMock.mockResolvedValue({
+      previousVersion: '1.6.1',
+      updatedTo: '1.6.2',
+      downloadUrl: 'x',
+    });
+    let phaseAtRestart: string | null = null;
+    restartMock.mockImplementation(async () => {
+      phaseAtRestart = useUpdateStore.getState().autoUpdatePhase;
+      throw new Error('flush cancelled');
+    });
+
+    await expect(
+      useUpdateStore.getState().runAutoUpdate('1.6.2'),
+    ).rejects.toBeInstanceOf(UpdateInstalledRestartFailedError);
+
+    // 재시작 요청 시점엔 restarting, 실패 후엔 installed 종단 상태 (버튼 비활성 유지)
+    expect(phaseAtRestart).toBe('restarting');
+    const state = useUpdateStore.getState();
+    expect(state.isAutoUpdating).toBe(true);
+    expect(state.autoUpdatePhase).toBe('installed');
+    expect(state.error).toBeNull();
+    expect(unsubscribeMock).toHaveBeenCalledTimes(1);
+    expect(
+      localStorage.getItem('dmnote:post-update-release-notice-version'),
+    ).toBe('1.6.2');
   });
 
   it('진행 중 재진입은 무시한다', async () => {

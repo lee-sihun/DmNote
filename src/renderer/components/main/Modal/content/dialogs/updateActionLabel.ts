@@ -36,6 +36,8 @@ export const resolveAutoUpdateActionLabel = ({
       return t('update.phaseInstalling');
     case 'restarting':
       return t('update.phaseRestarting');
+    case 'installed':
+      return t('update.phaseInstalled');
     case 'idle':
     default:
       return isAutoUpdating ? t('update.autoUpdating') : t('update.autoUpdate');

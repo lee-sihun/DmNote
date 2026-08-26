@@ -461,6 +461,8 @@
     "phaseVerifying": "Проверка...",
     "phaseInstalling": "Установка...",
     "phaseRestarting": "Перезапуск...",
+    "phaseInstalled": "Установлено — перезапустите",
+    "installedRestartFailed": "Обновление установлено. Перезапустите DM NOTE, чтобы использовать новую версию.",
     "later": "Позже",
     "checkUpdate": "Проверить",
     "checking": "Проверка...",

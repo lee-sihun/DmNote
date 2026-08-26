@@ -7,7 +7,20 @@ export type AutoUpdatePhase =
   | 'downloading'
   | 'verifying'
   | 'installing'
-  | 'restarting';
+  | 'restarting'
+  | 'installed'; // 설치는 끝났지만 재시작 요청 실패 — 사용자가 직접 다시 실행
+
+// 설치는 끝났지만 재시작 요청이 실패한 경우 — 새 버전은 다음 실행에 적용됨
+export class UpdateInstalledRestartFailedError extends Error {
+  readonly code = 'UPDATE_INSTALLED_RESTART_FAILED';
+  readonly originalError: unknown;
+
+  constructor(cause: unknown) {
+    super(getErrorMessage(cause));
+    this.name = 'UpdateInstalledRestartFailedError';
+    this.originalError = cause;
+  }
+}
 
 const GITHUB_REPO = 'DmNote-App/DmNote';
 const STORAGE_KEY = 'dmnote:skipped-version';
@@ -335,15 +348,9 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
     try {
       await appApi.autoUpdate(normalizedTag);
-      settled = true;
-      // 재시작 요청까지 보낸 상태 — 프로세스가 곧 종료됨.
-      // isAutoUpdating은 유지해 재클릭(중복 설치)을 막고, 재시작이 취소되면 dismissUpdate로 초기화
-      set({
-        autoUpdatePhase: 'restarting',
-        autoUpdateProgress: null,
-      });
     } catch (e) {
       settled = true;
+      unsubscribe();
       clearPendingPostUpdateReleaseNotice();
       const message = getErrorMessage(e);
       set({
@@ -353,8 +360,27 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         error: message,
       });
       throw e;
-    } finally {
-      unsubscribe();
+    }
+
+    settled = true;
+    unsubscribe();
+    // 설치 완료 → 재시작 요청. isAutoUpdating은 유지해 재클릭(중복 설치)을 막고,
+    // 재시작이 취소되면 dismissUpdate로 초기화
+    set({
+      autoUpdatePhase: 'restarting',
+      autoUpdateProgress: null,
+    });
+
+    try {
+      await appApi.restart();
+    } catch (e) {
+      // 새 버전은 이미 디스크에 있음 — 릴리즈 노트 예약은 유지하고 재시작만 실패로 알림.
+      // isAutoUpdating을 유지해 중복 설치를 막고, 모달을 닫으면(dismissUpdate) 초기화
+      set({
+        autoUpdatePhase: 'installed',
+        autoUpdateProgress: null,
+      });
+      throw new UpdateInstalledRestartFailedError(e);
     }
   },
 

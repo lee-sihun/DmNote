@@ -31,6 +31,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { usePluginDisplayElementsResponder } from '@hooks/app/usePluginDisplayElementsResponder';
 import {
+  UpdateInstalledRestartFailedError,
   useUpdateCheck,
   hasPendingPostUpdateReleaseNotice,
   clearPendingPostUpdateReleaseNotice,
@@ -408,6 +409,20 @@ export default function App() {
     try {
       await runAutoUpdate(updateInfo.latestVersion);
     } catch (error) {
+      if (error instanceof UpdateInstalledRestartFailedError) {
+        // 대개 에디터 저장 실패로 재시작이 취소된 경우 — 원인을 함께 보여줌
+        console.error(
+          'Update installed but restart failed:',
+          error.originalError,
+        );
+        const restartDetail = getErrorMessage(error.originalError);
+        showAlert(
+          restartDetail
+            ? `${t('update.installedRestartFailed')}\n${restartDetail}`
+            : t('update.installedRestartFailed'),
+        );
+        return;
+      }
       const detail = getErrorMessage(error);
       console.error('Automatic update failed:', error);
       if (detail) {

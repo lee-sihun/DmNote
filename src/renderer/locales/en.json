@@ -461,6 +461,8 @@
     "phaseVerifying": "Verifying...",
     "phaseInstalling": "Installing...",
     "phaseRestarting": "Restarting...",
+    "phaseInstalled": "Installed — relaunch to apply",
+    "installedRestartFailed": "The update was installed. Relaunch DM NOTE to use the new version.",
     "later": "Later",
     "checkUpdate": "Check for Updates",
     "checking": "Checking...",
