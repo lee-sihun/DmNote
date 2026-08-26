@@ -553,7 +553,8 @@ export function useGridSelection({
         );
         const keyCode = index >= 0 ? currentMappings[index] : undefined;
         const position = index >= 0 ? currentPositions[index] : undefined;
-        if (keyCode && position) {
+        // 미할당 키는 빈 문자열 슬롯이라 truthy 검사로 거르면 복사가 누락된다
+        if (keyCode !== undefined && position) {
           clipboardItems.push({
             type: 'key',
             keyCode: cloneSlot(keyCode),
