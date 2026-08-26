@@ -263,7 +263,8 @@ const fragmentShader = `
     float r = clamp(vRadius, 0.0, min(vHalfSize.x, vHalfSize.y));
     vec2 q = abs(vLocalPos) - (vHalfSize - vec2(r));
     float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-    float aa = 1.0;
+    // AA 폭은 물리 픽셀 1개(CSS px 단위) - backing 배율이 올라가면 경계 램프가 그만큼 좁아진다
+    float aa = max(uDomPerPx, 0.0001);
 
     // 테두리 디코딩: width에 side mode 인코딩됨 (0~20=all, 100~120=vertical, 200~220=horizontal)
     float encodedWidth = vBorder.x;
@@ -456,9 +457,9 @@ const normalizeFrameLimit = (value: unknown): number => {
 
 const FRAME_PACING_EPSILON_MS = 0.3;
 const MAX_DRIFT_FRAMES = 8;
-// 노트 캔버스 backing 배율 상한 - 좌표계가 CSS px라 위치·크기는 그대로, 픽셀 밀도만 줄어듦
-// GPU 드로우는 fill 비례라 고배율 화면에서 절반~1/3로 감소
-const NOTE_DPR_CAP = 1;
+// 노트 캔버스 backing 배율 상한 - 좌표계가 CSS px라 위치·크기는 그대로, 픽셀 밀도만 달라짐
+// 화면 배율을 따라가 경계를 물리 픽셀 단위로 그리되 극단 배율에서 fill 비용을 묶어둔다
+const NOTE_DPR_CAP = 2;
 
 const resolveDpr = (): number => {
   const rawDpr = window.devicePixelRatio || 1;
