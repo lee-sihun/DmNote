@@ -597,30 +597,54 @@ const rewriteNameList = (
     })
     .join(', ');
 
+// 이름 토큰 재작성 - 따옴표 문자열은 내용 전체가, 따옴표 없는 family는
+// 공백으로 이어진 ident 묶음 전체가 등록된 이름과 일치할 때만 바꾼다.
+// 부분 토큰 치환은 "Pixel Art" 같은 별개 family를 망가뜨린다
+const FAMILY_IDENT_CHARS = 'A-Za-z0-9_\\u0080-\\uFFFF-';
+const FAMILY_RUN_PATTERN = new RegExp(
+  `[${FAMILY_IDENT_CHARS}]+(?:\\s+[${FAMILY_IDENT_CHARS}]+)*`,
+  'g',
+);
+const QUOTED_STRING_PATTERN = /"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'/g;
+
 const rewriteNamedTokens = (
   value: string,
   renames: Map<string, string>,
   caseInsensitive = false,
 ): string => {
-  let out = value;
-  for (const [name, alias] of [...renames.entries()].sort(
-    ([left], [right]) => right.length - left.length,
-  )) {
-    const escaped = escapeRegExp(name);
-    out = out
-      .replace(
-        new RegExp(`(["'])${escaped}\\1`, caseInsensitive ? 'gi' : 'g'),
-        (_match, quote: string) => `${quote}${alias}${quote}`,
-      )
-      .replace(
-        new RegExp(
-          `(^|[^A-Za-z0-9_-])${escaped}(?=$|[^A-Za-z0-9_-])`,
-          caseInsensitive ? 'gi' : 'g',
-        ),
-        (_match, lead: string) => `${lead}${alias}`,
-      );
+  const lookup = (name: string): string | undefined =>
+    renames.get(caseInsensitive ? name.toLowerCase() : name);
+  const rewriteRun = (run: string): string => {
+    const collapsed = run.replace(/\s+/g, ' ');
+    const whole = lookup(collapsed);
+    if (whole !== undefined) return whole;
+    // 정적 변수에 담긴 font 축약형(`700 24px Pixel`) - family는 마지막 size
+    // 토큰 뒤에 온다. `/` 뒤 line-height 키워드 normal도 family가 아니다
+    const words = collapsed.split(' ');
+    let familyStart = 0;
+    words.forEach((word, index) => {
+      if (/^[0-9.+-]/.test(word)) familyStart = index + 1;
+    });
+    if (familyStart === 0 && /^normal$/i.test(words[0])) familyStart = 1;
+    if (familyStart === 0 || familyStart >= words.length) return run;
+    const alias = lookup(words.slice(familyStart).join(' '));
+    return alias === undefined
+      ? run
+      : `${words.slice(0, familyStart).join(' ')} ${alias}`;
+  };
+  const rewriteUnquoted = (segment: string): string =>
+    segment.replace(FAMILY_RUN_PATTERN, rewriteRun);
+  const quoted = new RegExp(QUOTED_STRING_PATTERN.source, 'g');
+  let out = '';
+  let last = 0;
+  for (let match = quoted.exec(value); match; match = quoted.exec(value)) {
+    out += rewriteUnquoted(value.slice(last, match.index));
+    const quote = match[0][0];
+    const alias = lookup(match[0].slice(1, -1));
+    out += alias ? `${quote}${alias}${quote}` : match[0];
+    last = match.index + match[0].length;
   }
-  return out;
+  return out + rewriteUnquoted(value.slice(last));
 };
 
 const collectVarNames = (value: string, out: Set<string>): void => {
@@ -801,6 +825,27 @@ const serializeRuleStyle = (
   return declarations.join(' ');
 };
 
+const FONT_FACE_FAMILY_DESCRIPTOR = /(^|[{;\s])(font-family\s*:\s*)[^;}]*/i;
+
+/**
+ * @font-face 원문 텍스트에서 font-family descriptor만 격리 이름으로 바꾼다.
+ * CSSOM 열거로 재조립하면 엔진이 열거하지 않는 descriptor(src·font-display·
+ * unicode-range)가 빠지므로 텍스트를 유지한다. descriptor를 못 찾으면 null
+ */
+export const rewriteFontFaceCssText = (
+  cssText: string,
+  alias: string,
+): string | null => {
+  const brace = findBlockStart(cssText);
+  if (brace === -1) return null;
+  const block = cssText.slice(brace);
+  const rewritten = block.replace(
+    FONT_FACE_FAMILY_DESCRIPTOR,
+    (_match, lead: string, property: string) => `${lead}${property}"${alias}"`,
+  );
+  return rewritten === block ? null : `@font-face ${rewritten}`;
+};
+
 const renameFontFaceRule = (
   rule: CSSRule,
   renames: Map<string, string>,
@@ -810,10 +855,13 @@ const renameFontFaceRule = (
   const family = normalizeCssName(style.getPropertyValue('font-family'));
   const alias = renames.get(family.toLowerCase());
   if (!alias) return null;
-  return `@font-face { ${serializeRuleStyle(
-    style,
-    new Map([['font-family', `"${alias}"`]]),
-  )} }`;
+  return (
+    rewriteFontFaceCssText(rule.cssText, alias) ??
+    `@font-face { ${serializeRuleStyle(
+      style,
+      new Map([['font-family', `"${alias}"`]]),
+    )} }`
+  );
 };
 
 const renameFontFeatureValuesRule = (
@@ -840,19 +888,15 @@ interface ScopeContext {
   namespacesHoisted: boolean;
 }
 
-// 스타일 규칙 재구성 - 선언부는 CSSOM 직렬화, 중첩 규칙은 재귀 스코프.
-// 원문 블록을 통째로 보존하면 중첩 `&` 확장이 스코프 밖으로 새므로 재구성한다
-const scopeStyleRule = (
-  rule: CSSStyleRule,
-  selectorText: string,
+// 선언부 재작성 - animation 이름, font-family 목록·var() fallback, font 참조 변수.
+// 스타일 규칙 본문과 중첩 규칙 뒤의 선언 묶음이 같은 경로를 쓴다
+const rewriteDeclarations = (
+  style: CSSStyleDeclaration,
   ctx: ScopeContext,
 ): string => {
-  let declarations = rewriteAnimationReferences(
-    rule.style.cssText,
-    ctx.renames,
-  );
+  let declarations = rewriteAnimationReferences(style.cssText, ctx.renames);
   const additions: string[] = [];
-  const fontFamily = rule.style.getPropertyValue('font-family');
+  const fontFamily = style.getPropertyValue('font-family');
   if (fontFamily) {
     // 목록 항목 단위로 바꾼 뒤 var() fallback 안의 이름도 토큰 단위로 재작성
     const rewritten = rewriteNamedTokens(
@@ -865,29 +909,40 @@ const scopeStyleRule = (
         serializeDeclaration(
           'font-family',
           rewritten,
-          rule.style.getPropertyPriority('font-family'),
+          style.getPropertyPriority('font-family'),
         ),
       );
     }
   }
-  for (let index = 0; index < rule.style.length; index += 1) {
-    const property = rule.style.item(index);
+  for (let index = 0; index < style.length; index += 1) {
+    const property = style.item(index);
     if (!property.startsWith('--')) continue;
-    let rewritten = rule.style.getPropertyValue(property);
+    let rewritten = style.getPropertyValue(property);
     if (ctx.fontVariables.has(property)) {
       rewritten = rewriteNamedTokens(rewritten, ctx.fontRenames, true);
     }
-    if (rewritten !== rule.style.getPropertyValue(property)) {
+    if (rewritten !== style.getPropertyValue(property)) {
       additions.push(
         serializeDeclaration(
           property,
           rewritten,
-          rule.style.getPropertyPriority(property),
+          style.getPropertyPriority(property),
         ),
       );
     }
   }
   if (additions.length) declarations = `${declarations} ${additions.join(' ')}`;
+  return declarations;
+};
+
+// 스타일 규칙 재구성 - 선언부는 CSSOM 직렬화, 중첩 규칙은 재귀 스코프.
+// 원문 블록을 통째로 보존하면 중첩 `&` 확장이 스코프 밖으로 새므로 재구성한다
+const scopeStyleRule = (
+  rule: CSSStyleRule,
+  selectorText: string,
+  ctx: ScopeContext,
+): string => {
+  const declarations = rewriteDeclarations(rule.style, ctx);
   const childRules = (rule as unknown as CSSGroupingRule).cssRules;
   const nested = childRules ? scopeRuleList(childRules, ctx, true) : '';
   const body = [declarations, nested].filter(Boolean).join('\n');
@@ -954,7 +1009,7 @@ const scopeRuleList = (
     const style = (rule as CSSStyleRule).style;
     if (nested && style) {
       // 중첩 규칙 뒤에 오는 선언 묶음 - 부모 스코프 안이라 선언만 재작성
-      out.push(rewriteAnimationReferences(style.cssText, ctx.renames));
+      out.push(rewriteDeclarations(style, ctx));
       continue;
     }
     // 격리할 수 없는 나머지 문서 전역 leaf at-rule은 버린다

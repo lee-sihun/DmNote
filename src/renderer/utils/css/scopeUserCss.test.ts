@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   USER_CSS_SCOPE_SELECTOR,
   rewriteAnimationReferences,
+  rewriteFontFaceCssText,
   scopeUserCss,
 } from './scopeUserCss';
 
@@ -636,5 +637,71 @@ describe('scopeUserCss', () => {
   it('파싱용 임시 style 요소를 문서에 남기지 않는다', () => {
     scopeUserCss('.counter { color: red; }', SCOPE);
     expect(document.querySelectorAll('style[media="not all"]').length).toBe(0);
+  });
+});
+
+describe('scopeUserCss font 이름 격리 경계', () => {
+  // jsdom의 CSSOM은 @font-face의 src·font-display를 파싱 단계에서 버리므로
+  // 엔진 직렬화 텍스트를 직접 넣어 재작성 경로를 검증한다
+  it('@font-face의 다른 descriptor는 이름만 바꾸고 보존한다', () => {
+    const out = rewriteFontFaceCssText(
+      '@font-face { font-family: Pixel; src: url("a.woff2") format("woff2"); font-display: swap; unicode-range: U+0000-05FF; }',
+      'dmnu-font-pixel-1',
+    );
+    expect(out).toBe(
+      '@font-face { font-family: "dmnu-font-pixel-1"; src: url("a.woff2") format("woff2"); font-display: swap; unicode-range: U+0000-05FF; }',
+    );
+    expect(
+      rewriteFontFaceCssText('@font-face { src: url("a.woff2"); }', 'x'),
+    ).toBeNull();
+    // 실제 파싱 경로도 같은 텍스트 재작성을 거친다
+    const scoped = compact(
+      scopeUserCss(
+        '@font-face { font-family: Pixel; src: url("a.woff2"); }',
+        SCOPE,
+      ),
+    );
+    expect(scoped).toMatch(/@font-face \{ font-family: "dmnu-font-[\w-]+";/);
+  });
+
+  it('등록된 family를 부분 토큰으로 포함하는 다른 이름은 바꾸지 않는다', () => {
+    const out = compact(
+      scopeUserCss(
+        [
+          '@font-face { font-family: Pixel; src: url("a.woff2"); }',
+          ':root { --g: "Pixel Art"; --h: Pixel Art, Pixel; }',
+          '.a { font-family: "Pixel Art", Pixel, sans-serif; }',
+          '.b { font-family: var(--face, Pixel Art); }',
+          '.c { font-family: var(--g); }',
+          '.d { font-family: var(--h); }',
+        ].join('\n'),
+        SCOPE,
+      ),
+    );
+    const alias = out.match(/font-family: ["']?(dmnu-font-[\w-]+)/)?.[1];
+    expect(alias).toBeTruthy();
+    expect(out).toContain(`font-family: "Pixel Art", ${alias}, sans-serif;`);
+    expect(out).toContain('font-family: var(--face, Pixel Art);');
+    expect(out).toContain('--g: "Pixel Art";');
+    expect(out).toContain(`--h: Pixel Art, ${alias};`);
+  });
+
+  it('정적 변수에 담긴 font 축약형의 family도 격리된 이름으로 바꾼다', () => {
+    const out = compact(
+      scopeUserCss(
+        [
+          '@font-face { font-family: Pixel; src: url("a.woff2"); }',
+          ':root { --f: 700 24px Pixel; --g: italic 12px/1.2 Pixel, serif; --h: 12px/normal Pixel; --i: 12px Pixel Art; }',
+          '.a { font: var(--f); } .b { font: var(--g); } .c { font: var(--h); } .d { font: var(--i); }',
+        ].join('\n'),
+        SCOPE,
+      ),
+    );
+    const alias = out.match(/font-family: ["']?(dmnu-font-[\w-]+)/)?.[1];
+    expect(alias).toBeTruthy();
+    expect(out).toContain(`--f: 700 24px ${alias};`);
+    expect(out).toContain(`--g: italic 12px/1.2 ${alias}, serif;`);
+    expect(out).toContain(`--h: 12px/normal ${alias};`);
+    expect(out).toContain('--i: 12px Pixel Art;');
   });
 });
