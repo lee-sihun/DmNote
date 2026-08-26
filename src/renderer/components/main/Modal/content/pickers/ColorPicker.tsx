@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from '@contexts/useTranslation';
 import {
   SaturationArea,
@@ -297,6 +298,14 @@ const ColorPickerWrapper = ({
 
   // onClose를 래핑하여 팔레트 저장 후 호출
   const handleClose = () => {
+    const ownerDocument = referenceRef.current?.ownerDocument ?? document;
+    const active = ownerDocument.activeElement;
+    if (
+      active?.matches('input, textarea') &&
+      active.closest('[role="dialog"]')
+    ) {
+      flushSync(() => (active as HTMLElement).blur());
+    }
     saveCurrentColorToPalette();
     onClose?.();
   };
@@ -813,6 +822,10 @@ const ColorPickerWrapper = ({
     return opacityPercentMixed.top || opacityPercentMixed.bottom;
   };
 
+  // 배치 값의 반대 축이 Mixed면 대표값으로 그 축을 덮지 않도록 잠근다
+  const rgbEditingDisabled = solidOnly && opacityMixedFor('solid');
+  const alphaEditingDisabled = solidOnly && hexMixed;
+
   const opacityPercentControl = (
     target: OpacityTarget,
   ): PercentInputProps | undefined =>
@@ -833,8 +846,9 @@ const ColorPickerWrapper = ({
   const solidPercentControl: PercentInputProps | undefined = solidOnly
     ? {
         value: Math.round(alpha * 100),
-        label: opacityPercentLabel,
+        label: opacityPercentLabel ?? t('propertiesPanel.opacity'),
         isMixed: opacityMixedFor('solid'),
+        disabled: alphaEditingDisabled,
         onEditStart: startAlphaEdit,
         onPreview: previewAlphaPercent,
         onCommit: commitAlphaPercent,
@@ -889,6 +903,7 @@ const ColorPickerWrapper = ({
 
       <SaturationArea
         color={selectedColor}
+        disabled={rgbEditingDisabled}
         onChange={handleChange}
         onChangeComplete={handleChangeComplete}
       />
@@ -897,12 +912,14 @@ const ColorPickerWrapper = ({
       <div className="flex flex-col gap-[6px]">
         <HueSlider
           color={selectedColor}
+          disabled={rgbEditingDisabled}
           onChange={handleChange}
           onChangeComplete={handleChangeComplete}
         />
         {solidOnly && (
           <AlphaSlider
             color={selectedColor}
+            disabled={alphaEditingDisabled}
             onChange={(color: ColorObject) => {
               // Alpha 변경 시 hex 값은 유지하고 alpha만 동기화 (hex 입력 깜빡임 방지)
               setAlphaWithSync(color.rgb.a, false);
@@ -932,7 +949,9 @@ const ColorPickerWrapper = ({
       {solidOnly || mode === MODES.solid ? (
         <Input
           value={inputValue}
+          ariaLabel={t('noteColor.color')}
           mixed={hexMixed}
+          disabled={rgbEditingDisabled}
           onValueChange={handleInputChange}
           onValueFocus={startSolidInputEdit}
           onValueCommit={commitSolidInput}
@@ -951,6 +970,7 @@ const ColorPickerWrapper = ({
         <GradientInputs
           topValue={gradientTop}
           bottomValue={gradientBottom}
+          colorLabel={t('noteColor.color')}
           onTopChange={(value) => handleGradientInputChange('top', value)}
           onBottomChange={(value) => handleGradientInputChange('bottom', value)}
           onTopFocus={() => startGradientInputEdit('top')}
@@ -1188,6 +1208,7 @@ interface PercentInputProps {
   value: number;
   label?: string;
   isMixed?: boolean;
+  disabled?: boolean;
   /** 포커스 진입. Escape 원복 기준을 잡는 시점 */
   onEditStart?: () => void;
   onPreview: (value: number) => void;
@@ -1201,6 +1222,7 @@ const PercentInput = ({
   value,
   label,
   isMixed,
+  disabled,
   onEditStart,
   onPreview,
   onCommit,
@@ -1213,6 +1235,7 @@ const PercentInput = ({
       max={100}
       width="48px"
       isMixed={isMixed}
+      disabled={disabled}
       ariaLabel={label}
       onPreview={onPreview}
       onChange={onCommit}
@@ -1223,8 +1246,10 @@ const PercentInput = ({
 
 interface InputProps {
   value?: string;
+  ariaLabel?: string;
   /** 배치 선택의 hex가 갈리면 편집 전까지 Mixed placeholder */
   mixed?: boolean;
+  disabled?: boolean;
   onValueChange?: (value: string) => void;
   onValueFocus?: () => void;
   onValueCommit?: () => void;
@@ -1236,7 +1261,9 @@ interface InputProps {
 
 const Input = ({
   value = '',
+  ariaLabel,
   mixed = false,
+  disabled = false,
   onValueChange,
   onValueFocus,
   onValueCommit,
@@ -1262,6 +1289,8 @@ const Input = ({
         />
         <input
           type="text"
+          disabled={disabled}
+          aria-label={ariaLabel}
           value={showMixed ? '' : value}
           placeholder={showMixed ? 'Mixed' : undefined}
           onChange={handleChange}
@@ -1288,7 +1317,7 @@ const Input = ({
               event.currentTarget.blur();
             }
           }}
-          className="block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body text-fg uppercase placeholder:text-fg-faint placeholder:italic placeholder:normal-case"
+          className="block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body text-fg uppercase placeholder:text-fg-faint placeholder:italic placeholder:normal-case disabled:cursor-not-allowed disabled:opacity-50"
         />
       </div>
 
@@ -1300,6 +1329,7 @@ const Input = ({
 interface GradientInputsProps {
   topValue: string;
   bottomValue: string;
+  colorLabel: string;
   onTopChange: (value: string) => void;
   onBottomChange: (value: string) => void;
   onTopFocus: () => void;
@@ -1317,6 +1347,7 @@ interface GradientInputsProps {
 function GradientInputs({
   topValue,
   bottomValue,
+  colorLabel,
   onTopChange,
   onBottomChange,
   onTopFocus,
@@ -1334,6 +1365,7 @@ function GradientInputs({
     <div className="flex flex-col gap-[6px]">
       <GradientInput
         label="Top"
+        ariaLabel={`${colorLabel} Top`}
         value={topValue}
         onChange={onTopChange}
         onFocus={onTopFocus}
@@ -1345,6 +1377,7 @@ function GradientInputs({
       />
       <GradientInput
         label="Bottom"
+        ariaLabel={`${colorLabel} Bottom`}
         value={bottomValue}
         onChange={onBottomChange}
         onFocus={onBottomFocus}
@@ -1360,6 +1393,7 @@ function GradientInputs({
 
 interface GradientInputProps {
   label: string;
+  ariaLabel: string;
   value: string;
   onChange?: (value: string) => void;
   onFocus?: () => void;
@@ -1372,6 +1406,7 @@ interface GradientInputProps {
 
 function GradientInput({
   label,
+  ariaLabel,
   value,
   onChange,
   onFocus,
@@ -1390,13 +1425,17 @@ function GradientInput({
           tabIndex={0}
           onClick={() => onSelect?.()}
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
-            if (e.key === 'Enter') onSelect?.();
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect?.();
+            }
           }}
           className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
           color={value ? `#${value}` : '#561ecb'}
         />
         <input
           type="text"
+          aria-label={ariaLabel}
           value={value}
           onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
             onChange?.(event.target.value)

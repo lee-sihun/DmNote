@@ -588,6 +588,27 @@ describe('숫자 입력 수식 계산', () => {
     expect(document.activeElement).not.toBe(input);
   });
 
+  it('정수 입력의 소수는 숫자 그대로 반올림하고 자릿수를 이어 붙이지 않는다', () => {
+    const commit = vi.fn();
+    const input = renderNumber({ onChange: commit });
+
+    act(() => setInputValue(input, '1.5'));
+    expect(input.value).toBe('1.5');
+    act(() => pressKey(input, 'Enter'));
+
+    expect(commit).toHaveBeenCalledWith(2);
+  });
+
+  it('Optional 정수 입력도 소수를 반올림해 확정한다', () => {
+    const commit = vi.fn();
+    const input = renderOptional({ onChange: commit });
+
+    act(() => setInputValue(input, '1.5'));
+    act(() => input.blur());
+
+    expect(commit).toHaveBeenCalledWith(2);
+  });
+
   it('기존 값 뒤에 수식을 덧붙여 계산한다', () => {
     const commit = vi.fn();
     const input = renderNumber({ onChange: commit });

@@ -38,6 +38,7 @@ export interface NumberInputProps {
   step?: number;
   /** 라벨 없는 자리에서 쓰는 접근성 이름 */
   ariaLabel?: string;
+  disabled?: boolean;
   isMixed?: boolean;
   mixedPlaceholder?: string;
 }
@@ -141,6 +142,7 @@ interface NumberFieldProps {
   /** placeholder 전용 표현 - 레이어에는 해당 없음 */
   placeholderClass?: string;
   ariaLabel?: string;
+  disabled?: boolean;
   pop: DigitPopState | null;
   invalid: boolean;
   tooltip: string;
@@ -162,6 +164,7 @@ const NumberInputField: React.FC<NumberFieldProps> = ({
   textClass,
   placeholderClass = '',
   ariaLabel,
+  disabled,
   pop,
   invalid,
   tooltip,
@@ -197,6 +200,7 @@ const NumberInputField: React.FC<NumberFieldProps> = ({
       <input
         ref={inputRef}
         type="text"
+        disabled={disabled}
         inputMode={inputMode}
         value={value}
         onChange={onChange}
@@ -230,7 +234,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   onBlur,
   onPreview,
   onCancel,
-  // 미지정 방향은 무제한 — 플러그인 설정 스키마의 optional min/max 계약과 동일
+  // 미지정 방향은 무제한, 플러그인 설정 스키마의 optional min/max 계약과 동일
   min = Number.NEGATIVE_INFINITY,
   max = Number.POSITIVE_INFINITY,
   prefix,
@@ -240,6 +244,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   decimalScale = 1,
   step,
   ariaLabel,
+  disabled = false,
   isMixed = false,
   mixedPlaceholder = 'Mixed',
 }) => {
@@ -288,8 +293,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     // 잘라서 받으면 사용자가 넣지 않은 다른 유효 수식이 확정될 수 있어 통째로 거절한다
     if (raw.length > MAX_EXPRESSION_LENGTH) return null;
     if (!ARITHMETIC_INPUT_PATTERN.test(raw)) return null;
-    if (isPartialNumericInput(raw) || canParseNumericInput(raw)) {
+    if (isPartialNumericInput(raw)) {
       return sanitizeNumericInput(raw);
+    }
+    if (canParseNumericInput(raw)) {
+      return !supportsDecimal && raw.includes('.')
+        ? raw
+        : sanitizeNumericInput(raw);
     }
     return raw;
   };
@@ -304,7 +314,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       return null;
     }
 
-    return clampValue(Number(input));
+    const parsed = Number(input);
+    return clampValue(supportsDecimal ? parsed : Math.round(parsed));
   };
 
   const evaluateAndClampExpression = (input: string): number | null => {
@@ -737,6 +748,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
             : ''
         }
         ariaLabel={ariaLabel}
+        disabled={disabled}
         pop={digitPop.pop}
         invalid={fieldError.active}
         tooltip={messages.expressionHint}
@@ -808,8 +820,11 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     // 잘라서 받으면 사용자가 넣지 않은 다른 유효 수식이 확정될 수 있어 통째로 거절한다
     if (raw.length > MAX_EXPRESSION_LENGTH) return null;
     if (!ARITHMETIC_INPUT_PATTERN.test(raw)) return null;
-    if (isPartialNumericInput(raw) || canParseNumericInput(raw)) {
+    if (isPartialNumericInput(raw)) {
       return sanitizeInput(raw);
+    }
+    if (canParseNumericInput(raw)) {
+      return !supportsDecimal && raw.includes('.') ? raw : sanitizeInput(raw);
     }
     return raw;
   };
@@ -1127,7 +1142,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     const numValue = Number(newValue);
     if (!Number.isFinite(numValue)) return;
 
-    emitValue(clampValue(numValue));
+    emitValue(clampValue(supportsDecimal ? numValue : Math.round(numValue)));
   };
 
   const handleFocus = () => {
@@ -1201,7 +1216,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       return;
     }
 
-    const clamped = clampValue(Number(cleaned));
+    const parsed = Number(cleaned);
+    const clamped = clampValue(supportsDecimal ? parsed : Math.round(parsed));
     syncText(getDisplayValue(clamped));
     cancelPendingCommit();
     onChange(clamped);

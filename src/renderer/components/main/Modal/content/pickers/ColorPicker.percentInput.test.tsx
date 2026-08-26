@@ -6,8 +6,19 @@ vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock('@components/main/Grid/PropertiesPanel/PickerSurface', () => ({
-  default: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  default: ({
+    children,
+    onClose,
+    ariaLabel,
+  }: {
+    children: React.ReactNode;
+    onClose?: () => void;
+    ariaLabel?: string;
+  }) => (
+    <div role="dialog" aria-label={ariaLabel}>
+      {children}
+      <button type="button" data-testid="close-picker" onClick={onClose} />
+    </div>
   ),
 }));
 vi.mock('@components/main/common/TabSwitch', () => ({ default: () => null }));
@@ -473,6 +484,30 @@ describe('ColorPicker 불투명도 % 입력', () => {
       expect(hexInput().value).toBe('FFFFFF');
     });
 
+    it('RGB가 Mixed면 대표 RGB로 덮지 않도록 alpha 편집을 잠근다', () => {
+      renderMixedSolid({ hexMixed: true });
+
+      expect(percentInput().disabled).toBe(true);
+      expect(
+        container
+          .querySelector('[role="slider"][aria-label="Alpha"]')
+          ?.getAttribute('aria-disabled'),
+      ).toBe('true');
+    });
+
+    it('alpha가 Mixed면 대표 alpha로 덮지 않도록 RGB 편집을 잠근다', () => {
+      renderMixedSolid({ opacityPercentMixed: true });
+
+      expect(hexInput().disabled).toBe(true);
+      expect(
+        container
+          .querySelector(
+            '[role="slider"][aria-label="Saturation and brightness"]',
+          )
+          ?.getAttribute('aria-disabled'),
+      ).toBe('true');
+    });
+
     it('Mixed hex 칸을 손대지 않고 blur하면 대표값을 확정하지 않는다', () => {
       const { onColorChange, onColorChangeComplete } = renderMixedSolid({
         hexMixed: true,
@@ -618,6 +653,24 @@ describe('ColorPicker 불투명도 % 입력', () => {
       act(() => pressKey(input, 'Enter'));
 
       expect(onColorChange).toHaveBeenCalledTimes(previewCount);
+      expect(onColorChangeComplete).toHaveBeenCalledTimes(1);
+      expect(String(onColorChangeComplete.mock.lastCall?.[0])).toMatch(
+        /^rgba\(0, 255, 0, 0.5\)$/,
+      );
+    });
+
+    it('유효한 hex를 입력한 채 닫아도 blur 확정을 먼저 보낸다', () => {
+      const { onColorChangeComplete } = renderSolid();
+      const input = hexInputs()[0];
+
+      act(() => input.focus());
+      act(() => setInputValue(input, '00FF00'));
+      act(() =>
+        container
+          .querySelector<HTMLButtonElement>('[data-testid="close-picker"]')!
+          .click(),
+      );
+
       expect(onColorChangeComplete).toHaveBeenCalledTimes(1);
       expect(String(onColorChangeComplete.mock.lastCall?.[0])).toMatch(
         /^rgba\(0, 255, 0, 0.5\)$/,
