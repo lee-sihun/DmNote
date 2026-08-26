@@ -351,6 +351,7 @@ interface SingleGraphPanelProps {
   onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
+  handleGeometryPreview?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
   setShowGraphImagePicker: (value: boolean) => void;
@@ -383,6 +384,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   onPaintPreview,
   onPaintCommit,
   handleGeometryCommit,
+  handleGeometryPreview,
   singleScrollRefFor,
   showGraphImagePicker,
   setShowGraphImagePicker,
@@ -463,6 +465,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   onChange={(value) => {
                     handleGeometryCommit?.('dx', value);
                   }}
+                  onPreview={(value) => handleGeometryPreview?.('dx', value)}
+                  onCancel={() => editGestureController.cancel()}
                   prefix="X"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -475,6 +479,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   onChange={(value) => {
                     handleGeometryCommit?.('dy', value);
                   }}
+                  onPreview={(value) => handleGeometryPreview?.('dy', value)}
+                  onCancel={() => editGestureController.cancel()}
                   prefix="Y"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -488,9 +494,12 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleGraphPosition.width || 200)}
                   onChange={(value) => {
-                    const width = Math.max(20, value);
-                    handleGeometryCommit?.('width', width);
+                    handleGeometryCommit?.('width', Math.max(20, value));
                   }}
+                  onPreview={(value) =>
+                    handleGeometryPreview?.('width', Math.max(20, value))
+                  }
+                  onCancel={() => editGestureController.cancel()}
                   prefix="W"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -499,9 +508,12 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleGraphPosition.height || 100)}
                   onChange={(value) => {
-                    const height = Math.max(20, value);
-                    handleGeometryCommit?.('height', height);
+                    handleGeometryCommit?.('height', Math.max(20, value));
                   }}
+                  onPreview={(value) =>
+                    handleGeometryPreview?.('height', Math.max(20, value))
+                  }
+                  onCancel={() => editGestureController.cancel()}
                   prefix="H"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -837,6 +849,7 @@ interface SingleKnobPanelProps {
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
+  handleGeometryPreview?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
@@ -867,6 +880,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   onPaintCommit,
   onShadowCommit,
   handleGeometryCommit,
+  handleGeometryPreview,
   singleScrollRefFor,
   panelElement,
   useCustomCSS,
@@ -878,6 +892,16 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   const [axisCaptureTarget, setAxisCaptureTarget] = useState<string | null>(
     null,
   );
+  // 민감도는 오버레이 프리뷰 대상이 아니라 확정 전까지 패널 안에서만 값을 들고 있는다
+  // 노브 id로 묶어야 대상이 바뀐 첫 렌더에 이전 노브의 미확정 값이 새 칸에 비치지 않는다
+  const [sensitivityDraft, setSensitivityDraft] = useState<{
+    id: string;
+    value: number;
+  } | null>(null);
+  const sensitivityDraftValue =
+    sensitivityDraft?.id === singleKnobPosition.id
+      ? sensitivityDraft.value
+      : null;
   const [classNameDraft, setClassNameDraft] = useState(
     singleKnobPosition.className || '',
   );
@@ -1242,6 +1266,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   onChange={(value) => {
                     handleGeometryCommit?.('dx', value);
                   }}
+                  onPreview={(value) => handleGeometryPreview?.('dx', value)}
+                  onCancel={() => editGestureController.cancel()}
                   prefix="X"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -1254,6 +1280,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   onChange={(value) => {
                     handleGeometryCommit?.('dy', value);
                   }}
+                  onPreview={(value) => handleGeometryPreview?.('dy', value)}
+                  onCancel={() => editGestureController.cancel()}
                   prefix="Y"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -1267,9 +1295,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleKnobPosition.width || 60)}
                   onChange={(value) => {
-                    const width = Math.max(20, value);
-                    handleGeometryCommit?.('width', width);
+                    handleGeometryCommit?.('width', Math.max(20, value));
                   }}
+                  onPreview={(value) =>
+                    handleGeometryPreview?.('width', Math.max(20, value))
+                  }
+                  onCancel={() => editGestureController.cancel()}
                   prefix="W"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -1278,9 +1309,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleKnobPosition.height || 60)}
                   onChange={(value) => {
-                    const height = Math.max(20, value);
-                    handleGeometryCommit?.('height', height);
+                    handleGeometryCommit?.('height', Math.max(20, value));
                   }}
+                  onPreview={(value) =>
+                    handleGeometryPreview?.('height', Math.max(20, value))
+                  }
+                  onCancel={() => editGestureController.cancel()}
                   prefix="H"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -1295,13 +1329,24 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 label={t('propertiesPanel.knobSensitivity') || '민감도'}
               >
                 <NumberInput
-                  value={Number(singleKnobPosition.sensitivity ?? 1)}
-                  onChange={(value) =>
+                  value={
+                    sensitivityDraftValue ??
+                    Number(singleKnobPosition.sensitivity ?? 1)
+                  }
+                  onChange={(value) => {
+                    setSensitivityDraft(null);
                     onElementPropertyCommit?.({
                       property: 'sensitivity',
                       value: Math.max(0, value),
+                    });
+                  }}
+                  onPreview={(value) =>
+                    setSensitivityDraft({
+                      id: singleKnobPosition.id,
+                      value: Math.max(0, value),
                     })
                   }
+                  onCancel={() => setSensitivityDraft(null)}
                   suffix="×"
                   min={0}
                   max={100}

@@ -1404,12 +1404,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     value: number,
   ) => {
     const patch = geometryAxisPatch(field, value);
-    const ownsPreviewGesture = type === 'key' || type === 'stat';
-    const gestureId = ownsPreviewGesture
-      ? editGestureController.activeGestureId() ?? undefined
-      : undefined;
+    // 네 종류 모두 숫자 입력이 preview 게스처를 열므로 커밋이 그 게스처를 정산한다
+    const gestureId = editGestureController.activeGestureId() ?? undefined;
     const persisted = commitElementGeometryById(type, id, patch, { gestureId });
-    if (ownsPreviewGesture) editGestureController.settleCommit(persisted);
+    editGestureController.settleCommit(persisted);
     void persisted.catch((error) => {
       console.error('Failed to update element geometry', error);
     });
@@ -2993,6 +2991,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          handleGeometryPreview={stableGeometryPreviewHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           handleGeometryCommit={stableGeometryHandler(
             'knob',
             selectedKnobElements[0]?.id,
@@ -3056,6 +3058,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             selectedGraphElements[0]?.id,
           )}
           onIdleImageFitCommit={stableIdleImageFitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          handleGeometryPreview={stableGeometryPreviewHandler(
             'graph',
             selectedGraphElements[0]?.id,
           )}
