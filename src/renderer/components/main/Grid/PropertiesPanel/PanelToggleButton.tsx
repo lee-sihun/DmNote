@@ -2,6 +2,7 @@ import { usePressAction } from '@hooks/usePressAction';
 import React, { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
+import { SIDE_PANEL_MATERIAL_CLASS } from './panelChrome';
 import {
   useOptimisticBooleanCommit,
   type CommitStrategy,
@@ -107,7 +108,7 @@ const PanelToggleButton = ({
         <span
           ref={chipRef}
           aria-hidden="true"
-          className="absolute inset-0 rounded-[8px] bg-glass-panel shadow-elevation-chrome"
+          className={`absolute inset-0 rounded-[8px] ${SIDE_PANEL_MATERIAL_CLASS} shadow-elevation-chrome`}
         />
         <svg
           className="relative"

@@ -2,8 +2,11 @@
 // 프레임이 글래스 재질을 소유하고, 페이지 전환 시 콘텐츠 레이어만 슬라이드
 // 상주 풀하이트 표면의 라이브 블러 — 캔버스 damage마다 재필터되므로
 // Windows에서 키 연타 프레임 실측이 유지 조건 (미달 시 bg-glass-panel-solid로 복귀)
-export const SIDE_PANEL_FRAME_CLASS =
-  'absolute right-0 top-0 bottom-0 w-[240px] bg-glass-panel backdrop-glass-popup backdrop-glass-canvas shadow-elevation-panel z-[var(--z-chrome-panel)]';
+// 사이드 패널 재질 - 프레임과 접힘 토글 칩이 같은 글래스를 공유
+export const SIDE_PANEL_MATERIAL_CLASS =
+  'bg-glass-panel backdrop-glass-popup backdrop-glass-canvas';
+
+export const SIDE_PANEL_FRAME_CLASS = `absolute right-0 top-0 bottom-0 w-[240px] ${SIDE_PANEL_MATERIAL_CLASS} shadow-elevation-panel z-[var(--z-chrome-panel)]`;
 
 // 구상 패널 루트 — 프레임을 꽉 채우는 투명 레이어
 export const PANEL_ROOT_CLASS = 'absolute inset-0 flex flex-col';
