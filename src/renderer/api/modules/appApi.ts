@@ -1,6 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { AppAutoUpdateResult } from '@src/types/plugin/api';
+import type {
+  AppAutoUpdateResult,
+  ReadyUnsubscribe,
+  UpdateProgressEvent,
+} from '@src/types/plugin/api';
+import { subscribe } from './shared';
 import { assertCanonicalEditorDocument } from '@src/types/editor';
 
 import type {
@@ -79,6 +84,11 @@ export const appApi = {
       return result;
     });
   },
+  // 자동 업데이트 진행 단계 (다운로드 % / 검증 / 설치)
+  onUpdateProgress: (
+    listener: (event: UpdateProgressEvent) => void,
+  ): ReadyUnsubscribe =>
+    subscribe<UpdateProgressEvent>('update:progress', listener),
   openExternal: (url: string) => invoke<void>('app_open_external', { url }),
   restart: () =>
     runAfterEditorFlush('app restart', () => invoke<void>('app_restart')),

@@ -1,5 +1,13 @@
 import { create } from 'zustand';
 import { appApi } from '@api/modules/appApi';
+import type { UpdateProgressEvent } from '@src/types/plugin/api';
+
+export type AutoUpdatePhase =
+  | 'idle'
+  | 'downloading'
+  | 'verifying'
+  | 'installing'
+  | 'restarting';
 
 const GITHUB_REPO = 'DmNote-App/DmNote';
 const STORAGE_KEY = 'dmnote:skipped-version';
@@ -31,6 +39,8 @@ interface UpdateState {
   updateInfo: UpdateInfo | null;
   isChecking: boolean;
   isAutoUpdating: boolean;
+  autoUpdatePhase: AutoUpdatePhase;
+  autoUpdateProgress: number | null; // 다운로드 % (알 수 없으면 null)
   error: string | null;
   dismissed: boolean;
   cacheUntil: number | null;
@@ -162,6 +172,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   updateInfo: null,
   isChecking: false,
   isAutoUpdating: false,
+  autoUpdatePhase: 'idle',
+  autoUpdateProgress: null,
   error: null,
   dismissed: false,
   cacheUntil: getCacheUntil(),
@@ -299,20 +311,45 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
     set({
       isAutoUpdating: true,
+      autoUpdatePhase: 'idle',
+      autoUpdateProgress: null,
       error: null,
     });
 
     // 성공적으로 재시작된 다음 실행에서 릴리즈 노트 모달을 1회 노출
     setPostUpdateNoticeVersion(normalizedTag);
 
+    // 백엔드 진행 단계 반영 — 성공/실패 모두 finally에서 해제
+    const unsubscribe = appApi.onUpdateProgress(
+      (event: UpdateProgressEvent) => {
+        set({
+          autoUpdatePhase: event.phase,
+          autoUpdateProgress:
+            event.phase === 'downloading' ? event.percent : null,
+        });
+      },
+    );
+
     try {
       await appApi.autoUpdate(normalizedTag);
-      set({ isAutoUpdating: false });
+      // 재시작 요청까지 보낸 상태 — 프로세스가 곧 종료됨
+      set({
+        isAutoUpdating: false,
+        autoUpdatePhase: 'restarting',
+        autoUpdateProgress: null,
+      });
     } catch (e) {
       clearPendingPostUpdateReleaseNotice();
       const message = getErrorMessage(e);
-      set({ isAutoUpdating: false, error: message });
+      set({
+        isAutoUpdating: false,
+        autoUpdatePhase: 'idle',
+        autoUpdateProgress: null,
+        error: message,
+      });
       throw e;
+    } finally {
+      unsubscribe();
     }
   },
 
@@ -339,6 +376,8 @@ export function useUpdateCheck() {
     updateInfo: store.updateInfo,
     isChecking: store.isChecking,
     isAutoUpdating: store.isAutoUpdating,
+    autoUpdatePhase: store.autoUpdatePhase,
+    autoUpdateProgress: store.autoUpdateProgress,
     error: store.error,
     dismissUpdate: store.dismissUpdate,
     skipVersion: store.skipVersion,

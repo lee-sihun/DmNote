@@ -17,6 +17,7 @@ import { usePalette } from '@hooks/Modal/usePalette';
 import CustomAlert from '@components/main/Modal/content/dialogs/Alert';
 import NoteSettingModal from '@components/main/Modal/content/settings/NoteSetting';
 import UpdateModal from '@components/main/Modal/content/dialogs/UpdateModal';
+import { resolveAutoUpdateActionLabel } from '@components/main/Modal/content/dialogs/updateActionLabel';
 import PropertiesPanelHost from '@components/main/Grid/PropertiesPanelHost';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { ShortcutBinding } from '@src/types/settings/shortcuts';
@@ -86,6 +87,8 @@ export default function App() {
     checkForUpdates,
     runAutoUpdate,
     isAutoUpdating,
+    autoUpdatePhase,
+    autoUpdateProgress,
   } = useUpdateCheck();
 
   const [pendingPostUpdateNotice, setPendingPostUpdateNotice] = useState(() =>
@@ -844,13 +847,13 @@ export default function App() {
           onSkipVersion={skipVersion}
           isLatestVersion={shownUpdate.isLatestVersion}
           onPrimaryAction={handleUpdatePrimaryAction}
-          primaryActionLabel={
-            autoUpdateEnabled
-              ? isAutoUpdating
-                ? t('update.autoUpdating')
-                : t('update.autoUpdate')
-              : t('update.goToRelease')
-          }
+          primaryActionLabel={resolveAutoUpdateActionLabel({
+            autoUpdateEnabled,
+            isAutoUpdating,
+            phase: autoUpdatePhase,
+            progress: autoUpdateProgress,
+            t,
+          })}
           primaryActionDisabled={isAutoUpdating}
         />
       )}

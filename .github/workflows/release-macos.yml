@@ -259,6 +259,7 @@ jobs:
           spctl -a -vvv -t open --context context:primary-signature "$DMG"
 
           # 자산 이름은 GitHub의 공백→점 치환에 맡기지 않고 고정
+          # — 앱 내 자동 업데이트(update_macos.rs asset_candidates)가 이 이름에 의존
           ASSET_PATH="$RUNNER_TEMP/DM.NOTE_${VERSION}_universal.dmg"
           cp "$DMG" "$ASSET_PATH"
           shasum -a 256 "$ASSET_PATH"

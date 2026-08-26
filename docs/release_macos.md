@@ -39,6 +39,8 @@ git push origin main X.Y.Z
 
 태그 푸시 → 워크플로가 draft 릴리즈 `DM NOTE v X.Y.Z`를 만들고 `DM.NOTE_X.Y.Z_universal.dmg`를 첨부한다. 이후:
 
+> 자산 이름 `DM.NOTE_<tag>_{aarch64|x64|universal}.dmg`는 **앱 내 자동 업데이트가 의존하는 계약**이다 (`src-tauri/src/commands/app/update_macos.rs`의 `asset_candidates`). 아키텍처 전용 자산이 있으면 그것을 우선 받으므로, 서명·공증되지 않은 DMG를 그 이름으로 수동 업로드하지 말 것.
+
 1. 한국어 릴리즈 노트 작성 (영어 노트는 `docs/releases/X.Y.Z_en.md`)
 2. Windows 자산(`DM.NOTE.exe`, `DM.NOTE.v.X.Y.Z.zip`) 수동 업로드
 3. **Publish** → `update-website.yml`이 DmSite 갱신을 트리거
