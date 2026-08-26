@@ -49,53 +49,10 @@ export interface PropertyRowProps {
   children: React.ReactNode;
 }
 
-export interface NumberInputProps {
-  value: number | string;
-  onChange: (value: number) => void;
-  /** 타이핑 callback을 첫 paint 뒤로 미뤄 입력 echo를 우선 반영 */
-  commitStrategy?: CommitStrategy;
-  /** 확정값을 함께 받는다. onChange가 예약한 state는 같은 이벤트에서 아직 이전 값이다 */
-  onBlur?: (value?: number) => void;
-  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
-  onPreview?: (value: number) => void;
-  /** Escape 원복 시 호출 (게스처 취소 연동) */
-  onCancel?: () => void;
-  min?: number;
-  max?: number;
-  prefix?: string;
-  suffix?: string;
-  width?: string;
-  allowDecimal?: boolean;
-  decimalScale?: number;
-  /** 방향키 눈금. 미지정이면 1, Shift는 이 값의 10배 */
-  step?: number;
-  isMixed?: boolean;
-  mixedPlaceholder?: string;
-}
-
-export interface OptionalNumberInputProps {
-  value?: number;
-  onChange: (value?: number) => void;
-  /** 타이핑 callback을 첫 paint 뒤로 미뤄 입력 echo를 우선 반영 */
-  commitStrategy?: CommitStrategy;
-  /** 확정값을 함께 받는다. onChange가 예약한 state는 같은 이벤트에서 아직 이전 값이다 */
-  onBlur?: (value?: number) => void;
-  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
-  onPreview?: (value?: number) => void;
-  /** Escape 원복 시 호출 (게스처 취소 연동) */
-  onCancel?: () => void;
-  min?: number;
-  max?: number;
-  prefix?: string;
-  suffix?: string;
-  width?: string;
-  placeholder?: string;
-  allowNegative?: boolean;
-  allowDecimal?: boolean;
-  decimalScale?: number;
-  isMixed?: boolean;
-  mixedPlaceholder?: string;
-}
+export type {
+  NumberInputProps,
+  OptionalNumberInputProps,
+} from '@components/main/common/NumberInput';
 
 export interface ColorInputProps {
   value: string;
