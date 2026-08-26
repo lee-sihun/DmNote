@@ -5,7 +5,7 @@
 
 export const NOTE_SETTINGS_CONSTRAINTS = {
   borderRadius: {
-    min: 1,
+    min: 0,
     max: 100,
     default: 4,
   },

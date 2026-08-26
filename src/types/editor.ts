@@ -1687,7 +1687,7 @@ const isEditorElementPropertyValueValid = (
         elementType === 'key' &&
         typeof value === 'number' &&
         Number.isFinite(value) &&
-        value >= 1 &&
+        value >= 0 &&
         value <= 100
       );
     case 'noteAlignment':

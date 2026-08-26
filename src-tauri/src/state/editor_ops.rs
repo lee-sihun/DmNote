@@ -1814,11 +1814,11 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         }
                     }
                     if let EditorElementPropertyPatchV1::NoteBorderRadius(patch) = patch {
-                        if !patch.is_finite() || !(1.0..=100.0).contains(patch) {
+                        if !patch.is_finite() || !(0.0..=100.0).contains(patch) {
                             return Err(EditorCommitError::validation(
                                 "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
                                 format!(
-                                    "editor op {op_index} note border radius must be finite and between 1 and 100"
+                                    "editor op {op_index} note border radius must be finite and between 0 and 100"
                                 ),
                             ));
                         }
@@ -8827,7 +8827,7 @@ mod tests {
                 "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
             ),
             (
-                EditorElementPropertyPatchV1::NoteBorderRadius(0.9),
+                EditorElementPropertyPatchV1::NoteBorderRadius(-0.1),
                 "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
             ),
             (

@@ -2224,7 +2224,7 @@ const invalidNoteStylePatch = (
   (patch.property === 'noteBorderRadius' &&
     (hasNonKeyTarget ||
       !Number.isFinite(patch.value) ||
-      patch.value < 1 ||
+      patch.value < 0 ||
       patch.value > 100));
 
 export const patchStylePropertyById = (

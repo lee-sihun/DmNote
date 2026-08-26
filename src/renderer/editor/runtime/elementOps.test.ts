@@ -2682,7 +2682,7 @@ describe('elementOps', () => {
     [
       'border radius range',
       'key',
-      { property: 'noteBorderRadius', value: 0.9 },
+      { property: 'noteBorderRadius', value: -0.1 },
     ],
   ] as const)(
     'note numeric %s는 wire 전에 거절한다',
