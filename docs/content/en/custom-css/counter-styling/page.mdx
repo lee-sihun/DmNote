@@ -51,6 +51,14 @@ Counters support the following CSS variables:
   over with `--counter-fill-position` and `--counter-fill-size`.
 </Callout>
 
+<Callout type="warning">
+  **Counter outline support has ended.** The `--counter-stroke-*` variables and
+  the outline settings in the properties panel were removed. Saved outline
+  settings are cleared on load, and custom CSS that sets `--counter-stroke-*`
+  no longer has any effect. Use `text-shadow` or `-webkit-text-stroke` on
+  `.counter` instead.
+</Callout>
+
 ## Inactive State Style
 
 Counter style when the key is not pressed:

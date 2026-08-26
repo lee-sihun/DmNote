@@ -18,7 +18,7 @@ const ReloadButton = ({
   <button
     type="button"
     onClick={onClick}
-    disabled={disabled}
+    disabled={disabled || busy}
     title={title}
     aria-busy={busy || undefined}
     className={
@@ -27,7 +27,7 @@ const ReloadButton = ({
         ? 'bg-fill-faint text-fg-disabled cursor-not-allowed'
         : 'bg-fill text-fg hover:bg-fill-hover')
     }
-    style={busy ? { opacity: 0.65, pointerEvents: 'none' } : undefined}
+    style={busy ? { opacity: 0.65 } : undefined}
   >
     <ReloadIcon spinning={busy} />
   </button>

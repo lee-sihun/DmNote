@@ -50,6 +50,13 @@ description: CSS로 키 카운터의 모양과 효과를 커스터마이징하�
   `--counter-fill-position`과 `--counter-fill-size`로 직접 제어할 수 있습니다.
 </Callout>
 
+<Callout type="warning">
+  **카운터 외곽선 지원이 종료되었습니다.** `--counter-stroke-*` 변수와 속성
+  패널의 외곽선 설정은 제거되었습니다. 저장된 외곽선 설정은 로드 시 정리되며,
+  `--counter-stroke-*`를 설정하는 커스텀 CSS는 더 이상 효과가 없습니다. 대신
+  `.counter`에 `text-shadow`나 `-webkit-text-stroke`를 사용하세요.
+</Callout>
+
 ## 비활성 상태 스타일
 
 키를 누르지 않았을 때의 카운터 스타일입니다:
