@@ -5,10 +5,7 @@ import {
   DEFAULT_FONT_FAMILY,
   normalizeFontFamilyName,
 } from '@src/types/settings/fonts';
-import {
-  findNearestFontWeight,
-  getCommonSupportedFontWeights,
-} from '@utils/core/fontWeights';
+import { getCommonSupportedFontWeights } from '@utils/core/fontWeights';
 
 interface FontWeightDropdownProps {
   fontFamilies: readonly (string | null | undefined)[];
@@ -38,16 +35,24 @@ const FontWeightDropdown = ({
       ]),
     [builtinFonts, customFonts, familyKey],
   );
-  const displayedWeight = findNearestFontWeight(value, supportedWeights);
+  // 저장값(600 등)이 지원 목록에 없어도 그대로 보여준다 - 최근접값으로 바꿔 보이면
+  // 표시와 저장이 어긋나고, 같은 값을 다시 골라도 커밋이 안 나가 되돌릴 수 없다
+  const options = useMemo(() => {
+    const weights =
+      !isMixed && Number.isFinite(value) && !supportedWeights.includes(value)
+        ? [...supportedWeights, value].sort((a, b) => a - b)
+        : supportedWeights;
+    return weights.map((weight) => ({
+      label: String(weight),
+      value: String(weight),
+    }));
+  }, [isMixed, supportedWeights, value]);
 
   return (
     <Dropdown
       commitStrategy="after-paint"
-      options={supportedWeights.map((weight) => ({
-        label: String(weight),
-        value: String(weight),
-      }))}
-      value={isMixed ? '' : String(displayedWeight)}
+      options={options}
+      value={isMixed ? '' : String(value)}
       placeholder={isMixed ? 'Mixed' : '—'}
       disabled={supportedWeights.length === 0}
       widthClass="w-[72px]"

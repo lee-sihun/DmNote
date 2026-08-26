@@ -69,7 +69,7 @@ export const BUILTIN_FONTS: CustomFont[] = [
     name: DEFAULT_FONT_FAMILY,
     displayName: 'Pretendard Variable',
     enabled: true,
-    weightRanges: [{ min: 45, max: 920 }],
+    weightRanges: [{ min: 45, max: 930 }],
   },
   {
     id: 'suit',
@@ -514,11 +514,6 @@ export function validateWebFontFaceCss(
     familyNames,
     detectedWeights,
   });
-}
-
-// CSS에서 font-family 이름 추출
-export function extractFontFamilyFromCSS(css: string): string | null {
-  return validateWebFontFaceCss(css).detectedFontFamily;
 }
 
 // 미리보기 초안 CSS 생성 — 최상위 @font-face 블록만 추출해 family를 초안 이름으로 치환
