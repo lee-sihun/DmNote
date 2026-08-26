@@ -1808,8 +1808,8 @@ describe('FontStyleToggle visual-first commit', () => {
   });
 
   it.each([
-    ['onBoldChange', true, 'fontWeight', 700],
-    ['onBoldChange', false, 'fontWeight', 400],
+    ['onBoldChange', true, 'fontBold', true],
+    ['onBoldChange', false, 'fontBold', false],
     ['onItalicChange', true, 'fontItalic', true],
     ['onUnderlineChange', false, 'fontUnderline', false],
     ['onStrikethroughChange', true, 'fontStrikethrough', true],

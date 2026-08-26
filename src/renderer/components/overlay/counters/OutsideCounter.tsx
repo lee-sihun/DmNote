@@ -72,6 +72,7 @@ const OutsideCounter = ({
         fontSize={counterSettings.fontSize}
         fontFamily={counterSettings.fontFamily}
         fontWeight={counterSettings.fontWeight}
+        fontBold={counterSettings.fontBold}
         fontItalic={counterSettings.fontItalic}
         fontUnderline={counterSettings.fontUnderline}
         fontStrikethrough={counterSettings.fontStrikethrough}

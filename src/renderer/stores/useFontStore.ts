@@ -134,11 +134,22 @@ function getFontFormatFromPath(path: string): string {
   }
 }
 
-function buildLocalFontFaceCSS(fontFamily: string, localPath: string): string {
+function buildLocalFontFaceCSS(font: CustomFont): string {
+  const localPath = font.localPath as string;
+  const fontFamily = font.name;
   const safeFamily = escapeCssString(fontFamily);
   const url = convertFileSrc(localPath);
   const format = getFontFormatFromPath(localPath);
-  return `@font-face {\n  font-family: '${safeFamily}';\n  src: url('${url}') format('${format}');\n  font-weight: normal;\n  font-style: normal;\n  font-display: swap;\n}`;
+  const ranges =
+    font.weightRanges && font.weightRanges.length > 0
+      ? font.weightRanges
+      : [{ min: 400, max: 400 }];
+  return ranges
+    .map(({ min, max }) => {
+      const weight = min === max ? String(min) : `${min} ${max}`;
+      return `@font-face {\n  font-family: '${safeFamily}';\n  src: url('${url}') format('${format}');\n  font-weight: ${weight};\n  font-style: normal;\n  font-display: swap;\n}`;
+    })
+    .join('\n');
 }
 
 // 활성화된 폰트 CSS를 DOM과 동기화 (추가/제거 모두)
@@ -155,7 +166,7 @@ export function syncFontCSS(): void {
   fonts.forEach((font) => {
     const css =
       font.type === 'local' && font.localPath
-        ? buildLocalFontFaceCSS(font.name, font.localPath)
+        ? buildLocalFontFaceCSS(font)
         : (font.cssContent as string);
     injectFontCSS(font.id, css);
     desiredIds.add(font.id);

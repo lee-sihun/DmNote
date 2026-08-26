@@ -272,6 +272,9 @@ const getFontStylePatch = (
   ) {
     return { property: 'fontWeight', value: values.fontWeight as number };
   }
+  if (keys[0] === 'fontBold' && typeof values.fontBold === 'boolean') {
+    return { property: 'fontBold', value: values.fontBold };
+  }
   if (keys[0] === 'fontItalic' && typeof values.fontItalic === 'boolean') {
     return { property: 'fontItalic', value: values.fontItalic };
   }
@@ -1446,9 +1449,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id: string | undefined,
   ) =>
     id && isNativeElementId(id)
-      ? (patch: EditorElementPropertyPatchV1) => {
+      ? (
+          patch: EditorElementPropertyPatchV1,
+          options?: { gestureId?: string },
+        ) => {
           // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
-          const persisted = patchElementPropertyById(type, id, patch);
+          const persisted = options?.gestureId
+            ? patchElementPropertyById(type, id, patch, {
+                gestureId: options.gestureId,
+              })
+            : patchElementPropertyById(type, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update element property', error);
           });
@@ -1739,8 +1749,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id: string | undefined,
   ) =>
     id && isNativeElementId(id)
-      ? (patch: EditorCounterTypographyPropertyPatchV1) => {
-          const persisted = patchCounterTypographyById(elementType, id, patch);
+      ? (
+          patch: EditorCounterTypographyPropertyPatchV1,
+          options?: { gestureId?: string },
+        ) => {
+          const persisted = options?.gestureId
+            ? patchCounterTypographyById(elementType, id, patch, {
+                gestureId: options.gestureId,
+              })
+            : patchCounterTypographyById(elementType, id, patch);
           void persisted.catch((error) => {
             console.error('Failed to update counter typography', error);
           });
@@ -2138,6 +2155,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 단일 키 업데이트 객체를 받는다. 아래 get*Patch 헬퍼가 태그 유니온으로 바꿔 wire에 올린다
   const handleBatchElementPropertyCommit = (
     patch: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
   ) => {
     const fontStylePatch = getFontStylePatch(patch);
     const fontFamilyPatch = getFontFamilyPatch(patch);
@@ -2152,11 +2170,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       targets.some((target) => !isNativeElementId(target.id))
     )
       return;
+    const gestureId = options?.gestureId;
     const commit =
       fontStylePatch !== null
-        ? patchFontStyleByTargets(targets, fontStylePatch)
+        ? gestureId
+          ? patchFontStyleByTargets(targets, fontStylePatch, { gestureId })
+          : patchFontStyleByTargets(targets, fontStylePatch)
         : fontFamilyPatch !== null
-        ? patchFontFamilyByTargets(targets, fontFamilyPatch)
+        ? gestureId
+          ? patchFontFamilyByTargets(targets, fontFamilyPatch, { gestureId })
+          : patchFontFamilyByTargets(targets, fontFamilyPatch)
         : patchUseInlineStylesByTargets(targets, useInlineStyles!);
     void commit.catch((error) => {
       console.error('Failed to batch update element style property', error);

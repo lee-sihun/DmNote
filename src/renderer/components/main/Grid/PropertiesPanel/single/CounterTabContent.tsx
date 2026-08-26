@@ -16,12 +16,17 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
+import FontWeightDropdown from '../FontWeightDropdown';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import { usePanelNav } from '../PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
-import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
+import {
+  DEFAULT_COUNTER_FONT_SIZE,
+  DEFAULT_COUNTER_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useFontStore } from '@stores/useFontStore';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { createCounterAnimationPresetIntent } from '@src/types/key/counterAnimation';
 import {
@@ -29,6 +34,7 @@ import {
   gradientToCss,
   type ColorModeValue,
 } from '@src/types/color';
+import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-counter:font';
@@ -343,17 +349,36 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           />
         </PropertyRow>
 
+        {/* 폰트 굵기 */}
+        <PropertyRow label={t('counterSetting.fontWeight') || '폰트 굵기'}>
+          <FontWeightDropdown
+            fontFamilies={[
+              counterSettings.fontFamily ??
+                (counterSettings.placement === 'inside'
+                  ? keyPosition.fontFamily ?? null
+                  : null),
+            ]}
+            value={counterSettings.fontWeight ?? DEFAULT_COUNTER_FONT_WEIGHT}
+            onChange={(value) => {
+              onCounterTypographyCommit?.({
+                property: 'counterFontWeight',
+                value,
+              });
+            }}
+          />
+        </PropertyRow>
+
         {/* 폰트 스타일 */}
         <PropertyRow label={t('counterSetting.fontStyle') || '폰트 스타일'}>
           <FontStyleToggle
-            isBold={(counterSettings.fontWeight ?? 400) >= 700}
+            isBold={counterSettings.fontBold ?? false}
             isItalic={counterSettings.fontItalic ?? false}
             isUnderline={counterSettings.fontUnderline ?? false}
             isStrikethrough={counterSettings.fontStrikethrough ?? false}
             onBoldChange={(value) => {
               onCounterTypographyCommit?.({
-                property: 'counterFontWeight',
-                value: value ? 700 : 400,
+                property: 'counterFontBold',
+                value,
               });
             }}
             onItalicChange={(value) => {
@@ -450,10 +475,24 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             selectedFont={counterSettings.fontFamily || null}
             onFontSelect={(fontName) => {
               if (fontName !== null) {
-                onCounterTypographyCommit?.({
-                  property: 'counterFontFamily',
-                  value: fontName,
-                });
+                const currentWeight =
+                  counterSettings.fontWeight ?? DEFAULT_COUNTER_FONT_WEIGHT;
+                const nextWeight = resolveSupportedFontWeight(
+                  fontName,
+                  useFontStore.getState().getAllFonts(),
+                );
+                // 굵기 재선택은 폰트 변경과 한 undo 단계
+                const gestureId = crypto.randomUUID();
+                onCounterTypographyCommit?.(
+                  { property: 'counterFontFamily', value: fontName },
+                  { gestureId },
+                );
+                if (nextWeight !== currentWeight) {
+                  onCounterTypographyCommit?.(
+                    { property: 'counterFontWeight', value: nextWeight },
+                    { gestureId },
+                  );
+                }
               }
             }}
             pageTitle={t('counterSetting.font') || '폰트'}

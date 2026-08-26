@@ -17814,6 +17814,7 @@ mod tests {
             enabled: true,
             local_path: None,
             css_content: Some("initial-font-css".to_string()),
+            weight_ranges: Vec::new(),
         };
         store
             .update(|data| {
@@ -17878,6 +17879,7 @@ mod tests {
             enabled: true,
             local_path: None,
             css_content: Some("preset-font-css".to_string()),
+            weight_ranges: Vec::new(),
         };
         let transaction = store
             .commit_preset_editor_transaction(
@@ -20720,6 +20722,7 @@ mod tests {
                     enabled: true,
                     local_path: Some("file:///tmp/broken%ZZ.ttf".to_string()),
                     css_content: None,
+                    weight_ranges: Vec::new(),
                 });
             })
             .unwrap();
@@ -20774,6 +20777,7 @@ mod tests {
             enabled: true,
             local_path: Some("C:unresolved-font.ttf".to_string()),
             css_content: None,
+            weight_ranges: Vec::new(),
         });
         data.key_positions.insert(
             "unresolved-mode".to_string(),
@@ -20892,6 +20896,7 @@ mod tests {
             enabled: true,
             local_path: Some(foreign_font.clone()),
             css_content: None,
+            weight_ranges: Vec::new(),
         });
         data.sound_library.insert(
             foreign_sound.clone(),
@@ -21643,6 +21648,7 @@ mod tests {
             enabled: true,
             local_path: Some(font_path.to_string_lossy().to_string()),
             css_content: None,
+            weight_ranges: Vec::new(),
         })
         .unwrap();
         font.as_object_mut()

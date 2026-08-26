@@ -61,6 +61,10 @@ import type {
   EditorPatchV1,
   EditorLegacyPatchV1,
 } from '@src/types/editor';
+import {
+  implicitCounterFontBold,
+  implicitElementFontBold,
+} from '@utils/core/fontWeights';
 
 export type EditorApplyReason =
   | 'initial'
@@ -675,9 +679,25 @@ const applySemanticOps = (
               const counter = position.counter as
                 | Record<string, unknown>
                 | undefined;
+              // 백엔드와 같은 암묵 Bold 고정 (fontWeights.implicitCounterFontBold)
               return {
                 ...position,
-                counter: { ...counter, fontWeight: op.patch.value },
+                counter: {
+                  ...counter,
+                  fontWeight: op.patch.value,
+                  ...(typeof counter?.fontBold !== 'boolean'
+                    ? { fontBold: implicitCounterFontBold(counter?.fontWeight) }
+                    : {}),
+                },
+              };
+            }
+            if (op.patch.property === 'counterFontBold') {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, fontBold: op.patch.value },
               };
             }
             if (op.patch.property === 'counterFontItalic') {
@@ -761,7 +781,17 @@ const applySemanticOps = (
               };
             }
             if (op.patch.property === 'fontWeight') {
-              return { ...position, fontWeight: op.patch.value };
+              // 백엔드와 같은 암묵 Bold 고정 (fontWeights.implicitElementFontBold)
+              return {
+                ...position,
+                fontWeight: op.patch.value,
+                ...(position.fontBold == null
+                  ? { fontBold: implicitElementFontBold(position.fontWeight) }
+                  : {}),
+              };
+            }
+            if (op.patch.property === 'fontBold') {
+              return { ...position, fontBold: op.patch.value };
             }
             if (op.patch.property === 'fontItalic') {
               return { ...position, fontItalic: op.patch.value };

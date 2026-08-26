@@ -9,6 +9,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import {
   DEFAULT_FONT_FAMILY,
+  normalizeFontFamilyName,
   type CustomFont,
 } from '@src/types/settings/fonts';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
@@ -88,7 +89,15 @@ const FontPicker = ({
 
   // 필터링된 폰트 목록 (비활성 폰트도 노출 — 행에서 흐리게 표시)
   const filteredFonts = (() => {
-    let fonts: CustomFont[] = [...builtinFonts, ...customFonts];
+    const familyNames = new Set<string>();
+    let fonts: CustomFont[] = [...builtinFonts, ...customFonts].filter(
+      (font) => {
+        const familyName = normalizeFontFamilyName(font.name);
+        if (familyNames.has(familyName)) return false;
+        familyNames.add(familyName);
+        return true;
+      },
+    );
 
     if (filterType !== 'all') {
       fonts = fonts.filter((f) => f.type === filterType);

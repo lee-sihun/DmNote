@@ -18,11 +18,17 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
+import FontWeightDropdown from '../FontWeightDropdown';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
 import { usePanelNav } from '../PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
-import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
+import {
+  DEFAULT_COUNTER_FONT_SIZE,
+  DEFAULT_COUNTER_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
+import { useFontStore } from '@stores/useFontStore';
+import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
@@ -37,6 +43,7 @@ const ANIMATION_PAGE_KEY = BATCH_COUNTER_ANIMATION_PAGE_KEY;
 interface BatchCounterTabContentProps {
   // 카운터 설정 (첫 번째 선택 키 기준)
   batchCounterSettings: KeyCounterSettings;
+  selectedCounterSettings?: KeyCounterSettings[];
   // 첫 번째 선택 키의 시각 정보 (프리뷰용)
   keyVisual?: CounterAnimationKeyVisual;
   onCounterEnabledCommit?: (enabled: boolean) => void;
@@ -44,6 +51,7 @@ interface BatchCounterTabContentProps {
   onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
   onCounterTypographyCommit?: (
     patch: EditorCounterTypographyPropertyPatchV1,
+    options?: { gestureId?: string },
   ) => void;
   // 컬러 디스플레이 (현재 상태 기준)
   colorState: 'idle' | 'active';
@@ -63,6 +71,7 @@ interface BatchCounterTabContentProps {
 
 const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   batchCounterSettings,
+  selectedCounterSettings = [batchCounterSettings],
   keyVisual,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
@@ -79,6 +88,15 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   // 인-패널 내비게이션 (폰트/애니메이션 서브 페이지)
   const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
     usePanelNav();
+  const counterFontFamilies = selectedCounterSettings.map(
+    (settings) => settings.fontFamily,
+  );
+  const counterWeight =
+    batchCounterSettings.fontWeight ?? DEFAULT_COUNTER_FONT_WEIGHT;
+  const counterWeightMixed = selectedCounterSettings.some(
+    (settings) =>
+      (settings.fontWeight ?? DEFAULT_COUNTER_FONT_WEIGHT) !== counterWeight,
+  );
 
   // 모션 편집기를 기다린 비동기 완료. ID 결합이면 시작 시점 선택 요소들에
   // 적용하되, 피커가 소유한 preset 필드만 쓰고 각 요소의 fresh enabled는
@@ -273,17 +291,32 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           />
         </PropertyRow>
 
+        {/* 폰트 굵기 */}
+        <PropertyRow label={t('counterSetting.fontWeight') || '폰트 굵기'}>
+          <FontWeightDropdown
+            fontFamilies={counterFontFamilies}
+            value={counterWeight}
+            isMixed={counterWeightMixed}
+            onChange={(value) => {
+              onCounterTypographyCommit?.({
+                property: 'counterFontWeight',
+                value,
+              });
+            }}
+          />
+        </PropertyRow>
+
         {/* 폰트 스타일 */}
         <PropertyRow label={t('counterSetting.fontStyle') || '폰트 스타일'}>
           <FontStyleToggle
-            isBold={(batchCounterSettings.fontWeight ?? 400) >= 700}
+            isBold={batchCounterSettings.fontBold ?? false}
             isItalic={batchCounterSettings.fontItalic ?? false}
             isUnderline={batchCounterSettings.fontUnderline ?? false}
             isStrikethrough={batchCounterSettings.fontStrikethrough ?? false}
             onBoldChange={(value) => {
               onCounterTypographyCommit?.({
-                property: 'counterFontWeight',
-                value: value ? 700 : 400,
+                property: 'counterFontBold',
+                value,
               });
             }}
             onItalicChange={(value) => {
@@ -349,10 +382,22 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             selectedFont={batchCounterSettings.fontFamily || null}
             onFontSelect={(fontFamily) => {
               if (fontFamily !== null) {
-                onCounterTypographyCommit?.({
-                  property: 'counterFontFamily',
-                  value: fontFamily,
-                });
+                const nextWeight = resolveSupportedFontWeight(
+                  fontFamily,
+                  useFontStore.getState().getAllFonts(),
+                );
+                // 굵기 재선택은 폰트 변경과 한 undo 단계
+                const gestureId = crypto.randomUUID();
+                onCounterTypographyCommit?.(
+                  { property: 'counterFontFamily', value: fontFamily },
+                  { gestureId },
+                );
+                if (counterWeightMixed || nextWeight !== counterWeight) {
+                  onCounterTypographyCommit?.(
+                    { property: 'counterFontWeight', value: nextWeight },
+                    { gestureId },
+                  );
+                }
               }
             }}
             pageTitle={t('counterSetting.font') || '폰트'}

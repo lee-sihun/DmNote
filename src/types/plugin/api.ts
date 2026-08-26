@@ -116,6 +116,7 @@ export type FontLoadResult = {
   error?: string;
   fontName?: string;
   fontPath?: string;
+  weightRanges?: Array<{ min: number; max: number }>;
 };
 
 export type ImageLoadResult = {

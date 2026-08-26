@@ -473,6 +473,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: Some("@font-face{}".to_string()),
+                weight_ranges: Vec::new(),
             }],
         };
         let expected_js = CustomJs {

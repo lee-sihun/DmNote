@@ -1038,10 +1038,14 @@ describe('single geometry input bindings', () => {
 
       act(() => captured.font?.onFontSelect('  Raw Counter Family  '));
 
-      expect(typography).toHaveBeenCalledWith({
-        property: 'counterFontFamily',
-        value: '  Raw Counter Family  ',
-      });
+      expect(typography).toHaveBeenCalledWith(
+        {
+          property: 'counterFontFamily',
+          value: '  Raw Counter Family  ',
+        },
+        // 굵기 재선택 커밋과 한 undo 단계로 묶는 gestureId
+        { gestureId: expect.any(String) },
+      );
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -1074,7 +1078,7 @@ describe('single geometry input bindings', () => {
       act(() => captured.fontStyle?.onStrikethroughChange(true));
       expect(typography.mock.calls).toEqual([
         [{ property: 'counterFontSize', value: 72 }],
-        [{ property: 'counterFontWeight', value: 700 }],
+        [{ property: 'counterFontBold', value: true }],
         [{ property: 'counterFontItalic', value: true }],
         [{ property: 'counterFontUnderline', value: true }],
         [{ property: 'counterFontStrikethrough', value: true }],

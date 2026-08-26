@@ -31,11 +31,20 @@ const buildPreviewCSS = (font: CustomFont): string | null => {
 
   if (font.type === 'local' && font.localPath) {
     const url = convertFileSrc(font.localPath);
-    return `@font-face {\n  font-family: '${escapeCssString(
-      previewFontFamily,
-    )}';\n  src: url('${url}') format('${getFontFormatFromPath(
-      font.localPath,
-    )}');\n  font-weight: normal;\n  font-style: normal;\n  font-display: swap;\n}`;
+    const ranges =
+      font.weightRanges && font.weightRanges.length > 0
+        ? font.weightRanges
+        : [{ min: 400, max: 400 }];
+    return ranges
+      .map(({ min, max }) => {
+        const weight = min === max ? String(min) : `${min} ${max}`;
+        return `@font-face {\n  font-family: '${escapeCssString(
+          previewFontFamily,
+        )}';\n  src: url('${url}') format('${getFontFormatFromPath(
+          font.localPath as string,
+        )}');\n  font-weight: ${weight};\n  font-style: normal;\n  font-display: swap;\n}`;
+      })
+      .join('\n');
   }
 
   if (font.type === 'web' && font.cssContent) {

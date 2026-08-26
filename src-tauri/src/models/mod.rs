@@ -336,6 +336,13 @@ pub enum FontType {
     Web,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FontWeightRange {
+    pub min: u16,
+    pub max: u16,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CustomFont {
@@ -349,6 +356,8 @@ pub struct CustomFont {
     pub local_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub css_content: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub weight_ranges: Vec<FontWeightRange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -654,6 +663,10 @@ pub struct KeyPosition {
     /// 글꼴 굵기 (CSS font-weight 값, 예: 400, 700)
     #[serde(default)]
     pub font_weight: Option<u32>,
+    /// 선택 굵기에 +300을 적용하는 Bold 토글 - None은 직렬화하지 않는다
+    /// (IPC에서 null로 나가면 프론트 스키마가 거부해 설정 전체가 기본값으로 떨어진다)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_bold: Option<bool>,
     /// 이탤릭체 여부
     #[serde(default)]
     pub font_italic: Option<bool>,
@@ -740,7 +753,8 @@ impl Default for KeyPosition {
             active_image_fit: None,
             use_inline_styles: None,
             display_text: None,
-            font_weight: None,
+            font_weight: Some(400),
+            font_bold: Some(true),
             font_italic: None,
             font_underline: None,
             font_strikethrough: None,
@@ -1123,6 +1137,10 @@ pub struct KeyCounterSettings {
     pub font_size: u32,
     #[serde(default = "default_counter_font_weight")]
     pub font_weight: u32,
+    /// 선택 굵기에 +300을 적용하는 Bold 토글 - None은 직렬화하지 않는다
+    /// (IPC에서 null로 나가면 프론트 스키마가 거부해 설정 전체가 기본값으로 떨어진다)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_bold: Option<bool>,
     /// 카운터 글꼴 패밀리 (커스텀 폰트 이름)
     #[serde(default)]
     pub font_family: Option<String>,
@@ -1149,6 +1167,7 @@ impl Default for KeyCounterSettings {
             gap: default_gap(),
             font_size: default_counter_font_size(),
             font_weight: default_counter_font_weight(),
+            font_bold: Some(false),
             font_family: None,
             font_italic: false,
             font_underline: false,
@@ -1159,6 +1178,16 @@ impl Default for KeyCounterSettings {
 }
 
 impl KeyCounterSettings {
+    pub(crate) fn migrate_legacy_font_weight(&mut self) -> bool {
+        if self.font_bold.is_some() || self.font_weight != 700 {
+            return false;
+        }
+
+        self.font_weight = 400;
+        self.font_bold = Some(true);
+        true
+    }
+
     pub fn normalize(&mut self) {
         self.animation.normalize();
     }
@@ -1176,6 +1205,7 @@ impl KeyCounterSettings {
             && self.gap == 6
             && self.font_size == 16
             && self.font_weight == 400
+            && self.font_bold.is_none()
             && self.font_family.is_none()
             && !self.font_italic
             && !self.font_underline
@@ -1192,6 +1222,7 @@ impl KeyCounterSettings {
             && self.gap == 6
             && self.font_size == 16
             && self.font_weight == 700
+            && self.font_bold.is_none()
             && self.font_family.is_none()
             && !self.font_italic
             && !self.font_underline
@@ -1210,6 +1241,7 @@ impl KeyCounterSettings {
             self.gap = default_gap();
             self.font_size = default_counter_font_size();
             self.font_weight = default_counter_font_weight();
+            self.font_bold = Some(false);
             self.animation = KeyCounterAnimationSettings::default();
             self.normalize();
             return true;
@@ -1221,6 +1253,7 @@ impl KeyCounterSettings {
             self.gap = default_gap();
             self.font_size = default_counter_font_size();
             self.font_weight = default_counter_font_weight();
+            self.font_bold = Some(false);
             self.normalize();
             return true;
         }
@@ -1350,6 +1383,17 @@ pub(crate) fn scrub_removed_text_outline_fields(value: &mut serde_json::Value) -
 }
 
 impl KeyPosition {
+    pub(crate) fn migrate_legacy_font_weight(&mut self) -> bool {
+        let mut changed = false;
+        if self.font_bold.is_none() && self.font_weight == Some(700) {
+            self.font_weight = Some(400);
+            self.font_bold = Some(true);
+            changed = true;
+        }
+
+        changed | self.counter.migrate_legacy_font_weight()
+    }
+
     /// 본체 페인트를 글로우로 복사. 바뀐 게 있으면 true
     pub(crate) fn mirror_note_body_to_glow(&mut self) -> bool {
         let changed = self.note_glow_gradient != self.note_gradient
@@ -2962,6 +3006,43 @@ mod tests {
         let mappings: KeyMappings = serde_json::from_value(raw.clone()).unwrap();
 
         assert_eq!(serde_json::to_value(mappings).unwrap(), raw);
+    }
+
+    #[test]
+    fn legacy_700_weights_migrate_to_400_with_bold_modifier() {
+        let mut raw = serde_json::to_value(KeyPosition::default()).unwrap();
+        let object = raw.as_object_mut().unwrap();
+        object.insert("fontWeight".to_string(), serde_json::json!(700));
+        object.remove("fontBold");
+        let counter = object["counter"].as_object_mut().unwrap();
+        counter.insert("fontWeight".to_string(), serde_json::json!(700));
+        counter.remove("fontBold");
+
+        let mut position: KeyPosition = serde_json::from_value(raw).unwrap();
+        assert!(position.migrate_legacy_font_weight());
+        assert_eq!(position.font_weight, Some(400));
+        assert_eq!(position.font_bold, Some(true));
+        assert_eq!(position.counter.font_weight, 400);
+        assert_eq!(position.counter.font_bold, Some(true));
+        assert!(!position.migrate_legacy_font_weight());
+    }
+
+    #[test]
+    fn legacy_non_bold_weights_remain_sparse() {
+        let mut raw = serde_json::to_value(KeyPosition::default()).unwrap();
+        let object = raw.as_object_mut().unwrap();
+        object.insert("fontWeight".to_string(), serde_json::json!(600));
+        object.remove("fontBold");
+        let counter = object["counter"].as_object_mut().unwrap();
+        counter.insert("fontWeight".to_string(), serde_json::json!(500));
+        counter.remove("fontBold");
+
+        let mut position: KeyPosition = serde_json::from_value(raw).unwrap();
+        assert!(!position.migrate_legacy_font_weight());
+        assert_eq!(position.font_weight, Some(600));
+        assert_eq!(position.font_bold, None);
+        assert_eq!(position.counter.font_weight, 500);
+        assert_eq!(position.counter.font_bold, None);
     }
 
     #[test]

@@ -1154,6 +1154,7 @@ const CounterAnimationEditorModal = ({
                         counterSettings?.fontWeight ??
                         DEFAULT_COUNTER_FONT_WEIGHT
                       }
+                      fontBold={counterSettings?.fontBold ?? false}
                       fontItalic={counterSettings?.fontItalic ?? false}
                       fontUnderline={counterSettings?.fontUnderline ?? false}
                       fontStrikethrough={

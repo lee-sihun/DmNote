@@ -24,11 +24,13 @@ import {
 import { createFontStyleToggleHandlers } from '../fontStyleToggleHandlers';
 import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useFontStore } from '@stores/useFontStore';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '../../../Modal/content/pickers/FontPickerOpenButton';
+import FontWeightDropdown from '../FontWeightDropdown';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
 import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
@@ -49,10 +51,12 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
+  DEFAULT_ELEMENT_FONT_BOLD,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
@@ -556,6 +560,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const handleStyleChangeComplete = (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
+    options?: { gestureId?: string },
   ) => {
     if (
       onStylePropertyCommit &&
@@ -575,10 +580,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     }
     // property와 value의 상관은 TS가 못 잡아 캐스트가 남는다. 모양은 wire 계약과
     // 같고 값 유효성은 하류 검증이 잡는다. 단일 키 객체를 보내면 조용히 폐기된다
-    onElementPropertyCommit?.({
-      property,
-      value,
-    } as EditorElementPropertyPatchV1);
+    onElementPropertyCommit?.(
+      {
+        property,
+        value,
+      } as EditorElementPropertyPatchV1,
+      options,
+    );
   };
 
   // 이미지 변경 핸들러
@@ -966,6 +974,15 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           />
         </PropertyRow>
 
+        {/* 글꼴 굵기 */}
+        <PropertyRow label={t('propertiesPanel.fontWeight') || '글꼴 굵기'}>
+          <FontWeightDropdown
+            fontFamilies={[keyPosition.fontFamily]}
+            value={keyPosition.fontWeight ?? DEFAULT_ELEMENT_BASE_FONT_WEIGHT}
+            onChange={(value) => handleStyleChangeComplete('fontWeight', value)}
+          />
+        </PropertyRow>
+
         {/* 글꼴 색상 */}
         <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
           <ColorSwatchButton
@@ -983,7 +1000,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
           <FontStyleToggle
             isBold={
-              (keyPosition.fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT) >= 700
+              keyPosition.fontBold ??
+              (keyPosition.fontWeight == null
+                ? DEFAULT_ELEMENT_FONT_BOLD
+                : keyPosition.fontWeight === 700)
             }
             isItalic={keyPosition.fontItalic ?? false}
             isUnderline={keyPosition.fontUnderline ?? false}
@@ -1174,7 +1194,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             open
             selectedFont={keyPosition.fontFamily || null}
             onFontSelect={(fontName) => {
-              handleStyleChangeComplete('fontFamily', fontName);
+              if (fontName === null) return;
+              const currentWeight =
+                keyPosition.fontWeight ?? DEFAULT_ELEMENT_BASE_FONT_WEIGHT;
+              const nextWeight = resolveSupportedFontWeight(
+                fontName,
+                useFontStore.getState().getAllFonts(),
+              );
+              // 굵기 재선택은 폰트 변경과 한 undo 단계 - 따로 되돌리면 새 폰트에
+              // 지원하지 않는 굵기가 남는다
+              const gestureId = crypto.randomUUID();
+              handleStyleChangeComplete('fontFamily', fontName, { gestureId });
+              if (nextWeight !== currentWeight) {
+                handleStyleChangeComplete('fontWeight', nextWeight, {
+                  gestureId,
+                });
+              }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}
             onBack={closePage}

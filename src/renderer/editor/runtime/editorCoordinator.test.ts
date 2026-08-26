@@ -3655,12 +3655,69 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
-  it('font style 4 leaf를 한 commit으로 적용하고 nested counter를 보존한다', async () => {
+  it('fontWeight 투영은 Bold 미확정 요소의 암묵 Bold를 백엔드와 같은 규칙으로 고정한다', async () => {
+    const legacyId = '00000000-0000-4000-8000-0000000000d1';
+    const counterId = '00000000-0000-4000-8000-0000000000d2';
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id: legacyId,
+          fontWeight: 700,
+          fontBold: undefined,
+        },
+        {
+          ...createDefaultKeyPosition(),
+          id: counterId,
+          counter: {
+            ...createDefaultKeyPosition().counter,
+            fontWeight: 400,
+            fontBold: undefined,
+          },
+        },
+      ],
+    };
+    base.keys = { '4key': ['A', 'B'] };
+    const ops: EditorOpV1[] = [
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: legacyId,
+        patch: { property: 'fontWeight', value: 500 },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: counterId,
+        patch: { property: 'counterFontWeight', value: 700 },
+      },
+    ];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    // 레거시 (700, 미확정)은 Bold였으므로 true로 고정, 굵기만 바뀐다
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      fontWeight: 500,
+      fontBold: true,
+    });
+    // 카운터 (400, 미확정)은 non-bold 고정 - (700, false)라 레거시로 오인되지 않는다
+    expect(outcome.document.keyPositions['4key'][1].counter).toMatchObject({
+      fontWeight: 700,
+      fontBold: false,
+    });
+  });
+
+  it('font style 5 leaf를 한 commit으로 적용하고 nested counter를 보존한다', async () => {
     const ids = [
       '00000000-0000-4000-8000-0000000000c1',
       '00000000-0000-4000-8000-0000000000c2',
       '00000000-0000-4000-8000-0000000000c3',
       '00000000-0000-4000-8000-0000000000c4',
+      '00000000-0000-4000-8000-0000000000c5',
     ];
     const base = makeDocument();
     base.keyPositions = {
@@ -3676,7 +3733,7 @@ describe('commitSemanticOpsInternal', () => {
         },
       })),
     };
-    base.keys = { '4key': ['A', 'B', 'C', 'D'] };
+    base.keys = { '4key': ['A', 'B', 'C', 'D', 'E'] };
     const ops: EditorOpV1[] = [
       {
         kind: 'patchElement',
@@ -3688,18 +3745,24 @@ describe('commitSemanticOpsInternal', () => {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[1],
-        patch: { property: 'fontItalic', value: false },
+        patch: { property: 'fontBold', value: false },
       },
       {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[2],
-        patch: { property: 'fontUnderline', value: false },
+        patch: { property: 'fontItalic', value: false },
       },
       {
         kind: 'patchElement',
         elementType: 'key',
         id: ids[3],
+        patch: { property: 'fontUnderline', value: false },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[4],
         patch: { property: 'fontStrikethrough', value: false },
       },
     ];
@@ -3711,6 +3774,7 @@ describe('commitSemanticOpsInternal', () => {
     expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
     expect(outcome.document.keyPositions['4key']).toEqual([
       expect.objectContaining({ fontWeight: 700 }),
+      expect.objectContaining({ fontBold: false }),
       expect.objectContaining({ fontItalic: false }),
       expect.objectContaining({ fontUnderline: false }),
       expect.objectContaining({ fontStrikethrough: false }),
@@ -3727,7 +3791,7 @@ describe('commitSemanticOpsInternal', () => {
   });
 
   it('fontFamily는 top-level raw leaf만 적용하고 nested counter를 보존한다', async () => {
-    const id = '00000000-0000-4000-8000-0000000000c5';
+    const id = '00000000-0000-4000-8000-0000000000c6';
     const base = withStableId(id);
     base.keyPositions['4key'][0] = {
       ...base.keyPositions['4key'][0],

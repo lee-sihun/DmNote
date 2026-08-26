@@ -18,6 +18,7 @@ export interface CountDisplayProps {
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: number;
+  fontBold?: boolean;
   fontItalic?: boolean;
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
@@ -84,6 +85,7 @@ const CountDisplay = ({
   fontSize,
   fontFamily,
   fontWeight,
+  fontBold,
   fontItalic,
   fontUnderline,
   fontStrikethrough,
@@ -159,9 +161,9 @@ const CountDisplay = ({
     Boolean(fillGradient),
     displayValue,
     // 상태 포함 - data-counter-state 스코프 커스텀 CSS가 메트릭을 바꿀 수 있다
-    `${fontSize}|${fontFamily}|${fontWeight}|${fontItalic}|${
-      active ? 'active' : 'inactive'
-    }`,
+    `${fontSize}|${fontFamily}|${fontWeight}|${
+      fontBold ? 'b' : 'r'
+    }|${fontItalic}|${active ? 'active' : 'inactive'}`,
   );
 
   return (
@@ -178,6 +180,7 @@ const CountDisplay = ({
             fontSize,
             fontFamily,
             fontWeight,
+            fontBold,
             fontItalic,
             fontUnderline,
             fontStrikethrough,

@@ -80,9 +80,9 @@ const KeyCounterPreviewBody = ({
     // 상태 포함 - data-counter-state 스코프 커스텀 CSS가 메트릭을 바꿀 수 있다
     `${counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}|${
       counterSettings.fontFamily
-    }|${counterSettings.fontWeight}|${counterSettings.fontItalic}|${
-      previewActive ? 'active' : 'inactive'
-    }`,
+    }|${counterSettings.fontWeight}|${counterSettings.fontBold ? 'b' : 'r'}|${
+      counterSettings.fontItalic
+    }|${previewActive ? 'active' : 'inactive'}`,
   );
   useCounterAxisAnchor(
     previewSession,
@@ -120,6 +120,7 @@ const KeyCounterPreviewBody = ({
               fontSize: counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE,
               fontFamily: counterSettings.fontFamily,
               fontWeight: counterSettings.fontWeight,
+              fontBold: counterSettings.fontBold,
               fontItalic: counterSettings.fontItalic,
               fontUnderline: counterSettings.fontUnderline,
               fontStrikethrough: counterSettings.fontStrikethrough,

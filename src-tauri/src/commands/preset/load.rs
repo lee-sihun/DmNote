@@ -312,6 +312,12 @@ fn preset_load_from_path(
     let mut stat_positions = preset.stat_positions.unwrap_or_default();
     let mut graph_positions = preset.graph_positions.unwrap_or_default();
     let mut knob_positions = preset.knob_positions.unwrap_or_default();
+    migrate_imported_font_weights(
+        &mut positions,
+        &mut stat_positions,
+        &mut graph_positions,
+        &mut knob_positions,
+    );
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
@@ -614,6 +620,13 @@ fn preset_load_tab_from_path(
     if let Some(v) = imported_knob_positions.get(&source_tab_id) {
         src_knob_positions.insert(current_tab_id.clone(), v.clone());
     }
+
+    migrate_imported_font_weights(
+        &mut src_key_positions,
+        &mut src_stat_positions,
+        &mut src_graph_positions,
+        &mut src_knob_positions,
+    );
 
     let has_tab_note_overrides = tab_note_overrides.is_some();
     let mut imported_tab_note_overrides = tab_note_overrides.unwrap_or_default();
@@ -982,6 +995,26 @@ fn align_imported_key_collections(keys: &mut KeyMappings, positions: &mut KeyPos
     }
 }
 
+fn migrate_imported_font_weights(
+    key_positions: &mut KeyPositions,
+    stat_positions: &mut StatPositions,
+    graph_positions: &mut GraphPositions,
+    knob_positions: &mut KnobPositions,
+) {
+    for position in key_positions.values_mut().flatten() {
+        position.migrate_legacy_font_weight();
+    }
+    for position in stat_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
+    }
+    for position in graph_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
+    }
+    for position in knob_positions.values_mut().flatten() {
+        position.position.migrate_legacy_font_weight();
+    }
+}
+
 fn rekey_full_preset_elements(store: &mut AppStoreData) {
     crate::state::native_element_id::rekey_store_element_ids(store);
 }
@@ -1059,16 +1092,19 @@ fn prepare_tab_preset_fonts(
     mut imported_font_settings: FontSettings,
     restore_fonts: impl FnOnce(&mut FontSettings) -> CmdResult<()>,
 ) -> CmdResult<Option<FontSettings>> {
-    let mut existing_names: HashSet<String> = existing_font_settings
+    let existing_names: HashSet<String> = existing_font_settings
         .custom_fonts
         .iter()
         .map(|font| font.name.clone())
         .collect();
 
-    // 같은 이름은 기존 정의 유지 — 수용한 이름도 반영해 프리셋 내부 중복 방어
-    imported_font_settings
-        .custom_fonts
-        .retain(|font| existing_names.insert(font.name.clone()));
+    // 같은 이름은 기존 정의 유지. 같은 family의 다른 페이스(파일)는 개별 자산이라
+    // 이름으로 묶지 않고, 프리셋 내부 중복은 id 기준으로만 방어
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    imported_font_settings.custom_fonts.retain(|font| {
+        !existing_names.contains(&font.name)
+            && (font.id.is_empty() || seen_ids.insert(font.id.clone()))
+    });
     if imported_font_settings.custom_fonts.is_empty() {
         return Ok(None);
     }
@@ -1095,14 +1131,20 @@ fn merge_prepared_tab_preset_fonts(
     existing_font_settings: &FontSettings,
     mut prepared: FontSettings,
 ) -> Option<FontSettings> {
-    let mut existing_names = existing_font_settings
+    let existing_names = existing_font_settings
         .custom_fonts
         .iter()
         .map(|font| font.name.clone())
         .collect::<HashSet<_>>();
+    let importable_names = prepared
+        .custom_fonts
+        .iter()
+        .filter(|font| !existing_names.contains(&font.name))
+        .map(|font| font.name.clone())
+        .collect::<HashSet<_>>();
     prepared
         .custom_fonts
-        .retain(|font| existing_names.insert(font.name.clone()));
+        .retain(|font| importable_names.contains(&font.name));
     if prepared.custom_fonts.is_empty() {
         return None;
     }
@@ -1679,8 +1721,8 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            CustomCssHistoryEntry, CustomFont, GraphPosition, GraphStatType, GraphType, JsPlugin,
-            KnobPosition, StatPosition, StatType,
+            CustomCssHistoryEntry, CustomFont, FontWeightRange, GraphPosition, GraphStatType,
+            GraphType, JsPlugin, KnobPosition, StatPosition, StatType,
         },
     };
 
@@ -2599,6 +2641,7 @@ mod tests {
                 enabled: true,
                 local_path: Some(existing_path.to_string_lossy().to_string()),
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let imported_font_id = "imported-id".to_string();
@@ -2611,6 +2654,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let embedded_fonts = vec![EmbeddedLocalFont {
@@ -2631,6 +2675,51 @@ mod tests {
             file_count_before
         );
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn tab_preset_keeps_all_local_faces_for_a_new_family() {
+        let face = |id: &str, weight: u16| CustomFont {
+            id: id.to_string(),
+            font_type: FontType::Local,
+            name: "Family".to_string(),
+            display_name: "Family".to_string(),
+            enabled: true,
+            local_path: Some(format!("/{id}.ttf")),
+            css_content: None,
+            weight_ranges: vec![FontWeightRange {
+                min: weight,
+                max: weight,
+            }],
+        };
+        let imported = FontSettings {
+            custom_fonts: vec![
+                face("regular", 400),
+                face("bold", 700),
+                // 프리셋 내부 중복(id 동일)은 한 번만 수용
+                face("bold", 700),
+            ],
+        };
+
+        // 실제 탭 로드 경로(prepare → restore → merge) 전체를 통과시킨다
+        let merged = merge_tab_preset_fonts(&FontSettings::default(), imported, |_| Ok(()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(merged.custom_fonts.len(), 2);
+        assert_eq!(merged.custom_fonts[0].weight_ranges[0].min, 400);
+        assert_eq!(merged.custom_fonts[1].weight_ranges[0].min, 700);
+
+        // 기존에 같은 이름이 있으면 그 family 전체를 기존 정의로 유지
+        let existing = FontSettings {
+            custom_fonts: vec![face("existing", 400)],
+        };
+        let imported = FontSettings {
+            custom_fonts: vec![face("regular", 400), face("bold", 700)],
+        };
+        assert!(merge_tab_preset_fonts(&existing, imported, |_| Ok(()))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -2819,6 +2908,7 @@ mod tests {
                 enabled: true,
                 local_path: Some("/existing/font.ttf".to_string()),
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
         let before = existing.clone();
@@ -2831,6 +2921,7 @@ mod tests {
                 enabled: true,
                 local_path: None,
                 css_content: None,
+                weight_ranges: Vec::new(),
             }],
         };
 

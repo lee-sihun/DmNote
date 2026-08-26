@@ -77,7 +77,7 @@ input[type='number']::-webkit-outer-spin-button {
   letter-spacing: 0.06em;
   font-size: var(--dmn-counter-font-size-default, 16px);
   font-family: var(--dmn-counter-font-family-default, inherit);
-  font-weight: var(--dmn-counter-font-weight-default, 400);
+  font-weight: var(--dmn-counter-font-weight-default, 500);
   font-style: var(--dmn-counter-font-style-default, normal);
   text-decoration: var(--dmn-counter-text-decoration-default, none);
   text-align: var(--dmn-counter-text-align-default, center);

@@ -222,6 +222,7 @@ interface EditorElementPropertyValuesV1 {
   counterGap: number;
   counterFontSize: number;
   counterFontWeight: number;
+  counterFontBold: boolean;
   counterFontItalic: boolean;
   counterFontUnderline: boolean;
   counterFontStrikethrough: boolean;
@@ -231,6 +232,7 @@ interface EditorElementPropertyValuesV1 {
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
   useInlineStyles: boolean;
   fontWeight: number;
+  fontBold: boolean;
   fontItalic: boolean;
   fontUnderline: boolean;
   fontStrikethrough: boolean;
@@ -289,6 +291,7 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'axisId',
   'useInlineStyles',
   'fontWeight',
+  'fontBold',
   'fontItalic',
   'fontUnderline',
   'fontStrikethrough',
@@ -324,6 +327,7 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'counterGap',
   'counterFontSize',
   'counterFontWeight',
+  'counterFontBold',
   'counterFontItalic',
   'counterFontUnderline',
   'counterFontStrikethrough',
@@ -418,6 +422,7 @@ export type EditorCounterLayoutPropertyPatchV1 = EditorPropertyPatchUnionV1<
 export type EditorCounterTypographyPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'counterFontSize'
   | 'counterFontWeight'
+  | 'counterFontBold'
   | 'counterFontItalic'
   | 'counterFontUnderline'
   | 'counterFontStrikethrough'
@@ -427,7 +432,11 @@ export type EditorCounterTypographyPropertyPatchV1 = EditorPropertyPatchUnionV1<
 export type EditorCounterFillPropertyPatchV1 = CounterFillPropertyPatchV1;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
-  'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
+  | 'fontWeight'
+  | 'fontBold'
+  | 'fontItalic'
+  | 'fontUnderline'
+  | 'fontStrikethrough'
 >;
 
 export type EditorFontFamilyPropertyPatchV1 =
@@ -739,6 +748,7 @@ const NULLABLE_POSITION_FIELDS = new Set([
   'useInlineStyles',
   'displayText',
   'fontWeight',
+  'fontBold',
   'fontItalic',
   'fontUnderline',
   'fontStrikethrough',
@@ -1476,6 +1486,7 @@ const isEditorElementPropertyValueValid = (
   switch (property) {
     case 'hidden':
     case 'useInlineStyles':
+    case 'fontBold':
     case 'fontItalic':
     case 'fontUnderline':
     case 'fontStrikethrough':
@@ -1584,6 +1595,7 @@ const isEditorElementPropertyValueValid = (
       );
     case 'counterEnabled':
     case 'counterAnimationEnabled':
+    case 'counterFontBold':
     case 'counterFontItalic':
     case 'counterFontUnderline':
     case 'counterFontStrikethrough':

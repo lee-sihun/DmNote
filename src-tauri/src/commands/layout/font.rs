@@ -6,6 +6,8 @@ use uuid::Uuid;
 use crate::{
     commands::dialog::parented_file_dialog,
     errors::{CmdResult, CommandError},
+    models::FontWeightRange,
+    services::font_metadata::parse_font_metadata,
 };
 
 /// 폰트 로드 결과 응답 타입
@@ -19,6 +21,8 @@ pub struct FontLoadResponse {
     pub font_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub weight_ranges: Vec<FontWeightRange>,
 }
 
 /// 로컬 폰트 파일을 선택하고 폰트 이름/경로를 반환
@@ -38,6 +42,7 @@ pub async fn font_load(
             error: None,
             font_name: None,
             font_path: None,
+            weight_ranges: Vec::new(),
         });
     };
     let path = file.path().to_path_buf();
@@ -47,12 +52,18 @@ pub async fn font_load(
 }
 
 fn font_load_from_path(app: tauri::AppHandle, path: PathBuf) -> CmdResult<FontLoadResponse> {
-    // 파일명(확장자 제외)을 폰트 이름으로 사용
-    let font_name = path
-        .file_stem()
-        .and_then(|n| n.to_str())
-        .unwrap_or("Unknown Font")
-        .to_string();
+    let metadata = match parse_font_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            return Ok(FontLoadResponse {
+                success: false,
+                error: Some(format!("폰트 정보를 읽을 수 없습니다: {error}")),
+                font_name: None,
+                font_path: None,
+                weight_ranges: Vec::new(),
+            });
+        }
+    };
 
     // asset protocol scope 호환 및 원본 파일 이동/삭제 대비를 위해
     // app data 디렉터리로 복사
@@ -70,10 +81,21 @@ fn font_load_from_path(app: tauri::AppHandle, path: PathBuf) -> CmdResult<FontLo
     fs::copy(&path, &dest_path)?;
     let dest_string = dest_path.to_string_lossy().to_string();
 
+    // Macintosh 플랫폼 name 레코드만 가진 구형 폰트는 family 이름을 못 읽는다 - 파일명 폴백
+    let font_name = metadata.family_name.unwrap_or_else(|| {
+        path.file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(str::trim)
+            .filter(|stem| !stem.is_empty())
+            .unwrap_or("Custom Font")
+            .to_string()
+    });
+
     Ok(FontLoadResponse {
         success: true,
         error: None,
         font_name: Some(font_name),
         font_path: Some(dest_string),
+        weight_ranges: metadata.weight_ranges,
     })
 }

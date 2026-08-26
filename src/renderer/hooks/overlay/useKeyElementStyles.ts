@@ -19,7 +19,8 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
+  DEFAULT_ELEMENT_FONT_BOLD,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
@@ -28,6 +29,7 @@ import {
   resolveElementShadow,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
+import { resolveEffectiveFontWeight } from '@utils/core/fontWeights';
 
 export interface KeyElementPosition {
   hidden?: boolean;
@@ -64,6 +66,7 @@ export interface KeyElementPosition {
   useInlineStyles?: boolean;
   displayText?: string;
   fontWeight?: number;
+  fontBold?: boolean;
   fontItalic?: boolean;
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
@@ -130,6 +133,7 @@ export function computeKeyElementStyles({
     useInlineStyles,
     displayText,
     fontWeight,
+    fontBold,
     fontItalic,
     fontUnderline,
     fontStrikethrough,
@@ -237,6 +241,16 @@ export function computeKeyElementStyles({
   const resolvedFontFamily = fontFamily
     ? `"${fontFamily}", "Pretendard Variable", sans-serif`
     : 'inherit';
+  const hasLegacyBoldWeight = fontBold == null && fontWeight === 700;
+  const resolvedBold =
+    fontBold ??
+    (fontWeight == null ? DEFAULT_ELEMENT_FONT_BOLD : hasLegacyBoldWeight);
+  const resolvedFontWeight = resolveEffectiveFontWeight(
+    hasLegacyBoldWeight
+      ? DEFAULT_ELEMENT_BASE_FONT_WEIGHT
+      : fontWeight ?? DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
+    resolvedBold,
+  );
   const resolvedShadow = elementShadowToCss(
     resolveElementShadow({
       active,
@@ -269,7 +283,7 @@ export function computeKeyElementStyles({
           color: stateFontColor || defaultTextColor,
           fontSize: fontSize ? `${fontSize}px` : undefined,
           fontFamily: fontFamily ? resolvedFontFamily : undefined,
-          fontWeight: fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
+          fontWeight: resolvedFontWeight,
           fontStyle: fontItalic ? ('italic' as const) : ('normal' as const),
           textDecoration: resolvedTextDecoration,
           boxShadow: resolvedShadow,
@@ -302,9 +316,7 @@ export function computeKeyElementStyles({
             : 'repeat',
           '--dmn-key-font-size-default': fontSize ? `${fontSize}px` : 'inherit',
           '--dmn-key-font-family-default': resolvedFontFamily,
-          '--dmn-key-font-weight-default': String(
-            fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
-          ),
+          '--dmn-key-font-weight-default': String(resolvedFontWeight),
           '--dmn-key-font-style-default': fontItalic ? 'italic' : 'normal',
           '--dmn-key-text-decoration-default': resolvedTextDecoration,
           '--dmn-key-shadow-default': resolvedShadow,
@@ -348,9 +360,7 @@ export function computeKeyElementStyles({
         ? resolvedFontFamily
         : undefined
       : 'inherit',
-    fontWeight: useInline
-      ? fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT
-      : 'inherit',
+    fontWeight: useInline ? resolvedFontWeight : 'inherit',
     fontStyle: useInline ? (fontItalic ? 'italic' : 'normal') : 'inherit',
     textDecoration: useInline ? resolvedTextDecoration : 'inherit',
   };
@@ -360,9 +370,11 @@ export function computeKeyElementStyles({
     position.fontGradient || position.activeFontGradient,
   );
   // 상태 포함 - [data-state] 스코프 커스텀 CSS가 메트릭을 바꿀 수 있다
-  const labelMetricsDep = `${fontSize ?? ''}|${resolvedFontFamily}|${
-    fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT
-  }|${fontItalic ? 1 : 0}|${active ? 'active' : 'inactive'}`;
+  const labelMetricsDep = `${
+    fontSize ?? ''
+  }|${resolvedFontFamily}|${resolvedFontWeight}|${fontItalic ? 1 : 0}|${
+    active ? 'active' : 'inactive'
+  }`;
 
   // 라벨 페인트 - 변수 모드는 전역 [data-key-label] 규칙이 소비하고,
   // 인라인 우선 모드만 실제 선언으로 승격 (글리프 클립은 라벨 노드에서만)

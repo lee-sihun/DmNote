@@ -59,3 +59,24 @@ describe('normalizeCounterSettings 손상 필드 격리', () => {
     expect('strokeIdleGradient' in normalized).toBe(false);
   });
 });
+
+describe('normalizeCounterSettings fontBold null', () => {
+  it('fontBold: null(Rust None)은 없음으로 취급하고 형제 필드를 보존한다', () => {
+    const normalized = normalizeCounterSettings({
+      enabled: true,
+      placement: 'outside',
+      align: 'left',
+      gap: 12,
+      fontSize: 22,
+      fontWeight: 700,
+      fontBold: null,
+    });
+    expect(normalized.placement).toBe('outside');
+    expect(normalized.align).toBe('left');
+    expect(normalized.gap).toBe(12);
+    expect(normalized.fontSize).toBe(22);
+    // 레거시 700은 400 + Bold로 해석
+    expect(normalized.fontWeight).toBe(400);
+    expect(normalized.fontBold).toBe(true);
+  });
+});

@@ -1,9 +1,12 @@
 import type React from 'react';
+import { DEFAULT_COUNTER_FONT_WEIGHT } from './elementDefaults';
+import { resolveEffectiveFontWeight } from './fontWeights';
 
 interface CounterTypographyOptions {
   fontSize?: number;
   fontFamily?: string | null;
   fontWeight?: number;
+  fontBold?: boolean;
   fontItalic?: boolean;
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
@@ -15,6 +18,7 @@ export const getCounterTypographyStyle = ({
   fontSize,
   fontFamily,
   fontWeight,
+  fontBold,
   fontItalic,
   fontUnderline,
   fontStrikethrough,
@@ -29,7 +33,10 @@ export const getCounterTypographyStyle = ({
   const resolvedFontFamily = fontFamily
     ? `"${fontFamily}", "Pretendard Variable", sans-serif`
     : 'inherit';
-  const resolvedFontWeight = Number.isFinite(fontWeight) ? fontWeight : 400;
+  const resolvedFontWeight = resolveEffectiveFontWeight(
+    Number.isFinite(fontWeight) ? fontWeight! : DEFAULT_COUNTER_FONT_WEIGHT,
+    fontBold === true,
+  );
   const resolvedFontStyle = fontItalic ? 'italic' : 'normal';
   const resolvedTextDecoration =
     decorations.length > 0 ? decorations.join(' ') : 'none';

@@ -23,7 +23,7 @@ const fixture = (): PropertyTagFixture =>
 describe('editor property wire parity', () => {
   it('canonical property 태그 배열은 공유 fixture와 순서까지 일치한다', () => {
     const { properties } = fixture();
-    expect(properties).toHaveLength(70);
+    expect(properties).toHaveLength(72);
     expect([...EDITOR_ELEMENT_PROPERTY_KEYS]).toEqual(properties);
   });
 

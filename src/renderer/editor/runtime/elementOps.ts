@@ -89,6 +89,10 @@ import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import {
+  implicitCounterFontBold,
+  implicitElementFontBold,
+} from '@utils/core/fontWeights';
 
 // 메뉴·확인 모달처럼 대상 확정과 실행 사이가 긴 파괴적 액션의 semantic op.
 // 대상은 {type, id}로 받고, eager 반영과 wire 생성 각각이 실행 시점의
@@ -653,6 +657,33 @@ export const rebindKeySlotById = (
     });
 };
 
+const POSITION_FIELD_BY_TYPE: Record<NativeElementType, string> = {
+  key: 'keyPositions',
+  stat: 'statPositions',
+  graph: 'graphPositions',
+  knob: 'knobPositions',
+};
+
+// 현재 문서의 요소 레코드 (없으면 null)
+const findCurrentPosition = (
+  document: Record<string, unknown> | null | undefined,
+  elementType: NativeElementType,
+  id: string,
+): (Record<string, unknown> & { id: string }) | null => {
+  const record = document?.[POSITION_FIELD_BY_TYPE[elementType]];
+  if (!record || typeof record !== 'object') return null;
+  return (
+    Object.values(record as Record<string, unknown>)
+      .flat()
+      .find(
+        (position): position is Record<string, unknown> & { id: string } =>
+          typeof position === 'object' &&
+          position !== null &&
+          (position as { id?: unknown }).id === id,
+      ) ?? null
+  );
+};
+
 // 단건 property의 즉시 반영 투영. 도킹·분리, 단건·다건 네 경로가 같은 걸 쓴다
 const elementPropertyIntents = (
   targets: readonly { elementType: NativeElementType; id: string }[],
@@ -662,10 +693,24 @@ const elementPropertyIntents = (
     NativeElementType,
     Map<string, Record<string, unknown>>
   >();
+  // 굵기 변경은 백엔드와 같은 암묵 Bold 고정을 함께 투영한다
+  const document =
+    patch.property === 'fontWeight'
+      ? (captureEditorDocument() as unknown as Record<string, unknown> | null)
+      : null;
   for (const { elementType, id } of targets) {
     // nullable leaf의 null은 위치 조각에서 undefined로, 나머지는 1:1 투영
     const byId = intents.get(elementType) ?? new Map();
-    byId.set(id, { [patch.property]: patch.value ?? undefined });
+    const intent: Record<string, unknown> = {
+      [patch.property]: patch.value ?? undefined,
+    };
+    if (patch.property === 'fontWeight') {
+      const current = findCurrentPosition(document, elementType, id);
+      if (current && current.fontBold == null) {
+        intent.fontBold = implicitElementFontBold(current.fontWeight);
+      }
+    }
+    byId.set(id, intent);
     intents.set(elementType, byId);
   }
   return intents;
@@ -1396,7 +1441,15 @@ const counterTypographyPropertyIntents = (
       patch.property === 'counterFontSize'
         ? { ...counter, fontSize: patch.value }
         : patch.property === 'counterFontWeight'
-        ? { ...counter, fontWeight: patch.value }
+        ? {
+            ...counter,
+            fontWeight: patch.value,
+            ...(typeof counter.fontBold !== 'boolean'
+              ? { fontBold: implicitCounterFontBold(counter.fontWeight) }
+              : {}),
+          }
+        : patch.property === 'counterFontBold'
+        ? { ...counter, fontBold: patch.value }
         : patch.property === 'counterFontItalic'
         ? { ...counter, fontItalic: patch.value }
         : patch.property === 'counterFontUnderline'
@@ -1426,6 +1479,9 @@ const isCounterTypographyPatch = (
       patch.value <= 900
     );
   }
+  if (patch.property === 'counterFontBold') {
+    return typeof patch.value === 'boolean';
+  }
   if (patch.property === 'counterFontItalic') {
     return typeof patch.value === 'boolean';
   }
@@ -1443,7 +1499,7 @@ const isCounterTypographyPatch = (
 export const patchCounterTypographyByTargets = (
   targets: readonly CounterAnimationTarget[],
   patch: EditorCounterTypographyPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => {
   if (
     !isCounterTypographyPatch(patch) ||
@@ -1465,6 +1521,7 @@ export const patchCounterTypographyByTargets = (
       patch,
     })),
     {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
       preflight: options.preflight,
       onEnrolled: () => {
         enrolled = true;
@@ -1484,7 +1541,7 @@ export const patchCounterTypographyById = (
   elementType: 'key' | 'stat',
   id: string,
   patch: EditorCounterTypographyPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> =>
   patchCounterTypographyByTargets([{ elementType, id }], patch, options);
 
@@ -1778,13 +1835,13 @@ export const patchUseInlineStylesByTargets = (
 export const patchFontStyleByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   patch: EditorFontStylePropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => patchElementPropertyByTargets(targets, patch, options);
 
 export const patchFontFamilyByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
   patch: EditorFontFamilyPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => patchElementPropertyByTargets(targets, patch, options);
 
 type PaintTarget = { elementType: NativeElementType; id: string };
