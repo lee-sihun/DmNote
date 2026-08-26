@@ -14,7 +14,7 @@
 
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
   [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
-  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
+  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 </div>
 
 https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
@@ -91,7 +91,7 @@ https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
 ## 📝 참고사항
 
 - **이 프로그램은 스트리밍이나 플레이 영상 제작 등에 자유롭게 사용 가능합니다.**
-- [macOS 설치 및 권한 설정 가이드](https://github.com/DmNote-App/DmNote/blob/master/docs/mac_guide.md)
+- [macOS 설치 및 권한 설정 가이드](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide.md)
 - 프로그램 기본 설정은 `%appdata%/com.dmnote.desktop` 폴더에 저장됩니다.
 - 오버레이를 실시간으로 직접 확인할 필요가 없고 스트리밍이나 플레이 영상 제작 등에 사용한다면 기본적으로 **OBS 모드** 사용을 권장합니다. 이는 일반 오버레이 모드보다 게임 프레임에 대한 악영향을 줄일 수 있습니다.
 - 만약 게임용 컴퓨터와 스트리밍/녹화용 컴퓨터가 분리되어 있는 환경이라면 게임용 컴퓨터에서 DM Note를 실행하고 스트리밍/녹화용 컴퓨터에서 OBS 브라우저 소스로 연결하여 사용하는 것을 추천합니다. 이 경우 키뷰어로 인해 발생하는 게임 프레임 저하 문제를 거의 완전히 해결할 수 있습니다.
@@ -167,7 +167,7 @@ ASIO 없이 빌드하려면(LLVM 불필요 — 기여 시 편리) `npm run tauri
 
 ## 📄 라이선스
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 
 ## ❤️ Special Thanks!
 

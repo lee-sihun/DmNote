@@ -14,7 +14,7 @@
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
   [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
-  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
+  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 </div>
 
 https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
@@ -125,7 +125,7 @@ npm run tauri:dev
 ## � 注意事项
 
 - **本程序可自由用于直播或游戏视频制作等场景。**
-- [macOS 安装与权限设置指南](https://github.com/DmNote-App/DmNote/blob/master/docs/mac_guide_zh-cn.md)
+- [macOS 安装与权限设置指南](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_zh-cn.md)
 - 程序默认设置保存在 `%appdata%/com.dmnote.desktop` 文件夹中。
 - 如果您不需要实时查看覆盖层，且用于直播或游戏视频制作，默认推荐使用 **OBS 模式**。这可以减少对游戏帧率的负面影响。
 - 如果游戏电脑和直播/录制电脑是分开的，建议在游戏电脑上运行 DM Note，在直播/录制电脑上通过 OBS 浏览器源连接。这样可以几乎完全解决因按键显示器导致的游戏帧率下降问题。
@@ -167,7 +167,7 @@ npm run tauri:dev
 
 ## 📄 许可证
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 
 ## ❤️ 特别致谢!
 
