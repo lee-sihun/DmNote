@@ -352,7 +352,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         {/* 폰트 굵기 */}
         <PropertyRow label={t('counterSetting.fontWeight') || '폰트 굵기'}>
           <FontWeightDropdown
-            fontFamilies={[counterSettings.fontFamily]}
+            fontFamilies={[
+              counterSettings.fontFamily ??
+                (counterSettings.placement === 'inside'
+                  ? keyPosition.fontFamily ?? null
+                  : null),
+            ]}
             value={counterSettings.fontWeight ?? DEFAULT_COUNTER_FONT_WEIGHT}
             onChange={(value) => {
               onCounterTypographyCommit?.({
@@ -476,15 +481,17 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
                   fontName,
                   useFontStore.getState().getAllFonts(),
                 );
-                onCounterTypographyCommit?.({
-                  property: 'counterFontFamily',
-                  value: fontName,
-                });
+                // 굵기 재선택은 폰트 변경과 한 undo 단계
+                const gestureId = crypto.randomUUID();
+                onCounterTypographyCommit?.(
+                  { property: 'counterFontFamily', value: fontName },
+                  { gestureId },
+                );
                 if (nextWeight !== currentWeight) {
-                  onCounterTypographyCommit?.({
-                    property: 'counterFontWeight',
-                    value: nextWeight,
-                  });
+                  onCounterTypographyCommit?.(
+                    { property: 'counterFontWeight', value: nextWeight },
+                    { gestureId },
+                  );
                 }
               }
             }}

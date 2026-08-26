@@ -1453,6 +1453,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       const args = [
         targets,
         { property: 'counterFontFamily', value: '  Raw Counter Family  ' },
+        // 굵기 재선택 커밋과 한 undo 단계로 묶는 gestureId
+        { gestureId: expect.any(String) },
       ];
       expect(patches.patchCounterTypographyByTargets).toHaveBeenCalledWith(
         ...args,

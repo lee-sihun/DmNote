@@ -120,7 +120,10 @@ interface BatchStyleTabContentProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onElementPropertyCommit?: (
+    updates: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
+  ) => void;
   // 키 전용 (사운드 등)
   getKeyOnlyMixedValue?: <T>(
     getter: (pos: KeyPosition) => T | undefined,
@@ -992,9 +995,18 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   fontName,
                   useFontStore.getState().getAllFonts(),
                 );
-                onElementPropertyCommit?.({ fontFamily: fontName });
+                // 굵기 재선택은 폰트 변경과 한 undo 단계 - 따로 되돌리면 새 폰트에
+                // 지원하지 않는 굵기가 남는다
+                const gestureId = crypto.randomUUID();
+                onElementPropertyCommit?.(
+                  { fontFamily: fontName },
+                  { gestureId },
+                );
                 if (weightState.isMixed || nextWeight !== weightState.value) {
-                  onElementPropertyCommit?.({ fontWeight: nextWeight });
+                  onElementPropertyCommit?.(
+                    { fontWeight: nextWeight },
+                    { gestureId },
+                  );
                 }
               }
             }}

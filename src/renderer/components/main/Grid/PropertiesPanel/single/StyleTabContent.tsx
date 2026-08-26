@@ -560,6 +560,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const handleStyleChangeComplete = (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
+    options?: { gestureId?: string },
   ) => {
     if (
       onStylePropertyCommit &&
@@ -579,10 +580,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     }
     // property와 value의 상관은 TS가 못 잡아 캐스트가 남는다. 모양은 wire 계약과
     // 같고 값 유효성은 하류 검증이 잡는다. 단일 키 객체를 보내면 조용히 폐기된다
-    onElementPropertyCommit?.({
-      property,
-      value,
-    } as EditorElementPropertyPatchV1);
+    onElementPropertyCommit?.(
+      {
+        property,
+        value,
+      } as EditorElementPropertyPatchV1,
+      options,
+    );
   };
 
   // 이미지 변경 핸들러
@@ -1197,9 +1201,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 fontName,
                 useFontStore.getState().getAllFonts(),
               );
-              handleStyleChangeComplete('fontFamily', fontName);
+              // 굵기 재선택은 폰트 변경과 한 undo 단계 - 따로 되돌리면 새 폰트에
+              // 지원하지 않는 굵기가 남는다
+              const gestureId = crypto.randomUUID();
+              handleStyleChangeComplete('fontFamily', fontName, { gestureId });
               if (nextWeight !== currentWeight) {
-                handleStyleChangeComplete('fontWeight', nextWeight);
+                handleStyleChangeComplete('fontWeight', nextWeight, {
+                  gestureId,
+                });
               }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}

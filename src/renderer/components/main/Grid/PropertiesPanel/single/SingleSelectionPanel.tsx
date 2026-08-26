@@ -336,7 +336,10 @@ interface SingleGraphPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (
+    patch: EditorElementPropertyPatchV1,
+    options?: { gestureId?: string },
+  ) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
@@ -796,7 +799,10 @@ interface SingleKnobPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onElementPropertyCommit?: (
+    patch: EditorElementPropertyPatchV1,
+    options?: { gestureId?: string },
+  ) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;

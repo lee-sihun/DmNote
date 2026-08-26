@@ -51,6 +51,7 @@ interface BatchCounterTabContentProps {
   onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
   onCounterTypographyCommit?: (
     patch: EditorCounterTypographyPropertyPatchV1,
+    options?: { gestureId?: string },
   ) => void;
   // 컬러 디스플레이 (현재 상태 기준)
   colorState: 'idle' | 'active';
@@ -385,15 +386,17 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
                   fontFamily,
                   useFontStore.getState().getAllFonts(),
                 );
-                onCounterTypographyCommit?.({
-                  property: 'counterFontFamily',
-                  value: fontFamily,
-                });
+                // 굵기 재선택은 폰트 변경과 한 undo 단계
+                const gestureId = crypto.randomUUID();
+                onCounterTypographyCommit?.(
+                  { property: 'counterFontFamily', value: fontFamily },
+                  { gestureId },
+                );
                 if (counterWeightMixed || nextWeight !== counterWeight) {
-                  onCounterTypographyCommit?.({
-                    property: 'counterFontWeight',
-                    value: nextWeight,
-                  });
+                  onCounterTypographyCommit?.(
+                    { property: 'counterFontWeight', value: nextWeight },
+                    { gestureId },
+                  );
                 }
               }
             }}

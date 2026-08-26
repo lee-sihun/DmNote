@@ -465,7 +465,10 @@ interface BatchKeyLikePanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onElementPropertyCommit?: (
+    updates: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
+  ) => void;
   onNoteElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
@@ -810,11 +813,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const commitCounterTypography = stableCounterTargets
     ? (
         patch: import('@src/types/editor').EditorCounterTypographyPropertyPatchV1,
+        options?: { gestureId?: string },
       ) => {
-        const persisted = patchCounterTypographyByTargets(
-          stableCounterTargets,
-          patch,
-        );
+        const persisted = options?.gestureId
+          ? patchCounterTypographyByTargets(stableCounterTargets, patch, {
+              gestureId: options.gestureId,
+            })
+          : patchCounterTypographyByTargets(stableCounterTargets, patch);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -1472,7 +1477,10 @@ interface BatchGraphOnlyPanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onElementPropertyCommit?: (
+    updates: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
+  ) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -1822,7 +1830,10 @@ interface BatchKnobOnlyPanelProps {
     dimension: 'width' | 'height',
     value: number,
   ) => void;
-  onElementPropertyCommit?: (updates: BatchElementPropertyUpdate) => void;
+  onElementPropertyCommit?: (
+    updates: BatchElementPropertyUpdate,
+    options?: { gestureId?: string },
+  ) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
