@@ -7,7 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { KeyStatsPayload, KeyStatePayload } from '@src/types/plugin/api';
+import type { KeyStatsPayload } from '@src/types/plugin/api';
 import type { KeyCounters } from '@src/types/key/keys';
 
 export type KeyStatsListener = (stats: KeyStatsPayload) => void;
@@ -18,7 +18,6 @@ const STATS_UPDATE_INTERVAL = 50;
 class KeyStatsService {
   private listeners: Set<KeyStatsListener> = new Set();
   private initialized = false;
-  private unlistenKeyState: (() => void) | null = null;
   private unlistenInputPress: (() => void) | null = null;
   private unlistenCounterChanged: (() => void) | null = null;
   private unlistenCountersChanged: (() => void) | null = null;
@@ -42,9 +41,6 @@ class KeyStatsService {
   // 마지막 통지 스냅샷 — 유휴 틱의 동일 값 재통지 방지
   private lastNotified: KeyStatsPayload | null = null;
 
-  // 현재 눌린 키 추적 (홀드 방지)
-  private pressedKeys: Set<string> = new Set();
-
   /**
    * 초기화: 이벤트 리스너 등록
    */
@@ -53,14 +49,6 @@ class KeyStatsService {
     this.initialized = true;
 
     try {
-      // 매핑된 키 상태 이벤트 구독 (현재 탭에 할당된 키만)
-      this.unlistenKeyState = await listen<KeyStatePayload>(
-        'keys:state',
-        ({ payload }) => {
-          this.handleKeyState(payload);
-        },
-      );
-
       // 물리 press 이벤트 구독 (KPS 집계, 계약 §6)
       // 한 물리 입력이 여러 슬롯을 트리거해도 1회만 발행됨
       this.unlistenInputPress = await listen<{ label: string; mode: string }>(
@@ -143,20 +131,6 @@ class KeyStatsService {
       this.updateTotal();
     } catch (error) {
       console.error('[KeyStatsService] Failed to load initial state:', error);
-    }
-  }
-
-  /**
-   * 매핑된 키 상태 이벤트 핸들러
-   */
-  private handleKeyState(payload: KeyStatePayload) {
-    const { key, state } = payload;
-
-    // KPS 집계는 input:press가 담당, 여기서는 홀드 상태만 추적
-    if (state === 'DOWN') {
-      this.pressedKeys.add(key);
-    } else if (state === 'UP') {
-      this.pressedKeys.delete(key);
     }
   }
 
@@ -326,7 +300,6 @@ class KeyStatsService {
     this.kpsMax = 0;
     this.kpsSum = 0;
     this.kpsCount = 0;
-    this.pressedKeys.clear();
     this.lastNotified = null;
     // total은 카운터에서 계산되므로 리셋하지 않음
   }
@@ -345,11 +318,6 @@ class KeyStatsService {
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
-    }
-
-    if (this.unlistenKeyState) {
-      this.unlistenKeyState();
-      this.unlistenKeyState = null;
     }
 
     if (this.unlistenInputPress) {

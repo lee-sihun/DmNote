@@ -3,6 +3,17 @@
  * 50ms 주기 틱이 값 미변경 시 리스너 fan-out을 만들지 않아야 함
  */
 import { describe, it, expect, vi } from 'vitest';
+
+const { invoke, listen } = vi.hoisted(() => ({
+  invoke: vi.fn(() =>
+    Promise.resolve({ keyCounters: {}, currentMode: '4key' }),
+  ),
+  listen: vi.fn(() => Promise.resolve(vi.fn())),
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+vi.mock('@tauri-apps/api/event', () => ({ listen }));
+
 import { keyStatsService } from '@utils/keyStatsService';
 
 type ServicePrivate = {
