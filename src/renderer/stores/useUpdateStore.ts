@@ -319,9 +319,12 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     // 성공적으로 재시작된 다음 실행에서 릴리즈 노트 모달을 1회 노출
     setPostUpdateNoticeVersion(normalizedTag);
 
-    // 백엔드 진행 단계 반영 — 성공/실패 모두 finally에서 해제
+    // 백엔드 진행 단계 반영 — 성공/실패 모두 finally에서 해제.
+    // 해제는 비동기라 완료 직후 도착한 늦은 이벤트가 restarting을 덮지 않도록 settled로 차단
+    let settled = false;
     const unsubscribe = appApi.onUpdateProgress(
       (event: UpdateProgressEvent) => {
+        if (settled) return;
         set({
           autoUpdatePhase: event.phase,
           autoUpdateProgress:
@@ -332,13 +335,15 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
     try {
       await appApi.autoUpdate(normalizedTag);
-      // 재시작 요청까지 보낸 상태 — 프로세스가 곧 종료됨
+      settled = true;
+      // 재시작 요청까지 보낸 상태 — 프로세스가 곧 종료됨.
+      // isAutoUpdating은 유지해 재클릭(중복 설치)을 막고, 재시작이 취소되면 dismissUpdate로 초기화
       set({
-        isAutoUpdating: false,
         autoUpdatePhase: 'restarting',
         autoUpdateProgress: null,
       });
     } catch (e) {
+      settled = true;
       clearPendingPostUpdateReleaseNotice();
       const message = getErrorMessage(e);
       set({
@@ -354,7 +359,15 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   dismissUpdate: () => {
-    set({ dismissed: true, updateAvailable: false, isLatestVersion: false });
+    set({
+      dismissed: true,
+      updateAvailable: false,
+      isLatestVersion: false,
+      // 재시작 대기 상태에서 닫으면 다시 시도할 수 있게 초기화
+      isAutoUpdating: false,
+      autoUpdatePhase: 'idle',
+      autoUpdateProgress: null,
+    });
   },
 
   skipVersion: () => {

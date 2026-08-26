@@ -168,6 +168,7 @@ pub use install::{cleanup_stale_leftovers, run};
 mod install {
     use std::path::{Path, PathBuf};
     use std::process::Command;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
 
     use tauri::AppHandle;
@@ -186,7 +187,28 @@ mod install {
     const HELPER_RELATIVE_PATH: &str = "Contents/Resources/DM NOTE.app";
     const DETACH_ATTEMPTS: u32 = 3;
 
+    // 동시 실행 방지 — 두 스테이징이 같은 .app.new를 두고 경쟁하면 반쯤 복사된 번들이 설치될 수 있음
+    static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+    struct InProgressGuard;
+
+    impl InProgressGuard {
+        fn acquire() -> CmdResult<Self> {
+            UPDATE_IN_PROGRESS
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .map(|_| InProgressGuard)
+                .map_err(|_| CommandError::msg("an update is already in progress"))
+        }
+    }
+
+    impl Drop for InProgressGuard {
+        fn drop(&mut self) {
+            UPDATE_IN_PROGRESS.store(false, Ordering::Release);
+        }
+    }
+
     pub fn run(app: AppHandle, tag: &str) -> CmdResult<AutoUpdateResult> {
+        let _guard = InProgressGuard::acquire()?;
         let target = validate_update_target(&app, tag)?;
         let bundle = resolve_current_bundle_path().ok_or_else(|| {
             CommandError::msg("auto update requires the app to run from an .app bundle")
@@ -224,8 +246,10 @@ mod install {
         }
 
         emit_update_progress(&app, UpdatePhase::Installing, None);
-        stage_bundle(&mounted_app, &paths.staged)?;
-        if let Err(error) = verify_staged_bundle(&paths.staged) {
+        // 스테이징·검증 중 어떤 실패든 부분 사본(.app.new)을 남기지 않음
+        if let Err(error) = stage_bundle(&mounted_app, &paths.staged)
+            .and_then(|()| verify_staged_bundle(&paths.staged))
+        {
             let _ = std::fs::remove_dir_all(&paths.staged);
             return Err(error);
         }
@@ -506,8 +530,9 @@ mod install {
         Ok(())
     }
 
-    /// current → backup, staged → current. 두 번째 rename 실패 시 원상 복구
-    fn swap_bundles(paths: &InstallPaths) -> CmdResult<()> {
+    /// staged ↔ current 원자 교환 후 (이제 구버전인) staged → backup.
+    /// 교환이 원자적이라 설치 경로가 비는 순간이 없음. 미지원 파일시스템이면 2단계 rename으로 폴백
+    pub(super) fn swap_bundles(paths: &InstallPaths) -> CmdResult<()> {
         if paths.backup.exists() {
             if !is_stale_update_leftover(&paths.backup) {
                 return Err(CommandError::msg(format!(
@@ -518,6 +543,59 @@ mod install {
             std::fs::remove_dir_all(&paths.backup)?;
         }
 
+        match atomic_swap(&paths.staged, &paths.current) {
+            Ok(()) => {
+                // 실패해도 설치는 완료 — .app.new 이름의 구버전은 다음 실행 시 정리
+                if let Err(error) = std::fs::rename(&paths.staged, &paths.backup) {
+                    log::warn!(
+                        "[Updater] failed to move previous app to {}: {error}",
+                        paths.backup.display()
+                    );
+                }
+                return Ok(());
+            }
+            Err(error) if is_swap_unsupported(&error) => {
+                log::warn!(
+                    "[Updater] atomic swap unsupported here ({error}); falling back to rename"
+                );
+            }
+            Err(error) => {
+                return Err(CommandError::msg(format!(
+                    "failed to swap the app bundle into place: {error}"
+                )));
+            }
+        }
+
+        swap_bundles_two_step(paths)
+    }
+
+    /// `renamex_np(RENAME_SWAP)` — 두 경로의 내용을 한 syscall로 교환 (macOS 10.12+, APFS/HFS+)
+    pub(super) fn atomic_swap(a: &Path, b: &Path) -> std::io::Result<()> {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let a_c = CString::new(a.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::other("path contains NUL"))?;
+        let b_c = CString::new(b.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::other("path contains NUL"))?;
+        // SAFETY: 두 인자 모두 유효한 NUL 종료 C 문자열이며 호출 동안 살아 있음
+        let rc = unsafe { libc::renamex_np(a_c.as_ptr(), b_c.as_ptr(), libc::RENAME_SWAP) };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+
+    fn is_swap_unsupported(error: &std::io::Error) -> bool {
+        matches!(
+            error.raw_os_error(),
+            Some(libc::ENOTSUP) | Some(libc::EINVAL) | Some(libc::EXDEV)
+        )
+    }
+
+    /// 폴백: current → backup, staged → current. 두 번째 rename 실패 시 원상 복구
+    fn swap_bundles_two_step(paths: &InstallPaths) -> CmdResult<()> {
         std::fs::rename(&paths.current, &paths.backup).map_err(|error| {
             CommandError::msg(format!(
                 "failed to move the current app aside ({}): {error}",
@@ -693,5 +771,33 @@ mod tests {
         assert!(!is_stale_update_leftover(
             &dir.path().join("DM NOTE.app.old.txt")
         ));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn atomic_swap_exchanges_directories_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let current = write_bundle(dir.path(), "DM NOTE.app", EXPECTED_BUNDLE_ID, "1.6.1");
+        let staged = write_bundle(dir.path(), "DM NOTE.app.new", EXPECTED_BUNDLE_ID, "1.6.2");
+
+        super::install::atomic_swap(&staged, &current).unwrap();
+
+        assert_eq!(read_bundle_info(&current).unwrap().version, "1.6.2");
+        assert_eq!(read_bundle_info(&staged).unwrap().version, "1.6.1");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn swap_bundles_leaves_previous_app_as_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let current = write_bundle(dir.path(), "DM NOTE.app", EXPECTED_BUNDLE_ID, "1.6.1");
+        write_bundle(dir.path(), "DM NOTE.app.new", EXPECTED_BUNDLE_ID, "1.6.2");
+        let paths = install_paths_for(&current).unwrap();
+
+        super::install::swap_bundles(&paths).unwrap();
+
+        assert_eq!(read_bundle_info(&paths.current).unwrap().version, "1.6.2");
+        assert_eq!(read_bundle_info(&paths.backup).unwrap().version, "1.6.1");
+        assert!(!paths.staged.exists());
     }
 }

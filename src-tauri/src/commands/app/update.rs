@@ -183,7 +183,8 @@ pub fn download_asset(
     Ok(bytes.to_vec())
 }
 
-/// 자산을 파일로 스트리밍 다운로드 — 진행률(%)을 콜백으로 전달, 404는 NotFound로 구분
+/// 자산을 파일로 스트리밍 다운로드 — 진행률(%)을 콜백으로 전달, 404는 NotFound로 구분 (macOS DMG)
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn download_asset_to_file(
     client: &reqwest::blocking::Client,
     url: &str,

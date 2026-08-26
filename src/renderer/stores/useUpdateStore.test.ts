@@ -87,10 +87,20 @@ describe('useUpdateStore.runAutoUpdate', () => {
     await run;
 
     const state = useUpdateStore.getState();
-    expect(state.isAutoUpdating).toBe(false);
+    // 재시작 대기 중에는 재클릭을 막기 위해 진행 중 상태 유지
+    expect(state.isAutoUpdating).toBe(true);
     expect(state.autoUpdatePhase).toBe('restarting');
     expect(state.error).toBeNull();
     expect(unsubscribeMock).toHaveBeenCalledTimes(1);
+
+    // 구독 해제 전에 도착한 늦은 이벤트는 무시
+    emitProgress({ phase: 'installing', percent: null });
+    expect(useUpdateStore.getState().autoUpdatePhase).toBe('restarting');
+
+    // 재시작이 취소돼 모달을 닫으면 다시 시도 가능 상태로
+    useUpdateStore.getState().dismissUpdate();
+    expect(useUpdateStore.getState().isAutoUpdating).toBe(false);
+    expect(useUpdateStore.getState().autoUpdatePhase).toBe('idle');
     expect(
       localStorage.getItem('dmnote:post-update-release-notice-version'),
     ).toBe('1.6.2');
