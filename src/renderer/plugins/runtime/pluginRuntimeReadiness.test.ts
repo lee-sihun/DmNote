@@ -59,6 +59,23 @@ describe('pluginRuntimeReadiness', () => {
     expect(isLocalPluginRuntimeReady()).toBe(true);
   });
 
+  it('리셋 이전 세대의 종료 콜백은 새 세대 카운터를 차감하지 않는다', () => {
+    settleInitialFetches();
+    const endStale = beginPluginWork();
+
+    // 런타임 재생성 - dispose가 리셋한 뒤 새 사이클이 작업 등록
+    resetPluginRuntimeReadiness();
+    settleInitialFetches();
+    const endCurrent = beginPluginWork();
+    expect(isLocalPluginRuntimeReady()).toBe(false);
+
+    endStale();
+    expect(isLocalPluginRuntimeReady()).toBe(false);
+
+    endCurrent();
+    expect(isLocalPluginRuntimeReady()).toBe(true);
+  });
+
   it('추적한 작업이 실패해도 준비 상태로 전환된다', async () => {
     settleInitialFetches();
     trackPluginWork(Promise.reject(new Error('restore failed')));

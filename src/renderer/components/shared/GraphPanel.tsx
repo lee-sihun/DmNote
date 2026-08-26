@@ -41,7 +41,7 @@ interface GraphPanelProps {
   withOffsetVars?: boolean;
   interactive?: boolean;
   dataEditing?: boolean;
-  isViewportTransforming?: boolean;
+  promoteTransformLayer?: boolean;
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   onMouseDown?: (e: React.MouseEvent) => void;
@@ -199,7 +199,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       withOffsetVars = true,
       interactive = true,
       dataEditing,
-      isViewportTransforming = false,
+      promoteTransformLayer,
       onClick,
       onDoubleClick,
       onMouseDown,
@@ -210,9 +210,15 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
     ref,
   ) {
     const safeMax = maxval > 0 ? maxval : 1;
+    const shouldPromoteTransformLayer =
+      !interactive || promoteTransformLayer === true;
     const resolvedGraphType = graphType === 'bar' ? 'bar' : 'line';
     const transform = withOffsetVars
-      ? `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`
+      ? interactive
+        ? `translate(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)))`
+        : `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`
+      : interactive
+      ? `translate(${dx}px, ${dy}px)`
       : `translate3d(${dx}px, ${dy}px, 0)`;
 
     const normalizedHistory = normalizeHistory(history);
@@ -455,11 +461,10 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
             flexDirection: 'column',
             overflow: 'hidden',
             cursor: interactive ? undefined : 'default',
-            willChange:
-              dataEditing || isViewportTransforming ? 'transform' : 'auto',
-            backfaceVisibility: 'hidden',
-            transformStyle: 'preserve-3d',
-            contain: 'layout style paint',
+            willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
+            backfaceVisibility: interactive ? 'visible' : 'hidden',
+            transformStyle: interactive ? 'flat' : 'preserve-3d',
+            contain: interactive ? 'layout style' : 'layout style paint',
             imageRendering: 'auto',
             isolation: 'isolate',
             zIndex,

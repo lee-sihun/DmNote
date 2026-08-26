@@ -15,6 +15,8 @@ let pendingInitialFetches = INITIAL_FETCH_COUNT;
 let pendingWork = 0;
 let enabledPluginCount = 0;
 let mainReady = false;
+// reset마다 증가 - 이전 런타임의 지연 종료 콜백이 새 사이클 카운터를 차감하지 않게
+let workGeneration = 0;
 
 const listeners = new Set<ReadinessListener>();
 
@@ -43,14 +45,16 @@ export const noteEnabledPluginCount = (count: number) => {
   notify();
 };
 
-/** 진행 중 작업 등록 - 반환된 종료 콜백은 중복 호출에 안전 */
+/** 진행 중 작업 등록 - 반환된 종료 콜백은 중복 호출·세대 교차에 안전 */
 export const beginPluginWork = (): (() => void) => {
   pendingWork += 1;
   notify();
   let ended = false;
+  const generation = workGeneration;
   return () => {
     if (ended) return;
     ended = true;
+    if (generation !== workGeneration) return;
     pendingWork = Math.max(0, pendingWork - 1);
     notify();
   };
@@ -86,6 +90,7 @@ export const subscribePluginReadiness = (
 };
 
 export const resetPluginRuntimeReadiness = () => {
+  workGeneration += 1;
   pendingInitialFetches = INITIAL_FETCH_COUNT;
   pendingWork = 0;
   enabledPluginCount = 0;

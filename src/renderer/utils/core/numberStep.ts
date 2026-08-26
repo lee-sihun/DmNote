@@ -16,20 +16,38 @@ const resolveStepSize = (step: number | undefined): number =>
 
 // 방향키가 아니면 null - 호출부가 기존 키 허용 흐름을 그대로 태운다.
 // Alt는 소수를 받는 필드에서만 최소 단위로 내려간다. 눈금이 아니라 자릿수를 따르므로
-// step 격자에서 벗어날 수 있는데, 그게 미세 조정의 목적이다
-export const resolveStepDelta = (
+// step 격자에서 벗어날 수 있는데, 그게 미세 조정의 목적이다.
+// 일반·Shift 스텝은 현재값에 더하는 게 아니라 스텝 격자로 스냅한다 -
+// 63.4에서 ↑는 64.4가 아니라 64. 소수 꼬리는 방향키 한 번으로 지워진다
+export const resolveStepper = (
   key: string,
   { shiftKey, altKey }: StepModifiers,
   decimalScale: number,
   step?: number,
-): number | null => {
+): ((base: number) => number) | null => {
   const direction = key === 'ArrowUp' ? 1 : key === 'ArrowDown' ? -1 : 0;
   if (direction === 0) return null;
   if (altKey && decimalScale > 0 && !shiftKey) {
-    return direction * 10 ** -decimalScale;
+    return (base) => base + direction * 10 ** -decimalScale;
   }
-  const size = resolveStepSize(step);
-  return direction * (shiftKey ? size * COARSE_MULTIPLIER : size);
+  const quantum = resolveStepSize(step) * (shiftKey ? COARSE_MULTIPLIER : 1);
+  return (base) => {
+    const ratio = base / quantum;
+    // 이미 격자 위인지 상대 오차로 판정 - 격자 위면 한 눈금 이동,
+    // 격자 밖이면 진행 방향의 가장 가까운 눈금으로만 붙는다
+    const epsilon = Number.EPSILON * Math.max(1, Math.abs(ratio)) * 8;
+    const nearest = Math.round(ratio);
+    const onGrid = Math.abs(ratio - nearest) <= epsilon;
+    const target = onGrid
+      ? nearest + direction
+      : direction > 0
+      ? Math.ceil(ratio)
+      : Math.floor(ratio);
+    // 곱셈 잔차 정리 - 눈금 자릿수에서 유도해 임의 정밀도 손실을 피한다
+    const quantumDecimals = (String(quantum).split('.')[1] ?? '').length;
+    const scale = 10 ** Math.min(quantumDecimals + 2, 12);
+    return Math.round(target * quantum * scale) / scale;
+  };
 };
 
 // 큐에서 묵은 반복 이벤트 판정.

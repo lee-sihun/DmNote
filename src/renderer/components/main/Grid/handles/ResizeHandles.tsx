@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { isMac } from '@utils/core/platform';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   clearPendingCustomCursorHover,
@@ -44,6 +45,8 @@ interface ResizeResult {
   width: number;
   height: number;
   handle: HandleDef;
+  /** 플랫폼 primary modifier 유지 중 - 스마트 가이드·크기 일치 스냅 일시 해제 */
+  suppressSmartSnap: boolean;
 }
 
 interface HandleProps {
@@ -379,8 +382,14 @@ const ResizeHandles = ({
           newWidth = Math.max(MIN_SIZE, startBounds!.width * scale);
         }
       } else {
-        newWidth = Math.max(MIN_SIZE, snap(newWidth));
-        newHeight = Math.max(MIN_SIZE, snap(newHeight));
+        // 드래그한 축만 스냅 - 반대 축까지 스냅하면 비배수 크기의 요소가
+        // 가로/세로 전용 리사이즈마다 1px씩 밀린다 (중앙 보정이 절반을 이동)
+        if (handle!.dx !== 0) {
+          newWidth = Math.max(MIN_SIZE, snap(newWidth));
+        }
+        if (handle!.dy !== 0) {
+          newHeight = Math.max(MIN_SIZE, snap(newHeight));
+        }
       }
 
       // 위치 계산 (앵커 엣지 보존: 드래그하지 않은 쪽은 고정)
@@ -415,6 +424,7 @@ const ResizeHandles = ({
         width: newWidth,
         height: newHeight,
         handle: handle!,
+        suppressSmartSnap: isMac() ? moveEvent.metaKey : moveEvent.ctrlKey,
       };
       const changed =
         result.x !== startBounds!.x ||

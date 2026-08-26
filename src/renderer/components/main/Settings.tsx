@@ -9,7 +9,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import Dropdown from '@components/main/common/Dropdown';
-import ReloadIcon from '@components/main/common/ReloadIcon';
+import ReloadButton from '@components/main/common/ReloadButton';
 import {
   SettingCard,
   SettingRow,
@@ -578,10 +578,13 @@ const Settings = ({
         plugin.content,
         plugin.name,
       );
+      const pluginStorageNamespace = `${pluginNamespace}/`;
 
       // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
       // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
-      const hasData: boolean = await pluginApi.storage.hasData(pluginNamespace);
+      const hasData: boolean = await pluginApi.storage.hasData(
+        pluginStorageNamespace,
+      );
       console.warn(
         '[PluginRemove] namespace=',
         pluginNamespace,
@@ -647,6 +650,7 @@ const Settings = ({
         plugin.content,
         plugin.name,
       );
+      const pluginStorageNamespace = `${pluginNamespace}/`;
 
       // 1) 먼저 플러그인 제거 → 클린업이 실행되며 일부 플러그인은 저장을 시도할 수 있음
       const result: JsRemoveResult = await jsApi.remove(pluginId);
@@ -655,7 +659,7 @@ const Settings = ({
       }
 
       // 2) 그 다음 스토리지 정리 → 클린업 중 재생성된 값까지 함께 제거
-      await pluginApi.storage.clearByPrefix(pluginNamespace);
+      await pluginApi.storage.clearByPrefix(pluginStorageNamespace);
     } catch (error) {
       console.error('Failed to remove JS plugin with data', error);
       showAlert?.(t('settings.jsPluginRemoveFailed'));
@@ -1046,34 +1050,12 @@ const Settings = ({
               >
                 <SettingRow label={t('settings.customJSLabel')}>
                   <div className="flex flex-row gap-[6px]">
-                    <button
+                    <ReloadButton
                       onClick={handleReloadPlugins}
-                      disabled={!canReloadPlugins || isReloadingPlugins}
-                      className={
-                        'flex items-center justify-center w-[23px] h-[23px] rounded-md transition-colors duration-fast ' +
-                        (canReloadPlugins && !isReloadingPlugins
-                          ? 'bg-fill text-fg hover:bg-fill-hover'
-                          : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
-                      }
-                      style={
-                        isReloadingPlugins
-                          ? { opacity: 0.65, pointerEvents: 'none' }
-                          : undefined
-                      }
+                      disabled={!canReloadPlugins}
+                      busy={isReloadingPlugins}
                       title={t('settings.reloadPlugins')}
-                    >
-                      {/* svg 루트가 아니라 래퍼를 돌려야 회전축이 아이콘 중심에 고정된다 */}
-                      <span
-                        className={
-                          'inline-flex' +
-                          (isReloadingPlugins
-                            ? ' motion-safe:animate-spin'
-                            : '')
-                        }
-                      >
-                        <ReloadIcon />
-                      </span>
-                    </button>
+                    />
                     <button
                       onClick={() =>
                         setActiveSettingsPanel((prev) =>
@@ -1119,18 +1101,11 @@ const Settings = ({
                 }
               >
                 <div className="flex items-center gap-[6px]">
-                  <button
+                  <ReloadButton
                     onClick={handleObsRegenerateToken}
                     disabled={!obsStatus.running}
-                    className={
-                      'flex items-center justify-center w-[23px] h-[23px] rounded-md transition-colors duration-fast ' +
-                      (obsStatus.running
-                        ? 'bg-fill text-fg hover:bg-fill-hover'
-                        : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
-                    }
-                  >
-                    <ReloadIcon />
-                  </button>
+                    title={t('settings.obsTokenRegen')}
+                  />
                   <button
                     onClick={handleObsCopyUrl}
                     disabled={!obsStatus.running}

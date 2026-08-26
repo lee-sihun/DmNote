@@ -48,7 +48,6 @@ const keyPosition = {
   counter: {
     ...counter,
     fill: { idle: '#112233', active: '#445566' },
-    stroke: { idle: '#778899', active: '#aabbcc' },
   },
 } as KeyPosition;
 

@@ -5,3 +5,5 @@ pub mod js;
 pub mod note_tab;
 pub mod preview;
 pub mod state;
+
+pub(super) const MAIN_WINDOW_LABEL: &str = "main";

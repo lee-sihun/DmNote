@@ -38,14 +38,23 @@ description: CSS로 키 카운터의 모양과 효과를 커스터마이징하�
 | `--counter-color`           | 텍스트 색상과 저장된 fill 해제 | `#FFFFFF`      |
 | `--counter-fill-image`      | 텍스트 fill 이미지             | `none`         |
 | `--counter-fill-clip`       | fill 클립 영역                 | `border-box`   |
+| `--counter-fill-position`   | fill 배경 위치                 | `0% 0%`        |
+| `--counter-fill-size`       | fill 배경 크기                 | `auto`         |
+| `--counter-fill-repeat`     | fill 반복 방식                 | `repeat`       |
 | `--counter-text-fill-color` | WebKit 텍스트 채움색           | `currentcolor` |
-| `--counter-stroke-color`    | 텍스트 외곽선 색상             | `transparent`  |
-| `--counter-stroke-width`    | 텍스트 외곽선 두께             | `0px`          |
 
 <Callout type="info">
   키/통계의 **인라인 스타일 우선**을 끄면 카운터 글꼴도 일반 CSS가 우선합니다.
   `--counter-color`를 지정하면 속성 패널에 저장된 fill 그라데이션도 자동으로
-  사라집니다.
+  사라집니다. 앱에서 만든 fill 그라데이션은 글자 잉크 범위에 맞춰 깔리며,
+  `--counter-fill-position`과 `--counter-fill-size`로 직접 제어할 수 있습니다.
+</Callout>
+
+<Callout type="warning">
+  **카운터 외곽선 지원이 종료되었습니다.** `--counter-stroke-*` 변수와 속성
+  패널의 외곽선 설정은 제거되었습니다. 저장된 외곽선 설정은 로드 시 정리되며,
+  `--counter-stroke-*`를 설정하는 커스텀 CSS는 더 이상 효과가 없습니다. 대신
+  `.counter`에 `text-shadow`나 `-webkit-text-stroke`를 사용하세요.
 </Callout>
 
 ## 비활성 상태 스타일
@@ -56,9 +65,6 @@ description: CSS로 키 카운터의 모양과 효과를 커스터마이징하�
 .counter[data-counter-state='inactive'] {
   /* 텍스트 색상 */
   --counter-color: #474244;
-
-  /* 외곽선 비활성화 */
-  --counter-stroke-color: transparent;
 }
 ```
 
@@ -70,9 +76,6 @@ description: CSS로 키 카운터의 모양과 효과를 커스터마이징하�
 .counter[data-counter-state='active'] {
   /* 텍스트 색상 */
   --counter-color: #ff2b80;
-
-  /* 외곽선 */
-  --counter-stroke-color: transparent;
 
   /* 글로우 효과 */
   text-shadow: 0px 0px 3px #ff2b80;
@@ -94,7 +97,6 @@ description: CSS로 키 카운터의 모양과 효과를 커스터마이징하�
 /* .blue 클래스를 가진 키의 카운터 - 활성 상태 */
 .blue .counter[data-counter-state='active'] {
   --counter-color: #2ebef3;
-  --counter-stroke-color: transparent;
   text-shadow: 0px 0px 3px #2ebef3;
 }
 ```
@@ -121,27 +123,6 @@ description: CSS로 키 카운터의 모양과 효과를 커스터마이징하�
 .counter[data-counter-state='active'] {
   --counter-color: #00ff88;
   text-shadow: 0px 0px 2px #00ff88, 0px 0px 4px #00ff88, 0px 0px 8px #00ff88;
-}
-```
-
-### 외곽선 스타일
-
-```css
-.counter {
-  font-size: 28px;
-  font-weight: 900;
-}
-
-.counter[data-counter-state='inactive'] {
-  --counter-color: #fff;
-  --counter-stroke-color: #333;
-  --counter-stroke-width: 2px;
-}
-
-.counter[data-counter-state='active'] {
-  --counter-color: #fff;
-  --counter-stroke-color: #ff2b80;
-  --counter-stroke-width: 2px;
 }
 ```
 

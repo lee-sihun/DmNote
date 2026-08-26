@@ -13,6 +13,7 @@ import {
   shift,
   flip,
   autoUpdate,
+  type Middleware,
   type Placement,
 } from '@floating-ui/react';
 import {
@@ -79,6 +80,15 @@ interface FloatingMenuPopupProps extends FloatingPopupBaseProps {
 }
 
 type FloatingPopupProps = FloatingDialogPopupProps | FloatingMenuPopupProps;
+
+const viewportOffset = (x: number, y: number): Middleware => ({
+  name: 'viewportOffset',
+  options: { x, y },
+  fn: ({ x: currentX, y: currentY }) => ({
+    x: currentX + x,
+    y: currentY + y,
+  }),
+});
 
 interface FloatingPopupSurfaceProps {
   setFloating: (node: HTMLDivElement | null) => void;
@@ -273,6 +283,7 @@ const FloatingPopup = ({
     // 순서가 바뀌면 shift가 밀어둔 결과를 flip이 다시 뒤집어 어긋난다
     middleware: [
       fuiOffset(offset),
+      viewportOffset(offsetX, offsetY),
       flip(),
       shift({ padding: POPUP_EDGE_PADDING }),
     ],
@@ -585,8 +596,8 @@ const FloatingPopup = ({
     left = (shownFixedX as number) + offsetX;
     top = (shownFixedY as number) + offsetY;
   } else {
-    left = (x ?? 0) + offsetX;
-    top = (y ?? 0) + offsetY;
+    left = x ?? 0;
+    top = y ?? 0;
   }
 
   const floatingContent = (

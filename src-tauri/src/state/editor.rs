@@ -1052,8 +1052,10 @@ fn key_position_id_order(
 // ID 짝짓기가 성립하지 않아 (모드, index)로 되돌린다
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GrandfatherKeying {
-    ById,
-    ByModeIndex,
+    StableId,
+    #[cfg(test)]
+    ModeIndex,
+    LegacyPresetModeIndex,
 }
 
 /// 기존 store에 있던 손실 없는 비정상 데이터는 유지하되 새 비정상 상태는 만들지 않음
@@ -1068,7 +1070,7 @@ pub(crate) fn validate_document_transition(
         candidate,
         current_store,
         candidate_store,
-        GrandfatherKeying::ById,
+        GrandfatherKeying::StableId,
     )
 }
 
@@ -1098,8 +1100,10 @@ pub(crate) fn validate_document_transition_with_keying(
     validate_metric_limits(current, candidate, keying)?;
 
     let native_id_alias = match keying {
-        GrandfatherKeying::ById => HashMap::new(),
-        GrandfatherKeying::ByModeIndex => native_id_alias_by_slot(current, candidate),
+        GrandfatherKeying::StableId => HashMap::new(),
+        #[cfg(test)]
+        GrandfatherKeying::ModeIndex => native_id_alias_by_slot(current, candidate),
+        GrandfatherKeying::LegacyPresetModeIndex => native_id_alias_by_slot(current, candidate),
     };
     if let Some(violation) = candidate_violations.iter().find(|violation| {
         is_unconditional_structural_violation(violation.code())
@@ -1656,7 +1660,7 @@ fn validate_mode_metric_limits(
     Ok(())
 }
 
-// keying에 따라 관용 상대를 찾는다. ById는 안정 ID로, ByModeIndex는 같은
+// keying에 따라 관용 상대를 찾는다. StableId는 안정 ID로, ModeIndex는 같은
 // 모드의 같은 자리로 짝짓는다
 fn grandfather_counterpart<'a, T>(
     keying: GrandfatherKeying,
@@ -1668,8 +1672,13 @@ fn grandfather_counterpart<'a, T>(
     position_of: impl Fn(&'a T) -> &'a KeyPosition,
 ) -> Option<&'a KeyPosition> {
     match keying {
-        GrandfatherKeying::ById => by_id.get(id).map(|element| position_of(element)),
-        GrandfatherKeying::ByModeIndex => current_collection
+        GrandfatherKeying::StableId => by_id.get(id).map(|element| position_of(element)),
+        #[cfg(test)]
+        GrandfatherKeying::ModeIndex => current_collection
+            .get(mode)
+            .and_then(|elements| elements.get(index))
+            .map(position_of),
+        GrandfatherKeying::LegacyPresetModeIndex => current_collection
             .get(mode)
             .and_then(|elements| elements.get(index))
             .map(position_of),
@@ -1694,13 +1703,18 @@ fn validate_per_owner_metric_limits(
     for (mode, keys) in &candidate.keys {
         for (slot_index, slot) in keys.iter().enumerate() {
             let current_slot = match keying {
-                GrandfatherKeying::ById => candidate
+                GrandfatherKeying::StableId => candidate
                     .key_positions
                     .get(mode)
                     .and_then(|positions| positions.get(slot_index))
                     .and_then(|position| current_key_slots.get(position.id.as_str()))
                     .copied(),
-                GrandfatherKeying::ByModeIndex => current
+                #[cfg(test)]
+                GrandfatherKeying::ModeIndex => current
+                    .keys
+                    .get(mode)
+                    .and_then(|slots| slots.get(slot_index)),
+                GrandfatherKeying::LegacyPresetModeIndex => current
                     .keys
                     .get(mode)
                     .and_then(|slots| slots.get(slot_index)),
@@ -1762,6 +1776,7 @@ fn validate_per_owner_metric_limits(
                     |position| position,
                 ),
                 position,
+                keying == GrandfatherKeying::LegacyPresetModeIndex,
             )?;
         }
     }
@@ -1788,6 +1803,7 @@ fn validate_per_owner_metric_limits(
                     |element| &element.position,
                 ),
                 &position.position,
+                keying == GrandfatherKeying::LegacyPresetModeIndex,
             )?;
         }
     }
@@ -1814,6 +1830,7 @@ fn validate_per_owner_metric_limits(
                     |element| &element.position,
                 ),
                 &position.position,
+                keying == GrandfatherKeying::LegacyPresetModeIndex,
             )?;
         }
     }
@@ -1840,6 +1857,7 @@ fn validate_per_owner_metric_limits(
                     |element| &element.position,
                 ),
                 &position.position,
+                keying == GrandfatherKeying::LegacyPresetModeIndex,
             )?;
         }
     }
@@ -1987,11 +2005,13 @@ fn validate_position_metrics(
     index: usize,
     current: Option<&KeyPosition>,
     candidate: &KeyPosition,
+    allow_legacy_finite_bounds: bool,
 ) -> Result<(), EditorCommitError> {
     validate_bounds_metrics(
         &format!("{field} {mode}[{index}]"),
         current.map(position_bounds),
         position_bounds(candidate),
+        allow_legacy_finite_bounds,
     )
 }
 
@@ -2013,6 +2033,7 @@ pub(crate) fn validate_editor_op_bounds(
         &format!("editor op {op_index}.bounds"),
         current.map(position_bounds),
         bounds,
+        false,
     )
 }
 
@@ -2034,12 +2055,14 @@ fn validate_bounds_metrics(
     label: &str,
     current: Option<EditorBoundsV1>,
     candidate: EditorBoundsV1,
+    allow_legacy_finite_bounds: bool,
 ) -> Result<(), EditorCommitError> {
     for (name, current, candidate) in [
         ("dx", current.map(|bounds| bounds.dx), candidate.dx),
         ("dy", current.map(|bounds| bounds.dy), candidate.dy),
     ] {
-        if coordinate_within_limit(candidate)
+        if (allow_legacy_finite_bounds && candidate.is_finite())
+            || coordinate_within_limit(candidate)
             || current.is_some_and(|value| {
                 !coordinate_within_limit(value)
                     && numeric_metric_non_increasing(value, candidate, false)
@@ -2061,7 +2084,9 @@ fn validate_bounds_metrics(
             candidate.height,
         ),
     ] {
-        if dimension_within_limit(candidate)
+        // 과거 프리셋의 범위 초과 치수는 관용하되 0·음수는 어떤 경로로도 허용하지 않는다
+        if (allow_legacy_finite_bounds && candidate.is_finite() && candidate > 0.0)
+            || dimension_within_limit(candidate)
             || current.is_some_and(|value| {
                 !dimension_within_limit(value)
                     && numeric_metric_non_increasing(value, candidate, true)
@@ -2800,13 +2825,21 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::FontColor("  raw font color  ".to_string()),
-                serde_json::json!({ "property": "fontColor", "value": "  raw font color  " }),
+                EditorElementPropertyPatchV1::FontPaint(crate::models::EditorPaintDescriptorV1 {
+                    color: "  raw font color  ".to_string(),
+                    gradient: None,
+                }),
+                serde_json::json!({ "property": "fontPaint", "value": { "color": "  raw font color  ", "gradient": null } }),
             ),
             (
-                EditorElementTypeV1::Knob,
-                EditorElementPropertyPatchV1::ActiveFontColor(String::new()),
-                serde_json::json!({ "property": "activeFontColor", "value": "" }),
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::ActiveFontPaint(
+                    crate::models::EditorPaintDescriptorV1 {
+                        color: String::new(),
+                        gradient: None,
+                    },
+                ),
+                serde_json::json!({ "property": "activeFontPaint", "value": { "color": "", "gradient": null } }),
             ),
             (
                 EditorElementTypeV1::Stat,
@@ -2988,16 +3021,6 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("  raw-idle-stroke  ".to_string()),
-                serde_json::json!({ "property": "counterStrokeIdle", "value": "  raw-idle-stroke  " }),
-            ),
-            (
-                EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterStrokeActive(String::new()),
-                serde_json::json!({ "property": "counterStrokeActive", "value": "" }),
-            ),
-            (
-                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterAnimationPreset(
                     crate::models::EditorCounterAnimationPresetIntentV1 {
                         preset_id: "user-motion".to_string(),
@@ -3023,6 +3046,11 @@ mod tests {
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteGlowEnabled(true),
                 serde_json::json!({ "property": "noteGlowEnabled", "value": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowSyncPaint(true),
+                serde_json::json!({ "property": "noteGlowSyncPaint", "value": true }),
             ),
             (
                 EditorElementTypeV1::Key,
@@ -3065,6 +3093,7 @@ mod tests {
                     crate::models::EditorNoteBorderPaintV1 {
                         color: "#A1b2C3".to_string(),
                         opacity: 55,
+                        gradient: None,
                     },
                 ),
                 serde_json::json!({ "property": "noteBorderPaint", "value": { "color": "#A1b2C3", "opacity": 55 } }),
@@ -3160,11 +3189,11 @@ mod tests {
             serde_json::json!({ "property": "className", "value": 1 }),
             serde_json::json!({ "className": "class", "hidden": true }),
             serde_json::json!({ "className": "class", "unexpected": true }),
-            serde_json::json!({ "property": "fontColor", "value": null }),
-            serde_json::json!({ "property": "fontColor", "value": 1 }),
-            serde_json::json!({ "property": "activeFontColor", "value": false }),
-            serde_json::json!({ "fontColor": "idle", "activeFontColor": "active" }),
-            serde_json::json!({ "activeFontColor": "active", "unexpected": true }),
+            serde_json::json!({ "property": "fontPaint", "value": null }),
+            serde_json::json!({ "property": "fontPaint", "value": { "color": "idle" } }),
+            serde_json::json!({ "property": "activeFontPaint", "value": false }),
+            serde_json::json!({ "fontPaint": { "color": "idle", "gradient": null }, "activeFontPaint": { "color": "active", "gradient": null } }),
+            serde_json::json!({ "property": "activeFontPaint", "value": { "color": "active", "gradient": null, "unexpected": true } }),
             serde_json::json!({ "property": "shadow", "value": {} }),
             serde_json::json!({ "property": "shadow", "value": { "offsetX": 1, "blur": 2 } }),
             serde_json::json!({ "property": "shadow", "value": { "color": "shadow", "unexpected": true } }),
@@ -3246,13 +3275,6 @@ mod tests {
             serde_json::json!({ "property": "counterFillActive", "value": { "color": "first", "gradient": { "angle": 45, "stops": [{ "color": "first", "pos": 0 }, { "color": "last", "pos": 1 }], "unexpected": true } } }),
             serde_json::json!({ "property": "counterFillIdle", "value": { "color": "solid", "unexpected": true } }),
             serde_json::json!({ "counterFillIdle": { "color": "idle" }, "counterFillActive": { "color": "active" } }),
-            serde_json::json!({ "property": "counterStrokeIdle", "value": null }),
-            serde_json::json!({ "property": "counterStrokeIdle", "value": 1 }),
-            serde_json::json!({ "counterStrokeIdle": "idle", "counterStrokeActive": "active" }),
-            serde_json::json!({ "counterStrokeIdle": "idle", "unexpected": true }),
-            serde_json::json!({ "property": "counterStrokeActive", "value": null }),
-            serde_json::json!({ "property": "counterStrokeActive", "value": 1 }),
-            serde_json::json!({ "counterStrokeActive": "active", "hidden": true }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": null }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": {} }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": { "presetId": "preset", "enabled": true } }),
@@ -3263,6 +3285,7 @@ mod tests {
             serde_json::json!({ "property": "statType", "value": "invalid" }),
             serde_json::json!({ "property": "noteEffectEnabled", "value": 1 }),
             serde_json::json!({ "property": "noteGlowEnabled", "value": null }),
+            serde_json::json!({ "property": "noteGlowSyncPaint", "value": null }),
             serde_json::json!({ "property": "noteGlowSize", "value": null }),
             serde_json::json!({ "property": "noteGlowSize", "value": "20" }),
             serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
@@ -4623,7 +4646,7 @@ mod tests {
             &candidate,
             &store,
             &candidate_store,
-            GrandfatherKeying::ByModeIndex,
+            GrandfatherKeying::ModeIndex,
         )
         .unwrap();
     }
@@ -4654,7 +4677,7 @@ mod tests {
             &candidate,
             &store,
             &candidate_store,
-            GrandfatherKeying::ByModeIndex,
+            GrandfatherKeying::ModeIndex,
         )
         .unwrap();
     }
@@ -4677,13 +4700,99 @@ mod tests {
             &candidate,
             &store,
             &candidate_store,
-            GrandfatherKeying::ByModeIndex,
+            GrandfatherKeying::ModeIndex,
         )
         .unwrap_err();
         assert_eq!(
             error.details.unwrap().validation_code.as_deref(),
             Some("COORDINATE_OUT_OF_RANGE")
         );
+    }
+
+    #[test]
+    fn legacy_preset_keying_accepts_finite_historical_bounds_in_every_collection() {
+        let store = store_with_each_position_collection();
+        let current = EditorDocumentV1::from_store(&store);
+
+        for collection in [
+            "keyPositions",
+            "statPositions",
+            "graphPositions",
+            "knobPositions",
+        ] {
+            let mut candidate = current.clone();
+            let position = position_mut(&mut candidate, collection);
+            position.dx = MAX_ABS_COORDINATE + 7_232.0;
+            position.width = MAX_DIMENSION + 7_232.0;
+            let mut candidate_store = store.clone();
+            candidate.apply_to_store(&mut candidate_store);
+            crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+            let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+            let strict = validate_document_transition_with_keying(
+                &current,
+                &candidate,
+                &store,
+                &candidate_store,
+                GrandfatherKeying::ModeIndex,
+            )
+            .unwrap_err();
+            assert!(matches!(
+                strict.details.unwrap().validation_code.as_deref(),
+                Some("COORDINATE_OUT_OF_RANGE" | "DIMENSION_OUT_OF_RANGE")
+            ));
+            validate_document_transition_with_keying(
+                &current,
+                &candidate,
+                &store,
+                &candidate_store,
+                GrandfatherKeying::LegacyPresetModeIndex,
+            )
+            .unwrap();
+        }
+
+        let mut invalid = current.clone();
+        invalid.key_positions.get_mut("4key").unwrap()[0].dx = f64::NAN;
+        let mut invalid_store = store.clone();
+        invalid.apply_to_store(&mut invalid_store);
+        assert!(validate_document_transition_with_keying(
+            &current,
+            &invalid,
+            &store,
+            &invalid_store,
+            GrandfatherKeying::LegacyPresetModeIndex,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn legacy_preset_keying_still_rejects_non_positive_dimensions() {
+        let store = store_with_each_position_collection();
+        let current = EditorDocumentV1::from_store(&store);
+
+        for (width, height) in [(0.0, 60.0), (-1.0, 60.0), (60.0, 0.0)] {
+            let mut candidate = current.clone();
+            let position = position_mut(&mut candidate, "keyPositions");
+            position.width = width;
+            position.height = height;
+            let mut candidate_store = store.clone();
+            candidate.apply_to_store(&mut candidate_store);
+            crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+            let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+            let error = validate_document_transition_with_keying(
+                &current,
+                &candidate,
+                &store,
+                &candidate_store,
+                GrandfatherKeying::LegacyPresetModeIndex,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.details.unwrap().validation_code.as_deref(),
+                Some("DIMENSION_OUT_OF_RANGE")
+            );
+        }
     }
 
     #[test]

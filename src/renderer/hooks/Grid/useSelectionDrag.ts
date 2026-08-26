@@ -1,6 +1,10 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type React from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import {
+  resumeCustomCursorHover,
+  suspendCustomCursorHover,
+} from '@utils/grid/cursorUtils';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -11,6 +15,7 @@ import {
 } from '@utils/grid/smartGuides';
 import { DRAG_THRESHOLD } from './constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
+import { isMac } from '@utils/core/platform';
 
 interface SelectedElementLike {
   id: string;
@@ -125,6 +130,9 @@ export const useSelectionDrag = ({
     activePointerIdRef.current = pointerId;
     dragTarget.setPointerCapture(pointerId);
     dragTarget.style.userSelect = 'none';
+    // 개별 드래그(useDraggable)와 동일한 잡기 커서 - 잡는 동안 grabbing 유지
+    dragTarget.ownerDocument.body.classList.add('dmn-dragging');
+    suspendCustomCursorHover();
 
     useSmartGuidesStore.getState().clearGuides();
 
@@ -160,7 +168,12 @@ export const useSelectionDrag = ({
         const newX = startX + rawDeltaX;
         const newY = startY + rawDeltaY;
         const gridSettings = useSettingsStore.getState().gridSettings;
-        const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
+        // 플랫폼 primary modifier로 스마트 스냅 일시 해제 (그리드 스냅은 유지)
+        const suppressSmartSnap = isMac()
+          ? frameEvent.metaKey
+          : frameEvent.ctrlKey;
+        const alignmentGuidesEnabled =
+          gridSettings?.alignmentGuides !== false && !suppressSmartSnap;
         const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
         const otherElements = getOtherElements(elementId);
         const nonSelectedElements = otherElements.filter(
@@ -236,8 +249,10 @@ export const useSelectionDrag = ({
           finalY = Math.round(newY / snapSize) * snapSize;
         }
 
-        const snappedDeltaX = Math.round(finalX - startX);
-        const snappedDeltaY = Math.round(finalY - startY);
+        // finalX/finalY는 이미 스마트 스냅 좌표 또는 그리드 배수 - 델타를
+        // 다시 정수화하면 소수 정렬 좌표가 깨져 가이드 선과 어긋난다
+        const snappedDeltaX = finalX - startX;
+        const snappedDeltaY = finalY - startY;
         const smartGuidesStore = useSmartGuidesStore.getState();
         if (snapResult && (snapResult.didSnapX || snapResult.didSnapY)) {
           const displayBounds =
@@ -315,6 +330,8 @@ export const useSelectionDrag = ({
       dragTarget.removeEventListener('lostpointercapture', finishDrag);
       window.removeEventListener('blur', finishDrag);
       dragTarget.style.userSelect = previousUserSelect;
+      dragTarget.ownerDocument.body.classList.remove('dmn-dragging');
+      resumeCustomCursorHover();
       useSmartGuidesStore.getState().clearGuides();
       if (actuallyDragging) {
         useGridSelectionStore.getState().setDraggingOrResizing(false);

@@ -57,9 +57,6 @@ const OutsideCounter = ({
   const fillGradient = active
     ? counterSettings.fillActiveGradient
     : counterSettings.fillIdleGradient;
-  const strokeColor = active
-    ? counterSettings.stroke.active
-    : counterSettings.stroke.idle;
 
   return (
     <div
@@ -70,7 +67,6 @@ const OutsideCounter = ({
         count={count}
         fillColor={fillColor}
         fillGradient={fillGradient}
-        strokeColor={strokeColor}
         globalKey={globalKey}
         active={active}
         fontSize={counterSettings.fontSize}

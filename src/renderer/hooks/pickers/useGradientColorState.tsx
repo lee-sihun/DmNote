@@ -18,6 +18,8 @@ import {
   type GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useEditStatePreviewPublisher } from '@stores/grid/useEditStatePreviewStore';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 
 interface UseGradientColorStateOptions {
   /** 현재 저장된 쌍 (base 색 + gradient 형제) */
@@ -34,7 +36,11 @@ interface UseGradientColorStateOptions {
   /** 미리보기(드래그 중) — 상위 프리뷰 경로로 전달 */
   onPreview?: (value: ColorModeValue) => void;
   /** 확정 커밋 — atomic patch 산출은 호출부가 gradientPairPatch/counterFillPair로 */
-  onCommit: (value: ColorModeValue) => void;
+  onCommit: (value: ColorModeValue, meta?: GradientCommitMeta) => void;
+}
+
+export interface GradientCommitMeta {
+  gradientSource?: 'seed' | 'remembered' | 'edit';
 }
 
 /**
@@ -70,6 +76,9 @@ export function useGradientColorState({
   onCommit,
 }: UseGradientColorStateOptions) {
   const storedSpec = pair.gradient ?? null;
+  // 상태 프리뷰 발행 - 앵커 존재(피커 오픈) 동안 형식과 무관하게 편집 중인
+  // 상태를 캔버스에 알린다. 그라데이션 세션과 달리 단색 편집도 포함
+  useEditStatePreviewPublisher(canvasAnchor ?? null, canvasState);
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
   );
@@ -108,6 +117,18 @@ export function useGradientColorState({
       return index === prev.index ? prev : { ...prev, index };
     });
   }, [contextKey, maxStopIndex]);
+  // undo/redo 반영 시 미커밋 초안 폐기 - 저장값이 되돌아간 뒤 옛 초안이
+  // 다음 커밋에 실리지 않게 (드래그 세션 자체는 프리미티브가 함께 취소)
+  const historyTick = useCommittedApplyStore((state) => state.historyTick);
+  const historyTickRef = useRef(historyTick);
+  useEffect(() => {
+    if (historyTickRef.current === historyTick) return;
+    historyTickRef.current = historyTick;
+    setDraft(null);
+    // undo/redo가 형식 전환보다 앞선 canonical 상태를 복원한 경우,
+    // 이후 전환에서 미래의 그라데이션을 되살리지 않게 왕복 기억도 폐기
+    lastGradientSpecsRef.current.clear();
+  }, [historyTick]);
   const selectedStop =
     selection.key === contextKey
       ? Math.min(Math.max(selection.index, 0), maxStopIndex)
@@ -147,7 +168,10 @@ export function useGradientColorState({
         : undefined;
       const spec = storedSpec ?? remembered ?? seedSpecFromSolid(baseColor);
       setSelectedStop(0);
-      onCommit({ mode: 'gradient', spec });
+      onCommit(
+        { mode: 'gradient', spec },
+        { gradientSource: remembered ? 'remembered' : 'seed' },
+      );
     } else {
       if (contextKey && workingSpec) {
         lastGradientSpecsRef.current.set(contextKey, workingSpec);
@@ -162,7 +186,7 @@ export function useGradientColorState({
     if (commit) {
       // 커밋은 저장값 갱신으로 같은 렌더 패스에 반영 — 초안은 제거
       setDraft(null);
-      onCommit({ mode: 'gradient', spec });
+      onCommit({ mode: 'gradient', spec }, { gradientSource: 'edit' });
     } else {
       // 취소 복원 등으로 저장값과 같아진 preview는 draft를 남기지 않는다
       if (storedSpec && JSON.stringify(spec) === JSON.stringify(storedSpec)) {

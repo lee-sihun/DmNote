@@ -8,12 +8,22 @@ use crate::{
     },
     errors::CmdResult,
     models::PluginInstancesChangedPayload,
-    state::{plugin::PLUGIN_DATA_KEY_PREFIX, store::PluginInstancesStorageChange, AppState},
+    state::{
+        plugin::{plugin_instances_storage_key, validate_plugin_id, PLUGIN_DATA_KEY_PREFIX},
+        store::PluginInstancesStorageChange,
+        AppState,
+    },
 };
 
 /// 플러그인 스토리지 키 생성 (네임스페이스 자동 적용)
 fn make_storage_key(key: &str) -> String {
     format!("{PLUGIN_DATA_KEY_PREFIX}{key}")
+}
+
+fn canonical_instances_key_for_full_namespace(prefix: &str) -> Option<String> {
+    let plugin_id = prefix.strip_suffix('/')?;
+    validate_plugin_id(plugin_id).ok()?;
+    Some(plugin_instances_storage_key(plugin_id))
 }
 
 fn publish_plugin_instances_deletions(
@@ -121,7 +131,13 @@ pub fn plugin_storage_has_data(state: State<'_, AppState>, prefix: String) -> Cm
     let all_keys = state.store.get_all_plugin_keys()?;
 
     let storage_prefix = make_storage_key(&prefix);
-    let has_data = all_keys.iter().any(|k| k.starts_with(&storage_prefix));
+    let canonical_instances_key = canonical_instances_key_for_full_namespace(&prefix);
+    let has_data = all_keys.iter().any(|key| {
+        key.starts_with(&storage_prefix)
+            || canonical_instances_key
+                .as_ref()
+                .is_some_and(|canonical| key == canonical)
+    });
 
     Ok(has_data)
 }
@@ -177,6 +193,26 @@ mod tests {
         assert_eq!(
             make_storage_key("demo/settings"),
             "plugin_data_demo/settings"
+        );
+    }
+
+    #[test]
+    fn only_a_full_plugin_namespace_maps_to_canonical_instances() {
+        assert_eq!(
+            canonical_instances_key_for_full_namespace("demo-plugin/"),
+            Some("plugin_data_demo-plugin/instances".to_string())
+        );
+        assert_eq!(
+            canonical_instances_key_for_full_namespace("demo-plugin"),
+            None
+        );
+        assert_eq!(
+            canonical_instances_key_for_full_namespace("demo-plugin/cache/"),
+            None
+        );
+        assert_eq!(
+            canonical_instances_key_for_full_namespace("invalid/id/"),
+            None
         );
     }
 

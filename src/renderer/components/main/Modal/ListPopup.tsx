@@ -410,7 +410,16 @@ const MenuItemRow = ({
             : 'hover:bg-fill active:bg-fill-active cursor-pointer'
         }`}
       >
-        {/* 좌측 체크 영역 — 체크 가능한 목록에서만 렌더 */}
+        {/* 라벨 텍스트 */}
+        <span
+          className={`flex-1 text-body whitespace-nowrap text-left ${
+            item.disabled ? 'text-fg-disabled' : 'text-fg'
+          }`}
+        >
+          {item.label}
+        </span>
+
+        {/* 우측 체크 영역 - 체크 가능한 목록에서만 렌더, 폭은 항상 확보해 행 너비 고정 */}
         {hasCheckColumn && (
           <span className="w-[14px] flex-shrink-0 flex items-center justify-center">
             {hasCheck && item.checked && (
@@ -432,15 +441,6 @@ const MenuItemRow = ({
             )}
           </span>
         )}
-
-        {/* 라벨 텍스트 */}
-        <span
-          className={`flex-1 text-body whitespace-nowrap text-left ${
-            item.disabled ? 'text-fg-disabled' : 'text-fg'
-          }`}
-        >
-          {item.label}
-        </span>
 
         {/* 우측 서브메뉴 화살표 — 라벨보다 작은 보조 글리프, 크롬 아이콘 톤, 패딩에 직접 정렬 */}
         {hasChildren && (

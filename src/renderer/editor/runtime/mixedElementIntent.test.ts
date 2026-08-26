@@ -98,6 +98,26 @@ describe('혼합 의도 러너 receipt 소유권', () => {
     expect(rollback).not.toHaveBeenCalled();
   });
 
+  it('plugin-only 의도는 editor payload 없이 같은 transaction에 전달한다', async () => {
+    mocks.commitMixed.mockImplementation(
+      async (_gestureId, mutation, pluginIds, meta: Meta) => {
+        expect(typeof mutation).toBe('function');
+        expect((mutation as () => unknown)()).toBeNull();
+        expect(pluginIds).toEqual(['plugin-a', 'plugin-b']);
+        meta.onEnrolled?.();
+      },
+    );
+
+    await runMixedElementOpsIntent({
+      gestureId: 'gesture-plugin-only',
+      pluginIds: ['plugin-a', 'plugin-b'],
+      ops: [],
+      receipt: null,
+    });
+
+    expect(mocks.commitSemantic).not.toHaveBeenCalled();
+  });
+
   it('안정 bounds 혼합 의도의 편입 전 실패만 receipt를 복원한다', async () => {
     const rollback = vi.fn();
     mocks.commitMixed.mockRejectedValueOnce(new Error('setup failed'));

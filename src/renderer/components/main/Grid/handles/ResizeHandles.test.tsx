@@ -83,6 +83,81 @@ describe('ResizeHandles frame coalescing', () => {
     act(() => document.dispatchEvent(new MouseEvent('mouseup')));
   });
 
+  it('가로 전용 핸들은 높이·Y를 유지한다 (비배수 높이 1px 밀림 방지)', async () => {
+    const onResize = vi.fn();
+    await act(async () => {
+      root.render(
+        <ResizeHandles
+          bounds={{ x: 40, y: 40, width: 100, height: 63 }}
+          onResize={onResize}
+        />,
+      );
+    });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="e"]')!;
+    act(() =>
+      handle.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 0,
+          clientY: 0,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: 10, clientY: 0 }),
+    );
+    const callback = callbacks.get(1)!;
+    callbacks.clear();
+    act(() => callback(performance.now()));
+    expect(onResize).toHaveBeenCalledTimes(1);
+    // 드래그하지 않은 축은 스냅 대상이 아니다 - 높이 63과 Y가 그대로여야 한다
+    expect(onResize.mock.calls[0][0]).toMatchObject({
+      x: 40,
+      y: 40,
+      width: 110,
+      height: 63,
+    });
+    act(() => document.dispatchEvent(new MouseEvent('mouseup')));
+  });
+
+  it('세로 전용 핸들은 너비·X를 유지한다', async () => {
+    const onResize = vi.fn();
+    await act(async () => {
+      root.render(
+        <ResizeHandles
+          bounds={{ x: 40, y: 40, width: 63, height: 100 }}
+          onResize={onResize}
+        />,
+      );
+    });
+    const handle = host.querySelector<HTMLElement>('[data-resize-handle="s"]')!;
+    act(() =>
+      handle.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 0,
+          clientY: 0,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    document.dispatchEvent(
+      new MouseEvent('mousemove', { clientX: 0, clientY: 10 }),
+    );
+    const callback = callbacks.get(1)!;
+    callbacks.clear();
+    act(() => callback(performance.now()));
+    expect(onResize).toHaveBeenCalledTimes(1);
+    expect(onResize.mock.calls[0][0]).toMatchObject({
+      x: 40,
+      y: 40,
+      width: 63,
+      height: 110,
+    });
+    act(() => document.dispatchEvent(new MouseEvent('mouseup')));
+  });
+
   it('mouseup은 예약된 마지막 bounds를 flush한다', async () => {
     const onResize = vi.fn();
     const onResizeEnd = vi.fn();

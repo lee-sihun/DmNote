@@ -40,7 +40,9 @@ export const runMixedElementOpsIntent = async (options: {
     } else {
       await commitMixedGestureTransaction(
         options.gestureId,
-        { opsVersion: EDITOR_OPS_VERSION, ops: options.ops },
+        options.ops.length > 0
+          ? { opsVersion: EDITOR_OPS_VERSION, ops: options.ops }
+          : () => null,
         options.pluginIds,
         { onEnrolled },
       );

@@ -810,7 +810,7 @@ const BenchmarkApp = () => {
       value={{ locale: 'ko', setLocale: () => undefined, t: (key) => key }}
     >
       <main className="relative min-h-screen bg-app p-[24px] text-fg">
-        <div className="relative min-h-[360px] w-[640px] rounded-panel bg-panel p-[12px]">
+        <div className="relative min-h-[360px] w-full max-w-[640px] rounded-panel bg-panel p-[12px]">
           <BenchmarkSurface
             scenario={scenario}
             strategy={strategy}

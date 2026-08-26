@@ -118,11 +118,20 @@ interface KeyPosition {
   count: number;
   noteColor: string | { type: 'gradient'; top: string; bottom: string };
   noteOpacity: number;
+  noteOpacityTop?: number;
+  noteOpacityBottom?: number;
+  noteGradient?: GradientSpec | null;
   noteEffectEnabled: boolean;
   noteGlowEnabled: boolean;
+  noteGlowSyncPaint?: boolean;
   noteGlowSize: number;
   noteGlowOpacity: number;
+  noteGlowOpacityTop?: number;
+  noteGlowOpacityBottom?: number;
   noteGlowColor?: string | { type: 'gradient'; top: string; bottom: string };
+  noteGlowGradient?: GradientSpec | null;
+  noteBorderColor?: string;
+  noteBorderGradient?: GradientSpec | null;
   noteAutoYCorrection: boolean;
   className?: string;
   zIndex?: number;
@@ -136,12 +145,16 @@ interface KeyPosition {
   activeBackgroundGradient?: GradientSpec | null;
   borderGradient?: GradientSpec | null;
   activeBorderGradient?: GradientSpec | null;
+  fontColor?: string;
+  activeFontColor?: string;
+  fontGradient?: GradientSpec | null;
+  activeFontGradient?: GradientSpec | null;
   shadow?: ElementShadowSpec;
   activeShadow?: ElementShadowSpec;
 }
 
 interface KeyCounterSettings {
-  // ...배치, 글자, stroke, 애니메이션 필드...
+  // ...배치, 글자, 애니메이션 필드...
   fill: { idle: string; active: string };
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
@@ -175,7 +188,28 @@ interface ElementShadowSpec {
 그라데이션 필드를 `null`로 두고 단색 필드를 갱신하세요.
 
 카운터 fill 그라데이션도 각각 `counter.fill.idle`과 `counter.fill.active`보다
-우선합니다. 카운터 stroke는 단색만 지원합니다.
+우선합니다.
+
+노트 테두리는 `noteBorderGradient`가 `noteBorderColor`보다 우선합니다.
+`noteBorderColor`는 항상 `#RRGGBB` hex로 유지되므로 그라데이션 저장 시 첫
+스톱 색이 hex로 변환되어 동기화됩니다. 스톱 색은 hex(`#RGB`, `#RGBA`,
+`#RRGGBB`, `#RRGGBBAA`) 또는 `rgb()`/`rgba()` 형식만 허용합니다.
+
+노트 본체와 글로우도 같은 형식을 지원합니다. `noteGradient` 또는
+`noteGlowGradient`가 있으면 해당 표면은 신형 의미가 됩니다.
+`noteOpacity`/`noteGlowOpacity`는 전역 배율(없으면 100)로 동작하고, 구형
+필드(top/bottom 두 색 객체와 끝단 투명도)는 구버전 표시용 근사값으로 자동
+동기됩니다. 스톱 색 형식 제한은 테두리와 같습니다. 그라데이션 필드를
+빼거나 `null`로 두고 요소를 쓰면 해당 표면은 구형 의미로 되돌아갑니다.
+표면을 한 번의 쓰기로 전환하려면 같은 `updatePositions` 호출에서 그라데이션
+필드와 배율을 함께 설정하세요. 단색 필드와 구형 근사값은 저장 시 파생되어
+동기화됩니다.
+
+`noteGlowSyncPaint`가 `true`이면 글로우 페인트(`noteGlowColor`,
+`noteGlowGradient`, `noteGlowOpacity`, `noteGlowOpacityTop/Bottom`)는 저장
+시점에 본체 페인트와 같은 값으로 파생됩니다. 이 상태에서 글로우 필드를
+직접 써도 본체 값으로 덮이므로 글로우를 따로 바꾸려면 먼저 `false`로
+두세요. 기본값은 `false`입니다.
 
 `shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
 생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면
@@ -238,7 +272,8 @@ console.log('모드 변경 성공:', result.success);
 
 ### resetMode(mode)
 
-특정 키 모드를 기본값으로 초기화합니다.
+특정 키 모드와 위치, 해당 모드에 배치된 플러그인 표시 요소를 기본값으로
+초기화합니다. 플러그인의 다른 저장 데이터는 유지됩니다.
 
 ```javascript
 await dmn.keys.resetMode('4key');
@@ -246,7 +281,11 @@ await dmn.keys.resetMode('4key');
 
 ### resetAll()
 
-모든 키, 위치, 커스텀 탭을 기본값으로 초기화합니다.
+모든 키, 위치, 카운터, 커스텀 탭과 플러그인 표시 요소 배치를 기본값으로
+초기화합니다. 설치한 플러그인과 그 밖의 플러그인 저장 데이터는 유지됩니다.
+초기화 대상은 저장된 `defineElement` 배치입니다. 플러그인 시작 코드가
+`displayElement.add()`로 직접 만드는 런타임 요소는 플러그인이 유지되는 동안
+남거나 다시 생성될 수 있습니다.
 
 ```javascript
 const reset = await dmn.keys.resetAll();

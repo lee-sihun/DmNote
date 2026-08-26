@@ -13,9 +13,9 @@ use crate::models::{
     CustomCssPatch, CustomJsPatch, EditorCommitOrigin, EditorCommitRequest, EditorCommitResult,
     EditorCommittedV1, EditorDocumentV1, EditorField, EditorGetResult, EditorOpResultStatusV1,
     EditorOpResultV1, EditorTransactionResult, FontType, GestureCommitRequest, GestureCommitResult,
-    HistoryStatus, KeyCounters, KeyPosition, NoteSettingsPatch, PluginInstancesCommitRequest,
-    PluginInstancesReconcileRequest, SavedPluginInstance, SettingsDiff, SettingsPatchInput,
-    SettingsState, EDITOR_SCHEMA_VERSION,
+    HistoryStatus, KeyCounters, KeyPosition, NoteSettingsPatch, PluginInstancesChangedPayload,
+    PluginInstancesCommitRequest, PluginInstancesReconcileRequest, SavedPluginInstance,
+    SettingsDiff, SettingsPatchInput, SettingsState, EDITOR_SCHEMA_VERSION,
 };
 use anyhow::{anyhow, Context, Result};
 use parking_lot::{Mutex, RwLock, RwLockWriteGuard};
@@ -52,12 +52,13 @@ use super::migration::{
     rehome_foreign_asset_references,
 };
 use super::plugin::{
-    add_plugin_group_refs, decode_plugin_instances, encode_plugin_instances,
-    for_each_stored_plugin_instances, is_plugin_instances_storage_key,
-    normalize_plugin_instance_tab_id, plugin_group_refs_from_store,
-    plugin_id_from_instances_storage_key, plugin_instances_storage_key, validate_plugin_id,
-    validate_plugin_instances_reconcile_request, validate_plugin_instances_request,
-    PluginGroupRefs, PLUGIN_DATA_KEY_PREFIX,
+    add_plugin_group_refs, decode_plugin_instance_entries, decode_plugin_instances_lenient,
+    encode_plugin_instance_entries, encode_plugin_instances, for_each_stored_plugin_instances,
+    is_plugin_instances_storage_key, normalize_plugin_instance_tab_id,
+    plugin_group_refs_from_store, plugin_id_from_instances_storage_key,
+    plugin_instances_storage_key, validate_plugin_id, validate_plugin_instances_reconcile_request,
+    validate_plugin_instances_request, validate_plugin_instances_transition, PluginGroupRefs,
+    StoredPluginInstanceEntry, PLUGIN_DATA_KEY_PREFIX,
 };
 
 const TRASH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -117,6 +118,8 @@ pub(crate) enum HistoryAuxChange {
     CustomTabs {
         snapshot: Box<CustomTabsHistorySnapshot>,
         changed_tab_css_ids: Vec<String>,
+        plugin_ids: Vec<String>,
+        revision: u64,
     },
     PresetFull {
         snapshot: Box<PresetFullHistorySnapshot>,
@@ -228,6 +231,21 @@ struct EditorTransactionHistoryOptions {
     observed_epoch: Option<u64>,
     key_counters: Option<KeyCounters>,
     invalidate_history_on_store_only_change: bool,
+    plugin_instances_reset: Option<PluginInstancesResetScope>,
+}
+
+#[derive(Clone)]
+pub(crate) enum PluginInstancesResetScope {
+    All,
+    Mode(String),
+}
+
+pub(crate) struct AuxEditorResetTransactionOptions<'a> {
+    pub(crate) scope: HistoryScope,
+    pub(crate) observed_history_epoch: Option<u64>,
+    pub(crate) origin: EditorCommitOrigin,
+    pub(crate) touched_fields: &'a [EditorField],
+    pub(crate) plugin_instances_reset: PluginInstancesResetScope,
 }
 
 struct PersistTicket {
@@ -583,7 +601,7 @@ impl AppStore {
                     let opposite = require_history_entry(
                         guard.history.prepare_custom_tabs_entry(current_snapshot)?,
                     )?;
-                    let change = self
+                    let (change, plugin_ids, revision) = self
                         .commit_custom_tabs_history_locked(
                             &mut guard,
                             &before,
@@ -595,8 +613,10 @@ impl AppStore {
                         opposite,
                         change,
                         Some(HistoryAuxChange::CustomTabs {
-                            snapshot: Box::new(before),
+                            snapshot: before,
                             changed_tab_css_ids,
+                            plugin_ids,
+                            revision,
                         }),
                     )
                 }
@@ -697,7 +717,7 @@ impl AppStore {
                             HistorySnapshot::Editor { changed_fields, .. } => {
                                 opposite_snapshots.push(HistorySnapshot::Editor {
                                     changed_fields: changed_fields.clone(),
-                                    before: current.patch_for_fields(changed_fields),
+                                    before: Box::new(current.patch_for_fields(changed_fields)),
                                 });
                             }
                             HistorySnapshot::PluginElements(before) => {
@@ -880,6 +900,7 @@ impl AppStore {
                 selected_key_type: guard.data.selected_key_type.clone(),
                 key_counters: guard.data.key_counters.clone(),
                 history_status: None,
+                plugin_instances_changes: Vec::new(),
                 runtime_publication_generation: guard.revision,
             });
         }
@@ -1009,6 +1030,7 @@ impl AppStore {
                 selected_key_type: current_store.selected_key_type,
                 key_counters: current_store.key_counters,
                 history_status: None,
+                plugin_instances_changes: Vec::new(),
                 runtime_publication_generation: guard.revision,
             });
         }
@@ -1066,6 +1088,7 @@ impl AppStore {
             selected_key_type,
             key_counters,
             history_status,
+            plugin_instances_changes: Vec::new(),
             runtime_publication_generation: guard.revision,
         })
     }
@@ -1185,7 +1208,7 @@ impl AppStore {
         if !changed_fields.is_empty() {
             history_snapshots.push(HistorySnapshot::Editor {
                 changed_fields: changed_fields.clone(),
-                before: current_editor.patch_for_fields(&changed_fields),
+                before: Box::new(current_editor.patch_for_fields(&changed_fields)),
             });
         }
 
@@ -1195,6 +1218,19 @@ impl AppStore {
                 plugin_elements_snapshot(&current_store, &plugin_change.plugin_id).map_err(
                     |error| EditorCommitError::validation("INVALID_GESTURE_PLUGIN", error),
                 )?;
+            validate_plugin_instances_transition(
+                current_snapshot.instances.as_deref().unwrap_or_default(),
+                &plugin_change.instances,
+            )
+            .map_err(|error| {
+                EditorCommitError::validation(
+                    error.clone(),
+                    format!(
+                        "invalid plugin gesture transition '{}': {error}",
+                        plugin_change.plugin_id
+                    ),
+                )
+            })?;
             let canonical = PluginElementsHistorySnapshot {
                 plugin_id: plugin_change.plugin_id.clone(),
                 instances: (!plugin_change.instances.is_empty())
@@ -1296,6 +1332,7 @@ impl AppStore {
             selected_key_type,
             key_counters,
             history_status: None,
+            plugin_instances_changes: Vec::new(),
             runtime_publication_generation: guard.revision,
         });
 
@@ -1447,6 +1484,7 @@ impl AppStore {
                 selected_key_type,
                 key_counters,
                 history_status: None,
+                plugin_instances_changes: Vec::new(),
                 runtime_publication_generation: guard.revision,
             })
         });
@@ -1460,7 +1498,8 @@ impl AppStore {
         target: &CustomTabsHistorySnapshot,
         operation_id: &str,
         origin: EditorCommitOrigin,
-    ) -> std::result::Result<Option<CommittedEditorChange>, EditorCommitError> {
+    ) -> std::result::Result<(Option<CommittedEditorChange>, Vec<String>, u64), EditorCommitError>
+    {
         let current_store = guard.data.clone();
         if target.matches_store(&current_store) {
             return Err(EditorCommitError::validation(
@@ -1497,11 +1536,27 @@ impl AppStore {
         };
         let selected_key_type = scratch.selected_key_type.clone();
         let key_counters = scratch.key_counters.clone();
+        let plugin_ids = target
+            .changed_plugin_ids()
+            .into_iter()
+            .filter(|plugin_id| {
+                let key = plugin_instances_storage_key(plugin_id);
+                current_store.plugin_data.get(&key) != scratch.plugin_data.get(&key)
+            })
+            .collect::<Vec<_>>();
+        let plugin_model_revision = if plugin_ids.is_empty() {
+            guard.plugin_model_revision
+        } else {
+            next_plugin_model_revision(guard.plugin_model_revision).map_err(|error| {
+                EditorCommitError::validation("PLUGIN_MODEL_REVISION_OUT_OF_RANGE", error)
+            })?
+        };
         self.commit_locked(guard, scratch, ())
             .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        guard.plugin_model_revision = plugin_model_revision;
 
         if changed_fields.is_empty() {
-            return Ok(None);
+            return Ok((None, plugin_ids, plugin_model_revision));
         }
         let event = origin.event_name().map(|origin| EditorCommittedV1 {
             schema_version: EDITOR_SCHEMA_VERSION,
@@ -1513,20 +1568,25 @@ impl AppStore {
             changed_fields: changed_fields.clone(),
             patch: candidate.patch_for_fields(&changed_fields),
         });
-        Ok(Some(CommittedEditorChange {
-            result: EditorCommitResult {
-                revision,
-                changed_fields,
-                op_results: None,
-            },
-            event,
-            replayed: false,
-            document: candidate,
-            selected_key_type,
-            key_counters,
-            history_status: None,
-            runtime_publication_generation: guard.revision,
-        }))
+        Ok((
+            Some(CommittedEditorChange {
+                result: EditorCommitResult {
+                    revision,
+                    changed_fields,
+                    op_results: None,
+                },
+                event,
+                replayed: false,
+                document: candidate,
+                selected_key_type,
+                key_counters,
+                history_status: None,
+                plugin_instances_changes: Vec::new(),
+                runtime_publication_generation: guard.revision,
+            }),
+            plugin_ids,
+            plugin_model_revision,
+        ))
     }
 
     fn commit_preset_full_history_locked(
@@ -1564,7 +1624,7 @@ impl AppStore {
             &candidate,
             &current_store,
             &scratch,
-            GrandfatherKeying::ByModeIndex,
+            GrandfatherKeying::LegacyPresetModeIndex,
         )?;
 
         let changed_fields = current.changed_fields(&candidate);
@@ -1606,6 +1666,7 @@ impl AppStore {
                 selected_key_type,
                 key_counters,
                 history_status: None,
+                plugin_instances_changes: Vec::new(),
                 runtime_publication_generation: guard.revision,
             }),
             settings_diff,
@@ -1638,6 +1699,26 @@ impl AppStore {
             origin,
             touched_fields,
             EditorTransactionHistoryOptions::default(),
+            admission,
+            updater,
+        )
+    }
+
+    pub(crate) fn commit_legacy_editor_reset_transaction_with_admission<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        plugin_instances_reset: PluginInstancesResetScope,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history_admission(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                plugin_instances_reset: Some(plugin_instances_reset),
+                ..EditorTransactionHistoryOptions::default()
+            },
             admission,
             updater,
         )
@@ -1828,6 +1909,32 @@ impl AppStore {
         )
     }
 
+    pub(crate) fn commit_aux_editor_reset_transaction_with_admission<T>(
+        &self,
+        options: AuxEditorResetTransactionOptions<'_>,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        if !matches!(options.scope, HistoryScope::CustomTabs | HistoryScope::Mode) {
+            return Err(EditorCommitError::validation(
+                "INVALID_AUX_HISTORY_SCOPE",
+                "aux editor transaction requires a custom tabs or mode scope",
+            ));
+        }
+        self.commit_editor_transaction_with_history_admission(
+            options.origin,
+            options.touched_fields,
+            EditorTransactionHistoryOptions {
+                scope: Some(options.scope),
+                observed_epoch: options.observed_history_epoch,
+                plugin_instances_reset: Some(options.plugin_instances_reset),
+                ..EditorTransactionHistoryOptions::default()
+            },
+            admission,
+            updater,
+        )
+    }
+
     #[cfg(test)]
     fn commit_editor_transaction_with_history<T>(
         &self,
@@ -1911,6 +2018,24 @@ impl AppStore {
             scratch.key_counters = counters.clone();
         }
         let value = updater(&mut scratch)?;
+        let plugin_reset_applied =
+            history_options
+                .plugin_instances_reset
+                .as_ref()
+                .is_some_and(|scope| match scope {
+                    PluginInstancesResetScope::All => true,
+                    PluginInstancesResetScope::Mode(mode) => {
+                        crate::defaults::default_keys().contains_key(mode)
+                            || current_store.custom_tabs.iter().any(|tab| tab.id == *mode)
+                    }
+                });
+        let affected_plugin_ids = history_options
+            .plugin_instances_reset
+            .as_ref()
+            .filter(|_| plugin_reset_applied)
+            .map(|scope| reset_plugin_instances_for_scope(&mut scratch, scope))
+            .transpose()?
+            .unwrap_or_default();
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
 
         // editorRevision은 이 트랜잭션만 관리
@@ -1936,9 +2061,9 @@ impl AppStore {
         // 프리셋 로드는 커밋 직전 모든 요소의 id를 재발급하므로 ID로는 관용
         // 상대를 찾을 수 없다 - 그 트랜잭션만 (모드, index) 짝짓기를 쓴다
         let keying = if history_options.scope == Some(HistoryScope::PresetFull) {
-            GrandfatherKeying::ByModeIndex
+            GrandfatherKeying::LegacyPresetModeIndex
         } else {
-            GrandfatherKeying::ById
+            GrandfatherKeying::StableId
         };
         validate_document_transition_with_keying(
             &current,
@@ -1995,17 +2120,37 @@ impl AppStore {
         };
 
         let has_store_changes = scratch != current_store;
+        let plugin_model_revision = if affected_plugin_ids.is_empty() {
+            guard.plugin_model_revision
+        } else {
+            next_plugin_model_revision(guard.plugin_model_revision).map_err(|error| {
+                EditorCommitError::validation("PLUGIN_MODEL_REVISION_OUT_OF_RANGE", error)
+            })?
+        };
         let selected_key_type = scratch.selected_key_type.clone();
         let key_counters = scratch.key_counters.clone();
         if has_store_changes {
             self.commit_locked(&mut guard, scratch, ())
                 .map_err(|error| EditorCommitError::io(error.to_string()))?;
         }
+        guard.plugin_model_revision = plugin_model_revision;
         let history_status = if let Some(plan) = history_plan {
             guard.history.apply_record_plan(plan);
+            if plugin_reset_applied {
+                guard.history.advance_epoch();
+            }
+            Some(guard.history.issue_status(self.history_gate.is_closed()))
+        } else if plugin_reset_applied {
+            // reset 전에 만들어져 이미 비행 중인 인스턴스 저장이 삭제 결과를
+            // 되살리지 못하게 epoch를 성공 reset마다 전진
+            if has_store_changes {
+                guard.history.invalidate_all();
+            }
+            guard.history.advance_epoch();
             Some(guard.history.issue_status(self.history_gate.is_closed()))
         } else if history_options.scope.is_none() {
             let should_invalidate_history = !changed_fields.is_empty()
+                || !affected_plugin_ids.is_empty()
                 || (history_options.invalidate_history_on_store_only_change && has_store_changes);
             let history_changed = should_invalidate_history && guard.history.invalidate_all();
             history_changed.then(|| guard.history.issue_status(self.history_gate.is_closed()))
@@ -2039,6 +2184,14 @@ impl AppStore {
             selected_key_type,
             key_counters,
             history_status,
+            plugin_instances_changes: affected_plugin_ids
+                .into_iter()
+                .map(|plugin_id| PluginInstancesChangedPayload {
+                    plugin_id,
+                    revision: plugin_model_revision,
+                    origin_mutation_id: None,
+                })
+                .collect(),
             runtime_publication_generation: guard.revision,
         };
 
@@ -2094,8 +2247,8 @@ impl AppStore {
         validate_plugin_id(plugin_id)?;
         let guard = self.state.read();
         let key = plugin_instances_storage_key(plugin_id);
-        let instances =
-            decode_plugin_instances(guard.data.plugin_data.get(&key))?.unwrap_or_default();
+        let instances = decode_plugin_instances_lenient(guard.data.plugin_data.get(&key), &key)
+            .unwrap_or_default();
         Ok((instances, guard.plugin_model_revision))
     }
 
@@ -2237,6 +2390,7 @@ impl AppStore {
         mutation: PluginInstancesMutationInput,
     ) -> std::result::Result<PluginInstancesCommitOutcome, String> {
         let current_instances = current_snapshot.instances.clone().unwrap_or_default();
+        validate_plugin_instances_transition(&current_instances, &mutation.instances)?;
         if current_instances == mutation.instances {
             return Ok(PluginInstancesCommitOutcome {
                 plugin_id: mutation.plugin_id,
@@ -2297,6 +2451,8 @@ impl AppStore {
         value: Value,
         admission: HistoryAdmissionLease,
     ) -> Result<AdmittedPluginStorageMutation<()>> {
+        // canonical 배치 버킷은 revision·history·이벤트를 우회하는 일반 storage 경로로
+        // 쓰거나 지울 수 없다 (namespace 전체 clear만 배치를 함께 지운다)
         if is_plugin_instances_storage_key(key) {
             return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
         }
@@ -2458,11 +2614,20 @@ impl AppStore {
         let namespace_plugin_id = plugin_id_from_storage_namespace_prefix(prefix);
         let plugin_history_exists = namespace_plugin_id
             .is_some_and(|plugin_id| guard.history.contains_plugin_elements_for(Some(plugin_id)));
+        // 공개 storage의 개별 키는 canonical 배치와 독립이다. 다만 플러그인
+        // 전체 namespace clear는 1.6.1의 "모든 데이터 삭제" 계약대로 내부
+        // 배치도 함께 지운다. cache/ 같은 하위 prefix에는 적용하지 않음
+        let canonical_instances_key = namespace_plugin_id.map(plugin_instances_storage_key);
         let keys = guard
             .data
             .plugin_data
             .keys()
-            .filter(|key| key.starts_with(prefix))
+            .filter(|key| {
+                key.starts_with(prefix)
+                    || canonical_instances_key
+                        .as_ref()
+                        .is_some_and(|canonical| *key == canonical)
+            })
             .cloned()
             .collect::<Vec<_>>();
         if keys.is_empty() {
@@ -3069,7 +3234,7 @@ fn plugin_elements_snapshot(
     let key = plugin_instances_storage_key(plugin_id);
     Ok(PluginElementsHistorySnapshot {
         plugin_id: plugin_id.to_string(),
-        instances: decode_plugin_instances(store.plugin_data.get(&key))?,
+        instances: decode_plugin_instances_lenient(store.plugin_data.get(&key), &key),
     })
 }
 
@@ -3088,6 +3253,64 @@ fn collect_plugin_instance_ids<'a>(keys: impl Iterator<Item = &'a str>) -> Vec<S
     plugin_ids.sort_unstable();
     plugin_ids.dedup();
     plugin_ids
+}
+
+fn reset_plugin_instances_for_scope(
+    store: &mut AppStoreData,
+    scope: &PluginInstancesResetScope,
+) -> std::result::Result<Vec<String>, EditorCommitError> {
+    let mut keys = store
+        .plugin_data
+        .keys()
+        .filter(|key| is_plugin_instances_storage_key(key))
+        .cloned()
+        .collect::<Vec<_>>();
+    keys.sort_unstable();
+    let mut affected_plugin_ids = Vec::new();
+
+    for key in keys {
+        let Some(plugin_id) = plugin_id_from_instances_storage_key(&key).map(str::to_string) else {
+            continue;
+        };
+        match scope {
+            PluginInstancesResetScope::All => {
+                store.plugin_data.remove(&key);
+                affected_plugin_ids.push(plugin_id);
+            }
+            PluginInstancesResetScope::Mode(mode) => {
+                let Some(value) = store.plugin_data.get(&key) else {
+                    continue;
+                };
+                let Some(mut entries) = decode_plugin_instance_entries(value, &key) else {
+                    continue;
+                };
+                let mut removed = false;
+                entries.retain(|entry| {
+                    let StoredPluginInstanceEntry::Parsed { instance, .. } = entry else {
+                        return true;
+                    };
+                    let retain =
+                        normalize_plugin_instance_tab_id(instance.tab_id.as_deref()) != mode;
+                    removed |= !retain;
+                    retain
+                });
+                if !removed {
+                    continue;
+                }
+                if entries.is_empty() {
+                    store.plugin_data.remove(&key);
+                } else {
+                    let value = encode_plugin_instance_entries(entries, &key);
+                    store.plugin_data.insert(key, value);
+                }
+                affected_plugin_ids.push(plugin_id);
+            }
+        }
+    }
+
+    affected_plugin_ids.sort_unstable();
+    affected_plugin_ids.dedup();
+    Ok(affected_plugin_ids)
 }
 
 fn plugin_id_from_storage_namespace_prefix(prefix: &str) -> Option<&str> {
@@ -4274,12 +4497,15 @@ mod tests {
     use super::{
         collect_local_font_paths, collect_local_image_path_keys, collect_local_image_paths,
         collect_local_sound_path_keys, collect_local_sound_paths, initialize_default_state,
-        purge_expired_trash_sessions_at, recover_interrupted_processed_wav_replacements_with,
+        plugin_instances_storage_key, purge_expired_trash_sessions_at,
+        recover_interrupted_processed_wav_replacements_with,
         recover_interrupted_sound_deletions_with, stage_sound_files_for_deletion,
-        sweep_unreferenced_asset_files, system_time_millis, AppStore, HistoryAuxChange,
+        sweep_unreferenced_asset_files, system_time_millis, AppStore,
+        AuxEditorResetTransactionOptions, HistoryAuxChange, PluginInstancesResetScope,
         TrashSession, PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
     };
     use crate::{
+        commands::keys::keys::reset_mode_data_for_test,
         custom_css::ValidatedCssFile,
         defaults::default_positions,
         errors::{EditorCommitError, EditorCommitErrorCode},
@@ -4293,7 +4519,7 @@ mod tests {
             EditorPatchV1, EditorTargetGroupV1, EditorZUpdateV1, FontSettings, FontType,
             GestureCommitRequest, GesturePluginInstancesChange, GraphPosition, GraphStatType,
             GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
-            OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
+            NoteColor, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
             PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
             SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
             StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
@@ -4657,6 +4883,433 @@ mod tests {
             observed_history_epoch: None,
             authority_generation: 1,
         }
+    }
+
+    #[test]
+    fn editor_reset_all_atomically_clears_only_plugin_instances() {
+        let dir = test_directory("editor-reset-all-plugin-instances-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .commit_plugin_instances(plugin_instances_request(
+                "plugin-a",
+                vec![saved_plugin_instance(1.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        store
+            .set_plugin_data("plugin_data_plugin-a/settings", json!({ "theme": "dark" }))
+            .unwrap();
+        store
+            .set_plugin_data("plugin_data_plugin-a/total", json!(37))
+            .unwrap();
+        let before_revision = store.plugin_model_revision();
+        let before_epoch = store.history_status().history_epoch;
+
+        let admission = store.admit_editor_mutation().unwrap();
+        let transaction = store
+            .commit_legacy_editor_reset_transaction_with_admission(
+                EditorCommitOrigin::LegacyAdapter("reset-all-test".to_string()),
+                &[],
+                PluginInstancesResetScope::All,
+                admission,
+                |_| Ok(()),
+            )
+            .unwrap();
+
+        assert!(store.plugin_instances_get("plugin-a").unwrap().0.is_empty());
+        assert_eq!(
+            store
+                .get_plugin_data("plugin_data_plugin-a/settings")
+                .unwrap(),
+            Some(json!({ "theme": "dark" }))
+        );
+        assert_eq!(store.plugin_model_revision(), before_revision + 1);
+        assert_eq!(store.history_status().history_epoch, before_epoch + 1);
+        assert_eq!(
+            transaction.change.plugin_instances_changes,
+            vec![crate::models::PluginInstancesChangedPayload {
+                plugin_id: "plugin-a".to_string(),
+                revision: before_revision + 1,
+                origin_mutation_id: None,
+            }]
+        );
+        assert!(!transaction.change.history_status.as_ref().unwrap().can_undo);
+        assert_eq!(
+            store.get_plugin_data("plugin_data_plugin-a/total").unwrap(),
+            Some(json!(37))
+        );
+        assert_eq!(
+            store
+                .get_plugin_data("plugin_data_plugin-a/instances")
+                .unwrap(),
+            None
+        );
+
+        drop(transaction);
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_reset_mode_filters_loaded_and_unloaded_plugin_instances_once() {
+        let dir = test_directory("editor-reset-mode-plugin-instances-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let four_key = saved_plugin_instance(1.0);
+        let mut five_key = saved_plugin_instance(2.0);
+        five_key.tab_id = Some("5key".to_string());
+        for (plugin_id, instances) in [
+            ("plugin-a", vec![four_key, five_key.clone()]),
+            ("plugin-b", vec![saved_plugin_instance(3.0)]),
+        ] {
+            store
+                .commit_plugin_instances(plugin_instances_request(
+                    plugin_id,
+                    instances,
+                    uuid::Uuid::new_v4().to_string(),
+                    None,
+                    Some(store.plugin_model_revision()),
+                ))
+                .unwrap();
+        }
+        let before_revision = store.plugin_model_revision();
+        let before_epoch = store.history_status().history_epoch;
+
+        let admission = store.admit_editor_mutation().unwrap();
+        let transaction = store
+            .commit_legacy_editor_reset_transaction_with_admission(
+                EditorCommitOrigin::LegacyAdapter("reset-mode-test".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::Mode("4key".to_string()),
+                admission,
+                |data| {
+                    reset_mode_data_for_test(data, "4key");
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![five_key]
+        );
+        assert!(store.plugin_instances_get("plugin-b").unwrap().0.is_empty());
+        assert_eq!(store.plugin_model_revision(), before_revision + 1);
+        assert_eq!(store.history_status().history_epoch, before_epoch + 1);
+        assert!(!store.history_status().can_undo);
+        assert_eq!(transaction.change.plugin_instances_changes.len(), 2);
+        assert!(transaction
+            .change
+            .plugin_instances_changes
+            .iter()
+            .all(|change| change.revision == before_revision + 1));
+
+        drop(transaction);
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_reset_mode_preserves_malformed_entries_and_skips_non_array_buckets() {
+        let dir = test_directory("editor-reset-mode-mixed-plugin-instances-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut data = initialize_default_state();
+        let target_with_id = saved_plugin_instance(1.0);
+        let mut target_without_id = saved_plugin_instance(2.0);
+        target_without_id.instance_id = None;
+        let mut retained = saved_plugin_instance(3.0);
+        retained.tab_id = Some("5key".to_string());
+        let retained_value = serde_json::to_value(&retained).unwrap();
+        let malformed = json!({ "position": "broken", "keep": true });
+        let non_array = json!({ "keep": "unchanged" });
+        let key = super::plugin_instances_storage_key("plugin-a");
+        let non_array_key = super::plugin_instances_storage_key("broken");
+        data.plugin_data.insert(
+            key.clone(),
+            json!([
+                serde_json::to_value(target_with_id).unwrap(),
+                serde_json::to_value(target_without_id).unwrap(),
+                retained_value.clone(),
+                malformed.clone()
+            ]),
+        );
+        data.plugin_data
+            .insert(non_array_key.clone(), non_array.clone());
+        let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+
+        let admission = store.admit_editor_mutation().unwrap();
+        let transaction = store
+            .commit_legacy_editor_reset_transaction_with_admission(
+                EditorCommitOrigin::LegacyAdapter("reset-mode-mixed-test".to_string()),
+                &[],
+                PluginInstancesResetScope::Mode("4key".to_string()),
+                admission,
+                |_| Ok(()),
+            )
+            .unwrap();
+
+        assert_eq!(
+            store.get_plugin_data(&key).unwrap(),
+            Some(json!([retained_value.clone(), malformed.clone()]))
+        );
+        assert_eq!(
+            store.get_plugin_data(&non_array_key).unwrap(),
+            Some(non_array.clone())
+        );
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![retained]
+        );
+        assert_eq!(
+            transaction
+                .change
+                .plugin_instances_changes
+                .iter()
+                .map(|change| change.plugin_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["plugin-a"]
+        );
+
+        drop(transaction);
+        store.flush_and_shutdown().unwrap();
+        let reloaded = AppStore::initialize_in_dir(&dir).unwrap();
+        assert_eq!(
+            reloaded.get_plugin_data(&key).unwrap(),
+            Some(json!([retained_value, malformed]))
+        );
+        assert_eq!(
+            reloaded.get_plugin_data(&non_array_key).unwrap(),
+            Some(non_array)
+        );
+        reloaded.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_reset_missing_mode_does_not_touch_plugin_instances() {
+        let dir = test_directory("editor-reset-missing-mode-plugin-instances-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut ghost = saved_plugin_instance(1.0);
+        ghost.tab_id = Some("ghost".to_string());
+        store
+            .commit_plugin_instances(plugin_instances_request(
+                "plugin-a",
+                vec![ghost.clone()],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        let before_revision = store.plugin_model_revision();
+        let before_epoch = store.history_status().history_epoch;
+
+        let admission = store.admit_editor_mutation().unwrap();
+        let transaction = store
+            .commit_legacy_editor_reset_transaction_with_admission(
+                EditorCommitOrigin::LegacyAdapter("reset-missing-mode-test".to_string()),
+                &[],
+                PluginInstancesResetScope::Mode("ghost".to_string()),
+                admission,
+                |_| Ok(None::<()>),
+            )
+            .unwrap();
+
+        assert_eq!(transaction.value, None);
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![ghost]
+        );
+        assert_eq!(store.plugin_model_revision(), before_revision);
+        assert_eq!(store.history_status().history_epoch, before_epoch);
+        assert!(transaction.change.plugin_instances_changes.is_empty());
+
+        drop(transaction);
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_reset_noop_advances_epoch_without_erasing_unrelated_history() {
+        let dir = test_directory("editor-reset-noop-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut five_key = saved_plugin_instance(1.0);
+        five_key.tab_id = Some("5key".to_string());
+        store
+            .commit_plugin_instances(plugin_instances_request(
+                "plugin-a",
+                vec![five_key.clone()],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        let before = store.history_status();
+        assert!(before.can_undo);
+
+        let admission = store.admit_editor_mutation().unwrap();
+        let transaction = store
+            .commit_legacy_editor_reset_transaction_with_admission(
+                EditorCommitOrigin::LegacyAdapter("reset-noop-test".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::Mode("4key".to_string()),
+                admission,
+                |data| {
+                    assert!(!reset_mode_data_for_test(data, "4key"));
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        let after = transaction.change.history_status.unwrap();
+        assert!(after.can_undo);
+        assert_eq!(after.history_epoch, before.history_epoch + 1);
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![five_key]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_reset_rejects_an_instance_save_captured_before_the_reset() {
+        let dir = test_directory("editor-reset-stale-plugin-save-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let instance = saved_plugin_instance(1.0);
+        store
+            .commit_plugin_instances(plugin_instances_request(
+                "plugin-a",
+                vec![instance.clone()],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        let stale_epoch = store.history_status().history_epoch;
+        let mut stale_request = plugin_instances_request(
+            "plugin-a",
+            vec![instance],
+            uuid::Uuid::new_v4().to_string(),
+            None,
+            None,
+        );
+        stale_request.observed_history_epoch = Some(stale_epoch);
+
+        let admission = store.admit_editor_mutation().unwrap();
+        store
+            .commit_legacy_editor_reset_transaction_with_admission(
+                EditorCommitOrigin::LegacyAdapter("reset-race-test".to_string()),
+                &[],
+                PluginInstancesResetScope::All,
+                admission,
+                |_| Ok(()),
+            )
+            .unwrap();
+
+        assert_eq!(
+            store.commit_plugin_instances(stale_request).unwrap_err(),
+            "HISTORY_EPOCH_CONFLICT"
+        );
+        assert!(store.plugin_instances_get("plugin-a").unwrap().0.is_empty());
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn canonical_plugin_bucket_preserves_legacy_outlier_while_editing_sibling() {
+        let dir = test_directory("legacy-plugin-outlier-canonical-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut data = initialize_default_state();
+        let mut legacy = saved_plugin_instance(40_000.0);
+        let sibling = saved_plugin_instance(10.0);
+        data.plugin_data.insert(
+            super::plugin_instances_storage_key("plugin-a"),
+            serde_json::to_value(vec![legacy.clone(), sibling.clone()]).unwrap(),
+        );
+        let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![legacy.clone(), sibling.clone()]
+        );
+        let mut edited_sibling = sibling;
+        edited_sibling.hidden = true;
+        store
+            .commit_plugin_instances(plugin_instances_request(
+                "plugin-a",
+                vec![legacy.clone(), edited_sibling.clone()],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![legacy.clone(), edited_sibling]
+        );
+
+        legacy.position.x = 41_000.0;
+        assert_eq!(
+            store
+                .commit_plugin_instances(plugin_instances_request(
+                    "plugin-a",
+                    vec![legacy],
+                    uuid::Uuid::new_v4().to_string(),
+                    None,
+                    Some(store.plugin_model_revision()),
+                ))
+                .unwrap_err(),
+            "INVALID_PLUGIN_INSTANCE_POSITION:0"
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn canonical_get_keeps_valid_instances_next_to_malformed_storage_entries() {
+        let dir = test_directory("lenient-canonical-plugin-read-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut data = initialize_default_state();
+        let valid = saved_plugin_instance(10.0);
+        data.plugin_data.insert(
+            super::plugin_instances_storage_key("plugin-a"),
+            json!([
+                serde_json::to_value(&valid).unwrap(),
+                { "position": "broken" }
+            ]),
+        );
+        let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![valid]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     fn gesture_request(
@@ -6643,6 +7296,107 @@ mod tests {
             before_history_revision
         );
         assert_eq!(store.writer.persist_count(), persist_count);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn gesture_plugin_transition_rejects_new_and_worsened_legacy_outliers_atomically() {
+        let dir = test_directory("gesture-plugin-legacy-outlier-transition-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        let before = store.snapshot();
+        let new_outlier = saved_plugin_instance(40_000.0);
+        let error = store
+            .commit_gesture(gesture_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, before.key_positions["4key"][0].dx + 25.0),
+                "demo-plugin",
+                vec![new_outlier.clone()],
+            ))
+            .unwrap_err();
+        assert_eq!(
+            error.details.and_then(|details| details.validation_code),
+            Some("INVALID_PLUGIN_INSTANCE_POSITION:0".to_string())
+        );
+        assert_eq!(store.snapshot(), before);
+
+        let key = super::plugin_instances_storage_key("demo-plugin");
+        store.state.write().data.plugin_data.insert(
+            key,
+            serde_json::to_value(vec![new_outlier.clone()]).unwrap(),
+        );
+        let legacy_before = store.snapshot();
+        let mut worsened = new_outlier;
+        worsened.position.x = 41_000.0;
+        let error = store
+            .commit_gesture(gesture_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, legacy_before.key_positions["4key"][0].dx + 30.0),
+                "demo-plugin",
+                vec![worsened],
+            ))
+            .unwrap_err();
+        assert_eq!(
+            error.details.and_then(|details| details.validation_code),
+            Some("INVALID_PLUGIN_INSTANCE_POSITION:0".to_string())
+        );
+        assert_eq!(store.snapshot(), legacy_before);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn gesture_plugin_transition_allows_legacy_outlier_sibling_edit_and_improvement() {
+        let dir = test_directory("gesture-plugin-legacy-outlier-compatible-edit-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let legacy = saved_plugin_instance(40_000.0);
+        store.state.write().data.plugin_data.insert(
+            super::plugin_instances_storage_key("demo-plugin"),
+            serde_json::to_value(vec![legacy.clone()]).unwrap(),
+        );
+
+        let mut sibling_edit = legacy.clone();
+        sibling_edit.hidden = true;
+        drop(
+            store
+                .commit_gesture(gesture_request(
+                    &store,
+                    uuid::Uuid::new_v4().to_string(),
+                    EditorPatchV1::default(),
+                    "demo-plugin",
+                    vec![sibling_edit.clone()],
+                ))
+                .unwrap(),
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![sibling_edit.clone()]
+        );
+
+        let mut improved = sibling_edit;
+        improved.position.x = 39_000.0;
+        drop(
+            store
+                .commit_gesture(gesture_request(
+                    &store,
+                    uuid::Uuid::new_v4().to_string(),
+                    EditorPatchV1::default(),
+                    "demo-plugin",
+                    vec![improved.clone()],
+                ))
+                .unwrap(),
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![improved]
+        );
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
@@ -12237,7 +12991,7 @@ mod tests {
                     counter.align_mode = crate::models::KeyCounterAlignMode::Between;
                     counter.gap = 7;
                     counter.fill.idle = "fill-sibling".to_string();
-                    counter.stroke.active = "stroke-sibling".to_string();
+                    counter.fill.active = "active-fill-sibling".to_string();
                     counter.font_family = Some("font-sibling".to_string());
                     counter.animation.enabled = false;
                     counter.animation.preset_id = Some("builtin-linear".to_string());
@@ -12451,7 +13205,7 @@ mod tests {
                     counter.font_strikethrough = false;
                     counter.font_family = Some("font-sibling".to_string());
                     counter.fill.idle = "fill-sibling".to_string();
-                    counter.stroke.active = "stroke-sibling".to_string();
+                    counter.fill.active = "active-fill-sibling".to_string();
                     counter.placement = crate::models::KeyCounterPlacement::Outside;
                     counter.animation.preset_id = Some("builtin-linear".to_string());
                 }
@@ -12709,7 +13463,7 @@ mod tests {
                         }))
                         .unwrap(),
                     );
-                    position.counter.stroke.idle = "stroke-sibling".to_string();
+                    position.counter.gap = 19;
                     position.counter.font_family = Some("font-sibling".to_string());
                 }
                 let mut stat_position = key_positions[0].clone();
@@ -12819,182 +13573,6 @@ mod tests {
             EditorElementTypeV1::Key,
             &key_ids[0],
             EditorElementPropertyPatchV1::CounterFillIdle(counter_fill_solid("different")),
-        )]);
-        assert_eq!(
-            store.commit_editor_document(reused).unwrap_err().error_code,
-            EditorCommitErrorCode::MutationIdReused
-        );
-
-        let no_change = store
-            .commit_editor_document(editor_ops_request(
-                changed.result.revision,
-                uuid::Uuid::new_v4().to_string(),
-                ops[..3].to_vec(),
-            ))
-            .unwrap();
-        assert!(no_change.result.changed_fields.is_empty());
-        assert!(no_change.event.is_none());
-        assert_eq!(store.history_status().history_revision, history_revision);
-
-        let gate = store.history_gate();
-        let undo_id = uuid::Uuid::new_v4().to_string();
-        let barrier = gate.close(&undo_id).unwrap();
-        store
-            .apply_history_operation(
-                HistoryDirection::Undo,
-                &undo_id,
-                &store.snapshot().key_counters,
-                || {},
-            )
-            .unwrap();
-        drop(barrier);
-        let undone = store.editor_get().document;
-        assert_eq!(
-            [
-                undone.key_positions["4key"][0].counter.clone(),
-                undone.key_positions["4key"][1].counter.clone(),
-                undone.stat_positions["4key"][0].position.counter.clone(),
-            ],
-            original_counters
-        );
-
-        let redo_id = uuid::Uuid::new_v4().to_string();
-        let barrier = gate.close(&redo_id).unwrap();
-        store
-            .apply_history_operation(
-                HistoryDirection::Redo,
-                &redo_id,
-                &store.snapshot().key_counters,
-                || {},
-            )
-            .unwrap();
-        drop(barrier);
-        let redone = store.editor_get().document;
-        assert_eq!(
-            [
-                redone.key_positions["4key"][0].counter.clone(),
-                redone.key_positions["4key"][1].counter.clone(),
-                redone.stat_positions["4key"][0].position.counter.clone(),
-            ],
-            expected_counters
-        );
-
-        store.flush_and_shutdown().unwrap();
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn counter_stroke_batch_replays_and_round_trips_one_history_entry() {
-        let dir = test_directory("editor-counter-stroke-history-test");
-        std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
-        let stat_id = uuid::Uuid::new_v4().to_string();
-        let setup = legacy_editor_commit(
-            &store,
-            &[EditorField::KeyPositions, EditorField::StatPositions],
-            |data| {
-                let key_positions = data.key_positions.get_mut("4key").unwrap();
-                for position in key_positions.iter_mut().take(2) {
-                    position.counter.stroke.idle = "idle-before".to_string();
-                    position.counter.stroke.active = "active-before".to_string();
-                    position.counter.fill.idle = "fill-sibling".to_string();
-                    position.counter.font_family = Some("font-sibling".to_string());
-                    position.counter.animation.preset_id = Some("builtin-linear".to_string());
-                }
-                let mut stat_position = key_positions[0].clone();
-                stat_position.id = stat_id.clone();
-                data.stat_positions.insert(
-                    "4key".to_string(),
-                    vec![StatPosition {
-                        stat_type: StatType::Kps,
-                        position: stat_position,
-                    }],
-                );
-            },
-        )
-        .unwrap();
-        let before = store.editor_get().document;
-        let key_ids = before.key_positions["4key"]
-            .iter()
-            .take(2)
-            .map(|position| position.id.clone())
-            .collect::<Vec<_>>();
-        let original_counters = [
-            before.key_positions["4key"][0].counter.clone(),
-            before.key_positions["4key"][1].counter.clone(),
-            before.stat_positions["4key"][0].position.counter.clone(),
-        ];
-        let ops = vec![
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                &key_ids[0],
-                EditorElementPropertyPatchV1::CounterStrokeIdle(String::new()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                &key_ids[1],
-                EditorElementPropertyPatchV1::CounterStrokeActive("  raw active  ".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Stat,
-                &stat_id,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("raw stat".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Key,
-                uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::CounterStrokeIdle("missing".to_string()),
-            ),
-        ];
-        let mutation_id = uuid::Uuid::new_v4().to_string();
-        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
-
-        let changed = store.commit_editor_document(request.clone()).unwrap();
-        assert_eq!(
-            changed.result.changed_fields,
-            [EditorField::KeyPositions, EditorField::StatPositions]
-        );
-        assert_eq!(
-            changed
-                .result
-                .op_results
-                .as_ref()
-                .unwrap()
-                .iter()
-                .map(|result| result.status)
-                .collect::<Vec<_>>(),
-            [
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::TargetMissing,
-            ]
-        );
-        let changed_counters = [
-            changed.document.key_positions["4key"][0].counter.clone(),
-            changed.document.key_positions["4key"][1].counter.clone(),
-            changed.document.stat_positions["4key"][0]
-                .position
-                .counter
-                .clone(),
-        ];
-        let mut expected_counters = original_counters.clone();
-        expected_counters[0].stroke.idle.clear();
-        expected_counters[1].stroke.active = "  raw active  ".to_string();
-        expected_counters[2].stroke.idle = "raw stat".to_string();
-        assert_eq!(changed_counters, expected_counters);
-        let history_revision = store.history_status().history_revision;
-
-        let replay = store.commit_editor_document(request.clone()).unwrap();
-        assert!(replay.replayed);
-        assert_eq!(replay.result, changed.result);
-        assert_eq!(store.history_status().history_revision, history_revision);
-
-        let mut reused = request;
-        reused.ops = Some(vec![patch_property_op(
-            EditorElementTypeV1::Key,
-            &key_ids[0],
-            EditorElementPropertyPatchV1::CounterStrokeIdle("different".to_string()),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -13408,17 +13986,49 @@ mod tests {
             positions[1].note_glow_opacity_bottom = None;
             positions[2].note_border_color = None;
             positions[2].note_border_opacity = 100;
+            positions[2].note_border_gradient = serde_json::from_value(serde_json::json!({
+                "angle": 45,
+                "stops": [
+                    { "color": "#010203", "pos": 0 },
+                    { "color": "#040506", "pos": 1 }
+                ]
+            }))
+            .unwrap();
             positions[3].note_glow_color = None;
             positions[3].note_glow_opacity = 61;
         })
         .unwrap();
+        let legacy_note_wire =
+            serde_json::to_vec(&setup.document.key_positions["4key"][0]).unwrap();
         let ops = vec![
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &ids[0],
                 EditorElementPropertyPatchV1::NotePaint(
-                    crate::models::EditorNotePaintIntentV1::Opacity(
-                        crate::models::EditorNotePaintOpacityIntentV1 { opacity: 55 },
+                    crate::models::EditorNotePaintIntentV1::Descriptor(
+                        crate::models::EditorNotePaintDescriptorIntentV1 {
+                            color: crate::models::EditorNoteColorV1::Gradient(
+                                crate::models::EditorNoteGradientColorV1 {
+                                    kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                                    top: "#112233".to_string(),
+                                    bottom: "#445566".to_string(),
+                                },
+                            ),
+                            opacity: 80,
+                            gradient: Some(crate::models::EditorPaintGradientV1 {
+                                angle: 45.0,
+                                stops: vec![
+                                    crate::models::EditorPaintGradientStopV1 {
+                                        color: "rgba(17,34,51,.5)".to_string(),
+                                        pos: 0.0,
+                                    },
+                                    crate::models::EditorPaintGradientStopV1 {
+                                        color: "#44556640".to_string(),
+                                        pos: 1.0,
+                                    },
+                                ],
+                            }),
+                        },
                     ),
                 ),
             ),
@@ -13440,8 +14050,21 @@ mod tests {
                 &ids[2],
                 EditorElementPropertyPatchV1::NoteBorderPaint(
                     crate::models::EditorNoteBorderPaintV1 {
-                        color: "#FFFFFF".to_string(),
-                        opacity: 100,
+                        color: "#112233".to_string(),
+                        opacity: 73,
+                        gradient: Some(crate::models::EditorPaintGradientV1 {
+                            angle: 135.0,
+                            stops: vec![
+                                crate::models::EditorPaintGradientStopV1 {
+                                    color: "rgba(17, 34, 51, .5)".to_string(),
+                                    pos: 0.0,
+                                },
+                                crate::models::EditorPaintGradientStopV1 {
+                                    color: "#ABC8".to_string(),
+                                    pos: 1.0,
+                                },
+                            ],
+                        }),
                     },
                 ),
             ),
@@ -13471,15 +14094,20 @@ mod tests {
             .iter()
             .all(|result| result.status == EditorOpResultStatusV1::Applied));
         let positions = &changed.document.key_positions["4key"];
-        assert_eq!(positions[0].note_opacity, 55);
-        assert_eq!(positions[0].note_opacity_top, Some(17));
-        assert_eq!(positions[0].note_opacity_bottom, Some(27));
+        assert_eq!(positions[0].note_opacity, 80);
+        assert_eq!(positions[0].note_opacity_top, Some(40));
+        assert_eq!(positions[0].note_opacity_bottom, Some(20));
+        assert_eq!(positions[0].note_gradient.as_ref().unwrap().angle, 45.0);
         assert_eq!(positions[1].note_glow_opacity, 70);
         assert_eq!(positions[1].note_glow_opacity_top, Some(20));
         assert_eq!(positions[1].note_glow_opacity_bottom, Some(80));
         assert!(positions[1].note_glow_color.is_none());
-        assert_eq!(positions[2].note_border_color.as_deref(), Some("#FFFFFF"));
-        assert_eq!(positions[2].note_border_opacity, 100);
+        assert_eq!(positions[2].note_border_color.as_deref(), Some("#112233"));
+        assert_eq!(positions[2].note_border_opacity, 73);
+        assert_eq!(
+            positions[2].note_border_gradient.as_ref().unwrap().angle,
+            135.0
+        );
         assert_eq!(
             positions[3].note_glow_color,
             Some(crate::models::NoteColor::Solid(String::new()))
@@ -13531,11 +14159,27 @@ mod tests {
             .unwrap();
         drop(barrier);
         let undone = store.editor_get().document;
+        assert_eq!(
+            serde_json::to_vec(&undone.key_positions["4key"][0]).unwrap(),
+            legacy_note_wire
+        );
+        assert!(undone.key_positions["4key"][0].note_gradient.is_none());
         assert_eq!(undone.key_positions["4key"][0].note_opacity_top, Some(17));
         assert!(undone.key_positions["4key"][1]
             .note_glow_opacity_top
             .is_none());
-        assert!(undone.key_positions["4key"][2].note_border_color.is_none());
+        assert_eq!(
+            undone.key_positions["4key"][2].note_border_color.as_deref(),
+            Some("#010203")
+        );
+        assert_eq!(
+            undone.key_positions["4key"][2]
+                .note_border_gradient
+                .as_ref()
+                .unwrap()
+                .angle,
+            45.0
+        );
         assert!(undone.key_positions["4key"][3].note_glow_color.is_none());
 
         let redo_id = uuid::Uuid::new_v4().to_string();
@@ -13550,21 +14194,50 @@ mod tests {
             .unwrap();
         drop(barrier);
         let redone = store.editor_get().document;
-        assert_eq!(redone.key_positions["4key"][0].note_opacity, 55);
+        assert_eq!(
+            serde_json::to_vec(&redone.key_positions["4key"][0]).unwrap(),
+            serde_json::to_vec(&changed.document.key_positions["4key"][0]).unwrap()
+        );
+        assert_eq!(redone.key_positions["4key"][0].note_opacity, 80);
+        assert!(redone.key_positions["4key"][0].note_gradient.is_some());
         assert_eq!(
             redone.key_positions["4key"][1].note_glow_opacity_top,
             Some(20)
         );
         assert_eq!(
             redone.key_positions["4key"][2].note_border_color.as_deref(),
-            Some("#FFFFFF")
+            Some("#112233")
+        );
+        assert_eq!(
+            redone.key_positions["4key"][2]
+                .note_border_gradient
+                .as_ref()
+                .unwrap()
+                .angle,
+            135.0
         );
         assert_eq!(
             redone.key_positions["4key"][3].note_glow_color,
             Some(crate::models::NoteColor::Solid(String::new()))
         );
 
+        let event_positions = changed
+            .event
+            .as_ref()
+            .unwrap()
+            .patch
+            .key_positions
+            .as_ref()
+            .unwrap();
+        assert_eq!(event_positions, &changed.document.key_positions);
+        assert_eq!(EditorDocumentV1::from_store(&store.snapshot()), redone);
+
         store.flush_and_shutdown().unwrap();
+        drop(store);
+        let reloaded =
+            crate::state::migration::load_store_from_path(&dir.join("store.json")).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert_eq!(EditorDocumentV1::from_store(&reloaded.data), redone);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -14039,73 +14712,50 @@ mod tests {
     }
 
     #[test]
-    fn font_color_batch_replays_fallbacks_and_round_trips_one_history_entry() {
-        let dir = test_directory("editor-font-color-history-test");
+    fn font_paint_batch_replays_fallbacks_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-font-paint-history-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let initial = store.editor_get().document;
         let key_idle_id = initial.key_positions["4key"][0].id.clone();
         let key_active_id = initial.key_positions["4key"][1].id.clone();
         let stat_id = uuid::Uuid::new_v4().to_string();
-        let graph_id = uuid::Uuid::new_v4().to_string();
-        let knob_id = uuid::Uuid::new_v4().to_string();
+        let active_descriptor = paint_descriptor(
+            "active-first",
+            Some((25.0, &[("active-first", 0.0), ("active-last", 1.0)])),
+        );
+        let stat_descriptor = paint_descriptor(
+            "stat-first",
+            Some((70.0, &[("stat-first", 0.0), ("stat-last", 1.0)])),
+        );
         let setup = legacy_editor_commit(
             &store,
-            &[
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-            ],
+            &[EditorField::KeyPositions, EditorField::StatPositions],
             |data| {
                 let template = data.key_positions["4key"][0].clone();
                 let key_idle = &mut data.key_positions.get_mut("4key").unwrap()[0];
                 key_idle.font_color = Some("same-idle".to_string());
+                key_idle.font_gradient = None;
                 key_idle.active_font_color = None;
+                key_idle.active_font_gradient = None;
                 key_idle.background_color = Some("key-background-sibling".to_string());
                 let key_active = &mut data.key_positions.get_mut("4key").unwrap()[1];
                 key_active.font_color = Some("key-idle-sibling".to_string());
+                key_active.font_gradient = None;
                 key_active.active_font_color = None;
+                key_active.active_font_gradient = None;
 
                 let mut stat_position = template.clone();
                 stat_position.id = stat_id.clone();
                 stat_position.font_color = None;
+                stat_position.font_gradient = None;
                 stat_position.active_font_color = Some("stat-active-sibling".to_string());
+                stat_position.active_font_gradient = None;
                 data.stat_positions.insert(
                     "4key".to_string(),
                     vec![StatPosition {
                         stat_type: StatType::Kps,
                         position: stat_position,
-                    }],
-                );
-
-                let mut graph_position = template.clone();
-                graph_position.id = graph_id.clone();
-                graph_position.font_color = Some("graph-old".to_string());
-                graph_position.active_font_color = Some("graph-active-sibling".to_string());
-                data.graph_positions.insert(
-                    "4key".to_string(),
-                    vec![GraphPosition {
-                        stat_type: GraphStatType::Kps,
-                        graph_type: GraphType::Line,
-                        graph_speed: 1000,
-                        graph_color: "graph-sibling".to_string(),
-                        show_avg_line: true,
-                        position: graph_position,
-                    }],
-                );
-
-                let mut knob_position = template;
-                knob_position.id = knob_id.clone();
-                knob_position.font_color = Some(" knob idle ".to_string());
-                knob_position.active_font_color = Some("   ".to_string());
-                data.knob_positions.insert(
-                    "4key".to_string(),
-                    vec![KnobPosition {
-                        axis_id: "axis-sibling".to_string(),
-                        sensitivity: 1.0,
-                        reverse: false,
-                        position: knob_position,
                     }],
                 );
             },
@@ -14115,32 +14765,22 @@ mod tests {
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_idle_id,
-                EditorElementPropertyPatchV1::FontColor("same-idle".to_string()),
+                EditorElementPropertyPatchV1::FontPaint(paint_descriptor("same-idle", None)),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 &key_active_id,
-                EditorElementPropertyPatchV1::ActiveFontColor(String::new()),
+                EditorElementPropertyPatchV1::ActiveFontPaint(active_descriptor.clone()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Stat,
                 &stat_id,
-                EditorElementPropertyPatchV1::FontColor(String::new()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Graph,
-                &graph_id,
-                EditorElementPropertyPatchV1::FontColor(" graph new ".to_string()),
-            ),
-            patch_property_op(
-                EditorElementTypeV1::Knob,
-                &knob_id,
-                EditorElementPropertyPatchV1::FontColor("knob-new".to_string()),
+                EditorElementPropertyPatchV1::FontPaint(stat_descriptor.clone()),
             ),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::ActiveFontColor("missing".to_string()),
+                EditorElementPropertyPatchV1::ActiveFontPaint(paint_descriptor("missing", None)),
             ),
         ];
         let history_before = store.history_status().history_revision;
@@ -14150,12 +14790,7 @@ mod tests {
         let changed = store.commit_editor_document(request.clone()).unwrap();
         assert_eq!(
             changed.result.changed_fields,
-            [
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-            ]
+            [EditorField::KeyPositions, EditorField::StatPositions]
         );
         assert_eq!(
             changed
@@ -14167,8 +14802,6 @@ mod tests {
                 .map(|result| result.status)
                 .collect::<Vec<_>>(),
             [
-                EditorOpResultStatusV1::Applied,
-                EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
@@ -14191,42 +14824,28 @@ mod tests {
             changed.document.key_positions["4key"][1]
                 .active_font_color
                 .as_deref(),
-            Some("")
+            Some("active-first")
         );
+        assert!(changed.document.key_positions["4key"][1]
+            .active_font_gradient
+            .is_some());
         assert_eq!(
             changed.document.stat_positions["4key"][0]
                 .position
                 .font_color
                 .as_deref(),
-            Some("")
+            Some("stat-first")
         );
+        assert!(changed.document.stat_positions["4key"][0]
+            .position
+            .font_gradient
+            .is_some());
         assert_eq!(
             changed.document.stat_positions["4key"][0]
                 .position
                 .active_font_color
                 .as_deref(),
             Some("stat-active-sibling")
-        );
-        assert_eq!(
-            changed.document.graph_positions["4key"][0]
-                .position
-                .font_color
-                .as_deref(),
-            Some(" graph new ")
-        );
-        assert_eq!(
-            changed.document.knob_positions["4key"][0]
-                .position
-                .font_color
-                .as_deref(),
-            Some("knob-new")
-        );
-        assert_eq!(
-            changed.document.knob_positions["4key"][0]
-                .position
-                .active_font_color
-                .as_deref(),
-            Some(" knob idle ")
         );
         assert_eq!(store.history_status().history_revision, history_before + 1);
 
@@ -14239,7 +14858,7 @@ mod tests {
         reused.ops = Some(vec![patch_property_op(
             EditorElementTypeV1::Key,
             &key_idle_id,
-            EditorElementPropertyPatchV1::FontColor("different".to_string()),
+            EditorElementPropertyPatchV1::FontPaint(paint_descriptor("different", None)),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -14250,7 +14869,7 @@ mod tests {
             .commit_editor_document(editor_ops_request(
                 changed.result.revision,
                 uuid::Uuid::new_v4().to_string(),
-                ops[..5].to_vec(),
+                ops[..3].to_vec(),
             ))
             .unwrap();
         assert!(no_change.result.changed_fields.is_empty());
@@ -14272,24 +14891,17 @@ mod tests {
         let undone = store.editor_get().document;
         assert!(undone.key_positions["4key"][0].active_font_color.is_none());
         assert!(undone.key_positions["4key"][1].active_font_color.is_none());
+        assert!(undone.key_positions["4key"][1]
+            .active_font_gradient
+            .is_none());
         assert!(undone.stat_positions["4key"][0]
             .position
             .font_color
             .is_none());
-        assert_eq!(
-            undone.graph_positions["4key"][0]
-                .position
-                .font_color
-                .as_deref(),
-            Some("graph-old")
-        );
-        assert_eq!(
-            undone.knob_positions["4key"][0]
-                .position
-                .active_font_color
-                .as_deref(),
-            Some("   ")
-        );
+        assert!(undone.stat_positions["4key"][0]
+            .position
+            .font_gradient
+            .is_none());
 
         let redo_id = uuid::Uuid::new_v4().to_string();
         let barrier = gate.close(&redo_id).unwrap();
@@ -14309,15 +14921,15 @@ mod tests {
         );
         assert_eq!(
             redone.key_positions["4key"][1].active_font_color.as_deref(),
-            Some("")
+            Some("active-first")
         );
-        assert_eq!(
-            redone.knob_positions["4key"][0]
-                .position
-                .active_font_color
-                .as_deref(),
-            Some(" knob idle ")
-        );
+        assert!(redone.key_positions["4key"][1]
+            .active_font_gradient
+            .is_some());
+        assert!(redone.stat_positions["4key"][0]
+            .position
+            .font_gradient
+            .is_some());
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
@@ -16965,6 +17577,7 @@ mod tests {
         let Some(HistoryAuxChange::CustomTabs {
             snapshot,
             changed_tab_css_ids,
+            ..
         }) = undo.aux_change.as_ref()
         else {
             panic!("custom tabs history change expected");
@@ -16990,6 +17603,7 @@ mod tests {
         let Some(HistoryAuxChange::CustomTabs {
             snapshot,
             changed_tab_css_ids,
+            ..
         }) = redo.aux_change.as_ref()
         else {
             panic!("custom tabs history change expected");
@@ -17004,6 +17618,175 @@ mod tests {
             store.snapshot().tab_note_overrides[&other_tab_id],
             other_note
         );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn custom_tab_delete_history_restores_plugin_instances_atomically() {
+        let dir = test_directory("custom-tab-plugin-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let tab_id = "history-plugin-tab".to_string();
+        let create_tab_id = tab_id.clone();
+        let create = store
+            .commit_aux_editor_transaction(
+                HistoryScope::CustomTabs,
+                None,
+                EditorCommitOrigin::LegacyAdapter("custom_tab_plugin_create".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.custom_tabs.push(CustomTab {
+                        id: create_tab_id.clone(),
+                        name: "Plugin History".to_string(),
+                    });
+                    data.keys.insert(create_tab_id.clone(), Vec::new());
+                    data.key_positions.insert(create_tab_id.clone(), Vec::new());
+                    data.selected_key_type = create_tab_id;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(create);
+
+        let mut target = saved_plugin_instance(11.0);
+        target.tab_id = Some(tab_id.clone());
+        target.group_id = Some("group-plugin".to_string());
+        let mut retained = saved_plugin_instance(22.0);
+        retained.tab_id = Some("4key".to_string());
+        let plugin_a_key = plugin_instances_storage_key("plugin-a");
+        let plugin_b_key = plugin_instances_storage_key("plugin-b");
+        let plugin_a_before = serde_json::json!([
+            target,
+            { "broken": true },
+            retained,
+        ]);
+        let plugin_b_before = serde_json::json!([
+            {
+                "instanceId": "00000000-0000-4000-8000-000000000033",
+                "position": { "x": 33.0, "y": 20.0 },
+                "tabId": tab_id,
+                "hidden": false,
+                "groupId": "group-plugin"
+            }
+        ]);
+        store
+            .update(|data| {
+                data.plugin_data
+                    .insert(plugin_a_key.clone(), plugin_a_before.clone());
+                data.plugin_data
+                    .insert(plugin_b_key.clone(), plugin_b_before.clone());
+            })
+            .unwrap();
+
+        let before_plugin_revision = store.plugin_model_revision();
+        let before_epoch = store.history_status().history_epoch;
+        let delete_tab_id = "history-plugin-tab".to_string();
+        let admission = store.admit_editor_mutation().unwrap();
+        let delete = store
+            .commit_aux_editor_reset_transaction_with_admission(
+                AuxEditorResetTransactionOptions {
+                    scope: HistoryScope::CustomTabs,
+                    observed_history_epoch: Some(before_epoch),
+                    origin: EditorCommitOrigin::LegacyAdapter(
+                        "custom_tab_plugin_delete".to_string(),
+                    ),
+                    touched_fields: &[
+                        EditorField::Keys,
+                        EditorField::KeyPositions,
+                        EditorField::StatPositions,
+                        EditorField::GraphPositions,
+                        EditorField::KnobPositions,
+                        EditorField::LayerGroups,
+                    ],
+                    plugin_instances_reset: PluginInstancesResetScope::Mode(delete_tab_id.clone()),
+                },
+                admission,
+                |data| {
+                    data.custom_tabs.retain(|tab| tab.id != delete_tab_id);
+                    data.keys.remove(&delete_tab_id);
+                    data.key_positions.remove(&delete_tab_id);
+                    data.stat_positions.remove(&delete_tab_id);
+                    data.graph_positions.remove(&delete_tab_id);
+                    data.knob_positions.remove(&delete_tab_id);
+                    data.layer_groups.remove(&delete_tab_id);
+                    data.key_counters.remove(&delete_tab_id);
+                    data.selected_key_type = "4key".to_string();
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert_eq!(store.plugin_model_revision(), before_plugin_revision + 1);
+        assert_eq!(store.history_status().history_epoch, before_epoch + 1);
+        assert_eq!(delete.change.plugin_instances_changes.len(), 2);
+        let after_delete = store.snapshot();
+        assert_eq!(
+            after_delete.plugin_data[&plugin_a_key],
+            serde_json::json!([{ "broken": true }, retained])
+        );
+        assert!(!after_delete.plugin_data.contains_key(&plugin_b_key));
+        let mut stale_instance = saved_plugin_instance(44.0);
+        stale_instance.tab_id = Some("history-plugin-tab".to_string());
+        let mut stale_request = plugin_instances_request(
+            "plugin-b",
+            vec![stale_instance],
+            uuid::Uuid::new_v4().to_string(),
+            None,
+            Some(store.plugin_model_revision()),
+        );
+        stale_request.observed_history_epoch = Some(before_epoch);
+        assert_eq!(
+            store.commit_plugin_instances(stale_request).unwrap_err(),
+            "HISTORY_EPOCH_CONFLICT"
+        );
+        assert!(!store.snapshot().plugin_data.contains_key(&plugin_b_key));
+        drop(delete);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {})
+            .unwrap();
+        drop(undo_barrier);
+        let Some(HistoryAuxChange::CustomTabs {
+            plugin_ids,
+            revision,
+            ..
+        }) = undo.aux_change.as_ref()
+        else {
+            panic!("custom tabs history change expected");
+        };
+        assert_eq!(
+            plugin_ids,
+            &["plugin-a".to_string(), "plugin-b".to_string()]
+        );
+        assert_eq!(*revision, before_plugin_revision + 2);
+        let restored = store.snapshot();
+        assert_eq!(restored.plugin_data[&plugin_a_key], plugin_a_before);
+        assert_eq!(restored.plugin_data[&plugin_b_key], plugin_b_before);
+        assert!(restored
+            .custom_tabs
+            .iter()
+            .any(|tab| tab.id == delete_tab_id));
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &current_counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+        let redone = store.snapshot();
+        assert_eq!(
+            redone.plugin_data[&plugin_a_key],
+            serde_json::json!([{ "broken": true }, retained])
+        );
+        assert!(!redone.plugin_data.contains_key(&plugin_b_key));
+        assert!(!redone.custom_tabs.iter().any(|tab| tab.id == delete_tab_id));
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
@@ -18944,6 +19727,110 @@ mod tests {
         assert!(serde_json::from_slice::<AppStoreData>(&std::fs::read(path).unwrap()).is_ok());
 
         drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn invalid_note_gradient_stop_repair_backs_up_persists_and_is_idempotent() {
+        let dir = test_directory("note-border-stop-repair-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("store.json");
+        let mut data = super::initialize_default_state();
+        let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+        position.note_color = NoteColor::Gradient {
+            top: "body-top".to_string(),
+            bottom: "body-bottom".to_string(),
+        };
+        position.note_opacity_top = Some(21);
+        position.note_opacity_bottom = Some(79);
+        position.note_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 45,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "transparent", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        position.note_glow_color = Some(NoteColor::Gradient {
+            top: "glow-top".to_string(),
+            bottom: "glow-bottom".to_string(),
+        });
+        position.note_glow_opacity_top = Some(31);
+        position.note_glow_opacity_bottom = Some(69);
+        position.note_glow_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 135,
+            "stops": [
+                { "color": "invalid", "pos": 0 },
+                { "color": "#445566", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        position.note_border_color = Some("#445566".to_string());
+        position.note_border_gradient = serde_json::from_value(serde_json::json!({
+            "angle": 90,
+            "stops": [
+                { "color": "#112233", "pos": 0 },
+                { "color": "transparent", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        position.display_text = Some("preserved sibling".to_string());
+        position.counter.font_size = 37;
+        let original = serde_json::to_vec_pretty(&data).unwrap();
+        std::fs::write(&path, &original).unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        assert!(store.skip_asset_sweep);
+        let repaired = store.snapshot();
+        let position = &repaired.key_positions["4key"][0];
+        assert!(position.note_gradient.is_none());
+        assert_eq!(
+            position.note_color,
+            NoteColor::Gradient {
+                top: "body-top".to_string(),
+                bottom: "body-bottom".to_string(),
+            }
+        );
+        assert_eq!(position.note_opacity_top, Some(21));
+        assert_eq!(position.note_opacity_bottom, Some(79));
+        assert!(position.note_glow_gradient.is_none());
+        assert_eq!(
+            position.note_glow_color,
+            Some(NoteColor::Gradient {
+                top: "glow-top".to_string(),
+                bottom: "glow-bottom".to_string(),
+            })
+        );
+        assert_eq!(position.note_glow_opacity_top, Some(31));
+        assert_eq!(position.note_glow_opacity_bottom, Some(69));
+        assert_eq!(position.note_border_color.as_deref(), Some("#445566"));
+        assert!(position.note_border_gradient.is_none());
+        assert_eq!(position.display_text.as_deref(), Some("preserved sibling"));
+        assert_eq!(position.counter.font_size, 37);
+        assert_eq!(std::fs::read(dir.join("store.json.bak")).unwrap(), original);
+
+        let on_disk: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(on_disk["keyPositions"]["4key"][0]
+            .get("noteGradient")
+            .is_none());
+        assert!(on_disk["keyPositions"]["4key"][0]
+            .get("noteGlowGradient")
+            .is_none());
+        assert!(on_disk["keyPositions"]["4key"][0]
+            .get("noteBorderGradient")
+            .is_none());
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+
+        let reloaded = super::load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(
+            reloaded.data.key_positions["4key"][0],
+            repaired.key_positions["4key"][0]
+        );
+
         let _ = std::fs::remove_dir_all(dir);
     }
 

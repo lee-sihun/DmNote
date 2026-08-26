@@ -7,6 +7,9 @@ import {
 } from '@utils/animation/rafLatestScheduler';
 import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
 import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
+import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 
 // 디자인 조절점 — 내부 폭 148px 기준 비율 ≈1.42:1
 const SATURATION_HEIGHT = 104;
@@ -88,6 +91,7 @@ export const usePointerSession = (
     const pointerId = activePointerRef.current;
     if (pointerId === null) return;
     activePointerRef.current = null;
+    useGradientEditStore.getState().setColorAdjusting(false);
     rectRef.current = null;
     previewSchedulerRef.current?.cancel();
     previewSchedulerRef.current = null;
@@ -96,6 +100,8 @@ export const usePointerSession = (
     blurCleanupRef.current = null;
     const target = targetRef.current;
     targetRef.current = null;
+    // 드래그 전역 커서 복원 - 포인터가 트랙 밖에 있어도 grabbing 유지 후 해제
+    endDragCursor(target?.ownerDocument ?? document);
     if (target?.hasPointerCapture(pointerId)) {
       target.releasePointerCapture(pointerId);
     }
@@ -121,10 +127,14 @@ export const usePointerSession = (
     activePointerRef.current = event.pointerId;
     targetRef.current = target;
     rectRef.current = rect;
+    // 색 조정 드래그 신호 - 그라데이션 축 오버레이가 스스로를 흐린다
+    useGradientEditStore.getState().setColorAdjusting(true);
     sessionTargetRef.current = editSessionScoped
       ? getEditSessionTarget()
       : null;
     target.setPointerCapture(event.pointerId);
+    // 잡는 동안 전역 grabbing - 캡처 중에도 커서는 히트테스트 기준(크로뮴)
+    beginDragCursor('grabbing', target.ownerDocument);
     // 트랙이 분리 패널 자식 창에 있으면 그 창의 blur·프레임을 쓴다
     const ownerWindow = target.ownerDocument.defaultView ?? window;
     const onWindowBlur = () => finish();
@@ -177,6 +187,17 @@ export const usePointerSession = (
   const finishOnUnmountRef = useLatest(finishOnUnmount);
   useEffect(() => () => finishOnUnmountRef.current(), [finishOnUnmountRef]);
 
+  // undo/redo 반영 시 진행 중 드래그를 커밋 없이 종료 - 이후 pointerup이나
+  // 캡처 상실이 마지막 draft로 Undo 결과를 되돌리지 않게
+  const historyTick = useCommittedApplyStore((state) => state.historyTick);
+  const historyTickRef = useRef(historyTick);
+  const teardownRef = useLatest(teardown);
+  useEffect(() => {
+    if (historyTickRef.current === historyTick) return;
+    historyTickRef.current = historyTick;
+    teardownRef.current();
+  }, [historyTick, teardownRef]);
+
   return {
     onPointerDown,
     onPointerMove,
@@ -189,8 +210,9 @@ export const usePointerSession = (
 const knobShadow = '0 0 4px rgba(0, 0, 0, 0.7)';
 
 // 색 표면은 무테 — 원색 트랙·체커·필드가 스스로 경계를 정의, 밝은 링은 검정 영역에서 도드라짐
+// 커서는 캔버스 아이템과 같은 정책 - 호버 무변화, 잡는 동안만 grabbing
 const trackClassName =
-  'relative w-full cursor-pointer touch-none select-none rounded-full ' +
+  'relative w-full cursor-default touch-none select-none rounded-full ' +
   'outline-none focus-visible:shadow-focus-ring';
 
 interface SaturationAreaProps extends ColorTrackProps {
@@ -258,7 +280,7 @@ export const SaturationArea = ({
         color.hsv.s,
       )}%, Brightness ${Math.round(color.hsv.v)}%`}
       onKeyDown={onKeyDown}
-      className="relative w-full cursor-pointer touch-none select-none rounded-lg outline-none focus-visible:shadow-focus-ring"
+      className="relative w-full cursor-default touch-none select-none rounded-lg outline-none focus-visible:shadow-focus-ring"
       style={{ height }}
     >
       {/* 라운딩은 클립이 아니라 9-slice 마스크 — 클립은 페인트 연산별 AA 중첩으로
@@ -368,7 +390,11 @@ export const AlphaSlider = ({
   onChange,
   onChangeComplete,
   continuousInputStrategy,
-}: ColorTrackProps) => {
+  ariaLabel = 'Alpha',
+}: ColorTrackProps & {
+  // 스톱 알파와 전역 배율이 나란한 형식에서 역할 구분
+  ariaLabel?: string;
+}) => {
   const session = usePointerSession((x, _y, final) => {
     const next = hsvToColorObject({ ...color.hsv, a: x });
     onChange(next);
@@ -415,7 +441,7 @@ export const AlphaSlider = ({
       {...session}
       role="slider"
       tabIndex={0}
-      aria-label="Alpha"
+      aria-label={ariaLabel}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(color.hsv.a * 100)}

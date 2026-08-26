@@ -7,6 +7,7 @@ import React from 'react';
 import type { Signal } from '@preact/signals-react';
 import CountDisplay from './CountDisplay';
 import SignalCountDisplay from './SignalCountDisplay';
+import KeyLabel from '@components/shared/KeyLabel';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 
 // 오버레이는 countSignal(구독 격리), 에디터 프리뷰는 count(숫자) — 타입으로 둘 중 하나만 허용.
@@ -21,6 +22,10 @@ type InsideCounterLayoutProps = CounterSource & {
   active: boolean;
   counterSettings: KeyCounterSettings;
   useInlineStyles?: boolean;
+  /** 라벨 그라데이션 클립 - 인라인 우선 모드 승격분 (변수 모드는 전역 규칙) */
+  labelPaintStyle?: React.CSSProperties;
+  labelHasGradient?: boolean;
+  labelMetricsDep?: string;
 };
 
 const InsideCounterLayout = ({
@@ -31,6 +36,9 @@ const InsideCounterLayout = ({
   active,
   counterSettings,
   useInlineStyles = false,
+  labelPaintStyle,
+  labelHasGradient,
+  labelMetricsDep,
 }: InsideCounterLayoutProps) => {
   const fillColor = active
     ? counterSettings.fill.active
@@ -38,9 +46,6 @@ const InsideCounterLayout = ({
   const fillGradient = active
     ? counterSettings.fillActiveGradient
     : counterSettings.fillIdleGradient;
-  const strokeColor = active
-    ? counterSettings.stroke.active
-    : counterSettings.stroke.idle;
   const contentGap = Number.isFinite(counterSettings.gap)
     ? counterSettings.gap
     : 4;
@@ -48,7 +53,6 @@ const InsideCounterLayout = ({
   const counterProps = {
     fillColor,
     fillGradient,
-    strokeColor,
     active,
     fontSize: counterSettings.fontSize,
     fontFamily: counterSettings.fontFamily,
@@ -75,13 +79,15 @@ const InsideCounterLayout = ({
   );
 
   const nameElement = (
-    <span
+    <KeyLabel
       key="label"
-      className="font-bold text-[14px] pointer-events-none select-none leading-normal text-safe-inline"
+      text={labelText}
+      className="font-bold text-[14px] pointer-events-none select-none leading-normal"
       style={textStyle}
-    >
-      {labelText}
-    </span>
+      paintStyle={labelPaintStyle}
+      hasGradient={labelHasGradient}
+      metricsDep={labelMetricsDep}
+    />
   );
 
   const isHorizontal =

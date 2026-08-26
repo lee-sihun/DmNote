@@ -2,6 +2,7 @@ import { editorApi } from '@api/modules/editorApi';
 import { previewApi } from '@api/modules/previewApi';
 import { unstable_batchedUpdates } from 'react-dom';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import {
   composeRenderedPositions,
   useKeyStore,
@@ -143,6 +144,9 @@ export const editorCoordinator = createEditorCoordinator({
     previewOverlay.endSessions(
       event.gestureIds ?? (event.gestureId ? [event.gestureId] : []),
     );
+    // canonical 반영 직후 열린 피커의 로컬 편집 상태 재동기화 신호
+    // (undo/redo는 historyTick도 올려 진행 중 드래그·초안을 취소)
+    useCommittedApplyStore.getState().bump(event.origin);
   },
   onGestureIdsDiscarded: (gestureIds) => {
     markGestureSessionsDiscarded(gestureIds);

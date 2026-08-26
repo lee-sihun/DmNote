@@ -41,6 +41,7 @@ import {
 } from '@src/renderer/editor/runtime/elementIntent';
 import {
   applyPluginAdditionEagerly,
+  runMixedElementOpsIntent,
   runMixedGestureElementIntent,
 } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { stableStringify } from '@utils/core/stableStringify';
@@ -322,6 +323,15 @@ export function useGridSelection({
             });
         }
       }
+    } else if (gestureId && pluginIds.length > 0) {
+      void runMixedElementOpsIntent({
+        gestureId,
+        pluginIds,
+        ops: [],
+        receipt: null,
+      }).catch((error: Error) => {
+        console.error('Failed to persist selected plugin positions', error);
+      });
     }
 
     // 플러그인 요소도 명시적으로 동기화 (드래그 종료 시 skipSync로 인해 동기화되지 않았을 수 있음)
@@ -465,15 +475,9 @@ export function useGridSelection({
               .map((element) => element.pluginId),
           ),
         ];
-        const hasNativeUpdates =
-          keyUpdates.length > 0 ||
-          statUpdates.length > 0 ||
-          graphUpdates.length > 0 ||
-          knobUpdates.length > 0;
-        // 혼합 이동은 staging을 eager 쓰기 앞에 세운다 - 쓰기 시점에 예약되는
-        // debounce 커밋이 settle의 gesture 커밋보다 먼저 착지하면 같은
-        // 제스처의 히스토리가 두 엔트리로 쪼개진다
-        if (syncToOverlay && hasNativeUpdates && movedPluginIds.length > 0) {
+        // 화살표 이동은 pointer 시작 경계가 없으므로 여기서 staging을 eager
+        // 쓰기 앞에 세운다. 드래그는 Grid의 시작 경계가 이미 같은 id로 stage함
+        if (syncToOverlay && movedPluginIds.length > 0) {
           beginMixedGestureTransaction(gestureId, movedPluginIds);
           stagedBeforeEagerWrite = true;
         }

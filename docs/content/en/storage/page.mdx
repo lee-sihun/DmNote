@@ -19,6 +19,13 @@ Simply use keys without worrying about conflicts with other plugins.
 await dmn.plugin.storage.set("settings", { theme: "dark" });
 ```
 
+<Callout type="warning">
+  The `instances` key is reserved for the app's saved plugin element placements
+  (`defineElement`). `set` and `remove` on this key are rejected with
+  `PLUGIN_INSTANCES_KEY_RESERVED`; placements are only removed together with
+  the namespace when you call `clear`. Use a different key.
+</Callout>
+
 ## API Reference
 
 ### get(key)
