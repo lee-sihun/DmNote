@@ -1273,7 +1273,6 @@ const Settings = ({
                   onChange={handleAsioBufferChange}
                   placeholder={String(DEFAULT_ASIO_BUFFER)}
                   align="right"
-                  widthClass="w-[70px]"
                   disabled={keySoundOutput?.requested.kind !== 'asio'}
                 />
               </SettingRow>
