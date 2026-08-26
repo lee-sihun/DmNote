@@ -618,7 +618,7 @@ describe('single geometry input bindings', () => {
       (input) => input.min === 0 && input.max === 20,
     );
     const borderRadius = captured.numberList.find(
-      (input) => input.min === 1 && input.max === 100,
+      (input) => input.min === 0 && input.max === 100,
     );
     act(() => borderWidth?.onPreview?.(2.5));
     act(() => borderWidth?.onChange(3.5));

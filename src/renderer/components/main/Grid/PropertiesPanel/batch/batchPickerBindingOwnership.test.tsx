@@ -905,7 +905,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         .filter((input) => input.min === 0 && input.max === 20)
         .at(-1);
       const borderRadius = captured.numbers
-        .filter((input) => input.min === 1 && input.max === 100)
+        .filter((input) => input.min === 0 && input.max === 100)
         .at(-1);
       expect(offsetX?.value).toBeUndefined();
       act(() => offsetX?.onChange(0));
