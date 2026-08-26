@@ -303,7 +303,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                   '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'}
               </p>
             )}
-            {showSettings &&
+            {settingsRenderable &&
               renderPluginSettingsForm(
                 selectedPluginDefinition?.settings,
                 resolvedPluginSettings,
