@@ -1703,8 +1703,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               }}
               onOpacityPercentCancel={() => {
                 // Escape는 게스처를 통째로 되돌린다. 로컬 대표값도 canonical에서 다시 읽어야
-                // 입력이 blur 뒤 옛 preview 값으로 재동기화되지 않는다.
-                // solidOnly 대상(테두리·카운터)은 alpha 취소가 onInputCancel로만 들어온다
+                // 입력이 blur 뒤 옛 preview 값으로 재동기화되지 않는다
+                // solidOnly 대상의 alpha 취소는 onInputCancel에서 처리
                 if (batchPickerFor === 'noteColor') {
                   editGestureController.cancel();
                   const base = getMixedValueCanonical(
