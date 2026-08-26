@@ -321,9 +321,18 @@ describe('useGridResize plugin gesture lifecycle', () => {
       'end:plugin-b:token-2',
     ]);
     expect(new Set(pluginGestureIds).size).toBe(1);
-    // plugin-only는 editor 무커밋 계약 - 오버레이 동기화만 수행
+    // plugin-only도 editor payload 없는 단일 plugin transaction으로 정산
     expect(mocks.commitPatch).not.toHaveBeenCalled();
-    expect(mocks.beginMixedGesture).not.toHaveBeenCalled();
+    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(pluginGestureIds[0], [
+      'plugin-a',
+      'plugin-b',
+    ]);
+    expect(mocks.commitMixedGesture).toHaveBeenCalledTimes(1);
+    const [gestureId, mutation, pluginIds] = mocks.commitMixedGesture.mock
+      .calls[0] as unknown as [string, () => unknown, string[]];
+    expect(gestureId).toBe(pluginGestureIds[0]);
+    expect(mutation()).toBeNull();
+    expect(pluginIds).toEqual(['plugin-a', 'plugin-b']);
     expect(mocks.sendBridge).toHaveBeenCalledWith(
       'overlay',
       'plugin:displayElements:sync',

@@ -298,12 +298,7 @@ const Grid = ({
           );
         }
       });
-    if (
-      tokens.size > 0 &&
-      useGridSelectionStore
-        .getState()
-        .selectedElements.some((element) => element.type !== 'plugin')
-    ) {
+    if (tokens.size > 0) {
       beginMixedGestureTransaction(gestureId, [...tokens.keys()]);
     }
     return () => {

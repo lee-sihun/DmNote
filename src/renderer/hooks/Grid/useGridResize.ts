@@ -160,10 +160,7 @@ export function useGridResize({
       id: element.id,
     }));
     beginPluginResizeSessions(gestureId);
-    if (
-      pluginResizeTokensRef.current.size > 0 &&
-      selectedElements.some((element) => element.type !== 'plugin')
-    ) {
+    if (pluginResizeTokensRef.current.size > 0) {
       beginMixedGestureTransaction(gestureId, [
         ...pluginResizeTokensRef.current.keys(),
       ]);
@@ -1048,6 +1045,19 @@ export function useGridResize({
           receipt: settlement.receipt,
         }).catch(reportElementOpError);
       }
+    } else if (
+      !groupHandledNatively &&
+      !groupHasNative &&
+      groupPluginInvolved &&
+      groupSettlement?.kind === 'intents' &&
+      settlementGestureId
+    ) {
+      void runMixedElementOpsIntent({
+        gestureId: settlementGestureId,
+        pluginIds: [...pluginResizeTokensRef.current.keys()],
+        ops: [],
+        receipt: groupSettlement.receipt,
+      }).catch(reportElementOpError);
     }
     if (groupPluginInvolved) {
       syncPluginElementsToOverlay();
