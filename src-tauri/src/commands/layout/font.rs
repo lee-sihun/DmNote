@@ -81,10 +81,20 @@ fn font_load_from_path(app: tauri::AppHandle, path: PathBuf) -> CmdResult<FontLo
     fs::copy(&path, &dest_path)?;
     let dest_string = dest_path.to_string_lossy().to_string();
 
+    // Macintosh 플랫폼 name 레코드만 가진 구형 폰트는 family 이름을 못 읽는다 - 파일명 폴백
+    let font_name = metadata.family_name.unwrap_or_else(|| {
+        path.file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(str::trim)
+            .filter(|stem| !stem.is_empty())
+            .unwrap_or("Custom Font")
+            .to_string()
+    });
+
     Ok(FontLoadResponse {
         success: true,
         error: None,
-        font_name: Some(metadata.family_name),
+        font_name: Some(font_name),
         font_path: Some(dest_string),
         weight_ranges: metadata.weight_ranges,
     })
