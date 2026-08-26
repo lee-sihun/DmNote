@@ -1207,6 +1207,7 @@ dependencies = [
  "once_cell",
  "open",
  "parking_lot",
+ "plist",
  "rdev",
  "reqwest 0.12.26",
  "rfd",

@@ -50,7 +50,9 @@ export const getCounterTypographyStyle = ({
       textDecoration: resolvedTextDecoration,
       textAlign: 'center',
       lineHeight,
-    };
+      // 카운터 굵기 폴백 변수 - inline 모드에서도 공급
+      '--dmn-counter-font-weight-default': String(resolvedFontWeight),
+    } as React.CSSProperties;
   }
 
   return {

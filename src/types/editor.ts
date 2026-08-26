@@ -18,9 +18,9 @@ import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
-  isNoteBorderPaintValueV1,
+  isNoteBorderPaintPatchValueV1,
   isNotePaintValuePatchV1,
-  type NoteBorderPaintValueV1,
+  type NoteBorderPaintPatchValueV1,
   type NotePaintPropertyPatchV1,
   type NotePaintValuePatchV1,
 } from '@src/types/key/notePaint';
@@ -29,7 +29,6 @@ import {
   type CounterFillDescriptorV1,
   type CounterFillPropertyPatchV1,
 } from '@src/types/key/counterFill';
-import { type FontColorPropertyPatchV1 } from '@src/types/key/fontColor';
 import {
   canonicalizePositionGradients,
   type PaintDescriptorV1,
@@ -228,8 +227,6 @@ interface EditorElementPropertyValuesV1 {
   counterFontUnderline: boolean;
   counterFontStrikethrough: boolean;
   counterFontFamily: string;
-  counterStrokeIdle: string;
-  counterStrokeActive: string;
   counterFillIdle: CounterFillDescriptorV1;
   counterFillActive: CounterFillDescriptorV1;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
@@ -242,8 +239,8 @@ interface EditorElementPropertyValuesV1 {
   fontFamily: string;
   displayText: string;
   className: string;
-  fontColor: string;
-  activeFontColor: string;
+  fontPaint: PaintDescriptorV1;
+  activeFontPaint: PaintDescriptorV1;
   borderWidth: number;
   borderRadius: number;
   fontSize: number;
@@ -262,10 +259,11 @@ interface EditorElementPropertyValuesV1 {
   shadowEnabled: boolean;
   notePaint: NotePaintValuePatchV1;
   noteGlowPaint: NotePaintValuePatchV1;
-  noteBorderPaint: NoteBorderPaintValueV1;
+  noteBorderPaint: NoteBorderPaintPatchValueV1;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
+  noteGlowSyncPaint: boolean;
   noteAlignment: 'left' | 'center' | 'right';
   noteBorderSide: 'all' | 'vertical' | 'horizontal';
   statType: 'kps' | 'kpsAvg' | 'kpsMax' | 'total';
@@ -300,8 +298,8 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'fontFamily',
   'displayText',
   'className',
-  'fontColor',
-  'activeFontColor',
+  'fontPaint',
+  'activeFontPaint',
   'shadow',
   'activeShadow',
   'shadowEnabled',
@@ -336,12 +334,11 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'counterFontFamily',
   'counterFillIdle',
   'counterFillActive',
-  'counterStrokeIdle',
-  'counterStrokeActive',
   'counterAnimationPreset',
   'statType',
   'noteEffectEnabled',
   'noteGlowEnabled',
+  'noteGlowSyncPaint',
   'noteGlowSize',
   'notePaint',
   'noteGlowPaint',
@@ -432,9 +429,6 @@ export type EditorCounterTypographyPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'counterFontFamily'
 >;
 
-export type EditorCounterStrokePropertyPatchV1 = EditorPropertyPatchUnionV1<
-  'counterStrokeIdle' | 'counterStrokeActive'
->;
 export type EditorCounterFillPropertyPatchV1 = CounterFillPropertyPatchV1;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -451,8 +445,6 @@ export type EditorFontFamilyPropertyPatchV1 =
 export type EditorTextPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'displayText' | 'className'
 >;
-
-export type EditorFontColorPropertyPatchV1 = FontColorPropertyPatchV1;
 
 export type EditorNumericStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'borderWidth' | 'borderRadius' | 'fontSize'
@@ -475,6 +467,8 @@ export type EditorPaintPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'activeBackgroundPaint'
   | 'borderPaint'
   | 'activeBorderPaint'
+  | 'fontPaint'
+  | 'activeFontPaint'
 >;
 
 export type EditorShadowPropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -487,6 +481,7 @@ export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
   | 'noteAutoYCorrection'
   | 'noteGlowEnabled'
+  | 'noteGlowSyncPaint'
   | 'noteAlignment'
   | 'noteBorderSide'
 >;
@@ -864,6 +859,8 @@ export const isEditorPaintPropertyPatchV1 = (
     'activeBackgroundPaint',
     'borderPaint',
     'activeBorderPaint',
+    'fontPaint',
+    'activeFontPaint',
   ].includes(value.property as string) &&
   isEditorPaintDescriptorV1(value.value);
 
@@ -1530,10 +1527,8 @@ const isEditorElementPropertyValueValid = (
     case 'fontFamily':
     case 'displayText':
     case 'className':
-    case 'fontColor':
     case 'inactiveImage':
       return typeof value === 'string';
-    case 'activeFontColor':
     case 'activeImage':
       return keyOrKnob && typeof value === 'string';
     case 'shadow':
@@ -1548,6 +1543,14 @@ const isEditorElementPropertyValueValid = (
     case 'activeBackgroundPaint':
     case 'activeBorderPaint':
       return keyOrKnob && isEditorPaintDescriptorV1(value);
+    // 라벨 렌더러가 있는 요소만 - idle은 키·스탯, active는 키 (스탯은 상태 없음)
+    case 'fontPaint':
+      return (
+        (elementType === 'key' || elementType === 'stat') &&
+        isEditorPaintDescriptorV1(value)
+      );
+    case 'activeFontPaint':
+      return elementType === 'key' && isEditorPaintDescriptorV1(value);
     case 'borderWidth':
       return (
         typeof value === 'number' &&
@@ -1628,10 +1631,7 @@ const isEditorElementPropertyValueValid = (
         (value as number) <= 900
       );
     case 'counterFontFamily':
-    case 'counterStrokeIdle':
       return keyOrStat && typeof value === 'string';
-    case 'counterStrokeActive':
-      return elementType === 'key' && typeof value === 'string';
     case 'counterFillIdle':
       return keyOrStat && isCounterFillDescriptorV1(value);
     case 'counterFillActive':
@@ -1643,6 +1643,7 @@ const isEditorElementPropertyValueValid = (
     case 'noteEffectEnabled':
     case 'noteAutoYCorrection':
     case 'noteGlowEnabled':
+    case 'noteGlowSyncPaint':
       return elementType === 'key' && typeof value === 'boolean';
     case 'noteGlowSize':
       return (
@@ -1656,7 +1657,7 @@ const isEditorElementPropertyValueValid = (
     case 'noteGlowPaint':
       return elementType === 'key' && isNotePaintValuePatchV1(value);
     case 'noteBorderPaint':
-      return elementType === 'key' && isNoteBorderPaintValueV1(value);
+      return elementType === 'key' && isNoteBorderPaintPatchValueV1(value);
     case 'noteOffsetX':
     case 'noteOffsetY':
       return (

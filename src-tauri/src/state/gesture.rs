@@ -573,14 +573,22 @@ mod tests {
                 serde_json::json!({ "property": "className", "value": "  raw class  " }),
             ),
             (
-                EditorElementTypeV1::Graph,
-                EditorElementPropertyPatchV1::FontColor(String::new()),
-                serde_json::json!({ "property": "fontColor", "value": "" }),
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::FontPaint(crate::models::EditorPaintDescriptorV1 {
+                    color: String::new(),
+                    gradient: None,
+                }),
+                serde_json::json!({ "property": "fontPaint", "value": { "color": "", "gradient": null } }),
             ),
             (
                 EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::ActiveFontColor("  raw active font  ".to_string()),
-                serde_json::json!({ "property": "activeFontColor", "value": "  raw active font  " }),
+                EditorElementPropertyPatchV1::ActiveFontPaint(
+                    crate::models::EditorPaintDescriptorV1 {
+                        color: "  raw active font  ".to_string(),
+                        gradient: None,
+                    },
+                ),
+                serde_json::json!({ "property": "activeFontPaint", "value": { "color": "  raw active font  ", "gradient": null } }),
             ),
             (
                 EditorElementTypeV1::Key,
@@ -762,16 +770,6 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
-                EditorElementPropertyPatchV1::CounterStrokeIdle("  raw-idle-stroke  ".to_string()),
-                serde_json::json!({ "property": "counterStrokeIdle", "value": "  raw-idle-stroke  " }),
-            ),
-            (
-                EditorElementTypeV1::Key,
-                EditorElementPropertyPatchV1::CounterStrokeActive(String::new()),
-                serde_json::json!({ "property": "counterStrokeActive", "value": "" }),
-            ),
-            (
-                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterAnimationPreset(
                     crate::models::EditorCounterAnimationPresetIntentV1 {
                         preset_id: "builtin-ease-out".to_string(),
@@ -797,6 +795,11 @@ mod tests {
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteGlowEnabled(true),
                 serde_json::json!({ "property": "noteGlowEnabled", "value": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowSyncPaint(true),
+                serde_json::json!({ "property": "noteGlowSyncPaint", "value": true }),
             ),
             (
                 EditorElementTypeV1::Key,
@@ -829,6 +832,7 @@ mod tests {
                     crate::models::EditorNoteBorderPaintV1 {
                         color: "#112233".to_string(),
                         opacity: 0,
+                        gradient: None,
                     },
                 ),
                 serde_json::json!({ "property": "noteBorderPaint", "value": { "color": "#112233", "opacity": 0 } }),
@@ -958,11 +962,11 @@ mod tests {
         }
 
         for patch in [
-            serde_json::json!({ "property": "fontColor", "value": null }),
-            serde_json::json!({ "property": "fontColor", "value": false }),
-            serde_json::json!({ "property": "activeFontColor", "value": 1 }),
-            serde_json::json!({ "fontColor": "idle", "activeFontColor": "active" }),
-            serde_json::json!({ "fontColor": "idle", "unexpected": true }),
+            serde_json::json!({ "property": "fontPaint", "value": null }),
+            serde_json::json!({ "property": "fontPaint", "value": { "color": "idle" } }),
+            serde_json::json!({ "property": "activeFontPaint", "value": 1 }),
+            serde_json::json!({ "fontPaint": { "color": "idle", "gradient": null }, "activeFontPaint": { "color": "active", "gradient": null } }),
+            serde_json::json!({ "property": "fontPaint", "value": { "color": "idle", "gradient": null, "unexpected": true } }),
         ] {
             let mut invalid_font_color = layer_name_wire.clone();
             invalid_font_color["editorOps"][0]["patch"] = patch;
@@ -1086,13 +1090,6 @@ mod tests {
             serde_json::json!({ "property": "counterFillActive", "value": { "color": "first", "gradient": { "angle": 45, "stops": [{ "color": "first", "pos": 0, "unexpected": true }, { "color": "last", "pos": 1 }] } } }),
             serde_json::json!({ "property": "counterFillIdle", "value": { "color": "solid", "unexpected": true } }),
             serde_json::json!({ "counterFillActive": { "color": "active" }, "hidden": false }),
-            serde_json::json!({ "property": "counterStrokeIdle", "value": null }),
-            serde_json::json!({ "property": "counterStrokeIdle", "value": 1 }),
-            serde_json::json!({ "counterStrokeIdle": "idle", "counterStrokeActive": "active" }),
-            serde_json::json!({ "counterStrokeIdle": "idle", "unexpected": true }),
-            serde_json::json!({ "property": "counterStrokeActive", "value": null }),
-            serde_json::json!({ "property": "counterStrokeActive", "value": 1 }),
-            serde_json::json!({ "counterStrokeActive": "active", "hidden": true }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": null }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": {} }),
             serde_json::json!({ "property": "counterAnimationPreset", "value": { "presetId": "preset", "enabled": false } }),
@@ -1101,6 +1098,7 @@ mod tests {
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset" }, "hidden": true }),
             serde_json::json!({ "property": "noteGlowSize", "value": null }),
             serde_json::json!({ "property": "noteGlowSize", "value": "20" }),
+            serde_json::json!({ "property": "noteGlowSyncPaint", "value": null }),
             serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
             serde_json::json!({ "noteGlowSize": 20, "unexpected": true }),
             serde_json::json!({ "property": "notePaint", "value": {} }),

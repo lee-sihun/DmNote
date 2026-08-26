@@ -295,7 +295,6 @@ const GraphItem = ({
       withOffsetVars={true}
       interactive={true}
       dataEditing={isDraggingOrResizing}
-      isViewportTransforming={isViewportTransforming}
       onClick={handleClick}
       onPointerDown={isSelectionMode ? handlePointerDown : undefined}
       onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}

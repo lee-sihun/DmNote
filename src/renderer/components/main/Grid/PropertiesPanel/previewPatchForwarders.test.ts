@@ -14,7 +14,7 @@ import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
 import {
-  previewBatchFontColor,
+  previewBatchPaint,
   previewBatchStyleProperty,
   previewSingleStyleProperty,
 } from './previewPatchForwarders';
@@ -162,10 +162,10 @@ describe('preview patch forwarders (forwarder → overlay 실경로)', () => {
     expectNoWirePollution(knob);
   });
 
-  it('batch font color는 projectFontColorPatch를 거쳐 active fallback까지 투영된다', () => {
-    previewBatchFontColor([{ elementType: 'key', id: KEY_ID }], '4key', {
-      property: 'fontColor',
-      value: '#new-idle',
+  it('batch font paint는 commit eager와 같은 투영으로 active fallback까지 포함한다', () => {
+    previewBatchPaint([{ elementType: 'key', id: KEY_ID }], '4key', {
+      property: 'fontPaint',
+      value: { color: '#new-idle', gradient: null },
     });
 
     const composed = composedKey();
@@ -175,10 +175,10 @@ describe('preview patch forwarders (forwarder → overlay 실경로)', () => {
     expectNoWirePollution(composed);
   });
 
-  it('batch active font color는 activeFontColor 조각만 투영된다', () => {
-    previewBatchFontColor([{ elementType: 'key', id: KEY_ID }], '4key', {
-      property: 'activeFontColor',
-      value: '#new-active',
+  it('batch active font paint는 active 조각만 투영된다', () => {
+    previewBatchPaint([{ elementType: 'key', id: KEY_ID }], '4key', {
+      property: 'activeFontPaint',
+      value: { color: '#new-active', gradient: null },
     });
 
     const composed = composedKey();
@@ -211,9 +211,9 @@ describe('preview patch forwarders (forwarder → overlay 실경로)', () => {
       { elementType: 'key' as const, id: KEY_ID_B },
     ];
 
-    previewBatchFontColor(targets, '4key', {
-      property: 'fontColor',
-      value: '#new-1',
+    previewBatchPaint(targets, '4key', {
+      property: 'fontPaint',
+      value: { color: '#new-1', gradient: null },
     });
 
     // 게스처와 미배타인 격리 커밋이 비선택 C를 삭제 - A·B live index가 당겨진다
@@ -223,9 +223,9 @@ describe('preview patch forwarders (forwarder → overlay 실경로)', () => {
     } as CanonicalEditorDocumentV1['keyPositions']);
 
     // 드래그 계속 - forwarder가 live index를 재해석해 전달하는 두 번째 이벤트
-    previewBatchFontColor(targets, '4key', {
-      property: 'fontColor',
-      value: '#new-2',
+    previewBatchPaint(targets, '4key', {
+      property: 'fontPaint',
+      value: { color: '#new-2', gradient: null },
     });
 
     const rendered = composePreviewPositions(

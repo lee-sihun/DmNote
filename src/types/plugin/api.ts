@@ -342,6 +342,11 @@ export type AppAutoUpdateResult = {
   updatedTo: string;
   downloadUrl: string;
 };
+export type UpdateProgressPhase = 'downloading' | 'verifying' | 'installing';
+export type UpdateProgressEvent = {
+  phase: UpdateProgressPhase;
+  percent: number | null;
+};
 
 export type BridgeMessage<T = unknown> = { type: string; data?: T };
 export type BridgeMessageListener<T = unknown> = (data: T) => void;
@@ -897,6 +902,9 @@ export interface DMNoteAPI {
   app: {
     bootstrap(): Promise<BootstrapPayload>;
     autoUpdate(tag: string): Promise<AppAutoUpdateResult>;
+    onUpdateProgress(
+      listener: (event: UpdateProgressEvent) => void,
+    ): ReadyUnsubscribe;
     openExternal(url: string): Promise<void>;
     restart(): Promise<void>;
     quit(): Promise<void>;

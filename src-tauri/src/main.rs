@@ -195,6 +195,8 @@ fn main() {
                 state::macos_termination::install(app.handle())
                     .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
                 launch_macos_dock_helper();
+                // 이전 자동 업데이트가 남긴 .app.old/.app.new 정리 (시작 지연 없이 백그라운드)
+                std::thread::spawn(commands::app::update_macos::cleanup_stale_leftovers);
             }
             Ok(())
         })
@@ -218,6 +220,7 @@ fn main() {
             commands::app::obs::obs_status,
             commands::app::obs::obs_regenerate_token,
             // 에디터 콘텐츠
+            commands::editor::css::css_fetch_import,
             commands::editor::css::css_get,
             commands::editor::css::css_get_use,
             commands::editor::css::css_toggle,
@@ -730,7 +733,7 @@ fn launch_macos_dock_helper() {
         .arg("--main-bundle-id")
         .arg("com.dmnote.desktop");
 
-    if let Some(bundle_path) = resolve_current_bundle_path() {
+    if let Some(bundle_path) = services::macos_bundle::resolve_current_bundle_path() {
         cmd.arg("--main-bundle-path").arg(bundle_path);
     }
 
@@ -755,7 +758,7 @@ fn launch_macos_dock_helper() {
 
 #[cfg(target_os = "macos")]
 fn resolve_macos_dock_helper_path() -> Option<PathBuf> {
-    if let Some(bundle_path) = resolve_current_bundle_path() {
+    if let Some(bundle_path) = services::macos_bundle::resolve_current_bundle_path() {
         let bundled_helper = bundle_path
             .join("Contents")
             .join("Resources")
@@ -771,27 +774,6 @@ fn resolve_macos_dock_helper_path() -> Option<PathBuf> {
         .join("DM NOTE.app");
     if dev_helper.is_dir() {
         return Some(dev_helper);
-    }
-
-    None
-}
-
-#[cfg(target_os = "macos")]
-fn resolve_current_bundle_path() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let macos_dir = exe.parent()?;
-    if macos_dir.file_name()? != "MacOS" {
-        return None;
-    }
-
-    let contents_dir = macos_dir.parent()?;
-    if contents_dir.file_name()? != "Contents" {
-        return None;
-    }
-
-    let bundle_dir = contents_dir.parent()?;
-    if bundle_dir.extension()? == "app" {
-        return Some(bundle_dir.to_path_buf());
     }
 
     None

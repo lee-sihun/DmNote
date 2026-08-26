@@ -62,7 +62,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('CountDisplay 커밋 예산', () => {
+// jsdom에는 Element.animate가 없어 rAF 폴백 경로가 실행된다
+describe('CountDisplay 커밋 예산 (rAF 폴백)', () => {
   const renderCount = (count: number): void => {
     act(() => {
       root.render(
@@ -118,6 +119,106 @@ describe('CountDisplay 커밋 예산', () => {
       vi.advanceTimersByTime(600);
     });
     expect(span.style.transform).toBe('scale(1)');
+  });
+});
+
+describe('CountDisplay WAAPI 경로', () => {
+  interface AnimateCall {
+    keyframes: unknown;
+    options: unknown;
+    cancel: ReturnType<typeof vi.fn>;
+  }
+  let animateCalls: AnimateCall[];
+  let rafSpy: ReturnType<typeof vi.fn>;
+  const proto = Element.prototype as unknown as { animate?: unknown };
+  const originalAnimate = proto.animate;
+
+  beforeEach(() => {
+    animateCalls = [];
+    proto.animate = (keyframes: unknown, options: unknown) => {
+      const call = { keyframes, options, cancel: vi.fn() };
+      animateCalls.push(call);
+      return call;
+    };
+    rafSpy = vi.fn(() => 1);
+    vi.stubGlobal('requestAnimationFrame', rafSpy);
+  });
+
+  afterEach(() => {
+    if (originalAnimate) proto.animate = originalAnimate;
+    else delete proto.animate;
+    vi.unstubAllGlobals();
+  });
+
+  const renderCount = (count: number, animationEnabled = true): void => {
+    act(() => {
+      root.render(
+        <Profiler id="count-waapi" onRender={onRender}>
+          <CountDisplay
+            count={count}
+            animationEnabled={animationEnabled}
+            animationDurationMs={250}
+            animationScale={1.3}
+            animationBezier={[0.3456, 1.2345, 0.6, 0.9]}
+          />
+        </Profiler>,
+      );
+    });
+  };
+
+  it('count 변경마다 target→1 키프레임을 컴포지터 애니메이션으로 시작하고 rAF를 쓰지 않음', () => {
+    renderCount(0);
+    expect(animateCalls).toHaveLength(0);
+    commits = 0;
+
+    renderCount(1);
+
+    expect(commits).toBeLessThanOrEqual(3);
+    expect(rafSpy).not.toHaveBeenCalled();
+    expect(animateCalls).toHaveLength(1);
+    expect(animateCalls[0].keyframes).toEqual([
+      { transform: 'scale(1.3)' },
+      { transform: 'scale(1)' },
+    ]);
+    expect(animateCalls[0].options).toEqual({
+      duration: 250,
+      easing: 'cubic-bezier(0.3456, 1.2345, 0.6000, 0.9000)',
+      fill: 'none',
+    });
+    // 인라인 복귀값은 유지 (fill: none 종료 시 scale(1)로 돌아감)
+    const span = container.querySelector('span.counter') as HTMLSpanElement;
+    expect(span.style.transform).toBe('scale(1)');
+  });
+
+  it('재생 중 count가 다시 바뀌면 이전 애니메이션을 취소하고 처음부터 재생', () => {
+    renderCount(0);
+    renderCount(1);
+    renderCount(2);
+
+    expect(animateCalls).toHaveLength(2);
+    expect(animateCalls[0].cancel).toHaveBeenCalledTimes(1);
+    expect(animateCalls[1].cancel).not.toHaveBeenCalled();
+  });
+
+  it('애니메이션 비활성화·언마운트 시 진행 중인 애니메이션을 취소', () => {
+    renderCount(0);
+    renderCount(1);
+    renderCount(1, false);
+    expect(animateCalls).toHaveLength(1);
+    expect(animateCalls[0].cancel).toHaveBeenCalled();
+
+    renderCount(2, false);
+    expect(animateCalls).toHaveLength(1);
+
+    renderCount(3);
+    expect(animateCalls).toHaveLength(2);
+    act(() => {
+      root.unmount();
+    });
+    expect(animateCalls[1].cancel).toHaveBeenCalledTimes(1);
+    act(() => {
+      root = createRoot(container);
+    });
   });
 });
 

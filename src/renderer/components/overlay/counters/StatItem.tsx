@@ -10,6 +10,7 @@ import {
 } from '@hooks/overlay/useKeyElementStyles';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import InsideCounterLayout from './InsideCounterLayout';
+import KeyLabel from '@components/shared/KeyLabel';
 
 interface StatItemProps {
   statType: string;
@@ -40,6 +41,9 @@ const StatItem = React.memo(
       hasCurrentImage,
       isTransparent,
       labelText,
+      labelPaintStyle,
+      labelHasGradient,
+      labelMetricsDep,
     } = computeKeyElementStyles({ position, active, label: label || '' });
 
     // 이미지 프리로드
@@ -54,9 +58,10 @@ const StatItem = React.memo(
       counterSettings.enabled &&
       counterSettings.placement === 'inside';
 
-    const counterValue = showInsideCounter
-      ? (getStatValueSignal(statType as StatItemType).value ?? 0) | 0
-      : 0;
+    // 시그널 객체만 넘기고 .value는 읽지 않음 — KPS 틱/press마다 StatItem 전체가 리렌더되지 않도록
+    const counterSignal = showInsideCounter
+      ? getStatValueSignal(statType as StatItemType)
+      : undefined;
 
     if (position?.hidden || isTransparent) return null;
 
@@ -82,21 +87,30 @@ const StatItem = React.memo(
             style={imageStyle}
             draggable={false}
           />
-        ) : showInsideCounter ? (
+        ) : showInsideCounter && counterSignal ? (
           <InsideCounterLayout
-            count={counterValue}
+            countSignal={counterSignal}
             labelText={labelText}
             textStyle={textStyle}
             active={active}
             counterSettings={counterSettings}
             useInlineStyles={position.useInlineStyles === true}
+            labelPaintStyle={labelPaintStyle}
+            labelHasGradient={labelHasGradient}
+            labelMetricsDep={labelMetricsDep}
           />
         ) : (
           <div
-            className="flex items-center justify-center h-full font-bold text-safe-inline"
+            className="flex items-center justify-center h-full font-bold"
             style={textStyle}
           >
-            {labelText}
+            {/* 라벨 페인트는 내용 크기 span 기준 - 키 라벨과 같은 박스 계약 */}
+            <KeyLabel
+              text={labelText}
+              paintStyle={labelPaintStyle}
+              hasGradient={labelHasGradient}
+              metricsDep={labelMetricsDep}
+            />
           </div>
         )}
       </div>

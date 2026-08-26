@@ -361,7 +361,6 @@ interface KeyCounterSettings {
   placement: "inside" | "outside";
   align: "top" | "bottom" | "left" | "right";
   fill: { idle: string; active: string }; // CSS 색상값
-  stroke: { idle: string; active: string };
   gap: number; // 간격 (px)
 }
 ```

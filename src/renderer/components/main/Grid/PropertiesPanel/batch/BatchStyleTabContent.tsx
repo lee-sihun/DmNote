@@ -48,7 +48,6 @@ import { editGestureController } from '@src/renderer/editor/runtime/editGestureC
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type {
   EditorPaintPropertyPatchV1,
-  EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
@@ -83,8 +82,8 @@ interface BatchStyleTabContentProps {
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
-  onFontColorPreview?: (patch: EditorFontColorPropertyPatchV1) => void;
-  onFontColorCommit?: (patch: EditorFontColorPropertyPatchV1) => void;
+  onFontColorPreview?: (patch: EditorPaintPropertyPatchV1) => void;
+  onFontColorCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
@@ -211,9 +210,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
   const colorPairFor = (
     position: KeyPosition,
-    target: 'backgroundColor' | 'borderColor',
+    target: 'backgroundColor' | 'borderColor' | 'fontColor',
     active: boolean,
   ) => {
+    if (target === 'fontColor') {
+      return resolveStatePair(
+        active,
+        { color: position.fontColor, gradient: position.fontGradient },
+        {
+          color: position.activeFontColor,
+          gradient: position.activeFontGradient,
+        },
+      );
+    }
     if (target === 'backgroundColor') {
       return resolveStatePair(
         active,
@@ -237,13 +246,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     );
   };
 
-  const fontColorFor = (position: KeyPosition, active: boolean) => {
-    const idle = position.fontColor?.trim() ? position.fontColor : undefined;
-    const activeColor = position.activeFontColor?.trim()
-      ? position.activeFontColor
-      : undefined;
-    return active ? activeColor ?? idle : idle;
-  };
+  const fontColorFor = (position: KeyPosition, active: boolean) =>
+    colorPairFor(position, 'fontColor', active).color?.trim() || undefined;
 
   const resolvedShadowFor = (position: KeyPosition, active: boolean) => {
     return resolveElementShadowForPosition({
@@ -618,6 +622,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             (shadowActiveState && batchActiveShadow.enabledAny)
           }
           showActiveState={shadowActiveState}
+          previewAnchor={{ kind: 'batch' }}
           onChange={handleShadowChange}
           onEnabledChange={handleShadowEnabledChange}
           panelElement={panelElement}
@@ -751,6 +756,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <ColorInput
+                  colorId={`batch-font:${batchSelectionKey}`}
+                  gradientSurface="font"
                   value={
                     getMixedValue(
                       (pos) => fontColorFor(pos, false),
@@ -769,20 +776,47 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   onChange={(color) =>
                     onFontColorPreview?.(
                       effectiveColorState === 'active'
-                        ? { property: 'activeFontColor', value: color }
-                        : { property: 'fontColor', value: color },
+                        ? {
+                            property: 'activeFontPaint',
+                            value: { color, gradient: null },
+                          }
+                        : {
+                            property: 'fontPaint',
+                            value: { color, gradient: null },
+                          },
                     )
                   }
-                  onChangeComplete={(color) =>
-                    onFontColorCommit?.({ property: 'fontColor', value: color })
-                  }
-                  onActiveChangeComplete={(color) =>
-                    onFontColorCommit?.({
-                      property: 'activeFontColor',
-                      value: color,
-                    })
-                  }
+                  onChangeComplete={() => {}}
+                  onActiveChangeComplete={() => {}}
                   panelElement={panelElement}
+                  canvasAnchor={{ kind: 'batch' }}
+                  gradientValue={
+                    getMixedValue(
+                      (pos) =>
+                        colorPairFor(pos, 'fontColor', false).gradient ?? null,
+                      null,
+                    ).value
+                  }
+                  activeGradientValue={
+                    activeMixedValue(
+                      (pos) =>
+                        colorPairFor(pos, 'fontColor', true).gradient ?? null,
+                      null,
+                    ).value
+                  }
+                  onModeCommit={(state, modeValue) =>
+                    onFontColorCommit?.(
+                      state === 'active'
+                        ? {
+                            property: 'activeFontPaint',
+                            value: paintDescriptor(modeValue),
+                          }
+                        : {
+                            property: 'fontPaint',
+                            value: paintDescriptor(modeValue),
+                          },
+                    )
+                  }
                 />
               </PropertyRow>
 

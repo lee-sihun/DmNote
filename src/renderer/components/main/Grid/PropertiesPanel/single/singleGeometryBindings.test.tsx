@@ -81,6 +81,7 @@ const captured = vi.hoisted(() => ({
     ) => void;
   },
   color: null as null | {
+    color?: string;
     stateMode?: string;
     onStateModeChange?: (mode: string) => void;
     onColorChange: (color: string) => void;
@@ -732,7 +733,7 @@ describe('single geometry input bindings', () => {
   ] as const)(
     '%s font color actual ColorPicker는 local drag 뒤 final raw leaf만 commit한다',
     (type, activeReachable) => {
-      const fontColor = vi.fn();
+      const paint = vi.fn();
       const legacy = vi.fn();
       act(() => {
         root.render(
@@ -743,7 +744,7 @@ describe('single geometry input bindings', () => {
             keyInfo={null}
             onPositionChange={vi.fn()}
             onKeyUpdate={legacy}
-            onFontColorCommit={fontColor}
+            onPaintCommit={paint}
             shadowActiveState={activeReachable}
             showSoundControls={false}
             panelElement={null}
@@ -751,22 +752,23 @@ describe('single geometry input bindings', () => {
           />,
         );
       });
+      // 글꼴 색상은 마지막 스와치
       act(() => captured.swatches.at(-1)?.onClick());
       act(() => captured.color?.onColorChange('local-only'));
-      expect(fontColor).not.toHaveBeenCalled();
+      expect(paint).not.toHaveBeenCalled();
       act(() => captured.color?.onColorChangeComplete(' idle raw '));
-      expect(fontColor).toHaveBeenLastCalledWith({
-        property: 'fontColor',
-        value: ' idle raw ',
+      expect(paint).toHaveBeenLastCalledWith({
+        property: 'fontPaint',
+        value: { color: ' idle raw ', gradient: null },
       });
       if (activeReachable) {
         act(() => captured.color?.onStateModeChange?.('active'));
         act(() => captured.color?.onColorChange('active-local'));
-        expect(fontColor).toHaveBeenCalledOnce();
+        expect(paint).toHaveBeenCalledOnce();
         act(() => captured.color?.onColorChangeComplete(' active raw '));
-        expect(fontColor).toHaveBeenLastCalledWith({
-          property: 'activeFontColor',
-          value: ' active raw ',
+        expect(paint).toHaveBeenLastCalledWith({
+          property: 'activeFontPaint',
+          value: { color: ' active raw ', gradient: null },
         });
       } else {
         expect(captured.color?.onStateModeChange).toBeUndefined();
@@ -1085,52 +1087,6 @@ describe('single geometry input bindings', () => {
     [
       'key',
       'idle',
-      { property: 'counterStrokeIdle', value: '  idle stroke  ' },
-    ],
-    [
-      'key',
-      'active',
-      { property: 'counterStrokeActive', value: '  active stroke  ' },
-    ],
-    ['stat', 'idle', { property: 'counterStrokeIdle', value: '' }],
-  ] as const)(
-    '%s counter stroke %s picker는 drag local-only 뒤 final exact commit한다',
-    (type, state, expected) => {
-      const stroke = vi.fn();
-      const legacy = vi.fn();
-      act(() => {
-        root.render(
-          <CounterTabContent
-            keyIndex={0}
-            keyPosition={createDefaultKeyPosition()}
-            isStat={type === 'stat'}
-            onKeyUpdate={legacy}
-            onCounterStrokeCommit={stroke}
-            t={(key) => key}
-          />,
-        );
-      });
-      act(() => captured.swatches.at(-1)?.onClick());
-      if (state === 'active') {
-        act(() => captured.color?.onStateModeChange?.('active'));
-      }
-      const value = expected.value;
-      act(() => captured.color?.onColorChange(value));
-      expect(stroke).not.toHaveBeenCalled();
-      act(() => captured.color?.onColorChangeComplete(value));
-
-      expect(stroke).toHaveBeenCalledWith(expected);
-      expect(legacy).not.toHaveBeenCalled();
-      if (type === 'stat') {
-        expect(captured.color?.onStateModeChange).toBeUndefined();
-      }
-    },
-  );
-
-  it.each([
-    [
-      'key',
-      'idle',
       { property: 'counterFillIdle', value: { color: ' final fill ' } },
     ],
     [
@@ -1160,7 +1116,7 @@ describe('single geometry input bindings', () => {
           />,
         );
       });
-      act(() => captured.swatches.at(-2)?.onClick());
+      act(() => captured.swatches.at(-1)?.onClick());
       if (state === 'active') {
         act(() => captured.color?.onStateModeChange?.('active'));
       }
@@ -1197,7 +1153,7 @@ describe('single geometry input bindings', () => {
         />,
       );
     });
-    act(() => captured.swatches.at(-2)?.onClick());
+    act(() => captured.swatches.at(-1)?.onClick());
     act(() => captured.color?.onColorChange('local-only'));
     expect(fill).not.toHaveBeenCalled();
     act(() => captured.color?.onGradientSpecSelect?.(gradient));

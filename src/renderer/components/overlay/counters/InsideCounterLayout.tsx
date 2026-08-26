@@ -4,25 +4,41 @@
  */
 
 import React from 'react';
+import type { Signal } from '@preact/signals-react';
 import CountDisplay from './CountDisplay';
+import SignalCountDisplay from './SignalCountDisplay';
+import KeyLabel from '@components/shared/KeyLabel';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 
-interface InsideCounterLayoutProps {
-  count: number;
+// 오버레이는 countSignal(구독 격리), 에디터 프리뷰는 count(숫자) — 타입으로 둘 중 하나만 허용.
+// 한 마운트에서 경로가 바뀌면 CountDisplay가 리마운트되어 팝 애니메이션 1회가 유실된다
+type CounterSource =
+  | { count: number; countSignal?: never }
+  | { countSignal: Signal<number>; count?: never };
+
+type InsideCounterLayoutProps = CounterSource & {
   labelText: string;
   textStyle: React.CSSProperties;
   active: boolean;
   counterSettings: KeyCounterSettings;
   useInlineStyles?: boolean;
-}
+  /** 라벨 그라데이션 클립 - 인라인 우선 모드 승격분 (변수 모드는 전역 규칙) */
+  labelPaintStyle?: React.CSSProperties;
+  labelHasGradient?: boolean;
+  labelMetricsDep?: string;
+};
 
 const InsideCounterLayout = ({
   count,
+  countSignal,
   labelText,
   textStyle,
   active,
   counterSettings,
   useInlineStyles = false,
+  labelPaintStyle,
+  labelHasGradient,
+  labelMetricsDep,
 }: InsideCounterLayoutProps) => {
   const fillColor = active
     ? counterSettings.fill.active
@@ -30,44 +46,49 @@ const InsideCounterLayout = ({
   const fillGradient = active
     ? counterSettings.fillActiveGradient
     : counterSettings.fillIdleGradient;
-  const strokeColor = active
-    ? counterSettings.stroke.active
-    : counterSettings.stroke.idle;
   const contentGap = Number.isFinite(counterSettings.gap)
     ? counterSettings.gap
     : 4;
 
-  const counterElement = (
-    <CountDisplay
+  const counterProps = {
+    fillColor,
+    fillGradient,
+    active,
+    fontSize: counterSettings.fontSize,
+    fontFamily: counterSettings.fontFamily,
+    fontWeight: counterSettings.fontWeight,
+    fontBold: counterSettings.fontBold,
+    fontItalic: counterSettings.fontItalic,
+    fontUnderline: counterSettings.fontUnderline,
+    fontStrikethrough: counterSettings.fontStrikethrough,
+    animationEnabled: counterSettings.animation.enabled,
+    animationBezier: counterSettings.animation.bezier,
+    animationScale: counterSettings.animation.scale,
+    animationDurationMs: counterSettings.animation.durationMs,
+    useInlineStyles,
+  };
+
+  // 이 파일은 컴파일 대상 — 시그널 .value를 여기서 읽지 말 것 (SignalCountDisplay가 구독)
+  const counterElement = countSignal ? (
+    <SignalCountDisplay
       key="counter"
-      count={count}
-      fillColor={fillColor}
-      fillGradient={fillGradient}
-      strokeColor={strokeColor}
-      active={active}
-      fontSize={counterSettings.fontSize}
-      fontFamily={counterSettings.fontFamily}
-      fontWeight={counterSettings.fontWeight}
-      fontBold={counterSettings.fontBold}
-      fontItalic={counterSettings.fontItalic}
-      fontUnderline={counterSettings.fontUnderline}
-      fontStrikethrough={counterSettings.fontStrikethrough}
-      animationEnabled={counterSettings.animation.enabled}
-      animationBezier={counterSettings.animation.bezier}
-      animationScale={counterSettings.animation.scale}
-      animationDurationMs={counterSettings.animation.durationMs}
-      useInlineStyles={useInlineStyles}
+      countSignal={countSignal}
+      {...counterProps}
     />
+  ) : (
+    <CountDisplay key="counter" count={count ?? 0} {...counterProps} />
   );
 
   const nameElement = (
-    <span
+    <KeyLabel
       key="label"
-      className="font-bold text-[14px] pointer-events-none select-none leading-normal text-safe-inline"
+      text={labelText}
+      className="font-bold text-[14px] pointer-events-none select-none leading-normal"
       style={textStyle}
-    >
-      {labelText}
-    </span>
+      paintStyle={labelPaintStyle}
+      hasGradient={labelHasGradient}
+      metricsDep={labelMetricsDep}
+    />
   );
 
   const isHorizontal =

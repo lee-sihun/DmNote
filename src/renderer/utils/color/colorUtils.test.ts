@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   isGradientColor,
   normalizeColorInput,
@@ -7,9 +7,15 @@ import {
   hsvToRgb,
   hsvToColorObject,
   toColorObject,
+  toCanonicalCssRgba,
   toCssRgba,
   toRgbHexColor,
 } from './colorUtils';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('isGradientColor', () => {
   it('gradient 객체를 감지', () => {
@@ -185,6 +191,23 @@ describe('toColorObject', () => {
     expect(result).not.toBeNull();
     expect(result!.rgb.r).toBe(255);
     expect(result!.hsv).toBeDefined();
+  });
+});
+
+describe('toCanonicalCssRgba', () => {
+  it('브라우저가 허용하는 named color를 strict rgba로 정규화', () => {
+    vi.stubGlobal('CSS', { supports: () => true });
+    let fillStyle = '#000000';
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      get fillStyle() {
+        return fillStyle;
+      },
+      set fillStyle(value: string) {
+        fillStyle = value === 'rebeccapurple' ? '#663399' : value;
+      },
+    } as CanvasRenderingContext2D);
+
+    expect(toCanonicalCssRgba('rebeccapurple')).toBe('rgba(102,51,153,1)');
   });
 });
 

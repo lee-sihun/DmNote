@@ -64,9 +64,6 @@ const {
   patchCounterLayoutViaAuthorityMock,
   patchCounterTypographyMock,
   patchCounterTypographyViaAuthorityMock,
-  patchCounterStrokeMock,
-  patchCounterStrokeTargetsMock,
-  patchCounterStrokeViaAuthorityMock,
   patchCounterFillMock,
   patchCounterFillViaAuthorityMock,
   patchFontColorMock,
@@ -157,9 +154,6 @@ const {
   patchCounterLayoutViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchCounterTypographyMock: vi.fn(() => Promise.resolve(true)),
   patchCounterTypographyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
-  patchCounterStrokeMock: vi.fn(() => Promise.resolve(true)),
-  patchCounterStrokeTargetsMock: vi.fn(() => Promise.resolve(true)),
-  patchCounterStrokeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchCounterFillMock: vi.fn(() => Promise.resolve(true)),
   patchCounterFillViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchFontColorMock: vi.fn(() => Promise.resolve(true)),
@@ -228,7 +222,6 @@ vi.mock('@plugins/runtime/displayElement/pluginElementActions', () => ({
     patchCounterAnimationEnabledViaAuthorityMock,
   patchCounterLayoutViaAuthority: patchCounterLayoutViaAuthorityMock,
   patchCounterTypographyViaAuthority: patchCounterTypographyViaAuthorityMock,
-  patchCounterStrokeViaAuthority: patchCounterStrokeViaAuthorityMock,
   patchCounterFillViaAuthority: patchCounterFillViaAuthorityMock,
   patchFontColorViaAuthority: patchFontColorViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
@@ -267,8 +260,6 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
     patchCounterBooleanByTargetsViaAuthorityMock,
   patchCounterLayoutById: patchCounterLayoutMock,
   patchCounterTypographyById: patchCounterTypographyMock,
-  patchCounterStrokeById: patchCounterStrokeMock,
-  patchCounterStrokeByTargets: patchCounterStrokeTargetsMock,
   patchCounterFillById: patchCounterFillMock,
   patchFontColorById: patchFontColorMock,
   patchGraphColorById: patchGraphColorMock,
@@ -466,9 +457,6 @@ const resetStores = () => {
   patchCounterLayoutViaAuthorityMock.mockClear();
   patchCounterTypographyMock.mockClear();
   patchCounterTypographyViaAuthorityMock.mockClear();
-  patchCounterStrokeMock.mockClear();
-  patchCounterStrokeTargetsMock.mockClear();
-  patchCounterStrokeViaAuthorityMock.mockClear();
   patchCounterFillMock.mockClear();
   patchCounterFillViaAuthorityMock.mockClear();
   patchFontColorMock.mockClear();

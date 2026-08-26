@@ -14,6 +14,48 @@ You can implement various styles like neon signs, minimal designs, game themes, 
   reapplied when you modify/save the CSS file.
 </Callout>
 
+## Where It Applies
+
+The overlay window and the OBS browser source receive the CSS file as is. In
+the main editor window it applies only to the grid preview (keys, counters,
+graphs, knobs, and plugin elements) and to the counter animation editor
+preview; app UI such as the settings panel and toolbar is not reached by your
+selectors. To make that work, every selector in the main window is confined to
+the preview area, and rules written on `body` or `:root` apply to the preview
+area itself. The prefix used for confinement does not change specificity, so
+ordinary rules cascade the same way on the canvas and in the overlay. A few
+limits apply to the main window only:
+
+- `@keyframes` names are prefixed automatically so they never collide with the
+  app's own animations, and names written directly in `animation` or
+  `animation-name` are rewritten to match. Only plain identifiers (letters,
+  digits, hyphens) are supported; definitions whose name needs quoting or equals
+  a reserved word such as `linear` are left out of the main window. Animation
+  names passed through a CSS variable (`var()`) are not rewritten either and
+  will not run in the main window.
+- Stylesheets pulled in with `@import` are fetched by the app and confined to
+  the preview area the same way. A sheet that cannot be fetched (offline, error
+  response, over 1 MiB, nested more than three levels deep) is skipped in the
+  main window only. `localhost` and private-network imports work without a
+  prompt; explicit cloud metadata URLs are rejected. If an imported sheet and
+  its parent declare the same `@namespace` prefix with different URLs, the
+  parent's declaration wins in the main preview.
+- `@font-face` family names receive private names in the main window. Matching
+  references in CSS rules, `@font-feature-values`, and static custom properties
+  are rewritten as well, so a web font still works in the grid preview without
+  changing app UI that uses the original family name. A name added later by
+  JavaScript or an element's inline style cannot be rewritten for the main
+  preview. `@counter-style`, `@font-palette-values`, and unrelated
+  `@font-feature-values` rules pass through unchanged for compatibility.
+  `@property` can collide with names the app registers and is ignored in the main
+  window.
+- Selectors that target siblings of `body`, such as `body + .x`, cannot be moved
+  inside the preview area and are ignored in the main window. The same applies
+  to the nested form, such as `body { & ~ .x { } }`.
+
+None of these limits apply to the overlay or OBS, where the CSS file is used as
+is.
+
 ## Basic Concepts
 
 ### CSS Variable System

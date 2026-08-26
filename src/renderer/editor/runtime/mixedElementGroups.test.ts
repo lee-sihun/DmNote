@@ -510,7 +510,7 @@ describe('setMixedLayerGroupHidden', () => {
     expect(mocks.gestureCommit).not.toHaveBeenCalled();
   });
 
-  it('plugin-only 그룹은 gesture 커밋 없이 plugin hidden만 갱신한다', async () => {
+  it('plugin-only 그룹도 단일 gesture 커밋으로 hidden을 저장한다', async () => {
     usePluginDisplayElementStore.setState({
       elements: [pluginElement({ groupId: GROUP_ID })],
     });
@@ -525,15 +525,29 @@ describe('setMixedLayerGroupHidden', () => {
     expect(usePluginDisplayElementStore.getState().elements[0].hidden).toBe(
       true,
     );
-    expect(mocks.rotateSession).toHaveBeenCalledWith(
-      'plugin-a',
-      expect.any(String),
-    );
-    expect(mocks.gestureCommit).not.toHaveBeenCalled();
+    expect(mocks.gestureCommit).toHaveBeenCalledTimes(1);
+    const request = mocks.gestureCommit.mock.calls[0]?.[0] as unknown as {
+      editorChanges?: unknown;
+      editorOps?: unknown[];
+      pluginChanges: Array<{
+        pluginId: string;
+        instances: Array<{ instanceId?: string; hidden?: boolean }>;
+      }>;
+    };
+    expect(request.editorChanges).toBeUndefined();
+    expect(request.editorOps).toBeUndefined();
+    expect(request.pluginChanges).toEqual([
+      {
+        pluginId: 'plugin-a',
+        instances: [
+          expect.objectContaining({ instanceId: INSTANCE_ID, hidden: true }),
+        ],
+      },
+    ]);
     expect(mocks.setLayerGroupHidden).not.toHaveBeenCalled();
   });
 
-  it('plugin-only 그룹의 다중 플러그인 토글은 공유 gestureId로 세션을 분리한다', async () => {
+  it('plugin-only 그룹의 다중 플러그인 토글은 한 transaction에 함께 저장한다', async () => {
     const secondInstanceId = '20000000-0000-4000-8000-000000000002';
     usePluginDisplayElementStore.setState({
       elements: [
@@ -555,19 +569,35 @@ describe('setMixedLayerGroupHidden', () => {
       setMixedLayerGroupHidden('4key', GROUP_ID, true),
     ).resolves.toBe(true);
 
-    expect(mocks.rotateSession).toHaveBeenCalledTimes(2);
-    const [firstCall, secondCall] = mocks.rotateSession.mock.calls as Array<
-      [string, string]
-    >;
-    expect(firstCall).toEqual(['plugin-a', expect.any(String)]);
-    // undo 1회 복원의 전제 - 두 플러그인이 같은 gestureId를 공유
-    expect(secondCall).toEqual(['plugin-b', firstCall[1]]);
+    expect(mocks.gestureCommit).toHaveBeenCalledTimes(1);
+    const request = mocks.gestureCommit.mock.calls[0]?.[0] as unknown as {
+      pluginChanges: Array<{
+        pluginId: string;
+        instances: Array<{ instanceId?: string; hidden?: boolean }>;
+      }>;
+    };
+    expect(request.pluginChanges).toEqual([
+      {
+        pluginId: 'plugin-a',
+        instances: [
+          expect.objectContaining({ instanceId: INSTANCE_ID, hidden: true }),
+        ],
+      },
+      {
+        pluginId: 'plugin-b',
+        instances: [
+          expect.objectContaining({
+            instanceId: secondInstanceId,
+            hidden: true,
+          }),
+        ],
+      },
+    ]);
     expect(
       usePluginDisplayElementStore
         .getState()
         .elements.map(({ hidden }) => hidden),
     ).toEqual([true, true]);
-    expect(mocks.gestureCommit).not.toHaveBeenCalled();
   });
 
   it('canonical ID가 아닌 native 멤버가 섞이면 fail-closed로 중단한다', async () => {

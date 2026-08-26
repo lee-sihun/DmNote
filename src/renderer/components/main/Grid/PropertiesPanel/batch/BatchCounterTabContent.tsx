@@ -54,15 +54,12 @@ interface BatchCounterTabContentProps {
   ) => void;
   // 컬러 디스플레이 (현재 상태 기준)
   colorState: 'idle' | 'active';
-  getCounterColorDisplay: (target: 'fill' | 'stroke') => string;
+  getCounterColorDisplay: (target: 'fill') => string;
   // 컬러 피커 토글
   onFillPickerToggle: () => void;
-  onStrokePickerToggle: () => void;
   // ref 목록
   batchCounterFillButtonRef: React.RefObject<HTMLButtonElement>;
-  batchCounterStrokeButtonRef: React.RefObject<HTMLButtonElement>;
   isFillPickerOpen: boolean;
-  isStrokePickerOpen: boolean;
   // 모션 완료의 시작 시점 결합. 소유자는 EditSessionBoundary 밖 부모다 -
   // 이 컴포넌트는 선택 변경 시 리마운트되어 open 중 재캡처가 일어난다
   animationBinding?: BatchElementBinding;
@@ -82,11 +79,8 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   colorState,
   getCounterColorDisplay,
   onFillPickerToggle,
-  onStrokePickerToggle,
   batchCounterFillButtonRef,
-  batchCounterStrokeButtonRef,
   isFillPickerOpen,
-  isStrokePickerOpen,
   animationBinding = EMPTY_BATCH_ELEMENT_BINDING,
   t,
 }) => {
@@ -258,24 +252,6 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             surfaceClassName="rounded-md"
             color={getDisplayColor(getCounterColorDisplay('fill'))}
             title={`${t('counterSetting.fill') || '채우기'} (${
-              colorState === 'active'
-                ? t('counterSetting.active') || '입력'
-                : t('counterSetting.idle') || '대기'
-            })`}
-          />
-        </PropertyRow>
-
-        {/* 외곽선 색상 */}
-        <PropertyRow label={t('counterSetting.stroke') || '외곽선'}>
-          <ColorSwatchButton
-            ref={batchCounterStrokeButtonRef}
-            type="button"
-            onClick={onStrokePickerToggle}
-            open={isStrokePickerOpen}
-            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-            surfaceClassName="rounded-md"
-            color={getDisplayColor(getCounterColorDisplay('stroke'))}
-            title={`${t('counterSetting.stroke') || '외곽선'} (${
               colorState === 'active'
                 ? t('counterSetting.active') || '입력'
                 : t('counterSetting.idle') || '대기'

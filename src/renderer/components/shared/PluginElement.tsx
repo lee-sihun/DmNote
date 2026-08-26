@@ -1059,10 +1059,9 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
   }, [windowType, definition?.id, element.fullId, updateElementBatched]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const elementStyle: React.CSSProperties = (() => {
-    const shouldPromoteTransformLayer =
-      windowType === 'overlay' ||
-      (windowType === 'main' &&
-        (isDraggingOrResizing || isViewportTransforming));
+    // 그리드 안 승격 금지 - WebKit은 합성 자식이 생기면 스케일 컨테이너를
+    // 레이어로 만들어 전체가 흐려진다. 오버레이 창은 스케일 조상이 없어 유지
+    const shouldPromoteTransformLayer = windowType === 'overlay';
 
     const baseStyle: React.CSSProperties = {
       position: 'absolute',

@@ -20,6 +20,10 @@ CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[d
 | `--key-border-image`  | Replacement image for a saved ring     | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
 | `--key-padding`       | Inner padding                          | `<length>` | `0px`, `3px`                         |
 | `--key-text-color`    | Text color                             | `<color>`  | `#ffffff`                            |
+| `--key-text-image`    | Replacement image for saved text paint | `<image>`  | `linear-gradient(0deg, #f0f, #0ff)`  |
+| `--key-text-position` | Text paint box position                | `<position>` | `0% 0%`                            |
+| `--key-text-size`     | Text paint box size                    | `<bg-size>`  | `auto`, `100% 100%`                |
+| `--key-text-repeat`   | Text paint repeat                      | `<repeat-style>` | `no-repeat`                    |
 | `--key-shadow`        | Idle and shared fallback shadow        | `<shadow>` | `0 4px 10px rgba(0,0,0,.28)`, `none` |
 | `--key-active-shadow` | Active shadow                          | `<shadow>` | `0 3px 8px rgba(0,0,0,.32)`, `none`  |
 | `--key-offset-x`      | X offset in active state               | `<length>` | `0px`, `2px`                         |
@@ -31,6 +35,11 @@ CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[d
   `--key-bg` automatically removes a saved background gradient. Setting
   `--key-border` removes the saved gradient border ring and its spacing. Use
   `--key-bg-image` or the standard `background` property for a custom gradient.
+  Setting `--key-text-color` (or a plain `color` rule on the label) removes a
+  saved text gradient. For a custom text gradient, set `--key-text-image`
+  together with `--key-text-color: transparent`. The glyph fill must be
+  emptied for the gradient to show, so on a key without a saved gradient,
+  `--key-text-image` alone stays hidden behind the opaque text color.
 </Callout>
 
 ### Usage Example
@@ -62,12 +71,15 @@ CSS variables applied to counter elements. Use with `.counter[data-counter-state
 | `--counter-color`           | Text color and saved-fill reset | `<color>`  | `#ffffff`                            |
 | `--counter-fill-image`      | Text fill image                 | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
 | `--counter-fill-clip`       | Fill clipping area              | `<box>`    | `text`, `border-box`                 |
+| `--counter-fill-position`   | Fill background position        | `<position>` | `0% 0%`, `4px 10px`                |
+| `--counter-fill-size`       | Fill background size            | `<bg-size>`  | `auto`, `100px 80px`               |
+| `--counter-fill-repeat`     | Fill repeat mode                | `<repeat-style>` | `no-repeat`                    |
 | `--counter-text-fill-color` | WebKit text fill color          | `<color>`  | `transparent`, `currentcolor`        |
-| `--counter-stroke-color`    | Text outline color              | `<color>`  | `#000000`, `transparent`             |
-| `--counter-stroke-width`    | Text outline thickness          | `<length>` | `1px`, `2px`                         |
 
 Setting only `--counter-color` also disables a counter fill gradient saved in
-the app. To create a CSS fill gradient, set all three fill variables:
+the app. Gradients created in the app are laid over the glyph ink box; use
+`--counter-fill-position` and `--counter-fill-size` to take over the placement.
+To create a CSS fill gradient, set all three fill variables:
 
 ```css
 .counter {
@@ -82,14 +94,10 @@ the app. To create a CSS fill gradient, set all three fill variables:
 ```css
 .counter[data-counter-state='inactive'] {
   --counter-color: #666;
-  --counter-stroke-color: transparent;
-  --counter-stroke-width: 0px;
 }
 
 .counter[data-counter-state='active'] {
   --counter-color: #ff2b80;
-  --counter-stroke-color: #fff;
-  --counter-stroke-width: 1px;
 }
 ```
 

@@ -4,8 +4,9 @@ use serde::Serialize;
 use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
-    commands::editor::state::{
-        emit_best_effort, publish_editor_change, publish_legacy_editor_change,
+    commands::{
+        editor::state::{emit_best_effort, publish_editor_change, publish_legacy_editor_change},
+        plugin::instances::publish_plugin_instances_changed,
     },
     defaults::{default_keys, default_positions},
     errors::CmdResult,
@@ -15,7 +16,13 @@ use crate::{
         NoteSettings, NoteSettingsPatch, SettingsPatchInput, SettingsState,
     },
     services::settings::apply_patch_to_store,
-    state::{editor::validate_history_restore_metadata, history::HistoryScope, AppState},
+    state::{
+        editor::validate_history_restore_metadata,
+        history::HistoryScope,
+        plugin::{for_each_stored_plugin_instances, normalize_plugin_instance_tab_id},
+        store::{AuxEditorResetTransactionOptions, PluginInstancesResetScope},
+        AppState,
+    },
 };
 
 const MAX_CUSTOM_TABS: usize = 30;
@@ -37,6 +44,12 @@ fn publish_legacy_key_noop_runtime(
 fn emit_aux_history_status(app: &AppHandle, change: &CommittedEditorChange) {
     if let Some(status) = change.history_status.as_ref() {
         emit_best_effort(app, "history:status", status);
+    }
+}
+
+fn publish_reset_plugin_instances(app: &AppHandle, change: &CommittedEditorChange) {
+    for payload in &change.plugin_instances_changes {
+        publish_plugin_instances_changed(app, payload);
     }
 }
 
@@ -126,7 +139,7 @@ where
     })
 }
 
-fn reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKind) {
+fn apply_reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKind) {
     match kind {
         ModeResetKind::Default => {
             if let Some(keys) = default_keys().get(mode) {
@@ -159,7 +172,105 @@ fn reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKind) {
             .map(|key| (key.canonical(), 0))
             .collect(),
     );
+}
+
+fn mode_positions_equal_without_ids(
+    current: &AppStoreData,
+    candidate: &AppStoreData,
+    mode: &str,
+) -> bool {
+    let mut current_keys = current.key_positions.get(mode).cloned();
+    let mut candidate_keys = candidate.key_positions.get(mode).cloned();
+    for position in current_keys.iter_mut().flatten() {
+        position.id.clear();
+    }
+    for position in candidate_keys.iter_mut().flatten() {
+        position.id.clear();
+    }
+
+    let mut current_stats = current.stat_positions.get(mode).cloned();
+    let mut candidate_stats = candidate.stat_positions.get(mode).cloned();
+    for position in current_stats.iter_mut().flatten() {
+        position.position.id.clear();
+    }
+    for position in candidate_stats.iter_mut().flatten() {
+        position.position.id.clear();
+    }
+
+    let mut current_graphs = current.graph_positions.get(mode).cloned();
+    let mut candidate_graphs = candidate.graph_positions.get(mode).cloned();
+    for position in current_graphs.iter_mut().flatten() {
+        position.position.id.clear();
+    }
+    for position in candidate_graphs.iter_mut().flatten() {
+        position.position.id.clear();
+    }
+
+    let mut current_knobs = current.knob_positions.get(mode).cloned();
+    let mut candidate_knobs = candidate.knob_positions.get(mode).cloned();
+    for position in current_knobs.iter_mut().flatten() {
+        position.position.id.clear();
+    }
+    for position in candidate_knobs.iter_mut().flatten() {
+        position.position.id.clear();
+    }
+
+    current_keys == candidate_keys
+        && optional_collections_equal(current_stats.as_deref(), candidate_stats.as_deref())
+        && optional_collections_equal(current_graphs.as_deref(), candidate_graphs.as_deref())
+        && optional_collections_equal(current_knobs.as_deref(), candidate_knobs.as_deref())
+}
+
+fn optional_collections_equal<T: PartialEq>(
+    current: Option<&[T]>,
+    candidate: Option<&[T]>,
+) -> bool {
+    current.unwrap_or_default() == candidate.unwrap_or_default()
+}
+
+fn mode_reset_semantics_equal(
+    current: &AppStoreData,
+    candidate: &AppStoreData,
+    mode: &str,
+) -> bool {
+    current.keys.get(mode) == candidate.keys.get(mode)
+        && mode_positions_equal_without_ids(current, candidate, mode)
+        && optional_collections_equal(
+            current.layer_groups.get(mode).map(Vec::as_slice),
+            candidate.layer_groups.get(mode).map(Vec::as_slice),
+        )
+        && current.tab_css_overrides.get(mode) == candidate.tab_css_overrides.get(mode)
+        && current.tab_note_overrides.get(mode) == candidate.tab_note_overrides.get(mode)
+        && current.key_counters.get(mode) == candidate.key_counters.get(mode)
+}
+
+fn has_plugin_instances_in_mode(store: &AppStoreData, mode: &str) -> bool {
+    let mut found = false;
+    for_each_stored_plugin_instances(store, |_, instances| {
+        found |= instances
+            .iter()
+            .any(|instance| normalize_plugin_instance_tab_id(instance.tab_id.as_deref()) == mode);
+    });
+    found
+}
+
+fn reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKind) -> bool {
+    let plugin_instances_changed = has_plugin_instances_in_mode(store, mode);
+    let mut candidate = store.clone();
+    apply_reset_mode_data(&mut candidate, mode, kind);
+    crate::state::migration::canonicalize_gradient_pairs(&mut candidate);
+    if mode_reset_semantics_equal(store, &candidate, mode) && !plugin_instances_changed {
+        return false;
+    }
+
+    *store = candidate;
     crate::state::native_element_id::rekey_mode_element_ids(store, mode);
+    true
+}
+
+#[cfg(test)]
+pub(crate) fn reset_mode_data_for_test(store: &mut AppStoreData, mode: &str) -> bool {
+    reset_mode_kind(store, mode).is_some_and(|kind| reset_mode_data(store, mode, kind))
 }
 
 fn plan_custom_tab_delete(store: &AppStoreData, id: &str) -> Option<CustomTabDeletePlan> {
@@ -345,7 +456,7 @@ pub fn keys_reset_all(
     let admission = state.admit_frontend_history_mutation(window.label())?;
     let transaction = state
         .store
-        .commit_legacy_editor_transaction_with_admission(
+        .commit_legacy_editor_reset_transaction_with_admission(
             EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
             &[
                 EditorField::Keys,
@@ -355,6 +466,7 @@ pub fn keys_reset_all(
                 EditorField::KnobPositions,
                 EditorField::LayerGroups,
             ],
+            PluginInstancesResetScope::All,
             admission,
             move |store| {
                 let cleared_tab_css_ids =
@@ -371,6 +483,7 @@ pub fn keys_reset_all(
     }
     drop(css_operation_guard);
     publish_legacy_editor_change(state.inner(), &app, &transaction.change);
+    publish_reset_plugin_instances(&app, &transaction.change);
     if !transaction
         .change
         .result
@@ -447,7 +560,7 @@ pub fn keys_reset_mode(
     let admission = state.admit_frontend_history_mutation(window.label())?;
     let transaction = state
         .store
-        .commit_legacy_editor_transaction_with_admission(
+        .commit_legacy_editor_reset_transaction_with_admission(
             EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
             &[
                 EditorField::Keys,
@@ -457,6 +570,7 @@ pub fn keys_reset_mode(
                 EditorField::KnobPositions,
                 EditorField::LayerGroups,
             ],
+            PluginInstancesResetScope::Mode(mode.clone()),
             admission,
             |store| {
                 let Some(kind) = reset_mode_kind(store, &mode) else {
@@ -474,6 +588,7 @@ pub fn keys_reset_mode(
         });
     };
     publish_legacy_editor_change(state.inner(), &app, &transaction.change);
+    publish_reset_plugin_instances(&app, &transaction.change);
     if !transaction
         .change
         .result
@@ -629,31 +744,36 @@ pub fn custom_tabs_delete(
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabDeleteResult> {
     let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction = state.store.commit_aux_editor_transaction_with_admission(
-        HistoryScope::CustomTabs,
-        observed_history_epoch,
-        EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
-        &[
-            EditorField::Keys,
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-            EditorField::LayerGroups,
-        ],
-        admission,
-        |store| {
-            let Some(plan) = plan_custom_tab_delete(store, &id) else {
-                return Ok(Err(store.selected_key_type.clone()));
-            };
-            delete_custom_tab_data(store, &id, &plan);
-            Ok(Ok((
-                store.custom_tabs.clone(),
-                store.selected_key_type.clone(),
-                store.tab_note_overrides.clone(),
-            )))
-        },
-    )?;
+    let transaction = state
+        .store
+        .commit_aux_editor_reset_transaction_with_admission(
+            AuxEditorResetTransactionOptions {
+                scope: HistoryScope::CustomTabs,
+                observed_history_epoch,
+                origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
+                touched_fields: &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                plugin_instances_reset: PluginInstancesResetScope::Mode(id.clone()),
+            },
+            admission,
+            |store| {
+                let Some(plan) = plan_custom_tab_delete(store, &id) else {
+                    return Ok(Err(store.selected_key_type.clone()));
+                };
+                delete_custom_tab_data(store, &id, &plan);
+                Ok(Ok((
+                    store.custom_tabs.clone(),
+                    store.selected_key_type.clone(),
+                    store.tab_note_overrides.clone(),
+                )))
+            },
+        )?;
     let (custom_tabs, selected_key_type, tab_note_overrides) = match transaction.value {
         Ok(result) => result,
         Err(selected) => {
@@ -665,6 +785,7 @@ pub fn custom_tabs_delete(
         }
     };
     publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_reset_plugin_instances(&app, &transaction.change);
     state.unwatch_tab_css(&id);
 
     emit_best_effort(

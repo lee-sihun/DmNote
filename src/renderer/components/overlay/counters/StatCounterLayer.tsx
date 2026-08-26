@@ -3,6 +3,7 @@ import React from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
+import { resolveCounterSettings } from '@hooks/overlay/useCounterSettings';
 import OutsideCounter from './OutsideCounter';
 
 interface StatPosition {
@@ -50,6 +51,14 @@ const StatCounterLayer = React.memo(({ positions }: StatCounterLayerProps) => {
     >
       {positions.map((position, index) => {
         if (!position || position.hidden) return null;
+        // inside 배치는 StatItem이 직접 그림 — outside만 마운트해 KPS 틱 리렌더 제거
+        const counterSettings = resolveCounterSettings(position.counter);
+        if (
+          !counterSettings.enabled ||
+          counterSettings.placement !== 'outside'
+        ) {
+          return null;
+        }
         return (
           <StatCounter
             key={`stat-counter-${index}`}

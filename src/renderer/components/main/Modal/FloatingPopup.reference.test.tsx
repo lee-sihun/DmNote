@@ -123,4 +123,33 @@ describe('FloatingPopup reference synchronization', () => {
     expect(measureA).toHaveBeenCalled();
     expect(measureB).toHaveBeenCalled();
   });
+
+  it('applies caller offsets before viewport boundary correction', async () => {
+    const anchor = document.createElement('button');
+    vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue(
+      createRect(80, 40, 30, 20),
+    );
+    const referenceRef: React.RefObject<HTMLElement> = { current: anchor };
+    document.body.insertBefore(anchor, host);
+
+    await act(async () => {
+      root.render(
+        <FloatingPopup
+          open
+          ariaLabel="Offset popup"
+          referenceRef={referenceRef}
+          placement="right-start"
+          offset={0}
+          offsetY={-80}
+          animate={false}
+          autoClose={false}
+          onClose={() => undefined}
+        >
+          <span>Offset content</span>
+        </FloatingPopup>,
+      );
+    });
+
+    await expectPosition(110, 5);
+  });
 });

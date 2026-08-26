@@ -122,7 +122,7 @@ describe('runAfterEditorFlush', () => {
     );
   });
 
-  it('restarts through the all-window handshake after a successful update', async () => {
+  it('installs the update after the editor flush without restarting', async () => {
     window.__dmn_window_type = 'main';
     coordinatorFlush.mockResolvedValue(undefined);
     const updateResult = {
@@ -130,15 +130,13 @@ describe('runAfterEditorFlush', () => {
       updatedTo: '1.7.0',
       downloadUrl: 'https://example.test/update',
     };
-    invoke.mockResolvedValueOnce(updateResult).mockResolvedValueOnce(undefined);
+    invoke.mockResolvedValueOnce(updateResult);
 
     await expect(appApi.autoUpdate('1.7.0')).resolves.toEqual(updateResult);
 
     expect(coordinatorFlush).toHaveBeenCalledOnce();
-    expect(invoke.mock.calls).toEqual([
-      ['app_auto_update', { tag: '1.7.0' }],
-      ['app_restart'],
-    ]);
+    // 재시작은 호출자(useUpdateStore)가 appApi.restart()로 별도 요청
+    expect(invoke.mock.calls).toEqual([['app_auto_update', { tag: '1.7.0' }]]);
   });
 
   it('acks lifecycle only after the editor write queue drains', async () => {

@@ -57,6 +57,8 @@ export interface KeyElementPosition {
   fontSize?: number;
   fontColor?: string;
   activeFontColor?: string;
+  fontGradient?: GradientSpec | null;
+  activeFontGradient?: GradientSpec | null;
   fontFamily?: string;
   idleImageFit?: string;
   activeImageFit?: string;
@@ -84,6 +86,12 @@ export interface KeyElementStyles {
   borderRingStyle: React.CSSProperties | null;
   imageStyle: React.CSSProperties;
   textStyle: React.CSSProperties;
+  /** 라벨 노드 전용 페인트 - 인라인 우선 모드의 그라데이션 클립 승격분 */
+  labelPaintStyle: React.CSSProperties;
+  /** idle·active 어느 상태든 라벨 그라데이션이 저장돼 있는지 - 측정 수명 기준 */
+  labelHasGradient: boolean;
+  /** 라벨 글리프 측정 캐시 키 - 타이포그래피·표시 상태 서명 */
+  labelMetricsDep: string;
   inactiveImageSrc: string | null;
   activeImageSrc: string | null;
   currentImageSrc: string | null;
@@ -158,7 +166,13 @@ export function computeKeyElementStyles({
     { color: activeBorderColor, gradient: position.activeBorderGradient },
   );
   const stateBorderColor = borderPair.color;
-  const stateFontColor = active ? activeFontColor ?? fontColor : fontColor;
+  const fontPair = resolveStatePair(
+    active,
+    { color: fontColor, gradient: position.fontGradient },
+    { color: activeFontColor, gradient: position.activeFontGradient },
+  );
+  const stateFontColor = fontPair.color;
+  const fontGradient = fontPair.gradient ?? null;
 
   // 이미지 소스
   const inactiveImageSrc = resolveImageSource(inactiveImage);
@@ -291,6 +305,15 @@ export function computeKeyElementStyles({
             ? `${gradientRingWidth}px`
             : '0px',
           '--dmn-key-text-color-default': stateFontColor || defaultTextColor,
+          '--dmn-key-text-image-default': fontGradient
+            ? gradientToCss(fontGradient)
+            : 'none',
+          '--dmn-key-label-color-default': fontGradient
+            ? 'transparent'
+            : 'inherit',
+          '--dmn-key-text-repeat-default': fontGradient
+            ? 'no-repeat'
+            : 'repeat',
           '--dmn-key-font-size-default': fontSize ? `${fontSize}px` : 'inherit',
           '--dmn-key-font-family-default': resolvedFontFamily,
           '--dmn-key-font-weight-default': String(resolvedFontWeight),
@@ -329,7 +352,8 @@ export function computeKeyElementStyles({
 
   const textStyle: React.CSSProperties = {
     willChange: 'auto',
-    color: 'inherit',
+    // color는 지정하지 않는다 - 라벨 인라인에 실리면 [data-key-label] 규칙의
+    // 그라데이션 클립(color: transparent)을 인라인 우선순위로 덮어버린다
     fontSize: useInline ? (fontSize ? `${fontSize}px` : undefined) : 'inherit',
     fontFamily: useInline
       ? fontFamily
@@ -340,6 +364,31 @@ export function computeKeyElementStyles({
     fontStyle: useInline ? (fontItalic ? 'italic' : 'normal') : 'inherit',
     textDecoration: useInline ? resolvedTextDecoration : 'inherit',
   };
+
+  // 측정 수명은 상태 쌍 단위 - 입력 토글마다 정리·재측정이 반복되지 않게
+  const labelHasGradient = Boolean(
+    position.fontGradient || position.activeFontGradient,
+  );
+  // 상태 포함 - [data-state] 스코프 커스텀 CSS가 메트릭을 바꿀 수 있다
+  const labelMetricsDep = `${
+    fontSize ?? ''
+  }|${resolvedFontFamily}|${resolvedFontWeight}|${fontItalic ? 1 : 0}|${
+    active ? 'active' : 'inactive'
+  }`;
+
+  // 라벨 페인트 - 변수 모드는 전역 [data-key-label] 규칙이 소비하고,
+  // 인라인 우선 모드만 실제 선언으로 승격 (글리프 클립은 라벨 노드에서만)
+  const labelPaintStyle: React.CSSProperties =
+    useInline && fontGradient
+      ? {
+          backgroundImage: gradientToCss(fontGradient),
+          backgroundRepeat: 'no-repeat',
+          WebkitBackgroundClip: 'text',
+          backgroundClip: 'text',
+          color: 'transparent',
+          WebkitTextFillColor: 'currentcolor',
+        }
+      : {};
 
   const borderRingStyle =
     showBorderRing && borderGradientSpec
@@ -356,6 +405,9 @@ export function computeKeyElementStyles({
     borderRingStyle,
     imageStyle,
     textStyle,
+    labelPaintStyle,
+    labelHasGradient,
+    labelMetricsDep,
     inactiveImageSrc,
     activeImageSrc,
     currentImageSrc,

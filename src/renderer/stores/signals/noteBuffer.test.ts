@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { createNoteBuffer } from './noteBuffer';
@@ -112,3 +114,338 @@ const bufferAtEpochBoundary = (nowMs: number): boolean => {
   const buffer = createNoteBuffer();
   return buffer.maybeRebaseEpoch(nowMs);
 };
+
+const gradientLayout = (
+  trackKey: string,
+  stops: Array<{ color: string; pos: number }>,
+  angle = 90,
+) => ({
+  ...layoutFor(trackKey),
+  noteBorderWidth: 2,
+  noteBorderColor: '#FF0080',
+  noteBorderGradient: { angle, stops },
+});
+
+const exhaustGradientPalette = (
+  buffer: ReturnType<typeof createNoteBuffer>,
+  trackKey: string,
+): void => {
+  for (let i = 0; i < 256; i += 1) {
+    const channel = i.toString(16).padStart(2, '0');
+    buffer.updateTrackLayouts([
+      gradientLayout(trackKey, [
+        { color: `#00${channel}00`, pos: 0 },
+        { color: '#FFFFFF', pos: 1 },
+      ]),
+    ]);
+  }
+};
+
+describe('NoteBuffer 테두리 그라데이션 LUT', () => {
+  const stopsA = [
+    { color: '#FF0000', pos: 0 },
+    { color: '#0000FF', pos: 1 },
+  ];
+  const stopsB = [
+    { color: '#00FF00', pos: 0 },
+    { color: '#000000', pos: 1 },
+  ];
+
+  it('allocate가 행 인덱스와 각도 라디안을 attribute에 기록한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsA, 180)]);
+    buffer.allocate('Z', 'note-1', 1000);
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+    expect(buffer.noteBorderGradientInfo[1]).toBeCloseTo(Math.PI, 5);
+  });
+
+  it('그라데이션 없는 트랙은 -1 (단색 경로)', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([layoutFor('Z')]);
+    buffer.allocate('Z', 'note-1', 1000);
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(-1);
+  });
+
+  it('같은 스톱 배열은 각도가 달라도 같은 행을 공유한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      gradientLayout('Z', stopsA, 0),
+      gradientLayout('X', stopsA, 270),
+    ]);
+    buffer.allocate('Z', 'note-1', 1000);
+    buffer.allocate('X', 'note-2', 1001);
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(
+      buffer.noteBorderGradientInfo[2],
+    );
+    expect(buffer.noteBorderGradientInfo[1]).not.toBeCloseTo(
+      buffer.noteBorderGradientInfo[3],
+      3,
+    );
+  });
+
+  it('의미가 같은 스톱 색의 표기 차이는 같은 행을 공유한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      gradientLayout('Z', stopsA),
+      gradientLayout('X', [
+        { color: 'rgb(255, 0, 0)', pos: 0 },
+        { color: '#0000ff', pos: 1 },
+      ]),
+    ]);
+    buffer.allocate('Z', 'note-1', 1000);
+    buffer.allocate('X', 'note-2', 1001);
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+    expect(buffer.noteBorderGradientInfo[2]).toBe(0);
+    expect(buffer.gradientLUTVersion).toBe(1);
+  });
+
+  it('스톱이 다르면 새 행을 append한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      gradientLayout('Z', stopsA),
+      gradientLayout('X', stopsB),
+    ]);
+    buffer.allocate('Z', 'note-1', 1000);
+    buffer.allocate('X', 'note-2', 1001);
+
+    const rows = [
+      buffer.noteBorderGradientInfo[0],
+      buffer.noteBorderGradientInfo[2],
+    ].sort();
+    expect(rows).toEqual([0, 1]);
+  });
+
+  it('premultiplied sRGB 보간을 저장한다 (투명 스톱 halo 방지)', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      gradientLayout('Z', [
+        { color: 'rgba(255,0,0,0)', pos: 0 },
+        { color: 'rgba(255,0,0,1)', pos: 1 },
+      ]),
+    ]);
+
+    // 중앙 텍셀: premultiplied r ≈ 128, alpha ≈ 128 (straight 보간이면 r=255)
+    const mid = 128 * 4;
+    expect(buffer.gradientLUT[mid]).toBeGreaterThan(120);
+    expect(buffer.gradientLUT[mid]).toBeLessThan(136);
+    expect(buffer.gradientLUT[mid + 3]).toBeGreaterThan(120);
+    expect(buffer.gradientLUT[mid + 3]).toBeLessThan(136);
+    // 끝 텍셀: 불투명 순수 빨강
+    const last = 255 * 4;
+    expect(buffer.gradientLUT[last]).toBe(255);
+    expect(buffer.gradientLUT[last + 3]).toBe(255);
+  });
+
+  it('참조 노트가 없으면 누수 행만 팔레트 리셋으로 회수한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsA)]);
+    const versionBeforeLeak = buffer.gradientLUTVersion;
+
+    // stopsA 행이 누수 - 리셋 후 stopsB가 행 0부터 재등록
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsB)]);
+    expect(buffer.gradientLUTVersion).toBeGreaterThan(versionBeforeLeak);
+    const versionAfterReset = buffer.gradientLUTVersion;
+
+    // 행 집합이 그대로인 갱신(키 이동 등)은 리셋도 재업로드도 만들지 않는다
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsB)]);
+    expect(buffer.gradientLUTVersion).toBe(versionAfterReset);
+    buffer.allocate('Z', 'note-1', 1000);
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+  });
+
+  it('활성 노트가 있으면 리셋하지 않고 옛 행을 보존한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsA)]);
+    buffer.allocate('Z', 'note-1', 1000);
+
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsB)]);
+    buffer.allocate('Z', 'note-2', 1001);
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+    expect(buffer.noteBorderGradientInfo[2]).toBe(1);
+  });
+
+  it('공유 fixture의 모든 유효 색을 래스터라이저가 실제로 파싱한다', () => {
+    // 검증은 통과하는데 렌더가 흰색 폴백으로 새는 도메인 분열 방지
+    const fixture = JSON.parse(
+      readFileSync(
+        join(
+          __dirname,
+          '../../../../tests/fixtures/note-border-stop-colors.json',
+        ),
+        'utf-8',
+      ),
+    ) as { valid: Array<{ input: string; representative: string }> };
+
+    for (const { input, representative } of fixture.valid) {
+      const buffer = createNoteBuffer();
+      buffer.updateTrackLayouts([
+        gradientLayout('Z', [
+          { color: input, pos: 0 },
+          { color: input, pos: 1 },
+        ]),
+      ]);
+      const expected = {
+        r: parseInt(representative.slice(1, 3), 16),
+        g: parseInt(representative.slice(3, 5), 16),
+        b: parseInt(representative.slice(5, 7), 16),
+      };
+      // premultiplied 저장이라 대표 RGB는 알파를 곱한 값과 일치해야 한다
+      const alpha = buffer.gradientLUT[3] / 255;
+      expect(buffer.gradientLUT[0], input).toBe(Math.round(expected.r * alpha));
+      expect(buffer.gradientLUT[1], input).toBe(Math.round(expected.g * alpha));
+      expect(buffer.gradientLUT[2], input).toBe(Math.round(expected.b * alpha));
+    }
+  });
+
+  it('레이아웃 갱신 없이도 만석 다운그레이드에서 회복한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsA)]);
+    buffer.allocate('Z', 'hold', 1000);
+    exhaustGradientPalette(buffer, 'Z');
+    buffer.allocate('Z', 'over', 1001);
+    expect(buffer.noteBorderGradientInfo[2]).toBe(-1);
+
+    // 레이아웃 갱신 없이 참조가 비워진 뒤 첫 allocate가 팔레트를 재구축
+    buffer.release('hold');
+    buffer.release('over');
+    buffer.allocate('Z', 'fresh', 1002);
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+  });
+
+  it('용량 초과 시 -1로 다운그레이드하고 유휴 리셋 후 회복한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsA)]);
+    buffer.allocate('Z', 'hold', 1000);
+
+    // 활성 노트가 행 리셋을 막는 동안 고유 스톱으로 용량을 소진
+    exhaustGradientPalette(buffer, 'Z');
+    buffer.allocate('Z', 'over', 1001);
+    expect(buffer.noteBorderGradientInfo[2]).toBe(-1);
+
+    buffer.release('hold');
+    buffer.release('over');
+    buffer.updateTrackLayouts([gradientLayout('Z', stopsB)]);
+    buffer.allocate('Z', 'fresh', 1002);
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+  });
+
+  it('정상 행 트랙이 먼저 할당되어도 다른 다운그레이드 트랙을 함께 회복한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([gradientLayout('A', stopsA)]);
+    buffer.allocate('A', 'hold', 1000);
+    exhaustGradientPalette(buffer, 'A');
+
+    buffer.updateTrackLayouts([
+      gradientLayout('A', stopsA),
+      gradientLayout('B', stopsB),
+    ]);
+    buffer.release('hold');
+
+    buffer.allocate('A', 'normal-first', 1001);
+    buffer.allocate('B', 'recovered-second', 1002);
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(0);
+    expect(buffer.noteBorderGradientInfo[2]).toBe(1);
+  });
+
+  it('신형 본체는 행·각도·배율을, 구형은 -1(direct)을 기록한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      {
+        ...layoutFor('Z'),
+        noteOpacity: 80,
+        noteGradient: {
+          angle: 90,
+          stops: [
+            { color: 'rgba(255,0,128,0.5)', pos: 0 },
+            { color: '#001122', pos: 1 },
+          ],
+        },
+      },
+      {
+        ...layoutFor('X'),
+        noteColor: { type: 'gradient', top: '#FF0000', bottom: '#0000FF' },
+      },
+    ]);
+    buffer.allocate('Z', 'new', 1000);
+    buffer.allocate('X', 'legacy', 1001);
+
+    expect(buffer.noteBodyPaint[0]).toBe(0);
+    expect(buffer.noteBodyPaint[1]).toBeCloseTo(Math.PI / 2, 5);
+    expect(buffer.noteBodyPaint[2]).toBeCloseTo(0.8, 5);
+    expect(buffer.noteBodyPaint[3]).toBe(-1);
+  });
+
+  it('글로우 소스 우선순위: 신형 > 구형 색 > 신형 본체 상속(color-only 행)', () => {
+    const bodySpec = {
+      angle: 90,
+      stops: [
+        { color: 'rgba(255,0,128,0.5)', pos: 0 },
+        { color: '#001122', pos: 1 },
+      ],
+    };
+    const glowSpec = {
+      angle: 0,
+      stops: [
+        { color: '#00FF00', pos: 0 },
+        { color: 'rgba(0,255,0,0)', pos: 1 },
+      ],
+    };
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      // 신형 글로우: LUT 알파 사용
+      {
+        ...layoutFor('A'),
+        noteGradient: bodySpec,
+        noteGlowGradient: glowSpec,
+        noteGlowOpacity: 50,
+      },
+      // 구형 글로우 색 명시: direct 경로
+      {
+        ...layoutFor('B'),
+        noteGradient: bodySpec,
+        noteGlowColor: '#123456',
+      },
+      // 글로우 미지정 + 신형 본체: color-only 상속 행 (본체 행과 별개)
+      { ...layoutFor('C'), noteGradient: bodySpec },
+    ]);
+    buffer.allocate('A', 'a', 1000);
+    buffer.allocate('B', 'b', 1001);
+    buffer.allocate('C', 'c', 1002);
+
+    // A: 신형 글로우 행 + useLUTAlpha=1 + 배율 0.5
+    expect(buffer.noteGlowPaint[0]).toBeGreaterThanOrEqual(0);
+    expect(buffer.noteGlowPaint[2]).toBeCloseTo(0.5, 5);
+    expect(buffer.noteGlowPaint[3]).toBe(1);
+    // B: direct
+    expect(buffer.noteGlowPaint[4]).toBe(-1);
+    // C: 상속 행은 본체 행과 다르고(알파 1 치환) useLUTAlpha=0
+    expect(buffer.noteGlowPaint[8]).toBeGreaterThanOrEqual(0);
+    expect(buffer.noteGlowPaint[8]).not.toBe(buffer.noteBodyPaint[6]);
+    expect(buffer.noteGlowPaint[11]).toBe(0);
+  });
+
+  it('release 시프트가 그라데이션 attribute를 함께 이동한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      gradientLayout('Z', stopsA, 45),
+      gradientLayout('X', stopsB, 315),
+    ]);
+    buffer.allocate('Z', 'note-1', 1000);
+    buffer.allocate('X', 'note-2', 1001);
+    const secondRow = buffer.noteBorderGradientInfo[2];
+    const secondAngle = buffer.noteBorderGradientInfo[3];
+
+    buffer.release('note-1');
+
+    expect(buffer.noteBorderGradientInfo[0]).toBe(secondRow);
+    expect(buffer.noteBorderGradientInfo[1]).toBeCloseTo(secondAngle, 5);
+    // 비운 슬롯은 단색 sentinel로 초기화
+    expect(buffer.noteBorderGradientInfo[2]).toBe(-1);
+  });
+});

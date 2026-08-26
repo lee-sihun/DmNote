@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DraggableKey from '@components/shared/Key';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -54,7 +55,11 @@ let container: HTMLDivElement;
 let root: Root;
 
 const renderKey = (
-  options: { isSelected?: boolean; activeTool?: string } = {},
+  options: {
+    isSelected?: boolean;
+    activeTool?: string;
+    isViewportTransforming?: boolean;
+  } = {},
 ) => {
   act(() => {
     root.render(
@@ -76,6 +81,7 @@ const renderKey = (
           onEraserClick={onEraserClick}
           isSelected={options.isSelected ?? false}
           activeTool={options.activeTool ?? 'select'}
+          isViewportTransforming={options.isViewportTransforming ?? false}
         />
       </div>,
     );
@@ -100,6 +106,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   hookState.wasMoved = false;
   hookState.pressMoved = false;
+  useGridSelectionStore.setState({
+    isDraggingOrResizing: false,
+    isResizing: false,
+  });
   container = document.createElement('div');
   document.body.appendChild(container);
   act(() => {
@@ -115,6 +125,47 @@ afterEach(() => {
 });
 
 describe('DraggableKey trailing click 가드', () => {
+  it('그리드 이동 중 키를 중첩 합성 레이어로 승격하지 않는다', () => {
+    const node = renderKey({ isViewportTransforming: true });
+
+    expect(node.style.willChange).toBe('auto');
+    expect(node.style.backfaceVisibility).toBe('visible');
+    expect(node.style.transformStyle).toBe('flat');
+    expect(node.style.contain).toBe('layout style');
+  });
+
+  it('리사이즈 중 애니메이션만 끄고 합성 레이어로 승격하지 않는다', () => {
+    act(() => {
+      useGridSelectionStore.getState().setResizing(true);
+    });
+    const node = renderKey();
+
+    expect(node.dataset.editing).toBe('true');
+    expect(node.style.willChange).toBe('auto');
+    expect(node.style.backfaceVisibility).toBe('visible');
+    expect(node.style.transformStyle).toBe('flat');
+    expect(node.style.contain).toBe('layout style');
+  });
+
+  it('드래그 중에도 키를 합성 레이어로 승격하지 않는다', () => {
+    act(() => {
+      useGridSelectionStore.getState().setDraggingOrResizing(true);
+    });
+
+    // WebKit은 스케일 레이어 안에 합성 자식이 생기면 컨테이너째 레이어로
+    // 만들어 그리드 전체가 흐려진다 - 선택된 키도 승격 없이 재페인트로 이동
+    for (const options of [{}, { isSelected: true }]) {
+      const node = renderKey(options);
+      expect(node.dataset.editing).toBe('true');
+      expect(node.style.transform).toContain('translate(');
+      expect(node.style.transform).not.toContain('translate3d(');
+      expect(node.style.willChange).toBe('auto');
+      expect(node.style.backfaceVisibility).toBe('visible');
+      expect(node.style.transformStyle).toBe('flat');
+      expect(node.style.contain).toBe('layout style');
+    }
+  });
+
   it('표식 없는 클릭은 onClick으로 통과한다', () => {
     const node = renderKey();
 

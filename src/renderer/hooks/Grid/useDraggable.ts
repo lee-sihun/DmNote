@@ -7,6 +7,7 @@ import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { calculateBounds, calculateSnapPoints } from '@utils/grid/smartGuides';
+import { isMac } from '@utils/core/platform';
 import {
   resumeCustomCursorHover,
   suspendCustomCursorHover,
@@ -340,8 +341,19 @@ export const useDraggable = ({
         const gridSettings = useSettingsStore.getState().gridSettings;
         const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
         const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
+        // 플랫폼 primary modifier를 누르고 있으면 스마트 스냅 일시 해제 -
+        // 그리드 스냅만 남아 이웃 소수 좌표에 낚이지 않고 격자에 맞출 수 있다
+        const suppressSmartSnap = isMac()
+          ? frameEvent.metaKey
+          : frameEvent.ctrlKey;
 
-        if (getOtherElementsFn && currentElementId && alignmentGuidesEnabled) {
+        if (suppressSmartSnap) {
+          smartGuidesStore.clearGuides();
+        } else if (
+          getOtherElementsFn &&
+          currentElementId &&
+          alignmentGuidesEnabled
+        ) {
           const otherElements = getOtherElementsFn(currentElementId);
           const draggedBounds = calculateBounds(
             newDx,
@@ -408,10 +420,12 @@ export const useDraggable = ({
         }
 
         // 축별로 스냅 적용
-        // X축: 스마트 가이드로 스냅되지 않은 경우에만 기본 그리드 스냅 적용
+        // X축: 스마트 가이드로 스냅되지 않은 경우에만 기본 그리드 스냅 적용.
+        // 스마트 스냅 좌표는 반올림하지 않는다 - 홀수 크기 이웃과의 중앙
+        // 정렬은 .5 좌표가 정답이고, 정수화하면 가이드 선과 어긋난다
         let snappedX: number;
         if (didSmartSnapX) {
-          snappedX = clampPosition(Math.round(finalX));
+          snappedX = clampPosition(finalX);
         } else {
           snappedX = clampPosition(
             Math.round(finalX / dynamicGridSize) * dynamicGridSize,
@@ -421,7 +435,7 @@ export const useDraggable = ({
         // Y축: 스마트 가이드로 스냅되지 않은 경우에만 기본 그리드 스냅 적용
         let snappedY: number;
         if (didSmartSnapY) {
-          snappedY = clampPosition(Math.round(finalY));
+          snappedY = clampPosition(finalY);
         } else {
           snappedY = clampPosition(
             Math.round(finalY / dynamicGridSize) * dynamicGridSize,

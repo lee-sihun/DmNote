@@ -77,16 +77,12 @@ type PickerTarget =
 
 type ColorState = 'idle' | 'active';
 type StyleColorTarget = 'backgroundColor' | 'borderColor' | 'fontColor';
-type GradientColorTarget = 'backgroundColor' | 'borderColor';
+type GradientColorTarget = StyleColorTarget;
 type ActiveStyleColorProperty =
   | 'activeBackgroundColor'
   | 'activeBorderColor'
   | 'activeFontColor';
-type StyleColorProperty =
-  | StyleColorTarget
-  | 'activeBackgroundColor'
-  | 'activeBorderColor'
-  | 'activeFontColor';
+type StyleColorProperty = StyleColorTarget | ActiveStyleColorProperty;
 
 interface StyleTabContentInternalProps extends StyleTabContentProps {
   // 로컬 상태 (단일 선택 시에만 사용, 개별 편집 모드에서는 사용하지 않음)
@@ -130,7 +126,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintCommit,
-  onFontColorCommit,
   onShadowCommit,
   imageButtonRef,
   panelElement,
@@ -347,6 +342,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
   const handlePickerToggle = (target: PickerTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
+    // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 배치로 리셋해
+    // 첫 렌더부터 이전 "입력" 선택이 새지 않는다
+    if (pickerFor !== target) setColorState('idle');
   };
 
   // 이미지 피커 토글 (외부 핸들러가 있으면 사용, 없으면 내부 상태 사용)
@@ -399,6 +397,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         return keyPosition.borderGradient ?? null;
       case 'activeBorderColor':
         return keyPosition.activeBorderGradient ?? null;
+      case 'fontColor':
+        return keyPosition.fontGradient ?? null;
+      case 'activeFontColor':
+        return keyPosition.activeFontGradient ?? null;
       default:
         return null;
     }
@@ -418,27 +420,21 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
   };
 
-  // 드래그 완료 시 부모에게 전달
+  // 드래그 완료 시 로컬 반영 - 커밋은 그라데이션 상태(handleGradientCommit)가 담당
   const handleColorChangeComplete = (
     target: StyleColorTarget,
     color: string,
   ) => {
     const prop = resolveColorProperty(target);
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
-
-    if (target === 'fontColor') {
-      onFontColorCommit?.(
-        prop === 'activeFontColor'
-          ? { property: 'activeFontColor', value: color }
-          : { property: 'fontColor', value: color },
-      );
-    }
   };
 
-  // ── 그라데이션 배선 (배경·테두리 전용, 글꼴 색상은 단색 유지) ──
+  // ── 그라데이션 배선 (배경·테두리·글꼴 공통) ──
 
   const gradientTarget: GradientColorTarget | null =
-    pickerFor === 'backgroundColor' || pickerFor === 'borderColor'
+    pickerFor === 'backgroundColor' ||
+    pickerFor === 'borderColor' ||
+    pickerFor === 'fontColor'
       ? pickerFor
       : null;
 
@@ -464,13 +460,17 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     const prop = resolveColorProperty(gradientTarget);
     const descriptor = paintDescriptor(value);
     const paintField =
-      effectiveColorState === 'active'
-        ? gradientTarget === 'backgroundColor'
+      gradientTarget === 'backgroundColor'
+        ? effectiveColorState === 'active'
           ? 'activeBackgroundPaint'
-          : 'activeBorderPaint'
-        : gradientTarget === 'backgroundColor'
-        ? 'backgroundPaint'
-        : 'borderPaint';
+          : 'backgroundPaint'
+        : gradientTarget === 'borderColor'
+        ? effectiveColorState === 'active'
+          ? 'activeBorderPaint'
+          : 'borderPaint'
+        : effectiveColorState === 'active'
+        ? 'activeFontPaint'
+        : 'fontPaint';
     setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
     onPaintCommit?.({ property: paintField, value: descriptor } as never);
   };
@@ -488,7 +488,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       canvasAnchor?.kind === 'batch' ? 'batch' : canvasAnchor?.id
     }:${pickerFor ?? 'none'}:${effectiveColorState}`,
     canvasAnchor: gradientTarget ? canvasAnchor : undefined,
-    canvasSurface: gradientTarget === 'borderColor' ? 'border' : 'background',
+    canvasSurface:
+      gradientTarget === 'borderColor'
+        ? 'border'
+        : gradientTarget === 'fontColor'
+        ? 'font'
+        : 'background',
     canvasState: effectiveColorState,
     onPreview: handleGradientPreview,
     onCommit: handleGradientCommit,
@@ -902,6 +907,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         idleShadow={idleShadow}
         activeShadow={activeShadow}
         showActiveState={shadowActiveState}
+        previewAnchor={canvasAnchor ?? null}
         onChange={(state, _shadow, patch) => {
           const leaf = elementShadowLeafFromPartial(patch);
           if (!leaf) return;
@@ -1101,6 +1107,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         {showImagePicker && onToggleImagePicker && imageButtonRef ? (
           <ImagePicker
             open={showImagePicker}
+            previewAnchor={canvasAnchor ?? null}
             referenceRef={imageButtonRef}
             panelElement={panelElement}
             completionBinding="element-id"

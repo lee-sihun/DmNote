@@ -214,7 +214,8 @@ console.log('Mode changed:', result.success);
 
 ### `dmn.keys.resetMode(mode): Promise<KeysModeResponse>`
 
-Resets one key mode and its positions to the built-in defaults.
+Resets one key mode, its positions, and plugin display elements placed in that
+mode to the built-in defaults. Other plugin storage is preserved.
 
 ```javascript
 await dmn.keys.resetMode('4key');
@@ -222,7 +223,12 @@ await dmn.keys.resetMode('4key');
 
 ### `dmn.keys.resetAll(): Promise<KeysResetAllResponse>`
 
-Resets all keys, positions, counters, and custom tabs to their built-in defaults.
+Resets all keys, positions, counters, custom tabs, and plugin display element
+placements to their built-in defaults. Installed plugins and other plugin
+storage are preserved. The reset targets saved `defineElement` placements.
+Runtime elements created directly by plugin startup code with
+`displayElement.add()` can remain or be created again while the plugin remains
+installed.
 
 ```javascript
 const result = await dmn.keys.resetAll();
@@ -331,6 +337,15 @@ gradient siblings:
 interface KeyPosition {
   id?: string; // stable element identity (UUID), assigned and owned by the app
   // ...position, image, note, and counter fields...
+  noteOpacityTop?: number;
+  noteOpacityBottom?: number;
+  noteGradient?: GradientSpec | null;
+  noteGlowSyncPaint?: boolean;
+  noteGlowOpacityTop?: number;
+  noteGlowOpacityBottom?: number;
+  noteGlowGradient?: GradientSpec | null;
+  noteBorderColor?: string;
+  noteBorderGradient?: GradientSpec | null;
   backgroundColor?: string;
   activeBackgroundColor?: string;
   borderColor?: string;
@@ -340,12 +355,16 @@ interface KeyPosition {
   activeBackgroundGradient?: GradientSpec | null;
   borderGradient?: GradientSpec | null;
   activeBorderGradient?: GradientSpec | null;
+  fontColor?: string;
+  activeFontColor?: string;
+  fontGradient?: GradientSpec | null;
+  activeFontGradient?: GradientSpec | null;
   shadow?: ElementShadowSpec;
   activeShadow?: ElementShadowSpec;
 }
 
 interface KeyCounterSettings {
-  // ...placement, typography, stroke, and animation fields...
+  // ...placement, typography, and animation fields...
   fill: { idle: string; active: string };
   fillIdleGradient?: GradientSpec | null;
   fillActiveGradient?: GradientSpec | null;
@@ -381,7 +400,29 @@ To return to a solid color, set the gradient field to `null` and update the
 solid field.
 
 The counter fill gradient fields likewise take priority over `counter.fill.idle`
-and `counter.fill.active`. Counter stroke remains solid-only.
+and `counter.fill.active`.
+
+For note borders, `noteBorderGradient` takes priority over `noteBorderColor`.
+`noteBorderColor` always stays a `#RRGGBB` hex value, so saving a gradient
+syncs it to the hex form of the first stop. Stop colors accept only hex
+(`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`) or `rgb()`/`rgba()` notation.
+
+Note bodies and glows support the same format. When `noteGradient` or
+`noteGlowGradient` is present, that surface switches to the new semantics:
+`noteOpacity`/`noteGlowOpacity` acts as a global multiplier (100 when absent),
+and the legacy fields (the two-color top/bottom object and the per-end
+opacities) stay synced as approximations for older versions. Stop color
+restrictions match the border. Writing an element without the gradient field
+(or with it set to `null`) returns that surface to legacy semantics. To
+switch a surface in one write, set the gradient field and its multiplier
+together in the same `updatePositions` call; the solid field and the legacy
+approximations are derived and synced on save.
+
+When `noteGlowSyncPaint` is `true`, the glow paint fields (`noteGlowColor`,
+`noteGlowGradient`, `noteGlowOpacity`, `noteGlowOpacityTop/Bottom`) are derived
+from the body paint on save. Any glow value written in that state is
+overwritten by the body value, so set it to `false` first to edit the glow
+independently. Defaults to `false`.
 
 `shadow` and `activeShadow` control the idle and pressed shadows independently.
 When omitted, the built-in shadow remains unchanged. Store a spec with

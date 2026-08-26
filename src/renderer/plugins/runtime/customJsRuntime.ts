@@ -325,38 +325,45 @@ ${plugin.content}
     injectGeneration += 1;
     const generation = injectGeneration;
 
-    void resetPluginAuthorityForRuntime().then((resetOk) => {
-      if (disposed || generation !== injectGeneration) {
-        endInjectionWork();
-        return;
-      }
-      if (!resetOk) {
-        // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
-        console.error('Skipping plugin injection: authority reset failed');
-        setReloading(false);
-        endInjectionWork();
-        return;
-      }
-      if (!enabled) {
-        setReloading(false);
-        endInjectionWork();
-        return;
-      }
+    void resetPluginAuthorityForRuntime()
+      .then((resetOk) => {
+        if (disposed || generation !== injectGeneration) {
+          endInjectionWork();
+          return;
+        }
+        if (!resetOk) {
+          // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
+          console.error('Skipping plugin injection: authority reset failed');
+          setReloading(false);
+          endInjectionWork();
+          return;
+        }
+        if (!enabled) {
+          setReloading(false);
+          endInjectionWork();
+          return;
+        }
 
-      currentPlugins
-        .filter((plugin) => plugin.enabled && plugin.content)
-        .forEach((plugin) => injectPlugin(plugin));
-      // 주입이 실제 실행된 시점에만 기록 - reset 실패로 중단된 뒤 같은
-      // 내용이 다시 오면 재시도가 가능해야 한다
-      appliedSignature = pluginsSignature(currentPlugins);
+        currentPlugins
+          .filter((plugin) => plugin.enabled && plugin.content)
+          .forEach((plugin) => injectPlugin(plugin));
+        // 주입이 실제 실행된 시점에만 기록 - reset 실패로 중단된 뒤 같은
+        // 내용이 다시 오면 재시도가 가능해야 한다
+        appliedSignature = pluginsSignature(currentPlugins);
 
-      // 모든 플러그인의 복원이 완료될 때까지 딜레이 후 리로드 플래그 해제
-      setTimeout(() => {
+        // 모든 플러그인의 복원이 완료될 때까지 딜레이 후 리로드 플래그 해제
+        setTimeout(() => {
+          endInjectionWork();
+          if (generation !== injectGeneration) return;
+          setReloading(false);
+        }, 100);
+      })
+      .catch((error) => {
+        // 주입 콜백 예외에도 리빌 게이트 카운터가 잔류하지 않게
+        console.error('Plugin injection cycle failed', error);
         endInjectionWork();
-        if (generation !== injectGeneration) return;
-        setReloading(false);
-      }, 100);
-    });
+        if (generation === injectGeneration) setReloading(false);
+      });
   };
 
   const syncPlugins = (next: JsPlugin[], options?: { forced?: boolean }) => {
@@ -385,8 +392,11 @@ ${plugin.content}
       .catch((error) => {
         console.error('Failed to fetch JS plugins', error);
       })
-      // 조회 실패는 fail-open - 게이트가 데드라인까지 닫혀 있지 않게 한다
-      .finally(notePluginFetchSettled);
+      // 조회 실패는 fail-open - 게이트가 데드라인까지 닫혀 있지 않게 한다.
+      // dispose 후 settle은 재생성된 사이클의 카운터를 건드리지 않는다
+      .finally(() => {
+        if (!disposed) notePluginFetchSettled();
+      });
 
     internalApi.js
       .getUse()
@@ -404,7 +414,9 @@ ${plugin.content}
       .catch((error) => {
         console.error('Failed to fetch JS plugin toggle state', error);
       })
-      .finally(notePluginFetchSettled);
+      .finally(() => {
+        if (!disposed) notePluginFetchSettled();
+      });
   };
 
   const setupListeners = () => {

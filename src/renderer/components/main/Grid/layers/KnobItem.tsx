@@ -11,6 +11,7 @@ import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
+import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
@@ -153,7 +154,12 @@ const KnobItem = ({
     elementId,
     isSelected,
   );
-  const previewActive = previewSession?.stateMode === 'active';
+  // 상태 프리뷰는 전용 스토어가 유일한 원천 (세션은 spec 페인트 전용)
+  const previewActive = useEditStatePreviewActive(
+    'knob',
+    elementId,
+    isSelected,
+  );
   const bgPair = resolveStatePair(
     previewActive,
     { color: backgroundColor, gradient: backgroundGradient },
@@ -344,7 +350,7 @@ const KnobItem = ({
     }
   };
 
-  const transform = `translate3d(calc(${draggable.dx}px + var(--key-offset-x, 0px)), calc(${draggable.dy}px + var(--key-offset-y, 0px)), 0)`;
+  const transform = `translate(calc(${draggable.dx}px + var(--key-offset-x, 0px)), calc(${draggable.dy}px + var(--key-offset-y, 0px)))`;
 
   return (
     <div
@@ -355,8 +361,9 @@ const KnobItem = ({
         height: `${height}px`,
         transform,
         zIndex: position.zIndex ?? zIndex,
-        willChange:
-          isDraggingOrResizing || isViewportTransforming ? 'transform' : 'auto',
+        // 그리드 안 승격 금지 - WebKit은 합성 자식이 생기면 스케일 컨테이너를
+        // 레이어로 만들어 전체가 흐려진다
+        willChange: 'auto',
         contain: 'layout style',
       }}
       data-editing={isDraggingOrResizing ? 'true' : undefined}

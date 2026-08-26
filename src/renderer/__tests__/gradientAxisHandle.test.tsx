@@ -221,8 +221,11 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         }),
       );
     });
-    // 임계값 전에는 클릭(스톱 추가) 후보 — 아직 회전 아님
-    expect(strip().style.cursor).toBe('grab');
+    // 임계값 전에도 프레스 즉시 잡기 커서 - 전역 클래스로 고정, 인라인은 대기값
+    expect(document.documentElement.classList.contains('dmn-drag-cursor')).toBe(
+      true,
+    );
+    expect(strip().style.cursor).toBe('default');
 
     act(() => {
       window.dispatchEvent(
@@ -247,6 +250,10 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     const [finalSpec, finalCommit] = apply.mock.calls.at(-1)!;
     expect(finalCommit).toBe(true);
     expect(finalSpec.angle).not.toBe(90);
+    // 놓으면 전역 커서 고정 해제
+    expect(document.documentElement.classList.contains('dmn-drag-cursor')).toBe(
+      false,
+    );
   });
 
   it('드래그 중 오버레이가 언마운트되면 시작 spec으로 복원한다', () => {
