@@ -1,11 +1,15 @@
 use std::{
     io::Read,
+    net::{IpAddr, Ipv6Addr, SocketAddr, ToSocketAddrs},
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use reqwest::blocking::Client;
+use reqwest::{
+    blocking::Client,
+    header::{ACCEPT, LOCATION},
+};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tokio::sync::Semaphore;
@@ -31,7 +35,7 @@ const CSS_IMPORT_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_CONCURRENT_CSS_IMPORT_FETCHES: usize = 4;
 const MAX_CSS_IMPORT_BYTES: usize = 1024 * 1024;
 const MAX_CSS_IMPORT_REDIRECTS: usize = 3;
-static CSS_IMPORT_CLIENT: OnceLock<Result<Client, String>> = OnceLock::new();
+const CSS_IMPORT_USER_AGENT: &str = concat!("DmNote/", env!("CARGO_PKG_VERSION"));
 static CSS_IMPORT_FETCH_LIMIT: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 /// OBS 브릿지에 CSS 설정 변경을 settings_diff로 전달 (전체 스냅샷 브로드캐스트 방지)
@@ -76,19 +80,62 @@ pub struct CssImportFetchResult {
     pub text: String,
 }
 
+// 클라우드 메타데이터 주소 - IPv4-mapped IPv6 표기(::ffff:a9fe:a9fe)도 같은 주소로 본다
+fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => matches!(
+            ip.octets(),
+            [169, 254, 169, 254] | [169, 254, 170, 2] | [100, 100, 100, 200] | [192, 0, 0, 192]
+        ),
+        IpAddr::V6(ip) => match ip.to_ipv4_mapped() {
+            Some(mapped) => is_cloud_metadata_ip(IpAddr::V4(mapped)),
+            None => ip == Ipv6Addr::new(0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254),
+        },
+    }
+}
+
 fn is_cloud_metadata_url(url: &url::Url) -> bool {
     match url.host() {
         Some(url::Host::Domain(host)) => matches!(
             host.trim_end_matches('.').to_ascii_lowercase().as_str(),
             "metadata.google.internal" | "metadata.azure.internal"
         ),
-        Some(url::Host::Ipv4(ip)) => matches!(
-            ip.octets(),
-            [169, 254, 169, 254] | [169, 254, 170, 2] | [100, 100, 100, 200] | [192, 0, 0, 192]
-        ),
-        Some(url::Host::Ipv6(ip)) => ip.to_string() == "fd00:ec2::254",
+        Some(url::Host::Ipv4(ip)) => is_cloud_metadata_ip(IpAddr::V4(ip)),
+        Some(url::Host::Ipv6(ip)) => is_cloud_metadata_ip(IpAddr::V6(ip)),
         None => false,
     }
+}
+
+// 호스트를 먼저 해석해 메타데이터 주소로 향하는 DNS 이름·리바인딩을 차단하고,
+// 실제 요청은 검사한 주소에만 고정한다
+fn resolve_css_import_addrs(url: &url::Url) -> CmdResult<Vec<SocketAddr>> {
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| CommandError::msg("CSS import URL has no port"))?;
+    let addrs: Vec<SocketAddr> = match url.host() {
+        Some(url::Host::Ipv4(ip)) => vec![SocketAddr::new(IpAddr::V4(ip), port)],
+        Some(url::Host::Ipv6(ip)) => vec![SocketAddr::new(IpAddr::V6(ip), port)],
+        Some(url::Host::Domain(domain)) => (domain.trim_end_matches('.'), port)
+            .to_socket_addrs()
+            .map_err(|error| {
+                CommandError::msg(format!(
+                    "failed to resolve CSS import host '{domain}': {error}"
+                ))
+            })?
+            .collect(),
+        None => return Err(CommandError::msg("CSS import URL has no host")),
+    };
+    if addrs.is_empty() {
+        return Err(CommandError::msg(
+            "CSS import host resolved to no addresses",
+        ));
+    }
+    if addrs.iter().any(|addr| is_cloud_metadata_ip(addr.ip())) {
+        return Err(CommandError::msg(
+            "CSS import access to cloud metadata endpoints is blocked",
+        ));
+    }
+    Ok(addrs)
 }
 
 fn validate_css_import_url(raw: &str) -> CmdResult<url::Url> {
@@ -138,50 +185,61 @@ fn css_import_fetch_limit() -> &'static Arc<Semaphore> {
         .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_CSS_IMPORT_FETCHES)))
 }
 
-fn css_import_client() -> CmdResult<&'static Client> {
-    CSS_IMPORT_CLIENT
-        .get_or_init(|| {
-            Client::builder()
-                .timeout(CSS_IMPORT_FETCH_TIMEOUT)
-                .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                    if attempt.previous().len() > MAX_CSS_IMPORT_REDIRECTS {
-                        attempt.error("CSS import exceeded redirect limit")
-                    } else if is_cloud_metadata_url(attempt.url()) {
-                        attempt.error("CSS import access to cloud metadata endpoints is blocked")
-                    } else {
-                        attempt.follow()
-                    }
-                }))
-                .build()
-                .map_err(|error| format!("failed to initialize CSS import client: {error}"))
-        })
-        .as_ref()
-        .map_err(|error| CommandError::msg(error.clone()))
+// hop마다 검증·해석·주소 고정이 필요하므로 리다이렉트는 직접 따라간다
+fn css_import_client(url: &url::Url, pinned: &[SocketAddr]) -> CmdResult<Client> {
+    let mut builder = Client::builder()
+        .timeout(CSS_IMPORT_FETCH_TIMEOUT)
+        .user_agent(CSS_IMPORT_USER_AGENT)
+        .redirect(reqwest::redirect::Policy::none());
+    if let Some(url::Host::Domain(domain)) = url.host() {
+        builder = builder.resolve_to_addrs(domain, pinned);
+    }
+    builder.build().map_err(|error| {
+        CommandError::msg(format!("failed to initialize CSS import client: {error}"))
+    })
 }
 
 fn fetch_css_import(url: String) -> CmdResult<CssImportFetchResult> {
-    let url = validate_css_import_url(&url)?;
-    let response = css_import_client()?
-        .get(url)
-        .send()
-        .map_err(|error| CommandError::msg(format!("failed to fetch CSS import: {error}")))?;
-    let response = response
-        .error_for_status()
-        .map_err(|error| CommandError::msg(format!("CSS import request failed: {error}")))?;
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_CSS_IMPORT_BYTES as u64)
-    {
-        return Err(CommandError::msg(format!(
-            "CSS import response exceeds {MAX_CSS_IMPORT_BYTES} bytes"
-        )));
+    let mut url = validate_css_import_url(&url)?;
+    for _ in 0..=MAX_CSS_IMPORT_REDIRECTS {
+        let pinned = resolve_css_import_addrs(&url)?;
+        let response = css_import_client(&url, &pinned)?
+            .get(url.clone())
+            .header(ACCEPT, "text/css,*/*;q=0.1")
+            .send()
+            .map_err(|error| CommandError::msg(format!("failed to fetch CSS import: {error}")))?;
+        if response.status().is_redirection() {
+            let location = response
+                .headers()
+                .get(LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| CommandError::msg("CSS import redirect without Location header"))?;
+            let next = url
+                .join(location)
+                .map_err(|error| CommandError::msg(format!("error following redirect: {error}")))?;
+            url = validate_css_import_url(next.as_str())
+                .map_err(|error| CommandError::msg(format!("error following redirect: {error}")))?;
+            continue;
+        }
+        let response = response
+            .error_for_status()
+            .map_err(|error| CommandError::msg(format!("CSS import request failed: {error}")))?;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_CSS_IMPORT_BYTES as u64)
+        {
+            return Err(CommandError::msg(format!(
+                "CSS import response exceeds {MAX_CSS_IMPORT_BYTES} bytes"
+            )));
+        }
+        let final_url = response.url().to_string();
+        let bytes = read_css_import_body(response)?;
+        return Ok(CssImportFetchResult {
+            final_url,
+            text: String::from_utf8_lossy(&bytes).into_owned(),
+        });
     }
-    let final_url = response.url().to_string();
-    let bytes = read_css_import_body(response)?;
-    Ok(CssImportFetchResult {
-        final_url,
-        text: String::from_utf8_lossy(&bytes).into_owned(),
-    })
+    Err(CommandError::msg("CSS import exceeded redirect limit"))
 }
 
 #[tauri::command]
@@ -1128,9 +1186,10 @@ fn css_tab_export_from_path(
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_css_extension, ensure_css_import_window, fetch_css_import,
+        ensure_css_extension, ensure_css_import_window, fetch_css_import, is_cloud_metadata_ip,
         prepare_tab_css_for_set_with, read_css_import_body, replace_tab_css_override,
-        validate_css_import_url, write_tab_css_export, MAX_CSS_IMPORT_BYTES,
+        resolve_css_import_addrs, validate_css_import_url, write_tab_css_export,
+        MAX_CSS_IMPORT_BYTES,
     };
     use crate::models::{AppStoreData, TabCss};
     use parking_lot::Mutex;
@@ -1198,6 +1257,27 @@ mod tests {
         ] {
             assert!(validate_css_import_url(blocked).is_err(), "{blocked}");
         }
+    }
+
+    #[test]
+    fn css_import_blocks_ipv4_mapped_metadata_literals_and_pins_resolved_addresses() {
+        assert!(
+            validate_css_import_url("http://[::ffff:169.254.169.254]/latest/meta-data").is_err()
+        );
+        assert!(is_cloud_metadata_ip(
+            "::ffff:169.254.169.254".parse().unwrap()
+        ));
+        assert!(is_cloud_metadata_ip("fd00:ec2::254".parse().unwrap()));
+        assert!(!is_cloud_metadata_ip("::1".parse().unwrap()));
+        assert!(!is_cloud_metadata_ip("127.0.0.1".parse().unwrap()));
+
+        let literal = url::Url::parse("http://127.0.0.1:5500/theme.css").unwrap();
+        assert_eq!(
+            resolve_css_import_addrs(&literal).unwrap(),
+            vec!["127.0.0.1:5500".parse::<std::net::SocketAddr>().unwrap()]
+        );
+        let mapped = url::Url::parse("http://[::ffff:169.254.169.254]/latest").unwrap();
+        assert!(resolve_css_import_addrs(&mapped).is_err());
     }
 
     #[test]
