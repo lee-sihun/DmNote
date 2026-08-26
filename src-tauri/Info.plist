@@ -2,11 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>DM NOTE needs to monitor keyboard and mouse input to display your keystrokes.</string>
-    <key>NSAccessibilityUsageDescription</key>
-    <string>DM NOTE needs accessibility access to capture keyboard and mouse events for the keystroke visualizer.</string>
-    <key>LSUIElement</key>
-    <true/>
+	<key>CFBundleIconName</key>
+	<string>DM NOTE</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>DM NOTE needs accessibility access to capture keyboard and mouse events for the keystroke visualizer.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>DM NOTE needs to monitor keyboard and mouse input to display your keystrokes.</string>
 </dict>
 </plist>
