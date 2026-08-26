@@ -108,6 +108,7 @@
     "obsStopFailed": "Не удалось остановить сервер OBS.",
     "obsGuide": "Отображает оверлей через источник «Браузер» в OBS.",
     "obsTokenRegenMessage": "Сгенерировать новый токен сессии?",
+    "obsTokenRegen": "Пересоздать токен",
     "obsTokenRegenConfirm": "Сгенерировать"
   },
   "shortcutSetting": {

@@ -108,6 +108,7 @@
     "obsStopFailed": "Failed to stop OBS server.",
     "obsGuide": "Displays the overlay via a browser source in OBS.",
     "obsTokenRegenMessage": "Regenerate the session token?",
+    "obsTokenRegen": "Regenerate Token",
     "obsTokenRegenConfirm": "Regenerate"
   },
   "shortcutSetting": {

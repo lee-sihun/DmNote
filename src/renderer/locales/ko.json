@@ -108,6 +108,7 @@
     "obsStopFailed": "OBS 서버 중지에 실패했습니다.",
     "obsGuide": "OBS에서 브라우저 소스로 오버레이를 표시합니다.",
     "obsTokenRegenMessage": "세션 토큰을 재생성 하시겠습니까?",
+    "obsTokenRegen": "토큰 재생성",
     "obsTokenRegenConfirm": "재생성"
   },
   "shortcutSetting": {

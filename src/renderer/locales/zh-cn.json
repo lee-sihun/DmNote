@@ -108,6 +108,7 @@
     "obsStopFailed": "OBS 服务器停止失败。",
     "obsGuide": "通过 OBS 浏览器源显示叠加层。",
     "obsTokenRegenMessage": "是否重新生成会话令牌？",
+    "obsTokenRegen": "重新生成令牌",
     "obsTokenRegenConfirm": "重新生成"
   },
   "shortcutSetting": {

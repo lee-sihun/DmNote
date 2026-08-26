@@ -9,7 +9,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import Dropdown from '@components/main/common/Dropdown';
-import ReloadIcon from '@components/main/common/ReloadIcon';
+import ReloadButton from '@components/main/common/ReloadButton';
 import {
   SettingCard,
   SettingRow,
@@ -1050,34 +1050,12 @@ const Settings = ({
               >
                 <SettingRow label={t('settings.customJSLabel')}>
                   <div className="flex flex-row gap-[6px]">
-                    <button
+                    <ReloadButton
                       onClick={handleReloadPlugins}
-                      disabled={!canReloadPlugins || isReloadingPlugins}
-                      className={
-                        'flex items-center justify-center w-[23px] h-[23px] rounded-md transition-colors duration-fast ' +
-                        (canReloadPlugins && !isReloadingPlugins
-                          ? 'bg-fill text-fg hover:bg-fill-hover'
-                          : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
-                      }
-                      style={
-                        isReloadingPlugins
-                          ? { opacity: 0.65, pointerEvents: 'none' }
-                          : undefined
-                      }
+                      disabled={!canReloadPlugins}
+                      busy={isReloadingPlugins}
                       title={t('settings.reloadPlugins')}
-                    >
-                      {/* svg 루트가 아니라 래퍼를 돌려야 회전축이 아이콘 중심에 고정된다 */}
-                      <span
-                        className={
-                          'inline-flex' +
-                          (isReloadingPlugins
-                            ? ' motion-safe:animate-spin'
-                            : '')
-                        }
-                      >
-                        <ReloadIcon />
-                      </span>
-                    </button>
+                    />
                     <button
                       onClick={() =>
                         setActiveSettingsPanel((prev) =>
@@ -1123,18 +1101,11 @@ const Settings = ({
                 }
               >
                 <div className="flex items-center gap-[6px]">
-                  <button
+                  <ReloadButton
                     onClick={handleObsRegenerateToken}
                     disabled={!obsStatus.running}
-                    className={
-                      'flex items-center justify-center w-[23px] h-[23px] rounded-md transition-colors duration-fast ' +
-                      (obsStatus.running
-                        ? 'bg-fill text-fg hover:bg-fill-hover'
-                        : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
-                    }
-                  >
-                    <ReloadIcon />
-                  </button>
+                    title={t('settings.obsTokenRegen')}
+                  />
                   <button
                     onClick={handleObsCopyUrl}
                     disabled={!obsStatus.running}
