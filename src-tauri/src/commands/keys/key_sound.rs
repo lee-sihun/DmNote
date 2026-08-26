@@ -1,7 +1,8 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::{
     audio::{KeySoundOutputBackend, KeySoundOutputDevices, KeySoundOutputState, KeySoundStatus},
+    commands::run_mutation,
     errors::{CmdResult, CommandError},
     state::AppState,
 };
@@ -60,11 +61,14 @@ pub fn key_sound_list_output_devices(
 }
 
 #[tauri::command]
-pub fn key_sound_set_output_backend(
-    state: State<'_, AppState>,
+pub async fn key_sound_set_output_backend(
+    app: AppHandle,
     backend: KeySoundOutputBackend,
 ) -> CmdResult<KeySoundOutputState> {
-    Ok(state.key_sound_set_output_backend(backend)?)
+    run_mutation(app, move |_, state| {
+        Ok(state.key_sound_set_output_backend(backend)?)
+    })
+    .await
 }
 
 #[tauri::command]

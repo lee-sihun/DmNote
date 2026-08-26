@@ -1,5 +1,6 @@
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
+use crate::commands::run_blocking;
 use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
 use crate::errors::CmdResult;
 use crate::state::AppState;
@@ -47,14 +48,17 @@ pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
 }
 
 #[tauri::command]
-pub fn app_quit_after_editor_flush(
+pub async fn app_quit_after_editor_flush(
     app: AppHandle,
-    state: State<'_, AppState>,
     window: WebviewWindow,
     handshake_id: String,
 ) -> CmdResult<()> {
-    state.acknowledge_frontend_lifecycle(app, &handshake_id, window.label());
-    Ok(())
+    let window_label = window.label().to_string();
+    run_blocking(app, move |app, state| {
+        state.acknowledge_frontend_lifecycle(app.clone(), &handshake_id, &window_label);
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]

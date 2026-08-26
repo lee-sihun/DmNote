@@ -7,6 +7,7 @@ use crate::{
     commands::{
         editor::state::{emit_best_effort, publish_editor_change, publish_legacy_editor_change},
         plugin::instances::publish_plugin_instances_changed,
+        run_blocking, run_history_mutation,
     },
     defaults::{default_keys, default_positions},
     errors::CmdResult,
@@ -18,7 +19,7 @@ use crate::{
     services::settings::apply_patch_to_store,
     state::{
         editor::validate_history_restore_metadata,
-        history::HistoryScope,
+        history::{HistoryAdmissionLease, HistoryScope},
         plugin::{for_each_stored_plugin_instances, normalize_plugin_instance_tab_id},
         store::{AuxEditorResetTransactionOptions, PluginInstancesResetScope},
         AppState,
@@ -359,13 +360,13 @@ pub struct CustomTabDeleteResult {
 }
 
 #[tauri::command]
-pub fn keys_get(state: State<'_, AppState>) -> CmdResult<KeyMappings> {
-    Ok(state.store.snapshot().keys)
+pub async fn keys_get(app: AppHandle) -> CmdResult<KeyMappings> {
+    run_blocking(app, |_, state| Ok(state.store.snapshot().keys)).await
 }
 
 #[tauri::command]
-pub fn positions_get(state: State<'_, AppState>) -> CmdResult<KeyPositions> {
-    Ok(state.store.snapshot().key_positions)
+pub async fn positions_get(app: AppHandle) -> CmdResult<KeyPositions> {
+    run_blocking(app, |_, state| Ok(state.store.snapshot().key_positions)).await
 }
 
 #[tauri::command]
@@ -374,15 +375,30 @@ pub fn keys_get_counters(state: State<'_, AppState>) -> CmdResult<KeyCounters> {
 }
 
 #[tauri::command]
-pub fn keys_set_mode(
-    state: State<'_, AppState>,
+pub async fn keys_set_mode(
     app: AppHandle,
     window: WebviewWindow,
     mode: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<ModeResponse> {
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            keys_set_mode_inner(state, app, mode, observed_history_epoch, admission)
+        },
+    )
+    .await
+}
+
+fn keys_set_mode_inner(
+    state: &AppState,
+    app: &AppHandle,
+    mode: String,
+    observed_history_epoch: Option<u64>,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<ModeResponse> {
     let requested = mode.clone();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
     let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::Mode,
         observed_history_epoch,
@@ -400,13 +416,13 @@ pub fn keys_set_mode(
         )
     {
         emit_best_effort(
-            &app,
+            app,
             "keys:mode-changed",
             &serde_json::json!({ "mode": &effective }),
         );
         state.refresh_obs_snapshot();
     }
-    emit_aux_history_status(&app, &transaction.change);
+    emit_aux_history_status(app, &transaction.change);
     Ok(ModeResponse {
         success,
         mode: effective,
@@ -414,10 +430,14 @@ pub fn keys_set_mode(
 }
 
 #[tauri::command]
-pub fn keys_reset_all(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    window: WebviewWindow,
+pub async fn keys_reset_all(app: AppHandle, window: WebviewWindow) -> CmdResult<ResetAllResponse> {
+    run_history_mutation(app, window.label().to_string(), keys_reset_all_inner).await
+}
+
+fn keys_reset_all_inner(
+    app: &AppHandle,
+    state: &AppState,
+    admission: HistoryAdmissionLease,
 ) -> CmdResult<ResetAllResponse> {
     let keys = default_keys().clone();
     let positions = default_positions().clone();
@@ -453,7 +473,6 @@ pub fn keys_reset_all(
     };
     let css_operation_guard = state.lock_css_operation();
     let previous_css_state = state.store.snapshot();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
     let transaction = state
         .store
         .commit_legacy_editor_reset_transaction_with_admission(
@@ -482,15 +501,15 @@ pub fn keys_reset_all(
         state.unwatch_tab_css(tab_id);
     }
     drop(css_operation_guard);
-    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
-    publish_reset_plugin_instances(&app, &transaction.change);
+    publish_legacy_editor_change(state, app, &transaction.change);
+    publish_reset_plugin_instances(app, &transaction.change);
     if !transaction
         .change
         .result
         .changed_fields
         .contains(&EditorField::Keys)
     {
-        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
+        publish_legacy_key_noop_runtime(state, app, &transaction.change);
     }
 
     let (settings_diff, cleared_tab_css_ids) = transaction.value;
@@ -504,18 +523,18 @@ pub fn keys_reset_all(
     let custom_tabs: Vec<CustomTab> = Vec::new();
     let tab_note_overrides = crate::models::TabNoteOverrides::new();
 
-    if let Err(error) = state.emit_settings_changed(&settings_diff, &app) {
+    if let Err(error) = state.emit_settings_changed(&settings_diff, app) {
         log::error!("[Keys] failed to publish reset settings: {error:#}");
     }
 
-    emit_best_effort(&app, "keys:changed", &keys);
-    emit_best_effort(&app, "positions:changed", &positions);
-    emit_best_effort(&app, "statPositions:changed", &stat_positions);
-    emit_best_effort(&app, "graphPositions:changed", &graph_positions);
-    emit_best_effort(&app, "knobPositions:changed", &knob_positions);
-    emit_best_effort(&app, "layerGroups:changed", &layer_groups);
+    emit_best_effort(app, "keys:changed", &keys);
+    emit_best_effort(app, "positions:changed", &positions);
+    emit_best_effort(app, "statPositions:changed", &stat_positions);
+    emit_best_effort(app, "graphPositions:changed", &graph_positions);
+    emit_best_effort(app, "knobPositions:changed", &knob_positions);
+    emit_best_effort(app, "layerGroups:changed", &layer_groups);
     emit_best_effort(
-        &app,
+        app,
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
@@ -523,20 +542,20 @@ pub fn keys_reset_all(
         },
     );
     emit_best_effort(
-        &app,
+        app,
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected_key_type }),
     );
-    emit_best_effort(&app, "css:use", &serde_json::json!({ "enabled": false }));
+    emit_best_effort(app, "css:use", &serde_json::json!({ "enabled": false }));
     emit_best_effort(
-        &app,
+        app,
         "css:content",
         &serde_json::json!({ "path": serde_json::Value::Null, "content": "" }),
     );
-    emit_best_effort(&app, "tabNote:changed_all", &tab_note_overrides);
+    emit_best_effort(app, "tabNote:changed_all", &tab_note_overrides);
     for tab_id in cleared_tab_css_ids {
         emit_best_effort(
-            &app,
+            app,
             "tabCss:changed",
             &crate::commands::editor::css::TabCssResponse { tab_id, css: None },
         );
@@ -551,13 +570,25 @@ pub fn keys_reset_all(
 }
 
 #[tauri::command]
-pub fn keys_reset_mode(
-    state: State<'_, AppState>,
+pub async fn keys_reset_mode(
     app: AppHandle,
     window: WebviewWindow,
     mode: String,
 ) -> CmdResult<ResetModeResponse> {
-    let admission = state.admit_frontend_history_mutation(window.label())?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| keys_reset_mode_inner(state, app, mode, admission),
+    )
+    .await
+}
+
+fn keys_reset_mode_inner(
+    state: &AppState,
+    app: &AppHandle,
+    mode: String,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<ResetModeResponse> {
     let transaction = state
         .store
         .commit_legacy_editor_reset_transaction_with_admission(
@@ -587,51 +618,51 @@ pub fn keys_reset_mode(
             mode,
         });
     };
-    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
-    publish_reset_plugin_instances(&app, &transaction.change);
+    publish_legacy_editor_change(state, app, &transaction.change);
+    publish_reset_plugin_instances(app, &transaction.change);
     if !transaction
         .change
         .result
         .changed_fields
         .contains(&EditorField::Keys)
     {
-        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
+        publish_legacy_key_noop_runtime(state, app, &transaction.change);
     }
 
     if cleared_tab_css {
         state.unwatch_tab_css(&mode);
     }
 
-    emit_best_effort(&app, "keys:changed", &transaction.change.document.keys);
+    emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
     emit_best_effort(
-        &app,
+        app,
         "positions:changed",
         &transaction.change.document.key_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "statPositions:changed",
         &transaction.change.document.stat_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "graphPositions:changed",
         &transaction.change.document.graph_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "knobPositions:changed",
         &transaction.change.document.knob_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "layerGroups:changed",
         &transaction.change.document.layer_groups,
     );
-    emit_best_effort(&app, "tabNote:changed_all", &tab_note_overrides);
+    emit_best_effort(app, "tabNote:changed_all", &tab_note_overrides);
     if cleared_tab_css {
         emit_best_effort(
-            &app,
+            app,
             "tabCss:changed",
             &crate::commands::editor::css::TabCssResponse {
                 tab_id: mode.clone(),
@@ -647,13 +678,12 @@ pub fn keys_reset_mode(
 }
 
 #[tauri::command]
-pub fn custom_tabs_list(state: State<'_, AppState>) -> CmdResult<Vec<CustomTab>> {
-    Ok(state.store.snapshot().custom_tabs)
+pub async fn custom_tabs_list(app: AppHandle) -> CmdResult<Vec<CustomTab>> {
+    run_blocking(app, |_, state| Ok(state.store.snapshot().custom_tabs)).await
 }
 
 #[tauri::command]
-pub fn custom_tabs_create(
-    state: State<'_, AppState>,
+pub async fn custom_tabs_create(
     app: AppHandle,
     window: WebviewWindow,
     name: String,
@@ -672,7 +702,24 @@ pub fn custom_tabs_create(
         id: id.clone(),
         name: trimmed,
     };
-    let admission = state.admit_frontend_history_mutation(window.label())?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            custom_tabs_create_inner(state, app, id, tab, observed_history_epoch, admission)
+        },
+    )
+    .await
+}
+
+fn custom_tabs_create_inner(
+    state: &AppState,
+    app: &AppHandle,
+    id: String,
+    tab: CustomTab,
+    observed_history_epoch: Option<u64>,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<CustomTabCreateResult> {
     let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::CustomTabs,
         observed_history_epoch,
@@ -706,28 +753,28 @@ pub fn custom_tabs_create(
             });
         }
     };
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_editor_change(state, app, &transaction.change, false);
 
     emit_best_effort(
-        &app,
+        app,
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
             selected_key_type: id.clone(),
         },
     );
-    emit_best_effort(&app, "keys:changed", &transaction.change.document.keys);
+    emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
     emit_best_effort(
-        &app,
+        app,
         "positions:changed",
         &transaction.change.document.key_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "keys:mode-changed",
         &serde_json::json!({ "mode": &id }),
     );
-    emit_aux_history_status(&app, &transaction.change);
+    emit_aux_history_status(app, &transaction.change);
 
     Ok(CustomTabCreateResult {
         result: Some(tab),
@@ -736,14 +783,29 @@ pub fn custom_tabs_create(
 }
 
 #[tauri::command]
-pub fn custom_tabs_delete(
-    state: State<'_, AppState>,
+pub async fn custom_tabs_delete(
     app: AppHandle,
     window: WebviewWindow,
     id: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabDeleteResult> {
-    let admission = state.admit_frontend_history_mutation(window.label())?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            custom_tabs_delete_inner(state, app, id, observed_history_epoch, admission)
+        },
+    )
+    .await
+}
+
+fn custom_tabs_delete_inner(
+    state: &AppState,
+    app: &AppHandle,
+    id: String,
+    observed_history_epoch: Option<u64>,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<CustomTabDeleteResult> {
     let transaction = state
         .store
         .commit_aux_editor_reset_transaction_with_admission(
@@ -784,47 +846,47 @@ pub fn custom_tabs_delete(
             });
         }
     };
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
-    publish_reset_plugin_instances(&app, &transaction.change);
+    publish_editor_change(state, app, &transaction.change, false);
+    publish_reset_plugin_instances(app, &transaction.change);
     state.unwatch_tab_css(&id);
 
     emit_best_effort(
-        &app,
+        app,
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs,
             selected_key_type: selected_key_type.clone(),
         },
     );
-    emit_best_effort(&app, "keys:changed", &transaction.change.document.keys);
+    emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
     emit_best_effort(
-        &app,
+        app,
         "positions:changed",
         &transaction.change.document.key_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "statPositions:changed",
         &transaction.change.document.stat_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "graphPositions:changed",
         &transaction.change.document.graph_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "knobPositions:changed",
         &transaction.change.document.knob_positions,
     );
     emit_best_effort(
-        &app,
+        app,
         "layerGroups:changed",
         &transaction.change.document.layer_groups,
     );
-    emit_best_effort(&app, "tabNote:changed_all", &tab_note_overrides);
+    emit_best_effort(app, "tabNote:changed_all", &tab_note_overrides);
     emit_best_effort(
-        &app,
+        app,
         "tabCss:changed",
         &crate::commands::editor::css::TabCssResponse {
             tab_id: id,
@@ -832,11 +894,11 @@ pub fn custom_tabs_delete(
         },
     );
     emit_best_effort(
-        &app,
+        app,
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected_key_type }),
     );
-    emit_aux_history_status(&app, &transaction.change);
+    emit_aux_history_status(app, &transaction.change);
 
     Ok(CustomTabDeleteResult {
         success: true,
@@ -854,15 +916,30 @@ pub struct CustomTabSelectResult {
 }
 
 #[tauri::command]
-pub fn custom_tabs_select(
-    state: State<'_, AppState>,
+pub async fn custom_tabs_select(
     app: AppHandle,
     window: WebviewWindow,
     id: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabSelectResult> {
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            custom_tabs_select_inner(state, app, id, observed_history_epoch, admission)
+        },
+    )
+    .await
+}
+
+fn custom_tabs_select_inner(
+    state: &AppState,
+    app: &AppHandle,
+    id: String,
+    observed_history_epoch: Option<u64>,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<CustomTabSelectResult> {
     let requested = id;
-    let admission = state.admit_frontend_history_mutation(window.label())?;
     let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::Mode,
         observed_history_epoch,
@@ -880,13 +957,13 @@ pub fn custom_tabs_select(
         )
     {
         emit_best_effort(
-            &app,
+            app,
             "keys:mode-changed",
             &serde_json::json!({ "mode": &selected }),
         );
         state.refresh_obs_snapshot();
     }
-    emit_aux_history_status(&app, &transaction.change);
+    emit_aux_history_status(app, &transaction.change);
 
     Ok(CustomTabSelectResult {
         success,
@@ -897,15 +974,38 @@ pub fn custom_tabs_select(
 
 /// 커스텀 탭 목록과 선택 모드를 원자적으로 복원
 #[tauri::command]
-pub fn custom_tabs_restore(
-    state: State<'_, AppState>,
+pub async fn custom_tabs_restore(
     app: AppHandle,
     window: WebviewWindow,
     custom_tabs: Vec<CustomTab>,
     selected_key_type: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<()> {
-    let admission = state.admit_frontend_history_mutation(window.label())?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            custom_tabs_restore_inner(
+                state,
+                app,
+                custom_tabs,
+                selected_key_type,
+                observed_history_epoch,
+                admission,
+            )
+        },
+    )
+    .await
+}
+
+fn custom_tabs_restore_inner(
+    state: &AppState,
+    app: &AppHandle,
+    custom_tabs: Vec<CustomTab>,
+    selected_key_type: String,
+    observed_history_epoch: Option<u64>,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<()> {
     let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::CustomTabs,
         observed_history_epoch,
@@ -931,7 +1031,7 @@ pub fn custom_tabs_restore(
         &selected_key_type,
     );
     emit_best_effort(
-        &app,
+        app,
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs,
@@ -939,99 +1039,123 @@ pub fn custom_tabs_restore(
         },
     );
     emit_best_effort(
-        &app,
+        app,
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected_key_type }),
     );
     state.refresh_obs_snapshot();
-    emit_aux_history_status(&app, &transaction.change);
+    emit_aux_history_status(app, &transaction.change);
     Ok(())
 }
 
 #[tauri::command]
-pub fn keys_reset_counters(
-    state: State<'_, AppState>,
+pub async fn keys_reset_counters(
     app: AppHandle,
     window: WebviewWindow,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let mutation =
-        state.reset_key_counters_with_admission(&app, observed_history_epoch, admission)?;
-    state.obs_broadcast_counters();
-    if let Some(status) = mutation.history_status.as_ref() {
-        emit_best_effort(&app, "history:status", status);
-    }
-    Ok(mutation.counters)
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let mutation =
+                state.reset_key_counters_with_admission(app, observed_history_epoch, admission)?;
+            state.obs_broadcast_counters();
+            if let Some(status) = mutation.history_status.as_ref() {
+                emit_best_effort(app, "history:status", status);
+            }
+            Ok(mutation.counters)
+        },
+    )
+    .await
 }
 
 #[tauri::command]
-pub fn keys_reset_counters_mode(
-    state: State<'_, AppState>,
+pub async fn keys_reset_counters_mode(
     app: AppHandle,
     window: WebviewWindow,
     mode: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let mutation =
-        state.reset_mode_counters_with_admission(&app, &mode, observed_history_epoch, admission)?;
-    state.obs_broadcast_counters();
-    if let Some(status) = mutation.history_status.as_ref() {
-        emit_best_effort(&app, "history:status", status);
-    }
-    Ok(mutation.counters)
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let mutation = state.reset_mode_counters_with_admission(
+                app,
+                &mode,
+                observed_history_epoch,
+                admission,
+            )?;
+            state.obs_broadcast_counters();
+            if let Some(status) = mutation.history_status.as_ref() {
+                emit_best_effort(app, "history:status", status);
+            }
+            Ok(mutation.counters)
+        },
+    )
+    .await
 }
 
 #[tauri::command]
-pub fn keys_reset_single_counter(
-    state: State<'_, AppState>,
+pub async fn keys_reset_single_counter(
     app: AppHandle,
     window: WebviewWindow,
     mode: String,
     key: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let mutation = state.reset_single_key_counter_with_admission(
-        &app,
-        &mode,
-        &key,
-        observed_history_epoch,
-        admission,
-    )?;
-    state.obs_broadcast_counters();
-    if let Some(status) = mutation.history_status.as_ref() {
-        emit_best_effort(&app, "history:status", status);
-    }
-    Ok(mutation.counters)
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let mutation = state.reset_single_key_counter_with_admission(
+                app,
+                &mode,
+                &key,
+                observed_history_epoch,
+                admission,
+            )?;
+            state.obs_broadcast_counters();
+            if let Some(status) = mutation.history_status.as_ref() {
+                emit_best_effort(app, "history:status", status);
+            }
+            Ok(mutation.counters)
+        },
+    )
+    .await
 }
 
 #[tauri::command]
-pub fn keys_set_counters(
-    state: State<'_, AppState>,
+pub async fn keys_set_counters(
     app: AppHandle,
     window: WebviewWindow,
     counters: KeyCounters,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let mutation = state.replace_key_counters_with_admission(
-        &app,
-        counters,
-        observed_history_epoch,
-        admission,
-    )?;
-    state.obs_broadcast_counters();
-    if let Some(status) = mutation.history_status.as_ref() {
-        emit_best_effort(&app, "history:status", status);
-    }
-    Ok(mutation.counters)
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let mutation = state.replace_key_counters_with_admission(
+                app,
+                counters,
+                observed_history_epoch,
+                admission,
+            )?;
+            state.obs_broadcast_counters();
+            if let Some(status) = mutation.history_status.as_ref() {
+                emit_best_effort(app, "history:status", status);
+            }
+            Ok(mutation.counters)
+        },
+    )
+    .await
 }
 
 #[tauri::command]
-pub fn layer_groups_get(state: State<'_, AppState>) -> CmdResult<LayerGroups> {
-    Ok(state.store.snapshot().layer_groups)
+pub async fn layer_groups_get(app: AppHandle) -> CmdResult<LayerGroups> {
+    run_blocking(app, |_, state| Ok(state.store.snapshot().layer_groups)).await
 }
 
 fn generate_custom_tab_id() -> String {

@@ -1,9 +1,10 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager};
 
 use crate::{
     commands::preset::PresetSnapshot,
     commands::{
         keys::keys::CustomTabChangePayload, plugin::instances::publish_plugin_instances_changed,
+        run_blocking, run_mutation,
     },
     errors::{CmdResult, CommandError},
     models::{AppStoreData, CustomCss, CustomJs, HistoryStatus, PluginInstancesChangedPayload},
@@ -24,62 +25,70 @@ use super::state::{emit_best_effort, publish_history_editor_change};
 const HISTORY_FRONTEND_FLUSH_DROPPED: &str = "HISTORY_FRONTEND_FLUSH_DROPPED";
 
 #[tauri::command]
-pub fn history_status(state: State<'_, AppState>) -> HistoryStatus {
-    state.store.history_status()
+pub async fn history_status(app: AppHandle) -> CmdResult<HistoryStatus> {
+    run_blocking(app, |_, state| Ok(state.store.history_status())).await
 }
 
 #[tauri::command]
-pub async fn history_undo(
-    state: State<'_, AppState>,
-    broker: State<'_, PreviewBroker>,
-    app: AppHandle,
-    operation_id: String,
-) -> CmdResult<HistoryStatus> {
+pub async fn history_undo(app: AppHandle, operation_id: String) -> CmdResult<HistoryStatus> {
     validate_history_operation_id(&operation_id)?;
-    let flush = state
-        .request_frontend_history_flush(app.clone(), &operation_id)
-        .map_err(CommandError::msg)?;
+    let flush_operation_id = operation_id.clone();
+    let flush = run_blocking(app.clone(), move |app, state| {
+        state
+            .request_frontend_history_flush(app.clone(), &flush_operation_id)
+            .map_err(CommandError::msg)
+    })
+    .await?;
     let mut flush = flush
         .await
         .map_err(|_| CommandError::msg(HISTORY_FRONTEND_FLUSH_DROPPED))?
         .map_err(CommandError::msg)?;
-    let result = run_history_operation(
-        state.inner(),
-        broker.inner(),
-        &app,
-        &operation_id,
-        HistoryDirection::Undo,
-        flush.take_barrier(),
-    );
-    drop(flush);
-    result
+    // flush 뒤 번호표 발급, 닫힌 gate로 다른 mutation admission 차단
+    run_mutation(app, move |app, state| {
+        let broker = app.state::<PreviewBroker>();
+        let result = run_history_operation(
+            state,
+            broker.inner(),
+            app,
+            &operation_id,
+            HistoryDirection::Undo,
+            flush.take_barrier(),
+        );
+        drop(flush);
+        result
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn history_redo(
-    state: State<'_, AppState>,
-    broker: State<'_, PreviewBroker>,
-    app: AppHandle,
-    operation_id: String,
-) -> CmdResult<HistoryStatus> {
+pub async fn history_redo(app: AppHandle, operation_id: String) -> CmdResult<HistoryStatus> {
     validate_history_operation_id(&operation_id)?;
-    let flush = state
-        .request_frontend_history_flush(app.clone(), &operation_id)
-        .map_err(CommandError::msg)?;
+    let flush_operation_id = operation_id.clone();
+    let flush = run_blocking(app.clone(), move |app, state| {
+        state
+            .request_frontend_history_flush(app.clone(), &flush_operation_id)
+            .map_err(CommandError::msg)
+    })
+    .await?;
     let mut flush = flush
         .await
         .map_err(|_| CommandError::msg(HISTORY_FRONTEND_FLUSH_DROPPED))?
         .map_err(CommandError::msg)?;
-    let result = run_history_operation(
-        state.inner(),
-        broker.inner(),
-        &app,
-        &operation_id,
-        HistoryDirection::Redo,
-        flush.take_barrier(),
-    );
-    drop(flush);
-    result
+    // flush 뒤 번호표 발급, 닫힌 gate로 다른 mutation admission 차단
+    run_mutation(app, move |app, state| {
+        let broker = app.state::<PreviewBroker>();
+        let result = run_history_operation(
+            state,
+            broker.inner(),
+            app,
+            &operation_id,
+            HistoryDirection::Redo,
+            flush.take_barrier(),
+        );
+        drop(flush);
+        result
+    })
+    .await
 }
 
 fn validate_history_operation_id(operation_id: &str) -> CmdResult<()> {

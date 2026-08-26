@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
-use crate::{errors::CmdResult, state::AppState};
+use crate::{commands::run_blocking, errors::CmdResult, state::AppState};
 
 fn ensure_main_caller(window: &WebviewWindow, action: &str) -> CmdResult<()> {
     if window.label() != "main" {
@@ -20,35 +20,37 @@ pub fn panel_window_arm_open(state: State<'_, AppState>, window: WebviewWindow) 
 
 // 도킹(hide)된 패널 창을 다시 띄운다. 창이 없으면 메인이 window.open으로 만들어야 한다
 #[tauri::command]
-pub fn panel_window_present(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    window: WebviewWindow,
-) -> CmdResult<()> {
-    ensure_main_caller(&window, "presented")?;
-    Ok(state.present_panel_window(&app, None, true)?)
+pub async fn panel_window_present(app: AppHandle, window: WebviewWindow) -> CmdResult<()> {
+    run_blocking(app, move |app, state| {
+        ensure_main_caller(&window, "presented")?;
+        Ok(state.present_panel_window(app, None, true)?)
+    })
+    .await
 }
 
 // 드래그 드롭 위치(논리 좌표, 창 좌상단)에 패널 창을 띄운다.
 // focus=false는 드래그 도중 tear-off - 메인의 드래그 세션을 끊지 않게 포커스를 두지 않는다
 #[tauri::command]
-pub fn panel_window_present_at(
-    state: State<'_, AppState>,
+pub async fn panel_window_present_at(
     app: AppHandle,
     window: WebviewWindow,
     x: f64,
     y: f64,
     focus: bool,
 ) -> CmdResult<()> {
-    ensure_main_caller(&window, "presented")?;
-    if !focus {
-        super::panel_drag_cursor::set(&app, &window, true)?;
-    }
-    let result = state.present_panel_window(&app, Some(tauri::LogicalPosition::new(x, y)), focus);
-    if result.is_err() && !focus {
-        let _ = super::panel_drag_cursor::set(&app, &window, false);
-    }
-    Ok(result?)
+    run_blocking(app, move |app, state| {
+        ensure_main_caller(&window, "presented")?;
+        if !focus {
+            super::panel_drag_cursor::set(app, &window, true)?;
+        }
+        let result =
+            state.present_panel_window(app, Some(tauri::LogicalPosition::new(x, y)), focus);
+        if result.is_err() && !focus {
+            let _ = super::panel_drag_cursor::set(app, &window, false);
+        }
+        Ok(result?)
+    })
+    .await
 }
 
 // 드래그 중 창 이동 (논리 좌표, 창 좌상단)
@@ -65,13 +67,12 @@ pub fn panel_window_move_to(
 }
 
 #[tauri::command]
-pub fn panel_window_reset_position(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    window: WebviewWindow,
-) -> CmdResult<()> {
-    ensure_main_caller(&window, "reset")?;
-    Ok(state.reset_panel_window_position(&app)?)
+pub async fn panel_window_reset_position(app: AppHandle, window: WebviewWindow) -> CmdResult<()> {
+    run_blocking(app, move |app, state| {
+        ensure_main_caller(&window, "reset")?;
+        Ok(state.reset_panel_window_position(app)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -96,13 +97,12 @@ pub fn panel_window_drag_context(
 
 // 도킹: 창은 살려 둔 채 감춘다 (파괴는 종료 시만 - opener와 컨트롤러를 공유)
 #[tauri::command]
-pub fn panel_window_dock(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    window: WebviewWindow,
-) -> CmdResult<()> {
-    ensure_main_caller(&window, "docked")?;
-    Ok(state.dock_panel_window(&app)?)
+pub async fn panel_window_dock(app: AppHandle, window: WebviewWindow) -> CmdResult<()> {
+    run_blocking(app, move |app, state| {
+        ensure_main_caller(&window, "docked")?;
+        Ok(state.dock_panel_window(app)?)
+    })
+    .await
 }
 
 // 기동 시 분리 복원 요청 1회 소비 - true면 메인이 window.open으로 패널을 연다

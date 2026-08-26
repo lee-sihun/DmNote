@@ -2,7 +2,10 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Component, Path, PathBuf},
-    sync::{mpsc, Arc},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, Arc,
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -88,6 +91,7 @@ impl SoundRecoveryOutcome {
 pub struct AppStore {
     path: PathBuf,
     state: RwLock<VersionedStoreState>,
+    runtime_publication_generation: AtomicU64,
     writer: StoreWriter,
     skip_asset_sweep: bool,
     history_gate: Arc<HistoryAdmissionGate>,
@@ -365,12 +369,18 @@ impl AppStore {
         Ok(store)
     }
 
+    #[cfg(test)]
+    pub(crate) fn initialize_for_test(dir: &Path) -> Result<Self> {
+        Self::initialize_in_dir(dir)
+    }
+
     fn new(path: PathBuf, state: AppStoreData, skip_asset_sweep: bool) -> Result<Self> {
         Ok(Self {
             writer: StoreWriter::start(path.clone())?,
             path,
             skip_asset_sweep,
             history_gate: Arc::new(HistoryAdmissionGate::default()),
+            runtime_publication_generation: AtomicU64::new(0),
             state: RwLock::new(VersionedStoreState {
                 data: state,
                 revision: 0,
@@ -406,6 +416,8 @@ impl AppStore {
         ticket.wait()?;
         state.data = scratch;
         state.revision = revision;
+        self.runtime_publication_generation
+            .store(revision, Ordering::Release);
         state.dirty = false;
         Ok(result)
     }
@@ -511,7 +523,7 @@ impl AppStore {
     }
 
     pub(crate) fn runtime_publication_generation(&self) -> u64 {
-        self.state.read().revision
+        self.runtime_publication_generation.load(Ordering::Acquire)
     }
 
     pub(crate) fn plugin_model_revision(&self) -> u64 {
@@ -4550,6 +4562,29 @@ mod tests {
 
     fn test_directory(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("dmnote-{label}-{}", uuid::Uuid::new_v4()))
+    }
+
+    #[test]
+    fn runtime_publication_generation_mirror_tracks_committed_revision() {
+        let directory = test_directory("runtime-publication-generation-mirror");
+        std::fs::create_dir_all(&directory).unwrap();
+        let store = AppStore::initialize_for_test(&directory).unwrap();
+
+        assert_eq!(
+            store.runtime_publication_generation(),
+            store.state.read().revision
+        );
+        let previous_revision = store.runtime_publication_generation();
+        store
+            .update(|data| data.language = "generation-mirror-test".to_string())
+            .unwrap();
+        let committed_revision = store.state.read().revision;
+        assert!(committed_revision > previous_revision);
+        assert_eq!(store.runtime_publication_generation(), committed_revision);
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     struct TestCounterEmitter {

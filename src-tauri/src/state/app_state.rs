@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
     io::{BufRead, BufReader},
     path::Path,
     process::{Child, ChildStdin, Command, Stdio},
@@ -43,9 +43,9 @@ use crate::{
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
-        DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings, KeySlot,
-        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
-        SettingsDiff, SettingsState, TabCssOverrides,
+        CommittedEditorChange, DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters,
+        KeyMappings, KeyPositions, KeySlot, KeySoundOutputBackendPersist, OverlayBounds,
+        OverlayResizeAnchor, PanelBounds, SettingsDiff, SettingsState, TabCssOverrides,
     },
     services::{
         css_watcher::CssWatcher, event_publisher::publish_event, obs_bridge::ObsBridgeService,
@@ -215,6 +215,7 @@ pub(crate) const HISTORY_FRONTEND_FLUSH_CANCELED: &str = "HISTORY_FRONTEND_FLUSH
 pub(crate) const HISTORY_FRONTEND_FLUSH_EMIT_FAILED: &str = "HISTORY_FRONTEND_FLUSH_EMIT_FAILED";
 pub(crate) const HISTORY_FRONTEND_FLUSH_INTERRUPTED: &str = "HISTORY_FRONTEND_FLUSH_INTERRUPTED";
 pub(crate) const HISTORY_FRONTEND_FLUSH_TIMEOUT: &str = "HISTORY_FRONTEND_FLUSH_TIMEOUT";
+pub(crate) const MUTATION_SHUTDOWN_STARTED: &str = "MUTATION_SHUTDOWN_STARTED";
 
 struct ShutdownWatchdogState {
     armed: bool,
@@ -669,6 +670,41 @@ struct RuntimePublicationState {
     mappings_generation: u64,
     mode_generation: u64,
     counters_generation: u64,
+    key_sound_bindings_generation: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct KeySoundBinding {
+    sound_path: String,
+    per_key_volume: f32,
+}
+
+type KeySoundBindingTable = HashMap<String, Vec<Option<KeySoundBinding>>>;
+
+fn build_key_sound_binding_table(key_positions: &KeyPositions) -> KeySoundBindingTable {
+    key_positions
+        .iter()
+        .map(|(mode, positions)| {
+            let bindings = positions
+                .iter()
+                .map(|position| {
+                    if !position.sound_enabled.unwrap_or(false) {
+                        return None;
+                    }
+                    let sound_path = position.sound_path.as_deref()?.trim();
+                    if sound_path.is_empty() {
+                        return None;
+                    }
+                    let volume_percent = position.sound_volume.unwrap_or(100.0);
+                    Some(KeySoundBinding {
+                        sound_path: sound_path.to_string(),
+                        per_key_volume: (volume_percent / 100.0).clamp(0.0, 2.0) as f32,
+                    })
+                })
+                .collect();
+            (mode.clone(), bindings)
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1039,10 +1075,12 @@ pub struct AppState {
     counter_history_barrier: Mutex<CounterHistoryBarrierState>,
     counter_history_ready: Condvar,
     runtime_publication: Mutex<RuntimePublicationState>,
+    mutation_publication: Arc<MutationPublicationSequencer>,
     key_counter_enabled: Arc<AtomicBool>,
     /// Raw input stream subscriber count - emit only when > 0
     raw_input_subscribers: Arc<std::sync::atomic::AtomicU32>,
     key_sound: Arc<KeySoundEngine>,
+    key_sound_bindings: RwLock<Arc<KeySoundBindingTable>>,
     key_sound_output_generation: Arc<AtomicU64>,
     key_sound_output_persistence_lock: Arc<Mutex<()>>,
     /// 전역 CSS 상태와 워처 전환 직렬화
@@ -1053,6 +1091,9 @@ pub struct AppState {
     css_watcher: RwLock<Option<CssWatcher>>,
     /// OBS WebSocket 브릿지
     pub obs_bridge: Arc<ObsBridgeService>,
+    /// OBS 시작, 중지, 토큰 회전 직렬화
+    /// 잠금 순서: OBS lifecycle mutex -> mutation ticket, 역순 금지
+    pub(crate) obs_lifecycle_lock: tokio::sync::Mutex<()>,
     /// OBS 모드 시작 전 오버레이 가시성 상태 (복원용)
     obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
     shutdown_started: AtomicBool,
@@ -1060,6 +1101,87 @@ pub struct AppState {
     shutdown_watchdog: Arc<Mutex<ShutdownWatchdogState>>,
     editor_flush_handshake: Arc<Mutex<Option<EditorFlushHandshake>>>,
     deferred_frontend_lifecycle: Mutex<Option<FrontendLifecycleAction>>,
+}
+
+#[derive(Default)]
+struct MutationPublicationState {
+    next_ticket: u64,
+    serving_ticket: u64,
+    completed_tickets: BTreeSet<u64>,
+    exhausted: bool,
+}
+
+#[derive(Default)]
+pub(crate) struct MutationPublicationSequencer {
+    state: Mutex<MutationPublicationState>,
+    turn_ready: Condvar,
+}
+
+pub(crate) struct MutationPublicationTicket {
+    sequencer: Arc<MutationPublicationSequencer>,
+    number: u64,
+}
+
+impl MutationPublicationSequencer {
+    fn issue(self: &Arc<Self>) -> std::result::Result<MutationPublicationTicket, &'static str> {
+        let mut state = self.state.lock();
+        if state.exhausted {
+            return Err("MUTATION_SEQUENCE_EXHAUSTED");
+        }
+        let number = state.next_ticket;
+        if number == u64::MAX {
+            state.exhausted = true;
+        } else {
+            state.next_ticket = number + 1;
+        }
+        Ok(MutationPublicationTicket {
+            sequencer: Arc::clone(self),
+            number,
+        })
+    }
+
+    fn wait_for_turn(&self, number: u64) {
+        let mut state = self.state.lock();
+        while state.serving_ticket != number {
+            self.turn_ready.wait(&mut state);
+        }
+    }
+
+    fn complete(&self, number: u64) {
+        let mut state = self.state.lock();
+        if number < state.serving_ticket {
+            return;
+        }
+        if number != state.serving_ticket {
+            state.completed_tickets.insert(number);
+            return;
+        }
+
+        loop {
+            if state.serving_ticket == u64::MAX {
+                break;
+            }
+            state.serving_ticket += 1;
+            let serving_ticket = state.serving_ticket;
+            if !state.completed_tickets.remove(&serving_ticket) {
+                break;
+            }
+        }
+        self.turn_ready.notify_all();
+    }
+}
+
+impl MutationPublicationTicket {
+    pub(crate) fn run<T>(self, mutation: impl FnOnce() -> T) -> T {
+        self.sequencer.wait_for_turn(self.number);
+        mutation()
+    }
+}
+
+impl Drop for MutationPublicationTicket {
+    fn drop(&mut self) {
+        self.sequencer.complete(self.number);
+    }
 }
 
 impl AppState {
@@ -1119,6 +1241,7 @@ impl AppState {
                 }
             }),
         ));
+        let key_sound_bindings = Arc::new(build_key_sound_binding_table(&snapshot.key_positions));
         let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
         let authorized_css_paths = collect_authorized_css_paths(&snapshot);
         let panel_bounds_persistence =
@@ -1150,15 +1273,18 @@ impl AppState {
             counter_history_barrier: Mutex::new(CounterHistoryBarrierState::default()),
             counter_history_ready: Condvar::new(),
             runtime_publication: Mutex::new(RuntimePublicationState::default()),
+            mutation_publication: Arc::new(MutationPublicationSequencer::default()),
             key_counter_enabled,
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             key_sound,
+            key_sound_bindings: RwLock::new(key_sound_bindings),
             key_sound_output_generation,
             key_sound_output_persistence_lock,
             css_operation_lock: Mutex::new(()),
             authorized_css_paths: RwLock::new(authorized_css_paths),
             css_watcher: RwLock::new(None),
             obs_bridge,
+            obs_lifecycle_lock: tokio::sync::Mutex::new(()),
             obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
             shutdown_started: AtomicBool::new(false),
             process_exit_authorized: AtomicBool::new(false),
@@ -1422,29 +1548,11 @@ impl AppState {
     fn auto_start_obs(&self, app: &AppHandle) {
         let bridge = self.obs_bridge.clone();
         let store = self.store.clone();
-        let port = store.with_state(|s| s.obs_port);
 
         // 부팅 시에는 오버레이를 생성하지 않았으므로 이전 표시 상태만 저장
         // (initialize_runtime에서 obs_mode_enabled일 때 ensure_overlay_window 건너뜀)
         let was_visible = store.with_state(|s| s.overlay_visible);
         *self.obs_previous_overlay_visible.write() = Some(was_visible);
-
-        // 저장 안 된 토큰으로 서버를 켜면 재부팅 후 기존 URL이 무효화되므로 시작 중단
-        let token = match self.resolve_and_save_obs_token() {
-            Ok(token) => token,
-            Err(e) => {
-                log::error!(
-                    "[ObsBridge] auto-start 중단: 토큰 저장 실패 ({}) — obs_mode_enabled를 false로 복구",
-                    e
-                );
-                let _ = store.update(|s| {
-                    s.obs_mode_enabled = false;
-                });
-                self.obs_restore_overlay(app);
-                let _ = app.emit("obs:status", &self.obs_bridge.status());
-                return;
-            }
-        };
         let app_handle = app.clone();
 
         // dev 모드: Vite dev server로 리다이렉트
@@ -1469,6 +1577,25 @@ impl AppState {
         bridge.set_app_handle(app.clone());
         // async start를 tokio 런타임에서 실행
         tauri::async_runtime::spawn(async move {
+            let state = app_handle.state::<AppState>();
+            let _lifecycle_guard = state.obs_lifecycle_lock.lock().await;
+            let port = store.with_state(|s| s.obs_port);
+            // 미저장 토큰 사용 방지를 위한 시작 중단
+            let token = match state.resolve_and_save_obs_token() {
+                Ok(token) => token,
+                Err(e) => {
+                    log::error!(
+                        "[ObsBridge] auto-start 중단: 토큰 저장 실패 ({e}), obs_mode_enabled를 false로 복구"
+                    );
+                    let _ = store.update(|s| {
+                        s.obs_mode_enabled = false;
+                    });
+                    state.obs_restore_overlay(&app_handle);
+                    let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
+                    return;
+                }
+            };
+
             match bridge.start(port, token).await {
                 Ok(actual_port) => {
                     log::info!("[ObsBridge] auto-start 성공 (port={})", actual_port);
@@ -1478,21 +1605,19 @@ impl AppState {
                             s.obs_port = actual_port;
                         });
                     }
-                    let state = app_handle.state::<AppState>();
                     // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
                     state.refresh_obs_snapshot();
                     let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
                 }
                 Err(e) => {
                     log::error!(
-                        "[ObsBridge] auto-start 실패: {} — obs_mode_enabled를 false로 복구",
+                        "[ObsBridge] auto-start 실패: {}, obs_mode_enabled를 false로 복구",
                         e
                     );
                     let _ = store.update(|state| {
                         state.obs_mode_enabled = false;
                     });
                     // 실패 시 오버레이 복원 (윈도우 재생성 포함)
-                    let state = app_handle.state::<AppState>();
                     state.obs_restore_overlay(&app_handle);
                     let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
                 }
@@ -1808,6 +1933,20 @@ impl AppState {
             .history_gate()
             .admit_mutation()
             .map_err(|_| EditorCommitError::history_in_progress())
+    }
+
+    pub(crate) fn ensure_mutation_allowed(&self) -> std::result::Result<(), &'static str> {
+        if self.shutdown_started.load(Ordering::SeqCst) {
+            return Err(MUTATION_SHUTDOWN_STARTED);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn issue_mutation_publication(
+        &self,
+    ) -> std::result::Result<MutationPublicationTicket, &'static str> {
+        self.ensure_mutation_allowed()?;
+        self.mutation_publication.issue()
     }
 
     pub fn cancel_frontend_lifecycle(&self, app_handle: AppHandle, handshake_id: &str) {
@@ -4399,36 +4538,43 @@ impl AppState {
         self.key_sound.invalidate_file_cache(path);
     }
 
+    pub(crate) fn publish_committed_key_sound_bindings(
+        &self,
+        change: &CommittedEditorChange,
+    ) -> bool {
+        if !change
+            .result
+            .changed_fields
+            .contains(&crate::models::EditorField::KeyPositions)
+        {
+            return false;
+        }
+
+        let bindings = Arc::new(build_key_sound_binding_table(
+            &change.document.key_positions,
+        ));
+        let mut publication = self.runtime_publication.lock();
+        if change.runtime_publication_generation < publication.key_sound_bindings_generation {
+            return false;
+        }
+        *self.key_sound_bindings.write() = bindings;
+        publication.key_sound_bindings_generation = change.runtime_publication_generation;
+        true
+    }
+
     fn resolve_key_sound_binding(
         &self,
         mode: &str,
         slot_indices: &[usize],
     ) -> Option<(String, f32)> {
-        self.store.with_state(|state| {
-            let positions = state.key_positions.get(mode)?;
+        let bindings = Arc::clone(&self.key_sound_bindings.read());
+        let mode_bindings = bindings.get(mode)?;
 
-            for index in slot_indices {
-                let Some(position) = positions.get(*index) else {
-                    continue;
-                };
-
-                if !position.sound_enabled.unwrap_or(false) {
-                    continue;
-                }
-                let Some(sound_path) = position.sound_path.as_ref() else {
-                    continue;
-                };
-                let trimmed_path = sound_path.trim();
-                if trimmed_path.is_empty() {
-                    continue;
-                }
-
-                let volume_percent = position.sound_volume.unwrap_or(100.0);
-                let per_key_volume = (volume_percent / 100.0).clamp(0.0, 2.0) as f32;
-                return Some((trimmed_path.to_string(), per_key_volume));
-            }
-
-            None
+        slot_indices.iter().find_map(|index| {
+            mode_bindings
+                .get(*index)
+                .and_then(Option::as_ref)
+                .map(|binding| (binding.sound_path.clone(), binding.per_key_volume))
         })
     }
 
@@ -6121,8 +6267,9 @@ mod tests {
         collections::{HashMap, HashSet},
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering},
-            Arc,
+            mpsc, Arc,
         },
+        thread,
         time::{Duration, Instant},
     };
 
@@ -6143,21 +6290,27 @@ mod tests {
         should_create_overlay_on_startup, should_recover_keyboard_daemon,
         should_restore_panel_on_startup, stored_bounds_need_monitor_data,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake, take_panel_open_arm,
-        EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
-        FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
-        FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect, MonitorData, MonitorSpec,
-        Mutex, OverlayCloseAction, PanelBoundsChange, PanelBoundsPersistenceController,
-        PanelBoundsPersistenceState, PanelBoundsSample, PanelCloseRequestState,
-        PanelCloseRequestedPayload, PanelVisibilityEventEmitter, PanelVisibilityPayload,
-        PanelVisibilityReason, PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT,
-        DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        AppState, EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake,
+        EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
+        FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect,
+        MonitorData, MonitorSpec, MutationPublicationSequencer, Mutex, OverlayCloseAction,
+        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
+        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload,
+        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
+        PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
         PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
     };
     use crate::{
         keyboard::KeyboardManager,
-        models::{AppStoreData, CustomCss, OverlayBounds, PanelBounds, TabCss},
-        state::local_asset_path::path_identity_key,
+        models::{
+            AppStoreData, CustomCss, EditorCommitOrigin, EditorField, OverlayBounds, PanelBounds,
+            TabCss,
+        },
+        state::{
+            history::HistoryAdmissionGate, local_asset_path::path_identity_key, store::AppStore,
+        },
     };
     use std::path::Path;
 
@@ -6167,6 +6320,148 @@ mod tests {
         assert!(should_create_overlay_on_startup(false, true));
         assert!(!should_create_overlay_on_startup(true, false));
         assert!(!should_create_overlay_on_startup(true, true));
+    }
+
+    #[test]
+    fn committed_key_positions_refresh_key_sound_binding_cache() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-key-sound-binding-cache-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state =
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap();
+        let initial = state.store.snapshot();
+        let mode = initial.selected_key_type.clone();
+        let sound_path = format!("/tmp/key-sound-{}.wav", uuid::Uuid::new_v4());
+        let committed_path = sound_path.clone();
+        let transaction = state
+            .store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("key_sound_binding_cache_test".to_string()),
+                &[EditorField::KeyPositions],
+                move |store| {
+                    let position = store
+                        .key_positions
+                        .get_mut(&mode)
+                        .unwrap()
+                        .first_mut()
+                        .unwrap();
+                    position.sound_enabled = Some(true);
+                    position.sound_path = Some(format!("  {committed_path}  "));
+                    position.sound_volume = Some(150.0);
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert_ne!(
+            state.resolve_key_sound_binding(&initial.selected_key_type, &[0]),
+            Some((sound_path.clone(), 1.5))
+        );
+        assert!(state.publish_committed_key_sound_bindings(&transaction.change));
+        assert_eq!(
+            state.resolve_key_sound_binding(&initial.selected_key_type, &[0]),
+            Some((sound_path, 1.5))
+        );
+
+        drop(transaction);
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn mutation_publication_preserves_ticket_order_when_first_worker_is_delayed() {
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let first = publication.issue().unwrap();
+        let second = publication.issue().unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let (second_waiting_tx, second_waiting_rx) = mpsc::channel();
+        let (second_done_tx, second_done_rx) = mpsc::channel();
+        let second_order = Arc::clone(&order);
+        let second_worker = thread::spawn(move || {
+            second_waiting_tx.send(()).unwrap();
+            second.run(|| second_order.lock().push(2));
+            second_done_tx.send(()).unwrap();
+        });
+        second_waiting_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+        assert!(matches!(
+            second_done_rx.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+
+        let first_order = Arc::clone(&order);
+        let first_worker = thread::spawn(move || first.run(|| first_order.lock().push(1)));
+        first_worker.join().unwrap();
+        second_done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        second_worker.join().unwrap();
+        assert_eq!(*order.lock(), vec![1, 2]);
+    }
+
+    #[test]
+    fn mutation_publication_advances_after_panicking_turn() {
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let first = publication.issue().unwrap();
+        let second = publication.issue().unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let first_order = Arc::clone(&order);
+        let first_worker = thread::spawn(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                first.run(|| {
+                    first_order.lock().push(1);
+                    panic!("publication panic test");
+                });
+            }))
+        });
+        let second_order = Arc::clone(&order);
+        let second_worker = thread::spawn(move || second.run(|| second_order.lock().push(2)));
+
+        assert!(first_worker.join().unwrap().is_err());
+        second_worker.join().unwrap();
+        assert_eq!(*order.lock(), vec![1, 2]);
+    }
+
+    #[test]
+    fn history_close_drains_while_mutation_publication_is_held() {
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let ticket = publication.issue().unwrap();
+        let gate = Arc::new(HistoryAdmissionGate::default());
+        let admission = gate.admit_mutation().unwrap();
+        let (publication_held_tx, publication_held_rx) = mpsc::channel();
+        let (release_publication_tx, release_publication_rx) = mpsc::channel();
+        let mutation = thread::spawn(move || {
+            ticket.run(|| {
+                publication_held_tx.send(()).unwrap();
+                release_publication_rx.recv().unwrap();
+                drop(admission);
+            });
+        });
+        publication_held_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+
+        let barrier = gate.begin_close("history-close-publication-test").unwrap();
+        let waiter = barrier.waiter();
+        let (drained_tx, drained_rx) = mpsc::channel();
+        let drain = thread::spawn(move || {
+            drained_tx.send(waiter.wait_for_drain()).unwrap();
+        });
+        assert!(matches!(
+            drained_rx.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+
+        release_publication_tx.send(()).unwrap();
+        assert_eq!(
+            drained_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            Ok(())
+        );
+        mutation.join().unwrap();
+        drain.join().unwrap();
+        drop(barrier);
     }
 
     #[test]

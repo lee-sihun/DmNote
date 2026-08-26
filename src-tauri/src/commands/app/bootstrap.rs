@@ -1,8 +1,8 @@
-use tauri::State;
+use tauri::AppHandle;
 
-use crate::{errors::CmdResult, models::BootstrapPayload, state::AppState};
+use crate::{commands::run_blocking, errors::CmdResult, models::BootstrapPayload};
 
 #[tauri::command]
-pub fn app_bootstrap(state: State<'_, AppState>) -> CmdResult<BootstrapPayload> {
-    Ok(state.bootstrap_payload())
+pub async fn app_bootstrap(app: AppHandle) -> CmdResult<BootstrapPayload> {
+    run_blocking(app, |_, state| Ok(state.bootstrap_payload())).await
 }
