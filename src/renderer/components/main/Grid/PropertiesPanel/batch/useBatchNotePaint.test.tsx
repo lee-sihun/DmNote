@@ -282,6 +282,57 @@ describe('useBatchNotePaint 집계·커밋', () => {
     expect(patch.value.gradient.stops[0].color).toBe('rgba(255,0,0,0.4)');
   });
 
+  it('그라데이션 형식 왕복은 기억된 스톱 알파를 다시 곱하지 않는다', () => {
+    const faded: GradientSpec = {
+      angle: 180,
+      stops: [
+        { color: 'rgba(255,0,0,0.6)', pos: 0 },
+        { color: 'rgba(255,0,0,0)', pos: 1 },
+      ],
+    };
+    render(
+      [
+        keyAt(ID_A, { noteGradient: faded, noteOpacity: 100 }),
+        keyAt(ID_B, { noteGradient: faded, noteOpacity: 100 }),
+      ],
+      'note',
+    );
+    act(() => {
+      const footer = latest().states.note.footerSlot as React.ReactElement<{
+        onFormatChange: (next: 'solid' | 'gradient') => void;
+      }>;
+      footer.props.onFormatChange('solid');
+    });
+    expect(lastPatch()).toEqual({
+      property: 'notePaint',
+      value: { color: '#FF0000', opacity: 60, gradient: null },
+    });
+
+    render(
+      [
+        keyAt(ID_A, { noteColor: '#FF0000', noteOpacity: 60 }),
+        keyAt(ID_B, { noteColor: '#FF0000', noteOpacity: 60 }),
+      ],
+      'note',
+    );
+    act(() => {
+      const footer = latest().states.note.footerSlot as React.ReactElement<{
+        onFormatChange: (next: 'solid' | 'gradient') => void;
+      }>;
+      footer.props.onFormatChange('gradient');
+    });
+    const patch = lastPatch();
+    if (
+      patch.property !== 'notePaint' ||
+      !('gradient' in patch.value) ||
+      !patch.value.gradient
+    ) {
+      throw new Error('gradient descriptor expected');
+    }
+    expect(patch.value.gradient.stops[0].color).toBe('rgba(255,0,0,0.6)');
+    expect(patch.value.opacity).toBe(100);
+  });
+
   it('그라데이션에서 단색으로 돌아오면 첫 스톱 알파가 단색 투명도가 된다', () => {
     const faded: GradientSpec = {
       angle: 180,
@@ -307,6 +358,52 @@ describe('useBatchNotePaint 집계·커밋', () => {
       property: 'noteBorderPaint',
       value: { color: '#FF0000', opacity: 30 },
     });
+  });
+
+  it('배치 테두리 형식 왕복은 기억한 스톱 알파를 다시 곱하지 않는다', () => {
+    const faded: GradientSpec = {
+      angle: 180,
+      stops: [
+        { color: 'rgba(255,0,0,0.6)', pos: 0 },
+        { color: 'rgba(255,0,0,0)', pos: 1 },
+      ],
+    };
+    const gradientKeys = [ID_A, ID_B].map((id) =>
+      keyAt(id, { noteBorderGradient: faded, noteBorderOpacity: 100 }),
+    );
+    render(gradientKeys, 'border');
+    act(() => {
+      const footer = latest().states.border.footerSlot as React.ReactElement<{
+        onFormatChange: (next: 'solid' | 'gradient') => void;
+      }>;
+      footer.props.onFormatChange('solid');
+    });
+    expect(lastPatch()).toEqual({
+      property: 'noteBorderPaint',
+      value: { color: '#FF0000', opacity: 60 },
+    });
+
+    const solidKeys = [ID_A, ID_B].map((id) =>
+      keyAt(id, { noteBorderColor: '#FF0000', noteBorderOpacity: 60 }),
+    );
+    render(solidKeys, 'border');
+    act(() => {
+      const footer = latest().states.border.footerSlot as React.ReactElement<{
+        onFormatChange: (next: 'solid' | 'gradient') => void;
+      }>;
+      footer.props.onFormatChange('gradient');
+    });
+    const patch = lastPatch();
+    if (
+      patch.property !== 'noteBorderPaint' ||
+      !('gradient' in patch.value) ||
+      !patch.value.gradient
+    )
+      throw new Error(
+        `gradient border patch expected: ${JSON.stringify(patch)}`,
+      );
+    expect(patch.value.gradient.stops[0].color).toBe('rgba(255,0,0,0.6)');
+    expect(patch.value.opacity).toBe(100);
   });
 
   it('canonical 반영 틱에 열린 표면의 로컬 투명도를 재동기화한다', () => {

@@ -31,7 +31,10 @@ import {
   toNoteStopColor,
   toNoteHexColor,
 } from '../notePaintColorUtils';
-import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import {
+  useGradientColorState,
+  type GradientCommitMeta,
+} from '@hooks/pickers/useGradientColorState';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -179,7 +182,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   };
 
   // 테두리 커밋 - 대표색은 hex 전용 계약(api-contract v2 §2)
-  const handleBorderPaintCommit = (value: ColorModeValue) => {
+  const handleBorderPaintCommit = (
+    value: ColorModeValue,
+    meta?: GradientCommitMeta,
+  ) => {
     if (value.mode === 'solid') {
       const hex = toNoteHexColor(value.color);
       // 그라데이션에서 돌아오면 첫 스톱 알파가 단색 투명도
@@ -198,7 +204,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     }
     // 단색에서 넘어오는 첫 커밋은 단색 투명도를 스톱 알파에 접는다
     commitBorderGradientPaint(
-      storedBorderGradient
+      storedBorderGradient || meta?.gradientSource === 'remembered'
         ? value.spec
         : foldGradientOpacity(value.spec, localBorderOpacity),
     );
@@ -308,7 +314,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
   // 본체·글로우 커밋 (계약 §9-5) - 전환·배율·shadow를 한 op으로
   const makePaintCommit =
-    (surface: 'note' | 'glow') => (value: ColorModeValue) => {
+    (surface: 'note' | 'glow') =>
+    (value: ColorModeValue, meta?: GradientCommitMeta) => {
       // 잠긴 뒤 늦게 도착한 피커 완료는 버린다 (백엔드가 거부하는 op)
       if (surface === 'glow' && glowPaintLocked) return;
       const property = surface === 'note' ? 'notePaint' : 'noteGlowPaint';
@@ -348,7 +355,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       // 신형·구형·상속 제시 spec은 알파가 이미 스톱에 실려 있다
       commitGradientPaint(
         surface,
-        hadPresented
+        hadPresented || meta?.gradientSource === 'remembered'
           ? value.spec
           : foldGradientOpacity(value.spec, localOpacity),
       );

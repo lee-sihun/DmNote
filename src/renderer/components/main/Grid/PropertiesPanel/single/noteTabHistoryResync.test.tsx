@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React, { act } from 'react';
+import React, { act, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NoteTabContent from './NoteTabContent';
@@ -15,6 +15,9 @@ type PickerProps = {
   color: string;
   opacityPercent?: number;
   hideColorAlpha?: boolean;
+  footerSlot?: ReactElement<{
+    onFormatChange: (next: 'solid' | 'gradient') => void;
+  }>;
   onColorChangeComplete: (color: string) => void;
 };
 
@@ -176,5 +179,41 @@ describe('NoteTabContent 열린 피커 재동기화', () => {
     if (patch?.property !== 'noteBorderPaint') return;
     expect(patch.value.opacity).toBe(100);
     expect('gradient' in patch.value && patch.value.gradient).toBeTruthy();
+  });
+
+  it('테두리 그라데이션을 단색으로 바꿨다 되돌려도 스톱 알파를 다시 곱하지 않는다', () => {
+    const fadedBorder: KeyPosition = {
+      ...gradientBorder(100),
+      noteBorderGradient: {
+        ...borderSpec,
+        stops: [
+          { color: 'rgba(255,0,0,0.6)', pos: 0 },
+          { color: 'rgba(0,0,255,0)', pos: 1 },
+        ],
+      },
+    };
+    render(fadedBorder);
+    openBorderPicker();
+
+    act(() => captured.picker?.footerSlot?.props.onFormatChange('solid'));
+    expect(commit.mock.calls.at(-1)?.[0]).toEqual({
+      property: 'noteBorderPaint',
+      value: { color: '#FF0000', opacity: 60 },
+    });
+
+    render(solidBorder(60));
+    act(() => captured.picker?.footerSlot?.props.onFormatChange('gradient'));
+    const patch = commit.mock.calls.at(-1)?.[0];
+    expect(patch?.property).toBe('noteBorderPaint');
+    if (
+      patch?.property !== 'noteBorderPaint' ||
+      !('gradient' in patch.value) ||
+      !patch.value.gradient
+    )
+      throw new Error(
+        `gradient border patch expected: ${JSON.stringify(patch)}`,
+      );
+    expect(patch.value.gradient.stops[0].color).toBe('rgba(255,0,0,0.6)');
+    expect(patch.value.opacity).toBe(100);
   });
 });

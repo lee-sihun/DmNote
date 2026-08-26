@@ -18,7 +18,10 @@ import {
 } from '@src/types/key/notePaint';
 import { parseStrictStopColor } from '@src/types/color';
 import { parseAlphaPercent } from '@utils/color/colorUtils';
-import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import {
+  useGradientColorState,
+  type GradientCommitMeta,
+} from '@hooks/pickers/useGradientColorState';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import {
   DEFAULT_NOTE_COLOR,
@@ -234,7 +237,8 @@ export const useBatchNotePaint = ({
 
   // 본체·글로우 커밋 (계약 §9-5) - 전환·배율·shadow를 한 op으로
   const makePaintCommit =
-    (surface: 'note' | 'glow') => (value: ColorModeValue) => {
+    (surface: 'note' | 'glow') =>
+    (value: ColorModeValue, meta?: GradientCommitMeta) => {
       if (!commitNotePaint) return;
       const property = surface === 'note' ? 'notePaint' : 'noteGlowPaint';
       // 그라데이션(신형·구형·상속 제시)이 하나라도 있는 선택만 원자 op 대상.
@@ -275,7 +279,7 @@ export const useBatchNotePaint = ({
       // 단색에서 넘어오는 첫 커밋만 단색 투명도를 스톱 알파에 접는다
       commitGradientPaint(
         surface,
-        firstPresented
+        firstPresented || meta?.gradientSource === 'remembered'
           ? value.spec
           : foldGradientOpacity(value.spec, localOpacity),
       );
@@ -300,7 +304,10 @@ export const useBatchNotePaint = ({
     commitNotePaint(patch);
   };
 
-  const handleBorderPaintCommit = (value: ColorModeValue) => {
+  const handleBorderPaintCommit = (
+    value: ColorModeValue,
+    meta?: GradientCommitMeta,
+  ) => {
     const firstPresented = first ? presentedBorderSpec(first) : null;
     if (value.mode === 'solid') {
       if (!commitNotePaint) return;
@@ -321,7 +328,7 @@ export const useBatchNotePaint = ({
     }
     // 단색에서 넘어오는 첫 커밋은 단색 투명도를 스톱 알파에 접는다
     commitBorderGradientPaint(
-      firstPresented
+      firstPresented || meta?.gradientSource === 'remembered'
         ? value.spec
         : foldGradientOpacity(value.spec, borderOpacity),
     );

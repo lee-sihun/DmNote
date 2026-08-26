@@ -36,7 +36,11 @@ interface UseGradientColorStateOptions {
   /** 미리보기(드래그 중) — 상위 프리뷰 경로로 전달 */
   onPreview?: (value: ColorModeValue) => void;
   /** 확정 커밋 — atomic patch 산출은 호출부가 gradientPairPatch/counterFillPair로 */
-  onCommit: (value: ColorModeValue) => void;
+  onCommit: (value: ColorModeValue, meta?: GradientCommitMeta) => void;
+}
+
+export interface GradientCommitMeta {
+  gradientSource?: 'seed' | 'remembered' | 'edit';
 }
 
 /**
@@ -121,6 +125,9 @@ export function useGradientColorState({
     if (historyTickRef.current === historyTick) return;
     historyTickRef.current = historyTick;
     setDraft(null);
+    // undo/redo가 형식 전환보다 앞선 canonical 상태를 복원한 경우,
+    // 이후 전환에서 미래의 그라데이션을 되살리지 않게 왕복 기억도 폐기
+    lastGradientSpecsRef.current.clear();
   }, [historyTick]);
   const selectedStop =
     selection.key === contextKey
@@ -161,7 +168,10 @@ export function useGradientColorState({
         : undefined;
       const spec = storedSpec ?? remembered ?? seedSpecFromSolid(baseColor);
       setSelectedStop(0);
-      onCommit({ mode: 'gradient', spec });
+      onCommit(
+        { mode: 'gradient', spec },
+        { gradientSource: remembered ? 'remembered' : 'seed' },
+      );
     } else {
       if (contextKey && workingSpec) {
         lastGradientSpecsRef.current.set(contextKey, workingSpec);
@@ -176,7 +186,7 @@ export function useGradientColorState({
     if (commit) {
       // 커밋은 저장값 갱신으로 같은 렌더 패스에 반영 — 초안은 제거
       setDraft(null);
-      onCommit({ mode: 'gradient', spec });
+      onCommit({ mode: 'gradient', spec }, { gradientSource: 'edit' });
     } else {
       // 취소 복원 등으로 저장값과 같아진 preview는 draft를 남기지 않는다
       if (storedSpec && JSON.stringify(spec) === JSON.stringify(storedSpec)) {
