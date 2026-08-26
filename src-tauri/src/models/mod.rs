@@ -1268,11 +1268,11 @@ fn escape_removed_counter_stroke_collision(
     counter: &mut serde_json::Map<String, serde_json::Value>,
     removed_stroke: Option<&serde_json::Value>,
     had_removed_gradient: bool,
-) {
+) -> bool {
     let Ok(parsed) =
         serde_json::from_value::<KeyCounterSettings>(serde_json::Value::Object(counter.clone()))
     else {
-        return;
+        return false;
     };
     let legacy_collision = parsed.matches_legacy_default_snapshot();
     let previous_collision = parsed.matches_previous_default_snapshot();
@@ -1281,23 +1281,26 @@ fn escape_removed_counter_stroke_collision(
         || (previous_collision
             && !removed_counter_stroke_matches(removed_stroke, "transparent", "transparent"));
     if !(had_removed_gradient || custom_stroke) || !(legacy_collision || previous_collision) {
-        return;
+        return false;
     }
     let Some(fill) = counter
         .get_mut("fill")
         .and_then(serde_json::Value::as_object_mut)
     else {
-        return;
+        return false;
     };
+    let mut changed = false;
     for state in ["idle", "active"] {
         let Some(color) = fill.get(state).and_then(serde_json::Value::as_str) else {
             continue;
         };
-        fill.insert(
-            state.to_string(),
-            serde_json::Value::String(compact_canonical_rgba(color)),
-        );
+        let escaped = serde_json::Value::String(compact_canonical_rgba(color));
+        if fill.get(state) != Some(&escaped) {
+            fill.insert(state.to_string(), escaped);
+            changed = true;
+        }
     }
+    changed
 }
 
 fn scrub_removed_text_outline_from_position(position: &mut serde_json::Value) -> bool {
@@ -1317,7 +1320,11 @@ fn scrub_removed_text_outline_from_position(position: &mut serde_json::Value) ->
     let had_removed_gradient = counter.remove("strokeIdleGradient").is_some()
         | counter.remove("strokeActiveGradient").is_some();
     changed |= removed_stroke.is_some() || had_removed_gradient;
-    escape_removed_counter_stroke_collision(counter, removed_stroke.as_ref(), had_removed_gradient);
+    changed |= escape_removed_counter_stroke_collision(
+        counter,
+        removed_stroke.as_ref(),
+        had_removed_gradient,
+    );
     changed
 }
 
