@@ -663,8 +663,9 @@ pub struct KeyPosition {
     /// 글꼴 굵기 (CSS font-weight 값, 예: 400, 700)
     #[serde(default)]
     pub font_weight: Option<u32>,
-    /// 선택 굵기에 +300을 적용하는 Bold 토글
-    #[serde(default)]
+    /// 선택 굵기에 +300을 적용하는 Bold 토글 - None은 직렬화하지 않는다
+    /// (IPC에서 null로 나가면 프론트 스키마가 거부해 설정 전체가 기본값으로 떨어진다)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_bold: Option<bool>,
     /// 이탤릭체 여부
     #[serde(default)]
@@ -1136,8 +1137,9 @@ pub struct KeyCounterSettings {
     pub font_size: u32,
     #[serde(default = "default_counter_font_weight")]
     pub font_weight: u32,
-    /// 선택 굵기에 +300을 적용하는 Bold 토글
-    #[serde(default)]
+    /// 선택 굵기에 +300을 적용하는 Bold 토글 - None은 직렬화하지 않는다
+    /// (IPC에서 null로 나가면 프론트 스키마가 거부해 설정 전체가 기본값으로 떨어진다)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_bold: Option<bool>,
     /// 카운터 글꼴 패밀리 (커스텀 폰트 이름)
     #[serde(default)]
@@ -1251,7 +1253,6 @@ impl KeyCounterSettings {
             self.gap = default_gap();
             self.font_size = default_counter_font_size();
             self.font_weight = default_counter_font_weight();
-            self.font_bold = Some(false);
             self.font_bold = Some(false);
             self.normalize();
             return true;

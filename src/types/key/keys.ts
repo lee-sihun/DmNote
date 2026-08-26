@@ -57,7 +57,8 @@ const keyCounterSettingsInputSchema = z
     gap: z.number().int().min(0).optional(),
     fontSize: z.number().int().min(8).max(72).optional(),
     fontWeight: z.number().int().min(100).max(900).optional(),
-    fontBold: z.boolean().optional(),
+    // Rust Option은 IPC에서 null로 올 수 있다 - 거부하면 카운터 설정 전체가 폴백된다
+    fontBold: z.boolean().nullable().optional(),
     fontFamily: z.string().nullable().optional(),
     fontItalic: z.boolean().optional(),
     fontUnderline: z.boolean().optional(),
