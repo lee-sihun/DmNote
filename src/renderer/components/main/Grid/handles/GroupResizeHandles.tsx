@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { isMac } from '@utils/core/platform';
+import { snapToGrid } from '@hooks/Grid/utils';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -419,10 +420,9 @@ const GroupResizeHandles = ({
 
       // store에서 스냅 크기 가져오기
       const snapSize =
-        useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
+        useSettingsStore.getState().gridSettings?.gridSnapSize ?? 5;
 
-      const snapDelta = (delta: number): number =>
-        Math.round(delta / snapSize) * snapSize;
+      const snapDelta = (delta: number): number => snapToGrid(delta, snapSize);
 
       const clampShrinkDelta = (
         delta: number,
@@ -430,7 +430,10 @@ const GroupResizeHandles = ({
         maxShrink: number,
       ): number => {
         if (!Number.isFinite(maxShrink) || maxShrink <= 0) return delta;
-        const maxSnapped = Math.floor(maxShrink / snapSize) * snapSize;
+        const maxSnapped =
+          snapSize > 0
+            ? Math.floor(maxShrink / snapSize) * snapSize
+            : maxShrink;
         if (handleDir === -1) {
           return Math.min(delta, maxSnapped);
         }
@@ -527,7 +530,7 @@ const GroupResizeHandles = ({
           groupBoundsForSnap,
           otherElements,
           undefined,
-          { disableSpacing: !spacingGuidesEnabled },
+          { disableSpacing: !spacingGuidesEnabled, gridSnapSize: snapSize },
         );
 
         // X축 스냅 적용

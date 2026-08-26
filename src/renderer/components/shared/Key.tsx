@@ -124,7 +124,7 @@ const DraggableKey = React.memo(
     const { getOtherElements } = useSmartGuidesElements();
 
     const gridSnapSize = useSettingsStore(
-      (state) => state.gridSettings?.gridSnapSize || 5,
+      (state) => state.gridSettings?.gridSnapSize ?? 5,
     );
 
     const isDraggingOrResizing = useGridSelectionStore(

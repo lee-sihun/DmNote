@@ -191,7 +191,7 @@ const Grid = ({
     (state) => state.gridSettings.minimapEnabled,
   );
   const gridSnapSize = useSettingsStore(
-    (state) => state.gridSettings?.gridSnapSize || 5,
+    (state) => state.gridSettings?.gridSnapSize ?? 5,
   );
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -1533,10 +1533,8 @@ const Grid = ({
         // 줌/팬 반영된 그리드 좌표 계산
         const gridCoords = clientToGridCoords(e.clientX, e.clientY);
         if (!gridCoords) return;
-        setGridAddLocalPos({
-          dx: Math.round(gridCoords.x),
-          dy: Math.round(gridCoords.y),
-        });
+        const snapped = snapCursorToGrid(gridCoords.x, gridCoords.y);
+        setGridAddLocalPos({ dx: snapped.x, dy: snapped.y });
         setGridContextClientPos({ x: e.clientX, y: e.clientY });
         setIsGridContextOpen(true);
       }}

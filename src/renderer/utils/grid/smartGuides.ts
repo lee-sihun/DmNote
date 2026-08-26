@@ -6,6 +6,8 @@
  * - 크기 일치 가이드 (Size Matching Guides)
  */
 
+import { roundToGrid } from './gridSnap';
+
 export interface ElementBounds {
   id: string;
   left: number;
@@ -168,6 +170,9 @@ export interface SnapPointsOptions {
 
   /** 간격(Spacing) 가이드/스냅 계산을 비활성화 */
   disableSpacing?: boolean;
+
+  /** 캔버스 중앙 스냅 결과를 맞출 그리드 크기, 0이면 반올림 없음 */
+  gridSnapSize?: number;
 }
 
 /**
@@ -189,6 +194,8 @@ export function calculateSnapPoints(
   let snappedY = draggedBounds.top;
   let didSnapX = false;
   let didSnapY = false;
+  let didSnapCanvasCenterX = false;
+  let didSnapCanvasCenterY = false;
 
   // 가장 가까운 스냅 포인트 추적
   let closestXDiff = Infinity;
@@ -205,7 +212,9 @@ export function calculateSnapPoints(
     // 그룹의 중심이 캔버스 중앙에 오도록 드래그 요소의 위치 계산
     const offsetX = draggedBounds.centerX - centerBounds.centerX;
     snappedX = CANVAS_CENTER_X - draggedBounds.width / 2 + offsetX;
+    snappedX = roundToGrid(snappedX, options?.gridSnapSize ?? 0);
     didSnapX = true;
+    didSnapCanvasCenterX = true;
   }
 
   // 요소(또는 그룹)의 중심이 캔버스 세로 중앙에 정렬
@@ -215,7 +224,9 @@ export function calculateSnapPoints(
     // 그룹의 중심이 캔버스 중앙에 오도록 드래그 요소의 위치 계산
     const offsetY = draggedBounds.centerY - centerBounds.centerY;
     snappedY = CANVAS_CENTER_Y - draggedBounds.height / 2 + offsetY;
+    snappedY = roundToGrid(snappedY, options?.gridSnapSize ?? 0);
     didSnapY = true;
+    didSnapCanvasCenterY = true;
   }
 
   for (const other of otherElements) {
@@ -230,6 +241,7 @@ export function calculateSnapPoints(
       closestXDiff = diff;
       snappedX = other.left;
       didSnapX = true;
+      didSnapCanvasCenterX = false;
     }
 
     // 오른쪽 가장자리 정렬 (right-to-right)
@@ -238,6 +250,7 @@ export function calculateSnapPoints(
       closestXDiff = diff;
       snappedX = other.right - draggedBounds.width;
       didSnapX = true;
+      didSnapCanvasCenterX = false;
     }
 
     // 왼쪽-오른쪽 정렬 (left-to-right) - 임시 비활성화
@@ -262,6 +275,7 @@ export function calculateSnapPoints(
       closestXDiff = diff;
       snappedX = other.centerX - draggedBounds.width / 2;
       didSnapX = true;
+      didSnapCanvasCenterX = false;
     }
 
     // === Y축 (수평 가이드라인) 스냅 체크 ===
@@ -272,6 +286,7 @@ export function calculateSnapPoints(
       closestYDiff = diff;
       snappedY = other.top;
       didSnapY = true;
+      didSnapCanvasCenterY = false;
     }
 
     // 하단 정렬 (bottom-to-bottom)
@@ -280,6 +295,7 @@ export function calculateSnapPoints(
       closestYDiff = diff;
       snappedY = other.bottom - draggedBounds.height;
       didSnapY = true;
+      didSnapCanvasCenterY = false;
     }
 
     // 상단-하단 정렬 (top-to-bottom) - 임시 비활성화
@@ -304,6 +320,7 @@ export function calculateSnapPoints(
       closestYDiff = diff;
       snappedY = other.centerY - draggedBounds.height / 2;
       didSnapY = true;
+      didSnapCanvasCenterY = false;
     }
   }
 
@@ -419,7 +436,10 @@ export function calculateSnapPoints(
     : snappedBounds;
 
   // X축: 요소(또는 그룹) 중심이 캔버스 가로 중앙에 정렬된 경우
-  if (didSnapX && Math.abs(snappedCenterBounds.centerX - CANVAS_CENTER_X) < 1) {
+  if (
+    didSnapCanvasCenterX ||
+    (didSnapX && Math.abs(snappedCenterBounds.centerX - CANVAS_CENTER_X) < 1)
+  ) {
     guides.push({
       type: 'vertical',
       position: CANVAS_CENTER_X,
@@ -428,7 +448,10 @@ export function calculateSnapPoints(
   }
 
   // Y축: 요소(또는 그룹) 중심이 캔버스 세로 중앙에 정렬된 경우
-  if (didSnapY && Math.abs(snappedCenterBounds.centerY - CANVAS_CENTER_Y) < 1) {
+  if (
+    didSnapCanvasCenterY ||
+    (didSnapY && Math.abs(snappedCenterBounds.centerY - CANVAS_CENTER_Y) < 1)
+  ) {
     guides.push({
       type: 'horizontal',
       position: CANVAS_CENTER_Y,

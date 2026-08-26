@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { isMac } from '@utils/core/platform';
+import { snapToGrid } from '@hooks/Grid/utils';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   clearPendingCustomCursorHover,
@@ -320,10 +321,9 @@ const ResizeHandles = ({
 
       // store에서 스냅 크기 가져오기
       const snapSize =
-        useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
+        useSettingsStore.getState().gridSettings?.gridSnapSize ?? 5;
 
-      const snap = (value: number): number =>
-        Math.round(value / snapSize) * snapSize;
+      const snap = (value: number): number => snapToGrid(value, snapSize);
 
       // 새 bounds 계산 (스냅 전)
       let nextWidth = startBounds!.width;

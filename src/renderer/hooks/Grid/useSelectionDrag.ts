@@ -16,6 +16,7 @@ import {
 import { DRAG_THRESHOLD } from './constants';
 import { tryAcquireDragSession, releaseDragSession } from './dragSession';
 import { isMac } from '@utils/core/platform';
+import { snapToGrid } from '@hooks/Grid/utils';
 
 interface SelectedElementLike {
   id: string;
@@ -168,6 +169,7 @@ export const useSelectionDrag = ({
         const newX = startX + rawDeltaX;
         const newY = startY + rawDeltaY;
         const gridSettings = useSettingsStore.getState().gridSettings;
+        const gridSnapSize = gridSettings?.gridSnapSize ?? 5;
         // 플랫폼 primary modifier로 스마트 스냅 일시 해제 (그리드 스냅은 유지)
         const suppressSmartSnap = isMac()
           ? frameEvent.metaKey
@@ -224,6 +226,7 @@ export const useSelectionDrag = ({
               {
                 groupBounds,
                 disableSpacing: !spacingGuidesEnabled,
+                gridSnapSize,
               },
             )
           : null;
@@ -236,8 +239,7 @@ export const useSelectionDrag = ({
               ? newX + snapResult.snappedX - groupBounds.left
               : snapResult.snappedX;
         } else {
-          const snapSize = gridSettings?.gridSnapSize || 5;
-          finalX = Math.round(newX / snapSize) * snapSize;
+          finalX = snapToGrid(newX, gridSnapSize);
         }
         if (snapResult?.didSnapY) {
           finalY =
@@ -245,8 +247,7 @@ export const useSelectionDrag = ({
               ? newY + snapResult.snappedY - groupBounds.top
               : snapResult.snappedY;
         } else {
-          const snapSize = gridSettings?.gridSnapSize || 5;
-          finalY = Math.round(newY / snapSize) * snapSize;
+          finalY = snapToGrid(newY, gridSnapSize);
         }
 
         // finalX/finalY는 이미 스마트 스냅 좌표 또는 그리드 배수 - 델타를

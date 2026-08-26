@@ -2232,7 +2232,7 @@ pub struct GridSettings {
     /// 미니맵 표시 여부
     #[serde(default = "default_true")]
     pub minimap_enabled: bool,
-    /// 그리드 스냅 크기 (1-10px)
+    /// 그리드 스냅 크기 (0-10px, 0은 끄기)
     #[serde(default = "default_grid_snap_size")]
     pub grid_snap_size: u32,
     /// 오버레이 여백 (0-30px)
