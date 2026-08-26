@@ -113,11 +113,13 @@ export const measureCounterGlyphBox = (
   const lineBox = element.offsetHeight;
   const baselineY = (lineBox - (fontAscent + fontDescent)) / 2 + fontAscent;
   const paddingLeft = parseFloat(cs.paddingLeft) || 0;
+  // TextMetrics 외곽선은 실제 래스터보다 작게 나와 가장자리가 잘린다 -
+  // 라벨 경로와 같은 1px 여유를 사방에 둔다
   return {
-    x: paddingLeft + span.left,
-    y: baselineY - band.ascent,
-    width: span.right - span.left,
-    height: band.ascent + band.descent,
+    x: paddingLeft + span.left - INK_BLEED_PX,
+    y: baselineY - band.ascent - INK_BLEED_PX,
+    width: span.right - span.left + INK_BLEED_PX * 2,
+    height: band.ascent + band.descent + INK_BLEED_PX * 2,
   };
 };
 
