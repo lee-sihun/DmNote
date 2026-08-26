@@ -69,11 +69,26 @@ pub struct CssLoadResponse {
     pub path: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CssImportFetchResult {
     pub final_url: String,
     pub text: String,
+}
+
+fn is_cloud_metadata_url(url: &url::Url) -> bool {
+    match url.host() {
+        Some(url::Host::Domain(host)) => matches!(
+            host.trim_end_matches('.').to_ascii_lowercase().as_str(),
+            "metadata.google.internal" | "metadata.azure.internal"
+        ),
+        Some(url::Host::Ipv4(ip)) => matches!(
+            ip.octets(),
+            [169, 254, 169, 254] | [169, 254, 170, 2] | [100, 100, 100, 200] | [192, 0, 0, 192]
+        ),
+        Some(url::Host::Ipv6(ip)) => ip.to_string() == "fd00:ec2::254",
+        None => false,
+    }
 }
 
 fn validate_css_import_url(raw: &str) -> CmdResult<url::Url> {
@@ -84,6 +99,11 @@ fn validate_css_import_url(raw: &str) -> CmdResult<url::Url> {
             "unsupported CSS import URL scheme '{}': only http and https are allowed",
             url.scheme()
         )));
+    }
+    if is_cloud_metadata_url(&url) {
+        return Err(CommandError::msg(
+            "CSS import access to cloud metadata endpoints is blocked",
+        ));
     }
     Ok(url)
 }
@@ -113,22 +133,30 @@ fn ensure_css_import_window(window_label: &str) -> CmdResult<()> {
     Ok(())
 }
 
+fn css_import_fetch_limit() -> &'static Arc<Semaphore> {
+    CSS_IMPORT_FETCH_LIMIT
+        .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_CSS_IMPORT_FETCHES)))
+}
+
 fn css_import_client() -> CmdResult<&'static Client> {
     CSS_IMPORT_CLIENT
         .get_or_init(|| {
             Client::builder()
                 .timeout(CSS_IMPORT_FETCH_TIMEOUT)
-                .redirect(reqwest::redirect::Policy::limited(MAX_CSS_IMPORT_REDIRECTS))
+                .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                    if attempt.previous().len() > MAX_CSS_IMPORT_REDIRECTS {
+                        attempt.error("CSS import exceeded redirect limit")
+                    } else if is_cloud_metadata_url(attempt.url()) {
+                        attempt.error("CSS import access to cloud metadata endpoints is blocked")
+                    } else {
+                        attempt.follow()
+                    }
+                }))
                 .build()
                 .map_err(|error| format!("failed to initialize CSS import client: {error}"))
         })
         .as_ref()
         .map_err(|error| CommandError::msg(error.clone()))
-}
-
-fn css_import_fetch_limit() -> &'static Arc<Semaphore> {
-    CSS_IMPORT_FETCH_LIMIT
-        .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_CSS_IMPORT_FETCHES)))
 }
 
 fn fetch_css_import(url: String) -> CmdResult<CssImportFetchResult> {
@@ -1100,7 +1128,7 @@ fn css_tab_export_from_path(
 #[cfg(test)]
 mod tests {
     use super::{
-        css_import_client, ensure_css_extension, ensure_css_import_window,
+        ensure_css_extension, ensure_css_import_window, fetch_css_import,
         prepare_tab_css_for_set_with, read_css_import_body, replace_tab_css_override,
         validate_css_import_url, write_tab_css_export, MAX_CSS_IMPORT_BYTES,
     };
@@ -1151,11 +1179,86 @@ mod tests {
     }
 
     #[test]
-    fn css_import_client_is_reused() {
-        let first = css_import_client().unwrap();
-        let second = css_import_client().unwrap();
+    fn css_import_blocks_only_explicit_metadata_targets() {
+        for allowed in [
+            "http://127.0.0.1:5500/theme.css",
+            "http://10.0.0.1/theme.css",
+            "https://example.com/theme.css",
+        ] {
+            validate_css_import_url(allowed).unwrap();
+        }
+        for blocked in [
+            "http://169.254.169.254/latest/meta-data",
+            "http://169.254.170.2/v2/credentials",
+            "http://100.100.100.200/latest/meta-data",
+            "http://192.0.0.192/metadata",
+            "http://[fd00:ec2::254]/latest/meta-data",
+            "http://metadata.google.internal/computeMetadata/v1",
+            "http://metadata.azure.internal/metadata/instance",
+        ] {
+            assert!(validate_css_import_url(blocked).is_err(), "{blocked}");
+        }
+    }
 
-        assert!(std::ptr::eq(first, second));
+    #[test]
+    fn css_import_follows_local_redirect_without_prompt() {
+        use std::io::{Read as _, Write as _};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            for request_index in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 2_048];
+                let _ = stream.read(&mut request).unwrap();
+                if request_index == 0 {
+                    stream
+                        .write_all(
+                            b"HTTP/1.1 302 Found\r\nLocation: /theme.css\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        )
+                        .unwrap();
+                } else {
+                    stream
+                        .write_all(
+                            b"HTTP/1.1 200 OK\r\nContent-Length: 22\r\nConnection: close\r\n\r\n.counter { color:red }",
+                        )
+                        .unwrap();
+                }
+            }
+        });
+        let fetched = fetch_css_import(format!("http://{address}/start.css")).unwrap();
+
+        server.join().unwrap();
+        assert_eq!(fetched.final_url, format!("http://{address}/theme.css"));
+        assert_eq!(fetched.text, ".counter { color:red }");
+    }
+
+    #[test]
+    fn css_import_blocks_metadata_redirect_before_requesting_it() {
+        use std::io::{Read as _, Write as _};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 2_048];
+            let _ = stream.read(&mut request).unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: http://169.254.169.254/latest/meta-data\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        });
+
+        let error = fetch_css_import(format!("http://{address}/start.css")).unwrap_err();
+
+        server.join().unwrap();
+        assert!(
+            error.to_string().contains("error following redirect"),
+            "unexpected redirect error: {error}"
+        );
     }
 
     #[test]
