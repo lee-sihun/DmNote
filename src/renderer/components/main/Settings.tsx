@@ -1225,14 +1225,12 @@ const Settings = ({
                   align="right"
                 />
               </SettingRow>
-              {!isMacOS && (
-                <SettingToggleRow
-                  commitStrategy="after-paint"
-                  label={t('settings.autoUpdate')}
-                  checked={autoUpdateEnabled}
-                  onToggle={handleAutoUpdateToggle}
-                />
-              )}
+              <SettingToggleRow
+                commitStrategy="after-paint"
+                label={t('settings.autoUpdate')}
+                checked={autoUpdateEnabled}
+                onToggle={handleAutoUpdateToggle}
+              />
               <SettingToggleRow
                 commitStrategy="after-paint"
                 label={t('settings.developerMode')}
