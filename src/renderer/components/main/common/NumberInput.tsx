@@ -36,6 +36,8 @@ export interface NumberInputProps {
   decimalScale?: number;
   /** 방향키 눈금. 미지정이면 1, Shift는 이 값의 10배 */
   step?: number;
+  /** 라벨 없는 자리에서 쓰는 접근성 이름 */
+  ariaLabel?: string;
   isMixed?: boolean;
   mixedPlaceholder?: string;
 }
@@ -138,6 +140,7 @@ interface NumberFieldProps {
   textClass: string;
   /** placeholder 전용 표현 - 레이어에는 해당 없음 */
   placeholderClass?: string;
+  ariaLabel?: string;
   pop: DigitPopState | null;
   invalid: boolean;
   tooltip: string;
@@ -158,6 +161,7 @@ const NumberInputField: React.FC<NumberFieldProps> = ({
   placeholder,
   textClass,
   placeholderClass = '',
+  ariaLabel,
   pop,
   invalid,
   tooltip,
@@ -202,6 +206,7 @@ const NumberInputField: React.FC<NumberFieldProps> = ({
         onBlur={onBlur}
         placeholder={placeholder}
         title={tooltip}
+        aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
         className={`${NUMBER_FIELD_CLASS} ${textClass} ${placeholderClass} ${
           popping ? 'dmn-digit-pop-host' : ''
@@ -234,6 +239,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   allowDecimal = false,
   decimalScale = 1,
   step,
+  ariaLabel,
   isMixed = false,
   mixedPlaceholder = 'Mixed',
 }) => {
@@ -730,6 +736,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
             ? 'placeholder:text-fg-faint placeholder:italic'
             : ''
         }
+        ariaLabel={ariaLabel}
         pop={digitPop.pop}
         invalid={fieldError.active}
         tooltip={messages.expressionHint}

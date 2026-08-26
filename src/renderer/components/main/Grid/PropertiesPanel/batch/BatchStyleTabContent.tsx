@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
 import { paintDescriptor, resolveStatePair } from '@src/types/color';
+import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
 import {
   PropertyRow,
   NumberInput,
@@ -232,6 +233,23 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     );
   };
 
+  // 피커 칸은 hex와 알파를 따로 판단한다. 색이 같고 알파만 갈리면 hex는 공통값이다
+  const mixedColorParts = (
+    getColor: (position: KeyPosition) => string | undefined,
+    fallback: string,
+  ) => {
+    const mixedFn =
+      effectiveColorState === 'active' ? activeMixedValue : getMixedValue;
+    return {
+      hexMixed: mixedFn((pos) => toRgbHexColor(getColor(pos) ?? fallback), '')
+        .isMixed,
+      alphaMixed: mixedFn(
+        (pos) => parseAlphaPercent(getColor(pos) ?? fallback),
+        100,
+      ).isMixed,
+    };
+  };
+
   const fontColorFor = (position: KeyPosition, active: boolean) => {
     const idle = position.fontColor?.trim() ? position.fontColor : undefined;
     const activeColor = position.activeFontColor?.trim()
@@ -402,6 +420,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           ) : null}
           <ColorInput
             colorId={`batch-background:${batchSelectionKey}`}
+            {...mixedColorParts(
+              (pos) =>
+                colorPairFor(
+                  pos,
+                  'backgroundColor',
+                  effectiveColorState === 'active',
+                ).color,
+              effectiveColorState === 'active'
+                ? DEFAULT_ELEMENT_ACTIVE_BG
+                : DEFAULT_ELEMENT_BG,
+            )}
             value={
               getMixedValue(
                 (pos) => colorPairFor(pos, 'backgroundColor', false).color,
@@ -469,6 +498,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           ) : null}
           <ColorInput
             colorId={`batch-border:${batchSelectionKey}`}
+            {...mixedColorParts(
+              (pos) =>
+                colorPairFor(
+                  pos,
+                  'borderColor',
+                  effectiveColorState === 'active',
+                ).color,
+              effectiveColorState === 'active'
+                ? DEFAULT_ELEMENT_ACTIVE_BORDER
+                : DEFAULT_ELEMENT_BORDER,
+            )}
             gradientSurface="border"
             value={
               getMixedValue(
@@ -726,6 +766,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <ColorInput
+                  {...mixedColorParts(
+                    (pos) =>
+                      fontColorFor(pos, effectiveColorState === 'active'),
+                    effectiveColorState === 'active'
+                      ? DEFAULT_ELEMENT_ACTIVE_FONT
+                      : DEFAULT_ELEMENT_FONT,
+                  )}
                   value={
                     getMixedValue(
                       (pos) => fontColorFor(pos, false),

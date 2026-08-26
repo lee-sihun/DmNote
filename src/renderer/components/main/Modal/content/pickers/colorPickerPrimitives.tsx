@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { hsvToColorObject, type ColorObject } from '@utils/color/colorUtils';
 import { CHECKER_PATTERN, CHECKER_SIZE } from './ColorSwatch';
 import {
@@ -35,9 +36,10 @@ interface ColorTrackProps {
 const clampRatio = (value: number): number =>
   value < 0 ? 0 : value > 1 ? 1 : value;
 
+// layout effect라야 flushSync로 당긴 커밋 직후 같은 호출 스택에서 최신 값을 읽는다
 const useLatest = <T,>(value: T) => {
   const ref = useRef(value);
-  useEffect(() => {
+  useLayoutEffect(() => {
     ref.current = value;
   });
   return ref;
@@ -118,6 +120,15 @@ export const usePointerSession = (
     const target = event.currentTarget;
     const rect = target.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
+    // 트랙 드래그가 시작되면 같은 팝업 안의 텍스트 편집은 끝난 것으로 본다.
+    // 먼저 blur해 확정하고 그 커밋을 flushSync로 당겨야 첫 preview가 확정된 색에서
+    // 출발한다. 확정만 하고 렌더를 기다리면 emit이 옛 색 클로저로 hex를 되덮는다
+    const scope =
+      target.closest('[role="dialog"]') ?? target.ownerDocument.body;
+    const active = target.ownerDocument.activeElement;
+    if (active?.matches('input, textarea') && scope.contains(active)) {
+      flushSync(() => (active as HTMLElement).blur());
+    }
     activePointerRef.current = event.pointerId;
     targetRef.current = target;
     rectRef.current = rect;

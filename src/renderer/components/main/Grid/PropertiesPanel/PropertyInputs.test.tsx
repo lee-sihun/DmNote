@@ -7,8 +7,22 @@ vi.mock('@contexts/useTranslation', () => ({
 }));
 
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
-  default: ({ footerSlot }: { footerSlot?: React.ReactNode }) => (
-    <div data-testid="color-picker">{footerSlot}</div>
+  default: ({
+    footerSlot,
+    hexMixed,
+    opacityPercentMixed,
+  }: {
+    footerSlot?: React.ReactNode;
+    hexMixed?: boolean;
+    opacityPercentMixed?: boolean;
+  }) => (
+    <div
+      data-testid="color-picker"
+      data-hex-mixed={hexMixed ? 'true' : undefined}
+      data-alpha-mixed={opacityPercentMixed ? 'true' : undefined}
+    >
+      {footerSlot}
+    </div>
   ),
 }));
 
@@ -1702,6 +1716,25 @@ describe('ColorInput deferred picker mount', () => {
     expect(
       container.querySelector('[data-testid="color-picker"]'),
     ).not.toBeNull();
+  });
+
+  it('배치 Mixed 신호를 hex·알파로 나눠 피커에 넘긴다', () => {
+    act(() =>
+      root.render(
+        <ColorInput
+          value="#ffffff"
+          onChange={() => {}}
+          pickerMountStrategy="sync"
+          hexMixed
+          alphaMixed={false}
+        />,
+      ),
+    );
+    act(() => container.querySelector('button')!.click());
+
+    const picker = container.querySelector('[data-testid="color-picker"]')!;
+    expect(picker.getAttribute('data-hex-mixed')).toBe('true');
+    expect(picker.getAttribute('data-alpha-mixed')).toBeNull();
   });
 
   it('sync 전략은 클릭 이벤트에서 피커를 즉시 mount한다', () => {

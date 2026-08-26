@@ -434,6 +434,17 @@ interface BatchLocalColors {
   strokeActive: string;
 }
 
+interface BatchLocalOpacities {
+  noteOpacity: number;
+  noteOpacityTop: number;
+  noteOpacityBottom: number;
+  glowOpacity: number;
+  glowOpacityTop: number;
+  glowOpacityBottom: number;
+}
+
+type OpacityTarget = 'solid' | 'top' | 'bottom';
+
 interface BatchKeyLikePanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
   // native+plugin 합산 개수 - 헤더 표시·분배 게이트 (미전달 시 native 개수)
@@ -480,6 +491,8 @@ interface BatchKeyLikePanelProps {
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
   getMixedValue: MixedValueGetter<KeyPosition>;
+  /** 프리뷰가 섞이지 않은 canonical 기준. 게스처 취소 뒤 로컬 복원용 */
+  getMixedValueCanonical: MixedValueGetter<KeyPosition>;
   getMixedValueBatch: MixedValueGetter<KeyPosition>;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -506,9 +519,9 @@ interface BatchKeyLikePanelProps {
   setBatchCounterColorState: (value: 'idle' | 'active') => void;
   batchLocalColors: BatchLocalColors;
   setBatchLocalColors: React.Dispatch<React.SetStateAction<BatchLocalColors>>;
-  batchLocalOpacities: { noteOpacity: number; glowOpacity: number };
+  batchLocalOpacities: BatchLocalOpacities;
   setBatchLocalOpacities: React.Dispatch<
-    React.SetStateAction<{ noteOpacity: number; glowOpacity: number }>
+    React.SetStateAction<BatchLocalOpacities>
   >;
   handleBatchPickerToggle: (target: BatchPickerTarget) => void;
   handleBatchPickerColorChange: (newColor: NoteColor) => void;
@@ -562,6 +575,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   onNoteElementPropertyCommit,
   handleGraphBatchSharedSetting,
   getMixedValue,
+  getMixedValueCanonical,
   getMixedValueBatch,
   getMixedValueGraphs,
   getMixedValueKeysOnly,
@@ -584,7 +598,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   batchCounterColorState,
   setBatchCounterColorState,
   batchLocalColors,
-  setBatchLocalColors: _setBatchLocalColors,
+  setBatchLocalColors,
   batchLocalOpacities,
   setBatchLocalOpacities,
   handleBatchPickerToggle,
@@ -1032,11 +1046,32 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         isStat: selectedKeyLikeElements[0]?.type === 'stat',
       }
     : undefined;
-  const noteOpacityMixed = getMixedValue((pos) => pos.noteOpacity, 80).isMixed;
-  const glowOpacityMixed = getMixedValue(
+  // NOTE 탭은 키만 편집하므로 Mixed도 키 기준. 통계가 섞인 선택에서 통계 값이 Mixed를 만들지 않게
+  const noteMixedFn =
+    selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
+  const noteOpacityMixed = noteMixedFn((pos) => pos.noteOpacity, 80).isMixed;
+  const noteOpacityEdgesMixed = {
+    top: noteMixedFn((pos) => pos.noteOpacityTop ?? pos.noteOpacity, 80)
+      .isMixed,
+    bottom: noteMixedFn((pos) => pos.noteOpacityBottom ?? pos.noteOpacity, 80)
+      .isMixed,
+  };
+  const glowOpacityMixed = noteMixedFn(
     (pos) => pos.noteGlowOpacity,
     70,
   ).isMixed;
+  const glowOpacityEdgesMixed = {
+    top: noteMixedFn((pos) => pos.noteGlowOpacityTop ?? pos.noteGlowOpacity, 70)
+      .isMixed,
+    bottom: noteMixedFn(
+      (pos) => pos.noteGlowOpacityBottom ?? pos.noteGlowOpacity,
+      70,
+    ).isMixed,
+  };
+  const isGradientNoteColor = (value: NoteColor) =>
+    typeof value === 'object' && value !== null && 'type' in value;
+  const batchNoteIsGradient = isGradientNoteColor(batchLocalColors.noteColor);
+  const batchGlowIsGradient = isGradientNoteColor(batchLocalColors.glowColor);
   const batchSpacing = getBatchSpacingValue();
   const graphTypeState = getMixedValueGraphs(
     (pos) => pos.graphType || 'line',
@@ -1054,6 +1089,17 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     (pos) => pos.graphColor || '#86EFAC',
     '#86EFAC',
   );
+  // 피커 칸은 hex와 알파를 따로 판단한다. 그래프 색은 rgba 문자열일 수 있다
+  const graphColorMixed = {
+    hex: getMixedValueGraphs(
+      (pos) => toRgbHexColor(pos.graphColor || '#86EFAC'),
+      '',
+    ).isMixed,
+    alpha: getMixedValueGraphs(
+      (pos) => parseAlphaPercent(pos.graphColor || '#86EFAC'),
+      100,
+    ).isMixed,
+  };
   const graphAnimationState = getMixedValueGraphs(
     (pos) => pos.graphAnimationEnabled ?? true,
     true,
@@ -1067,6 +1113,103 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
     { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
   ];
+
+  // 열린 배치 피커의 hex 칸·% 칸 Mixed. 두 칸은 따로 판단하고, 저장 표현(대소문자·rgba·hex8)이
+  // 달라도 같은 색이면 공통값으로 본다
+  const batchPickerMixed = ((): {
+    hex: boolean;
+    alpha: boolean | { top: boolean; bottom: boolean };
+  } => {
+    const paintHex = (value: NoteColor | undefined) =>
+      typeof value === 'string' ? toRgbHexColor(value) : value;
+    switch (batchPickerFor) {
+      case 'noteColor':
+        return {
+          hex: noteMixedFn((pos) => paintHex(pos.noteColor), '#FFFFFF').isMixed,
+          alpha: batchNoteIsGradient ? noteOpacityEdgesMixed : noteOpacityMixed,
+        };
+      case 'glowColor':
+        return {
+          hex: noteMixedFn(
+            (pos) => paintHex(pos.noteGlowColor ?? pos.noteColor),
+            '#FFFFFF',
+          ).isMixed,
+          alpha: batchGlowIsGradient ? glowOpacityEdgesMixed : glowOpacityMixed,
+        };
+      case 'borderColor':
+        return {
+          hex: noteMixedFn((pos) => toRgbHexColor(pos.noteBorderColor), '')
+            .isMixed,
+          alpha: noteMixedFn((pos) => pos.noteBorderOpacity, 100).isMixed,
+        };
+      case 'fill':
+      case 'stroke': {
+        // 입력 상태 색은 통계를 편집하지 않으므로 Mixed도 같은 집합으로
+        const state = batchCounterColorState === 'active' ? 'active' : 'idle';
+        const mixedFn =
+          state === 'active' ? getMixedValueActiveCapable : getMixedValue;
+        const colorOf = (pos: KeyPosition) =>
+          normalizeCounterSettings(pos.counter)[batchPickerFor][state];
+        return {
+          hex: mixedFn((pos) => toRgbHexColor(colorOf(pos)), '').isMixed,
+          alpha: mixedFn((pos) => parseAlphaPercent(colorOf(pos)), 100).isMixed,
+        };
+      }
+      default:
+        return { hex: false, alpha: false };
+    }
+  })();
+
+  // 단일 선택과 같은 규칙: 상·하단은 각자 바꾸고 base는 평균, 단색은 셋을 같은 값으로.
+  // base만 저장하면 남아 있는 상·하단이 우선해 바꾼 값이 보이지 않는다
+  const nextNoteOpacities = (
+    kind: 'note' | 'glow',
+    value: number,
+    target: OpacityTarget,
+  ) => {
+    if (target === 'solid') {
+      return { opacity: value, opacityTop: value, opacityBottom: value };
+    }
+    const local = batchLocalOpacities;
+    const top = kind === 'note' ? local.noteOpacityTop : local.glowOpacityTop;
+    const bottom =
+      kind === 'note' ? local.noteOpacityBottom : local.glowOpacityBottom;
+    const nextTop = target === 'top' ? value : top;
+    const nextBottom = target === 'bottom' ? value : bottom;
+    return {
+      opacity: Math.round((nextTop + nextBottom) / 2),
+      opacityTop: nextTop,
+      opacityBottom: nextBottom,
+    };
+  };
+
+  const applyNoteOpacities = (
+    kind: 'note' | 'glow',
+    next: { opacity: number; opacityTop: number; opacityBottom: number },
+  ) => {
+    setBatchLocalOpacities((prev) =>
+      kind === 'note'
+        ? {
+            ...prev,
+            noteOpacity: next.opacity,
+            noteOpacityTop: next.opacityTop,
+            noteOpacityBottom: next.opacityBottom,
+          }
+        : {
+            ...prev,
+            glowOpacity: next.opacity,
+            glowOpacityTop: next.opacityTop,
+            glowOpacityBottom: next.opacityBottom,
+          },
+    );
+  };
+
+  const batchOpacityKind =
+    batchPickerFor === 'noteColor'
+      ? 'note'
+      : batchPickerFor === 'glowColor'
+      ? 'glow'
+      : null;
 
   const getCounterColorDisplay = (target: 'fill' | 'stroke') => {
     const key =
@@ -1236,6 +1379,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         ) : null}
                         <ColorInput
                           value={graphColorState.value}
+                          hexMixed={graphColorMixed.hex}
+                          alphaMixed={graphColorMixed.alpha}
                           onChange={() => {}}
                           onChangeComplete={(value) =>
                             handleGraphBatchSharedSetting({
@@ -1452,55 +1597,108 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               }
               opacityPercent={
                 batchPickerFor === 'noteColor'
-                  ? batchLocalOpacities.noteOpacity
+                  ? batchNoteIsGradient
+                    ? {
+                        top: batchLocalOpacities.noteOpacityTop,
+                        bottom: batchLocalOpacities.noteOpacityBottom,
+                      }
+                    : batchLocalOpacities.noteOpacity
                   : batchPickerFor === 'glowColor'
-                  ? batchLocalOpacities.glowOpacity
+                  ? batchGlowIsGradient
+                    ? {
+                        top: batchLocalOpacities.glowOpacityTop,
+                        bottom: batchLocalOpacities.glowOpacityBottom,
+                      }
+                    : batchLocalOpacities.glowOpacity
                   : undefined
               }
-              onOpacityPercentChange={(value: number) => {
-                if (batchPickerFor === 'noteColor') {
-                  setBatchLocalOpacities((prev) => ({
-                    ...prev,
-                    noteOpacity: value,
-                  }));
-                  previewNotePaint?.({
-                    property: 'notePaint',
-                    value: { opacity: value },
-                  });
-                } else if (batchPickerFor === 'glowColor') {
-                  setBatchLocalOpacities((prev) => ({
-                    ...prev,
-                    glowOpacity: value,
-                  }));
-                  previewNotePaint?.({
-                    property: 'noteGlowPaint',
-                    value: { opacity: value },
-                  });
-                }
+              onOpacityPercentChange={(value, target) => {
+                if (!batchOpacityKind) return;
+                const next = nextNoteOpacities(batchOpacityKind, value, target);
+                applyNoteOpacities(batchOpacityKind, next);
+                previewNotePaint?.({
+                  property:
+                    batchOpacityKind === 'note' ? 'notePaint' : 'noteGlowPaint',
+                  value: next,
+                });
               }}
-              onOpacityPercentChangeComplete={(value: number) => {
+              onOpacityPercentChangeComplete={(value, target) => {
+                if (!batchOpacityKind) return;
+                const next = nextNoteOpacities(batchOpacityKind, value, target);
+                applyNoteOpacities(batchOpacityKind, next);
+                commitNotePaint?.({
+                  property:
+                    batchOpacityKind === 'note' ? 'notePaint' : 'noteGlowPaint',
+                  value: next,
+                });
+              }}
+              onOpacityPercentCancel={() => {
+                // Escape는 게스처를 통째로 되돌린다. 로컬 대표값도 canonical에서 다시 읽어야
+                // 입력이 blur 뒤 옛 preview 값으로 재동기화되지 않는다
                 if (batchPickerFor === 'noteColor') {
-                  setBatchLocalOpacities((prev) => ({
-                    ...prev,
-                    noteOpacity: value,
-                  }));
-                  if (commitNotePaint) {
-                    commitNotePaint({
-                      property: 'notePaint',
-                      value: { opacity: value },
-                    });
-                  }
+                  editGestureController.cancel();
+                  const base = getMixedValueCanonical(
+                    (pos) => pos.noteOpacity,
+                    80,
+                  ).value;
+                  applyNoteOpacities('note', {
+                    opacity: base,
+                    opacityTop: getMixedValueCanonical(
+                      (pos) => pos.noteOpacityTop ?? pos.noteOpacity,
+                      base,
+                    ).value,
+                    opacityBottom: getMixedValueCanonical(
+                      (pos) => pos.noteOpacityBottom ?? pos.noteOpacity,
+                      base,
+                    ).value,
+                  });
                 } else if (batchPickerFor === 'glowColor') {
-                  setBatchLocalOpacities((prev) => ({
+                  editGestureController.cancel();
+                  const base = getMixedValueCanonical(
+                    (pos) => pos.noteGlowOpacity,
+                    70,
+                  ).value;
+                  applyNoteOpacities('glow', {
+                    opacity: base,
+                    opacityTop: getMixedValueCanonical(
+                      (pos) => pos.noteGlowOpacityTop ?? pos.noteGlowOpacity,
+                      base,
+                    ).value,
+                    opacityBottom: getMixedValueCanonical(
+                      (pos) => pos.noteGlowOpacityBottom ?? pos.noteGlowOpacity,
+                      base,
+                    ).value,
+                  });
+                } else if (batchPickerFor === 'borderColor') {
+                  editGestureController.cancel();
+                  const borderColor = getMixedValueCanonical(
+                    (pos) => pos.noteBorderColor,
+                    '#FFFFFF',
+                  ).value;
+                  const borderOpacity = getMixedValueCanonical(
+                    (pos) => pos.noteBorderOpacity,
+                    100,
+                  ).value;
+                  setBatchLocalColors((prev) => ({
                     ...prev,
-                    glowOpacity: value,
+                    borderColor,
+                    borderOpacity,
                   }));
-                  if (commitNotePaint) {
-                    commitNotePaint({
-                      property: 'noteGlowPaint',
-                      value: { opacity: value },
-                    });
-                  }
+                } else if (
+                  batchPickerFor === 'fill' ||
+                  batchPickerFor === 'stroke'
+                ) {
+                  // 카운터 색 preview는 로컬에만 머물러 게스처가 없다. 표시 중인 확정값으로 되돌린다
+                  const target = batchPickerFor;
+                  const state =
+                    batchCounterColorState === 'active' ? 'active' : 'idle';
+                  const key = `${target}${
+                    state === 'active' ? 'Active' : 'Idle'
+                  }` as const;
+                  setBatchLocalColors((prev) => ({
+                    ...prev,
+                    [key]: batchCounterSettings[target][state],
+                  }));
                 }
               }}
               opacityPercentLabel={
@@ -1510,13 +1708,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   ? t('keySetting.noteGlowOpacity') || '글로우 투명도'
                   : undefined
               }
-              opacityPercentMixed={
-                batchPickerFor === 'noteColor'
-                  ? noteOpacityMixed
-                  : batchPickerFor === 'glowColor'
-                  ? glowOpacityMixed
-                  : false
-              }
+              opacityPercentMixed={batchPickerMixed.alpha}
+              hexMixed={batchPickerMixed.hex}
             />
           ) : null}
         </PopupExit>
@@ -1715,6 +1908,17 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
     (pos) => pos.graphColor || '#86EFAC',
     '#86EFAC',
   );
+  // 피커 칸은 hex와 알파를 따로 판단한다. 그래프 색은 rgba 문자열일 수 있다
+  const graphColorMixed = {
+    hex: getMixedValueGraphs(
+      (pos) => toRgbHexColor(pos.graphColor || '#86EFAC'),
+      '',
+    ).isMixed,
+    alpha: getMixedValueGraphs(
+      (pos) => parseAlphaPercent(pos.graphColor || '#86EFAC'),
+      100,
+    ).isMixed,
+  };
   const graphAnimationState = getMixedValueGraphs(
     (pos) => pos.graphAnimationEnabled ?? true,
     true,
@@ -1836,6 +2040,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     ) : null}
                     <ColorInput
                       value={graphColorState.value}
+                      hexMixed={graphColorMixed.hex}
+                      alphaMixed={graphColorMixed.alpha}
                       onChange={() => {}}
                       onChangeComplete={(value) =>
                         handleGraphBatchSharedSetting({ graphColor: value })

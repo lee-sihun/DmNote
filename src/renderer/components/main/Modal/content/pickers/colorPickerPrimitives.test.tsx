@@ -14,6 +14,22 @@ const Harness = ({ emit }: HarnessProps) => {
   return <div data-track="true" {...session} />;
 };
 
+// 입력 blur가 바꾼 상태를 첫 emit이 읽어야 한다 (hex 확정 뒤 트랙 드래그)
+const BlurCommitHarness = ({
+  emit,
+}: {
+  emit: (hue: number, final: boolean) => void;
+}) => {
+  const [hue, setHue] = React.useState(0);
+  const session = usePointerSession((_x, _y, final) => emit(hue, final));
+  return (
+    <div role="dialog">
+      <input onBlur={() => setHue(120)} />
+      <div data-track="true" {...session} />
+    </div>
+  );
+};
+
 const pointerEvent = (
   type: string,
   { clientX, clientY }: { clientX: number; clientY: number },
@@ -123,5 +139,119 @@ describe('색상 트랙 pointer session', () => {
     expect(callbacks).toHaveLength(0);
     expect(emit).toHaveBeenLastCalledWith(1, 1, true);
     expect(emit).toHaveBeenCalledTimes(2);
+  });
+});
+
+// 드래그 시작은 텍스트 편집을 끝낸다. 첫 preview보다 먼저 blur해야
+// 입력 쪽 확정이 슬라이더 값을 나중에 덮지 않는다
+describe('색상 트랙 pointerdown과 활성 입력', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    vi.restoreAllMocks();
+  });
+
+  const mockTrack = () => {
+    const track = host.querySelector<HTMLElement>('[data-track="true"]')!;
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 100,
+      height: 10,
+      right: 100,
+      bottom: 10,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    Object.defineProperties(track, {
+      setPointerCapture: { value: vi.fn() },
+      hasPointerCapture: { value: vi.fn(() => true) },
+      releasePointerCapture: { value: vi.fn() },
+    });
+    return track;
+  };
+
+  it('blur가 확정한 상태에서 첫 preview가 출발한다', () => {
+    const emit = vi.fn<(hue: number, final: boolean) => void>();
+    act(() => root.render(<BlurCommitHarness emit={emit} />));
+    const input = host.querySelector('input')!;
+    const track = mockTrack();
+
+    act(() => input.focus());
+    act(() => {
+      track.dispatchEvent(
+        pointerEvent('pointerdown', { clientX: 50, clientY: 5 }),
+      );
+    });
+
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(120, false);
+  });
+
+  it('팝업 밖의 입력은 건드리지 않는다', () => {
+    const emit = vi.fn();
+    act(() => root.render(<BlurCommitHarness emit={emit} />));
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    const track = mockTrack();
+
+    outside.focus();
+    act(() => {
+      track.dispatchEvent(
+        pointerEvent('pointerdown', { clientX: 50, clientY: 5 }),
+      );
+    });
+
+    expect(document.activeElement).toBe(outside);
+    expect(emit).toHaveBeenCalledTimes(1);
+    outside.remove();
+  });
+
+  it('활성 input을 첫 preview 전에 blur한다', () => {
+    const order: string[] = [];
+    const emit = vi.fn(() => order.push('emit'));
+    act(() => root.render(<Harness emit={emit} />));
+    // render가 host의 기존 자식을 지우므로 입력은 그 뒤에 붙인다
+    const input = document.createElement('input');
+    host.appendChild(input);
+    input.addEventListener('blur', () => order.push('blur'));
+    const track = host.querySelector<HTMLElement>('[data-track="true"]')!;
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 100,
+      height: 10,
+      right: 100,
+      bottom: 10,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    Object.defineProperties(track, {
+      setPointerCapture: { value: vi.fn() },
+      hasPointerCapture: { value: vi.fn(() => true) },
+      releasePointerCapture: { value: vi.fn() },
+    });
+
+    input.focus();
+    expect(document.activeElement).toBe(input);
+    act(() => {
+      track.dispatchEvent(
+        pointerEvent('pointerdown', { clientX: 50, clientY: 5 }),
+      );
+    });
+
+    expect(document.activeElement).not.toBe(input);
+    expect(order).toEqual(['blur', 'emit']);
   });
 });

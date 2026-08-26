@@ -81,6 +81,9 @@ export interface ColorInputProps {
   canvasAnchor?: GradientCanvasAnchor;
   /** 편집 표면 — 캔버스 일시 페인트 대상 필드 (기본 background) */
   gradientSurface?: GradientPreviewSurface;
+  /** 배치 선택에서 hex·알파가 서로 다르면 피커 칸에 Mixed. 둘은 따로 판단한다 */
+  hexMixed?: boolean;
+  alphaMixed?: boolean;
 }
 
 export interface TextInputProps {

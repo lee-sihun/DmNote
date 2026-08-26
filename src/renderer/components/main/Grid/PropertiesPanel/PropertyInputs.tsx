@@ -241,6 +241,8 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   onModeCommit,
   canvasAnchor,
   gradientSurface = 'background',
+  hexMixed = false,
+  alphaMixed = false,
 }) => {
   // 외부 제어 모드인지 확인
   const isControlled =
@@ -477,6 +479,8 @@ export const ColorInput: React.FC<ColorInputProps> = ({
             onClose={handleClose}
             interactiveRefs={interactiveRefs}
             solidOnly={solidOnly}
+            hexMixed={hexMixed}
+            opacityPercentMixed={alphaMixed}
             stateMode={showStateTabs ? stateMode : undefined}
             onStateModeChange={
               showStateTabs ? handleStateModeChange : undefined

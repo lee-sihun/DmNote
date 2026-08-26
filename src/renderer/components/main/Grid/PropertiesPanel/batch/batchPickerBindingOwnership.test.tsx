@@ -472,6 +472,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       handleGraphBatchSharedSetting: vi.fn(),
       handleKnobBatchSharedSetting: vi.fn(),
       getMixedValue: mixedValue,
+      getMixedValueCanonical: mixedValue,
       getMixedValueBatch: mixedValue,
       getMixedValueGraphs: mixedValue,
       getMixedValueGraphsAsKey: mixedValue,

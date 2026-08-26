@@ -390,6 +390,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const positions = useKeyStore((state) => state.positions);
+  const canonicalPositions = useKeyStore((state) => state.canonicalPositions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const canonicalStatItemPositions = useStatItemStore(
     (state) => state.positions,
@@ -1079,10 +1080,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const [batchLocalOpacities, setBatchLocalOpacities] = useState<{
     noteOpacity: number;
+    noteOpacityTop: number;
+    noteOpacityBottom: number;
     glowOpacity: number;
+    glowOpacityTop: number;
+    glowOpacityBottom: number;
   }>({
     noteOpacity: 80,
+    noteOpacityTop: 80,
+    noteOpacityBottom: 80,
     glowOpacity: 70,
+    glowOpacityTop: 70,
+    glowOpacityBottom: 70,
   });
 
   // 선택이 변경되면 로컬 상태 초기화
@@ -1957,6 +1966,32 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return { isMixed, value: firstValue };
   };
 
+  // 게스처를 취소한 직후 로컬 대표값을 되돌릴 때 쓴다. positions는 프리뷰가 합성된
+  // 렌더 상태라 취소 직전 클로저로는 되돌아간 값을 읽을 수 없다
+  const getMixedValueCanonical = <T,>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const modePositions = canonicalPositions[selectedKeyType] ?? [];
+    const selected = selectedKeyLikeElements.flatMap((el) =>
+      el.type === 'key'
+        ? modePositions.filter((position) => position.id === el.id)
+        : [],
+    );
+    if (selected.length === 0) return { isMixed: false, value: defaultValue };
+
+    const firstValue = getter(selected[0]) ?? defaultValue;
+    const isMixed = selected.some((position) => {
+      const val = getter(position) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
+
+    return { isMixed, value: firstValue };
+  };
+
   const getMixedValueGraphs = <T,>(
     getter: (pos: GraphItemPosition) => T | undefined,
     defaultValue: T,
@@ -2631,15 +2666,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           strokeIdle: counterSettings.stroke.idle,
           strokeActive: counterSettings.stroke.active,
         });
+        const noteOpacity =
+          typeof firstPos.noteOpacity === 'number' ? firstPos.noteOpacity : 80;
+        const glowOpacity =
+          typeof firstPos.noteGlowOpacity === 'number'
+            ? firstPos.noteGlowOpacity
+            : 70;
         setBatchLocalOpacities({
-          noteOpacity:
-            typeof firstPos.noteOpacity === 'number'
-              ? firstPos.noteOpacity
-              : 80,
-          glowOpacity:
-            typeof firstPos.noteGlowOpacity === 'number'
-              ? firstPos.noteGlowOpacity
-              : 70,
+          noteOpacity,
+          noteOpacityTop: firstPos.noteOpacityTop ?? noteOpacity,
+          noteOpacityBottom: firstPos.noteOpacityBottom ?? noteOpacity,
+          glowOpacity,
+          glowOpacityTop: firstPos.noteGlowOpacityTop ?? glowOpacity,
+          glowOpacityBottom: firstPos.noteGlowOpacityBottom ?? glowOpacity,
         });
       }
     }
@@ -2890,6 +2929,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           onNoteElementPropertyCommit={handleBatchNoteElementPropertyCommit}
           handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
           getMixedValue={getMixedValue}
+          getMixedValueCanonical={getMixedValueCanonical}
           getMixedValueBatch={getMixedValueBatch}
           getMixedValueGraphs={getMixedValueGraphs}
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
