@@ -121,20 +121,6 @@ const createStylePropertyHandlers = (
   };
 };
 
-const paintPatchDetails = (patch: EditorPaintPropertyPatchV1) => {
-  const field = patch.property;
-  const descriptor = patch.value;
-  const { active, background } = paintPropertyFields(field);
-  return {
-    field,
-    descriptor,
-    active,
-    target: background
-      ? ('backgroundColor' as const)
-      : ('borderColor' as const),
-  };
-};
-
 const createPaintHandlers = (
   targets: readonly {
     elementType: 'key' | 'stat' | 'graph' | 'knob';
@@ -143,8 +129,7 @@ const createPaintHandlers = (
   selectedKeyType: string,
 ) => {
   const stableTargets = (patch: EditorPaintPropertyPatchV1) => {
-    const details = paintPatchDetails(patch);
-    const relevant = details.active
+    const relevant = paintPropertyFields(patch.property).active
       ? targets.filter(
           ({ elementType }) => elementType === 'key' || elementType === 'knob',
         )
@@ -722,6 +707,40 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     new Set(notePaintIds).size === notePaintIds.length
       ? notePaintIds
       : null;
+
+  const restoreFailedNotePaint = (patch: EditorNotePaintPropertyPatchV1) => {
+    if (editGestureController.activeGestureId() !== null) return;
+    if (patch.property === 'notePaint') {
+      const noteColor = getMixedValueCanonical(
+        (pos) => pos.noteColor,
+        '#FFFFFF' as NoteColor,
+      ).value;
+      setBatchLocalColors((prev) => ({ ...prev, noteColor }));
+      return;
+    }
+    if (patch.property === 'noteGlowPaint') {
+      const glowColor = getMixedValueCanonical(
+        (pos) => pos.noteGlowColor ?? pos.noteColor,
+        '#FFFFFF' as NoteColor,
+      ).value;
+      setBatchLocalColors((prev) => ({ ...prev, glowColor }));
+      return;
+    }
+    const borderColor = getMixedValueCanonical(
+      (pos) => pos.noteBorderColor,
+      '#FFFFFF',
+    ).value;
+    const borderOpacity = getMixedValueCanonical(
+      (pos) => pos.noteBorderOpacity,
+      100,
+    ).value;
+    setBatchLocalColors((prev) => ({
+      ...prev,
+      borderColor,
+      borderOpacity,
+    }));
+  };
+
   const commitNotePaint = stableNotePaintIds
     ? (patch: EditorNotePaintPropertyPatchV1) => {
         const gestureId = editGestureController.activeGestureId() ?? undefined;
@@ -729,7 +748,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
           gestureId,
         });
         editGestureController.settleCommit(persisted);
-        void persisted.catch(reportElementOpError);
+        void persisted.catch((error) => {
+          restoreFailedNotePaint(patch);
+          reportElementOpError(error);
+        });
       }
     : undefined;
   const previewNotePaint = stableNotePaintIds

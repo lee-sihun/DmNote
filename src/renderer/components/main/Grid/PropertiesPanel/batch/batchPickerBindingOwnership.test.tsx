@@ -585,6 +585,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     captured.optionalNumbers.length = 0;
     captured.fontStyles.length = 0;
     captured.shadows.length = 0;
+    gestures.activeGestureId.mockReturnValue(
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    );
     selectKey(ID_A);
     host = document.createElement('div');
     pageHost = document.createElement('div');
@@ -672,6 +675,55 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       );
     });
   };
+
+  it('배치 노트 색상 영구 실패는 로컬 대표값도 canonical로 복원한다', async () => {
+    const failure = new Error('permanent');
+    patches.patchNotePaintByIds.mockRejectedValueOnce(failure);
+    gestures.settleCommit.mockImplementationOnce(
+      (persisted: Promise<unknown>) => {
+        gestures.activeGestureId.mockReturnValue(null);
+        void persisted.catch(() => {});
+      },
+    );
+    const setBatchLocalColors = vi.fn();
+    const props = panelProps();
+    props.activeTab = 'note';
+    props.batchPickerFor = 'noteColor';
+    props.setBatchLocalColors = setBatchLocalColors;
+    props.getMixedValueCanonical = ((getter: (position: never) => unknown) => ({
+      isMixed: false,
+      value: getter({ ...keyAt(ID_A), noteColor: '#112233' } as never),
+    })) as PanelProps['getMixedValueCanonical'];
+    props.handleBatchNotePickerColorChangeComplete = (color, semantic) =>
+      semantic({ property: 'notePaint', value: { color } });
+
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...props} />
+        </PanelNavProvider>,
+      );
+    });
+
+    await act(async () => {
+      captured.color?.onColorChangeComplete('#abcdef');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const restore = setBatchLocalColors.mock.calls.at(-1)?.[0] as (
+      current: PanelProps['batchLocalColors'],
+    ) => PanelProps['batchLocalColors'];
+    expect(restore(props.batchLocalColors).noteColor).toBe('#112233');
+  });
 
   it.each(['main'] as const)(
     '%s batch counter picker는 open 시점 key/stat만 한 exact intent로 보낸다',
@@ -1753,7 +1805,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           : [`${kind}-0`]
         : kind === 'mixed'
         ? ['key', 'stat', 'graph', 'knob'].map(
-            (type, index) =>
+            (_, index) =>
               `${suffix}${index + 1}${index + 1}${index + 1}${index + 1}${
                 index + 1
               }${index + 1}${index + 1}-${index + 1}${index + 1}${index + 1}${
