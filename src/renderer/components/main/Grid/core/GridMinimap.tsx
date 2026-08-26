@@ -4,6 +4,7 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import { useKeyStore } from '@stores/data/useKeyStore';
 import DigitPopLayer from '@components/main/common/DigitPopLayer';
 import { useDigitPop } from '@hooks/ui/useDigitPop';
+import IconMotion from '@components/main/Tool/icons/IconMotion';
 import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
@@ -53,7 +54,7 @@ interface ZoomButtonProps {
   children: React.ReactNode;
 }
 
-// 줌 컨트롤 공통 버튼
+// 줌 컨트롤 공통 버튼. 호버 배경만으로는 눌림이 안 읽혀 아이콘이 누름을 따라 줄어든다
 const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
   <div
     role="button"
@@ -62,7 +63,7 @@ const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
       e.stopPropagation();
       onClick();
     }}
-    className="flex-1 flex items-center justify-center h-full text-fg-faint hover:text-fg cursor-pointer"
+    className="dmn-icon-press flex-1 flex items-center justify-center h-full text-fg-faint hover:text-fg cursor-pointer"
     style={{
       backgroundColor: 'transparent',
       transition: 'background-color 150ms, color 150ms',
@@ -76,7 +77,7 @@ const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
     }
     title={title}
   >
-    {children}
+    <IconMotion>{children}</IconMotion>
   </div>
 );
 

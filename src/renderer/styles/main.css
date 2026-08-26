@@ -1050,6 +1050,26 @@ svg [data-dmn-icon-motion] {
   }
 }
 
+/* 누름 - 누르는 동안 줄어 있다가 떼면 오버슈트로 되튄다.
+   keyframe이 아니라 트랜지션인 이유: 누른 채 머무는 시간이 제각각이라
+   내려가는 구간과 올라오는 구간을 따로 가져야 하고, 중간에 떼도 튀지 않아야 한다.
+   내려갈 땐 짧고 직선적으로, 올라올 땐 스프링 커브로 - 눌림은 즉답이고 복귀가 재질이다 */
+.dmn-icon-press > .dmn-icon-motion {
+  transition: transform var(--ui-icon-press-duration) var(--ui-icon-ease-back);
+}
+
+.dmn-icon-press:active > .dmn-icon-motion {
+  transform: scale(var(--ui-icon-press-scale));
+  transition-duration: var(--ui-icon-press-down-duration);
+  transition-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-icon-press > .dmn-icon-motion {
+    transition: none;
+  }
+}
+
 /* 문지르는 물건이라 툴바에서 유일하게 여러 번 왕복한다 */
 @keyframes dmnIconWobble {
   0% {
