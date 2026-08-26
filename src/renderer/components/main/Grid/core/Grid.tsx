@@ -91,13 +91,13 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_BORDER,
-  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
+import { gradientRingStyle, gradientToCss } from '@src/types/color';
 import {
   elementShadowToCss,
   resolveElementShadow,
@@ -1358,6 +1358,23 @@ const Grid = ({
     ));
   };
 
+  // 고스트는 실제 요소와 같은 기본 립을 그린다. 링 배경은 전역 규칙이 아닌
+  // 인라인으로 - 고스트는 data-*-element가 아니라 전역 게이트를 안 탄다
+  const renderGhostBorderRing = (suppressDefault: boolean) => {
+    const border = resolveElementBorder({}, false, { suppressDefault });
+    if (!border.gradient || border.width <= 0) return null;
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          ...gradientRingStyle(border.gradient, border.width),
+          background: gradientToCss(border.gradient),
+          pointerEvents: 'none',
+        }}
+      />
+    );
+  };
+
   const renderDuplicateGhost = () => {
     if (!duplicateState || !duplicateCursor) return null;
 
@@ -1374,12 +1391,15 @@ const Grid = ({
             height: `${height}px`,
             transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
             background: DEFAULT_ELEMENT_BG,
-            border: `1px solid ${DEFAULT_ELEMENT_BORDER}`,
+            border: 'none',
             borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
+            overflow: 'hidden',
             opacity: 0.5,
             zIndex: 'var(--z-canvas-drag-preview)',
           }}
-        />
+        >
+          {renderGhostBorderRing(false)}
+        </div>
       );
     }
 
@@ -1428,13 +1448,14 @@ const Grid = ({
           transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
           backgroundColor,
           borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
-          border: `${DEFAULT_ELEMENT_BORDER_WIDTH}px solid ${DEFAULT_ELEMENT_BORDER}`,
+          border: 'none',
           boxShadow: previewShadow,
           overflow: 'hidden',
           opacity: 0.5,
           zIndex: 'var(--z-canvas-drag-preview)',
         }}
       >
+        {renderGhostBorderRing(Boolean(previewImage))}
         {previewImage ? (
           <img
             src={previewImage}
