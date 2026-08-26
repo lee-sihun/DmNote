@@ -1092,16 +1092,19 @@ fn prepare_tab_preset_fonts(
     mut imported_font_settings: FontSettings,
     restore_fonts: impl FnOnce(&mut FontSettings) -> CmdResult<()>,
 ) -> CmdResult<Option<FontSettings>> {
-    let mut existing_names: HashSet<String> = existing_font_settings
+    let existing_names: HashSet<String> = existing_font_settings
         .custom_fonts
         .iter()
         .map(|font| font.name.clone())
         .collect();
 
-    // 같은 이름은 기존 정의 유지 — 수용한 이름도 반영해 프리셋 내부 중복 방어
-    imported_font_settings
-        .custom_fonts
-        .retain(|font| existing_names.insert(font.name.clone()));
+    // 같은 이름은 기존 정의 유지. 같은 family의 다른 페이스(파일)는 개별 자산이라
+    // 이름으로 묶지 않고, 프리셋 내부 중복은 id 기준으로만 방어
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    imported_font_settings.custom_fonts.retain(|font| {
+        !existing_names.contains(&font.name)
+            && (font.id.is_empty() || seen_ids.insert(font.id.clone()))
+    });
     if imported_font_settings.custom_fonts.is_empty() {
         return Ok(None);
     }
@@ -2689,15 +2692,34 @@ mod tests {
                 max: weight,
             }],
         };
-        let prepared = FontSettings {
-            custom_fonts: vec![face("regular", 400), face("bold", 700)],
+        let imported = FontSettings {
+            custom_fonts: vec![
+                face("regular", 400),
+                face("bold", 700),
+                // 프리셋 내부 중복(id 동일)은 한 번만 수용
+                face("bold", 700),
+            ],
         };
 
-        let merged = merge_prepared_tab_preset_fonts(&FontSettings::default(), prepared).unwrap();
+        // 실제 탭 로드 경로(prepare → restore → merge) 전체를 통과시킨다
+        let merged = merge_tab_preset_fonts(&FontSettings::default(), imported, |_| Ok(()))
+            .unwrap()
+            .unwrap();
 
         assert_eq!(merged.custom_fonts.len(), 2);
         assert_eq!(merged.custom_fonts[0].weight_ranges[0].min, 400);
         assert_eq!(merged.custom_fonts[1].weight_ranges[0].min, 700);
+
+        // 기존에 같은 이름이 있으면 그 family 전체를 기존 정의로 유지
+        let existing = FontSettings {
+            custom_fonts: vec![face("existing", 400)],
+        };
+        let imported = FontSettings {
+            custom_fonts: vec![face("regular", 400), face("bold", 700)],
+        };
+        assert!(merge_tab_preset_fonts(&existing, imported, |_| Ok(()))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
