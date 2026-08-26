@@ -14,7 +14,6 @@ use crate::state::native_element_id::{is_valid_element_id, new_unique_id, Backfi
 pub(crate) const MAX_PLUGIN_INSTANCES_REQUEST_BYTES: usize = 8 * 1024 * 1024;
 // 플러그인 스토리지 키 네임스페이스 - storage 커맨드와 canonical 헬퍼의 단일 원천
 pub(crate) const PLUGIN_DATA_KEY_PREFIX: &str = "plugin_data_";
-const MAX_PLUGIN_ID_BYTES: usize = 128;
 const MAX_PLUGIN_INSTANCES: usize = 4_096;
 const MAX_PLUGIN_RECONCILE_TAB_IDS: usize = 64;
 const MAX_TAB_ID_BYTES: usize = 128;
@@ -205,7 +204,6 @@ fn validate_plugin_mutation_id(mutation_id: &str) -> Result<(), String> {
 
 pub(crate) fn validate_plugin_id(plugin_id: &str) -> Result<(), String> {
     if plugin_id.is_empty()
-        || plugin_id.len() > MAX_PLUGIN_ID_BYTES
         || !plugin_id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
@@ -968,6 +966,30 @@ mod tests {
         assert!(!is_plugin_instances_storage_key(
             "plugin_data_invalid/id/instances"
         ));
+    }
+
+    #[test]
+    fn legacy_long_plugin_ids_remain_addressable() {
+        for length in [129, 255, 256, 1_024] {
+            let plugin_id = "a".repeat(length);
+            validate_plugin_id(&plugin_id).unwrap();
+            let key = plugin_instances_storage_key(&plugin_id);
+            assert_eq!(
+                plugin_id_from_instances_storage_key(&key),
+                Some(plugin_id.as_str())
+            );
+        }
+
+        for plugin_id in ["", "contains/slash", "한글"] {
+            assert_eq!(
+                validate_plugin_id(plugin_id).unwrap_err(),
+                "INVALID_PLUGIN_ID"
+            );
+            assert_eq!(
+                plugin_id_from_instances_storage_key(&plugin_instances_storage_key(plugin_id)),
+                None
+            );
+        }
     }
 
     #[test]
