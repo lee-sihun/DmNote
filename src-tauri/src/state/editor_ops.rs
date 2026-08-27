@@ -2938,7 +2938,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
 #[cfg(test)]
 mod tests {
     use crate::{
-        defaults::{default_keys, default_positions},
+        defaults::default_keys,
         models::{
             AppStoreData, EditorElementGroupTargetV1, EditorElementPropertyPatchV1,
             EditorFrozenElementV1, EditorFrozenGroupV1, EditorFrozenKeySlotV1, EditorGroupUpdateV1,
@@ -2954,7 +2954,10 @@ mod tests {
     fn base_store() -> AppStoreData {
         let mut store = AppStoreData {
             keys: default_keys().clone(),
-            key_positions: default_positions().clone(),
+            key_positions: default_keys()
+                .iter()
+                .map(|(mode, keys)| (mode.clone(), vec![KeyPosition::default(); keys.len()]))
+                .collect(),
             ..AppStoreData::default()
         };
         backfill_store_element_ids(&mut store);

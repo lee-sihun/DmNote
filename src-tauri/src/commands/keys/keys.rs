@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tauri::{AppHandle, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::{
     commands::{
@@ -9,17 +9,18 @@ use crate::{
         plugin::instances::publish_plugin_instances_changed,
         run_blocking, run_history_mutation,
     },
-    defaults::{default_keys, default_positions},
+    defaults::{default_keys, default_positions, default_stat_positions},
     errors::CmdResult,
     models::{
         AppStoreData, CommittedEditorChange, CustomCssPatch, CustomTab, EditorCommitOrigin,
         EditorDocumentV1, EditorField, KeyCounters, KeyMappings, KeyPositions, LayerGroups,
-        NoteSettings, NoteSettingsPatch, SettingsPatchInput, SettingsState,
+        NoteSettings, NoteSettingsPatch, SettingsPatchInput, SettingsState, StatPositions,
     },
     services::settings::apply_patch_to_store,
     state::{
         editor::validate_history_restore_metadata,
         history::{HistoryAdmissionLease, HistoryScope},
+        migration::migrate_key_images_to_app_data,
         plugin::{for_each_stored_plugin_instances, normalize_plugin_instance_tab_id},
         store::{AuxEditorResetTransactionOptions, PluginInstancesResetScope},
         AppState,
@@ -76,10 +77,15 @@ fn zeroed_counters(keys: &KeyMappings) -> KeyCounters {
         .collect()
 }
 
-fn reset_all_editor_data(store: &mut AppStoreData, keys: &KeyMappings, positions: &KeyPositions) {
+fn reset_all_editor_data(
+    store: &mut AppStoreData,
+    keys: &KeyMappings,
+    positions: &KeyPositions,
+    stat_positions: &StatPositions,
+) {
     store.keys = keys.clone();
     store.key_positions = positions.clone();
-    store.stat_positions.clear();
+    store.stat_positions = stat_positions.clone();
     store.graph_positions.clear();
     store.knob_positions.clear();
     store.layer_groups.clear();
@@ -89,6 +95,17 @@ fn reset_all_editor_data(store: &mut AppStoreData, keys: &KeyMappings, positions
     store.tab_note_overrides.clear();
     store.tab_css_overrides.clear();
     crate::state::native_element_id::rekey_store_element_ids(store);
+}
+
+fn reset_all_editor_data_with_images(
+    store: &mut AppStoreData,
+    keys: &KeyMappings,
+    positions: &KeyPositions,
+    stat_positions: &StatPositions,
+    app_data_dir: &std::path::Path,
+) {
+    reset_all_editor_data(store, keys, positions, stat_positions);
+    migrate_key_images_to_app_data(app_data_dir, store);
 }
 
 fn reset_mode_kind(store: &AppStoreData, mode: &str) -> Option<ModeResetKind> {
@@ -151,14 +168,19 @@ fn apply_reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKi
                     .key_positions
                     .insert(mode.to_string(), positions.clone());
             }
+            if let Some(positions) = default_stat_positions().get(mode) {
+                store
+                    .stat_positions
+                    .insert(mode.to_string(), positions.clone());
+            }
         }
         ModeResetKind::Custom => {
             store.keys.insert(mode.to_string(), Vec::new());
             store.key_positions.insert(mode.to_string(), Vec::new());
+            store.stat_positions.insert(mode.to_string(), Vec::new());
         }
     }
 
-    store.stat_positions.insert(mode.to_string(), Vec::new());
     store.graph_positions.insert(mode.to_string(), Vec::new());
     store.knob_positions.insert(mode.to_string(), Vec::new());
     store.layer_groups.remove(mode);
@@ -267,6 +289,20 @@ fn reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKind) ->
     *store = candidate;
     crate::state::native_element_id::rekey_mode_element_ids(store, mode);
     true
+}
+
+fn reset_mode_data_with_images(
+    store: &mut AppStoreData,
+    mode: &str,
+    kind: ModeResetKind,
+    app_data_dir: &std::path::Path,
+) -> bool {
+    let changed = reset_mode_data(store, mode, kind);
+    if kind == ModeResetKind::Default {
+        migrate_key_images_to_app_data(app_data_dir, store) || changed
+    } else {
+        changed
+    }
 }
 
 #[cfg(test)]
@@ -441,6 +477,8 @@ fn keys_reset_all_inner(
 ) -> CmdResult<ResetAllResponse> {
     let keys = default_keys().clone();
     let positions = default_positions().clone();
+    let stat_positions = default_stat_positions().clone();
+    let app_data_dir = app.path().app_data_dir()?;
     let mut note_patch = NoteSettingsPatch::default();
     let defaults = NoteSettings::default();
     note_patch.frame_limit = Some(defaults.frame_limit);
@@ -490,7 +528,13 @@ fn keys_reset_all_inner(
             move |store| {
                 let cleared_tab_css_ids =
                     store.tab_css_overrides.keys().cloned().collect::<Vec<_>>();
-                reset_all_editor_data(store, &keys, &positions);
+                reset_all_editor_data_with_images(
+                    store,
+                    &keys,
+                    &positions,
+                    &stat_positions,
+                    &app_data_dir,
+                );
                 let settings_diff = apply_patch_to_store(store, &settings_patch);
                 Ok((settings_diff, cleared_tab_css_ids))
             },
@@ -589,6 +633,7 @@ fn keys_reset_mode_inner(
     mode: String,
     admission: HistoryAdmissionLease,
 ) -> CmdResult<ResetModeResponse> {
+    let app_data_dir = app.path().app_data_dir()?;
     let transaction = state
         .store
         .commit_legacy_editor_reset_transaction_with_admission(
@@ -608,7 +653,7 @@ fn keys_reset_mode_inner(
                     return Ok(None);
                 };
                 let cleared_tab_css = store.tab_css_overrides.contains_key(&mode);
-                reset_mode_data(store, &mode, kind);
+                reset_mode_data_with_images(store, &mode, kind, &app_data_dir);
                 Ok(Some((cleared_tab_css, store.tab_note_overrides.clone())))
             },
         )?;
@@ -1190,11 +1235,12 @@ pub fn raw_input_unsubscribe(state: State<'_, AppState>) -> CmdResult<RawInputSu
 #[cfg(test)]
 mod tests {
     use super::{
-        delete_custom_tab_data, plan_custom_tab_delete, reset_all_editor_data, reset_mode_data,
-        reset_mode_kind, select_mode_if_available, set_mode_with, ModeResetKind,
+        delete_custom_tab_data, plan_custom_tab_delete, reset_all_editor_data,
+        reset_all_editor_data_with_images, reset_mode_data, reset_mode_kind,
+        select_mode_if_available, set_mode_with, ModeResetKind,
     };
     use crate::{
-        defaults::{default_keys, default_positions},
+        defaults::{default_keys, default_positions, default_stat_positions},
         keyboard::KeyboardManager,
         models::{
             AppStoreData, CustomTab, GraphPosition, GraphStatType, GraphType, KeySlot,
@@ -1303,11 +1349,17 @@ mod tests {
     #[test]
     fn reset_all_clears_knob_positions_and_zeroes_default_counters() {
         let mut store = populated_custom_tab_store();
-        reset_all_editor_data(&mut store, default_keys(), default_positions());
+        reset_all_editor_data(
+            &mut store,
+            default_keys(),
+            default_positions(),
+            default_stat_positions(),
+        );
 
         assert!(store.knob_positions.is_empty());
         assert!(store.custom_tabs.is_empty());
         assert_eq!(store.selected_key_type, "4key");
+        assert_eq!(store.stat_positions.len(), default_stat_positions().len());
         assert!(store
             .key_counters
             .values()
@@ -1318,7 +1370,12 @@ mod tests {
     #[test]
     fn reset_all_issues_a_fresh_globally_unique_id_generation_each_time() {
         let mut store = populated_custom_tab_store();
-        reset_all_editor_data(&mut store, default_keys(), default_positions());
+        reset_all_editor_data(
+            &mut store,
+            default_keys(),
+            default_positions(),
+            default_stat_positions(),
+        );
         let first = store
             .key_positions
             .values()
@@ -1327,7 +1384,12 @@ mod tests {
             .collect::<HashSet<_>>();
         let first_count = store.key_positions.values().map(Vec::len).sum::<usize>();
 
-        reset_all_editor_data(&mut store, default_keys(), default_positions());
+        reset_all_editor_data(
+            &mut store,
+            default_keys(),
+            default_positions(),
+            default_stat_positions(),
+        );
         let second = store
             .key_positions
             .values()
@@ -1341,6 +1403,67 @@ mod tests {
         assert!(second
             .iter()
             .all(|id| crate::state::native_element_id::is_valid_element_id(id)));
+    }
+
+    #[test]
+    fn reset_all_migrates_default_data_url_images_immediately() {
+        let dir = std::env::temp_dir().join(format!(
+            "dmnote-reset-all-default-images-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut store = populated_custom_tab_store();
+
+        reset_all_editor_data_with_images(
+            &mut store,
+            default_keys(),
+            default_positions(),
+            default_stat_positions(),
+            &dir,
+        );
+
+        let positions = store
+            .key_positions
+            .values()
+            .flatten()
+            .chain(
+                store
+                    .stat_positions
+                    .values()
+                    .flatten()
+                    .map(|stat| &stat.position),
+            )
+            .chain(
+                store
+                    .graph_positions
+                    .values()
+                    .flatten()
+                    .map(|graph| &graph.position),
+            )
+            .chain(
+                store
+                    .knob_positions
+                    .values()
+                    .flatten()
+                    .map(|knob| &knob.position),
+            )
+            .collect::<Vec<_>>();
+        let image_paths = positions
+            .iter()
+            .flat_map(|position| [&position.active_image, &position.inactive_image])
+            .flatten()
+            .filter(|image| !image.is_empty())
+            .collect::<Vec<_>>();
+        assert!(!image_paths.is_empty());
+        assert!(image_paths.iter().all(|image| !image.starts_with("data:")));
+        assert!(image_paths
+            .iter()
+            .all(|image| std::path::Path::new(image.as_str()).is_file()));
+        assert!(store.stat_positions.values().flatten().all(|stat| {
+            crate::state::native_element_id::is_valid_element_id(&stat.position.id)
+        }));
+
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -1375,6 +1498,10 @@ mod tests {
         reset_mode_data(&mut store, "4key", ModeResetKind::Default);
 
         assert!(store.knob_positions["4key"].is_empty());
+        assert_eq!(
+            store.stat_positions["4key"].len(),
+            default_stat_positions()["4key"].len()
+        );
     }
 
     #[test]
