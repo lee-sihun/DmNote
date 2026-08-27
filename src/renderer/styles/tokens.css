@@ -292,7 +292,6 @@
   --ui-digit-duration: 220ms;
   --ui-digit-stagger: 40ms;
   --ui-digit-distance: 6px;
-  --ui-digit-blur: 2px;
   --ui-digit-ease: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* 오류 흔들기 - 좌우로 한 번 털고 작은 오버슈트로 멈춘다.

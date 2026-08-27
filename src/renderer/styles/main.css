@@ -1440,13 +1440,11 @@ svg [data-dmn-icon-motion] {
       calc(var(--ui-digit-distance) * var(--dmn-digit-dir, 1))
     );
     opacity: 0;
-    filter: blur(var(--ui-digit-blur));
   }
 
   to {
     transform: translateY(0);
     opacity: 1;
-    filter: blur(0);
   }
 }
 

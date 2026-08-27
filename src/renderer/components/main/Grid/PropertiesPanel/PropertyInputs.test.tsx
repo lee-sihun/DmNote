@@ -1611,6 +1611,22 @@ describe('숫자 스텝 팝인 레이어', () => {
     ).toEqual([false, true]);
   });
 
+  it('999에서 1000으로 바뀌면 네 자리를 순서대로 재생한다', () => {
+    renderStepped(999);
+
+    expect(segments().map((part) => part.textContent)).toEqual([
+      '1',
+      '0',
+      '0',
+      '0',
+    ]);
+    expect(
+      segments().map((part) =>
+        (part as HTMLElement).style.getPropertyValue('--dmn-digit-step'),
+      ),
+    ).toEqual(['0', '1', '2', '3']);
+  });
+
   it('선행 부호를 단독 조각으로 남기지 않는다', () => {
     // -3에서 -2로. 오른쪽 정렬 diff만 쓰면 부호가 혼자 남는다
     renderStepped(-3);
