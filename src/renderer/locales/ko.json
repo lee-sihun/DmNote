@@ -91,6 +91,7 @@
     "customJSDesc": "JS 플러그인을 실행해 고급 동작을 확장합니다.",
     "resizeAnchorDesc": "오버레이 창의 리사이즈 기준점을 선택합니다.",
     "keyCounterDesc": "각 키 입력 횟수를 기록하고 표시합니다.",
+    "trayEnabledDesc": "창을 닫아도 종료하지 않고 트레이에 남깁니다.",
     "counterReset": "키 카운터가 초기화되었습니다.",
     "counterResetFailed": "키 카운터 초기화에 실패했습니다.",
     "obsMode": "OBS 모드 활성화",
