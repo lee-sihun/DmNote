@@ -227,7 +227,12 @@ export const dockPropertiesPanel = async (): Promise<TransitionOutcome> => {
       return 'done';
     } catch (error) {
       if (getPanelChildWindow()) {
-        await restorePlacement('detached');
+        // 되돌림도 짧게만 기다린다 - 호스트가 없으면(설정 화면) 영영 안 붙는다
+        usePanelHostStore.getState().setPlacement('detached');
+        await waitForPanelHostAttachment('detached', {
+          timeoutMs: DOCK_ATTACH_TIMEOUT_MS,
+          settleWhenAbsent: true,
+        });
       }
       console.error('Failed to dock panel window', error);
       return 'failed';
