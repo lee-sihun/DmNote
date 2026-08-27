@@ -92,6 +92,11 @@ export function useGridMarquee({
     startMarqueeSelection(x, y);
   };
 
+  // 리스너 가드는 스토어를 직접 읽는다 - 취소 setState와 React 플러시 사이에 끼어든
+  // mouseup이 렌더 캡처 값(true)으로 옛 마퀴를 확정·해제하지 않게
+  const isMarqueeActive = () =>
+    useGridSelectionStore.getState().isMarqueeSelecting;
+
   const applyPendingMarquee = () => {
     const point = pendingClientPointRef.current;
     pendingClientPointRef.current = null;
@@ -104,7 +109,7 @@ export function useGridMarquee({
 
   // 마퀴 선택 중 마우스 이동 핸들러
   const handleMarqueeMouseMove = (e: MouseEvent) => {
-    if (!isMarqueeSelecting) return;
+    if (!isMarqueeActive()) return;
     pendingClientPointRef.current = { x: e.clientX, y: e.clientY };
     if (continuousInputStrategy === 'legacy') {
       applyPendingMarquee();
@@ -119,7 +124,7 @@ export function useGridMarquee({
 
   // 마퀴 선택 완료 시 요소 선택 처리
   const handleMarqueeMouseUp = () => {
-    if (!isMarqueeSelecting) return;
+    if (!isMarqueeActive()) return;
     if (frameRef.current !== null) {
       cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
@@ -242,7 +247,7 @@ export function useGridMarquee({
   };
 
   const cancelMarqueeSelection = () => {
-    if (!isMarqueeSelecting) return;
+    if (!isMarqueeActive()) return;
     if (frameRef.current !== null) {
       cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
@@ -251,11 +256,21 @@ export function useGridMarquee({
     endMarqueeSelection();
   };
 
+  // 보조 버튼 프레스는 확정이 아니라 취소 - contextmenu보다 반드시 먼저 오는 유일한 신호.
+  // WKWebView는 mousedown → contextmenu → mouseup, Chromium/WebView2는
+  // mousedown → mouseup → contextmenu 순이라 mouseup을 기다리면 먼저 선택이 확정된다.
+  // contextmenu 리스너는 키보드 기동(Shift+F10) 대비로 유지
+  const cancelOnSecondaryPress = (e: MouseEvent) => {
+    if (e.button === 0) return;
+    cancelMarqueeSelection();
+  };
+
   // 마퀴 선택 이벤트 등록
   useEffect(() => {
     if (isMarqueeSelecting) {
       document.addEventListener('mousemove', handleMarqueeMouseMove);
       document.addEventListener('mouseup', handleMarqueeMouseUp);
+      document.addEventListener('mousedown', cancelOnSecondaryPress, true);
       document.addEventListener('contextmenu', cancelMarqueeSelection, true);
       window.addEventListener('blur', cancelMarqueeSelection);
 
@@ -267,6 +282,7 @@ export function useGridMarquee({
         pendingClientPointRef.current = null;
         document.removeEventListener('mousemove', handleMarqueeMouseMove);
         document.removeEventListener('mouseup', handleMarqueeMouseUp);
+        document.removeEventListener('mousedown', cancelOnSecondaryPress, true);
         document.removeEventListener(
           'contextmenu',
           cancelMarqueeSelection,
