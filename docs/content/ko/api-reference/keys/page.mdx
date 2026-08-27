@@ -115,6 +115,9 @@ interface KeyPosition {
   inactiveImage?: string;
   activeTransparent?: boolean;
   idleTransparent?: boolean;
+  imageMode?: 'replace' | 'overlay'; // 이미지 배치. 없으면 replace(이미지가 키를 대체)
+  idleImageTransform?: { offsetX: number; offsetY: number; rotation: number; scale: number }; // 없으면 identity
+  activeImageTransform?: { offsetX: number; offsetY: number; rotation: number; scale: number };
   count: number;
   noteColor: string | { type: 'gradient'; top: string; bottom: string };
   noteOpacity: number;

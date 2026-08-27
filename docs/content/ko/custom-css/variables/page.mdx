@@ -11,40 +11,61 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 
 키 요소에 적용되는 CSS 변수입니다. `[data-state="inactive"]` 또는 `[data-state="active"]` 선택자와 함께 사용합니다.
 
-| 변수                  | 설명                                | 타입       | 예시                                 |
-| --------------------- | ----------------------------------- | ---------- | ------------------------------------ |
-| `--key-radius`        | 키 모서리의 둥근 정도               | `<length>` | `8px`, `50%`                         |
-| `--key-bg`            | 키 배경색과 저장된 배경 이미지 해제 | `<color>`  | `#ff2b80`                            |
-| `--key-bg-image`      | 키의 배경 이미지                    | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
-| `--key-border`        | 키 테두리와 저장된 보더 링 해제     | `<border>` | `2px solid #fff`, `none`             |
-| `--key-border-image`  | 저장된 보더 링의 이미지 교체        | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
-| `--key-padding`       | 키 내부 여백                        | `<length>` | `0px`, `3px`                         |
-| `--key-text-color`    | 키 텍스트 색상                      | `<color>`  | `#ffffff`                            |
-| `--key-text-image`    | 저장된 텍스트 페인트의 이미지 교체  | `<image>`  | `linear-gradient(0deg, #f0f, #0ff)`  |
-| `--key-text-position` | 텍스트 페인트 박스 위치             | `<position>` | `0% 0%`                            |
-| `--key-text-size`     | 텍스트 페인트 박스 크기             | `<bg-size>`  | `auto`, `100% 100%`                |
-| `--key-text-repeat`   | 텍스트 페인트 반복 방식             | `<repeat-style>` | `no-repeat`                    |
-| `--key-shadow`        | 대기 및 공통 폴백 그림자            | `<shadow>` | `0 4px 10px rgba(0,0,0,.28)`, `none` |
-| `--key-active-shadow` | 입력 상태 그림자                    | `<shadow>` | `0 3px 8px rgba(0,0,0,.32)`, `none`  |
-| `--key-offset-x`      | 활성 상태에서 X축 이동량            | `<length>` | `0px`, `2px`                         |
-| `--key-offset-y`      | 활성 상태에서 Y축 이동량            | `<length>` | `4px`                                |
+| 변수                    | 설명                                    | 타입             | 예시                                 |
+| ----------------------- | --------------------------------------- | ---------------- | ------------------------------------ |
+| `--key-radius`          | 키 모서리의 둥근 정도                   | `<length>`       | `8px`, `50%`                         |
+| `--key-bg`              | 키 배경색과 저장된 배경 이미지 해제     | `<color>`        | `#ff2b80`                            |
+| `--key-bg-image`        | 키의 배경 이미지                        | `<image>`        | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--key-border`          | 키 테두리와 저장된 보더 링 해제         | `<border>`       | `2px solid #fff`, `none`             |
+| `--key-border-image`    | 저장된 보더 링의 이미지 교체            | `<image>`        | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--key-padding`         | 키 내부 여백                            | `<length>`       | `0px`, `3px`                         |
+| `--key-text-color`      | 키 텍스트 색상                          | `<color>`        | `#ffffff`                            |
+| `--key-text-image`      | 저장된 텍스트 페인트의 이미지 교체      | `<image>`        | `linear-gradient(0deg, #f0f, #0ff)`  |
+| `--key-text-position`   | 텍스트 페인트 박스 위치                 | `<position>`     | `0% 0%`                              |
+| `--key-text-size`       | 텍스트 페인트 박스 크기                 | `<bg-size>`      | `auto`, `100% 100%`                  |
+| `--key-text-repeat`     | 텍스트 페인트 반복 방식                 | `<repeat-style>` | `no-repeat`                          |
+| `--key-shadow`          | 대기 및 공통 폴백 그림자                | `<shadow>`       | `0 4px 10px rgba(0,0,0,.28)`, `none` |
+| `--key-active-shadow`   | 입력 상태 그림자                        | `<shadow>`       | `0 3px 8px rgba(0,0,0,.32)`, `none`  |
+| `--key-offset-x`        | 활성 상태에서 X축 이동량                | `<length>`       | `0px`, `2px`                         |
+| `--key-offset-y`        | 활성 상태에서 Y축 이동량                | `<length>`       | `4px`                                |
+| `--key-image-fit`       | 저장된 이미지의 맞춤 방식 교체          | `<object-fit>`   | `cover`, `contain`                   |
+| `--key-image-transform` | 저장된 이미지 변환(이동·회전·크기) 교체 | `<transform>`    | `rotate(15deg) scale(1.2)`           |
+| `--key-image-z`         | 이미지 레이어 z-index                   | `<integer>`      | `0`, `3`                             |
 
 <Callout type="info">
   **인라인 스타일 우선**이 꺼져 있으면 속성 패널의 색·그라데이션·보더·글꼴·
   그림자는 낮은 우선순위의 기본값으로만 적용됩니다. `--key-bg`를 지정하면 저장된
   배경 그라데이션이 자동으로 사라지고, `--key-border`를 지정하면 저장된
-  그라데이션 보더 링과 링 여백이 함께 사라집니다. 테두리를 지정하지 않은
-  요소의 기본 테두리도 위에서 아래로 옅어지는 1px 그라데이션 링이라
-  같은 방식으로 대체됩니다. 링은 자식 요소라 키에 일반 `border` 규칙을 걸면
-  루트 테두리만 바뀌므로, 링까지 지우려면 `--key-border`로 해제하거나
-  `[data-key-element] > [data-gradient-border-ring]`을 숨기세요. 사용자 그라데이션은
+  그라데이션 보더 링과 링 여백이 함께 사라집니다. 테두리를 지정하지 않은 요소의
+  기본 테두리도 위에서 아래로 옅어지는 1px 그라데이션 링이라 같은 방식으로
+  대체됩니다. 링은 자식 요소라 키에 일반 `border` 규칙을 걸면 루트 테두리만
+  바뀌므로, 링까지 지우려면 `--key-border`로 해제하거나 `[data-key-element] >
+  [data-gradient-border-ring]`을 숨기세요. 사용자 그라데이션은
   `--key-bg-image`나 표준 `background` 속성으로 지정할 수 있습니다.
   `--key-text-color`(또는 라벨에 거는 일반 `color` 규칙)를 지정하면 저장된
-  텍스트 그라데이션이 사라집니다. 사용자 텍스트 그라데이션은 `--key-text-image`와
-  `--key-text-color: transparent`를 함께 지정합니다. 글리프 채움을 비워야
-  그라데이션이 보이므로, 저장된 그라데이션이 없는 키에서 `--key-text-image`만
-  지정하면 불투명한 글자 색에 가려집니다.
+  텍스트 그라데이션이 사라집니다. 사용자 텍스트 그라데이션은
+  `--key-text-image`와 `--key-text-color: transparent`를 함께 지정합니다. 글리프
+  채움을 비워야 그라데이션이 보이므로, 저장된 그라데이션이 없는 키에서
+  `--key-text-image`만 지정하면 불투명한 글자 색에 가려집니다.
 </Callout>
+
+### 이미지 레이어
+
+속성 패널에서 지정한 이미지는 키 루트의 자식 `img[data-key-image-layer]`로
+링 여백(`padding`) 안쪽에 절대 배치됩니다. 루트에는 `data-key-image`와 함께
+배치 모드 `data-key-image-mode="replace|overlay"`가 붙습니다.
+
+- `replace`(기본): 앱 기본 배경·테두리·그림자와 텍스트가 숨겨지고 이미지가
+  표면이 됩니다. 사용자 CSS의 `--key-border`나 `padding`은 그대로 살아 있어
+  이미지가 그 안쪽에 그려지고 `--key-radius`로 잘립니다. 테두리 없이 이미지만
+  보이게 하려면 `[data-key-image-mode="replace"] { --key-border: none; --key-padding: 0 }`처럼
+  직접 해제하세요.
+- `overlay`: 키 표면·텍스트·카운터가 그대로 그려지고 이미지가 그 위에
+  얹힙니다. 이미지는 키의 `border-radius`를 상속하고, 루트 `overflow`가 `visible`이라 이동·회전·확대한 이미지가 키 밖으로
+  나갈 수 있습니다. 잘라내려면 `overflow: hidden`을 지정하세요.
+
+저장된 맞춤·변환·z 순서는 `--key-image-fit`, `--key-image-transform`,
+`--key-image-z`로 덮어씁니다.
 
 ### 사용 예시
 
@@ -70,15 +91,15 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 
 카운터 요소에 적용되는 CSS 변수입니다. `.counter[data-counter-state="..."]` 선택자와 함께 사용합니다.
 
-| 변수                        | 설명                           | 타입       | 예시                                 |
-| --------------------------- | ------------------------------ | ---------- | ------------------------------------ |
-| `--counter-color`           | 텍스트 색상과 저장된 fill 해제 | `<color>`  | `#ffffff`                            |
-| `--counter-fill-image`      | 텍스트 fill 이미지             | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
-| `--counter-fill-clip`       | fill 클립 영역                 | `<box>`    | `text`, `border-box`                 |
-| `--counter-fill-position`   | fill 배경 위치                 | `<position>` | `0% 0%`, `4px 10px`                |
-| `--counter-fill-size`       | fill 배경 크기                 | `<bg-size>`  | `auto`, `100px 80px`               |
-| `--counter-fill-repeat`     | fill 반복 방식                 | `<repeat-style>` | `no-repeat`                    |
-| `--counter-text-fill-color` | WebKit 텍스트 채움색           | `<color>`  | `transparent`, `currentcolor`        |
+| 변수                        | 설명                           | 타입             | 예시                                 |
+| --------------------------- | ------------------------------ | ---------------- | ------------------------------------ |
+| `--counter-color`           | 텍스트 색상과 저장된 fill 해제 | `<color>`        | `#ffffff`                            |
+| `--counter-fill-image`      | 텍스트 fill 이미지             | `<image>`        | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--counter-fill-clip`       | fill 클립 영역                 | `<box>`          | `text`, `border-box`                 |
+| `--counter-fill-position`   | fill 배경 위치                 | `<position>`     | `0% 0%`, `4px 10px`                  |
+| `--counter-fill-size`       | fill 배경 크기                 | `<bg-size>`      | `auto`, `100px 80px`                 |
+| `--counter-fill-repeat`     | fill 반복 방식                 | `<repeat-style>` | `no-repeat`                          |
+| `--counter-text-fill-color` | WebKit 텍스트 채움색           | `<color>`        | `transparent`, `currentcolor`        |
 
 `--counter-color`만 지정해도 앱에 저장된 카운터 fill 그라데이션은 자동으로
 해제됩니다. 앱에서 만든 그라데이션은 글자 잉크 박스에 맞춰 깔리며, 배치를 직접

@@ -337,6 +337,9 @@ gradient siblings:
 interface KeyPosition {
   id?: string; // stable element identity (UUID), assigned and owned by the app
   // ...position, image, note, and counter fields...
+  imageMode?: 'replace' | 'overlay'; // image placement, defaults to replace (image replaces the key)
+  idleImageTransform?: { offsetX: number; offsetY: number; rotation: number; scale: number }; // identity when absent
+  activeImageTransform?: { offsetX: number; offsetY: number; rotation: number; scale: number };
   noteOpacityTop?: number;
   noteOpacityBottom?: number;
   noteGradient?: GradientSpec | null;
