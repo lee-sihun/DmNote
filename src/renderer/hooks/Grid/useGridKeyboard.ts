@@ -117,6 +117,7 @@ export function useGridKeyboard({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (isHistoryEditorFlushLocked()) return;
       if (isModalLayerActive()) return;
       if (typeof window !== 'undefined' && window.__dmn_isKeyListening) {

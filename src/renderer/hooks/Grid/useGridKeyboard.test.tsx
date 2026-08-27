@@ -433,6 +433,25 @@ describe('useGridKeyboard arrow history burst', () => {
     vi.unstubAllGlobals();
   });
 
+  it('포커스된 위젯이 소비한 방향키로 선택 요소를 움직이지 않는다', () => {
+    const widget = document.createElement('button');
+    widget.addEventListener('keydown', (event) => event.preventDefault());
+    document.body.appendChild(widget);
+
+    act(() => {
+      widget.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    expect(commitPatchMock).not.toHaveBeenCalled();
+    widget.remove();
+  });
+
   it('활성 모달 동안 모든 배경 편집 키를 차단하고 종료 후 복원한다', async () => {
     const handlers = {
       move: vi.fn(),
