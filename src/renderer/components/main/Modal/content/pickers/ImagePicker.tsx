@@ -16,6 +16,7 @@ import {
   DEFAULT_IMAGE_MODE,
   IDENTITY_IMAGE_TRANSFORM,
   IMAGE_TRANSFORM_CONSTRAINTS,
+  imageTransformToCss,
   type ImageMode,
   type ImageTransform,
   type ImageTransformLeaf,
@@ -230,6 +231,7 @@ const ImagePicker = ({
     (effectiveMode === STATE_MODES.idle
       ? idleImageTransform
       : activeImageTransform) ?? IDENTITY_IMAGE_TRANSFORM;
+  const currentTransformCss = imageTransformToCss(currentTransform);
   const handleTransformLeaf = (leaf: ImageTransformLeaf, value: number) => {
     onImageTransformChange?.(effectiveMode, leaf, value);
   };
@@ -272,14 +274,19 @@ const ImagePicker = ({
         />
 
         {/* 이미지 표시 */}
-        {currentImage && !currentTransparent && (
-          <div
-            className="absolute inset-0 bg-cover bg-center"
+        {currentImageSrc && !currentTransparent && (
+          <img
+            key={currentImageSrc}
+            src={currentImageSrc}
+            alt=""
+            data-image-picker-preview="true"
+            className="absolute inset-0 block w-full h-full pointer-events-none select-none"
             style={{
-              backgroundImage: currentImageSrc
-                ? `url(${currentImageSrc})`
-                : 'none',
+              objectFit: (currentImageFit ||
+                'cover') as React.CSSProperties['objectFit'],
+              transform: currentTransformCss,
             }}
+            draggable={false}
           />
         )}
 

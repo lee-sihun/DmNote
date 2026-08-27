@@ -218,3 +218,67 @@ describe('ImagePicker 비동기 완료와 대상 전환', () => {
     expect(onIdleImageChange).toHaveBeenCalledWith('/tmp/picked.png');
   });
 });
+
+describe('ImagePicker 이미지 미리보기', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const renderPicker = (imageFit: string) => {
+    act(() => {
+      root.render(
+        <ImagePicker
+          open
+          referenceRef={createRef<HTMLElement>() as never}
+          idleImage="data:image/png;base64,preview"
+          idleImageFit={imageFit}
+          idleImageTransform={{
+            offsetX: 12.5,
+            offsetY: -4,
+            rotation: 25,
+            scale: 0.5,
+          }}
+          onIdleImageFitChange={vi.fn()}
+          onImageTransformChange={vi.fn()}
+          onClose={vi.fn()}
+          showActiveState={false}
+        />,
+      );
+    });
+  };
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it.each(['cover', 'contain', 'fill', 'none'])(
+    '%s 맞춤과 위치·회전·크기를 미리보기 이미지에 적용한다',
+    (imageFit) => {
+      renderPicker(imageFit);
+
+      const preview = container.querySelector<HTMLImageElement>(
+        '[data-image-picker-preview]',
+      );
+
+      expect(preview).not.toBeNull();
+      expect(preview!.style.objectFit).toBe(imageFit);
+      expect(preview!.style.transform).toBe(
+        'translate(12.5px, -4px) rotate(25deg) scale(0.5)',
+      );
+    },
+  );
+
+  it('원본에서도 픽셀 크기 안내 없이 렌더링한다', () => {
+    renderPicker('none');
+
+    expect(
+      container.querySelector('[data-image-picker-dimensions]'),
+    ).toBeNull();
+  });
+});
