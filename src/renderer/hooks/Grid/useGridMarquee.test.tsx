@@ -6,9 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useGridMarquee } from './useGridMarquee';
 
+// (0,0)→(200,200) 마퀴가 감싸는 키 하나 - 잘못된 확정이 선택으로 드러나게
 const Harness = () => {
   useGridMarquee({
-    positions: {},
+    positions: {
+      benchmark: [
+        { id: 'key-1', dx: 0, dy: 0, width: 100, height: 100 },
+      ] as never,
+    },
     statPositions: {},
     graphPositions: {},
     knobPositions: {},
@@ -97,6 +102,108 @@ describe('useGridMarquee frame coalescing', () => {
 
     expect(callbacks.size).toBe(0);
     expect(useGridSelectionStore.getState().isMarqueeSelecting).toBe(false);
+  });
+
+  // 편집 입력이 포커스면 프레스가 선택을 비우지 않으므로(아래 describe) 마퀴 중에도
+  // 선택이 남아 있을 수 있다 - 취소는 그 선택을 건드리면 안 된다
+  it('컨텍스트 메뉴가 열리면 마퀴를 취소하되 기존 선택은 남긴다', () => {
+    const kept = [{ type: 'key' as const, id: 'key-1', index: 0 }];
+    act(() => useGridSelectionStore.setState({ selectedElements: kept }));
+    act(() =>
+      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true })),
+    );
+    expect(callbacks.size).toBe(1);
+
+    // 메뉴가 열리기 전에 끝나야 하므로 캡처 단계를 쓴다.
+    // 중첩 노드에서 올려야 캡처와 버블이 구분된다
+    act(() =>
+      host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })),
+    );
+
+    expect(useGridSelectionStore.getState()).toMatchObject({
+      isMarqueeSelecting: false,
+      marqueeStart: null,
+      marqueeEnd: null,
+    });
+    // 취소는 확정과 다르다 - 예약된 프레임을 버리고 선택을 건드리지 않는다
+    expect(callbacks.size).toBe(0);
+    expect(useGridSelectionStore.getState().selectedElements).toEqual(kept);
+  });
+
+  it('Chromium 순서(우클릭 mousedown → mouseup → contextmenu)에서도 선택을 확정하지 않는다', () => {
+    act(() =>
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 200, clientY: 200 }),
+      ),
+    );
+    flushFrame();
+
+    act(() => {
+      host.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, button: 2 }),
+      );
+      host.dispatchEvent(
+        new MouseEvent('mouseup', { bubbles: true, button: 2 }),
+      );
+      host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    });
+
+    expect(useGridSelectionStore.getState()).toMatchObject({
+      isMarqueeSelecting: false,
+      marqueeStart: null,
+      marqueeEnd: null,
+      selectedElements: [],
+    });
+  });
+
+  // 취소 setState와 React 플러시 사이에 끼어든 mouseup은 렌더 캡처 값으로는
+  // 아직 마퀴 중이라 옛 마퀴를 정산해 버린다 - 가드는 스토어를 직접 읽어야 한다
+  it('WebKit 순서(mousedown → contextmenu → mouseup)에서 지각 mouseup이 선택을 지우지 않는다', () => {
+    const kept = [{ type: 'key' as const, id: 'key-1', index: 0 }];
+    act(() => useGridSelectionStore.setState({ selectedElements: kept }));
+
+    act(() => {
+      host.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, button: 2 }),
+      );
+      host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      host.dispatchEvent(
+        new MouseEvent('mouseup', { bubbles: true, button: 2 }),
+      );
+    });
+
+    expect(useGridSelectionStore.getState().isMarqueeSelecting).toBe(false);
+    expect(useGridSelectionStore.getState().selectedElements).toEqual(kept);
+  });
+
+  it('좌클릭 mouseup은 그대로 마퀴를 정산한다', () => {
+    act(() =>
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 200, clientY: 200 }),
+      ),
+    );
+    flushFrame();
+
+    act(() => document.dispatchEvent(new MouseEvent('mouseup', { button: 0 })));
+
+    expect(useGridSelectionStore.getState()).toMatchObject({
+      isMarqueeSelecting: false,
+      selectedElements: [{ type: 'key', id: 'key-1', index: 0 }],
+    });
+  });
+
+  it('창이 포커스를 잃으면 마퀴를 취소하되 기존 선택은 남긴다', () => {
+    const kept = [{ type: 'key' as const, id: 'key-1', index: 0 }];
+    act(() => useGridSelectionStore.setState({ selectedElements: kept }));
+
+    act(() => window.dispatchEvent(new Event('blur')));
+
+    expect(useGridSelectionStore.getState()).toMatchObject({
+      isMarqueeSelecting: false,
+      marqueeStart: null,
+      marqueeEnd: null,
+    });
+    expect(useGridSelectionStore.getState().selectedElements).toEqual(kept);
   });
 });
 

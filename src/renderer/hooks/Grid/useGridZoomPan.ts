@@ -12,6 +12,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isMac } from '@utils/core/platform';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { ShortcutBinding } from '@src/types/settings/shortcuts';
+import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 
 interface UseGridZoomPanOptions {
   mode: string;
@@ -165,6 +166,7 @@ export function useGridZoomPan({
    * 휠 이벤트 핸들러
    */
   const handleWheel = (e: WheelEvent) => {
+    if (isModalLayerActive()) return;
     e.preventDefault();
     const isWheelZoomModifierPressed = macOS
       ? e.metaKey || e.ctrlKey // macOS: Cmd+휠, 그리고 트랙패드 핀치(ctrlKey=true)도 줌으로 유지
@@ -215,7 +217,7 @@ export function useGridZoomPan({
       wheelFrameRef.current = null;
       const next = pendingWheelRef.current;
       pendingWheelRef.current = null;
-      if (!next) return;
+      if (!next || isModalLayerActive()) return;
       applyWheel(next);
     });
   };
@@ -224,6 +226,7 @@ export function useGridZoomPan({
    * 키보드 단축키 핸들러
    */
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (isModalLayerActive()) return;
     // 입력 요소에서는 단축키 무시
     const target = e.target as HTMLElement;
     if (
@@ -279,6 +282,7 @@ export function useGridZoomPan({
   const handleMiddleMouseDown = (e: MouseEvent) => {
     // 미들 버튼만 처리
     if (e.button !== 1) return;
+    if (isModalLayerActive()) return;
 
     e.preventDefault();
     e.stopPropagation(); // 이벤트 전파 방지 (요소들의 mousedown 이벤트가 발생하지 않도록)
@@ -310,7 +314,7 @@ export function useGridZoomPan({
     const applyPendingPan = () => {
       const point = pendingPoint;
       pendingPoint = null;
-      if (!point) return;
+      if (!point || isModalLayerActive()) return;
       touchTransforming();
       setPan(mode, startPanX + point.x - startX, startPanY + point.y - startY);
     };

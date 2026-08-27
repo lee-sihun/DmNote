@@ -36,6 +36,8 @@ export const settleFocusedEditor = async (
   // 매크로태스크는 양보하지 않는다 - 원격 선택은 그쪽으로 오므로 커밋 전에 끼어들 수 없다
   await Promise.resolve();
 
+  // 이 줄을 첫 await 앞으로 당기면 안 된다. 창 blur 리스너로 이어 붙은 스크럽 취소
+  // (useScrubDrag)가 같은 디스패치 안에서 먼저 닫혀야 끌던 draft가 저장되지 않는다
   const gestureCommit = startGestureCommit();
 
   // blur가 만든 React state 갱신과 IME 정산을 한 turn 기다린다

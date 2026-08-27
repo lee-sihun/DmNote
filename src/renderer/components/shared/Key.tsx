@@ -8,6 +8,10 @@ import { useDraggable } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
+import {
+  isErrorForCurrentSrc,
+  useFailedImageSrcs,
+} from '@hooks/overlay/useFailedImageSrcs';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -124,7 +128,7 @@ const DraggableKey = React.memo(
     const { getOtherElements } = useSmartGuidesElements();
 
     const gridSnapSize = useSettingsStore(
-      (state) => state.gridSettings?.gridSnapSize || 5,
+      (state) => state.gridSettings?.gridSnapSize ?? 5,
     );
 
     const isDraggingOrResizing = useGridSelectionStore(
@@ -305,6 +309,10 @@ const DraggableKey = React.memo(
           : { fontGradient: previewSession.spec }
         : {}),
     };
+    const { failedImageSrcs, markFailed } = useFailedImageSrcs(
+      previewPosition.inactiveImage,
+      previewPosition.activeImage,
+    );
     const {
       keyStyle: computedKeyStyle,
       borderRingStyle,
@@ -315,11 +323,14 @@ const DraggableKey = React.memo(
       labelMetricsDep,
       currentImageSrc,
       hasCurrentImage,
+      imageMode,
+      imageReplaces,
       labelText,
     } = computeKeyElementStyles({
       position: previewPosition,
       active: previewActive,
       label: displayName,
+      failedImageSrcs,
     });
     // 그리드(스케일 레이어) 안에서는 승격 금지 - WebKit은 합성 자식이 하나라도
     // 생기면 스케일 컨테이너 자체를 레이어로 만들어 내용 전체가 흐려진다.
@@ -386,6 +397,7 @@ const DraggableKey = React.memo(
         data-editing={isDraggingOrResizing ? 'true' : undefined}
         data-key-element="true"
         data-key-image={hasCurrentImage ? 'true' : undefined}
+        data-key-image-mode={hasCurrentImage ? imageMode : undefined}
         onClick={handleClick}
         onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
         onPointerDown={
@@ -401,14 +413,21 @@ const DraggableKey = React.memo(
             style={borderRingStyle}
           />
         )}
-        {hasCurrentImage ? (
+        {hasCurrentImage && (
           <img
             src={currentImageSrc || ''}
             alt=""
+            data-key-image-layer="true"
             style={imageStyle}
             draggable={false}
+            onError={(event) => {
+              if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
+                return;
+              markFailed(currentImageSrc);
+            }}
           />
-        ) : showInsideCounter ? (
+        )}
+        {imageReplaces ? null : showInsideCounter ? (
           renderInsideCounterPreview()
         ) : (
           <div
@@ -441,6 +460,10 @@ export const Key = React.memo(function Key({
   const selectorKey = globalKey || keyName;
   const active = getKeySignal(selectorKey).value;
 
+  const { failedImageSrcs, markFailed } = useFailedImageSrcs(
+    position.inactiveImage,
+    position.activeImage,
+  );
   const {
     keyStyle,
     borderRingStyle,
@@ -453,12 +476,15 @@ export const Key = React.memo(function Key({
     activeImageSrc,
     currentImageSrc,
     hasCurrentImage,
+    imageMode,
+    imageReplaces,
     isTransparent,
     labelText,
   } = computeKeyElementStyles({
     position,
     active,
     label: keyName,
+    failedImageSrcs,
   });
 
   useEffect(() => {
@@ -487,6 +513,7 @@ export const Key = React.memo(function Key({
       data-state={active ? 'active' : 'inactive'}
       data-key-element="true"
       data-key-image={hasCurrentImage ? 'true' : undefined}
+      data-key-image-mode={hasCurrentImage ? imageMode : undefined}
     >
       {borderRingStyle && (
         <span
@@ -495,14 +522,21 @@ export const Key = React.memo(function Key({
           style={borderRingStyle}
         />
       )}
-      {hasCurrentImage ? (
+      {hasCurrentImage && (
         <img
           src={currentImageSrc || ''}
           alt=""
+          data-key-image-layer="true"
           style={imageStyle}
           draggable={false}
+          onError={(event) => {
+            if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
+              return;
+            markFailed(currentImageSrc);
+          }}
         />
-      ) : showInsideCounter && counterSignal ? (
+      )}
+      {imageReplaces ? null : showInsideCounter && counterSignal ? (
         <InsideCounterLayout
           countSignal={counterSignal}
           labelText={labelText}

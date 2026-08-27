@@ -27,9 +27,12 @@ import {
   dockPropertiesPanel,
   notePanelWindowHidden,
   usePanelHostStore,
+  registerPanelHostScrollReapply,
 } from './usePanelHostStore';
 
 describe('usePanelHostStore transitions', () => {
+  let stopAttachmentMirror: () => void;
+
   beforeEach(() => {
     vi.useFakeTimers();
     mocks.present.mockClear().mockImplementation(() => Promise.resolve());
@@ -41,10 +44,23 @@ describe('usePanelHostStore transitions', () => {
       .mockClear()
       .mockImplementation(() => Promise.resolve({}));
     mocks.getPanelChildWindow.mockClear().mockReturnValue(null);
-    usePanelHostStore.setState({ placement: 'docked', transition: 'idle' });
+    usePanelHostStore.setState({
+      placement: 'docked',
+      attachedPlacement: 'docked',
+      transition: 'idle',
+    });
+    stopAttachmentMirror = usePanelHostStore.subscribe((state, previous) => {
+      if (state.placement === previous.placement) return;
+      setTimeout(() => {
+        usePanelHostStore
+          .getState()
+          .setAttachedPlacement(usePanelHostStore.getState().placement);
+      }, 0);
+    });
   });
 
   afterEach(() => {
+    stopAttachmentMirror();
     vi.useRealTimers();
   });
 
@@ -69,6 +85,32 @@ describe('usePanelHostStore transitions', () => {
     expect(order).toEqual(['open', 'present:detached']);
     expect(usePanelHostStore.getState()).toMatchObject({
       placement: 'detached',
+      transition: 'idle',
+    });
+  });
+
+  it('does not present until the host is attached to the child document', async () => {
+    stopAttachmentMirror();
+    usePanelHostStore.getState().setAttachedPlacement(null);
+    const task = detachPropertiesPanel();
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(usePanelHostStore.getState().placement).toBe('detached');
+    expect(mocks.present).not.toHaveBeenCalled();
+
+    usePanelHostStore.getState().setAttachedPlacement('detached');
+    expect(await task).toBe('done');
+    expect(mocks.present).toHaveBeenCalledOnce();
+  });
+
+  it('returns to the dock without presenting when host attachment times out', async () => {
+    stopAttachmentMirror();
+
+    expect(await run(detachPropertiesPanel())).toBe('failed');
+    expect(mocks.present).not.toHaveBeenCalled();
+    expect(usePanelHostStore.getState()).toMatchObject({
+      placement: 'docked',
+      attachedPlacement: 'docked',
       transition: 'idle',
     });
   });
@@ -105,6 +147,63 @@ describe('usePanelHostStore transitions', () => {
 
     expect(await run(dockPropertiesPanel())).toBe('done');
     expect(order).toEqual(['dock:docked']);
+    expect(usePanelHostStore.getState().placement).toBe('docked');
+  });
+
+  it('dock은 호스트가 메인 문서에 붙은 뒤에 창을 감춘다', async () => {
+    stopAttachmentMirror();
+    usePanelHostStore.setState({
+      placement: 'detached',
+      attachedPlacement: 'detached',
+    });
+
+    const pending = dockPropertiesPanel();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.dock).not.toHaveBeenCalled();
+
+    usePanelHostStore.getState().setAttachedPlacement('docked');
+    expect(await run(pending)).toBe('done');
+    expect(mocks.dock).toHaveBeenCalledOnce();
+  });
+
+  it('detach는 창을 드러낸 뒤 스크롤 재적용을 부른다', async () => {
+    const order: string[] = [];
+    mocks.present.mockImplementation(async () => {
+      order.push('present');
+    });
+    const release = registerPanelHostScrollReapply(() => order.push('reapply'));
+    try {
+      expect(await run(detachPropertiesPanel())).toBe('done');
+      expect(order).toEqual(['present', 'reapply']);
+    } finally {
+      release();
+    }
+  });
+
+  it('dock hides the child window when the panel host is unmounted', async () => {
+    stopAttachmentMirror();
+    usePanelHostStore.setState({
+      placement: 'detached',
+      attachedPlacement: null,
+    });
+
+    expect(await run(dockPropertiesPanel())).toBe('done');
+    expect(mocks.dock).toHaveBeenCalledOnce();
+    expect(usePanelHostStore.getState()).toMatchObject({
+      placement: 'docked',
+      attachedPlacement: null,
+    });
+  });
+
+  it('dock still hides the child window when host attachment times out', async () => {
+    stopAttachmentMirror();
+    usePanelHostStore.setState({
+      placement: 'detached',
+      attachedPlacement: 'detached',
+    });
+
+    expect(await run(dockPropertiesPanel())).toBe('done');
+    expect(mocks.dock).toHaveBeenCalledOnce();
     expect(usePanelHostStore.getState().placement).toBe('docked');
   });
 

@@ -96,6 +96,29 @@ describe('Dropdown keyboard contract', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it('열린 메뉴는 side panel과 같은 canvas glass 재질을 쓴다', async () => {
+    await act(async () => {
+      root.render(
+        <Dropdown
+          options={[{ label: 'One', value: 'one' }]}
+          value="one"
+          onChange={() => undefined}
+        />,
+      );
+    });
+
+    const trigger = host.querySelector<HTMLButtonElement>('button');
+    await act(async () => trigger?.click());
+
+    const menu = openListbox();
+    expect(menu?.classList.contains('bg-glass-panel')).toBe(true);
+    expect(menu?.classList.contains('backdrop-glass-popup')).toBe(true);
+    expect(menu?.classList.contains('backdrop-glass-canvas')).toBe(true);
+    expect(menu?.classList.contains('shadow-elevation-popup')).toBe(true);
+    expect(menu?.classList.contains('shadow-elevation-2')).toBe(false);
+    expect(menu?.classList.contains('shadow-elevation-3')).toBe(false);
+  });
+
   it('after-paint 전략은 메뉴와 라벨을 먼저 갱신하고 선택 콜백을 미룬다', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
       window.setTimeout(() => callback(performance.now()), 0),

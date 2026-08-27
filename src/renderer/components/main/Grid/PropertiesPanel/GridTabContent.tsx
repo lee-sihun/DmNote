@@ -54,7 +54,7 @@ const GridTabContent: React.FC = () => {
           <NumberInput
             value={gridSettings.gridSnapSize}
             onChange={(val) => handleSettingChange('gridSnapSize', val)}
-            min={1}
+            min={0}
             max={10}
             suffix="px"
             width="54px"

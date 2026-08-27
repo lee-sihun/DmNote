@@ -649,6 +649,61 @@ export function inheritedPaintMaterialization(
   };
 }
 
+export function projectPaintDescriptor(
+  current: Record<string, unknown>,
+  elementType: 'key' | 'stat' | 'graph' | 'knob',
+  field: PaintPropertyNameV1,
+  descriptor: PaintDescriptorV1,
+): Record<string, unknown> {
+  const {
+    active,
+    surface,
+    colorField,
+    gradientField,
+    activeColorField,
+    activeGradientField,
+  } = paintPropertyFields(field);
+  const next: Record<string, unknown> = {
+    [colorField]: descriptor.color,
+    [gradientField]: descriptor.gradient ?? undefined,
+  };
+  // 물질화 대상은 active 쌍을 가진 요소 (font는 키만)
+  const materializes =
+    surface === 'font'
+      ? elementType === 'key'
+      : elementType === 'key' || elementType === 'knob';
+  if (!active && materializes) {
+    const inherited = inheritedPaintMaterialization(
+      {
+        color:
+          typeof current[colorField] === 'string'
+            ? (current[colorField] as string)
+            : undefined,
+        gradient: current[gradientField] as GradientSpec | null | undefined,
+      },
+      {
+        color:
+          typeof current[activeColorField] === 'string'
+            ? (current[activeColorField] as string)
+            : undefined,
+        gradient: current[activeGradientField] as
+          | GradientSpec
+          | null
+          | undefined,
+      },
+    );
+    if (inherited) {
+      if (inherited.color != null) {
+        next[activeColorField] = inherited.color;
+      }
+      if (inherited.gradient) {
+        next[activeGradientField] = inherited.gradient;
+      }
+    }
+  }
+  return next;
+}
+
 const hasStoredPairValue = (pair: ColorPair): boolean =>
   (typeof pair.color === 'string' && pair.color.trim().length > 0) ||
   pair.gradient != null;

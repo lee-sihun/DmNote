@@ -3,6 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGridViewStore } from '@stores/grid/useGridViewStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import DigitPopLayer from '@components/main/common/DigitPopLayer';
+import { useDigitPop } from '@hooks/ui/useDigitPop';
+import IconMotion from '@components/main/Tool/icons/IconMotion';
 import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
@@ -52,7 +55,7 @@ interface ZoomButtonProps {
   children: React.ReactNode;
 }
 
-// 줌 컨트롤 공통 버튼
+// 줌 컨트롤 공통 버튼. 호버 배경만으로는 눌림이 안 읽혀 아이콘이 누름을 따라 줄어든다
 const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
   <div
     role="button"
@@ -61,7 +64,7 @@ const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
       e.stopPropagation();
       onClick();
     }}
-    className="flex-1 flex items-center justify-center h-full text-fg-faint hover:text-fg cursor-pointer"
+    className="dmn-icon-press flex-1 flex items-center justify-center h-full text-fg-faint hover:text-fg cursor-pointer"
     style={{
       backgroundColor: 'transparent',
       transition: 'background-color 150ms, color 150ms',
@@ -75,7 +78,7 @@ const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
     }
     title={title}
   >
-    {children}
+    <IconMotion>{children}</IconMotion>
   </div>
 );
 
@@ -99,6 +102,36 @@ const GridMinimap = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const minimapRef = useRef<HTMLDivElement>(null);
+
+  // 배율 라벨 - 바뀐 자릿수만 튀어오르는 숫자 스텝 팝인을 NumberInput과 같은 경로로 재생
+  const zoomText = `${Math.round(zoom * 100)}%`;
+  const { pop: zoomDigitPopState, play: playZoomDigitPop } = useDigitPop();
+  const zoomTextRef = useRef(zoomText);
+  // 버튼 스텝에서만 재생한다. 휠 줌은 프레임마다 값이 바뀌어 재생이 겹치면
+  // 숫자가 계속 깜빡여 눈으로 좇을 수 없다
+  const zoomStepPendingRef = useRef(false);
+  const stepZoom = (action: () => void) => () => {
+    zoomStepPendingRef.current = true;
+    action();
+  };
+  useEffect(() => {
+    const prevText = zoomTextRef.current;
+    if (prevText === zoomText) return;
+    zoomTextRef.current = zoomText;
+    const fromStep = zoomStepPendingRef.current;
+    zoomStepPendingRef.current = false;
+    if (!fromStep) return;
+    playZoomDigitPop(
+      prevText,
+      zoomText,
+      parseInt(zoomText, 10) > parseInt(prevText, 10) ? 1 : -1,
+    );
+  }, [zoomText, playZoomDigitPop]);
+  // 표시값과 어긋난 재생은 접는다 - 연속 줌 중 늦게 온 오버레이가 옛 숫자를 남기지 않게
+  const zoomPop =
+    zoomDigitPopState && zoomDigitPopState.text === zoomText
+      ? zoomDigitPopState
+      : null;
   const [containerSize, setContainerSize] = useState({
     width: 400,
     height: 300,
@@ -409,11 +442,13 @@ const GridMinimap = ({
   return (
     <div
       ref={minimapRef}
-      className="absolute bottom-2 left-2 z-30 select-none bg-glass-dim-solid rounded-[8px] shadow-elevation-chrome overflow-hidden"
+      className="absolute bottom-2 left-2 z-[var(--z-chrome-panel)] select-none bg-glass-dim backdrop-glass-popup backdrop-glass-canvas rounded-[8px] shadow-elevation-chrome overflow-hidden"
+      // 상주 글래스 표면이라 opacity 페이드 금지 - 블러+opacity 조합은 WKWebView에서
+      // 블러 레이어가 점멸한다 (panelChrome 규칙). 등퇴장이 필요하면 마운트 토글로.
+      // 라이브 블러 유지 조건은 Windows 키 연타 프레임 실측 (미달 시 -solid 토큰 복귀)
       style={{
         width: MINIMAP_WIDTH,
         opacity: shouldShow ? 1 : 0,
-        transition: 'opacity 200ms ease-out',
         pointerEvents: shouldShow ? 'auto' : 'none',
       }}
       onMouseEnter={() => setIsHovering(true)}
@@ -431,7 +466,7 @@ const GridMinimap = ({
       >
         {/* 초기화 버튼 */}
         <ZoomButton
-          onClick={onResetZoom}
+          onClick={stepZoom(onResetZoom)}
           title="Reset zoom (Ctrl+0)"
           style={{ borderTopLeftRadius: 3, borderBottomLeftRadius: 3 }}
         >
@@ -440,7 +475,7 @@ const GridMinimap = ({
             <path
               d="M2 4.5V2H4.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -448,7 +483,7 @@ const GridMinimap = ({
             <path
               d="M7.5 2H10V4.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -456,7 +491,7 @@ const GridMinimap = ({
             <path
               d="M2 7.5V10H4.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -464,40 +499,49 @@ const GridMinimap = ({
             <path
               d="M7.5 10H10V7.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </svg>
         </ZoomButton>
         {/* 확대 버튼 */}
-        <ZoomButton onClick={onZoomIn} title="Zoom in (Ctrl++)">
+        <ZoomButton onClick={stepZoom(onZoomIn)} title="Zoom in (Ctrl++)">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path
               d="M6 3V9M3 6H9"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
             />
           </svg>
         </ZoomButton>
         {/* 축소 버튼 */}
-        <ZoomButton onClick={onZoomOut} title="Zoom out (Ctrl+-)">
+        <ZoomButton onClick={stepZoom(onZoomOut)} title="Zoom out (Ctrl+-)">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path
               d="M3 6H9"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
             />
           </svg>
         </ZoomButton>
         {/* 현재 배율 */}
         <span
-          className="w-[42px] h-full flex items-center justify-center text-fg-muted text-xs"
+          className={`relative w-[42px] h-full flex items-center justify-center text-fg-muted text-xs tabular-nums${
+            zoomPop ? ' dmn-digit-pop-host' : ''
+          }`}
           style={{ borderTopRightRadius: 4, borderBottomRightRadius: 4 }}
         >
-          {Math.round(zoom * 100)}%
+          {zoomText}
+          {zoomPop && (
+            <DigitPopLayer
+              key={zoomPop.cycle}
+              pop={zoomPop}
+              className="text-fg-muted text-xs tabular-nums"
+            />
+          )}
         </span>
       </div>
       {/* 미니맵 */}

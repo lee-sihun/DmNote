@@ -21,6 +21,7 @@ import {
   pushDisplayElementsToOverlay,
   usePluginDisplayElementStore,
 } from '@stores/plugin/usePluginDisplayElementStore';
+import { usePluginHealthStore } from '@stores/plugin/usePluginHealthStore';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import {
   beginPluginWork,
@@ -30,10 +31,21 @@ import {
 } from './pluginRuntimeReadiness';
 import { handlerRegistry } from './handlers';
 import { displayElementInstanceRegistry } from './displayElement';
-import { createPluginApiProxy, createPluginWindowProxy } from './api';
+import { createPluginApiProxy } from './api';
+import type { DMNoteAPI } from '@src/types/plugin/api';
 import type { JsPlugin } from '@src/types/plugin/js';
+import type {
+  PluginHealthEntry,
+  PluginHealthMap,
+  PluginInjectionOutcome,
+} from '@stores/plugin/usePluginHealthStore';
 
 const SCRIPT_ID_PREFIX = 'dmn-custom-js-';
+
+/** 플러그인별 API를 실어 나르는 script element */
+type PluginScriptElement = HTMLScriptElement & {
+  __dmn_plugin_api?: DMNoteAPI;
+};
 
 export interface CustomJsRuntime {
   initialize: () => void;
@@ -43,7 +55,13 @@ export interface CustomJsRuntime {
 export function createCustomJsRuntime(): CustomJsRuntime {
   const activeElements = new Map<
     string,
-    { element: HTMLScriptElement; cleanup?: () => void; pluginId?: string }
+    {
+      element: HTMLScriptElement;
+      cleanup?: () => void;
+      pluginId?: string;
+      // 이 주입 세대의 쓰기 게이트를 닫는다 - 제거 뒤 남은 타이머·구독이 문서를 못 쓰게
+      revoke?: () => void;
+    }
   >();
   const cleanupRegistry = new Map<string, (() => void)[]>();
   const unsubscribers: Array<() => void> = [];
@@ -92,6 +110,20 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     return new Promise((resolve) => reloadSettledWaiters.add(resolve));
   };
 
+  // 주입 결과는 main 창의 관리 목록과 알림이 쓴다
+  const publishHealth = (
+    outcome: PluginInjectionOutcome,
+    health: PluginHealthMap = {},
+  ) => {
+    if (disposed) return;
+    // 알고 있던 id 전체를 함께 실어 대기자가 "대상이 사라짐"과 "무관한 정산"을 가른다
+    usePluginHealthStore.getState().publish(
+      outcome,
+      health,
+      currentPlugins.map((plugin) => plugin.id),
+    );
+  };
+
   const safeRun = (fn?: () => void, label?: string) => {
     if (typeof fn !== 'function') return;
     try {
@@ -113,6 +145,22 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     cleanupRegistry.get(pluginId)!.push(cleanup);
   };
 
+  const clearPluginUi = (pluginId: string) => {
+    if (window.__dmn_window_type !== 'main') return;
+    try {
+      usePluginMenuStore.getState().clearByPluginId(pluginId);
+      usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
+      displayElementInstanceRegistry.clearByPluginId(pluginId);
+
+      pushDisplayElementsToOverlay();
+    } catch (error) {
+      console.error(
+        `Failed to clear UI elements for plugin '${pluginId}'`,
+        error,
+      );
+    }
+  };
+
   const runPluginCleanups = (pluginId: string) => {
     const cleanups = cleanupRegistry.get(pluginId) || [];
     cleanups.forEach((cleanup, index) => {
@@ -126,8 +174,10 @@ export function createCustomJsRuntime(): CustomJsRuntime {
   const removeAll = () => {
     for (const [
       id,
-      { element, cleanup, pluginId },
+      { element, cleanup, pluginId, revoke },
     ] of activeElements.entries()) {
+      // cleanup 전에 게이트를 닫는다 - cleanup 중 뒤늦게 도는 콜백도 거절
+      revoke?.();
       if (pluginId) {
         const previousPluginId = window.__dmn_current_plugin_id;
         window.__dmn_current_plugin_id = pluginId;
@@ -163,31 +213,24 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     }
   };
 
-  const injectPlugin = (plugin: JsPlugin) => {
+  const injectPlugin = (plugin: JsPlugin): PluginHealthEntry => {
+    const pluginId = extractPluginId(plugin.content, plugin.name);
+    const previousCleanup = window.__dmn_custom_js_cleanup;
+    const previousPluginId = window.__dmn_current_plugin_id;
+    let element: HTMLScriptElement | null = null;
+    let committed = false;
+    // 주입 세대별 회수 플래그 - Set<pluginId>로 두면 같은 id를 다시 주입할 때
+    // 옛 세대의 좀비 핸들까지 되살아난다
+    let revoked = false;
+
     try {
-      const previousCleanup = window.__dmn_custom_js_cleanup;
       if (previousCleanup) {
         delete window.__dmn_custom_js_cleanup;
       }
 
-      const pluginId = extractPluginId(plugin.content, plugin.name);
-
       window.__dmn_current_plugin_id = pluginId;
 
-      if (window.__dmn_window_type === 'main') {
-        try {
-          usePluginMenuStore.getState().clearByPluginId(pluginId);
-          usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
-          displayElementInstanceRegistry.clearByPluginId(pluginId);
-
-          pushDisplayElementsToOverlay();
-        } catch (error) {
-          console.error(
-            `Failed to clear UI elements for plugin '${pluginId}'`,
-            error,
-          );
-        }
-      }
+      clearPluginUi(pluginId);
 
       // 플러그인용 API 프록시 생성
       const proxiedApi = createPluginApiProxy({
@@ -196,19 +239,13 @@ export function createCustomJsRuntime(): CustomJsRuntime {
         registerCleanup: (cleanup) => registerCleanup(pluginId, cleanup),
         isReloading: getIsReloading,
         waitForReloadEnd,
+        isRevoked: () => revoked,
       });
 
-      // 플러그인용 Window 프록시 생성
-      const proxyWindow = createPluginWindowProxy(proxiedApi);
-      window.__dmn_plugin_window_proxy = proxyWindow;
-
       const wrappedContent = `
-;(function(window){
+;(function(window, dmn){
   'use strict';
   const __PLUGIN_ID__ = "${pluginId}";
-  
-  // 플러그인 스코프에 dmn 별칭 추가 (window. 없이 바로 접근 가능)
-  const dmn = window.api;
   
   const __autoWrapAsync__ = () => {
     const globalWindow = typeof window !== 'undefined' ? window : globalThis;
@@ -252,32 +289,67 @@ export function createCustomJsRuntime(): CustomJsRuntime {
 ${plugin.content}
     })();
   } catch (e) {
-    console.error('Failed to run JS plugin: ${plugin.name}', e);
+    console.error('Failed to run JS plugin: ' + ${JSON.stringify(
+      plugin.name,
+    )}, e);
+    // 주입 직후 런타임이 회수한다 - 삼키면 실패가 성공처럼 보인다.
+    // 빈 메시지(throw '')나 message getter 예외도 실패로 남아야 한다
+    let __dmn_msg = '';
+    try {
+      __dmn_msg = e && e.message != null ? String(e.message) : String(e);
+    } catch (_) {
+      __dmn_msg = '';
+    }
+    window.__dmn_plugin_run_error = __dmn_msg || 'Unknown error';
   }
-  
+
   __autoWrapAsync__();
-})(window.__dmn_plugin_window_proxy);
+  // 끝까지 도달했다는 표시 - 문법 오류나 래퍼 자체의 예외를 여기서 가른다
+  window.__dmn_plugin_ran = true;
+})(window, document.currentScript.__dmn_plugin_api);
+//# sourceURL=dmn-plugin-${pluginId}.js
 `;
 
-      const element = document.createElement('script');
+      element = document.createElement('script');
       element.id = `${SCRIPT_ID_PREFIX}${plugin.id}`;
       element.type = 'text/javascript';
       element.textContent = wrappedContent;
-      document.head.appendChild(element);
+      // 공유 전역 대신 이 script element로만 전달한다.
+      // 동기 평가 중 document.currentScript가 이 요소를 가리킨다
+      (element as PluginScriptElement).__dmn_plugin_api = proxiedApi;
+
+      // 인라인 script의 문법 오류는 appendChild 호출자에게 예외로 오지 않고
+      // window error 이벤트로만 보고된다 (HTML 스펙 run a classic script).
+      // 다만 이 구간의 error 이벤트가 전부 이 플러그인의 실패는 아니다.
+      // 실패 판정은 완주 여부로 하고, 이 메시지는 완주하지 못했을 때 사유로만 쓴다
+      let observedErrorMessage: string | undefined;
+      const captureParseError = (event: ErrorEvent): void => {
+        observedErrorMessage ??= event.message || 'SyntaxError';
+      };
+      window.addEventListener('error', captureParseError, true);
+      delete window.__dmn_plugin_ran;
+      try {
+        document.head.appendChild(element);
+      } finally {
+        window.removeEventListener('error', captureParseError, true);
+      }
+
+      // 오류가 없었다는 것으로 성공을 추정하지 않는다. CSP 차단처럼 평가 자체가
+      // 일어나지 않으면 오류 이벤트도 없으므로 완주 여부를 직접 확인한다
+      const completed = window.__dmn_plugin_ran === true;
+      delete window.__dmn_plugin_ran;
+      const runErrorMessage = window.__dmn_plugin_run_error;
+      delete window.__dmn_plugin_run_error;
 
       const pluginCleanup = window.__dmn_custom_js_cleanup;
 
-      try {
-        delete window.__dmn_plugin_window_proxy;
-        delete window.__dmn_current_plugin_id;
-      } catch {
-        // 무시
-      }
-
-      if (previousCleanup) {
-        window.__dmn_custom_js_cleanup = previousCleanup;
-      } else {
-        delete window.__dmn_custom_js_cleanup;
+      // 완주했으면 성공이다. 실행 중 관측된 error 이벤트는 이 플러그인이 낸
+      // 진단일 수 있으므로 완주 결과를 뒤집지 않는다
+      const failure = completed
+        ? runErrorMessage
+        : observedErrorMessage ?? 'Plugin script was not evaluated';
+      if (failure) {
+        return { status: 'failed' as const, message: failure };
       }
 
       activeElements.set(plugin.id, {
@@ -285,9 +357,61 @@ ${plugin.content}
         cleanup:
           typeof pluginCleanup === 'function' ? pluginCleanup : undefined,
         pluginId,
+        revoke: () => {
+          revoked = true;
+        },
       });
+      committed = true;
+      return { status: 'ok' as const };
     } catch (error) {
       console.error(`Failed to inject JS plugin '${plugin.name}'`, error);
+      return {
+        status: 'failed' as const,
+        message:
+          (error instanceof Error ? error.message : String(error)) ||
+          'Unknown error',
+      };
+    } finally {
+      // 전역 복원과 실패 회수는 모든 탈출 경로에서 일어나야 한다.
+      // 복원을 빠뜨리면 다음 플러그인이 남의 컨텍스트로 주입된다
+      try {
+        delete window.__dmn_plugin_ran;
+        delete window.__dmn_plugin_run_error;
+        // 노드에 걸어둔 API 참조는 모든 탈출 경로에서 떼어낸다 - appendChild가
+        // 던져 분리된 노드에 남으면 안 된다. 동기 평가 중에만 살아 있고 이전
+        // 플러그인의 참조는 이미 제거돼 있어 남의 것을 읽을 창은 없다
+        if (element) delete (element as PluginScriptElement).__dmn_plugin_api;
+      } catch {
+        // 무시
+      }
+
+      if (!committed) {
+        // 사용자 코드가 throw 전에 등록한 UI·handler·cleanup을 되돌린다.
+        // 실패한 플러그인의 반쪽 기능이 정상 항목과 나란히 남으면 안 된다.
+        // 남은 타이머·구독이 뒤늦게 문서를 쓰지 못하게 게이트도 닫는다
+        revoked = true;
+        window.__dmn_current_plugin_id = pluginId;
+        runPluginCleanups(pluginId);
+        safeRun(window.__dmn_custom_js_cleanup, plugin.id);
+        clearPluginUi(pluginId);
+        element?.remove();
+      }
+
+      // 진입 전 값으로 되돌린다 - 삭제로 끝내면 바깥 소유자 정보가 사라진다
+      try {
+        if (previousPluginId !== undefined) {
+          window.__dmn_current_plugin_id = previousPluginId;
+        } else {
+          delete window.__dmn_current_plugin_id;
+        }
+        if (previousCleanup) {
+          window.__dmn_custom_js_cleanup = previousCleanup;
+        } else {
+          delete window.__dmn_custom_js_cleanup;
+        }
+      } catch {
+        // 무시
+      }
     }
   };
 
@@ -315,6 +439,13 @@ ${plugin.content}
   // 재주입 세대 - reset 대기 중 다음 injectAll이 시작되면 이전 세대 주입을 중단
   let injectGeneration = 0;
 
+  // 전역 OFF - 켜져 있던 동안의 오류 상태를 그대로 두면 지금도 실패 중으로 보인다
+  const disableRuntime = () => {
+    removeAll();
+    publishHealth('skipped');
+    void resetPluginAuthorityForRuntime();
+  };
+
   const injectAll = () => {
     // 주입 사이클이 끝나야 리빌 게이트가 열린다 - 모든 종료 경로에서 해제.
     // removeAll보다 먼저 - teardown이 내보내는 빈 요소 sync가 준비 완료로
@@ -334,19 +465,26 @@ ${plugin.content}
         if (!resetOk) {
           // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
           console.error('Skipping plugin injection: authority reset failed');
+          // 주입이 아예 일어나지 않았다. 빈 결과를 성공으로 읽히게 두면 안 된다
+          publishHealth('aborted');
           setReloading(false);
           endInjectionWork();
           return;
         }
         if (!enabled) {
+          publishHealth('skipped');
           setReloading(false);
           endInjectionWork();
           return;
         }
 
+        const health: PluginHealthMap = {};
         currentPlugins
           .filter((plugin) => plugin.enabled && plugin.content)
-          .forEach((plugin) => injectPlugin(plugin));
+          .forEach((plugin) => {
+            health[plugin.id] = injectPlugin(plugin);
+          });
+        publishHealth('settled', health);
         // 주입이 실제 실행된 시점에만 기록 - reset 실패로 중단된 뒤 같은
         // 내용이 다시 오면 재시도가 가능해야 한다
         appliedSignature = pluginsSignature(currentPlugins);
@@ -377,8 +515,7 @@ ${plugin.content}
       if (!options?.forced && appliedSignature === nextSignature) return;
       injectAll();
     } else {
-      removeAll();
-      void resetPluginAuthorityForRuntime();
+      disableRuntime();
     }
   };
 
@@ -407,8 +544,7 @@ ${plugin.content}
         if (enabled) {
           injectAll();
         } else {
-          removeAll();
-          void resetPluginAuthorityForRuntime();
+          disableRuntime();
         }
       })
       .catch((error) => {
@@ -426,8 +562,7 @@ ${plugin.content}
       if (enabled) {
         injectAll();
       } else {
-        removeAll();
-        void resetPluginAuthorityForRuntime();
+        disableRuntime();
       }
     });
 
@@ -449,13 +584,35 @@ ${plugin.content}
     }
   };
 
+  // 비동기 실패(async IIFE reject)는 주입 창이 닫힌 뒤 보고되므로 컨텍스트 id로는
+  // 못 잡는다. 스크립트 sourceURL로 귀속해 로그만 남긴다 - 상태를 뒤집으면
+  // 정산 프로토콜(revision)과 어긋나고 스택이 없는 reason은 귀속도 못 한다
+  const reportUnhandledPluginRejection = (event: PromiseRejectionEvent) => {
+    const reason = event.reason as { stack?: unknown } | undefined;
+    const stack = typeof reason?.stack === 'string' ? reason.stack : '';
+    const match = stack.match(/dmn-plugin-([a-z0-9-_]+)\.js/);
+    if (!match) return;
+    console.error(
+      `[Plugin ${match[1]}] Unhandled promise rejection`,
+      event.reason,
+    );
+  };
+
   const initialize = () => {
+    window.addEventListener(
+      'unhandledrejection',
+      reportUnhandledPluginRejection,
+    );
     fetchInitialState();
     setupListeners();
   };
 
   const dispose = () => {
     disposed = true;
+    window.removeEventListener(
+      'unhandledrejection',
+      reportUnhandledPluginRejection,
+    );
     cleanupSubscriptions();
     removeAll();
     setReloading(false);

@@ -12,6 +12,7 @@ import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 
 import { useGridKeyboard } from './useGridKeyboard';
 import { useGridSelection } from './useGridSelection';
+import { registerPopupLayer } from '@components/main/Modal/popupLayer';
 
 import type { CanonicalKeyPosition } from '@src/types/editor';
 
@@ -20,11 +21,20 @@ const {
   rotateSessionMock,
   sendBridgeMessageMock,
   recordedGenerates,
+  groupSelectedElementsMock,
+  ungroupSelectedElementsMock,
 } = vi.hoisted(() => ({
   commitPatchMock: vi.fn().mockResolvedValue(undefined),
   rotateSessionMock: vi.fn(),
   sendBridgeMessageMock: vi.fn(),
   recordedGenerates: [] as Array<(base: unknown) => unknown>,
+  groupSelectedElementsMock: vi.fn().mockResolvedValue(undefined),
+  ungroupSelectedElementsMock: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@utils/grid/groupActions', () => ({
+  groupSelectedElements: groupSelectedElementsMock,
+  ungroupSelectedElements: ungroupSelectedElementsMock,
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
@@ -133,10 +143,49 @@ const Harness = ({
   return null;
 };
 
+interface BlockingHarnessProps {
+  move: () => void;
+  remove: () => void;
+  clear: () => void;
+  copy: () => void;
+  paste: () => void;
+  forward: () => void;
+  backward: () => void;
+  continuousInputStrategy?: 'sync' | 'frame';
+}
+
+const BlockingHarness = ({
+  move,
+  remove,
+  clear,
+  copy,
+  paste,
+  forward,
+  backward,
+  continuousInputStrategy = 'sync',
+}: BlockingHarnessProps) => {
+  useGridKeyboard({
+    selectedElements: [
+      { type: 'key', id: STABLE_IDS[0], index: 0 },
+      { type: 'key', id: STABLE_IDS[1], index: 1 },
+    ],
+    moveSelectedElements: move,
+    deleteSelectedElements: remove,
+    clearSelection: clear,
+    copySelectedElements: copy,
+    pasteElements: paste,
+    onMoveForward: forward,
+    onMoveBackward: backward,
+    continuousInputStrategy,
+  });
+  return null;
+};
+
 describe('useGridKeyboard arrow history burst', () => {
   let host: HTMLDivElement;
   let root: Root;
   let randomUUIDMock: ReturnType<typeof vi.spyOn>;
+  const layerCleanups: Array<() => void> = [];
 
   beforeEach(async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -146,6 +195,8 @@ describe('useGridKeyboard arrow history burst', () => {
     rotateSessionMock.mockClear();
     sendBridgeMessageMock.mockClear();
     recordedGenerates.length = 0;
+    groupSelectedElementsMock.mockClear();
+    ungroupSelectedElementsMock.mockClear();
     randomUUIDMock = vi
       .spyOn(crypto, 'randomUUID')
       .mockReturnValueOnce(firstGestureId)
@@ -161,6 +212,7 @@ describe('useGridKeyboard arrow history burst', () => {
     useGraphItemStore.setState({ positions: {} });
     useKnobItemStore.setState({ positions: {} });
     usePluginDisplayElementStore.setState({ elements: [] });
+    useGridSelectionStore.setState({ clipboard: [{} as never] });
 
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -171,8 +223,18 @@ describe('useGridKeyboard arrow history burst', () => {
   });
 
   afterEach(async () => {
+    await act(async () =>
+      layerCleanups
+        .splice(0)
+        .reverse()
+        .forEach((cleanup) => cleanup()),
+    );
     await act(async () => root.unmount());
+    useGridSelectionStore.setState({ clipboard: [] });
     host.remove();
+    document
+      .querySelectorAll('[data-dmn-modal-backdrop="true"]')
+      .forEach((element) => element.remove());
     randomUUIDMock.mockRestore();
     vi.useRealTimers();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
@@ -368,6 +430,123 @@ describe('useGridKeyboard arrow history burst', () => {
     });
     expect(commitPatchMock).toHaveBeenCalledOnce();
     expect(callbacks).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('포커스된 위젯이 소비한 방향키로 선택 요소를 움직이지 않는다', () => {
+    const widget = document.createElement('button');
+    widget.addEventListener('keydown', (event) => event.preventDefault());
+    document.body.appendChild(widget);
+
+    act(() => {
+      widget.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    expect(commitPatchMock).not.toHaveBeenCalled();
+    widget.remove();
+  });
+
+  it('활성 모달 동안 모든 배경 편집 키를 차단하고 종료 후 복원한다', async () => {
+    const handlers = {
+      move: vi.fn(),
+      remove: vi.fn(),
+      clear: vi.fn(),
+      copy: vi.fn(),
+      paste: vi.fn(),
+      forward: vi.fn(),
+      backward: vi.fn(),
+    };
+    await act(async () => root.render(<BlockingHarness {...handlers} />));
+
+    const modal = document.createElement('div');
+    modal.dataset.dmnModalBackdrop = 'true';
+    document.body.appendChild(modal);
+    let unregister = () => {};
+    await act(async () => {
+      unregister = registerPopupLayer(modal);
+      layerCleanups.push(unregister);
+    });
+
+    const press = (init: KeyboardEventInit) =>
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        }),
+      );
+    press({ key: 'g', code: 'KeyG', ctrlKey: true });
+    press({ key: 'g', code: 'KeyG', ctrlKey: true, shiftKey: true });
+    press({ key: 'c', code: 'KeyC', ctrlKey: true });
+    press({ key: 'v', code: 'KeyV', ctrlKey: true });
+    press({ key: 'ArrowRight', code: 'ArrowRight' });
+    press({ key: 'Backspace', code: 'Backspace' });
+    press({ key: 'Escape', code: 'Escape' });
+    press({ key: ']', code: 'BracketRight' });
+    press({ key: '[', code: 'BracketLeft' });
+
+    Object.values(handlers).forEach((handler) =>
+      expect(handler).not.toHaveBeenCalled(),
+    );
+    expect(groupSelectedElementsMock).not.toHaveBeenCalled();
+    expect(ungroupSelectedElementsMock).not.toHaveBeenCalled();
+
+    await act(async () => unregister());
+    press({ key: 'Backspace', code: 'Backspace' });
+    expect(handlers.remove).toHaveBeenCalledOnce();
+  });
+
+  it('모달 직전에 예약된 방향키 프레임도 폐기한다', async () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callbacks.set(1, callback);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+    const move = vi.fn();
+    await act(async () =>
+      root.render(
+        <BlockingHarness
+          move={move}
+          remove={vi.fn()}
+          clear={vi.fn()}
+          copy={vi.fn()}
+          paste={vi.fn()}
+          forward={vi.fn()}
+          backward={vi.fn()}
+          continuousInputStrategy="frame"
+        />,
+      ),
+    );
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(callbacks).toHaveLength(1);
+
+    const modal = document.createElement('div');
+    modal.dataset.dmnModalBackdrop = 'true';
+    document.body.appendChild(modal);
+    await act(async () => {
+      layerCleanups.push(registerPopupLayer(modal));
+    });
+    act(() => {
+      const callback = [...callbacks.values()][0];
+      callbacks.clear();
+      callback(performance.now());
+    });
+
+    expect(move).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 });

@@ -23,15 +23,18 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
   // 실제 화면에 그려질 그리드 크기 (줌 적용)
   const scaledGridSize = gridSize * zoom;
 
-  // 패턴 오프셋 계산 (팬 위치에 맞춰 그리드 이동)
-  const offsetX = panX % scaledGridSize;
-  const offsetY = panY % scaledGridSize;
-
   // 고유 패턴 ID (여러 그리드가 있을 경우 충돌 방지)
   const patternIdRef = useRef(
     `grid-pattern-${Math.random().toString(36).substr(2, 9)}`,
   );
   const patternId = patternIdRef.current;
+
+  // 스냅 끄기(0)면 배경 선도 그리지 않음
+  if (scaledGridSize <= 0) return null;
+
+  // 패턴 오프셋 계산 (팬 위치에 맞춰 그리드 이동)
+  const offsetX = panX % scaledGridSize;
+  const offsetY = panY % scaledGridSize;
 
   return (
     <svg

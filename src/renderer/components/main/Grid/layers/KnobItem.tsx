@@ -16,12 +16,12 @@ import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_ACTIVE_BG,
-  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
 import {
   elementShadowToCss,
   resolveElementShadow,
@@ -174,31 +174,47 @@ const KnobItem = ({
     previewSession?.surface === 'background'
       ? previewSession.spec
       : bgPair.gradient;
+  // 보더는 키·그래프와 같은 공용 해석기 (미지정이면 기본 글래스 립)
+  const resolvedKnobBorder = resolveElementBorder(
+    {
+      borderColor,
+      activeBorderColor,
+      borderGradient,
+      activeBorderGradient,
+      borderWidth,
+    },
+    previewActive,
+  );
   const effectiveBorderGradient =
     previewSession?.surface === 'border'
       ? previewSession.spec
-      : borderPair.gradient;
+      : resolvedKnobBorder.gradient;
   const stateBackgroundColor =
     bgPair.color ||
     (previewActive ? DEFAULT_ELEMENT_ACTIVE_BG : DEFAULT_ELEMENT_BG);
+  // 회전 인식 막대 색은 명시 단색 보더만 겸한다. 그라데이션 보더의 대표 첫 스톱은
+  // 막대 색이 아니다 - 패널이 보여주는 기본 립(0.14 알파)을 그대로 커밋하면 막대가
+  // 사라지므로, 그라데이션이거나 미지정이면 텍스트 색 계열.
+  // 프리뷰 중에도 링과 같은 기준(effective)을 봐야 커밋 순간 막대가 튀지 않는다
   const stateBorderColor =
-    borderPair.color ||
-    (previewActive ? DEFAULT_ELEMENT_ACTIVE_FONT : DEFAULT_ELEMENT_FONT);
+    effectiveBorderGradient == null && borderPair.color
+      ? borderPair.color
+      : previewActive
+      ? DEFAULT_ELEMENT_ACTIVE_FONT
+      : DEFAULT_ELEMENT_FONT;
 
-  // 키·그래프와 동일 규칙 — 두께 미지정이면 기본 두께 링, 0은 명시적 비활성
-  const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
+  const gradientRingWidth = resolvedKnobBorder.width;
   const showBorderRing =
-    Boolean(effectiveBorderGradient) &&
-    (borderWidth != null ? borderWidth > 0 : true);
+    Boolean(effectiveBorderGradient) && gradientRingWidth > 0;
   const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
   const resolvedBorder =
-    !effectiveBorderGradient && borderWidth && borderWidth > 0
-      ? `${borderWidth}px solid ${stateBorderColor}`
+    !showBorderRing && gradientRingWidth > 0
+      ? `${gradientRingWidth}px solid ${resolvedKnobBorder.color}`
       : 'none';
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
     (state: { gridSettings?: { gridSnapSize?: number } }) =>
-      state.gridSettings?.gridSnapSize || 5,
+      state.gridSettings?.gridSnapSize ?? 5,
   );
   const isDraggingOrResizing = useGridSelectionStore(
     (state: { isDraggingOrResizing: boolean }) => state.isDraggingOrResizing,

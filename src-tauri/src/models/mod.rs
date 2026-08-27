@@ -424,6 +424,10 @@ pub struct PendingProcessedWavReplacement {
 )]
 pub enum KeySoundOutputBackendPersist {
     DefaultDevice,
+    Device {
+        id: String,
+        name: String,
+    },
     Asio {
         driver_name: String,
         /// ASIO 버퍼 크기(프레임). None이면 엔진 기본값 사용
@@ -501,6 +505,40 @@ pub const SHADOW_OFFSET_MIN: f64 = -100.0;
 pub const SHADOW_OFFSET_MAX: f64 = 100.0;
 pub const SHADOW_BLUR_MIN: f64 = 0.0;
 pub const SHADOW_BLUR_MAX: f64 = 100.0;
+
+pub const IMAGE_TRANSFORM_OFFSET_MIN: f64 = -500.0;
+pub const IMAGE_TRANSFORM_OFFSET_MAX: f64 = 500.0;
+pub const IMAGE_TRANSFORM_ROTATION_MIN: f64 = -180.0;
+pub const IMAGE_TRANSFORM_ROTATION_MAX: f64 = 180.0;
+pub const IMAGE_TRANSFORM_SCALE_MIN: f64 = 0.1;
+pub const IMAGE_TRANSFORM_SCALE_MAX: f64 = 10.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageMode {
+    Replace,
+    Overlay,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageTransform {
+    pub offset_x: f64,
+    pub offset_y: f64,
+    pub rotation: f64,
+    pub scale: f64,
+}
+
+impl Default for ImageTransform {
+    fn default() -> Self {
+        Self {
+            offset_x: 0.0,
+            offset_y: 0.0,
+            rotation: 0.0,
+            scale: 1.0,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -654,6 +692,12 @@ pub struct KeyPosition {
     pub idle_image_fit: Option<ImageFit>,
     #[serde(default)]
     pub active_image_fit: Option<ImageFit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_mode: Option<ImageMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_image_transform: Option<ImageTransform>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_image_transform: Option<ImageTransform>,
     /// 인라인 스타일 우선 여부 (true: 속성 패널 스타일 우선, false: 커스텀 CSS 우선)
     #[serde(default)]
     pub use_inline_styles: Option<bool>,
@@ -751,6 +795,9 @@ impl Default for KeyPosition {
             image_fit: None,
             idle_image_fit: None,
             active_image_fit: None,
+            image_mode: None,
+            idle_image_transform: None,
+            active_image_transform: None,
             use_inline_styles: None,
             display_text: None,
             font_weight: Some(400),
@@ -1411,6 +1458,17 @@ impl KeyPosition {
         changed
     }
 
+    // replace는 sparse 저장(None)이 정본 - 프리셋·플러그인·frozen insert로 들어온
+    // Some(Replace)를 접어 이후 ImageMode(Replace) 패치가 빈 undo 항목을 만들지 않게
+    pub(crate) fn canonicalize_image_mode(&mut self) -> bool {
+        if self.image_mode == Some(ImageMode::Replace) {
+            self.image_mode = None;
+            true
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
         let mut changed = false;
         let mut pair_repaired = false;
@@ -1859,7 +1917,7 @@ fn default_note_glow_enabled() -> bool {
     false
 }
 fn default_note_glow_size() -> f64 {
-    20.0
+    10.0
 }
 
 fn default_note_border_opacity() -> u32 {
@@ -2228,7 +2286,7 @@ pub struct GridSettings {
     /// 미니맵 표시 여부
     #[serde(default = "default_true")]
     pub minimap_enabled: bool,
-    /// 그리드 스냅 크기 (1-10px)
+    /// 그리드 스냅 크기 (0-10px, 0은 끄기)
     #[serde(default = "default_grid_snap_size")]
     pub grid_snap_size: u32,
     /// 오버레이 여백 (0-30px)
@@ -3272,12 +3330,12 @@ mod tests {
         assert_eq!(pos.note_glow_size, 20.5);
     }
 
-    // note_glow_size 미지정 시 기본값(20.0) 적용
+    // note_glow_size 미지정 시 기본값(10.0) 적용
     #[test]
-    fn note_glow_size_defaults_to_20() {
+    fn note_glow_size_defaults_to_10() {
         let json = key_position_json(r#""noteWidth": null"#);
         let pos: KeyPosition = serde_json::from_str(&json).unwrap();
-        assert_eq!(pos.note_glow_size, 20.0);
+        assert_eq!(pos.note_glow_size, 10.0);
         assert_eq!(pos.note_width, None);
     }
 

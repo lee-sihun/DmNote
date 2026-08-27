@@ -13,10 +13,16 @@ import {
 import type {
   EditorElementTypeV1,
   EditorPaintPropertyPatchV1,
-  EditorPreviewStylePropertyPatchV1,
+  EditorShadowPreviewPatchV1,
+  EditorStylePropertyPreviewPatchV1,
 } from '@src/types/editor';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { PreviewDomain } from '@src/types/preview';
+import { projectElementShadowPatch } from '@src/types/key/shadows';
+import {
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+} from '@utils/core/elementDefaults';
 
 type PreviewTargetType = 'key' | 'stat' | 'graph' | 'knob';
 
@@ -36,18 +42,90 @@ const previewDomainOf = (type: PreviewTargetType): PreviewDomain =>
 
 // nullable leaf의 null은 eager intent 경로와 동일하게 undefined로 투영
 export const projectPreviewStylePropertyPatch = (
-  patch: EditorPreviewStylePropertyPatchV1,
+  patch: EditorStylePropertyPreviewPatchV1,
 ): Record<string, unknown> => ({
   [patch.property]: patch.value ?? undefined,
 });
 
+const isShadowPreviewPatch = (
+  patch: EditorStylePropertyPreviewPatchV1,
+): patch is EditorShadowPreviewPatchV1 =>
+  patch.property === 'shadow' || patch.property === 'activeShadow';
+
+const currentPositionOf = (
+  document: ReturnType<typeof captureEditorDocument>,
+  target: PreviewTarget,
+  mode: string,
+  index: number,
+): KeyPosition | undefined => {
+  const collection =
+    target.elementType === 'key'
+      ? document.keyPositions
+      : target.elementType === 'stat'
+      ? document.statPositions
+      : target.elementType === 'graph'
+      ? document.graphPositions
+      : document.knobPositions;
+  return collection[mode]?.[index] as KeyPosition | undefined;
+};
+
+// 그림자는 leaf wire를 대상별 현재 스펙에 얹어 전체 스펙으로 투영한다 - 커밋 경로와 같은 함수.
+// 그래프는 그림자가 없고, 통계는 눌림 상태가 없어 activeShadow를 받지 않는다
+const previewBatchShadow = (
+  targets: readonly PreviewTarget[],
+  selectedKeyType: string,
+  patch: EditorShadowPreviewPatchV1,
+): void => {
+  const document = captureEditorDocument();
+  const grouped = new Map<
+    PreviewTargetType,
+    Array<{ id: string; patch: Record<string, unknown> }>
+  >();
+  for (const target of targets) {
+    if (target.elementType === 'graph') continue;
+    if (target.elementType === 'stat' && patch.property === 'activeShadow') {
+      continue;
+    }
+    const locator = resolveElementById(target.elementType, target.id);
+    if (!locator || locator.mode !== selectedKeyType) return;
+    const current = currentPositionOf(
+      document,
+      target,
+      locator.mode,
+      locator.index,
+    );
+    if (!current) return;
+    const entries = grouped.get(target.elementType) ?? [];
+    entries.push({
+      id: target.id,
+      patch: projectElementShadowPatch({
+        position: current,
+        elementType: target.elementType,
+        patch,
+        defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+        defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+      }),
+    });
+    grouped.set(target.elementType, entries);
+  }
+  for (const [type, entries] of grouped) {
+    editGestureController.preview(selectedKeyType, entries, {
+      domain: previewDomainOf(type),
+    });
+  }
+};
+
 export const previewSingleStyleProperty = (
   type: EditorElementTypeV1,
   id: string,
-  patch: EditorPreviewStylePropertyPatchV1,
+  patch: EditorStylePropertyPreviewPatchV1,
 ): void => {
   const locator = resolveElementById(type, id);
   if (!locator) return;
+  if (isShadowPreviewPatch(patch)) {
+    previewBatchShadow([{ elementType: type, id }], locator.mode, patch);
+    return;
+  }
   // locator는 mode 해석·존재 확인 전용 - 신원은 id가 결정
   editGestureController.preview(
     locator.mode,
@@ -64,8 +142,12 @@ export const previewSingleStyleProperty = (
 export const previewBatchStyleProperty = (
   targets: readonly PreviewTarget[],
   selectedKeyType: string,
-  patch: EditorPreviewStylePropertyPatchV1,
+  patch: EditorStylePropertyPreviewPatchV1,
 ): void => {
+  if (isShadowPreviewPatch(patch)) {
+    previewBatchShadow(targets, selectedKeyType, patch);
+    return;
+  }
   const grouped = new Map<
     PreviewTargetType,
     Array<{ id: string; patch: Record<string, unknown> }>
@@ -176,4 +258,36 @@ export const previewBatchPaint = (
       domain: previewDomainOf(type),
     });
   }
+};
+
+export const previewSinglePaint = (
+  type: PreviewTargetType,
+  id: string,
+  patch: EditorPaintPropertyPatchV1,
+): void => {
+  const locator = resolveElementById(type, id);
+  if (!locator) return;
+  previewBatchPaint([{ elementType: type, id }], locator.mode, patch);
+};
+
+export const previewBatchGraphColor = (
+  ids: readonly string[],
+  selectedKeyType: string,
+  color: string,
+): void => {
+  const entries: Array<{ id: string; patch: Record<string, unknown> }> = [];
+  for (const id of ids) {
+    const locator = resolveElementById('graph', id);
+    if (!locator || locator.mode !== selectedKeyType) return;
+    entries.push({ id, patch: { graphColor: color } });
+  }
+  editGestureController.preview(selectedKeyType, entries, {
+    domain: 'graphPosition',
+  });
+};
+
+export const previewSingleGraphColor = (id: string, color: string): void => {
+  const locator = resolveElementById('graph', id);
+  if (!locator) return;
+  previewBatchGraphColor([id], locator.mode, color);
 };

@@ -4,6 +4,11 @@ import type { StyleTabContentProps } from '../types';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
+  applyImageTransformLeaf,
+  type ImageMode,
+  type ImageTransformLeaf,
+} from '@src/types/key/imageLayer';
+import {
   slotMembers,
   slotUiMode,
   slotCanonical,
@@ -56,6 +61,10 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import {
+  elementImageReplacesSurface,
+  resolveElementBorder,
+} from '@utils/core/elementBorder';
 import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 import {
   elementShadowLeafFromPartial,
@@ -68,12 +77,7 @@ const FONT_PAGE_KEY = 'single-style:font';
 const SOUND_PAGE_KEY = 'single-style:sound';
 
 // 피커 타겟 타입
-type PickerTarget =
-  | 'backgroundColor'
-  | 'borderColor'
-  | 'fontColor'
-  | 'image'
-  | null;
+type PickerTarget = 'backgroundColor' | 'borderColor' | 'fontColor' | null;
 
 type ColorState = 'idle' | 'active';
 type StyleColorTarget = 'backgroundColor' | 'borderColor' | 'fontColor';
@@ -125,6 +129,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
   onShadowCommit,
   imageButtonRef,
@@ -258,7 +263,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 폰트 버튼 ref
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
-  const internalImageButtonRef = useRef<HTMLButtonElement>(null);
 
   // 인-패널 내비게이션 (사운드/폰트 서브 페이지)
   const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
@@ -336,25 +340,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     fontColorBtnRef,
   ];
 
-  // 실제 사용할 이미지 버튼 ref (외부에서 제공되면 외부 것 사용)
-  const _actualImageButtonRef = imageButtonRef || internalImageButtonRef;
-
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
   const handlePickerToggle = (target: PickerTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
     // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 배치로 리셋해
     // 첫 렌더부터 이전 "입력" 선택이 새지 않는다
     if (pickerFor !== target) setColorState('idle');
-  };
-
-  // 이미지 피커 토글 (외부 핸들러가 있으면 사용, 없으면 내부 상태 사용)
-  const _handleImagePickerToggle = () => {
-    if (onToggleImagePicker) {
-      onToggleImagePicker();
-      setPickerFor(null); // 다른 피커 닫기
-    } else {
-      handlePickerToggle('image');
-    }
   };
 
   const resolveColorProperty = (
@@ -414,7 +405,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     return localColors[resolveColorProperty(target)];
   };
 
-  // 드래그 중 로컬 상태만 업데이트
+  // 드래그 중 로컬 상태만 갱신 - preview는 그라데이션 상태(handleGradientPreview)가 담당
   const handleColorChange = (target: StyleColorTarget, color: string) => {
     const prop = resolveColorProperty(target);
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
@@ -441,6 +432,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const gradientSpecFor = (
     target: GradientColorTarget,
   ): GradientSpec | null => {
+    // 테두리는 상태별 이미지 억제까지 렌더와 같은 해석기 결과를 그대로 쓴다.
+    // 활성 이미지로 억제된 null이 대기 기본 립으로 되돌아가면 안 된다
+    if (target === 'borderColor') {
+      const active = effectiveColorState === 'active';
+      return resolveElementBorder(keyPosition, active, {
+        suppressDefault: elementImageReplacesSurface(keyPosition, active),
+      }).gradient;
+    }
     const idleGradient = storedGradientOf(target);
     if (effectiveColorState !== 'active') return idleGradient;
     const activeProp = activeColorPropertyFor(target);
@@ -450,29 +449,41 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     return activeHasValue ? activeGradient : idleGradient;
   };
 
+  // 배경·테두리·글꼴 표면과 상태 조합을 paint 필드로
+  const paintFieldFor = (target: GradientColorTarget) =>
+    target === 'backgroundColor'
+      ? effectiveColorState === 'active'
+        ? 'activeBackgroundPaint'
+        : 'backgroundPaint'
+      : target === 'borderColor'
+      ? effectiveColorState === 'active'
+        ? 'activeBorderPaint'
+        : 'borderPaint'
+      : effectiveColorState === 'active'
+      ? 'activeFontPaint'
+      : 'fontPaint';
+
+  // 드래그와 텍스트 입력은 같은 preview patch를 사용
   const handleGradientPreview = (value: ColorModeValue) => {
     if (!gradientTarget) return;
-    if (value.mode === 'solid') handleColorChange(gradientTarget, value.color);
+    const prop = resolveColorProperty(gradientTarget);
+    const descriptor = paintDescriptor(value);
+    setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+    onPaintPreview?.({
+      property: paintFieldFor(gradientTarget),
+      value: descriptor,
+    });
   };
 
   const handleGradientCommit = (value: ColorModeValue) => {
     if (!gradientTarget) return;
     const prop = resolveColorProperty(gradientTarget);
     const descriptor = paintDescriptor(value);
-    const paintField =
-      gradientTarget === 'backgroundColor'
-        ? effectiveColorState === 'active'
-          ? 'activeBackgroundPaint'
-          : 'backgroundPaint'
-        : gradientTarget === 'borderColor'
-        ? effectiveColorState === 'active'
-          ? 'activeBorderPaint'
-          : 'borderPaint'
-        : effectiveColorState === 'active'
-        ? 'activeFontPaint'
-        : 'fontPaint';
     setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-    onPaintCommit?.({ property: paintField, value: descriptor } as never);
+    onPaintCommit?.({
+      property: paintFieldFor(gradientTarget),
+      value: descriptor,
+    });
   };
 
   const gradientState = useGradientColorState({
@@ -496,6 +507,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         : 'background',
     canvasState: effectiveColorState,
     onPreview: handleGradientPreview,
+    onCancel: () => editGestureController.cancel(),
     onCommit: handleGradientCommit,
   });
 
@@ -622,6 +634,37 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onActiveImageFitCommit?.(fit);
   };
 
+  // 이미지 레이어 모드·변환은 키 전용 - 범용 property 커밋으로 흘린다
+  const handleImageModeChange = (mode: ImageMode) => {
+    onElementPropertyCommit?.({ property: 'imageMode', value: mode });
+  };
+  const handleImageTransformChange = (
+    state: 'idle' | 'active',
+    leaf: ImageTransformLeaf,
+    value: number,
+  ) => {
+    onElementPropertyCommit?.(
+      state === 'idle'
+        ? { property: 'idleImageTransform', value: { leaf, value } }
+        : { property: 'activeImageTransform', value: { leaf, value } },
+    );
+  };
+  // 프리뷰는 leaf가 아니라 전체 변환을 보낸다. 오버레이는 patch를 얕게 합치므로
+  // leaf만 보내면 나머지 축이 사라진다
+  const handleImageTransformPreview = (
+    state: 'idle' | 'active',
+    leaf: ImageTransformLeaf,
+    value: number,
+  ) => {
+    const property =
+      state === 'idle' ? 'idleImageTransform' : 'activeImageTransform';
+    onStylePropertyPreview?.({
+      property,
+      value: applyImageTransformLeaf(keyPosition[property], { leaf, value }),
+    });
+  };
+  const handleImageTransformCancel = () => editGestureController.cancel();
+
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
     onStylePropertyPreview?.({ property: 'displayText', value: value });
@@ -639,11 +682,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const handleClassNameBlur = (value: string) => {
     onStylePropertyCommit?.({ property: 'className', value: value });
   };
-
-  // 이미지 피커 열림 상태 (외부 또는 내부)
-  const _isImagePickerOpen = onToggleImagePicker
-    ? showImagePicker
-    : pickerFor === 'image';
 
   // 색상 표시용 헬퍼 함수
   const getDisplayColor = (color: string): string => {
@@ -921,6 +959,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               : { property: 'shadow', value: leaf },
           );
         }}
+        onPreview={(state, leaf) =>
+          onStylePropertyPreview?.({
+            property: state === 'active' ? 'activeShadow' : 'shadow',
+            value: leaf,
+          })
+        }
+        onPreviewCancel={() => editGestureController.cancel()}
         onEnabledChange={(enabled) => {
           onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
         }}
@@ -1133,6 +1178,17 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             onActiveImageFitChange={handleActiveImageFitChange}
             onIdleImageReset={handleIdleImageReset}
             onActiveImageReset={handleActiveImageReset}
+            {...(shadowActiveState
+              ? {
+                  imageMode: keyPosition.imageMode,
+                  idleImageTransform: keyPosition.idleImageTransform,
+                  activeImageTransform: keyPosition.activeImageTransform,
+                  onImageModeChange: handleImageModeChange,
+                  onImageTransformChange: handleImageTransformChange,
+                  onImageTransformPreview: handleImageTransformPreview,
+                  onImageTransformCancel: handleImageTransformCancel,
+                }
+              : {})}
             onClose={() => onToggleImagePicker()}
             showActiveState={shadowActiveState}
           />
@@ -1140,8 +1196,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       </PopupExit>
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
-      <PopupExit open={Boolean(pickerFor && pickerFor !== 'image')}>
-        {pickerFor && pickerFor !== 'image' ? (
+      <PopupExit open={Boolean(pickerFor)}>
+        {pickerFor ? (
           <ColorPicker
             open={!!pickerFor}
             referenceRef={
@@ -1167,6 +1223,19 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 ? gradientState.handlePickerColorChange(c, true)
                 : handleColorChangeComplete(pickerFor as StyleColorTarget, c)
             }
+            onInputCancel={(_target, restoredColor) => {
+              gradientState.cancelPreview();
+              if (typeof restoredColor === 'string') {
+                const prop = resolveColorProperty(
+                  pickerFor as StyleColorTarget,
+                );
+                setLocalColors((prev) => ({
+                  ...prev,
+                  [prop]: restoredColor,
+                }));
+              }
+              editGestureController.cancel();
+            }}
             onClose={() => setPickerFor(null)}
             solidOnly={true}
             stateMode={shadowActiveState ? effectiveColorState : undefined}

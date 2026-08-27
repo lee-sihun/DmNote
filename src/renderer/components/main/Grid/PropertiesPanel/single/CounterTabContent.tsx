@@ -28,6 +28,7 @@ import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useFontStore } from '@stores/useFontStore';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { createCounterAnimationPresetIntent } from '@src/types/key/counterAnimation';
 import {
   counterFillPair,
@@ -183,6 +184,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     onPreview: (value) => {
       if (value.mode === 'solid') handleColorChange(value.color);
     },
+    onCancel: () => editGestureController.cancel(),
     onCommit: handleFillCommit,
   });
 
@@ -449,6 +451,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             onColorChangeComplete={(c: string) =>
               fillGradientState.handlePickerColorChange(c, true)
             }
+            onInputCancel={() => {
+              fillGradientState.cancelPreview();
+              editGestureController.cancel();
+            }}
             onClose={() => setPickerFor(null)}
             solidOnly={true}
             interactiveRefs={colorPickerInteractiveRefs}

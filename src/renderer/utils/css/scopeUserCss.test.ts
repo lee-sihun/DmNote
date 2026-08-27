@@ -221,6 +221,25 @@ describe('scopeUserCss', () => {
     expect(flat).not.toContain('@keyframes pop {');
   });
 
+  it('앱 숫자 애니메이션과 같은 이름도 사용자 스코프 안으로 격리한다', () => {
+    const out = scopeUserCss(
+      [
+        '@keyframes dmnDigitPop { from { filter: blur(24px); } }',
+        ':root { --ui-digit-duration: 4000ms; }',
+        '.dmn-digit-pop > span { animation: dmnDigitPop 4s linear; }',
+      ].join('\n'),
+      SCOPE,
+    );
+    const flat = compact(out);
+
+    expect(flat).toContain('@keyframes dmnu-dmnDigitPop {');
+    expect(flat).toContain(`${SCOPE} { --ui-digit-duration: 4000ms; }`);
+    expect(flat).toContain(
+      `${SCOPE} .dmn-digit-pop > span { animation: dmnu-dmnDigitPop 4s linear; }`,
+    );
+    expect(flat).not.toContain('@keyframes dmnDigitPop {');
+  });
+
   it('@media 안의 @keyframes도 이름을 바꾼다', () => {
     const out = scopeUserCss(
       '@media (min-width: 1px) { @keyframes pop { to { opacity: 1; } } .counter { animation-name: pop; } }',

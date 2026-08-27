@@ -156,8 +156,8 @@ export function cloneKeyPositionForDuplicate(
     ...sourcePosition,
     // 복제본은 새 신원. source id를 물려받으면 후보 안 중복으로 커밋이 거절된다
     id: newElementId(),
-    dx: Math.round(targetDx),
-    dy: Math.round(targetDy),
+    dx: targetDx,
+    dy: targetDy,
     counter: clonedCounter,
     noteColor: clonedNoteColor,
     noteGlowEnabled: sourcePosition.noteGlowEnabled ?? true,

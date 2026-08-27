@@ -11,6 +11,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
@@ -47,62 +48,23 @@ export interface PropertyRowProps {
   children: React.ReactNode;
 }
 
-export interface NumberInputProps {
-  value: number | string;
-  onChange: (value: number) => void;
-  /** 타이핑 callback을 첫 paint 뒤로 미뤄 입력 echo를 우선 반영 */
-  commitStrategy?: CommitStrategy;
-  /** 확정값을 함께 받는다. onChange가 예약한 state는 같은 이벤트에서 아직 이전 값이다 */
-  onBlur?: (value?: number) => void;
-  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
-  onPreview?: (value: number) => void;
-  /** Escape 원복 시 호출 (게스처 취소 연동) */
-  onCancel?: () => void;
-  min?: number;
-  max?: number;
-  prefix?: string;
-  suffix?: string;
-  width?: string;
-  allowDecimal?: boolean;
-  decimalScale?: number;
-  /** 방향키 눈금. 미지정이면 1, Shift는 이 값의 10배 */
-  step?: number;
-  isMixed?: boolean;
-  mixedPlaceholder?: string;
-}
-
-export interface OptionalNumberInputProps {
-  value?: number;
-  onChange: (value?: number) => void;
-  /** 타이핑 callback을 첫 paint 뒤로 미뤄 입력 echo를 우선 반영 */
-  commitStrategy?: CommitStrategy;
-  /** 확정값을 함께 받는다. onChange가 예약한 state는 같은 이벤트에서 아직 이전 값이다 */
-  onBlur?: (value?: number) => void;
-  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
-  onPreview?: (value?: number) => void;
-  /** Escape 원복 시 호출 (게스처 취소 연동) */
-  onCancel?: () => void;
-  min?: number;
-  max?: number;
-  prefix?: string;
-  suffix?: string;
-  width?: string;
-  placeholder?: string;
-  allowNegative?: boolean;
-  allowDecimal?: boolean;
-  decimalScale?: number;
-  isMixed?: boolean;
-  mixedPlaceholder?: string;
-}
+export type {
+  NumberInputProps,
+  OptionalNumberInputProps,
+} from '@components/main/common/NumberInput';
 
 export interface ColorInputProps {
   value: string;
   onChange: (value: string) => void;
+  /** 드래그·타이핑 중 대기 색상 preview */
+  onPreview?: (value: string) => void;
   /** 내부 ColorPicker mount를 첫 paint 뒤로 미뤄 스와치 피드백을 우선 반영 */
   pickerMountStrategy?: CommitStrategy;
   onChangeComplete?: (value: string) => void;
   activeValue?: string;
   onActiveChange?: (value: string) => void;
+  /** 드래그·타이핑 중 입력 색상 preview */
+  onActivePreview?: (value: string) => void;
   onActiveChangeComplete?: (value: string) => void;
   showStateTabs?: boolean;
   stateMode?: 'idle' | 'active';
@@ -118,10 +80,17 @@ export interface ColorInputProps {
   activeGradientValue?: GradientSpec | null;
   /** gradient 지원 커밋 경로 — 단색/그라데이션 확정을 한 콜백으로 수신 */
   onModeCommit?: (state: 'idle' | 'active', value: ColorModeValue) => void;
+  /** gradient 지원 preview 경로. 단색/그라데이션을 같은 표현으로 수신 */
+  onModePreview?: (state: 'idle' | 'active', value: ColorModeValue) => void;
+  /** Escape·유효하지 않은 blur에서 호출부 preview 세션 취소 */
+  onCancel?: () => void;
   /** 온캔버스 각도 핸들 앵커 */
   canvasAnchor?: GradientCanvasAnchor;
   /** 편집 표면 — 캔버스 일시 페인트 대상 필드 (기본 background) */
   gradientSurface?: GradientPreviewSurface;
+  /** 배치 선택에서 hex·알파가 서로 다르면 피커 칸에 Mixed. 둘은 따로 판단한다 */
+  hexMixed?: boolean;
+  alphaMixed?: boolean;
 }
 
 export interface TextInputProps {
@@ -216,8 +185,9 @@ export interface StyleTabContentProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
@@ -228,8 +198,10 @@ export interface StyleTabContentProps {
 
 export interface NoteTabContentProps {
   keyPosition: KeyPosition;
+  /** preview overlay를 제외한 Escape 원복 기준 */
+  canonicalKeyPosition?: KeyPosition;
   onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
-  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onNotePaintPreview?: (patch: EditorNotePaintPropertyPatchV1) => void;
   onNotePaintCommit?: (patch: EditorNotePaintPropertyPatchV1) => void;

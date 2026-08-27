@@ -11,8 +11,8 @@ import {
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-  DEFAULT_ELEMENT_BORDER_WIDTH,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
 import {
   gradientToCss,
   gradientRingStyle,
@@ -158,27 +158,40 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
   const stateBackground = isActive
     ? activeBackgroundColor || backgroundColor || DEFAULT_ELEMENT_ACTIVE_BG
     : backgroundColor || DEFAULT_ELEMENT_BG;
-  // 보더 색은 회전 인식 막대 색을 겸함 — 폴백은 텍스트 색 계열
-  const stateBorderColor = isActive
-    ? activeBorderColor || borderColor || DEFAULT_ELEMENT_ACTIVE_FONT
-    : borderColor || DEFAULT_ELEMENT_FONT;
   // 그라데이션 쌍 해석 — 상태 간 색/그라데이션이 섞이지 않도록 쌍 단위 폴백
+  const indicatorBorderPair = resolveStatePair(
+    isActive,
+    { color: borderColor, gradient: borderGradient },
+    { color: activeBorderColor, gradient: activeBorderGradient },
+  );
+  // 회전 인식 막대 색은 명시 단색 보더만 겸한다 - 그라데이션 보더의 대표 첫 스톱은
+  // 막대 색이 아니다 (KnobItem과 동일 규칙)
+  const stateBorderColor =
+    indicatorBorderPair.gradient == null && indicatorBorderPair.color
+      ? indicatorBorderPair.color
+      : isActive
+      ? DEFAULT_ELEMENT_ACTIVE_FONT
+      : DEFAULT_ELEMENT_FONT;
   const bgPair = resolveStatePair(
     isActive,
     { color: backgroundColor, gradient: backgroundGradient },
     { color: activeBackgroundColor, gradient: activeBackgroundGradient },
   );
-  const borderPair = resolveStatePair(
-    isActive,
-    { color: borderColor, gradient: borderGradient },
-    { color: activeBorderColor, gradient: activeBorderGradient },
-  );
   const bgSpec = bgPair.gradient ?? null;
-  const borderSpec = borderPair.gradient ?? null;
-  // 키·그래프와 동일 규칙 — 두께 미지정이면 기본 두께 링, 0은 명시적 비활성
-  const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
-  const showBorderRing =
-    Boolean(borderSpec) && (borderWidth != null ? borderWidth > 0 : true);
+  // 보더는 키·그래프와 같은 공용 해석기 (미지정이면 기본 글래스 립)
+  const resolvedKnobBorder = resolveElementBorder(
+    {
+      borderColor,
+      activeBorderColor,
+      borderGradient,
+      activeBorderGradient,
+      borderWidth,
+    },
+    isActive,
+  );
+  const borderSpec = resolvedKnobBorder.gradient;
+  const gradientRingWidth = resolvedKnobBorder.width;
+  const showBorderRing = Boolean(borderSpec) && gradientRingWidth > 0;
   // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
   const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
   const resolvedBackground = isTransparent
@@ -187,8 +200,8 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
     ? gradientToCss(bgSpec)
     : stateBackground;
   const resolvedBorder =
-    !showBorderRing && borderWidth && borderWidth > 0
-      ? `${borderWidth}px solid ${stateBorderColor}`
+    !showBorderRing && gradientRingWidth > 0
+      ? `${gradientRingWidth}px solid ${resolvedKnobBorder.color}`
       : 'none';
   const resolvedShadow = elementShadowToCss(
     resolveElementShadow({

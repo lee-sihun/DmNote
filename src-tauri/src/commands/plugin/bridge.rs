@@ -1,7 +1,8 @@
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::errors::{CmdResult, CommandError};
+use crate::services::event_publisher::publish_event;
 use crate::state::AppState;
 
 /// 플러그인 간 윈도우 브릿지 메시지 전송
@@ -23,7 +24,7 @@ pub fn plugin_bridge_send(
         "data": data,
     });
 
-    app.emit("plugin-bridge:message", payload)?;
+    publish_event(&app, "plugin-bridge:message", payload);
 
     Ok(())
 }
@@ -44,11 +45,6 @@ pub fn plugin_bridge_send_to(
         data.as_ref().map(|d| d.to_string().len()).unwrap_or(0)
     );
 
-    let payload = serde_json::json!({
-        "type": message_type,
-        "data": data,
-    });
-
     // 타겟 윈도우 레이블 결정
     let window_label = match target.as_str() {
         "main" => "main",
@@ -61,15 +57,21 @@ pub fn plugin_bridge_send_to(
         }
     };
 
-    // 특정 윈도우에만 이벤트 전송
-    if let Some(window) = app.get_webview_window(window_label) {
-        window.emit("plugin-bridge:message", payload)?;
+    // 발행은 전역이므로 target을 실어 수신 측(bridgeApi·OBS 브릿지)이 거른다 -
+    // send(브로드캐스트)는 target 없이 그대로
+    let payload = serde_json::json!({
+        "type": message_type,
+        "data": data,
+        "target": window_label,
+    });
+
+    // Window::emit도 전역 발행이므로 publisher에서 한 번만 전송
+    if app.get_webview_window(window_label).is_some() {
+        publish_event(&app, "plugin-bridge:message", payload);
         Ok(())
     } else if window_label == "overlay" && state.is_obs_mode_active() {
-        // OBS 모드에서 overlay가 destroy된 상태 — WS 클라이언트로 직접 포워딩
-        state
-            .obs_bridge
-            .broadcast_tauri_event("plugin-bridge:message".to_string(), payload);
+        // OBS 모드에서는 overlay가 destroy된 상태
+        publish_event(&app, "plugin-bridge:message", payload);
         Ok(())
     } else {
         Err(CommandError::msg(format!(

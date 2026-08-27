@@ -47,10 +47,10 @@ describe('ListPopup 표면 옵션', () => {
     expect(surface()?.style.minWidth).toBe('172px');
   });
 
-  it('기본 z는 z-40', async () => {
+  it('기본 z는 팝업 토큰', async () => {
     await render({});
 
-    expect(surface()?.className).toContain('z-40');
+    expect(surface()?.className).toContain('z-[var(--z-chrome-popup)]');
   });
 
   // 호출부가 z를 주면 기본값을 빼야 한다. 둘 다 붙으면 특이도가 같아
@@ -60,7 +60,7 @@ describe('ListPopup 표면 옵션', () => {
 
     const className = surface()?.className ?? '';
     expect(className).toContain('z-[60]');
-    expect(className).not.toContain('z-40');
+    expect(className).not.toContain('z-[var(--z-chrome-popup)]');
   });
 
   it('z가 아닌 className은 기본 z와 함께 붙는다', async () => {
@@ -68,6 +68,37 @@ describe('ListPopup 표면 옵션', () => {
 
     const className = surface()?.className ?? '';
     expect(className).toContain('w-[172px]');
-    expect(className).toContain('z-40');
+    expect(className).toContain('z-[var(--z-chrome-popup)]');
+  });
+
+  it('긴 항목 이름은 전체 문구를 유지한 채 180px 표면 안에서 말줄임한다', async () => {
+    const label =
+      '아주 길어서 메뉴 폭을 계속 늘리면 안 되는 플러그인 메뉴 항목';
+    await render({ items: [{ id: 'long', label, isPlugin: true }] });
+
+    const item = document.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    const text = item?.querySelector('span');
+
+    expect(item?.hasAttribute('title')).toBe(false);
+    expect(item?.textContent).toBe(label);
+    expect(item?.className).toContain('max-w-[172px]');
+    expect(item?.className).toContain('overflow-hidden');
+    expect(text?.className).toContain('min-w-0');
+    expect(text?.className).toContain('truncate');
+    expect(text?.className).toContain('text-body');
+  });
+
+  it('기본 항목은 기존 내용 기반 폭을 유지한다', async () => {
+    await render({
+      items: [{ id: 'long', label: '기존 드롭다운의 긴 기본 항목' }],
+    });
+
+    const item = document.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    const text = item?.querySelector('span');
+
+    expect(item?.className).not.toContain('max-w-[172px]');
+    expect(text?.className).not.toContain('truncate');
+    expect(text?.className).toContain('whitespace-nowrap');
+    expect(text?.className).toContain('text-body');
   });
 });

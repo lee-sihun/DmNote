@@ -7,6 +7,7 @@ import {
 } from '@hooks/ui/usePanelAnchoredPopupPosition';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import { usePanelHost } from '@contexts/PanelHostContext';
+import { CANVAS_POPUP_CHROME_CLASS } from '@components/main/Modal/popupChrome';
 
 // 트리거와 팝업 사이 간격 — 좌표 계산기의 gap과 같은 값
 const POPUP_GAP = 5;
@@ -104,7 +105,9 @@ const PickerSurface = ({
       offset={detached ? POPUP_GAP : 32}
       // 측정 좌표는 이미 정확하므로 세로 보정을 무시
       offsetY={measured || detached ? 0 : offsetY}
-      className="z-50"
+      className="z-[var(--z-chrome-modal)]"
+      // 피커가 띄운 알림(잘못된 이미지 등)이 피커를 닫지 않게 - 백드롭이 어차피 덮는다
+      closeOnModalCover={false}
       interactiveRefs={interactiveRefs}
       onClose={onClose}
       autoClose={false}
@@ -116,7 +119,7 @@ const PickerSurface = ({
     >
       <div
         ref={cardRef}
-        className={`dmn-motion ${cardClassName}`}
+        className={`dmn-motion ${CANVAS_POPUP_CHROME_CLASS} ${cardClassName}`}
         style={{
           visibility: awaitingPosition ? 'hidden' : undefined,
           // 분리 창에서는 카드 고정 폭 대신 섹션 폭을 따름

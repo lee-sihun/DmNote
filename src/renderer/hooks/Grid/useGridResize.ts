@@ -217,6 +217,7 @@ export function useGridResize({
         undefined,
         {
           disableSpacing: !spacingGuidesEnabled,
+          gridSnapSize: gridSettings?.gridSnapSize ?? 5,
         },
       );
       const handle = newBounds.handle;
@@ -527,6 +528,7 @@ export function useGridResize({
         undefined,
         {
           disableSpacing: !spacingGuidesEnabled,
+          gridSnapSize: gridSettings?.gridSnapSize ?? 5,
         },
       );
       const handle = newBounds.handle;

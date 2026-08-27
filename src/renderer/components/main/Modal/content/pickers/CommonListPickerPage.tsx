@@ -1,13 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useLayoutEffect, useRef } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import Dropdown from '@components/main/common/Dropdown';
 import SearchField from '@components/main/common/SearchField';
-import AddIconButton from '@components/main/common/AddIconButton';
+import ListAddRow from '@components/main/common/ListAddRow';
 
 type FilterOption = {
   value: string;
   label: string;
 };
+
+// 행 기본 규격 - pickerRowClass의 30px 행 + gap-[4px]
+const DEFAULT_ROW_H = 30;
+const ROW_GAP = 4;
+// 절단 지점 - 행 높이의 2/3, 글자 중간을 지나 미완결로 읽히는 위치
+const CUT_RATIO = 2 / 3;
+// 리듬 보정 허용 폭 - 이 밖이면 기본 규격 유지
+const ROW_H_TOLERANCE = 3;
 
 interface CommonListPickerPageProps<T> {
   open: boolean;
@@ -25,8 +33,10 @@ interface CommonListPickerPageProps<T> {
   errorText?: string;
   onAdd: (event: React.MouseEvent<HTMLButtonElement>) => void;
   addLabel: string;
-  // 추가 버튼에 앵커된 메뉴의 기준점용
+  // 추가 행에 앵커된 메뉴의 기준점용
   addButtonRef?: React.RefObject<HTMLButtonElement>;
+  // 추가 행 위치 - 자주 쌓이는 리스트는 start로 항상 손에 닿게
+  addRowPlacement?: 'start' | 'end';
   pageTitle: string;
   onBack: () => void;
 }
@@ -48,18 +58,67 @@ export default function CommonListPickerPage<T>({
   onAdd,
   addLabel,
   addButtonRef,
+  addRowPlacement = 'end',
   pageTitle,
   onBack,
 }: CommonListPickerPageProps<T>) {
   const { scrollContainerRef: scrollRef, lenisInstance } = useLenis();
+  const viewportRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
+  // Lenis 콜백 ref와 로컬 ref를 한 노드에 함께 연결
+  const setViewportEl = useCallback(
+    (node: HTMLElement | null) => {
+      viewportRef.current = node;
+      scrollRef(node);
+    },
+    [scrollRef],
+  );
+
+  // 행 리듬 보정 - 표면·간격·뷰포트는 그대로 두고 행 높이만 미세 조절해서
+  // 오버플로 시 마지막 가시 행이 항상 글자 중간에서 잘리게 함.
+  // 행 경계가 뷰포트 바닥과 겹치면 다음 행이 통째로 숨어 스크롤 단서가 사라짐
+  useLayoutEffect(() => {
     if (!open) return;
-    const rafId = requestAnimationFrame(() => {
+    const scrollEl = viewportRef.current;
+    if (!scrollEl) return;
+
+    const apply = () => {
+      // 기본 규격으로 되돌린 뒤 측정해야 오버플로 판정이 흔들리지 않음
+      scrollEl.style.removeProperty('--dmn-picker-row-h');
+      const viewport = scrollEl.clientHeight;
+      const overflowing = scrollEl.scrollHeight > viewport + 1;
+      if (overflowing) {
+        const pitch = DEFAULT_ROW_H + ROW_GAP;
+        const fullRows = Math.round(
+          (viewport - DEFAULT_ROW_H * CUT_RATIO) / pitch,
+        );
+        if (fullRows >= 1) {
+          const rowH = (viewport - ROW_GAP * fullRows) / (fullRows + CUT_RATIO);
+          if (Math.abs(rowH - DEFAULT_ROW_H) <= ROW_H_TOLERANCE) {
+            scrollEl.style.setProperty(
+              '--dmn-picker-row-h',
+              `${rowH.toFixed(2)}px`,
+            );
+          }
+        }
+      }
       lenisInstance.current?.resize?.();
-    });
-    return () => cancelAnimationFrame(rafId);
-  }, [open, items.length, filterValue, searchQuery, lenisInstance]);
+    };
+
+    apply();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(apply);
+    observer.observe(scrollEl);
+    return () => observer.disconnect();
+  }, [
+    open,
+    items.length,
+    filterValue,
+    searchQuery,
+    isLoading,
+    errorText,
+    lenisInstance,
+  ]);
 
   if (!open) return null;
 
@@ -83,7 +142,7 @@ export default function CommonListPickerPage<T>({
             <path
               d="M5.5 1.5L1.5 6L5.5 10.5"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth="1.2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -110,13 +169,26 @@ export default function CommonListPickerPage<T>({
       {/* 리스트 컨테이너 — 배경보다 한 단계 밝은 필 테이블. 빈 공간도 테이블의 빈 영역으로 읽힘 */}
       <div className="mx-[12px] bg-inset rounded-surface p-[4px] flex-1 min-h-0 flex flex-col">
         <div
-          ref={scrollRef}
-          className="flex-1 min-h-0 flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade"
+          ref={setViewportEl}
+          className="flex-1 min-h-0 flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade dmn-scroll-fade-shallow"
         >
           {/* flex-1로 스크롤 영역을 채워 빈 상태가 중앙에 오게 함 */}
           <div className="flex flex-col gap-[4px] flex-1">
+            {/* 추가 행 - 리스트와 같이 스크롤, 위치는 placement가 결정 */}
+            {addRowPlacement === 'start' && (
+              <ListAddRow
+                label={addLabel}
+                onClick={onAdd}
+                buttonRef={addButtonRef}
+              />
+            )}
             {items.length === 0 && !isLoading && !errorText ? (
-              <div className="flex-1 flex items-center justify-center py-[14px] text-fg-faint text-body">
+              // 추가 행이 뒤에 오면 안내 문구가 늘어나 행을 바닥으로 밀지 않게
+              <div
+                className={`${
+                  addRowPlacement === 'end' ? '' : 'flex-1 '
+                }flex items-center justify-center py-[14px] text-fg-faint text-body`}
+              >
                 {emptyText}
               </div>
             ) : null}
@@ -131,31 +203,28 @@ export default function CommonListPickerPage<T>({
                 {errorText}
               </p>
             ) : null}
+            {addRowPlacement === 'end' && (
+              <ListAddRow
+                label={addLabel}
+                onClick={onAdd}
+                buttonRef={addButtonRef}
+              />
+            )}
           </div>
         </div>
       </div>
-      {/* 하단 도구 바 — 필터 + 추가 */}
+      {/* 하단 필터 바 */}
       <div className="p-[12px] shrink-0">
-        <div className="flex items-center gap-[8px]">
-          {filterOptions && filterValue !== undefined && onFilterChange ? (
-            <div className="flex-1 min-w-0">
-              <Dropdown
-                commitStrategy="after-paint"
-                options={filterOptions}
-                value={filterValue}
-                onChange={onFilterChange}
-                fullWidth
-                size="lg"
-              />
-            </div>
-          ) : null}
-          <AddIconButton
-            buttonRef={addButtonRef}
-            onClick={onAdd}
-            label={addLabel}
-            className="ml-auto"
+        {filterOptions && filterValue !== undefined && onFilterChange ? (
+          <Dropdown
+            commitStrategy="after-paint"
+            options={filterOptions}
+            value={filterValue}
+            onChange={onFilterChange}
+            fullWidth
+            size="lg"
           />
-        </div>
+        ) : null}
       </div>
     </div>
   );

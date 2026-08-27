@@ -22,6 +22,7 @@ import {
 } from '@utils/grid/groupActions';
 import { useHistoryShortcuts } from './useHistoryShortcuts';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { isModalLayerActive } from '@components/main/Modal/popupLayer';
 
 interface UseGridKeyboardParams {
   selectedElements: SelectedElement[];
@@ -85,7 +86,7 @@ export function useGridKeyboard({
       }
       const pending = pendingArrowMove.current;
       pendingArrowMove.current = null;
-      if (pending) {
+      if (pending && !isModalLayerActive()) {
         moveSelectedElements(pending.deltaX, pending.deltaY, pending.gestureId);
       }
     };
@@ -116,7 +117,9 @@ export function useGridKeyboard({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (isHistoryEditorFlushLocked()) return;
+      if (isModalLayerActive()) return;
       if (typeof window !== 'undefined' && window.__dmn_isKeyListening) {
         return;
       }

@@ -13,6 +13,7 @@ interface TabSwitchProps {
   onTabChange: (tabId: string) => void;
   commitStrategy?: CommitStrategy;
   className?: string;
+  disabled?: boolean;
 }
 
 // 세그먼트 컨트롤 — 활성 인디케이터가 transform으로 슬라이딩
@@ -22,6 +23,7 @@ const TabSwitch = ({
   onTabChange,
   commitStrategy = 'sync',
   className,
+  disabled = false,
 }: TabSwitchProps) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const { value: visualActiveTab, select } = useOptimisticValueCommit({
@@ -50,7 +52,9 @@ const TabSwitch = ({
           무거운 탭으로 갈 때만 그래서 방향 비대칭으로 체감된다 */}
       <div
         aria-hidden
-        className="dmn-segment-thumb absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill shadow-elevation-chrome will-change-transform"
+        className={`dmn-segment-thumb absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill shadow-elevation-chrome will-change-transform ${
+          disabled ? 'opacity-40' : ''
+        }`}
         style={{
           width: `calc((100% - 4px) / ${tabs.length})`,
           transform: `translate3d(${activeIndex * 100}%, 0, 0)`,
@@ -62,9 +66,12 @@ const TabSwitch = ({
           type="button"
           aria-pressed={visualActiveTab === tab.id}
           data-tab-id={tab.id}
+          disabled={disabled}
           onClick={() => select(tab.id)}
           className={`relative z-10 w-full h-full rounded-[8px] text-body transition-colors duration-base ${
-            visualActiveTab === tab.id
+            disabled
+              ? 'text-fg-faint'
+              : visualActiveTab === tab.id
               ? 'text-fg'
               : 'text-fg-muted hover:text-fg'
           }`}

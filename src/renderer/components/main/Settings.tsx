@@ -28,7 +28,15 @@ import {
   FILL_INTERACTIVE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
-import { extractPluginId } from '@utils/plugin/pluginUtils';
+import {
+  currentPluginHealthRevision,
+  waitForPluginInjection,
+} from '@stores/plugin/usePluginHealthStore';
+import {
+  extractPluginId,
+  getPluginDisplayName,
+} from '@utils/plugin/pluginUtils';
+import { classifyPluginAddResult } from '@utils/plugin/pluginAddResult';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
@@ -54,6 +62,7 @@ import { obsApi } from '@api/modules/obsApi';
 import { keySoundOutputApi } from '@api/modules/resourceApi';
 import type {
   KeySoundOutputBackend,
+  KeySoundOutputDevices,
   KeySoundOutputState,
 } from '@api/modules/resourceApi';
 import type { ObsStatus } from '@src/types/obs';
@@ -85,18 +94,18 @@ const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
 // 기본 버퍼 크기 (게임 기본값과 동일한 최저값)
 const DEFAULT_ASIO_BUFFER = 64;
 
-const KEY_SOUND_OUTPUT_ERROR_KEYS: Record<string, string> = {
-  asioUnavailableBuild: 'settings.keySoundOutputError.asioUnavailableBuild',
-  asioDeviceNotFound: 'settings.keySoundOutputError.asioDeviceNotFound',
-  asioOpenFailed: 'settings.keySoundOutputError.asioOpenFailed',
-  defaultOpenFailed: 'settings.keySoundOutputError.defaultOpenFailed',
-};
-
 // 설정 패널은 열 때마다 재마운트되므로, 마지막 출력 상태를 모듈에 캐시해
-// 재진입 시 '기본 장치 → ASIO' 드롭다운 깜빡임을 방지한다.
+// 재진입 시 '기본 장치 → 선택 장치' 드롭다운 깜빡임을 방지한다.
 let cachedKeySoundOutput: KeySoundOutputState | null = null;
-let cachedAsioDrivers: string[] = [];
-let cachedAsioDriversLoaded = false;
+// null이면 목록 미로딩
+let cachedOutputDevices: KeySoundOutputDevices | null = null;
+
+const KEY_SOUND_DEVICE_PREFIX = 'device:';
+const KEY_SOUND_ASIO_PREFIX = 'asio:';
+
+// 드롭다운 라벨용 축약
+const truncateDeviceName = (name: string) =>
+  name.length > 16 ? `${name.slice(0, 16)}…` : name;
 
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
@@ -202,14 +211,12 @@ const Settings = ({
   });
   const obsTogglingRef = useRef(false);
 
-  // 키음 출력 백엔드 (기본 장치 / ASIO) — 캐시로 초기화해 재진입 깜빡임 방지
+  // 키음 출력 백엔드 (기본 장치 / 시스템 장치 / ASIO) — 캐시로 초기화해 재진입 깜빡임 방지
   const [keySoundOutput, setKeySoundOutputRaw] =
     useState<KeySoundOutputState | null>(cachedKeySoundOutput);
-  const [asioDrivers, setAsioDrivers] = useState<string[]>(cachedAsioDrivers);
-  // 목록 로딩 완료 전에는 드롭다운을 잠그지 않음 (첫 마운트 비활성 깜빡임 방지)
-  const [asioDriversLoaded, setAsioDriversLoaded] = useState(
-    cachedAsioDriversLoaded,
-  );
+  // 목록 로딩 완료(null 아님) 전에는 드롭다운을 잠그지 않음 (첫 마운트 비활성 깜빡임 방지)
+  const [outputDevices, setOutputDevices] =
+    useState<KeySoundOutputDevices | null>(cachedOutputDevices);
   const pendingKeySoundOutputRef = useRef<KeySoundOutputBackend | null>(null);
   const applyingKeySoundOutputRef = useRef(false);
 
@@ -233,10 +240,8 @@ const Settings = ({
           keySoundOutputApi.getState(),
         ]);
         if (cancelled) return;
-        cachedAsioDrivers = devices.asio;
-        cachedAsioDriversLoaded = true;
-        setAsioDrivers(devices.asio);
-        setAsioDriversLoaded(true);
+        cachedOutputDevices = devices;
+        setOutputDevices(devices);
         if (
           !applyingKeySoundOutputRef.current &&
           !pendingKeySoundOutputRef.current
@@ -294,16 +299,29 @@ const Settings = ({
   };
 
   const handleKeySoundOutputChange = (val: string) => {
-    enqueueKeySoundOutput(
-      val.startsWith('asio:')
-        ? {
-            kind: 'asio',
-            driverName: val.slice('asio:'.length),
-            // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
-            bufferSize: DEFAULT_ASIO_BUFFER,
-          }
-        : { kind: 'defaultDevice' },
-    );
+    if (val.startsWith(KEY_SOUND_ASIO_PREFIX)) {
+      enqueueKeySoundOutput({
+        kind: 'asio',
+        driverName: val.slice(KEY_SOUND_ASIO_PREFIX.length),
+        // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
+        bufferSize: DEFAULT_ASIO_BUFFER,
+      });
+      return;
+    }
+    if (val.startsWith(KEY_SOUND_DEVICE_PREFIX)) {
+      const id = val.slice(KEY_SOUND_DEVICE_PREFIX.length);
+      const requested = keySoundOutput?.requested;
+      // 목록에 없는 장치는 저장된(분리된) 선택 항목뿐
+      const name =
+        outputDevices?.system.find((item) => item.id === id)?.name ??
+        (requested?.kind === 'device' && requested.id === id
+          ? requested.name
+          : null);
+      if (name === null) return;
+      enqueueKeySoundOutput({ kind: 'device', id, name });
+      return;
+    }
+    enqueueKeySoundOutput({ kind: 'defaultDevice' });
   };
 
   // ASIO 버퍼 크기 변경 (게임과 동일 버퍼로 맞춰야 ASIO 공존 가능)
@@ -456,6 +474,43 @@ const Settings = ({
   const formatPluginErrors = (errors: PluginError[] = []): string =>
     errors.map((item) => `${item.path ?? 'unknown'}: ${item.error}`).join('\n');
 
+  // 파일을 읽는 데 성공해도 브라우저가 평가하지 못하면 실패다.
+  // 주입 결과가 정산될 때까지 기다렸다가 실제로 죽은 플러그인을 오류로 합류시킨다
+  const collectInjectionErrors = async (
+    candidates: JsPlugin[],
+    revision: number,
+  ): Promise<PluginError[]> => {
+    const injected: JsPlugin[] = candidates.filter(
+      (plugin) => plugin.enabled && plugin.content,
+    );
+    if (!injected.length) return [];
+
+    const { outcome, health } = await waitForPluginInjection(
+      revision,
+      injected.map((plugin) => plugin.id),
+    );
+
+    // 전역 JS가 꺼져 있으면 주입 대상이 아니다. 실패로 셀 일이 아니다
+    if (outcome === 'skipped') return [];
+
+    // 주입이 아예 못 돌았으면 결과가 비어 있다. 이걸 '오류 없음'으로 읽으면
+    // 실행되지 않은 플러그인을 성공으로 표시하게 된다
+    if (outcome !== 'settled') {
+      return injected.map((plugin) => ({
+        path: plugin.path ?? plugin.name,
+        error: t('settings.jsNotApplied'),
+      }));
+    }
+
+    return injected
+      .filter((plugin) => health[plugin.id]?.status === 'failed')
+      .map((plugin) => ({
+        path: plugin.path ?? plugin.name,
+        // 빈 메시지(throw '')는 nullish가 아니라 그대로 렌더되므로 ||
+        error: health[plugin.id]?.message || t('settings.jsRuntimeError'),
+      }));
+  };
+
   const canReloadPlugins: boolean = jsPlugins.some(
     (plugin: JsPlugin) => plugin.path,
   );
@@ -470,22 +525,33 @@ const Settings = ({
     reloadingPluginsRef.current = true;
     setIsReloadingPlugins(true);
     try {
+      // 요청 전에 회차를 잡는다 - 응답보다 주입 정산이 먼저 끝나도 놓치지 않는다
+      const healthRevision: number = currentPluginHealthRevision();
       const result: JsReloadResult = await jsApi.reload();
       const updated: JsPlugin[] = result.updated ?? [];
-      const errors: PluginError[] = result.errors ?? [];
+      const injectionErrors: PluginError[] = await collectInjectionErrors(
+        updated,
+        healthRevision,
+      );
+      const errors: PluginError[] = [
+        ...(result.errors ?? []),
+        ...injectionErrors,
+      ];
 
-      if (errors.length && updated.length) {
+      const succeeded: number = updated.length - injectionErrors.length;
+
+      if (errors.length && succeeded) {
         showAlert?.(
           `${t('settings.jsReloadPartial', {
-            count: updated.length,
+            count: succeeded,
           })}\n${formatPluginErrors(errors)}`,
         );
       } else if (errors.length) {
         showAlert?.(
           `${t('settings.jsReloadFailed')}\n${formatPluginErrors(errors)}`,
         );
-      } else if (updated.length) {
-        showAlert?.(t('settings.jsReloadSuccess', { count: updated.length }));
+      } else if (succeeded) {
+        showAlert?.(t('settings.jsReloadSuccess', { count: succeeded }));
       } else {
         showAlert?.(t('settings.jsReloadNoChanges'));
       }
@@ -512,22 +578,31 @@ const Settings = ({
     addingPluginsRef.current = true;
     setIsAddingPlugins(true);
     try {
+      const healthRevision: number = currentPluginHealthRevision();
       const result: JsLoadResult = await jsApi.load();
       if (!result) return;
       const added: JsPlugin[] = result.added ?? [];
-      const errors: PluginError[] = result.errors ?? [];
+      const injectionErrors: PluginError[] = await collectInjectionErrors(
+        added,
+        healthRevision,
+      );
+      const errors: PluginError[] = [
+        ...(result.errors ?? []),
+        ...injectionErrors,
+      ];
+      const alertKind = classifyPluginAddResult(added.length, errors.length);
 
-      if (errors.length && added.length) {
+      if (alertKind === 'partial') {
         showAlert?.(
           `${t('settings.jsAddPartial', {
             count: added.length,
           })}\n${formatPluginErrors(errors)}`,
         );
-      } else if (errors.length) {
+      } else if (alertKind === 'failed') {
         showAlert?.(
           `${t('settings.jsAddFailed')}\n${formatPluginErrors(errors)}`,
         );
-      } else if (added.length) {
+      } else if (alertKind === 'success') {
         showAlert?.(t('settings.jsAddSuccess', { count: added.length }));
       }
     } catch (error) {
@@ -933,14 +1008,40 @@ const Settings = ({
     });
   };
 
+  const requestedBackend = keySoundOutput?.requested;
   const requestedAsioDriver =
-    keySoundOutput?.requested.kind === 'asio'
-      ? keySoundOutput.requested.driverName
-      : null;
+    requestedBackend?.kind === 'asio' ? requestedBackend.driverName : null;
+  const asioDrivers = outputDevices?.asio ?? [];
   const visibleAsioDrivers =
     requestedAsioDriver && !asioDrivers.includes(requestedAsioDriver)
       ? [...asioDrivers, requestedAsioDriver]
       : asioDrivers;
+  // 저장된 장치가 현재 목록에 없어도(분리됨) 선택 상태가 보이도록 병합
+  const requestedDevice =
+    requestedBackend?.kind === 'device' ? requestedBackend : null;
+  const systemDevices = outputDevices?.system ?? [];
+  const visibleSystemDevices =
+    requestedDevice && !systemDevices.some((d) => d.id === requestedDevice.id)
+      ? [
+          ...systemDevices,
+          { id: requestedDevice.id, name: requestedDevice.name },
+        ]
+      : systemDevices;
+  // 같은 이름 장치는 순번으로 구분, 순번은 축약 밖에 붙여 항상 보이게
+  const systemDeviceLabels = new Map<string, string>();
+  const nameCounts = new Map<string, number>();
+  for (const device of visibleSystemDevices) {
+    const seen = (nameCounts.get(device.name) ?? 0) + 1;
+    nameCounts.set(device.name, seen);
+    const base = truncateDeviceName(device.name);
+    systemDeviceLabels.set(device.id, seen > 1 ? `${base} (${seen})` : base);
+  }
+  const keySoundOutputValue =
+    requestedBackend?.kind === 'asio'
+      ? `${KEY_SOUND_ASIO_PREFIX}${requestedBackend.driverName}`
+      : requestedBackend?.kind === 'device'
+      ? `${KEY_SOUND_DEVICE_PREFIX}${requestedBackend.id}`
+      : 'defaultDevice';
   const requestedAsioBuffer =
     keySoundOutput?.requested.kind === 'asio'
       ? keySoundOutput.requested.bufferSize || DEFAULT_ASIO_BUFFER
@@ -950,12 +1051,6 @@ const Settings = ({
   )
     ? ASIO_BUFFER_SIZES
     : [...ASIO_BUFFER_SIZES, requestedAsioBuffer].sort((a, b) => a - b);
-  const keySoundOutputErrorKey =
-    keySoundOutput?.errorCode &&
-    KEY_SOUND_OUTPUT_ERROR_KEYS[keySoundOutput.errorCode];
-  const keySoundOutputError = keySoundOutputErrorKey
-    ? t(keySoundOutputErrorKey)
-    : keySoundOutput?.error;
 
   return (
     <div className="relative w-full h-full">
@@ -1134,26 +1229,20 @@ const Settings = ({
                       label:
                         t('settings.keySoundOutputDefault') || '기본 재생 장치',
                     },
-                    ...visibleAsioDrivers.map((name) => {
-                      // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
-                      const failed =
-                        name === requestedAsioDriver && !!keySoundOutputError;
-                      return {
-                        value: `asio:${name}`,
-                        // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
-                        label: failed
-                          ? `⚠ ${keySoundOutputError}`
-                          : `ASIO: ${
-                              name.length > 16 ? `${name.slice(0, 16)}…` : name
-                            }`,
-                      };
-                    }),
+                    // 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유)
+                    // 장치를 못 열면 백엔드가 선택을 기본 장치로 되돌리므로 경고 라벨 없음
+                    ...visibleSystemDevices.map((device) => ({
+                      value: `${KEY_SOUND_DEVICE_PREFIX}${device.id}`,
+                      label:
+                        systemDeviceLabels.get(device.id) ??
+                        truncateDeviceName(device.name),
+                    })),
+                    ...visibleAsioDrivers.map((name) => ({
+                      value: `${KEY_SOUND_ASIO_PREFIX}${name}`,
+                      label: `ASIO: ${truncateDeviceName(name)}`,
+                    })),
                   ]}
-                  value={
-                    keySoundOutput?.requested.kind === 'asio'
-                      ? `asio:${keySoundOutput.requested.driverName}`
-                      : 'defaultDevice'
-                  }
+                  value={keySoundOutputValue}
                   onChange={handleKeySoundOutputChange}
                   placeholder={
                     t('settings.keySoundOutputDefault') || '기본 재생 장치'
@@ -1161,7 +1250,9 @@ const Settings = ({
                   align="right"
                   widthClass="max-w-[160px]"
                   disabled={
-                    asioDriversLoaded && visibleAsioDrivers.length === 0
+                    outputDevices !== null &&
+                    visibleSystemDevices.length + visibleAsioDrivers.length ===
+                      0
                   }
                 />
               </SettingRow>
@@ -1187,7 +1278,6 @@ const Settings = ({
                   onChange={handleAsioBufferChange}
                   placeholder={String(DEFAULT_ASIO_BUFFER)}
                   align="right"
-                  widthClass="w-[70px]"
                   disabled={keySoundOutput?.requested.kind !== 'asio'}
                 />
               </SettingRow>
@@ -1361,9 +1451,12 @@ const Settings = ({
             setDataDeleteModalOpen(false);
             setPluginToDelete(null);
           }}
-          onDeleteWithData={() => removePluginWithData(shownPluginToDelete.id)}
-          onDeletePluginOnly={() => removePluginOnly(shownPluginToDelete.id)}
-          pluginName={shownPluginToDelete.name}
+          onConfirm={(withData) =>
+            withData
+              ? removePluginWithData(shownPluginToDelete.id)
+              : removePluginOnly(shownPluginToDelete.id)
+          }
+          pluginName={getPluginDisplayName(shownPluginToDelete.name)}
           t={t}
         />
       )}

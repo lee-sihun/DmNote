@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
     io::{BufRead, BufReader},
     path::Path,
     process::{Child, ChildStdin, Command, Stdio},
@@ -43,19 +43,19 @@ use crate::{
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
-        DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings, KeySlot,
-        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
-        SettingsDiff, SettingsState, TabCssOverrides,
+        CommittedEditorChange, DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters,
+        KeyMappings, KeyPositions, KeySlot, KeySoundOutputBackendPersist, OverlayBounds,
+        OverlayResizeAnchor, PanelBounds, SettingsDiff, SettingsState, TabCssOverrides,
     },
-    services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
+    services::{
+        css_watcher::CssWatcher, event_publisher::publish_event, obs_bridge::ObsBridgeService,
+        settings::SettingsService,
+    },
     state::local_asset_path::path_identity_key,
 };
 
 const OVERLAY_LABEL: &str = "overlay";
 pub(crate) const PANEL_LABEL: &str = "panel";
-// 분리 패널 창은 메인 웹뷰가 window.open으로 여는 opener 자식 - 자체 JS 런타임이 없어
-// raw input·종료 핸드셰이크 대상이 아니다
-const RAW_INPUT_WINDOW_LABELS: [&str; 2] = ["main", OVERLAY_LABEL];
 const FRONTEND_LIFECYCLE_WINDOW_LABELS: [&str; 2] = ["main", OVERLAY_LABEL];
 // 메인이 window.open을 부르기 직전 arm하고, 이 시간 안에 온 요청만 패널 창으로 인정
 const PANEL_OPEN_ARM_TIMEOUT: Duration = Duration::from_secs(2);
@@ -215,6 +215,7 @@ pub(crate) const HISTORY_FRONTEND_FLUSH_CANCELED: &str = "HISTORY_FRONTEND_FLUSH
 pub(crate) const HISTORY_FRONTEND_FLUSH_EMIT_FAILED: &str = "HISTORY_FRONTEND_FLUSH_EMIT_FAILED";
 pub(crate) const HISTORY_FRONTEND_FLUSH_INTERRUPTED: &str = "HISTORY_FRONTEND_FLUSH_INTERRUPTED";
 pub(crate) const HISTORY_FRONTEND_FLUSH_TIMEOUT: &str = "HISTORY_FRONTEND_FLUSH_TIMEOUT";
+pub(crate) const MUTATION_SHUTDOWN_STARTED: &str = "MUTATION_SHUTDOWN_STARTED";
 
 struct ShutdownWatchdogState {
     armed: bool,
@@ -255,6 +256,9 @@ struct PanelBoundsPersistenceState {
     latest: Option<PanelBoundsSample>,
     window: Option<WebviewWindow>,
     applied_max_height: Option<f64>,
+    // 초기화로 발생한 resize가 비운 저장값을 되살리지 않게 하는 기본 높이 추적
+    unpersisted_default_height: Option<f64>,
+    default_height_pending: bool,
     session: u64,
     generation: u64,
     worker_running: bool,
@@ -614,6 +618,46 @@ struct QueuedCounterIncrement {
     key: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyCountersStatePayload<'a> {
+    session_id: &'a str,
+    revision: u64,
+    counters: &'a KeyCounters,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyCounterPayload<'a> {
+    mode: &'a str,
+    key: &'a str,
+    count: u32,
+    session_id: &'a str,
+    revision: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InputAxisPayload<'a> {
+    axis_id: &'a str,
+    value: u32,
+    full: u32,
+}
+
+#[derive(Serialize)]
+struct RawInputPayload<'a> {
+    label: &'a str,
+    labels: &'a [String],
+    state: &'a str,
+    device: &'a str,
+}
+
+#[derive(Serialize)]
+struct InputPressPayload<'a> {
+    label: &'a str,
+    mode: &'a str,
+}
+
 #[derive(Debug, Default)]
 struct CounterHistoryBarrierState {
     queueing: bool,
@@ -626,6 +670,41 @@ struct RuntimePublicationState {
     mappings_generation: u64,
     mode_generation: u64,
     counters_generation: u64,
+    key_sound_bindings_generation: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct KeySoundBinding {
+    sound_path: String,
+    per_key_volume: f32,
+}
+
+type KeySoundBindingTable = HashMap<String, Vec<Option<KeySoundBinding>>>;
+
+fn build_key_sound_binding_table(key_positions: &KeyPositions) -> KeySoundBindingTable {
+    key_positions
+        .iter()
+        .map(|(mode, positions)| {
+            let bindings = positions
+                .iter()
+                .map(|position| {
+                    if !position.sound_enabled.unwrap_or(false) {
+                        return None;
+                    }
+                    let sound_path = position.sound_path.as_deref()?.trim();
+                    if sound_path.is_empty() {
+                        return None;
+                    }
+                    let volume_percent = position.sound_volume.unwrap_or(100.0);
+                    Some(KeySoundBinding {
+                        sound_path: sound_path.to_string(),
+                        per_key_volume: (volume_percent / 100.0).clamp(0.0, 2.0) as f32,
+                    })
+                })
+                .collect();
+            (mode.clone(), bindings)
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -642,7 +721,6 @@ pub(crate) struct AdmittedCounterMutation {
 }
 
 /// 카운터 write lock 내부 전용 이벤트 송신 경계
-/// 동기 Rust listener에서 AppState 카운터 API 재진입 금지
 pub(crate) trait KeyCounterEventEmitter {
     fn emit_key_counters(
         &self,
@@ -667,15 +745,16 @@ impl KeyCounterEventEmitter for AppHandle {
         session_id: &str,
         revision: u64,
     ) -> Result<()> {
-        self.emit("keys:counters", counters)?;
-        self.emit(
+        publish_event(self, "keys:counters", counters);
+        publish_event(
+            self,
             "keys:counters-state",
-            &json!({
-                "sessionId": session_id,
-                "revision": revision,
-                "counters": counters,
-            }),
-        )?;
+            KeyCountersStatePayload {
+                session_id,
+                revision,
+                counters,
+            },
+        );
         Ok(())
     }
 
@@ -687,16 +766,17 @@ impl KeyCounterEventEmitter for AppHandle {
         session_id: &str,
         revision: u64,
     ) -> Result<()> {
-        self.emit(
+        publish_event(
+            self,
             "keys:counter",
-            &json!({
-                "mode": mode,
-                "key": key,
-                "count": count,
-                "sessionId": session_id,
-                "revision": revision,
-            }),
-        )?;
+            KeyCounterPayload {
+                mode,
+                key,
+                count,
+                session_id,
+                revision,
+            },
+        );
         Ok(())
     }
 }
@@ -791,22 +871,32 @@ fn should_recover_keyboard_daemon(
         && task_generation == Some(failed_generation)
 }
 
-fn key_state_payload(
-    key: &str,
-    state: &str,
-    mode: &str,
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyStatePayload<'a> {
+    key: &'a str,
+    state: &'a str,
+    mode: &'a str,
+    event_age_ms: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hold_duration_ms: Option<f64>,
+}
+
+fn key_state_payload<'a>(
+    key: &'a str,
+    state: &'a str,
+    mode: &'a str,
     event_age_ms: f64,
     is_down: bool,
     hold_duration_ms: Option<f64>,
-) -> serde_json::Value {
-    let mut payload =
-        json!({ "key": key, "state": state, "mode": mode, "eventAgeMs": event_age_ms });
-    if !is_down {
-        if let Some(hold_duration_ms) = hold_duration_ms {
-            payload["holdDurationMs"] = json!(hold_duration_ms);
-        }
+) -> KeyStatePayload<'a> {
+    KeyStatePayload {
+        key,
+        state,
+        mode,
+        event_age_ms,
+        hold_duration_ms: if is_down { None } else { hold_duration_ms },
     }
-    payload
 }
 
 fn canonical_hold_duration_ms(
@@ -985,10 +1075,15 @@ pub struct AppState {
     counter_history_barrier: Mutex<CounterHistoryBarrierState>,
     counter_history_ready: Condvar,
     runtime_publication: Mutex<RuntimePublicationState>,
+    mutation_publication: Arc<MutationPublicationSequencer>,
     key_counter_enabled: Arc<AtomicBool>,
     /// Raw input stream subscriber count - emit only when > 0
     raw_input_subscribers: Arc<std::sync::atomic::AtomicU32>,
     key_sound: Arc<KeySoundEngine>,
+    key_sound_bindings: RwLock<Arc<KeySoundBindingTable>>,
+    key_sound_output_generation: Arc<AtomicU64>,
+    // 잠금 순서: key_sound_output_persistence_lock → 번호표 turn (역순 금지)
+    key_sound_output_persistence_lock: Arc<Mutex<()>>,
     /// 전역 CSS 상태와 워처 전환 직렬화
     css_operation_lock: Mutex<()>,
     /// 현재 세션에서 사용자가 승인한 CSS 경로
@@ -997,6 +1092,9 @@ pub struct AppState {
     css_watcher: RwLock<Option<CssWatcher>>,
     /// OBS WebSocket 브릿지
     pub obs_bridge: Arc<ObsBridgeService>,
+    /// OBS 시작, 중지, 토큰 회전 직렬화
+    /// 잠금 순서: OBS lifecycle mutex -> mutation ticket, 역순 금지
+    pub(crate) obs_lifecycle_lock: tokio::sync::Mutex<()>,
     /// OBS 모드 시작 전 오버레이 가시성 상태 (복원용)
     obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
     shutdown_started: AtomicBool,
@@ -1004,6 +1102,87 @@ pub struct AppState {
     shutdown_watchdog: Arc<Mutex<ShutdownWatchdogState>>,
     editor_flush_handshake: Arc<Mutex<Option<EditorFlushHandshake>>>,
     deferred_frontend_lifecycle: Mutex<Option<FrontendLifecycleAction>>,
+}
+
+#[derive(Default)]
+struct MutationPublicationState {
+    next_ticket: u64,
+    serving_ticket: u64,
+    completed_tickets: BTreeSet<u64>,
+    exhausted: bool,
+}
+
+#[derive(Default)]
+pub(crate) struct MutationPublicationSequencer {
+    state: Mutex<MutationPublicationState>,
+    turn_ready: Condvar,
+}
+
+pub(crate) struct MutationPublicationTicket {
+    sequencer: Arc<MutationPublicationSequencer>,
+    number: u64,
+}
+
+impl MutationPublicationSequencer {
+    fn issue(self: &Arc<Self>) -> std::result::Result<MutationPublicationTicket, &'static str> {
+        let mut state = self.state.lock();
+        if state.exhausted {
+            return Err("MUTATION_SEQUENCE_EXHAUSTED");
+        }
+        let number = state.next_ticket;
+        if number == u64::MAX {
+            state.exhausted = true;
+        } else {
+            state.next_ticket = number + 1;
+        }
+        Ok(MutationPublicationTicket {
+            sequencer: Arc::clone(self),
+            number,
+        })
+    }
+
+    fn wait_for_turn(&self, number: u64) {
+        let mut state = self.state.lock();
+        while state.serving_ticket != number {
+            self.turn_ready.wait(&mut state);
+        }
+    }
+
+    fn complete(&self, number: u64) {
+        let mut state = self.state.lock();
+        if number < state.serving_ticket {
+            return;
+        }
+        if number != state.serving_ticket {
+            state.completed_tickets.insert(number);
+            return;
+        }
+
+        loop {
+            if state.serving_ticket == u64::MAX {
+                break;
+            }
+            state.serving_ticket += 1;
+            let serving_ticket = state.serving_ticket;
+            if !state.completed_tickets.remove(&serving_ticket) {
+                break;
+            }
+        }
+        self.turn_ready.notify_all();
+    }
+}
+
+impl MutationPublicationTicket {
+    pub(crate) fn run<T>(self, mutation: impl FnOnce() -> T) -> T {
+        self.sequencer.wait_for_turn(self.number);
+        mutation()
+    }
+}
+
+impl Drop for MutationPublicationTicket {
+    fn drop(&mut self) {
+        self.sequencer.complete(self.number);
+    }
 }
 
 impl AppState {
@@ -1021,13 +1200,49 @@ impl AppState {
         Self::sync_counters_with_keys_impl(&mut initial_key_counters, &snapshot.keys);
         let key_counters = Arc::new(RwLock::new(initial_key_counters));
         let key_counter_enabled = Arc::new(AtomicBool::new(snapshot.key_counter_enabled));
-        // 저장된 출력 백엔드로 엔진을 처음부터 초기화 → "기본 장치 → ASIO" 전환 깜빡임 제거.
+        // 저장된 출력 백엔드 초기화, 전환 깜빡임 방지
         let initial_backend = snapshot
             .key_sound_output_backend
             .clone()
             .map(output_backend_from_persist)
             .unwrap_or_default();
-        let key_sound = Arc::new(KeySoundEngine::with_output_backend(initial_backend));
+        let key_sound_output_generation = Arc::new(AtomicU64::new(0));
+        let key_sound_output_persistence_lock = Arc::new(Mutex::new(()));
+        let fallback_store = Arc::clone(&store);
+        let fallback_generation = Arc::clone(&key_sound_output_generation);
+        let fallback_persistence_lock = Arc::clone(&key_sound_output_persistence_lock);
+        let key_sound = Arc::new(KeySoundEngine::with_output_backend(
+            initial_backend,
+            Arc::new(move |failed, settled| {
+                let fallback_store = Arc::clone(&fallback_store);
+                let fallback_generation = Arc::clone(&fallback_generation);
+                let fallback_persistence_lock = Arc::clone(&fallback_persistence_lock);
+                let generation = fallback_generation.load(Ordering::Acquire);
+                if let Err(err) =
+                    thread::Builder::new()
+                        .name("key-sound-fallback-persist".to_string())
+                        .spawn(move || {
+                            let _persistence_guard = fallback_persistence_lock.lock();
+                            let failed = output_backend_to_persist(failed);
+                            let settled = output_backend_to_persist(settled);
+                            if let Err(err) = fallback_store.update(move |state| {
+                                if fallback_generation.load(Ordering::Acquire) == generation
+                                    && state.key_sound_output_backend.as_ref().is_some_and(
+                                        |current| output_backend_targets_match(current, &failed),
+                                    )
+                                {
+                                    state.key_sound_output_backend = Some(settled);
+                                }
+                            }) {
+                                log::warn!("failed to persist fallback output backend: {err:#}");
+                            }
+                        })
+                {
+                    log::warn!("failed to spawn fallback output persistence thread: {err}");
+                }
+            }),
+        ));
+        let key_sound_bindings = Arc::new(build_key_sound_binding_table(&snapshot.key_positions));
         let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
         let authorized_css_paths = collect_authorized_css_paths(&snapshot);
         let panel_bounds_persistence =
@@ -1059,13 +1274,18 @@ impl AppState {
             counter_history_barrier: Mutex::new(CounterHistoryBarrierState::default()),
             counter_history_ready: Condvar::new(),
             runtime_publication: Mutex::new(RuntimePublicationState::default()),
+            mutation_publication: Arc::new(MutationPublicationSequencer::default()),
             key_counter_enabled,
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             key_sound,
+            key_sound_bindings: RwLock::new(key_sound_bindings),
+            key_sound_output_generation,
+            key_sound_output_persistence_lock,
             css_operation_lock: Mutex::new(()),
             authorized_css_paths: RwLock::new(authorized_css_paths),
             css_watcher: RwLock::new(None),
             obs_bridge,
+            obs_lifecycle_lock: tokio::sync::Mutex::new(()),
             obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
             shutdown_started: AtomicBool::new(false),
             process_exit_authorized: AtomicBool::new(false),
@@ -1292,7 +1512,7 @@ impl AppState {
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
         }
-        // OBS 브릿지 캐시 갱신 (이벤트는 register_event_forwarding이 자동 포워딩)
+        // OBS 브릿지 캐시 갱신
         if self.obs_bridge.is_running() {
             let bp = self.bootstrap_payload();
             if let Ok(snap) = serde_json::to_value(&bp) {
@@ -1302,7 +1522,7 @@ impl AppState {
         // 전체 설정 페이로드 전송 방지 (임베디드 폰트 등 대용량 데이터 제외)
         let mut payload = diff.clone();
         payload.full = None;
-        app.emit("settings:changed", payload)?;
+        publish_event(app, "settings:changed", payload);
         Ok(())
     }
 
@@ -1329,29 +1549,11 @@ impl AppState {
     fn auto_start_obs(&self, app: &AppHandle) {
         let bridge = self.obs_bridge.clone();
         let store = self.store.clone();
-        let port = store.with_state(|s| s.obs_port);
 
         // 부팅 시에는 오버레이를 생성하지 않았으므로 이전 표시 상태만 저장
         // (initialize_runtime에서 obs_mode_enabled일 때 ensure_overlay_window 건너뜀)
         let was_visible = store.with_state(|s| s.overlay_visible);
         *self.obs_previous_overlay_visible.write() = Some(was_visible);
-
-        // 저장 안 된 토큰으로 서버를 켜면 재부팅 후 기존 URL이 무효화되므로 시작 중단
-        let token = match self.resolve_and_save_obs_token() {
-            Ok(token) => token,
-            Err(e) => {
-                log::error!(
-                    "[ObsBridge] auto-start 중단: 토큰 저장 실패 ({}) — obs_mode_enabled를 false로 복구",
-                    e
-                );
-                let _ = store.update(|s| {
-                    s.obs_mode_enabled = false;
-                });
-                self.obs_restore_overlay(app);
-                let _ = app.emit("obs:status", &self.obs_bridge.status());
-                return;
-            }
-        };
         let app_handle = app.clone();
 
         // dev 모드: Vite dev server로 리다이렉트
@@ -1374,11 +1576,27 @@ impl AppState {
 
         // AppHandle 전달 (invoke_request 디스패치용)
         bridge.set_app_handle(app.clone());
-        // Tauri 이벤트 → OBS WS 포워딩 리스너 등록
-        bridge.register_event_forwarding(app);
-
         // async start를 tokio 런타임에서 실행
         tauri::async_runtime::spawn(async move {
+            let state = app_handle.state::<AppState>();
+            let _lifecycle_guard = state.obs_lifecycle_lock.lock().await;
+            let port = store.with_state(|s| s.obs_port);
+            // 미저장 토큰 사용 방지를 위한 시작 중단
+            let token = match state.resolve_and_save_obs_token() {
+                Ok(token) => token,
+                Err(e) => {
+                    log::error!(
+                        "[ObsBridge] auto-start 중단: 토큰 저장 실패 ({e}), obs_mode_enabled를 false로 복구"
+                    );
+                    let _ = store.update(|s| {
+                        s.obs_mode_enabled = false;
+                    });
+                    state.obs_restore_overlay(&app_handle);
+                    let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
+                    return;
+                }
+            };
+
             match bridge.start(port, token).await {
                 Ok(actual_port) => {
                     log::info!("[ObsBridge] auto-start 성공 (port={})", actual_port);
@@ -1388,21 +1606,19 @@ impl AppState {
                             s.obs_port = actual_port;
                         });
                     }
-                    let state = app_handle.state::<AppState>();
                     // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
                     state.refresh_obs_snapshot();
                     let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
                 }
                 Err(e) => {
                     log::error!(
-                        "[ObsBridge] auto-start 실패: {} — obs_mode_enabled를 false로 복구",
+                        "[ObsBridge] auto-start 실패: {}, obs_mode_enabled를 false로 복구",
                         e
                     );
                     let _ = store.update(|state| {
                         state.obs_mode_enabled = false;
                     });
                     // 실패 시 오버레이 복원 (윈도우 재생성 포함)
-                    let state = app_handle.state::<AppState>();
                     state.obs_restore_overlay(&app_handle);
                     let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
                 }
@@ -1431,7 +1647,7 @@ impl AppState {
         // store.overlay_visible은 변경하지 않음 — ensure_overlay_window가 재생성 시
         // 이 값을 기준으로 show/hide를 결정하므로, 원래 값을 유지해야 함
         *self.overlay_visible.write() = false;
-        let _ = app.emit("overlay:visibility", &json!({ "visible": false }));
+        publish_event(app, "overlay:visibility", json!({ "visible": false }));
     }
 
     /// OBS 중지 시 오버레이 재생성 + 복원
@@ -1472,7 +1688,7 @@ impl AppState {
         }
     }
 
-    /// OBS 브릿지 캐시 스냅샷 갱신 (이벤트는 register_event_forwarding이 자동 포워딩)
+    /// OBS 브릿지 캐시 스냅샷 갱신
     /// CSS 등 개별 설정 변경이 OBS 런타임 상태(키 시그널, KPS)를 리셋하지 않도록 사용
     pub fn notify_obs_settings_diff(&self, _diff: serde_json::Value) {
         if !self.obs_bridge.is_running() {
@@ -1484,7 +1700,7 @@ impl AppState {
         }
     }
 
-    /// OBS 브릿지 캐시 스냅샷 갱신 (카운터 이벤트는 register_event_forwarding이 자동 포워딩)
+    /// OBS 브릿지 카운터 스냅샷 갱신
     pub fn obs_broadcast_counters(&self) {
         if !self.obs_bridge.is_running() {
             return;
@@ -1552,13 +1768,13 @@ impl AppState {
                     "[Overlay] 저장 실패 후 보상도 실패({comp_err}) — 창 상태({visible})를 권위로 동기화"
                 );
                 *self.overlay_visible.write() = visible;
-                let _ = app.emit("overlay:visibility", &json!({ "visible": visible }));
+                publish_event(app, "overlay:visibility", json!({ "visible": visible }));
             }
             return Err(persist_err);
         }
 
         *self.overlay_visible.write() = visible;
-        app.emit("overlay:visibility", &json!({ "visible": visible }))?;
+        publish_event(app, "overlay:visibility", json!({ "visible": visible }));
         Ok(())
     }
 
@@ -1582,7 +1798,7 @@ impl AppState {
                 window.set_ignore_cursor_events(locked)?;
             }
         }
-        app.emit("overlay:lock", &json!({ "locked": locked }))?;
+        publish_event(app, "overlay:lock", json!({ "locked": locked }));
         Ok(())
     }
 
@@ -1718,6 +1934,20 @@ impl AppState {
             .history_gate()
             .admit_mutation()
             .map_err(|_| EditorCommitError::history_in_progress())
+    }
+
+    pub(crate) fn ensure_mutation_allowed(&self) -> std::result::Result<(), &'static str> {
+        if self.shutdown_started.load(Ordering::SeqCst) {
+            return Err(MUTATION_SHUTDOWN_STARTED);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn issue_mutation_publication(
+        &self,
+    ) -> std::result::Result<MutationPublicationTicket, &'static str> {
+        self.ensure_mutation_allowed()?;
+        self.mutation_publication.issue()
     }
 
     pub fn cancel_frontend_lifecycle(&self, app_handle: AppHandle, handshake_id: &str) {
@@ -2126,7 +2356,7 @@ impl AppState {
         let updated = self.store.update(|state| {
             state.overlay_resize_anchor = value.clone();
         })?;
-        app.emit("overlay:anchor", &json!({ "anchor": value.as_str() }))?;
+        publish_event(app, "overlay:anchor", json!({ "anchor": value.as_str() }));
         Ok(updated.overlay_resize_anchor.as_str().to_string())
     }
 
@@ -2278,15 +2508,16 @@ impl AppState {
             bounds.x,
             bounds.y
         );
-        app.emit(
+        publish_event(
+            app,
             "overlay:resized",
-            &json!({
+            json!({
                 "x": bounds.x,
                 "y": bounds.y,
                 "width": bounds.width,
                 "height": bounds.height,
             }),
-        )?;
+        );
 
         Ok(bounds)
     }
@@ -2376,15 +2607,16 @@ impl AppState {
             None,
         )?;
 
-        app.emit(
+        publish_event(
+            app,
             "overlay:resized",
-            &json!({
+            json!({
                 "x": bounds.x,
                 "y": bounds.y,
                 "width": bounds.width,
                 "height": bounds.height,
             }),
-        )?;
+        );
 
         Ok(bounds)
     }
@@ -2505,7 +2737,6 @@ impl AppState {
                         BufReader::new(Box::new(stdout))
                     }
                 };
-                let mut overlay_window = app_handle.get_webview_window(OVERLAY_LABEL);
                 // Windows에서 reader 스레드 우선순위 약간 상향
                 #[cfg(target_os = "windows")]
                 unsafe {
@@ -2583,13 +2814,14 @@ impl AppState {
                             if let Ok(axis) =
                                 serde_json::from_str::<crate::ipc::HidAxisMessage>(s)
                             {
-                                let _ = app_handle.emit(
+                                publish_event(
+                                    &app_handle,
                                     "input:axis",
-                                    &json!({
-                                        "axisId": axis.axis_id,
-                                        "value": axis.value,
-                                        "full": axis.full,
-                                    }),
+                                    InputAxisPayload {
+                                        axis_id: &axis.axis_id,
+                                        value: axis.value,
+                                        full: axis.full,
+                                    },
                                 );
                                 continue;
                             }
@@ -2645,26 +2877,22 @@ impl AppState {
                                 crate::ipc::HookKeyState::Down => "DOWN",
                                 crate::ipc::HookKeyState::Up => "UP",
                             };
-                            let labels_for_emit = message.labels.clone();
-                            let primary_label = labels_for_emit.first()
-                                .cloned()
-                                .unwrap_or_else(|| String::from(""));
+                            let primary_label =
+                                message.labels.first().map(String::as_str).unwrap_or("");
 
                             // 구독자가 있을 때만 raw input 스트림 emit
                             let app_state = app_handle.state::<AppState>();
                             if app_state.raw_input_subscriber_count() > 0 {
-                                let raw_payload = json!({
-                                    "label": primary_label,
-                                    "labels": labels_for_emit.clone(),
-                                    "state": state,
-                                    "device": device_str,
-                                });
-
-                                for label in RAW_INPUT_WINDOW_LABELS {
-                                    if let Some(window) = app_handle.get_webview_window(label) {
-                                        let _ = window.emit("input:raw", &raw_payload);
-                                    }
-                                }
+                                publish_event(
+                                    &app_handle,
+                                    "input:raw",
+                                    RawInputPayload {
+                                        label: primary_label,
+                                        labels: &message.labels,
+                                        state,
+                                        device: device_str,
+                                    },
+                                );
                             }
 
                             let is_down = state == "DOWN";
@@ -2678,12 +2906,14 @@ impl AppState {
                             };
 
                             if let Some(pressed_label) = outcome.pressed_label.as_ref() {
-                                if let Err(err) = app_handle.emit(
+                                publish_event(
+                                    &app_handle,
                                     "input:press",
-                                    &json!({ "label": pressed_label, "mode": &outcome.mode }),
-                                ) {
-                                    error!("failed to emit input:press: {err}");
-                                }
+                                    InputPressPayload {
+                                        label: pressed_label,
+                                        mode: &outcome.mode,
+                                    },
+                                );
                             }
 
                             let fallback_age_ms = recv_at.elapsed().as_secs_f64() * 1000.0;
@@ -2796,55 +3026,15 @@ impl AppState {
                                     ),
                                 );
 
-                                let mut emitted = false;
-                                if let Some(overlay) = overlay_window.as_ref() {
-                                    match overlay.emit("keys:state", &payload) {
-                                        Ok(_) => emitted = true,
-                                        Err(err) => {
-                                            error!("failed to emit keys:state to overlay: {err}");
-                                            overlay_window = None;
-                                        }
-                                    }
-                                }
-                                if !emitted {
-                                    if overlay_window.is_none() {
-                                        overlay_window =
-                                            app_handle.get_webview_window(OVERLAY_LABEL);
-                                        if let Some(overlay) = overlay_window.as_ref() {
-                                            if overlay.emit("keys:state", &payload).is_ok() {
-                                                emitted = true;
-                                            } else {
-                                                overlay_window = None;
-                                            }
-                                        }
-                                    }
-                                    if !emitted {
-                                        if app_state.is_obs_mode_active() {
-                                            app_state.obs_bridge.broadcast_tauri_event(
-                                                "keys:state".to_string(),
-                                                payload.clone(),
-                                            );
-                                            emitted = true;
-                                        } else if let Err(err) =
-                                            app_handle.emit("keys:state", &payload)
-                                        {
-                                            error!("failed to emit keys:state (fallback): {err}");
-                                        } else {
-                                            emitted = true;
-                                        }
-                                    }
-                                }
-
-                                if emitted {
-                                    keys_state_emit_count += 1;
-                                    if keys_state_emit_count.is_multiple_of(500) {
-                                        log::debug!(
-                                            "[AppState] emitted keys:state {} times (last key={}, state={})",
-                                            keys_state_emit_count,
-                                            slot_event.canonical,
-                                            transition_state
-                                        );
-                                    }
+                                publish_event(&app_handle, "keys:state", payload);
+                                keys_state_emit_count += 1;
+                                if keys_state_emit_count.is_multiple_of(500) {
+                                    log::debug!(
+                                        "[AppState] emitted keys:state {} times (last key={}, state={})",
+                                        keys_state_emit_count,
+                                        slot_event.canonical,
+                                        transition_state
+                                    );
                                 }
                             }
                         }
@@ -2980,9 +3170,7 @@ impl AppState {
 
     fn reset_keyboard_hook_state(&self, app: &AppHandle) {
         self.clear_active_keys();
-        if let Err(err) = app.emit("keys:reset", &json!({ "reason": "hook_restart" })) {
-            warn!("failed to emit keys:reset: {err}");
-        }
+        publish_event(app, "keys:reset", json!({ "reason": "hook_restart" }));
     }
 
     fn restart_keyboard_hook(&self, app: AppHandle) -> Result<()> {
@@ -2997,7 +3185,7 @@ impl AppState {
         &self.plugin_authority
     }
 
-    pub(crate) fn reset_plugin_authority(&self) -> Result<PluginAuthorityLease<'_>, String> {
+    pub(crate) fn reset_plugin_authority(&self) -> Result<PluginAuthorityLease, String> {
         self.plugin_authority.reset()
     }
 
@@ -3141,6 +3329,26 @@ impl AppState {
         window
             .set_position(position)
             .context("failed to move panel window")
+    }
+
+    // 저장값을 비우고 기본 배치로 되돌린다. 창을 새로 보이거나 포커스를 옮기지 않는다.
+    // 즉시 저장은 panel_creation_lock 밖에서 - 디스크 대기 동안 창 전환이 막힌다
+    pub fn reset_panel_window_position(&self, app: &AppHandle) -> Result<()> {
+        let main_rect = main_window_logical_rect(app);
+        let monitors = MonitorData::gather(app);
+        let window = app.get_webview_window(PANEL_LABEL);
+        let layout = window
+            .as_ref()
+            .map(|_| resolve_panel_window_layout(None, main_rect, &monitors, None));
+
+        self.panel_bounds_persistence
+            .clear_saved_bounds(layout.as_ref())?;
+
+        if let (Some(window), Some(layout)) = (window, layout) {
+            let _creation_guard = self.panel_creation_lock.lock();
+            self.apply_panel_window_layout(&window, &layout);
+        }
+        Ok(())
     }
 
     // 헤더 드래그 세션 시작 시 한 번 읽는 값 - 도크 존 판정 기준 좌표
@@ -3748,17 +3956,20 @@ impl AppState {
                                 // 보상 실패 — 실제 창 상태(숨김)를 권위로 runtime과 이벤트만 동기화
                                 log::error!("failed to compensate overlay hide: {show_err}");
                                 *overlay_visible.write() = false;
-                                let _ = app_handle
-                                    .emit("overlay:visibility", &json!({ "visible": false }));
+                                publish_event(
+                                    &app_handle,
+                                    "overlay:visibility",
+                                    json!({ "visible": false }),
+                                );
                             }
                             return;
                         }
                         *overlay_visible.write() = false;
-                        if let Err(err) =
-                            app_handle.emit("overlay:visibility", &json!({ "visible": false }))
-                        {
-                            log::error!("failed to emit overlay visibility change: {err}");
-                        }
+                        publish_event(
+                            &app_handle,
+                            "overlay:visibility",
+                            json!({ "visible": false }),
+                        );
                     }
                 }
             }
@@ -3811,7 +4022,7 @@ impl AppState {
                     window.set_ignore_cursor_events(value)?;
                 }
             }
-            app.emit("overlay:lock", &json!({ "locked": value }))?;
+            publish_event(app, "overlay:lock", json!({ "locked": value }));
         }
 
         if let Some(enabled) = diff.changed.developer_mode_enabled {
@@ -4294,20 +4505,29 @@ impl AppState {
         &self,
         backend: KeySoundOutputBackend,
     ) -> Result<KeySoundOutputState> {
-        let requested = match &backend {
-            KeySoundOutputBackend::DefaultDevice => KeySoundOutputBackend::DefaultDevice,
-            KeySoundOutputBackend::Asio {
-                driver_name,
-                buffer_size,
-            } => KeySoundOutputBackend::Asio {
-                driver_name: driver_name.trim().to_string(),
-                buffer_size: buffer_size.filter(|size| *size > 0),
-            },
-        };
-        self.store.update(|state| {
-            state.key_sound_output_backend = Some(output_backend_to_persist(requested));
+        let _persistence_guard = self.key_sound_output_persistence_lock.lock();
+        // 셧다운 뒤 요청은 장치를 열기 전에 거절 (persist 단계의 turn 검사와 동일 조건)
+        self.ensure_mutation_allowed().map_err(anyhow::Error::msg)?;
+        self.key_sound_output_generation
+            .fetch_add(1, Ordering::AcqRel);
+        // 장치 열기는 번호표 밖에서 기다린다 - turn 안에서 기다리면 드라이버가 멈춘 동안
+        // 뒤 번호표(저장·커밋) 전부가 정지한다. 엔진 콜백은 저장 스레드만 생성하므로
+        // 동기 대기 중 교착 없음
+        let output_state = self.key_sound.set_output_backend(backend);
+        let requested = output_state.requested.clone();
+        // 잠금 순서: persistence_lock → 번호표. 번호표 보유자는 이 잠금을 잡지 않고
+        // fallback persist 스레드는 잠금만 잡고 번호표는 잡지 않으므로 역순이 없다.
+        // 잠금을 든 채 번호표를 받아야 겹친 요청의 엔진 전환 순서와 persist 순서가 일치한다
+        let ticket = self
+            .issue_mutation_publication()
+            .map_err(anyhow::Error::msg)?;
+        ticket.run(|| {
+            self.ensure_mutation_allowed().map_err(anyhow::Error::msg)?;
+            self.store.update(|state| {
+                state.key_sound_output_backend = Some(output_backend_to_persist(requested));
+            })
         })?;
-        Ok(self.key_sound.set_output_backend(backend))
+        Ok(output_state)
     }
 
     pub fn key_sound_get_output_state(&self) -> KeySoundOutputState {
@@ -4332,41 +4552,49 @@ impl AppState {
         self.key_sound.invalidate_file_cache(path);
     }
 
+    pub(crate) fn publish_committed_key_sound_bindings(
+        &self,
+        change: &CommittedEditorChange,
+    ) -> bool {
+        if !change
+            .result
+            .changed_fields
+            .contains(&crate::models::EditorField::KeyPositions)
+        {
+            return false;
+        }
+
+        let bindings = Arc::new(build_key_sound_binding_table(
+            &change.document.key_positions,
+        ));
+        let mut publication = self.runtime_publication.lock();
+        if change.runtime_publication_generation < publication.key_sound_bindings_generation {
+            return false;
+        }
+        *self.key_sound_bindings.write() = bindings;
+        publication.key_sound_bindings_generation = change.runtime_publication_generation;
+        true
+    }
+
     fn resolve_key_sound_binding(
         &self,
         mode: &str,
         slot_indices: &[usize],
     ) -> Option<(String, f32)> {
-        self.store.with_state(|state| {
-            let positions = state.key_positions.get(mode)?;
+        let bindings = Arc::clone(&self.key_sound_bindings.read());
+        let mode_bindings = bindings.get(mode)?;
 
-            for index in slot_indices {
-                let Some(position) = positions.get(*index) else {
-                    continue;
-                };
-
-                if !position.sound_enabled.unwrap_or(false) {
-                    continue;
-                }
-                let Some(sound_path) = position.sound_path.as_ref() else {
-                    continue;
-                };
-                let trimmed_path = sound_path.trim();
-                if trimmed_path.is_empty() {
-                    continue;
-                }
-
-                let volume_percent = position.sound_volume.unwrap_or(100.0);
-                let per_key_volume = (volume_percent / 100.0).clamp(0.0, 2.0) as f32;
-                return Some((trimmed_path.to_string(), per_key_volume));
-            }
-
-            None
+        slot_indices.iter().find_map(|index| {
+            mode_bindings
+                .get(*index)
+                .and_then(Option::as_ref)
+                .map(|binding| (binding.sound_path.clone(), binding.per_key_volume))
         })
     }
 
     // ========== CSS 핫리로딩 관련 메서드 ==========
 
+    /// 잠금 순서: 번호표 turn -> CSS 잠금, 역순이면 preset_load와 교착
     pub(crate) fn lock_css_operation(&self) -> parking_lot::MutexGuard<'_, ()> {
         self.css_operation_lock.lock()
     }
@@ -4480,6 +4708,9 @@ impl Drop for AppState {
 fn output_backend_from_persist(value: KeySoundOutputBackendPersist) -> KeySoundOutputBackend {
     match value {
         KeySoundOutputBackendPersist::DefaultDevice => KeySoundOutputBackend::DefaultDevice,
+        KeySoundOutputBackendPersist::Device { id, name } => {
+            KeySoundOutputBackend::Device { id, name }
+        }
         KeySoundOutputBackendPersist::Asio {
             driver_name,
             buffer_size,
@@ -4493,6 +4724,9 @@ fn output_backend_from_persist(value: KeySoundOutputBackendPersist) -> KeySoundO
 fn output_backend_to_persist(value: KeySoundOutputBackend) -> KeySoundOutputBackendPersist {
     match value {
         KeySoundOutputBackend::DefaultDevice => KeySoundOutputBackendPersist::DefaultDevice,
+        KeySoundOutputBackend::Device { id, name } => {
+            KeySoundOutputBackendPersist::Device { id, name }
+        }
         KeySoundOutputBackend::Asio {
             driver_name,
             buffer_size,
@@ -4500,6 +4734,112 @@ fn output_backend_to_persist(value: KeySoundOutputBackend) -> KeySoundOutputBack
             driver_name,
             buffer_size,
         },
+    }
+}
+
+fn output_backend_targets_match(
+    left: &KeySoundOutputBackendPersist,
+    right: &KeySoundOutputBackendPersist,
+) -> bool {
+    match (left, right) {
+        (
+            KeySoundOutputBackendPersist::DefaultDevice,
+            KeySoundOutputBackendPersist::DefaultDevice,
+        ) => true,
+        (
+            KeySoundOutputBackendPersist::Device { id: left_id, .. },
+            KeySoundOutputBackendPersist::Device { id: right_id, .. },
+        ) => left_id == right_id,
+        (
+            KeySoundOutputBackendPersist::Asio {
+                driver_name: left_driver,
+                ..
+            },
+            KeySoundOutputBackendPersist::Asio {
+                driver_name: right_driver,
+                ..
+            },
+        ) => left_driver == right_driver,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod output_backend_tests {
+    use super::{
+        output_backend_from_persist, output_backend_targets_match, output_backend_to_persist,
+    };
+    use crate::{audio::KeySoundOutputBackend, models::KeySoundOutputBackendPersist};
+
+    #[test]
+    fn device_output_backend_persist_round_trip() {
+        let backend = KeySoundOutputBackend::Device {
+            id: "coreaudio:device-id".to_string(),
+            name: "Speakers".to_string(),
+        };
+        let persisted = output_backend_to_persist(backend.clone());
+
+        assert_eq!(
+            persisted,
+            KeySoundOutputBackendPersist::Device {
+                id: "coreaudio:device-id".to_string(),
+                name: "Speakers".to_string(),
+            }
+        );
+        assert_eq!(output_backend_from_persist(persisted), backend);
+    }
+
+    #[test]
+    fn device_output_backend_uses_camel_case_json() {
+        let persisted = KeySoundOutputBackendPersist::Device {
+            id: "wasapi:device-id".to_string(),
+            name: "Headphones".to_string(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(persisted).unwrap(),
+            serde_json::json!({
+                "kind": "device",
+                "id": "wasapi:device-id",
+                "name": "Headphones"
+            })
+        );
+    }
+
+    #[test]
+    fn output_backend_target_match_uses_stable_identifiers() {
+        let default = KeySoundOutputBackendPersist::DefaultDevice;
+        let device = KeySoundOutputBackendPersist::Device {
+            id: "device-id".to_string(),
+            name: "Old name".to_string(),
+        };
+        let renamed_device = KeySoundOutputBackendPersist::Device {
+            id: "device-id".to_string(),
+            name: "New name".to_string(),
+        };
+        let other_device = KeySoundOutputBackendPersist::Device {
+            id: "other-device-id".to_string(),
+            name: "Old name".to_string(),
+        };
+        let asio = KeySoundOutputBackendPersist::Asio {
+            driver_name: "ASIO Driver".to_string(),
+            buffer_size: Some(128),
+        };
+        let resized_asio = KeySoundOutputBackendPersist::Asio {
+            driver_name: "ASIO Driver".to_string(),
+            buffer_size: Some(256),
+        };
+        let other_asio = KeySoundOutputBackendPersist::Asio {
+            driver_name: "Other ASIO Driver".to_string(),
+            buffer_size: Some(128),
+        };
+
+        assert!(output_backend_targets_match(&default, &default));
+        assert!(output_backend_targets_match(&device, &renamed_device));
+        assert!(!output_backend_targets_match(&device, &other_device));
+        assert!(output_backend_targets_match(&asio, &resized_asio));
+        assert!(!output_backend_targets_match(&asio, &other_asio));
+        assert!(!output_backend_targets_match(&default, &device));
     }
 }
 
@@ -5431,6 +5771,8 @@ impl PanelBoundsPersistenceController {
         state.latest = latest;
         state.window = Some(window.clone());
         state.applied_max_height = Some(max_height);
+        state.unpersisted_default_height = None;
+        state.default_height_pending = false;
         state.generation = state.generation.wrapping_add(1);
         state.dirty = false;
         state.persist_dirty = false;
@@ -5468,13 +5810,38 @@ impl PanelBoundsPersistenceController {
         let persist = change.changes_persisted_bounds();
         if let PanelBoundsChange::Snapshot(snapshot) = change {
             state.latest = Some(snapshot);
-            return Self::mark_dirty(state, persist);
+        } else {
+            let Some(latest) = state.latest.as_mut() else {
+                return false;
+            };
+            apply_panel_bounds_change(latest, change);
         }
-        let Some(latest) = state.latest.as_mut() else {
-            return false;
-        };
-        apply_panel_bounds_change(latest, change);
+        let persist = Self::should_persist_change(state, persist);
         Self::mark_dirty(state, persist)
+    }
+
+    fn should_persist_change(state: &mut PanelBoundsPersistenceState, persist: bool) -> bool {
+        if !persist {
+            return false;
+        }
+        let Some(default_height) = state.unpersisted_default_height else {
+            return true;
+        };
+        let Some(sample) = state.latest else {
+            state.unpersisted_default_height = None;
+            state.default_height_pending = false;
+            return true;
+        };
+        let height = panel_bounds_from_sample(sample).height;
+        if (height - default_height).abs() < 0.5 {
+            state.default_height_pending = false;
+            return false;
+        }
+        if state.default_height_pending {
+            return false;
+        }
+        state.unpersisted_default_height = None;
+        true
     }
 
     // 이동만 바뀌어도 워커는 깨운다 - 모니터가 바뀌면 높이 한계를 다시 걸어야 하기 때문
@@ -5526,6 +5893,32 @@ impl PanelBoundsPersistenceController {
         self.store
             .flush()
             .context("failed to flush settled panel bounds")
+    }
+
+    fn clear_saved_bounds(&self, layout: Option<&PanelWindowLayout>) -> Result<()> {
+        let _persist_guard = self.persist_lock.lock();
+        self.store
+            .update_deferred(|data| data.panel_bounds = None)
+            .context("failed to clear saved panel bounds")?;
+        self.store
+            .flush()
+            .context("failed to flush cleared panel bounds")?;
+
+        let mut state = self.state.lock();
+        let default_height = layout.map(|value| value.height);
+        let current_height = state
+            .latest
+            .map(panel_bounds_from_sample)
+            .map(|value| value.height);
+        state.unpersisted_default_height = default_height;
+        state.default_height_pending = default_height
+            .zip(current_height)
+            .is_none_or(|(default, current)| (default - current).abs() >= 0.5);
+        state.applied_max_height = layout.map(|value| value.max_height);
+        state.generation = state.generation.wrapping_add(1);
+        state.dirty = false;
+        state.persist_dirty = false;
+        Ok(())
     }
 
     fn persist_worker_work(&self, work: PanelBoundsPersistWork) -> Result<bool> {
@@ -5632,9 +6025,16 @@ impl PanelBoundsPersistenceController {
         let _persist_guard = self.persist_lock.lock();
         let generation_before_sample = self.state.lock().generation;
         let sampled = panel_bounds_sample_from_window(window);
-        Self::flush_samples(&self.state, generation_before_sample, sampled, |sample| {
-            self.persist_sample(sample)
-        })
+        let persisted =
+            Self::flush_samples(&self.state, generation_before_sample, sampled, |sample| {
+                self.persist_sample(sample)
+            })?;
+        if !persisted {
+            self.store
+                .flush()
+                .context("failed to flush store with cleared panel bounds")?;
+        }
+        Ok(())
     }
 
     fn flush_samples(
@@ -5642,7 +6042,7 @@ impl PanelBoundsPersistenceController {
         generation_before_sample: u64,
         sampled: Result<PanelBoundsSample>,
         mut persist: impl FnMut(PanelBoundsSample) -> Result<()>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let mut work = {
             let mut state = state_mutex.lock();
             let sampled = match sampled {
@@ -5658,22 +6058,31 @@ impl PanelBoundsPersistenceController {
             state.generation = state.generation.wrapping_add(1);
             state.dirty = false;
             state.persist_dirty = false;
-            // 생명주기 경계의 flush는 이동 여부를 가리지 않고 현재 값을 남긴다
+            let persist = Self::should_persist_change(&mut state, true);
             PanelBoundsPersistWork {
                 session: state.session,
                 generation: state.generation,
                 sample,
-                persist: true,
+                persist,
             }
         };
+        let mut persisted = false;
 
         loop {
-            if let Err(error) = persist(work.sample) {
-                Self::restore_failed_work(&mut state_mutex.lock(), &work);
-                return Err(error);
+            if work.persist {
+                if let Err(error) = persist(work.sample) {
+                    Self::restore_failed_work(&mut state_mutex.lock(), &work);
+                    return Err(error);
+                }
+                persisted = true;
             }
-            let Some(next) = Self::take_dirty_work(&mut state_mutex.lock()) else {
-                return Ok(());
+            let next = {
+                let mut state = state_mutex.lock();
+                let Some(mut next) = Self::take_dirty_work(&mut state) else {
+                    return Ok(persisted);
+                };
+                next.persist = Self::should_persist_change(&mut state, true);
+                next
             };
             work = next;
         }
@@ -5691,6 +6100,8 @@ impl PanelBoundsPersistenceController {
         state.active = false;
         state.window = None;
         state.applied_max_height = None;
+        state.unpersisted_default_height = None;
+        state.default_height_pending = false;
         state.generation = state.generation.wrapping_add(1);
         state.dirty = false;
         state.persist_dirty = false;
@@ -5871,8 +6282,9 @@ mod tests {
         collections::{HashMap, HashSet},
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering},
-            Arc,
+            mpsc, Arc,
         },
+        thread,
         time::{Duration, Instant},
     };
 
@@ -5893,22 +6305,27 @@ mod tests {
         should_create_overlay_on_startup, should_recover_keyboard_daemon,
         should_restore_panel_on_startup, stored_bounds_need_monitor_data,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake, take_panel_open_arm,
-        EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
-        FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
-        FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect, MonitorData, MonitorSpec,
-        Mutex, OverlayCloseAction, PanelBoundsChange, PanelBoundsPersistenceController,
-        PanelBoundsPersistenceState, PanelBoundsSample, PanelCloseRequestState,
-        PanelCloseRequestedPayload, PanelVisibilityEventEmitter, PanelVisibilityPayload,
-        PanelVisibilityReason, PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT,
-        DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        AppState, EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake,
+        EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
+        FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect,
+        MonitorData, MonitorSpec, MutationPublicationSequencer, Mutex, OverlayCloseAction,
+        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
+        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload,
+        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
+        PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
         PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
-        RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
-        models::{AppStoreData, CustomCss, OverlayBounds, PanelBounds, TabCss},
-        state::local_asset_path::path_identity_key,
+        models::{
+            AppStoreData, CustomCss, EditorCommitOrigin, EditorField, OverlayBounds, PanelBounds,
+            TabCss,
+        },
+        state::{
+            history::HistoryAdmissionGate, local_asset_path::path_identity_key, store::AppStore,
+        },
     };
     use std::path::Path;
 
@@ -5918,6 +6335,270 @@ mod tests {
         assert!(should_create_overlay_on_startup(false, true));
         assert!(!should_create_overlay_on_startup(true, false));
         assert!(!should_create_overlay_on_startup(true, true));
+    }
+
+    #[test]
+    fn committed_key_positions_refresh_key_sound_binding_cache() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-key-sound-binding-cache-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state =
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap();
+        let initial = state.store.snapshot();
+        let mode = initial.selected_key_type.clone();
+        let sound_path = format!("/tmp/key-sound-{}.wav", uuid::Uuid::new_v4());
+        let committed_path = sound_path.clone();
+        let transaction = state
+            .store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("key_sound_binding_cache_test".to_string()),
+                &[EditorField::KeyPositions],
+                move |store| {
+                    let position = store
+                        .key_positions
+                        .get_mut(&mode)
+                        .unwrap()
+                        .first_mut()
+                        .unwrap();
+                    position.sound_enabled = Some(true);
+                    position.sound_path = Some(format!("  {committed_path}  "));
+                    position.sound_volume = Some(150.0);
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert_ne!(
+            state.resolve_key_sound_binding(&initial.selected_key_type, &[0]),
+            Some((sound_path.clone(), 1.5))
+        );
+        assert!(state.publish_committed_key_sound_bindings(&transaction.change));
+        assert_eq!(
+            state.resolve_key_sound_binding(&initial.selected_key_type, &[0]),
+            Some((sound_path, 1.5))
+        );
+
+        drop(transaction);
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    // 장치 전환 대기는 번호표 밖 - 앞 번호표가 잡혀 있어도 엔진은 먼저 전환되고
+    // persist만 turn을 기다린다 (turn 안에서 기다리면 뒤 번호표 전부가 드라이버를 기다림)
+    #[test]
+    fn output_backend_switch_runs_before_publication_turn() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-output-backend-turn-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state = Arc::new(
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap(),
+        );
+        let blocking_ticket = state.issue_mutation_publication().unwrap();
+
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker_state = Arc::clone(&state);
+        let worker = thread::spawn(move || {
+            let result = worker_state
+                .key_sound_set_output_backend(crate::audio::KeySoundOutputBackend::DefaultDevice);
+            done_tx.send(result.is_ok()).unwrap();
+        });
+
+        // 앞 번호표가 살아 있는 동안 persist는 turn을 기다린다
+        assert!(done_rx.recv_timeout(Duration::from_millis(500)).is_err());
+        assert!(state.store.snapshot().key_sound_output_backend.is_none());
+
+        drop(blocking_ticket);
+        assert!(done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("앞 번호표가 풀리면 persist가 완료된다"));
+        worker.join().unwrap();
+        assert!(state.store.snapshot().key_sound_output_backend.is_some());
+
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn mutation_publication_preserves_ticket_order_when_first_worker_is_delayed() {
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let first = publication.issue().unwrap();
+        let second = publication.issue().unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let (second_waiting_tx, second_waiting_rx) = mpsc::channel();
+        let (second_done_tx, second_done_rx) = mpsc::channel();
+        let second_order = Arc::clone(&order);
+        let second_worker = thread::spawn(move || {
+            second_waiting_tx.send(()).unwrap();
+            second.run(|| second_order.lock().push(2));
+            second_done_tx.send(()).unwrap();
+        });
+        second_waiting_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+        assert!(matches!(
+            second_done_rx.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+
+        let first_order = Arc::clone(&order);
+        let first_worker = thread::spawn(move || first.run(|| first_order.lock().push(1)));
+        first_worker.join().unwrap();
+        second_done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        second_worker.join().unwrap();
+        assert_eq!(*order.lock(), vec![1, 2]);
+    }
+
+    // 커밋 커맨드 구조 재현: 뒤 번호표가 먼저 admit한 뒤 turn을 기다리고, 앞 번호표가
+    // 그 다음 admit → turn. lease가 잠금이면 앞 번호표가 admit에서 막혀 영구 교착
+    #[test]
+    fn plugin_authority_admission_does_not_block_earlier_publication_turn() {
+        use crate::state::plugin::PluginRuntimeAuthority;
+
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let authority = Arc::new(PluginRuntimeAuthority::default());
+        authority.reset().unwrap();
+        let first = publication.issue().unwrap();
+        let second = publication.issue().unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+
+        let (second_admitted_tx, second_admitted_rx) = mpsc::channel();
+        let second_authority = Arc::clone(&authority);
+        let second_order = Arc::clone(&order);
+        let second_worker = thread::spawn(move || {
+            let lease = second_authority.admit(1).unwrap();
+            second_admitted_tx.send(()).unwrap();
+            second.run(|| {
+                second_authority.revalidate(lease).unwrap();
+                second_order.lock().push(2);
+            });
+        });
+        second_admitted_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+
+        let first_authority = Arc::clone(&authority);
+        let first_order = Arc::clone(&order);
+        let first_worker = thread::spawn(move || {
+            let lease = first_authority.admit(1).unwrap();
+            first.run(|| {
+                first_authority.revalidate(lease).unwrap();
+                first_order.lock().push(1);
+            });
+        });
+
+        let (done_tx, done_rx) = mpsc::channel();
+        thread::spawn(move || {
+            first_worker.join().unwrap();
+            second_worker.join().unwrap();
+            done_tx.send(()).unwrap();
+        });
+        done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("admit이 잠금을 들지 않아야 번호표 순서대로 진행된다");
+        assert_eq!(*order.lock(), vec![1, 2]);
+    }
+
+    // 번호표 FIFO가 reset과 커밋을 직렬화한다 - reset 뒤 turn의 revalidate는 거절
+    #[test]
+    fn plugin_authority_revalidate_rejects_commit_admitted_before_reset() {
+        use crate::state::plugin::PluginRuntimeAuthority;
+
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let authority = PluginRuntimeAuthority::default();
+        authority.reset().unwrap();
+        let lease = authority.admit(1).unwrap();
+
+        let reset_ticket = publication.issue().unwrap();
+        let commit_ticket = publication.issue().unwrap();
+        reset_ticket.run(|| authority.reset().unwrap());
+        let rejected = commit_ticket.run(|| authority.revalidate(lease));
+        assert_eq!(
+            rejected.unwrap_err(),
+            "AUTHORITY_GENERATION_CHANGED".to_string()
+        );
+    }
+
+    #[test]
+    fn mutation_publication_advances_after_unrun_ticket_is_dropped() {
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let first = publication.issue().unwrap();
+        let second = publication.issue().unwrap();
+
+        drop(first);
+
+        assert_eq!(publication.state.lock().serving_ticket, 1);
+        let mut ran = false;
+        second.run(|| ran = true);
+        assert!(ran);
+    }
+
+    #[test]
+    fn mutation_publication_advances_after_panicking_turn() {
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let first = publication.issue().unwrap();
+        let second = publication.issue().unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let first_order = Arc::clone(&order);
+        let first_worker = thread::spawn(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                first.run(|| {
+                    first_order.lock().push(1);
+                    panic!("publication panic test");
+                });
+            }))
+        });
+        let second_order = Arc::clone(&order);
+        let second_worker = thread::spawn(move || second.run(|| second_order.lock().push(2)));
+
+        assert!(first_worker.join().unwrap().is_err());
+        second_worker.join().unwrap();
+        assert_eq!(*order.lock(), vec![1, 2]);
+    }
+
+    #[test]
+    fn history_close_drains_while_mutation_publication_is_held() {
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let ticket = publication.issue().unwrap();
+        let gate = Arc::new(HistoryAdmissionGate::default());
+        let admission = gate.admit_mutation().unwrap();
+        let (publication_held_tx, publication_held_rx) = mpsc::channel();
+        let (release_publication_tx, release_publication_rx) = mpsc::channel();
+        let mutation = thread::spawn(move || {
+            ticket.run(|| {
+                publication_held_tx.send(()).unwrap();
+                release_publication_rx.recv().unwrap();
+                drop(admission);
+            });
+        });
+        publication_held_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+
+        let barrier = gate.begin_close("history-close-publication-test").unwrap();
+        let waiter = barrier.waiter();
+        let (drained_tx, drained_rx) = mpsc::channel();
+        let drain = thread::spawn(move || {
+            drained_tx.send(waiter.wait_for_drain()).unwrap();
+        });
+        assert!(matches!(
+            drained_rx.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+
+        release_publication_tx.send(()).unwrap();
+        assert_eq!(
+            drained_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            Ok(())
+        );
+        mutation.join().unwrap();
+        drain.join().unwrap();
+        drop(barrier);
     }
 
     #[test]
@@ -6097,12 +6778,6 @@ mod tests {
     }
 
     #[test]
-    fn raw_input_targets_exclude_the_opener_hosted_panel() {
-        // 패널 창은 자체 JS 런타임이 없다 - raw input을 받을 수신자가 없다
-        assert_eq!(RAW_INPUT_WINDOW_LABELS, ["main", OVERLAY_LABEL]);
-    }
-
-    #[test]
     fn panel_open_arm_is_consumed_once_and_expires() {
         let now = Instant::now();
         let mut slot = None;
@@ -6261,6 +6936,90 @@ mod tests {
                 .expect("coalesced work stays scheduled")
                 .persist
         );
+    }
+
+    #[test]
+    fn panel_reset_ignores_default_layout_resize_before_user_resize() {
+        let mut state = PanelBoundsPersistenceState {
+            latest: Some(PanelBoundsSample {
+                position: PhysicalPosition::new(600, 300),
+                position_scale_factor: 2.0,
+                size: PhysicalSize::new(480, 2_000),
+                size_scale_factor: 2.0,
+                current_scale_factor: 2.0,
+            }),
+            unpersisted_default_height: Some(712.0),
+            default_height_pending: true,
+            session: 3,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_600)),
+        );
+        assert!(
+            !PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("intermediate reset size should schedule constraints")
+                .persist
+        );
+
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_424)),
+        );
+        assert!(
+            !PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("default reset size should schedule constraints")
+                .persist
+        );
+        assert!(!state.default_height_pending);
+
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            3,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_500)),
+        );
+        assert!(
+            PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("user resize should schedule persistence")
+                .persist
+        );
+        assert_eq!(state.unpersisted_default_height, None);
+    }
+
+    #[test]
+    fn panel_reset_at_default_height_persists_the_next_user_resize() {
+        let mut state = PanelBoundsPersistenceState {
+            latest: Some(PanelBoundsSample {
+                position: PhysicalPosition::new(600, 300),
+                position_scale_factor: 2.0,
+                size: PhysicalSize::new(480, 1_424),
+                size_scale_factor: 2.0,
+                current_scale_factor: 2.0,
+            }),
+            unpersisted_default_height: Some(712.0),
+            default_height_pending: false,
+            session: 4,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+
+        PanelBoundsPersistenceController::record_change(
+            &mut state,
+            4,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_500)),
+        );
+
+        assert!(
+            PanelBoundsPersistenceController::take_dirty_work(&mut state)
+                .expect("user resize should schedule persistence")
+                .persist
+        );
+        assert_eq!(state.unpersisted_default_height, None);
     }
 
     #[test]
@@ -6522,6 +7281,34 @@ mod tests {
             .is_err()
         );
         assert!(state.lock().dirty);
+    }
+
+    #[test]
+    fn panel_bounds_flush_preserves_cleared_default_height() {
+        let sample = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_424),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let state = Mutex::new(PanelBoundsPersistenceState {
+            latest: Some(sample),
+            unpersisted_default_height: Some(712.0),
+            default_height_pending: false,
+            session: 7,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        });
+
+        let persisted =
+            PanelBoundsPersistenceController::flush_samples(&state, 0, Ok(sample), |_| {
+                panic!("default height must remain cleared")
+            })
+            .unwrap();
+
+        assert!(!persisted);
+        assert_eq!(state.lock().unpersisted_default_height, Some(712.0));
     }
 
     // 기동 복원 회귀: 방금 배치된 메인 창의 논리 좌표를 받으면 세로 중앙이 맞는다
@@ -7098,9 +7885,19 @@ mod tests {
 
     #[test]
     fn key_state_payload_exposes_hold_duration_on_up_only() {
-        let down = key_state_payload("A", "DOWN", "4key", 2.0, true, Some(15.0));
-        let up = key_state_payload("A", "UP", "4key", 3.0, false, Some(15.0));
-        let unmatched_up = key_state_payload("A", "UP", "4key", 3.0, false, None);
+        let down = serde_json::to_value(key_state_payload(
+            "A",
+            "DOWN",
+            "4key",
+            2.0,
+            true,
+            Some(15.0),
+        ))
+        .unwrap();
+        let up = serde_json::to_value(key_state_payload("A", "UP", "4key", 3.0, false, Some(15.0)))
+            .unwrap();
+        let unmatched_up =
+            serde_json::to_value(key_state_payload("A", "UP", "4key", 3.0, false, None)).unwrap();
 
         assert!(down.get("holdDurationMs").is_none());
         assert_eq!(up["holdDurationMs"], serde_json::json!(15.0));

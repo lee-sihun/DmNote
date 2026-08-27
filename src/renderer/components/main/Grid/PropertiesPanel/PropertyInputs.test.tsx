@@ -2,14 +2,33 @@ import React, { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const colorInputHarness = vi.hoisted(() => ({
+  pickerProps: null as null | Record<string, unknown>,
+  gradientOptions: null as null | Record<string, unknown>,
+  cancelGradientPreview: vi.fn(),
+}));
+
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
-  default: ({ footerSlot }: { footerSlot?: React.ReactNode }) => (
-    <div data-testid="color-picker">{footerSlot}</div>
-  ),
+  default: (props: {
+    footerSlot?: React.ReactNode;
+    hexMixed?: boolean;
+    opacityPercentMixed?: boolean;
+  }) => {
+    colorInputHarness.pickerProps = props as Record<string, unknown>;
+    return (
+      <div
+        data-testid="color-picker"
+        data-hex-mixed={props.hexMixed ? 'true' : undefined}
+        data-alpha-mixed={props.opacityPercentMixed ? 'true' : undefined}
+      >
+        {props.footerSlot}
+      </div>
+    );
+  },
 }));
 
 vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
@@ -26,14 +45,18 @@ vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
 }));
 
 vi.mock('@hooks/pickers/useGradientColorState', () => ({
-  useGradientColorState: () => ({
-    pickerColor: '#ffffff',
-    headerSlot: null,
-    footerSlot: <span>gradient-controls</span>,
-    paletteGradientSpec: null,
-    handlePickerColorChange: vi.fn(),
-    handleGradientSpecSelect: vi.fn(),
-  }),
+  useGradientColorState: (options: Record<string, unknown>) => {
+    colorInputHarness.gradientOptions = options;
+    return {
+      pickerColor: '#ffffff',
+      headerSlot: null,
+      footerSlot: <span>gradient-controls</span>,
+      paletteGradientSpec: null,
+      handlePickerColorChange: vi.fn(),
+      handleGradientSpecSelect: vi.fn(),
+      cancelPreview: colorInputHarness.cancelGradientPreview,
+    };
+  },
 }));
 
 import {
@@ -112,6 +135,9 @@ describe('NumberInput visual-first commit', () => {
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
+    colorInputHarness.pickerProps = null;
+    colorInputHarness.gradientOptions = null;
+    colorInputHarness.cancelGradientPreview.mockClear();
   });
 
   afterEach(() => {
@@ -560,6 +586,27 @@ describe('숫자 입력 수식 계산', () => {
     expect(commit).toHaveBeenCalledTimes(1);
     expect(commit).toHaveBeenCalledWith(expected);
     expect(document.activeElement).not.toBe(input);
+  });
+
+  it('정수 입력의 소수는 숫자 그대로 반올림하고 자릿수를 이어 붙이지 않는다', () => {
+    const commit = vi.fn();
+    const input = renderNumber({ onChange: commit });
+
+    act(() => setInputValue(input, '1.5'));
+    expect(input.value).toBe('1.5');
+    act(() => pressKey(input, 'Enter'));
+
+    expect(commit).toHaveBeenCalledWith(2);
+  });
+
+  it('Optional 정수 입력도 소수를 반올림해 확정한다', () => {
+    const commit = vi.fn();
+    const input = renderOptional({ onChange: commit });
+
+    act(() => setInputValue(input, '1.5'));
+    act(() => input.blur());
+
+    expect(commit).toHaveBeenCalledWith(2);
   });
 
   it('기존 값 뒤에 수식을 덧붙여 계산한다', () => {
@@ -1564,6 +1611,22 @@ describe('숫자 스텝 팝인 레이어', () => {
     ).toEqual([false, true]);
   });
 
+  it('999에서 1000으로 바뀌면 네 자리를 순서대로 재생한다', () => {
+    renderStepped(999);
+
+    expect(segments().map((part) => part.textContent)).toEqual([
+      '1',
+      '0',
+      '0',
+      '0',
+    ]);
+    expect(
+      segments().map((part) =>
+        (part as HTMLElement).style.getPropertyValue('--dmn-digit-step'),
+      ),
+    ).toEqual(['0', '1', '2', '3']);
+  });
+
   it('선행 부호를 단독 조각으로 남기지 않는다', () => {
     // -3에서 -2로. 오른쪽 정렬 diff만 쓰면 부호가 혼자 남는다
     renderStepped(-3);
@@ -1693,6 +1756,9 @@ describe('ColorInput deferred picker mount', () => {
   let root: Root;
 
   beforeEach(() => {
+    colorInputHarness.pickerProps = null;
+    colorInputHarness.gradientOptions = null;
+    colorInputHarness.cancelGradientPreview.mockClear();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
       window.setTimeout(() => callback(performance.now()), 0),
     );
@@ -1725,6 +1791,112 @@ describe('ColorInput deferred picker mount', () => {
     expect(
       container.querySelector('[data-testid="color-picker"]'),
     ).not.toBeNull();
+  });
+
+  it('배치 Mixed 신호를 hex·알파로 나눠 피커에 넘긴다', () => {
+    act(() =>
+      root.render(
+        <ColorInput
+          value="#ffffff"
+          onChange={() => {}}
+          pickerMountStrategy="sync"
+          hexMixed
+          alphaMixed={false}
+        />,
+      ),
+    );
+    act(() => container.querySelector('button')!.click());
+
+    const picker = container.querySelector('[data-testid="color-picker"]')!;
+    expect(picker.getAttribute('data-hex-mixed')).toBe('true');
+    expect(picker.getAttribute('data-alpha-mixed')).toBeNull();
+  });
+
+  it('ColorPicker preview와 complete를 부모 preview와 commit 채널로 분리한다', () => {
+    const onPreview = vi.fn();
+    const onChange = vi.fn();
+    const onChangeComplete = vi.fn();
+    act(() =>
+      root.render(
+        <ColorInput
+          value="#ffffff"
+          onPreview={onPreview}
+          onChange={onChange}
+          onChangeComplete={onChangeComplete}
+          pickerMountStrategy="sync"
+        />,
+      ),
+    );
+    act(() => container.querySelector('button')!.click());
+    const picker = colorInputHarness.pickerProps as {
+      onColorChange: (color: string) => void;
+      onColorChangeComplete: (color: string) => void;
+    };
+
+    act(() => picker.onColorChange('#112233'));
+    expect(onPreview).toHaveBeenCalledWith('#112233');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onChangeComplete).not.toHaveBeenCalled();
+
+    act(() => picker.onColorChangeComplete('#112233'));
+    expect(onPreview).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('#112233');
+    expect(onChangeComplete).toHaveBeenCalledWith('#112233');
+  });
+
+  it('피커 입력 cancel은 로컬 gradient draft와 부모 gesture를 함께 취소한다', () => {
+    const onCancel = vi.fn();
+    act(() =>
+      root.render(
+        <ColorInput
+          value="#ffffff"
+          onChange={() => {}}
+          onCancel={onCancel}
+          pickerMountStrategy="sync"
+        />,
+      ),
+    );
+    act(() => container.querySelector('button')!.click());
+    const picker = colorInputHarness.pickerProps as {
+      onInputCancel: (target: 'solid', restoredColor: string) => void;
+    };
+
+    act(() => picker.onInputCancel('solid', '#abcdef'));
+
+    expect(colorInputHarness.cancelGradientPreview).toHaveBeenCalledTimes(1);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('gradient mode preview는 ColorModeValue를 그대로 onModePreview에 전달한다', () => {
+    const onModePreview = vi.fn();
+    act(() =>
+      root.render(
+        <ColorInput
+          value="#ffffff"
+          onChange={() => {}}
+          gradientValue={null}
+          onModeCommit={() => {}}
+          onModePreview={onModePreview}
+        />,
+      ),
+    );
+    const preview = colorInputHarness.gradientOptions?.onPreview as (
+      value: unknown,
+    ) => void;
+    const value = {
+      mode: 'gradient' as const,
+      spec: {
+        angle: 180,
+        stops: [
+          { color: '#112233', pos: 0 },
+          { color: '#445566', pos: 1 },
+        ],
+      },
+    };
+
+    act(() => preview(value));
+
+    expect(onModePreview).toHaveBeenCalledWith('idle', value);
   });
 
   it('sync 전략은 클릭 이벤트에서 피커를 즉시 mount한다', () => {

@@ -55,7 +55,6 @@ const FontWeightDropdown = ({
       value={isMixed ? '' : String(value)}
       placeholder={isMixed ? 'Mixed' : '—'}
       disabled={supportedWeights.length === 0}
-      widthClass="w-[72px]"
       onChange={(nextValue) => {
         const nextWeight = Number(nextValue);
         if (Number.isFinite(nextWeight)) onChange(nextWeight);

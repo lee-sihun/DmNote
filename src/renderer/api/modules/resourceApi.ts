@@ -96,25 +96,37 @@ export const soundApi = {
     invoke('key_sound_set_latency_logging', { enabled }).then(() => undefined),
 };
 
-// 키음 출력 백엔드 (기본 장치 / ASIO)
+// 키음 출력 백엔드 (기본 장치 / 시스템 장치 / ASIO)
+// device.id는 cpal DeviceId 문자열, name은 마지막으로 본 표시 이름
 export type KeySoundOutputBackend =
   | { kind: 'defaultDevice' }
+  | { kind: 'device'; id: string; name: string }
   | { kind: 'asio'; driverName: string; bufferSize?: number | null };
 
+// 진단용, UI에는 표시하지 않음 (실패 시 백엔드가 선택을 기본 장치로 되돌림)
 export type KeySoundOutputErrorCode =
   | 'asioUnavailableBuild'
   | 'asioDeviceNotFound'
   | 'asioOpenFailed'
+  | 'deviceNotFound'
+  | 'deviceOpenFailed'
   | 'defaultOpenFailed';
+
+export interface KeySoundOutputDevice {
+  id: string;
+  name: string;
+}
 
 export interface KeySoundOutputDevices {
   defaultDevice: boolean;
+  system: KeySoundOutputDevice[];
   asio: string[];
 }
 
 export interface KeySoundOutputState {
   requested: KeySoundOutputBackend;
-  effective: KeySoundOutputBackend;
+  // 열린 스트림이 없으면 null
+  effective: KeySoundOutputBackend | null;
   error: string | null;
   errorCode: KeySoundOutputErrorCode | null;
   asioAvailable: boolean;

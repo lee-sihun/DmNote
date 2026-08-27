@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   toCanonicalGradient,
   toCompactRgba,
@@ -35,6 +35,8 @@ interface UseGradientColorStateOptions {
   canvasState?: GradientPreviewState;
   /** 미리보기(드래그 중) — 상위 프리뷰 경로로 전달 */
   onPreview?: (value: ColorModeValue) => void;
+  /** 미리보기 취소, 외부 편집 제스처 폐기 */
+  onCancel?: () => void;
   /** 확정 커밋 — atomic patch 산출은 호출부가 gradientPairPatch/counterFillPair로 */
   onCommit: (value: ColorModeValue, meta?: GradientCommitMeta) => void;
 }
@@ -73,6 +75,7 @@ export function useGradientColorState({
   canvasSurface = 'background',
   canvasState = 'idle',
   onPreview,
+  onCancel,
   onCommit,
 }: UseGradientColorStateOptions) {
   const storedSpec = pair.gradient ?? null;
@@ -204,6 +207,9 @@ export function useGradientColorState({
   const applySpecRef = useRef(applySpec);
   // eslint-disable-next-line react-hooks/refs
   applySpecRef.current = applySpec;
+  const onCancelRef = useRef(onCancel);
+  // eslint-disable-next-line react-hooks/refs
+  onCancelRef.current = onCancel;
   const canvasAnchorRef = useRef(canvasAnchor);
   // eslint-disable-next-line react-hooks/refs
   canvasAnchorRef.current = canvasAnchor;
@@ -244,6 +250,10 @@ export function useGradientColorState({
       selectStop: setSelectedStop,
       apply: (spec: GradientSpec, commit: boolean) =>
         applySpecRef.current(spec, commit),
+      cancel: () => {
+        setDraft(null);
+        onCancelRef.current?.();
+      },
     });
     return () => {
       // 피커가 닫혀 앵커가 사라진 경우 세션 소유권과 무관하게 로컬 초안 폐기
@@ -315,6 +325,10 @@ export function useGradientColorState({
     applySpec(spec, true);
   };
 
+  const cancelPreview = () => {
+    setDraft(null);
+  };
+
   return {
     format,
     headerSlot,
@@ -323,5 +337,6 @@ export function useGradientColorState({
     handlePickerColorChange,
     paletteGradientSpec,
     handleGradientSpecSelect,
+    cancelPreview,
   };
 }

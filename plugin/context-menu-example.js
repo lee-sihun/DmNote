@@ -124,7 +124,6 @@ menuIds.push(
   dmn.ui.contextMenu.addGridMenuItem({
     id: "show-grid-position",
     label: "클릭 위치 표시",
-    position: "top",
     onClick: (context) => {
       const { dx, dy } = context.position;
       console.log(`[Context Menu Example] 그리드 위치: (${dx}, ${dy})`);
@@ -170,7 +169,6 @@ menuIds.push(
   dmn.ui.contextMenu.addGridMenuItem({
     id: "show-markers",
     label: "저장된 마커 보기",
-    position: "bottom",
     onClick: async () => {
       const markers =
         (await dmn.plugin.storage.get("noteMarkers")) || [];

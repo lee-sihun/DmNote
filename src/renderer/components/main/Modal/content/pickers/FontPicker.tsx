@@ -68,6 +68,23 @@ const FontPicker = ({
   const fontLibrary = useFontLibrary();
   const menu = usePickerItemMenu<string>();
 
+  // 추가 행이 스크롤 영역 안에 있어 메뉴를 연 채 스크롤하면
+  // 고정 좌표 메뉴가 행에서 분리됨 - 스크롤 시작 즉시 닫는다
+  useEffect(() => {
+    if (addMenuPosition === null) return;
+    const closeOnScroll = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.('[data-dmn-popup-layer="true"]')) return;
+      setAddMenuPosition(null);
+    };
+    document.addEventListener('scroll', closeOnScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () =>
+      document.removeEventListener('scroll', closeOnScroll, { capture: true });
+  }, [addMenuPosition]);
+
   // 첫 페인트 전에 비활성 폰트의 목록 미리보기 face 동기화
   useInsertionEffect(() => {
     if (!open) return;
@@ -151,8 +168,11 @@ const FontPicker = ({
         },
         {
           id: 'toggle',
-          label: t('fontPicker.enabledToggle') || '활성화',
-          checked: menuTargetFont.enabled,
+          // 상태를 체크로 보이면 이 목록에서 유일하게 체크 가능한 항목 하나 때문에
+          // 나머지 행까지 체크 칸만큼 밀린다. 라벨이 직접 동작을 말하게 둔다
+          label: menuTargetFont.enabled
+            ? t('fontPicker.disable') || '비활성화'
+            : t('fontPicker.enable') || '활성화',
           // 복원 실패로 파일 경로가 없는 로컬 폰트는 재활성화 불가
           disabled:
             menuTargetFont.type === 'local' && !menuTargetFont.localPath,
@@ -328,6 +348,7 @@ const FontPicker = ({
           setAddMenuPosition({ x: rect.right + 4, y: rect.top - 2 });
         }}
         addLabel={t('fontPicker.add')}
+        addRowPlacement="start"
         addButtonRef={addButtonRef}
       />
 

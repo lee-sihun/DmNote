@@ -1,8 +1,10 @@
 // 피커 리스트 행 규격 — 패널 페이지의 인셋 웰 테이블 행
 
-// 인셋 웰(테이블) 내부의 필 행 — 30 컨트롤 스케일, 웰과 동심 라운딩
+// 인셋 웰(테이블) 내부의 필 행 — 30 컨트롤 스케일, 웰과 동심 라운딩.
+// 높이는 변수 기반 - 페이지가 마지막 가시 행이 글자 중간에서 잘리도록
+// 30px 기준 ±3px 안에서 리듬을 미세 보정함 (CommonListPickerPage)
 export const pickerRowClass =
-  'w-full h-[30px] px-[8px] rounded-md text-label transition-colors flex items-center gap-[4px] group';
+  'w-full h-[var(--dmn-picker-row-h,30px)] px-[8px] rounded-md text-label transition-colors flex items-center gap-[4px] group';
 
 // 행 트레일링 ⋮ 버튼 — 28px(30 행 스케일)
 // 숨김 상태는 폭까지 접어(w-0) 이름이 조기 잘리지 않게 함

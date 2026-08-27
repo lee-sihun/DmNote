@@ -2,6 +2,7 @@ import { usePressAction } from '@hooks/usePressAction';
 import React, { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
+import { SIDE_PANEL_CHIP_MATERIAL_CLASS } from './panelChrome';
 import {
   useOptimisticBooleanCommit,
   type CommitStrategy,
@@ -24,8 +25,8 @@ const CHIP_HIDDEN = '0';
 // 패널 열기/닫기 토글 — 열림/닫힘을 하나의 지속 노드로 렌더해
 // 리마운트 깜빡임 없이 글래스 칩 ↔ 베어 아이콘으로 모프.
 // 아이콘 중심은 두 상태 모두 우상단 (24, 24) 앵커에 고정.
-// 칩은 opacity 페이드 — backdrop-filter가 없는 재질이라 안전
-// (블러+opacity 조합은 WKWebView에서 블러 레이어가 점멸).
+// 칩은 opacity 페이드 — backdrop-filter가 없는 솔리드 재질이라 안전
+// (블러+opacity 조합은 WKWebView에서 블러 레이어가 점멸, panelChrome 참조).
 // 눈 토글과 같은 규칙: FROM 상태를 정적으로 고정하고 TO 커밋은 onfinish에서
 const PanelToggleButton = ({
   open,
@@ -94,7 +95,7 @@ const PanelToggleButton = ({
   const togglePress = usePressAction(toggle);
 
   return (
-    <div className="absolute top-0 right-0 z-30 w-[48px] h-[48px] flex items-center justify-center pointer-events-none">
+    <div className="absolute top-0 right-0 z-[var(--z-chrome-panel)] w-[48px] h-[48px] flex items-center justify-center pointer-events-none">
       <button
         ref={buttonRef}
         {...togglePress}
@@ -107,7 +108,7 @@ const PanelToggleButton = ({
         <span
           ref={chipRef}
           aria-hidden="true"
-          className="absolute inset-0 rounded-[8px] bg-glass-panel shadow-elevation-chrome"
+          className={`absolute inset-0 rounded-[8px] ${SIDE_PANEL_CHIP_MATERIAL_CLASS} shadow-elevation-chrome`}
         />
         <svg
           className="relative"
@@ -123,7 +124,7 @@ const PanelToggleButton = ({
             height="12.5"
             rx="2"
             stroke="currentColor"
-            strokeWidth="1.5"
+            strokeWidth="1.2"
             fill="none"
           />
           <line
@@ -133,7 +134,7 @@ const PanelToggleButton = ({
             x2="10"
             y2="13"
             stroke="currentColor"
-            strokeWidth="1.5"
+            strokeWidth="1.2"
           />
           <g
             className="dmn-panel-toggle-lines"

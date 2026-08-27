@@ -681,7 +681,7 @@ fn rewrite_position_sound_reference(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{defaults::default_positions, models::KnobPosition};
+    use crate::models::{KeyPosition, KnobPosition};
 
     #[test]
     fn image_payload_embeds_percent_encoded_file_url() {
@@ -695,8 +695,10 @@ mod tests {
         let image_url = url::Url::from_file_path(&image_path).unwrap().to_string();
         assert!(image_url.contains("%20"));
 
-        let mut position = default_positions()["4key"][0].clone();
-        position.active_image = Some(image_url);
+        let position = KeyPosition {
+            active_image: Some(image_url),
+            ..KeyPosition::default()
+        };
         let key_positions = KeyPositions::from([("4key".to_string(), vec![position])]);
 
         let (exported, _, _, _, embedded) = build_preset_image_payload(
@@ -729,8 +731,10 @@ mod tests {
         let sound_path = temp_dir.join("knob.wav");
         std::fs::write(&sound_path, b"knob-sound").unwrap();
 
-        let mut position = default_positions()["4key"][0].clone();
-        position.sound_path = Some(sound_path.to_string_lossy().to_string());
+        let position = KeyPosition {
+            sound_path: Some(sound_path.to_string_lossy().to_string()),
+            ..KeyPosition::default()
+        };
         let mut knob_positions = KnobPositions::new();
         knob_positions.insert(
             "4key".to_string(),

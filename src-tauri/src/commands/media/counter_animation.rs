@@ -1,16 +1,18 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State, WebviewWindow};
+use tauri::{AppHandle, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
-    commands::editor::state::{emit_best_effort, publish_legacy_editor_change},
+    commands::{
+        editor::state::{emit_best_effort, publish_legacy_editor_change},
+        run_blocking, run_history_mutation, run_mutation,
+    },
     errors::{CmdResult, CommandError, EditorCommitError},
     models::{
         default_counter_animation_builtin_presets, default_counter_animation_preset_id,
         find_builtin_counter_animation_preset_by_id, CommittedEditorChange, CounterAnimationPreset,
         CounterAnimationSource, EditorCommitOrigin, EditorField,
     },
-    state::AppState,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -56,16 +58,16 @@ pub struct CounterAnimationDeleteResponse {
 }
 
 #[tauri::command]
-pub fn counter_animation_list(
-    state: State<'_, AppState>,
-) -> CmdResult<CounterAnimationListResponse> {
-    let snapshot = state.store.snapshot();
-    Ok(build_library_payload(&snapshot.counter_animation_presets))
+pub async fn counter_animation_list(app: AppHandle) -> CmdResult<CounterAnimationListResponse> {
+    run_blocking(app, |_, state| {
+        let snapshot = state.store.snapshot();
+        Ok(build_library_payload(&snapshot.counter_animation_presets))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn counter_animation_create(
-    state: State<'_, AppState>,
+pub async fn counter_animation_create(
     app: AppHandle,
     request: CounterAnimationCreateRequest,
 ) -> CmdResult<CounterAnimationUpsertResponse> {
@@ -84,22 +86,24 @@ pub fn counter_animation_create(
         return Err(CommandError::msg("counter animation name cannot be empty"));
     }
 
-    let next_preset = preset.clone();
-    let updated = state.store.update(|store| {
-        store.counter_animation_presets.push(next_preset.clone());
-    })?;
+    run_mutation(app, move |app, state| {
+        let next_preset = preset.clone();
+        let updated = state.store.update(|store| {
+            store.counter_animation_presets.push(next_preset.clone());
+        })?;
 
-    emit_counter_animation_changed(&app, &updated.counter_animation_presets);
+        emit_counter_animation_changed(app, &updated.counter_animation_presets);
 
-    Ok(CounterAnimationUpsertResponse {
-        preset,
-        affected_usage_count: 0,
+        Ok(CounterAnimationUpsertResponse {
+            preset,
+            affected_usage_count: 0,
+        })
     })
+    .await
 }
 
 #[tauri::command]
-pub fn counter_animation_update(
-    state: State<'_, AppState>,
+pub async fn counter_animation_update(
     app: AppHandle,
     window: WebviewWindow,
     request: CounterAnimationUpdateRequest,
@@ -107,17 +111,6 @@ pub fn counter_animation_update(
     let target_id = request.id.trim().to_string();
     if target_id.is_empty() {
         return Err(CommandError::msg("counter animation id is required"));
-    }
-
-    let current = state.store.snapshot();
-    if !current
-        .counter_animation_presets
-        .iter()
-        .any(|preset| preset.id == target_id)
-    {
-        return Err(CommandError::msg(format!(
-            "counter animation preset not found: {target_id}"
-        )));
     }
 
     let mut preset = CounterAnimationPreset {
@@ -135,44 +128,60 @@ pub fn counter_animation_update(
         return Err(CommandError::msg("counter animation name cannot be empty"));
     }
 
-    let next_preset = preset.clone();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction = state
-        .store
-        .commit_legacy_editor_transaction_with_admission(
-            EditorCommitOrigin::LegacyAdapter("counter_animation_update".to_string()),
-            &[
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-            ],
-            admission,
-            |store| {
-                replace_counter_animation_preset(store, &target_id, &next_preset)?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let current = state.store.snapshot();
+            if !current
+                .counter_animation_presets
+                .iter()
+                .any(|preset| preset.id == target_id)
+            {
+                return Err(CommandError::msg(format!(
+                    "counter animation preset not found: {target_id}"
+                )));
+            }
 
-                let affected_usage_count =
-                    apply_preset_to_bound_counters(store, &target_id, &next_preset);
-                Ok((
-                    store.counter_animation_presets.clone(),
-                    affected_usage_count,
-                ))
-            },
-        )?;
-    let (user_presets, affected_usage_count) = transaction.value;
+            let next_preset = preset.clone();
+            let transaction = state
+                .store
+                .commit_legacy_editor_transaction_with_admission(
+                    EditorCommitOrigin::LegacyAdapter("counter_animation_update".to_string()),
+                    &[
+                        EditorField::KeyPositions,
+                        EditorField::StatPositions,
+                        EditorField::GraphPositions,
+                    ],
+                    admission,
+                    |store| {
+                        replace_counter_animation_preset(store, &target_id, &next_preset)?;
 
-    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
-    emit_counter_animation_changed(&app, &user_presets);
-    emit_positions_changed(&app, &transaction.change, affected_usage_count);
+                        let affected_usage_count =
+                            apply_preset_to_bound_counters(store, &target_id, &next_preset);
+                        Ok((
+                            store.counter_animation_presets.clone(),
+                            affected_usage_count,
+                        ))
+                    },
+                )?;
+            let (user_presets, affected_usage_count) = transaction.value;
 
-    Ok(CounterAnimationUpsertResponse {
-        preset,
-        affected_usage_count,
-    })
+            publish_legacy_editor_change(state, app, &transaction.change);
+            emit_counter_animation_changed(app, &user_presets);
+            emit_positions_changed(app, &transaction.change, affected_usage_count);
+
+            Ok(CounterAnimationUpsertResponse {
+                preset,
+                affected_usage_count,
+            })
+        },
+    )
+    .await
 }
 
 #[tauri::command]
-pub fn counter_animation_delete(
-    state: State<'_, AppState>,
+pub async fn counter_animation_delete(
     app: AppHandle,
     window: WebviewWindow,
     id: String,
@@ -182,17 +191,6 @@ pub fn counter_animation_delete(
         return Err(CommandError::msg("counter animation id is required"));
     }
 
-    let current = state.store.snapshot();
-    if !current
-        .counter_animation_presets
-        .iter()
-        .any(|preset| preset.id == target_id)
-    {
-        return Err(CommandError::msg(format!(
-            "counter animation preset not found: {target_id}"
-        )));
-    }
-
     let fallback_preset =
         find_builtin_counter_animation_preset_by_id(default_counter_animation_preset_id())
             .ok_or_else(|| CommandError::msg("default builtin counter animation preset missing"))?;
@@ -200,38 +198,55 @@ pub fn counter_animation_delete(
 
     let fallback_target = fallback_preset.clone();
 
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction = state.store.commit_legacy_resource_deletion_with_admission(
-        EditorCommitOrigin::LegacyAdapter("counter_animation_delete".to_string()),
-        &[
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-        ],
-        admission,
-        |store| {
-            remove_counter_animation_preset(store, &target_id)?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let current = state.store.snapshot();
+            if !current
+                .counter_animation_presets
+                .iter()
+                .any(|preset| preset.id == target_id)
+            {
+                return Err(CommandError::msg(format!(
+                    "counter animation preset not found: {target_id}"
+                )));
+            }
 
-            let affected_usage_count =
-                apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
-            Ok((
-                store.counter_animation_presets.clone(),
+            let transaction = state.store.commit_legacy_resource_deletion_with_admission(
+                EditorCommitOrigin::LegacyAdapter("counter_animation_delete".to_string()),
+                &[
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                ],
+                admission,
+                |store| {
+                    remove_counter_animation_preset(store, &target_id)?;
+
+                    let affected_usage_count =
+                        apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
+                    Ok((
+                        store.counter_animation_presets.clone(),
+                        affected_usage_count,
+                    ))
+                },
+            )?;
+            let (user_presets, affected_usage_count) = transaction.value;
+
+            publish_legacy_editor_change(state, app, &transaction.change);
+            emit_counter_animation_changed(app, &user_presets);
+            emit_positions_changed(app, &transaction.change, affected_usage_count);
+
+            Ok(CounterAnimationDeleteResponse {
+                success: true,
+                id: target_id,
                 affected_usage_count,
-            ))
+                fallback_preset_id,
+            })
         },
-    )?;
-    let (user_presets, affected_usage_count) = transaction.value;
-
-    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
-    emit_counter_animation_changed(&app, &user_presets);
-    emit_positions_changed(&app, &transaction.change, affected_usage_count);
-
-    Ok(CounterAnimationDeleteResponse {
-        success: true,
-        id: target_id,
-        affected_usage_count,
-        fallback_preset_id,
-    })
+    )
+    .await
 }
 
 fn build_library_payload(user_presets: &[CounterAnimationPreset]) -> CounterAnimationListResponse {

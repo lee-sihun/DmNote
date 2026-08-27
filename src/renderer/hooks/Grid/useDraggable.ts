@@ -8,6 +8,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { calculateBounds, calculateSnapPoints } from '@utils/grid/smartGuides';
 import { isMac } from '@utils/core/platform';
+import { snapToGrid } from '@hooks/Grid/utils';
 import {
   resumeCustomCursorHover,
   suspendCustomCursorHover,
@@ -62,13 +63,14 @@ const clampPosition = (value: number): number => {
 };
 
 // 줌 레벨에 따른 동적 그리드 스냅 크기 계산
-// 화면상 일정한 드래그 거리를 유지하면서 최소 1px 보장
+// 화면상 일정한 드래그 거리를 유지하면서 최소 1px 보장, 0은 스냅 끄기
 const MIN_GRID_SIZE = 1;
 
 const calculateDynamicGridSize = (
   zoom: number,
   baseGridSize: number,
 ): number => {
+  if (baseGridSize <= 0) return 0;
   const dynamicSize = Math.round(baseGridSize / zoom);
   return Math.max(dynamicSize, MIN_GRID_SIZE);
 };
@@ -249,7 +251,7 @@ export const useDraggable = ({
 
     // gridSettings에서 스냅 크기 가져오기
     const gridSnapSize =
-      useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
+      useSettingsStore.getState().gridSettings?.gridSnapSize ?? 5;
 
     // 줌 레벨에 따른 동적 그리드 크기 계산
     const dynamicGridSize = calculateDynamicGridSize(currentZoom, gridSnapSize);
@@ -367,7 +369,10 @@ export const useDraggable = ({
             draggedBounds,
             otherElements,
             undefined,
-            { disableSpacing: !spacingGuidesEnabled },
+            {
+              disableSpacing: !spacingGuidesEnabled,
+              gridSnapSize: dynamicGridSize,
+            },
           );
 
           if (snapResult.didSnapX || snapResult.didSnapY) {
@@ -420,16 +425,13 @@ export const useDraggable = ({
         }
 
         // 축별로 스냅 적용
-        // X축: 스마트 가이드로 스냅되지 않은 경우에만 기본 그리드 스냅 적용.
-        // 스마트 스냅 좌표는 반올림하지 않는다 - 홀수 크기 이웃과의 중앙
-        // 정렬은 .5 좌표가 정답이고, 정수화하면 가이드 선과 어긋난다
+        // X축 스마트 가이드 미적용 시 기본 그리드 스냅
+        // 캔버스 중앙 스냅은 계산 단계에서 그리드에 맞추고 이웃 정렬 소수 좌표는 보존
         let snappedX: number;
         if (didSmartSnapX) {
           snappedX = clampPosition(finalX);
         } else {
-          snappedX = clampPosition(
-            Math.round(finalX / dynamicGridSize) * dynamicGridSize,
-          );
+          snappedX = clampPosition(snapToGrid(finalX, dynamicGridSize));
         }
 
         // Y축: 스마트 가이드로 스냅되지 않은 경우에만 기본 그리드 스냅 적용
@@ -437,9 +439,7 @@ export const useDraggable = ({
         if (didSmartSnapY) {
           snappedY = clampPosition(finalY);
         } else {
-          snappedY = clampPosition(
-            Math.round(finalY / dynamicGridSize) * dynamicGridSize,
-          );
+          snappedY = clampPosition(snapToGrid(finalY, dynamicGridSize));
         }
 
         if (

@@ -54,6 +54,7 @@ import {
 } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
 import {
   captureBatchElementBinding,
   useBatchElementBinding,
@@ -67,16 +68,22 @@ import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateC
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
 } from '@src/types/editor';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
 import {
+  previewBatchGraphColor,
   previewBatchPaint,
   previewBatchStyleProperty,
 } from '../previewPatchForwarders';
-import { hexWithAlphaPercent } from '@utils/color/colorUtils';
+import {
+  hexWithAlphaPercent,
+  parseAlphaPercent,
+  toRgbHexColor,
+} from '@utils/color/colorUtils';
 import type { BatchElementPropertyUpdate } from '../types';
 import { useBatchNotePaint, type BatchNoteSurface } from './useBatchNotePaint';
 
@@ -103,7 +110,7 @@ const createStylePropertyHandlers = (
     };
   }
   return {
-    previewStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) =>
+    previewStyleProperty: (patch: EditorStylePropertyPreviewPatchV1) =>
       previewBatchStyleProperty(stableTargets, selectedKeyType, patch),
     commitStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) => {
       const gestureId = options.settleGesture
@@ -142,27 +149,7 @@ const paintRelevantTargets = <
     : targets;
 };
 
-const createPaintCommitHandler =
-  (
-    targets: readonly {
-      elementType: 'key' | 'stat' | 'graph' | 'knob';
-      id: string;
-    }[],
-  ) =>
-  (patch: EditorPaintPropertyPatchV1) => {
-    const relevant = paintRelevantTargets(targets, patch);
-    const stable =
-      relevant.length > 0 &&
-      relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
-      new Set(relevant.map(({ id }) => id)).size === relevant.length;
-    if (!stable) {
-      return;
-    }
-    const persisted = patchPaintByTargets(relevant, patch);
-    void persisted.catch(reportElementOpError);
-  };
-
-const createFontColorHandlers = (
+const createPaintHandlers = (
   targets: readonly {
     elementType: 'key' | 'stat' | 'graph' | 'knob';
     id: string;
@@ -171,31 +158,24 @@ const createFontColorHandlers = (
 ) => {
   const stableTargets = (patch: EditorPaintPropertyPatchV1) => {
     const relevant = paintRelevantTargets(targets, patch);
-    return relevant.length > 0 &&
+    const stable =
+      relevant.length > 0 &&
       relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
-      new Set(relevant.map(({ id }) => id)).size === relevant.length
-      ? relevant
-      : null;
+      new Set(relevant.map(({ id }) => id)).size === relevant.length;
+    return stable ? relevant : null;
   };
   return {
-    previewFontColor: (patch: EditorPaintPropertyPatchV1) => {
+    previewPaint: (patch: EditorPaintPropertyPatchV1) => {
       const stable = stableTargets(patch);
       if (!stable) return;
       previewBatchPaint(stable, selectedKeyType, patch);
     },
-    commitFontColor: (patch: EditorPaintPropertyPatchV1) => {
+    commitPaint: (patch: EditorPaintPropertyPatchV1) => {
       const stable = stableTargets(patch);
       if (!stable) return;
-      const active = patch.property === 'activeFontPaint';
-      const gestureId = active
-        ? undefined
-        : editGestureController.activeGestureId() ?? undefined;
-      const persisted = patchPaintByTargets(
-        stable,
-        patch,
-        gestureId ? { gestureId } : {},
-      );
-      if (!active) editGestureController.settleCommit(persisted);
+      const gestureId = editGestureController.activeGestureId() ?? undefined;
+      const persisted = patchPaintByTargets(stable, patch, { gestureId });
+      editGestureController.settleCommit(persisted);
       void persisted.catch(reportElementOpError);
     },
   };
@@ -220,7 +200,9 @@ const createShadowCommitHandler =
     if (!stable) {
       return;
     }
-    const persisted = patchShadowByTargets(relevant, patch);
+    const gestureId = editGestureController.activeGestureId() ?? undefined;
+    const persisted = patchShadowByTargets(relevant, patch, { gestureId });
+    editGestureController.settleCommit(persisted);
     void persisted.catch(reportElementOpError);
   };
 
@@ -282,6 +264,7 @@ const commitBoundSoundPath = (
   void persisted.catch(reportElementOpError);
 };
 
+// 24 그리드를 12px로 렌더 - 스트로크 2.4가 화면상 1.2
 const RenameIcon: React.FC = () => (
   <svg
     width="12"
@@ -293,14 +276,14 @@ const RenameIcon: React.FC = () => (
     <path
       d="M12 20H21"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -473,6 +456,8 @@ interface BatchKeyLikePanelProps {
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
   getMixedValue: MixedValueGetter<KeyPosition>;
+  /** 프리뷰가 섞이지 않은 canonical 기준. 게스처 취소 뒤 로컬 복원용 */
+  getMixedValueCanonical: MixedValueGetter<KeyPosition>;
   getMixedValueBatch: MixedValueGetter<KeyPosition>;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -546,6 +531,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   onNoteElementPropertyCommit,
   handleGraphBatchSharedSetting,
   getMixedValue,
+  getMixedValueCanonical,
   getMixedValueBatch,
   getMixedValueGraphs,
   getMixedValueKeysOnly,
@@ -567,7 +553,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   batchCounterColorState,
   setBatchCounterColorState,
   batchLocalColors,
-  setBatchLocalColors: _setBatchLocalColors,
+  setBatchLocalColors,
   handleBatchPickerToggle,
   handleBatchPickerColorChange,
   handleBatchPickerColorChangeComplete,
@@ -638,8 +624,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   );
   const { previewStyleProperty, commitStyleProperty } =
     createStylePropertyHandlers(textPropertyTargets, selectedKeyType);
-  const commitPaint = createPaintCommitHandler(textPropertyTargets);
-  const { previewFontColor, commitFontColor } = createFontColorHandlers(
+  const { previewPaint, commitPaint } = createPaintHandlers(
     textPropertyTargets,
     selectedKeyType,
   );
@@ -690,6 +675,11 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       return current?.id === id && current.noteGlowSyncPaint === true;
     });
   };
+  // 영구 실패 시 로컬 대표값 복원 - 피커 로컬 상태(useBatchNotePaint)가 아래에서
+  // 만들어지므로 실패 콜백 시점에 읽도록 늦게 묶는다
+  const notePaintFailureRestore: {
+    current?: (patch: EditorNotePaintPropertyPatchV1) => void;
+  } = {};
   const commitNotePaint = stableNotePaintIds
     ? (patch: EditorNotePaintPropertyPatchV1) => {
         if (glowPaintLockedForSelection(patch)) return;
@@ -697,8 +687,16 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         const persisted = patchNotePaintByIds(stableNotePaintIds, patch, {
           gestureId,
         });
+        // 커밋 시점 지문 - 실패가 돌아왔을 때 선택이 바뀌었으면 새 선택의 로컬 상태를
+        // 옛 대표값으로 덮지 않는다 (settleCommit과 같은 기준)
+        const committedTarget = getEditSessionTarget();
         editGestureController.settleCommit(persisted);
-        void persisted.catch(reportElementOpError);
+        void persisted.catch((error) => {
+          if (getEditSessionTarget() === committedTarget) {
+            notePaintFailureRestore.current?.(patch);
+          }
+          reportElementOpError(error);
+        });
       }
     : undefined;
   const previewNotePaint = stableNotePaintIds
@@ -829,10 +827,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   );
 
   const hasGraphSelection = selectedGraphElements.length > 0;
-  const styleMixedValueGetter = hasGraphSelection
+  // 표시값·Mixed 판정은 resize가 실제로 쓰는 대상 집합(키·스탯·그래프·노브)과 같아야 한다.
+  // 노브만 섞여도 키 전용 getter를 쓰면 노브 값이 대표값에 가려진 채 덮인다
+  const hasBatchStyleOnlySelection =
+    hasGraphSelection || selectedKnobElements.length > 0;
+  const styleMixedValueGetter = hasBatchStyleOnlySelection
     ? getMixedValueBatch
     : getMixedValue;
-  const styleSelectedDataGetter = hasGraphSelection
+  const styleSelectedDataGetter = hasBatchStyleOnlySelection
     ? getSelectedBatchStyleData
     : getSelectedKeysData;
 
@@ -865,6 +867,47 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     commitNotePaint,
     previewNotePaint,
   });
+  // 영구 실패는 canonical 재반영 신호(commitTick)가 오지 않는다. 열린 피커의
+  // 로컬 대표값을 canonical에서 다시 읽어 옛 편집값이 다음 커밋에 실리지 않게
+  notePaintFailureRestore.current = (patch) => {
+    if (editGestureController.activeGestureId() !== null) return;
+    const surface: BatchNoteSurface =
+      patch.property === 'notePaint'
+        ? 'note'
+        : patch.property === 'noteGlowPaint'
+        ? 'glow'
+        : 'border';
+    const state = batchNotePaint.states[surface];
+    if (state.format === 'gradient') {
+      // 스톱 초안만 버리면 저장값 spec이 다시 제시된다
+      state.cancelPreview();
+      return;
+    }
+    if (surface === 'border') {
+      batchNotePaint.previewBorderSolid(
+        hexWithAlphaPercent(
+          getMixedValueCanonical((pos) => pos.noteBorderColor, '#FFFFFF').value,
+          getMixedValueCanonical((pos) => pos.noteBorderOpacity, 100).value,
+        ),
+      );
+      return;
+    }
+    const color = getMixedValueCanonical(
+      (pos) =>
+        surface === 'note' ? pos.noteColor : pos.noteGlowColor ?? pos.noteColor,
+      '#FFFFFF' as NoteColor,
+    ).value;
+    if (typeof color === 'string') state.handlePickerColorChange(color, false);
+    if (surface === 'note') {
+      batchNotePaint.setNoteOpacity(
+        getMixedValueCanonical((pos) => pos.noteOpacity, 80).value,
+      );
+    } else {
+      batchNotePaint.setGlowOpacity(
+        getMixedValueCanonical((pos) => pos.noteGlowOpacity, 70).value,
+      );
+    }
+  };
   const getBatchNoteColorDisplay = () => batchNotePaint.displays.note;
   const getBatchGlowColorDisplay = () => batchNotePaint.displays.glow;
   const getBatchBorderColorDisplay = () => batchNotePaint.displays.border;
@@ -884,8 +927,11 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         isStat: selectedKeyLikeElements[0]?.type === 'stat',
       }
     : undefined;
-  const noteOpacityMixed = getMixedValue((pos) => pos.noteOpacity, 80).isMixed;
-  const glowOpacityMixed = getMixedValue(
+  // NOTE 탭은 키만 편집하므로 Mixed도 키 기준. 통계가 섞인 선택에서 통계 값이 Mixed를 만들지 않게
+  const noteMixedFn =
+    selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
+  const noteOpacityMixed = noteMixedFn((pos) => pos.noteOpacity, 80).isMixed;
+  const glowOpacityMixed = noteMixedFn(
     (pos) => pos.noteGlowOpacity,
     70,
   ).isMixed;
@@ -906,6 +952,17 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     (pos) => pos.graphColor || '#86EFAC',
     '#86EFAC',
   );
+  // 피커 칸은 hex와 알파를 따로 판단한다. 그래프 색은 rgba 문자열일 수 있다
+  const graphColorMixed = {
+    hex: getMixedValueGraphs(
+      (pos) => toRgbHexColor(pos.graphColor || '#86EFAC'),
+      '',
+    ).isMixed,
+    alpha: getMixedValueGraphs(
+      (pos) => parseAlphaPercent(pos.graphColor || '#86EFAC'),
+      100,
+    ).isMixed,
+  };
   const graphAnimationState = getMixedValueGraphs(
     (pos) => pos.graphAnimationEnabled ?? true,
     true,
@@ -927,6 +984,54 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       : null,
     batchCounterColorState,
   );
+
+  // 열린 배치 피커의 hex 칸·% 칸 Mixed. 두 칸은 따로 판단하고, 저장 표현(대소문자·rgba·hex8)이
+  // 달라도 같은 색이면 공통값으로 본다. 그라데이션 형식은 선택 스톱을 편집하므로 칸 Mixed를 두지 않는다
+  const batchPickerMixed = ((): { hex: boolean; alpha: boolean } => {
+    const paintHex = (value: NoteColor | undefined) =>
+      typeof value === 'string' ? toRgbHexColor(value) : value;
+    if (
+      openNoteSurface &&
+      batchNotePaint.states[openNoteSurface].format === 'gradient'
+    ) {
+      return { hex: false, alpha: false };
+    }
+    switch (batchPickerFor) {
+      case 'noteColor':
+        return {
+          hex: noteMixedFn((pos) => paintHex(pos.noteColor), '#FFFFFF').isMixed,
+          alpha: noteOpacityMixed,
+        };
+      case 'glowColor':
+        return {
+          hex: noteMixedFn(
+            (pos) => paintHex(pos.noteGlowColor ?? pos.noteColor),
+            '#FFFFFF',
+          ).isMixed,
+          alpha: glowOpacityMixed,
+        };
+      case 'borderColor':
+        return {
+          hex: noteMixedFn((pos) => toRgbHexColor(pos.noteBorderColor), '')
+            .isMixed,
+          alpha: noteMixedFn((pos) => pos.noteBorderOpacity, 100).isMixed,
+        };
+      case 'fill': {
+        // 입력 상태 색은 통계를 편집하지 않으므로 Mixed도 같은 집합으로
+        const state = batchCounterColorState === 'active' ? 'active' : 'idle';
+        const mixedFn =
+          state === 'active' ? getMixedValueActiveCapable : getMixedValue;
+        const colorOf = (pos: KeyPosition) =>
+          normalizeCounterSettings(pos.counter).fill[state];
+        return {
+          hex: mixedFn((pos) => toRgbHexColor(colorOf(pos)), '').isMixed,
+          alpha: mixedFn((pos) => parseAlphaPercent(colorOf(pos)), 100).isMixed,
+        };
+      }
+      default:
+        return { hex: false, alpha: false };
+    }
+  })();
 
   const getCounterColorDisplay = (target: 'fill') => {
     const key = batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
@@ -994,9 +1099,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 onSoundVolumeCommit={commitSoundVolume}
                 onStylePropertyPreview={previewStyleProperty}
                 onStylePropertyCommit={commitStyleProperty}
+                onPaintPreview={previewPaint}
                 onPaintCommit={commitPaint}
-                onFontColorPreview={previewFontColor}
-                onFontColorCommit={commitFontColor}
+                onFontColorPreview={previewPaint}
+                onFontColorCommit={commitPaint}
                 onShadowCommit={commitShadow}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
@@ -1085,12 +1191,22 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         ) : null}
                         <ColorInput
                           value={graphColorState.value}
+                          hexMixed={graphColorMixed.hex}
+                          alphaMixed={graphColorMixed.alpha}
                           onChange={() => {}}
+                          onPreview={(value) =>
+                            previewBatchGraphColor(
+                              selectedGraphElements.map(({ id }) => id),
+                              selectedKeyType,
+                              value,
+                            )
+                          }
                           onChangeComplete={(value) =>
                             handleGraphBatchSharedSetting({
                               graphColor: value,
                             })
                           }
+                          onCancel={() => editGestureController.cancel()}
                           colorId={`graph-batch-mixed-color-${selectedKeyType}`}
                           panelElement={panelElement}
                         />
@@ -1294,6 +1410,33 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   ? setBatchCounterColorState
                   : undefined
               }
+              onInputCancel={(_target, restoredColor) => {
+                if (openNoteSurface) {
+                  if (typeof restoredColor !== 'string') return;
+                  const state = batchNotePaint.states[openNoteSurface];
+                  if (
+                    openNoteSurface === 'border' &&
+                    state.format !== 'gradient'
+                  ) {
+                    batchNotePaint.previewBorderSolid(restoredColor);
+                  } else {
+                    state.handlePickerColorChange(restoredColor, false);
+                  }
+                  editGestureController.cancel();
+                  return;
+                }
+                if (batchPickerFor === 'fill') {
+                  const state =
+                    batchCounterColorState === 'active' ? 'active' : 'idle';
+                  setBatchLocalColors((prev) => ({
+                    ...prev,
+                    [state === 'active' ? 'fillActive' : 'fillIdle']:
+                      batchCounterSettings.fill[state],
+                  }));
+                }
+              }}
+              hexMixed={batchPickerMixed.hex}
+              opacityPercentMixed={batchPickerMixed.alpha}
               headerSlot={
                 openNoteSurface
                   ? batchNotePaint.activeState.headerSlot
@@ -1360,14 +1503,26 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         value: { opacity: value },
                       });
                     },
+                    onOpacityPercentCancel: () => {
+                      // Escape는 게스처를 통째로 되돌린다. 로컬 대표값도 canonical에서
+                      // 다시 읽어야 입력이 blur 뒤 옛 preview 값으로 재동기화되지 않는다
+                      editGestureController.cancel();
+                      if (openNoteSurface === 'note') {
+                        batchNotePaint.setNoteOpacity(
+                          getMixedValueCanonical((pos) => pos.noteOpacity, 80)
+                            .value,
+                        );
+                        return;
+                      }
+                      batchNotePaint.setGlowOpacity(
+                        getMixedValueCanonical((pos) => pos.noteGlowOpacity, 70)
+                          .value,
+                      );
+                    },
                     opacityPercentLabel:
                       openNoteSurface === 'note'
                         ? t('keySetting.noteOpacity') || '노트 투명도'
                         : t('keySetting.noteGlowOpacity') || '글로우 투명도',
-                    opacityPercentMixed:
-                      openNoteSurface === 'note'
-                        ? noteOpacityMixed
-                        : glowOpacityMixed,
                   }
                 : {})}
             />
@@ -1545,11 +1700,12 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
       })),
       selectedKeyType,
     );
-  const commitPaint = createPaintCommitHandler(
+  const { previewPaint, commitPaint } = createPaintHandlers(
     selectedGraphElements.map(({ id }) => ({
       elementType: 'graph',
       id,
     })),
+    selectedKeyType,
   );
 
   const graphShapeOptions = [
@@ -1572,6 +1728,17 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
     (pos) => pos.graphColor || '#86EFAC',
     '#86EFAC',
   );
+  // 피커 칸은 hex와 알파를 따로 판단한다. 그래프 색은 rgba 문자열일 수 있다
+  const graphColorMixed = {
+    hex: getMixedValueGraphs(
+      (pos) => toRgbHexColor(pos.graphColor || '#86EFAC'),
+      '',
+    ).isMixed,
+    alpha: getMixedValueGraphs(
+      (pos) => parseAlphaPercent(pos.graphColor || '#86EFAC'),
+      100,
+    ).isMixed,
+  };
   const graphAnimationState = getMixedValueGraphs(
     (pos) => pos.graphAnimationEnabled ?? true,
     true,
@@ -1608,10 +1775,13 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
         >
           <EditSessionBoundary>
             <BatchStyleTabContent
+              // 그래프 렌더는 이미지가 있어도 기본 립을 억제하지 않는다 - 패널도 같은 판정
+              imageSuppressesDefaultBorder={false}
               selectedCount={selectedGraphElements.length}
               totalCount={totalCount ?? selectedGraphElements.length}
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
+              onPaintPreview={previewPaint}
               onPaintCommit={commitPaint}
               hideDisplayText
               hideFontControls
@@ -1693,10 +1863,20 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     ) : null}
                     <ColorInput
                       value={graphColorState.value}
+                      hexMixed={graphColorMixed.hex}
+                      alphaMixed={graphColorMixed.alpha}
                       onChange={() => {}}
+                      onPreview={(value) =>
+                        previewBatchGraphColor(
+                          selectedGraphElements.map(({ id }) => id),
+                          selectedKeyType,
+                          value,
+                        )
+                      }
                       onChangeComplete={(value) =>
                         handleGraphBatchSharedSetting({ graphColor: value })
                       }
+                      onCancel={() => editGestureController.cancel()}
                       colorId={`graph-batch-color-${selectedKeyType}`}
                       panelElement={panelElement}
                     />
@@ -1898,11 +2078,12 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
       })),
       selectedKeyType,
     );
-  const commitPaint = createPaintCommitHandler(
+  const { previewPaint, commitPaint } = createPaintHandlers(
     selectedKnobElements.map(({ id }) => ({
       elementType: 'knob',
       id,
     })),
+    selectedKeyType,
   );
   const commitShadow = createShadowCommitHandler(
     selectedKnobElements.map(({ id }) => ({
@@ -1943,10 +2124,13 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
         >
           <EditSessionBoundary>
             <BatchStyleTabContent
+              // 노브 렌더는 이미지가 있어도 기본 립을 억제하지 않는다 - 패널도 같은 판정
+              imageSuppressesDefaultBorder={false}
               selectedCount={selectedKnobElements.length}
               totalCount={totalCount ?? selectedKnobElements.length}
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
+              onPaintPreview={previewPaint}
               onPaintCommit={commitPaint}
               onShadowCommit={commitShadow}
               hideDisplayText

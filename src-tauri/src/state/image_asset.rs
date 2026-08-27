@@ -14,6 +14,11 @@ pub(crate) struct ImportedImage {
     pub path: PathBuf,
 }
 
+#[derive(Debug)]
+pub(crate) struct ImportedFont {
+    pub path: PathBuf,
+}
+
 pub(crate) fn import_image_file(
     source_path: &Path,
     images_dir: &Path,
@@ -70,6 +75,55 @@ pub(crate) fn import_image_bytes(
     let path = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
     atomic_replace(&path, bytes, "image-import")?;
     Ok(ImportedImage { path })
+}
+
+pub(crate) fn import_font_file(
+    source_path: &Path,
+    fonts_dir: &Path,
+    extension: &str,
+) -> Result<ImportedFont> {
+    import_font_file_with_replace(source_path, fonts_dir, extension, atomic_replace_from_temp)
+}
+
+fn import_font_file_with_replace<Replace>(
+    source_path: &Path,
+    fonts_dir: &Path,
+    extension: &str,
+    replace: Replace,
+) -> Result<ImportedFont>
+where
+    Replace: FnOnce(&Path, &Path) -> Result<()>,
+{
+    fs::create_dir_all(fonts_dir)
+        .with_context(|| format!("failed to create font directory at {}", fonts_dir.display()))?;
+
+    let path = fonts_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
+    let temp_path = fonts_dir.join(format!(".font-import-{}.tmp", Uuid::new_v4()));
+    let result = (|| {
+        let mut source = File::open(source_path)
+            .with_context(|| format!("failed to open font at {}", source_path.display()))?;
+        let mut temp = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .with_context(|| format!("failed to create font temp at {}", temp_path.display()))?;
+        io::copy(&mut source, &mut temp).with_context(|| {
+            format!(
+                "failed to copy font from {} to {}",
+                source_path.display(),
+                temp_path.display()
+            )
+        })?;
+        sync_file_contents(&temp)
+            .with_context(|| format!("failed to sync font temp at {}", temp_path.display()))?;
+        drop(temp);
+        replace(&temp_path, &path)?;
+        Ok(ImportedFont { path })
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+    result
 }
 
 #[cfg(test)]
@@ -182,6 +236,49 @@ mod tests {
             .path()
             .extension()
             .is_some_and(|extension| extension == "tmp")));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn font_file_import_keeps_original_bytes_and_extension() {
+        let directory = test_directory("font-atomic-file");
+        let fonts = directory.join("fonts");
+        let source = directory.join("source.woff2");
+        let expected = b"wOF2-original-payload";
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(&source, expected).unwrap();
+
+        let imported = import_font_file(&source, &fonts, "woff2").unwrap();
+
+        assert_eq!(
+            imported.path.extension().and_then(|value| value.to_str()),
+            Some("woff2")
+        );
+        assert_eq!(fs::read(&imported.path).unwrap(), expected);
+        assert!(!fs::read_dir(&fonts).unwrap().any(|entry| entry
+            .unwrap()
+            .path()
+            .extension()
+            .is_some_and(|extension| extension == "tmp")));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn failed_font_replace_leaves_no_partial_target_or_temp() {
+        let directory = test_directory("font-atomic-failure");
+        let fonts = directory.join("fonts");
+        let source = directory.join("source.ttf");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(&source, b"\x00\x01\x00\x00-original-payload").unwrap();
+
+        let result = import_font_file_with_replace(&source, &fonts, "ttf", |temp, target| {
+            assert!(temp.exists());
+            assert!(!target.exists());
+            anyhow::bail!("injected replace failure")
+        });
+
+        assert!(result.is_err());
+        assert!(fs::read_dir(&fonts).unwrap().next().is_none());
         fs::remove_dir_all(directory).unwrap();
     }
 }

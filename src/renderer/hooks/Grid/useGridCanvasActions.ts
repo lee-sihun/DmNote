@@ -34,8 +34,6 @@ import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_ACTIVE_BG,
   DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_ACTIVE_FONT,
-  DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
 } from '@utils/core/elementDefaults';
 
@@ -312,7 +310,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       noteEffectEnabled: true,
       noteGlowEnabled: false,
       noteGlowSyncPaint: false,
-      noteGlowSize: 20,
+      noteGlowSize: 10,
       noteGlowOpacity: 70,
       noteGlowColor: '#FFFFFF',
       noteAutoYCorrection: true,
@@ -349,15 +347,13 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       noteEffectEnabled: true,
       noteGlowEnabled: false,
       noteGlowSyncPaint: false,
-      noteGlowSize: 20,
+      noteGlowSize: 10,
       noteGlowOpacity: 70,
       noteGlowColor: '#FFFFFF',
       noteAutoYCorrection: true,
       className: '',
       counter: createDefaultCounterSettings(),
       backgroundColor: DEFAULT_ELEMENT_BG,
-      borderColor: DEFAULT_ELEMENT_HAIRLINE,
-      borderWidth: 1,
       borderRadius: DEFAULT_ELEMENT_RADIUS,
       fontColor: DEFAULT_ELEMENT_FONT,
       activeFontColor: DEFAULT_ELEMENT_FONT,
@@ -417,7 +413,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       noteEffectEnabled: false,
       noteGlowEnabled: false,
       noteGlowSyncPaint: false,
-      noteGlowSize: 20,
+      noteGlowSize: 10,
       noteGlowOpacity: 70,
       noteGlowColor: '#FFFFFF',
       noteAutoYCorrection: true,
@@ -425,9 +421,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       counter: createDefaultCounterSettings(),
       backgroundColor: DEFAULT_ELEMENT_BG,
       activeBackgroundColor: DEFAULT_ELEMENT_ACTIVE_BG,
-      borderColor: DEFAULT_ELEMENT_FONT,
-      activeBorderColor: DEFAULT_ELEMENT_ACTIVE_FONT,
-      borderWidth: 0,
     };
     void addKnobAt(selectedKeyType, position).catch(reportElementOpError);
   };

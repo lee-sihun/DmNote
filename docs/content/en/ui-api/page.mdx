@@ -41,6 +41,8 @@ const menuId = dmn.ui.contextMenu.addKeyMenuItem({
 ### Grid Menu (addGridMenuItem)
 
 Add items to the menu shown when right-clicking empty grid space.
+So the menu stays short no matter how many plugins are installed, items added here are grouped under a single `Plugins` submenu.
+They keep their registration order and `position` does not apply.
 
 ```javascript
 dmn.ui.contextMenu.addGridMenuItem({
@@ -65,7 +67,7 @@ dmn.ui.contextMenu.addGridMenuItem({
 {
   id: "my-menu",           // Unique ID within plugin
   label: "Menu Item",      // Display text
-  position: "bottom",      // "top" | "bottom" (default: bottom)
+  position: "bottom",      // "top" | "bottom" (default: bottom, key menu only)
 
   // Conditional visibility
   visible: (context) => context.mode === "4key",
@@ -79,6 +81,8 @@ dmn.ui.contextMenu.addGridMenuItem({
   },
 }
 ```
+
+`visible` and `disabled` accept a boolean or a function of the context. A function that throws is treated as hidden / disabled (the rest of the menu still renders), and non-function values are coerced by truthiness — `0`, `""`, and `null` hide an item when passed to `visible`, and leave it enabled when passed to `disabled`.
 
 ### Menu Management
 

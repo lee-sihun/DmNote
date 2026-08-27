@@ -1,4 +1,10 @@
 import { clampToViewport } from '@utils/ui/popupGeometry';
+import {
+  hasModalLayerAbove,
+  isTopmostPopupLayer,
+  registerPopupLayer,
+  subscribeModalLayerActivity,
+} from '@components/main/Modal/popupLayer';
 
 type DropdownMenuElement = HTMLElement & {
   __pluginPlaceholder?: HTMLElement | null;
@@ -40,6 +46,10 @@ type DropdownRoot = HTMLElement | ShadowRoot;
 
 const registeredRoots = new Map<DropdownRoot, number>();
 const openMenus = new Set<DropdownMenuElement>();
+// 열린 메뉴의 팝업 레이어 해제 - Dropdown/FloatingPopup과 같은 스택에 서서 Escape
+// 소유권과 모달 덮임 판정을 공유한다 (z 60이라 모달 위에 남는 유일한 표면이었다)
+const menuLayerReleases = new WeakMap<DropdownMenuElement, () => void>();
+let unsubscribeModalActivity: (() => void) | null = null;
 let observer: MutationObserver | null = null;
 let listenersAttached = false;
 
@@ -49,6 +59,8 @@ const isRootConnected = (root: DropdownRoot) =>
 
 const closeMenu = (menu: DropdownMenuElement) => {
   if (!openMenus.has(menu)) return;
+  menuLayerReleases.get(menu)?.();
+  menuLayerReleases.delete(menu);
   const dropdown = menu.__pluginDropdown as DropdownContainerElement | null;
   menu.classList.add('hidden');
   menu.classList.remove('flex');
@@ -109,15 +121,24 @@ const openMenu = (
   menu.classList.remove('hidden');
   menu.classList.add('flex');
   menu.style.position = 'fixed';
-  menu.style.zIndex = '60';
+  menu.style.zIndex = 'var(--z-chrome-submenu)';
   menu.style.maxHeight = '200px';
   menu.style.overflowY = 'auto';
   menu.dataset.pluginDropdownPortal = 'true';
   menu.dataset.dmnPopupSubmenu = 'true';
   openMenus.add(menu);
+  menuLayerReleases.set(menu, registerPopupLayer(menu));
   const arrow = dropdown.querySelector('svg');
   if (arrow) arrow.style.transform = 'rotate(180deg)';
   measureAndPositionMenu(menu, toggleBtn, dropdown);
+};
+
+// 모달이 위에 덮이면 닫는다 - 모달 안(dmn.ui.dialog.custom)에서 연 메뉴는 모달보다
+// 뒤에 등록되므로 유지되고, 그 위에 또 모달이 뜨면 닫힌다 (스택 순서 판정)
+const closeMenusCoveredByModal = () => {
+  [...openMenus].forEach((menu) => {
+    if (hasModalLayerAbove(menu)) closeMenu(menu);
+  });
 };
 
 const belongsToRegisteredRoot = (node: Node) =>
@@ -184,6 +205,9 @@ const handleKeydown = (event: KeyboardEvent) => {
   if (event.key !== 'Escape' || event.defaultPrevented || !openMenus.size) {
     return;
   }
+  // 위에 모달이 있으면 Escape 소유권은 그쪽 - 한 번에 한 겹씩 닫힌다
+  const topmost = [...openMenus].some((menu) => isTopmostPopupLayer(menu));
+  if (!topmost) return;
   event.preventDefault();
   closeAllMenus();
 };
@@ -191,6 +215,8 @@ const handleKeydown = (event: KeyboardEvent) => {
 const detachGlobalListeners = () => {
   if (!listenersAttached) return;
   closeAllMenus();
+  unsubscribeModalActivity?.();
+  unsubscribeModalActivity = null;
   document.removeEventListener('click', handleClick, true);
   document.removeEventListener('keydown', handleKeydown);
   document.removeEventListener('scroll', handleScrollOrResize, true);
@@ -217,6 +243,9 @@ const attachGlobalListeners = () => {
   listenersAttached = true;
   document.addEventListener('click', handleClick, true);
   document.addEventListener('keydown', handleKeydown);
+  unsubscribeModalActivity = subscribeModalLayerActivity(
+    closeMenusCoveredByModal,
+  );
   document.addEventListener('scroll', handleScrollOrResize, true);
   window.addEventListener('resize', handleScrollOrResize);
   observer = new MutationObserver(() => {

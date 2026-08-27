@@ -618,7 +618,7 @@ describe('single geometry input bindings', () => {
       (input) => input.min === 0 && input.max === 20,
     );
     const borderRadius = captured.numberList.find(
-      (input) => input.min === 1 && input.max === 100,
+      (input) => input.min === 0 && input.max === 100,
     );
     act(() => borderWidth?.onPreview?.(2.5));
     act(() => borderWidth?.onChange(3.5));
@@ -1827,6 +1827,180 @@ describe('single geometry input bindings', () => {
       expect(legacy).not.toHaveBeenCalled();
     },
   );
+
+  it.each(['graph', 'knob'] as const)(
+    '%s X/Y/W/H는 타이핑·스텝을 preview로 보내고 커밋은 onChange에서만 한다',
+    (type) => {
+      const geometry = vi.fn();
+      const preview = vi.fn();
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        handleGeometryCommit: geometry,
+        handleGeometryPreview: preview,
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: false,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              singleGraphIndex={0}
+              handleGraphUpdate={vi.fn()}
+              showGraphImagePicker={false}
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={createRef<HTMLButtonElement>()}
+              graphClassNameDraft=""
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              handleKnobUpdate={vi.fn()}
+            />
+          ),
+        );
+      });
+
+      act(() => captured.numbers.get('X')?.onPreview?.(12));
+      act(() => captured.numbers.get('Y')?.onPreview?.(13));
+      // 크기 하한은 preview와 commit이 같은 값을 봐야 화면과 저장이 갈라지지 않는다
+      act(() => captured.numbers.get('W')?.onPreview?.(5));
+      act(() => captured.numbers.get('H')?.onPreview?.(150));
+
+      expect(preview.mock.calls).toEqual([
+        ['dx', 12],
+        ['dy', 13],
+        ['width', 20],
+        ['height', 150],
+      ]);
+      expect(geometry).not.toHaveBeenCalled();
+
+      act(() => captured.numbers.get('W')?.onChange(5));
+      expect(geometry.mock.calls).toEqual([['width', 20]]);
+    },
+  );
+
+  it('knob 민감도는 preview 동안 패널 draft만 바꾸고 onChange에서 한 번 커밋한다', () => {
+    const commit = vi.fn();
+    act(() => {
+      root.render(
+        <SingleKnobPanel
+          setPanelElement={vi.fn()}
+          selectedKeyType="4key"
+          isRenaming={false}
+          renameInputRef={createRef<HTMLInputElement>()}
+          renameValue=""
+          setRenameValue={vi.fn()}
+          renameCancelledRef={{ current: false }}
+          handleRenameCommit={vi.fn()}
+          handleRenameCancel={vi.fn()}
+          handleRenameStart={vi.fn()}
+          onElementPropertyCommit={commit}
+          singleScrollRefFor={() => vi.fn()}
+          panelElement={null}
+          useCustomCSS={false}
+          t={(key: string) => key}
+          singleKnobPosition={{
+            ...createDefaultKeyPosition(),
+            axisId: 'HIDA:test',
+            sensitivity: 1,
+            reverse: false,
+          }}
+          singleKnobIndex={0}
+          handleKnobUpdate={vi.fn()}
+        />,
+      );
+    });
+
+    const before = captured.numberList.length;
+    act(() => captured.numbers.get('×')?.onPreview?.(1.55));
+    act(() => captured.numbers.get('×')?.onPreview?.(1.6));
+    expect(commit).not.toHaveBeenCalled();
+    // draft가 value로 되돌아와야 재렌더 뒤에도 표시가 유지된다
+    const latestSensitivity = [...captured.numberList]
+      .reverse()
+      .find((props) => (props as { suffix?: string }).suffix === '×');
+    expect(latestSensitivity?.value).toBe(1.6);
+    expect(captured.numberList.length).toBeGreaterThan(before);
+
+    act(() => captured.numbers.get('×')?.onChange(1.6));
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith({
+      property: 'sensitivity',
+      value: 1.6,
+    });
+  });
+
+  it('knob 민감도 draft는 다른 노브로 바뀐 첫 렌더부터 보이지 않는다', () => {
+    const renderKnob = (id: string, sensitivity: number) =>
+      act(() => {
+        root.render(
+          <SingleKnobPanel
+            setPanelElement={vi.fn()}
+            selectedKeyType="4key"
+            isRenaming={false}
+            renameInputRef={createRef<HTMLInputElement>()}
+            renameValue=""
+            setRenameValue={vi.fn()}
+            renameCancelledRef={{ current: false }}
+            handleRenameCommit={vi.fn()}
+            handleRenameCancel={vi.fn()}
+            handleRenameStart={vi.fn()}
+            onElementPropertyCommit={vi.fn()}
+            singleScrollRefFor={() => vi.fn()}
+            panelElement={null}
+            useCustomCSS={false}
+            t={(key: string) => key}
+            singleKnobPosition={{
+              ...createDefaultKeyPosition(),
+              id,
+              axisId: 'HIDA:test',
+              sensitivity,
+              reverse: false,
+            }}
+            singleKnobIndex={0}
+            handleKnobUpdate={vi.fn()}
+          />,
+        );
+      });
+    const latestSensitivity = () =>
+      [...captured.numberList]
+        .reverse()
+        .find((props) => (props as { suffix?: string }).suffix === '×')?.value;
+
+    renderKnob('knob-a', 1);
+    act(() => captured.numbers.get('×')?.onPreview?.(2.5));
+    expect(latestSensitivity()).toBe(2.5);
+
+    renderKnob('knob-b', 3);
+    expect(latestSensitivity()).toBe(3);
+  });
 
   it.each(['graph', 'knob'] as const)(
     '%s className은 local draft 뒤 blur에서만 stable exact commit한다',

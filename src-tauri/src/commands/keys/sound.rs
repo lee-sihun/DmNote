@@ -6,17 +6,22 @@ use std::{
     path::{Path, PathBuf},
     time::SystemTime,
 };
-use tauri::{Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Manager, WebviewWindow};
 use uuid::Uuid;
 
-use crate::commands::{dialog::parented_file_dialog, editor::state::publish_legacy_editor_change};
+use crate::commands::{
+    dialog::parented_file_dialog, editor::state::publish_legacy_editor_change,
+    issue_mutation_ticket, run_blocking, run_history_mutation, run_mutation,
+};
 use crate::errors::{CmdResult, CommandError};
 use crate::models::{
     AppStoreData, EditorCommitOrigin, EditorField, PendingProcessedWavReplacement,
     SoundLibraryEntry, SoundSource,
 };
+use crate::services::event_publisher::publish_event;
 use crate::state::{
     atomic_file::{prepare_atomic_replace, PreparedAtomicReplace},
+    history::HistoryAdmissionLease,
     local_asset_path::paths_have_same_identity,
     store::{
         move_staged_sound_deletions_to_trash, restore_staged_sound_deletions,
@@ -157,58 +162,114 @@ pub async fn sound_load(
         });
     };
     let path = file.path().to_path_buf();
-    tauri::async_runtime::spawn_blocking(move || sound_load_from_path(app, path))
-        .await
-        .map_err(|error| CommandError::msg(format!("sound load task failed: {error}")))?
-}
+    run_blocking(app, move |app, state| {
+        state.ensure_mutation_allowed().map_err(CommandError::msg)?;
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("wav")
+            .to_lowercase();
+        let sounds_dir = ensure_sounds_dir(app)?;
+        let dest_path = sounds_dir.join(format!("{}.{}", Uuid::new_v4(), ext));
+        fs::copy(&path, &dest_path)
+            .map_err(|e| CommandError::msg(format!("사운드 파일 복사 실패: {e}")))?;
+        let ticket = issue_mutation_ticket(app)?;
+        ticket.run(|| {
+            let dest_path_str = normalize_path_string(&dest_path);
+            state.store.update(|s| {
+                s.sound_library.insert(
+                    dest_path_str.clone(),
+                    SoundLibraryEntry {
+                        source: SoundSource::Local,
+                        ..Default::default()
+                    },
+                );
+            })?;
 
-fn sound_load_from_path(app: tauri::AppHandle, path: PathBuf) -> CmdResult<SoundLoadResponse> {
-    let state = app.state::<AppState>();
-
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("wav")
-        .to_lowercase();
-
-    let sounds_dir = ensure_sounds_dir(&app)?;
-    let dest_path = sounds_dir.join(format!("{}.{}", Uuid::new_v4(), ext));
-    fs::copy(&path, &dest_path)
-        .map_err(|e| CommandError::msg(format!("사운드 파일 복사 실패: {e}")))?;
-
-    let dest_path_str = normalize_path_string(&dest_path);
-    state.store.update(|s| {
-        s.sound_library.insert(
-            dest_path_str.clone(),
-            SoundLibraryEntry {
-                source: SoundSource::Local,
-                ..Default::default()
-            },
-        );
-    })?;
-
-    Ok(SoundLoadResponse {
-        success: true,
-        error: None,
-        sound_path: Some(dest_path_str),
+            Ok(SoundLoadResponse {
+                success: true,
+                error: None,
+                sound_path: Some(dest_path_str),
+            })
+        })
     })
+    .await
 }
 
 #[tauri::command]
-pub fn sound_list(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> CmdResult<Vec<SoundListItem>> {
-    let sounds_dir = ensure_sounds_dir(&app)?;
-    let _transaction_guard = PROCESSED_WAV_TRANSACTION_LOCK.lock();
-    let recovery_complete = state.store.prepare_sound_listing_while_locked()?;
+pub async fn sound_list(app: tauri::AppHandle) -> CmdResult<Vec<SoundListItem>> {
+    // 디렉터리 스캔은 번호표 밖 - OBS 클라이언트도 부르는 읽기 경로가 저장 큐를 막지 않게.
+    // 라이브러리에 변화가 있을 때만 번호표를 받아 persist한다 (sound_load와 같은 순서)
+    run_blocking(app, sound_list_inner).await
+}
+
+struct SoundScan {
+    items: Vec<SoundListItem>,
+    library_at_scan: std::collections::HashMap<String, SoundLibraryEntry>,
+    seen_paths: HashSet<String>,
+    scan_complete: bool,
+}
+
+fn sound_list_inner(app: &tauri::AppHandle, state: &AppState) -> CmdResult<Vec<SoundListItem>> {
+    let sounds_dir = ensure_sounds_dir(app)?;
+    let scan = {
+        let _transaction_guard = PROCESSED_WAV_TRANSACTION_LOCK.lock();
+        let recovery_complete = state.store.prepare_sound_listing_while_locked()?;
+        let library = state.store.with_state(|s| s.sound_library.clone());
+        scan_sounds_dir(&sounds_dir, library, recovery_complete)?
+    };
+    let SoundScan {
+        mut items,
+        library_at_scan,
+        seen_paths,
+        scan_complete,
+    } = scan;
+
+    if sound_library_needs_reconcile(&library_at_scan, &seen_paths, scan_complete) {
+        let ticket = issue_mutation_ticket(app)?;
+        ticket.run(|| -> CmdResult<()> {
+            // 잠금 순서: 번호표 turn → PROCESSED_WAV 잠금 (sound_delete와 동일)
+            let _transaction_guard = PROCESSED_WAV_TRANSACTION_LOCK.lock();
+            state.store.update(|s| {
+                apply_sound_scan_to_library(
+                    &mut s.sound_library,
+                    &library_at_scan,
+                    &seen_paths,
+                    scan_complete,
+                    &|key| Path::new(key).exists(),
+                );
+            })?;
+            Ok(())
+        })?;
+    }
+
+    // 내장 사운드 우선, 이후 최신순
+    items.sort_by(|a, b| {
+        let a_builtin = a.source == SoundSource::Builtin;
+        let b_builtin = b.source == SoundSource::Builtin;
+        b_builtin
+            .cmp(&a_builtin)
+            .then_with(|| {
+                b.modified_at_ms
+                    .unwrap_or_default()
+                    .cmp(&a.modified_at_ms.unwrap_or_default())
+            })
+            .then_with(|| a.file_name.cmp(&b.file_name))
+    });
+
+    Ok(items)
+}
+
+fn scan_sounds_dir(
+    sounds_dir: &Path,
+    library: std::collections::HashMap<String, SoundLibraryEntry>,
+    recovery_complete: bool,
+) -> CmdResult<SoundScan> {
     let mut items = Vec::new();
-    let mut library = state.store.with_state(|s| s.sound_library.clone());
     let mut seen_paths = HashSet::new();
-    let mut library_mutated = false;
     let mut scan_complete = recovery_complete;
 
-    let entries = fs::read_dir(&sounds_dir)
+    let entries = fs::read_dir(sounds_dir)
         .map_err(|e| CommandError::msg(format!("사운드 디렉토리 읽기 실패: {e}")))?;
 
     for entry_result in entries {
@@ -264,13 +325,7 @@ pub fn sound_list(
         let path_key = normalize_path_string(&path);
         seen_paths.insert(path_key.clone());
 
-        let entry_meta = library
-            .entry(path_key.clone())
-            .or_insert_with(|| {
-                library_mutated = true;
-                SoundLibraryEntry::default()
-            })
-            .clone();
+        let entry_meta = library.get(&path_key).cloned().unwrap_or_default();
 
         let modified_at_ms = metadata.modified().ok().and_then(|modified| {
             modified
@@ -294,35 +349,53 @@ pub fn sound_list(
         });
     }
 
-    let stale_keys = stale_sound_library_keys(&library, &seen_paths, scan_complete);
-    if !stale_keys.is_empty() {
-        for key in stale_keys {
-            library.remove(&key);
+    Ok(SoundScan {
+        items,
+        library_at_scan: library,
+        seen_paths,
+        scan_complete,
+    })
+}
+
+// 스캔 결과가 라이브러리와 다른가 - 같으면 번호표를 받지 않는다.
+// 실제 적용은 turn 안의 apply_sound_scan_to_library (디스크 재확인 포함)
+fn sound_library_needs_reconcile(
+    library: &std::collections::HashMap<String, SoundLibraryEntry>,
+    seen_paths: &HashSet<String>,
+    scan_complete: bool,
+) -> bool {
+    seen_paths.iter().any(|key| !library.contains_key(key))
+        || !stale_sound_library_keys(library, seen_paths, scan_complete).is_empty()
+}
+
+// 라이브러리를 스캔 결과에 맞춘다. 스캔~turn 사이의 sound_delete·sound_load·
+// sound_update_processed_wav를 존중해 삽입·삭제 양쪽 모두 디스크 실재를 다시 확인하고,
+// 삭제 후보는 스캔 시점에 있던 키로 한정한다
+fn apply_sound_scan_to_library(
+    library: &mut std::collections::HashMap<String, SoundLibraryEntry>,
+    library_at_scan: &std::collections::HashMap<String, SoundLibraryEntry>,
+    seen_paths: &HashSet<String>,
+    scan_complete: bool,
+    exists: &dyn Fn(&str) -> bool,
+) {
+    for key in seen_paths {
+        if !library.contains_key(key) && exists(key) {
+            library.insert(key.clone(), SoundLibraryEntry::default());
         }
-        library_mutated = true;
     }
-
-    if library_mutated {
-        state.store.update(|s| {
-            s.sound_library = library.clone();
-        })?;
+    if !scan_complete {
+        return;
     }
-
-    // 내장 사운드 우선, 이후 최신순
-    items.sort_by(|a, b| {
-        let a_builtin = a.source == SoundSource::Builtin;
-        let b_builtin = b.source == SoundSource::Builtin;
-        b_builtin
-            .cmp(&a_builtin)
-            .then_with(|| {
-                b.modified_at_ms
-                    .unwrap_or_default()
-                    .cmp(&a.modified_at_ms.unwrap_or_default())
-            })
-            .then_with(|| a.file_name.cmp(&b.file_name))
-    });
-
-    Ok(items)
+    let stale: Vec<String> = library
+        .keys()
+        .filter(|key| {
+            library_at_scan.contains_key(*key) && !seen_paths.contains(*key) && !exists(key)
+        })
+        .cloned()
+        .collect();
+    for key in stale {
+        library.remove(&key);
+    }
 }
 
 fn stale_sound_library_keys(
@@ -341,33 +414,37 @@ fn stale_sound_library_keys(
 }
 
 #[tauri::command]
-pub fn sound_set_hidden(
+pub async fn sound_set_hidden(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
     sound_path: String,
     hidden: bool,
 ) -> CmdResult<SoundSetHiddenResponse> {
-    let path_key = set_sound_hidden(&app, state.inner(), &sound_path, hidden)?;
-    Ok(SoundSetHiddenResponse {
-        success: true,
-        sound_path: path_key,
-        hidden,
+    run_mutation(app, move |app, state| {
+        let path_key = set_sound_hidden(app, state, &sound_path, hidden)?;
+        Ok(SoundSetHiddenResponse {
+            success: true,
+            sound_path: path_key,
+            hidden,
+        })
     })
+    .await
 }
 
 #[tauri::command]
-pub fn sound_set_enabled(
+pub async fn sound_set_enabled(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
     sound_path: String,
     enabled: bool,
 ) -> CmdResult<SoundSetEnabledResponse> {
-    let path_key = set_sound_hidden(&app, state.inner(), &sound_path, !enabled)?;
-    Ok(SoundSetEnabledResponse {
-        success: true,
-        sound_path: path_key,
-        enabled,
+    run_mutation(app, move |app, state| {
+        let path_key = set_sound_hidden(app, state, &sound_path, !enabled)?;
+        Ok(SoundSetEnabledResponse {
+            success: true,
+            sound_path: path_key,
+            enabled,
+        })
     })
+    .await
 }
 
 fn set_sound_hidden(
@@ -394,18 +471,29 @@ fn set_sound_hidden(
 }
 
 #[tauri::command]
-pub fn sound_rename(
+pub async fn sound_rename(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
     sound_path: String,
     display_name: String,
 ) -> CmdResult<SoundRenameResponse> {
-    let sounds_dir = ensure_sounds_dir(&app)?;
+    run_mutation(app, move |app, state| {
+        sound_rename_inner(app, state, sound_path, display_name)
+    })
+    .await
+}
+
+fn sound_rename_inner(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    sound_path: String,
+    display_name: String,
+) -> CmdResult<SoundRenameResponse> {
+    let sounds_dir = ensure_sounds_dir(app)?;
     let validated_path = validate_sound_path(&sounds_dir, &sound_path)?;
     if !validated_path.exists() {
         return Err(CommandError::msg("대상 사운드 파일이 존재하지 않습니다."));
     }
-    let path_key = resolve_stored_sound_path_key(state.inner(), &validated_path);
+    let path_key = resolve_stored_sound_path_key(state, &validated_path);
 
     let trimmed = display_name.trim();
     if trimmed.is_empty() {
@@ -441,20 +529,33 @@ pub fn sound_rename(
 }
 
 #[tauri::command]
-pub fn sound_delete(
+pub async fn sound_delete(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
     window: WebviewWindow,
     sound_path: String,
 ) -> CmdResult<SoundDeleteResponse> {
-    let sounds_dir = ensure_sounds_dir(&app)?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| sound_delete_inner(app, state, sound_path, admission),
+    )
+    .await
+}
+
+fn sound_delete_inner(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    sound_path: String,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<SoundDeleteResponse> {
+    let sounds_dir = ensure_sounds_dir(app)?;
     let trash_dir = app
         .path()
         .app_data_dir()
         .map_err(|error| CommandError::msg(format!("앱 데이터 경로 확인 실패: {error}")))?
         .join("trash");
     let validated_path = validate_sound_path(&sounds_dir, &sound_path)?;
-    let path_key = resolve_stored_sound_path_key(state.inner(), &validated_path);
+    let path_key = resolve_stored_sound_path_key(state, &validated_path);
     let stored_path = validate_sound_path(&sounds_dir, &path_key)?;
 
     // 내장 사운드 삭제 차단 (OBS/플러그인 경유 호출 포함)
@@ -492,7 +593,6 @@ pub fn sound_delete(
         .map_err(|error| CommandError::msg(format!("사운드 파일 삭제 준비 실패: {error:#}")))?;
 
     let transaction = commit_staged_sound_deletion(&staged, || {
-        let admission = state.admit_frontend_history_mutation(window.label())?;
         Ok(state.store.commit_legacy_resource_deletion_with_admission(
             EditorCommitOrigin::LegacyAdapter("sound_delete".to_string()),
             &[
@@ -512,23 +612,40 @@ pub fn sound_delete(
         log::warn!("[Sound] 삭제 파일 trash 이동 지연: {error:#}");
     }
 
-    publish_legacy_editor_change(state.inner(), &app, &transaction.change);
+    publish_legacy_editor_change(state, app, &transaction.change);
     if transaction.value {
         emit_sound_reference_changes_with(&transaction.change.result.changed_fields, |event| {
             match event {
                 SoundReferenceChangeEvent::Key => {
-                    app.emit(event.name(), &transaction.change.document.key_positions)
+                    publish_event(
+                        app,
+                        event.name(),
+                        &transaction.change.document.key_positions,
+                    );
                 }
                 SoundReferenceChangeEvent::Stat => {
-                    app.emit(event.name(), &transaction.change.document.stat_positions)
+                    publish_event(
+                        app,
+                        event.name(),
+                        &transaction.change.document.stat_positions,
+                    );
                 }
                 SoundReferenceChangeEvent::Graph => {
-                    app.emit(event.name(), &transaction.change.document.graph_positions)
+                    publish_event(
+                        app,
+                        event.name(),
+                        &transaction.change.document.graph_positions,
+                    );
                 }
                 SoundReferenceChangeEvent::Knob => {
-                    app.emit(event.name(), &transaction.change.document.knob_positions)
+                    publish_event(
+                        app,
+                        event.name(),
+                        &transaction.change.document.knob_positions,
+                    );
                 }
             }
+            Ok::<(), std::convert::Infallible>(())
         });
     }
 
@@ -629,9 +746,19 @@ where
 }
 
 #[tauri::command]
-pub fn sound_save_processed_wav(
+pub async fn sound_save_processed_wav(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
+    request: SoundSaveProcessedWavRequest,
+) -> CmdResult<SoundSaveProcessedWavResponse> {
+    run_mutation(app, move |app, state| {
+        sound_save_processed_wav_inner(app, state, request)
+    })
+    .await
+}
+
+fn sound_save_processed_wav_inner(
+    app: &tauri::AppHandle,
+    state: &AppState,
     request: SoundSaveProcessedWavRequest,
 ) -> CmdResult<SoundSaveProcessedWavResponse> {
     let encoded = request.wav_base64.trim();
@@ -658,7 +785,7 @@ pub fn sound_save_processed_wav(
         });
     }
 
-    let sounds_dir = ensure_sounds_dir(&app)?;
+    let sounds_dir = ensure_sounds_dir(app)?;
 
     let base_name = request
         .file_name
@@ -709,7 +836,7 @@ pub fn sound_save_processed_wav(
                 .as_deref()
                 .unwrap_or("wav")
                 .to_lowercase();
-            let originals_dir = ensure_originals_dir(&app)?;
+            let originals_dir = ensure_originals_dir(app)?;
             let orig_filename = format!("{}.{}", Uuid::new_v4(), orig_ext);
             let orig_path = originals_dir.join(&orig_filename);
             fs::write(&orig_path, orig_bytes)
@@ -754,45 +881,47 @@ pub struct SoundLoadOriginalResponse {
 
 /// 편집을 위해 원본 사운드 파일을 base64로 반환
 #[tauri::command]
-pub fn sound_load_original(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
+pub async fn sound_load_original(
+    app: AppHandle,
     sound_path: String,
 ) -> CmdResult<SoundLoadOriginalResponse> {
-    let sounds_dir = ensure_sounds_dir(&app)?;
-    let validated_path = validate_sound_path(&sounds_dir, &sound_path)?;
-    let path_key = resolve_stored_sound_path_key(state.inner(), &validated_path);
+    run_blocking(app, move |app, state| {
+        let sounds_dir = ensure_sounds_dir(app)?;
+        let validated_path = validate_sound_path(&sounds_dir, &sound_path)?;
+        let path_key = resolve_stored_sound_path_key(state, &validated_path);
 
-    let original_rel = state
-        .store
-        .with_state(|s| {
-            s.sound_library
-                .get(&path_key)
-                .and_then(|e| e.original_path.clone())
+        let original_rel = state
+            .store
+            .with_state(|s| {
+                s.sound_library
+                    .get(&path_key)
+                    .and_then(|e| e.original_path.clone())
+            })
+            .ok_or_else(|| CommandError::msg("원본 파일 정보가 없습니다."))?;
+
+        let original_path = sounds_dir.join(&original_rel);
+        let original_abs = validate_sound_path(&sounds_dir, &original_path.to_string_lossy())?;
+        if !original_abs.exists() {
+            return Err(CommandError::msg("원본 파일이 존재하지 않습니다."));
+        }
+
+        let bytes = fs::read(&original_abs)
+            .map_err(|e| CommandError::msg(format!("원본 사운드 파일 읽기 실패: {e}")))?;
+        let encoded = BASE64_STANDARD.encode(&bytes);
+
+        let ext = original_abs
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase());
+
+        Ok(SoundLoadOriginalResponse {
+            success: true,
+            error: None,
+            audio_base64: Some(encoded),
+            original_extension: ext,
         })
-        .ok_or_else(|| CommandError::msg("원본 파일 정보가 없습니다."))?;
-
-    let original_path = sounds_dir.join(&original_rel);
-    let original_abs = validate_sound_path(&sounds_dir, &original_path.to_string_lossy())?;
-    if !original_abs.exists() {
-        return Err(CommandError::msg("원본 파일이 존재하지 않습니다."));
-    }
-
-    let bytes = fs::read(&original_abs)
-        .map_err(|e| CommandError::msg(format!("원본 사운드 파일 읽기 실패: {e}")))?;
-    let encoded = BASE64_STANDARD.encode(&bytes);
-
-    let ext = original_abs
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|s| s.to_lowercase());
-
-    Ok(SoundLoadOriginalResponse {
-        success: true,
-        error: None,
-        audio_base64: Some(encoded),
-        original_extension: ext,
     })
+    .await
 }
 
 #[derive(Deserialize)]
@@ -815,14 +944,24 @@ pub struct SoundUpdateProcessedWavResponse {
 
 /// 기존 트리밍 파일을 새 WAV로 덮어쓰고 메타데이터 갱신
 #[tauri::command]
-pub fn sound_update_processed_wav(
+pub async fn sound_update_processed_wav(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
     request: SoundUpdateProcessedWavRequest,
 ) -> CmdResult<SoundUpdateProcessedWavResponse> {
-    let sounds_dir = ensure_sounds_dir(&app)?;
+    run_mutation(app, move |app, state| {
+        sound_update_processed_wav_inner(app, state, request)
+    })
+    .await
+}
+
+fn sound_update_processed_wav_inner(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    request: SoundUpdateProcessedWavRequest,
+) -> CmdResult<SoundUpdateProcessedWavResponse> {
+    let sounds_dir = ensure_sounds_dir(app)?;
     let validated_path = validate_sound_path(&sounds_dir, &request.sound_path)?;
-    let path_key = resolve_stored_sound_path_key(state.inner(), &validated_path);
+    let path_key = resolve_stored_sound_path_key(state, &validated_path);
 
     // 내장 사운드 덮어쓰기 차단 (OBS/플러그인 경유 호출 포함)
     let is_builtin = state.store.with_state(|s| {
@@ -1214,10 +1353,11 @@ fn is_supported_sound_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        backup_path_for, commit_staged_sound_deletion, contains_duplicate_path_separator,
-        emit_sound_reference_changes_with, ensure_existing_sound_edit_target,
-        remove_sound_entry_and_references, replace_processed_wav_with,
-        resolve_sound_path_key_from_keys, restore_interrupted_processed_wav_backup_with,
+        apply_sound_scan_to_library, backup_path_for, commit_staged_sound_deletion,
+        contains_duplicate_path_separator, emit_sound_reference_changes_with,
+        ensure_existing_sound_edit_target, remove_sound_entry_and_references,
+        replace_processed_wav_with, resolve_sound_path_key_from_keys,
+        restore_interrupted_processed_wav_backup_with, sound_library_needs_reconcile,
         stale_sound_library_keys, validate_sound_path, PreparedAtomicReplace,
         SoundReferenceChangeEvent,
     };
@@ -1329,6 +1469,59 @@ mod tests {
             }],
         );
         data
+    }
+
+    #[test]
+    fn sound_library_needs_reconcile_is_false_when_scan_matches_library() {
+        let mut library = std::collections::HashMap::new();
+        library.insert(
+            "a.wav".to_string(),
+            crate::models::SoundLibraryEntry::default(),
+        );
+        let seen: std::collections::HashSet<String> = ["a.wav".to_string()].into_iter().collect();
+        assert!(!sound_library_needs_reconcile(&library, &seen, true));
+    }
+
+    #[test]
+    fn apply_sound_scan_inserts_new_files_and_drops_stale_only_when_complete() {
+        let mut library = std::collections::HashMap::new();
+        library.insert(
+            "gone.wav".to_string(),
+            crate::models::SoundLibraryEntry::default(),
+        );
+        let seen: std::collections::HashSet<String> = ["new.wav".to_string()].into_iter().collect();
+        let at_scan = library.clone();
+        let exists = |_: &str| true;
+
+        let mut partial = library.clone();
+        assert!(sound_library_needs_reconcile(&library, &seen, false));
+        apply_sound_scan_to_library(&mut partial, &at_scan, &seen, false, &exists);
+        assert!(partial.contains_key("new.wav"));
+        assert!(partial.contains_key("gone.wav"));
+
+        let mut complete = library.clone();
+        // 삭제 후보 gone.wav는 turn 시점에 디스크에도 없어야 지운다
+        apply_sound_scan_to_library(&mut complete, &at_scan, &seen, true, &|key| {
+            key != "gone.wav"
+        });
+        assert!(complete.contains_key("new.wav"));
+        assert!(!complete.contains_key("gone.wav"));
+    }
+
+    #[test]
+    fn apply_sound_scan_keeps_entries_resurrected_between_scan_and_turn() {
+        // 스캔 때 없던 파일이 turn 직전에 되살아나면(update_processed_wav의 rename)
+        // 메타를 지우지 않는다
+        let mut library = std::collections::HashMap::new();
+        library.insert(
+            "back.wav".to_string(),
+            crate::models::SoundLibraryEntry::default(),
+        );
+        let at_scan = library.clone();
+        let seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        apply_sound_scan_to_library(&mut library, &at_scan, &seen, true, &|_| true);
+        assert!(library.contains_key("back.wav"));
     }
 
     #[test]

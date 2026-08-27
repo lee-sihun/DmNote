@@ -125,7 +125,7 @@ const GraphItem = ({
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
     (state: { gridSettings?: { gridSnapSize?: number } }) =>
-      state.gridSettings?.gridSnapSize || 5,
+      state.gridSettings?.gridSnapSize ?? 5,
   );
   const isDraggingOrResizing = useGridSelectionStore(
     (state: { isDraggingOrResizing: boolean }) => state.isDraggingOrResizing,

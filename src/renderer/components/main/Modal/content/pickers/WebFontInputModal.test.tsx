@@ -56,6 +56,20 @@ describe('WebFontInputModal 편집기 마운트', () => {
     );
   });
 
+  it('코드 입력부는 불투명 웰 대신 어두운 glass 재질을 사용한다', async () => {
+    await renderModal('');
+    await settleDeferredContent();
+
+    const surface = document.querySelector<HTMLElement>(
+      '[data-webfont-editor-surface="true"]',
+    );
+    expect(surface).not.toBeNull();
+    expect(surface?.className).toContain('bg-glass-dim');
+    expect(surface?.className).toContain('backdrop-glass-popup');
+    expect(surface?.className).not.toContain('bg-inset-solid');
+    expect(surface?.className).not.toContain('shadow-');
+  });
+
   it('닫히면 에디터를 정리한다', async () => {
     await renderModal('');
     await settleDeferredContent();

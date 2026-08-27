@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { hsvToColorObject, type ColorObject } from '@utils/color/colorUtils';
 import { CHECKER_PATTERN, CHECKER_SIZE } from './ColorSwatch';
+import GooeyThumb from './GooeyThumb';
 import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
@@ -31,6 +33,7 @@ interface ColorTrackProps {
   color: ColorObject;
   onChange: (color: ColorObject) => void;
   onChangeComplete?: (color: ColorObject) => void;
+  disabled?: boolean;
   /** 성능 계측용 비교 전략. 제품 경로는 프레임당 최신 입력만 반영한다. */
   continuousInputStrategy?: ContinuousInputStrategy;
 }
@@ -38,9 +41,10 @@ interface ColorTrackProps {
 const clampRatio = (value: number): number =>
   value < 0 ? 0 : value > 1 ? 1 : value;
 
+// layout effect라야 flushSync로 당긴 커밋 직후 같은 호출 스택에서 최신 값을 읽는다
 const useLatest = <T,>(value: T) => {
   const ref = useRef(value);
-  useEffect(() => {
+  useLayoutEffect(() => {
     ref.current = value;
   });
   return ref;
@@ -52,6 +56,7 @@ const useLatest = <T,>(value: T) => {
 export const usePointerSession = (
   emit: (ratioX: number, ratioY: number, final: boolean) => void,
   continuousInputStrategy: ContinuousInputStrategy = 'frame',
+  disabled = false,
 ) => {
   const emitRef = useLatest(emit);
   const activePointerRef = useRef<number | null>(null);
@@ -119,11 +124,21 @@ export const usePointerSession = (
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
     if (event.button !== 0 || !event.isPrimary) return;
     if (activePointerRef.current !== null) return;
     const target = event.currentTarget;
     const rect = target.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
+    // 트랙 드래그가 시작되면 같은 팝업 안의 텍스트 편집은 끝난 것으로 본다.
+    // 먼저 blur해 확정하고 그 커밋을 flushSync로 당겨야 첫 preview가 확정된 색에서
+    // 출발한다. 확정만 하고 렌더를 기다리면 emit이 옛 색 클로저로 hex를 되덮는다
+    const scope =
+      target.closest('[role="dialog"]') ?? target.ownerDocument.body;
+    const active = target.ownerDocument.activeElement;
+    if (active?.matches('input, textarea') && scope.contains(active)) {
+      flushSync(() => (active as HTMLElement).blur());
+    }
     activePointerRef.current = event.pointerId;
     targetRef.current = target;
     rectRef.current = rect;
@@ -207,8 +222,6 @@ export const usePointerSession = (
   };
 };
 
-const knobShadow = '0 0 4px rgba(0, 0, 0, 0.7)';
-
 // 색 표면은 무테 — 원색 트랙·체커·필드가 스스로 경계를 정의, 밝은 링은 검정 영역에서 도드라짐
 // 커서는 캔버스 아이템과 같은 정책 - 호버 무변화, 잡는 동안만 grabbing
 const trackClassName =
@@ -224,19 +237,25 @@ export const SaturationArea = ({
   height = SATURATION_HEIGHT,
   onChange,
   onChangeComplete,
+  disabled = false,
   continuousInputStrategy,
 }: SaturationAreaProps) => {
-  const session = usePointerSession((x, y, final) => {
-    const next = hsvToColorObject({
-      ...color.hsv,
-      s: x * 100,
-      v: 100 - y * 100,
-    });
-    onChange(next);
-    if (final) onChangeComplete?.(next);
-  }, continuousInputStrategy);
+  const session = usePointerSession(
+    (x, y, final) => {
+      const next = hsvToColorObject({
+        ...color.hsv,
+        s: x * 100,
+        v: 100 - y * 100,
+      });
+      onChange(next);
+      if (final) onChangeComplete?.(next);
+    },
+    continuousInputStrategy,
+    disabled,
+  );
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
     const step = event.shiftKey ? PAGE_STEP : 1;
     let { s, v } = color.hsv;
     switch (event.key) {
@@ -271,7 +290,8 @@ export const SaturationArea = ({
     <div
       {...session}
       role="slider"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
       aria-label="Saturation and brightness"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -280,7 +300,9 @@ export const SaturationArea = ({
         color.hsv.s,
       )}%, Brightness ${Math.round(color.hsv.v)}%`}
       onKeyDown={onKeyDown}
-      className="relative w-full cursor-default touch-none select-none rounded-lg outline-none focus-visible:shadow-focus-ring"
+      className={`relative w-full touch-none select-none rounded-lg outline-none focus-visible:shadow-focus-ring ${
+        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-default'
+      }`}
       style={{ height }}
     >
       {/* 라운딩은 클립이 아니라 9-slice 마스크 — 클립은 페인트 연산별 AA 중첩으로
@@ -296,17 +318,11 @@ export const SaturationArea = ({
           } as React.CSSProperties
         }
       />
-      <div
-        className="pointer-events-none absolute rounded-full border-2 border-white"
-        style={{
-          left: `${color.hsv.s}%`,
-          top: `${100 - color.hsv.v}%`,
-          width: SATURATION_CURSOR_SIZE,
-          height: SATURATION_CURSOR_SIZE,
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: `rgb(${color.rgb.r} ${color.rgb.g} ${color.rgb.b})`,
-          boxShadow: knobShadow,
-        }}
+      <GooeyThumb
+        x={color.hsv.s / 100}
+        y={1 - color.hsv.v / 100}
+        size={SATURATION_CURSOR_SIZE}
+        color={`rgb(${color.rgb.r} ${color.rgb.g} ${color.rgb.b})`}
       />
     </div>
   );
@@ -316,15 +332,21 @@ export const HueSlider = ({
   color,
   onChange,
   onChangeComplete,
+  disabled = false,
   continuousInputStrategy,
 }: ColorTrackProps) => {
-  const session = usePointerSession((x, _y, final) => {
-    const next = hsvToColorObject({ ...color.hsv, h: x * 360 });
-    onChange(next);
-    if (final) onChangeComplete?.(next);
-  }, continuousInputStrategy);
+  const session = usePointerSession(
+    (x, _y, final) => {
+      const next = hsvToColorObject({ ...color.hsv, h: x * 360 });
+      onChange(next);
+      if (final) onChangeComplete?.(next);
+    },
+    continuousInputStrategy,
+    disabled,
+  );
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
     const step = event.shiftKey ? HUE_PAGE_STEP : 1;
     let h = color.hsv.h;
     switch (event.key) {
@@ -361,25 +383,23 @@ export const HueSlider = ({
     <div
       {...session}
       role="slider"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
       aria-label="Hue"
       aria-valuemin={0}
       aria-valuemax={360}
       aria-valuenow={Math.round(color.hsv.h)}
       onKeyDown={onKeyDown}
-      className={trackClassName}
+      className={`${trackClassName} ${
+        disabled ? 'cursor-not-allowed opacity-50' : ''
+      }`}
       style={{ height: TRACK_HEIGHT, background: HUE_TRACK_GRADIENT }}
     >
-      <div
-        className="pointer-events-none absolute top-1/2 rounded-full border-2 border-white"
-        style={{
-          left: `${(color.hsv.h / 360) * 100}%`,
-          width: KNOB_SIZE,
-          height: KNOB_SIZE,
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: `hsl(${color.hsv.h} 100% 50%)`,
-          boxShadow: knobShadow,
-        }}
+      <GooeyThumb
+        x={color.hsv.h / 360}
+        y={0.5}
+        size={KNOB_SIZE}
+        color={`hsl(${color.hsv.h} 100% 50%)`}
       />
     </div>
   );
@@ -389,19 +409,25 @@ export const AlphaSlider = ({
   color,
   onChange,
   onChangeComplete,
+  disabled = false,
   continuousInputStrategy,
   ariaLabel = 'Alpha',
 }: ColorTrackProps & {
   // 스톱 알파와 전역 배율이 나란한 형식에서 역할 구분
   ariaLabel?: string;
 }) => {
-  const session = usePointerSession((x, _y, final) => {
-    const next = hsvToColorObject({ ...color.hsv, a: x });
-    onChange(next);
-    if (final) onChangeComplete?.(next);
-  }, continuousInputStrategy);
+  const session = usePointerSession(
+    (x, _y, final) => {
+      const next = hsvToColorObject({ ...color.hsv, a: x });
+      onChange(next);
+      if (final) onChangeComplete?.(next);
+    },
+    continuousInputStrategy,
+    disabled,
+  );
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
     const step = (event.shiftKey ? PAGE_STEP : 1) / 100;
     let a = color.hsv.a;
     switch (event.key) {
@@ -440,28 +466,28 @@ export const AlphaSlider = ({
     <div
       {...session}
       role="slider"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
       aria-label={ariaLabel}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(color.hsv.a * 100)}
       onKeyDown={onKeyDown}
-      className={trackClassName}
+      className={`${trackClassName} ${
+        disabled ? 'cursor-not-allowed opacity-50' : ''
+      }`}
       style={{
         height: TRACK_HEIGHT,
         background: `linear-gradient(to right, rgb(${rgb} / 0), rgb(${rgb} / 1)), ${CHECKER_PATTERN} top left / ${CHECKER_SIZE} ${CHECKER_SIZE} repeat`,
       }}
     >
-      <div
-        className="pointer-events-none absolute top-1/2 rounded-full border-2 border-white"
-        style={{
-          left: `${color.hsv.a * 100}%`,
-          width: KNOB_SIZE,
-          height: KNOB_SIZE,
-          transform: 'translate(-50%, -50%)',
-          background: `linear-gradient(rgb(${rgb} / ${color.hsv.a}), rgb(${rgb} / ${color.hsv.a})), ${CHECKER_PATTERN} center / ${CHECKER_SIZE} ${CHECKER_SIZE} repeat`,
-          boxShadow: knobShadow,
-        }}
+      <GooeyThumb
+        x={color.hsv.a}
+        y={0.5}
+        size={KNOB_SIZE}
+        color={`rgb(${rgb})`}
+        colorOpacity={color.hsv.a}
+        checker
       />
     </div>
   );

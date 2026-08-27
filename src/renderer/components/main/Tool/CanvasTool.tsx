@@ -25,6 +25,7 @@ interface CanvasToolProps {
   activeTool?: string;
   setActiveTool?: (tool: string) => void;
   primaryButtonRef?: React.RefObject<HTMLButtonElement>;
+  interactionDisabled?: boolean;
 }
 
 const CanvasTool = ({
@@ -36,6 +37,7 @@ const CanvasTool = ({
   activeTool,
   setActiveTool,
   primaryButtonRef,
+  interactionDisabled = false,
 }: CanvasToolProps) => {
   const { t } = useTranslation();
   const [selectedTool, setSelectedTool] = useState<SelectableTool | null>(
@@ -52,6 +54,13 @@ const CanvasTool = ({
       setSelectedTool(activeTool as SelectableTool);
     }
   }, [activeTool]);
+
+  // 포털 메뉴는 ToolBar의 inert 경계 밖에 있으므로 모달 진입 시 닫는다
+  useEffect(() => {
+    if (!interactionDisabled) return;
+    setIsAddPopupOpen(false);
+    setIsResetPopupOpen(false);
+  }, [interactionDisabled]);
 
   const handleClick = (key: string) => {
     if (key === 'move' || key === 'eraser') {

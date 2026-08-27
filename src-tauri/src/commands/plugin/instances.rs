@@ -1,15 +1,15 @@
 use std::collections::{BTreeMap, HashMap};
 
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use crate::{
-    commands::editor::state::emit_best_effort,
+    commands::{editor::state::emit_best_effort, run_blocking, run_mutation_task},
     errors::{CmdResult, CommandError},
     models::{
         PluginGroupRefsSnapshot, PluginInstancesChangedPayload, PluginInstancesCommitRequest,
         PluginInstancesCommitResult, PluginInstancesReconcileRequest, PluginInstancesSnapshot,
     },
-    state::{plugin::PluginGroupRefs, store::AdmittedPluginInstancesCommit, AppState},
+    state::{plugin::PluginGroupRefs, store::AdmittedPluginInstancesCommit},
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -77,28 +77,33 @@ fn finish_plugin_instances_commit(
 }
 
 #[tauri::command]
-pub fn plugin_instances_get(
-    state: State<'_, AppState>,
+pub async fn plugin_instances_get(
+    app: AppHandle,
     plugin_id: String,
 ) -> CmdResult<PluginInstancesSnapshot> {
-    let (instances, model_revision) = state
-        .store
-        .plugin_instances_get(&plugin_id)
-        .map_err(CommandError::msg)?;
-    let snapshot = PluginInstancesSnapshot {
-        plugin_id,
-        instances,
-        model_revision,
-        authority_generation: state.plugin_authority().generation(),
-    };
-    if serde_json::to_vec(&snapshot)
-        .map_err(|error| CommandError::msg(format!("INVALID_PLUGIN_INSTANCES_SNAPSHOT:{error}")))?
-        .len()
-        > crate::state::plugin::MAX_PLUGIN_INSTANCES_REQUEST_BYTES
-    {
-        return Err(CommandError::msg("PLUGIN_INSTANCES_SNAPSHOT_TOO_LARGE"));
-    }
-    Ok(snapshot)
+    run_blocking(app, move |_, state| {
+        let (instances, model_revision) = state
+            .store
+            .plugin_instances_get(&plugin_id)
+            .map_err(CommandError::msg)?;
+        let snapshot = PluginInstancesSnapshot {
+            plugin_id,
+            instances,
+            model_revision,
+            authority_generation: state.plugin_authority().generation(),
+        };
+        if serde_json::to_vec(&snapshot)
+            .map_err(|error| {
+                CommandError::msg(format!("INVALID_PLUGIN_INSTANCES_SNAPSHOT:{error}"))
+            })?
+            .len()
+            > crate::state::plugin::MAX_PLUGIN_INSTANCES_REQUEST_BYTES
+        {
+            return Err(CommandError::msg("PLUGIN_INSTANCES_SNAPSHOT_TOO_LARGE"));
+        }
+        Ok(snapshot)
+    })
+    .await
 }
 
 // wire 정렬 변환 - HashSet 비결정 순서를 결정적 스냅샷으로 고정
@@ -129,72 +134,96 @@ fn plugin_group_refs_snapshot(
 // editor 단독 커밋의 normalize 그룹 생존 판정 모집단 미러용 - 미로드·데이터만
 // 남은 플러그인의 저장 인스턴스까지 포함해 프론트 replay와 백엔드 판정을 일치시킨다
 #[tauri::command]
-pub fn plugin_group_refs_get(state: State<'_, AppState>) -> CmdResult<PluginGroupRefsSnapshot> {
-    let (refs_by_plugin, model_revision) = state.store.plugin_group_refs_by_plugin();
-    Ok(plugin_group_refs_snapshot(refs_by_plugin, model_revision))
+pub async fn plugin_group_refs_get(app: AppHandle) -> CmdResult<PluginGroupRefsSnapshot> {
+    run_blocking(app, |_, state| {
+        let (refs_by_plugin, model_revision) = state.store.plugin_group_refs_by_plugin();
+        Ok(plugin_group_refs_snapshot(refs_by_plugin, model_revision))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn plugin_instances_commit(
-    state: State<'_, AppState>,
+pub async fn plugin_instances_commit(
     app: AppHandle,
     window: WebviewWindow,
     request: PluginInstancesCommitRequest,
 ) -> CmdResult<PluginInstancesCommitResult> {
-    crate::state::plugin::validate_plugin_instances_request(&request).map_err(CommandError::msg)?;
-    if window.label() != MAIN_WINDOW_LABEL {
-        return Err(CommandError::msg("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED"));
-    }
-    let authority = state
-        .plugin_authority()
-        .admit(request.authority_generation)
-        .map_err(CommandError::msg)?;
-    let admission = state
-        .admit_frontend_history_mutation(window.label())
-        .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
-    let mutation_id = request.mutation_id.clone();
-    let committed = state
-        .store
-        .commit_plugin_instances_with_admission(request, admission)
-        .map_err(CommandError::msg)?;
-    Ok(finish_plugin_instances_commit(
-        &app,
-        mutation_id,
-        authority.generation(),
-        committed,
-    ))
+    let window_label = window.label().to_string();
+    run_mutation_task(app, move |app, state, ticket| {
+        crate::state::plugin::validate_plugin_instances_request(&request)
+            .map_err(CommandError::msg)?;
+        if window_label != MAIN_WINDOW_LABEL {
+            return Err(CommandError::msg("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED"));
+        }
+        let authority = state
+            .plugin_authority()
+            .admit(request.authority_generation)
+            .map_err(CommandError::msg)?;
+        let admission = state
+            .admit_frontend_history_mutation(&window_label)
+            .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
+        ticket.run(move || {
+            // 잠금 순서: 번호표 turn → authority (gesture.rs와 동일)
+            state
+                .plugin_authority()
+                .revalidate(authority)
+                .map_err(CommandError::msg)?;
+            let mutation_id = request.mutation_id.clone();
+            let committed = state
+                .store
+                .commit_plugin_instances_with_admission(request, admission)
+                .map_err(CommandError::msg)?;
+            Ok(finish_plugin_instances_commit(
+                app,
+                mutation_id,
+                authority.generation(),
+                committed,
+            ))
+        })
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn plugin_instances_reconcile(
-    state: State<'_, AppState>,
+pub async fn plugin_instances_reconcile(
     app: AppHandle,
     window: WebviewWindow,
     request: PluginInstancesReconcileRequest,
 ) -> CmdResult<PluginInstancesCommitResult> {
-    crate::state::plugin::validate_plugin_instances_reconcile_request(&request)
-        .map_err(CommandError::msg)?;
-    if window.label() != MAIN_WINDOW_LABEL {
-        return Err(CommandError::msg("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED"));
-    }
-    let authority = state
-        .plugin_authority()
-        .admit(request.authority_generation)
-        .map_err(CommandError::msg)?;
-    let admission = state
-        .admit_frontend_history_mutation(window.label())
-        .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
-    let mutation_id = request.mutation_id.clone();
-    let committed = state
-        .store
-        .reconcile_plugin_instances_with_admission(request, admission)
-        .map_err(CommandError::msg)?;
-    Ok(finish_plugin_instances_commit(
-        &app,
-        mutation_id,
-        authority.generation(),
-        committed,
-    ))
+    let window_label = window.label().to_string();
+    run_mutation_task(app, move |app, state, ticket| {
+        crate::state::plugin::validate_plugin_instances_reconcile_request(&request)
+            .map_err(CommandError::msg)?;
+        if window_label != MAIN_WINDOW_LABEL {
+            return Err(CommandError::msg("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED"));
+        }
+        let authority = state
+            .plugin_authority()
+            .admit(request.authority_generation)
+            .map_err(CommandError::msg)?;
+        let admission = state
+            .admit_frontend_history_mutation(&window_label)
+            .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
+        ticket.run(move || {
+            // 잠금 순서: 번호표 turn → authority (gesture.rs와 동일)
+            state
+                .plugin_authority()
+                .revalidate(authority)
+                .map_err(CommandError::msg)?;
+            let mutation_id = request.mutation_id.clone();
+            let committed = state
+                .store
+                .reconcile_plugin_instances_with_admission(request, admission)
+                .map_err(CommandError::msg)?;
+            Ok(finish_plugin_instances_commit(
+                app,
+                mutation_id,
+                authority.generation(),
+                committed,
+            ))
+        })
+    })
+    .await
 }
 
 #[cfg(test)]

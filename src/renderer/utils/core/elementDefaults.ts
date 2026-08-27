@@ -1,3 +1,4 @@
+import type { GradientSpec } from '@src/types/color';
 import {
   elementShadowToCss,
   type ElementShadowSpec,
@@ -19,14 +20,24 @@ export const DEFAULT_ELEMENT_ACTIVE_BG = 'rgba(255, 255, 255, 0.88)';
 export const DEFAULT_ELEMENT_FONT = 'rgba(237, 238, 242, 0.78)';
 export const DEFAULT_ELEMENT_ACTIVE_FONT = 'rgba(20, 20, 24, 0.9)';
 
-// 기본 보더 — 1px 헤어라인이 표면 분리 담당, 테두리 색상/두께 UI로 그대로 수정 가능
-// 무보더 글래스 프리셋 느낌을 위해 존재감 최소 수준, 활성은 흰 배경 위라 자연히 사라짐
-export const DEFAULT_ELEMENT_BORDER = 'rgba(255, 255, 255, 0.04)';
-export const DEFAULT_ELEMENT_ACTIVE_BORDER = 'rgba(255, 255, 255, 0.04)';
+// 기본 보더 - 1px 글래스 립. 170°는 빛이 왼쪽 위에서 드는 방향이라 밝은 립이
+// 위 변 왼쪽에 조금 더 걸리고 오른쪽 아래로 잦아든다. 끝 스톱을 80%에 두어
+// 아래 1/4은 균일하게 남기고 하단 모서리가 비어 보이지 않게 한다.
+// 테두리 색·형식·두께 UI로 그대로 수정 가능, 대표 단색은 첫 스톱 (형제 필드 규칙)
+export const DEFAULT_ELEMENT_BORDER_GRADIENT: GradientSpec = {
+  angle: 170,
+  stops: [
+    { color: 'rgba(255, 255, 255, 0.14)', pos: 0 },
+    { color: 'rgba(255, 255, 255, 0.04)', pos: 0.8 },
+  ],
+};
+// 활성은 흰 배경 위라 립이 자연히 잠긴다. 같은 spec을 써서 눌림 시 링 두께가 안 바뀌게
+export const DEFAULT_ELEMENT_ACTIVE_BORDER_GRADIENT: GradientSpec =
+  DEFAULT_ELEMENT_BORDER_GRADIENT;
+export const DEFAULT_ELEMENT_BORDER =
+  DEFAULT_ELEMENT_BORDER_GRADIENT.stops[0].color;
+export const DEFAULT_ELEMENT_ACTIVE_BORDER = DEFAULT_ELEMENT_BORDER;
 export const DEFAULT_ELEMENT_BORDER_WIDTH = 1;
-
-// 그래프 등 다른 요소가 같은 헤어라인을 쓸 때의 별칭
-export const DEFAULT_ELEMENT_HAIRLINE = DEFAULT_ELEMENT_BORDER;
 
 export const DEFAULT_ELEMENT_RADIUS = 4;
 export const DEFAULT_ELEMENT_BASE_FONT_WEIGHT = 400;

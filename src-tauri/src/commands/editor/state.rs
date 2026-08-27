@@ -1,17 +1,16 @@
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, State, WebviewWindow};
+use tauri::{AppHandle, Manager, WebviewWindow};
 
 use crate::{
+    commands::{run_blocking, run_prepared_mutation},
     errors::CmdResult,
     models::{CommittedEditorChange, EditorCommitResult, EditorField, EditorGetResult},
-    services::preview_broker::PreviewBroker,
+    services::{event_publisher::publish_event, preview_broker::PreviewBroker},
     state::{editor::decode_editor_commit_request, AppState},
 };
 
 pub(crate) fn emit_best_effort<T: serde::Serialize>(app: &AppHandle, event: &str, payload: &T) {
-    if let Err(error) = app.emit(event, payload) {
-        log::error!("[Editor] failed to emit {event}: {error}");
-    }
+    publish_event(app, event, payload);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -135,6 +134,7 @@ fn publish_editor_change_with_options(
     legacy_fields: &[EditorField],
     key_runtime_policy: KeyRuntimePublishPolicy,
 ) {
+    state.publish_committed_key_sound_bindings(change);
     let Some(event) = change.event.as_ref() else {
         return;
     };
@@ -206,71 +206,83 @@ pub(crate) fn publish_editor_change_after_key_runtime(
 }
 
 #[tauri::command]
-pub fn editor_get(state: State<'_, AppState>) -> CmdResult<EditorGetResult> {
-    Ok(state.store.editor_get())
+pub async fn editor_get(app: AppHandle) -> CmdResult<EditorGetResult> {
+    run_blocking(app, |_, state| Ok(state.store.editor_get())).await
 }
 
 #[tauri::command]
-pub fn editor_commit(
-    state: State<'_, AppState>,
-    broker: State<'_, PreviewBroker>,
+pub async fn editor_commit(
     app: AppHandle,
     window: WebviewWindow,
     request: Value,
 ) -> CmdResult<EditorCommitResult> {
-    let request = decode_editor_commit_request(request).inspect_err(|error| {
-        let validation_code = error
-            .details
-            .as_ref()
-            .and_then(|details| details.validation_code.as_deref())
-            .unwrap_or("UNKNOWN");
-        log::info!(
-            target: "editor_commit",
-            "command=editor_commit outcome=validation_rejected validationCode={validation_code}"
-        );
-    })?;
-    let admission = state
-        .admit_frontend_history_mutation(window.label())
-        .map_err(|_| crate::errors::EditorCommitError::history_in_progress())?;
-    let gesture_ids = request.echoed_gesture_ids();
-    let is_ops = request.ops.is_some();
-    let requested_fields = request
-        .changes
-        .as_ref()
-        .map_or_else(Vec::new, |changes| changes.included_fields());
-    let previous_mode = requested_fields
-        .contains(&EditorField::Keys)
-        .then(|| state.keyboard.current_mode());
-    let change = state
-        .store
-        .commit_editor_document_admitted(request, &admission)?;
-    for gesture_id in &gesture_ids {
-        if let Err(error) =
-            broker.finish_committed_session(window.label(), gesture_id, change.event.is_none())
-        {
-            log::warn!("failed to finish committed preview session: {error}");
-        }
-    }
-    if change.event.is_some() {
-        publish_editor_change(state.inner(), &app, &change, false);
-    }
-    if !change.replayed {
-        let legacy_fields =
-            commit_legacy_fields(is_ops, &requested_fields, &change.result.changed_fields);
-        publish_legacy_editor_fields(state.inner(), &app, &change, legacy_fields);
-        if previous_mode.is_some_and(|mode| mode != change.selected_key_type) {
-            emit_best_effort(
-                &app,
-                "keys:mode-changed",
-                &serde_json::json!({ "mode": &change.selected_key_type }),
-            );
-        }
-    }
-    if let Some(history_status) = change.history_status.as_ref() {
-        emit_best_effort(&app, "history:status", history_status);
-    }
-    drop(admission);
-    Ok(change.result)
+    let window_label = window.label().to_string();
+    let committed_window_label = window_label.clone();
+    run_prepared_mutation(
+        app,
+        move |_, state| {
+            let request = decode_editor_commit_request(request).inspect_err(|error| {
+                let validation_code = error
+                    .details
+                    .as_ref()
+                    .and_then(|details| details.validation_code.as_deref())
+                    .unwrap_or("UNKNOWN");
+                log::info!(
+                    target: "editor_commit",
+                    "command=editor_commit outcome=validation_rejected validationCode={validation_code}"
+                );
+            })?;
+            let admission = state
+                .admit_frontend_history_mutation(&window_label)
+                .map_err(|_| crate::errors::EditorCommitError::history_in_progress())?;
+            Ok((request, admission))
+        },
+        move |app, state, (request, admission)| {
+            let broker = app.state::<PreviewBroker>();
+            let gesture_ids = request.echoed_gesture_ids();
+            let is_ops = request.ops.is_some();
+            let requested_fields = request
+                .changes
+                .as_ref()
+                .map_or_else(Vec::new, |changes| changes.included_fields());
+            let previous_mode = requested_fields
+                .contains(&EditorField::Keys)
+                .then(|| state.keyboard.current_mode());
+            let change = state
+                .store
+                .commit_editor_document_admitted(request, &admission)?;
+            for gesture_id in &gesture_ids {
+                if let Err(error) = broker.finish_committed_session(
+                    &committed_window_label,
+                    gesture_id,
+                    change.event.is_none(),
+                ) {
+                    log::warn!("failed to finish committed preview session: {error}");
+                }
+            }
+            if change.event.is_some() {
+                publish_editor_change(state, app, &change, false);
+            }
+            if !change.replayed {
+                let legacy_fields =
+                    commit_legacy_fields(is_ops, &requested_fields, &change.result.changed_fields);
+                publish_legacy_editor_fields(state, app, &change, legacy_fields);
+                if previous_mode.is_some_and(|mode| mode != change.selected_key_type) {
+                    emit_best_effort(
+                        app,
+                        "keys:mode-changed",
+                        &serde_json::json!({ "mode": &change.selected_key_type }),
+                    );
+                }
+            }
+            if let Some(history_status) = change.history_status.as_ref() {
+                emit_best_effort(app, "history:status", history_status);
+            }
+            drop(admission);
+            Ok(change.result)
+        },
+    )
+    .await
 }
 
 #[cfg(test)]

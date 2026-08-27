@@ -114,6 +114,8 @@ export type CssActivateResult = {
 export type FontLoadResult = {
   success: boolean;
   error?: string;
+  /** 'invalid-font-content' - 없으면 사용자 취소 */
+  errorCode?: string;
   fontName?: string;
   fontPath?: string;
   weightRanges?: Array<{ min: number; max: number }>;
@@ -122,6 +124,8 @@ export type FontLoadResult = {
 export type ImageLoadResult = {
   success: boolean;
   error?: string;
+  /** 'invalid-image-content' - 없으면 사용자 취소 */
+  errorCode?: string;
   imagePath?: string;
 };
 
@@ -348,7 +352,12 @@ export type UpdateProgressEvent = {
   percent: number | null;
 };
 
-export type BridgeMessage<T = unknown> = { type: string; data?: T };
+export type BridgeMessage<T = unknown> = {
+  type: string;
+  data?: T;
+  /** sendTo 발신 - 없으면 브로드캐스트(send). 수신 창이 자기 타겟이 아니면 무시한다 */
+  target?: WindowTarget;
+};
 export type BridgeMessageListener<T = unknown> = (data: T) => void;
 export type BridgeAnyListener = (type: string, data: unknown) => void;
 export type WindowTarget = 'main' | 'overlay';

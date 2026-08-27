@@ -47,12 +47,6 @@
     "keySoundOutput": "按鍵音輸出",
     "keySoundOutputDefault": "預設裝置",
     "keySoundOutputBuffer": "ASIO 緩衝區大小",
-    "keySoundOutputError": {
-      "asioUnavailableBuild": "此版本未包含 ASIO 支援。",
-      "asioDeviceNotFound": "找不到 ASIO 裝置。",
-      "asioOpenFailed": "無法開啟 ASIO 裝置，將使用預設輸出播放。",
-      "defaultOpenFailed": "無法開啟可用的輸出裝置。"
-    },
     "topLeft": "左上",
     "bottomLeft": "左下",
     "topRight": "右上",
@@ -78,10 +72,11 @@
     "jsPluginToggleFailed": "切換插件狀態失敗.",
     "jsPluginRemoveFailed": "移除插件失敗.",
     "pluginDataDeleteTitle": "刪除插件資料",
-    "pluginDataDeleteMessage": "'{{name}}' 插件儲存了資料. 是否要一併刪除?",
-    "pluginDataDeleteWarning": "刪除資料將永久移除插件設定、歷史記錄等. 此操作無法撤銷.",
-    "deleteWithData": "包含資料刪除",
-    "deletePluginOnly": "僅刪除插件",
+    "pluginDataDeleteMessage": "「{{name}}」有已儲存的資料。",
+    "pluginDataDeleteToggle": "一併刪除資料",
+    "pluginDataScope": "設定與歷史紀錄",
+    "pluginDataKeepTail": "會保留。",
+    "pluginDataWipeTail": "將永久消失。",
     "language": "語言",
     "selectLanguage": "選擇語言",
     "shortcuts": "快捷鍵",
@@ -109,7 +104,10 @@
     "obsGuide": "透過 OBS 瀏覽器來源顯示覆蓋層。",
     "obsTokenRegenMessage": "是否重新產生工作階段權杖？",
     "obsTokenRegen": "重新產生權杖",
-    "obsTokenRegenConfirm": "重新產生"
+    "obsTokenRegenConfirm": "重新產生",
+    "jsPluginFailed": "錯誤",
+    "jsRuntimeError": "外掛程式執行時發生錯誤。",
+    "jsNotApplied": "無法套用此外掛程式。"
   },
   "shortcutSetting": {
     "title": "快捷鍵設定",
@@ -187,7 +185,14 @@
     "idle": "閒置",
     "active": "按下",
     "transparent": "透明",
-    "reset": "重置圖像"
+    "reset": "重置圖像",
+    "invalidImage": "無法讀取此圖片檔案。",
+    "mode": "放置",
+    "modeReplace": "僅圖像",
+    "modeOverlay": "疊加",
+    "position": "位置",
+    "rotation": "旋轉",
+    "scale": "大小"
   },
   "noteSetting": {
     "borderRadius": "圓角半徑",
@@ -286,11 +291,7 @@
     "createTitle": "建立標籤頁",
     "create": "建立",
     "delete": "刪除",
-    "deleteConfirm": "刪除 '{{name}}' 標籤頁?",
-    "search": {
-      "placeholder": "搜尋自訂標籤頁",
-      "empty": "無結果"
-    },
+    "deleteConfirm": "刪除 '{{name}}' 標籤頁？",
     "name": {
       "placeholder": "例如: 我的自定義",
       "required": "請輸入名稱",
@@ -342,9 +343,13 @@
     "sendToBack": "置於底層",
     "bringForward": "上移一層",
     "sendBackward": "下移一層",
-    "tabCssSetting": "標籤頁 CSS 設定",
-    "tabNoteSetting": "標籤頁軌道設定",
-    "resetOverlayPosition": "重設懸浮窗位置",
+    "plugins": "插件",
+    "currentTabGroup": "目前分頁設定",
+    "resetPositionGroup": "重設位置",
+    "cssSetting": "CSS",
+    "trackSetting": "軌道",
+    "overlayTarget": "懸浮窗",
+    "panelTarget": "面板視窗",
     "addKey": "新增按鍵",
     "addStat": "新增統計",
     "addGraph": "新增圖表",
@@ -615,12 +620,14 @@
     "edit": "編輯",
     "rename": "重新命名",
     "delete": "刪除",
-    "enabledToggle": "啟用",
+    "enable": "啟用",
+    "disable": "停用",
     "saveFailed": "字體設定儲存失敗。",
     "editorLoadFailed": "無法載入網路字體編輯器，請再試一次。",
     "editTargetMissing": "找不到要編輯的網路字體，可能已被移除。",
-    "deleteConfirm": "確定刪除該字體？使用它的元素將以預設字體顯示。",
-    "add": "新增字型"
+    "deleteConfirm": "確定刪除該字體？\n使用它的元素將以預設字體顯示。",
+    "add": "新增字型",
+    "invalidFont": "無法讀取此字型檔案。"
   },
   "soundPicker": {
     "searchPlaceholder": "搜尋",
@@ -637,7 +644,7 @@
     "deleteFailed": "音效刪除失敗",
     "renameFailed": "音效重新命名失敗",
     "hideFailed": "無法變更音效顯示狀態",
-    "deleteConfirm": "確定刪除該音效？檔案將被刪除，並從所有使用它的元素中移除。",
+    "deleteConfirm": "確定刪除該音效？\n將從所有使用它的元素中移除。",
     "add": "新增音效"
   },
   "soundTrimModal": {

@@ -47,12 +47,6 @@
     "keySoundOutput": "키 사운드 출력",
     "keySoundOutputDefault": "기본 재생 장치",
     "keySoundOutputBuffer": "ASIO 버퍼 크기",
-    "keySoundOutputError": {
-      "asioUnavailableBuild": "ASIO를 지원하지 않는 빌드입니다.",
-      "asioDeviceNotFound": "ASIO 장치를 찾을 수 없습니다.",
-      "asioOpenFailed": "ASIO 장치를 열 수 없어 기본 출력으로 재생합니다.",
-      "defaultOpenFailed": "사용 가능한 출력 장치를 열 수 없습니다."
-    },
     "topLeft": "좌상단",
     "bottomLeft": "좌하단",
     "topRight": "우상단",
@@ -73,15 +67,16 @@
     "jsReloadFailed": "JS 플러그인을 다시 불러오지 못했습니다:",
     "jsReloadNoChanges": "리로드된 플러그인이 없습니다.",
     "jsAddSuccess": "플러그인 {{count}}개를 추가했습니다.",
-    "jsAddPartial": "플러그인 {{count}}개를 추가했지만 일부 실패했습니다:",
+    "jsAddPartial": "플러그인 {{count}}개를 추가했지만 일부 실패했습니다.",
     "jsAddFailed": "JS 플러그인 추가에 실패했습니다:",
     "jsPluginToggleFailed": "플러그인 상태를 변경하지 못했습니다.",
     "jsPluginRemoveFailed": "플러그인을 제거하지 못했습니다.",
     "pluginDataDeleteTitle": "플러그인 데이터 삭제",
-    "pluginDataDeleteMessage": "'{{name}}' 플러그인이 저장한 데이터가 있습니다. 플러그인과 함께 삭제하시겠습니까?",
-    "pluginDataDeleteWarning": "데이터를 함께 삭제하면 플러그인 설정, 히스토리 등이 모두 제거되며 복구할 수 없습니다.",
-    "deleteWithData": "데이터 포함 삭제",
-    "deletePluginOnly": "플러그인만 삭제",
+    "pluginDataDeleteMessage": "'{{name}}'에 저장된 데이터가 있습니다.",
+    "pluginDataDeleteToggle": "데이터도 함께 삭제",
+    "pluginDataScope": "설정과 히스토리",
+    "pluginDataKeepTail": "는 그대로 남습니다.",
+    "pluginDataWipeTail": "까지 사라져 되돌릴 수 없습니다.",
     "language": "언어 설정",
     "selectLanguage": "언어 선택",
     "shortcuts": "단축키 설정",
@@ -109,7 +104,10 @@
     "obsGuide": "OBS에서 브라우저 소스로 오버레이를 표시합니다.",
     "obsTokenRegenMessage": "세션 토큰을 재생성 하시겠습니까?",
     "obsTokenRegen": "토큰 재생성",
-    "obsTokenRegenConfirm": "재생성"
+    "obsTokenRegenConfirm": "재생성",
+    "jsPluginFailed": "오류",
+    "jsRuntimeError": "플러그인 실행 중 오류가 발생했습니다.",
+    "jsNotApplied": "플러그인을 적용하지 못했습니다."
   },
   "shortcutSetting": {
     "title": "단축키 설정",
@@ -187,7 +185,14 @@
     "idle": "대기",
     "active": "입력",
     "transparent": "키 투명화",
-    "reset": "이미지 초기화"
+    "reset": "이미지 초기화",
+    "invalidImage": "이미지 파일을 해석할 수 없습니다.",
+    "mode": "배치",
+    "modeReplace": "이미지만",
+    "modeOverlay": "키 위에",
+    "position": "위치",
+    "rotation": "회전",
+    "scale": "크기"
   },
   "noteSetting": {
     "borderRadius": "라운딩",
@@ -286,11 +291,7 @@
     "createTitle": "탭 생성",
     "create": "생성하기",
     "delete": "삭제",
-    "deleteConfirm": "{{name}} 탭을 제거 하시겠습니까?",
-    "search": {
-      "placeholder": "커스텀 탭 검색",
-      "empty": "결과 없음"
-    },
+    "deleteConfirm": "{{name}} 탭을 삭제하시겠습니까?",
     "name": {
       "placeholder": "예: 내 커스텀",
       "required": "이름을 입력하세요",
@@ -342,9 +343,13 @@
     "sendToBack": "맨 아래로",
     "bringForward": "앞으로",
     "sendBackward": "뒤로",
-    "tabCssSetting": "현재 탭 CSS 설정",
-    "tabNoteSetting": "현재 탭 트랙 설정",
-    "resetOverlayPosition": "오버레이 위치 초기화",
+    "plugins": "플러그인",
+    "currentTabGroup": "현재 탭 설정",
+    "resetPositionGroup": "위치 초기화",
+    "cssSetting": "CSS",
+    "trackSetting": "트랙",
+    "overlayTarget": "오버레이",
+    "panelTarget": "분리 패널",
     "addKey": "키 추가",
     "addStat": "통계 추가",
     "addGraph": "그래프 추가",
@@ -615,12 +620,14 @@
     "edit": "편집",
     "rename": "이름 변경",
     "delete": "삭제",
-    "enabledToggle": "활성화",
+    "enable": "활성화",
+    "disable": "비활성화",
     "saveFailed": "폰트 설정 저장에 실패했습니다.",
     "editorLoadFailed": "웹폰트 편집기를 불러오지 못했습니다. 다시 시도해 주세요.",
     "editTargetMissing": "편집할 웹폰트를 찾지 못했습니다. 이미 삭제되었을 수 있습니다.",
-    "deleteConfirm": "폰트를 삭제하시겠습니까? 이 폰트를 사용 중인 요소는 기본 폰트로 표시됩니다.",
-    "add": "폰트 추가"
+    "deleteConfirm": "폰트를 삭제하시겠습니까?\n사용 중인 요소는 기본 폰트로 표시됩니다.",
+    "add": "폰트 추가",
+    "invalidFont": "폰트 파일을 해석할 수 없습니다."
   },
   "soundPicker": {
     "searchPlaceholder": "검색",
@@ -637,7 +644,7 @@
     "deleteFailed": "사운드 삭제 실패",
     "renameFailed": "사운드 이름 변경 실패",
     "hideFailed": "사운드 숨김 변경 실패",
-    "deleteConfirm": "사운드를 삭제하시겠습니까? 파일이 삭제되고 이 사운드를 사용하는 모든 요소에서 해제됩니다.",
+    "deleteConfirm": "사운드를 삭제하시겠습니까?\n사용 중인 모든 요소에서 해제됩니다.",
     "add": "사운드 추가"
   },
   "soundTrimModal": {

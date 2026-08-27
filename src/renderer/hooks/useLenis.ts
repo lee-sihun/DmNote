@@ -37,6 +37,7 @@ const easeOutExpo = (t: number): number => {
 
 // 여러 keepalive 스크롤 영역이 각자 영구 RAF를 만들지 않도록 전역 1개 루프로 병합
 const activeLenisInstances = new Set<Lenis>();
+const lenisByWrapper = new WeakMap<HTMLElement, Lenis>();
 let sharedRafId: number | null = null;
 
 const runSharedLenisFrame = (time: number) => {
@@ -60,6 +61,17 @@ const unregisterLenisInstance = (instance: Lenis) => {
     cancelAnimationFrame(sharedRafId);
     sharedRafId = null;
   }
+};
+
+// 문서 간 DOM 이동 뒤 브라우저 스크롤과 Lenis 목표점을 함께 맞춘다
+export const restoreLenisScroll = (wrapper: HTMLElement, top: number) => {
+  const instance = lenisByWrapper.get(wrapper);
+  if (!instance) {
+    wrapper.scrollTop = top;
+    return;
+  }
+  instance.resize();
+  instance.scrollTo(top, { immediate: true, force: true });
 };
 
 /**
@@ -112,12 +124,16 @@ export const useLenis = (options: UseLenisOptions = {}) => {
     });
 
     lenisRef.current = lenis;
+    lenisByWrapper.set(wrapper, lenis);
 
     registerLenisInstance(lenis);
 
     // 클린업
     return () => {
       unregisterLenisInstance(lenis);
+      if (lenisByWrapper.get(wrapper) === lenis) {
+        lenisByWrapper.delete(wrapper);
+      }
       lenis.destroy();
       lenisRef.current = null;
     };

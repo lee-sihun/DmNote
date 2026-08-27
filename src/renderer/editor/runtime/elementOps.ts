@@ -72,11 +72,14 @@ import type { KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import {
-  inheritedPaintMaterialization,
-  paintPropertyFields,
-} from '@src/types/color';
+import { paintPropertyFields, projectPaintDescriptor } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
+import {
+  applyImageTransformLeaf,
+  type ImageMode,
+  type ImageTransform,
+  type ImageTransformLeafPatch,
+} from '@src/types/key/imageLayer';
 import {
   isNotePaintPropertyPatchV1,
   projectNotePaintPatch,
@@ -693,9 +696,13 @@ const elementPropertyIntents = (
     NativeElementType,
     Map<string, Record<string, unknown>>
   >();
-  // 굵기 변경은 백엔드와 같은 암묵 Bold 고정을 함께 투영한다
+  // 굵기 변경은 백엔드와 같은 암묵 Bold 고정을, 이미지 변환 leaf는 현재 변환에
+  // 적용한 결과를 투영한다 (둘 다 현재 위치가 필요)
+  const isImageTransformPatch =
+    patch.property === 'idleImageTransform' ||
+    patch.property === 'activeImageTransform';
   const document =
-    patch.property === 'fontWeight'
+    patch.property === 'fontWeight' || isImageTransformPatch
       ? (captureEditorDocument() as unknown as Record<string, unknown> | null)
       : null;
   for (const { elementType, id } of targets) {
@@ -709,6 +716,12 @@ const elementPropertyIntents = (
       if (current && current.fontBold == null) {
         intent.fontBold = implicitElementFontBold(current.fontWeight);
       }
+    } else if (isImageTransformPatch && patch.value !== null) {
+      const current = findCurrentPosition(document, elementType, id);
+      intent[patch.property] = applyImageTransformLeaf(
+        current?.[patch.property] as ImageTransform | undefined,
+        patch.value,
+      );
     }
     byId.set(id, intent);
     intents.set(elementType, byId);
@@ -1125,7 +1138,7 @@ export const patchGraphTypesByIds = (
 export const patchGraphColorsByIds = (
   ids: readonly string[],
   graphColor: string,
-  options: { preflight?: () => void } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> =>
   patchElementPropertyByTargets(
     idTargets('graph', ids),
@@ -1814,6 +1827,34 @@ export const patchActiveImageFitById = (
     options,
   );
 
+export const patchImageModeById = (
+  id: string,
+  imageMode: ImageMode,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchElementPropertyById(
+    'key',
+    id,
+    { property: 'imageMode', value: imageMode },
+    options,
+  );
+
+// null이면 해당 상태의 변환을 identity로 되돌린다
+export const patchImageTransformById = (
+  id: string,
+  state: 'idle' | 'active',
+  patch: ImageTransformLeafPatch | null,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchElementPropertyById(
+    'key',
+    id,
+    state === 'idle'
+      ? { property: 'idleImageTransform', value: patch }
+      : { property: 'activeImageTransform', value: patch },
+    options,
+  );
+
 export const patchKnobPropertiesByIds = (
   ids: readonly string[],
   patch: EditorKnobRuntimePropertyPatchV1,
@@ -1853,17 +1894,6 @@ const paintPropertyIntents = (
   const document = captureEditorDocument();
   const fieldName = patch.property;
   const descriptor = patch.value;
-  const {
-    active,
-    surface,
-    colorField,
-    gradientField,
-    activeColorField,
-    activeGradientField,
-  } = paintPropertyFields(fieldName);
-  // 물질화 대상 - active 쌍을 가진 요소 (font는 키만)
-  const materializeTypes: readonly NativeElementType[] =
-    surface === 'font' ? ['key'] : ['key', 'knob'];
   const intents = new Map<
     NativeElementType,
     Map<string, Record<string, unknown>>
@@ -1883,36 +1913,12 @@ const paintPropertyIntents = (
       | (Record<string, unknown> & { id: string })
       | undefined;
     if (!current) continue;
-    const next: Record<string, unknown> = {
-      [colorField]: descriptor.color,
-      [gradientField]: descriptor.gradient ?? undefined,
-    };
-    if (!active && materializeTypes.includes(elementType)) {
-      const inherited = inheritedPaintMaterialization(
-        {
-          color:
-            typeof current[colorField] === 'string'
-              ? (current[colorField] as string)
-              : undefined,
-          gradient: current[gradientField] as never,
-        },
-        {
-          color:
-            typeof current[activeColorField] === 'string'
-              ? (current[activeColorField] as string)
-              : undefined,
-          gradient: current[activeGradientField] as never,
-        },
-      );
-      if (inherited) {
-        if (inherited.color != null) {
-          next[activeColorField] = inherited.color;
-        }
-        if (inherited.gradient) {
-          next[activeGradientField] = inherited.gradient;
-        }
-      }
-    }
+    const next = projectPaintDescriptor(
+      current,
+      elementType,
+      fieldName,
+      descriptor,
+    );
     const byId =
       intents.get(elementType) ?? new Map<string, Record<string, unknown>>();
     byId.set(id, next);
@@ -1924,7 +1930,7 @@ const paintPropertyIntents = (
 export const patchPaintByTargets = (
   targets: readonly PaintTarget[],
   patch: EditorPaintPropertyPatchV1,
-  options: { preflight?: () => void; gestureId?: string } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> => {
   const { active, surface } = paintPropertyFields(patch.property);
   // 표면별 허용 타깃 - font는 라벨 렌더러가 있는 키·스탯(active는 키만)
@@ -1957,7 +1963,7 @@ export const patchPaintByTargets = (
       patch: structuredClone(patch),
     })),
     {
-      gestureId: options.gestureId,
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
       preflight: options.preflight,
       onEnrolled: () => {
         enrolled = true;
@@ -1977,7 +1983,7 @@ export const patchPaintById = (
   elementType: NativeElementType,
   id: string,
   patch: EditorPaintPropertyPatchV1,
-  options: { preflight?: () => void; gestureId?: string } = {},
+  options: PropertyCommitOptions = {},
 ): Promise<boolean> =>
   patchPaintByTargets([{ elementType, id }], patch, options);
 
@@ -2107,7 +2113,7 @@ const shadowPropertyIntents = (
 export const patchShadowByTargets = (
   targets: readonly ShadowTarget[],
   patch: EditorShadowPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (
     !isEditorShadowPropertyPatchV1(patch) ||
@@ -2135,6 +2141,7 @@ export const patchShadowByTargets = (
       patch: structuredClone(patch),
     })),
     {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
       preflight: options.preflight,
       onEnrolled: () => {
         enrolled = true;
@@ -2154,7 +2161,7 @@ export const patchShadowById = (
   elementType: 'key' | 'stat' | 'knob',
   id: string,
   patch: EditorShadowPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> =>
   patchShadowByTargets([{ elementType, id }], patch, options);
 
@@ -2262,7 +2269,7 @@ const invalidNoteStylePatch = (
   (patch.property === 'noteBorderRadius' &&
     (hasNonKeyTarget ||
       !Number.isFinite(patch.value) ||
-      patch.value < 1 ||
+      patch.value < 0 ||
       patch.value > 100));
 
 export const patchStylePropertyById = (

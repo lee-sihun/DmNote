@@ -41,6 +41,8 @@ export interface GradientEditSession {
   selectStop: (index: number) => void;
   /** 스펙 적용 - commit=false는 프리뷰(피커 동기), true는 확정 커밋 */
   apply: (spec: GradientSpec, commit: boolean) => void;
+  /** 드래그 취소, 로컬 초안과 외부 프리뷰 제스처를 함께 폐기 */
+  cancel?: () => void;
 }
 
 export interface GradientAnchorBounds {

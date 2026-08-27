@@ -138,7 +138,7 @@ const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
         x2="17"
         y2="13.5"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.2"
         strokeLinecap="round"
       />
     </svg>

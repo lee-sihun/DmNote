@@ -184,7 +184,7 @@ const Modal = ({
       // 닫히는 중엔 시각 잔상만 남으므로 포커스·스크린리더 대상에서 뺀다
       inert={closing}
       tabIndex={-1}
-      className="fixed top-[30px] bottom-[60px] left-0 right-0 flex items-center justify-center z-50"
+      className="fixed top-[30px] bottom-[60px] left-0 right-0 flex items-center justify-center z-[var(--z-chrome-modal)]"
       onPointerDown={handleBackdropPointerDown}
       onClick={handleBackdropClick}
       onWheel={handleWheel}

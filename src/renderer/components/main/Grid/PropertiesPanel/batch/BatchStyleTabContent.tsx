@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
 import { paintDescriptor, resolveStatePair } from '@src/types/color';
+import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
 import {
   PropertyRow,
   NumberInput,
@@ -29,6 +30,10 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import {
+  elementImageReplacesSurface,
+  resolveElementBorder,
+} from '@utils/core/elementBorder';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
@@ -49,6 +54,7 @@ import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
 import type { BatchElementPropertyUpdate } from '../types';
@@ -79,8 +85,9 @@ interface BatchStyleTabContentProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onFontColorPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onFontColorCommit?: (patch: EditorPaintPropertyPatchV1) => void;
@@ -92,6 +99,8 @@ interface BatchStyleTabContentProps {
   // 선택에 키·노브가 없으면(통계뿐) 그림자 대기만 편집
   shadowActiveState?: boolean;
   shadowKind?: 'key' | 'knob';
+  /** 이미지가 기본 립을 억제하는 요소인지 - 키·통계만 (그래프·노브 렌더는 억제하지 않는다) */
+  imageSuppressesDefaultBorder?: boolean;
   afterSizeContent?: React.ReactNode;
   // getMixedValue 함수
   getMixedValue: <T>(
@@ -155,6 +164,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
   onFontColorPreview,
   onFontColorCommit,
@@ -163,6 +173,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   showShadowControls = true,
   shadowActiveState = true,
   shadowKind = 'key',
+  imageSuppressesDefaultBorder = true,
   afterSizeContent,
   getMixedValue,
   getSelectedKeysData,
@@ -239,14 +250,30 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         },
       );
     }
-    return resolveStatePair(
-      active,
-      { color: position.borderColor, gradient: position.borderGradient },
-      {
-        color: position.activeBorderColor,
-        gradient: position.activeBorderGradient,
-      },
-    );
+    // 테두리는 미지정 시 앱 기본 립이 들어가므로 렌더와 같은 해석기로 읽는다
+    const border = resolveElementBorder(position, active, {
+      suppressDefault:
+        imageSuppressesDefaultBorder &&
+        elementImageReplacesSurface(position, active),
+    });
+    return { color: border.color, gradient: border.gradient };
+  };
+
+  // 피커 칸은 hex와 알파를 따로 판단한다. 색이 같고 알파만 갈리면 hex는 공통값이다
+  const mixedColorParts = (
+    getColor: (position: KeyPosition) => string | undefined,
+    fallback: string,
+  ) => {
+    const mixedFn =
+      effectiveColorState === 'active' ? activeMixedValue : getMixedValue;
+    return {
+      hexMixed: mixedFn((pos) => toRgbHexColor(getColor(pos) ?? fallback), '')
+        .isMixed,
+      alphaMixed: mixedFn(
+        (pos) => parseAlphaPercent(getColor(pos) ?? fallback),
+        100,
+      ).isMixed,
+    };
   };
 
   const fontColorFor = (position: KeyPosition, active: boolean) =>
@@ -371,7 +398,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             prefix="W"
             width={AXIS_FIELD_WIDTH}
             min={10}
-            max={500}
+            max={9999}
             allowDecimal
             decimalScale={1}
             isMixed={getMixedValue((pos) => pos.width, 60).isMixed}
@@ -384,7 +411,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             prefix="H"
             width={AXIS_FIELD_WIDTH}
             min={10}
-            max={500}
+            max={9999}
             allowDecimal
             decimalScale={1}
             isMixed={getMixedValue((pos) => pos.height, 60).isMixed}
@@ -414,6 +441,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           ) : null}
           <ColorInput
             colorId={`batch-background:${batchSelectionKey}`}
+            {...mixedColorParts(
+              (pos) =>
+                colorPairFor(
+                  pos,
+                  'backgroundColor',
+                  effectiveColorState === 'active',
+                ).color,
+              effectiveColorState === 'active'
+                ? DEFAULT_ELEMENT_ACTIVE_BG
+                : DEFAULT_ELEMENT_BG,
+            )}
             value={
               getMixedValue(
                 (pos) => colorPairFor(pos, 'backgroundColor', false).color,
@@ -432,6 +470,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onChange={() => {}}
             onChangeComplete={() => {}}
             onActiveChangeComplete={() => {}}
+            onCancel={() => editGestureController.cancel()}
             panelElement={panelElement}
             canvasAnchor={{ kind: 'batch' }}
             gradientValue={
@@ -447,6 +486,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   colorPairFor(pos, 'backgroundColor', true).gradient ?? null,
                 null,
               ).value
+            }
+            onModePreview={(state, modeValue) =>
+              onPaintPreview?.(
+                state === 'active'
+                  ? {
+                      property: 'activeBackgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    }
+                  : {
+                      property: 'backgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    },
+              )
             }
             onModeCommit={(state, modeValue) =>
               onPaintCommit?.(
@@ -481,6 +533,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           ) : null}
           <ColorInput
             colorId={`batch-border:${batchSelectionKey}`}
+            {...mixedColorParts(
+              (pos) =>
+                colorPairFor(
+                  pos,
+                  'borderColor',
+                  effectiveColorState === 'active',
+                ).color,
+              effectiveColorState === 'active'
+                ? DEFAULT_ELEMENT_ACTIVE_BORDER
+                : DEFAULT_ELEMENT_BORDER,
+            )}
             gradientSurface="border"
             value={
               getMixedValue(
@@ -500,6 +563,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onChange={() => {}}
             onChangeComplete={() => {}}
             onActiveChangeComplete={() => {}}
+            onCancel={() => editGestureController.cancel()}
             panelElement={panelElement}
             canvasAnchor={{ kind: 'batch' }}
             gradientValue={
@@ -515,6 +579,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   colorPairFor(pos, 'borderColor', true).gradient ?? null,
                 null,
               ).value
+            }
+            onModePreview={(state, modeValue) =>
+              onPaintPreview?.(
+                state === 'active'
+                  ? {
+                      property: 'activeBorderPaint',
+                      value: paintDescriptor(modeValue),
+                    }
+                  : {
+                      property: 'borderPaint',
+                      value: paintDescriptor(modeValue),
+                    },
+              )
             }
             onModeCommit={(state, modeValue) =>
               onPaintCommit?.(
@@ -627,6 +704,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           showActiveState={shadowActiveState}
           previewAnchor={{ kind: 'batch' }}
           onChange={handleShadowChange}
+          onPreview={(state, leaf) =>
+            onStylePropertyPreview?.({
+              property: state === 'active' ? 'activeShadow' : 'shadow',
+              value: leaf,
+            })
+          }
+          onPreviewCancel={() => editGestureController.cancel()}
           onEnabledChange={handleShadowEnabledChange}
           panelElement={panelElement}
           t={t}
@@ -761,6 +845,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 <ColorInput
                   colorId={`batch-font:${batchSelectionKey}`}
                   gradientSurface="font"
+                  {...mixedColorParts(
+                    (pos) =>
+                      fontColorFor(pos, effectiveColorState === 'active'),
+                    effectiveColorState === 'active'
+                      ? DEFAULT_ELEMENT_ACTIVE_FONT
+                      : DEFAULT_ELEMENT_FONT,
+                  )}
                   value={
                     getMixedValue(
                       (pos) => fontColorFor(pos, false),
@@ -776,21 +867,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   showStateTabs={shadowActiveState}
                   stateMode={effectiveColorState}
                   onStateModeChange={setColorState}
-                  onChange={(color) =>
-                    onFontColorPreview?.(
-                      effectiveColorState === 'active'
-                        ? {
-                            property: 'activeFontPaint',
-                            value: { color, gradient: null },
-                          }
-                        : {
-                            property: 'fontPaint',
-                            value: { color, gradient: null },
-                          },
-                    )
-                  }
+                  onChange={() => {}}
                   onChangeComplete={() => {}}
                   onActiveChangeComplete={() => {}}
+                  onCancel={() => editGestureController.cancel()}
                   panelElement={panelElement}
                   canvasAnchor={{ kind: 'batch' }}
                   gradientValue={
@@ -806,6 +886,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                         colorPairFor(pos, 'fontColor', true).gradient ?? null,
                       null,
                     ).value
+                  }
+                  onModePreview={(state, modeValue) =>
+                    onFontColorPreview?.(
+                      state === 'active'
+                        ? {
+                            property: 'activeFontPaint',
+                            value: paintDescriptor(modeValue),
+                          }
+                        : {
+                            property: 'fontPaint',
+                            value: paintDescriptor(modeValue),
+                          },
+                    )
                   }
                   onModeCommit={(state, modeValue) =>
                     onFontColorCommit?.(

@@ -14,7 +14,7 @@
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
   [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
-  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
+  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 </div>
 
 https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
@@ -125,7 +125,7 @@ To build without ASIO (no LLVM required — handy for contributing), use `npm ru
 ## � Notes
 
 - **This program is free to use for streaming or gameplay video production.**
-- [macOS installation and permission setup guide](https://github.com/DmNote-App/DmNote/blob/master/docs/mac_guide_en.md)
+- [macOS installation and permission setup guide](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_en.md)
 - Program default settings are saved in the `%appdata%/com.dmnote.desktop` folder.
 - If you don't need to check the overlay in real-time and are using it for streaming or gameplay video production, **OBS Mode** is recommended by default. This can reduce the negative impact on game frame rates compared to the regular overlay mode.
 - If your gaming PC and streaming/recording PC are separate, we recommend running DM Note on the gaming PC and connecting via OBS browser source on the streaming/recording PC. This can almost completely resolve game frame drop issues caused by the key viewer.
@@ -167,7 +167,7 @@ We welcome your contributions! Please check the [Contributing Guide](../CONTRIBU
 
 ## 📄 License
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 
 ## ❤️ Special Thanks!
 

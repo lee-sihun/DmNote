@@ -29,9 +29,11 @@ import { useFocusRestore } from '@hooks/ui/useFocusRestore';
 import { useDeferredContentMount } from '@hooks/ui/useDeferredContentMount';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import {
+  hasModalLayerAbove,
   isInsideHigherPopupLayer,
   isTopmostPopupLayer,
   registerPopupLayer,
+  subscribeModalLayerActivity,
 } from './popupLayer';
 import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import { usePanelHost } from '@contexts/PanelHostContext';
@@ -67,6 +69,9 @@ interface FloatingPopupBaseProps {
   initialFocus?: 'first' | 'surface';
   /** 팝업 shell을 먼저 표시하고 무거운 children mount를 첫 paint 뒤로 분리 */
   contentMountStrategy?: CommitStrategy;
+  /** false면 모달이 덮여도 닫지 않는다 - 자기 흐름에서 알림 모달을 띄우는 피커 표면용.
+   *  모달 아래(z 50 이하) 표면은 백드롭에 덮여 조작이 막히므로 잠금 목적과 충돌하지 않는다 */
+  closeOnModalCover?: boolean;
 }
 
 interface FloatingDialogPopupProps extends FloatingPopupBaseProps {
@@ -262,6 +267,7 @@ const FloatingPopup = ({
   focusOriginRef,
   initialFocus,
   contentMountStrategy = 'sync',
+  closeOnModalCover = true,
 }: FloatingPopupProps) => {
   // 앵커가 사는 창 기준으로 배치·포털·바깥 클릭을 처리한다 (분리 패널 창 지원)
   const { window: ownerWindow, document: ownerDocument } = usePanelHost();
@@ -354,6 +360,18 @@ const FloatingPopup = ({
     ownerDocument.addEventListener('keydown', onKey);
     return () => ownerDocument.removeEventListener('keydown', onKey);
   }, [open, onClose, ownerDocument]);
+
+  // 모달이 덮이면 body 포털 표면은 inert 루트 밖이라 살아남는다 — 스스로 닫는다.
+  // 스택 순서 판정이라 모달 안에서 연 팝업(모달보다 뒤에 등록)은 닫지 않는다.
+  // 서브메뉴는 부모가 closing이 되면 스스로 사라지므로 별도 처리 없음
+  useEffect(() => {
+    if (!open || !closeOnModalCover) return;
+    const closeIfCovered = () => {
+      if (hasModalLayerAbove(floatingRef.current)) onClose();
+    };
+    closeIfCovered();
+    return subscribeModalLayerActivity(closeIfCovered);
+  }, [open, onClose, closeOnModalCover]);
 
   useEffect(() => {
     if (open && autoClose) {

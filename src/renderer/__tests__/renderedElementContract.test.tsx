@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // 렌더 DOM 계약 — data 속성과 --dmn-* fallback 변수가 실제 컴포넌트 루트에 실리는지 고정
 // (elementShadowContract 등 기존 계약 테스트는 유틸 반환값·CSS 텍스트만 검증)
+import { gradientToCss } from '@src/types/color';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -20,7 +21,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW,
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_BORDER_GRADIENT,
   DEFAULT_ELEMENT_SHADOW,
 } from '@utils/core/elementDefaults';
 import {
@@ -260,12 +261,20 @@ describe('렌더 DOM 계약', () => {
       expect(el!.style.getPropertyValue('--dmn-knob-radius-default')).toBe(
         '50%',
       );
+      // 미지정 테두리는 기본 글래스 립 - 실보더 대신 1px 링 자식과 패딩 예약
       expect(el!.style.getPropertyValue('--dmn-knob-border-default')).toBe(
         'none',
       );
       expect(el!.style.getPropertyValue('--dmn-knob-padding-default')).toBe(
-        '0px',
+        '1px',
       );
+      const knobRing = el!.querySelector<HTMLElement>(
+        '[data-gradient-border-ring="true"]',
+      );
+      expect(knobRing).not.toBeNull();
+      expect(
+        knobRing!.style.getPropertyValue('--dmn-border-gradient-image-default'),
+      ).toBe(gradientToCss(DEFAULT_ELEMENT_BORDER_GRADIENT));
       expect(el!.style.getPropertyValue('--dmn-knob-indicator-default')).toBe(
         DEFAULT_ELEMENT_FONT,
       );
@@ -298,15 +307,48 @@ describe('렌더 DOM 계약', () => {
       expect(el!.style.getPropertyValue('--dmn-graph-bg-default')).toBe(
         DEFAULT_ELEMENT_BG,
       );
+      // 미지정 테두리는 기본 글래스 립 - 실보더 대신 1px 링 자식과 패딩 예약
       expect(el!.style.getPropertyValue('--dmn-graph-border-default')).toBe(
-        `1px solid ${DEFAULT_ELEMENT_HAIRLINE}`,
+        'none',
       );
       expect(el!.style.getPropertyValue('--dmn-graph-radius-default')).toBe(
         '4px',
       );
       expect(el!.style.getPropertyValue('--dmn-graph-padding-default')).toBe(
-        '0px',
+        '1px',
       );
+      const graphRing = el!.querySelector<HTMLElement>(
+        '[data-gradient-border-ring="true"]',
+      );
+      expect(graphRing).not.toBeNull();
+      expect(
+        graphRing!.style.getPropertyValue(
+          '--dmn-border-gradient-image-default',
+        ),
+      ).toBe(gradientToCss(DEFAULT_ELEMENT_BORDER_GRADIENT));
+    });
+
+    it('store가 null로 직렬화한 두께·반경도 미지정으로 읽어 기본 립을 낸다', () => {
+      host.innerHTML = renderToStaticMarkup(
+        <GraphPanel
+          history={[1, 2, 3]}
+          avg={2}
+          maxval={3}
+          uid="contract-null"
+          borderWidth={null as unknown as number}
+          borderRadius={null as unknown as number}
+        />,
+      );
+      const el = host.querySelector<HTMLElement>('[data-graph-element="true"]');
+      expect(el!.style.getPropertyValue('--dmn-graph-padding-default')).toBe(
+        '1px',
+      );
+      expect(el!.style.getPropertyValue('--dmn-graph-radius-default')).toBe(
+        '4px',
+      );
+      expect(
+        el!.querySelector('[data-gradient-border-ring="true"]'),
+      ).not.toBeNull();
     });
 
     it('메인 편집 그래프는 2D 이동 승격과 편집 상태를 독립 적용한다', () => {

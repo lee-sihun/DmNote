@@ -15,21 +15,26 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BG,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_ACTIVE_FONT,
-  DEFAULT_ELEMENT_BORDER,
-  DEFAULT_ELEMENT_ACTIVE_BORDER,
-  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
   DEFAULT_ELEMENT_FONT_BOLD,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
 import {
   elementShadowToCss,
   resolveElementShadow,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
 import { resolveEffectiveFontWeight } from '@utils/core/fontWeights';
+import {
+  DEFAULT_IMAGE_MODE,
+  IDENTITY_IMAGE_TRANSFORM,
+  imageTransformToCss,
+  type ImageMode,
+  type ImageTransform,
+} from '@src/types/key/imageLayer';
 
 export interface KeyElementPosition {
   hidden?: boolean;
@@ -63,6 +68,9 @@ export interface KeyElementPosition {
   idleImageFit?: string;
   activeImageFit?: string;
   imageFit?: string;
+  imageMode?: ImageMode;
+  idleImageTransform?: ImageTransform;
+  activeImageTransform?: ImageTransform;
   useInlineStyles?: boolean;
   displayText?: string;
   fontWeight?: number;
@@ -78,6 +86,8 @@ interface KeyElementStylesInput {
   position: KeyElementPosition;
   active: boolean;
   label: string;
+  /** 디코드에 실패한 resolved src 집합 - 유실 이미지가 투명 키를 만들지 않게 렌더에서 제외 */
+  failedImageSrcs?: ReadonlySet<string>;
 }
 
 export interface KeyElementStyles {
@@ -96,6 +106,9 @@ export interface KeyElementStyles {
   activeImageSrc: string | null;
   currentImageSrc: string | null;
   hasCurrentImage: boolean;
+  /** 이미지가 있을 때의 레이어 모드 - replace면 표면·텍스트를 이미지가 대체 */
+  imageMode: ImageMode;
+  imageReplaces: boolean;
   isTransparent: boolean;
   labelText: string;
   useInline: boolean;
@@ -105,6 +118,7 @@ export function computeKeyElementStyles({
   position,
   active,
   label,
+  failedImageSrcs,
 }: KeyElementStylesInput): KeyElementStyles {
   const {
     dx,
@@ -160,12 +174,6 @@ export function computeKeyElementStyles({
     },
   );
   const stateBgPair = active ? activeBgPair : idleBgPair;
-  const borderPair = resolveStatePair(
-    active,
-    { color: borderColor, gradient: position.borderGradient },
-    { color: activeBorderColor, gradient: position.activeBorderGradient },
-  );
-  const stateBorderColor = borderPair.color;
   const fontPair = resolveStatePair(
     active,
     { color: fontColor, gradient: position.fontGradient },
@@ -174,9 +182,12 @@ export function computeKeyElementStyles({
   const stateFontColor = fontPair.color;
   const fontGradient = fontPair.gradient ?? null;
 
-  // 이미지 소스
-  const inactiveImageSrc = resolveImageSource(inactiveImage);
-  const activeImageSrc = resolveImageSource(activeImage);
+  // 이미지 소스. 실패한 src는 없는 것으로 - 배경·라벨·기본 립·섀도가 그대로 복귀하고
+  // 활성만 실패하면 대기 이미지로 자연 폴백된다
+  const dropFailed = (src: string | null): string | null =>
+    src && failedImageSrcs?.has(src) ? null : src;
+  const inactiveImageSrc = dropFailed(resolveImageSource(inactiveImage));
+  const activeImageSrc = dropFailed(resolveImageSource(activeImage));
 
   const isTransparent = active ? activeTransparent : idleTransparent;
 
@@ -187,9 +198,16 @@ export function computeKeyElementStyles({
   const effectiveImageFit = isUsingActiveImage
     ? activeImageFit || imageFit || 'cover'
     : idleImageFit || imageFit || 'cover';
+  const imageMode = position.imageMode ?? DEFAULT_IMAGE_MODE;
+  const imageReplaces = hasCurrentImage && imageMode === 'replace';
+  // active 이미지가 없으면 idle 이미지와 함께 idle 변환을 그대로 쓴다
+  const imageTransform =
+    (isUsingActiveImage
+      ? position.activeImageTransform
+      : position.idleImageTransform) ?? IDENTITY_IMAGE_TRANSFORM;
 
-  // 기본 색상 — 이미지 키는 기본 배경 억제 (이미지가 표면 전부)
-  const rootHasImage = hasCurrentImage;
+  // 기본 색상 — replace 이미지 키는 기본 배경 억제 (이미지가 표면 전부)
+  const rootHasImage = imageReplaces;
   const rootBgPair = stateBgPair;
   const rootBackgroundColor = rootBgPair.color;
   const defaultBgColor = rootHasImage
@@ -197,9 +215,6 @@ export function computeKeyElementStyles({
     : active
     ? DEFAULT_ELEMENT_ACTIVE_BG
     : DEFAULT_ELEMENT_BG;
-  const defaultBorderColor = active
-    ? DEFAULT_ELEMENT_ACTIVE_BORDER
-    : DEFAULT_ELEMENT_BORDER;
   const defaultTextColor =
     active && !activeImageSrc
       ? DEFAULT_ELEMENT_ACTIVE_FONT
@@ -207,31 +222,43 @@ export function computeKeyElementStyles({
 
   // 그라데이션 모드 — 대표 단색은 칠하지 않음 (반투명 스톱 이중 합성 방지)
   const bgGradient = rootHasImage ? null : rootBgPair.gradient ?? null;
-  const borderGradientSpec = borderPair.gradient ?? null;
 
-  // 보더 판정 — 명시값 우선, 아무 값도 없으면 기본 1px 헤어라인이 표면 분리
-  // 담당(패널 표시값과 일치). 두께 0은 명시적 무보더, 이미지 키는 헤어라인 제외
-  const hasExplicitBorder =
-    borderWidth != null ? borderWidth > 0 : stateBorderColor != null;
-  const showDefaultHairline =
-    !hasExplicitBorder && borderWidth == null && !hasCurrentImage;
-  const explicitBorder = `${
-    borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH
-  }px solid ${stateBorderColor || defaultBorderColor}`;
+  // 보더 판정은 공용 해석기 - 패널 표시값과 같은 규칙. 이미지 키는 기본 립 제외
+  const borderFields = {
+    borderColor,
+    activeBorderColor,
+    borderGradient: position.borderGradient,
+    activeBorderGradient: position.activeBorderGradient,
+    borderWidth,
+  };
+  const resolvedElementBorder = resolveElementBorder(borderFields, active, {
+    suppressDefault: imageReplaces,
+  });
+  const borderGradientSpec = resolvedElementBorder.gradient;
+  const gradientRingWidth = resolvedElementBorder.width;
+  const showBorderRing =
+    borderGradientSpec != null && resolvedElementBorder.width > 0;
   const resolvedBorder =
-    hasExplicitBorder || showDefaultHairline ? explicitBorder : 'none';
-  // 그라데이션 보더는 명시 보더와 같은 두께 규칙 — width 0은 명시적 비활성
-  const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
-  const ringEnabled = borderWidth != null ? borderWidth > 0 : true;
-  const showBorderRing = borderGradientSpec != null && ringEnabled;
-  // 한쪽 상태만 링이어도 반대 상태에 같은 패딩을 예약 — 눌림 시 콘텐츠 박스
-  // 이동 방지. 실보더·헤어라인 상태는 보더가 이미 같은 인셋을 만들므로 제외
-  const pairHasRing =
-    ringEnabled &&
-    (position.borderGradient != null || position.activeBorderGradient != null);
+    !showBorderRing && resolvedElementBorder.width > 0
+      ? `${resolvedElementBorder.width}px solid ${resolvedElementBorder.color}`
+      : 'none';
+  // 반대 상태만 링이고 이 상태는 보더가 없으면 같은 패딩을 예약 - 눌림 시
+  // 콘텐츠 박스 이동 방지. 보더가 있는 상태는 이미 같은 인셋을 만든다
+  // 억제 판정도 이 상태와 같은 규칙(replace만) - overlay에서 반대 상태가 립을
+  // 그리는데 여기서 null이 나오면 패딩 예약이 빠져 눌림 시 콘텐츠가 1px 튄다
+  const otherStateBorder = resolveElementBorder(borderFields, !active, {
+    suppressDefault:
+      imageMode === 'replace' &&
+      Boolean(active ? inactiveImageSrc : activeImageSrc || inactiveImageSrc),
+  });
   const reserveRingPadding =
     showBorderRing ||
-    (pairHasRing && !hasExplicitBorder && !showDefaultHairline);
+    (resolvedElementBorder.width <= 0 &&
+      otherStateBorder.gradient != null &&
+      otherStateBorder.width > 0);
+  const reservedRingWidth = showBorderRing
+    ? gradientRingWidth
+    : otherStateBorder.width;
 
   const textDecorations: string[] = [];
   if (fontUnderline) textDecorations.push('underline');
@@ -258,7 +285,7 @@ export function computeKeyElementStyles({
       activeShadow,
       defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
       defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-      suppressDefault: hasCurrentImage,
+      suppressDefault: imageReplaces,
     }),
   );
 
@@ -279,7 +306,7 @@ export function computeKeyElementStyles({
               ? `${borderRadius}px`
               : `${DEFAULT_ELEMENT_RADIUS}px`,
           border: showBorderRing ? 'none' : resolvedBorder,
-          ...(reserveRingPadding ? { padding: `${gradientRingWidth}px` } : {}),
+          ...(reserveRingPadding ? { padding: `${reservedRingWidth}px` } : {}),
           color: stateFontColor || defaultTextColor,
           fontSize: fontSize ? `${fontSize}px` : undefined,
           fontFamily: fontFamily ? resolvedFontFamily : undefined,
@@ -302,7 +329,7 @@ export function computeKeyElementStyles({
               ? `${borderRadius}px`
               : `${DEFAULT_ELEMENT_RADIUS}px`,
           '--dmn-key-padding-default': reserveRingPadding
-            ? `${gradientRingWidth}px`
+            ? `${reservedRingWidth}px`
             : '0px',
           '--dmn-key-text-color-default': stateFontColor || defaultTextColor,
           '--dmn-key-text-image-default': fontGradient
@@ -321,11 +348,17 @@ export function computeKeyElementStyles({
           '--dmn-key-text-decoration-default': resolvedTextDecoration,
           '--dmn-key-shadow-default': resolvedShadow,
         } as React.CSSProperties)),
-    overflow: 'hidden' as const,
+    // overflow는 전역 :where 기본값(replace hidden, overlay visible)에 맡긴다
     willChange: 'transform',
     backfaceVisibility: 'hidden' as const,
     transformStyle: 'preserve-3d' as const,
-    contain: 'layout style paint',
+    // overlay 이미지는 오버행할 수 있어 paint containment 제외. replace는 루트
+    // overflow:hidden이 이미 자르므로 유지 (이미지 프리셋 대부분이 replace)
+    contain: imageReplaces
+      ? 'layout style paint'
+      : hasCurrentImage
+      ? 'layout style'
+      : 'layout style paint',
     imageRendering: 'auto' as const,
     isolation: 'isolate' as const,
     boxSizing: 'border-box' as const,
@@ -334,19 +367,36 @@ export function computeKeyElementStyles({
   };
 
   const fallbackImageDimmed = active && !activeImageSrc && !!inactiveImageSrc;
+  // 레이어 배치·object-fit·변환·z는 전역 :where([data-key-image-layer]) 규칙이
+  // 소비한다. 인라인 우선 모드만 실제 선언으로 승격
+  const imageTransformCss = imageTransformToCss(imageTransform);
+  const imageLayerZ = imageReplaces ? 0 : 3;
   const createImageStyle = (
     objectFit: string,
     dimmed: boolean,
   ): React.CSSProperties => ({
-    width: '100%',
-    height: '100%',
-    objectFit: objectFit as React.CSSProperties['objectFit'],
-    display: 'block',
     pointerEvents: 'none' as const,
     userSelect: 'none' as const,
-    position: 'relative' as const,
-    zIndex: 0,
     filter: dimmed ? 'brightness(0.62)' : 'none',
+    ...(useInline
+      ? {
+          position: 'absolute' as const,
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box' as const,
+          padding: imageReplaces ? 'inherit' : 0,
+          ...(imageReplaces ? {} : { borderRadius: 'inherit' }),
+          display: 'block',
+          objectFit: objectFit as React.CSSProperties['objectFit'],
+          transform: imageTransformCss,
+          zIndex: imageLayerZ,
+        }
+      : ({
+          '--dmn-key-image-fit-default': objectFit,
+          '--dmn-key-image-transform-default': imageTransformCss,
+          '--dmn-key-image-z-default': String(imageLayerZ),
+        } as React.CSSProperties)),
   });
   const imageStyle = createImageStyle(effectiveImageFit, fallbackImageDimmed);
 
@@ -394,6 +444,9 @@ export function computeKeyElementStyles({
     showBorderRing && borderGradientSpec
       ? {
           ...gradientRingStyle(borderGradientSpec, gradientRingWidth),
+          // 링은 DOM상 img보다 앞이라 같은 z(0)면 뒤에 오는 replace 이미지가 덮는다.
+          // replace(0) 위·overlay(3) 아래 - GraphPanel의 순서와 동일
+          zIndex: 1,
           ...(useInline
             ? { background: gradientToCss(borderGradientSpec) }
             : {}),
@@ -412,6 +465,8 @@ export function computeKeyElementStyles({
     activeImageSrc,
     currentImageSrc,
     hasCurrentImage,
+    imageMode,
+    imageReplaces,
     isTransparent,
     labelText,
     useInline,

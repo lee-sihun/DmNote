@@ -283,6 +283,11 @@ describe('커스텀 CSS 우선순위 계약', () => {
       expect(docs).not.toContain('counter-stroke');
       expect(docs).not.toContain('key-text-stroke');
       expect(docs).toContain('--key-text-image');
+      // 기본 링은 자식 요소라 루트 border 규칙으로는 안 지워진다는 안내
+      expect(docs).toContain('border: none !important');
+      expect(docs).toContain('[data-gradient-border-ring]');
+      expect(docs).toContain('--graph-border');
+      expect(docs).toContain('--knob-border');
     }
   });
 });

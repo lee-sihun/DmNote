@@ -1,10 +1,10 @@
 use serde::Deserialize;
-use tauri::{AppHandle, State};
+use tauri::AppHandle;
 
 use crate::{
+    commands::run_blocking,
     errors::CmdResult,
     models::{BootstrapOverlayState, OverlayBounds},
-    state::AppState,
 };
 
 #[derive(Debug, Deserialize)]
@@ -23,37 +23,39 @@ pub struct OverlayResizeArgs {
 }
 
 #[tauri::command]
-pub fn overlay_get(state: State<'_, AppState>) -> CmdResult<BootstrapOverlayState> {
-    Ok(state.overlay_status())
+pub async fn overlay_get(app: AppHandle) -> CmdResult<BootstrapOverlayState> {
+    run_blocking(app, |_, state| Ok(state.overlay_status())).await
 }
 
 #[tauri::command]
-pub async fn overlay_set_visible(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    visible: bool,
-) -> CmdResult<()> {
-    // OBS 모드 활성화 중에는 오버레이 수동 토글 차단
-    if state.is_obs_mode_active() {
-        return Err(crate::errors::CommandError::msg(
-            "OBS 모드 활성화 중에는 오버레이를 수동으로 전환할 수 없습니다",
-        ));
-    }
-    Ok(state.set_overlay_visibility(&app, visible)?)
+pub async fn overlay_set_visible(app: AppHandle, visible: bool) -> CmdResult<()> {
+    // store 쓰기(fsync)를 async 런타임 스레드에서 직접 하지 않는다 - overlay_set_lock과 동일
+    run_blocking(app, move |app, state| {
+        // OBS 모드 활성화 중에는 오버레이 수동 토글 차단
+        if state.is_obs_mode_active() {
+            return Err(crate::errors::CommandError::msg(
+                "OBS 모드 활성화 중에는 오버레이를 수동으로 전환할 수 없습니다",
+            ));
+        }
+        Ok(state.set_overlay_visibility(app, visible)?)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn overlay_set_lock(state: State<'_, AppState>, app: AppHandle, locked: bool) -> CmdResult<()> {
-    Ok(state.set_overlay_lock(&app, locked, true)?)
+pub async fn overlay_set_lock(app: AppHandle, locked: bool) -> CmdResult<()> {
+    run_blocking(app, move |app, state| {
+        Ok(state.set_overlay_lock(app, locked, true)?)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn overlay_set_anchor(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    anchor: String,
-) -> CmdResult<String> {
-    Ok(state.set_overlay_anchor(&app, &anchor)?)
+pub async fn overlay_set_anchor(app: AppHandle, anchor: String) -> CmdResult<String> {
+    run_blocking(app, move |app, state| {
+        Ok(state.set_overlay_anchor(app, &anchor)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -66,26 +68,25 @@ pub fn overlay_transition_fade(app: AppHandle, alpha: f64, duration_ms: u64) -> 
 }
 
 #[tauri::command]
-pub fn overlay_reset_position(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> CmdResult<OverlayBounds> {
-    Ok(state.reset_overlay_position(&app)?)
+pub async fn overlay_reset_position(app: AppHandle) -> CmdResult<OverlayBounds> {
+    run_blocking(app, |app, state| Ok(state.reset_overlay_position(app)?)).await
 }
 
 #[tauri::command]
-pub fn overlay_resize(
-    state: State<'_, AppState>,
+pub async fn overlay_resize(
     app: AppHandle,
     payload: OverlayResizeArgs,
 ) -> CmdResult<OverlayBounds> {
-    Ok(state.resize_overlay(
-        &app,
-        payload.width,
-        payload.height,
-        payload.anchor,
-        payload.content_top_offset,
-        payload.fixed_position_delta_x,
-        payload.fixed_position_delta_y,
-    )?)
+    run_blocking(app, move |app, state| {
+        Ok(state.resize_overlay(
+            app,
+            payload.width,
+            payload.height,
+            payload.anchor,
+            payload.content_top_offset,
+            payload.fixed_position_delta_x,
+            payload.fixed_position_delta_y,
+        )?)
+    })
+    .await
 }

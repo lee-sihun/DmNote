@@ -20,8 +20,8 @@ description: 컨텍스트 메뉴, Display Element, Dialog, Components API
 
 ```javascript
 const menuId = dmn.ui.contextMenu.addKeyMenuItem({
-  id: "copy-keycode",
-  label: "키 코드 복사",
+  id: 'copy-keycode',
+  label: '키 코드 복사',
   onClick: (context) => {
     navigator.clipboard.writeText(context.keyCode);
   },
@@ -30,22 +30,24 @@ const menuId = dmn.ui.contextMenu.addKeyMenuItem({
 
 **Context 객체:**
 
-| 속성       | 타입        | 설명                 |
-| ---------- | ----------- | -------------------- |
-| `keyCode`  | string      | canonical 슬롯 식별자 (예: "D", "LEFT CTRL+Z", "F\|NUMPAD 4") |
-| `id`       | string      | 요소 안정 ID (UUID). 재정렬·모드 전환에도 같은 키를 가리킵니다 |
+| 속성       | 타입        | 설명                                                                       |
+| ---------- | ----------- | -------------------------------------------------------------------------- |
+| `keyCode`  | string      | canonical 슬롯 식별자 (예: "D", "LEFT CTRL+Z", "F\|NUMPAD 4")              |
+| `id`       | string      | 요소 안정 ID (UUID). 재정렬·모드 전환에도 같은 키를 가리킵니다             |
 | `index`    | number      | 키 인덱스. deprecated: 현재 스냅샷에서만 유효하며 신원은 `id`를 사용하세요 |
-| `position` | KeyPosition | 키 위치 정보         |
-| `mode`     | string      | 현재 키 모드         |
+| `position` | KeyPosition | 키 위치 정보                                                               |
+| `mode`     | string      | 현재 키 모드                                                               |
 
 ### 그리드 메뉴 (addGridMenuItem)
 
 그리드 빈 공간을 우클릭할 때 표시되는 메뉴에 항목을 추가합니다.
+설치된 플러그인이 늘어도 메뉴가 길어지지 않도록, 여기 추가된 항목은 `플러그인` 서브메뉴 하나로 묶여 표시됩니다.
+자리는 등록 순서를 따르며 `position`은 적용되지 않습니다.
 
 ```javascript
 dmn.ui.contextMenu.addGridMenuItem({
-  id: "add-timer",
-  label: "타이머 추가",
+  id: 'add-timer',
+  label: '타이머 추가',
   onClick: (context) => {
     createTimer(context.position);
   },
@@ -65,7 +67,7 @@ dmn.ui.contextMenu.addGridMenuItem({
 {
   id: "my-menu",           // 플러그인 내 고유 ID
   label: "메뉴 항목",       // 표시 텍스트
-  position: "bottom",      // "top" | "bottom" (기본: bottom)
+  position: "bottom",      // "top" | "bottom" (기본: bottom, 키 메뉴 전용)
 
   // 조건부 표시
   visible: (context) => context.mode === "4key",
@@ -80,12 +82,14 @@ dmn.ui.contextMenu.addGridMenuItem({
 }
 ```
 
+`visible`과 `disabled`는 boolean 또는 context를 받는 함수입니다. 함수가 예외를 던지면 숨김/비활성으로 처리되고(나머지 메뉴는 그대로 표시), 함수가 아닌 값은 truthiness로 판정합니다 — `visible`에 `0`, `""`, `null`을 주면 항목이 숨겨지고, 같은 값들을 `disabled`에 주면 항목이 활성 상태로 남습니다.
+
 ### 메뉴 관리
 
 ```javascript
 // 메뉴 업데이트
 dmn.ui.contextMenu.updateMenuItem(menuId, {
-  label: "새로운 라벨",
+  label: '새로운 라벨',
   disabled: true,
 });
 
@@ -135,7 +139,7 @@ const panel = dmn.ui.displayElement.add({
             <span
               style="width: 4px; height: ${v}px; background: #86EFAC;"
             ></span>
-          `
+          `,
         )}
       </div>
     </div>
@@ -155,15 +159,15 @@ dmn.ui.displayElement.add({
 
   // 함수 직접 전달 (권장)
   onClick: async () => {
-    console.log("클릭됨!");
+    console.log('클릭됨!');
   },
 
   onPositionChange: async (pos) => {
-    await dmn.plugin.storage.set("position", pos);
+    await dmn.plugin.storage.set('position', pos);
   },
 
   onDelete: async () => {
-    console.log("삭제됨!");
+    console.log('삭제됨!');
   },
 });
 ```
@@ -194,7 +198,7 @@ dmn.ui.displayElement.add({
   html: `<div>→</div>`,
   position: { x: 0, y: 0 },
   anchor: {
-    keyCode: "D",
+    keyCode: 'D',
     offset: { x: 70, y: 0 },
   },
 });
@@ -242,10 +246,10 @@ dmn.plugin.registerCleanup(() => {
 간단한 알림을 표시합니다. 반환된 Promise는 사용자가 확인 버튼을 누르거나 다이얼로그가 닫힐 때 resolve됩니다.
 
 ```javascript
-await dmn.ui.dialog.alert("저장되었습니다!");
+await dmn.ui.dialog.alert('저장되었습니다!');
 // 사용자가 확인을 누른 뒤에 이어서 실행됨
 
-await dmn.ui.dialog.alert("작업 완료", { confirmText: "OK" });
+await dmn.ui.dialog.alert('작업 완료', { confirmText: 'OK' });
 ```
 
 ### confirm
@@ -255,16 +259,16 @@ await dmn.ui.dialog.alert("작업 완료", { confirmText: "OK" });
 옵션: `confirmText`(확인 버튼 문구), `cancelText`(취소 버튼 문구), `danger`(파괴적 작업용 — 확인 버튼이 위험 색상으로 표시)
 
 ```javascript
-const ok = await dmn.ui.dialog.confirm("진행하시겠습니까?");
+const ok = await dmn.ui.dialog.confirm('진행하시겠습니까?');
 if (ok) {
   // 확인 클릭
 }
 
 // 위험한 작업
-const confirmed = await dmn.ui.dialog.confirm("모든 데이터가 삭제됩니다.", {
+const confirmed = await dmn.ui.dialog.confirm('모든 데이터가 삭제됩니다.', {
   danger: true,
-  confirmText: "삭제",
-  cancelText: "유지",
+  confirmText: '삭제',
+  cancelText: '유지',
 });
 ```
 
@@ -276,30 +280,30 @@ const confirmed = await dmn.ui.dialog.confirm("모든 데이터가 삭제됩니�
 const formHtml = `
   <div class="flex flex-col gap-[12px]">
     ${dmn.ui.components.formRow(
-      "이름",
-      dmn.ui.components.input({ id: "name" })
+      '이름',
+      dmn.ui.components.input({ id: 'name' }),
     )}
     ${dmn.ui.components.formRow(
-      "테마",
+      '테마',
       dmn.ui.components.dropdown({
-        id: "theme",
+        id: 'theme',
         options: [
-          { label: "다크", value: "dark" },
-          { label: "라이트", value: "light" },
+          { label: '다크', value: 'dark' },
+          { label: '라이트', value: 'light' },
         ],
-      })
+      }),
     )}
   </div>
 `;
 
 const confirmed = await dmn.ui.dialog.custom(formHtml, {
-  confirmText: "저장",
+  confirmText: '저장',
   showCancel: true,
 });
 
 if (confirmed) {
-  const name = document.getElementById("name").value;
-  const theme = document.getElementById("theme").value;
+  const name = document.getElementById('name').value;
+  const theme = document.getElementById('theme').value;
 }
 ```
 
@@ -311,9 +315,9 @@ Dialog 내부에서 사용할 수 있는 UI 컴포넌트입니다.
 ### button
 
 ```javascript
-dmn.ui.components.button("저장", {
-  variant: "primary", // "primary" | "danger" | "secondary"
-  onClick: () => console.log("클릭"),
+dmn.ui.components.button('저장', {
+  variant: 'primary', // "primary" | "danger" | "secondary"
+  onClick: () => console.log('클릭'),
 });
 ```
 
@@ -322,8 +326,8 @@ dmn.ui.components.button("저장", {
 ```javascript
 dmn.ui.components.checkbox({
   checked: true,
-  id: "enabled",
-  onChange: (checked) => console.log("상태:", checked),
+  id: 'enabled',
+  onChange: (checked) => console.log('상태:', checked),
 });
 ```
 
@@ -331,13 +335,13 @@ dmn.ui.components.checkbox({
 
 ```javascript
 dmn.ui.components.input({
-  type: "number",
+  type: 'number',
   value: 50,
   min: 0,
   max: 100,
   width: 100,
-  id: "volume",
-  onChange: (value) => console.log("값:", value),
+  id: 'volume',
+  onChange: (value) => console.log('값:', value),
 });
 ```
 
@@ -346,12 +350,12 @@ dmn.ui.components.input({
 ```javascript
 dmn.ui.components.dropdown({
   options: [
-    { label: "다크", value: "dark" },
-    { label: "라이트", value: "light" },
+    { label: '다크', value: 'dark' },
+    { label: '라이트', value: 'light' },
   ],
-  selected: "dark",
-  id: "theme",
-  onChange: (value) => console.log("선택:", value),
+  selected: 'dark',
+  id: 'theme',
+  onChange: (value) => console.log('선택:', value),
 });
 ```
 
@@ -360,7 +364,7 @@ dmn.ui.components.dropdown({
 라벨과 컴포넌트를 수평으로 배치합니다.
 
 ```javascript
-dmn.ui.components.formRow("볼륨", volumeInput);
+dmn.ui.components.formRow('볼륨', volumeInput);
 ```
 
 ### panel
@@ -373,7 +377,7 @@ dmn.ui.components.formRow("볼륨", volumeInput);
 
 ```javascript
 const panelHtml = dmn.ui.components.panel(formHtml, {
-  title: "설정",
+  title: '설정',
   width: 400,
 });
 
@@ -389,16 +393,16 @@ dmn.ui.displayElement.add({
 
 ```javascript
 dmn.ui.pickColor({
-  initialColor: "#ff0000",
+  initialColor: '#ff0000',
   onColorChange: (color) => {
-    console.log("색상 변경 중:", color);
+    console.log('색상 변경 중:', color);
   },
   onColorChangeComplete: (color) => {
-    console.log("색상 선택 완료:", color);
+    console.log('색상 선택 완료:', color);
   },
   // 선택적 옵션
   position: { x: 100, y: 100 }, // 직접 위치 지정
-  referenceElement: document.getElementById("my-button"), // 요소 기준 위치
+  referenceElement: document.getElementById('my-button'), // 요소 기준 위치
 });
 ```
 
@@ -419,11 +423,11 @@ dmn.ui.pickColor({
 ```javascript
 // @id settings-panel
 
-if (dmn.window.type !== "main") return;
+if (dmn.window.type !== 'main') return;
 
 let settings = {
   enabled: true,
-  theme: "dark",
+  theme: 'dark',
   volume: 50,
 };
 
@@ -433,59 +437,59 @@ async function showSettings() {
   const formHtml = `
     <div class="flex flex-col gap-[12px]">
       ${dmn.ui.components.formRow(
-        "활성화",
+        '활성화',
         dmn.ui.components.checkbox({
           checked: settings.enabled,
           onChange: (v) => (tempSettings.enabled = v),
-        })
+        }),
       )}
       ${dmn.ui.components.formRow(
-        "테마",
+        '테마',
         dmn.ui.components.dropdown({
           options: [
-            { label: "다크", value: "dark" },
-            { label: "라이트", value: "light" },
+            { label: '다크', value: 'dark' },
+            { label: '라이트', value: 'light' },
           ],
           selected: settings.theme,
           onChange: (v) => (tempSettings.theme = v),
-        })
+        }),
       )}
       ${dmn.ui.components.formRow(
-        "볼륨",
+        '볼륨',
         dmn.ui.components.input({
-          type: "number",
+          type: 'number',
           value: settings.volume,
           min: 0,
           max: 100,
           width: 60,
           onChange: (v) => (tempSettings.volume = parseInt(v)),
-        })
+        }),
       )}
     </div>
   `;
 
   const confirmed = await dmn.ui.dialog.custom(formHtml, {
-    confirmText: "저장",
+    confirmText: '저장',
     showCancel: true,
   });
 
   if (confirmed) {
     settings = tempSettings;
-    await dmn.plugin.storage.set("settings", settings);
-    await dmn.ui.dialog.alert("저장되었습니다!");
+    await dmn.plugin.storage.set('settings', settings);
+    await dmn.ui.dialog.alert('저장되었습니다!');
   }
 }
 
 // 그리드 메뉴에 설정 추가
 dmn.ui.contextMenu.addGridMenuItem({
-  id: "open-settings",
-  label: "설정",
+  id: 'open-settings',
+  label: '설정',
   onClick: showSettings,
 });
 
 // 초기화
 (async () => {
-  const saved = await dmn.plugin.storage.get("settings");
+  const saved = await dmn.plugin.storage.get('settings');
   if (saved) settings = saved;
 })();
 

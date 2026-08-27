@@ -11,6 +11,10 @@ import {
 } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
+  applyImageTransformLeaf,
+  type ImageTransform,
+} from '@src/types/key/imageLayer';
+import {
   isNotePaintPropertyPatchV1,
   mirrorBodyPaintToGlow,
   projectNotePaintPatch,
@@ -601,6 +605,30 @@ const applySemanticOps = (
             }
             if (op.patch.property === 'activeImageFit') {
               return { ...position, activeImageFit: op.patch.value };
+            }
+            if (op.patch.property === 'imageMode') {
+              // replace는 기본값이라 sparse 저장 - 백엔드와 동일
+              const { imageMode: _imageMode, ...rest } = position;
+              return op.patch.value === 'replace'
+                ? rest
+                : { ...position, imageMode: op.patch.value };
+            }
+            if (
+              op.patch.property === 'idleImageTransform' ||
+              op.patch.property === 'activeImageTransform'
+            ) {
+              const field = op.patch.property;
+              if (op.patch.value === null) {
+                const { [field]: _dropped, ...rest } = position;
+                return rest;
+              }
+              return {
+                ...position,
+                [field]: applyImageTransformLeaf(
+                  position[field] as ImageTransform | undefined,
+                  op.patch.value,
+                ),
+              };
             }
             if (op.patch.property === 'counterEnabled') {
               const counter = position.counter as

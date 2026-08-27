@@ -1,7 +1,8 @@
 import React from 'react';
 
 interface IconMotionProps {
-  motion: string;
+  /** 호버 재생 keyframe 이름. 누름 트랜지션(.dmn-icon-press)만 쓰는 곳은 생략 */
+  motion?: string;
   children: React.ReactNode;
 }
 

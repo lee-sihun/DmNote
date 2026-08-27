@@ -1,0 +1,22 @@
+{
+  "fill": { "solid": "srgb:0.106,0.106,0.125,1.0" },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "logo.svg",
+          "name": "logo",
+          "glass": false,
+          "position": { "scale": 2.56, "translation-in-points": [0, 0] }
+        }
+      ],
+      "glass": false,
+      "specular": false,
+      "shadow": { "kind": "neutral", "opacity": 0 },
+      "translucency": { "enabled": false, "value": 0 },
+      "blur-material": 0,
+      "lighting": "individual"
+    }
+  ],
+  "supported-platforms": { "circles": ["watchOS"], "squares": "shared" }
+}

@@ -8,12 +8,18 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { usePopupPresence } from '@hooks/ui/usePopupPresence';
-import { isTopmostPopupLayer, registerPopupLayer } from '../Modal/popupLayer';
+import {
+  hasModalLayerAbove,
+  isTopmostPopupLayer,
+  registerPopupLayer,
+  subscribeModalLayerActivity,
+} from '../Modal/popupLayer';
 import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { clampToViewport } from '@utils/ui/popupGeometry';
 import { usePanelHost } from '@contexts/PanelHostContext';
 import { isNodeLike } from '@utils/dom/isElementNode';
+import { CANVAS_POPUP_CHROME_CLASS } from '../Modal/popupChrome';
 
 interface DropdownOption {
   label: string;
@@ -266,6 +272,18 @@ const Dropdown: React.FC<DropdownProps> = ({
     return registerPopupLayer(menu);
   }, [anchor, mounted, open]);
 
+  // 모달이 덮이면 body 포털 메뉴는 inert 루트 밖이라 살아남는다 — 스스로 닫는다.
+  // 열린 동안만 명령형 구독 (Dropdown은 패널 전역에 깔린 핫 컴포넌트라 상시 구독 회피).
+  // 트리거 포커스 복귀는 하지 않는다 - 트리거는 이미 inert이고 모달 포커스를 뺏는다
+  useEffect(() => {
+    if (!open || !mounted) return;
+    const closeIfCovered = () => {
+      if (hasModalLayerAbove(menuRef.current)) setOpen(false);
+    };
+    closeIfCovered();
+    return subscribeModalLayerActivity(closeIfCovered);
+  }, [mounted, open]);
+
   // 열린 동안 내용 크기 변화(비동기 옵션 로드 등) 시 클램프·플립 재계산
   useEffect(() => {
     if (!open || !mounted) return;
@@ -415,7 +433,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             inert={motionState === 'closing'}
             role="listbox"
             id={menuId}
-            className={`dmn-motion fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] ${widthClass}`}
+            className={`dmn-motion fixed flex flex-col p-[5px] gap-[4px] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface z-[var(--z-chrome-submenu)] overflow-x-hidden overflow-y-auto max-h-[200px] ${widthClass}`}
             style={{
               // 실측 전에는 원점에서 히든 렌더 — 자연 크기 그대로 측정
               left: menuPos ? menuPos.left : 0,
@@ -504,6 +522,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           <span className={`truncate ${!selected ? 'text-fg-muted' : ''}`}>
             {selected ? selected.label : placeholder}
           </span>
+          {/* viewBox 14를 8px로 렌더 - 스트로크 2.1이 화면상 1.2 */}
           <svg
             width="8"
             height="5"
@@ -516,7 +535,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             <path
               d="M1 1L7 7L13 1"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="2.1"
               strokeLinecap="round"
               strokeLinejoin="round"
             />

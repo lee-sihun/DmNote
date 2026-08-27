@@ -24,10 +24,9 @@ const renderPanel = (isPluginResizable: boolean) => {
         isPluginResizable={isPluginResizable}
         selectedPluginElement={null}
         pluginDisplaySize={{ width: 200, height: 150 }}
-        handlePluginPositionXChange={vi.fn()}
-        handlePluginPositionYChange={vi.fn()}
-        handlePluginWidthChange={vi.fn()}
-        handlePluginHeightChange={vi.fn()}
+        handlePluginGeometryPreview={vi.fn()}
+        handlePluginGeometryCommit={vi.fn()}
+        handlePluginGeometryCancel={vi.fn()}
         hasSinglePluginSelection
         showModalHint={false}
         showSettings

@@ -373,6 +373,21 @@ describe('useGridSelection compound history gesture', () => {
     expect(useKeyStore.getState().canonicalPositions).toEqual(positionsBefore);
   });
 
+  it('미할당 키(빈 슬롯)도 복사되어 클립보드에 들어간다', () => {
+    act(() => {
+      useKeyStore.setState({ keyMappings: { '4key': [''] } });
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+    });
+
+    act(() => api.copySelectedElements());
+
+    expect(useGridSelectionStore.getState().clipboard).toEqual([
+      { type: 'key', keyCode: '', position: keyPosition },
+    ]);
+  });
+
   it('혼합 붙여넣기는 editor와 plugin에 같은 gestureId를 전달한다', async () => {
     act(() => {
       useGridSelectionStore.getState().setClipboard([

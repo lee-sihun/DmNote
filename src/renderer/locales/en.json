@@ -47,12 +47,6 @@
     "keySoundOutput": "Key Sound Output",
     "keySoundOutputDefault": "Default Device",
     "keySoundOutputBuffer": "ASIO Buffer Size",
-    "keySoundOutputError": {
-      "asioUnavailableBuild": "This build does not include ASIO support.",
-      "asioDeviceNotFound": "ASIO device not found.",
-      "asioOpenFailed": "Could not open the ASIO device, so playback uses the default output.",
-      "defaultOpenFailed": "No output device could be opened."
-    },
     "topLeft": "Top-Left",
     "bottomLeft": "Bottom-Left",
     "topRight": "Top-Right",
@@ -78,10 +72,11 @@
     "jsPluginToggleFailed": "Failed to toggle the plugin.",
     "jsPluginRemoveFailed": "Failed to remove the plugin.",
     "pluginDataDeleteTitle": "Delete Plugin Data",
-    "pluginDataDeleteMessage": "'{{name}}' plugin has stored data. Do you want to delete it together?",
-    "pluginDataDeleteWarning": "Deleting data will permanently remove plugin settings, history, etc. This action cannot be undone.",
-    "deleteWithData": "Delete with data",
-    "deletePluginOnly": "Delete plugin only",
+    "pluginDataDeleteMessage": "'{{name}}' has stored data.",
+    "pluginDataDeleteToggle": "Delete the data too",
+    "pluginDataScope": "Settings and history",
+    "pluginDataKeepTail": " stay untouched.",
+    "pluginDataWipeTail": " are gone for good.",
     "language": "Language",
     "selectLanguage": "Select Language",
     "shortcuts": "Shortcuts",
@@ -109,7 +104,10 @@
     "obsGuide": "Displays the overlay via a browser source in OBS.",
     "obsTokenRegenMessage": "Regenerate the session token?",
     "obsTokenRegen": "Regenerate Token",
-    "obsTokenRegenConfirm": "Regenerate"
+    "obsTokenRegenConfirm": "Regenerate",
+    "jsPluginFailed": "Error",
+    "jsRuntimeError": "The plugin failed while running.",
+    "jsNotApplied": "The plugin could not be applied."
   },
   "shortcutSetting": {
     "title": "Shortcut Settings",
@@ -187,7 +185,14 @@
     "idle": "Idle",
     "active": "Pressed",
     "transparent": "Transparent",
-    "reset": "Reset Image"
+    "reset": "Reset Image",
+    "invalidImage": "This image file could not be read.",
+    "mode": "Mode",
+    "modeReplace": "Replace",
+    "modeOverlay": "Overlay",
+    "position": "Position",
+    "rotation": "Rotation",
+    "scale": "Size"
   },
   "noteSetting": {
     "borderRadius": "Corner Radius",
@@ -287,10 +292,6 @@
     "create": "Create",
     "delete": "Delete",
     "deleteConfirm": "Delete the '{{name}}' tab?",
-    "search": {
-      "placeholder": "Search custom tabs",
-      "empty": "No results"
-    },
     "name": {
       "placeholder": "e.g. My Custom",
       "required": "Please enter a name",
@@ -342,9 +343,13 @@
     "sendToBack": "Send to Back",
     "bringForward": "Bring Forward",
     "sendBackward": "Send Backward",
-    "tabCssSetting": "Tab CSS Settings",
-    "tabNoteSetting": "Tab Track Settings",
-    "resetOverlayPosition": "Reset Overlay Position",
+    "plugins": "Plugins",
+    "currentTabGroup": "Current Tab Settings",
+    "resetPositionGroup": "Reset Position",
+    "cssSetting": "CSS",
+    "trackSetting": "Track",
+    "overlayTarget": "Overlay",
+    "panelTarget": "Panel Window",
     "addKey": "Add Key",
     "addStat": "Add Stat",
     "addGraph": "Add Graph",
@@ -615,12 +620,14 @@
     "edit": "Edit",
     "rename": "Rename",
     "delete": "Delete",
-    "enabledToggle": "Enabled",
+    "enable": "Enable",
+    "disable": "Disable",
     "saveFailed": "Failed to save font settings.",
     "editorLoadFailed": "Couldn't load the web font editor. Please try again.",
     "editTargetMissing": "Couldn't find the web font to edit. It may have been removed.",
-    "deleteConfirm": "Delete this font? Elements using it will fall back to the default font.",
-    "add": "Add Font"
+    "deleteConfirm": "Delete this font?\nElements using it will fall back to the default font.",
+    "add": "Add Font",
+    "invalidFont": "This font file could not be read."
   },
   "soundPicker": {
     "searchPlaceholder": "Search...",
@@ -637,7 +644,7 @@
     "deleteFailed": "Failed to delete sound",
     "renameFailed": "Failed to rename sound",
     "hideFailed": "Failed to change sound visibility",
-    "deleteConfirm": "Delete this sound? The file will be deleted and unassigned from every element using it.",
+    "deleteConfirm": "Delete this sound?\nEvery element using it will be unassigned.",
     "add": "Add Sound"
   },
   "soundTrimModal": {

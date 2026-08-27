@@ -42,6 +42,8 @@ url = "2"
 unicode-normalization = "0.1"
 zip = "0.6"
 sha2 = "0.10"
+quick-xml = "0.38"
+infer = "0.19"
 rodio = { git = "https://github.com/lee-sihun/rodio", rev = "7b771e15", default-features = false, features = ["playback"] }
 symphonia = { version = "0.5", default-features = false, features = ["ogg", "vorbis", "wav", "aiff", "mp3", "isomp4", "aac", "pcm", "adpcm", "flac", "alac"] }
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }

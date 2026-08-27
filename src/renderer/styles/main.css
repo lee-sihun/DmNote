@@ -113,6 +113,23 @@ body.dmn-dragging * {
     saturate(var(--ui-glass-backdrop-sat));
 }
 
+/* canvas 위 표면은 배경색이 재질을 지배하지 않게 clamp 강화 */
+:where(.backdrop-glass-canvas).backdrop-glass {
+  -webkit-backdrop-filter: blur(32px)
+    brightness(var(--ui-glass-canvas-backdrop-dim))
+    saturate(var(--ui-glass-canvas-backdrop-sat));
+  backdrop-filter: blur(32px) brightness(var(--ui-glass-canvas-backdrop-dim))
+    saturate(var(--ui-glass-canvas-backdrop-sat));
+}
+
+:where(.backdrop-glass-canvas).backdrop-glass-popup {
+  -webkit-backdrop-filter: blur(24px)
+    brightness(var(--ui-glass-canvas-backdrop-dim))
+    saturate(var(--ui-glass-canvas-backdrop-sat));
+  backdrop-filter: blur(24px) brightness(var(--ui-glass-canvas-backdrop-dim))
+    saturate(var(--ui-glass-canvas-backdrop-sat));
+}
+
 /* 스크림 프로스트 — 검은 딤 + 은은한 전화면 블러 (디자인 개편 전 레시피 복원).
    틴트는 유틸리티가 아니라 여기서 소유 — 딤·블러 레시피 단일 소스.
    전화면 재필터라 반경은 최소 유지, 블러 키프레임 보간 금지가 최적화의 핵심 —
@@ -170,7 +187,7 @@ body.dmn-dragging * {
     content: none;
   }
 
-  /* backdrop 클래스 없는 글래스 틴트 사용처(패널 토글 칩)도 동일 승격 */
+  /* 글래스 패널 틴트 사용처(사이드 패널 프레임·캔버스 팝업)도 동일 승격 */
   .bg-glass-panel {
     --ui-glass-panel: rgba(25, 25, 29, 0.96);
   }
@@ -244,6 +261,19 @@ body.dmn-dragging * {
     animation-timeline: scroll(self);
   }
 
+  /* 행 리스트용 얕은 변형 - 30px 행이 20px 페이드에 통째로 잠겨
+     걸친 행 단서가 사라지므로 바닥 깊이를 8px로 캡. 뷰포트 스냅(20px 걸침)과
+     쌍: 글자 윗부분은 또렷하고 아랫부분이 녹아내리는 절단면을 만든다 */
+  .dmn-scroll-fade.dmn-scroll-fade-shallow {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--dmn-fade-top, 0px),
+      black calc(100% - min(var(--dmn-fade-bottom, 0px), 8px)),
+      transparent
+    );
+  }
+
   @keyframes dmn-scroll-fade {
     0% {
       --dmn-fade-top: 0px;
@@ -313,6 +343,10 @@ body.dmn-dragging * {
   transform: translateX(var(--ui-page-slide-distance));
 }
 
+/* blur(0)은 항등이지만 filter가 none이 아니라 이 페이지는 항상 backdrop root다
+   (Filter Effects 2 §3). 그래서 페이지 안에 라이브 글래스를 직접 두면 블러가
+   페이지 경계 안쪽만 샘플한다 - 피커·메뉴는 반드시 body로 포털할 것.
+   none으로 되돌리면 WKWebView가 보간을 못 해 전환이 깨진다 (아래 아이콘 스왑 주석 참조) */
 .dmn-panel-page[data-active='true'] {
   opacity: 1;
   transform: translateX(0);
@@ -351,6 +385,55 @@ body.dmn-dragging * {
 
 @media (prefers-reduced-motion: reduce) {
   .dmn-icon-swap > [data-icon] {
+    transition: none;
+  }
+}
+
+/* 글자 스왑 — 바뀌는 부분만 겹쳐두고 크로스페이드.
+   나가는 글자는 위로 밀리며 흐려지고, 들어오는 글자는 아래에서 올라온다.
+   inline-grid라 두 글자가 같은 칸을 쓰므로 폭이 긴 쪽으로 고정된다 —
+   교체 순간 줄이 밀리지 않는 게 이 구조를 쓰는 이유다 */
+.dmn-text-swap {
+  display: inline-grid;
+  justify-items: start;
+  /* 앞 글자와 같은 기준선에 앉아야 한다. bottom이나 center로 맞추면 줄 바닥이나
+     상자 중심에 걸려 글자가 반 칸 뜬다. 겹친 두 꼬리끼리도 baseline으로 묶인다 */
+  align-items: baseline;
+  /* 자간·행간은 바깥 문장에서 그대로 물려받는다 - 여기서 다시 정하지 않는다 */
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.dmn-text-swap > [data-text] {
+  grid-area: 1 / 1;
+  /* pre인 이유 - 로케일에 따라 앞부분과 사이에 공백이 필요한데(영어·러시아어)
+     nowrap은 선행 공백을 삼킨다. 한국어는 조사가 붙어 공백이 없다 */
+  white-space: pre;
+  /* 보이는 상태를 명시 — filter: none에서 시작하면 WKWebView가 보간을 못 함 */
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0);
+  transition: opacity var(--ui-text-swap-duration) var(--ui-text-swap-ease),
+    filter var(--ui-text-swap-duration) var(--ui-text-swap-ease),
+    transform var(--ui-text-swap-duration) var(--ui-text-swap-ease);
+}
+
+.dmn-text-swap[data-state='on'] > [data-text='off'] {
+  opacity: 0;
+  filter: blur(var(--ui-text-swap-blur));
+  transform: translateY(calc(var(--ui-text-swap-shift) * -1));
+  pointer-events: none;
+}
+
+.dmn-text-swap[data-state='off'] > [data-text='on'] {
+  opacity: 0;
+  filter: blur(var(--ui-text-swap-blur));
+  transform: translateY(var(--ui-text-swap-shift));
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-text-swap > [data-text] {
     transition: none;
   }
 }
@@ -655,8 +738,7 @@ body.dmn-dragging * {
   height: 100%;
 }
 
-/* 크롬 색은 사이드 패널과 같은 토큰 — 웰(bg-inset-solid)이 배경을 소유, 에디터는 투명.
-   웰이 알파면 모달 카드 밝기를 그대로 물려받아 신택스 팔레트 대비가 무너진다 */
+/* 입력 well이 어두운 glass를 소유하고 editor는 투명하게 유지 */
 .webfont-cm-editor .cm-editor {
   height: 100%;
   background: transparent;
@@ -973,6 +1055,26 @@ svg [data-dmn-icon-motion] {
 
   45% {
     transform: scale(1.09);
+  }
+}
+
+/* 누름 - 누르는 동안 줄어 있다가 떼면 오버슈트로 되튄다.
+   keyframe이 아니라 트랜지션인 이유: 누른 채 머무는 시간이 제각각이라
+   내려가는 구간과 올라오는 구간을 따로 가져야 하고, 중간에 떼도 튀지 않아야 한다.
+   내려갈 땐 짧고 직선적으로, 올라올 땐 스프링 커브로 - 눌림은 즉답이고 복귀가 재질이다 */
+.dmn-icon-press > .dmn-icon-motion {
+  transition: transform var(--ui-icon-press-duration) var(--ui-icon-ease-back);
+}
+
+.dmn-icon-press:active > .dmn-icon-motion {
+  transform: scale(var(--ui-icon-press-scale));
+  transition-duration: var(--ui-icon-press-down-duration);
+  transition-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-icon-press > .dmn-icon-motion {
+    transition: none;
   }
 }
 
@@ -1338,13 +1440,11 @@ svg [data-dmn-icon-motion] {
       calc(var(--ui-digit-distance) * var(--dmn-digit-dir, 1))
     );
     opacity: 0;
-    filter: blur(var(--ui-digit-blur));
   }
 
   to {
     transform: translateY(0);
     opacity: 1;
-    filter: blur(0);
   }
 }
 

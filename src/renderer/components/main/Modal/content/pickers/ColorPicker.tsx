@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from '@contexts/useTranslation';
 import {
   SaturationArea,
@@ -8,6 +9,7 @@ import {
 } from './colorPickerPrimitives';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import TabSwitch from '@components/main/common/TabSwitch';
+import { NumberInput } from '@components/main/common/NumberInput';
 import {
   MODES,
   isGradientColor,
@@ -78,8 +80,16 @@ interface ColorPickerWrapperProps {
     value: number,
     target: OpacityTarget,
   ) => void;
+  /** % 입력의 Escape 원복. 배치 편집은 게스처 취소로만 항목별 값을 되살릴 수 있다 */
+  onOpacityPercentCancel?: (target: OpacityTarget) => void;
+  /** hex/solid alpha 입력의 Escape 원복. 피커는 로컬 시작값을, 호출부는 preview 세션을 되돌린다 */
+  onInputCancel?: (target: OpacityTarget, restoredColor: ColorValue) => void;
   opacityPercentLabel?: string;
-  opacityPercentMixed?: boolean;
+  /** 배치 선택의 % 칸 값(opacity 또는 solidOnly alpha)이 서로 다르면 대표값 대신 Mixed.
+   *  그라데이션은 상·하단이 따로 갈릴 수 있어 객체도 받는다 */
+  opacityPercentMixed?: boolean | { top: boolean; bottom: boolean };
+  /** 배치 선택의 hex가 서로 다르면 hex 칸이 Mixed. 손대지 않은 blur는 확정하지 않는다 */
+  hexMixed?: boolean;
   interactiveRefs?: React.RefObject<HTMLElement>[];
   position?: { x: number; y: number } | string;
   offsetY?: number;
@@ -126,8 +136,11 @@ const ColorPickerWrapper = ({
   opacityPercent = undefined,
   onOpacityPercentChange = undefined,
   onOpacityPercentChangeComplete = undefined,
+  onOpacityPercentCancel = undefined,
+  onInputCancel = undefined,
   opacityPercentLabel = undefined,
-  opacityPercentMixed: _opacityPercentMixed = false,
+  opacityPercentMixed = false,
+  hexMixed = false,
   interactiveRefs = [],
   position = undefined,
   offsetY = -80,
@@ -148,11 +161,6 @@ const ColorPickerWrapper = ({
   const [alpha, setAlpha] = useState<number>(() =>
     extractAlphaFromColor(color),
   );
-  const [alphaPercentInput, setAlphaPercentInput] = useState<string>(() =>
-    String(Math.round(extractAlphaFromColor(color) * 100)),
-  );
-  const [isAlphaPercentFocused, setIsAlphaPercentFocused] =
-    useState<boolean>(false);
   const [gradientTop, setGradientTop] = useState<string>(() =>
     isGradientColor(color)
       ? color.top.replace('#', '')
@@ -162,7 +170,6 @@ const ColorPickerWrapper = ({
     isGradientColor(color) ? color.bottom.replace('#', '') : 'FFFFFF',
   );
   const suppressGradientResetRef = useRef<boolean>(false);
-  const suppressGradientBroadcastRef = useRef<boolean>(false);
   // 드래그 중인지 추적 (드래그 중에는 외부 color prop 동기화 건너뜀)
   const isDraggingRef = useRef<boolean>(false);
   // 한번이라도 그라디언트 모드에 진입(또는 그라디언트 값을 받은) 이후엔
@@ -244,7 +251,6 @@ const ColorPickerWrapper = ({
         } else if (mode === MODES.gradient) {
           // 그라디언트 모드에서 솔리드 팔레트 클릭 시, 선택된 stop에 적용
           const newHex = parsed.hex.replace('#', '').toUpperCase();
-          suppressGradientBroadcastRef.current = true;
           if (gradientSelected === 'top') {
             setGradientTop(newHex);
             const gradient = buildGradient(parsed.hex, `#${gradientBottom}`);
@@ -282,7 +288,6 @@ const ColorPickerWrapper = ({
           );
           return;
         }
-        suppressGradientBroadcastRef.current = true;
         setGradientTop(gradientColor.top.replace('#', '').toUpperCase());
         setGradientBottom(gradientColor.bottom.replace('#', '').toUpperCase());
         setMode(MODES.gradient);
@@ -297,6 +302,14 @@ const ColorPickerWrapper = ({
 
   // onClose를 래핑하여 팔레트 저장 후 호출
   const handleClose = () => {
+    const ownerDocument = referenceRef.current?.ownerDocument ?? document;
+    const active = ownerDocument.activeElement;
+    if (
+      active?.matches('input, textarea') &&
+      active.closest('[role="dialog"]')
+    ) {
+      flushSync(() => (active as HTMLElement).blur());
+    }
     saveCurrentColorToPalette();
     onClose?.();
   };
@@ -328,7 +341,6 @@ const ColorPickerWrapper = ({
     if (isGradientNow) {
       const topHex = color.top.replace('#', '').toUpperCase();
       const bottomHex = color.bottom.replace('#', '').toUpperCase();
-      suppressGradientBroadcastRef.current = true;
       setGradientTop(topHex);
       setGradientBottom(bottomHex);
       hasSeededGradientFromSolidRef.current = true;
@@ -371,7 +383,6 @@ const ColorPickerWrapper = ({
           !suppressGradientResetRef.current &&
           !hasSeededGradientFromSolidRef.current
         ) {
-          suppressGradientBroadcastRef.current = true;
           setGradientTop(parsed.hex.replace('#', ''));
           setGradientBottom('FFFFFF');
         }
@@ -391,7 +402,28 @@ const ColorPickerWrapper = ({
       .slice(0, solidOnly ? 6 : 8),
   );
 
+  // 이번 편집에서 hex를 실제로 쳤는지. Mixed 상태에서 손대지 않은 blur가
+  // 대표값을 선택 전체에 확정해 항목별 값을 지우는 일을 막는다
+  const hexDirtyRef = useRef(false);
+  const solidInputEditRef = useRef<{
+    inputValue: string;
+    color: ColorValue;
+    selectedColor: ColorObject;
+    alpha: number;
+    previewed: boolean;
+  } | null>(null);
+  const gradientInputEditRef = useRef<{
+    side: GradientSide;
+    top: string;
+    bottom: string;
+    color: GradientColor;
+    selectedColor: ColorObject;
+    dirty: boolean;
+    previewed: boolean;
+  } | null>(null);
+
   useEffect(() => {
+    if (solidInputEditRef.current) return;
     setInputValue(
       selectedColor.hex
         .replace('#', '')
@@ -399,12 +431,6 @@ const ColorPickerWrapper = ({
         .slice(0, solidOnly ? 6 : 8),
     );
   }, [selectedColor.hex, solidOnly]);
-
-  useEffect(() => {
-    if (solidOnly && !isAlphaPercentFocused) {
-      setAlphaPercentInput(String(Math.round(alpha * 100)));
-    }
-  }, [alpha, solidOnly, isAlphaPercentFocused]);
 
   // solidOnly 모드에서 Alpha 값 변경 반영 - useEffect 제거하여 무한 루프 방지
   // Alpha 슬라이더는 onChangeComplete에서 처리
@@ -436,17 +462,6 @@ const ColorPickerWrapper = ({
     }
   };
 
-  useEffect(() => {
-    if (mode !== MODES.gradient || solidOnly) {
-      return;
-    }
-    if (suppressGradientBroadcastRef.current) {
-      suppressGradientBroadcastRef.current = false;
-      return;
-    }
-    onColorChange?.(buildGradient(`#${gradientTop}`, `#${gradientBottom}`));
-  }, [mode, gradientTop, gradientBottom, onColorChange, solidOnly]);
-
   const applyColor = (
     next: string | Partial<ColorObject>,
     isComplete: boolean = false,
@@ -458,7 +473,6 @@ const ColorPickerWrapper = ({
       // 그라디언트 모드에서 Saturation/Hue 편집 시 선택된 stop 업데이트
       const newHex = parsed.hex.replace('#', '').toUpperCase();
 
-      suppressGradientBroadcastRef.current = true;
       if (gradientSelected === 'top') {
         setGradientTop(newHex);
         const gradient = buildGradient(parsed.hex, `#${gradientBottom}`);
@@ -499,75 +513,145 @@ const ColorPickerWrapper = ({
     isDraggingRef.current = false;
   };
 
+  const validHexDraft = (value: string, allowAlpha: boolean): boolean =>
+    value.length === 6 || (allowAlpha && value.length === 8);
+
+  const solidOutput = (parsed: ColorObject, draft: string): string =>
+    solidOnly
+      ? buildRgbaFromHexAndAlpha(parsed.hex, alpha)
+      : draft.length === 8
+      ? `#${draft}`
+      : parsed.hex;
+
+  const startSolidInputEdit = () => {
+    const baseColor = solidOnly
+      ? buildRgbaFromHexAndAlpha(selectedColor.hex, alpha)
+      : inputValue.length === 8
+      ? `#${inputValue}`
+      : selectedColor.hex;
+    solidInputEditRef.current = {
+      inputValue,
+      color: baseColor,
+      selectedColor,
+      alpha,
+      previewed: false,
+    };
+    hexDirtyRef.current = false;
+    // Mixed 필드는 빈 칸에서 시작한다. 대표값을 띄우면 공통값처럼 읽힌다
+    if (hexMixed) setInputValue('');
+  };
+
   const handleInputChange = (raw: string) => {
     const sanitized = raw
       .replace(/[^0-9a-fA-F]/g, '')
       .slice(0, solidOnly ? 6 : 8)
       .toUpperCase();
+    if (!solidInputEditRef.current) startSolidInputEdit();
+    hexDirtyRef.current = true;
     setInputValue(sanitized);
+    if (!validHexDraft(sanitized, !solidOnly)) return;
+    const parsed = parseHexColor(sanitized);
+    if (!parsed) return;
+    const nextSelected = solidOnly
+      ? {
+          ...parsed,
+          rgb: { ...parsed.rgb, a: alpha },
+          hsv: { ...parsed.hsv, a: alpha },
+        }
+      : parsed;
+    setSelectedColor(nextSelected);
+    if (solidInputEditRef.current) {
+      solidInputEditRef.current.previewed = true;
+    }
+    onColorChange?.(solidOutput(parsed, sanitized));
+  };
+
+  const restoreSolidInput = () => {
+    const edit = solidInputEditRef.current;
+    if (!edit) return;
+    setInputValue(edit.inputValue);
+    setSelectedColor(edit.selectedColor);
+    setAlpha(edit.alpha);
+    hexDirtyRef.current = false;
+    solidInputEditRef.current = null;
+    if (!edit.previewed) return;
+    if (onInputCancel) {
+      onInputCancel('solid', edit.color);
+    } else if (!hexMixed) {
+      onColorChange?.(edit.color);
+    }
   };
 
   const commitSolidInput = () => {
-    if (!inputValue) {
-      setInputValue(
-        selectedColor.hex
-          .replace('#', '')
-          .toUpperCase()
-          .slice(0, solidOnly ? 6 : 8),
-      );
+    if (!hexDirtyRef.current) {
+      const edit = solidInputEditRef.current;
+      if (edit) setInputValue(edit.inputValue);
+      solidInputEditRef.current = null;
       return;
     }
-
+    if (!validHexDraft(inputValue, !solidOnly)) {
+      restoreSolidInput();
+      return;
+    }
     const parsed = parseHexColor(inputValue);
     if (!parsed) {
-      setInputValue(
-        selectedColor.hex
-          .replace('#', '')
-          .toUpperCase()
-          .slice(0, solidOnly ? 6 : 8),
-      );
+      restoreSolidInput();
       return;
     }
-
-    setSelectedColor(
-      solidOnly
-        ? {
-            ...parsed,
-            rgb: { ...parsed.rgb, a: alpha },
-            hsv: { ...parsed.hsv, a: alpha },
-          }
-        : parsed,
-    );
-
-    if (solidOnly) {
-      const rgbaValue = buildRgbaFromHexAndAlpha(parsed.hex, alpha);
-      onColorChange?.(rgbaValue);
-      onColorChangeComplete?.(rgbaValue);
-    } else {
-      onColorChange?.(parsed.hex);
-      onColorChangeComplete?.(parsed.hex);
-    }
+    hexDirtyRef.current = false;
+    solidInputEditRef.current = null;
+    onColorChangeComplete?.(solidOutput(parsed, inputValue));
   };
 
-  const handleAlphaPercentChange = (raw: string) => {
-    const sanitized = raw.replace(/[^0-9]/g, '').slice(0, 3);
-    setAlphaPercentInput(sanitized);
-
-    if (sanitized === '') return;
-    const num = Math.min(Math.max(parseInt(sanitized, 10), 0), 100);
-    setAlphaWithSync(num / 100, false);
+  const cancelSolidInput = (): boolean => {
+    if (!hexDirtyRef.current) return false;
+    restoreSolidInput();
+    return true;
   };
 
-  const commitAlphaPercent = () => {
-    if (!solidOnly) return;
-    const raw = alphaPercentInput.trim();
-    if (!raw) {
-      setAlphaPercentInput(String(Math.round(alpha * 100)));
+  // 입력은 NumberInput이 0~100으로 재운 값만 넘긴다
+  const previewAlphaPercent = (percent: number) => {
+    setAlphaWithSync(percent / 100, false);
+  };
+
+  const commitAlphaPercent = (percent: number) => {
+    setAlphaWithSync(percent / 100, true);
+  };
+
+  // Escape 원복 기준. Mixed에서는 NumberInput이 대표값을 다시 발행하지 않으므로
+  // 편집 전 alpha를 여기서 기억해 두었다가 되돌린다
+  const alphaEditBaseRef = useRef(alpha);
+
+  const startAlphaEdit = () => {
+    alphaEditBaseRef.current = alpha;
+  };
+
+  const cancelAlphaPercent = () => {
+    const base = alphaEditBaseRef.current;
+    const restoredColor = buildRgbaFromHexAndAlpha(selectedColor.hex, base);
+    if (onInputCancel) {
+      setAlpha(base);
+      setSelectedColor((prev) => ({
+        ...prev,
+        rgb: { ...prev.rgb, a: base },
+        hsv: { ...prev.hsv, a: base },
+      }));
+      onInputCancel('solid', restoredColor);
       return;
     }
-    const num = Math.min(Math.max(parseInt(raw, 10), 0), 100);
-    setAlphaPercentInput(String(num));
-    setAlphaWithSync(num / 100, true);
+    if (onOpacityPercentCancel) {
+      // 호출부가 게스처를 가지면 preview를 내지 않고 조용히 되돌린 뒤 맡긴다.
+      // 대표값 preview는 선택 전체를 평탄화한다
+      setAlpha(base);
+      setSelectedColor((prev) => ({
+        ...prev,
+        rgb: { ...prev.rgb, a: base },
+        hsv: { ...prev.hsv, a: base },
+      }));
+      onOpacityPercentCancel('solid');
+      return;
+    }
+    setAlphaWithSync(base, false);
   };
 
   const commitGradient = () => {
@@ -577,19 +661,98 @@ const ColorPickerWrapper = ({
       return;
     }
     setSelectedColor(parsedTop);
-    const gradient = buildGradient(parsedTop.hex, parsedBottom.hex);
+    const gradient = buildGradient(`#${gradientTop}`, `#${gradientBottom}`);
     onColorChange?.(gradient);
     onColorChangeComplete?.(gradient);
   };
 
-  const handleGradientInputChange =
-    (setter: React.Dispatch<React.SetStateAction<string>>) => (raw: string) => {
-      const sanitized = raw
-        .replace(/[^0-9a-fA-F]/g, '')
-        .slice(0, 8)
-        .toUpperCase();
-      setter(sanitized);
+  const startGradientInputEdit = (side: GradientSide) => {
+    const selectedValue = side === 'top' ? gradientTop : gradientBottom;
+    const parsed = parseHexColor(selectedValue) ?? selectedColor;
+    setGradientSelected(side);
+    setSelectedColor(parsed);
+    gradientInputEditRef.current = {
+      side,
+      top: gradientTop,
+      bottom: gradientBottom,
+      color: buildGradient(`#${gradientTop}`, `#${gradientBottom}`),
+      selectedColor: parsed,
+      dirty: false,
+      previewed: false,
     };
+  };
+
+  const handleGradientInputChange = (side: GradientSide, raw: string) => {
+    const sanitized = raw
+      .replace(/[^0-9a-fA-F]/g, '')
+      .slice(0, 8)
+      .toUpperCase();
+    if (gradientInputEditRef.current?.side !== side) {
+      startGradientInputEdit(side);
+    }
+    const edit = gradientInputEditRef.current;
+    if (edit) edit.dirty = true;
+    if (side === 'top') setGradientTop(sanitized);
+    else setGradientBottom(sanitized);
+    if (!validHexDraft(sanitized, true)) return;
+    const parsed = parseHexColor(sanitized);
+    const other = parseHexColor(side === 'top' ? gradientBottom : gradientTop);
+    if (!parsed || !other) return;
+    setSelectedColor(parsed);
+    if (edit) edit.previewed = true;
+    onColorChange?.(
+      side === 'top'
+        ? buildGradient(`#${sanitized}`, `#${gradientBottom}`)
+        : buildGradient(`#${gradientTop}`, `#${sanitized}`),
+    );
+  };
+
+  const restoreGradientInput = () => {
+    const edit = gradientInputEditRef.current;
+    if (!edit) return;
+    setGradientTop(edit.top);
+    setGradientBottom(edit.bottom);
+    setSelectedColor(edit.selectedColor);
+    setGradientSelected(edit.side);
+    gradientInputEditRef.current = null;
+    if (!edit.previewed) return;
+    if (onInputCancel) onInputCancel(edit.side, edit.color);
+    else onColorChange?.(edit.color);
+  };
+
+  const commitGradientInput = (side: GradientSide) => {
+    const edit = gradientInputEditRef.current;
+    if (!edit?.dirty) {
+      gradientInputEditRef.current = null;
+      return;
+    }
+    if (
+      !validHexDraft(gradientTop, true) ||
+      !validHexDraft(gradientBottom, true)
+    ) {
+      restoreGradientInput();
+      return;
+    }
+    const parsedTop = parseHexColor(gradientTop);
+    const parsedBottom = parseHexColor(gradientBottom);
+    if (!parsedTop || !parsedBottom) {
+      restoreGradientInput();
+      return;
+    }
+    setGradientSelected(side);
+    setSelectedColor(side === 'top' ? parsedTop : parsedBottom);
+    gradientInputEditRef.current = null;
+    onColorChangeComplete?.(
+      buildGradient(`#${gradientTop}`, `#${gradientBottom}`),
+    );
+  };
+
+  const cancelGradientInput = (side: GradientSide): boolean => {
+    const edit = gradientInputEditRef.current;
+    if (!edit || edit.side !== side || !edit.dirty) return false;
+    restoreGradientInput();
+    return true;
+  };
 
   const selectGradient = (side: GradientSide) => {
     setGradientSelected(side);
@@ -638,7 +801,11 @@ const ColorPickerWrapper = ({
     return null;
   })();
 
+  // 피커가 색 알파를 직접 소유하는 동안은 호출부 opacity 제어와 함께 켜지지 않는다.
+  // hideColorAlpha면 호출부 투명도가 알파를 대신한다
+  const ownsColorAlpha = solidOnly && !hideColorAlpha;
   const showOpacityControl =
+    !ownsColorAlpha &&
     resolvedOpacityPercent !== null &&
     typeof onOpacityPercentChange === 'function';
 
@@ -649,103 +816,68 @@ const ColorPickerWrapper = ({
   const resolvedOpacityTop = resolvedOpacityPercent?.top;
   const resolvedOpacityBottom = resolvedOpacityPercent?.bottom;
 
-  const [opacityPercentSolidInput, setOpacityPercentSolidInput] =
-    useState<string>(() =>
-      showOpacityControl ? String(Math.round(resolvedOpacitySolid!)) : '',
-    );
-  const [opacityPercentTopInput, setOpacityPercentTopInput] = useState<string>(
-    () => (showOpacityControl ? String(Math.round(resolvedOpacityTop!)) : ''),
-  );
-  const [opacityPercentBottomInput, setOpacityPercentBottomInput] =
-    useState<string>(() =>
-      showOpacityControl ? String(Math.round(resolvedOpacityBottom!)) : '',
-    );
-  const [opacityPercentFocusTarget, setOpacityPercentFocusTarget] =
-    useState<OpacityTarget | null>(null);
-
-  useEffect(() => {
-    if (!showOpacityControl) return;
-    if (opacityPercentFocusTarget === 'solid') return;
-    setOpacityPercentSolidInput(String(Math.round(resolvedOpacitySolid!)));
-  }, [opacityPercentFocusTarget, resolvedOpacitySolid, showOpacityControl]);
-
-  useEffect(() => {
-    if (!showOpacityControl) return;
-    if (opacityPercentFocusTarget === 'top') return;
-    setOpacityPercentTopInput(String(Math.round(resolvedOpacityTop!)));
-  }, [opacityPercentFocusTarget, resolvedOpacityTop, showOpacityControl]);
-
-  useEffect(() => {
-    if (!showOpacityControl) return;
-    if (opacityPercentFocusTarget === 'bottom') return;
-    setOpacityPercentBottomInput(String(Math.round(resolvedOpacityBottom!)));
-  }, [opacityPercentFocusTarget, resolvedOpacityBottom, showOpacityControl]);
-
   const clampOpacityPercent = (value: number): number => {
     const num = Number(value);
     if (!Number.isFinite(num)) return 0;
     return Math.min(Math.max(Math.round(num), 0), 100);
   };
 
-  const handleOpacityPercentSolidChange = (raw: string) => {
-    if (!showOpacityControl) return;
-    const sanitized = String(raw ?? '')
-      .replace(/[^0-9]/g, '')
-      .slice(0, 3);
-    setOpacityPercentSolidInput(sanitized);
-
-    if (sanitized === '') return;
-    const num = clampOpacityPercent(Number(sanitized));
-    onOpacityPercentChange?.(num, 'solid');
+  const previewOpacityPercent = (target: OpacityTarget, percent: number) => {
+    onOpacityPercentChange?.(clampOpacityPercent(percent), target);
   };
 
-  const handleOpacityPercentTopChange = (raw: string) => {
-    if (!showOpacityControl) return;
-    const sanitized = String(raw ?? '')
-      .replace(/[^0-9]/g, '')
-      .slice(0, 3);
-    setOpacityPercentTopInput(sanitized);
-
-    if (sanitized === '') return;
-    const num = clampOpacityPercent(Number(sanitized));
-    onOpacityPercentChange?.(num, 'top');
+  const commitOpacityPercent = (target: OpacityTarget, percent: number) => {
+    const clamped = clampOpacityPercent(percent);
+    onOpacityPercentChange?.(clamped, target);
+    onOpacityPercentChangeComplete?.(clamped, target);
   };
 
-  const handleOpacityPercentBottomChange = (raw: string) => {
-    if (!showOpacityControl) return;
-    const sanitized = String(raw ?? '')
-      .replace(/[^0-9]/g, '')
-      .slice(0, 3);
-    setOpacityPercentBottomInput(sanitized);
-
-    if (sanitized === '') return;
-    const num = clampOpacityPercent(Number(sanitized));
-    onOpacityPercentChange?.(num, 'bottom');
+  const opacityMixedFor = (target: OpacityTarget): boolean => {
+    if (typeof opacityPercentMixed === 'boolean') return opacityPercentMixed;
+    if (target === 'top') return opacityPercentMixed.top;
+    if (target === 'bottom') return opacityPercentMixed.bottom;
+    return opacityPercentMixed.top || opacityPercentMixed.bottom;
   };
 
-  const commitOpacityPercentSolid = () => {
-    if (!showOpacityControl) return;
-    const clamped = clampOpacityPercent(Number(opacityPercentSolidInput));
-    setOpacityPercentSolidInput(String(clamped));
-    onOpacityPercentChange?.(clamped, 'solid');
-    onOpacityPercentChangeComplete?.(clamped, 'solid');
-  };
+  // 배치 값의 반대 축이 Mixed면 대표값으로 그 축을 덮지 않도록 잠근다.
+  // 알파를 색에 실어 보내는 형식(ownsColorAlpha)에서만 - hideColorAlpha면 색 알파는
+  // 저장 때 버려져 opacity Mixed와 무관한데 잠그면 색을 아예 못 바꾼다.
+  // 두 축 모두 Mixed면 지킬 공통값이 없으므로 잠금을 풀어 막다른 길을 없앤다
+  // (Mixed 칸 편집 = 전체 적용은 다른 Mixed 입력과 같은 규칙)
+  const bothAxesMixed = hexMixed && opacityMixedFor('solid');
+  const rgbEditingDisabled =
+    ownsColorAlpha && !bothAxesMixed && opacityMixedFor('solid');
+  const alphaEditingDisabled = ownsColorAlpha && !bothAxesMixed && hexMixed;
 
-  const commitOpacityPercentTop = () => {
-    if (!showOpacityControl) return;
-    const clamped = clampOpacityPercent(Number(opacityPercentTopInput));
-    setOpacityPercentTopInput(String(clamped));
-    onOpacityPercentChange?.(clamped, 'top');
-    onOpacityPercentChangeComplete?.(clamped, 'top');
-  };
+  const opacityPercentControl = (
+    target: OpacityTarget,
+  ): PercentInputProps | undefined =>
+    showOpacityControl && resolvedOpacityPercent
+      ? {
+          value: resolvedOpacityPercent[target],
+          label: opacityLabelText,
+          isMixed: opacityMixedFor(target),
+          onPreview: (percent) => previewOpacityPercent(target, percent),
+          onCommit: (percent) => commitOpacityPercent(target, percent),
+          onCancel: onOpacityPercentCancel
+            ? () => onOpacityPercentCancel(target)
+            : undefined,
+        }
+      : undefined;
 
-  const commitOpacityPercentBottom = () => {
-    if (!showOpacityControl) return;
-    const clamped = clampOpacityPercent(Number(opacityPercentBottomInput));
-    setOpacityPercentBottomInput(String(clamped));
-    onOpacityPercentChange?.(clamped, 'bottom');
-    onOpacityPercentChangeComplete?.(clamped, 'bottom');
-  };
+  // 색 알파를 소유하면 피커 alpha를, 아니면 호출부의 opacity를 편집한다
+  const solidPercentControl: PercentInputProps | undefined = ownsColorAlpha
+    ? {
+        value: Math.round(alpha * 100),
+        label: t('colorPicker.alpha'),
+        isMixed: opacityMixedFor('solid'),
+        disabled: alphaEditingDisabled,
+        onEditStart: startAlphaEdit,
+        onPreview: previewAlphaPercent,
+        onCommit: commitAlphaPercent,
+        onCancel: cancelAlphaPercent,
+      }
+    : opacityPercentControl('solid');
 
   const opacitySliderTarget: OpacityTarget = (() => {
     if (solidOnly || mode === MODES.solid) return 'solid';
@@ -777,7 +909,7 @@ const ColorPickerWrapper = ({
       panelElement={panelElement}
       fallbackWidth={168}
       fallbackHeight={300}
-      cardClassName="flex flex-col p-[10px] gap-[12px] w-[168px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
+      cardClassName="flex flex-col p-[10px] gap-[12px] w-[168px] rounded-popup"
       placement={placement}
       offsetY={offsetY}
       fallbackFixedX={typeof position === 'object' ? position?.x : undefined}
@@ -794,6 +926,7 @@ const ColorPickerWrapper = ({
 
       <SaturationArea
         color={selectedColor}
+        disabled={rgbEditingDisabled}
         onChange={handleChange}
         onChangeComplete={handleChangeComplete}
       />
@@ -802,6 +935,7 @@ const ColorPickerWrapper = ({
       <div className="flex flex-col gap-[6px]">
         <HueSlider
           color={selectedColor}
+          disabled={rgbEditingDisabled}
           onChange={handleChange}
           onChangeComplete={handleChangeComplete}
         />
@@ -810,6 +944,7 @@ const ColorPickerWrapper = ({
         {solidOnly && !hideColorAlpha && (
           <AlphaSlider
             color={selectedColor}
+            disabled={alphaEditingDisabled}
             onChange={(color: ColorObject) => {
               // Alpha 변경 시 hex 값은 유지하고 alpha만 동기화 (hex 입력 깜빡임 방지)
               setAlphaWithSync(color.rgb.a, false);
@@ -825,29 +960,13 @@ const ColorPickerWrapper = ({
             color={opacitySliderColor}
             ariaLabel={opacityLabelText}
             onChange={(c: ColorObject) => {
-              const target = opacitySliderTarget;
-              const next = clampOpacityPercent((c?.rgb?.a ?? 1) * 100);
-              if (
-                opacityPercentFocusTarget === null ||
-                opacityPercentFocusTarget !== target
-              ) {
-                if (target === 'solid')
-                  setOpacityPercentSolidInput(String(next));
-                else if (target === 'top')
-                  setOpacityPercentTopInput(String(next));
-                else setOpacityPercentBottomInput(String(next));
-              }
-              onOpacityPercentChange?.(next, target);
+              previewOpacityPercent(
+                opacitySliderTarget,
+                (c?.rgb?.a ?? 1) * 100,
+              );
             }}
             onChangeComplete={(c: ColorObject) => {
-              const target = opacitySliderTarget;
-              const next = clampOpacityPercent((c?.rgb?.a ?? 1) * 100);
-              if (target === 'solid') setOpacityPercentSolidInput(String(next));
-              else if (target === 'top')
-                setOpacityPercentTopInput(String(next));
-              else setOpacityPercentBottomInput(String(next));
-              onOpacityPercentChange?.(next, target);
-              onOpacityPercentChangeComplete?.(next, target);
+              commitOpacityPercent(opacitySliderTarget, (c?.rgb?.a ?? 1) * 100);
             }}
           />
         )}
@@ -856,100 +975,40 @@ const ColorPickerWrapper = ({
       {solidOnly || mode === MODES.solid ? (
         <Input
           value={inputValue}
-          colorLabel={t('colorPicker.hex')}
-          alphaLabel={
-            // 이 필드가 전역 배율을 대신 표시하는 형식이면 이름도 배율 라벨로
-            solidOnly && !hideColorAlpha
-              ? t('colorPicker.alpha')
-              : showOpacityControl
-              ? opacityLabelText
-              : t('colorPicker.alpha')
-          }
+          ariaLabel={t('colorPicker.hex')}
+          mixed={hexMixed}
+          disabled={rgbEditingDisabled}
           onValueChange={handleInputChange}
+          onValueFocus={startSolidInputEdit}
           onValueCommit={commitSolidInput}
+          onValueCancel={cancelSolidInput}
           previewColor={selectedColor.hex}
           alpha={
             solidOnly && !hideColorAlpha
               ? alpha
-              : showOpacityControl
-              ? clampOpacityPercent(resolvedOpacitySolid!) / 100
+              : showOpacityControl && resolvedOpacityPercent
+              ? clampOpacityPercent(resolvedOpacityPercent.solid) / 100
               : undefined
           }
-          alphaPercentValue={
-            solidOnly && !hideColorAlpha
-              ? alphaPercentInput
-              : showOpacityControl
-              ? opacityPercentSolidInput
-              : undefined
-          }
-          onAlphaPercentChange={
-            solidOnly && !hideColorAlpha
-              ? handleAlphaPercentChange
-              : showOpacityControl
-              ? handleOpacityPercentSolidChange
-              : undefined
-          }
-          onAlphaPercentCommit={
-            solidOnly && !hideColorAlpha
-              ? commitAlphaPercent
-              : showOpacityControl
-              ? commitOpacityPercentSolid
-              : undefined
-          }
-          onAlphaPercentFocusChange={
-            solidOnly && !hideColorAlpha
-              ? setIsAlphaPercentFocused
-              : showOpacityControl
-              ? (focused: boolean) =>
-                  setOpacityPercentFocusTarget(focused ? 'solid' : null)
-              : undefined
-          }
+          alphaPercent={solidPercentControl}
         />
       ) : (
         <GradientInputs
           topValue={gradientTop}
           bottomValue={gradientBottom}
-          onTopChange={handleGradientInputChange(setGradientTop)}
-          onBottomChange={handleGradientInputChange(setGradientBottom)}
-          onTopCommit={() => {
-            commitGradient();
-            selectGradient('top');
-          }}
-          onBottomCommit={() => {
-            commitGradient();
-            selectGradient('bottom');
-          }}
+          colorLabel={t('noteColor.color')}
+          onTopChange={(value) => handleGradientInputChange('top', value)}
+          onBottomChange={(value) => handleGradientInputChange('bottom', value)}
+          onTopFocus={() => startGradientInputEdit('top')}
+          onBottomFocus={() => startGradientInputEdit('bottom')}
+          onTopCommit={() => commitGradientInput('top')}
+          onBottomCommit={() => commitGradientInput('bottom')}
+          onTopCancel={() => cancelGradientInput('top')}
+          onBottomCancel={() => cancelGradientInput('bottom')}
           selected={gradientSelected}
           onSelect={(s: GradientSide) => selectGradient(s)}
-          rightTopValue={
-            showOpacityControl ? opacityPercentTopInput : undefined
-          }
-          rightBottomValue={
-            showOpacityControl ? opacityPercentBottomInput : undefined
-          }
-          onRightValueChange={
-            showOpacityControl
-              ? (target: GradientSide, raw: string) => {
-                  if (target === 'top') handleOpacityPercentTopChange(raw);
-                  else handleOpacityPercentBottomChange(raw);
-                }
-              : undefined
-          }
-          onRightCommit={
-            showOpacityControl
-              ? (target: GradientSide) => {
-                  if (target === 'top') commitOpacityPercentTop();
-                  else commitOpacityPercentBottom();
-                }
-              : undefined
-          }
-          onRightFocusChange={
-            showOpacityControl
-              ? (target: GradientSide, focused: boolean) =>
-                  setOpacityPercentFocusTarget(focused ? target : null)
-              : undefined
-          }
-          rightTitle={opacityPercentLabel || 'Opacity'}
+          rightTopPercent={opacityPercentControl('top')}
+          rightBottomPercent={opacityPercentControl('bottom')}
         />
       )}
 
@@ -965,6 +1024,7 @@ const ColorPickerWrapper = ({
         }
         onPaletteClick={handlePaletteClick}
         showGradient={!solidOnly || gradientSpec !== undefined}
+        solidLocked={rgbEditingDisabled || alphaEditingDisabled}
       />
       {footerSlot}
     </PickerSurface>
@@ -982,6 +1042,8 @@ interface ColorPaletteSectionProps {
   gradientPalette: PaletteValue[];
   onPaletteClick: (color: PaletteValue, type: string) => void;
   showGradient: boolean;
+  /** 반대 축 잠금 중 - 솔리드 슬롯은 hex·알파를 함께 쓰므로 컨트롤과 같은 정책을 따른다 */
+  solidLocked?: boolean;
 }
 
 function ColorPaletteSection({
@@ -989,6 +1051,7 @@ function ColorPaletteSection({
   gradientPalette,
   onPaletteClick,
   showGradient,
+  solidLocked = false,
 }: ColorPaletteSectionProps) {
   const PALETTE_SIZE = 7;
 
@@ -1012,6 +1075,7 @@ function ColorPaletteSection({
             key={`solid-${index}`}
             color={color}
             type="solid"
+            disabled={solidLocked}
             onClick={() => color && onPaletteClick(color, 'solid')}
           />
         ))}
@@ -1038,10 +1102,17 @@ interface PaletteSlotProps {
   color: PaletteValue | null;
   type: string;
   onClick?: () => void;
+  disabled?: boolean;
 }
 
-function PaletteSlot({ color, type, onClick }: PaletteSlotProps) {
+function PaletteSlot({
+  color,
+  type,
+  onClick,
+  disabled = false,
+}: PaletteSlotProps) {
   const isEmpty = !color;
+  const inert = isEmpty || disabled;
   const specImage = isGradientSpecColor(color)
     ? gradientToCss(toCanonicalGradient(color))
     : undefined;
@@ -1113,14 +1184,15 @@ function PaletteSlot({ color, type, onClick }: PaletteSlotProps) {
     <ColorSwatchButton
       type="button"
       className={`w-[16px] h-[16px] rounded transition-colors ${
-        isEmpty ? 'cursor-default' : 'cursor-pointer'
+        inert ? 'cursor-default' : 'cursor-pointer'
       }`}
       surfaceClassName="rounded"
       color={solidColor}
       gradient={gradient}
       image={specImage}
-      onClick={isEmpty ? undefined : onClick}
-      disabled={isEmpty}
+      onClick={inert ? undefined : onClick}
+      disabled={inert}
+      data-palette-slot={type}
       title={getTitle()}
     />
   );
@@ -1171,33 +1243,77 @@ function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
   );
 }
 
+interface PercentInputProps {
+  value: number;
+  label?: string;
+  isMixed?: boolean;
+  disabled?: boolean;
+  /** 포커스 진입. Escape 원복 기준을 잡는 시점 */
+  onEditStart?: () => void;
+  onPreview: (value: number) => void;
+  onCommit: (value: number) => void;
+  onCancel?: () => void;
+}
+
+// 0~100 정수 입력. 속성 패널 숫자 입력과 같은 수식·방향키·자릿수 재생을 갖는다.
+// 폭은 Mixed placeholder가 잘리지 않는 최소값
+const PercentInput = ({
+  value,
+  label,
+  isMixed,
+  disabled,
+  onEditStart,
+  onPreview,
+  onCommit,
+  onCancel,
+}: PercentInputProps) => (
+  <div className="w-[48px] flex-shrink-0" onFocusCapture={onEditStart}>
+    <NumberInput
+      value={value}
+      min={0}
+      max={100}
+      width="48px"
+      isMixed={isMixed}
+      disabled={disabled}
+      ariaLabel={label}
+      onPreview={onPreview}
+      onChange={onCommit}
+      onCancel={onCancel}
+    />
+  </div>
+);
+
 interface InputProps {
   value?: string;
-  colorLabel: string;
-  alphaLabel: string;
+  ariaLabel?: string;
+  /** 배치 선택의 hex가 갈리면 편집 전까지 Mixed placeholder */
+  mixed?: boolean;
+  disabled?: boolean;
   onValueChange?: (value: string) => void;
+  onValueFocus?: () => void;
   onValueCommit?: () => void;
+  onValueCancel?: () => boolean;
   previewColor?: string;
   alpha?: number;
-  alphaPercentValue?: string;
-  onAlphaPercentChange?: (value: string) => void;
-  onAlphaPercentCommit?: () => void;
-  onAlphaPercentFocusChange?: (focused: boolean) => void;
+  alphaPercent?: PercentInputProps;
 }
 
 const Input = ({
   value = '',
-  colorLabel,
-  alphaLabel,
+  ariaLabel,
+  mixed = false,
+  disabled = false,
   onValueChange,
+  onValueFocus,
   onValueCommit,
+  onValueCancel,
   previewColor,
   alpha,
-  alphaPercentValue,
-  onAlphaPercentChange,
-  onAlphaPercentCommit,
-  onAlphaPercentFocusChange,
+  alphaPercent,
 }: InputProps) => {
+  const [editing, setEditing] = useState(false);
+  const cancelledRef = useRef(false);
+  const showMixed = mixed && !editing;
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onValueChange?.(e.target.value);
   };
@@ -1212,43 +1328,39 @@ const Input = ({
         />
         <input
           type="text"
-          aria-label={colorLabel}
-          value={value}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          value={showMixed ? '' : value}
+          placeholder={showMixed ? 'Mixed' : undefined}
           onChange={handleChange}
-          onBlur={onValueCommit}
+          onFocus={() => {
+            cancelledRef.current = false;
+            setEditing(true);
+            onValueFocus?.();
+          }}
+          onBlur={() => {
+            setEditing(false);
+            if (cancelledRef.current) {
+              cancelledRef.current = false;
+              return;
+            }
+            onValueCommit?.();
+          }}
           onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
             if (event.key === 'Enter') {
-              onValueCommit?.();
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape' && onValueCancel?.()) {
+              event.preventDefault();
+              cancelledRef.current = true;
+              event.currentTarget.blur();
             }
           }}
-          className="block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body text-fg uppercase"
+          className="block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body text-fg uppercase placeholder:text-fg-faint placeholder:italic placeholder:normal-case disabled:cursor-not-allowed disabled:opacity-50"
         />
       </div>
 
-      {alpha !== undefined && (
-        <div className="w-[36px] flex-shrink-0">
-          <input
-            type="text"
-            inputMode="numeric"
-            aria-label={alphaLabel}
-            value={alphaPercentValue ?? ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              onAlphaPercentChange?.(e.target.value)
-            }
-            onFocus={() => onAlphaPercentFocusChange?.(true)}
-            onBlur={() => {
-              onAlphaPercentFocusChange?.(false);
-              onAlphaPercentCommit?.();
-            }}
-            onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
-              if (event.key === 'Enter') {
-                event.currentTarget.blur();
-              }
-            }}
-            className="block px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg"
-          />
-        </div>
-      )}
+      {alphaPercent && <PercentInput {...alphaPercent} />}
     </div>
   );
 };
@@ -1256,69 +1368,63 @@ const Input = ({
 interface GradientInputsProps {
   topValue: string;
   bottomValue: string;
+  colorLabel: string;
   onTopChange: (value: string) => void;
   onBottomChange: (value: string) => void;
+  onTopFocus: () => void;
+  onBottomFocus: () => void;
   onTopCommit: () => void;
   onBottomCommit: () => void;
+  onTopCancel: () => boolean;
+  onBottomCancel: () => boolean;
   selected: GradientSide;
   onSelect?: (side: GradientSide) => void;
-  rightTopValue?: string;
-  rightBottomValue?: string;
-  onRightValueChange?: (target: GradientSide, raw: string) => void;
-  onRightCommit?: (target: GradientSide) => void;
-  onRightFocusChange?: (target: GradientSide, focused: boolean) => void;
-  rightTitle?: string;
+  rightTopPercent?: PercentInputProps;
+  rightBottomPercent?: PercentInputProps;
 }
 
 function GradientInputs({
   topValue,
   bottomValue,
+  colorLabel,
   onTopChange,
   onBottomChange,
+  onTopFocus,
+  onBottomFocus,
   onTopCommit,
   onBottomCommit,
+  onTopCancel,
+  onBottomCancel,
   selected,
   onSelect,
-  rightTopValue,
-  rightBottomValue,
-  onRightValueChange,
-  onRightCommit,
-  onRightFocusChange,
-  rightTitle,
+  rightTopPercent,
+  rightBottomPercent,
 }: GradientInputsProps) {
   return (
     <div className="flex flex-col gap-[6px]">
       <GradientInput
         label="Top"
+        ariaLabel={`${colorLabel} Top`}
         value={topValue}
         onChange={onTopChange}
+        onFocus={onTopFocus}
         onCommit={onTopCommit}
+        onCancel={onTopCancel}
         selected={selected === 'top'}
         onSelect={() => onSelect?.('top')}
-        rightValue={rightTopValue}
-        onRightValueChange={(raw: string) => onRightValueChange?.('top', raw)}
-        onRightCommit={() => onRightCommit?.('top')}
-        onRightFocusChange={(focused: boolean) =>
-          onRightFocusChange?.('top', focused)
-        }
-        rightTitle={rightTitle}
+        rightPercent={rightTopPercent}
       />
       <GradientInput
         label="Bottom"
+        ariaLabel={`${colorLabel} Bottom`}
         value={bottomValue}
         onChange={onBottomChange}
+        onFocus={onBottomFocus}
         onCommit={onBottomCommit}
+        onCancel={onBottomCancel}
         selected={selected === 'bottom'}
         onSelect={() => onSelect?.('bottom')}
-        rightValue={rightBottomValue}
-        onRightValueChange={(raw: string) =>
-          onRightValueChange?.('bottom', raw)
-        }
-        onRightCommit={() => onRightCommit?.('bottom')}
-        onRightFocusChange={(focused: boolean) =>
-          onRightFocusChange?.('bottom', focused)
-        }
-        rightTitle={rightTitle}
+        rightPercent={rightBottomPercent}
       />
     </div>
   );
@@ -1326,31 +1432,30 @@ function GradientInputs({
 
 interface GradientInputProps {
   label: string;
+  ariaLabel: string;
   value: string;
   onChange?: (value: string) => void;
+  onFocus?: () => void;
   onCommit?: () => void;
+  onCancel?: () => boolean;
   selected: boolean;
   onSelect?: () => void;
-  rightValue?: string;
-  onRightValueChange?: (value: string) => void;
-  onRightCommit?: () => void;
-  onRightFocusChange?: (focused: boolean) => void;
-  rightTitle?: string;
+  rightPercent?: PercentInputProps;
 }
 
 function GradientInput({
   label,
+  ariaLabel,
   value,
   onChange,
+  onFocus,
   onCommit,
+  onCancel,
   selected,
   onSelect,
-  rightValue,
-  onRightValueChange,
-  onRightCommit,
-  onRightFocusChange,
-  rightTitle,
+  rightPercent,
 }: GradientInputProps) {
+  const cancelledRef = useRef(false);
   return (
     <div className="flex items-center gap-[6px] w-full">
       <div className="relative flex-1 min-w-0">
@@ -1359,22 +1464,41 @@ function GradientInput({
           tabIndex={0}
           onClick={() => onSelect?.()}
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
-            if (e.key === 'Enter') onSelect?.();
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect?.();
+            }
           }}
           className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
           color={value ? `#${value}` : '#561ecb'}
         />
         <input
           type="text"
+          aria-label={ariaLabel}
           value={value}
           onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
             onChange?.(event.target.value)
           }
-          onFocus={() => onSelect?.()}
-          onBlur={onCommit}
+          onFocus={() => {
+            cancelledRef.current = false;
+            onSelect?.();
+            onFocus?.();
+          }}
+          onBlur={() => {
+            if (cancelledRef.current) {
+              cancelledRef.current = false;
+              return;
+            }
+            onCommit?.();
+          }}
           onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
             if (event.key === 'Enter') {
-              onCommit?.();
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape' && onCancel?.()) {
+              event.preventDefault();
+              cancelledRef.current = true;
+              event.currentTarget.blur();
             }
           }}
           placeholder={label}
@@ -1383,30 +1507,7 @@ function GradientInput({
           }`}
         />
       </div>
-      {rightValue !== undefined && (
-        <div className="w-[36px] flex-shrink-0">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={rightValue ?? ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              onRightValueChange?.(e.target.value)
-            }
-            onFocus={() => onRightFocusChange?.(true)}
-            onBlur={() => {
-              onRightFocusChange?.(false);
-              onRightCommit?.();
-            }}
-            onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
-              if (event.key === 'Enter') {
-                event.currentTarget.blur();
-              }
-            }}
-            className="block px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg"
-            title={rightTitle}
-          />
-        </div>
-      )}
+      {rightPercent && <PercentInput {...rightPercent} />}
     </div>
   );
 }

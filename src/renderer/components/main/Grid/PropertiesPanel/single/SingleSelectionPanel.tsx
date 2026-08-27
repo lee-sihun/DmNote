@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { EditStateAnchor } from '@stores/grid/useEditStatePreviewStore';
 import { flushPluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
@@ -17,6 +18,7 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { PluginGeometryField } from '@hooks/Grid/usePluginGeometryGesture';
 import type {
   CounterTabContentProps,
   NoteTabContentProps,
@@ -32,14 +34,15 @@ import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { axisEventBus } from '@utils/core/axisEventBus';
 import {
   DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
+  DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_ACTIVE_BG,
-  DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_ACTIVE_FONT,
-  DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
@@ -83,6 +86,7 @@ import type {
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorElementPropertyPatchV1,
 } from '@src/types/editor';
 
@@ -100,6 +104,7 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
   }
 };
 
+// 24 그리드를 12px로 렌더 - 스트로크 2.4가 화면상 1.2
 const RenameIcon: React.FC = () => (
   <svg
     width="12"
@@ -111,14 +116,14 @@ const RenameIcon: React.FC = () => (
     <path
       d="M12 20H21"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -136,10 +141,15 @@ interface PluginSelectionPanelProps {
   isPluginResizable: boolean;
   selectedPluginElement: PluginPanelElementView | null;
   pluginDisplaySize: { width: number; height: number };
-  handlePluginPositionXChange: (value: number) => void;
-  handlePluginPositionYChange: (value: number) => void;
-  handlePluginWidthChange: (value: number) => void;
-  handlePluginHeightChange: (value: number) => void;
+  handlePluginGeometryPreview: (
+    field: PluginGeometryField,
+    value: number,
+  ) => void;
+  handlePluginGeometryCommit: (
+    field: PluginGeometryField,
+    value: number,
+  ) => void;
+  handlePluginGeometryCancel: () => void;
   hasSinglePluginSelection: boolean;
   showModalHint: boolean;
   showSettings: boolean;
@@ -163,6 +173,84 @@ interface PluginSelectionPanelProps {
   t: (key: string) => string | undefined;
 }
 
+interface PluginGeometrySectionProps {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  onPreview: (field: PluginGeometryField, value: number) => void;
+  onCommit: (field: PluginGeometryField, value: number) => void;
+  onCancel: () => void;
+  t: (key: string) => string | undefined;
+}
+
+// 입력 트리와 세션 취소 경계를 같은 서브트리에 둔다 - 선택 지문이 같아도
+// 라우트 전환으로 이 섹션만 언마운트되면 미확정 세션을 닫아야 한다
+const PluginGeometrySection = ({
+  position,
+  size,
+  onPreview,
+  onCommit,
+  onCancel,
+  t,
+}: PluginGeometrySectionProps) => {
+  useEffect(() => () => onCancel(), [onCancel]);
+  return (
+    <PropertySection>
+      <PropertyRow label={t('propertiesPanel.position') || '위치'}>
+        <NumberInput
+          value={position.x}
+          onChange={(value) => onCommit('x', value)}
+          onPreview={(value) => onPreview('x', value)}
+          onCancel={onCancel}
+          prefix="X"
+          width={AXIS_FIELD_WIDTH}
+          min={-9999}
+          max={9999}
+          allowDecimal
+          decimalScale={1}
+        />
+        <NumberInput
+          value={position.y}
+          onChange={(value) => onCommit('y', value)}
+          onPreview={(value) => onPreview('y', value)}
+          onCancel={onCancel}
+          prefix="Y"
+          width={AXIS_FIELD_WIDTH}
+          min={-9999}
+          max={9999}
+          allowDecimal
+          decimalScale={1}
+        />
+      </PropertyRow>
+      <PropertyRow label={t('propertiesPanel.size') || '크기'}>
+        <NumberInput
+          value={size.width}
+          onChange={(value) => onCommit('width', value)}
+          onPreview={(value) => onPreview('width', value)}
+          onCancel={onCancel}
+          prefix="W"
+          width={AXIS_FIELD_WIDTH}
+          min={10}
+          max={9999}
+          allowDecimal
+          decimalScale={1}
+        />
+        <NumberInput
+          value={size.height}
+          onChange={(value) => onCommit('height', value)}
+          onPreview={(value) => onPreview('height', value)}
+          onCancel={onCancel}
+          prefix="H"
+          width={AXIS_FIELD_WIDTH}
+          min={10}
+          max={9999}
+          allowDecimal
+          decimalScale={1}
+        />
+      </PropertyRow>
+    </PropertySection>
+  );
+};
+
 export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   setPanelElement,
   pluginTitle,
@@ -170,10 +258,9 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   isPluginResizable,
   selectedPluginElement,
   pluginDisplaySize,
-  handlePluginPositionXChange,
-  handlePluginPositionYChange,
-  handlePluginWidthChange,
-  handlePluginHeightChange,
+  handlePluginGeometryPreview,
+  handlePluginGeometryCommit,
+  handlePluginGeometryCancel,
   hasSinglePluginSelection,
   showModalHint,
   showSettings,
@@ -244,52 +331,14 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
         >
           <EditSessionBoundary>
             {isPluginResizable && (
-              <PropertySection>
-                <PropertyRow label={t('propertiesPanel.position') || '위치'}>
-                  <NumberInput
-                    value={selectedPluginElement?.position.x ?? 0}
-                    onChange={handlePluginPositionXChange}
-                    prefix="X"
-                    width={AXIS_FIELD_WIDTH}
-                    min={-9999}
-                    max={9999}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                  <NumberInput
-                    value={selectedPluginElement?.position.y ?? 0}
-                    onChange={handlePluginPositionYChange}
-                    prefix="Y"
-                    width={AXIS_FIELD_WIDTH}
-                    min={-9999}
-                    max={9999}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                </PropertyRow>
-                <PropertyRow label={t('propertiesPanel.size') || '크기'}>
-                  <NumberInput
-                    value={pluginDisplaySize.width}
-                    onChange={handlePluginWidthChange}
-                    prefix="W"
-                    width={AXIS_FIELD_WIDTH}
-                    min={10}
-                    max={9999}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                  <NumberInput
-                    value={pluginDisplaySize.height}
-                    onChange={handlePluginHeightChange}
-                    prefix="H"
-                    width={AXIS_FIELD_WIDTH}
-                    min={10}
-                    max={9999}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                </PropertyRow>
-              </PropertySection>
+              <PluginGeometrySection
+                position={selectedPluginElement?.position ?? { x: 0, y: 0 }}
+                size={pluginDisplaySize}
+                onPreview={handlePluginGeometryPreview}
+                onCommit={handlePluginGeometryCommit}
+                onCancel={handlePluginGeometryCancel}
+                t={t}
+              />
             )}
             {!hasSinglePluginSelection && (
               <p className="text-fg-faint text-body text-center">
@@ -340,12 +389,15 @@ interface SingleGraphPanelProps {
     patch: EditorElementPropertyPatchV1,
     options?: { gestureId?: string },
   ) => void;
+  onGraphColorPreview?: (color: string) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
+  handleGeometryPreview?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
   setShowGraphImagePicker: (value: boolean) => void;
@@ -370,12 +422,15 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleRenameCancel,
   handleRenameStart,
   onElementPropertyCommit,
+  onGraphColorPreview,
   onInactiveImageCommit,
   onIdleTransparentCommit,
   onIdleImageFitCommit,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
   handleGeometryCommit,
+  handleGeometryPreview,
   singleScrollRefFor,
   showGraphImagePicker,
   setShowGraphImagePicker,
@@ -395,6 +450,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
     (singleGraphPosition.statType as StatItemType) || 'kps';
   const graphDefaultTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
   const graphTitle = singleGraphPosition.layerName || graphDefaultTitle;
+  // 미지정 테두리는 앱 기본 립을 그대로 보여 준다 (렌더와 같은 해석기)
+  const graphBorderDisplay = resolveElementBorder(singleGraphPosition, false);
 
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
@@ -454,6 +511,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   onChange={(value) => {
                     handleGeometryCommit?.('dx', value);
                   }}
+                  onPreview={(value) => handleGeometryPreview?.('dx', value)}
+                  onCancel={() => editGestureController.cancel()}
                   prefix="X"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -466,6 +525,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   onChange={(value) => {
                     handleGeometryCommit?.('dy', value);
                   }}
+                  onPreview={(value) => handleGeometryPreview?.('dy', value)}
+                  onCancel={() => editGestureController.cancel()}
                   prefix="Y"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -479,9 +540,12 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleGraphPosition.width || 200)}
                   onChange={(value) => {
-                    const width = Math.max(20, value);
-                    handleGeometryCommit?.('width', width);
+                    handleGeometryCommit?.('width', Math.max(20, value));
                   }}
+                  onPreview={(value) =>
+                    handleGeometryPreview?.('width', Math.max(20, value))
+                  }
+                  onCancel={() => editGestureController.cancel()}
                   prefix="W"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -490,9 +554,12 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleGraphPosition.height || 100)}
                   onChange={(value) => {
-                    const height = Math.max(20, value);
-                    handleGeometryCommit?.('height', height);
+                    handleGeometryCommit?.('height', Math.max(20, value));
                   }}
+                  onPreview={(value) =>
+                    handleGeometryPreview?.('height', Math.max(20, value))
+                  }
+                  onCancel={() => editGestureController.cancel()}
                   prefix="H"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -563,12 +630,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <ColorInput
                   value={singleGraphPosition.graphColor || '#86EFAC'}
                   onChange={() => {}}
+                  onPreview={(value) => onGraphColorPreview?.(value)}
                   onChangeComplete={(value) =>
                     onElementPropertyCommit?.({
                       property: 'graphColor',
                       value: value,
                     })
                   }
+                  onCancel={() => editGestureController.cancel()}
                   colorId={`graph-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   panelElement={panelElement}
                 />
@@ -612,12 +681,19 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                       ? { kind: 'graph', id: singleGraphPosition.id }
                       : undefined
                   }
+                  onModePreview={(_state, modeValue) =>
+                    onPaintPreview?.({
+                      property: 'backgroundPaint',
+                      value: paintDescriptor(modeValue),
+                    })
+                  }
                   onModeCommit={(_state, modeValue) =>
                     onPaintCommit?.({
                       property: 'backgroundPaint',
                       value: paintDescriptor(modeValue),
                     })
                   }
+                  onCancel={() => editGestureController.cancel()}
                   colorId={`graph-bg-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   panelElement={panelElement}
                 />
@@ -627,17 +703,21 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 label={t('propertiesPanel.borderColor') || 'Border Color'}
               >
                 <ColorInput
-                  value={
-                    singleGraphPosition.borderColor || DEFAULT_ELEMENT_HAIRLINE
-                  }
+                  value={graphBorderDisplay.color}
                   onChange={() => {}}
                   onChangeComplete={() => {}}
-                  gradientValue={singleGraphPosition.borderGradient ?? null}
+                  gradientValue={graphBorderDisplay.gradient}
                   canvasAnchor={
                     singleGraphPosition.id &&
                     isNativeElementId(singleGraphPosition.id)
                       ? { kind: 'graph', id: singleGraphPosition.id }
                       : undefined
+                  }
+                  onModePreview={(_state, modeValue) =>
+                    onPaintPreview?.({
+                      property: 'borderPaint',
+                      value: paintDescriptor(modeValue),
+                    })
                   }
                   onModeCommit={(_state, modeValue) =>
                     onPaintCommit?.({
@@ -645,6 +725,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                       value: paintDescriptor(modeValue),
                     })
                   }
+                  onCancel={() => editGestureController.cancel()}
                   colorId={`graph-border-color-${selectedKeyType}-${singleGraphPosition.id}`}
                   gradientSurface="border"
                   panelElement={panelElement}
@@ -809,10 +890,13 @@ interface SingleKnobPanelProps {
   onActiveTransparentCommit?: (activeTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
+  handleGeometryPreview?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
@@ -839,9 +923,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   onIdleImageFitCommit,
   onActiveImageFitCommit,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
+  onStylePropertyPreview,
   onShadowCommit,
   handleGeometryCommit,
+  handleGeometryPreview,
   singleScrollRefFor,
   panelElement,
   useCustomCSS,
@@ -853,6 +940,20 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   const [axisCaptureTarget, setAxisCaptureTarget] = useState<string | null>(
     null,
   );
+  // 민감도는 오버레이 프리뷰 대상이 아니라 확정 전까지 패널 안에서만 값을 들고 있는다
+  // 노브 id로 묶어야 대상이 바뀐 첫 렌더에 이전 노브의 미확정 값이 새 칸에 비치지 않는다
+  const [sensitivityDraft, setSensitivityDraft] = useState<{
+    id: string;
+    value: number;
+  } | null>(null);
+  const sensitivityDraftValue =
+    sensitivityDraft?.id === singleKnobPosition.id
+      ? sensitivityDraft.value
+      : null;
+  // draft는 커밋이 착지할 때 지운다 - 먼저 비우면 착지 전 한 프레임 옛 값이 비친다
+  useEffect(() => {
+    setSensitivityDraft(null);
+  }, [singleKnobPosition.id, singleKnobPosition.sensitivity]);
   const [classNameDraft, setClassNameDraft] = useState(
     singleKnobPosition.className || '',
   );
@@ -901,9 +1002,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   // 대기/입력 색상 (키 패널과 동일한 기본값/전환 로직)
   const DEFAULT_KNOB_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
-  const DEFAULT_KNOB_BORDER_COLOR = DEFAULT_ELEMENT_FONT;
+  const DEFAULT_KNOB_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
   const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
-  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
+  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
 
   type KnobColorTarget = 'backgroundColor' | 'borderColor';
   type KnobColorProperty =
@@ -996,6 +1097,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   // ── 그라데이션 배선 (키 패널과 동일 패턴) — 단색 커밋도 이 경로로 통합 ──
 
+  // 테두리 미지정이면 렌더와 같은 기본 립을 편집 대상으로 보여 준다
+  const defaultKnobBorderGradientFor = (
+    active: boolean,
+  ): GradientSpec | null => {
+    const resolved = resolveElementBorder(singleKnobPosition, active);
+    return resolved.isDefault ? resolved.gradient : null;
+  };
+
   const storedGradientOf = (prop: KnobColorProperty): GradientSpec | null => {
     switch (prop) {
       case 'backgroundColor':
@@ -1003,9 +1112,15 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       case 'activeBackgroundColor':
         return singleKnobPosition.activeBackgroundGradient ?? null;
       case 'borderColor':
-        return singleKnobPosition.borderGradient ?? null;
+        return (
+          singleKnobPosition.borderGradient ??
+          defaultKnobBorderGradientFor(false)
+        );
       case 'activeBorderColor':
-        return singleKnobPosition.activeBorderGradient ?? null;
+        return (
+          singleKnobPosition.activeBorderGradient ??
+          defaultKnobBorderGradientFor(true)
+        );
       default:
         return null;
     }
@@ -1057,10 +1172,21 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     canvasSurface: pickerFor === 'borderColor' ? 'border' : 'background',
     canvasState: colorState,
     onPreview: (value) => {
-      if (value.mode === 'solid' && pickerFor) {
-        handleColorChange(pickerFor, value.color);
-      }
+      if (!pickerFor) return;
+      const prop = resolveColorProperty(pickerFor);
+      const descriptor = paintDescriptor(value);
+      setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+      const paintField =
+        colorState === 'active'
+          ? pickerFor === 'backgroundColor'
+            ? 'activeBackgroundPaint'
+            : 'activeBorderPaint'
+          : pickerFor === 'backgroundColor'
+          ? 'backgroundPaint'
+          : 'borderPaint';
+      onPaintPreview?.({ property: paintField, value: descriptor } as never);
     },
+    onCancel: () => editGestureController.cancel(),
     onCommit: handleGradientCommit,
   });
 
@@ -1192,6 +1318,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   onChange={(value) => {
                     handleGeometryCommit?.('dx', value);
                   }}
+                  onPreview={(value) => handleGeometryPreview?.('dx', value)}
+                  onCancel={() => editGestureController.cancel()}
                   prefix="X"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -1204,6 +1332,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   onChange={(value) => {
                     handleGeometryCommit?.('dy', value);
                   }}
+                  onPreview={(value) => handleGeometryPreview?.('dy', value)}
+                  onCancel={() => editGestureController.cancel()}
                   prefix="Y"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -1217,9 +1347,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleKnobPosition.width || 60)}
                   onChange={(value) => {
-                    const width = Math.max(20, value);
-                    handleGeometryCommit?.('width', width);
+                    handleGeometryCommit?.('width', Math.max(20, value));
                   }}
+                  onPreview={(value) =>
+                    handleGeometryPreview?.('width', Math.max(20, value))
+                  }
+                  onCancel={() => editGestureController.cancel()}
                   prefix="W"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -1228,9 +1361,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleKnobPosition.height || 60)}
                   onChange={(value) => {
-                    const height = Math.max(20, value);
-                    handleGeometryCommit?.('height', height);
+                    handleGeometryCommit?.('height', Math.max(20, value));
                   }}
+                  onPreview={(value) =>
+                    handleGeometryPreview?.('height', Math.max(20, value))
+                  }
+                  onCancel={() => editGestureController.cancel()}
                   prefix="H"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -1245,13 +1381,28 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 label={t('propertiesPanel.knobSensitivity') || '민감도'}
               >
                 <NumberInput
-                  value={Number(singleKnobPosition.sensitivity ?? 1)}
-                  onChange={(value) =>
+                  value={
+                    sensitivityDraftValue ??
+                    Number(singleKnobPosition.sensitivity ?? 1)
+                  }
+                  onChange={(value) => {
+                    const next = Math.max(0, value);
+                    setSensitivityDraft({
+                      id: singleKnobPosition.id,
+                      value: next,
+                    });
                     onElementPropertyCommit?.({
                       property: 'sensitivity',
+                      value: next,
+                    });
+                  }}
+                  onPreview={(value) =>
+                    setSensitivityDraft({
+                      id: singleKnobPosition.id,
                       value: Math.max(0, value),
                     })
                   }
+                  onCancel={() => setSensitivityDraft(null)}
                   suffix="×"
                   min={0}
                   max={100}
@@ -1321,7 +1472,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 label={t('propertiesPanel.borderWidth') || '테두리 두께'}
               >
                 <NumberInput
-                  value={singleKnobPosition.borderWidth ?? 0}
+                  value={
+                    singleKnobPosition.borderWidth ??
+                    DEFAULT_ELEMENT_BORDER_WIDTH
+                  }
                   onChange={(value) =>
                     onStylePropertyCommit?.({
                       property: 'borderWidth',
@@ -1419,6 +1573,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     : { property: 'shadow', value: leaf },
                 );
               }}
+              onPreview={(state, leaf) =>
+                onStylePropertyPreview?.({
+                  property: state === 'active' ? 'activeShadow' : 'shadow',
+                  value: leaf,
+                })
+              }
+              onPreviewCancel={() => editGestureController.cancel()}
               onEnabledChange={(enabled) => {
                 onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
               }}
@@ -1494,6 +1655,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             onColorChangeComplete={(c: string) =>
               knobGradientState.handlePickerColorChange(c, true)
             }
+            onInputCancel={(_target, restoredColor) => {
+              knobGradientState.cancelPreview();
+              if (pickerFor && typeof restoredColor === 'string') {
+                handleColorChange(pickerFor, restoredColor);
+              }
+              editGestureController.cancel();
+            }}
             onClose={() => setPickerFor(null)}
             solidOnly={true}
             stateMode={colorState}
@@ -1522,6 +1690,7 @@ interface SingleKeyStatPanelProps {
   singleKeyIndex: number | null;
   singleStatIndex: number | null;
   singleKeyPosition: KeyPosition | null;
+  canonicalKeyPosition: KeyPosition | null;
   singleStatPosition: StatItemPosition | null;
   singleKeyCode: string | null;
   singleKeySlot: KeySlot | null;
@@ -1554,8 +1723,9 @@ interface SingleKeyStatPanelProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   onNotePaintCommit?: NoteTabContentProps['onNotePaintCommit'];
@@ -1582,6 +1752,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   singleKeyIndex,
   singleStatIndex,
   singleKeyPosition,
+  canonicalKeyPosition,
   singleStatPosition,
   singleKeyCode,
   singleKeySlot,
@@ -1614,6 +1785,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintPreview,
   onPaintCommit,
   onShadowCommit,
   onNotePaintCommit,
@@ -1809,6 +1981,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onSoundVolumeCommit={onSoundVolumeCommit}
               onStylePropertyPreview={onStylePropertyPreview}
               onStylePropertyCommit={onStylePropertyCommit}
+              onPaintPreview={onPaintPreview}
               onPaintCommit={onPaintCommit}
               onShadowCommit={onShadowCommit}
               imageButtonRef={imageButtonRef}
@@ -1846,6 +2019,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             <EditSessionBoundary>
               <NoteTabContent
                 keyPosition={singleKeyPosition!}
+                canonicalKeyPosition={canonicalKeyPosition ?? undefined}
                 onElementPropertyCommit={onElementPropertyCommit}
                 onStylePropertyPreview={onStylePropertyPreview}
                 onStylePropertyCommit={onStylePropertyCommit}

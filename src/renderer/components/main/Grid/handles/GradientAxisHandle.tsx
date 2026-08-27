@@ -569,6 +569,7 @@ const GradientAxisOverlay = ({
       drag.ownerGeneration === useGradientEditStore.getState().generation
     ) {
       live.apply(drag.startSpec, false);
+      live.cancel?.();
     }
   };
   // eslint-disable-next-line react-hooks/refs
@@ -746,8 +747,8 @@ const GradientAxisOverlay = ({
     <div
       ref={rootRef}
       className="absolute inset-0 pointer-events-none"
-      // 리사이즈 핸들(21~25) 위, 사이드 패널(z-30) 아래 - 패널 위로 새지 않게
-      style={{ zIndex: 26 }}
+      // 리사이즈 핸들 위, 사이드 패널 아래에 두는 내부 편집 층 - 패널 위로 새지 않게
+      style={{ zIndex: 'var(--z-canvas-gradient-editor)' }}
       data-dmn-gradient-overlay="true"
     >
       {/* 조작 UI 묶음 - 핸들 드래그나 피커 색 드래그 동안 흐려져

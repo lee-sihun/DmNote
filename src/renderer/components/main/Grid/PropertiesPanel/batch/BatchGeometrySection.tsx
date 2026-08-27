@@ -134,7 +134,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
                 <path
                   d="M1 1V9"
                   stroke="currentColor"
-                  strokeWidth="1.5"
+                  strokeWidth="1.2"
                   strokeLinecap="round"
                 />
                 <rect
@@ -165,7 +165,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
                 <path
                   d="M5 1V9"
                   stroke="currentColor"
-                  strokeWidth="1.5"
+                  strokeWidth="1.2"
                   strokeLinecap="round"
                 />
                 <rect
@@ -196,7 +196,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
                 <path
                   d="M9 1V9"
                   stroke="currentColor"
-                  strokeWidth="1.5"
+                  strokeWidth="1.2"
                   strokeLinecap="round"
                 />
                 <rect
@@ -230,7 +230,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
                 <path
                   d="M1 1H9"
                   stroke="currentColor"
-                  strokeWidth="1.5"
+                  strokeWidth="1.2"
                   strokeLinecap="round"
                 />
                 <rect
@@ -261,7 +261,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
                 <path
                   d="M1 5H9"
                   stroke="currentColor"
-                  strokeWidth="1.5"
+                  strokeWidth="1.2"
                   strokeLinecap="round"
                 />
                 <rect
@@ -292,7 +292,7 @@ const BatchGeometrySection: React.FC<BatchGeometrySectionProps> = ({
                 <path
                   d="M1 9H9"
                   stroke="currentColor"
-                  strokeWidth="1.5"
+                  strokeWidth="1.2"
                   strokeLinecap="round"
                 />
                 <rect

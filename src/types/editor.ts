@@ -18,6 +18,12 @@ import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
+  isImageTransformLeafPatch,
+  type ImageMode,
+  type ImageTransform,
+  type ImageTransformLeafPatch,
+} from '@src/types/key/imageLayer';
+import {
   isNoteBorderPaintPatchValueV1,
   isNotePaintValuePatchV1,
   type NoteBorderPaintPatchValueV1,
@@ -214,6 +220,9 @@ interface EditorElementPropertyValuesV1 {
   activeTransparent: boolean;
   idleImageFit: 'cover' | 'contain' | 'fill' | 'none';
   activeImageFit: 'cover' | 'contain' | 'fill' | 'none';
+  imageMode: ImageMode;
+  idleImageTransform: ImageTransformLeafPatch | null;
+  activeImageTransform: ImageTransformLeafPatch | null;
   counterEnabled: boolean;
   counterAnimationEnabled: boolean;
   counterPlacement: 'inside' | 'outside';
@@ -316,6 +325,9 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'activeTransparent',
   'idleImageFit',
   'activeImageFit',
+  'imageMode',
+  'idleImageTransform',
+  'activeImageTransform',
   'soundPath',
   'soundEnabled',
   'soundVolume',
@@ -400,6 +412,13 @@ export type EditorImageFitPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'idleImageFit' | 'activeImageFit'
 >;
 
+export type EditorImageModePropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'imageMode'>;
+
+export type EditorImageTransformPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'idleImageTransform' | 'activeImageTransform'
+>;
+
 export interface EditorCounterAnimationPresetIntentV1 {
   presetId: string;
   applyPresetId?: true;
@@ -461,6 +480,24 @@ export type EditorPreviewStylePropertyPatchV1 =
       | 'noteBorderWidth'
       | 'noteBorderRadius'
     >;
+
+// 프리뷰 전용 - 커밋 wire는 leaf 패치지만 프리뷰는 keyPosition에 그대로 얹을 전체 변환을 보낸다
+export type EditorImageTransformPreviewPatchV1 = {
+  property: 'idleImageTransform' | 'activeImageTransform';
+  value: ImageTransform;
+};
+
+// 프리뷰도 커밋과 같은 leaf wire. 대상별 전체 스펙 투영은 forwarder가 맡는다 -
+// 배치에서 대표 스펙을 통째로 얹으면 Mixed 대상의 다른 축까지 잠시 통일된다
+export type EditorShadowPreviewPatchV1 = {
+  property: 'shadow' | 'activeShadow';
+  value: ElementShadowValuePatch;
+};
+
+export type EditorStylePropertyPreviewPatchV1 =
+  | EditorPreviewStylePropertyPatchV1
+  | EditorImageTransformPreviewPatchV1
+  | EditorShadowPreviewPatchV1;
 
 export type EditorPaintPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'backgroundPaint'
@@ -745,6 +782,9 @@ const NULLABLE_POSITION_FIELDS = new Set([
   'imageFit',
   'idleImageFit',
   'activeImageFit',
+  'imageMode',
+  'idleImageTransform',
+  'activeImageTransform',
   'useInlineStyles',
   'displayText',
   'fontWeight',
@@ -1581,6 +1621,17 @@ const isEditorElementPropertyValueValid = (
         keyOrKnob &&
         ['cover', 'contain', 'fill', 'none'].includes(value as string)
       );
+    // 이미지 레이어 모드·변환은 키 렌더러만 소비한다
+    case 'imageMode':
+      return (
+        elementType === 'key' && (value === 'replace' || value === 'overlay')
+      );
+    case 'idleImageTransform':
+    case 'activeImageTransform':
+      return (
+        elementType === 'key' &&
+        (value === null || isImageTransformLeafPatch(value))
+      );
     case 'soundPath':
       return elementType === 'key' && typeof value === 'string';
     case 'soundEnabled':
@@ -1687,7 +1738,7 @@ const isEditorElementPropertyValueValid = (
         elementType === 'key' &&
         typeof value === 'number' &&
         Number.isFinite(value) &&
-        value >= 1 &&
+        value >= 0 &&
         value <= 100
       );
     case 'noteAlignment':

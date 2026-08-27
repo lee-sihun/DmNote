@@ -12,7 +12,7 @@ use parking_lot::RwLock;
 use serde_json::Value;
 use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse, InvokeResponseBody};
 use tauri::webview::InvokeRequest;
-use tauri::{AppHandle, Listener, Manager, Wry};
+use tauri::{AppHandle, Manager, Wry};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, oneshot};
@@ -69,6 +69,15 @@ const ALLOWED_WS_COMMANDS: &[&str] = &[
     "plugin_storage_has_data",
     // 파괴적 bulk 삭제는 plugin_storage_clear와 동일하게 원격 차단
 ];
+
+// OBS 브라우저 소스는 overlay 창을 대신한다 - main만을 향한 브릿지 메시지는 전달하지 않는다
+fn is_forwarded_to_obs(event: &str, data: &Value) -> bool {
+    if !FORWARDED_EVENTS.contains(&event) {
+        return false;
+    }
+    !(event == "plugin-bridge:message"
+        && data.get("target").and_then(Value::as_str) == Some("main"))
+}
 
 const FORWARDED_EVENTS: &[&str] = &[
     "settings:changed",
@@ -359,8 +368,6 @@ pub struct ObsBridgeService {
     session_token: RwLock<String>,
     /// Tauri AppHandle (invoke_request 디스패치용)
     app_handle: RwLock<Option<AppHandle<Wry>>>,
-    /// 이벤트 포워딩용 리스너 ID (stop 시 해제)
-    event_listener_ids: RwLock<Vec<tauri::EventId>>,
 }
 
 impl ObsBridgeService {
@@ -379,7 +386,6 @@ impl ObsBridgeService {
             server_version: version.to_string(),
             session_token: RwLock::new(String::new()),
             app_handle: RwLock::new(None),
-            event_listener_ids: RwLock::new(Vec::new()),
         }
     }
 
@@ -393,36 +399,6 @@ impl ObsBridgeService {
 
     pub fn set_app_handle(&self, handle: AppHandle<Wry>) {
         *self.app_handle.write() = Some(handle);
-    }
-
-    /// Tauri 이벤트를 OBS WS 클라이언트에 포워딩하는 리스너 등록
-    pub fn register_event_forwarding(&self, app: &AppHandle<Wry>) {
-        // 기존 리스너 해제 (중복 호출 시 누적 방지)
-        for id in self.event_listener_ids.write().drain(..) {
-            app.unlisten(id);
-        }
-
-        // OBS 오버레이가 수신하는 이벤트 목록
-        // listen_any: 모든 타깃(App/Window/Webview)의 이벤트를 캡처
-        // emit_to()로 특정 윈도우에 보낸 이벤트도 포워딩됨
-        let mut ids = Vec::with_capacity(FORWARDED_EVENTS.len());
-        for event_name in FORWARDED_EVENTS {
-            let tx = self.broadcast_tx.clone();
-            let name = event_name.to_string();
-            let id = app.listen_any(*event_name, move |evt| {
-                let data: Value = serde_json::from_str(evt.payload()).unwrap_or(Value::Null);
-                let _ = tx.send(ObsBroadcast::TauriEvent {
-                    event: name.clone(),
-                    data,
-                });
-            });
-            ids.push(id);
-        }
-        *self.event_listener_ids.write() = ids;
-        log::info!(
-            "[ObsBridge] 이벤트 포워딩 등록: {}개 이벤트",
-            FORWARDED_EVENTS.len()
-        );
     }
 
     pub fn is_running(&self) -> bool {
@@ -457,11 +433,23 @@ impl ObsBridgeService {
         *self.cached_snapshot.write() = snapshot;
     }
 
-    /// 범용 Tauri 이벤트 포워딩 (OBS 클라이언트에 tauri_event로 전달)
-    pub fn broadcast_tauri_event(&self, event: String, data: Value) {
-        let _ = self
+    pub fn publish(&self, event: &str, data: Value) {
+        if !self.is_running() || !is_forwarded_to_obs(event, &data) {
+            return;
+        }
+
+        let receiver_count = self.broadcast_tx.receiver_count();
+        if self
             .broadcast_tx
-            .send(ObsBroadcast::TauriEvent { event, data });
+            .send(ObsBroadcast::TauriEvent {
+                event: event.to_string(),
+                data,
+            })
+            .is_err()
+            && receiver_count > 0
+        {
+            log::warn!("[ObsBridge] {event} 전송 실패: receiver_count={receiver_count}");
+        }
     }
 
     /// 전체 스냅샷 재전송 (프리셋 로드 등 대규모 변경 시)
@@ -540,13 +528,6 @@ impl ObsBridgeService {
     pub fn stop(&self) {
         if !self.running.load(Ordering::Relaxed) {
             return;
-        }
-        // 이벤트 포워딩 리스너 해제
-        if let Some(app) = self.app_handle.read().as_ref() {
-            use tauri::Listener;
-            for id in self.event_listener_ids.write().drain(..) {
-                app.unlisten(id);
-            }
         }
         // 기존 클라이언트 세션에 종료 신호 전송
         let _ = self.broadcast_tx.send(ObsBroadcast::Shutdown);
@@ -1386,6 +1367,30 @@ mod tests {
         ws
     }
 
+    async fn assert_no_tauri_event(ws: &mut TestWebSocket) {
+        let result = tokio::time::timeout(Duration::from_millis(100), async {
+            loop {
+                match ws.next().await {
+                    Some(Ok(Message::Text(text))) => {
+                        let envelope = serde_json::from_str::<ObsEnvelope>(&text)
+                            .expect("OBS envelope 파싱 실패");
+                        if envelope.msg_type == "tauri_event" {
+                            return true;
+                        }
+                    }
+                    Some(Ok(_)) => {}
+                    Some(Err(_)) | None => return false,
+                }
+            }
+        })
+        .await;
+
+        assert!(
+            matches!(result, Err(_) | Ok(false)),
+            "예상하지 않은 tauri_event 중복 수신"
+        );
+    }
+
     #[test]
     fn websocket_allowlist_uses_exact_matching() {
         assert_eq!(ALLOWED_WS_COMMANDS.len(), 32);
@@ -1411,7 +1416,19 @@ mod tests {
     }
 
     #[test]
+    fn bridge_messages_targeting_main_are_not_forwarded_to_obs() {
+        let broadcast = serde_json::json!({ "type": "PING", "data": null });
+        assert!(is_forwarded_to_obs("plugin-bridge:message", &broadcast));
+        let to_overlay = serde_json::json!({ "type": "PING", "target": "overlay" });
+        assert!(is_forwarded_to_obs("plugin-bridge:message", &to_overlay));
+        let to_main = serde_json::json!({ "type": "PING", "target": "main" });
+        assert!(!is_forwarded_to_obs("plugin-bridge:message", &to_main));
+        assert!(!is_forwarded_to_obs("app:close-requested", &broadcast));
+    }
+
+    #[test]
     fn public_overlay_events_are_forwarded_to_obs_clients() {
+        assert_eq!(FORWARDED_EVENTS.len(), 32);
         for event in [
             "customTabs:changed",
             "overlay:resized",
@@ -1420,6 +1437,167 @@ mod tests {
         ] {
             assert!(FORWARDED_EVENTS.contains(&event), "missing event: {event}");
         }
+    }
+
+    #[tokio::test]
+    async fn publish_is_noop_while_server_is_stopped() {
+        let bridge = ObsBridgeService::new("test");
+        let mut receiver = bridge.broadcast_tx.subscribe();
+
+        bridge.publish("settings:changed", serde_json::json!({ "enabled": true }));
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), receiver.recv())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_with_no_receivers_keeps_running_server_healthy() {
+        let bridge = Arc::new(ObsBridgeService::new("test"));
+        let port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 시작 실패");
+
+        assert_ne!(port, 0);
+        assert_eq!(bridge.broadcast_tx.receiver_count(), 0);
+        bridge.publish("settings:changed", serde_json::json!({ "enabled": true }));
+        assert!(bridge.is_running());
+
+        bridge.stop();
+    }
+
+    #[tokio::test]
+    async fn publish_forwards_supported_events_to_authenticated_client() {
+        let bridge = Arc::new(ObsBridgeService::new("test"));
+        let port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 시작 실패");
+        let mut ws = connect_authenticated(port, "token").await;
+
+        for (event_name, data) in [
+            ("settings:changed", serde_json::json!({ "theme": "dark" })),
+            ("overlay:lock", serde_json::json!({ "locked": true })),
+            ("css:content", serde_json::json!({ "content": "body {}" })),
+        ] {
+            bridge.publish(event_name, data.clone());
+            let event = receive_envelope(&mut ws, "tauri_event").await;
+            assert_eq!(
+                event.payload,
+                serde_json::json!({ "event": event_name, "data": data })
+            );
+        }
+
+        bridge.stop();
+    }
+
+    #[tokio::test]
+    async fn publish_ignores_events_outside_forwarded_allowlist() {
+        let bridge = Arc::new(ObsBridgeService::new("test"));
+        let port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 시작 실패");
+        let mut ws = connect_authenticated(port, "token").await;
+
+        bridge.publish("history:status", serde_json::json!({ "canUndo": true }));
+        bridge.publish("settings:changed", serde_json::json!({ "marker": true }));
+
+        let event = receive_envelope(&mut ws, "tauri_event").await;
+        assert_eq!(
+            event.payload,
+            serde_json::json!({
+                "event": "settings:changed",
+                "data": { "marker": true }
+            })
+        );
+        assert_no_tauri_event(&mut ws).await;
+
+        bridge.stop();
+    }
+
+    #[tokio::test]
+    async fn publish_reaches_multiple_authenticated_clients_once_each() {
+        let bridge = Arc::new(ObsBridgeService::new("test"));
+        let port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 시작 실패");
+        let mut first = connect_authenticated(port, "token").await;
+        let mut second = connect_authenticated(port, "token").await;
+
+        bridge.publish("overlay:lock", serde_json::json!({ "locked": false }));
+
+        for ws in [&mut first, &mut second] {
+            let event = receive_envelope(ws, "tauri_event").await;
+            assert_eq!(
+                event.payload,
+                serde_json::json!({
+                    "event": "overlay:lock",
+                    "data": { "locked": false }
+                })
+            );
+            assert_no_tauri_event(ws).await;
+        }
+
+        bridge.stop();
+    }
+
+    #[tokio::test]
+    async fn publish_after_stop_start_has_no_missing_or_duplicate_event() {
+        let bridge = Arc::new(ObsBridgeService::new("test"));
+        let first_port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 시작 실패");
+        let mut first = connect_authenticated(first_port, "token").await;
+
+        bridge.publish("settings:changed", serde_json::json!({ "cycle": 1 }));
+        let first_event = receive_envelope(&mut first, "tauri_event").await;
+        assert_eq!(first_event.payload["data"]["cycle"], 1);
+
+        bridge.stop();
+        drop(first);
+
+        let second_port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 재시작 실패");
+        let mut second = connect_authenticated(second_port, "token").await;
+
+        bridge.publish("settings:changed", serde_json::json!({ "cycle": 2 }));
+        let second_event = receive_envelope(&mut second, "tauri_event").await;
+        assert_eq!(second_event.payload["data"]["cycle"], 2);
+        assert_no_tauri_event(&mut second).await;
+
+        bridge.stop();
+    }
+
+    #[tokio::test]
+    async fn lagged_publish_burst_recovers_with_latest_snapshot() {
+        let bridge = Arc::new(ObsBridgeService::new("test"));
+        let expected_snapshot = serde_json::json!({ "revision": 300 });
+        bridge.update_snapshot(expected_snapshot.clone());
+        let port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 시작 실패");
+        let mut ws = connect_authenticated(port, "token").await;
+
+        for revision in 0..300 {
+            bridge.publish(
+                "settings:changed",
+                serde_json::json!({ "revision": revision }),
+            );
+        }
+
+        let snapshot = receive_envelope(&mut ws, "snapshot").await;
+        assert_eq!(snapshot.payload, expected_snapshot);
+
+        bridge.stop();
     }
 
     #[test]
@@ -1751,8 +1929,8 @@ mod tests {
 
         let resync = make_envelope("resync_request", 1, Value::Null);
         let _ = old_ws.send(Message::Text(resync.to_string())).await;
-        bridge.broadcast_tauri_event(
-            "token-rotation-test".to_string(),
+        bridge.publish(
+            "settings:changed",
             serde_json::json!({ "authenticated": false }),
         );
 
@@ -1766,7 +1944,7 @@ mod tests {
                         if envelope.msg_type == "tauri_event" {
                             assert_ne!(
                                 envelope.payload.get("event").and_then(Value::as_str),
-                                Some("token-rotation-test")
+                                Some("settings:changed")
                             );
                         }
                     }
@@ -1779,15 +1957,15 @@ mod tests {
         .expect("구 토큰 세션이 종료되지 않음");
 
         let mut new_ws = connect_authenticated(port, "new-token").await;
-        bridge.broadcast_tauri_event(
-            "token-rotation-test".to_string(),
+        bridge.publish(
+            "settings:changed",
             serde_json::json!({ "authenticated": true }),
         );
         let event = receive_envelope(&mut new_ws, "tauri_event").await;
         assert_eq!(
             event.payload,
             serde_json::json!({
-                "event": "token-rotation-test",
+                "event": "settings:changed",
                 "data": { "authenticated": true }
             })
         );

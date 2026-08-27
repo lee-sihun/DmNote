@@ -5,6 +5,7 @@ import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { PanelHostContext } from '@contexts/PanelHostContext';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { usePanelHeaderDrag } from '@hooks/panel/usePanelHeaderDrag';
+import { restoreLenisScroll } from '@hooks/useLenis';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
@@ -12,10 +13,17 @@ import {
   detachPropertiesPanel,
   dockPropertiesPanel,
   isTransitionFailure,
+  registerPanelHostMoveCapture,
+  registerPanelHostScrollReapply,
+  type PanelHostPlacement,
   usePanelHostStore,
 } from '@stores/grid/usePanelHostStore';
 import { isMac, isWindows } from '@utils/core/platform';
 import { readTokenColor } from '@utils/panelWindow/nativeChrome';
+import {
+  isModalLayerActive,
+  useModalLayerActive,
+} from '@components/main/Modal/popupLayer';
 import {
   getPanelChildWindow,
   openPanelChildWindow,
@@ -30,6 +38,12 @@ import type { CSSProperties } from 'react';
 const DETACHED_ROOT_CLASS =
   'relative w-screen h-screen overflow-hidden rounded-[var(--dmn-panel-window-radius,12px)] bg-panel-detached';
 const DOCKED_ROOT_CLASS = 'contents';
+const SCROLL_VIEWPORT_SELECTOR = '.properties-panel-overlay-viewport';
+
+interface ScrollPosition {
+  top: number;
+  left: number;
+}
 
 // Windows는 창이 불투명이라 실루엣이 항상 네이티브 - 반경은 적용 성공 여부와 무관하게 0
 const nativeOwnsSilhouette = () => isWindows();
@@ -50,6 +64,8 @@ const fallbackChrome = (): PanelWindowChrome =>
     : { webRadius: 12, webRing: true };
 
 interface PropertiesPanelHostProps {
+  // 실제 그리드 영역만 드래그 도킹 대상으로 사용
+  dockAreaRef: React.RefObject<HTMLElement | null>;
   onKeyMappingChange?: (index: number, newKey: string) => void;
   // 분리/도킹 전환이 사용자에게 알릴 만한 이유로 실패했을 때
   onTransitionFailure?: (kind: 'detach' | 'dock') => void;
@@ -61,15 +77,18 @@ interface PropertiesPanelHostProps {
  * 분리는 그 호스트 엘리먼트를 자식 창 문서로 adoptNode해 옮기는 것 - 컨테이너가 같으므로
  * React는 리마운트하지 않고, 위임 리스너도 컨테이너에 붙어 있어 문서를 옮겨도 살아 있다
  */
+// 분리 창 모달 딤의 등퇴장 시간
+const DIM_FADE_MS = 150;
+
 const PropertiesPanelHost = ({
+  dockAreaRef,
   onKeyMappingChange,
   onTransitionFailure,
 }: PropertiesPanelHostProps) => {
+  const modalLayerActive = useModalLayerActive();
   const placement = usePanelHostStore((state) => state.placement);
   const detached = placement === 'detached';
   const slotRef = useRef<HTMLDivElement | null>(null);
-  // 도킹 자리(그리드 영역) - 헤더 드래그의 도크 존 기준
-  const dockAreaRef = useRef<HTMLElement | null>(null);
   const [host] = useState(() => {
     const element = document.createElement('div');
     element.className = 'contents';
@@ -79,19 +98,136 @@ const PropertiesPanelHost = ({
   // 자식 창은 detached일 때만 유효 - 배치가 바뀌면 다시 읽는다
   const child = detached ? getPanelChildWindow() : null;
   const childWindow = child?.window ?? null;
+  const childBodyRef = useRef<HTMLElement | null>(null);
+  const attachedPlacementRef = useRef<PanelHostPlacement | null>(null);
+  const scrollPositionsRef = useRef(new WeakMap<HTMLElement, ScrollPosition>());
+
+  useLayoutEffect(() => {
+    childBodyRef.current = childWindow?.document.body ?? null;
+    return () => {
+      childBodyRef.current = null;
+    };
+  }, [childWindow]);
+
+  // 분리 패널의 picker와 메뉴는 host 밖의 child body로 포털될 수 있다.
+  // 딤은 body opacity가 아니라 덮개 한 장이 소유한다 - opacity < 1인 body는
+  // backdrop root가 되어 이 창 안 모든 글래스의 블러를 죽이고, 딤이 풀리는
+  // 순간 블러가 튀어 돌아온다. 입력 차단은 그대로 inert가 맡는다
+  useLayoutEffect(() => {
+    const body = childBodyRef.current;
+    if (!body || !modalLayerActive) return;
+    const previousInert = body.inert;
+    body.inert = true;
+    body.dataset.dmnModalLocked = 'true';
+
+    const dim = body.ownerDocument.createElement('div');
+    dim.dataset.dmnModalDim = 'true';
+    dim.setAttribute('aria-hidden', 'true');
+    Object.assign(dim.style, {
+      position: 'fixed',
+      inset: '0',
+      background: 'var(--ui-bg-app)',
+      opacity: '0',
+      pointerEvents: 'none',
+      transition: `opacity ${DIM_FADE_MS}ms ease`,
+      zIndex: 'var(--z-chrome-tooltip)',
+    });
+    // 앞선 세션의 잔여 덮개가 남아 있으면 먼저 걷는다
+    body
+      .querySelectorAll('[data-dmn-modal-dim]')
+      .forEach((stale) => stale.remove());
+    body.appendChild(dim);
+    // 첫 프레임에 0으로 확정한 뒤 올려야 트랜지션이 산다
+    const raf = body.ownerDocument.defaultView?.requestAnimationFrame(() => {
+      dim.style.opacity = '0.6';
+    });
+    // 잠긴 자식 창에 OS 포커스가 있으면 Escape가 그 문서에만 닿는다 - 분리 창엔
+    // 모달이 없으므로 메인 문서로 넘겨 최상위 레이어가 소유권을 판정하게 한다
+    const relayEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      document.dispatchEvent(
+        // 소비자들이 defaultPrevented로 소유권을 넘기므로 cancelable이어야 한다
+        new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    };
+    body.ownerDocument.addEventListener('keydown', relayEscape);
+
+    return () => {
+      body.ownerDocument.removeEventListener('keydown', relayEscape);
+      body.inert = previousInert;
+      delete body.dataset.dmnModalLocked;
+      if (raf) body.ownerDocument.defaultView?.cancelAnimationFrame(raf);
+      // 걷힐 때도 같은 시간으로 되돌린다 - 즉시 제거하면 딤이 툭 끊긴다
+      dim.style.opacity = '0';
+      setTimeout(() => dim.remove(), DIM_FADE_MS);
+    };
+  }, [childWindow, modalLayerActive]);
 
   // 슬롯 ref는 패널 서브트리의 layout effect보다 먼저 붙는다(형제 순서) -
   // 첫 마운트에서 패널이 문서 밖 호스트에서 실측되는 일이 없게 여기서 즉시 끼운다
   const attachSlot = (slot: HTMLDivElement | null) => {
     slotRef.current = slot;
-    dockAreaRef.current = slot?.parentElement ?? null;
     if (slot && !detached && host.parentNode !== slot) {
       slot.appendChild(host);
     }
   };
 
+  useLayoutEffect(() => {
+    return registerPanelHostMoveCapture(() => {
+      const sourcePlacement = attachedPlacementRef.current;
+      if (!sourcePlacement) return;
+      host
+        .querySelectorAll<HTMLElement>(SCROLL_VIEWPORT_SELECTOR)
+        .forEach((viewport) => {
+          scrollPositionsRef.current.set(viewport, {
+            top: viewport.scrollTop,
+            left: viewport.scrollLeft,
+          });
+        });
+    });
+  }, [host]);
+
+  // 자식 창은 present() 뒤에야 레이아웃이 선다 - 숨긴 채 복원한 스크롤이 Lenis limit 0에
+  // 잘렸을 수 있어, 드러난 뒤 저장값과 다른 뷰포트만 다시 적용한다 (무증상 환경에선 no-op)
+  useLayoutEffect(() => {
+    return registerPanelHostScrollReapply(() => {
+      const reapply = () => {
+        host
+          .querySelectorAll<HTMLElement>(SCROLL_VIEWPORT_SELECTOR)
+          .forEach((viewport) => {
+            const position = scrollPositionsRef.current.get(viewport);
+            if (!position || viewport.scrollTop === position.top) return;
+            restoreLenisScroll(viewport, position.top);
+          });
+      };
+      // 레이아웃 뒤에 적용해야 한다 - 같은 태스크에서 재적용하면 다시 0으로 잘린다
+      const view = host.ownerDocument.defaultView;
+      if (view?.requestAnimationFrame) view.requestAnimationFrame(reapply);
+      else setTimeout(reapply, 0);
+    });
+  }, [host]);
+
   // 호스트 엘리먼트 이동. 자식 창이 사라졌으면 도킹으로 되돌린다
   useLayoutEffect(() => {
+    const viewports = Array.from(
+      host.querySelectorAll<HTMLElement>(SCROLL_VIEWPORT_SELECTOR),
+    );
+
+    const finishMove = (targetPlacement: PanelHostPlacement) => {
+      viewports.forEach((viewport) => {
+        const position = scrollPositionsRef.current.get(viewport);
+        if (!position) return;
+        viewport.scrollLeft = position.left;
+        restoreLenisScroll(viewport, position.top);
+      });
+      attachedPlacementRef.current = targetPlacement;
+      usePanelHostStore.getState().setAttachedPlacement(targetPlacement);
+    };
+
     if (detached) {
       const target = getPanelChildWindow();
       if (!target) {
@@ -101,13 +237,30 @@ const PropertiesPanelHost = ({
       if (host.parentNode !== target.document.body) {
         target.document.body.appendChild(target.document.adoptNode(host));
       }
+      finishMove('detached');
       return;
     }
     const slot = slotRef.current;
     if (slot && host.parentNode !== slot) {
       slot.appendChild(document.adoptNode(host));
     }
+    if (slot && host.parentNode === slot) finishMove('docked');
   }, [detached, host]);
+
+  useLayoutEffect(() => {
+    return () => {
+      attachedPlacementRef.current = null;
+      usePanelHostStore.getState().setAttachedPlacement(null);
+    };
+  }, []);
+
+  // Portal 자식 cleanup 뒤 외부 컨테이너만 회수
+  useEffect(
+    () => () => {
+      host.remove();
+    },
+    [host],
+  );
 
   const hostValue = useMemo<PanelHostValue>(
     () => ({
@@ -159,6 +312,7 @@ const PropertiesPanelHost = ({
         ? event.metaKey && !event.ctrlKey
         : event.ctrlKey && !event.metaKey;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isModalLayerActive()) return;
       if (isHistoryEditorFlushLocked()) return;
       if (event.repeat || event.shiftKey || event.altKey) return;
       if (!primaryOnly(event)) return;
@@ -251,13 +405,15 @@ const PropertiesPanelHost = ({
       {dockHint && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute right-0 top-0 bottom-0 w-[240px] z-40 bg-white/[0.06] shadow-[inset_0_0_0_1px_var(--ui-line)]"
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-[240px] z-[var(--z-chrome-popup)] bg-white/[0.06] shadow-[inset_0_0_0_1px_var(--ui-line)]"
         />
       )}
       {createPortal(
         <PanelHostContext.Provider value={hostValue}>
           <div
             className={detached ? DETACHED_ROOT_CLASS : DOCKED_ROOT_CLASS}
+            data-dmn-modal-locked={modalLayerActive ? 'true' : undefined}
+            inert={modalLayerActive ? true : undefined}
             // 프레임(WINDOW_PANEL_FRAME_CLASS)까지 상속으로 함께 따라간다.
             // 도킹 상태에선 걸지 않는다 - contents 박스라 메인 창 서브트리 전체로 새어나간다
             style={
@@ -281,7 +437,7 @@ const PropertiesPanelHost = ({
             {detached && chrome.webRing && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-[var(--dmn-panel-window-radius,12px)] shadow-[inset_0_0_0_1px_var(--ui-line)] z-50"
+                className="pointer-events-none absolute inset-0 rounded-[var(--dmn-panel-window-radius,12px)] shadow-[inset_0_0_0_1px_var(--ui-line)] z-[var(--z-chrome-modal)]"
               />
             )}
           </div>

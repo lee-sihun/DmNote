@@ -427,7 +427,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
   // 그리드 스냅 크기 가져오기
   const gridSnapSize = useSettingsStore(
-    (state) => state.gridSettings?.gridSnapSize || 5,
+    (state) => state.gridSettings?.gridSnapSize ?? 5,
   );
 
   // 선택 드래그 상태

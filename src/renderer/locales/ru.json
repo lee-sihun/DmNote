@@ -47,12 +47,6 @@
     "keySoundOutput": "Звук клавиш",
     "keySoundOutputDefault": "По умолчанию",
     "keySoundOutputBuffer": "Размер буфера ASIO",
-    "keySoundOutputError": {
-      "asioUnavailableBuild": "Эта сборка не поддерживает ASIO.",
-      "asioDeviceNotFound": "Устройство ASIO не найдено.",
-      "asioOpenFailed": "Не удалось открыть устройство ASIO, используется вывод по умолчанию.",
-      "defaultOpenFailed": "Не удалось открыть доступное устройство вывода."
-    },
     "topLeft": "Верх-лево",
     "bottomLeft": "Низ-лево",
     "topRight": "Верх-право",
@@ -78,10 +72,11 @@
     "jsPluginToggleFailed": "Не удалось переключить плагин.",
     "jsPluginRemoveFailed": "Ошибка удаления плагина.",
     "pluginDataDeleteTitle": "Удаление данных",
-    "pluginDataDeleteMessage": "У «{{name}}» есть данные. Удалить вместе?",
-    "pluginDataDeleteWarning": "Данные (настройки, история и т.д.) будут удалены безвозвратно.",
-    "deleteWithData": "Удалить с данными",
-    "deletePluginOnly": "Только плагин",
+    "pluginDataDeleteMessage": "У «{{name}}» есть сохранённые данные.",
+    "pluginDataDeleteToggle": "Удалить и данные",
+    "pluginDataScope": "Настройки и история",
+    "pluginDataKeepTail": " останутся нетронутыми.",
+    "pluginDataWipeTail": " исчезнут безвозвратно.",
     "language": "Язык",
     "selectLanguage": "Выбор языка",
     "shortcuts": "Горячие клавиши",
@@ -109,7 +104,10 @@
     "obsGuide": "Отображает оверлей через источник «Браузер» в OBS.",
     "obsTokenRegenMessage": "Сгенерировать новый токен сессии?",
     "obsTokenRegen": "Пересоздать токен",
-    "obsTokenRegenConfirm": "Сгенерировать"
+    "obsTokenRegenConfirm": "Сгенерировать",
+    "jsPluginFailed": "Ошибка",
+    "jsRuntimeError": "Во время выполнения плагина произошла ошибка.",
+    "jsNotApplied": "Не удалось применить плагин."
   },
   "shortcutSetting": {
     "title": "Горячие клавиши",
@@ -187,7 +185,14 @@
     "idle": "Покой",
     "active": "Нажат",
     "transparent": "Прозрачный",
-    "reset": "Сбросить"
+    "reset": "Сбросить",
+    "invalidImage": "Не удалось прочитать этот файл изображения.",
+    "mode": "Слой",
+    "modeReplace": "Замена",
+    "modeOverlay": "Поверх",
+    "position": "Позиция",
+    "rotation": "Поворот",
+    "scale": "Размер"
   },
   "noteSetting": {
     "borderRadius": "Скругление",
@@ -287,10 +292,6 @@
     "create": "Создать",
     "delete": "Удалить",
     "deleteConfirm": "Удалить вкладку «{{name}}»?",
-    "search": {
-      "placeholder": "Поиск вкладок",
-      "empty": "Нет результатов"
-    },
     "name": {
       "placeholder": "напр. Моя вкладка",
       "required": "Введите название",
@@ -342,9 +343,13 @@
     "sendToBack": "На задний план",
     "bringForward": "Выше",
     "sendBackward": "Ниже",
-    "tabCssSetting": "CSS вкладки",
-    "tabNoteSetting": "Настройки трека вкладки",
-    "resetOverlayPosition": "Сбросить позицию оверлея",
+    "plugins": "Плагины",
+    "currentTabGroup": "Настройки вкладки",
+    "resetPositionGroup": "Сбросить позицию",
+    "cssSetting": "CSS",
+    "trackSetting": "Трек",
+    "overlayTarget": "Оверлей",
+    "panelTarget": "Панель",
     "addKey": "Добавить клавишу",
     "addStat": "Добавить стат.",
     "addGraph": "Добавить график",
@@ -615,12 +620,14 @@
     "edit": "Редактировать",
     "rename": "Переименовать",
     "delete": "Удалить",
-    "enabledToggle": "Включён",
+    "enable": "Включить",
+    "disable": "Отключить",
     "saveFailed": "Не удалось сохранить настройки шрифтов.",
     "editorLoadFailed": "Не удалось загрузить редактор веб-шрифтов. Попробуйте ещё раз.",
     "editTargetMissing": "Не удалось найти веб-шрифт для редактирования. Возможно, он был удалён.",
-    "deleteConfirm": "Удалить шрифт? Элементы, использующие его, будут отображаться шрифтом по умолчанию.",
-    "add": "Добавить шрифт"
+    "deleteConfirm": "Удалить шрифт?\nЭлементы, использующие его, будут отображаться шрифтом по умолчанию.",
+    "add": "Добавить шрифт",
+    "invalidFont": "Не удалось прочитать этот файл шрифта."
   },
   "soundPicker": {
     "searchPlaceholder": "Поиск...",
@@ -637,7 +644,7 @@
     "deleteFailed": "Не удалось удалить звук",
     "renameFailed": "Не удалось переименовать звук",
     "hideFailed": "Не удалось изменить видимость звука",
-    "deleteConfirm": "Удалить звук? Файл будет удалён, и звук будет снят со всех элементов, где он используется.",
+    "deleteConfirm": "Удалить звук?\nЗвук будет снят со всех элементов, где он используется.",
     "add": "Добавить звук"
   },
   "soundTrimModal": {

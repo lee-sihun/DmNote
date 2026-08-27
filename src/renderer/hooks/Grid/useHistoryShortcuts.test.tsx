@@ -3,8 +3,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useHistoryShortcuts } from './useHistoryShortcuts';
+import { registerPopupLayer } from '@components/main/Modal/popupLayer';
 
 vi.mock('@utils/core/platform', () => ({ isMac: () => true }));
+const mocks = vi.hoisted(() => ({ childWindow: null as Window | null }));
+vi.mock('@hooks/panel/usePanelChildWindow', () => ({
+  usePanelChildWindow: () => mocks.childWindow,
+}));
 
 interface HarnessProps {
   onUndo: () => void;
@@ -19,17 +24,28 @@ const Harness = ({ onUndo, onRedo }: HarnessProps) => {
 describe('useHistoryShortcuts', () => {
   let host: HTMLDivElement;
   let root: Root;
+  const layerCleanups: Array<() => void> = [];
 
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
+    mocks.childWindow = null;
   });
 
   afterEach(async () => {
+    await act(async () =>
+      layerCleanups
+        .splice(0)
+        .reverse()
+        .forEach((cleanup) => cleanup()),
+    );
     await act(async () => root.unmount());
     host.remove();
+    document
+      .querySelectorAll('[data-dmn-modal-backdrop="true"]')
+      .forEach((element) => element.remove());
   });
 
   const renderHarness = async (onUndo: () => void, onRedo: () => void) => {
@@ -87,6 +103,37 @@ describe('useHistoryShortcuts', () => {
     input.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(false);
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  it('활성 모달 동안 메인과 분리 패널의 undo를 모두 차단한다', async () => {
+    const childTarget = new EventTarget();
+    mocks.childWindow = childTarget as Window;
+    const onUndo = vi.fn();
+    await renderHarness(onUndo, vi.fn());
+
+    const modal = document.createElement('div');
+    modal.dataset.dmnModalBackdrop = 'true';
+    document.body.appendChild(modal);
+    await act(async () => {
+      layerCleanups.push(registerPopupLayer(modal));
+    });
+
+    const mainEvent = new KeyboardEvent('keydown', {
+      key: 'z',
+      metaKey: true,
+      cancelable: true,
+    });
+    const childEvent = new KeyboardEvent('keydown', {
+      key: 'z',
+      metaKey: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(mainEvent);
+    childTarget.dispatchEvent(childEvent);
+
+    expect(mainEvent.defaultPrevented).toBe(false);
+    expect(childEvent.defaultPrevented).toBe(false);
     expect(onUndo).not.toHaveBeenCalled();
   });
 });

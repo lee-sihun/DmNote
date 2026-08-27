@@ -5,7 +5,8 @@ import CommonListPickerPage from './CommonListPickerPage';
 
 vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({
-    scrollContainerRef: { current: null },
+    // 실제 훅과 같은 콜백 ref 계약
+    scrollContainerRef: () => undefined,
     lenisInstance: { current: null },
   }),
 }));

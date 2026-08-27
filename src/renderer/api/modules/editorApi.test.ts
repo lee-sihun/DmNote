@@ -630,7 +630,7 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['key', { property: 'noteWidth', value: 0.1 }],
     ['key', { property: 'noteBorderWidth', value: 0 }],
     ['key', { property: 'noteBorderWidth', value: 20 }],
-    ['key', { property: 'noteBorderRadius', value: 1 }],
+    ['key', { property: 'noteBorderRadius', value: 0 }],
     ['key', { property: 'noteBorderRadius', value: 100 }],
     ['key', { property: 'notePaint', value: { color: '' } }],
     [
@@ -790,7 +790,7 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['key', { property: 'noteWidth', value: Number.POSITIVE_INFINITY }],
     ['key', { property: 'noteBorderWidth', value: -0.1 }],
     ['key', { property: 'noteBorderWidth', value: 20.1 }],
-    ['key', { property: 'noteBorderRadius', value: 0.9 }],
+    ['key', { property: 'noteBorderRadius', value: -0.1 }],
     ['key', { property: 'noteBorderRadius', value: 100.1 }],
     ['key', { property: 'noteBorderRadius', value: null }],
     ['key', { noteOffsetX: 0, noteOffsetY: 0 }],

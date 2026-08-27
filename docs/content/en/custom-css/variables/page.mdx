@@ -11,36 +11,67 @@ This page lists all CSS variables available for styling in DM Note.
 
 CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[data-state="active"]` selectors.
 
-| Variable              | Description                            | Type       | Example                              |
-| --------------------- | -------------------------------------- | ---------- | ------------------------------------ |
-| `--key-radius`        | Corner roundness                       | `<length>` | `8px`, `50%`                         |
-| `--key-bg`            | Background color and saved-image reset | `<color>`  | `#ff2b80`                            |
-| `--key-bg-image`      | Background image                       | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
-| `--key-border`        | Border and saved border-ring reset     | `<border>` | `2px solid #fff`, `none`             |
-| `--key-border-image`  | Replacement image for a saved ring     | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
-| `--key-padding`       | Inner padding                          | `<length>` | `0px`, `3px`                         |
-| `--key-text-color`    | Text color                             | `<color>`  | `#ffffff`                            |
-| `--key-text-image`    | Replacement image for saved text paint | `<image>`  | `linear-gradient(0deg, #f0f, #0ff)`  |
-| `--key-text-position` | Text paint box position                | `<position>` | `0% 0%`                            |
-| `--key-text-size`     | Text paint box size                    | `<bg-size>`  | `auto`, `100% 100%`                |
-| `--key-text-repeat`   | Text paint repeat                      | `<repeat-style>` | `no-repeat`                    |
-| `--key-shadow`        | Idle and shared fallback shadow        | `<shadow>` | `0 4px 10px rgba(0,0,0,.28)`, `none` |
-| `--key-active-shadow` | Active shadow                          | `<shadow>` | `0 3px 8px rgba(0,0,0,.32)`, `none`  |
-| `--key-offset-x`      | X offset in active state               | `<length>` | `0px`, `2px`                         |
-| `--key-offset-y`      | Y offset in active state               | `<length>` | `4px`                                |
+| Variable                | Description                                                         | Type             | Example                              |
+| ----------------------- | ------------------------------------------------------------------- | ---------------- | ------------------------------------ |
+| `--key-radius`          | Corner roundness                                                    | `<length>`       | `8px`, `50%`                         |
+| `--key-bg`              | Background color and saved-image reset                              | `<color>`        | `#ff2b80`                            |
+| `--key-bg-image`        | Background image                                                    | `<image>`        | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--key-border`          | Border and saved border-ring reset                                  | `<border>`       | `2px solid #fff`, `none`             |
+| `--key-border-image`    | Replacement image for a saved ring                                  | `<image>`        | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--key-padding`         | Inner padding                                                       | `<length>`       | `0px`, `3px`                         |
+| `--key-text-color`      | Text color                                                          | `<color>`        | `#ffffff`                            |
+| `--key-text-image`      | Replacement image for saved text paint                              | `<image>`        | `linear-gradient(0deg, #f0f, #0ff)`  |
+| `--key-text-position`   | Text paint box position                                             | `<position>`     | `0% 0%`                              |
+| `--key-text-size`       | Text paint box size                                                 | `<bg-size>`      | `auto`, `100% 100%`                  |
+| `--key-text-repeat`     | Text paint repeat                                                   | `<repeat-style>` | `no-repeat`                          |
+| `--key-shadow`          | Idle and shared fallback shadow                                     | `<shadow>`       | `0 4px 10px rgba(0,0,0,.28)`, `none` |
+| `--key-active-shadow`   | Active shadow                                                       | `<shadow>`       | `0 3px 8px rgba(0,0,0,.32)`, `none`  |
+| `--key-offset-x`        | X offset in active state                                            | `<length>`       | `0px`, `2px`                         |
+| `--key-offset-y`        | Y offset in active state                                            | `<length>`       | `4px`                                |
+| `--key-image-fit`       | Replacement fit for the saved image                                 | `<object-fit>`   | `cover`, `contain`                   |
+| `--key-image-transform` | Replacement transform (offset, rotation, scale) for the saved image | `<transform>`    | `rotate(15deg) scale(1.2)`           |
+| `--key-image-z`         | z-index of the image layer                                          | `<integer>`      | `0`, `3`                             |
 
 <Callout type="info">
   With **Inline Styles Priority** disabled, property-panel colors, gradients,
   borders, typography, and shadows are low-priority defaults only. Setting
   `--key-bg` automatically removes a saved background gradient. Setting
-  `--key-border` removes the saved gradient border ring and its spacing. Use
-  `--key-bg-image` or the standard `background` property for a custom gradient.
-  Setting `--key-text-color` (or a plain `color` rule on the label) removes a
-  saved text gradient. For a custom text gradient, set `--key-text-image`
-  together with `--key-text-color: transparent`. The glyph fill must be
-  emptied for the gradient to show, so on a key without a saved gradient,
-  `--key-text-image` alone stays hidden behind the opaque text color.
+  `--key-border` removes the saved gradient border ring and its spacing. The
+  default border of an element with no border set is also a 1px gradient ring
+  that fades from top to bottom, so it is replaced the same way. The ring is a
+  child element, so a plain `border` rule on the key only changes the root
+  border; reset it with `--key-border` or hide `[data-key-element] >
+  [data-gradient-border-ring]`. Use `--key-bg-image` or the standard
+  `background` property for a custom gradient. Setting `--key-text-color` (or a
+  plain `color` rule on the label) removes a saved text gradient. For a custom
+  text gradient, set `--key-text-image` together with `--key-text-color:
+  transparent`. The glyph fill must be emptied for the gradient to show, so on a
+  key without a saved gradient, `--key-text-image` alone stays hidden behind the
+  opaque text color.
 </Callout>
+
+### Image Layer
+
+An image set in the properties panel renders as a child `img[data-key-image-layer]`
+of the key root, absolutely positioned inside the ring spacing (`padding`). The
+root carries `data-key-image` and the placement mode
+`data-key-image-mode="replace|overlay"`.
+
+- `replace` (default): the app's default background, border, shadow, and label
+  are hidden and the image becomes the surface. A `--key-border` or `padding`
+  from your CSS stays in effect, so the image draws inside it and is clipped by
+  `--key-radius`. To show only the image, reset them yourself:
+  `[data-key-image-mode="replace"] { --key-border: none; --key-padding: 0 }`.
+- `overlay`: the key surface, label, and counter render as usual and the image
+  sits on top. The image inherits the key's `border-radius`, and the root
+  `overflow` is `visible`, so an offset, rotated, or scaled
+  image may extend past the key. Set `overflow: hidden` to clip it.
+
+Override the saved fit, transform, and stacking with `--key-image-fit`,
+`--key-image-transform`, and `--key-image-z`. With **inline style priority**
+enabled these three are promoted to inline declarations, so the `--key-image-*`
+variables do not apply; override `object-fit`, `transform`, and `z-index`
+directly with `!important` instead.
 
 ### Usage Example
 
@@ -66,15 +97,15 @@ CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[d
 
 CSS variables applied to counter elements. Use with `.counter[data-counter-state="..."]` selectors.
 
-| Variable                    | Description                     | Type       | Example                              |
-| --------------------------- | ------------------------------- | ---------- | ------------------------------------ |
-| `--counter-color`           | Text color and saved-fill reset | `<color>`  | `#ffffff`                            |
-| `--counter-fill-image`      | Text fill image                 | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
-| `--counter-fill-clip`       | Fill clipping area              | `<box>`    | `text`, `border-box`                 |
-| `--counter-fill-position`   | Fill background position        | `<position>` | `0% 0%`, `4px 10px`                |
-| `--counter-fill-size`       | Fill background size            | `<bg-size>`  | `auto`, `100px 80px`               |
-| `--counter-fill-repeat`     | Fill repeat mode                | `<repeat-style>` | `no-repeat`                    |
-| `--counter-text-fill-color` | WebKit text fill color          | `<color>`  | `transparent`, `currentcolor`        |
+| Variable                    | Description                     | Type             | Example                              |
+| --------------------------- | ------------------------------- | ---------------- | ------------------------------------ |
+| `--counter-color`           | Text color and saved-fill reset | `<color>`        | `#ffffff`                            |
+| `--counter-fill-image`      | Text fill image                 | `<image>`        | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--counter-fill-clip`       | Fill clipping area              | `<box>`          | `text`, `border-box`                 |
+| `--counter-fill-position`   | Fill background position        | `<position>`     | `0% 0%`, `4px 10px`                  |
+| `--counter-fill-size`       | Fill background size            | `<bg-size>`      | `auto`, `100px 80px`                 |
+| `--counter-fill-repeat`     | Fill repeat mode                | `<repeat-style>` | `no-repeat`                          |
+| `--counter-text-fill-color` | WebKit text fill color          | `<color>`        | `transparent`, `currentcolor`        |
 
 Setting only `--counter-color` also disables a counter fill gradient saved in
 the app. Gradients created in the app are laid over the glyph ink box; use
@@ -105,6 +136,8 @@ To create a CSS fill gradient, set all three fill variables:
 
 CSS variables available for graph elements.
 Disable **Inline Styles Priority** on the graph to control these via CSS.
+A graph with no border set draws the same default 1px gradient ring as keys;
+`--graph-border` resets it together with its spacing.
 
 | Variable               | Description                        | Type       | Example                              |
 | ---------------------- | ---------------------------------- | ---------- | ------------------------------------ |
@@ -130,7 +163,9 @@ Disable **Inline Styles Priority** on the graph to control these via CSS.
 
 Disable **Inline Styles Priority** on a knob to use these variables. The custom
 class is on the position wrapper, so target `.knob-class [data-knob-element]`
-when applying standard properties directly to the visible surface.
+when applying standard properties directly to the visible surface. A knob with
+no border set draws the same default 1px gradient ring as keys; `--knob-border`
+resets it together with its spacing.
 
 | Variable               | Description                        | Type       | Example                              |
 | ---------------------- | ---------------------------------- | ---------- | ------------------------------------ |
@@ -232,6 +267,21 @@ property declaration:
 [data-state='active'] {
   background: #ff2b80 !important;
   box-shadow: 0px 0px 8px #ff2b80 !important;
+}
+```
+
+`border: none !important` clears only the root border. The gradient border
+ring (the app default and any saved ring) is a child element, so reset it with
+the border variable, which needs no `!important`, or hide the ring directly:
+
+```css
+.my-key {
+  --key-border: none;
+}
+
+/* or */
+.my-key [data-gradient-border-ring] {
+  display: none;
 }
 ```
 

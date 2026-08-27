@@ -63,6 +63,7 @@ import {
   patchShadowByTargets,
   patchNotePaintById,
   patchNotePaintByIds,
+  patchGraphColorsByIds,
   patchGraphPropertiesByIds,
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
@@ -89,6 +90,8 @@ import {
   patchActiveTransparentByTargets,
   patchIdleImageFitById,
   patchActiveImageFitById,
+  patchImageModeById,
+  patchImageTransformById,
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
   rebindKeySlotById,
@@ -1904,6 +1907,30 @@ describe('elementOps', () => {
     expect(api.commitSemanticOps).toHaveBeenCalledOnce();
   });
 
+  it('graphColor batch는 preview gestureId를 semantic commit에 전달한다', async () => {
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [graphAt(ID_A, { graphColor: '#old' })],
+      },
+    });
+
+    await patchGraphColorsByIds([ID_A], '#new', {
+      gestureId: 'graph-color-gesture',
+    });
+
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'graph',
+          id: ID_A,
+          patch: { property: 'graphColor', value: '#new' },
+        },
+      ],
+      expect.objectContaining({ gestureId: 'graph-color-gesture' }),
+    );
+  });
+
   it('graphType batch의 빈 ID와 중복 ID는 eager와 wire 전에 거절한다', async () => {
     await expect(patchGraphTypesByIds([ID_A, ''], 'bar')).resolves.toBe(false);
     await expect(patchGraphTypesByIds([ID_A, ID_A], 'bar')).resolves.toBe(
@@ -2316,10 +2343,14 @@ describe('elementOps', () => {
       });
       api.captureEditorDocument.mockReturnValue(documentFromStores());
 
-      await patchPaintByTargets([{ elementType: 'key', id: ID_A }], {
-        property: 'backgroundPaint',
-        value: { color: '#next', gradient: null },
-      });
+      await patchPaintByTargets(
+        [{ elementType: 'key', id: ID_A }],
+        {
+          property: 'backgroundPaint',
+          value: { color: '#next', gradient: null },
+        },
+        { gestureId: 'paint-gesture' },
+      );
 
       expect(
         useKeyStore.getState().canonicalPositions['4key'][0],
@@ -2343,7 +2374,7 @@ describe('elementOps', () => {
             },
           },
         ],
-        expect.anything(),
+        expect.objectContaining({ gestureId: 'paint-gesture' }),
       );
     },
   );
@@ -2653,7 +2684,7 @@ describe('elementOps', () => {
     [
       'border radius range',
       'key',
-      { property: 'noteBorderRadius', value: 0.9 },
+      { property: 'noteBorderRadius', value: -0.1 },
     ],
   ] as const)(
     'note numeric %s는 wire 전에 거절한다',
@@ -3778,6 +3809,48 @@ describe('elementOps', () => {
       patchActiveTransparentById('key', 'key-0', true),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('image mode·transform은 key 전용 leaf patch로 보내고 즉시 스토어에 반영한다', async () => {
+    await patchImageModeById(ID_A, 'overlay');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { property: 'imageMode', value: 'overlay' },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(useKeyStore.getState().positions['4key'][0].imageMode).toBe(
+      'overlay',
+    );
+
+    await patchImageTransformById(ID_A, 'idle', { leaf: 'offsetX', value: 10 });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: {
+            property: 'idleImageTransform',
+            value: { leaf: 'offsetX', value: 10 },
+          },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(
+      useKeyStore.getState().positions['4key'][0].idleImageTransform,
+    ).toEqual({ offsetX: 10, offsetY: 0, rotation: 0, scale: 1 });
+
+    await patchImageTransformById(ID_A, 'idle', null);
+    expect(
+      useKeyStore.getState().positions['4key'][0].idleImageTransform,
+    ).toBeUndefined();
   });
 
   it('single image fit은 state별 exact enum leaf만 보내고 이미지 형제를 보존한다', async () => {

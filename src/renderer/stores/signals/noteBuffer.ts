@@ -220,7 +220,7 @@ export const resolvedGlowSize = (
   layout: Pick<TrackLayoutInput, 'noteGlowEnabled' | 'noteGlowSize'>,
 ): number => {
   if (!(layout.noteGlowEnabled ?? false)) return 0;
-  return Math.min(Math.max(layout.noteGlowSize ?? 20, 0), 50);
+  return Math.min(Math.max(layout.noteGlowSize ?? 10, 0), 50);
 };
 
 const resolveTrackLayout = (

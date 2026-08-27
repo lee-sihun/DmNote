@@ -47,6 +47,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
@@ -61,6 +62,7 @@ import type {
 import { normalizeCounterSettings } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { useLenis } from '@hooks/useLenis';
+import { usePluginGeometryGesture } from '@hooks/Grid/usePluginGeometryGesture';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import {
@@ -149,7 +151,11 @@ import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
-import { previewSingleStyleProperty } from './PropertiesPanel/previewPatchForwarders';
+import {
+  previewSingleGraphColor,
+  previewSinglePaint,
+  previewSingleStyleProperty,
+} from './PropertiesPanel/previewPatchForwarders';
 import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
@@ -390,6 +396,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const positions = useKeyStore((state) => state.positions);
+  const canonicalPositions = useKeyStore((state) => state.canonicalPositions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const canonicalStatItemPositions = useStatItemStore(
     (state) => state.positions,
@@ -552,6 +559,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     : -1;
   const singleKeyPosition =
     singleKeyIndex >= 0 ? positions[selectedKeyType]?.[singleKeyIndex] : null;
+  const singleCanonicalKeyPosition = singleKeyId
+    ? (canonicalPositions[selectedKeyType] ?? []).find(
+        (position) => position.id === singleKeyId,
+      ) ?? null
+    : null;
   const singleKeySlot =
     singleKeyIndex >= 0
       ? keyMappings[selectedKeyType]?.[singleKeyIndex] ?? null
@@ -1292,33 +1304,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     ),
   };
 
-  const handlePluginPositionXChange = (value: number) => {
-    if (!selectedPluginElement) return;
-    updatePluginElement(selectedPluginElement.fullId, {
-      position: { x: value },
-    });
-  };
-
-  const handlePluginPositionYChange = (value: number) => {
-    if (!selectedPluginElement) return;
-    updatePluginElement(selectedPluginElement.fullId, {
-      position: { y: value },
-    });
-  };
-
-  const handlePluginWidthChange = (value: number) => {
-    if (!selectedPluginElement) return;
-    updatePluginElement(selectedPluginElement.fullId, {
-      measuredSize: { width: value },
-    });
-  };
-
-  const handlePluginHeightChange = (value: number) => {
-    if (!selectedPluginElement) return;
-    updatePluginElement(selectedPluginElement.fullId, {
-      measuredSize: { height: value },
-    });
-  };
+  // 위치·크기 숫자 입력은 캔버스 드래그와 같은 플러그인 편집 세션을 쓴다 -
+  // 값의 원본이 프론트 스토어라 preview_broker 대신 세션 경계에서 한 번 저장
+  const pluginGeometryGesture = usePluginGeometryGesture(
+    selectedPluginElement
+      ? {
+          fullId: selectedPluginElement.fullId,
+          pluginId: selectedPluginElement.pluginId,
+        }
+      : null,
+  );
 
   const handlePluginSettingChange = (key: string, value: unknown) => {
     if (!selectedPluginElement) return;
@@ -1394,12 +1389,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     value: number,
   ) => {
     const patch = geometryAxisPatch(field, value);
-    const ownsPreviewGesture = type === 'key' || type === 'stat';
-    const gestureId = ownsPreviewGesture
-      ? editGestureController.activeGestureId() ?? undefined
-      : undefined;
+    // 네 종류 모두 숫자 입력이 preview 게스처를 열므로 커밋이 그 게스처를 정산한다
+    const gestureId = editGestureController.activeGestureId() ?? undefined;
     const persisted = commitElementGeometryById(type, id, patch, { gestureId });
-    if (ownsPreviewGesture) editGestureController.settleCommit(persisted);
+    editGestureController.settleCommit(persisted);
     void persisted.catch((error) => {
       console.error('Failed to update element geometry', error);
     });
@@ -1454,11 +1447,27 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           options?: { gestureId?: string },
         ) => {
           // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
-          const persisted = options?.gestureId
-            ? patchElementPropertyById(type, id, patch, {
-                gestureId: options.gestureId,
-              })
-            : patchElementPropertyById(type, id, patch);
+          // 그래프 색과 키 이미지 변환은 preview 게스처를 정산하고,
+          // 그 외는 호출부가 준 gestureId만 공유
+          const settlesGesture =
+            (type === 'graph' && patch.property === 'graphColor') ||
+            (type === 'key' &&
+              (patch.property === 'idleImageTransform' ||
+                patch.property === 'activeImageTransform'));
+          const gestureId =
+            options?.gestureId ??
+            (settlesGesture
+              ? editGestureController.activeGestureId() ?? undefined
+              : undefined);
+          const persisted = patchElementPropertyById(
+            type,
+            id,
+            patch,
+            gestureId ? { gestureId } : {},
+          );
+          if (settlesGesture) {
+            editGestureController.settleCommit(persisted);
+          }
           void persisted.catch((error) => {
             console.error('Failed to update element property', error);
           });
@@ -1587,7 +1596,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id: string | undefined,
   ) =>
     id && isNativeElementId(id)
-      ? (patch: EditorPreviewStylePropertyPatchV1) =>
+      ? (patch: EditorStylePropertyPreviewPatchV1) =>
           previewSingleStyleProperty(type, id, patch)
       : undefined;
 
@@ -1619,11 +1628,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorPaintPropertyPatchV1) => {
-          const persisted = patchPaintById(type, id, patch);
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted = patchPaintById(type, id, patch, { gestureId });
+          editGestureController.settleCommit(persisted);
           void persisted.catch((error) => {
             console.error('Failed to update paint', error);
           });
         }
+      : undefined;
+
+  const stablePaintPreviewHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorPaintPropertyPatchV1) =>
+          previewSinglePaint(type, id, patch)
       : undefined;
 
   const stableShadowCommitHandler = (
@@ -1632,7 +1653,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorShadowPropertyPatchV1) => {
-          const persisted = patchShadowById(type, id, patch);
+          // 스크럽·타이핑 preview 게스처를 이 커밋으로 정산 - 실패 시 lifecycle까지 폐기되게 id 동반
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted = patchShadowById(type, id, patch, { gestureId });
+          editGestureController.settleCommit(persisted);
           void persisted.catch((error) => {
             console.error('Failed to update shadow', error);
           });
@@ -1931,6 +1956,32 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const firstValue = getter(keysData[0].position!) ?? defaultValue;
     const isMixed = keysData.some((data) => {
       const val = getter(data.position!) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
+
+    return { isMixed, value: firstValue };
+  };
+
+  // 게스처를 취소한 직후 로컬 대표값을 되돌릴 때 쓴다. positions는 프리뷰가 합성된
+  // 렌더 상태라 취소 직전 클로저로는 되돌아간 값을 읽을 수 없다
+  const getMixedValueCanonical = <T,>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const modePositions = canonicalPositions[selectedKeyType] ?? [];
+    const selected = selectedKeyLikeElements.flatMap((el) =>
+      el.type === 'key'
+        ? modePositions.filter((position) => position.id === el.id)
+        : [],
+    );
+    if (selected.length === 0) return { isMixed: false, value: defaultValue };
+
+    const firstValue = getter(selected[0]) ?? defaultValue;
+    const isMixed = selected.some((position) => {
+      const val = getter(position) ?? defaultValue;
       if (typeof val === 'object' && typeof firstValue === 'object') {
         return JSON.stringify(val) !== JSON.stringify(firstValue);
       }
@@ -2311,7 +2362,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       stableGraphIds.length > 0 &&
       stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
-      const commit = patchGraphColorsByIds(stableGraphIds, graphColor);
+      const gestureId = editGestureController.activeGestureId() ?? undefined;
+      const commit = patchGraphColorsByIds(stableGraphIds, graphColor, {
+        gestureId,
+      });
+      editGestureController.settleCommit(commit);
       void commit.catch((error) => {
         console.error('Failed to batch update graph color', error);
       });
@@ -2702,6 +2757,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           onNoteElementPropertyCommit={handleBatchNoteElementPropertyCommit}
           handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
           getMixedValue={getMixedValue}
+          getMixedValueCanonical={getMixedValueCanonical}
           getMixedValueBatch={getMixedValueBatch}
           getMixedValueGraphs={getMixedValueGraphs}
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
@@ -2868,10 +2924,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           isPluginResizable={isPluginResizable}
           selectedPluginElement={selectedPluginElement}
           pluginDisplaySize={pluginDisplaySize}
-          handlePluginPositionXChange={handlePluginPositionXChange}
-          handlePluginPositionYChange={handlePluginPositionYChange}
-          handlePluginWidthChange={handlePluginWidthChange}
-          handlePluginHeightChange={handlePluginHeightChange}
+          handlePluginGeometryPreview={pluginGeometryGesture.preview}
+          handlePluginGeometryCommit={pluginGeometryGesture.commit}
+          handlePluginGeometryCancel={pluginGeometryGesture.cancel}
           hasSinglePluginSelection={hasSinglePluginSelection}
           showModalHint={showModalHint}
           showSettings={showSettings}
@@ -2928,6 +2983,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          handleGeometryPreview={stableGeometryPreviewHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           handleGeometryCommit={stableGeometryHandler(
             'knob',
             selectedKnobElements[0]?.id,
@@ -2936,7 +2995,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          onPaintPreview={stablePaintPreviewHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           onPaintCommit={stablePaintCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onStylePropertyPreview={stableStylePropertyPreviewHandler(
             'knob',
             selectedKnobElements[0]?.id,
           )}
@@ -2971,6 +3038,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'graph',
             selectedGraphElements[0]?.id,
           )}
+          onGraphColorPreview={
+            selectedGraphElements[0]?.id &&
+            isNativeElementId(selectedGraphElements[0].id)
+              ? (color) =>
+                  previewSingleGraphColor(selectedGraphElements[0].id, color)
+              : undefined
+          }
           onInactiveImageCommit={stableInactiveImageHandler(
             'graph',
             selectedGraphElements[0]?.id,
@@ -2983,6 +3057,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'graph',
             selectedGraphElements[0]?.id,
           )}
+          handleGeometryPreview={stableGeometryPreviewHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
           handleGeometryCommit={stableGeometryHandler(
             'graph',
             selectedGraphElements[0]?.id,
@@ -2992,6 +3070,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             selectedGraphElements[0]?.id,
           )}
           onPaintCommit={stablePaintCommitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onPaintPreview={stablePaintPreviewHandler(
             'graph',
             selectedGraphElements[0]?.id,
           )}
@@ -3023,6 +3105,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         singleKeyIndex={singleKeyIndex}
         singleStatIndex={singleStatIndex}
         singleKeyPosition={singleKeyPosition}
+        canonicalKeyPosition={singleCanonicalKeyPosition}
         singleStatPosition={singleStatPosition}
         singleKeyCode={singleKeyCode}
         singleKeySlot={singleKeySlot}
@@ -3113,6 +3196,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? selectedStatElements[0]?.id
             : selectedKeyElements[0]?.id,
           { settleGesture: true },
+        )}
+        onPaintPreview={stablePaintPreviewHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
         )}
         onPaintCommit={stablePaintCommitHandler(
           isSingleStat ? 'stat' : 'key',

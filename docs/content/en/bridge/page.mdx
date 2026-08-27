@@ -35,6 +35,8 @@ await dmn.bridge.sendTo("overlay", "THEME_CHANGED", { theme: "dark" });
 await dmn.bridge.sendTo("main", "KEY_PRESSED", { key: "KeyD" });
 ```
 
+Only the target window's listeners fire. In OBS mode the OBS browser source stands in for the overlay window, so it receives messages sent to `"overlay"`.
+
 ### on(type, listener)
 
 Subscribe to specific message type.

@@ -47,12 +47,6 @@
     "keySoundOutput": "按键音输出",
     "keySoundOutputDefault": "默认设备",
     "keySoundOutputBuffer": "ASIO 缓冲区大小",
-    "keySoundOutputError": {
-      "asioUnavailableBuild": "此版本未包含 ASIO 支持。",
-      "asioDeviceNotFound": "找不到 ASIO 设备。",
-      "asioOpenFailed": "无法打开 ASIO 设备，将使用默认输出播放。",
-      "defaultOpenFailed": "无法打开可用的输出设备。"
-    },
     "topLeft": "左上",
     "bottomLeft": "左下",
     "topRight": "右上",
@@ -78,10 +72,11 @@
     "jsPluginToggleFailed": "切换插件状态失败.",
     "jsPluginRemoveFailed": "移除插件失败.",
     "pluginDataDeleteTitle": "删除插件数据",
-    "pluginDataDeleteMessage": "'{{name}}' 插件存储了数据. 是否要一并删除?",
-    "pluginDataDeleteWarning": "删除数据将永久移除插件设置、历史记录等. 此操作无法撤销.",
-    "deleteWithData": "包含数据删除",
-    "deletePluginOnly": "仅删除插件",
+    "pluginDataDeleteMessage": "“{{name}}”有已保存的数据。",
+    "pluginDataDeleteToggle": "一并删除数据",
+    "pluginDataScope": "设置与历史记录",
+    "pluginDataKeepTail": "会保留。",
+    "pluginDataWipeTail": "将永久消失。",
     "language": "语言",
     "selectLanguage": "选择语言",
     "shortcuts": "快捷键",
@@ -109,7 +104,10 @@
     "obsGuide": "通过 OBS 浏览器源显示叠加层。",
     "obsTokenRegenMessage": "是否重新生成会话令牌？",
     "obsTokenRegen": "重新生成令牌",
-    "obsTokenRegenConfirm": "重新生成"
+    "obsTokenRegenConfirm": "重新生成",
+    "jsPluginFailed": "错误",
+    "jsRuntimeError": "插件运行时发生错误。",
+    "jsNotApplied": "无法应用该插件。"
   },
   "shortcutSetting": {
     "title": "快捷键设置",
@@ -187,7 +185,14 @@
     "idle": "闲置",
     "active": "按下",
     "transparent": "透明",
-    "reset": "重置图像"
+    "reset": "重置图像",
+    "invalidImage": "无法读取该图片文件。",
+    "mode": "放置",
+    "modeReplace": "仅图像",
+    "modeOverlay": "叠加",
+    "position": "位置",
+    "rotation": "旋转",
+    "scale": "大小"
   },
   "noteSetting": {
     "borderRadius": "圆角半径",
@@ -286,11 +291,7 @@
     "createTitle": "创建标签页",
     "create": "创建",
     "delete": "删除",
-    "deleteConfirm": "删除 '{{name}}' 标签页?",
-    "search": {
-      "placeholder": "搜索自定义标签页",
-      "empty": "无结果"
-    },
+    "deleteConfirm": "删除 '{{name}}' 标签页？",
     "name": {
       "placeholder": "例如: 我的自定义",
       "required": "请输入名称",
@@ -342,9 +343,13 @@
     "sendToBack": "置于底层",
     "bringForward": "上移一层",
     "sendBackward": "下移一层",
-    "tabCssSetting": "标签页 CSS 设置",
-    "tabNoteSetting": "标签页轨道设置",
-    "resetOverlayPosition": "重置悬浮窗位置",
+    "plugins": "插件",
+    "currentTabGroup": "当前标签设置",
+    "resetPositionGroup": "重置位置",
+    "cssSetting": "CSS",
+    "trackSetting": "轨道",
+    "overlayTarget": "悬浮窗",
+    "panelTarget": "面板窗口",
     "addKey": "添加按键",
     "addStat": "添加统计",
     "addGraph": "添加图表",
@@ -615,12 +620,14 @@
     "edit": "编辑",
     "rename": "重命名",
     "delete": "删除",
-    "enabledToggle": "启用",
+    "enable": "启用",
+    "disable": "禁用",
     "saveFailed": "字体设置保存失败。",
     "editorLoadFailed": "无法加载网络字体编辑器，请重试。",
     "editTargetMissing": "找不到要编辑的网络字体，可能已被移除。",
-    "deleteConfirm": "确定删除该字体？使用它的元素将以默认字体显示。",
-    "add": "添加字体"
+    "deleteConfirm": "确定删除该字体？\n使用它的元素将以默认字体显示。",
+    "add": "添加字体",
+    "invalidFont": "无法读取该字体文件。"
   },
   "soundPicker": {
     "searchPlaceholder": "搜索",
@@ -637,7 +644,7 @@
     "deleteFailed": "音频删除失败",
     "renameFailed": "音频重命名失败",
     "hideFailed": "无法更改音效显示状态",
-    "deleteConfirm": "确定删除该音频？文件将被删除，并从所有使用它的元素中移除。",
+    "deleteConfirm": "确定删除该音频？\n将从所有使用它的元素中移除。",
     "add": "添加音效"
   },
   "soundTrimModal": {

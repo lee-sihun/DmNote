@@ -31,20 +31,20 @@ const DetachIcon = () => (
     <path
       d="M6 3H3.5C2.67157 3 2 3.67157 2 4.5V12.5C2 13.3284 2.67157 14 3.5 14H11.5C12.3284 14 13 13.3284 13 12.5V10"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.2"
       strokeLinecap="round"
     />
     <path
       d="M9 2H14V7"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.2"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M14 2L8 8"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.2"
       strokeLinecap="round"
     />
   </svg>
@@ -61,20 +61,20 @@ const ReattachIcon = () => (
     <path
       d="M10 13H12.5C13.3284 13 14 12.3284 14 11.5V3.5C14 2.67157 13.3284 2 12.5 2H4.5C3.67157 2 3 2.67157 3 3.5V6"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.2"
       strokeLinecap="round"
     />
     <path
       d="M7 14H2V9"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.2"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M2 14L8 8"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.2"
       strokeLinecap="round"
     />
   </svg>

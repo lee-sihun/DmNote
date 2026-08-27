@@ -4,6 +4,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useIconMotion } from '@hooks/useIconMotion';
 import { useState, useRef } from 'react';
 import FloatingPopup from '../Modal/FloatingPopup';
+import { CANVAS_POPUP_CHROME_CLASS } from '../Modal/popupChrome';
 import TabList from '../Modal/content/settings/TabList';
 
 const TabTool = () => {
@@ -56,6 +57,10 @@ const TabTool = () => {
         </div>
       </button>
       <FloatingPopup
+        // TabList가 자기 흐름에서 이름·삭제 모달을 연다 - 덮임 자동 닫힘이 그 모달까지
+        // 언마운트한다. 이 팝업은 툴바 서브트리 안(z 40 < 모달 50)이라 잠금 시 inert·딤
+        // 처리되므로 유령이 되지 않는다 (PickerSurface와 같은 근거)
+        closeOnModalCover={false}
         open={isPopupOpen && isBootstrapped}
         ariaLabel={t('tabs.title')}
         referenceRef={gridButtonRef}
@@ -63,8 +68,11 @@ const TabTool = () => {
         initialFocus="surface"
         onClose={() => setIsPopupOpen(false)}
         contentMountStrategy="after-paint"
-        // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조
-        className="dmn-motion flex flex-col gap-[6px] w-[216px] p-[8px] bg-glass backdrop-glass-popup rounded-popup shadow-elevation-2"
+        // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조.
+        // 담는 것이 메뉴 행뿐이라 표면도 메뉴 계열을 그대로 쓴다.
+        // 패딩 5px = 갭 4px + inset 링 1px 보정 - 링이 패딩 최외곽을 덮어
+        // 같은 값이면 가장자리만 1px 좁아 보인다
+        className={`dmn-motion flex flex-col gap-[4px] w-[180px] p-[5px] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface`}
       >
         <TabList />
       </FloatingPopup>

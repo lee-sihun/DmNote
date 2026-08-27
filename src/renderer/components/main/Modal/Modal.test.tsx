@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FloatingPopup from './FloatingPopup';
 import Modal from './Modal';
+import { isModalLayerActive } from './popupLayer';
 import {
   settleDeferredContent,
   stubAnimationFrame,
@@ -211,6 +212,67 @@ describe('Modal focus contract', () => {
     expect(document.body.textContent).not.toContain('Late action');
   });
 
+  it('closing 전환 즉시 배경 입력 잠금 소유권을 놓는다', async () => {
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Closing dialog" motionState="open">
+          <button type="button">Action</button>
+        </Modal>,
+      );
+    });
+    expect(isModalLayerActive()).toBe(true);
+
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Closing dialog" motionState="closing">
+          <button type="button">Action</button>
+        </Modal>,
+      );
+    });
+
+    expect(
+      document.querySelector('[aria-label="Closing dialog"]'),
+    ).not.toBeNull();
+    expect(isModalLayerActive()).toBe(false);
+  });
+
+  it('inert 해제보다 먼저 실패한 opener 포커스를 다음 frame에 복구한다', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const opener = document.createElement('button');
+    document.body.prepend(opener);
+    opener.focus();
+    const nativeFocus = opener.focus.bind(opener);
+    const focus = vi
+      .spyOn(opener, 'focus')
+      .mockImplementationOnce(() => undefined)
+      .mockImplementation(() => nativeFocus());
+
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Retry focus" motionState="open">
+          <button type="button">Action</button>
+        </Modal>,
+      );
+    });
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Retry focus" motionState="closing">
+          <button type="button">Action</button>
+        </Modal>,
+      );
+    });
+
+    expect(focus).toHaveBeenCalledOnce();
+    expect(frames).toHaveLength(1);
+    act(() => frames[0](performance.now()));
+    expect(focus).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(opener);
+  });
+
   it('yields keyboard ownership while a popup layer is open', async () => {
     const closeModal = vi.fn();
     const closePopup = vi.fn();
@@ -289,6 +351,10 @@ describe('Modal focus contract', () => {
       );
     });
 
+    // 배경 팝업은 모달이 덮이는 순간 스스로 닫힌다(잠금 밖에 남는 body 포털 표면 차단).
+    // Escape는 그 뒤에도 모달만 소비한다 - 팝업 닫힘이 한 번 더 나가면 안 된다
+    expect(closePopup).toHaveBeenCalledTimes(1);
+
     const escape = new KeyboardEvent('keydown', {
       key: 'Escape',
       bubbles: true,
@@ -297,7 +363,7 @@ describe('Modal focus contract', () => {
     document.dispatchEvent(escape);
 
     expect(escape.defaultPrevented).toBe(true);
-    expect(closePopup).not.toHaveBeenCalled();
+    expect(closePopup).toHaveBeenCalledTimes(1);
     expect(closeModal).toHaveBeenCalledTimes(1);
   });
 

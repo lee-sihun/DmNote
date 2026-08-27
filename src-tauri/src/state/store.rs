@@ -2,7 +2,10 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Component, Path, PathBuf},
-    sync::{mpsc, Arc},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, Arc,
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -88,6 +91,7 @@ impl SoundRecoveryOutcome {
 pub struct AppStore {
     path: PathBuf,
     state: RwLock<VersionedStoreState>,
+    runtime_publication_generation: AtomicU64,
     writer: StoreWriter,
     skip_asset_sweep: bool,
     history_gate: Arc<HistoryAdmissionGate>,
@@ -365,12 +369,18 @@ impl AppStore {
         Ok(store)
     }
 
+    #[cfg(test)]
+    pub(crate) fn initialize_for_test(dir: &Path) -> Result<Self> {
+        Self::initialize_in_dir(dir)
+    }
+
     fn new(path: PathBuf, state: AppStoreData, skip_asset_sweep: bool) -> Result<Self> {
         Ok(Self {
             writer: StoreWriter::start(path.clone())?,
             path,
             skip_asset_sweep,
             history_gate: Arc::new(HistoryAdmissionGate::default()),
+            runtime_publication_generation: AtomicU64::new(0),
             state: RwLock::new(VersionedStoreState {
                 data: state,
                 revision: 0,
@@ -406,6 +416,8 @@ impl AppStore {
         ticket.wait()?;
         state.data = scratch;
         state.revision = revision;
+        self.runtime_publication_generation
+            .store(revision, Ordering::Release);
         state.dirty = false;
         Ok(result)
     }
@@ -511,7 +523,7 @@ impl AppStore {
     }
 
     pub(crate) fn runtime_publication_generation(&self) -> u64 {
-        self.state.read().revision
+        self.runtime_publication_generation.load(Ordering::Acquire)
     }
 
     pub(crate) fn plugin_model_revision(&self) -> u64 {
@@ -1521,6 +1533,7 @@ impl AppStore {
         scratch.key_counters = target.key_counters.clone();
         target.apply_override_patches(&mut scratch);
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
@@ -1615,6 +1628,7 @@ impl AppStore {
             &preset_history_settings_patch(&target.settings),
         );
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
@@ -2037,6 +2051,7 @@ impl AppStore {
             .transpose()?
             .unwrap_or_default();
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
 
         // editorRevision은 이 트랜잭션만 관리
         scratch.editor_revision = current_store.editor_revision;
@@ -3145,11 +3160,12 @@ fn preserve_pre_migration_store(path: &Path) -> Result<Option<PathBuf>> {
 }
 
 fn initialize_default_state() -> AppStoreData {
-    use crate::defaults::{default_keys, default_positions};
+    use crate::defaults::{default_keys, default_positions, default_stat_positions};
 
     let mut data = normalize_state(AppStoreData {
         keys: default_keys().clone(),
         key_positions: default_positions().clone(),
+        stat_positions: default_stat_positions().clone(),
         ..Default::default()
     });
     crate::state::native_element_id::backfill_store_element_ids(&mut data);
@@ -3203,6 +3219,7 @@ fn prepare_editor_patch_transition(
     let mut scratch = current_store.clone();
     candidate.apply_to_store(&mut scratch);
     crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+    crate::state::migration::canonicalize_image_modes(&mut scratch);
     candidate = EditorDocumentV1::from_store(&scratch);
 
     validate_paired_update(
@@ -4507,7 +4524,7 @@ mod tests {
     use crate::{
         commands::keys::keys::reset_mode_data_for_test,
         custom_css::ValidatedCssFile,
-        defaults::default_positions,
+        defaults::{default_keys, default_positions},
         errors::{EditorCommitError, EditorCommitErrorCode},
         keyboard::KeyboardManager,
         models::{
@@ -4550,6 +4567,113 @@ mod tests {
 
     fn test_directory(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("dmnote-{label}-{}", uuid::Uuid::new_v4()))
+    }
+
+    fn regular_file_count(directory: &Path) -> usize {
+        std::fs::read_dir(directory)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+            .count()
+    }
+
+    fn initialize_neutral_editor_store(dir: &Path) -> AppStore {
+        std::fs::create_dir_all(dir).unwrap();
+        let keys = default_keys()
+            .iter()
+            .map(|(mode, slots)| {
+                (
+                    mode.clone(),
+                    slots
+                        .iter()
+                        .map(|slot| KeySlot::from(slot.canonical()))
+                        .collect(),
+                )
+            })
+            .collect::<crate::models::KeyMappings>();
+        let key_positions = keys
+            .iter()
+            .map(|(mode, slots)| (mode.clone(), vec![KeyPosition::default(); slots.len()]))
+            .collect();
+        let mut data = crate::state::migration::normalize_state(AppStoreData {
+            keys,
+            key_positions,
+            ..AppStoreData::default()
+        });
+        crate::state::native_element_id::backfill_store_element_ids(&mut data);
+        let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+        store.persist_current().unwrap();
+        store
+    }
+
+    #[test]
+    fn first_initialize_migrates_default_images_and_reopen_is_idempotent() {
+        let dir = test_directory("default-image-initialize");
+        let images_dir = dir.join("images");
+
+        let first = AppStore::initialize_in_dir(&dir).unwrap();
+        let first_snapshot = first.snapshot();
+        let image_references = super::iter_all_positions(&first_snapshot)
+            .flat_map(|position| [&position.active_image, &position.inactive_image])
+            .flatten()
+            .filter(|image| !image.is_empty())
+            .collect::<Vec<_>>();
+
+        assert!(!image_references.is_empty());
+        assert!(image_references
+            .iter()
+            .all(|image| !image.starts_with("data:")));
+        assert!(image_references
+            .iter()
+            .all(|image| Path::new(image.as_str()).is_file()));
+        for mode in first_snapshot.keys.keys() {
+            let stats = first_snapshot
+                .stat_positions
+                .get(mode)
+                .unwrap_or_else(|| panic!("missing initialized stats for {mode}"));
+            assert!(!stats.is_empty());
+            assert!(stats.iter().all(|stat| {
+                crate::state::native_element_id::is_valid_element_id(&stat.position.id)
+            }));
+        }
+        let first_image_count = regular_file_count(&images_dir);
+        assert!(first_image_count > 0);
+        first.flush_and_shutdown().unwrap();
+        drop(first);
+
+        let second = AppStore::initialize_in_dir(&dir).unwrap();
+        assert_eq!(regular_file_count(&images_dir), first_image_count);
+        assert!(super::iter_all_positions(&second.snapshot())
+            .flat_map(|position| [&position.active_image, &position.inactive_image])
+            .flatten()
+            .all(|image| !image.starts_with("data:")));
+        second.flush_and_shutdown().unwrap();
+        drop(second);
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn runtime_publication_generation_mirror_tracks_committed_revision() {
+        let directory = test_directory("runtime-publication-generation-mirror");
+        std::fs::create_dir_all(&directory).unwrap();
+        let store = AppStore::initialize_for_test(&directory).unwrap();
+
+        assert_eq!(
+            store.runtime_publication_generation(),
+            store.state.read().revision
+        );
+        let previous_revision = store.runtime_publication_generation();
+        store
+            .update(|data| data.language = "generation-mirror-test".to_string())
+            .unwrap();
+        let committed_revision = store.state.read().revision;
+        assert!(committed_revision > previous_revision);
+        assert_eq!(store.runtime_publication_generation(), committed_revision);
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     struct TestCounterEmitter {
@@ -6631,7 +6755,7 @@ mod tests {
     fn reorder_commits_replays_and_round_trips_with_snapshot_history() {
         let dir = test_directory("reorder-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let initial = store.editor_get();
         let before_revision = initial.revision;
         let before = initial.document;
@@ -7020,7 +7144,7 @@ mod tests {
     fn mixed_reorder_and_plugin_change_are_atomic_on_validation_and_persist_failure() {
         let dir = test_directory("mixed-reorder-plugin-atomic-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let before = store.snapshot();
         let before_plugin_revision = store.plugin_model_revision();
         let before_history_revision = store.history_status().history_revision;
@@ -8836,7 +8960,7 @@ mod tests {
     fn strict_editor_commit_persists_once_and_synchronizes_key_counters() {
         let dir = test_directory("strict-editor-success-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let persist_count = store.writer.persist_count();
         let before = store.snapshot();
         let old_key = before.keys["4key"][0].canonical();
@@ -9319,7 +9443,7 @@ mod tests {
     fn v1_stale_snapshot_commit_rekeys_deleted_element_instead_of_reviving_it() {
         let dir = test_directory("v1-stale-native-element-id-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let initial = store.editor_get();
         let stale_keys = initial.document.keys.clone();
         let stale_positions = initial.document.key_positions.clone();
@@ -9479,7 +9603,7 @@ mod tests {
     fn editor_ops_follow_stable_id_and_restore_the_latest_snapshot_on_undo() {
         let dir = test_directory("editor-ops-stable-id-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let initial = store.editor_get().document;
         let target = initial.key_positions["4key"][0].clone();
         let initial_bounds = bounds(&target);
@@ -10326,7 +10450,7 @@ mod tests {
     fn common_option_batches_replay_and_round_trip_all_native_types() {
         let dir = test_directory("editor-inline-style-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut template = document.key_positions["4key"][0].clone();
         template.counter.font_italic = true;
@@ -10543,6 +10667,11 @@ mod tests {
         );
 
         let counter_font_weight = redone.key_positions["4key"][0].counter.font_weight;
+        let original_font_weight = redone.key_positions["4key"][0].font_weight;
+        let original_font_italic = redone.stat_positions["4key"][0].position.font_italic;
+        let original_font_underline = redone.graph_positions["4key"][0].position.font_underline;
+        let original_font_strikethrough =
+            redone.knob_positions["4key"][0].position.font_strikethrough;
         let font_ops = vec![
             patch_property_op(
                 EditorElementTypeV1::Key,
@@ -10690,22 +10819,25 @@ mod tests {
             .unwrap();
         drop(barrier);
         let font_undone = store.editor_get().document;
-        assert_eq!(font_undone.key_positions["4key"][0].font_weight, None);
+        assert_eq!(
+            font_undone.key_positions["4key"][0].font_weight,
+            original_font_weight
+        );
         assert_eq!(
             font_undone.stat_positions["4key"][0].position.font_italic,
-            None
+            original_font_italic
         );
         assert_eq!(
             font_undone.graph_positions["4key"][0]
                 .position
                 .font_underline,
-            None
+            original_font_underline
         );
         assert_eq!(
             font_undone.knob_positions["4key"][0]
                 .position
                 .font_strikethrough,
-            None
+            original_font_strikethrough
         );
         assert_eq!(
             font_undone.key_positions["4key"][0].counter.font_weight,
@@ -10974,7 +11106,7 @@ mod tests {
     fn display_text_batch_replays_raw_empty_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-display-text-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut template = document.key_positions["4key"][0].clone();
         template.display_text = None;
@@ -11202,7 +11334,7 @@ mod tests {
     fn class_name_replays_raw_empty_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-class-name-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let target_id = document.key_positions["4key"][0].id.clone();
         {
@@ -11333,7 +11465,7 @@ mod tests {
     fn numeric_style_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-numeric-style-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut template = document.key_positions["4key"][0].clone();
         template.border_width = None;
@@ -11533,7 +11665,7 @@ mod tests {
     fn inactive_image_batch_replays_raw_empty_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-inactive-image-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut template = document.key_positions["4key"][0].clone();
         template.inactive_image = None;
@@ -11744,7 +11876,7 @@ mod tests {
     fn active_image_batch_replays_raw_empty_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-active-image-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut template = document.key_positions["4key"][0].clone();
         template.active_image = None;
@@ -11911,7 +12043,7 @@ mod tests {
     fn image_transparency_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-image-transparency-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut template = document.key_positions["4key"][0].clone();
         template.idle_transparent = false;
@@ -12201,7 +12333,7 @@ mod tests {
     fn image_fit_patches_replay_and_round_trip_raw_option_history() {
         let dir = test_directory("editor-image-fit-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut template = document.key_positions["4key"][0].clone();
         template.image_fit = Some(crate::models::ImageFit::Cover);
@@ -12369,7 +12501,7 @@ mod tests {
     fn sound_path_batch_replays_raw_empty_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-sound-path-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut first = document.key_positions["4key"][0].clone();
         first.sound_path = None;
@@ -12509,7 +12641,7 @@ mod tests {
     fn sound_enabled_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-sound-enabled-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut first = document.key_positions["4key"][0].clone();
         first.sound_enabled = None;
@@ -12651,7 +12783,7 @@ mod tests {
     fn sound_volume_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-sound-volume-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut document = store.editor_get().document;
         let mut first = document.key_positions["4key"][0].clone();
         first.sound_volume = None;
@@ -15355,7 +15487,7 @@ mod tests {
     fn note_literal_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-note-literal-history-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let initial = store.editor_get().document;
         let ids = initial
             .key_positions
@@ -15824,7 +15956,7 @@ mod tests {
     fn legacy_delete_patch_keeps_key_pair_and_empty_group_cleanup_atomic() {
         let dir = test_directory("legacy-delete-pair-group-contract-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mut grouped = store.editor_get().document;
         grouped.key_positions.get_mut("4key").unwrap()[0].group_id =
             Some("delete-group".to_string());
@@ -18171,7 +18303,7 @@ mod tests {
     fn editor_history_undo_does_not_restore_key_counters() {
         let dir = test_directory("editor-history-counter-scope-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let before = store.snapshot();
         let old_key = before.keys["4key"][0].canonical();
         let new_key = "HistoryCounterScopeKey".to_string();
@@ -18506,8 +18638,7 @@ mod tests {
     fn legacy_keys_publication_drains_before_later_history_restore() {
         let dir = test_directory("legacy-editor-publication-drain-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let state =
-            Arc::new(AppState::initialize(AppStore::initialize_in_dir(&dir).unwrap()).unwrap());
+        let state = Arc::new(AppState::initialize(initialize_neutral_editor_store(&dir)).unwrap());
         let initial = state.store.snapshot();
         let mode = initial.selected_key_type.clone();
         let mut strict_keys = initial.keys.clone();
@@ -18821,6 +18952,39 @@ mod tests {
     }
 
     #[test]
+    fn editor_commit_folds_replace_image_mode_into_none() {
+        let dir = test_directory("editor-image-mode-canonicalization-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let revision_before = store.editor_get().revision;
+        let mut positions = store.editor_get().document.key_positions;
+        positions.get_mut("4key").unwrap()[0].image_mode = Some(crate::models::ImageMode::Replace);
+        let request = editor_request(
+            revision_before,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                key_positions: Some(positions),
+                ..EditorPatchV1::default()
+            },
+        );
+
+        // replace만 명시한 패치는 정규화 뒤 무변경 - 빈 undo 항목이 남지 않는다
+        let change = store.commit_editor_document(request).unwrap();
+        assert!(change.result.changed_fields.is_empty());
+        assert_eq!(change.result.revision, revision_before);
+        assert!(change.event.is_none());
+        assert!(change.document.key_positions["4key"][0]
+            .image_mode
+            .is_none());
+        assert!(store.snapshot().key_positions["4key"][0]
+            .image_mode
+            .is_none());
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn invalid_gradient_preset_parse_failure_leaves_store_unchanged() {
         let dir = test_directory("invalid-gradient-preset-atomicity-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -19001,7 +19165,7 @@ mod tests {
     fn strict_editor_structural_single_field_update_requires_pair() {
         let dir = test_directory("strict-editor-paired-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let before = store.snapshot();
         let mut keys = before.keys.clone();
         keys.get_mut("4key").unwrap().push("F5".into());
@@ -19116,7 +19280,7 @@ mod tests {
     fn canonical_request_hash_makes_map_order_idempotent() {
         let dir = test_directory("strict-editor-canonical-hash-test");
         std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let store = initialize_neutral_editor_store(&dir);
         let mutation_id = uuid::Uuid::new_v4().to_string();
         let current = store.snapshot().keys;
         let mut entries = current.into_iter().collect::<Vec<_>>();

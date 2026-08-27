@@ -3,6 +3,7 @@
  */
 
 import { useSettingsStore } from '@stores/useSettingsStore';
+import { roundToGrid } from '@utils/grid/gridSnap';
 
 /**
  * 값을 그리드 스냅에 맞춰 반올림
@@ -14,7 +15,7 @@ export const snapToGrid = (value: number, gridSize?: number): number => {
   if (!Number.isFinite(value)) return 0;
   const snapSize =
     gridSize ?? useSettingsStore.getState().gridSettings?.gridSnapSize ?? 5;
-  return Math.round(value / snapSize) * snapSize;
+  return roundToGrid(value, snapSize);
 };
 
 /**

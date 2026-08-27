@@ -140,6 +140,37 @@ describe('Checkbox 노브 드래그', () => {
     vi.restoreAllMocks();
   });
 
+  it('끄는 도중에도 노브가 넘어간 쪽을 밖으로 알린다', () => {
+    const onDisplayChange = vi.fn();
+    act(() =>
+      root.render(
+        <Checkbox
+          checked={false}
+          onChange={() => {}}
+          onDisplayChange={onDisplayChange}
+        />,
+      ),
+    );
+    mockRects();
+    onDisplayChange.mockClear();
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    // 아직 반대편에 못 닿았다 - 알림이 없어야 한다
+    send('pointermove', { clientX: TRACK.x + 5 });
+    expect(onDisplayChange).not.toHaveBeenCalled();
+
+    // 손을 떼기 전에 넘어간 것만으로 알려야 아래 설명이 따라간다
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    expect(onDisplayChange).toHaveBeenLastCalledWith(true);
+
+    // 도로 끌어오면 되돌아온다
+    send('pointermove', { clientX: TRACK.x + 4 });
+    expect(onDisplayChange).toHaveBeenLastCalledWith(false);
+
+    send('pointerup', { clientX: TRACK.x + 4 });
+    clickAfterRelease();
+  });
+
   it('반대편까지 끌고 놓으면 한 번만 뒤집는다', () => {
     const onChange = vi.fn();
     render(false, onChange);

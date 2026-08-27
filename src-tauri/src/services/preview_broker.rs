@@ -79,6 +79,8 @@ const KEY_POSITION_PATCH_FIELDS: &[&str] = &[
     "idleImageFit",
     "activeImageFit",
     "imageFit",
+    "idleImageTransform",
+    "activeImageTransform",
     "useInlineStyles",
     "displayText",
     "fontWeight",
@@ -693,6 +695,52 @@ mod tests {
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].source_label, "owner");
         assert_eq!(messages[0].kind, PreviewKind::Patch);
+    }
+
+    #[test]
+    fn image_transform_preview_fields_round_trip_through_channel() {
+        let broker = PreviewBroker::default();
+        subscribe(&broker, "owner");
+        let messages = Arc::new(Mutex::new(Vec::new()));
+        broker
+            .subscribe("observer", recording_channel(messages.clone()))
+            .expect("observer subscribes");
+        let session_id = session_id();
+        let expected_patch = serde_json::json!({
+            "idleImageTransform": {
+                "offsetX": 12.5,
+                "offsetY": -4.0,
+                "rotation": 25.0,
+                "scale": 1.35
+            },
+            "activeImageTransform": {
+                "offsetX": -8.0,
+                "offsetY": 6.25,
+                "rotation": -15.0,
+                "scale": 0.75
+            }
+        });
+        let request: PreviewPublishRequest = serde_json::from_value(serde_json::json!({
+            "schemaVersion": PREVIEW_SCHEMA_VERSION,
+            "sessionId": session_id,
+            "seq": 1,
+            "domain": "keyPosition",
+            "mode": "default",
+            "targets": [0],
+            "patch": expected_patch
+        }))
+        .expect("nested image transform request is valid JSON");
+
+        broker
+            .publish("owner", request)
+            .expect("image transform preview publishes");
+
+        let messages = messages.lock();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(
+            messages[0].patch,
+            expected_patch.as_object().unwrap().clone()
+        );
     }
 
     #[test]

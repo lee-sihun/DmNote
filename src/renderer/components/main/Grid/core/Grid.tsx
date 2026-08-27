@@ -86,18 +86,22 @@ import type {
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { overlayApi } from '@api/modules/overlayApi';
+import { panelWindowApi } from '@api/modules/panelWindowApi';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
+  DEFAULT_IMAGE_MODE,
+  imageTransformToCss,
+} from '@src/types/key/imageLayer';
+import {
   DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_BORDER,
-  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementBorder } from '@utils/core/elementBorder';
+import { gradientRingStyle, gradientToCss } from '@src/types/color';
 import {
   elementShadowToCss,
   resolveElementShadow,
@@ -191,7 +195,7 @@ const Grid = ({
     (state) => state.gridSettings.minimapEnabled,
   );
   const gridSnapSize = useSettingsStore(
-    (state) => state.gridSettings?.gridSnapSize || 5,
+    (state) => state.gridSettings?.gridSnapSize ?? 5,
   );
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -1358,6 +1362,23 @@ const Grid = ({
     ));
   };
 
+  // 고스트는 실제 요소와 같은 기본 립을 그린다. 링 배경은 전역 규칙이 아닌
+  // 인라인으로 - 고스트는 data-*-element가 아니라 전역 게이트를 안 탄다
+  const renderGhostBorderRing = (suppressDefault: boolean) => {
+    const border = resolveElementBorder({}, false, { suppressDefault });
+    if (!border.gradient || border.width <= 0) return null;
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          ...gradientRingStyle(border.gradient, border.width),
+          background: gradientToCss(border.gradient),
+          pointerEvents: 'none',
+        }}
+      />
+    );
+  };
+
   const renderDuplicateGhost = () => {
     if (!duplicateState || !duplicateCursor) return null;
 
@@ -1374,12 +1395,15 @@ const Grid = ({
             height: `${height}px`,
             transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
             background: DEFAULT_ELEMENT_BG,
-            border: `1px solid ${DEFAULT_ELEMENT_HAIRLINE}`,
+            border: 'none',
             borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
+            overflow: 'hidden',
             opacity: 0.5,
-            zIndex: 1000,
+            zIndex: 'var(--z-canvas-drag-preview)',
           }}
-        />
+        >
+          {renderGhostBorderRing(false)}
+        </div>
       );
     }
 
@@ -1389,6 +1413,10 @@ const Grid = ({
         height = 60,
         inactiveImage,
         activeImage,
+        imageFit,
+        idleImageFit,
+        imageMode,
+        idleImageTransform,
         className,
         shadow,
         activeShadow,
@@ -1399,7 +1427,13 @@ const Grid = ({
       resolveImageSource(inactiveImage) ||
       resolveImageSource(activeImage) ||
       '';
-    const backgroundColor = previewImage ? 'transparent' : DEFAULT_ELEMENT_BG;
+    // 고스트는 기본 외형(저자 의도)이되 이미지 배치만 원본 키를 따른다 - replace만
+    // 표면을 대체하므로 립·배경 억제도 그때만
+    const ghostImageReplaces =
+      Boolean(previewImage) && (imageMode ?? DEFAULT_IMAGE_MODE) === 'replace';
+    const backgroundColor = ghostImageReplaces
+      ? 'transparent'
+      : DEFAULT_ELEMENT_BG;
     const previewShadow = elementShadowToCss(
       resolveElementShadow({
         active: false,
@@ -1407,7 +1441,7 @@ const Grid = ({
         activeShadow,
         defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
         defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-        suppressDefault: Boolean(previewImage),
+        suppressDefault: ghostImageReplaces,
       }),
     );
     // keyName은 호출부에서 slotDisplayName으로 합성된 표시 라벨
@@ -1428,13 +1462,14 @@ const Grid = ({
           transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
           backgroundColor,
           borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
-          border: `${DEFAULT_ELEMENT_BORDER_WIDTH}px solid ${DEFAULT_ELEMENT_BORDER}`,
+          border: 'none',
           boxShadow: previewShadow,
-          overflow: 'hidden',
+          overflow: ghostImageReplaces ? 'hidden' : 'visible',
           opacity: 0.5,
-          zIndex: 1000,
+          zIndex: 'var(--z-canvas-drag-preview)',
         }}
       >
+        {renderGhostBorderRing(ghostImageReplaces)}
         {previewImage ? (
           <img
             src={previewImage}
@@ -1442,7 +1477,12 @@ const Grid = ({
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
+              objectFit: (idleImageFit ||
+                imageFit ||
+                'cover') as React.CSSProperties['objectFit'],
+              transform: idleImageTransform
+                ? imageTransformToCss(idleImageTransform)
+                : undefined,
               display: 'block',
               pointerEvents: 'none',
               userSelect: 'none',
@@ -1500,7 +1540,7 @@ const Grid = ({
         gridContainerRef.current = node;
       }}
       data-grid-container
-      className="relative w-full h-full bg-panel rounded-[0px] overflow-hidden"
+      className="relative isolate w-full h-full bg-panel rounded-[0px] overflow-hidden"
       style={color === 'transparent' ? undefined : { backgroundColor: color }}
       onContextMenu={(e) => {
         if (duplicateState) {
@@ -1512,10 +1552,8 @@ const Grid = ({
         // 줌/팬 반영된 그리드 좌표 계산
         const gridCoords = clientToGridCoords(e.clientX, e.clientY);
         if (!gridCoords) return;
-        setGridAddLocalPos({
-          dx: Math.round(gridCoords.x),
-          dy: Math.round(gridCoords.y),
-        });
+        const snapped = snapCursorToGrid(gridCoords.x, gridCoords.y);
+        setGridAddLocalPos({ dx: snapped.x, dy: snapped.y });
         setGridContextClientPos({ x: e.clientX, y: e.clientY });
         setIsGridContextOpen(true);
       }}
@@ -1678,7 +1716,7 @@ const Grid = ({
               border: '2px solid var(--ui-selection-border)',
               borderRadius: '4px',
               pointerEvents: 'none',
-              zIndex: 20,
+              zIndex: 'var(--z-canvas-selection-outline)',
             }}
           />
         );
@@ -2212,6 +2250,10 @@ const Grid = ({
               void overlayApi.resetPosition().catch((error) => {
                 console.error('Failed to reset overlay position', error);
               });
+            } else if (id === 'resetPanelPosition') {
+              void panelWindowApi.resetPosition().catch((error) => {
+                console.error('Failed to reset panel window position', error);
+              });
             }
             setIsGridContextOpen(false);
             setGridContextClientPos(null);
@@ -2243,7 +2285,6 @@ const Grid = ({
         />
       )}
       {/* 줌 레벨 표시 - 미니맵 내부로 통합됨 */}
-      {/* <ZoomIndicator zoom={zoom} /> */}
       {/* 탭 CSS 설정 모달 */}
       <TabCssModal
         isOpen={isTabCssModalOpen}

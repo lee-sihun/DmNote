@@ -5,6 +5,10 @@ import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
 import {
+  isErrorForCurrentSrc,
+  useFailedImageSrcs,
+} from '@hooks/overlay/useFailedImageSrcs';
+import {
   computeKeyElementStyles,
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
@@ -30,6 +34,10 @@ const StatItem = React.memo(
   }: StatItemProps) => {
     useSignals();
 
+    const { failedImageSrcs, markFailed } = useFailedImageSrcs(
+      position?.inactiveImage,
+      position?.activeImage,
+    );
     const {
       keyStyle,
       borderRingStyle,
@@ -39,12 +47,19 @@ const StatItem = React.memo(
       activeImageSrc,
       currentImageSrc,
       hasCurrentImage,
+      imageMode,
+      imageReplaces,
       isTransparent,
       labelText,
       labelPaintStyle,
       labelHasGradient,
       labelMetricsDep,
-    } = computeKeyElementStyles({ position, active, label: label || '' });
+    } = computeKeyElementStyles({
+      position,
+      active,
+      label: label || '',
+      failedImageSrcs,
+    });
 
     // 이미지 프리로드
     useEffect(() => {
@@ -72,6 +87,7 @@ const StatItem = React.memo(
         data-state={active ? 'active' : 'inactive'}
         data-key-element="true"
         data-key-image={hasCurrentImage ? 'true' : undefined}
+        data-key-image-mode={hasCurrentImage ? imageMode : undefined}
       >
         {borderRingStyle && (
           <span
@@ -80,14 +96,21 @@ const StatItem = React.memo(
             style={borderRingStyle}
           />
         )}
-        {hasCurrentImage ? (
+        {hasCurrentImage && (
           <img
             src={currentImageSrc!}
             alt=""
+            data-key-image-layer="true"
             style={imageStyle}
             draggable={false}
+            onError={(event) => {
+              if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
+                return;
+              markFailed(currentImageSrc);
+            }}
           />
-        ) : showInsideCounter && counterSignal ? (
+        )}
+        {imageReplaces ? null : showInsideCounter && counterSignal ? (
           <InsideCounterLayout
             countSignal={counterSignal}
             labelText={labelText}

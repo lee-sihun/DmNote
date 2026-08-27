@@ -118,6 +118,10 @@ enum ViolationPropertyPath {
         name: &'static str,
         property: &'static str,
     },
+    ImageTransform {
+        name: &'static str,
+        property: &'static str,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -268,12 +272,23 @@ where
     Ok(request)
 }
 
+fn carries_value(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Array(items) => !items.is_empty(),
+        _ => true,
+    }
+}
+
 fn first_unknown_json_key(raw: &Value, canonical: &Value, path: &str) -> Option<String> {
     match (raw, canonical) {
         (Value::Object(raw), Value::Object(canonical)) => raw.iter().find_map(|(key, value)| {
             let child_path = format!("{path}.{key}");
             canonical.get(key).map_or_else(
-                || Some(child_path.clone()),
+                // None·빈 배열은 재직렬화에서 생략된다(skip_serializing_if).
+                // 프론트가 명시한 null·[]은 같은 뜻이고 실린 값이 없으므로
+                // 미지의 키로 보지 않는다 - 값이 있는 키만 거절
+                || carries_value(value).then(|| child_path.clone()),
                 |canonical| first_unknown_json_key(value, canonical, &child_path),
             )
         }),
@@ -1483,6 +1498,90 @@ fn collect_position_style_violations(
                 );
             }
         }
+        // 이미지 변환도 그림자처럼 문서 단위로 검증한다 - property 패치 경로만 검사하면
+        // 프리셋·플러그인·frozen insert로 범위 밖 값이 영속돼 다음 실행의 복구 세션을 유발한다
+        for (name, transform) in [
+            ("idleImageTransform", position.idle_image_transform.as_ref()),
+            (
+                "activeImageTransform",
+                position.active_image_transform.as_ref(),
+            ),
+        ] {
+            if let Some(transform) = transform {
+                collect_image_transform_violations(
+                    NativeElementDiagnostic {
+                        kind,
+                        field,
+                        mode,
+                        index,
+                        id: &position.id,
+                    },
+                    name,
+                    transform,
+                    violations,
+                );
+            }
+        }
+    }
+}
+
+fn collect_image_transform_violations(
+    element: NativeElementDiagnostic<'_>,
+    name: &'static str,
+    transform: &crate::models::ImageTransform,
+    violations: &mut BTreeSet<ValidationViolation>,
+) {
+    use crate::models::{
+        IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX,
+        IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN,
+    };
+    let NativeElementDiagnostic {
+        kind,
+        field,
+        mode,
+        index,
+        id,
+    } = element;
+    for (property, value, min, max) in [
+        (
+            "offsetX",
+            transform.offset_x,
+            IMAGE_TRANSFORM_OFFSET_MIN,
+            IMAGE_TRANSFORM_OFFSET_MAX,
+        ),
+        (
+            "offsetY",
+            transform.offset_y,
+            IMAGE_TRANSFORM_OFFSET_MIN,
+            IMAGE_TRANSFORM_OFFSET_MAX,
+        ),
+        (
+            "rotation",
+            transform.rotation,
+            IMAGE_TRANSFORM_ROTATION_MIN,
+            IMAGE_TRANSFORM_ROTATION_MAX,
+        ),
+        (
+            "scale",
+            transform.scale,
+            IMAGE_TRANSFORM_SCALE_MIN,
+            IMAGE_TRANSFORM_SCALE_MAX,
+        ),
+    ] {
+        if !value.is_finite() || !(min..=max).contains(&value) {
+            violations.insert(ValidationViolation::new(
+                native_violation_key(
+                    kind,
+                    id,
+                    "INVALID_IMAGE_TRANSFORM",
+                    ViolationPropertyPath::ImageTransform { name, property },
+                    InvalidValueSignature::FloatBits(value.to_bits()),
+                ),
+                format!(
+                    "{field} {mode}[{index}].{name}.{property} must be a finite number between {min} and {max}"
+                ),
+            ));
+        }
     }
 }
 
@@ -2671,6 +2770,56 @@ mod tests {
         });
         let error = decode_editor_commit_request(delete_with_bounds).unwrap_err();
         assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+    }
+
+    #[test]
+    fn frozen_insert_wire_accepts_explicit_null_for_skipped_optional_fields() {
+        let frozen = |counter: serde_json::Value| {
+            serde_json::json!({
+                "baseRevision": 0,
+                "mutationId": Uuid::new_v4().to_string(),
+                "opsVersion": EDITOR_OPS_VERSION,
+                "ops": [{
+                    "kind": "insertFrozenElements",
+                    "mode": "4key",
+                    "elements": [{
+                        "elementType": "key",
+                        "slot": "A",
+                        "position": {
+                            "id": Uuid::new_v4().to_string(),
+                            "dx": 0.0, "dy": 0.0, "width": 60.0, "height": 60.0, "count": 0,
+                            "counter": counter,
+                        },
+                    }],
+                    "groups": [],
+                    "zUpdates": [],
+                }],
+            })
+        };
+
+        // 프론트 정규화는 미지정 그라데이션을 null로 보낸다 - None은 재직렬화에서
+        // 생략되지만 같은 뜻이므로 통과해야 한다
+        decode_editor_commit_request(frozen(serde_json::json!({
+            "enabled": true,
+            "fillIdleGradient": null,
+            "fillActiveGradient": null,
+        })))
+        .unwrap();
+
+        // 빈 배열로 명시한 생략 필드(gestureIds)도 같은 규칙
+        let mut with_empty_gesture_ids = frozen(serde_json::json!({ "enabled": true }));
+        with_empty_gesture_ids["gestureIds"] = serde_json::json!([]);
+        decode_editor_commit_request(with_empty_gesture_ids).unwrap();
+
+        // 값이 실린 미지의 키는 여전히 거절
+        let error = decode_editor_commit_request(frozen(serde_json::json!({
+            "enabled": true,
+            "fillActiveGradient": null,
+            "fillHoverGradient": { "angle": 0, "stops": [] },
+        })))
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+        assert!(error.message.contains("fillHoverGradient"));
     }
 
     #[test]
@@ -4533,6 +4682,43 @@ mod tests {
                 .and_then(|details| details.validation_code.as_deref()),
             Some("INVALID_ELEMENT_SHADOW")
         );
+    }
+
+    // 이미지 변환도 그림자와 같은 문서 단위 검증 - 기존 값은 grandfather, 새 범위 밖 값은 거부
+    #[test]
+    fn image_transform_violations_are_rejected_unless_grandfathered() {
+        let out_of_range = |scale: f64| crate::models::ImageTransform {
+            offset_x: 0.0,
+            offset_y: 0.0,
+            rotation: 0.0,
+            scale,
+        };
+        let mut store = default_editor_store();
+        store.key_positions.get_mut("4key").unwrap()[0].idle_image_transform =
+            Some(out_of_range(0.05));
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut unrelated = current.clone();
+        unrelated.key_positions.get_mut("4key").unwrap()[0].font_size = Some(18.0);
+        let mut unrelated_store = store.clone();
+        unrelated.apply_to_store(&mut unrelated_store);
+        validate_document_transition(&current, &unrelated, &store, &unrelated_store).unwrap();
+
+        let mut changed = current.clone();
+        changed.key_positions.get_mut("4key").unwrap()[0].idle_image_transform =
+            Some(out_of_range(0.04));
+        let mut changed_store = store.clone();
+        changed.apply_to_store(&mut changed_store);
+        let error =
+            validate_document_transition(&current, &changed, &store, &changed_store).unwrap_err();
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|details| details.validation_code.as_deref()),
+            Some("INVALID_IMAGE_TRANSFORM")
+        );
+        assert!(error.message.contains("idleImageTransform.scale"));
     }
 
     #[test]

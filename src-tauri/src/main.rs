@@ -147,10 +147,22 @@ fn main() {
                 return Ok(());
             }
 
-            // macOS: 네이티브 Edit 메뉴 추가 — WKWebView 편집 단축키(Cmd+Z/X/C/V/A) 활성화
+            // macOS: 네이티브 앱/Edit 메뉴 추가 - 앱 메뉴로 Cmd+Q, Edit 메뉴로 WKWebView 편집 단축키(Cmd+Z/X/C/V/A) 활성화
             #[cfg(target_os = "macos")]
             {
                 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
+
+                // AppKit은 메뉴 바의 첫 서브메뉴를 앱 메뉴로 렌더한다.
+                // set_menu는 Tauri 기본 메뉴를 통째로 대체하므로 Quit을 여기서 직접 넣어야 한다.
+                // Quit은 MenuEvent 없이 `terminate:`로 직결되고 RunEvent::ExitRequested도 거치지
+                // 않지만, macos_termination::install이 주입한 applicationShouldTerminate:가
+                // 종료 핸드셰이크(편집 flush)로 가로챈다
+                let app_menu = Submenu::with_items(
+                    app,
+                    app.package_info().name.clone(),
+                    true,
+                    &[&PredefinedMenuItem::quit(app, None)?],
+                )?;
 
                 let edit_menu = Submenu::with_items(
                     app,
@@ -168,7 +180,7 @@ fn main() {
                     ],
                 )?;
 
-                let menu = Menu::with_items(app, &[&edit_menu])?;
+                let menu = Menu::with_items(app, &[&app_menu, &edit_menu])?;
                 app.set_menu(menu)?;
             }
 
@@ -318,6 +330,7 @@ fn main() {
             commands::layout::panel::panel_window_present,
             commands::layout::panel::panel_window_present_at,
             commands::layout::panel::panel_window_move_to,
+            commands::layout::panel::panel_window_reset_position,
             commands::layout::panel::panel_window_set_drag_cursor,
             commands::layout::panel::panel_window_drag_context,
             commands::layout::panel::panel_window_dock,

@@ -10,7 +10,6 @@ export { default as GridMinimap } from './core/GridMinimap';
 // overlays
 export { default as MarqueeSelectionOverlay } from './overlays/MarqueeSelectionOverlay';
 export { default as SmartGuidesOverlay } from './overlays/SmartGuidesOverlay';
-export { default as ZoomIndicator } from './overlays/ZoomIndicator';
 
 // 기본 export
 export { default } from './core/Grid';

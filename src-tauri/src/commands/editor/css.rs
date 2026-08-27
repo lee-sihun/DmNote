@@ -11,11 +11,14 @@ use reqwest::{
     header::{ACCEPT, LOCATION},
 };
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Manager, WebviewWindow};
 use tokio::sync::Semaphore;
 
 use crate::{
-    commands::{dialog::parented_file_dialog, editor::state::emit_best_effort},
+    commands::{
+        dialog::parented_file_dialog, editor::state::emit_best_effort, issue_mutation_ticket,
+        run_blocking, run_history_mutation,
+    },
     custom_css::{
         custom_css_settings_diff, history_paths_match, inspect_css_history_status,
         normalize_custom_css_history, record_custom_css_load, touch_custom_css_history,
@@ -438,109 +441,121 @@ pub struct TabCssExportResponse {
 }
 
 #[tauri::command]
-pub fn css_get(state: State<'_, AppState>) -> CmdResult<CustomCss> {
-    Ok(state.store.snapshot().custom_css)
+pub async fn css_get(app: AppHandle) -> CmdResult<CustomCss> {
+    run_blocking(app, |_, state| Ok(state.store.snapshot().custom_css)).await
 }
 
 #[tauri::command]
-pub fn css_get_use(state: State<'_, AppState>) -> CmdResult<bool> {
-    Ok(state.store.snapshot().use_custom_css)
+pub async fn css_get_use(app: AppHandle) -> CmdResult<bool> {
+    run_blocking(app, |_, state| Ok(state.store.snapshot().use_custom_css)).await
 }
 
 #[tauri::command]
-pub fn css_toggle(
-    state: State<'_, AppState>,
+pub async fn css_toggle(
     app: AppHandle,
     window: WebviewWindow,
     enabled: bool,
 ) -> CmdResult<CssToggleResponse> {
-    let _operation_guard = state.lock_css_operation();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                store.use_custom_css = enabled;
-                Ok(store.custom_css.clone())
-            })?;
-    let css = &transaction.value;
-    if enabled {
-        state.unwatch_global_css();
-        if let Some(path) = &css.path {
-            if let Err(err) = state.watch_global_css(path) {
-                log::warn!("[css_toggle] Failed to start watching: {}", err);
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let _operation_guard = state.lock_css_operation();
+            let transaction =
+                state
+                    .store
+                    .commit_history_overlap_mutation_with_admission(admission, |store| {
+                        store.use_custom_css = enabled;
+                        Ok(store.custom_css.clone())
+                    })?;
+            let css = &transaction.value;
+            if enabled {
+                state.unwatch_global_css();
+                if let Some(path) = &css.path {
+                    if let Err(err) = state.watch_global_css(path) {
+                        log::warn!("[css_toggle] Failed to start watching: {}", err);
+                    }
+                }
+            } else {
+                state.unwatch_global_css();
             }
-        }
-    } else {
-        state.unwatch_global_css();
-    }
 
-    emit_history_status(&app, &transaction);
-    emit_best_effort(&app, "css:use", &CssToggleResponse { enabled });
-    if enabled {
-        emit_best_effort(&app, "css:content", css);
-    }
-    notify_obs_css(&state);
-    Ok(CssToggleResponse { enabled })
+            emit_history_status(app, &transaction);
+            emit_best_effort(app, "css:use", &CssToggleResponse { enabled });
+            if enabled {
+                emit_best_effort(app, "css:content", css);
+            }
+            notify_obs_css(state);
+            Ok(CssToggleResponse { enabled })
+        },
+    )
+    .await
 }
 
 #[tauri::command]
-pub fn css_reset(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    window: WebviewWindow,
-) -> CmdResult<()> {
-    let _operation_guard = state.lock_css_operation();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                store.use_custom_css = false;
-                store.custom_css = CustomCss::default();
-                Ok(())
-            })?;
-    state.unwatch_global_css();
+pub async fn css_reset(app: AppHandle, window: WebviewWindow) -> CmdResult<()> {
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let _operation_guard = state.lock_css_operation();
+            let transaction =
+                state
+                    .store
+                    .commit_history_overlap_mutation_with_admission(admission, |store| {
+                        store.use_custom_css = false;
+                        store.custom_css = CustomCss::default();
+                        Ok(())
+                    })?;
+            state.unwatch_global_css();
 
-    emit_history_status(&app, &transaction);
-    emit_best_effort(&app, "css:use", &CssToggleResponse { enabled: false });
-    emit_best_effort(&app, "css:content", &CustomCss::default());
+            emit_history_status(app, &transaction);
+            emit_best_effort(app, "css:use", &CssToggleResponse { enabled: false });
+            emit_best_effort(app, "css:content", &CustomCss::default());
 
-    notify_obs_css(&state);
-    Ok(())
+            notify_obs_css(state);
+            Ok(())
+        },
+    )
+    .await
 }
 
 #[tauri::command]
-pub fn css_set_content(
-    state: State<'_, AppState>,
+pub async fn css_set_content(
     app: AppHandle,
     window: WebviewWindow,
     content: String,
 ) -> CmdResult<CssSetContentResponse> {
-    let _operation_guard = state.lock_css_operation();
     if content.len() as u64 > MAX_CUSTOM_CSS_BYTES {
         return Ok(CssSetContentResponse {
             success: false,
             error: Some(CssHistoryErrorCode::TooLarge.as_str().to_string()),
         });
     }
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                store.custom_css.content = content;
-                Ok(store.custom_css.clone())
-            })?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let _operation_guard = state.lock_css_operation();
+            let transaction =
+                state
+                    .store
+                    .commit_history_overlap_mutation_with_admission(admission, |store| {
+                        store.custom_css.content = content;
+                        Ok(store.custom_css.clone())
+                    })?;
 
-    emit_history_status(&app, &transaction);
-    emit_best_effort(&app, "css:content", &transaction.value);
+            emit_history_status(app, &transaction);
+            emit_best_effort(app, "css:content", &transaction.value);
 
-    notify_obs_css(&state);
-    Ok(CssSetContentResponse {
-        success: true,
-        error: None,
-    })
+            notify_obs_css(state);
+            Ok(CssSetContentResponse {
+                success: true,
+                error: None,
+            })
+        },
+    )
+    .await
 }
 
 #[tauri::command]
@@ -558,162 +573,186 @@ pub async fn css_load(app: AppHandle, window: WebviewWindow) -> CmdResult<CssLoa
         });
     };
     let path = file.path().to_path_buf();
-    tauri::async_runtime::spawn_blocking(move || css_load_from_path(app, window, path))
-        .await
-        .map_err(|error| CommandError::msg(format!("CSS load task failed: {error}")))?
+    let window_label = window.label().to_string();
+    run_blocking(app, move |app, state| {
+        css_load_from_path(app, state, &window_label, path)
+    })
+    .await
 }
 
 fn css_load_from_path(
-    app: AppHandle,
-    window: WebviewWindow,
+    app: &AppHandle,
+    state: &AppState,
+    window_label: &str,
     path: PathBuf,
 ) -> CmdResult<CssLoadResponse> {
-    let state = app.state::<AppState>();
-
     let selected_path = path.to_string_lossy().to_string();
-    let _operation_guard = state.lock_css_operation();
-    let loaded = match validate_css_path(&path) {
-        Ok(loaded) => loaded,
-        Err(error) => {
-            log_css_rejection("css_load", &selected_path, &error);
-            return Ok(CssLoadResponse {
-                success: false,
-                error: Some(error.code.as_str().to_string()),
-                content: None,
-                path: Some(selected_path),
-            });
+    let ticket = issue_mutation_ticket(app)?;
+    let admission = state.admit_frontend_history_mutation(window_label)?;
+    ticket.run(|| {
+        state.ensure_mutation_allowed().map_err(CommandError::msg)?;
+        // 잠금 순서: 번호표 turn -> CSS 잠금, 역순이면 preset_load와 교착
+        // 검증도 잠금 안에서 해야 watcher가 저장한 최신본을 옛 내용으로 덮지 않음
+        let _operation_guard = state.lock_css_operation();
+        let loaded = match validate_css_path(&path) {
+            Ok(loaded) => loaded,
+            Err(error) => {
+                log_css_rejection("css_load", &selected_path, &error);
+                return Ok(CssLoadResponse {
+                    success: false,
+                    error: Some(error.code.as_str().to_string()),
+                    content: None,
+                    path: Some(selected_path),
+                });
+            }
+        };
+        let transaction = commit_loaded_css(state, &loaded, true, admission)?;
+        let (css, use_custom_css) = &transaction.value;
+        state.authorize_css_path(&loaded.canonical_path);
+        state.unwatch_global_css();
+        if *use_custom_css {
+            if let Err(error) = state.watch_global_css(&loaded.canonical_path) {
+                log::warn!("[css_load] Failed to start watching: {error}");
+            }
         }
-    };
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction = commit_loaded_css(&state, &loaded, true, admission)?;
-    let (css, use_custom_css) = &transaction.value;
-    state.authorize_css_path(&loaded.canonical_path);
-    state.unwatch_global_css();
-    if *use_custom_css {
-        if let Err(error) = state.watch_global_css(&loaded.canonical_path) {
-            log::warn!("[css_load] Failed to start watching: {error}");
-        }
-    }
-    emit_history_status(&app, &transaction);
-    emit_best_effort(&app, "css:content", css);
-    notify_obs_css(&state);
+        emit_history_status(app, &transaction);
+        emit_best_effort(app, "css:content", css);
+        notify_obs_css(state);
 
-    Ok(CssLoadResponse {
-        success: true,
-        error: None,
-        content: Some(loaded.content),
-        path: Some(loaded.canonical_path),
+        Ok(CssLoadResponse {
+            success: true,
+            error: None,
+            content: Some(loaded.content),
+            path: Some(loaded.canonical_path),
+        })
     })
 }
 
 #[tauri::command]
-pub fn css_history_get(state: State<'_, AppState>) -> CmdResult<Vec<CustomCssHistoryItem>> {
-    Ok(history_items(&state.store.snapshot().custom_css_history))
+pub async fn css_history_get(app: AppHandle) -> CmdResult<Vec<CustomCssHistoryItem>> {
+    run_blocking(app, |_, state| {
+        Ok(history_items(&state.store.snapshot().custom_css_history))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn css_history_activate(
-    state: State<'_, AppState>,
+pub async fn css_history_activate(
     app: AppHandle,
     window: WebviewWindow,
     path: String,
 ) -> CmdResult<CssActivateResponse> {
-    let _operation_guard = state.lock_css_operation();
-    let authorized = state
-        .store
-        .with_state(|store| has_history_path(&store.custom_css_history, &path));
-    if !authorized {
-        log::warn!(
-            "[css_history_activate] Rejected CSS path code={} path={}",
-            CssHistoryErrorCode::PathNotAuthorized.as_str(),
-            path
-        );
-        return Ok(activate_failure(
-            CssHistoryErrorCode::PathNotAuthorized,
-            path,
-        ));
-    }
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let _operation_guard = state.lock_css_operation();
+            let authorized = state
+                .store
+                .with_state(|store| has_history_path(&store.custom_css_history, &path));
+            if !authorized {
+                log::warn!(
+                    "[css_history_activate] Rejected CSS path code={} path={}",
+                    CssHistoryErrorCode::PathNotAuthorized.as_str(),
+                    path
+                );
+                return Ok(activate_failure(
+                    CssHistoryErrorCode::PathNotAuthorized,
+                    path,
+                ));
+            }
 
-    let loaded = match validate_css_path(Path::new(&path)) {
-        Ok(loaded) => loaded,
-        Err(error) => {
-            log_css_rejection("css_history_activate", &path, &error);
-            return Ok(activate_failure(error.code, path));
-        }
-    };
-    let canonical_authorized = state
-        .store
-        .with_state(|store| has_history_path(&store.custom_css_history, &loaded.canonical_path));
-    if !canonical_authorized {
-        log::warn!(
-            "[css_history_activate] Rejected canonical CSS path code={} path={}",
-            CssHistoryErrorCode::PathNotAuthorized.as_str(),
-            loaded.canonical_path
-        );
-        return Ok(activate_failure(
-            CssHistoryErrorCode::PathNotAuthorized,
-            path,
-        ));
-    }
+            let loaded = match validate_css_path(Path::new(&path)) {
+                Ok(loaded) => loaded,
+                Err(error) => {
+                    log_css_rejection("css_history_activate", &path, &error);
+                    return Ok(activate_failure(error.code, path));
+                }
+            };
+            let canonical_authorized = state.store.with_state(|store| {
+                has_history_path(&store.custom_css_history, &loaded.canonical_path)
+            });
+            if !canonical_authorized {
+                log::warn!(
+                    "[css_history_activate] Rejected canonical CSS path code={} path={}",
+                    CssHistoryErrorCode::PathNotAuthorized.as_str(),
+                    loaded.canonical_path
+                );
+                return Ok(activate_failure(
+                    CssHistoryErrorCode::PathNotAuthorized,
+                    path,
+                ));
+            }
 
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction = commit_loaded_css(&state, &loaded, false, admission)?;
-    let (css, use_custom_css) = &transaction.value;
-    state.authorize_css_path(&loaded.canonical_path);
-    state.unwatch_global_css();
-    if *use_custom_css {
-        if let Err(error) = state.watch_global_css(&loaded.canonical_path) {
-            log::warn!("[css_history_activate] Failed to start watching: {error}");
-        }
-    }
-    emit_history_status(&app, &transaction);
-    emit_best_effort(&app, "css:content", css);
-    notify_obs_css(&state);
+            let transaction = commit_loaded_css(state, &loaded, false, admission)?;
+            let (css, use_custom_css) = &transaction.value;
+            state.authorize_css_path(&loaded.canonical_path);
+            state.unwatch_global_css();
+            if *use_custom_css {
+                if let Err(error) = state.watch_global_css(&loaded.canonical_path) {
+                    log::warn!("[css_history_activate] Failed to start watching: {error}");
+                }
+            }
+            emit_history_status(app, &transaction);
+            emit_best_effort(app, "css:content", css);
+            notify_obs_css(state);
 
-    Ok(CssActivateResponse {
-        success: true,
-        code: None,
-        content: Some(loaded.content),
-        path: Some(loaded.canonical_path),
-    })
+            Ok(CssActivateResponse {
+                success: true,
+                code: None,
+                content: Some(loaded.content),
+                path: Some(loaded.canonical_path),
+            })
+        },
+    )
+    .await
 }
 
 #[tauri::command]
-pub fn css_history_remove(
-    state: State<'_, AppState>,
+pub async fn css_history_remove(
+    app: AppHandle,
     window: WebviewWindow,
     path: String,
 ) -> CmdResult<Vec<CustomCssHistoryItem>> {
-    let operation_guard = state.lock_css_operation();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                store
-                    .custom_css_history
-                    .retain(|entry| !history_paths_match(&entry.path, &path));
-                normalize_custom_css_history(&mut store.custom_css_history);
-                Ok(store.custom_css_history.clone())
-            })?;
-    drop(operation_guard);
-    Ok(history_items(&transaction.value))
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |_, state, admission| {
+            let operation_guard = state.lock_css_operation();
+            let transaction =
+                state
+                    .store
+                    .commit_history_overlap_mutation_with_admission(admission, |store| {
+                        store
+                            .custom_css_history
+                            .retain(|entry| !history_paths_match(&entry.path, &path));
+                        normalize_custom_css_history(&mut store.custom_css_history);
+                        Ok(store.custom_css_history.clone())
+                    })?;
+            drop(operation_guard);
+            Ok(history_items(&transaction.value))
+        },
+    )
+    .await
 }
 
 // ========== 탭별 CSS 커맨드 ==========
 
 /// 모든 탭의 CSS 오버라이드 조회
 #[tauri::command]
-pub fn css_tab_get_all(state: State<'_, AppState>) -> CmdResult<TabCssOverrides> {
-    Ok(state.store.snapshot().tab_css_overrides)
+pub async fn css_tab_get_all(app: AppHandle) -> CmdResult<TabCssOverrides> {
+    run_blocking(app, |_, state| Ok(state.store.snapshot().tab_css_overrides)).await
 }
 
 /// 특정 탭의 CSS 조회
 #[tauri::command]
-pub fn css_tab_get(state: State<'_, AppState>, tab_id: String) -> CmdResult<TabCssResponse> {
-    let overrides = state.store.snapshot().tab_css_overrides;
-    let css = overrides.get(&tab_id).cloned();
-    Ok(TabCssResponse { tab_id, css })
+pub async fn css_tab_get(app: AppHandle, tab_id: String) -> CmdResult<TabCssResponse> {
+    run_blocking(app, move |_, state| {
+        let overrides = state.store.snapshot().tab_css_overrides;
+        let css = overrides.get(&tab_id).cloned();
+        Ok(TabCssResponse { tab_id, css })
+    })
+    .await
 }
 
 /// 특정 탭에 CSS 파일 로드
@@ -736,212 +775,235 @@ pub async fn css_tab_load(
         });
     };
     let path = file.path().to_path_buf();
-    tauri::async_runtime::spawn_blocking(move || css_tab_load_from_path(app, window, tab_id, path))
-        .await
-        .map_err(|error| CommandError::msg(format!("tab CSS load task failed: {error}")))?
+    let window_label = window.label().to_string();
+    run_blocking(app, move |app, state| {
+        css_tab_load_from_path(app, state, &window_label, tab_id, path)
+    })
+    .await
 }
 
 fn css_tab_load_from_path(
-    app: AppHandle,
-    window: WebviewWindow,
+    app: &AppHandle,
+    state: &AppState,
+    window_label: &str,
     tab_id: String,
     path: PathBuf,
 ) -> CmdResult<TabCssLoadResponse> {
-    let state = app.state::<AppState>();
-
     let selected_path = path.to_string_lossy().to_string();
-    let _operation_guard = state.lock_css_operation();
-    let loaded = match validate_css_path(&path) {
-        Ok(loaded) => loaded,
-        Err(error) => {
-            log_css_rejection("css_tab_load", &selected_path, &error);
-            return Ok(TabCssLoadResponse {
-                success: false,
-                error: Some(error.code.as_str().to_string()),
-                tab_id,
-                css: None,
-            });
+    let ticket = issue_mutation_ticket(app)?;
+    let admission = state.admit_frontend_history_mutation(window_label)?;
+    ticket.run(|| {
+        state.ensure_mutation_allowed().map_err(CommandError::msg)?;
+        // 잠금 순서: 번호표 turn -> CSS 잠금, 역순이면 preset_load와 교착
+        // 검증도 잠금 안에서 해야 watcher가 저장한 최신본을 옛 내용으로 덮지 않음
+        let _operation_guard = state.lock_css_operation();
+        let loaded = match validate_css_path(&path) {
+            Ok(loaded) => loaded,
+            Err(error) => {
+                log_css_rejection("css_tab_load", &selected_path, &error);
+                return Ok(TabCssLoadResponse {
+                    success: false,
+                    error: Some(error.code.as_str().to_string()),
+                    tab_id,
+                    css: None,
+                });
+            }
+        };
+        let tab_css = TabCss {
+            path: Some(loaded.canonical_path.clone()),
+            content: loaded.content,
+            enabled: true,
+        };
+        let transaction =
+            state
+                .store
+                .commit_history_overlap_mutation_with_admission(admission, |store| {
+                    replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
+                    Ok(())
+                })?;
+        state.authorize_css_path(&loaded.canonical_path);
+        state.unwatch_tab_css(&tab_id);
+        if let Err(error) = state.watch_tab_css(&loaded.canonical_path, &tab_id) {
+            log::warn!("[css_tab_load] Failed to watch tab {tab_id}: {error}");
         }
-    };
-    let tab_css = TabCss {
-        path: Some(loaded.canonical_path.clone()),
-        content: loaded.content,
-        enabled: true,
-    };
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
-                Ok(())
-            })?;
-    state.authorize_css_path(&loaded.canonical_path);
-    state.unwatch_tab_css(&tab_id);
-    if let Err(error) = state.watch_tab_css(&loaded.canonical_path, &tab_id) {
-        log::warn!("[css_tab_load] Failed to watch tab {tab_id}: {error}");
-    }
-    emit_history_status(&app, &transaction);
-    emit_best_effort(
-        &app,
-        "tabCss:changed",
-        &TabCssResponse {
-            tab_id: tab_id.clone(),
-            css: Some(tab_css.clone()),
-        },
-    );
+        emit_history_status(app, &transaction);
+        emit_best_effort(
+            app,
+            "tabCss:changed",
+            &TabCssResponse {
+                tab_id: tab_id.clone(),
+                css: Some(tab_css.clone()),
+            },
+        );
 
-    Ok(TabCssLoadResponse {
-        success: true,
-        error: None,
-        tab_id,
-        css: Some(tab_css),
+        Ok(TabCssLoadResponse {
+            success: true,
+            error: None,
+            tab_id,
+            css: Some(tab_css),
+        })
     })
 }
 
 /// 특정 탭의 CSS 제거 (전역 CSS로 폴백)
 #[tauri::command]
-pub fn css_tab_clear(
-    state: State<'_, AppState>,
+pub async fn css_tab_clear(
     app: AppHandle,
     window: WebviewWindow,
     tab_id: String,
 ) -> CmdResult<TabCssClearResponse> {
-    let _operation_guard = state.lock_css_operation();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                replace_tab_css_override(store, &tab_id, None);
-                Ok(())
-            })?;
-    state.unwatch_tab_css(&tab_id);
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let _operation_guard = state.lock_css_operation();
+            let transaction =
+                state
+                    .store
+                    .commit_history_overlap_mutation_with_admission(admission, |store| {
+                        replace_tab_css_override(store, &tab_id, None);
+                        Ok(())
+                    })?;
+            state.unwatch_tab_css(&tab_id);
 
-    emit_history_status(&app, &transaction);
-    emit_best_effort(
-        &app,
-        "tabCss:changed",
-        &TabCssResponse {
-            tab_id: tab_id.clone(),
-            css: None,
+            emit_history_status(app, &transaction);
+            emit_best_effort(
+                app,
+                "tabCss:changed",
+                &TabCssResponse {
+                    tab_id: tab_id.clone(),
+                    css: None,
+                },
+            );
+
+            Ok(TabCssClearResponse {
+                success: true,
+                tab_id,
+            })
         },
-    );
-
-    Ok(TabCssClearResponse {
-        success: true,
-        tab_id,
-    })
+    )
+    .await
 }
 
 /// 특정 탭의 CSS 직접 설정 (복원용)
 #[tauri::command]
-pub fn css_tab_set(
-    state: State<'_, AppState>,
+pub async fn css_tab_set(
     app: AppHandle,
     window: WebviewWindow,
     tab_id: String,
     css: Option<TabCss>,
 ) -> CmdResult<TabCssSetResponse> {
-    let _operation_guard = state.lock_css_operation();
-    let css = css.map(|tab_css| prepare_tab_css_for_set(&state, tab_css));
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                replace_tab_css_override(store, &tab_id, css.clone());
-                Ok(())
-            })?;
-    state.unwatch_tab_css(&tab_id);
-    if let Some(path) = css
-        .as_ref()
-        .filter(|tab_css| tab_css.enabled)
-        .and_then(|tab_css| tab_css.path.as_deref())
-    {
-        if let Err(error) = state.watch_tab_css(path, &tab_id) {
-            log::warn!("[css_tab_set] Failed to watch tab {tab_id}: {error}");
-        }
-    }
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let _operation_guard = state.lock_css_operation();
+            let css = css.map(|tab_css| prepare_tab_css_for_set(state, tab_css));
+            let transaction =
+                state
+                    .store
+                    .commit_history_overlap_mutation_with_admission(admission, |store| {
+                        replace_tab_css_override(store, &tab_id, css.clone());
+                        Ok(())
+                    })?;
+            state.unwatch_tab_css(&tab_id);
+            if let Some(path) = css
+                .as_ref()
+                .filter(|tab_css| tab_css.enabled)
+                .and_then(|tab_css| tab_css.path.as_deref())
+            {
+                if let Err(error) = state.watch_tab_css(path, &tab_id) {
+                    log::warn!("[css_tab_set] Failed to watch tab {tab_id}: {error}");
+                }
+            }
 
-    emit_history_status(&app, &transaction);
-    emit_best_effort(
-        &app,
-        "tabCss:changed",
-        &TabCssResponse {
-            tab_id: tab_id.clone(),
-            css: css.clone(),
+            emit_history_status(app, &transaction);
+            emit_best_effort(
+                app,
+                "tabCss:changed",
+                &TabCssResponse {
+                    tab_id: tab_id.clone(),
+                    css: css.clone(),
+                },
+            );
+
+            Ok(TabCssSetResponse {
+                success: true,
+                tab_id,
+                css,
+            })
         },
-    );
-
-    Ok(TabCssSetResponse {
-        success: true,
-        tab_id,
-        css,
-    })
+    )
+    .await
 }
 
 /// 특정 탭의 CSS 사용 여부 토글
 #[tauri::command]
-pub fn css_tab_toggle(
-    state: State<'_, AppState>,
+pub async fn css_tab_toggle(
     app: AppHandle,
     window: WebviewWindow,
     tab_id: String,
     enabled: bool,
 ) -> CmdResult<TabCssToggleResponse> {
-    let _operation_guard = state.lock_css_operation();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                let updated_css = if let Some(tab_css) = store.tab_css_overrides.get_mut(&tab_id) {
-                    tab_css.enabled = enabled;
-                    tab_css.clone()
-                } else {
-                    // 탭 CSS가 없으면 기본 설정으로 생성
-                    let new_css = TabCss {
-                        path: None,
-                        content: String::new(),
-                        enabled,
-                    };
-                    store
-                        .tab_css_overrides
-                        .insert(tab_id.clone(), new_css.clone());
-                    new_css
-                };
-                Ok(updated_css)
-            })?;
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let _operation_guard = state.lock_css_operation();
+            let transaction =
+                state
+                    .store
+                    .commit_history_overlap_mutation_with_admission(admission, |store| {
+                        let updated_css =
+                            if let Some(tab_css) = store.tab_css_overrides.get_mut(&tab_id) {
+                                tab_css.enabled = enabled;
+                                tab_css.clone()
+                            } else {
+                                // 탭 CSS가 없으면 기본 설정으로 생성
+                                let new_css = TabCss {
+                                    path: None,
+                                    content: String::new(),
+                                    enabled,
+                                };
+                                store
+                                    .tab_css_overrides
+                                    .insert(tab_id.clone(), new_css.clone());
+                                new_css
+                            };
+                        Ok(updated_css)
+                    })?;
 
-    state.unwatch_tab_css(&tab_id);
-    if enabled {
-        if let Some(path) = &transaction.value.path {
-            if let Err(err) = state.watch_tab_css(path, &tab_id) {
-                log::warn!(
-                    "[css_tab_toggle] Failed to start watching tab {}: {}",
-                    tab_id,
-                    err
-                );
+            state.unwatch_tab_css(&tab_id);
+            if enabled {
+                if let Some(path) = &transaction.value.path {
+                    if let Err(err) = state.watch_tab_css(path, &tab_id) {
+                        log::warn!(
+                            "[css_tab_toggle] Failed to start watching tab {}: {}",
+                            tab_id,
+                            err
+                        );
+                    }
+                }
             }
-        }
-    }
 
-    emit_history_status(&app, &transaction);
-    emit_best_effort(
-        &app,
-        "tabCss:changed",
-        &TabCssResponse {
-            tab_id: tab_id.clone(),
-            css: Some(transaction.value.clone()),
+            emit_history_status(app, &transaction);
+            emit_best_effort(
+                app,
+                "tabCss:changed",
+                &TabCssResponse {
+                    tab_id: tab_id.clone(),
+                    css: Some(transaction.value.clone()),
+                },
+            );
+
+            Ok(TabCssToggleResponse {
+                success: true,
+                tab_id,
+                enabled,
+            })
         },
-    );
-
-    Ok(TabCssToggleResponse {
-        success: true,
-        tab_id,
-        enabled,
-    })
+    )
+    .await
 }
 
 fn prepare_tab_css_for_set(state: &AppState, css: TabCss) -> TabCss {
@@ -995,95 +1057,100 @@ fn tab_activate_failure(
 }
 
 #[tauri::command]
-pub fn css_tab_activate_history(
-    state: State<'_, AppState>,
+pub async fn css_tab_activate_history(
     app: AppHandle,
     window: WebviewWindow,
     tab_id: String,
     path: String,
 ) -> CmdResult<TabCssActivateResponse> {
-    let _operation_guard = state.lock_css_operation();
-    let authorized = state
-        .store
-        .with_state(|store| has_history_path(&store.custom_css_history, &path));
-    if !authorized {
-        log::warn!(
-            "[css_tab_activate_history] Rejected CSS path code={} path={}",
-            CssHistoryErrorCode::PathNotAuthorized.as_str(),
-            path
-        );
-        return Ok(tab_activate_failure(
-            tab_id,
-            Some(CssHistoryErrorCode::PathNotAuthorized),
-        ));
-    }
-
-    let loaded = match validate_css_path(Path::new(&path)) {
-        Ok(loaded) => loaded,
-        Err(error) => {
-            log_css_rejection("css_tab_activate_history", &path, &error);
-            return Ok(tab_activate_failure(tab_id, Some(error.code)));
-        }
-    };
-    let canonical_authorized = state
-        .store
-        .with_state(|store| has_history_path(&store.custom_css_history, &loaded.canonical_path));
-    if !canonical_authorized {
-        log::warn!(
-            "[css_tab_activate_history] Rejected canonical CSS path code={} path={}",
-            CssHistoryErrorCode::PathNotAuthorized.as_str(),
-            loaded.canonical_path
-        );
-        return Ok(tab_activate_failure(
-            tab_id,
-            Some(CssHistoryErrorCode::PathNotAuthorized),
-        ));
-    }
-    if !is_valid_tab_id(&state, &tab_id) {
-        log::warn!("[css_tab_activate_history] Rejected unknown tab id={tab_id}");
-        return Ok(tab_activate_failure(tab_id, None));
-    }
-
-    let tab_css = TabCss {
-        path: Some(loaded.canonical_path.clone()),
-        content: loaded.content,
-        enabled: true,
-    };
-    let timestamp = current_unix_millis();
-    let admission = state.admit_frontend_history_mutation(window.label())?;
-    let transaction =
-        state
-            .store
-            .commit_history_overlap_mutation_with_admission(admission, |store| {
-                replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
-                touch_custom_css_history(
-                    &mut store.custom_css_history,
-                    &loaded.canonical_path,
-                    timestamp,
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            let _operation_guard = state.lock_css_operation();
+            let authorized = state
+                .store
+                .with_state(|store| has_history_path(&store.custom_css_history, &path));
+            if !authorized {
+                log::warn!(
+                    "[css_tab_activate_history] Rejected CSS path code={} path={}",
+                    CssHistoryErrorCode::PathNotAuthorized.as_str(),
+                    path
                 );
-                Ok(())
-            })?;
-    state.authorize_css_path(&loaded.canonical_path);
-    state.unwatch_tab_css(&tab_id);
-    if let Err(error) = state.watch_tab_css(&loaded.canonical_path, &tab_id) {
-        log::warn!("[css_tab_activate_history] Failed to watch tab {tab_id}: {error}");
-    }
-    emit_history_status(&app, &transaction);
-    emit_best_effort(
-        &app,
-        "tabCss:changed",
-        &TabCssResponse {
-            tab_id: tab_id.clone(),
-            css: Some(tab_css.clone()),
-        },
-    );
+                return Ok(tab_activate_failure(
+                    tab_id,
+                    Some(CssHistoryErrorCode::PathNotAuthorized),
+                ));
+            }
 
-    Ok(TabCssActivateResponse {
-        success: true,
-        code: None,
-        tab_id,
-        css: Some(tab_css),
-    })
+            let loaded = match validate_css_path(Path::new(&path)) {
+                Ok(loaded) => loaded,
+                Err(error) => {
+                    log_css_rejection("css_tab_activate_history", &path, &error);
+                    return Ok(tab_activate_failure(tab_id, Some(error.code)));
+                }
+            };
+            let canonical_authorized = state.store.with_state(|store| {
+                has_history_path(&store.custom_css_history, &loaded.canonical_path)
+            });
+            if !canonical_authorized {
+                log::warn!(
+                    "[css_tab_activate_history] Rejected canonical CSS path code={} path={}",
+                    CssHistoryErrorCode::PathNotAuthorized.as_str(),
+                    loaded.canonical_path
+                );
+                return Ok(tab_activate_failure(
+                    tab_id,
+                    Some(CssHistoryErrorCode::PathNotAuthorized),
+                ));
+            }
+            if !is_valid_tab_id(state, &tab_id) {
+                log::warn!("[css_tab_activate_history] Rejected unknown tab id={tab_id}");
+                return Ok(tab_activate_failure(tab_id, None));
+            }
+
+            let tab_css = TabCss {
+                path: Some(loaded.canonical_path.clone()),
+                content: loaded.content,
+                enabled: true,
+            };
+            let timestamp = current_unix_millis();
+            let transaction =
+                state
+                    .store
+                    .commit_history_overlap_mutation_with_admission(admission, |store| {
+                        replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
+                        touch_custom_css_history(
+                            &mut store.custom_css_history,
+                            &loaded.canonical_path,
+                            timestamp,
+                        );
+                        Ok(())
+                    })?;
+            state.authorize_css_path(&loaded.canonical_path);
+            state.unwatch_tab_css(&tab_id);
+            if let Err(error) = state.watch_tab_css(&loaded.canonical_path, &tab_id) {
+                log::warn!("[css_tab_activate_history] Failed to watch tab {tab_id}: {error}");
+            }
+            emit_history_status(app, &transaction);
+            emit_best_effort(
+                app,
+                "tabCss:changed",
+                &TabCssResponse {
+                    tab_id: tab_id.clone(),
+                    css: Some(tab_css.clone()),
+                },
+            );
+
+            Ok(TabCssActivateResponse {
+                success: true,
+                code: None,
+                tab_id,
+                css: Some(tab_css),
+            })
+        },
+    )
+    .await
 }
 
 fn no_tab_css_export() -> TabCssExportResponse {

@@ -16,15 +16,35 @@ export type PanelHostTransition = 'idle' | 'detaching' | 'docking';
 
 interface PanelHostState {
   placement: PanelHostPlacement;
+  attachedPlacement: PanelHostPlacement | null;
   transition: PanelHostTransition;
   setPlacement: (placement: PanelHostPlacement) => void;
+  setAttachedPlacement: (placement: PanelHostPlacement | null) => void;
   setTransition: (transition: PanelHostTransition) => void;
 }
 
-export const usePanelHostStore = create<PanelHostState>((set) => ({
+let captureBeforePlacementChange: (() => void) | null = null;
+
+// React가 분리·도킹용 높이 클래스를 바꾸기 전에 현재 스크롤 위치를 읽는다
+export const registerPanelHostMoveCapture = (capture: () => void) => {
+  captureBeforePlacementChange = capture;
+  return () => {
+    if (captureBeforePlacementChange === capture) {
+      captureBeforePlacementChange = null;
+    }
+  };
+};
+
+export const usePanelHostStore = create<PanelHostState>((set, get) => ({
   placement: 'docked',
+  attachedPlacement: null,
   transition: 'idle',
-  setPlacement: (placement) => set({ placement }),
+  setPlacement: (placement) => {
+    if (get().placement === placement) return;
+    captureBeforePlacementChange?.();
+    set({ placement });
+  },
+  setAttachedPlacement: (attachedPlacement) => set({ attachedPlacement }),
   setTransition: (transition) => set({ transition }),
 }));
 
@@ -46,9 +66,64 @@ export type TransitionOutcome = 'done' | 'busy' | 'blocked' | 'failed';
 export const isTransitionFailure = (outcome: TransitionOutcome): boolean =>
   outcome === 'blocked' || outcome === 'failed';
 
-// 호스트 이동은 React 커밋(layout effect)이 수행한다 - 창을 드러내기 전에 한 턴 양보
-const yieldToRender = () =>
-  new Promise<void>((resolve) => setTimeout(resolve, 0));
+// 도킹은 호스트 이동을 짧게만 기다린다 - 설정 화면에선 호스트가 언마운트돼 영영 안 붙고,
+// 창은 그동안 떠 있어 보이므로 오래 붙잡지 않는다
+const DOCK_ATTACH_TIMEOUT_MS = 300;
+
+// 실제 DOM 이동은 React layout effect가 확인한다. 타이머 한 번으로는 커밋 완료를 보장할 수 없다
+const waitForPanelHostAttachment = (
+  placement: PanelHostPlacement,
+  {
+    timeoutMs = 1500,
+    // 호스트가 아예 없으면(언마운트) 옮길 것도 없으므로 성공으로 본다
+    settleWhenAbsent = false,
+  }: { timeoutMs?: number; settleWhenAbsent?: boolean } = {},
+): Promise<boolean> => {
+  const attachedPlacement = usePanelHostStore.getState().attachedPlacement;
+  if (attachedPlacement === placement) {
+    return Promise.resolve(true);
+  }
+  if (settleWhenAbsent && attachedPlacement === null) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (attached: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      unsubscribe();
+      resolve(attached);
+    };
+    const unsubscribe = usePanelHostStore.subscribe((state) => {
+      if (state.attachedPlacement === placement) finish(true);
+      else if (settleWhenAbsent && state.attachedPlacement === null) {
+        finish(true);
+      }
+    });
+    const timeoutId = setTimeout(() => finish(false), timeoutMs);
+  });
+};
+
+let reapplyScrollAfterPresent: (() => void) | null = null;
+
+// 자식 창은 present() 뒤에야 레이아웃이 선다 - 숨긴 채 복원한 스크롤이 limit 0으로
+// 잘렸을 수 있어 드러난 뒤 한 번 더 적용한다 (PropertiesPanelHost가 등록)
+export const reapplyPanelHostScroll = (): void => {
+  reapplyScrollAfterPresent?.();
+};
+
+export const registerPanelHostScrollReapply = (reapply: () => void) => {
+  reapplyScrollAfterPresent = reapply;
+  return () => {
+    if (reapplyScrollAfterPresent === reapply) reapplyScrollAfterPresent = null;
+  };
+};
+
+const restorePlacement = async (placement: PanelHostPlacement) => {
+  usePanelHostStore.getState().setPlacement(placement);
+  await waitForPanelHostAttachment(placement);
+};
 
 // 문서를 옮기면 포커스가 풀리는데 blur 이벤트가 따라온다는 보장이 없다 -
 // blur 전용 편집값을 옮기기 전에 확정한다.
@@ -88,7 +163,11 @@ export const detachPropertiesPanel = async (
     }
     await openPanelChildWindow();
     usePanelHostStore.getState().setPlacement('detached');
-    await yieldToRender();
+    if (!(await waitForPanelHostAttachment('detached'))) {
+      await restorePlacement('docked');
+      console.error('Failed to attach panel host to detached window');
+      return 'failed';
+    }
     try {
       if (options.position) {
         await panelWindowApi.presentAt(
@@ -99,9 +178,10 @@ export const detachPropertiesPanel = async (
       } else {
         await panelWindowApi.present();
       }
+      reapplyPanelHostScroll();
       return 'done';
     } catch (error) {
-      usePanelHostStore.getState().setPlacement('docked');
+      await restorePlacement('docked');
       console.error('Failed to present detached panel', error);
       return 'failed';
     }
@@ -130,13 +210,29 @@ export const dockPropertiesPanel = async (): Promise<TransitionOutcome> => {
     usePanelHostStore.getState().setPlacement('docked');
     // 분리 창엔 접힘이 없었다 - 도킹한 패널은 펼친 채로 돌려준다
     usePropertiesPanelStore.getState().setCanvasPanelOpen(true);
-    await yieldToRender();
+    // 도킹도 호스트 이동을 기다린다 - 다만 실패는 치명이 아니다 (창은 그대로 감춘다).
+    // 설정 화면에선 호스트가 언마운트돼 attach가 영영 오지 않는다
+    if (
+      !(await waitForPanelHostAttachment('docked', {
+        timeoutMs: DOCK_ATTACH_TIMEOUT_MS,
+        settleWhenAbsent: true,
+      }))
+    ) {
+      console.warn(
+        'Panel host did not attach to the main document before dock',
+      );
+    }
     try {
       await panelWindowApi.dock();
       return 'done';
     } catch (error) {
       if (getPanelChildWindow()) {
+        // 되돌림도 짧게만 기다린다 - 호스트가 없으면(설정 화면) 영영 안 붙는다
         usePanelHostStore.getState().setPlacement('detached');
+        await waitForPanelHostAttachment('detached', {
+          timeoutMs: DOCK_ATTACH_TIMEOUT_MS,
+          settleWhenAbsent: true,
+        });
       }
       console.error('Failed to dock panel window', error);
       return 'failed';
