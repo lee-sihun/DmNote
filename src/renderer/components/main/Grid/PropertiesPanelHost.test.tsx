@@ -482,6 +482,8 @@ describe('PropertiesPanelHost', () => {
 
     await act(async () => {
       reapplyPanelHostScroll();
+      // rAF가 없는 환경 폴백은 다음 태스크 - 레이아웃 뒤에 적용해야 한다
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(viewport.scrollTop).toBe(420);
   });

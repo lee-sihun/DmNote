@@ -82,7 +82,7 @@ dmn.ui.contextMenu.addGridMenuItem({
 }
 ```
 
-`visible`과 `disabled`는 boolean 또는 context를 받는 함수입니다. 함수가 예외를 던지면 숨김/비활성으로 처리되고(나머지 메뉴는 그대로 표시), 함수가 아닌 값은 truthiness로 판정합니다 — `0`, `""`, `null`은 항목을 숨깁니다.
+`visible`과 `disabled`는 boolean 또는 context를 받는 함수입니다. 함수가 예외를 던지면 숨김/비활성으로 처리되고(나머지 메뉴는 그대로 표시), 함수가 아닌 값은 truthiness로 판정합니다 — `visible`에 `0`, `""`, `null`을 주면 항목이 숨겨지고, 같은 값들을 `disabled`에 주면 항목이 활성 상태로 남습니다.
 
 ### 메뉴 관리
 

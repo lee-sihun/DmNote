@@ -8,7 +8,10 @@ import { useDraggable } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
-import { useFailedImageSrcs } from '@hooks/overlay/useFailedImageSrcs';
+import {
+  isErrorForCurrentSrc,
+  useFailedImageSrcs,
+} from '@hooks/overlay/useFailedImageSrcs';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -417,7 +420,11 @@ const DraggableKey = React.memo(
             data-key-image-layer="true"
             style={imageStyle}
             draggable={false}
-            onError={() => markFailed(currentImageSrc)}
+            onError={(event) => {
+              if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
+                return;
+              markFailed(currentImageSrc);
+            }}
           />
         )}
         {imageReplaces ? null : showInsideCounter ? (
@@ -522,7 +529,11 @@ export const Key = React.memo(function Key({
           data-key-image-layer="true"
           style={imageStyle}
           draggable={false}
-          onError={() => markFailed(currentImageSrc)}
+          onError={(event) => {
+            if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
+              return;
+            markFailed(currentImageSrc);
+          }}
         />
       )}
       {imageReplaces ? null : showInsideCounter && counterSignal ? (

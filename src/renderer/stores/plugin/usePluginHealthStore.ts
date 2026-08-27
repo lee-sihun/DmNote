@@ -69,16 +69,26 @@ export function currentPluginHealthRevision(): number {
  * 요청을 보내기 전에 회차를 잡아 두면 대기를 걸기 전에 게시가 끝나도 놓치지 않는다.
  *
  * settled 결과는 그 시점에 주입된 플러그인 전체의 스냅샷이다.
- * expectedIds를 주면 그 대상이 실린 정산만 받는다 - 파일 다이얼로그가 열린 동안
+ * expectedIds를 주면 대상 전부가 실린 정산만 받는다 - 파일 다이얼로그가 열린 동안
  * 들어온 무관한 정산(전역 JS 토글, 프리셋 로드 재주입)을 내 결과로 오인하지 않게.
- * 단 대상이 knownIds에서 사라졌으면(대기 중 꺼졌거나 지워짐) 실패가 아니라
- * 주입 대상이 아니었다는 뜻이므로 즉시 정산한다 - 포함을 무조건 기다리면
- * 플러그인을 끄는 것만으로 정산을 영영 놓친다
+ * 대상 일부만 실린 정산도 거른다 - 나머지가 무오류로 집계된다.
+ * 단 "한 번 실렸다가 knownIds에서 사라진" 대상은 대기 중 꺼졌거나 지워진 것이므로
+ * 기다리지 않고 정산한다. 처음부터 없던 id(막 추가한 플러그인)에는 이 탈출구를 주지
+ * 않는다 - 그러면 무관한 정산이 전부 수용돼 상관 자체가 무의미해진다
  */
 export function waitForPluginInjection(
   revision: number,
   expectedIds?: readonly string[],
 ): Promise<PluginInjectionResult> {
+  // 한 번이라도 주입 목록에 실렸던 대상 - 사라짐 판정의 전제
+  const everKnown = new Set<string>();
+  const noteKnown = (knownIds?: string[]): void => {
+    if (!Array.isArray(knownIds)) return;
+    expectedIds?.forEach((id) => {
+      if (knownIds.includes(id)) everKnown.add(id);
+    });
+  };
+
   const accepts = (state: {
     outcome: PluginInjectionOutcome;
     health: PluginHealthMap;
@@ -86,14 +96,22 @@ export function waitForPluginInjection(
   }): boolean => {
     if (!expectedIds?.length) return true;
     if (state.outcome !== 'settled') return true;
-    if (expectedIds.some((id) => id in state.health)) return true;
-    return (
-      Array.isArray(state.knownIds) &&
-      expectedIds.every((id) => !state.knownIds?.includes(id))
+    const knownIds = Array.isArray(state.knownIds) ? state.knownIds : undefined;
+    noteKnown(knownIds);
+    if (!knownIds) {
+      // knownIds가 없는 구 게시는 상관이 불가능하다 - 하나라도 실렸으면 수용
+      return expectedIds.some((id) => id in state.health);
+    }
+    return expectedIds.every(
+      (id) =>
+        id in state.health || (everKnown.has(id) && !knownIds.includes(id)),
     );
   };
 
   const initial = usePluginHealthStore.getState();
+  // 대기 시작 시점의 주입 목록을 전제로 깐다 - 이미 주입돼 있던 플러그인만
+  // "사라짐"으로 정산될 수 있다
+  noteKnown(initial.knownIds);
   if (initial.revision !== revision && accepts(initial)) {
     return Promise.resolve({
       outcome: initial.outcome,

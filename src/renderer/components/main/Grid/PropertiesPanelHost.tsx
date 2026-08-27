@@ -146,7 +146,12 @@ const PropertiesPanelHost = ({
     const relayEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       document.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        // 소비자들이 defaultPrevented로 소유권을 넘기므로 cancelable이어야 한다
+        new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }),
       );
     };
     body.ownerDocument.addEventListener('keydown', relayEscape);
@@ -199,9 +204,10 @@ const PropertiesPanelHost = ({
             restoreLenisScroll(viewport, position.top);
           });
       };
+      // 레이아웃 뒤에 적용해야 한다 - 같은 태스크에서 재적용하면 다시 0으로 잘린다
       const view = host.ownerDocument.defaultView;
       if (view?.requestAnimationFrame) view.requestAnimationFrame(reapply);
-      else reapply();
+      else setTimeout(reapply, 0);
     });
   }, [host]);
 

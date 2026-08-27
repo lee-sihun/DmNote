@@ -4,7 +4,10 @@ import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
-import { useFailedImageSrcs } from '@hooks/overlay/useFailedImageSrcs';
+import {
+  isErrorForCurrentSrc,
+  useFailedImageSrcs,
+} from '@hooks/overlay/useFailedImageSrcs';
 import {
   computeKeyElementStyles,
   type KeyElementPosition,
@@ -100,7 +103,11 @@ const StatItem = React.memo(
             data-key-image-layer="true"
             style={imageStyle}
             draggable={false}
-            onError={() => markFailed(currentImageSrc)}
+            onError={(event) => {
+              if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
+                return;
+              markFailed(currentImageSrc);
+            }}
           />
         )}
         {imageReplaces ? null : showInsideCounter && counterSignal ? (

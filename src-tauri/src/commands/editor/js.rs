@@ -322,6 +322,19 @@ pub async fn js_reload(app: AppHandle, window: WebviewWindow) -> CmdResult<JsRel
             // 디스크 재읽기는 내용이 같아도 재주입 필요 - forced 고정
             emit_js_state(app, &transaction.value.0, true)?;
 
+            // 스냅샷~turn 사이에 제거된 플러그인의 읽기 오류는 버린다 - 이미 없는 항목을
+            // 오류로 표시하지 않게
+            let script = &transaction.value.0;
+            let errors: Vec<JsPluginError> = errors
+                .into_iter()
+                .filter(|error| {
+                    script
+                        .plugins
+                        .iter()
+                        .any(|plugin| plugin.path.as_deref() == Some(error.path.as_str()))
+                })
+                .collect();
+
             Ok(JsReloadResponse {
                 updated: transaction.value.1.clone(),
                 errors,

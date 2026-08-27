@@ -96,8 +96,15 @@ export const useFocusRestore = (
     restoreFocus();
   }, [open, restoreFocus]);
 
-  // 닫기 신호 없이 사라지는 경로(부모가 통째로 언마운트) 폴백
-  useLayoutEffect(() => restoreFocus, [restoreFocus]);
+  // 닫기 신호 없이 사라지는 경로(부모가 통째로 언마운트) 폴백.
+  // 예약된 재시도 참조는 놓아준다 - 닫힌 자식 창을 붙들지 않게
+  useLayoutEffect(
+    () => () => {
+      restoreFocus();
+      retryRef.current = null;
+    },
+    [restoreFocus],
+  );
 
   return { openerRef, captureOpener, restoreFocus };
 };

@@ -85,6 +85,9 @@ export function clearComponentHandlers(pluginId: string): void {
   componentHandlers.delete(pluginId);
 }
 
+// id와 표시명이 같은 확장자 집합을 벗긴다 - 한쪽만 바꾸면 id는 'foo'인데 이름은 'foo.ts'
+const PLUGIN_FILE_EXT_RE = /\.(?:m?js|ts)$/i;
+
 /**
  * 플러그인 파일 내용에서 @id 메타데이터를 추출하거나 파일명으로 폴백합니다.
  *
@@ -92,9 +95,6 @@ export function clearComponentHandlers(pluginId: string): void {
  * @param filename - 플러그인 파일명
  * @returns 플러그인 고유 ID (네임스페이스로 사용)
  */
-// id와 표시명이 같은 확장자 집합을 벗긴다 - 한쪽만 바꾸면 id는 'foo'인데 이름은 'foo.ts'
-const PLUGIN_FILE_EXT_RE = /\.(?:m?js|ts)$/i;
-
 export function extractPluginId(content: string, filename: string): string {
   // 첫 20줄에서 @id 메타데이터 찾기
   const lines = content.split('\n').slice(0, 20);

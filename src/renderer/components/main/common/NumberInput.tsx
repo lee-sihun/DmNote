@@ -1257,7 +1257,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     isFocused ? String(normalizePrecision(num)) : getDisplayValue(num);
 
   // 접두 스크럽은 preview 채널이 있을 때만 켠다 (NumberInput과 같은 정책).
-  // 값이 비어 있으면 placeholder의 상속값에서 출발한다 - 방향키와 같은 기준
+  // 값이 비어 있으면 placeholder의 상속값에서 출발한다 - 방향키와 같은 기준.
+  // disabled prop이 생기면 NumberInput처럼 `&& !disabled`를 함께 걸 것
   const scrubEnabled = Boolean(prefix) && Boolean(onPreview);
   const scrub = useScrubDrag({
     enabled: scrubEnabled,

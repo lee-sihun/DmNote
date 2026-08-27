@@ -225,33 +225,19 @@ fn sound_list_inner(app: &tauri::AppHandle, state: &AppState) -> CmdResult<Vec<S
         scan_complete,
     } = scan;
 
-    if reconcile_sound_library(&library_at_scan, &seen_paths, scan_complete).is_some() {
+    if sound_library_needs_reconcile(&library_at_scan, &seen_paths, scan_complete) {
         let ticket = issue_mutation_ticket(app)?;
         ticket.run(|| -> CmdResult<()> {
             // 잠금 순서: 번호표 turn → PROCESSED_WAV 잠금 (sound_delete와 동일)
             let _transaction_guard = PROCESSED_WAV_TRANSACTION_LOCK.lock();
             state.store.update(|s| {
-                // 스캔~turn 사이의 sound_delete·sound_load를 존중한다 - 삽입 후보는 파일이
-                // 아직 있을 때만, 삭제 후보는 스캔 시점에 있던 키로 한정
-                for key in &seen_paths {
-                    if !s.sound_library.contains_key(key) && Path::new(key).exists() {
-                        s.sound_library
-                            .insert(key.clone(), SoundLibraryEntry::default());
-                    }
-                }
-                if scan_complete {
-                    let stale: Vec<String> = s
-                        .sound_library
-                        .keys()
-                        .filter(|key| {
-                            library_at_scan.contains_key(*key) && !seen_paths.contains(*key)
-                        })
-                        .cloned()
-                        .collect();
-                    for key in stale {
-                        s.sound_library.remove(&key);
-                    }
-                }
+                apply_sound_scan_to_library(
+                    &mut s.sound_library,
+                    &library_at_scan,
+                    &seen_paths,
+                    scan_complete,
+                    &|key| Path::new(key).exists(),
+                );
             })?;
             Ok(())
         })?;
@@ -371,25 +357,45 @@ fn scan_sounds_dir(
     })
 }
 
-// 스캔 결과로 라이브러리를 맞춘 사본 - 변화가 없으면 None (번호표를 받지 않는다)
-fn reconcile_sound_library(
+// 스캔 결과가 라이브러리와 다른가 - 같으면 번호표를 받지 않는다.
+// 실제 적용은 turn 안의 apply_sound_scan_to_library (디스크 재확인 포함)
+fn sound_library_needs_reconcile(
     library: &std::collections::HashMap<String, SoundLibraryEntry>,
     seen_paths: &HashSet<String>,
     scan_complete: bool,
-) -> Option<std::collections::HashMap<String, SoundLibraryEntry>> {
-    let mut next = library.clone();
-    let mut changed = false;
+) -> bool {
+    seen_paths.iter().any(|key| !library.contains_key(key))
+        || !stale_sound_library_keys(library, seen_paths, scan_complete).is_empty()
+}
+
+// 라이브러리를 스캔 결과에 맞춘다. 스캔~turn 사이의 sound_delete·sound_load·
+// sound_update_processed_wav를 존중해 삽입·삭제 양쪽 모두 디스크 실재를 다시 확인하고,
+// 삭제 후보는 스캔 시점에 있던 키로 한정한다
+fn apply_sound_scan_to_library(
+    library: &mut std::collections::HashMap<String, SoundLibraryEntry>,
+    library_at_scan: &std::collections::HashMap<String, SoundLibraryEntry>,
+    seen_paths: &HashSet<String>,
+    scan_complete: bool,
+    exists: &dyn Fn(&str) -> bool,
+) {
     for key in seen_paths {
-        if !next.contains_key(key) {
-            next.insert(key.clone(), SoundLibraryEntry::default());
-            changed = true;
+        if !library.contains_key(key) && exists(key) {
+            library.insert(key.clone(), SoundLibraryEntry::default());
         }
     }
-    for key in stale_sound_library_keys(library, seen_paths, scan_complete) {
-        next.remove(&key);
-        changed = true;
+    if !scan_complete {
+        return;
     }
-    changed.then_some(next)
+    let stale: Vec<String> = library
+        .keys()
+        .filter(|key| {
+            library_at_scan.contains_key(*key) && !seen_paths.contains(*key) && !exists(key)
+        })
+        .cloned()
+        .collect();
+    for key in stale {
+        library.remove(&key);
+    }
 }
 
 fn stale_sound_library_keys(
@@ -1347,10 +1353,11 @@ fn is_supported_sound_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        backup_path_for, commit_staged_sound_deletion, contains_duplicate_path_separator,
-        emit_sound_reference_changes_with, ensure_existing_sound_edit_target,
-        reconcile_sound_library, remove_sound_entry_and_references, replace_processed_wav_with,
-        resolve_sound_path_key_from_keys, restore_interrupted_processed_wav_backup_with,
+        apply_sound_scan_to_library, backup_path_for, commit_staged_sound_deletion,
+        contains_duplicate_path_separator, emit_sound_reference_changes_with,
+        ensure_existing_sound_edit_target, remove_sound_entry_and_references,
+        replace_processed_wav_with, resolve_sound_path_key_from_keys,
+        restore_interrupted_processed_wav_backup_with, sound_library_needs_reconcile,
         stale_sound_library_keys, validate_sound_path, PreparedAtomicReplace,
         SoundReferenceChangeEvent,
     };
@@ -1465,32 +1472,56 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_sound_library_is_none_when_scan_matches_library() {
+    fn sound_library_needs_reconcile_is_false_when_scan_matches_library() {
         let mut library = std::collections::HashMap::new();
         library.insert(
             "a.wav".to_string(),
             crate::models::SoundLibraryEntry::default(),
         );
         let seen: std::collections::HashSet<String> = ["a.wav".to_string()].into_iter().collect();
-        assert!(reconcile_sound_library(&library, &seen, true).is_none());
+        assert!(!sound_library_needs_reconcile(&library, &seen, true));
     }
 
     #[test]
-    fn reconcile_sound_library_inserts_new_files_and_drops_stale_only_when_complete() {
+    fn apply_sound_scan_inserts_new_files_and_drops_stale_only_when_complete() {
         let mut library = std::collections::HashMap::new();
         library.insert(
             "gone.wav".to_string(),
             crate::models::SoundLibraryEntry::default(),
         );
         let seen: std::collections::HashSet<String> = ["new.wav".to_string()].into_iter().collect();
+        let at_scan = library.clone();
+        let exists = |_: &str| true;
 
-        let partial = reconcile_sound_library(&library, &seen, false).unwrap();
+        let mut partial = library.clone();
+        assert!(sound_library_needs_reconcile(&library, &seen, false));
+        apply_sound_scan_to_library(&mut partial, &at_scan, &seen, false, &exists);
         assert!(partial.contains_key("new.wav"));
         assert!(partial.contains_key("gone.wav"));
 
-        let complete = reconcile_sound_library(&library, &seen, true).unwrap();
+        let mut complete = library.clone();
+        // 삭제 후보 gone.wav는 turn 시점에 디스크에도 없어야 지운다
+        apply_sound_scan_to_library(&mut complete, &at_scan, &seen, true, &|key| {
+            key != "gone.wav"
+        });
         assert!(complete.contains_key("new.wav"));
         assert!(!complete.contains_key("gone.wav"));
+    }
+
+    #[test]
+    fn apply_sound_scan_keeps_entries_resurrected_between_scan_and_turn() {
+        // 스캔 때 없던 파일이 turn 직전에 되살아나면(update_processed_wav의 rename)
+        // 메타를 지우지 않는다
+        let mut library = std::collections::HashMap::new();
+        library.insert(
+            "back.wav".to_string(),
+            crate::models::SoundLibraryEntry::default(),
+        );
+        let at_scan = library.clone();
+        let seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        apply_sound_scan_to_library(&mut library, &at_scan, &seen, true, &|_| true);
+        assert!(library.contains_key("back.wav"));
     }
 
     #[test]
