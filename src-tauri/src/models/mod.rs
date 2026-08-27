@@ -506,6 +506,40 @@ pub const SHADOW_OFFSET_MAX: f64 = 100.0;
 pub const SHADOW_BLUR_MIN: f64 = 0.0;
 pub const SHADOW_BLUR_MAX: f64 = 100.0;
 
+pub const IMAGE_TRANSFORM_OFFSET_MIN: f64 = -500.0;
+pub const IMAGE_TRANSFORM_OFFSET_MAX: f64 = 500.0;
+pub const IMAGE_TRANSFORM_ROTATION_MIN: f64 = -180.0;
+pub const IMAGE_TRANSFORM_ROTATION_MAX: f64 = 180.0;
+pub const IMAGE_TRANSFORM_SCALE_MIN: f64 = 0.1;
+pub const IMAGE_TRANSFORM_SCALE_MAX: f64 = 10.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageMode {
+    Replace,
+    Overlay,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageTransform {
+    pub offset_x: f64,
+    pub offset_y: f64,
+    pub rotation: f64,
+    pub scale: f64,
+}
+
+impl Default for ImageTransform {
+    fn default() -> Self {
+        Self {
+            offset_x: 0.0,
+            offset_y: 0.0,
+            rotation: 0.0,
+            scale: 1.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ElementShadowSpec {
@@ -658,6 +692,12 @@ pub struct KeyPosition {
     pub idle_image_fit: Option<ImageFit>,
     #[serde(default)]
     pub active_image_fit: Option<ImageFit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_mode: Option<ImageMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_image_transform: Option<ImageTransform>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_image_transform: Option<ImageTransform>,
     /// 인라인 스타일 우선 여부 (true: 속성 패널 스타일 우선, false: 커스텀 CSS 우선)
     #[serde(default)]
     pub use_inline_styles: Option<bool>,
@@ -755,6 +795,9 @@ impl Default for KeyPosition {
             image_fit: None,
             idle_image_fit: None,
             active_image_fit: None,
+            image_mode: None,
+            idle_image_transform: None,
+            active_image_transform: None,
             use_inline_styles: None,
             display_text: None,
             font_weight: Some(400),

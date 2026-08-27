@@ -75,6 +75,12 @@ import type { KnobItemPosition } from '@src/types/key/knobs';
 import { paintPropertyFields, projectPaintDescriptor } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
+  applyImageTransformLeaf,
+  type ImageMode,
+  type ImageTransform,
+  type ImageTransformLeafPatch,
+} from '@src/types/key/imageLayer';
+import {
   isNotePaintPropertyPatchV1,
   projectNotePaintPatch,
 } from '@src/types/key/notePaint';
@@ -690,9 +696,13 @@ const elementPropertyIntents = (
     NativeElementType,
     Map<string, Record<string, unknown>>
   >();
-  // 굵기 변경은 백엔드와 같은 암묵 Bold 고정을 함께 투영한다
+  // 굵기 변경은 백엔드와 같은 암묵 Bold 고정을, 이미지 변환 leaf는 현재 변환에
+  // 적용한 결과를 투영한다 (둘 다 현재 위치가 필요)
+  const isImageTransformPatch =
+    patch.property === 'idleImageTransform' ||
+    patch.property === 'activeImageTransform';
   const document =
-    patch.property === 'fontWeight'
+    patch.property === 'fontWeight' || isImageTransformPatch
       ? (captureEditorDocument() as unknown as Record<string, unknown> | null)
       : null;
   for (const { elementType, id } of targets) {
@@ -706,6 +716,12 @@ const elementPropertyIntents = (
       if (current && current.fontBold == null) {
         intent.fontBold = implicitElementFontBold(current.fontWeight);
       }
+    } else if (isImageTransformPatch && patch.value !== null) {
+      const current = findCurrentPosition(document, elementType, id);
+      intent[patch.property] = applyImageTransformLeaf(
+        current?.[patch.property] as ImageTransform | undefined,
+        patch.value,
+      );
     }
     byId.set(id, intent);
     intents.set(elementType, byId);
@@ -1808,6 +1824,34 @@ export const patchActiveImageFitById = (
     type,
     id,
     { property: 'activeImageFit', value: activeImageFit },
+    options,
+  );
+
+export const patchImageModeById = (
+  id: string,
+  imageMode: ImageMode,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchElementPropertyById(
+    'key',
+    id,
+    { property: 'imageMode', value: imageMode },
+    options,
+  );
+
+// null이면 해당 상태의 변환을 identity로 되돌린다
+export const patchImageTransformById = (
+  id: string,
+  state: 'idle' | 'active',
+  patch: ImageTransformLeafPatch | null,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchElementPropertyById(
+    'key',
+    id,
+    state === 'idle'
+      ? { property: 'idleImageTransform', value: patch }
+      : { property: 'activeImageTransform', value: patch },
     options,
   );
 

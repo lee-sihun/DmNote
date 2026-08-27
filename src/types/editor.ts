@@ -18,6 +18,11 @@ import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
+  isImageTransformLeafPatch,
+  type ImageMode,
+  type ImageTransformLeafPatch,
+} from '@src/types/key/imageLayer';
+import {
   isNoteBorderPaintPatchValueV1,
   isNotePaintValuePatchV1,
   type NoteBorderPaintPatchValueV1,
@@ -214,6 +219,9 @@ interface EditorElementPropertyValuesV1 {
   activeTransparent: boolean;
   idleImageFit: 'cover' | 'contain' | 'fill' | 'none';
   activeImageFit: 'cover' | 'contain' | 'fill' | 'none';
+  imageMode: ImageMode;
+  idleImageTransform: ImageTransformLeafPatch | null;
+  activeImageTransform: ImageTransformLeafPatch | null;
   counterEnabled: boolean;
   counterAnimationEnabled: boolean;
   counterPlacement: 'inside' | 'outside';
@@ -316,6 +324,9 @@ export const EDITOR_ELEMENT_PROPERTY_KEYS = [
   'activeTransparent',
   'idleImageFit',
   'activeImageFit',
+  'imageMode',
+  'idleImageTransform',
+  'activeImageTransform',
   'soundPath',
   'soundEnabled',
   'soundVolume',
@@ -398,6 +409,13 @@ export type EditorImageTransparencyPropertyPatchV1 = EditorPropertyPatchUnionV1<
 
 export type EditorImageFitPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'idleImageFit' | 'activeImageFit'
+>;
+
+export type EditorImageModePropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'imageMode'>;
+
+export type EditorImageTransformPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'idleImageTransform' | 'activeImageTransform'
 >;
 
 export interface EditorCounterAnimationPresetIntentV1 {
@@ -745,6 +763,9 @@ const NULLABLE_POSITION_FIELDS = new Set([
   'imageFit',
   'idleImageFit',
   'activeImageFit',
+  'imageMode',
+  'idleImageTransform',
+  'activeImageTransform',
   'useInlineStyles',
   'displayText',
   'fontWeight',
@@ -1580,6 +1601,17 @@ const isEditorElementPropertyValueValid = (
       return (
         keyOrKnob &&
         ['cover', 'contain', 'fill', 'none'].includes(value as string)
+      );
+    // 이미지 레이어 모드·변환은 키 렌더러만 소비한다
+    case 'imageMode':
+      return (
+        elementType === 'key' && (value === 'replace' || value === 'overlay')
+      );
+    case 'idleImageTransform':
+    case 'activeImageTransform':
+      return (
+        elementType === 'key' &&
+        (value === null || isImageTransformLeafPatch(value))
       );
     case 'soundPath':
       return elementType === 'key' && typeof value === 'string';

@@ -29,10 +29,12 @@ use crate::{
         scrub_removed_text_outline_fields, AppStoreData, CounterAnimationPreset, CustomCss,
         CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab, FontType, FontWeightRange,
         GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
-        JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPosition,
-        KnobPositions, LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds, ShortcutsState,
-        SoundLibraryEntry, StatPosition, StatPositions, StatType, TabCss, TabNoteSettings,
-        POSITION_COLLECTION_FIELDS,
+        ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
+        KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
+        OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
+        TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
+        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
+        IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
     },
     services::font_metadata::parse_font_metadata,
 };
@@ -110,6 +112,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         if migrate_legacy_knob_sensitivity(&mut data) {
                             needs_persist = true;
                         }
+                        let image_transform_repaired = repair_image_transforms(&mut data);
+                        needs_persist |= image_transform_repaired;
                         needs_persist |= has_legacy_font_weight_state(&data);
                         let editor_revision_repaired = repair_editor_revision(&mut data);
                         needs_persist |= editor_revision_repaired;
@@ -139,7 +143,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                             layout_repaired
                                 || semantic_repaired
                                 || editor_revision_repaired
-                                || gradient_pair_repaired,
+                                || gradient_pair_repaired
+                                || image_transform_repaired,
                             seed_active_css_history,
                             explicit_invalid_element_id,
                         )
@@ -981,6 +986,68 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     data
 }
 
+fn repair_image_transforms(data: &mut AppStoreData) -> bool {
+    fn repair_transform(transform: &mut Option<ImageTransform>) -> bool {
+        let Some(transform) = transform else {
+            return false;
+        };
+        let identity = ImageTransform::default();
+        let mut repaired = false;
+        for (value, fallback, minimum, maximum) in [
+            (
+                &mut transform.offset_x,
+                identity.offset_x,
+                IMAGE_TRANSFORM_OFFSET_MIN,
+                IMAGE_TRANSFORM_OFFSET_MAX,
+            ),
+            (
+                &mut transform.offset_y,
+                identity.offset_y,
+                IMAGE_TRANSFORM_OFFSET_MIN,
+                IMAGE_TRANSFORM_OFFSET_MAX,
+            ),
+            (
+                &mut transform.rotation,
+                identity.rotation,
+                IMAGE_TRANSFORM_ROTATION_MIN,
+                IMAGE_TRANSFORM_ROTATION_MAX,
+            ),
+            (
+                &mut transform.scale,
+                identity.scale,
+                IMAGE_TRANSFORM_SCALE_MIN,
+                IMAGE_TRANSFORM_SCALE_MAX,
+            ),
+        ] {
+            if !value.is_finite() || !(minimum..=maximum).contains(value) {
+                *value = fallback;
+                repaired = true;
+            }
+        }
+        repaired
+    }
+
+    fn repair_position(position: &mut KeyPosition) -> bool {
+        repair_transform(&mut position.idle_image_transform)
+            | repair_transform(&mut position.active_image_transform)
+    }
+
+    let mut repaired = false;
+    for position in data.key_positions.values_mut().flatten() {
+        repaired |= repair_position(position);
+    }
+    for position in data.stat_positions.values_mut().flatten() {
+        repaired |= repair_position(&mut position.position);
+    }
+    for position in data.graph_positions.values_mut().flatten() {
+        repaired |= repair_position(&mut position.position);
+    }
+    for position in data.knob_positions.values_mut().flatten() {
+        repaired |= repair_position(&mut position.position);
+    }
+    repaired
+}
+
 fn has_legacy_font_weight_state(data: &AppStoreData) -> bool {
     data.key_positions
         .values()
@@ -1312,6 +1379,7 @@ fn repair_legacy_state(value: Value) -> AppStoreData {
     let mut data =
         serde_json::from_value::<AppStoreData>(Value::Object(recovered)).unwrap_or_default();
     migrate_legacy_knob_sensitivity(&mut data);
+    repair_image_transforms(&mut data);
     repair_semantic_identities(&mut data);
     repair_custom_tab_key_layout_pairs(
         &mut data,
@@ -1649,6 +1717,7 @@ where
 
             let entry_name = format!("{field}.{mode}[{index}]");
             let mut candidate = entry.clone();
+            recover_image_transform_children(&entry_name, &mut candidate);
             recover_invalid_counter_fill_gradient_children(&entry_name, &mut candidate);
             if serde_json::from_value::<T>(candidate.clone()).is_ok() {
                 recovered_entries.push(candidate);
@@ -1733,6 +1802,7 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
                 Err(err) => {
                     let entry_name = format!("{field}.{mode}[{index}]");
                     let mut candidate = entry.clone();
+                    recover_image_transform_children(&entry_name, &mut candidate);
                     recover_invalid_counter_fill_gradient_children(&entry_name, &mut candidate);
                     let recovered = if serde_json::from_value::<KeyPosition>(candidate.clone())
                         .is_ok()
@@ -1757,6 +1827,76 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
         recovered_modes.insert(mode.clone(), Value::Array(recovered_entries));
     }
     Some(Value::Object(recovered_modes))
+}
+
+fn recover_image_transform_children(entry_name: &str, value: &mut Value) -> bool {
+    let Some(position) = value.as_object_mut() else {
+        return false;
+    };
+    let mut repaired = false;
+
+    let invalid_mode = position
+        .get("imageMode")
+        .is_some_and(|mode| serde_json::from_value::<Option<ImageMode>>(mode.clone()).is_err());
+    if invalid_mode {
+        log::warn!("[Store] Resetting invalid {entry_name}.imageMode to None during recovery");
+        position.remove("imageMode");
+        repaired = true;
+    }
+
+    for field in ["idleImageTransform", "activeImageTransform"] {
+        let invalid_object = position
+            .get(field)
+            .is_some_and(|transform| !transform.is_null() && !transform.is_object());
+        if invalid_object {
+            log::warn!("[Store] Resetting invalid {entry_name}.{field} to None during recovery");
+            position.remove(field);
+            repaired = true;
+            continue;
+        }
+        let Some(transform) = position.get_mut(field).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        for (leaf, fallback, minimum, maximum) in [
+            (
+                "offsetX",
+                0.0,
+                IMAGE_TRANSFORM_OFFSET_MIN,
+                IMAGE_TRANSFORM_OFFSET_MAX,
+            ),
+            (
+                "offsetY",
+                0.0,
+                IMAGE_TRANSFORM_OFFSET_MIN,
+                IMAGE_TRANSFORM_OFFSET_MAX,
+            ),
+            (
+                "rotation",
+                0.0,
+                IMAGE_TRANSFORM_ROTATION_MIN,
+                IMAGE_TRANSFORM_ROTATION_MAX,
+            ),
+            (
+                "scale",
+                1.0,
+                IMAGE_TRANSFORM_SCALE_MIN,
+                IMAGE_TRANSFORM_SCALE_MAX,
+            ),
+        ] {
+            let invalid = transform
+                .get(leaf)
+                .and_then(Value::as_f64)
+                .is_none_or(|value| !value.is_finite() || !(minimum..=maximum).contains(&value));
+            if invalid {
+                log::warn!(
+                    "[Store] Resetting invalid {entry_name}.{field}.{leaf} to identity during recovery"
+                );
+                transform.insert(leaf.to_string(), serde_json::json!(fallback));
+                repaired = true;
+            }
+        }
+    }
+    repaired
 }
 
 fn recover_invalid_counter_fill_gradient_children(entry_name: &str, value: &mut Value) -> bool {
@@ -2057,17 +2197,17 @@ mod tests {
     use super::{
         load_store_from_path, migrate_local_fonts_to_app_data, migrate_sound_library_enabled,
         normalize_state, parse_portable_asset_reference, recover_key_mapping_entries,
-        rehome_foreign_asset_references, rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT,
-        LEGACY_OVERLAY_WIDTH, LEGACY_PANEL_DETACH_ENABLED_KEY,
+        rehome_foreign_asset_references, repair_image_transforms, rgba_to_hex, AssetCategory,
+        LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH, LEGACY_PANEL_DETACH_ENABLED_KEY,
     };
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
             AppStoreData, CustomCssHistoryEntry, CustomFont, CustomTab, FontType, GraphPosition,
-            GraphStatType, GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor,
-            KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
-            NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition, StatType, TabCss,
-            TabNoteSettings, POSITION_COLLECTION_FIELDS,
+            GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
+            KeyCounterColor, KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition,
+            LayerGroupDef, NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition,
+            StatType, TabCss, TabNoteSettings, POSITION_COLLECTION_FIELDS,
         },
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -5379,6 +5519,69 @@ mod tests {
         assert!(!loaded.data.graph_positions.contains_key("invalid-mode"));
         assert!(!loaded.data.knob_positions.contains_key("invalid-mode"));
         assert_eq!(loaded.data.font_settings.custom_fonts, vec![font]);
+    }
+
+    #[test]
+    fn image_settings_recover_in_place_without_removing_positions() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-image-transform-recovery-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let positions = vec![
+            default_positions()["4key"][0].clone(),
+            default_positions()["4key"][1].clone(),
+        ];
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture["keyPositions"]["recovery-mode"] = serde_json::to_value(&positions).unwrap();
+        fixture["keyPositions"]["recovery-mode"][0]["imageMode"] = json!("damaged");
+        fixture["keyPositions"]["recovery-mode"][0]["idleImageTransform"] = json!({
+            "offsetX": 25.0,
+            "offsetY": -30.0,
+            "rotation": 45.0,
+            "scale": 100.0
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.repaired);
+        assert!(loaded.needs_persist);
+        assert_eq!(loaded.data.key_positions["recovery-mode"].len(), 2);
+        let recovered = &loaded.data.key_positions["recovery-mode"][0];
+        assert_eq!(recovered.image_mode, None);
+        assert_eq!(
+            recovered.idle_image_transform,
+            Some(ImageTransform {
+                offset_x: 25.0,
+                offset_y: -30.0,
+                rotation: 45.0,
+                scale: 1.0,
+            })
+        );
+
+        let mut data = loaded.data;
+        let transform = data.key_positions.get_mut("recovery-mode").unwrap()[0]
+            .active_image_transform
+            .insert(ImageTransform {
+                offset_x: 10.0,
+                offset_y: 20.0,
+                rotation: 30.0,
+                scale: f64::NAN,
+            });
+        assert!(transform.scale.is_nan());
+        let original_len = data.key_positions["recovery-mode"].len();
+        assert!(repair_image_transforms(&mut data));
+        assert_eq!(data.key_positions["recovery-mode"].len(), original_len);
+        assert_eq!(
+            data.key_positions["recovery-mode"][0].active_image_transform,
+            Some(ImageTransform {
+                offset_x: 10.0,
+                offset_y: 20.0,
+                rotation: 30.0,
+                scale: 1.0,
+            })
+        );
     }
 
     #[test]

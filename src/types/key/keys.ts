@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { imageModeSchema, imageTransformSchema } from './imageLayer';
 import { elementShadowSpecSchema } from './shadows';
 import { NOTE_SETTINGS_CONSTRAINTS } from '../settings/noteSettingsConstraints';
 import { getDefaultCounterSettings } from '@src/renderer/defaults';
@@ -377,6 +378,10 @@ export const keyPositionSchema = z.object({
   activeImageFit: imageFitSchema.optional(),
   // 레거시(대기/입력 공통) 이미지 맞춤
   imageFit: imageFitSchema.optional(),
+  // 이미지 레이어 모드(없으면 replace)와 상태별 변환(없으면 identity)
+  imageMode: imageModeSchema.optional(),
+  idleImageTransform: imageTransformSchema.optional(),
+  activeImageTransform: imageTransformSchema.optional(),
   // 인라인 스타일 우선 여부 (true: 속성 패널 스타일 우선, false: 커스텀 CSS 우선)
   useInlineStyles: z.boolean().optional(),
   // 키에 표시할 커스텀 텍스트 (없으면 기본 키 이름 표시)

@@ -656,6 +656,23 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::ImageMode(crate::models::ImageMode::Overlay),
+                serde_json::json!({ "property": "imageMode", "value": "overlay" }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::IdleImageTransform(Some(
+                    crate::models::ImageTransformLeafPatchV1::OffsetX(-125.5),
+                )),
+                serde_json::json!({ "property": "idleImageTransform", "value": { "leaf": "offsetX", "value": -125.5 } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::ActiveImageTransform(None),
+                serde_json::json!({ "property": "activeImageTransform", "value": null }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::SoundPath(String::new()),
                 serde_json::json!({ "property": "soundPath", "value": "" }),
             ),
@@ -1051,6 +1068,10 @@ mod tests {
             serde_json::json!({ "idleImageFit": "cover", "activeImageFit": "contain" }),
             serde_json::json!({ "property": "activeImageFit", "value": 1 }),
             serde_json::json!({ "activeImageFit": "none", "unexpected": true }),
+            serde_json::json!({ "property": "imageMode", "value": "invalid" }),
+            serde_json::json!({ "property": "idleImageTransform", "value": { "leaf": "offsetX", "value": "1" } }),
+            serde_json::json!({ "property": "idleImageTransform", "value": { "leaf": "offsetX", "value": 1, "unexpected": true } }),
+            serde_json::json!({ "property": "activeImageTransform", "value": { "leaf": "unknown", "value": 1 } }),
             serde_json::json!({ "property": "soundPath", "value": null }),
             serde_json::json!({ "property": "soundPath", "value": 1 }),
             serde_json::json!({ "soundPath": "path", "soundEnabled": true }),

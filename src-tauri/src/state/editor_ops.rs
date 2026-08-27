@@ -11,8 +11,11 @@ use crate::{
         EditorNoteBorderPaintV1, EditorNoteColorV1, EditorNotePaintIntentV1,
         EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1,
         EditorPaintGradientV1, EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1,
-        ElementShadowSpec, GradientSpec, KeyPosition, LayerGroupDef, NoteColor, NoteGradientShadow,
-        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        ElementShadowSpec, GradientSpec, ImageMode, ImageTransform, ImageTransformLeafPatchV1,
+        KeyPosition, LayerGroupDef, NoteColor, NoteGradientShadow, IMAGE_TRANSFORM_OFFSET_MAX,
+        IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
+        IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
+        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
 };
 
@@ -336,6 +339,31 @@ fn validate_shadow_leaf(patch: &EditorShadowLeafPatchV1) -> Result<(), EditorCom
     })
 }
 
+fn validate_image_transform_leaf(
+    patch: &ImageTransformLeafPatchV1,
+) -> Result<(), EditorCommitError> {
+    let violation = match patch {
+        ImageTransformLeafPatchV1::OffsetX(value) => (!value.is_finite()
+            || !(IMAGE_TRANSFORM_OFFSET_MIN..=IMAGE_TRANSFORM_OFFSET_MAX).contains(value))
+        .then_some("image offset X must be finite and between -500 and 500"),
+        ImageTransformLeafPatchV1::OffsetY(value) => (!value.is_finite()
+            || !(IMAGE_TRANSFORM_OFFSET_MIN..=IMAGE_TRANSFORM_OFFSET_MAX).contains(value))
+        .then_some("image offset Y must be finite and between -500 and 500"),
+        ImageTransformLeafPatchV1::Rotation(value) => (!value.is_finite()
+            || !(IMAGE_TRANSFORM_ROTATION_MIN..=IMAGE_TRANSFORM_ROTATION_MAX).contains(value))
+        .then_some("image rotation must be finite and between -180 and 180"),
+        ImageTransformLeafPatchV1::Scale(value) => (!value.is_finite()
+            || !(IMAGE_TRANSFORM_SCALE_MIN..=IMAGE_TRANSFORM_SCALE_MAX).contains(value))
+        .then_some("image scale must be finite and between 0.1 and 10"),
+    };
+    violation.map_or(Ok(()), |message| {
+        Err(EditorCommitError::validation(
+            "INVALID_IMAGE_TRANSFORM",
+            message,
+        ))
+    })
+}
+
 fn default_shadow_spec(
     position: &KeyPosition,
     element_type: EditorElementTypeV1,
@@ -410,6 +438,42 @@ fn apply_shadow_leaf(shadow: &mut ElementShadowSpec, patch: &EditorShadowLeafPat
             }
         }
     }
+}
+
+fn apply_image_transform_leaf(
+    transform: &mut ImageTransform,
+    patch: &ImageTransformLeafPatchV1,
+) -> bool {
+    let target = match patch {
+        ImageTransformLeafPatchV1::OffsetX(_) => &mut transform.offset_x,
+        ImageTransformLeafPatchV1::OffsetY(_) => &mut transform.offset_y,
+        ImageTransformLeafPatchV1::Rotation(_) => &mut transform.rotation,
+        ImageTransformLeafPatchV1::Scale(_) => &mut transform.scale,
+    };
+    let value = match patch {
+        ImageTransformLeafPatchV1::OffsetX(value)
+        | ImageTransformLeafPatchV1::OffsetY(value)
+        | ImageTransformLeafPatchV1::Rotation(value)
+        | ImageTransformLeafPatchV1::Scale(value) => *value,
+    };
+    if *target == value {
+        false
+    } else {
+        *target = value;
+        true
+    }
+}
+
+fn patch_image_transform(
+    transform: &mut Option<ImageTransform>,
+    patch: &Option<ImageTransformLeafPatchV1>,
+) -> bool {
+    let Some(patch) = patch else {
+        return transform.take().is_some();
+    };
+    let seeded = transform.is_none();
+    let transform = transform.get_or_insert_default();
+    apply_image_transform_leaf(transform, patch) || seeded
 }
 
 fn patch_shadow(
@@ -1639,6 +1703,36 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                         ));
                     }
                 }
+                // key 전용 active 이미지 transform
+                EditorElementPropertyPatchV1::ActiveImageTransform(patch) => {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Key,
+                        *element_type,
+                    )?;
+                    if let Some(patch) = patch {
+                        validate_image_transform_leaf(patch)?;
+                    }
+                }
+                // key 전용 idle 이미지 transform
+                EditorElementPropertyPatchV1::IdleImageTransform(patch) => {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Key,
+                        *element_type,
+                    )?;
+                    if let Some(patch) = patch {
+                        validate_image_transform_leaf(patch)?;
+                    }
+                }
+                // key 전용 공통 이미지 모드
+                EditorElementPropertyPatchV1::ImageMode(_) => {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Key,
+                        *element_type,
+                    )?;
+                }
                 // key·stat 한정 카운터 애니메이션 프리셋
                 EditorElementPropertyPatchV1::CounterAnimationPreset(patch) => {
                     if !matches!(
@@ -2336,6 +2430,27 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                             position.active_image_fit = Some(patch.clone());
                             true
                         }
+                    }
+                    EditorElementPropertyPatchV1::ImageMode(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        let next = match patch {
+                            ImageMode::Replace => None,
+                            ImageMode::Overlay => Some(ImageMode::Overlay),
+                        };
+                        if position.image_mode == next {
+                            false
+                        } else {
+                            position.image_mode = next;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::IdleImageTransform(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        patch_image_transform(&mut position.idle_image_transform, patch)
+                    }
+                    EditorElementPropertyPatchV1::ActiveImageTransform(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        patch_image_transform(&mut position.active_image_transform, patch)
                     }
                     EditorElementPropertyPatchV1::SoundPath(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -3106,8 +3221,8 @@ mod tests {
     // 속성 계열 × elementType 허용 매트릭스 - TS validator(src/types/editor.ts)와 동일 집합
     fn patch_target_type_matrix() -> Vec<PatchTargetMatrixRow> {
         use crate::models::{
-            EditorNoteBorderSideV1, ImageFit, KeyCounterAlign, KeyCounterAlignMode,
-            KeyCounterPlacement, NoteAlignment, StatType,
+            EditorNoteBorderSideV1, ImageFit, ImageMode, ImageTransformLeafPatchV1,
+            KeyCounterAlign, KeyCounterAlignMode, KeyCounterPlacement, NoteAlignment, StatType,
         };
         use EditorElementPropertyPatchV1 as Patch;
         use EditorElementTypeV1::{Graph, Key, Knob, Stat};
@@ -3228,6 +3343,17 @@ mod tests {
                 "activeImageFit",
                 KEY_KNOB,
                 Patch::ActiveImageFit(ImageFit::Fill),
+            ),
+            row("imageMode", KEY_ONLY, Patch::ImageMode(ImageMode::Overlay)),
+            row(
+                "idleImageTransform",
+                KEY_ONLY,
+                Patch::IdleImageTransform(Some(ImageTransformLeafPatchV1::OffsetX(10.0))),
+            ),
+            row(
+                "activeImageTransform",
+                KEY_ONLY,
+                Patch::ActiveImageTransform(Some(ImageTransformLeafPatchV1::Scale(1.5))),
             ),
             row(
                 "soundPath",
@@ -6222,6 +6348,158 @@ mod tests {
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store.key_positions["4key"][0].idle_image_fit, None);
+        }
+    }
+
+    #[test]
+    fn image_transform_patches_seed_noop_reset_and_store_sparse_mode() {
+        let store = store_with_every_reorder_type();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::ImageMode(ImageMode::Overlay),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::IdleImageTransform(Some(
+                    ImageTransformLeafPatchV1::OffsetX(125.0),
+                )),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::ActiveImageTransform(Some(
+                    ImageTransformLeafPatchV1::Scale(1.5),
+                )),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let position = &transition.candidate.key_positions["4key"][0];
+        assert_eq!(position.image_mode, Some(ImageMode::Overlay));
+        assert_eq!(
+            position.idle_image_transform,
+            Some(ImageTransform {
+                offset_x: 125.0,
+                ..ImageTransform::default()
+            })
+        );
+        assert_eq!(
+            position.active_image_transform,
+            Some(ImageTransform {
+                scale: 1.5,
+                ..ImageTransform::default()
+            })
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert!(replay
+            .op_results
+            .iter()
+            .all(|result| result.status == EditorOpResultStatusV1::NoChange));
+
+        let reset_ops = [
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::ImageMode(ImageMode::Replace),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::IdleImageTransform(None),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::ActiveImageTransform(None),
+            ),
+        ];
+        let reset = prepare_editor_ops_transition(&transition.scratch, &reset_ops).unwrap();
+        let position = &reset.candidate.key_positions["4key"][0];
+        assert_eq!(position.image_mode, None);
+        assert_eq!(position.idle_image_transform, None);
+        assert_eq!(position.active_image_transform, None);
+        assert!(reset
+            .op_results
+            .iter()
+            .all(|result| result.status == EditorOpResultStatusV1::Applied));
+
+        let reset_replay = prepare_editor_ops_transition(&reset.scratch, &reset_ops).unwrap();
+        assert!(reset_replay.changed_fields.is_empty());
+        assert!(reset_replay
+            .op_results
+            .iter()
+            .all(|result| result.status == EditorOpResultStatusV1::NoChange));
+    }
+
+    #[test]
+    fn image_transform_properties_reject_non_keys_and_invalid_ranges() {
+        let store = store_with_every_reorder_type();
+        for patch in [
+            EditorElementPropertyPatchV1::ImageMode(ImageMode::Overlay),
+            EditorElementPropertyPatchV1::IdleImageTransform(Some(
+                ImageTransformLeafPatchV1::Rotation(45.0),
+            )),
+            EditorElementPropertyPatchV1::ActiveImageTransform(None),
+        ] {
+            for (element_type, id) in [
+                (
+                    EditorElementTypeV1::Stat,
+                    store.stat_positions["4key"][0].position.id.clone(),
+                ),
+                (
+                    EditorElementTypeV1::Graph,
+                    store.graph_positions["4key"][0].position.id.clone(),
+                ),
+                (
+                    EditorElementTypeV1::Knob,
+                    store.knob_positions["4key"][0].position.id.clone(),
+                ),
+            ] {
+                let error = prepare_editor_ops_transition(
+                    &store,
+                    &[patch_property_op(element_type, id, patch.clone())],
+                )
+                .unwrap_err();
+                assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            }
+        }
+
+        let key_id = store.key_positions["4key"][0].id.clone();
+        for patch in [
+            ImageTransformLeafPatchV1::OffsetX(-500.1),
+            ImageTransformLeafPatchV1::OffsetY(f64::INFINITY),
+            ImageTransformLeafPatchV1::Rotation(180.1),
+            ImageTransformLeafPatchV1::Scale(0.09),
+            ImageTransformLeafPatchV1::Scale(f64::NAN),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &key_id,
+                    EditorElementPropertyPatchV1::IdleImageTransform(Some(patch)),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_IMAGE_TRANSFORM"));
         }
     }
 

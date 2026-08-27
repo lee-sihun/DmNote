@@ -90,6 +90,8 @@ import {
   patchActiveTransparentByTargets,
   patchIdleImageFitById,
   patchActiveImageFitById,
+  patchImageModeById,
+  patchImageTransformById,
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
   rebindKeySlotById,
@@ -3807,6 +3809,48 @@ describe('elementOps', () => {
       patchActiveTransparentById('key', 'key-0', true),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('image mode·transform은 key 전용 leaf patch로 보내고 즉시 스토어에 반영한다', async () => {
+    await patchImageModeById(ID_A, 'overlay');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { property: 'imageMode', value: 'overlay' },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(useKeyStore.getState().positions['4key'][0].imageMode).toBe(
+      'overlay',
+    );
+
+    await patchImageTransformById(ID_A, 'idle', { leaf: 'offsetX', value: 10 });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: {
+            property: 'idleImageTransform',
+            value: { leaf: 'offsetX', value: 10 },
+          },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(
+      useKeyStore.getState().positions['4key'][0].idleImageTransform,
+    ).toEqual({ offsetX: 10, offsetY: 0, rotation: 0, scale: 1 });
+
+    await patchImageTransformById(ID_A, 'idle', null);
+    expect(
+      useKeyStore.getState().positions['4key'][0].idleImageTransform,
+    ).toBeUndefined();
   });
 
   it('single image fit은 state별 exact enum leaf만 보내고 이미지 형제를 보존한다', async () => {

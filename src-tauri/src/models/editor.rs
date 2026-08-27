@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     AppStoreData, GradientSpec, GradientStop, GraphPosition, GraphPositions, GraphType, ImageFit,
-    KeyCounterAlign, KeyCounterAlignMode, KeyCounterPlacement, KeyCounters, KeyMappings,
+    ImageMode, KeyCounterAlign, KeyCounterAlignMode, KeyCounterPlacement, KeyCounters, KeyMappings,
     KeyPosition, KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, NoteAlignment,
     SlotMatch, StatPosition, StatPositions, StatType,
 };
@@ -212,7 +212,7 @@ pub struct EditorBoundsV1 {
 )]
 pub enum EditorElementPropertyPatchV1 {
     Hidden(bool),
-    // nullable 4건은 value 키 자체가 없으면 거부 - Option 기본 동작(None) 차단
+    // nullable variant는 value 키 자체가 없으면 거부 - Option 기본 동작(None) 차단
     #[serde(deserialize_with = "deserialize_required_nullable_string")]
     LayerName(Option<String>),
     GraphType(GraphType),
@@ -250,6 +250,11 @@ pub enum EditorElementPropertyPatchV1 {
     ActiveTransparent(bool),
     IdleImageFit(ImageFit),
     ActiveImageFit(ImageFit),
+    ImageMode(ImageMode),
+    #[serde(deserialize_with = "deserialize_required_nullable_image_transform_leaf")]
+    IdleImageTransform(Option<ImageTransformLeafPatchV1>),
+    #[serde(deserialize_with = "deserialize_required_nullable_image_transform_leaf")]
+    ActiveImageTransform(Option<ImageTransformLeafPatchV1>),
     SoundPath(String),
     SoundEnabled(bool),
     SoundVolume(f64),
@@ -302,6 +307,29 @@ pub enum EditorShadowLeafPatchV1 {
     OffsetX(f64),
     OffsetY(f64),
     Blur(f64),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "leaf",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ImageTransformLeafPatchV1 {
+    OffsetX(f64),
+    OffsetY(f64),
+    Rotation(f64),
+    Scale(f64),
+}
+
+fn deserialize_required_nullable_image_transform_leaf<'de, D>(
+    deserializer: D,
+) -> Result<Option<ImageTransformLeafPatchV1>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<ImageTransformLeafPatchV1>::deserialize(deserializer)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -845,7 +873,7 @@ mod tests {
         }
     }
 
-    // 72개 variant 전수: (patch, property 태그, value wire) 고정 표본
+    // 75개 variant 전수: (patch, property 태그, value wire) 고정 표본
     fn property_patch_samples() -> Vec<(
         EditorElementPropertyPatchV1,
         &'static str,
@@ -968,6 +996,21 @@ mod tests {
                 P::ActiveImageFit(ImageFit::Fill),
                 "activeImageFit",
                 json!("fill"),
+            ),
+            (
+                P::ImageMode(ImageMode::Overlay),
+                "imageMode",
+                json!("overlay"),
+            ),
+            (
+                P::IdleImageTransform(Some(ImageTransformLeafPatchV1::Rotation(-45.5))),
+                "idleImageTransform",
+                json!({ "leaf": "rotation", "value": -45.5 }),
+            ),
+            (
+                P::ActiveImageTransform(None),
+                "activeImageTransform",
+                serde_json::Value::Null,
             ),
             (
                 P::SoundPath("sound.wav".to_string()),
@@ -1100,7 +1143,7 @@ mod tests {
     #[test]
     fn property_patch_wire_pins_all_tag_value_pairs_and_roundtrips() {
         let samples = property_patch_samples();
-        assert_eq!(samples.len(), 72);
+        assert_eq!(samples.len(), 75);
         for (patch, tag, value) in samples {
             let wire = serde_json::to_value(&patch).unwrap();
             assert_eq!(
@@ -1292,6 +1335,8 @@ mod tests {
             ("noteOffsetX", P::NoteOffsetX(None)),
             ("noteOffsetY", P::NoteOffsetY(None)),
             ("noteWidth", P::NoteWidth(None)),
+            ("idleImageTransform", P::IdleImageTransform(None)),
+            ("activeImageTransform", P::ActiveImageTransform(None)),
         ];
         for (tag, expected_null) in cases {
             // value 키 자체가 없으면 None으로 통과하지 않고 거부
@@ -1335,6 +1380,46 @@ mod tests {
             assert!(
                 serde_json::from_value::<EditorShadowLeafPatchV1>(invalid.clone()).is_err(),
                 "expected shadow leaf rejection: {invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn image_transform_leaf_wire_requires_leaf_tag_and_exact_fields() {
+        use serde_json::json;
+        for (wire, expected) in [
+            (
+                json!({ "leaf": "offsetX", "value": -10.5 }),
+                ImageTransformLeafPatchV1::OffsetX(-10.5),
+            ),
+            (
+                json!({ "leaf": "offsetY", "value": 20.5 }),
+                ImageTransformLeafPatchV1::OffsetY(20.5),
+            ),
+            (
+                json!({ "leaf": "rotation", "value": 45.0 }),
+                ImageTransformLeafPatchV1::Rotation(45.0),
+            ),
+            (
+                json!({ "leaf": "scale", "value": 1.25 }),
+                ImageTransformLeafPatchV1::Scale(1.25),
+            ),
+        ] {
+            let decoded: ImageTransformLeafPatchV1 = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(decoded, expected);
+            assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
+        }
+        for invalid in [
+            json!({ "scale": 1.0 }),
+            json!({ "value": 1.0 }),
+            json!({ "leaf": "zoom", "value": 1.0 }),
+            json!({ "leaf": "scale" }),
+            json!({ "leaf": "scale", "value": 1.0, "extra": true }),
+            json!({ "leaf": "offsetX", "value": "1" }),
+        ] {
+            assert!(
+                serde_json::from_value::<ImageTransformLeafPatchV1>(invalid.clone()).is_err(),
+                "expected image transform leaf rejection: {invalid}"
             );
         }
     }
