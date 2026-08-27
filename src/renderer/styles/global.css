@@ -216,6 +216,43 @@ input[type='number']::-webkit-outer-spin-button {
   );
 }
 
+/*
+ * 키 이미지 레이어 - 링 예약 padding 안쪽에 절대 배치. replace는 이미지가
+ * 표면이라 radius 클리핑, overlay는 스티커처럼 키 밖으로 나갈 수 있다.
+ * 사용자 CSS는 공개 --key-image-* 변수나 일반 선언으로 언제든 덮어쓴다
+ */
+:where([data-key-element]) {
+  overflow: hidden;
+}
+
+:where([data-key-element][data-key-image-mode='overlay']) {
+  overflow: visible;
+}
+
+:where([data-key-element] > [data-key-image-layer]) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: inherit;
+  display: block;
+  object-fit: var(--key-image-fit, var(--dmn-key-image-fit-default, cover));
+  transform: var(
+    --key-image-transform,
+    var(--dmn-key-image-transform-default, none)
+  );
+  z-index: var(--key-image-z, var(--dmn-key-image-z-default, 0));
+}
+
+:where(
+    [data-key-element][data-key-image-mode='overlay'] > [data-key-image-layer]
+  ) {
+  padding: 0;
+  /* 루트가 더는 잘라주지 않으니 이미지가 키 모서리를 따라간다 */
+  border-radius: inherit;
+}
+
 /* 투명 보더 아래로 사용자 배경이 비치지 않게 하되 커스텀 CSS가 항상 우선 */
 :where([data-key-element], [data-graph-element], [data-knob-element]) {
   background-clip: padding-box;

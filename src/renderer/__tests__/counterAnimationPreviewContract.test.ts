@@ -33,7 +33,7 @@ describe('카운터 애니메이션 키 프리뷰 계약', () => {
 
     expect(idle.hasCurrentImage).toBe(true);
     expect(idle.currentImageSrc).toBe('data:image/png;base64,AA==');
-    expect(idle.imageStyle.objectFit).toBe('contain');
+    expect(idle.imageStyle['--dmn-key-image-fit-default']).toBe('contain');
     expect(idle.keyStyle['--dmn-key-bg-default']).toBe('transparent');
     expect(idle.keyStyle['--dmn-key-border-default']).toBe('none');
     expect(idle.keyStyle['--dmn-key-shadow-default']).toBe('none');

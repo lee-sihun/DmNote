@@ -1111,6 +1111,8 @@ const CounterAnimationEditorModal = ({
                     textStyle,
                     currentImageSrc,
                     hasCurrentImage,
+                    imageMode,
+                    imageReplaces,
                     isTransparent,
                     labelText,
                     useInline,
@@ -1231,6 +1233,9 @@ const CounterAnimationEditorModal = ({
                         data-state={keyActive ? 'active' : 'inactive'}
                         data-key-element="true"
                         data-key-image={hasCurrentImage ? 'true' : undefined}
+                        data-key-image-mode={
+                          hasCurrentImage ? imageMode : undefined
+                        }
                       >
                         {borderRingStyle && (
                           <span
@@ -1239,14 +1244,16 @@ const CounterAnimationEditorModal = ({
                             style={borderRingStyle}
                           />
                         )}
-                        {hasCurrentImage ? (
+                        {hasCurrentImage && (
                           <img
                             src={currentImageSrc || ''}
                             alt=""
+                            data-key-image-layer="true"
                             style={imageStyle}
                             draggable={false}
                           />
-                        ) : isInside ? (
+                        )}
+                        {imageReplaces ? null : isInside ? (
                           <div
                             className={`flex ${
                               isHorizontal ? '' : 'flex-col'

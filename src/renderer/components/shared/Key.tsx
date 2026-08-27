@@ -315,6 +315,8 @@ const DraggableKey = React.memo(
       labelMetricsDep,
       currentImageSrc,
       hasCurrentImage,
+      imageMode,
+      imageReplaces,
       labelText,
     } = computeKeyElementStyles({
       position: previewPosition,
@@ -386,6 +388,7 @@ const DraggableKey = React.memo(
         data-editing={isDraggingOrResizing ? 'true' : undefined}
         data-key-element="true"
         data-key-image={hasCurrentImage ? 'true' : undefined}
+        data-key-image-mode={hasCurrentImage ? imageMode : undefined}
         onClick={handleClick}
         onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
         onPointerDown={
@@ -401,14 +404,16 @@ const DraggableKey = React.memo(
             style={borderRingStyle}
           />
         )}
-        {hasCurrentImage ? (
+        {hasCurrentImage && (
           <img
             src={currentImageSrc || ''}
             alt=""
+            data-key-image-layer="true"
             style={imageStyle}
             draggable={false}
           />
-        ) : showInsideCounter ? (
+        )}
+        {imageReplaces ? null : showInsideCounter ? (
           renderInsideCounterPreview()
         ) : (
           <div
@@ -453,6 +458,8 @@ export const Key = React.memo(function Key({
     activeImageSrc,
     currentImageSrc,
     hasCurrentImage,
+    imageMode,
+    imageReplaces,
     isTransparent,
     labelText,
   } = computeKeyElementStyles({
@@ -487,6 +494,7 @@ export const Key = React.memo(function Key({
       data-state={active ? 'active' : 'inactive'}
       data-key-element="true"
       data-key-image={hasCurrentImage ? 'true' : undefined}
+      data-key-image-mode={hasCurrentImage ? imageMode : undefined}
     >
       {borderRingStyle && (
         <span
@@ -495,14 +503,16 @@ export const Key = React.memo(function Key({
           style={borderRingStyle}
         />
       )}
-      {hasCurrentImage ? (
+      {hasCurrentImage && (
         <img
           src={currentImageSrc || ''}
           alt=""
+          data-key-image-layer="true"
           style={imageStyle}
           draggable={false}
         />
-      ) : showInsideCounter && counterSignal ? (
+      )}
+      {imageReplaces ? null : showInsideCounter && counterSignal ? (
         <InsideCounterLayout
           countSignal={counterSignal}
           labelText={labelText}

@@ -39,6 +39,8 @@ const StatItem = React.memo(
       activeImageSrc,
       currentImageSrc,
       hasCurrentImage,
+      imageMode,
+      imageReplaces,
       isTransparent,
       labelText,
       labelPaintStyle,
@@ -72,6 +74,7 @@ const StatItem = React.memo(
         data-state={active ? 'active' : 'inactive'}
         data-key-element="true"
         data-key-image={hasCurrentImage ? 'true' : undefined}
+        data-key-image-mode={hasCurrentImage ? imageMode : undefined}
       >
         {borderRingStyle && (
           <span
@@ -80,14 +83,16 @@ const StatItem = React.memo(
             style={borderRingStyle}
           />
         )}
-        {hasCurrentImage ? (
+        {hasCurrentImage && (
           <img
             src={currentImageSrc!}
             alt=""
+            data-key-image-layer="true"
             style={imageStyle}
             draggable={false}
           />
-        ) : showInsideCounter && counterSignal ? (
+        )}
+        {imageReplaces ? null : showInsideCounter && counterSignal ? (
           <InsideCounterLayout
             countSignal={counterSignal}
             labelText={labelText}
