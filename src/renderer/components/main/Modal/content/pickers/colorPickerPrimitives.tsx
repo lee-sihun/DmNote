@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { hsvToColorObject, type ColorObject } from '@utils/color/colorUtils';
 import { CHECKER_PATTERN, CHECKER_SIZE } from './ColorSwatch';
+import GooeyThumb from './GooeyThumb';
 import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
@@ -221,8 +222,6 @@ export const usePointerSession = (
   };
 };
 
-const knobShadow = '0 0 4px rgba(0, 0, 0, 0.7)';
-
 // 색 표면은 무테 — 원색 트랙·체커·필드가 스스로 경계를 정의, 밝은 링은 검정 영역에서 도드라짐
 // 커서는 캔버스 아이템과 같은 정책 - 호버 무변화, 잡는 동안만 grabbing
 const trackClassName =
@@ -319,17 +318,11 @@ export const SaturationArea = ({
           } as React.CSSProperties
         }
       />
-      <div
-        className="pointer-events-none absolute rounded-full border-2 border-white"
-        style={{
-          left: `${color.hsv.s}%`,
-          top: `${100 - color.hsv.v}%`,
-          width: SATURATION_CURSOR_SIZE,
-          height: SATURATION_CURSOR_SIZE,
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: `rgb(${color.rgb.r} ${color.rgb.g} ${color.rgb.b})`,
-          boxShadow: knobShadow,
-        }}
+      <GooeyThumb
+        x={color.hsv.s / 100}
+        y={1 - color.hsv.v / 100}
+        size={SATURATION_CURSOR_SIZE}
+        color={`rgb(${color.rgb.r} ${color.rgb.g} ${color.rgb.b})`}
       />
     </div>
   );
@@ -402,16 +395,11 @@ export const HueSlider = ({
       }`}
       style={{ height: TRACK_HEIGHT, background: HUE_TRACK_GRADIENT }}
     >
-      <div
-        className="pointer-events-none absolute top-1/2 rounded-full border-2 border-white"
-        style={{
-          left: `${(color.hsv.h / 360) * 100}%`,
-          width: KNOB_SIZE,
-          height: KNOB_SIZE,
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: `hsl(${color.hsv.h} 100% 50%)`,
-          boxShadow: knobShadow,
-        }}
+      <GooeyThumb
+        x={color.hsv.h / 360}
+        y={0.5}
+        size={KNOB_SIZE}
+        color={`hsl(${color.hsv.h} 100% 50%)`}
       />
     </div>
   );
@@ -493,16 +481,13 @@ export const AlphaSlider = ({
         background: `linear-gradient(to right, rgb(${rgb} / 0), rgb(${rgb} / 1)), ${CHECKER_PATTERN} top left / ${CHECKER_SIZE} ${CHECKER_SIZE} repeat`,
       }}
     >
-      <div
-        className="pointer-events-none absolute top-1/2 rounded-full border-2 border-white"
-        style={{
-          left: `${color.hsv.a * 100}%`,
-          width: KNOB_SIZE,
-          height: KNOB_SIZE,
-          transform: 'translate(-50%, -50%)',
-          background: `linear-gradient(rgb(${rgb} / ${color.hsv.a}), rgb(${rgb} / ${color.hsv.a})), ${CHECKER_PATTERN} center / ${CHECKER_SIZE} ${CHECKER_SIZE} repeat`,
-          boxShadow: knobShadow,
-        }}
+      <GooeyThumb
+        x={color.hsv.a}
+        y={0.5}
+        size={KNOB_SIZE}
+        color={`rgb(${rgb})`}
+        colorOpacity={color.hsv.a}
+        checker
       />
     </div>
   );
