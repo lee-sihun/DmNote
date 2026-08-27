@@ -163,6 +163,11 @@ pub async fn plugin_instances_commit(
             .admit_frontend_history_mutation(&window_label)
             .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
         ticket.run(move || {
+            // 잠금 순서: 번호표 turn → authority (gesture.rs와 동일)
+            state
+                .plugin_authority()
+                .revalidate(authority)
+                .map_err(CommandError::msg)?;
             let mutation_id = request.mutation_id.clone();
             let committed = state
                 .store
@@ -200,6 +205,11 @@ pub async fn plugin_instances_reconcile(
             .admit_frontend_history_mutation(&window_label)
             .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
         ticket.run(move || {
+            // 잠금 순서: 번호표 turn → authority (gesture.rs와 동일)
+            state
+                .plugin_authority()
+                .revalidate(authority)
+                .map_err(CommandError::msg)?;
             let mutation_id = request.mutation_id.clone();
             let committed = state
                 .store

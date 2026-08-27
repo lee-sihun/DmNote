@@ -36,6 +36,12 @@ pub async fn commit_gesture(
             .admit_frontend_history_mutation(&window_label)
             .map_err(|_| EditorCommitError::history_in_progress())?;
         ticket.run(move || {
+            // 잠금 순서: 번호표 turn → authority. turn 밖 admit은 빠른 거절용 스냅샷이고
+            // reset과의 직렬화는 번호표가 맡으므로 turn 안에서 다시 확인한다
+            state
+                .plugin_authority()
+                .revalidate(authority)
+                .map_err(crate::errors::CommandError::msg)?;
             let broker = app.state::<PreviewBroker>();
             let mutation_id = request.mutation_id.clone();
             let gesture_id = request.gesture_id.clone();

@@ -2,7 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     audio::{KeySoundOutputBackend, KeySoundOutputDevices, KeySoundOutputState, KeySoundStatus},
-    commands::run_mutation,
+    commands::run_blocking,
     errors::{CmdResult, CommandError},
     state::AppState,
 };
@@ -53,19 +53,19 @@ pub fn key_sound_set_latency_logging(
     Ok(state.key_sound_set_latency_logging(enabled))
 }
 
+// 장치 열거는 엔드포인트마다 드라이버 질의를 하므로 IPC(메인) 스레드 밖에서
 #[tauri::command]
-pub fn key_sound_list_output_devices(
-    state: State<'_, AppState>,
-) -> CmdResult<KeySoundOutputDevices> {
-    Ok(state.key_sound_list_output_devices())
+pub async fn key_sound_list_output_devices(app: AppHandle) -> CmdResult<KeySoundOutputDevices> {
+    run_blocking(app, |_, state| Ok(state.key_sound_list_output_devices())).await
 }
 
+// 장치 전환 대기는 번호표 밖, persist만 번호표 turn 안 (AppState가 순서를 소유)
 #[tauri::command]
 pub async fn key_sound_set_output_backend(
     app: AppHandle,
     backend: KeySoundOutputBackend,
 ) -> CmdResult<KeySoundOutputState> {
-    run_mutation(app, move |_, state| {
+    run_blocking(app, move |_, state| {
         Ok(state.key_sound_set_output_backend(backend)?)
     })
     .await
