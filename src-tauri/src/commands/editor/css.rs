@@ -587,22 +587,25 @@ fn css_load_from_path(
     path: PathBuf,
 ) -> CmdResult<CssLoadResponse> {
     let selected_path = path.to_string_lossy().to_string();
-    let _operation_guard = state.lock_css_operation();
-    let loaded = match validate_css_path(&path) {
-        Ok(loaded) => loaded,
-        Err(error) => {
-            log_css_rejection("css_load", &selected_path, &error);
-            return Ok(CssLoadResponse {
-                success: false,
-                error: Some(error.code.as_str().to_string()),
-                content: None,
-                path: Some(selected_path),
-            });
-        }
-    };
     let ticket = issue_mutation_ticket(app)?;
     let admission = state.admit_frontend_history_mutation(window_label)?;
     ticket.run(|| {
+        state.ensure_mutation_allowed().map_err(CommandError::msg)?;
+        // 잠금 순서: 번호표 turn -> CSS 잠금, 역순이면 preset_load와 교착
+        // 검증도 잠금 안에서 해야 watcher가 저장한 최신본을 옛 내용으로 덮지 않음
+        let _operation_guard = state.lock_css_operation();
+        let loaded = match validate_css_path(&path) {
+            Ok(loaded) => loaded,
+            Err(error) => {
+                log_css_rejection("css_load", &selected_path, &error);
+                return Ok(CssLoadResponse {
+                    success: false,
+                    error: Some(error.code.as_str().to_string()),
+                    content: None,
+                    path: Some(selected_path),
+                });
+            }
+        };
         let transaction = commit_loaded_css(state, &loaded, true, admission)?;
         let (css, use_custom_css) = &transaction.value;
         state.authorize_css_path(&loaded.canonical_path);
@@ -787,22 +790,25 @@ fn css_tab_load_from_path(
     path: PathBuf,
 ) -> CmdResult<TabCssLoadResponse> {
     let selected_path = path.to_string_lossy().to_string();
-    let _operation_guard = state.lock_css_operation();
-    let loaded = match validate_css_path(&path) {
-        Ok(loaded) => loaded,
-        Err(error) => {
-            log_css_rejection("css_tab_load", &selected_path, &error);
-            return Ok(TabCssLoadResponse {
-                success: false,
-                error: Some(error.code.as_str().to_string()),
-                tab_id,
-                css: None,
-            });
-        }
-    };
     let ticket = issue_mutation_ticket(app)?;
     let admission = state.admit_frontend_history_mutation(window_label)?;
     ticket.run(|| {
+        state.ensure_mutation_allowed().map_err(CommandError::msg)?;
+        // 잠금 순서: 번호표 turn -> CSS 잠금, 역순이면 preset_load와 교착
+        // 검증도 잠금 안에서 해야 watcher가 저장한 최신본을 옛 내용으로 덮지 않음
+        let _operation_guard = state.lock_css_operation();
+        let loaded = match validate_css_path(&path) {
+            Ok(loaded) => loaded,
+            Err(error) => {
+                log_css_rejection("css_tab_load", &selected_path, &error);
+                return Ok(TabCssLoadResponse {
+                    success: false,
+                    error: Some(error.code.as_str().to_string()),
+                    tab_id,
+                    css: None,
+                });
+            }
+        };
         let tab_css = TabCss {
             path: Some(loaded.canonical_path.clone()),
             content: loaded.content,

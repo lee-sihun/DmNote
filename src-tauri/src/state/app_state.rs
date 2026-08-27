@@ -4580,6 +4580,7 @@ impl AppState {
 
     // ========== CSS 핫리로딩 관련 메서드 ==========
 
+    /// 잠금 순서: 번호표 turn -> CSS 잠금, 역순이면 preset_load와 교착
     pub(crate) fn lock_css_operation(&self) -> parking_lot::MutexGuard<'_, ()> {
         self.css_operation_lock.lock()
     }
@@ -6399,6 +6400,20 @@ mod tests {
         second_done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
         second_worker.join().unwrap();
         assert_eq!(*order.lock(), vec![1, 2]);
+    }
+
+    #[test]
+    fn mutation_publication_advances_after_unrun_ticket_is_dropped() {
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let first = publication.issue().unwrap();
+        let second = publication.issue().unwrap();
+
+        drop(first);
+
+        assert_eq!(publication.state.lock().serving_ticket, 1);
+        let mut ran = false;
+        second.run(|| ran = true);
+        assert!(ran);
     }
 
     #[test]
