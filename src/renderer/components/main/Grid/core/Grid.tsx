@@ -2285,7 +2285,6 @@ const Grid = ({
         />
       )}
       {/* 줌 레벨 표시 - 미니맵 내부로 통합됨 */}
-      {/* <ZoomIndicator zoom={zoom} /> */}
       {/* 탭 CSS 설정 모달 */}
       <TabCssModal
         isOpen={isTabCssModalOpen}

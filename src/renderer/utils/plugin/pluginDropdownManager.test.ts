@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { registerPopupLayer } from '@components/main/Modal/popupLayer';
 import { setupPluginDropdownInteractions } from './pluginDropdownManager';
 
 const createDropdownRoot = () => {
@@ -185,5 +186,99 @@ describe('플러그인 드롭다운 화면 경계 보정', () => {
     // 화면보다 긴 목록은 잘리지 않고 스크롤한다
     expect(menu.style.maxHeight).toBe('200px');
     expect(menu.style.overflowY).toBe('auto');
+  });
+
+  describe('팝업 레이어 스택', () => {
+    const cleanups: Array<() => void> = [];
+
+    beforeEach(() => {
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          callback(performance.now());
+          return 1;
+        },
+      );
+    });
+
+    afterEach(() => {
+      cleanups
+        .splice(0)
+        .reverse()
+        .forEach((cleanup) => cleanup());
+      document.body.replaceChildren();
+      vi.unstubAllGlobals();
+    });
+
+    const openMenu = (root: HTMLElement) => {
+      const toggle = root.querySelector(
+        '[data-dropdown-toggle]',
+      ) as HTMLElement;
+      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      return document.body.querySelector(
+        '[data-plugin-dropdown-portal="true"]',
+      ) as HTMLElement | null;
+    };
+    const registerModal = () => {
+      const layer = document.createElement('div');
+      layer.setAttribute('data-dmn-modal-backdrop', 'true');
+      document.body.appendChild(layer);
+      const release = registerPopupLayer(layer);
+      cleanups.push(release);
+      return release;
+    };
+
+    it('열린 메뉴 위에 모달이 뜨면 닫힌다', () => {
+      const root = createDropdownRoot();
+      cleanups.push(setupPluginDropdownInteractions(root));
+      expect(openMenu(root)).not.toBeNull();
+
+      registerModal();
+
+      expect(
+        document.body.querySelector('[data-plugin-dropdown-portal="true"]'),
+      ).toBeNull();
+      // 원위치로 돌아간다
+      expect(root.querySelector('[data-dropdown-menu]')).not.toBeNull();
+    });
+
+    it('모달 안에서 연 메뉴는 유지되고, 그 위 두 번째 모달에는 닫힌다', () => {
+      registerModal();
+      const root = createDropdownRoot();
+      cleanups.push(setupPluginDropdownInteractions(root));
+      expect(openMenu(root)).not.toBeNull();
+
+      registerModal();
+
+      expect(
+        document.body.querySelector('[data-plugin-dropdown-portal="true"]'),
+      ).toBeNull();
+    });
+
+    it('위에 모달이 있으면 Escape 소유권을 넘긴다', () => {
+      const root = createDropdownRoot();
+      cleanups.push(setupPluginDropdownInteractions(root));
+      openMenu(root);
+      const escape = () => {
+        const event = new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        });
+        document.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      // 최상위면 메뉴가 소비한다
+      expect(escape()).toBe(true);
+
+      openMenu(root);
+      const layer = document.createElement('div');
+      layer.setAttribute('data-dmn-modal-backdrop', 'true');
+      document.body.appendChild(layer);
+      // 모달 등록으로 메뉴는 이미 닫힌다 - 소유권 판정 자체를 보려면 스택만 위에 둔다
+      const release = registerPopupLayer(layer);
+      cleanups.push(release);
+      expect(escape()).toBe(false);
+    });
   });
 });

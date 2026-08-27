@@ -183,7 +183,12 @@ export default function CommonListPickerPage<T>({
               />
             )}
             {items.length === 0 && !isLoading && !errorText ? (
-              <div className="flex-1 flex items-center justify-center py-[14px] text-fg-faint text-body">
+              // 추가 행이 뒤에 오면 안내 문구가 늘어나 행을 바닥으로 밀지 않게
+              <div
+                className={`${
+                  addRowPlacement === 'end' ? '' : 'flex-1 '
+                }flex items-center justify-center py-[14px] text-fg-faint text-body`}
+              >
                 {emptyText}
               </div>
             ) : null}
