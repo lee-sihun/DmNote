@@ -801,9 +801,11 @@ const ColorPickerWrapper = ({
     return null;
   })();
 
-  // solidOnly는 피커가 alpha를 직접 소유하므로 호출부 opacity 제어와 함께 켜지지 않는다
+  // 피커가 색 알파를 직접 소유하는 동안은 호출부 opacity 제어와 함께 켜지지 않는다.
+  // hideColorAlpha면 호출부 투명도가 알파를 대신한다
+  const ownsColorAlpha = solidOnly && !hideColorAlpha;
   const showOpacityControl =
-    !solidOnly &&
+    !ownsColorAlpha &&
     resolvedOpacityPercent !== null &&
     typeof onOpacityPercentChange === 'function';
 
@@ -857,8 +859,8 @@ const ColorPickerWrapper = ({
         }
       : undefined;
 
-  // solidOnly는 피커가 alpha를 직접 소유하고, 아니면 호출부의 opacity를 편집한다
-  const solidPercentControl: PercentInputProps | undefined = solidOnly
+  // 색 알파를 소유하면 피커 alpha를, 아니면 호출부의 opacity를 편집한다
+  const solidPercentControl: PercentInputProps | undefined = ownsColorAlpha
     ? {
         value: Math.round(alpha * 100),
         label: t('colorPicker.alpha'),
