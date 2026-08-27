@@ -1906,7 +1906,7 @@ fn default_note_glow_enabled() -> bool {
     false
 }
 fn default_note_glow_size() -> f64 {
-    20.0
+    10.0
 }
 
 fn default_note_border_opacity() -> u32 {
@@ -3319,12 +3319,12 @@ mod tests {
         assert_eq!(pos.note_glow_size, 20.5);
     }
 
-    // note_glow_size 미지정 시 기본값(20.0) 적용
+    // note_glow_size 미지정 시 기본값(10.0) 적용
     #[test]
-    fn note_glow_size_defaults_to_20() {
+    fn note_glow_size_defaults_to_10() {
         let json = key_position_json(r#""noteWidth": null"#);
         let pos: KeyPosition = serde_json::from_str(&json).unwrap();
-        assert_eq!(pos.note_glow_size, 20.0);
+        assert_eq!(pos.note_glow_size, 10.0);
         assert_eq!(pos.note_width, None);
     }
 
