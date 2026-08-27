@@ -500,7 +500,7 @@ fn audio_thread(
     let mut latency_logging = state.read().status.latency_logging;
     let mut requested_backend = state.read().output_state.requested.clone();
     let mut stream_handler = None;
-    let output_state = switch_output_backend_with_notification(
+    let output_state = open_initial_output_backend(
         requested_backend.clone(),
         &mut stream_handler,
         fallback_callback.as_ref(),
@@ -828,6 +828,44 @@ fn switch_output_backend(
     }
 }
 
+// 기동 시 폴백 정책: 장치 부재(뽑힌 USB DAC 등)는 저장값을 기본 장치로 잊고(런타임 규칙과
+// 동일), 열기 실패(게임의 ASIO 배타 점유·드라이버 오류)는 일시적일 수 있어 저장값을 지킨다 -
+// 이번 세션만 기본 장치로 재생하고 다음 기동에 다시 시도한다
+fn startup_fallback_forgets(error_code: &str) -> bool {
+    matches!(
+        error_code,
+        ERROR_CODE_DEVICE_NOT_FOUND | ERROR_CODE_ASIO_DEVICE_NOT_FOUND
+    )
+}
+
+fn open_initial_output_backend(
+    backend: KeySoundOutputBackend,
+    stream_handler: &mut Option<StreamHandler>,
+    fallback_callback: &(dyn Fn(KeySoundOutputBackend, KeySoundOutputBackend) + Send + Sync),
+) -> KeySoundOutputState {
+    let requested = backend.clone();
+    let requested_non_default = !matches!(&backend, KeySoundOutputBackend::DefaultDevice);
+    let mut output_state = switch_output_backend(backend, stream_handler);
+    if requested_non_default
+        && matches!(
+            &output_state.requested,
+            KeySoundOutputBackend::DefaultDevice
+        )
+    {
+        if output_state
+            .error_code
+            .as_deref()
+            .is_some_and(startup_fallback_forgets)
+        {
+            fallback_callback(requested, output_state.requested.clone());
+        } else {
+            // 저장값 유지 - 스트림 오류 재연결(play_on_stream)에서 다시 시도된다
+            output_state.requested = requested;
+        }
+    }
+    output_state
+}
+
 fn switch_output_backend_with_notification(
     backend: KeySoundOutputBackend,
     stream_handler: &mut Option<StreamHandler>,
@@ -871,7 +909,7 @@ fn asio_output_error_code(err: &AudioSinkOpenError) -> &'static str {
     match err {
         AudioSinkOpenError::AsioUnavailableBuild => ERROR_CODE_ASIO_UNAVAILABLE_BUILD,
         AudioSinkOpenError::AsioDeviceNotFound => ERROR_CODE_ASIO_DEVICE_NOT_FOUND,
-        AudioSinkOpenError::DeviceNotFound => ERROR_CODE_ASIO_DEVICE_NOT_FOUND,
+        AudioSinkOpenError::DeviceNotFound => ERROR_CODE_DEVICE_NOT_FOUND,
         AudioSinkOpenError::OpenFailed(_) => ERROR_CODE_ASIO_OPEN_FAILED,
     }
 }
@@ -1239,8 +1277,11 @@ mod output_backend_tests {
     };
 
     use super::{
-        open_system_device_audio_sink, switch_output_backend_with_notification, AudioSinkOpenError,
-        KeySoundEngine, KeySoundOutputBackend,
+        open_initial_output_backend, open_system_device_audio_sink, startup_fallback_forgets,
+        switch_output_backend_with_notification, AudioSinkOpenError, KeySoundEngine,
+        KeySoundOutputBackend, ERROR_CODE_ASIO_DEVICE_NOT_FOUND, ERROR_CODE_ASIO_OPEN_FAILED,
+        ERROR_CODE_ASIO_UNAVAILABLE_BUILD, ERROR_CODE_DEFAULT_OPEN_FAILED,
+        ERROR_CODE_DEVICE_NOT_FOUND, ERROR_CODE_DEVICE_OPEN_FAILED,
     };
 
     #[test]
@@ -1280,6 +1321,41 @@ mod output_backend_tests {
             notified.store(true, Ordering::Relaxed);
         };
         let output_state = switch_output_backend_with_notification(
+            KeySoundOutputBackend::Device {
+                id: "invalid-device-id".to_string(),
+                name: "Speakers".to_string(),
+            },
+            &mut stream_handler,
+            &fallback_callback,
+        );
+
+        assert_eq!(output_state.requested, KeySoundOutputBackend::DefaultDevice);
+        assert!(notified.load(Ordering::Relaxed));
+        if let Some(handler) = stream_handler.as_mut() {
+            handler.sink.log_on_drop(false);
+        }
+    }
+
+    #[test]
+    fn startup_fallback_forgets_only_missing_devices() {
+        assert!(startup_fallback_forgets(ERROR_CODE_DEVICE_NOT_FOUND));
+        assert!(startup_fallback_forgets(ERROR_CODE_ASIO_DEVICE_NOT_FOUND));
+        assert!(!startup_fallback_forgets(ERROR_CODE_ASIO_OPEN_FAILED));
+        assert!(!startup_fallback_forgets(ERROR_CODE_DEVICE_OPEN_FAILED));
+        assert!(!startup_fallback_forgets(ERROR_CODE_DEFAULT_OPEN_FAILED));
+        assert!(!startup_fallback_forgets(ERROR_CODE_ASIO_UNAVAILABLE_BUILD));
+    }
+
+    // 기동 시 장치 부재는 런타임과 같이 forget - 저장값이 기본 장치로 덮인다
+    #[test]
+    fn startup_forgets_missing_device_and_notifies() {
+        let mut stream_handler = None;
+        let notified = Arc::new(AtomicBool::new(false));
+        let notified_for_callback = Arc::clone(&notified);
+        let fallback_callback = move |_failed, _settled| {
+            notified_for_callback.store(true, Ordering::Relaxed);
+        };
+        let output_state = open_initial_output_backend(
             KeySoundOutputBackend::Device {
                 id: "invalid-device-id".to_string(),
                 name: "Speakers".to_string(),

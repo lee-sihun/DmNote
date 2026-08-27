@@ -126,6 +126,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         );
                         needs_persist |= layout_repaired;
                         needs_persist |= normalize_blank_font_colors(&mut data);
+                        needs_persist |= canonicalize_image_modes(&mut data);
                         let (gradient_changed, gradient_pair_repaired) =
                             canonicalize_gradient_pairs(&mut data);
                         needs_persist |= gradient_changed;
@@ -899,6 +900,7 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     normalize_custom_css_history(&mut data.custom_css_history);
     repair_editor_revision(&mut data);
     normalize_blank_font_colors(&mut data);
+    canonicalize_image_modes(&mut data);
 
     if data.keys.is_empty() {
         data.keys = default_keys().clone();
@@ -1120,6 +1122,24 @@ fn normalize_blank_font_colors(data: &mut AppStoreData) -> bool {
     }
     for knob in data.knob_positions.values_mut().flatten() {
         changed |= normalize_position(&mut knob.position);
+    }
+    changed
+}
+
+// image_mode replace 표현을 None으로 접는다 (KeyPosition::canonicalize_image_mode 참조)
+pub(crate) fn canonicalize_image_modes(data: &mut AppStoreData) -> bool {
+    let mut changed = false;
+    for position in data.key_positions.values_mut().flatten() {
+        changed |= position.canonicalize_image_mode();
+    }
+    for stat in data.stat_positions.values_mut().flatten() {
+        changed |= stat.position.canonicalize_image_mode();
+    }
+    for graph in data.graph_positions.values_mut().flatten() {
+        changed |= graph.position.canonicalize_image_mode();
+    }
+    for knob in data.knob_positions.values_mut().flatten() {
+        changed |= knob.position.canonicalize_image_mode();
     }
     changed
 }
@@ -1387,6 +1407,7 @@ fn repair_legacy_state(value: Value) -> AppStoreData {
         source_key_positions.as_ref(),
     );
     canonicalize_gradient_pairs(&mut data);
+    canonicalize_image_modes(&mut data);
     migrate_custom_css_history_timestamps(&mut data.custom_css_history);
     normalize_state(data)
 }
@@ -3753,6 +3774,34 @@ mod tests {
             assert!(position.font_color.is_none());
             assert!(position.active_font_color.is_none());
         }
+    }
+
+    #[test]
+    fn normalize_state_folds_replace_image_mode_to_sparse_none() {
+        let data = normalize_state(AppStoreData {
+            key_positions: crate::models::KeyPositions::from([(
+                "custom".to_string(),
+                vec![
+                    KeyPosition {
+                        id: "replace".to_string(),
+                        image_mode: Some(crate::models::ImageMode::Replace),
+                        ..KeyPosition::default()
+                    },
+                    KeyPosition {
+                        id: "overlay".to_string(),
+                        image_mode: Some(crate::models::ImageMode::Overlay),
+                        ..KeyPosition::default()
+                    },
+                ],
+            )]),
+            ..AppStoreData::default()
+        });
+
+        assert_eq!(data.key_positions["custom"][0].image_mode, None);
+        assert_eq!(
+            data.key_positions["custom"][1].image_mode,
+            Some(crate::models::ImageMode::Overlay)
+        );
     }
 
     #[test]

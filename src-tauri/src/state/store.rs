@@ -1533,6 +1533,7 @@ impl AppStore {
         scratch.key_counters = target.key_counters.clone();
         target.apply_override_patches(&mut scratch);
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
@@ -1627,6 +1628,7 @@ impl AppStore {
             &preset_history_settings_patch(&target.settings),
         );
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
@@ -2049,6 +2051,7 @@ impl AppStore {
             .transpose()?
             .unwrap_or_default();
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
 
         // editorRevision은 이 트랜잭션만 관리
         scratch.editor_revision = current_store.editor_revision;

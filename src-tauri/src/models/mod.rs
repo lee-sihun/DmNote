@@ -1458,6 +1458,17 @@ impl KeyPosition {
         changed
     }
 
+    // replace는 sparse 저장(None)이 정본 - 프리셋·플러그인·frozen insert로 들어온
+    // Some(Replace)를 접어 이후 ImageMode(Replace) 패치가 빈 undo 항목을 만들지 않게
+    pub(crate) fn canonicalize_image_mode(&mut self) -> bool {
+        if self.image_mode == Some(ImageMode::Replace) {
+            self.image_mode = None;
+            true
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
         let mut changed = false;
         let mut pair_repaired = false;

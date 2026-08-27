@@ -1075,6 +1075,7 @@ fn apply_frozen_insert(
         .cloned()
         .map(|mut element| {
             element.position_mut().canonicalize_gradient_pairs();
+            element.position_mut().canonicalize_image_mode();
             element
         })
         .collect();

@@ -45,11 +45,6 @@ pub fn plugin_bridge_send_to(
         data.as_ref().map(|d| d.to_string().len()).unwrap_or(0)
     );
 
-    let payload = serde_json::json!({
-        "type": message_type,
-        "data": data,
-    });
-
     // 타겟 윈도우 레이블 결정
     let window_label = match target.as_str() {
         "main" => "main",
@@ -61,6 +56,14 @@ pub fn plugin_bridge_send_to(
             )))
         }
     };
+
+    // 발행은 전역이므로 target을 실어 수신 측(bridgeApi·OBS 브릿지)이 거른다 -
+    // send(브로드캐스트)는 target 없이 그대로
+    let payload = serde_json::json!({
+        "type": message_type,
+        "data": data,
+        "target": window_label,
+    });
 
     // Window::emit도 전역 발행이므로 publisher에서 한 번만 전송
     if app.get_webview_window(window_label).is_some() {

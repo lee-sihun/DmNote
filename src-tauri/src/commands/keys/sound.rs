@@ -198,20 +198,92 @@ pub async fn sound_load(
 
 #[tauri::command]
 pub async fn sound_list(app: tauri::AppHandle) -> CmdResult<Vec<SoundListItem>> {
-    run_mutation(app, sound_list_inner).await
+    // 디렉터리 스캔은 번호표 밖 - OBS 클라이언트도 부르는 읽기 경로가 저장 큐를 막지 않게.
+    // 라이브러리에 변화가 있을 때만 번호표를 받아 persist한다 (sound_load와 같은 순서)
+    run_blocking(app, sound_list_inner).await
+}
+
+struct SoundScan {
+    items: Vec<SoundListItem>,
+    library_at_scan: std::collections::HashMap<String, SoundLibraryEntry>,
+    seen_paths: HashSet<String>,
+    scan_complete: bool,
 }
 
 fn sound_list_inner(app: &tauri::AppHandle, state: &AppState) -> CmdResult<Vec<SoundListItem>> {
     let sounds_dir = ensure_sounds_dir(app)?;
-    let _transaction_guard = PROCESSED_WAV_TRANSACTION_LOCK.lock();
-    let recovery_complete = state.store.prepare_sound_listing_while_locked()?;
+    let scan = {
+        let _transaction_guard = PROCESSED_WAV_TRANSACTION_LOCK.lock();
+        let recovery_complete = state.store.prepare_sound_listing_while_locked()?;
+        let library = state.store.with_state(|s| s.sound_library.clone());
+        scan_sounds_dir(&sounds_dir, library, recovery_complete)?
+    };
+    let SoundScan {
+        mut items,
+        library_at_scan,
+        seen_paths,
+        scan_complete,
+    } = scan;
+
+    if reconcile_sound_library(&library_at_scan, &seen_paths, scan_complete).is_some() {
+        let ticket = issue_mutation_ticket(app)?;
+        ticket.run(|| -> CmdResult<()> {
+            // 잠금 순서: 번호표 turn → PROCESSED_WAV 잠금 (sound_delete와 동일)
+            let _transaction_guard = PROCESSED_WAV_TRANSACTION_LOCK.lock();
+            state.store.update(|s| {
+                // 스캔~turn 사이의 sound_delete·sound_load를 존중한다 - 삽입 후보는 파일이
+                // 아직 있을 때만, 삭제 후보는 스캔 시점에 있던 키로 한정
+                for key in &seen_paths {
+                    if !s.sound_library.contains_key(key) && Path::new(key).exists() {
+                        s.sound_library
+                            .insert(key.clone(), SoundLibraryEntry::default());
+                    }
+                }
+                if scan_complete {
+                    let stale: Vec<String> = s
+                        .sound_library
+                        .keys()
+                        .filter(|key| {
+                            library_at_scan.contains_key(*key) && !seen_paths.contains(*key)
+                        })
+                        .cloned()
+                        .collect();
+                    for key in stale {
+                        s.sound_library.remove(&key);
+                    }
+                }
+            })?;
+            Ok(())
+        })?;
+    }
+
+    // 내장 사운드 우선, 이후 최신순
+    items.sort_by(|a, b| {
+        let a_builtin = a.source == SoundSource::Builtin;
+        let b_builtin = b.source == SoundSource::Builtin;
+        b_builtin
+            .cmp(&a_builtin)
+            .then_with(|| {
+                b.modified_at_ms
+                    .unwrap_or_default()
+                    .cmp(&a.modified_at_ms.unwrap_or_default())
+            })
+            .then_with(|| a.file_name.cmp(&b.file_name))
+    });
+
+    Ok(items)
+}
+
+fn scan_sounds_dir(
+    sounds_dir: &Path,
+    library: std::collections::HashMap<String, SoundLibraryEntry>,
+    recovery_complete: bool,
+) -> CmdResult<SoundScan> {
     let mut items = Vec::new();
-    let mut library = state.store.with_state(|s| s.sound_library.clone());
     let mut seen_paths = HashSet::new();
-    let mut library_mutated = false;
     let mut scan_complete = recovery_complete;
 
-    let entries = fs::read_dir(&sounds_dir)
+    let entries = fs::read_dir(sounds_dir)
         .map_err(|e| CommandError::msg(format!("사운드 디렉토리 읽기 실패: {e}")))?;
 
     for entry_result in entries {
@@ -267,13 +339,7 @@ fn sound_list_inner(app: &tauri::AppHandle, state: &AppState) -> CmdResult<Vec<S
         let path_key = normalize_path_string(&path);
         seen_paths.insert(path_key.clone());
 
-        let entry_meta = library
-            .entry(path_key.clone())
-            .or_insert_with(|| {
-                library_mutated = true;
-                SoundLibraryEntry::default()
-            })
-            .clone();
+        let entry_meta = library.get(&path_key).cloned().unwrap_or_default();
 
         let modified_at_ms = metadata.modified().ok().and_then(|modified| {
             modified
@@ -297,35 +363,33 @@ fn sound_list_inner(app: &tauri::AppHandle, state: &AppState) -> CmdResult<Vec<S
         });
     }
 
-    let stale_keys = stale_sound_library_keys(&library, &seen_paths, scan_complete);
-    if !stale_keys.is_empty() {
-        for key in stale_keys {
-            library.remove(&key);
+    Ok(SoundScan {
+        items,
+        library_at_scan: library,
+        seen_paths,
+        scan_complete,
+    })
+}
+
+// 스캔 결과로 라이브러리를 맞춘 사본 - 변화가 없으면 None (번호표를 받지 않는다)
+fn reconcile_sound_library(
+    library: &std::collections::HashMap<String, SoundLibraryEntry>,
+    seen_paths: &HashSet<String>,
+    scan_complete: bool,
+) -> Option<std::collections::HashMap<String, SoundLibraryEntry>> {
+    let mut next = library.clone();
+    let mut changed = false;
+    for key in seen_paths {
+        if !next.contains_key(key) {
+            next.insert(key.clone(), SoundLibraryEntry::default());
+            changed = true;
         }
-        library_mutated = true;
     }
-
-    if library_mutated {
-        state.store.update(|s| {
-            s.sound_library = library.clone();
-        })?;
+    for key in stale_sound_library_keys(library, seen_paths, scan_complete) {
+        next.remove(&key);
+        changed = true;
     }
-
-    // 내장 사운드 우선, 이후 최신순
-    items.sort_by(|a, b| {
-        let a_builtin = a.source == SoundSource::Builtin;
-        let b_builtin = b.source == SoundSource::Builtin;
-        b_builtin
-            .cmp(&a_builtin)
-            .then_with(|| {
-                b.modified_at_ms
-                    .unwrap_or_default()
-                    .cmp(&a.modified_at_ms.unwrap_or_default())
-            })
-            .then_with(|| a.file_name.cmp(&b.file_name))
-    });
-
-    Ok(items)
+    changed.then_some(next)
 }
 
 fn stale_sound_library_keys(
@@ -1285,7 +1349,7 @@ mod tests {
     use super::{
         backup_path_for, commit_staged_sound_deletion, contains_duplicate_path_separator,
         emit_sound_reference_changes_with, ensure_existing_sound_edit_target,
-        remove_sound_entry_and_references, replace_processed_wav_with,
+        reconcile_sound_library, remove_sound_entry_and_references, replace_processed_wav_with,
         resolve_sound_path_key_from_keys, restore_interrupted_processed_wav_backup_with,
         stale_sound_library_keys, validate_sound_path, PreparedAtomicReplace,
         SoundReferenceChangeEvent,
@@ -1398,6 +1462,35 @@ mod tests {
             }],
         );
         data
+    }
+
+    #[test]
+    fn reconcile_sound_library_is_none_when_scan_matches_library() {
+        let mut library = std::collections::HashMap::new();
+        library.insert(
+            "a.wav".to_string(),
+            crate::models::SoundLibraryEntry::default(),
+        );
+        let seen: std::collections::HashSet<String> = ["a.wav".to_string()].into_iter().collect();
+        assert!(reconcile_sound_library(&library, &seen, true).is_none());
+    }
+
+    #[test]
+    fn reconcile_sound_library_inserts_new_files_and_drops_stale_only_when_complete() {
+        let mut library = std::collections::HashMap::new();
+        library.insert(
+            "gone.wav".to_string(),
+            crate::models::SoundLibraryEntry::default(),
+        );
+        let seen: std::collections::HashSet<String> = ["new.wav".to_string()].into_iter().collect();
+
+        let partial = reconcile_sound_library(&library, &seen, false).unwrap();
+        assert!(partial.contains_key("new.wav"));
+        assert!(partial.contains_key("gone.wav"));
+
+        let complete = reconcile_sound_library(&library, &seen, true).unwrap();
+        assert!(complete.contains_key("new.wav"));
+        assert!(!complete.contains_key("gone.wav"));
     }
 
     #[test]

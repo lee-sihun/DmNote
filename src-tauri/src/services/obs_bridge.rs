@@ -70,6 +70,15 @@ const ALLOWED_WS_COMMANDS: &[&str] = &[
     // 파괴적 bulk 삭제는 plugin_storage_clear와 동일하게 원격 차단
 ];
 
+// OBS 브라우저 소스는 overlay 창을 대신한다 - main만을 향한 브릿지 메시지는 전달하지 않는다
+fn is_forwarded_to_obs(event: &str, data: &Value) -> bool {
+    if !FORWARDED_EVENTS.contains(&event) {
+        return false;
+    }
+    !(event == "plugin-bridge:message"
+        && data.get("target").and_then(Value::as_str) == Some("main"))
+}
+
 const FORWARDED_EVENTS: &[&str] = &[
     "settings:changed",
     "editor:committed",
@@ -425,7 +434,7 @@ impl ObsBridgeService {
     }
 
     pub fn publish(&self, event: &str, data: Value) {
-        if !self.is_running() || !FORWARDED_EVENTS.contains(&event) {
+        if !self.is_running() || !is_forwarded_to_obs(event, &data) {
             return;
         }
 
@@ -1404,6 +1413,17 @@ mod tests {
         assert!(!is_allowed_command("app_bootstrap_extra"));
         assert!(!is_allowed_command("plugin:window|close"));
         assert_eq!(build_allowed_list().len(), ALLOWED_WS_COMMANDS.len());
+    }
+
+    #[test]
+    fn bridge_messages_targeting_main_are_not_forwarded_to_obs() {
+        let broadcast = serde_json::json!({ "type": "PING", "data": null });
+        assert!(is_forwarded_to_obs("plugin-bridge:message", &broadcast));
+        let to_overlay = serde_json::json!({ "type": "PING", "target": "overlay" });
+        assert!(is_forwarded_to_obs("plugin-bridge:message", &to_overlay));
+        let to_main = serde_json::json!({ "type": "PING", "target": "main" });
+        assert!(!is_forwarded_to_obs("plugin-bridge:message", &to_main));
+        assert!(!is_forwarded_to_obs("app:close-requested", &broadcast));
     }
 
     #[test]

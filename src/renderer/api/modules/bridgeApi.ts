@@ -15,7 +15,9 @@ export const bridgeApi = (() => {
 
   // 백엔드에서 브로드캐스트한 메시지 수신
   listen<BridgeMessage>('plugin-bridge:message', ({ payload }) => {
-    const { type, data } = payload;
+    const { type, data, target } = payload;
+    // sendTo는 전역 발행에 target을 실어 보낸다 - 내 창이 아니면 무시 (send는 target 없음)
+    if (target && target !== window.__dmn_window_type) return;
 
     // 타입별 리스너 호출
     const typeListeners = listeners.get(type);

@@ -35,6 +35,8 @@ await dmn.bridge.sendTo("overlay", "THEME_CHANGED", { theme: "dark" });
 await dmn.bridge.sendTo("main", "KEY_PRESSED", { key: "KeyD" });
 ```
 
+대상 창의 리스너만 호출됩니다. OBS 모드에서는 OBS 브라우저 소스가 오버레이 창을 대신하므로 `"overlay"`로 보낸 메시지를 받습니다.
+
 ### on(type, listener)
 
 특정 타입의 메시지를 구독합니다.

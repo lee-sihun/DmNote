@@ -352,7 +352,12 @@ export type UpdateProgressEvent = {
   percent: number | null;
 };
 
-export type BridgeMessage<T = unknown> = { type: string; data?: T };
+export type BridgeMessage<T = unknown> = {
+  type: string;
+  data?: T;
+  /** sendTo 발신 - 없으면 브로드캐스트(send). 수신 창이 자기 타겟이 아니면 무시한다 */
+  target?: WindowTarget;
+};
 export type BridgeMessageListener<T = unknown> = (data: T) => void;
 export type BridgeAnyListener = (type: string, data: unknown) => void;
 export type WindowTarget = 'main' | 'overlay';
