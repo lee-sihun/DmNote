@@ -37,6 +37,7 @@ export const usePluginMenuStore = create<PluginMenuState>((set, get) => ({
   gridMenuItems: [],
 
   addKeyMenuItem: (item) => {
+    // 'unknown' 폴백은 방어망 - 컨텍스트 없는 등록은 uiApi가 거부한다
     const pluginId = window.__dmn_current_plugin_id || 'unknown';
     const fullId = `${pluginId}:${item.id}`;
 

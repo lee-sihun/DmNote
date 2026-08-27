@@ -55,7 +55,13 @@ export interface CustomJsRuntime {
 export function createCustomJsRuntime(): CustomJsRuntime {
   const activeElements = new Map<
     string,
-    { element: HTMLScriptElement; cleanup?: () => void; pluginId?: string }
+    {
+      element: HTMLScriptElement;
+      cleanup?: () => void;
+      pluginId?: string;
+      // 이 주입 세대의 쓰기 게이트를 닫는다 - 제거 뒤 남은 타이머·구독이 문서를 못 쓰게
+      revoke?: () => void;
+    }
   >();
   const cleanupRegistry = new Map<string, (() => void)[]>();
   const unsubscribers: Array<() => void> = [];
@@ -110,7 +116,12 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     health: PluginHealthMap = {},
   ) => {
     if (disposed) return;
-    usePluginHealthStore.getState().publish(outcome, health);
+    // 알고 있던 id 전체를 함께 실어 대기자가 "대상이 사라짐"과 "무관한 정산"을 가른다
+    usePluginHealthStore.getState().publish(
+      outcome,
+      health,
+      currentPlugins.map((plugin) => plugin.id),
+    );
   };
 
   const safeRun = (fn?: () => void, label?: string) => {
@@ -163,8 +174,10 @@ export function createCustomJsRuntime(): CustomJsRuntime {
   const removeAll = () => {
     for (const [
       id,
-      { element, cleanup, pluginId },
+      { element, cleanup, pluginId, revoke },
     ] of activeElements.entries()) {
+      // cleanup 전에 게이트를 닫는다 - cleanup 중 뒤늦게 도는 콜백도 거절
+      revoke?.();
       if (pluginId) {
         const previousPluginId = window.__dmn_current_plugin_id;
         window.__dmn_current_plugin_id = pluginId;
@@ -206,6 +219,9 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     const previousPluginId = window.__dmn_current_plugin_id;
     let element: HTMLScriptElement | null = null;
     let committed = false;
+    // 주입 세대별 회수 플래그 - Set<pluginId>로 두면 같은 id를 다시 주입할 때
+    // 옛 세대의 좀비 핸들까지 되살아난다
+    let revoked = false;
 
     try {
       if (previousCleanup) {
@@ -223,6 +239,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
         registerCleanup: (cleanup) => registerCleanup(pluginId, cleanup),
         isReloading: getIsReloading,
         waitForReloadEnd,
+        isRevoked: () => revoked,
       });
 
       const wrappedContent = `
@@ -275,14 +292,22 @@ ${plugin.content}
     console.error('Failed to run JS plugin: ' + ${JSON.stringify(
       plugin.name,
     )}, e);
-    // 주입 직후 런타임이 회수한다 - 삼키면 실패가 성공처럼 보인다
-    window.__dmn_plugin_run_error = e && e.message ? String(e.message) : String(e);
+    // 주입 직후 런타임이 회수한다 - 삼키면 실패가 성공처럼 보인다.
+    // 빈 메시지(throw '')나 message getter 예외도 실패로 남아야 한다
+    let __dmn_msg = '';
+    try {
+      __dmn_msg = e && e.message != null ? String(e.message) : String(e);
+    } catch (_) {
+      __dmn_msg = '';
+    }
+    window.__dmn_plugin_run_error = __dmn_msg || 'Unknown error';
   }
-  
+
   __autoWrapAsync__();
   // 끝까지 도달했다는 표시 - 문법 오류나 래퍼 자체의 예외를 여기서 가른다
   window.__dmn_plugin_ran = true;
 })(window, document.currentScript.__dmn_plugin_api);
+//# sourceURL=dmn-plugin-${pluginId}.js
 `;
 
       element = document.createElement('script');
@@ -313,7 +338,6 @@ ${plugin.content}
       // 일어나지 않으면 오류 이벤트도 없으므로 완주 여부를 직접 확인한다
       const completed = window.__dmn_plugin_ran === true;
       delete window.__dmn_plugin_ran;
-      delete (element as PluginScriptElement).__dmn_plugin_api;
       const runErrorMessage = window.__dmn_plugin_run_error;
       delete window.__dmn_plugin_run_error;
 
@@ -333,6 +357,9 @@ ${plugin.content}
         cleanup:
           typeof pluginCleanup === 'function' ? pluginCleanup : undefined,
         pluginId,
+        revoke: () => {
+          revoked = true;
+        },
       });
       committed = true;
       return { status: 'ok' as const };
@@ -340,7 +367,9 @@ ${plugin.content}
       console.error(`Failed to inject JS plugin '${plugin.name}'`, error);
       return {
         status: 'failed' as const,
-        message: error instanceof Error ? error.message : String(error),
+        message:
+          (error instanceof Error ? error.message : String(error)) ||
+          'Unknown error',
       };
     } finally {
       // 전역 복원과 실패 회수는 모든 탈출 경로에서 일어나야 한다.
@@ -348,13 +377,19 @@ ${plugin.content}
       try {
         delete window.__dmn_plugin_ran;
         delete window.__dmn_plugin_run_error;
+        // 노드에 걸어둔 API 참조는 모든 탈출 경로에서 떼어낸다 - appendChild가
+        // 던져 분리된 노드에 남으면 안 된다. 동기 평가 중에만 살아 있고 이전
+        // 플러그인의 참조는 이미 제거돼 있어 남의 것을 읽을 창은 없다
+        if (element) delete (element as PluginScriptElement).__dmn_plugin_api;
       } catch {
         // 무시
       }
 
       if (!committed) {
         // 사용자 코드가 throw 전에 등록한 UI·handler·cleanup을 되돌린다.
-        // 실패한 플러그인의 반쪽 기능이 정상 항목과 나란히 남으면 안 된다
+        // 실패한 플러그인의 반쪽 기능이 정상 항목과 나란히 남으면 안 된다.
+        // 남은 타이머·구독이 뒤늦게 문서를 쓰지 못하게 게이트도 닫는다
+        revoked = true;
         window.__dmn_current_plugin_id = pluginId;
         runPluginCleanups(pluginId);
         safeRun(window.__dmn_custom_js_cleanup, plugin.id);
@@ -549,13 +584,35 @@ ${plugin.content}
     }
   };
 
+  // 비동기 실패(async IIFE reject)는 주입 창이 닫힌 뒤 보고되므로 컨텍스트 id로는
+  // 못 잡는다. 스크립트 sourceURL로 귀속해 로그만 남긴다 - 상태를 뒤집으면
+  // 정산 프로토콜(revision)과 어긋나고 스택이 없는 reason은 귀속도 못 한다
+  const reportUnhandledPluginRejection = (event: PromiseRejectionEvent) => {
+    const reason = event.reason as { stack?: unknown } | undefined;
+    const stack = typeof reason?.stack === 'string' ? reason.stack : '';
+    const match = stack.match(/dmn-plugin-([a-z0-9-_]+)\.js/);
+    if (!match) return;
+    console.error(
+      `[Plugin ${match[1]}] Unhandled promise rejection`,
+      event.reason,
+    );
+  };
+
   const initialize = () => {
+    window.addEventListener(
+      'unhandledrejection',
+      reportUnhandledPluginRejection,
+    );
     fetchInitialState();
     setupListeners();
   };
 
   const dispose = () => {
     disposed = true;
+    window.removeEventListener(
+      'unhandledrejection',
+      reportUnhandledPluginRejection,
+    );
     cleanupSubscriptions();
     removeAll();
     setReloading(false);

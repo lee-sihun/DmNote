@@ -485,7 +485,10 @@ const Settings = ({
     );
     if (!injected.length) return [];
 
-    const { outcome, health } = await waitForPluginInjection(revision);
+    const { outcome, health } = await waitForPluginInjection(
+      revision,
+      injected.map((plugin) => plugin.id),
+    );
 
     // 전역 JS가 꺼져 있으면 주입 대상이 아니다. 실패로 셀 일이 아니다
     if (outcome === 'skipped') return [];
@@ -503,7 +506,8 @@ const Settings = ({
       .filter((plugin) => health[plugin.id]?.status === 'failed')
       .map((plugin) => ({
         path: plugin.path ?? plugin.name,
-        error: health[plugin.id]?.message ?? t('settings.jsRuntimeError'),
+        // 빈 메시지(throw '')는 nullish가 아니라 그대로 렌더되므로 ||
+        error: health[plugin.id]?.message || t('settings.jsRuntimeError'),
       }));
   };
 

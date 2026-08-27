@@ -92,6 +92,9 @@ export function clearComponentHandlers(pluginId: string): void {
  * @param filename - 플러그인 파일명
  * @returns 플러그인 고유 ID (네임스페이스로 사용)
  */
+// id와 표시명이 같은 확장자 집합을 벗긴다 - 한쪽만 바꾸면 id는 'foo'인데 이름은 'foo.ts'
+const PLUGIN_FILE_EXT_RE = /\.(?:m?js|ts)$/i;
+
 export function extractPluginId(content: string, filename: string): string {
   // 첫 20줄에서 @id 메타데이터 찾기
   const lines = content.split('\n').slice(0, 20);
@@ -102,16 +105,19 @@ export function extractPluginId(content: string, filename: string): string {
     }
   }
 
-  // 폴백: 파일명 정규화
-  return filename
-    .toLowerCase()
-    .replace(/\.(js|mjs|ts)$/i, '')
-    .replace(/[^a-z0-9-_]/g, '-')
-    .replace(/--+/g, '-')
-    .replace(/^-|-$/g, '');
+  // 폴백: 파일명 정규화. 정규화 결과가 비면(기호만 있는 파일명) 빈 id가
+  // 컨텍스트 부재로 읽혀 메뉴 등록이 막히므로 고정 폴백을 준다
+  return (
+    filename
+      .toLowerCase()
+      .replace(PLUGIN_FILE_EXT_RE, '')
+      .replace(/[^a-z0-9-_]/g, '-')
+      .replace(/--+/g, '-')
+      .replace(/^-|-$/g, '') || 'plugin'
+  );
 }
 
 export function getPluginDisplayName(filename: string): string {
-  const displayName = filename.replace(/\.(?:m?js)$/i, '');
+  const displayName = filename.replace(PLUGIN_FILE_EXT_RE, '');
   return displayName || filename;
 }

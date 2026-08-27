@@ -16,13 +16,14 @@ const result = await dmn.font.load();
 // {
 //   success: boolean,
 //   error?: string,
+//   errorCode?: 'invalid-font-content',
 //   fontName?: string,
 //   fontPath?: string,
 //   weightRanges?: Array<{ min: number, max: number }>
 // }
 ```
 
-`fontName` is the family name read from the font file's own metadata (the file name is used only when the font has no readable family record), so several files of one family import as one family. If the file cannot be parsed as a font, `success` is `false` and nothing is copied.
+`fontName` is the family name read from the font file's own metadata (the file name is used only when the font has no readable family record), so several files of one family import as one family. If the file cannot be parsed as a font, `success` is `false`, `errorCode` is `'invalid-font-content'`, and nothing is copied. When `success` is `false` and `errorCode` is absent, the user cancelled the picker.
 
 ## Image
 
@@ -32,8 +33,15 @@ Opens the system file picker, imports an image, and returns its app-managed path
 
 ```typescript
 const result = await dmn.image.load();
-// { success: boolean, error?: string, imagePath?: string }
+// {
+//   success: boolean,
+//   error?: string,
+//   errorCode?: 'invalid-image-content',
+//   imagePath?: string
+// }
 ```
+
+The file is validated by its content, not its extension. A file that cannot be decoded as an image returns `success: false` with `errorCode: 'invalid-image-content'`; a cancelled picker returns `success: false` with no `errorCode`.
 
 ## Sound
 
