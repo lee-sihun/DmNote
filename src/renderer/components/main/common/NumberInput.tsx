@@ -29,7 +29,7 @@ export interface NumberInputProps {
   onCancel?: () => void;
   min?: number;
   max?: number;
-  prefix?: string;
+  prefix?: React.ReactNode;
   suffix?: string;
   width?: string;
   allowDecimal?: boolean;
@@ -56,7 +56,7 @@ export interface OptionalNumberInputProps {
   onCancel?: () => void;
   min?: number;
   max?: number;
-  prefix?: string;
+  prefix?: React.ReactNode;
   suffix?: string;
   width?: string;
   placeholder?: string;
@@ -73,7 +73,7 @@ export interface OptionalNumberInputProps {
 // 잘못된 수식은 링과 흔들기로만 알린다. 말풍선까지 띄우면 좁은 패널에서
 // 아래 행을 덮고, 스크롤 뷰포트가 overflow-y auto라 가로로도 잘린다
 const NumberInputShell: React.FC<{
-  prefix?: string;
+  prefix?: React.ReactNode;
   width: string;
   focused: boolean;
   invalid: boolean;

@@ -186,7 +186,13 @@
     "active": "按下",
     "transparent": "透明",
     "reset": "重置圖像",
-    "invalidImage": "無法讀取此圖片檔案。"
+    "invalidImage": "無法讀取此圖片檔案。",
+    "mode": "放置",
+    "modeReplace": "僅圖像",
+    "modeOverlay": "覆蓋在按鍵上",
+    "position": "位置",
+    "rotation": "旋轉",
+    "scale": "大小"
   },
   "noteSetting": {
     "borderRadius": "圓角半徑",

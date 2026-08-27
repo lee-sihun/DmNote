@@ -186,7 +186,13 @@
     "active": "입력",
     "transparent": "키 투명화",
     "reset": "이미지 초기화",
-    "invalidImage": "이미지 파일을 해석할 수 없습니다."
+    "invalidImage": "이미지 파일을 해석할 수 없습니다.",
+    "mode": "배치",
+    "modeReplace": "이미지만",
+    "modeOverlay": "키 위에",
+    "position": "위치",
+    "rotation": "회전",
+    "scale": "크기"
   },
   "noteSetting": {
     "borderRadius": "라운딩",

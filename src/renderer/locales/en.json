@@ -186,7 +186,13 @@
     "active": "Pressed",
     "transparent": "Transparent",
     "reset": "Reset Image",
-    "invalidImage": "This image file could not be read."
+    "invalidImage": "This image file could not be read.",
+    "mode": "Placement",
+    "modeReplace": "Image only",
+    "modeOverlay": "On top of key",
+    "position": "Position",
+    "rotation": "Rotation",
+    "scale": "Size"
   },
   "noteSetting": {
     "borderRadius": "Corner Radius",

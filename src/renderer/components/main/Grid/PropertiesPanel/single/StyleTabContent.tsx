@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { StyleTabContentProps } from '../types';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
+import type { ImageMode, ImageTransformLeaf } from '@src/types/key/imageLayer';
 import {
   slotMembers,
   slotUiMode,
@@ -629,6 +630,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onActiveImageFitCommit?.(fit);
   };
 
+  // 이미지 레이어 모드·변환은 키 전용 - 범용 property 커밋으로 흘린다
+  const handleImageModeChange = (mode: ImageMode) => {
+    onElementPropertyCommit?.({ property: 'imageMode', value: mode });
+  };
+  const handleImageTransformChange = (
+    state: 'idle' | 'active',
+    leaf: ImageTransformLeaf,
+    value: number,
+  ) => {
+    onElementPropertyCommit?.(
+      state === 'idle'
+        ? { property: 'idleImageTransform', value: { leaf, value } }
+        : { property: 'activeImageTransform', value: { leaf, value } },
+    );
+  };
+
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
     onStylePropertyPreview?.({ property: 'displayText', value: value });
@@ -1135,6 +1152,15 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             onActiveImageFitChange={handleActiveImageFitChange}
             onIdleImageReset={handleIdleImageReset}
             onActiveImageReset={handleActiveImageReset}
+            {...(shadowActiveState
+              ? {
+                  imageMode: keyPosition.imageMode,
+                  idleImageTransform: keyPosition.idleImageTransform,
+                  activeImageTransform: keyPosition.activeImageTransform,
+                  onImageModeChange: handleImageModeChange,
+                  onImageTransformChange: handleImageTransformChange,
+                }
+              : {})}
             onClose={() => onToggleImagePicker()}
             showActiveState={shadowActiveState}
           />

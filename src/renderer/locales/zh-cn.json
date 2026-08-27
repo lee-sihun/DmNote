@@ -186,7 +186,13 @@
     "active": "按下",
     "transparent": "透明",
     "reset": "重置图像",
-    "invalidImage": "无法读取该图片文件。"
+    "invalidImage": "无法读取该图片文件。",
+    "mode": "放置",
+    "modeReplace": "仅图像",
+    "modeOverlay": "覆盖在按键上",
+    "position": "位置",
+    "rotation": "旋转",
+    "scale": "大小"
   },
   "noteSetting": {
     "borderRadius": "圆角半径",

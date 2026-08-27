@@ -3,6 +3,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
+import { NumberInput } from '@components/main/common/NumberInput';
 import TabSwitch from '@components/main/common/TabSwitch';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
@@ -11,6 +12,14 @@ import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessio
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import { imageApi } from '@api/modules/resourceApi';
+import {
+  DEFAULT_IMAGE_MODE,
+  IDENTITY_IMAGE_TRANSFORM,
+  IMAGE_TRANSFORM_CONSTRAINTS,
+  type ImageMode,
+  type ImageTransform,
+  type ImageTransformLeaf,
+} from '@src/types/key/imageLayer';
 import {
   useEditStatePreviewPublisher,
   type EditStateAnchor,
@@ -36,6 +45,16 @@ interface ImagePickerProps {
   onActiveImageFitChange?: (value: string) => void;
   onIdleImageReset?: () => void;
   onActiveImageReset?: () => void;
+  /** 이미지 레이어 모드·변환 - 키 요소만 편집 가능 */
+  imageMode?: ImageMode;
+  idleImageTransform?: ImageTransform;
+  activeImageTransform?: ImageTransform;
+  onImageModeChange?: (mode: ImageMode) => void;
+  onImageTransformChange?: (
+    state: 'idle' | 'active',
+    leaf: ImageTransformLeaf,
+    value: number,
+  ) => void;
   onClose: () => void;
   interactiveRefs?: React.RefObject<HTMLElement>[];
   /** 눌림 상태가 없는 요소는 대기 이미지만 편집 */
@@ -43,6 +62,43 @@ interface ImagePickerProps {
   /** 비동기 완료 콜백이 안정 ID applier로 라우팅되면 element-id */
   completionBinding?: CompletionBinding;
 }
+
+// 회전·크기 입력의 접두 글리프 - X/Y 글자와 같은 자리
+const AngleGlyph = () => (
+  <svg
+    width="11"
+    height="11"
+    viewBox="0 0 12 12"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M2 2v8h8M2 5.5a4.5 4.5 0 0 1 4.5 4.5"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const ScaleGlyph = () => (
+  <svg
+    width="11"
+    height="11"
+    viewBox="0 0 12 12"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M2 10L10 2M10 2H6.5M10 2v3.5M2 10h3.5M2 10V6.5"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 const STATE_MODES = {
   idle: 'idle',
@@ -68,6 +124,11 @@ const ImagePicker = ({
   onActiveImageFitChange = undefined,
   onIdleImageReset,
   onActiveImageReset,
+  imageMode = DEFAULT_IMAGE_MODE,
+  idleImageTransform,
+  activeImageTransform,
+  onImageModeChange,
+  onImageTransformChange,
   onClose,
   interactiveRefs = [],
   showActiveState = true,
@@ -164,6 +225,15 @@ const ImagePicker = ({
     }
   };
 
+  const showImageLayer = typeof onImageTransformChange === 'function';
+  const currentTransform =
+    (effectiveMode === STATE_MODES.idle
+      ? idleImageTransform
+      : activeImageTransform) ?? IDENTITY_IMAGE_TRANSFORM;
+  const handleTransformLeaf = (leaf: ImageTransformLeaf, value: number) => {
+    onImageTransformChange?.(effectiveMode, leaf, value);
+  };
+
   return (
     <PickerSurface
       open={open}
@@ -248,6 +318,64 @@ const ImagePicker = ({
         )}
       </div>
 
+      {/* 상태별 위치·회전·크기 - 라벨 대신 접두 글리프가 의미를 맡는다 */}
+      {showImageLayer && (
+        <div className="flex flex-col gap-[4px]">
+          <div className="flex items-center gap-[8px] w-full">
+            <NumberInput
+              commitStrategy="after-paint"
+              value={currentTransform.offsetX}
+              onChange={(value) => handleTransformLeaf('offsetX', value)}
+              prefix="X"
+              ariaLabel={`${t('imagePicker.position')} X`}
+              width="100%"
+              min={IMAGE_TRANSFORM_CONSTRAINTS.offset.min}
+              max={IMAGE_TRANSFORM_CONSTRAINTS.offset.max}
+              allowDecimal
+              decimalScale={1}
+            />
+            <NumberInput
+              commitStrategy="after-paint"
+              value={currentTransform.offsetY}
+              onChange={(value) => handleTransformLeaf('offsetY', value)}
+              prefix="Y"
+              ariaLabel={`${t('imagePicker.position')} Y`}
+              width="100%"
+              min={IMAGE_TRANSFORM_CONSTRAINTS.offset.min}
+              max={IMAGE_TRANSFORM_CONSTRAINTS.offset.max}
+              allowDecimal
+              decimalScale={1}
+            />
+          </div>
+          <div className="flex items-center gap-[8px] w-full">
+            <NumberInput
+              commitStrategy="after-paint"
+              value={currentTransform.rotation}
+              onChange={(value) => handleTransformLeaf('rotation', value)}
+              prefix={<AngleGlyph />}
+              ariaLabel={t('imagePicker.rotation')}
+              suffix="°"
+              width="100%"
+              min={IMAGE_TRANSFORM_CONSTRAINTS.rotation.min}
+              max={IMAGE_TRANSFORM_CONSTRAINTS.rotation.max}
+              allowDecimal
+              decimalScale={1}
+            />
+            <NumberInput
+              commitStrategy="after-paint"
+              value={Math.round(currentTransform.scale * 100)}
+              onChange={(value) => handleTransformLeaf('scale', value / 100)}
+              prefix={<ScaleGlyph />}
+              ariaLabel={t('imagePicker.scale')}
+              suffix="%"
+              width="100%"
+              min={IMAGE_TRANSFORM_CONSTRAINTS.scale.min * 100}
+              max={IMAGE_TRANSFORM_CONSTRAINTS.scale.max * 100}
+            />
+          </div>
+        </div>
+      )}
+
       {/* 설정 카드 */}
       <PropertySection>
         {/* 키 투명화 토글 */}
@@ -290,6 +418,22 @@ const ImagePicker = ({
                 },
               ]}
               onChange={handleImageFitChange}
+            />
+          </div>
+        )}
+
+        {/* 배치 모드 - 공통 */}
+        {typeof onImageModeChange === 'function' && (
+          <div className="flex justify-between items-center w-full min-h-[32px]">
+            <p className="text-fg-muted text-label">{t('imagePicker.mode')}</p>
+            <Dropdown
+              commitStrategy="after-paint"
+              value={imageMode}
+              options={[
+                { value: 'replace', label: t('imagePicker.modeReplace') },
+                { value: 'overlay', label: t('imagePicker.modeOverlay') },
+              ]}
+              onChange={(value) => onImageModeChange(value as ImageMode)}
             />
           </div>
         )}
