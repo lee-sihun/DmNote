@@ -189,7 +189,7 @@
     "invalidImage": "无法读取该图片文件。",
     "mode": "放置",
     "modeReplace": "仅图像",
-    "modeOverlay": "覆盖在按键上",
+    "modeOverlay": "叠加",
     "position": "位置",
     "rotation": "旋转",
     "scale": "大小"

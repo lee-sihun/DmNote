@@ -187,9 +187,9 @@
     "transparent": "Transparent",
     "reset": "Reset Image",
     "invalidImage": "This image file could not be read.",
-    "mode": "Placement",
-    "modeReplace": "Image only",
-    "modeOverlay": "On top of key",
+    "mode": "Mode",
+    "modeReplace": "Replace",
+    "modeOverlay": "Overlay",
     "position": "Position",
     "rotation": "Rotation",
     "scale": "Size"
