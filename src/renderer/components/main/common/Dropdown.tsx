@@ -8,7 +8,12 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { usePopupPresence } from '@hooks/ui/usePopupPresence';
-import { isTopmostPopupLayer, registerPopupLayer } from '../Modal/popupLayer';
+import {
+  hasModalLayerAbove,
+  isTopmostPopupLayer,
+  registerPopupLayer,
+  subscribeModalLayerActivity,
+} from '../Modal/popupLayer';
 import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { clampToViewport } from '@utils/ui/popupGeometry';
@@ -266,6 +271,18 @@ const Dropdown: React.FC<DropdownProps> = ({
     if (!open || !mounted || !menu) return;
     return registerPopupLayer(menu);
   }, [anchor, mounted, open]);
+
+  // 모달이 덮이면 body 포털 메뉴는 inert 루트 밖이라 살아남는다 — 스스로 닫는다.
+  // 열린 동안만 명령형 구독 (Dropdown은 패널 전역에 깔린 핫 컴포넌트라 상시 구독 회피).
+  // 트리거 포커스 복귀는 하지 않는다 - 트리거는 이미 inert이고 모달 포커스를 뺏는다
+  useEffect(() => {
+    if (!open || !mounted) return;
+    const closeIfCovered = () => {
+      if (hasModalLayerAbove(menuRef.current)) setOpen(false);
+    };
+    closeIfCovered();
+    return subscribeModalLayerActivity(closeIfCovered);
+  }, [mounted, open]);
 
   // 열린 동안 내용 크기 변화(비동기 옵션 로드 등) 시 클램프·플립 재계산
   useEffect(() => {

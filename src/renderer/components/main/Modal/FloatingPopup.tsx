@@ -29,9 +29,11 @@ import { useFocusRestore } from '@hooks/ui/useFocusRestore';
 import { useDeferredContentMount } from '@hooks/ui/useDeferredContentMount';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import {
+  hasModalLayerAbove,
   isInsideHigherPopupLayer,
   isTopmostPopupLayer,
   registerPopupLayer,
+  subscribeModalLayerActivity,
 } from './popupLayer';
 import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import { usePanelHost } from '@contexts/PanelHostContext';
@@ -354,6 +356,18 @@ const FloatingPopup = ({
     ownerDocument.addEventListener('keydown', onKey);
     return () => ownerDocument.removeEventListener('keydown', onKey);
   }, [open, onClose, ownerDocument]);
+
+  // 모달이 덮이면 body 포털 표면은 inert 루트 밖이라 살아남는다 — 스스로 닫는다.
+  // 스택 순서 판정이라 모달 안에서 연 팝업(모달보다 뒤에 등록)은 닫지 않는다.
+  // 서브메뉴는 부모가 closing이 되면 스스로 사라지므로 별도 처리 없음
+  useEffect(() => {
+    if (!open) return;
+    const closeIfCovered = () => {
+      if (hasModalLayerAbove(floatingRef.current)) onClose();
+    };
+    closeIfCovered();
+    return subscribeModalLayerActivity(closeIfCovered);
+  }, [open, onClose]);
 
   useEffect(() => {
     if (open && autoClose) {
