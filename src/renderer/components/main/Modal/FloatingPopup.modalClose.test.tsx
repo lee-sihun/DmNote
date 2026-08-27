@@ -19,7 +19,7 @@ describe('FloatingPopup 모달 잠금', () => {
   const layerCleanups: Array<() => void> = [];
   const onClose = vi.fn();
 
-  const renderPopup = async () => {
+  const renderPopup = async (closeOnModalCover?: boolean) => {
     await act(async () =>
       root.render(
         <FloatingPopup
@@ -28,6 +28,7 @@ describe('FloatingPopup 모달 잠금', () => {
           onClose={onClose}
           animate={false}
           portalToBody
+          closeOnModalCover={closeOnModalCover}
         >
           <button type="button">item</button>
         </FloatingPopup>,
@@ -76,6 +77,14 @@ describe('FloatingPopup 모달 잠금', () => {
     await registerModalLayer();
 
     await renderPopup();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // 피커 표면은 자기 흐름에서 알림 모달을 띄운다 - 알림이 피커를 닫으면 안 된다
+  it('closeOnModalCover=false면 모달이 덮여도 닫지 않는다', async () => {
+    await renderPopup(false);
+
+    await registerModalLayer();
     expect(onClose).not.toHaveBeenCalled();
   });
 });

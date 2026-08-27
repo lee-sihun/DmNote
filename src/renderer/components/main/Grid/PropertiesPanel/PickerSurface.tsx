@@ -106,6 +106,8 @@ const PickerSurface = ({
       // 측정 좌표는 이미 정확하므로 세로 보정을 무시
       offsetY={measured || detached ? 0 : offsetY}
       className="z-[var(--z-chrome-modal)]"
+      // 피커가 띄운 알림(잘못된 이미지 등)이 피커를 닫지 않게 - 백드롭이 어차피 덮는다
+      closeOnModalCover={false}
       interactiveRefs={interactiveRefs}
       onClose={onClose}
       autoClose={false}
