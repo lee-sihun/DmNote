@@ -839,9 +839,15 @@ const ColorPickerWrapper = ({
     return opacityPercentMixed.top || opacityPercentMixed.bottom;
   };
 
-  // 배치 값의 반대 축이 Mixed면 대표값으로 그 축을 덮지 않도록 잠근다
-  const rgbEditingDisabled = solidOnly && opacityMixedFor('solid');
-  const alphaEditingDisabled = solidOnly && hexMixed;
+  // 배치 값의 반대 축이 Mixed면 대표값으로 그 축을 덮지 않도록 잠근다.
+  // 알파를 색에 실어 보내는 형식(ownsColorAlpha)에서만 - hideColorAlpha면 색 알파는
+  // 저장 때 버려져 opacity Mixed와 무관한데 잠그면 색을 아예 못 바꾼다.
+  // 두 축 모두 Mixed면 지킬 공통값이 없으므로 잠금을 풀어 막다른 길을 없앤다
+  // (Mixed 칸 편집 = 전체 적용은 다른 Mixed 입력과 같은 규칙)
+  const bothAxesMixed = hexMixed && opacityMixedFor('solid');
+  const rgbEditingDisabled =
+    ownsColorAlpha && !bothAxesMixed && opacityMixedFor('solid');
+  const alphaEditingDisabled = ownsColorAlpha && !bothAxesMixed && hexMixed;
 
   const opacityPercentControl = (
     target: OpacityTarget,
@@ -1018,6 +1024,7 @@ const ColorPickerWrapper = ({
         }
         onPaletteClick={handlePaletteClick}
         showGradient={!solidOnly || gradientSpec !== undefined}
+        solidLocked={rgbEditingDisabled || alphaEditingDisabled}
       />
       {footerSlot}
     </PickerSurface>
@@ -1035,6 +1042,8 @@ interface ColorPaletteSectionProps {
   gradientPalette: PaletteValue[];
   onPaletteClick: (color: PaletteValue, type: string) => void;
   showGradient: boolean;
+  /** 반대 축 잠금 중 - 솔리드 슬롯은 hex·알파를 함께 쓰므로 컨트롤과 같은 정책을 따른다 */
+  solidLocked?: boolean;
 }
 
 function ColorPaletteSection({
@@ -1042,6 +1051,7 @@ function ColorPaletteSection({
   gradientPalette,
   onPaletteClick,
   showGradient,
+  solidLocked = false,
 }: ColorPaletteSectionProps) {
   const PALETTE_SIZE = 7;
 
@@ -1065,6 +1075,7 @@ function ColorPaletteSection({
             key={`solid-${index}`}
             color={color}
             type="solid"
+            disabled={solidLocked}
             onClick={() => color && onPaletteClick(color, 'solid')}
           />
         ))}
@@ -1091,10 +1102,17 @@ interface PaletteSlotProps {
   color: PaletteValue | null;
   type: string;
   onClick?: () => void;
+  disabled?: boolean;
 }
 
-function PaletteSlot({ color, type, onClick }: PaletteSlotProps) {
+function PaletteSlot({
+  color,
+  type,
+  onClick,
+  disabled = false,
+}: PaletteSlotProps) {
   const isEmpty = !color;
+  const inert = isEmpty || disabled;
   const specImage = isGradientSpecColor(color)
     ? gradientToCss(toCanonicalGradient(color))
     : undefined;
@@ -1166,14 +1184,15 @@ function PaletteSlot({ color, type, onClick }: PaletteSlotProps) {
     <ColorSwatchButton
       type="button"
       className={`w-[16px] h-[16px] rounded transition-colors ${
-        isEmpty ? 'cursor-default' : 'cursor-pointer'
+        inert ? 'cursor-default' : 'cursor-pointer'
       }`}
       surfaceClassName="rounded"
       color={solidColor}
       gradient={gradient}
       image={specImage}
-      onClick={isEmpty ? undefined : onClick}
-      disabled={isEmpty}
+      onClick={inert ? undefined : onClick}
+      disabled={inert}
+      data-palette-slot={type}
       title={getTitle()}
     />
   );

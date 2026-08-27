@@ -412,6 +412,9 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   };
 
   const cancelDraft = () => {
+    // 손대지 않은 필드의 Escape는 취소 채널도 건드리지 않는다 - onCancel은 살아 있는
+    // preview 게스처를 파괴한다. 타이핑·스텝이 있었으면 발행 전이라도 되돌린다
+    const touched = hasUserInputRef.current || emittedRef.current;
     cancelPendingCommit();
     syncText(
       committedMixedRef.current
@@ -421,7 +424,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     hasUserInputRef.current = false;
     fieldError.clear();
     digitPop.clear();
-    restorePreview();
+    if (touched) restorePreview();
   };
 
   // 스텝 기준은 편집 중인 값이 우선. 비었거나 부호만 남은 중간 상태면 확정값으로 돌아간다.
@@ -697,6 +700,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       return resolveStepBase();
     },
     step: step ?? 1,
+    range: { min, max },
     quantize: (raw) => clampValue(supportsDecimal ? raw : Math.round(raw)),
     // 접두 손잡이와 입력은 같은 label 아래에 있다
     ownsFocus: (active, handle) =>
@@ -1006,6 +1010,9 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   };
 
   const cancelDraft = () => {
+    // 손대지 않은 필드의 Escape는 취소 채널도 건드리지 않는다 - onCancel은 살아 있는
+    // preview 게스처를 파괴한다. 타이핑·스텝이 있었으면 발행 전이라도 되돌린다
+    const touched = hasUserInputRef.current || emittedRef.current;
     cancelPendingCommit();
     const committedValue = committedValueRef.current;
     syncText(
@@ -1016,18 +1023,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     hasUserInputRef.current = false;
     fieldError.clear();
     digitPop.clear();
-    restorePreview();
+    if (touched) restorePreview();
   };
-
-  useEffect(() => {
-    if (!isFocused) {
-      syncText(isMixed || value == null ? '' : getDisplayValue(value));
-      hasUserInputRef.current = false;
-      committedValueRef.current = value;
-      committedMixedRef.current = isMixed;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, isFocused, isMixed]);
 
   // 값이 비어 있으면 placeholder에 보이는 상속값이 기준이다.
   // 화면에 16px이 떠 있는데 0에서 시작하면 방향키가 값을 되돌리는 것처럼 보인다
@@ -1249,8 +1246,85 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     fieldError.clear();
     committedValueRef.current = value;
     committedMixedRef.current = isMixed;
-    syncText(!isMixed && value != null ? String(value) : '');
+    // 포커스 표시도 blur 표시와 같은 자릿수 - 12.34가 포커스 순간 12.3에서 되살아나지 않게
+    syncText(
+      !isMixed && value != null ? String(normalizePrecision(value)) : '',
+    );
   };
+
+  // 포커스 중 표시는 숫자만, 아니면 단위까지
+  const draftTextFor = (num: number): string =>
+    isFocused ? String(normalizePrecision(num)) : getDisplayValue(num);
+
+  // 접두 스크럽은 preview 채널이 있을 때만 켠다 (NumberInput과 같은 정책).
+  // 값이 비어 있으면 placeholder의 상속값에서 출발한다 - 방향키와 같은 기준
+  const scrubEnabled = Boolean(prefix) && Boolean(onPreview);
+  const scrub = useScrubDrag({
+    enabled: scrubEnabled,
+    resolveBase: () => {
+      digitPop.clear();
+      if (isFocused && isExpressionDraft(draftRef.current)) {
+        const evaluated = evaluateAndClampExpression(draftRef.current);
+        if (evaluated === null) {
+          fieldError.raise();
+          return null;
+        }
+        syncText(String(evaluated));
+        hasUserInputRef.current = true;
+        fieldError.clear();
+        digitPop.clear();
+        return evaluated;
+      }
+      return resolveStepBase();
+    },
+    step: 1,
+    range: { min: domainMin, max },
+    quantize: (raw) => clampValue(supportsDecimal ? raw : Math.round(raw)),
+    ownsFocus: (active, handle) =>
+      handle.parentElement?.contains(active) ?? false,
+    onMove: (next) => {
+      stepFrame.cancel();
+      holdKeyRef.current = null;
+      syncText(draftTextFor(next));
+      hasUserInputRef.current = true;
+      emitValue(next);
+    },
+    onCommit: (final) => {
+      cancelPendingCommit();
+      syncText(draftTextFor(final));
+      hasUserInputRef.current = false;
+      committedValueRef.current = final;
+      committedMixedRef.current = false;
+      emittedRef.current = false;
+      lastEmittedRef.current = null;
+      onChange(final);
+    },
+    onCancel: () => {
+      cancelPendingCommit();
+      const committed = committedValueRef.current;
+      syncText(
+        committedMixedRef.current || committed == null
+          ? ''
+          : draftTextFor(committed),
+      );
+      hasUserInputRef.current = false;
+      fieldError.clear();
+      digitPop.clear();
+      restorePreview();
+    },
+  });
+
+  useEffect(() => {
+    // 스크럽 중에는 로컬 draft가 표시 권위다 - 부모 preview 에코가 드래그 중 값을
+    // 덮거나, value가 undefined를 지나는 순간 칸을 비우지 않게
+    if (!isFocused && !scrub.active) {
+      syncText(isMixed || value == null ? '' : getDisplayValue(value));
+      hasUserInputRef.current = false;
+      committedValueRef.current = value;
+      committedMixedRef.current = isMixed;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, isFocused, isMixed]);
 
   const handleBlur = () => {
     setIsFocused(false);
@@ -1258,6 +1332,9 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     // 취소한 값이 되살아나거나 확정 뒤에 값이 한 번 더 움직인다
     stepFrame.cancel();
     holdKeyRef.current = null;
+
+    // 끌고 있는 도중의 blur는 취소다 (NumberInput과 동일)
+    if (scrub.cancel()) return;
 
     // Escape는 확정 없이 표시값 원복
     if (escapedRef.current) {
@@ -1335,6 +1412,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   return (
     <NumberInputShell
       prefix={prefix}
+      scrub={scrubEnabled ? scrub : undefined}
       width={width}
       focused={isFocused}
       invalid={fieldError.active}

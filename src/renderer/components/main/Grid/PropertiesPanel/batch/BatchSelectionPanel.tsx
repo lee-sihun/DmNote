@@ -54,6 +54,7 @@ import {
 } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
 import {
   captureBatchElementBinding,
   useBatchElementBinding,
@@ -686,9 +687,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         const persisted = patchNotePaintByIds(stableNotePaintIds, patch, {
           gestureId,
         });
+        // 커밋 시점 지문 - 실패가 돌아왔을 때 선택이 바뀌었으면 새 선택의 로컬 상태를
+        // 옛 대표값으로 덮지 않는다 (settleCommit과 같은 기준)
+        const committedTarget = getEditSessionTarget();
         editGestureController.settleCommit(persisted);
         void persisted.catch((error) => {
-          notePaintFailureRestore.current?.(patch);
+          if (getEditSessionTarget() === committedTarget) {
+            notePaintFailureRestore.current?.(patch);
+          }
           reportElementOpError(error);
         });
       }

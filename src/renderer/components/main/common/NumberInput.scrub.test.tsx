@@ -3,7 +3,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { NumberInput } from './NumberInput';
+import { NumberInput, OptionalNumberInput } from './NumberInput';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -366,6 +366,179 @@ describe('NumberInput 접두 스크럽', () => {
     expect(onPreview).toHaveBeenLastCalledWith(12);
     send('pointerup', { clientX: 2 });
     expect(onChange).toHaveBeenCalledWith(12);
+  });
+
+  it('onPreview가 없으면 접두는 손잡이가 아니다', () => {
+    const onChange = vi.fn();
+    render({ onChange });
+
+    expect(prefixEl().className).not.toContain('cursor-ew-resize');
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 5 });
+    send('pointerup', { clientX: 5 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // 누적 raw가 범위 밖으로 쌓이면 되돌릴 때 같은 픽셀만큼 값이 안 움직인다
+  it('범위 끝에서 되돌리면 데드존 없이 바로 값이 움직인다', async () => {
+    const onPreview = vi.fn();
+    render({ onPreview, min: 0, max: 12 });
+
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 40 });
+    await flushAfterPaintCommit();
+    expect(onPreview).toHaveBeenLastCalledWith(12);
+
+    send('pointermove', { clientX: 35 });
+    await flushAfterPaintCommit();
+    expect(onPreview).toHaveBeenLastCalledWith(7);
+  });
+
+  it('Shift 오버슛 뒤에도 데드존이 생기지 않는다', async () => {
+    const onPreview = vi.fn();
+    render({ onPreview, min: 0, max: 100 });
+
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 100, shiftKey: true });
+    await flushAfterPaintCommit();
+    expect(onPreview).toHaveBeenLastCalledWith(100);
+
+    send('pointermove', { clientX: 99 });
+    await flushAfterPaintCommit();
+    expect(onPreview).toHaveBeenLastCalledWith(99);
+  });
+
+  // 이동 없는 홀드가 Escape를 삼키면 모달이 첫 Escape에 안 닫힌다
+  it('이동 없는 홀드 중 Escape는 소비하지 않는다', () => {
+    const onCancel = vi.fn();
+    render({ onPreview: vi.fn(), onCancel });
+
+    send('pointerdown', { clientX: 0 });
+    const escape = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      window.dispatchEvent(escape);
+    });
+
+    expect(escape.defaultPrevented).toBe(false);
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(document.documentElement.classList.contains('dmn-drag-cursor')).toBe(
+      false,
+    );
+  });
+
+  it('포인터 캡처에 실패하면 전역 커서·선택 금지를 남기지 않는다', () => {
+    HTMLElement.prototype.setPointerCapture = () => {
+      throw new Error('InvalidStateError');
+    };
+    render({ onPreview: vi.fn() });
+
+    send('pointerdown', { clientX: 0 });
+
+    expect(document.documentElement.classList.contains('dmn-drag-cursor')).toBe(
+      false,
+    );
+    expect(document.body.style.userSelect).toBe('');
+  });
+});
+
+describe('OptionalNumberInput 접두 스크럽', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let captured: Set<number>;
+
+  const prefixEl = () => container.querySelector<HTMLElement>('label > span')!;
+  const inputEl = () => container.querySelector('input')!;
+  const pointer = (type: string, init: Record<string, unknown> = {}) => {
+    const event = new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      ...init,
+    });
+    Object.defineProperties(event, {
+      pointerId: { value: 1 },
+      isPrimary: { value: true },
+    });
+    return event;
+  };
+  const send = (type: string, init: Record<string, unknown> = {}) =>
+    act(() => {
+      prefixEl().dispatchEvent(pointer(type, init));
+    });
+  const render = (
+    props: Partial<React.ComponentProps<typeof OptionalNumberInput>> = {},
+  ) => {
+    act(() =>
+      root.render(
+        <OptionalNumberInput
+          value={undefined}
+          placeholder="0"
+          onChange={() => {}}
+          prefix="X"
+          allowNegative
+          {...props}
+        />,
+      ),
+    );
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
+    captured = new Set();
+    HTMLElement.prototype.setPointerCapture = function (id: number) {
+      captured.add(id);
+    };
+    HTMLElement.prototype.releasePointerCapture = function (id: number) {
+      captured.delete(id);
+    };
+    HTMLElement.prototype.hasPointerCapture = (id: number) => captured.has(id);
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    vi.unstubAllGlobals();
+    container.remove();
+  });
+
+  it('값이 비어 있으면 placeholder 상속값에서 출발해 preview로 흐른다', async () => {
+    const onChange = vi.fn();
+    const onPreview = vi.fn();
+    render({ onChange, onPreview });
+
+    expect(prefixEl().className).toContain('cursor-ew-resize');
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 5 });
+    await flushAfterPaintCommit();
+    expect(onPreview).toHaveBeenLastCalledWith(5);
+    expect(onChange).not.toHaveBeenCalled();
+
+    send('pointerup', { clientX: 5 });
+    expect(onChange).toHaveBeenCalledWith(5);
+  });
+
+  it('드래그 중 부모가 빈 값으로 리렌더해도 표시가 지워지지 않는다', async () => {
+    const onPreview = vi.fn();
+    render({ onPreview, value: 3 });
+
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 2 });
+    await flushAfterPaintCommit();
+    expect(inputEl().value).toBe('5');
+
+    render({ onPreview, value: undefined });
+    expect(inputEl().value).toBe('5');
   });
 
   it('onPreview가 없으면 접두는 손잡이가 아니다', () => {

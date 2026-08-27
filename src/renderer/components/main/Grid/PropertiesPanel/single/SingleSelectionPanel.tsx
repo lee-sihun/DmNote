@@ -950,6 +950,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     sensitivityDraft?.id === singleKnobPosition.id
       ? sensitivityDraft.value
       : null;
+  // draft는 커밋이 착지할 때 지운다 - 먼저 비우면 착지 전 한 프레임 옛 값이 비친다
+  useEffect(() => {
+    setSensitivityDraft(null);
+  }, [singleKnobPosition.id, singleKnobPosition.sensitivity]);
   const [classNameDraft, setClassNameDraft] = useState(
     singleKnobPosition.className || '',
   );
@@ -1382,10 +1386,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     Number(singleKnobPosition.sensitivity ?? 1)
                   }
                   onChange={(value) => {
-                    setSensitivityDraft(null);
+                    const next = Math.max(0, value);
+                    setSensitivityDraft({
+                      id: singleKnobPosition.id,
+                      value: next,
+                    });
                     onElementPropertyCommit?.({
                       property: 'sensitivity',
-                      value: Math.max(0, value),
+                      value: next,
                     });
                   }}
                   onPreview={(value) =>
