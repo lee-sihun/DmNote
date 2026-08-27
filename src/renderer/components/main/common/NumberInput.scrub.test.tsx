@@ -285,6 +285,89 @@ describe('NumberInput 접두 스크럽', () => {
     expect(captured.size).toBe(0);
   });
 
+  it('다른 입력이 편집 중이면 시작 전에 그쪽을 blur해 정산하고 자기 입력은 건드리지 않는다', async () => {
+    const onPreview = vi.fn();
+    render({ onChange: () => {}, onPreview });
+    const other = document.createElement('input');
+    document.body.append(other);
+    const otherBlur = vi.fn();
+    other.addEventListener('blur', otherBlur);
+    act(() => other.focus());
+
+    send('pointerdown', { clientX: 0 });
+    expect(otherBlur).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).not.toBe(other);
+    send('pointermove', { clientX: 2 });
+    await flushAfterPaintCommit();
+    expect(onPreview).toHaveBeenCalled();
+    expect(otherBlur.mock.invocationCallOrder[0]).toBeLessThan(
+      onPreview.mock.invocationCallOrder[0],
+    );
+    send('pointerup', { clientX: 2 });
+    other.remove();
+
+    act(() => inputEl().focus());
+    send('pointerdown', { clientX: 0 });
+    expect(document.activeElement).toBe(inputEl());
+    send('pointerup', { clientX: 0 });
+  });
+
+  it('스크럽 중 방향키는 값에 끼어들지 않는다', async () => {
+    const onPreview = vi.fn();
+    render({ onChange: () => {}, onPreview });
+
+    act(() => inputEl().focus());
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 3 });
+    await flushAfterPaintCommit();
+    expect(onPreview).toHaveBeenLastCalledWith(13);
+
+    const keydown = new KeyboardEvent('keydown', {
+      key: 'ArrowUp',
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      inputEl().dispatchEvent(keydown);
+    });
+    await flushAfterPaintCommit();
+    expect(keydown.defaultPrevented).toBe(true);
+    expect(onPreview).toHaveBeenLastCalledWith(13);
+    expect(inputEl().value).toBe('13');
+    send('pointerup', { clientX: 3 });
+  });
+
+  it('취소로 끝난 뒤의 이동 없는 클릭은 삼키지 않는다', () => {
+    render({ onChange: () => {}, onPreview: () => {} });
+
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 2 });
+    send('pointercancel', { clientX: 2 });
+
+    send('pointerdown', { clientX: 0 });
+    send('pointerup', { clientX: 0 });
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    act(() => {
+      prefixEl().dispatchEvent(click);
+    });
+    expect(click.defaultPrevented).toBe(false);
+  });
+
+  it('Mixed 표시 중에도 접두는 손잡이로 남고 대표값에서 출발한다', async () => {
+    const onChange = vi.fn();
+    const onPreview = vi.fn();
+    render({ onChange, onPreview, isMixed: true });
+
+    expect(prefixEl()).not.toBeNull();
+    expect(inputEl().value).toBe('');
+    send('pointerdown', { clientX: 0 });
+    send('pointermove', { clientX: 2 });
+    await flushAfterPaintCommit();
+    expect(onPreview).toHaveBeenLastCalledWith(12);
+    send('pointerup', { clientX: 2 });
+    expect(onChange).toHaveBeenCalledWith(12);
+  });
+
   it('onPreview가 없으면 접두는 손잡이가 아니다', () => {
     const onChange = vi.fn();
     render({ onChange });

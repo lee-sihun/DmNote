@@ -199,7 +199,9 @@ const createShadowCommitHandler =
     if (!stable) {
       return;
     }
-    const persisted = patchShadowByTargets(relevant, patch);
+    const gestureId = editGestureController.activeGestureId() ?? undefined;
+    const persisted = patchShadowByTargets(relevant, patch, { gestureId });
+    editGestureController.settleCommit(persisted);
     void persisted.catch(reportElementOpError);
   };
 
@@ -819,10 +821,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   );
 
   const hasGraphSelection = selectedGraphElements.length > 0;
-  const styleMixedValueGetter = hasGraphSelection
+  // 표시값·Mixed 판정은 resize가 실제로 쓰는 대상 집합(키·스탯·그래프·노브)과 같아야 한다.
+  // 노브만 섞여도 키 전용 getter를 쓰면 노브 값이 대표값에 가려진 채 덮인다
+  const hasBatchStyleOnlySelection =
+    hasGraphSelection || selectedKnobElements.length > 0;
+  const styleMixedValueGetter = hasBatchStyleOnlySelection
     ? getMixedValueBatch
     : getMixedValue;
-  const styleSelectedDataGetter = hasGraphSelection
+  const styleSelectedDataGetter = hasBatchStyleOnlySelection
     ? getSelectedBatchStyleData
     : getSelectedKeysData;
 

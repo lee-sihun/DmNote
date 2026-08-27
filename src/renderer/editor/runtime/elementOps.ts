@@ -2113,7 +2113,7 @@ const shadowPropertyIntents = (
 export const patchShadowByTargets = (
   targets: readonly ShadowTarget[],
   patch: EditorShadowPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (
     !isEditorShadowPropertyPatchV1(patch) ||
@@ -2141,6 +2141,7 @@ export const patchShadowByTargets = (
       patch: structuredClone(patch),
     })),
     {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
       preflight: options.preflight,
       onEnrolled: () => {
         enrolled = true;
@@ -2160,7 +2161,7 @@ export const patchShadowById = (
   elementType: 'key' | 'stat' | 'knob',
   id: string,
   patch: EditorShadowPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> =>
   patchShadowByTargets([{ elementType, id }], patch, options);
 

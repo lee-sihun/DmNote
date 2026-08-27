@@ -845,6 +845,7 @@ interface SingleKnobPanelProps {
   onActiveTransparentCommit?: (activeTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
@@ -879,6 +880,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   onStylePropertyCommit,
   onPaintPreview,
   onPaintCommit,
+  onStylePropertyPreview,
   onShadowCommit,
   handleGeometryCommit,
   handleGeometryPreview,
@@ -1518,6 +1520,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     : { property: 'shadow', value: leaf },
                 );
               }}
+              onPreview={(state, leaf) =>
+                onStylePropertyPreview?.({
+                  property: state === 'active' ? 'activeShadow' : 'shadow',
+                  value: leaf,
+                })
+              }
+              onPreviewCancel={() => editGestureController.cancel()}
               onEnabledChange={(enabled) => {
                 onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
               }}

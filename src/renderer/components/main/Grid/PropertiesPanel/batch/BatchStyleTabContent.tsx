@@ -393,7 +393,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             prefix="W"
             width={AXIS_FIELD_WIDTH}
             min={10}
-            max={500}
+            max={9999}
             allowDecimal
             decimalScale={1}
             isMixed={getMixedValue((pos) => pos.width, 60).isMixed}
@@ -406,7 +406,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             prefix="H"
             width={AXIS_FIELD_WIDTH}
             min={10}
-            max={500}
+            max={9999}
             allowDecimal
             decimalScale={1}
             isMixed={getMixedValue((pos) => pos.height, 60).isMixed}
@@ -699,6 +699,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           showActiveState={shadowActiveState}
           previewAnchor={{ kind: 'batch' }}
           onChange={handleShadowChange}
+          onPreview={(state, leaf) =>
+            onStylePropertyPreview?.({
+              property: state === 'active' ? 'activeShadow' : 'shadow',
+              value: leaf,
+            })
+          }
+          onPreviewCancel={() => editGestureController.cancel()}
           onEnabledChange={handleShadowEnabledChange}
           panelElement={panelElement}
           t={t}

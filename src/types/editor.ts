@@ -487,9 +487,17 @@ export type EditorImageTransformPreviewPatchV1 = {
   value: ImageTransform;
 };
 
+// 프리뷰도 커밋과 같은 leaf wire. 대상별 전체 스펙 투영은 forwarder가 맡는다 -
+// 배치에서 대표 스펙을 통째로 얹으면 Mixed 대상의 다른 축까지 잠시 통일된다
+export type EditorShadowPreviewPatchV1 = {
+  property: 'shadow' | 'activeShadow';
+  value: ElementShadowValuePatch;
+};
+
 export type EditorStylePropertyPreviewPatchV1 =
   | EditorPreviewStylePropertyPatchV1
-  | EditorImageTransformPreviewPatchV1;
+  | EditorImageTransformPreviewPatchV1
+  | EditorShadowPreviewPatchV1;
 
 export type EditorPaintPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'backgroundPaint'

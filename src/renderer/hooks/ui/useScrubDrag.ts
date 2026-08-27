@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import type React from 'react';
+import { flushSync } from 'react-dom';
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 
 export interface ScrubDragOptions {
@@ -22,6 +23,9 @@ export interface ScrubDragOptions {
   onCommit: (value: number) => void;
   /** Escape·포인터 취소·캡처 유실·언마운트 */
   onCancel: () => void;
+  /** 이 요소의 편집 중인 입력이면 true. 다른 입력이 포커스 중이면 시작 전에 blur해
+   *  그쪽 preview 게스처를 먼저 정산한다 - 두 필드가 한 게스처를 나눠 갖지 않게 */
+  ownsFocus?: (active: Element, handle: HTMLElement) => boolean;
 }
 
 export interface ScrubDragHandlers {
@@ -58,6 +62,7 @@ export const useScrubDrag = ({
   onMove,
   onCommit,
   onCancel,
+  ownsFocus,
 }: ScrubDragOptions): {
   active: boolean;
   handlers: ScrubDragHandlers;
@@ -74,6 +79,7 @@ export const useScrubDrag = ({
     onMove,
     onCommit,
     onCancel,
+    ownsFocus,
   });
   useLayoutEffect(() => {
     callbacksRef.current = {
@@ -83,6 +89,7 @@ export const useScrubDrag = ({
       onMove,
       onCancel,
       onCommit,
+      ownsFocus,
     };
   });
 
@@ -141,10 +148,22 @@ export const useScrubDrag = ({
       // 라벨 mousedown 기본 동작(포커스 이동·글자 선택)을 막는다.
       // 클릭 활성화는 따로 살아 있어 이동 없는 클릭은 여전히 입력에 포커스가 간다
       e.preventDefault();
-      const base = callbacksRef.current.resolveBase();
-      if (base === null) return;
       const element = e.currentTarget;
       const doc = element.ownerDocument;
+      // 취소로 끝난 세션의 표시가 남아 다음 정상 클릭을 삼키지 않게
+      delete element.dataset.scrubbed;
+      // 다른 입력의 미확정 편집은 여기서 확정시킨다. 라벨 mousedown 기본 동작을 막아
+      // 자연 blur가 없으므로 직접 blur하고 그 커밋을 동기로 당긴다
+      // instanceof는 창 realm에 묶여 분리 패널(자식 창) 요소를 놓친다 - 셀렉터로 판별
+      const active = doc.activeElement;
+      if (
+        active?.matches('input, textarea') &&
+        !callbacksRef.current.ownsFocus?.(active, element)
+      ) {
+        flushSync(() => (active as HTMLElement).blur());
+      }
+      const base = callbacksRef.current.resolveBase();
+      if (base === null) return;
       const body = doc.body;
       const prevSelect = body.style.userSelect;
       // 캡처 중에도 커서는 포인터 아래 요소가 정하므로 문서 전체를 덮는다.

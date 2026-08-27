@@ -171,6 +171,70 @@ describe('preview patch forwarders (forwarder → overlay 실경로)', () => {
     expectNoWirePollution(knob);
   });
 
+  it('batch shadow leaf는 대상별 현재 스펙에 얹혀 전체 스펙으로 투영된다', () => {
+    const seeded = keyFixture();
+    (seeded['4key'][0] as KeyRecord).shadow = {
+      enabled: true,
+      color: '#123456',
+      offsetX: 1,
+      offsetY: 2,
+      blur: 3,
+    };
+    useKeyStore.setState({ canonicalPositions: seeded, positions: seeded });
+
+    previewBatchStyleProperty(
+      [
+        { elementType: 'key', id: KEY_ID },
+        { elementType: 'knob', id: KNOB_ID },
+      ],
+      '4key',
+      { property: 'shadow', value: { leaf: 'offsetX', value: 7 } },
+    );
+
+    // 키는 자기 색·blur를 유지한 채 offsetX만 바뀐다
+    const key = composedKey();
+    expect(key.shadow).toEqual({
+      enabled: true,
+      color: '#123456',
+      offsetX: 7,
+      offsetY: 2,
+      blur: 3,
+    });
+    // 저장된 그림자가 없는 노브는 기본 스펙 위에 얹힌다
+    const knob = composedKnob();
+    expect((knob.shadow as KeyRecord).offsetX).toBe(7);
+    expect((knob.shadow as KeyRecord).enabled).toBeDefined();
+    expectNoWirePollution(key);
+    expectNoWirePollution(knob);
+  });
+
+  it('batch activeShadow leaf는 통계를 건너뛴다', () => {
+    const STAT_ID = '00000000-0000-4000-8000-000000000521';
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          { ...createDefaultKeyPosition(), id: STAT_ID, statType: 'kps' },
+        ],
+      } as CanonicalEditorDocumentV1['statPositions'],
+    });
+
+    previewBatchStyleProperty(
+      [
+        { elementType: 'key', id: KEY_ID },
+        { elementType: 'stat', id: STAT_ID },
+      ],
+      '4key',
+      { property: 'activeShadow', value: { leaf: 'blur', value: 9 } },
+    );
+
+    expect((composedKey().activeShadow as KeyRecord).blur).toBe(9);
+    const stat = composePreviewPositions(
+      'statPosition',
+      useStatItemStore.getState().positions,
+    )['4key'][0] as KeyRecord;
+    expect(stat.activeShadow).toBeUndefined();
+  });
+
   it('batch font paint는 commit eager와 같은 투영으로 active fallback까지 포함한다', () => {
     previewBatchPaint([{ elementType: 'key', id: KEY_ID }], '4key', {
       property: 'fontPaint',

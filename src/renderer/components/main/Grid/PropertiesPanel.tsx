@@ -1669,7 +1669,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) =>
     id && isNativeElementId(id)
       ? (patch: EditorShadowPropertyPatchV1) => {
-          const persisted = patchShadowById(type, id, patch);
+          // 스크럽·타이핑 preview 게스처를 이 커밋으로 정산 - 실패 시 lifecycle까지 폐기되게 id 동반
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted = patchShadowById(type, id, patch, { gestureId });
+          editGestureController.settleCommit(persisted);
           void persisted.catch((error) => {
             console.error('Failed to update shadow', error);
           });
@@ -3013,6 +3017,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             selectedKnobElements[0]?.id,
           )}
           onPaintCommit={stablePaintCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onStylePropertyPreview={stableStylePropertyPreviewHandler(
             'knob',
             selectedKnobElements[0]?.id,
           )}

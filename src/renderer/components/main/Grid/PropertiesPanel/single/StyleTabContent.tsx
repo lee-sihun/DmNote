@@ -959,6 +959,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               : { property: 'shadow', value: leaf },
           );
         }}
+        onPreview={(state, leaf) =>
+          onStylePropertyPreview?.({
+            property: state === 'active' ? 'activeShadow' : 'shadow',
+            value: leaf,
+          })
+        }
+        onPreviewCancel={() => editGestureController.cancel()}
         onEnabledChange={(enabled) => {
           onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
         }}

@@ -1939,10 +1939,14 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       commitShadow('idle', { blur: 22.5 });
 
       const writer = patches.patchShadowByTargets;
-      expect(writer).toHaveBeenCalledWith(targets, {
-        property: 'shadow',
-        value: { leaf: 'blur', value: 22.5 },
-      });
+      expect(writer).toHaveBeenCalledWith(
+        targets,
+        {
+          property: 'shadow',
+          value: { leaf: 'blur', value: 22.5 },
+        },
+        { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+      );
       expect(legacy).not.toHaveBeenCalled();
     },
   );
@@ -1968,6 +1972,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         property: 'activeShadow',
         value: { leaf: 'color', value: ' raw active ' },
       },
+      { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
     );
     expect(legacy).not.toHaveBeenCalled();
   });

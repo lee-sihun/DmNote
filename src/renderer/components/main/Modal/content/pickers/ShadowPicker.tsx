@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { ElementShadowSpec } from '@src/types/key/shadows';
+import {
+  elementShadowLeafFromPartial,
+  type ElementShadowSpec,
+  type ElementShadowValuePatch,
+} from '@src/types/key/shadows';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import ColorPicker from './ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
@@ -32,6 +36,9 @@ interface ShadowPickerProps {
     shadow: ElementShadowSpec,
     patch: Partial<ElementShadowSpec>,
   ) => void;
+  /** 드래그·타이핑 중 leaf 프리뷰. 없으면 숫자 입력은 저장만 한다 */
+  onPreview?: (state: ShadowState, patch: ElementShadowValuePatch) => void;
+  onPreviewCancel?: () => void;
   onClose: () => void;
   interactiveRefs?: React.RefObject<HTMLElement>[];
   /** 눌림 상태가 없는 요소(통계)는 대기 탭만 노출 */
@@ -49,6 +56,8 @@ const ShadowPicker = ({
   idleMixed = false,
   activeMixed = false,
   onChange,
+  onPreview,
+  onPreviewCancel,
   onClose,
   interactiveRefs = [],
   showActiveState = true,
@@ -82,6 +91,18 @@ const ShadowPicker = ({
   const update = (patch: Partial<ElementShadowSpec>) => {
     onChange(effectiveState, { ...current, ...patch }, patch);
   };
+
+  // 숫자 입력의 preview·cancel 배선. 프리뷰 채널이 있을 때만 붙여 접두 스크럽이 켜진다
+  const numericGesture = (leaf: 'offsetX' | 'offsetY' | 'blur') =>
+    onPreview
+      ? {
+          onPreview: (value: number) => {
+            const patch = elementShadowLeafFromPartial({ [leaf]: value });
+            if (patch) onPreview(effectiveState, patch);
+          },
+          onCancel: onPreviewCancel,
+        }
+      : {};
 
   const handleStateChange = (next: string) => {
     setColorOpen(false);
@@ -173,6 +194,7 @@ const ShadowPicker = ({
           <NumberInput
             value={current.offsetX}
             onChange={(value) => update({ offsetX: value })}
+            {...numericGesture('offsetX')}
             prefix="X"
             min={-100}
             max={100}
@@ -182,6 +204,7 @@ const ShadowPicker = ({
           <NumberInput
             value={current.offsetY}
             onChange={(value) => update({ offsetY: value })}
+            {...numericGesture('offsetY')}
             prefix="Y"
             min={-100}
             max={100}
@@ -194,6 +217,7 @@ const ShadowPicker = ({
           <NumberInput
             value={current.blur}
             onChange={(value) => update({ blur: value })}
+            {...numericGesture('blur')}
             suffix="px"
             min={0}
             max={100}

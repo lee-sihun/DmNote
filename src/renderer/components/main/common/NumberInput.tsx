@@ -561,6 +561,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       if (stepper !== null) {
         // 버리는 이벤트도 기본 동작(캐럿 이동)은 막아야 한다
         e.preventDefault();
+        // 스크럽 중에는 포인터가 값의 권위다. 붙잡은 방향키 반복이 끼어들지 않게
+        if (scrub.active) return;
         if (isStaleRepeat(e.nativeEvent)) return;
         if (isExpressionDraft(draftRef.current)) {
           const evaluated = evaluateAndClampExpression(draftRef.current);
@@ -696,6 +698,9 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     },
     step: step ?? 1,
     quantize: (raw) => clampValue(supportsDecimal ? raw : Math.round(raw)),
+    // 접두 손잡이와 입력은 같은 label 아래에 있다
+    ownsFocus: (active, handle) =>
+      handle.parentElement?.contains(active) ?? false,
     onMove: (next) => {
       // 밀린 키 스텝은 버린다. 드래그가 그 값 위에서 이어지면 손을 뗀 뒤 값이 한 번 더 뛴다
       stepFrame.cancel();
@@ -810,7 +815,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   return (
     <NumberInputShell
-      prefix={showMixedPlaceholder ? undefined : prefix}
+      prefix={prefix}
       scrub={scrubEnabled ? scrub : undefined}
       width={width}
       focused={isFocused}
@@ -1329,7 +1334,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 
   return (
     <NumberInputShell
-      prefix={showMixedPlaceholder ? undefined : prefix}
+      prefix={prefix}
       width={width}
       focused={isFocused}
       invalid={fieldError.active}

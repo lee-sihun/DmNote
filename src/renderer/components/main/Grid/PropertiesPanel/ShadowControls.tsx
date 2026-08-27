@@ -1,5 +1,8 @@
 import React, { useRef, useState } from 'react';
-import type { ElementShadowSpec } from '@src/types/key/shadows';
+import type {
+  ElementShadowSpec,
+  ElementShadowValuePatch,
+} from '@src/types/key/shadows';
 import ShadowPicker from '@components/main/Modal/content/pickers/ShadowPicker';
 import Checkbox from '@components/main/common/Checkbox';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
@@ -21,6 +24,9 @@ interface ShadowControlsProps {
     shadow: ElementShadowSpec,
     patch: Partial<ElementShadowSpec>,
   ) => void;
+  /** 드래그·타이핑 중 leaf 프리뷰 - 있으면 피커 숫자 입력에 접두 스크럽이 켜진다 */
+  onPreview?: (state: ShadowState, patch: ElementShadowValuePatch) => void;
+  onPreviewCancel?: () => void;
   /** 대기·입력 양쪽 enabled를 한 번에 갱신 (마스터 토글) */
   onEnabledChange: (enabled: boolean) => void;
   /** benchmark·호환성 검증용 - 실제 UI는 after-paint 사용 */
@@ -40,6 +46,8 @@ const ShadowControls = ({
   activeMixed = false,
   anyEnabled: anyEnabledProp,
   onChange,
+  onPreview,
+  onPreviewCancel,
   onEnabledChange,
   enabledCommitStrategy = 'after-paint',
   showActiveState = true,
@@ -111,6 +119,8 @@ const ShadowControls = ({
             idleMixed={idleMixed}
             activeMixed={activeMixed}
             onChange={onChange}
+            onPreview={onPreview}
+            onPreviewCancel={onPreviewCancel}
             showActiveState={showActiveState}
             onClose={() => setPickerOpen(false)}
             interactiveRefs={[configButtonRef]}
