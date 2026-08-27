@@ -31,7 +31,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
 import {
-  elementShowsImage,
+  elementImageReplacesSurface,
   resolveElementBorder,
 } from '@utils/core/elementBorder';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
@@ -99,6 +99,8 @@ interface BatchStyleTabContentProps {
   // 선택에 키·노브가 없으면(통계뿐) 그림자 대기만 편집
   shadowActiveState?: boolean;
   shadowKind?: 'key' | 'knob';
+  /** 이미지가 기본 립을 억제하는 요소인지 - 키·통계만 (그래프·노브 렌더는 억제하지 않는다) */
+  imageSuppressesDefaultBorder?: boolean;
   afterSizeContent?: React.ReactNode;
   // getMixedValue 함수
   getMixedValue: <T>(
@@ -171,6 +173,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   showShadowControls = true,
   shadowActiveState = true,
   shadowKind = 'key',
+  imageSuppressesDefaultBorder = true,
   afterSizeContent,
   getMixedValue,
   getSelectedKeysData,
@@ -249,7 +252,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     }
     // 테두리는 미지정 시 앱 기본 립이 들어가므로 렌더와 같은 해석기로 읽는다
     const border = resolveElementBorder(position, active, {
-      suppressDefault: elementShowsImage(position, active),
+      suppressDefault:
+        imageSuppressesDefaultBorder &&
+        elementImageReplacesSurface(position, active),
     });
     return { color: border.color, gradient: border.gradient };
   };

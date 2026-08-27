@@ -28,7 +28,8 @@ describe('키 이미지 레이어 스타일', () => {
     expect(styles.keyStyle['--dmn-key-bg-default']).toBe('transparent');
     expect(styles.keyStyle['--dmn-key-border-default']).toBe('none');
     expect(styles.borderRingStyle).toBeNull();
-    expect(styles.keyStyle.contain).toBe('layout style');
+    // replace는 루트 overflow:hidden이 오버행을 자르므로 paint containment를 유지한다
+    expect(styles.keyStyle.contain).toBe('layout style paint');
     expect(styles.keyStyle.overflow).toBeUndefined();
     expect(styles.imageStyle['--dmn-key-image-z-default']).toBe('0');
     expect(styles.imageStyle['--dmn-key-image-transform-default']).toBe(

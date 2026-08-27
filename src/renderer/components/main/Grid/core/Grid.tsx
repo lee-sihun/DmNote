@@ -90,6 +90,10 @@ import { panelWindowApi } from '@api/modules/panelWindowApi';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
+  DEFAULT_IMAGE_MODE,
+  imageTransformToCss,
+} from '@src/types/key/imageLayer';
+import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_RADIUS,
@@ -1409,6 +1413,10 @@ const Grid = ({
         height = 60,
         inactiveImage,
         activeImage,
+        imageFit,
+        idleImageFit,
+        imageMode,
+        idleImageTransform,
         className,
         shadow,
         activeShadow,
@@ -1419,7 +1427,13 @@ const Grid = ({
       resolveImageSource(inactiveImage) ||
       resolveImageSource(activeImage) ||
       '';
-    const backgroundColor = previewImage ? 'transparent' : DEFAULT_ELEMENT_BG;
+    // 고스트는 기본 외형(저자 의도)이되 이미지 배치만 원본 키를 따른다 - replace만
+    // 표면을 대체하므로 립·배경 억제도 그때만
+    const ghostImageReplaces =
+      Boolean(previewImage) && (imageMode ?? DEFAULT_IMAGE_MODE) === 'replace';
+    const backgroundColor = ghostImageReplaces
+      ? 'transparent'
+      : DEFAULT_ELEMENT_BG;
     const previewShadow = elementShadowToCss(
       resolveElementShadow({
         active: false,
@@ -1427,7 +1441,7 @@ const Grid = ({
         activeShadow,
         defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
         defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-        suppressDefault: Boolean(previewImage),
+        suppressDefault: ghostImageReplaces,
       }),
     );
     // keyName은 호출부에서 slotDisplayName으로 합성된 표시 라벨
@@ -1450,12 +1464,12 @@ const Grid = ({
           borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
           border: 'none',
           boxShadow: previewShadow,
-          overflow: 'hidden',
+          overflow: ghostImageReplaces ? 'hidden' : 'visible',
           opacity: 0.5,
           zIndex: 'var(--z-canvas-drag-preview)',
         }}
       >
-        {renderGhostBorderRing(Boolean(previewImage))}
+        {renderGhostBorderRing(ghostImageReplaces)}
         {previewImage ? (
           <img
             src={previewImage}
@@ -1463,7 +1477,12 @@ const Grid = ({
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
+              objectFit: (idleImageFit ||
+                imageFit ||
+                'cover') as React.CSSProperties['objectFit'],
+              transform: idleImageTransform
+                ? imageTransformToCss(idleImageTransform)
+                : undefined,
               display: 'block',
               pointerEvents: 'none',
               userSelect: 'none',

@@ -317,21 +317,31 @@ const ImagePicker = ({
           }}
         />
 
-        {/* 이미지 표시 */}
+        {/* 이미지 표시. overlay 모드는 키 밖으로 나가는 게 핵심이라 안쪽 프레임(키 경계)
+            기준으로 넘침을 보여주고, replace는 박스 전체를 키로 보고 잘라낸다 */}
         {currentImageSrc && !currentTransparent && (
-          <img
-            key={currentImageSrc}
-            src={currentImageSrc}
-            alt=""
-            data-image-picker-preview="true"
-            className="absolute inset-0 block w-full h-full pointer-events-none select-none"
-            style={{
-              objectFit: (currentImageFit ||
-                'cover') as React.CSSProperties['objectFit'],
-              transform: currentTransformCss,
-            }}
-            draggable={false}
-          />
+          <div
+            data-image-picker-frame={imageMode}
+            className={
+              imageMode === 'overlay'
+                ? 'absolute inset-[10px] rounded-[6px] border border-dashed border-line pointer-events-none'
+                : 'absolute inset-0 overflow-hidden pointer-events-none'
+            }
+          >
+            <img
+              key={currentImageSrc}
+              src={currentImageSrc}
+              alt=""
+              data-image-picker-preview="true"
+              className="absolute inset-0 block w-full h-full pointer-events-none select-none"
+              style={{
+                objectFit: (currentImageFit ||
+                  'cover') as React.CSSProperties['objectFit'],
+                transform: currentTransformCss,
+              }}
+              draggable={false}
+            />
+          </div>
         )}
 
         {/* 호버 오버레이 */}

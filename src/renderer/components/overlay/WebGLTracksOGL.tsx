@@ -966,6 +966,27 @@ export function WebGLTracksOGL({
 
     window.addEventListener('resize', handleResize);
 
+    // 배율이 다른 모니터로 옮기면 CSS 크기는 그대로라 resize가 안 올 수 있다.
+    // resolution 미디어 쿼리는 현재 배율에 고정되므로 바뀔 때마다 다시 건다
+    let dprQuery: MediaQueryList | null = null;
+    const disarmDprQuery = (): void => {
+      dprQuery?.removeEventListener('change', handleDprChange);
+      dprQuery = null;
+    };
+    const armDprQuery = (): void => {
+      disarmDprQuery();
+      if (typeof window.matchMedia !== 'function') return;
+      dprQuery = window.matchMedia(
+        `(resolution: ${window.devicePixelRatio || 1}dppx)`,
+      );
+      dprQuery.addEventListener('change', handleDprChange);
+    };
+    function handleDprChange(): void {
+      armDprQuery();
+      refreshCropRef.current();
+    }
+    armDprQuery();
+
     if (noteBuffer.activeCount > 0 && !isAnimating.current) {
       resetFrameClock(frameClockRef.current);
       animationScheduler.add(animate);
@@ -977,6 +998,7 @@ export function WebGLTracksOGL({
     return () => {
       unsubscribe();
       window.removeEventListener('resize', handleResize);
+      disarmDprQuery();
       if (isAnimating.current) {
         animationScheduler.remove(animate);
       }

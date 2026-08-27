@@ -1769,6 +1769,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
         >
           <EditSessionBoundary>
             <BatchStyleTabContent
+              // 그래프 렌더는 이미지가 있어도 기본 립을 억제하지 않는다 - 패널도 같은 판정
+              imageSuppressesDefaultBorder={false}
               selectedCount={selectedGraphElements.length}
               totalCount={totalCount ?? selectedGraphElements.length}
               onStylePropertyPreview={previewStyleProperty}
@@ -2116,6 +2118,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
         >
           <EditSessionBoundary>
             <BatchStyleTabContent
+              // 노브 렌더는 이미지가 있어도 기본 립을 억제하지 않는다 - 패널도 같은 판정
+              imageSuppressesDefaultBorder={false}
               selectedCount={selectedKnobElements.length}
               totalCount={totalCount ?? selectedKnobElements.length}
               onStylePropertyPreview={previewStyleProperty}

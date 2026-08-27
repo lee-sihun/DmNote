@@ -62,7 +62,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
 import {
-  elementShowsImage,
+  elementImageReplacesSurface,
   resolveElementBorder,
 } from '@utils/core/elementBorder';
 import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
@@ -437,7 +437,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     if (target === 'borderColor') {
       const active = effectiveColorState === 'active';
       return resolveElementBorder(keyPosition, active, {
-        suppressDefault: elementShowsImage(keyPosition, active),
+        suppressDefault: elementImageReplacesSurface(keyPosition, active),
       }).gradient;
     }
     const idleGradient = storedGradientOf(target);

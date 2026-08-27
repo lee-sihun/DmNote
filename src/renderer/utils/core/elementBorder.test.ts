@@ -4,7 +4,10 @@ import {
   DEFAULT_ELEMENT_BORDER,
   DEFAULT_ELEMENT_BORDER_GRADIENT,
 } from './elementDefaults';
-import { resolveElementBorder } from './elementBorder';
+import {
+  elementImageReplacesSurface,
+  resolveElementBorder,
+} from './elementBorder';
 
 describe('resolveElementBorder', () => {
   it('아무 값도 없으면 기본 글래스 립 1px', () => {
@@ -78,6 +81,35 @@ describe('resolveElementBorder', () => {
     const result = resolveElementBorder({ borderColor: '#123456' }, true);
     expect(result.color).toBe('#123456');
     expect(result.gradient).toBeNull();
+  });
+
+  // 패널의 억제 판정은 렌더(imageReplaces)와 같아야 한다 - overlay에서 갈리면
+  // 패널이 단색 피커를 열어 기본 립이 단색으로 커밋된다
+  it('elementImageReplacesSurface는 replace 모드의 이미지 키만 참이다', () => {
+    const img = 'file:///a.png';
+    expect(elementImageReplacesSurface({ inactiveImage: img }, false)).toBe(
+      true,
+    );
+    expect(
+      elementImageReplacesSurface(
+        { inactiveImage: img, imageMode: 'overlay' },
+        false,
+      ),
+    ).toBe(false);
+    expect(elementImageReplacesSurface({}, false)).toBe(false);
+    // 활성 상태는 활성 이미지, 없으면 대기 이미지로 폴백
+    expect(elementImageReplacesSurface({ inactiveImage: img }, true)).toBe(
+      true,
+    );
+    expect(elementImageReplacesSurface({ activeImage: img }, false)).toBe(
+      false,
+    );
+    expect(
+      elementImageReplacesSurface(
+        { activeImage: img, imageMode: 'replace' },
+        true,
+      ),
+    ).toBe(true);
   });
 
   it('이미지 키는 기본 립을 내지 않지만 두께를 지정하면 그린다', () => {

@@ -158,11 +158,20 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
   const stateBackground = isActive
     ? activeBackgroundColor || backgroundColor || DEFAULT_ELEMENT_ACTIVE_BG
     : backgroundColor || DEFAULT_ELEMENT_BG;
-  // 보더 색은 회전 인식 막대 색을 겸함 — 폴백은 텍스트 색 계열
-  const stateBorderColor = isActive
-    ? activeBorderColor || borderColor || DEFAULT_ELEMENT_ACTIVE_FONT
-    : borderColor || DEFAULT_ELEMENT_FONT;
   // 그라데이션 쌍 해석 — 상태 간 색/그라데이션이 섞이지 않도록 쌍 단위 폴백
+  const indicatorBorderPair = resolveStatePair(
+    isActive,
+    { color: borderColor, gradient: borderGradient },
+    { color: activeBorderColor, gradient: activeBorderGradient },
+  );
+  // 회전 인식 막대 색은 명시 단색 보더만 겸한다 - 그라데이션 보더의 대표 첫 스톱은
+  // 막대 색이 아니다 (KnobItem과 동일 규칙)
+  const stateBorderColor =
+    indicatorBorderPair.gradient == null && indicatorBorderPair.color
+      ? indicatorBorderPair.color
+      : isActive
+      ? DEFAULT_ELEMENT_ACTIVE_FONT
+      : DEFAULT_ELEMENT_FONT;
   const bgPair = resolveStatePair(
     isActive,
     { color: backgroundColor, gradient: backgroundGradient },

@@ -57,6 +57,10 @@ const TabTool = () => {
         </div>
       </button>
       <FloatingPopup
+        // TabList가 자기 흐름에서 이름·삭제 모달을 연다 - 덮임 자동 닫힘이 그 모달까지
+        // 언마운트한다. 이 팝업은 툴바 서브트리 안(z 40 < 모달 50)이라 잠금 시 inert·딤
+        // 처리되므로 유령이 되지 않는다 (PickerSurface와 같은 근거)
+        closeOnModalCover={false}
         open={isPopupOpen && isBootstrapped}
         ariaLabel={t('tabs.title')}
         referenceRef={gridButtonRef}

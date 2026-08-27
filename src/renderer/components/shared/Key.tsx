@@ -8,6 +8,7 @@ import { useDraggable } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
+import { useFailedImageSrcs } from '@hooks/overlay/useFailedImageSrcs';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -305,6 +306,10 @@ const DraggableKey = React.memo(
           : { fontGradient: previewSession.spec }
         : {}),
     };
+    const { failedImageSrcs, markFailed } = useFailedImageSrcs(
+      previewPosition.inactiveImage,
+      previewPosition.activeImage,
+    );
     const {
       keyStyle: computedKeyStyle,
       borderRingStyle,
@@ -322,6 +327,7 @@ const DraggableKey = React.memo(
       position: previewPosition,
       active: previewActive,
       label: displayName,
+      failedImageSrcs,
     });
     // 그리드(스케일 레이어) 안에서는 승격 금지 - WebKit은 합성 자식이 하나라도
     // 생기면 스케일 컨테이너 자체를 레이어로 만들어 내용 전체가 흐려진다.
@@ -411,6 +417,7 @@ const DraggableKey = React.memo(
             data-key-image-layer="true"
             style={imageStyle}
             draggable={false}
+            onError={() => markFailed(currentImageSrc)}
           />
         )}
         {imageReplaces ? null : showInsideCounter ? (
@@ -446,6 +453,10 @@ export const Key = React.memo(function Key({
   const selectorKey = globalKey || keyName;
   const active = getKeySignal(selectorKey).value;
 
+  const { failedImageSrcs, markFailed } = useFailedImageSrcs(
+    position.inactiveImage,
+    position.activeImage,
+  );
   const {
     keyStyle,
     borderRingStyle,
@@ -466,6 +477,7 @@ export const Key = React.memo(function Key({
     position,
     active,
     label: keyName,
+    failedImageSrcs,
   });
 
   useEffect(() => {
@@ -510,6 +522,7 @@ export const Key = React.memo(function Key({
           data-key-image-layer="true"
           style={imageStyle}
           draggable={false}
+          onError={() => markFailed(currentImageSrc)}
         />
       )}
       {imageReplaces ? null : showInsideCounter && counterSignal ? (
