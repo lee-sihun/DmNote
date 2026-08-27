@@ -16,6 +16,7 @@ import {
   DEFAULT_IMAGE_MODE,
   IDENTITY_IMAGE_TRANSFORM,
   IMAGE_TRANSFORM_CONSTRAINTS,
+  applyImageTransformLeaf,
   imageTransformToCss,
   type ImageMode,
   type ImageTransform,
@@ -56,6 +57,13 @@ interface ImagePickerProps {
     leaf: ImageTransformLeaf,
     value: number,
   ) => void;
+  /** 입력 중·드래그 중 값 - 저장 없이 캔버스에만 비친다 */
+  onImageTransformPreview?: (
+    state: 'idle' | 'active',
+    leaf: ImageTransformLeaf,
+    value: number,
+  ) => void;
+  onImageTransformCancel?: () => void;
   onClose: () => void;
   interactiveRefs?: React.RefObject<HTMLElement>[];
   /** 눌림 상태가 없는 요소는 대기 이미지만 편집 */
@@ -130,6 +138,8 @@ const ImagePicker = ({
   activeImageTransform,
   onImageModeChange,
   onImageTransformChange,
+  onImageTransformPreview,
+  onImageTransformCancel,
   onClose,
   interactiveRefs = [],
   showActiveState = true,
@@ -227,14 +237,48 @@ const ImagePicker = ({
   };
 
   const showImageLayer = typeof onImageTransformChange === 'function';
-  const currentTransform =
+  const committedTransform =
     (effectiveMode === STATE_MODES.idle
       ? idleImageTransform
       : activeImageTransform) ?? IDENTITY_IMAGE_TRANSFORM;
+  // 미리보기 썸네일도 드래그를 따라가야 한다. 확정 전 값은 저장소에 없으므로 여기서 든다
+  const [draftTransform, setDraftTransform] = useState<{
+    mode: typeof effectiveMode;
+    transform: ImageTransform;
+  } | null>(null);
+  const currentTransform =
+    draftTransform?.mode === effectiveMode
+      ? draftTransform.transform
+      : committedTransform;
   const currentTransformCss = imageTransformToCss(currentTransform);
   const handleTransformLeaf = (leaf: ImageTransformLeaf, value: number) => {
+    setDraftTransform(null);
     onImageTransformChange?.(effectiveMode, leaf, value);
   };
+  const canPreviewTransform = typeof onImageTransformPreview === 'function';
+  const handleTransformLeafPreview = (
+    leaf: ImageTransformLeaf,
+    value: number,
+  ) => {
+    setDraftTransform({
+      mode: effectiveMode,
+      transform: applyImageTransformLeaf(committedTransform, { leaf, value }),
+    });
+    onImageTransformPreview?.(effectiveMode, leaf, value);
+  };
+  const handleTransformCancel = () => {
+    setDraftTransform(null);
+    onImageTransformCancel?.();
+  };
+  // 입력별 preview·cancel 묶음. preview 콜백이 없으면 둘 다 빼서 타이핑이 저장으로 바로 간다
+  const transformLeafGesture = (leaf: ImageTransformLeaf, scale = 1) =>
+    canPreviewTransform
+      ? {
+          onPreview: (value: number) =>
+            handleTransformLeafPreview(leaf, value / scale),
+          onCancel: handleTransformCancel,
+        }
+      : {};
 
   return (
     <PickerSurface
@@ -333,6 +377,7 @@ const ImagePicker = ({
               commitStrategy="after-paint"
               value={currentTransform.offsetX}
               onChange={(value) => handleTransformLeaf('offsetX', value)}
+              {...transformLeafGesture('offsetX')}
               prefix="X"
               ariaLabel={`${t('imagePicker.position')} X`}
               width="100%"
@@ -345,6 +390,7 @@ const ImagePicker = ({
               commitStrategy="after-paint"
               value={currentTransform.offsetY}
               onChange={(value) => handleTransformLeaf('offsetY', value)}
+              {...transformLeafGesture('offsetY')}
               prefix="Y"
               ariaLabel={`${t('imagePicker.position')} Y`}
               width="100%"
@@ -359,6 +405,7 @@ const ImagePicker = ({
               commitStrategy="after-paint"
               value={currentTransform.rotation}
               onChange={(value) => handleTransformLeaf('rotation', value)}
+              {...transformLeafGesture('rotation')}
               prefix={<AngleGlyph />}
               ariaLabel={t('imagePicker.rotation')}
               suffix="°"
@@ -372,6 +419,7 @@ const ImagePicker = ({
               commitStrategy="after-paint"
               value={Math.round(currentTransform.scale * 100)}
               onChange={(value) => handleTransformLeaf('scale', value / 100)}
+              {...transformLeafGesture('scale', 100)}
               prefix={<ScaleGlyph />}
               ariaLabel={t('imagePicker.scale')}
               suffix="%"

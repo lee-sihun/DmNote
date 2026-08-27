@@ -13,7 +13,7 @@ import {
 import type {
   EditorElementTypeV1,
   EditorPaintPropertyPatchV1,
-  EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
 } from '@src/types/editor';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { PreviewDomain } from '@src/types/preview';
@@ -36,7 +36,7 @@ const previewDomainOf = (type: PreviewTargetType): PreviewDomain =>
 
 // nullable leaf의 null은 eager intent 경로와 동일하게 undefined로 투영
 export const projectPreviewStylePropertyPatch = (
-  patch: EditorPreviewStylePropertyPatchV1,
+  patch: EditorStylePropertyPreviewPatchV1,
 ): Record<string, unknown> => ({
   [patch.property]: patch.value ?? undefined,
 });
@@ -44,7 +44,7 @@ export const projectPreviewStylePropertyPatch = (
 export const previewSingleStyleProperty = (
   type: EditorElementTypeV1,
   id: string,
-  patch: EditorPreviewStylePropertyPatchV1,
+  patch: EditorStylePropertyPreviewPatchV1,
 ): void => {
   const locator = resolveElementById(type, id);
   if (!locator) return;
@@ -64,7 +64,7 @@ export const previewSingleStyleProperty = (
 export const previewBatchStyleProperty = (
   targets: readonly PreviewTarget[],
   selectedKeyType: string,
-  patch: EditorPreviewStylePropertyPatchV1,
+  patch: EditorStylePropertyPreviewPatchV1,
 ): void => {
   const grouped = new Map<
     PreviewTargetType,

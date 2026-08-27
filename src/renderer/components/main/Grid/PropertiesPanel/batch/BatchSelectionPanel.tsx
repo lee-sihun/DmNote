@@ -67,6 +67,7 @@ import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateC
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
@@ -108,7 +109,7 @@ const createStylePropertyHandlers = (
     };
   }
   return {
-    previewStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) =>
+    previewStyleProperty: (patch: EditorStylePropertyPreviewPatchV1) =>
       previewBatchStyleProperty(stableTargets, selectedKeyType, patch),
     commitStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) => {
       const gestureId = options.settleGesture

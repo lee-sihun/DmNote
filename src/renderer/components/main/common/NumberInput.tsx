@@ -15,6 +15,7 @@ import {
 } from '@utils/core/arithmeticExpression';
 import { I18nContext } from '@contexts/I18nContextDef';
 import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';
+import { useScrubDrag, type ScrubDragHandlers } from '@hooks/ui/useScrubDrag';
 
 export interface NumberInputProps {
   value: number | string;
@@ -74,6 +75,8 @@ export interface OptionalNumberInputProps {
 // 아래 행을 덮고, 스크롤 뷰포트가 overflow-y auto라 가로로도 잘린다
 const NumberInputShell: React.FC<{
   prefix?: React.ReactNode;
+  /** 접두를 좌우로 끌어 값을 바꾸는 게스처. 있으면 접두가 드래그 손잡이가 된다 */
+  scrub?: { active: boolean; handlers: ScrubDragHandlers };
   width: string;
   focused: boolean;
   invalid: boolean;
@@ -82,6 +85,7 @@ const NumberInputShell: React.FC<{
   children: React.ReactNode;
 }> = ({
   prefix,
+  scrub,
   width,
   focused,
   invalid,
@@ -99,7 +103,14 @@ const NumberInputShell: React.FC<{
     onAnimationEnd={onAnimationEnd}
   >
     {prefix && (
-      <span className="shrink-0 text-fg-muted text-body">{prefix}</span>
+      <span
+        className={`shrink-0 text-body text-fg-muted ${
+          scrub ? 'cursor-ew-resize select-none' : ''
+        }`}
+        {...scrub?.handlers}
+      >
+        {prefix}
+      </span>
     )}
     {children}
   </label>
@@ -413,16 +424,6 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     restorePreview();
   };
 
-  useEffect(() => {
-    if (!isFocused) {
-      syncText(isMixed ? '' : getDisplayValue(value));
-      hasUserInputRef.current = false;
-      committedValueRef.current = value;
-      committedMixedRef.current = isMixed;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, isFocused, isMixed]);
-
   // 스텝 기준은 편집 중인 값이 우선. 비었거나 부호만 남은 중간 상태면 확정값으로 돌아간다.
   // Mixed는 대표값이 기준 - 타이핑과 마찬가지로 절대값을 전체에 적용한다
   const resolveStepBase = (): number => {
@@ -666,12 +667,92 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     }
   };
 
+  // 포커스 중 표시는 숫자만, 아니면 단위까지
+  const draftTextFor = (num: number): string =>
+    isFocused ? String(normalizePrecision(num)) : getDisplayValue(num);
+
+  // 접두 스크럽은 preview 채널이 있을 때만 켠다. 없으면 liveCommit이 onChange라
+  // 이동마다 저장이 나가 방향키 꾹 누르기와 같은 적체가 생긴다
+  const scrubEnabled = Boolean(prefix) && Boolean(onPreview) && !disabled;
+  const scrub = useScrubDrag({
+    enabled: scrubEnabled,
+    resolveBase: () => {
+      digitPop.clear();
+      // 비포커스 표시값의 %, ° 같은 suffix는 수식 문자가 아니다
+      // 실제 수식을 편집 중인 포커스 상태에서만 평가 경로로 보낸다
+      if (isFocused && isExpressionDraft(draftRef.current)) {
+        const evaluated = evaluateAndClampExpression(draftRef.current);
+        if (evaluated === null) {
+          fieldError.raise();
+          return null;
+        }
+        syncText(String(evaluated));
+        hasUserInputRef.current = true;
+        fieldError.clear();
+        digitPop.clear();
+        return evaluated;
+      }
+      return resolveStepBase();
+    },
+    step: step ?? 1,
+    quantize: (raw) => clampValue(supportsDecimal ? raw : Math.round(raw)),
+    onMove: (next) => {
+      // 밀린 키 스텝은 버린다. 드래그가 그 값 위에서 이어지면 손을 뗀 뒤 값이 한 번 더 뛴다
+      stepFrame.cancel();
+      holdKeyRef.current = null;
+      // 포커스를 옮기지 않는 스크럽에서도 단위 유무가 바뀌지 않게 표시 형식을 유지
+      syncText(draftTextFor(next));
+      hasUserInputRef.current = true;
+      emitValue(next);
+    },
+    onCommit: (final) => {
+      cancelPendingCommit();
+      syncText(draftTextFor(final));
+      hasUserInputRef.current = false;
+      committedValueRef.current = final;
+      committedMixedRef.current = false;
+      emittedRef.current = false;
+      lastEmittedRef.current = null;
+      onChange(final);
+    },
+    onCancel: () => {
+      cancelPendingCommit();
+      syncText(
+        committedMixedRef.current
+          ? ''
+          : draftTextFor(Number(committedValueRef.current)),
+      );
+      hasUserInputRef.current = false;
+      fieldError.clear();
+      digitPop.clear();
+      restorePreview();
+    },
+  });
+
+  useEffect(() => {
+    // 스크럽 중에는 로컬 draft가 표시 권위다. after-paint preview가 늦게 돌아와도
+    // 현재 포인터 값과 단위 문자열을 한 프레임 전 값으로 덮지 않는다
+    if (!isFocused && !scrub.active) {
+      syncText(isMixed ? '' : getDisplayValue(value));
+      hasUserInputRef.current = false;
+      committedValueRef.current = value;
+      committedMixedRef.current = isMixed;
+    }
+    // active 종료만으로 옛 prop을 다시 쓰지 않는다. 최종 onChange의 value 변경이 동기화한다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, isFocused, isMixed]);
+
   const handleBlur = () => {
     setIsFocused(false);
     // 확정과 취소 모두 최종값을 직접 들고 간다. 밀린 스텝이 그 뒤에 도착하면
     // 취소한 값이 되살아나거나 확정 뒤에 값이 한 번 더 움직인다
     stepFrame.cancel();
     holdKeyRef.current = null;
+
+    // 끌고 있는 도중의 blur(창 전환, 분리 패널 포커스 정산)는 취소다.
+    // 드래그 draft를 확정하면 창 blur 리스너가 저장을 만든다.
+    // 잡기만 하고 안 움직인 세션은 값을 건드리지 않았으므로 평소 정산으로 이어간다
+    if (scrub.cancel()) return;
 
     // Escape는 확정 없이 표시값 원복
     if (escapedRef.current) {
@@ -730,6 +811,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   return (
     <NumberInputShell
       prefix={showMixedPlaceholder ? undefined : prefix}
+      scrub={scrubEnabled ? scrub : undefined}
       width={width}
       focused={isFocused}
       invalid={fieldError.active}

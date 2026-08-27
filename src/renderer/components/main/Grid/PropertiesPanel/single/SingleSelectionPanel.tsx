@@ -85,6 +85,7 @@ import type {
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorElementPropertyPatchV1,
 } from '@src/types/editor';
 
@@ -1660,7 +1661,7 @@ interface SingleKeyStatPanelProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;

@@ -11,6 +11,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
@@ -184,7 +185,7 @@ export interface StyleTabContentProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
@@ -200,7 +201,7 @@ export interface NoteTabContentProps {
   /** preview overlay를 제외한 Escape 원복 기준 */
   canonicalKeyPosition?: KeyPosition;
   onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
-  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorStylePropertyPreviewPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onNotePaintPreview?: (patch: EditorNotePaintPropertyPatchV1) => void;
   onNotePaintCommit?: (patch: EditorNotePaintPropertyPatchV1) => void;

@@ -47,6 +47,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorStylePropertyPreviewPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
@@ -1462,9 +1463,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           options?: { gestureId?: string },
         ) => {
           // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
-          // 그래프 색은 preview 게스처를 정산하고, 그 외는 호출부가 준 gestureId만 공유
+          // 그래프 색과 키 이미지 변환은 preview 게스처를 정산하고,
+          // 그 외는 호출부가 준 gestureId만 공유
           const settlesGesture =
-            type === 'graph' && patch.property === 'graphColor';
+            (type === 'graph' && patch.property === 'graphColor') ||
+            (type === 'key' &&
+              (patch.property === 'idleImageTransform' ||
+                patch.property === 'activeImageTransform'));
           const gestureId =
             options?.gestureId ??
             (settlesGesture
@@ -1607,7 +1612,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id: string | undefined,
   ) =>
     id && isNativeElementId(id)
-      ? (patch: EditorPreviewStylePropertyPatchV1) =>
+      ? (patch: EditorStylePropertyPreviewPatchV1) =>
           previewSingleStyleProperty(type, id, patch)
       : undefined;
 

@@ -20,6 +20,7 @@ import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
   isImageTransformLeafPatch,
   type ImageMode,
+  type ImageTransform,
   type ImageTransformLeafPatch,
 } from '@src/types/key/imageLayer';
 import {
@@ -479,6 +480,16 @@ export type EditorPreviewStylePropertyPatchV1 =
       | 'noteBorderWidth'
       | 'noteBorderRadius'
     >;
+
+// 프리뷰 전용 - 커밋 wire는 leaf 패치지만 프리뷰는 keyPosition에 그대로 얹을 전체 변환을 보낸다
+export type EditorImageTransformPreviewPatchV1 = {
+  property: 'idleImageTransform' | 'activeImageTransform';
+  value: ImageTransform;
+};
+
+export type EditorStylePropertyPreviewPatchV1 =
+  | EditorPreviewStylePropertyPatchV1
+  | EditorImageTransformPreviewPatchV1;
 
 export type EditorPaintPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'backgroundPaint'

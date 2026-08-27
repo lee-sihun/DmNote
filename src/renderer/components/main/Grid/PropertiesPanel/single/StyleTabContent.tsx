@@ -3,7 +3,11 @@ import { createPortal } from 'react-dom';
 import type { StyleTabContentProps } from '../types';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
-import type { ImageMode, ImageTransformLeaf } from '@src/types/key/imageLayer';
+import {
+  applyImageTransformLeaf,
+  type ImageMode,
+  type ImageTransformLeaf,
+} from '@src/types/key/imageLayer';
 import {
   slotMembers,
   slotUiMode,
@@ -645,6 +649,21 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         : { property: 'activeImageTransform', value: { leaf, value } },
     );
   };
+  // 프리뷰는 leaf가 아니라 전체 변환을 보낸다. 오버레이는 patch를 얕게 합치므로
+  // leaf만 보내면 나머지 축이 사라진다
+  const handleImageTransformPreview = (
+    state: 'idle' | 'active',
+    leaf: ImageTransformLeaf,
+    value: number,
+  ) => {
+    const property =
+      state === 'idle' ? 'idleImageTransform' : 'activeImageTransform';
+    onStylePropertyPreview?.({
+      property,
+      value: applyImageTransformLeaf(keyPosition[property], { leaf, value }),
+    });
+  };
+  const handleImageTransformCancel = () => editGestureController.cancel();
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
@@ -1159,6 +1178,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                   activeImageTransform: keyPosition.activeImageTransform,
                   onImageModeChange: handleImageModeChange,
                   onImageTransformChange: handleImageTransformChange,
+                  onImageTransformPreview: handleImageTransformPreview,
+                  onImageTransformCancel: handleImageTransformCancel,
                 }
               : {})}
             onClose={() => onToggleImagePicker()}
