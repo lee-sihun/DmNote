@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  hasModalLayerAbove,
   isModalLayerActive,
   registerPopupLayer,
   subscribeModalLayerActivity,
@@ -62,5 +63,65 @@ describe('popupLayer modal activity', () => {
     const popup = appendLayer('popup');
     cleanups.push(registerPopupLayer(popup));
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('hasModalLayerAbove', () => {
+  const cleanups: Array<() => void> = [];
+
+  afterEach(() => {
+    cleanups
+      .splice(0)
+      .reverse()
+      .forEach((cleanup) => cleanup());
+    document.body.innerHTML = '';
+  });
+
+  it('팝업 뒤에 등록된 모달은 팝업을 덮는다', () => {
+    const popup = appendLayer('popup');
+    cleanups.push(registerPopupLayer(popup));
+    cleanups.push(registerPopupLayer(appendLayer('modal')));
+
+    expect(hasModalLayerAbove(popup)).toBe(true);
+  });
+
+  it('모달 안에서 연 팝업(모달보다 뒤 등록)은 덮이지 않은 것으로 본다', () => {
+    cleanups.push(registerPopupLayer(appendLayer('modal')));
+    const popup = appendLayer('popup');
+    cleanups.push(registerPopupLayer(popup));
+
+    expect(hasModalLayerAbove(popup)).toBe(false);
+  });
+
+  // 집계 boolean은 true 그대로지만 아래 팝업이 새 모달에 덮이므로 알려야 한다
+  it('모달 위에 두 번째 모달이 등록되면 구독자에게 알린다', () => {
+    const listener = vi.fn();
+    cleanups.push(subscribeModalLayerActivity(listener));
+    cleanups.push(registerPopupLayer(appendLayer('modal')));
+    const popup = appendLayer('popup');
+    cleanups.push(registerPopupLayer(popup));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    const unregisterSecond = registerPopupLayer(appendLayer('modal'));
+    cleanups.push(unregisterSecond);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(hasModalLayerAbove(popup)).toBe(true);
+
+    unregisterSecond();
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(hasModalLayerAbove(popup)).toBe(false);
+  });
+
+  it('스택에 없는 요소와 끊긴 모달은 판정하지 않는다', () => {
+    const stranger = appendLayer('popup');
+    expect(hasModalLayerAbove(stranger)).toBe(false);
+    expect(hasModalLayerAbove(null)).toBe(false);
+
+    const popup = appendLayer('popup');
+    cleanups.push(registerPopupLayer(popup));
+    const modal = appendLayer('modal');
+    cleanups.push(registerPopupLayer(modal));
+    modal.remove();
+    expect(hasModalLayerAbove(popup)).toBe(false);
   });
 });

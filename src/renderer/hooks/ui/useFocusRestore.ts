@@ -35,6 +35,8 @@ export const useFocusRestore = (
   );
   const activatedRef = useRef(false);
   const restoredRef = useRef(false);
+  // 재시도 rAF - 스케줄한 창과 함께 보관 (자식 창 rAF를 메인 창으로 취소하면 안 된다)
+  const retryRef = useRef<{ view: Window; handle: number } | null>(null);
 
   const captureOpener = useCallback((container: HTMLElement) => {
     // 컨테이너가 분리 패널 창에 있으면 그 창의 activeElement가 opener다
@@ -50,12 +52,30 @@ export const useFocusRestore = (
     restoredRef.current = true;
     const opener = openerRef.current;
     if (opener && opener.isConnected) {
-      opener.focus();
+      // 모달이 덮여 팝업이 닫힌 경우 잠긴 opener로 포커스를 되돌리면 모달에서
+      // 포커스를 빼앗는다 (jsdom은 inert를 강제하지 않아 가드가 필요)
+      if (!opener.closest('[inert]')) opener.focus();
       // 모달 종료 커밋에서 opener의 inert 해제가 한 번 늦으면 다음 frame에 재시도
-      if (opener.ownerDocument.activeElement !== opener) {
-        opener.ownerDocument.defaultView?.requestAnimationFrame(() => {
+      const doc = opener.ownerDocument;
+      if (doc.activeElement !== opener) {
+        const view = doc.defaultView;
+        if (!view) return;
+        // 스케줄 시점의 포커스 위치. 그새 사용자가 다른 곳을 잡았으면 뺏지 않는다 -
+        // 같은 자리에 머물렀거나(닫히는 모달 안) body로 떨어진 경우만 재시도
+        const activeAtSchedule = doc.activeElement;
+        const handle = view.requestAnimationFrame(() => {
+          retryRef.current = null;
+          const active = doc.activeElement;
+          if (
+            active !== activeAtSchedule &&
+            active !== doc.body &&
+            active != null
+          ) {
+            return;
+          }
           if (opener.isConnected && !opener.closest('[inert]')) opener.focus();
         });
+        retryRef.current = { view, handle };
       }
     }
   }, []);
@@ -63,15 +83,28 @@ export const useFocusRestore = (
   // paint 전에 돌려놔야 포커스가 한 프레임 뜨지 않는다
   useLayoutEffect(() => {
     if (open) {
-      // 닫히다 다시 열리면 가드를 풀어야 다음 닫힘에서도 복원된다
+      // 닫히다 다시 열리면 가드를 풀어야 다음 닫힘에서도 복원된다.
+      // 예약된 재시도는 버린다 - 다시 열린 팝업에서 포커스가 opener로 튕기면 안 된다
       restoredRef.current = false;
+      const retry = retryRef.current;
+      if (retry) {
+        retry.view.cancelAnimationFrame(retry.handle);
+        retryRef.current = null;
+      }
       return;
     }
     restoreFocus();
   }, [open, restoreFocus]);
 
-  // 닫기 신호 없이 사라지는 경로(부모가 통째로 언마운트) 폴백
-  useLayoutEffect(() => restoreFocus, [restoreFocus]);
+  // 닫기 신호 없이 사라지는 경로(부모가 통째로 언마운트) 폴백.
+  // 예약된 재시도 참조는 놓아준다 - 닫힌 자식 창을 붙들지 않게
+  useLayoutEffect(
+    () => () => {
+      restoreFocus();
+      retryRef.current = null;
+    },
+    [restoreFocus],
+  );
 
   return { openerRef, captureOpener, restoreFocus };
 };

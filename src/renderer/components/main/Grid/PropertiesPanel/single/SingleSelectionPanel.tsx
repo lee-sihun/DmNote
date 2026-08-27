@@ -18,6 +18,7 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { PluginGeometryField } from '@hooks/Grid/usePluginGeometryGesture';
 import type {
   CounterTabContentProps,
   NoteTabContentProps,
@@ -140,10 +141,15 @@ interface PluginSelectionPanelProps {
   isPluginResizable: boolean;
   selectedPluginElement: PluginPanelElementView | null;
   pluginDisplaySize: { width: number; height: number };
-  handlePluginPositionXChange: (value: number) => void;
-  handlePluginPositionYChange: (value: number) => void;
-  handlePluginWidthChange: (value: number) => void;
-  handlePluginHeightChange: (value: number) => void;
+  handlePluginGeometryPreview: (
+    field: PluginGeometryField,
+    value: number,
+  ) => void;
+  handlePluginGeometryCommit: (
+    field: PluginGeometryField,
+    value: number,
+  ) => void;
+  handlePluginGeometryCancel: () => void;
   hasSinglePluginSelection: boolean;
   showModalHint: boolean;
   showSettings: boolean;
@@ -167,6 +173,84 @@ interface PluginSelectionPanelProps {
   t: (key: string) => string | undefined;
 }
 
+interface PluginGeometrySectionProps {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  onPreview: (field: PluginGeometryField, value: number) => void;
+  onCommit: (field: PluginGeometryField, value: number) => void;
+  onCancel: () => void;
+  t: (key: string) => string | undefined;
+}
+
+// 입력 트리와 세션 취소 경계를 같은 서브트리에 둔다 - 선택 지문이 같아도
+// 라우트 전환으로 이 섹션만 언마운트되면 미확정 세션을 닫아야 한다
+const PluginGeometrySection = ({
+  position,
+  size,
+  onPreview,
+  onCommit,
+  onCancel,
+  t,
+}: PluginGeometrySectionProps) => {
+  useEffect(() => () => onCancel(), [onCancel]);
+  return (
+    <PropertySection>
+      <PropertyRow label={t('propertiesPanel.position') || '위치'}>
+        <NumberInput
+          value={position.x}
+          onChange={(value) => onCommit('x', value)}
+          onPreview={(value) => onPreview('x', value)}
+          onCancel={onCancel}
+          prefix="X"
+          width={AXIS_FIELD_WIDTH}
+          min={-9999}
+          max={9999}
+          allowDecimal
+          decimalScale={1}
+        />
+        <NumberInput
+          value={position.y}
+          onChange={(value) => onCommit('y', value)}
+          onPreview={(value) => onPreview('y', value)}
+          onCancel={onCancel}
+          prefix="Y"
+          width={AXIS_FIELD_WIDTH}
+          min={-9999}
+          max={9999}
+          allowDecimal
+          decimalScale={1}
+        />
+      </PropertyRow>
+      <PropertyRow label={t('propertiesPanel.size') || '크기'}>
+        <NumberInput
+          value={size.width}
+          onChange={(value) => onCommit('width', value)}
+          onPreview={(value) => onPreview('width', value)}
+          onCancel={onCancel}
+          prefix="W"
+          width={AXIS_FIELD_WIDTH}
+          min={10}
+          max={9999}
+          allowDecimal
+          decimalScale={1}
+        />
+        <NumberInput
+          value={size.height}
+          onChange={(value) => onCommit('height', value)}
+          onPreview={(value) => onPreview('height', value)}
+          onCancel={onCancel}
+          prefix="H"
+          width={AXIS_FIELD_WIDTH}
+          min={10}
+          max={9999}
+          allowDecimal
+          decimalScale={1}
+        />
+      </PropertyRow>
+    </PropertySection>
+  );
+};
+
 export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   setPanelElement,
   pluginTitle,
@@ -174,10 +258,9 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   isPluginResizable,
   selectedPluginElement,
   pluginDisplaySize,
-  handlePluginPositionXChange,
-  handlePluginPositionYChange,
-  handlePluginWidthChange,
-  handlePluginHeightChange,
+  handlePluginGeometryPreview,
+  handlePluginGeometryCommit,
+  handlePluginGeometryCancel,
   hasSinglePluginSelection,
   showModalHint,
   showSettings,
@@ -248,52 +331,14 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
         >
           <EditSessionBoundary>
             {isPluginResizable && (
-              <PropertySection>
-                <PropertyRow label={t('propertiesPanel.position') || '위치'}>
-                  <NumberInput
-                    value={selectedPluginElement?.position.x ?? 0}
-                    onChange={handlePluginPositionXChange}
-                    prefix="X"
-                    width={AXIS_FIELD_WIDTH}
-                    min={-9999}
-                    max={9999}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                  <NumberInput
-                    value={selectedPluginElement?.position.y ?? 0}
-                    onChange={handlePluginPositionYChange}
-                    prefix="Y"
-                    width={AXIS_FIELD_WIDTH}
-                    min={-9999}
-                    max={9999}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                </PropertyRow>
-                <PropertyRow label={t('propertiesPanel.size') || '크기'}>
-                  <NumberInput
-                    value={pluginDisplaySize.width}
-                    onChange={handlePluginWidthChange}
-                    prefix="W"
-                    width={AXIS_FIELD_WIDTH}
-                    min={10}
-                    max={9999}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                  <NumberInput
-                    value={pluginDisplaySize.height}
-                    onChange={handlePluginHeightChange}
-                    prefix="H"
-                    width={AXIS_FIELD_WIDTH}
-                    min={10}
-                    max={9999}
-                    allowDecimal
-                    decimalScale={1}
-                  />
-                </PropertyRow>
-              </PropertySection>
+              <PluginGeometrySection
+                position={selectedPluginElement?.position ?? { x: 0, y: 0 }}
+                size={pluginDisplaySize}
+                onPreview={handlePluginGeometryPreview}
+                onCommit={handlePluginGeometryCommit}
+                onCancel={handlePluginGeometryCancel}
+                t={t}
+              />
             )}
             {!hasSinglePluginSelection && (
               <p className="text-fg-faint text-body text-center">
@@ -905,6 +950,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     sensitivityDraft?.id === singleKnobPosition.id
       ? sensitivityDraft.value
       : null;
+  // draft는 커밋이 착지할 때 지운다 - 먼저 비우면 착지 전 한 프레임 옛 값이 비친다
+  useEffect(() => {
+    setSensitivityDraft(null);
+  }, [singleKnobPosition.id, singleKnobPosition.sensitivity]);
   const [classNameDraft, setClassNameDraft] = useState(
     singleKnobPosition.className || '',
   );
@@ -1337,10 +1386,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     Number(singleKnobPosition.sensitivity ?? 1)
                   }
                   onChange={(value) => {
-                    setSensitivityDraft(null);
+                    const next = Math.max(0, value);
+                    setSensitivityDraft({
+                      id: singleKnobPosition.id,
+                      value: next,
+                    });
                     onElementPropertyCommit?.({
                       property: 'sensitivity',
-                      value: Math.max(0, value),
+                      value: next,
                     });
                   }}
                   onPreview={(value) =>

@@ -187,7 +187,7 @@ body.dmn-dragging * {
     content: none;
   }
 
-  /* backdrop 클래스 없는 글래스 틴트 사용처(패널 토글 칩)도 동일 승격 */
+  /* 글래스 패널 틴트 사용처(사이드 패널 프레임·캔버스 팝업)도 동일 승격 */
   .bg-glass-panel {
     --ui-glass-panel: rgba(25, 25, 29, 0.96);
   }

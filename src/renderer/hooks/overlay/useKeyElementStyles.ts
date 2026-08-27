@@ -86,6 +86,8 @@ interface KeyElementStylesInput {
   position: KeyElementPosition;
   active: boolean;
   label: string;
+  /** 디코드에 실패한 resolved src 집합 - 유실 이미지가 투명 키를 만들지 않게 렌더에서 제외 */
+  failedImageSrcs?: ReadonlySet<string>;
 }
 
 export interface KeyElementStyles {
@@ -116,6 +118,7 @@ export function computeKeyElementStyles({
   position,
   active,
   label,
+  failedImageSrcs,
 }: KeyElementStylesInput): KeyElementStyles {
   const {
     dx,
@@ -179,9 +182,12 @@ export function computeKeyElementStyles({
   const stateFontColor = fontPair.color;
   const fontGradient = fontPair.gradient ?? null;
 
-  // 이미지 소스
-  const inactiveImageSrc = resolveImageSource(inactiveImage);
-  const activeImageSrc = resolveImageSource(activeImage);
+  // 이미지 소스. 실패한 src는 없는 것으로 - 배경·라벨·기본 립·섀도가 그대로 복귀하고
+  // 활성만 실패하면 대기 이미지로 자연 폴백된다
+  const dropFailed = (src: string | null): string | null =>
+    src && failedImageSrcs?.has(src) ? null : src;
+  const inactiveImageSrc = dropFailed(resolveImageSource(inactiveImage));
+  const activeImageSrc = dropFailed(resolveImageSource(activeImage));
 
   const isTransparent = active ? activeTransparent : idleTransparent;
 
@@ -238,10 +244,12 @@ export function computeKeyElementStyles({
       : 'none';
   // 반대 상태만 링이고 이 상태는 보더가 없으면 같은 패딩을 예약 - 눌림 시
   // 콘텐츠 박스 이동 방지. 보더가 있는 상태는 이미 같은 인셋을 만든다
+  // 억제 판정도 이 상태와 같은 규칙(replace만) - overlay에서 반대 상태가 립을
+  // 그리는데 여기서 null이 나오면 패딩 예약이 빠져 눌림 시 콘텐츠가 1px 튄다
   const otherStateBorder = resolveElementBorder(borderFields, !active, {
-    suppressDefault: Boolean(
-      active ? inactiveImageSrc : activeImageSrc || inactiveImageSrc,
-    ),
+    suppressDefault:
+      imageMode === 'replace' &&
+      Boolean(active ? inactiveImageSrc : activeImageSrc || inactiveImageSrc),
   });
   const reserveRingPadding =
     showBorderRing ||
@@ -344,8 +352,13 @@ export function computeKeyElementStyles({
     willChange: 'transform',
     backfaceVisibility: 'hidden' as const,
     transformStyle: 'preserve-3d' as const,
-    // 이미지 레이어가 오버행할 수 있어 paint containment는 이미지 키에서 제외
-    contain: hasCurrentImage ? 'layout style' : 'layout style paint',
+    // overlay 이미지는 오버행할 수 있어 paint containment 제외. replace는 루트
+    // overflow:hidden이 이미 자르므로 유지 (이미지 프리셋 대부분이 replace)
+    contain: imageReplaces
+      ? 'layout style paint'
+      : hasCurrentImage
+      ? 'layout style'
+      : 'layout style paint',
     imageRendering: 'auto' as const,
     isolation: 'isolate' as const,
     boxSizing: 'border-box' as const,
@@ -431,6 +444,9 @@ export function computeKeyElementStyles({
     showBorderRing && borderGradientSpec
       ? {
           ...gradientRingStyle(borderGradientSpec, gradientRingWidth),
+          // 링은 DOM상 img보다 앞이라 같은 z(0)면 뒤에 오는 replace 이미지가 덮는다.
+          // replace(0) 위·overlay(3) 아래 - GraphPanel의 순서와 동일
+          zIndex: 1,
           ...(useInline
             ? { background: gradientToCss(borderGradientSpec) }
             : {}),

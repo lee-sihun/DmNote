@@ -85,6 +85,7 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
     ];
     const COUNTER_FIELDS: [&str; 2] = ["fillIdleGradient", "fillActiveGradient"];
     const SHADOW_FIELDS: [&str; 2] = ["shadow", "activeShadow"];
+    const IMAGE_TRANSFORM_FIELDS: [&str; 2] = ["idleImageTransform", "activeImageTransform"];
 
     for collection_name in POSITION_COLLECTION_FIELDS {
         let Some(modes) = preset
@@ -125,6 +126,16 @@ fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
                         continue;
                     };
                     if let Some((suffix, error)) = invalid_shadow_error(value) {
+                        return Some(format!(
+                            "{collection_name}[{mode:?}][{index}].{field}{suffix}: {error}"
+                        ));
+                    }
+                }
+                for field in IMAGE_TRANSFORM_FIELDS {
+                    let Some(value) = entry.get(field).filter(|value| !value.is_null()) else {
+                        continue;
+                    };
+                    if let Some((suffix, error)) = invalid_image_transform_error(value) {
                         return Some(format!(
                             "{collection_name}[{mode:?}][{index}].{field}{suffix}: {error}"
                         ));
@@ -216,6 +227,58 @@ fn invalid_shadow_error(value: &serde_json::Value) -> Option<(&'static str, &'st
         })
     {
         return Some((".blur", "must be a finite number between 0 and 100"));
+    }
+    None
+}
+
+// 이미지 변환은 그림자와 같은 정책으로 문에서 거부한다 - 문서 검증(editor.rs)과 같은 범위
+fn invalid_image_transform_error(
+    value: &serde_json::Value,
+) -> Option<(&'static str, &'static str)> {
+    use crate::models::{
+        IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX,
+        IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN,
+    };
+    let Some(transform) = value.as_object() else {
+        return Some(("", "must be an object"));
+    };
+    for (field, suffix, min, max, error) in [
+        (
+            "offsetX",
+            ".offsetX",
+            IMAGE_TRANSFORM_OFFSET_MIN,
+            IMAGE_TRANSFORM_OFFSET_MAX,
+            "must be a finite number between -500 and 500",
+        ),
+        (
+            "offsetY",
+            ".offsetY",
+            IMAGE_TRANSFORM_OFFSET_MIN,
+            IMAGE_TRANSFORM_OFFSET_MAX,
+            "must be a finite number between -500 and 500",
+        ),
+        (
+            "rotation",
+            ".rotation",
+            IMAGE_TRANSFORM_ROTATION_MIN,
+            IMAGE_TRANSFORM_ROTATION_MAX,
+            "must be a finite number between -180 and 180",
+        ),
+        (
+            "scale",
+            ".scale",
+            IMAGE_TRANSFORM_SCALE_MIN,
+            IMAGE_TRANSFORM_SCALE_MAX,
+            "must be a finite number between 0.1 and 10",
+        ),
+    ] {
+        if !transform
+            .get(field)
+            .and_then(serde_json::Value::as_f64)
+            .is_some_and(|value| value.is_finite() && (min..=max).contains(&value))
+        {
+            return Some((suffix, error));
+        }
     }
     None
 }
@@ -2049,6 +2112,37 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn preset_rejects_out_of_range_image_transform_with_path() {
+        let preset = serde_json::json!({
+            "keyPositions": {
+                "custom mode": [{
+                    "idleImageTransform": {
+                        "offsetX": 0, "offsetY": 0, "rotation": 0, "scale": 0.05
+                    }
+                }]
+            }
+        });
+        assert_eq!(
+            invalid_position_style_detail(&preset).as_deref(),
+            Some(
+                "keyPositions[\"custom mode\"][0].idleImageTransform.scale: must be a finite number between 0.1 and 10"
+            )
+        );
+
+        let valid = serde_json::json!({
+            "keyPositions": {
+                "custom mode": [{
+                    "idleImageTransform": null,
+                    "activeImageTransform": {
+                        "offsetX": -500, "offsetY": 500, "rotation": 180, "scale": 10
+                    }
+                }]
+            }
+        });
+        assert_eq!(invalid_position_style_detail(&valid), None);
     }
 
     #[test]

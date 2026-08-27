@@ -192,10 +192,16 @@ const KnobItem = ({
   const stateBackgroundColor =
     bgPair.color ||
     (previewActive ? DEFAULT_ELEMENT_ACTIVE_BG : DEFAULT_ELEMENT_BG);
-  // 회전 인식 막대 색은 명시 보더 색을 겸하고, 미지정이면 텍스트 색 계열
+  // 회전 인식 막대 색은 명시 단색 보더만 겸한다. 그라데이션 보더의 대표 첫 스톱은
+  // 막대 색이 아니다 - 패널이 보여주는 기본 립(0.14 알파)을 그대로 커밋하면 막대가
+  // 사라지므로, 그라데이션이거나 미지정이면 텍스트 색 계열.
+  // 프리뷰 중에도 링과 같은 기준(effective)을 봐야 커밋 순간 막대가 튀지 않는다
   const stateBorderColor =
-    borderPair.color ||
-    (previewActive ? DEFAULT_ELEMENT_ACTIVE_FONT : DEFAULT_ELEMENT_FONT);
+    effectiveBorderGradient == null && borderPair.color
+      ? borderPair.color
+      : previewActive
+      ? DEFAULT_ELEMENT_ACTIVE_FONT
+      : DEFAULT_ELEMENT_FONT;
 
   const gradientRingWidth = resolvedKnobBorder.width;
   const showBorderRing =

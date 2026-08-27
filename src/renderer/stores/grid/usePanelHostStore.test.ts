@@ -27,6 +27,7 @@ import {
   dockPropertiesPanel,
   notePanelWindowHidden,
   usePanelHostStore,
+  registerPanelHostScrollReapply,
 } from './usePanelHostStore';
 
 describe('usePanelHostStore transitions', () => {
@@ -147,6 +148,36 @@ describe('usePanelHostStore transitions', () => {
     expect(await run(dockPropertiesPanel())).toBe('done');
     expect(order).toEqual(['dock:docked']);
     expect(usePanelHostStore.getState().placement).toBe('docked');
+  });
+
+  it('dock은 호스트가 메인 문서에 붙은 뒤에 창을 감춘다', async () => {
+    stopAttachmentMirror();
+    usePanelHostStore.setState({
+      placement: 'detached',
+      attachedPlacement: 'detached',
+    });
+
+    const pending = dockPropertiesPanel();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.dock).not.toHaveBeenCalled();
+
+    usePanelHostStore.getState().setAttachedPlacement('docked');
+    expect(await run(pending)).toBe('done');
+    expect(mocks.dock).toHaveBeenCalledOnce();
+  });
+
+  it('detach는 창을 드러낸 뒤 스크롤 재적용을 부른다', async () => {
+    const order: string[] = [];
+    mocks.present.mockImplementation(async () => {
+      order.push('present');
+    });
+    const release = registerPanelHostScrollReapply(() => order.push('reapply'));
+    try {
+      expect(await run(detachPropertiesPanel())).toBe('done');
+      expect(order).toEqual(['present', 'reapply']);
+    } finally {
+      release();
+    }
   });
 
   it('dock hides the child window when the panel host is unmounted', async () => {

@@ -1,11 +1,10 @@
 use serde::Deserialize;
-use tauri::{AppHandle, State};
+use tauri::AppHandle;
 
 use crate::{
     commands::run_blocking,
     errors::CmdResult,
     models::{BootstrapOverlayState, OverlayBounds},
-    state::AppState,
 };
 
 #[derive(Debug, Deserialize)]
@@ -29,18 +28,18 @@ pub async fn overlay_get(app: AppHandle) -> CmdResult<BootstrapOverlayState> {
 }
 
 #[tauri::command]
-pub async fn overlay_set_visible(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    visible: bool,
-) -> CmdResult<()> {
-    // OBS 모드 활성화 중에는 오버레이 수동 토글 차단
-    if state.is_obs_mode_active() {
-        return Err(crate::errors::CommandError::msg(
-            "OBS 모드 활성화 중에는 오버레이를 수동으로 전환할 수 없습니다",
-        ));
-    }
-    Ok(state.set_overlay_visibility(&app, visible)?)
+pub async fn overlay_set_visible(app: AppHandle, visible: bool) -> CmdResult<()> {
+    // store 쓰기(fsync)를 async 런타임 스레드에서 직접 하지 않는다 - overlay_set_lock과 동일
+    run_blocking(app, move |app, state| {
+        // OBS 모드 활성화 중에는 오버레이 수동 토글 차단
+        if state.is_obs_mode_active() {
+            return Err(crate::errors::CommandError::msg(
+                "OBS 모드 활성화 중에는 오버레이를 수동으로 전환할 수 없습니다",
+            ));
+        }
+        Ok(state.set_overlay_visibility(app, visible)?)
+    })
+    .await
 }
 
 #[tauri::command]

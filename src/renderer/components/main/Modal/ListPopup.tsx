@@ -552,8 +552,31 @@ const MenuItemRow = ({
   useEffect(() => {
     return () => {
       if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+      // 열린 서브메뉴를 쥔 행이 사라지면 공유 ref에 분리된 노드의 getRect가 남아
+      // 다음 호버의 형제 전환 판정이 0 사각형으로 오판한다
+      releaseSibling(siblingActiveRef, item.id);
     };
-  }, []);
+  }, [item.id, siblingActiveRef]);
+
+  // 부모 메뉴를 스크롤하면 앵커 행이 움직이는데 서브메뉴는 열 때 잰 좌표에 고정된다.
+  // 프레임마다 재측정하면 글래스 표면에서 강제 레이아웃+재필터라, 스크롤 시 닫는다
+  // (FloatingPopup closeOnScroll과 같은 관용구). 서브메뉴 자체 스크롤은 행을 포함하지
+  // 않으므로 무시된다
+  useEffect(() => {
+    if (!subMenuOpen) return;
+    const row = rowRef.current;
+    const doc = row?.ownerDocument;
+    if (!row || !doc) return;
+    const onScroll = (event: Event) => {
+      const target = event.target as Node | null;
+      if (!target || !target.contains(row)) return;
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+      setSubMenuOpen(false);
+      releaseSibling(siblingActiveRef, item.id);
+    };
+    doc.addEventListener('scroll', onScroll, true);
+    return () => doc.removeEventListener('scroll', onScroll, true);
+  }, [subMenuOpen, item.id, siblingActiveRef]);
 
   const hasCheck = typeof item.checked === 'boolean';
   const constrainLabel = item.isPlugin === true;

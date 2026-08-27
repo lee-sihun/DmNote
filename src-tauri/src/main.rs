@@ -153,7 +153,10 @@ fn main() {
                 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
 
                 // AppKit은 메뉴 바의 첫 서브메뉴를 앱 메뉴로 렌더한다.
-                // set_menu는 Tauri 기본 메뉴를 통째로 대체하므로 Quit을 여기서 직접 넣어야 한다
+                // set_menu는 Tauri 기본 메뉴를 통째로 대체하므로 Quit을 여기서 직접 넣어야 한다.
+                // Quit은 MenuEvent 없이 `terminate:`로 직결되고 RunEvent::ExitRequested도 거치지
+                // 않지만, macos_termination::install이 주입한 applicationShouldTerminate:가
+                // 종료 핸드셰이크(편집 flush)로 가로챈다
                 let app_menu = Submenu::with_items(
                     app,
                     app.package_info().name.clone(),

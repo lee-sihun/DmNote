@@ -14,6 +14,7 @@ import {
   dockPropertiesPanel,
   isTransitionFailure,
   registerPanelHostMoveCapture,
+  registerPanelHostScrollReapply,
   type PanelHostPlacement,
   usePanelHostStore,
 } from '@stores/grid/usePanelHostStore';
@@ -140,8 +141,23 @@ const PropertiesPanelHost = ({
     const raf = body.ownerDocument.defaultView?.requestAnimationFrame(() => {
       dim.style.opacity = '0.6';
     });
+    // 잠긴 자식 창에 OS 포커스가 있으면 Escape가 그 문서에만 닿는다 - 분리 창엔
+    // 모달이 없으므로 메인 문서로 넘겨 최상위 레이어가 소유권을 판정하게 한다
+    const relayEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      document.dispatchEvent(
+        // 소비자들이 defaultPrevented로 소유권을 넘기므로 cancelable이어야 한다
+        new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    };
+    body.ownerDocument.addEventListener('keydown', relayEscape);
 
     return () => {
+      body.ownerDocument.removeEventListener('keydown', relayEscape);
       body.inert = previousInert;
       delete body.dataset.dmnModalLocked;
       if (raf) body.ownerDocument.defaultView?.cancelAnimationFrame(raf);
@@ -172,6 +188,26 @@ const PropertiesPanelHost = ({
             left: viewport.scrollLeft,
           });
         });
+    });
+  }, [host]);
+
+  // 자식 창은 present() 뒤에야 레이아웃이 선다 - 숨긴 채 복원한 스크롤이 Lenis limit 0에
+  // 잘렸을 수 있어, 드러난 뒤 저장값과 다른 뷰포트만 다시 적용한다 (무증상 환경에선 no-op)
+  useLayoutEffect(() => {
+    return registerPanelHostScrollReapply(() => {
+      const reapply = () => {
+        host
+          .querySelectorAll<HTMLElement>(SCROLL_VIEWPORT_SELECTOR)
+          .forEach((viewport) => {
+            const position = scrollPositionsRef.current.get(viewport);
+            if (!position || viewport.scrollTop === position.top) return;
+            restoreLenisScroll(viewport, position.top);
+          });
+      };
+      // 레이아웃 뒤에 적용해야 한다 - 같은 태스크에서 재적용하면 다시 0으로 잘린다
+      const view = host.ownerDocument.defaultView;
+      if (view?.requestAnimationFrame) view.requestAnimationFrame(reapply);
+      else setTimeout(reapply, 0);
     });
   }, [host]);
 

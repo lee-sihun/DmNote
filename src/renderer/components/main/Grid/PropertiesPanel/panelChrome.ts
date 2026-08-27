@@ -2,9 +2,15 @@
 // 프레임이 글래스 재질을 소유하고, 페이지 전환 시 콘텐츠 레이어만 슬라이드
 // 상주 풀하이트 표면의 라이브 블러 — 캔버스 damage마다 재필터되므로
 // Windows에서 키 연타 프레임 실측이 유지 조건 (미달 시 bg-glass-panel-solid로 복귀)
-// 사이드 패널 재질 - 프레임과 접힘 토글 칩이 같은 글래스를 공유
+// 사이드 패널 프레임 재질
 export const SIDE_PANEL_MATERIAL_CLASS =
   'bg-glass-panel backdrop-glass-popup backdrop-glass-canvas';
+
+// 접힘 토글 칩 - opacity로 등퇴장하므로 라이브 블러 금지
+// (블러+opacity 조합은 WKWebView에서 블러 레이어가 점멸하고, 페이드를 래퍼로
+//  옮겨도 opacity < 1인 조상이 backdrop root가 되어 같은 증상 - Modal.tsx 참조).
+// 프레임과 같은 L*에 서도록 상주 크롬 솔리드 토큰을 쓴다
+export const SIDE_PANEL_CHIP_MATERIAL_CLASS = 'bg-glass-panel-solid';
 
 export const SIDE_PANEL_FRAME_CLASS = `absolute right-0 top-0 bottom-0 w-[240px] ${SIDE_PANEL_MATERIAL_CLASS} shadow-elevation-panel z-[var(--z-chrome-panel)]`;
 

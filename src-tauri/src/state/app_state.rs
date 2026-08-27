@@ -1082,6 +1082,7 @@ pub struct AppState {
     key_sound: Arc<KeySoundEngine>,
     key_sound_bindings: RwLock<Arc<KeySoundBindingTable>>,
     key_sound_output_generation: Arc<AtomicU64>,
+    // 잠금 순서: key_sound_output_persistence_lock → 번호표 turn (역순 금지)
     key_sound_output_persistence_lock: Arc<Mutex<()>>,
     /// 전역 CSS 상태와 워처 전환 직렬화
     css_operation_lock: Mutex<()>,
@@ -3184,7 +3185,7 @@ impl AppState {
         &self.plugin_authority
     }
 
-    pub(crate) fn reset_plugin_authority(&self) -> Result<PluginAuthorityLease<'_>, String> {
+    pub(crate) fn reset_plugin_authority(&self) -> Result<PluginAuthorityLease, String> {
         self.plugin_authority.reset()
     }
 
@@ -4505,13 +4506,26 @@ impl AppState {
         backend: KeySoundOutputBackend,
     ) -> Result<KeySoundOutputState> {
         let _persistence_guard = self.key_sound_output_persistence_lock.lock();
+        // 셧다운 뒤 요청은 장치를 열기 전에 거절 (persist 단계의 turn 검사와 동일 조건)
+        self.ensure_mutation_allowed().map_err(anyhow::Error::msg)?;
         self.key_sound_output_generation
             .fetch_add(1, Ordering::AcqRel);
-        // 엔진 콜백은 저장 스레드만 생성하므로 동기 대기 중 교착 없음
+        // 장치 열기는 번호표 밖에서 기다린다 - turn 안에서 기다리면 드라이버가 멈춘 동안
+        // 뒤 번호표(저장·커밋) 전부가 정지한다. 엔진 콜백은 저장 스레드만 생성하므로
+        // 동기 대기 중 교착 없음
         let output_state = self.key_sound.set_output_backend(backend);
         let requested = output_state.requested.clone();
-        self.store.update(|state| {
-            state.key_sound_output_backend = Some(output_backend_to_persist(requested));
+        // 잠금 순서: persistence_lock → 번호표. 번호표 보유자는 이 잠금을 잡지 않고
+        // fallback persist 스레드는 잠금만 잡고 번호표는 잡지 않으므로 역순이 없다.
+        // 잠금을 든 채 번호표를 받아야 겹친 요청의 엔진 전환 순서와 persist 순서가 일치한다
+        let ticket = self
+            .issue_mutation_publication()
+            .map_err(anyhow::Error::msg)?;
+        ticket.run(|| {
+            self.ensure_mutation_allowed().map_err(anyhow::Error::msg)?;
+            self.store.update(|state| {
+                state.key_sound_output_backend = Some(output_backend_to_persist(requested));
+            })
         })?;
         Ok(output_state)
     }
@@ -6372,6 +6386,44 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 
+    // 장치 전환 대기는 번호표 밖 - 앞 번호표가 잡혀 있어도 엔진은 먼저 전환되고
+    // persist만 turn을 기다린다 (turn 안에서 기다리면 뒤 번호표 전부가 드라이버를 기다림)
+    #[test]
+    fn output_backend_switch_runs_before_publication_turn() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-output-backend-turn-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state = Arc::new(
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap(),
+        );
+        let blocking_ticket = state.issue_mutation_publication().unwrap();
+
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker_state = Arc::clone(&state);
+        let worker = thread::spawn(move || {
+            let result = worker_state
+                .key_sound_set_output_backend(crate::audio::KeySoundOutputBackend::DefaultDevice);
+            done_tx.send(result.is_ok()).unwrap();
+        });
+
+        // 앞 번호표가 살아 있는 동안 persist는 turn을 기다린다
+        assert!(done_rx.recv_timeout(Duration::from_millis(500)).is_err());
+        assert!(state.store.snapshot().key_sound_output_backend.is_none());
+
+        drop(blocking_ticket);
+        assert!(done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("앞 번호표가 풀리면 persist가 완료된다"));
+        worker.join().unwrap();
+        assert!(state.store.snapshot().key_sound_output_backend.is_some());
+
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
     #[test]
     fn mutation_publication_preserves_ticket_order_when_first_worker_is_delayed() {
         let publication = Arc::new(MutationPublicationSequencer::default());
@@ -6400,6 +6452,76 @@ mod tests {
         second_done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
         second_worker.join().unwrap();
         assert_eq!(*order.lock(), vec![1, 2]);
+    }
+
+    // 커밋 커맨드 구조 재현: 뒤 번호표가 먼저 admit한 뒤 turn을 기다리고, 앞 번호표가
+    // 그 다음 admit → turn. lease가 잠금이면 앞 번호표가 admit에서 막혀 영구 교착
+    #[test]
+    fn plugin_authority_admission_does_not_block_earlier_publication_turn() {
+        use crate::state::plugin::PluginRuntimeAuthority;
+
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let authority = Arc::new(PluginRuntimeAuthority::default());
+        authority.reset().unwrap();
+        let first = publication.issue().unwrap();
+        let second = publication.issue().unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+
+        let (second_admitted_tx, second_admitted_rx) = mpsc::channel();
+        let second_authority = Arc::clone(&authority);
+        let second_order = Arc::clone(&order);
+        let second_worker = thread::spawn(move || {
+            let lease = second_authority.admit(1).unwrap();
+            second_admitted_tx.send(()).unwrap();
+            second.run(|| {
+                second_authority.revalidate(lease).unwrap();
+                second_order.lock().push(2);
+            });
+        });
+        second_admitted_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+
+        let first_authority = Arc::clone(&authority);
+        let first_order = Arc::clone(&order);
+        let first_worker = thread::spawn(move || {
+            let lease = first_authority.admit(1).unwrap();
+            first.run(|| {
+                first_authority.revalidate(lease).unwrap();
+                first_order.lock().push(1);
+            });
+        });
+
+        let (done_tx, done_rx) = mpsc::channel();
+        thread::spawn(move || {
+            first_worker.join().unwrap();
+            second_worker.join().unwrap();
+            done_tx.send(()).unwrap();
+        });
+        done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("admit이 잠금을 들지 않아야 번호표 순서대로 진행된다");
+        assert_eq!(*order.lock(), vec![1, 2]);
+    }
+
+    // 번호표 FIFO가 reset과 커밋을 직렬화한다 - reset 뒤 turn의 revalidate는 거절
+    #[test]
+    fn plugin_authority_revalidate_rejects_commit_admitted_before_reset() {
+        use crate::state::plugin::PluginRuntimeAuthority;
+
+        let publication = Arc::new(MutationPublicationSequencer::default());
+        let authority = PluginRuntimeAuthority::default();
+        authority.reset().unwrap();
+        let lease = authority.admit(1).unwrap();
+
+        let reset_ticket = publication.issue().unwrap();
+        let commit_ticket = publication.issue().unwrap();
+        reset_ticket.run(|| authority.reset().unwrap());
+        let rejected = commit_ticket.run(|| authority.revalidate(lease));
+        assert_eq!(
+            rejected.unwrap_err(),
+            "AUTHORITY_GENERATION_CHANGED".to_string()
+        );
     }
 
     #[test]

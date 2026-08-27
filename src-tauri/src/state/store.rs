@@ -1533,6 +1533,7 @@ impl AppStore {
         scratch.key_counters = target.key_counters.clone();
         target.apply_override_patches(&mut scratch);
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
@@ -1627,6 +1628,7 @@ impl AppStore {
             &preset_history_settings_patch(&target.settings),
         );
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
@@ -2049,6 +2051,7 @@ impl AppStore {
             .transpose()?
             .unwrap_or_default();
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        crate::state::migration::canonicalize_image_modes(&mut scratch);
 
         // editorRevision은 이 트랜잭션만 관리
         scratch.editor_revision = current_store.editor_revision;
@@ -3216,6 +3219,7 @@ fn prepare_editor_patch_transition(
     let mut scratch = current_store.clone();
     candidate.apply_to_store(&mut scratch);
     crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+    crate::state::migration::canonicalize_image_modes(&mut scratch);
     candidate = EditorDocumentV1::from_store(&scratch);
 
     validate_paired_update(
@@ -18944,6 +18948,39 @@ mod tests {
             EditorDocumentV1::from_store(&reloaded.data),
             committed_document
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_commit_folds_replace_image_mode_into_none() {
+        let dir = test_directory("editor-image-mode-canonicalization-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let revision_before = store.editor_get().revision;
+        let mut positions = store.editor_get().document.key_positions;
+        positions.get_mut("4key").unwrap()[0].image_mode = Some(crate::models::ImageMode::Replace);
+        let request = editor_request(
+            revision_before,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                key_positions: Some(positions),
+                ..EditorPatchV1::default()
+            },
+        );
+
+        // replace만 명시한 패치는 정규화 뒤 무변경 - 빈 undo 항목이 남지 않는다
+        let change = store.commit_editor_document(request).unwrap();
+        assert!(change.result.changed_fields.is_empty());
+        assert_eq!(change.result.revision, revision_before);
+        assert!(change.event.is_none());
+        assert!(change.document.key_positions["4key"][0]
+            .image_mode
+            .is_none());
+        assert!(store.snapshot().key_positions["4key"][0]
+            .image_mode
+            .is_none());
+
+        store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -131,7 +131,10 @@ vi.mock('@components/main/Grid/PropertiesPanel', () => ({
 }));
 
 import PropertiesPanelHost from './PropertiesPanelHost';
-import { usePanelHostStore } from '@stores/grid/usePanelHostStore';
+import {
+  reapplyPanelHostScroll,
+  usePanelHostStore,
+} from '@stores/grid/usePanelHostStore';
 import { registerPopupLayer } from '@components/main/Modal/popupLayer';
 import { usePanelHost } from '@contexts/PanelHostContext';
 
@@ -453,6 +456,36 @@ describe('PropertiesPanelHost', () => {
     });
     expect(viewport.scrollTop).toBe(310);
     mainAdoptSpy.mockRestore();
+  });
+
+  // 숨긴 자식 창에서 복원한 스크롤은 Lenis limit 0에 잘릴 수 있다 - present 뒤 재적용
+  it('present 뒤 재적용은 잘린 스크롤만 저장값으로 되돌린다', async () => {
+    await render();
+    const viewport = hostElement()!.querySelector<HTMLElement>(
+      '.properties-panel-overlay-viewport',
+    )!;
+    viewport.scrollTop = 420;
+    mocks.childWindow = createChild();
+    (
+      mocks.childWindow as unknown as {
+        requestAnimationFrame?: (cb: FrameRequestCallback) => number;
+      }
+    ).requestAnimationFrame = (cb) => {
+      cb(0);
+      return 1;
+    };
+
+    await act(async () => {
+      usePanelHostStore.getState().setPlacement('detached');
+    });
+    viewport.scrollTop = 0;
+
+    await act(async () => {
+      reapplyPanelHostScroll();
+      // rAF가 없는 환경 폴백은 다음 태스크 - 레이아웃 뒤에 적용해야 한다
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(viewport.scrollTop).toBe(420);
   });
 
   it('moves an open panel popup to the child document with the panel', async () => {

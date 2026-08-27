@@ -62,6 +62,7 @@ import type {
 import { normalizeCounterSettings } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { useLenis } from '@hooks/useLenis';
+import { usePluginGeometryGesture } from '@hooks/Grid/usePluginGeometryGesture';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import {
@@ -1303,33 +1304,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     ),
   };
 
-  const handlePluginPositionXChange = (value: number) => {
-    if (!selectedPluginElement) return;
-    updatePluginElement(selectedPluginElement.fullId, {
-      position: { x: value },
-    });
-  };
-
-  const handlePluginPositionYChange = (value: number) => {
-    if (!selectedPluginElement) return;
-    updatePluginElement(selectedPluginElement.fullId, {
-      position: { y: value },
-    });
-  };
-
-  const handlePluginWidthChange = (value: number) => {
-    if (!selectedPluginElement) return;
-    updatePluginElement(selectedPluginElement.fullId, {
-      measuredSize: { width: value },
-    });
-  };
-
-  const handlePluginHeightChange = (value: number) => {
-    if (!selectedPluginElement) return;
-    updatePluginElement(selectedPluginElement.fullId, {
-      measuredSize: { height: value },
-    });
-  };
+  // 위치·크기 숫자 입력은 캔버스 드래그와 같은 플러그인 편집 세션을 쓴다 -
+  // 값의 원본이 프론트 스토어라 preview_broker 대신 세션 경계에서 한 번 저장
+  const pluginGeometryGesture = usePluginGeometryGesture(
+    selectedPluginElement
+      ? {
+          fullId: selectedPluginElement.fullId,
+          pluginId: selectedPluginElement.pluginId,
+        }
+      : null,
+  );
 
   const handlePluginSettingChange = (key: string, value: unknown) => {
     if (!selectedPluginElement) return;
@@ -2940,10 +2924,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           isPluginResizable={isPluginResizable}
           selectedPluginElement={selectedPluginElement}
           pluginDisplaySize={pluginDisplaySize}
-          handlePluginPositionXChange={handlePluginPositionXChange}
-          handlePluginPositionYChange={handlePluginPositionYChange}
-          handlePluginWidthChange={handlePluginWidthChange}
-          handlePluginHeightChange={handlePluginHeightChange}
+          handlePluginGeometryPreview={pluginGeometryGesture.preview}
+          handlePluginGeometryCommit={pluginGeometryGesture.commit}
+          handlePluginGeometryCancel={pluginGeometryGesture.cancel}
           hasSinglePluginSelection={hasSinglePluginSelection}
           showModalHint={showModalHint}
           showSettings={showSettings}

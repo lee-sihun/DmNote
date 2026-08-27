@@ -66,13 +66,24 @@ export type TransitionOutcome = 'done' | 'busy' | 'blocked' | 'failed';
 export const isTransitionFailure = (outcome: TransitionOutcome): boolean =>
   outcome === 'blocked' || outcome === 'failed';
 
+// 도킹은 호스트 이동을 짧게만 기다린다 - 설정 화면에선 호스트가 언마운트돼 영영 안 붙고,
+// 창은 그동안 떠 있어 보이므로 오래 붙잡지 않는다
+const DOCK_ATTACH_TIMEOUT_MS = 300;
+
 // 실제 DOM 이동은 React layout effect가 확인한다. 타이머 한 번으로는 커밋 완료를 보장할 수 없다
 const waitForPanelHostAttachment = (
   placement: PanelHostPlacement,
-  timeoutMs = 1500,
+  {
+    timeoutMs = 1500,
+    // 호스트가 아예 없으면(언마운트) 옮길 것도 없으므로 성공으로 본다
+    settleWhenAbsent = false,
+  }: { timeoutMs?: number; settleWhenAbsent?: boolean } = {},
 ): Promise<boolean> => {
   const attachedPlacement = usePanelHostStore.getState().attachedPlacement;
   if (attachedPlacement === placement) {
+    return Promise.resolve(true);
+  }
+  if (settleWhenAbsent && attachedPlacement === null) {
     return Promise.resolve(true);
   }
   return new Promise((resolve) => {
@@ -86,9 +97,27 @@ const waitForPanelHostAttachment = (
     };
     const unsubscribe = usePanelHostStore.subscribe((state) => {
       if (state.attachedPlacement === placement) finish(true);
+      else if (settleWhenAbsent && state.attachedPlacement === null) {
+        finish(true);
+      }
     });
     const timeoutId = setTimeout(() => finish(false), timeoutMs);
   });
+};
+
+let reapplyScrollAfterPresent: (() => void) | null = null;
+
+// 자식 창은 present() 뒤에야 레이아웃이 선다 - 숨긴 채 복원한 스크롤이 limit 0으로
+// 잘렸을 수 있어 드러난 뒤 한 번 더 적용한다 (PropertiesPanelHost가 등록)
+export const reapplyPanelHostScroll = (): void => {
+  reapplyScrollAfterPresent?.();
+};
+
+export const registerPanelHostScrollReapply = (reapply: () => void) => {
+  reapplyScrollAfterPresent = reapply;
+  return () => {
+    if (reapplyScrollAfterPresent === reapply) reapplyScrollAfterPresent = null;
+  };
 };
 
 const restorePlacement = async (placement: PanelHostPlacement) => {
@@ -149,6 +178,7 @@ export const detachPropertiesPanel = async (
       } else {
         await panelWindowApi.present();
       }
+      reapplyPanelHostScroll();
       return 'done';
     } catch (error) {
       await restorePlacement('docked');
@@ -180,12 +210,29 @@ export const dockPropertiesPanel = async (): Promise<TransitionOutcome> => {
     usePanelHostStore.getState().setPlacement('docked');
     // 분리 창엔 접힘이 없었다 - 도킹한 패널은 펼친 채로 돌려준다
     usePropertiesPanelStore.getState().setCanvasPanelOpen(true);
+    // 도킹도 호스트 이동을 기다린다 - 다만 실패는 치명이 아니다 (창은 그대로 감춘다).
+    // 설정 화면에선 호스트가 언마운트돼 attach가 영영 오지 않는다
+    if (
+      !(await waitForPanelHostAttachment('docked', {
+        timeoutMs: DOCK_ATTACH_TIMEOUT_MS,
+        settleWhenAbsent: true,
+      }))
+    ) {
+      console.warn(
+        'Panel host did not attach to the main document before dock',
+      );
+    }
     try {
       await panelWindowApi.dock();
       return 'done';
     } catch (error) {
       if (getPanelChildWindow()) {
+        // 되돌림도 짧게만 기다린다 - 호스트가 없으면(설정 화면) 영영 안 붙는다
         usePanelHostStore.getState().setPlacement('detached');
+        await waitForPanelHostAttachment('detached', {
+          timeoutMs: DOCK_ATTACH_TIMEOUT_MS,
+          settleWhenAbsent: true,
+        });
       }
       console.error('Failed to dock panel window', error);
       return 'failed';

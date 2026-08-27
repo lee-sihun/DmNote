@@ -118,6 +118,10 @@ enum ViolationPropertyPath {
         name: &'static str,
         property: &'static str,
     },
+    ImageTransform {
+        name: &'static str,
+        property: &'static str,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -1493,6 +1497,90 @@ fn collect_position_style_violations(
                     violations,
                 );
             }
+        }
+        // 이미지 변환도 그림자처럼 문서 단위로 검증한다 - property 패치 경로만 검사하면
+        // 프리셋·플러그인·frozen insert로 범위 밖 값이 영속돼 다음 실행의 복구 세션을 유발한다
+        for (name, transform) in [
+            ("idleImageTransform", position.idle_image_transform.as_ref()),
+            (
+                "activeImageTransform",
+                position.active_image_transform.as_ref(),
+            ),
+        ] {
+            if let Some(transform) = transform {
+                collect_image_transform_violations(
+                    NativeElementDiagnostic {
+                        kind,
+                        field,
+                        mode,
+                        index,
+                        id: &position.id,
+                    },
+                    name,
+                    transform,
+                    violations,
+                );
+            }
+        }
+    }
+}
+
+fn collect_image_transform_violations(
+    element: NativeElementDiagnostic<'_>,
+    name: &'static str,
+    transform: &crate::models::ImageTransform,
+    violations: &mut BTreeSet<ValidationViolation>,
+) {
+    use crate::models::{
+        IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX,
+        IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN,
+    };
+    let NativeElementDiagnostic {
+        kind,
+        field,
+        mode,
+        index,
+        id,
+    } = element;
+    for (property, value, min, max) in [
+        (
+            "offsetX",
+            transform.offset_x,
+            IMAGE_TRANSFORM_OFFSET_MIN,
+            IMAGE_TRANSFORM_OFFSET_MAX,
+        ),
+        (
+            "offsetY",
+            transform.offset_y,
+            IMAGE_TRANSFORM_OFFSET_MIN,
+            IMAGE_TRANSFORM_OFFSET_MAX,
+        ),
+        (
+            "rotation",
+            transform.rotation,
+            IMAGE_TRANSFORM_ROTATION_MIN,
+            IMAGE_TRANSFORM_ROTATION_MAX,
+        ),
+        (
+            "scale",
+            transform.scale,
+            IMAGE_TRANSFORM_SCALE_MIN,
+            IMAGE_TRANSFORM_SCALE_MAX,
+        ),
+    ] {
+        if !value.is_finite() || !(min..=max).contains(&value) {
+            violations.insert(ValidationViolation::new(
+                native_violation_key(
+                    kind,
+                    id,
+                    "INVALID_IMAGE_TRANSFORM",
+                    ViolationPropertyPath::ImageTransform { name, property },
+                    InvalidValueSignature::FloatBits(value.to_bits()),
+                ),
+                format!(
+                    "{field} {mode}[{index}].{name}.{property} must be a finite number between {min} and {max}"
+                ),
+            ));
         }
     }
 }
@@ -4594,6 +4682,43 @@ mod tests {
                 .and_then(|details| details.validation_code.as_deref()),
             Some("INVALID_ELEMENT_SHADOW")
         );
+    }
+
+    // 이미지 변환도 그림자와 같은 문서 단위 검증 - 기존 값은 grandfather, 새 범위 밖 값은 거부
+    #[test]
+    fn image_transform_violations_are_rejected_unless_grandfathered() {
+        let out_of_range = |scale: f64| crate::models::ImageTransform {
+            offset_x: 0.0,
+            offset_y: 0.0,
+            rotation: 0.0,
+            scale,
+        };
+        let mut store = default_editor_store();
+        store.key_positions.get_mut("4key").unwrap()[0].idle_image_transform =
+            Some(out_of_range(0.05));
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut unrelated = current.clone();
+        unrelated.key_positions.get_mut("4key").unwrap()[0].font_size = Some(18.0);
+        let mut unrelated_store = store.clone();
+        unrelated.apply_to_store(&mut unrelated_store);
+        validate_document_transition(&current, &unrelated, &store, &unrelated_store).unwrap();
+
+        let mut changed = current.clone();
+        changed.key_positions.get_mut("4key").unwrap()[0].idle_image_transform =
+            Some(out_of_range(0.04));
+        let mut changed_store = store.clone();
+        changed.apply_to_store(&mut changed_store);
+        let error =
+            validate_document_transition(&current, &changed, &store, &changed_store).unwrap_err();
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|details| details.validation_code.as_deref()),
+            Some("INVALID_IMAGE_TRANSFORM")
+        );
+        assert!(error.message.contains("idleImageTransform.scale"));
     }
 
     #[test]

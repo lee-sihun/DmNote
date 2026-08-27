@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     commands::{
         dialog::parented_file_dialog, editor::state::emit_best_effort, issue_mutation_ticket,
-        run_blocking, run_history_mutation, run_prepared_mutation,
+        run_blocking, run_history_mutation,
     },
     errors::CmdResult,
     models::{CustomJs, JsPlugin},
@@ -299,41 +299,22 @@ pub async fn js_load(app: AppHandle, window: WebviewWindow) -> CmdResult<JsLoadR
 #[tauri::command]
 pub async fn js_reload(app: AppHandle, window: WebviewWindow) -> CmdResult<JsReloadResponse> {
     let window_label = window.label().to_string();
-    run_prepared_mutation(
-        app,
-        move |_, state| {
-            let script = get_normalized_script(state)?;
-            let mut loaded_plugins = Vec::new();
-            let mut errors = Vec::new();
-
-            for plugin in &script.plugins {
-                let Some(ref path) = plugin.path else {
-                    continue;
-                };
-                match fs::read_to_string(path) {
-                    Ok(content) => loaded_plugins.push((plugin.id.clone(), path.clone(), content)),
-                    Err(err) => errors.push(JsPluginError::new(path.clone(), err.to_string())),
-                }
-            }
-            let admission = state.admit_frontend_history_mutation(&window_label)?;
-            Ok((loaded_plugins, errors, admission))
-        },
-        move |app, state, (loaded_plugins, errors, admission)| {
+    // 파일 읽기는 번호표 발급 전에 - 번호표는 발급~drop 전체가 뒤 번호표의 대기 구간이라
+    // prepare 단계의 I/O도 저장 큐를 막는다 (js_load와 같은 순서: I/O → 번호표 → admission → turn)
+    run_blocking(app, move |app, state| {
+        let script = get_normalized_script(state)?;
+        let (loaded_plugins, errors) = read_plugin_sources(&script);
+        let ticket = issue_mutation_ticket(app)?;
+        let admission = state.admit_frontend_history_mutation(&window_label)?;
+        ticket.run(|| {
             let transaction =
                 state
                     .store
                     .commit_history_overlap_mutation_with_admission(admission, |store| {
                         let script = &mut store.custom_js;
                         let _ = script.normalize();
-                        let mut updated_plugins = Vec::new();
-                        for (id, expected_path, content) in &loaded_plugins {
-                            if let Some(plugin) = script.plugins.iter_mut().find(|plugin| {
-                                plugin.id == *id && plugin.path.as_ref() == Some(expected_path)
-                            }) {
-                                plugin.content.clone_from(content);
-                                updated_plugins.push(plugin.clone());
-                            }
-                        }
+                        // 스냅샷과 turn 사이에 경로가 바뀐 플러그인은 건너뛴다
+                        let updated_plugins = apply_reloaded_sources(script, &loaded_plugins);
                         let _ = script.normalize();
                         Ok((script.clone(), updated_plugins))
                     })?;
@@ -341,13 +322,60 @@ pub async fn js_reload(app: AppHandle, window: WebviewWindow) -> CmdResult<JsRel
             // 디스크 재읽기는 내용이 같아도 재주입 필요 - forced 고정
             emit_js_state(app, &transaction.value.0, true)?;
 
+            // 스냅샷~turn 사이에 제거된 플러그인의 읽기 오류는 버린다 - 이미 없는 항목을
+            // 오류로 표시하지 않게
+            let script = &transaction.value.0;
+            let errors: Vec<JsPluginError> = errors
+                .into_iter()
+                .filter(|error| {
+                    script
+                        .plugins
+                        .iter()
+                        .any(|plugin| plugin.path.as_deref() == Some(error.path.as_str()))
+                })
+                .collect();
+
             Ok(JsReloadResponse {
                 updated: transaction.value.1.clone(),
                 errors,
             })
-        },
-    )
+        })
+    })
     .await
+}
+
+type ReloadedSource = (String, String, String);
+
+// 경로가 있는 플러그인의 파일을 읽는다 - 실패는 개별 오류로 모으고 나머지는 계속
+fn read_plugin_sources(script: &CustomJs) -> (Vec<ReloadedSource>, Vec<JsPluginError>) {
+    let mut loaded_plugins = Vec::new();
+    let mut errors = Vec::new();
+    for plugin in &script.plugins {
+        let Some(ref path) = plugin.path else {
+            continue;
+        };
+        match fs::read_to_string(path) {
+            Ok(content) => loaded_plugins.push((plugin.id.clone(), path.clone(), content)),
+            Err(err) => errors.push(JsPluginError::new(path.clone(), err.to_string())),
+        }
+    }
+    (loaded_plugins, errors)
+}
+
+// 읽은 내용을 id·경로가 아직 같은 플러그인에만 적용한다
+fn apply_reloaded_sources(script: &mut CustomJs, loaded: &[ReloadedSource]) -> Vec<JsPlugin> {
+    let mut updated_plugins = Vec::new();
+    for (id, expected_path, content) in loaded {
+        if let Some(plugin) = script
+            .plugins
+            .iter_mut()
+            .find(|plugin| plugin.id == *id && plugin.path.as_ref() == Some(expected_path))
+        {
+            plugin.content.clone_from(content);
+            updated_plugins.push(plugin.clone());
+        }
+    }
+    updated_plugins
 }
 
 #[tauri::command]
@@ -485,6 +513,76 @@ mod tests {
     use super::*;
 
     // js_reload의 forced=true 방출이 전제하는 js:content payload 계약 고정
+    #[test]
+    fn reloaded_sources_apply_only_to_plugins_whose_path_is_unchanged() {
+        let mut script = CustomJs {
+            plugins: vec![
+                JsPlugin {
+                    id: "same".to_string(),
+                    name: "same.js".to_string(),
+                    path: Some("/a/same.js".to_string()),
+                    content: "old".to_string(),
+                    enabled: true,
+                },
+                JsPlugin {
+                    id: "moved".to_string(),
+                    name: "moved.js".to_string(),
+                    path: Some("/b/moved.js".to_string()),
+                    content: "old".to_string(),
+                    enabled: true,
+                },
+            ],
+            ..CustomJs::default()
+        };
+        let updated = super::apply_reloaded_sources(
+            &mut script,
+            &[
+                (
+                    "same".to_string(),
+                    "/a/same.js".to_string(),
+                    "new".to_string(),
+                ),
+                (
+                    "moved".to_string(),
+                    "/old/moved.js".to_string(),
+                    "new".to_string(),
+                ),
+            ],
+        );
+        assert_eq!(
+            updated.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+            vec!["same"]
+        );
+        assert_eq!(script.plugins[0].content, "new");
+        assert_eq!(script.plugins[1].content, "old");
+    }
+
+    #[test]
+    fn read_plugin_sources_collects_read_errors_and_skips_pathless_plugins() {
+        let script = CustomJs {
+            plugins: vec![
+                JsPlugin {
+                    id: "inline".to_string(),
+                    name: "inline.js".to_string(),
+                    path: None,
+                    content: "void 0;".to_string(),
+                    enabled: true,
+                },
+                JsPlugin {
+                    id: "missing".to_string(),
+                    name: "missing.js".to_string(),
+                    path: Some("/definitely/missing/plugin.js".to_string()),
+                    content: String::new(),
+                    enabled: true,
+                },
+            ],
+            ..CustomJs::default()
+        };
+        let (loaded, errors) = super::read_plugin_sources(&script);
+        assert!(loaded.is_empty());
+        assert_eq!(errors.len(), 1);
+    }
+
     #[test]
     fn js_state_payload_flattens_script_and_carries_forced_flag() {
         let script = CustomJs {

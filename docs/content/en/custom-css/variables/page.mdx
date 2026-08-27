@@ -68,7 +68,10 @@ root carries `data-key-image` and the placement mode
   image may extend past the key. Set `overflow: hidden` to clip it.
 
 Override the saved fit, transform, and stacking with `--key-image-fit`,
-`--key-image-transform`, and `--key-image-z`.
+`--key-image-transform`, and `--key-image-z`. With **inline style priority**
+enabled these three are promoted to inline declarations, so the `--key-image-*`
+variables do not apply; override `object-fit`, `transform`, and `z-index`
+directly with `!important` instead.
 
 ### Usage Example
 

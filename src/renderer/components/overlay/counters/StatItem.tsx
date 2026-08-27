@@ -5,6 +5,10 @@ import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
 import {
+  isErrorForCurrentSrc,
+  useFailedImageSrcs,
+} from '@hooks/overlay/useFailedImageSrcs';
+import {
   computeKeyElementStyles,
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
@@ -30,6 +34,10 @@ const StatItem = React.memo(
   }: StatItemProps) => {
     useSignals();
 
+    const { failedImageSrcs, markFailed } = useFailedImageSrcs(
+      position?.inactiveImage,
+      position?.activeImage,
+    );
     const {
       keyStyle,
       borderRingStyle,
@@ -46,7 +54,12 @@ const StatItem = React.memo(
       labelPaintStyle,
       labelHasGradient,
       labelMetricsDep,
-    } = computeKeyElementStyles({ position, active, label: label || '' });
+    } = computeKeyElementStyles({
+      position,
+      active,
+      label: label || '',
+      failedImageSrcs,
+    });
 
     // 이미지 프리로드
     useEffect(() => {
@@ -90,6 +103,11 @@ const StatItem = React.memo(
             data-key-image-layer="true"
             style={imageStyle}
             draggable={false}
+            onError={(event) => {
+              if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
+                return;
+              markFailed(currentImageSrc);
+            }}
           />
         )}
         {imageReplaces ? null : showInsideCounter && counterSignal ? (

@@ -31,6 +31,7 @@ vi.mock('./colorPickerPrimitives', async (importOriginal) => {
 });
 
 import ColorPicker from './ColorPicker';
+import { addToPalette } from '@utils/color/colorPaletteStorage';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -247,7 +248,7 @@ describe('ColorPicker 불투명도 % 입력', () => {
     });
 
     it('손대지 않은 필드의 Escape는 위로 올려 팝업이 닫히게 둔다', () => {
-      renderSolid();
+      const { onColorChange } = renderSolid();
       const input = percentInput();
 
       act(() => input.focus());
@@ -257,6 +258,8 @@ describe('ColorPicker 불투명도 % 입력', () => {
       });
 
       expect(keydown.defaultPrevented).toBe(false);
+      // 되돌릴 게 없으면 취소 채널도 조용하다 - 편집 없는 preview 발행 금지
+      expect(onColorChange).not.toHaveBeenCalled();
     });
 
     it('preview가 나간 뒤 빈 값으로 blur하면 확정값을 preview로 되돌린다', () => {
@@ -796,6 +799,63 @@ describe('ColorPicker 불투명도 % 입력', () => {
 
       act(() => pressKey(input, 'Enter'));
       expect(onColorChangeComplete).toHaveBeenLastCalledWith('#11223380');
+    });
+  });
+
+  describe('반대 축 잠금 정책', () => {
+    const hexInput = () =>
+      container.querySelector<HTMLInputElement>('input:not([inputmode])')!;
+    const solidSlots = () =>
+      Array.from(
+        container.querySelectorAll<HTMLButtonElement>(
+          '[data-palette-slot="solid"]',
+        ),
+      );
+    const renderLocked = (
+      props: Partial<React.ComponentProps<typeof ColorPicker>>,
+    ) => {
+      const onColorChange = vi.fn();
+      const onColorChangeComplete = vi.fn();
+      act(() =>
+        root.render(
+          <ColorPicker
+            open
+            referenceRef={referenceRef()}
+            color="rgba(255, 255, 255, 1)"
+            solidOnly
+            onColorChange={onColorChange}
+            onColorChangeComplete={onColorChangeComplete}
+            onClose={vi.fn()}
+            {...props}
+          />,
+        ),
+      );
+      return { onColorChange, onColorChangeComplete };
+    };
+
+    // hideColorAlpha면 색 알파는 저장 때 버려져 opacity Mixed와 무관하다
+    it('hideColorAlpha 피커는 opacity가 Mixed여도 색 편집을 잠그지 않는다', () => {
+      renderLocked({ hideColorAlpha: true, opacityPercentMixed: true });
+      expect(hexInput().disabled).toBe(false);
+    });
+
+    it('두 축이 모두 Mixed면 지킬 공통값이 없으므로 잠금을 푼다', () => {
+      renderLocked({ hexMixed: true, opacityPercentMixed: true });
+      expect(hexInput().disabled).toBe(false);
+      expect(percentInput().disabled).toBe(false);
+    });
+
+    it('잠긴 동안 솔리드 팔레트도 함께 잠긴다', () => {
+      addToPalette('solid', 'rgba(10, 20, 30, 1)');
+      const { onColorChangeComplete } = renderLocked({
+        opacityPercentMixed: true,
+      });
+
+      const slots = solidSlots();
+      expect(slots.length).toBeGreaterThan(0);
+      expect(slots.every((slot) => slot.disabled)).toBe(true);
+      act(() => slots[0].click());
+      expect(onColorChangeComplete).not.toHaveBeenCalled();
     });
   });
 });

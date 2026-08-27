@@ -102,4 +102,17 @@ describe('flushFocusedEditor', () => {
       await expect(flushFocusedEditor()).resolves.toBe(false);
     },
   );
+
+  // 창 blur 리스너로 이어 붙은 스크럽 취소(useScrubDrag)가 같은 디스패치 안에서 먼저
+  // 닫히려면 게스처 커밋이 최소 한 마이크로태스크 뒤여야 한다 - 동기 시점엔 미호출
+  it('호출 직후 동기 시점에는 gesture 커밋을 시작하지 않는다', async () => {
+    beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
+    commitPendingAsync.mockResolvedValue(true);
+
+    const pending = flushFocusedEditor();
+    expect(commitPendingAsync).not.toHaveBeenCalled();
+
+    await pending;
+    expect(commitPendingAsync).toHaveBeenCalledTimes(1);
+  });
 });

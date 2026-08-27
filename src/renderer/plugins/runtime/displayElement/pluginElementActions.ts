@@ -149,6 +149,61 @@ export const updatePluginElement = (
   store.updateElement(fullId, materializePluginElementUpdate(element, patch));
 };
 
+export interface PluginElementGeometrySnapshot {
+  position: { x: number; y: number };
+  measuredSize?: { width: number; height: number };
+}
+
+/** 게스처 시작 시점의 위치·크기 스냅샷 */
+export const capturePluginElementGeometry = (
+  fullId: string,
+): PluginElementGeometrySnapshot | null => {
+  const element = usePluginDisplayElementStore
+    .getState()
+    .elements.find((candidate) => candidate.fullId === fullId);
+  if (!element) return null;
+  return {
+    position: { ...element.position },
+    measuredSize: element.measuredSize
+      ? { ...element.measuredSize }
+      : undefined,
+  };
+};
+
+const sameSize = (
+  a: { width: number; height: number } | undefined,
+  b: { width: number; height: number } | undefined,
+): boolean =>
+  a === b || (!!a && !!b && a.width === b.width && a.height === b.height);
+
+// measuredSize가 없던 요소는 undefined로 되돌린다 - updatePluginElement의
+// materialize 폴백이 만든 크기를 남기면 canonical과 달라져 취소가 저장으로 변한다
+// (되돌린 뒤 PluginElement가 재측정해 실측 크기를 저장할 수는 있다 - 마운트 측정과
+// 같은 값이라 사용자 편집이 아닌 실측 반영이다).
+// 값이 같으면 건드리지 않는다 - 새 객체 정체만 바뀌어도 요소 측정 effect가 다시 돈다
+export const restorePluginElementGeometry = (
+  fullId: string,
+  snapshot: PluginElementGeometrySnapshot,
+): void => {
+  const store = usePluginDisplayElementStore.getState();
+  const element = store.elements.find(
+    (candidate) => candidate.fullId === fullId,
+  );
+  if (!element) return;
+  const samePosition =
+    element.position.x === snapshot.position.x &&
+    element.position.y === snapshot.position.y;
+  if (samePosition && sameSize(element.measuredSize, snapshot.measuredSize)) {
+    return;
+  }
+  store.updateElement(fullId, {
+    position: { ...snapshot.position },
+    measuredSize: snapshot.measuredSize
+      ? { ...snapshot.measuredSize }
+      : undefined,
+  });
+};
+
 /** z-order 일괄 지정 */
 export const setPluginElementZIndexes = (
   entries: Array<{ fullId: string; zIndex: number }>,

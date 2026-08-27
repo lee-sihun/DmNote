@@ -17,6 +17,10 @@ export interface ScrubDragOptions {
   step: number;
   /** 누적 변위로 만든 원시값을 표시 규칙(반올림·클램프)에 맞춘다 */
   quantize: (raw: number) => number;
+  /** 누적 raw가 표시 범위를 넘어 쌓이지 않게 한다. 넘겨 쌓으면 되돌릴 때 같은 픽셀만큼
+   *  값이 안 움직이는 데드존이 생긴다 (Shift는 10배). 반올림은 하지 않는다 - quantize가
+   *  step보다 거친 정수 필드에서 매 이동이 지워져 드래그가 얼어붙는다 */
+  range?: { min: number; max: number };
   /** 값이 실제로 바뀔 때만 - 화면 갱신과 프리뷰 발행 */
   onMove: (next: number) => void;
   /** 손을 뗄 때 1회. 값이 한 번도 안 바뀌었으면 호출되지 않는다 */
@@ -63,6 +67,7 @@ export const useScrubDrag = ({
   onCommit,
   onCancel,
   ownsFocus,
+  range,
 }: ScrubDragOptions): {
   active: boolean;
   handlers: ScrubDragHandlers;
@@ -80,6 +85,7 @@ export const useScrubDrag = ({
     onCommit,
     onCancel,
     ownsFocus,
+    range,
   });
   useLayoutEffect(() => {
     callbacksRef.current = {
@@ -90,6 +96,7 @@ export const useScrubDrag = ({
       onCancel,
       onCommit,
       ownsFocus,
+      range,
     };
   });
 
@@ -120,10 +127,15 @@ export const useScrubDrag = ({
     const win = session.element.ownerDocument.defaultView ?? window;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // 되돌린 값이 있을 때만 이 게스처가 Escape를 소비한다. 이동 없는 홀드가
+      // 삼키면 모달이 첫 Escape에 안 닫힌다 (입력 필드와 같은 규칙)
+      if (!finish('cancel')) return;
       e.preventDefault();
       e.stopPropagation();
-      finish('cancel');
     };
+    // 분리 패널 창의 blur는 PropertiesPanelHost의 flushFocusedEditor가 먼저 듣는다.
+    // settleFocusedEditor가 게스처 커밋을 첫 await 뒤로 미루기 때문에 이 취소가 같은
+    // 디스패치 안에서 먼저 닫힌다 - 그 순서가 "드래그 중 창 blur = 취소"를 지탱한다
     const handleBlur = () => finish('cancel');
     win.addEventListener('keydown', handleKeyDown, true);
     win.addEventListener('blur', handleBlur);
@@ -170,7 +182,15 @@ export const useScrubDrag = ({
       // 폼(cursor-text)·입력 위를 지나도 놓을 때까지 좌우 화살표가 유지된다
       beginDragCursor('ew-resize', doc);
       body.style.userSelect = 'none';
-      element.setPointerCapture(e.pointerId);
+      try {
+        element.setPointerCapture(e.pointerId);
+      } catch {
+        // 잡지 못하면 이번 누름은 없던 것으로. 세션이 없으면 문서 변경을 되돌릴
+        // 주체도 없어 전역 커서·선택 금지가 영구히 남는다
+        endDragCursor(doc);
+        body.style.userSelect = prevSelect;
+        return;
+      }
       sessionRef.current = {
         pointerId: e.pointerId,
         element,
@@ -195,6 +215,10 @@ export const useScrubDrag = ({
       if (dx === 0) return;
       // 누적 변위에 현재 배율을 곱한다. 드래그 중 Shift를 바꿔도 값이 튀지 않는다
       session.raw += dx * (e.shiftKey ? unit * SHIFT_MULTIPLIER : unit);
+      const range = callbacksRef.current.range;
+      if (range) {
+        session.raw = Math.min(Math.max(session.raw, range.min), range.max);
+      }
       const next = q(session.raw);
       if (next === session.last) return;
       session.last = next;

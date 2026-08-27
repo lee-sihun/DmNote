@@ -1,4 +1,5 @@
 import { resolveStatePair, type GradientSpec } from '@src/types/color';
+import { DEFAULT_IMAGE_MODE, type ImageMode } from '@src/types/key/imageLayer';
 
 import {
   DEFAULT_ELEMENT_ACTIVE_BORDER,
@@ -44,6 +45,20 @@ export const elementShowsImage = (
   active
     ? isNonEmpty(fields.activeImage) || isNonEmpty(fields.inactiveImage)
     : isNonEmpty(fields.inactiveImage);
+
+// 기본 립을 억제하는 조건 - 이미지가 표면 전체를 대체하는 replace 모드만.
+// overlay는 표면·라벨이 그대로 그려지므로 립도 그대로 (useKeyElementStyles의
+// imageReplaces와 같은 규칙 - 패널이 이 판정과 갈리면 커밋 시 기본 립이 단색으로 유실된다)
+export const elementImageReplacesSurface = (
+  fields: {
+    inactiveImage?: string | null;
+    activeImage?: string | null;
+    imageMode?: ImageMode;
+  },
+  active: boolean,
+): boolean =>
+  elementShowsImage(fields, active) &&
+  (fields.imageMode ?? DEFAULT_IMAGE_MODE) === 'replace';
 
 // 명시값 우선, 색·형식·두께 모두 미지정이면 앱 기본 립.
 // 두께 0은 명시적 무보더, 두께만 지정하면 기본 립을 그 두께로 그린다.

@@ -65,7 +65,9 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
   나갈 수 있습니다. 잘라내려면 `overflow: hidden`을 지정하세요.
 
 저장된 맞춤·변환·z 순서는 `--key-image-fit`, `--key-image-transform`,
-`--key-image-z`로 덮어씁니다.
+`--key-image-z`로 덮어씁니다. **인라인 스타일 우선**을 켜면 이 셋이 인라인 선언으로
+승격되어 `--key-image-*` 변수가 적용되지 않습니다. 이 모드에서는 `object-fit`·
+`transform`·`z-index`를 `!important`로 직접 덮어쓰세요.
 
 ### 사용 예시
 

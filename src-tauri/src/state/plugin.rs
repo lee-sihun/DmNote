@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::Mutex;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -34,22 +34,22 @@ pub(crate) struct PluginRuntimeAuthority {
     state: Mutex<PluginAuthorityState>,
 }
 
-#[derive(Debug)]
-pub(crate) struct PluginAuthorityLease<'a> {
-    guard: MutexGuard<'a, PluginAuthorityState>,
+// 입장 허가 - generation 스냅샷만 든다. 잠금을 든 채 번호표 turn을 기다리면
+// 앞 번호표가 admit에서 이 잠금을 기다려 교착한다 (잠금 순서: 번호표 turn → authority).
+// reset과의 배제는 번호표 FIFO가 맡고, 커맨드는 turn 안에서 revalidate로 다시 확인한다
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PluginAuthorityLease {
+    generation: u64,
 }
 
-impl PluginAuthorityLease<'_> {
+impl PluginAuthorityLease {
     pub(crate) fn generation(&self) -> u64 {
-        self.guard.generation
+        self.generation
     }
 }
 
 impl PluginRuntimeAuthority {
-    pub(crate) fn admit(
-        &self,
-        expected_generation: u64,
-    ) -> Result<PluginAuthorityLease<'_>, String> {
+    pub(crate) fn admit(&self, expected_generation: u64) -> Result<PluginAuthorityLease, String> {
         let guard = self.state.lock();
         if !guard.available {
             return Err("AUTHORITY_UNAVAILABLE".to_string());
@@ -57,10 +57,17 @@ impl PluginRuntimeAuthority {
         if guard.generation != expected_generation {
             return Err("AUTHORITY_GENERATION_CHANGED".to_string());
         }
-        Ok(PluginAuthorityLease { guard })
+        Ok(PluginAuthorityLease {
+            generation: guard.generation,
+        })
     }
 
-    pub(crate) fn reset(&self) -> Result<PluginAuthorityLease<'_>, String> {
+    // 번호표 turn 안 재확인 - turn 대기 중 reset이 끼어든 커밋을 거절
+    pub(crate) fn revalidate(&self, lease: PluginAuthorityLease) -> Result<(), String> {
+        self.admit(lease.generation()).map(drop)
+    }
+
+    pub(crate) fn reset(&self) -> Result<PluginAuthorityLease, String> {
         let mut state = self.state.lock();
         state.generation = state
             .generation
@@ -68,7 +75,9 @@ impl PluginRuntimeAuthority {
             .filter(|generation| *generation <= MAX_SAFE_WIRE_REVISION)
             .ok_or_else(|| "AUTHORITY_GENERATION_OUT_OF_RANGE".to_string())?;
         state.available = true;
-        Ok(PluginAuthorityLease { guard: state })
+        Ok(PluginAuthorityLease {
+            generation: state.generation,
+        })
     }
 
     pub(crate) fn generation(&self) -> u64 {
@@ -692,6 +701,49 @@ mod tests {
         authority.mark_unavailable();
         assert_eq!(
             authority.admit(1).unwrap_err(),
+            "AUTHORITY_UNAVAILABLE".to_string()
+        );
+    }
+
+    // lease가 잠금을 들면 번호표 turn 대기 중 reset·다른 admit이 막혀 교착한다
+    #[test]
+    fn admission_does_not_hold_authority_lock() {
+        let authority = std::sync::Arc::new(PluginRuntimeAuthority::default());
+        authority.reset().unwrap();
+        let lease = authority.admit(1).unwrap();
+
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker_authority = std::sync::Arc::clone(&authority);
+        let worker = std::thread::spawn(move || {
+            let reset = worker_authority.reset().unwrap();
+            let other = worker_authority.admit(reset.generation());
+            done_tx.send(other.is_ok()).unwrap();
+        });
+
+        assert!(done_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("lease 보유 중에도 reset·admit이 진행돼야 한다"));
+        worker.join().unwrap();
+        assert_eq!(lease.generation(), 1);
+    }
+
+    #[test]
+    fn revalidate_rejects_after_reset_and_after_unavailable() {
+        let authority = PluginRuntimeAuthority::default();
+        authority.reset().unwrap();
+        let lease = authority.admit(1).unwrap();
+        assert!(authority.revalidate(lease).is_ok());
+
+        authority.reset().unwrap();
+        assert_eq!(
+            authority.revalidate(lease).unwrap_err(),
+            "AUTHORITY_GENERATION_CHANGED".to_string()
+        );
+
+        let fresh = authority.admit(2).unwrap();
+        authority.mark_unavailable();
+        assert_eq!(
+            authority.revalidate(fresh).unwrap_err(),
             "AUTHORITY_UNAVAILABLE".to_string()
         );
     }

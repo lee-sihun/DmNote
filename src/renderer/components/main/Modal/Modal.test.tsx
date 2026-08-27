@@ -351,6 +351,10 @@ describe('Modal focus contract', () => {
       );
     });
 
+    // 배경 팝업은 모달이 덮이는 순간 스스로 닫힌다(잠금 밖에 남는 body 포털 표면 차단).
+    // Escape는 그 뒤에도 모달만 소비한다 - 팝업 닫힘이 한 번 더 나가면 안 된다
+    expect(closePopup).toHaveBeenCalledTimes(1);
+
     const escape = new KeyboardEvent('keydown', {
       key: 'Escape',
       bubbles: true,
@@ -359,7 +363,7 @@ describe('Modal focus contract', () => {
     document.dispatchEvent(escape);
 
     expect(escape.defaultPrevented).toBe(true);
-    expect(closePopup).not.toHaveBeenCalled();
+    expect(closePopup).toHaveBeenCalledTimes(1);
     expect(closeModal).toHaveBeenCalledTimes(1);
   });
 

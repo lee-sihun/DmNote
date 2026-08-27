@@ -258,6 +258,14 @@ input[type='number']::-webkit-outer-spin-button {
   background-clip: padding-box;
 }
 
+/* mask-composite 미지원 환경에서는 링 배경이 요소 전체를 덮는다 - 립을 끈다.
+   :where가 아닌 일반 선택자: 인라인 우선 모드도 display는 인라인에 싣지 않는다 */
+@supports not ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
+  [data-gradient-border-ring] {
+    display: none;
+  }
+}
+
 /* 그라데이션 보더도 앱 기본값은 fallback. 기존 border 변수를 지정하면
    border 문법이 background에는 무효가 되어 앱 링이 자동으로 사라진다 */
 :where([data-key-element] > [data-gradient-border-ring]) {
