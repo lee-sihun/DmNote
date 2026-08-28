@@ -127,3 +127,34 @@ describe('overlay hit revision lease', () => {
     expect(computeLeaseEnd(nearMax + 1)).toBe(Number.MAX_SAFE_INTEGER);
   });
 });
+
+describe('overlay hit 발행 판정', () => {
+  const rects = [{ x: 10, y: 20, width: 30, height: 40 }];
+  const same = [{ x: 10, y: 20, width: 30, height: 40 }];
+
+  const load = async () => {
+    const { shouldPublishHitRegions } = await import('./useOverlayHitRegions');
+    return shouldPublishHitRegions;
+  };
+
+  it('rect와 배율이 모두 같으면 발행하지 않는다', async () => {
+    const shouldPublish = await load();
+    expect(shouldPublish(rects, 1.5, same, 1.5)).toBe(false);
+  });
+
+  it('rect가 같아도 배율이 바뀌면 발행한다', async () => {
+    // 150% 화면에서 히트 영역이 보이는 위치의 1/1.5 지점에 생기던 회귀
+    const shouldPublish = await load();
+    expect(shouldPublish(rects, 1, same, 1.5)).toBe(true);
+  });
+
+  it('배율이 같아도 rect가 바뀌면 발행한다', async () => {
+    const shouldPublish = await load();
+    expect(shouldPublish(rects, 1.5, [{ ...rects[0], x: 11 }], 1.5)).toBe(true);
+  });
+
+  it('첫 발행은 항상 내보낸다', async () => {
+    const shouldPublish = await load();
+    expect(shouldPublish(null, null, rects, 1)).toBe(true);
+  });
+});

@@ -83,6 +83,9 @@ const nextRevision = () => {
 let lastSyncFailureMessage: string | null = null;
 // 직전 발행 rect - 동일하면 IPC를 생략한다 (옵저버·이벤트 중복 트리거 흡수)
 let lastSentRects: HitRegionRect[] | null = null;
+// 배율도 발행 기준에 포함한다. rect는 CSS px라 배율만 바뀌면 값이 그대로인데,
+// 백엔드는 이 배율로 물리 좌표를 만들기 때문에 생략하면 옛 배율에 갇힌다
+let lastSentDpr: number | null = null;
 
 const rectsEqual = (a: HitRegionRect[], b: HitRegionRect[]): boolean =>
   a.length === b.length &&
@@ -96,15 +99,36 @@ const rectsEqual = (a: HitRegionRect[], b: HitRegionRect[]): boolean =>
     );
   });
 
+// 발행 여부 판정. rect와 배율을 함께 봐야 한다 - rect는 CSS px라 배율만 바뀌면
+// 값이 그대로인데, 백엔드는 이 배율로 물리 좌표를 만든다
+export const shouldPublishHitRegions = (
+  lastRects: HitRegionRect[] | null,
+  lastDpr: number | null,
+  rects: HitRegionRect[],
+  devicePixelRatio: number,
+): boolean =>
+  !lastRects || lastDpr !== devicePixelRatio || !rectsEqual(lastRects, rects);
+
 const syncHitRegions = (rects: HitRegionRect[]) => {
-  if (lastSentRects && rectsEqual(lastSentRects, rects)) return;
+  // 보정 줌이 곱해진 실측 배율 - 백엔드가 DPI로 대신 계산할 수 없다
+  const devicePixelRatio = window.devicePixelRatio;
+  if (
+    !shouldPublishHitRegions(
+      lastSentRects,
+      lastSentDpr,
+      rects,
+      devicePixelRatio,
+    )
+  ) {
+    return;
+  }
   lastSentRects = rects;
+  lastSentDpr = devicePixelRatio;
   invoke<void>('overlay_sync_hit_regions', {
     payload: {
       rects,
       revision: nextRevision(),
-      // 보정 줌이 곱해진 실측 배율 - 백엔드가 DPI로 대신 계산할 수 없다
-      devicePixelRatio: window.devicePixelRatio,
+      devicePixelRatio,
     },
   })
     .then(() => {
@@ -114,11 +138,44 @@ const syncHitRegions = (rects: HitRegionRect[]) => {
       // 실패한 발행은 기준선으로 남기지 않는다 - 같은 rect 재시도가 막히면
       // 히트 창이 영영 옛 배치에 머무른다
       lastSentRects = null;
+      lastSentDpr = null;
       const message = String(error);
       if (message === lastSyncFailureMessage) return;
       lastSyncFailureMessage = message;
       console.warn('Failed to sync overlay hit regions', error);
     });
+};
+
+// 배율 변경은 CSS px 레이아웃을 바꾸지 않아 ResizeObserver도 resize 이벤트도 발화하지 않는다.
+// 현재 배율에 고정한 미디어 쿼리를 걸어 두고, 깨지는 순간 다시 걸며 재측정을 알린다
+const watchDevicePixelRatio = (onChange: () => void): (() => void) => {
+  let query: MediaQueryList | null = null;
+  let disposed = false;
+
+  function handleChange() {
+    arm();
+    onChange();
+  }
+
+  function arm() {
+    if (disposed) return;
+    query?.removeEventListener('change', handleChange);
+    query = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    query.addEventListener('change', handleChange);
+  }
+
+  // 테스트 환경 등 matchMedia가 없는 곳에서는 감시를 건너뛴다.
+  // 발행 기준에 배율이 들어가 있어 다음 재측정에서 어차피 따라잡는다
+  if (typeof window.matchMedia !== 'function') {
+    return () => {};
+  }
+
+  arm();
+  return () => {
+    disposed = true;
+    query?.removeEventListener('change', handleChange);
+    query = null;
+  };
 };
 
 const hitNodes = (): HTMLElement[] =>
@@ -189,12 +246,18 @@ export const useOverlayHitRegions = (generation: unknown) => {
     };
 
     scheduleRef.current = scheduleMeasure;
+    const unwatchScale = watchDevicePixelRatio(scheduleMeasure);
+    // 미디어 쿼리가 발화하지 않는 웹뷰를 대비한 두 번째 그물.
+    // 발행 기준에 배율이 들어 있으므로 헛호출은 IPC로 이어지지 않는다
+    window.addEventListener('resize', scheduleMeasure);
     scheduleMeasure();
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
+      unwatchScale();
+      window.removeEventListener('resize', scheduleMeasure);
       scheduleRef.current = () => {};
     };
   }, [generation]);
