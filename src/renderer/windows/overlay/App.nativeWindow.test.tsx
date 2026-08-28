@@ -111,6 +111,11 @@ vi.mock('@api/modules/overlayApi', () => ({
     transitionFade: vi.fn(() => Promise.resolve(true)),
   },
 }));
+// 히트 영역 실측은 ResizeObserver·네이티브 IPC에 의존 - 이 파일들의 관심사 밖
+vi.mock('@hooks/overlay/useOverlayHitRegions', () => ({
+  useOverlayHitRegions: () => {},
+  subscribeHitContextMenu: () => () => {},
+}));
 vi.mock('@components/shared/OverlayScene', () => ({ default: () => null }));
 vi.mock('@utils/core/axisEventBus', () => ({
   axisEventBus: { initialize: vi.fn() },

@@ -126,6 +126,11 @@ vi.mock('@stores/useSettingsStore', async () => {
 });
 // usePluginDisplayElementStore는 실제 스토어 사용 — 플러그인 element 갱신이
 // 오버레이 App에 미치는 영향(리렌더 승격·signal 리셋)을 실제 경로로 검증
+// 히트 영역 실측은 ResizeObserver·네이티브 IPC에 의존 - 이 파일들의 관심사 밖
+vi.mock('@hooks/overlay/useOverlayHitRegions', () => ({
+  useOverlayHitRegions: () => {},
+  subscribeHitContextMenu: () => () => {},
+}));
 vi.mock('@components/shared/OverlayScene', () => ({
   default: () => {
     mocks.sceneRenders.count += 1;

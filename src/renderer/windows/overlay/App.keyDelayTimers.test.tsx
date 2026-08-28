@@ -77,6 +77,11 @@ vi.mock('@stores/data/useKnobItemStore', () => ({
 }));
 // usePluginDisplayElementStore는 실제 스토어 사용 — App이 store API
 // (getState/subscribe)를 요구하며, 이 파일은 플러그인 요소를 조작하지 않음
+// 히트 영역 실측은 ResizeObserver·네이티브 IPC에 의존 - 이 파일들의 관심사 밖
+vi.mock('@hooks/overlay/useOverlayHitRegions', () => ({
+  useOverlayHitRegions: () => {},
+  subscribeHitContextMenu: () => () => {},
+}));
 vi.mock('@components/shared/OverlayScene', () => ({ default: () => null }));
 vi.mock('@hooks/shared/useLayoutComputation', () => ({
   computeLayout: () => ({
