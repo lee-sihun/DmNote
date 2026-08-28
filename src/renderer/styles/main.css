@@ -598,6 +598,8 @@ body.dmn-dragging * {
   --dmn-enter-scale: var(--ui-popup-enter-scale);
   --dmn-exit-scale: var(--ui-popup-exit-scale);
   --dmn-motion-duration: var(--dmn-enter-duration);
+  --dmn-motion-opacity: 1;
+  --dmn-motion-scale: 1;
 }
 
 /* 카드 모달은 같은 상태 기계에 다이얼만 교체 */

@@ -1537,6 +1537,28 @@ where
     Some(Value::Object(recovered))
 }
 
+fn recover_key_position_fields(field: &str, value: &Value) -> Option<Value> {
+    let Value::Object(source) = value else {
+        return None;
+    };
+    let Value::Object(mut recovered) = recover_object_fields::<KeyPosition>(field, value)? else {
+        return None;
+    };
+
+    // sparse 폰트 필드는 부재 자체가 레거시 의미를 가진다
+    if !source.contains_key("fontWeight") {
+        recovered.remove("fontWeight");
+    }
+    let source_weight_is_valid = source
+        .get("fontWeight")
+        .is_none_or(|entry| serde_json::from_value::<Option<u32>>(entry.clone()).is_ok());
+    if !source.contains_key("fontBold") && source_weight_is_valid {
+        recovered.remove("fontBold");
+    }
+
+    Some(Value::Object(recovered))
+}
+
 fn recover_array_entries<T>(field: &str, value: &Value) -> Option<Value>
 where
     T: DeserializeOwned,
@@ -1752,8 +1774,7 @@ where
                 continue;
             }
 
-            let Some(partial) = recover_object_fields::<KeyPosition>(&entry_name, &candidate)
-            else {
+            let Some(partial) = recover_key_position_fields(&entry_name, &candidate) else {
                 log::warn!(
                     "[Store] Removing invalid {field} entry '{mode}[{index}]' during recovery"
                 );
@@ -1830,7 +1851,7 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
                     {
                         candidate
                     } else {
-                        recover_object_fields::<KeyPosition>(&entry_name, &candidate)
+                        recover_key_position_fields(&entry_name, &candidate)
                         .filter(|candidate| {
                             serde_json::from_value::<KeyPosition>(candidate.clone()).is_ok()
                         })
@@ -3411,6 +3432,30 @@ mod tests {
         raw["statPositions"]["4key"][0]["activeFontGradient"] = damaged.clone();
         raw["graphPositions"]["4key"][0]["fontGradient"] = damaged.clone();
         raw["knobPositions"]["4key"][0]["activeFontGradient"] = damaged;
+
+        raw["keyPositions"]["4key"][0]["fontWeight"] = serde_json::json!(400);
+        raw["keyPositions"]["4key"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("fontBold");
+        raw["statPositions"]["4key"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("fontWeight");
+        raw["statPositions"]["4key"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("fontBold");
+        raw["graphPositions"]["4key"][0]["fontWeight"] = serde_json::json!(700);
+        raw["graphPositions"]["4key"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("fontBold");
+        raw["knobPositions"]["4key"][0]["fontWeight"] = serde_json::json!(600);
+        raw["knobPositions"]["4key"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("fontBold");
         std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();
@@ -3448,6 +3493,18 @@ mod tests {
         ] {
             assert_eq!(position.font_color.as_deref(), Some("font-sibling"));
         }
+        let key = &loaded.data.key_positions["4key"][0];
+        assert_eq!(key.font_weight, Some(400));
+        assert_eq!(key.font_bold, None);
+        let stat = &loaded.data.stat_positions["4key"][0].position;
+        assert_eq!(stat.font_weight, None);
+        assert_eq!(stat.font_bold, None);
+        let graph = &loaded.data.graph_positions["4key"][0].position;
+        assert_eq!(graph.font_weight, Some(400));
+        assert_eq!(graph.font_bold, Some(true));
+        let knob = &loaded.data.knob_positions["4key"][0].position;
+        assert_eq!(knob.font_weight, Some(600));
+        assert_eq!(knob.font_bold, None);
         let _ = std::fs::remove_file(path);
     }
 

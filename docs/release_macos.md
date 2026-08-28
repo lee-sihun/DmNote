@@ -1,6 +1,6 @@
 # macOS 릴리즈 절차
 
-`.github/workflows/release-macos.yml`이 유니버설 DMG 빌드 → Developer ID 서명 → 공증 → draft 릴리즈 첨부까지 수행한다. Windows 자산은 수동으로 draft에 추가한 뒤 publish한다.
+`.github/workflows/release-macos.yml`이 유니버설 DMG 빌드 → Developer ID 서명 → 공증 → draft 릴리즈 첨부까지 수행한다. 같은 태그로 Windows workflow도 실행되어 Windows 자산을 동일 draft 릴리즈에 첨부한다.
 
 ## 1. 시크릿 (최초 1회)
 
@@ -37,13 +37,14 @@ npm version patch        # package.json 버전 올리고 tauri.conf.json / Cargo
 git push origin main X.Y.Z
 ```
 
-태그 푸시 → 워크플로가 draft 릴리즈 `DM NOTE v X.Y.Z`를 만들고 `DM.NOTE_X.Y.Z_universal.dmg`를 첨부한다. 이후:
+태그 푸시 → macOS와 Windows workflow가 각각 빌드한 자산을 draft 릴리즈 `DM NOTE v X.Y.Z`에 첨부한다. 이후:
 
 > 자산 이름 `DM.NOTE_<tag>_{aarch64|x64|universal}.dmg`는 **앱 내 자동 업데이트가 의존하는 계약**이다 (`src-tauri/src/commands/app/update_macos.rs`의 `asset_candidates`). 아키텍처 전용 자산이 있으면 그것을 우선 받으므로, 서명·공증되지 않은 DMG를 그 이름으로 수동 업로드하지 말 것.
 
 1. 한국어 릴리즈 노트 작성 (영어 노트는 `docs/releases/X.Y.Z_en.md`)
-2. Windows 자산(`DM.NOTE.exe`, `DM.NOTE.v.X.Y.Z.zip`) 수동 업로드
-3. **Publish** → `update-website.yml`이 DmSite 갱신을 트리거
+2. macOS DMG와 Windows 자산(`DM.NOTE.exe`, `DM.NOTE.v.X.Y.Z.zip`)이 모두 있는지 확인
+3. 운영 인증서 활성화 전에는 Windows 자산이 미서명임을 릴리즈 노트에 명시
+4. **Publish** → `update-website.yml`이 DmSite 갱신을 트리거
 
 같은 태그로 다시 빌드하려면 Run workflow → ref에서 **태그 선택** + `dry_run` 해제. draft면 DMG만 덮어쓰고 노트·다른 자산은 유지되며, 이미 publish된 릴리즈는 자동 덮어쓰기를 거부한다(수동 `gh release upload --clobber`).
 

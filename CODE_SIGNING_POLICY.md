@@ -6,14 +6,14 @@ Free code signing provided by [SignPath.io](https://signpath.io/), certificate b
 
 DM NOTE uses Authenticode signing for the Windows application executable built by the official [`DmNote-App/DmNote`](https://github.com/DmNote-App/DmNote) repository.
 
-The same signed executable is distributed in two forms:
+After the production certificate is activated, the same signed executable is distributed in two forms:
 
 - `DM.NOTE.exe`, used by the in-app Windows updater
 - `dm-note.exe` inside `DM.NOTE.v.<version>.zip`, used for portable installations
 
 The two files differ only by filename and have identical contents. The portable ZIP also contains the same set of CSS and plugin examples as the previous Windows release, plus the third-party notice for the current build. These additional text assets are not signed with the DM NOTE signing policy.
 
-## Build and approval process
+## Production build and approval process
 
 1. GitHub Actions builds the executable from the official repository on a GitHub-hosted Windows runner.
 2. The unsigned executable is uploaded as a GitHub Actions artifact and submitted through the SignPath GitHub integration with verified origin information.
@@ -22,6 +22,12 @@ The two files differ only by filename and have identical contents. The portable 
 5. The signed executable is placed in both Windows release formats before the draft GitHub Release is published.
 
 Test-signed artifacts use a self-signed certificate and are never published as releases.
+
+## Temporary bootstrap release process
+
+Until the SignPath Foundation production certificate is activated, tagged Windows builds temporarily skip SignPath and publish unsigned `DM.NOTE.exe` and portable ZIP assets to a draft GitHub Release. Release notes must identify these Windows assets as unsigned before the draft is published.
+
+The self-signed test certificate is used only to validate the trusted build and artifact configuration. Test-signed files are not substituted for unsigned public assets. Once the production certificate is available, the unsigned tag path will be removed and production signing will become mandatory before draft upload.
 
 ## Team roles
 
@@ -49,4 +55,4 @@ On Windows, the Authenticode signature can be inspected with PowerShell:
 Get-AuthenticodeSignature -LiteralPath .\DM.NOTE.exe | Format-List
 ```
 
-Production releases must report a valid signature issued under the SignPath Foundation certificate before publication.
+After production signing is activated, Windows releases must report a valid signature issued under the SignPath Foundation certificate before publication.

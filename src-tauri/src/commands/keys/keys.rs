@@ -5,7 +5,10 @@ use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::{
     commands::{
-        editor::state::{emit_best_effort, publish_editor_change, publish_legacy_editor_change},
+        editor::state::{
+            emit_best_effort, publish_editor_change, publish_editor_change_after_key_runtime,
+            publish_legacy_editor_change,
+        },
         plugin::instances::publish_plugin_instances_changed,
         run_blocking, run_history_mutation,
     },
@@ -22,7 +25,10 @@ use crate::{
         history::{HistoryAdmissionLease, HistoryScope},
         migration::migrate_key_images_to_app_data,
         plugin::{for_each_stored_plugin_instances, normalize_plugin_instance_tab_id},
-        store::{AuxEditorResetTransactionOptions, PluginInstancesResetScope},
+        store::{
+            AuxEditorResetTransactionOptions, AuxEditorTransactionOptions,
+            PluginInstancesResetScope,
+        },
         AppState,
     },
 };
@@ -41,6 +47,34 @@ fn publish_legacy_key_noop_runtime(
     );
     state.obs_broadcast_counters();
     state.refresh_obs_snapshot();
+}
+
+fn publish_legacy_reset_editor_change(
+    state: &AppState,
+    app: &AppHandle,
+    change: &CommittedEditorChange,
+    key_runtime_applied: bool,
+) {
+    if key_runtime_applied {
+        publish_editor_change_after_key_runtime(state, app, change);
+        emit_aux_history_status(app, change);
+        if !change.result.changed_fields.contains(&EditorField::Keys) {
+            state.apply_committed_editor_keys_without_counters(
+                change.runtime_publication_generation,
+                &change.document.keys,
+                &change.selected_key_type,
+            );
+            if change.event.is_none() || change.result.changed_fields.is_empty() {
+                state.refresh_obs_snapshot();
+            }
+        }
+        return;
+    }
+
+    publish_legacy_editor_change(state, app, change);
+    if !change.result.changed_fields.contains(&EditorField::Keys) {
+        publish_legacy_key_noop_runtime(state, app, change);
+    }
 }
 
 fn emit_aux_history_status(app: &AppHandle, change: &CommittedEditorChange) {
@@ -436,10 +470,12 @@ fn keys_set_mode_inner(
 ) -> CmdResult<ModeResponse> {
     let requested = mode.clone();
     let transaction = state.store.commit_aux_editor_transaction_with_admission(
-        HistoryScope::Mode,
-        observed_history_epoch,
-        EditorCommitOrigin::LegacyAdapter("keys_set_mode".to_string()),
-        &[],
+        AuxEditorTransactionOptions {
+            scope: HistoryScope::Mode,
+            observed_history_epoch,
+            origin: EditorCommitOrigin::LegacyAdapter("keys_set_mode".to_string()),
+            touched_fields: &[],
+        },
         admission,
         move |store| Ok(select_mode_if_available(store, &requested)),
     )?;
@@ -511,9 +547,9 @@ fn keys_reset_all_inner(
     };
     let css_operation_guard = state.lock_css_operation();
     let previous_css_state = state.store.snapshot();
-    let transaction = state
-        .store
-        .commit_legacy_editor_reset_transaction_with_admission(
+    let (transaction, key_runtime_applied) = state
+        .commit_legacy_editor_reset_preserving_runtime_counters(
+            app,
             EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
             &[
                 EditorField::Keys,
@@ -545,16 +581,8 @@ fn keys_reset_all_inner(
         state.unwatch_tab_css(tab_id);
     }
     drop(css_operation_guard);
-    publish_legacy_editor_change(state, app, &transaction.change);
+    publish_legacy_reset_editor_change(state, app, &transaction.change, key_runtime_applied);
     publish_reset_plugin_instances(app, &transaction.change);
-    if !transaction
-        .change
-        .result
-        .changed_fields
-        .contains(&EditorField::Keys)
-    {
-        publish_legacy_key_noop_runtime(state, app, &transaction.change);
-    }
 
     let (settings_diff, cleared_tab_css_ids) = transaction.value;
     let keys = transaction.change.document.keys;
@@ -634,9 +662,9 @@ fn keys_reset_mode_inner(
     admission: HistoryAdmissionLease,
 ) -> CmdResult<ResetModeResponse> {
     let app_data_dir = app.path().app_data_dir()?;
-    let transaction = state
-        .store
-        .commit_legacy_editor_reset_transaction_with_admission(
+    let (transaction, key_runtime_applied) = state
+        .commit_legacy_editor_reset_preserving_runtime_counters(
+            app,
             EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
             &[
                 EditorField::Keys,
@@ -663,16 +691,8 @@ fn keys_reset_mode_inner(
             mode,
         });
     };
-    publish_legacy_editor_change(state, app, &transaction.change);
+    publish_legacy_reset_editor_change(state, app, &transaction.change, key_runtime_applied);
     publish_reset_plugin_instances(app, &transaction.change);
-    if !transaction
-        .change
-        .result
-        .changed_fields
-        .contains(&EditorField::Keys)
-    {
-        publish_legacy_key_noop_runtime(state, app, &transaction.change);
-    }
 
     if cleared_tab_css {
         state.unwatch_tab_css(&mode);
@@ -765,30 +785,38 @@ fn custom_tabs_create_inner(
     observed_history_epoch: Option<u64>,
     admission: HistoryAdmissionLease,
 ) -> CmdResult<CustomTabCreateResult> {
-    let transaction = state.store.commit_aux_editor_transaction_with_admission(
-        HistoryScope::CustomTabs,
-        observed_history_epoch,
-        EditorCommitOrigin::LegacyAdapter("custom_tabs_create".to_string()),
-        &[EditorField::Keys, EditorField::KeyPositions],
-        admission,
-        |store| {
-            if store
-                .custom_tabs
-                .iter()
-                .any(|existing| existing.name == tab.name)
-            {
-                return Ok(Err("duplicate-name".to_string()));
-            }
-            if store.custom_tabs.len() >= MAX_CUSTOM_TABS {
-                return Ok(Err("max-reached".to_string()));
-            }
-            store.custom_tabs.push(tab.clone());
-            store.keys.insert(id.clone(), Vec::new());
-            store.key_positions.insert(id.clone(), Vec::new());
-            store.selected_key_type = id.clone();
-            Ok(Ok((tab.clone(), store.custom_tabs.clone())))
-        },
-    )?;
+    let (transaction, key_runtime_applied) = state
+        .commit_editor_transaction_preserving_runtime_counters(app, |runtime_counters| {
+            state
+                .store
+                .commit_aux_editor_transaction_with_runtime_counters_admission(
+                    AuxEditorTransactionOptions {
+                        scope: HistoryScope::CustomTabs,
+                        observed_history_epoch,
+                        origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_create".to_string()),
+                        touched_fields: &[EditorField::Keys, EditorField::KeyPositions],
+                    },
+                    admission,
+                    runtime_counters,
+                    |store| {
+                        if store
+                            .custom_tabs
+                            .iter()
+                            .any(|existing| existing.name == tab.name)
+                        {
+                            return Ok(Err("duplicate-name".to_string()));
+                        }
+                        if store.custom_tabs.len() >= MAX_CUSTOM_TABS {
+                            return Ok(Err("max-reached".to_string()));
+                        }
+                        store.custom_tabs.push(tab.clone());
+                        store.keys.insert(id.clone(), Vec::new());
+                        store.key_positions.insert(id.clone(), Vec::new());
+                        store.selected_key_type = id.clone();
+                        Ok(Ok((tab.clone(), store.custom_tabs.clone())))
+                    },
+                )
+        })?;
     let (tab, custom_tabs) = match transaction.value {
         Ok(result) => result,
         Err(error) => {
@@ -798,7 +826,11 @@ fn custom_tabs_create_inner(
             });
         }
     };
-    publish_editor_change(state, app, &transaction.change, false);
+    if key_runtime_applied {
+        publish_editor_change_after_key_runtime(state, app, &transaction.change);
+    } else {
+        publish_editor_change(state, app, &transaction.change, false);
+    }
 
     emit_best_effort(
         app,
@@ -851,36 +883,40 @@ fn custom_tabs_delete_inner(
     observed_history_epoch: Option<u64>,
     admission: HistoryAdmissionLease,
 ) -> CmdResult<CustomTabDeleteResult> {
-    let transaction = state
-        .store
-        .commit_aux_editor_reset_transaction_with_admission(
-            AuxEditorResetTransactionOptions {
-                scope: HistoryScope::CustomTabs,
-                observed_history_epoch,
-                origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
-                touched_fields: &[
-                    EditorField::Keys,
-                    EditorField::KeyPositions,
-                    EditorField::StatPositions,
-                    EditorField::GraphPositions,
-                    EditorField::KnobPositions,
-                    EditorField::LayerGroups,
-                ],
-                plugin_instances_reset: PluginInstancesResetScope::Mode(id.clone()),
-            },
-            admission,
-            |store| {
-                let Some(plan) = plan_custom_tab_delete(store, &id) else {
-                    return Ok(Err(store.selected_key_type.clone()));
-                };
-                delete_custom_tab_data(store, &id, &plan);
-                Ok(Ok((
-                    store.custom_tabs.clone(),
-                    store.selected_key_type.clone(),
-                    store.tab_note_overrides.clone(),
-                )))
-            },
-        )?;
+    let (transaction, key_runtime_applied) = state
+        .commit_editor_transaction_preserving_runtime_counters(app, |runtime_counters| {
+            state
+                .store
+                .commit_aux_editor_reset_transaction_with_runtime_counters_admission(
+                    AuxEditorResetTransactionOptions {
+                        scope: HistoryScope::CustomTabs,
+                        observed_history_epoch,
+                        origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
+                        touched_fields: &[
+                            EditorField::Keys,
+                            EditorField::KeyPositions,
+                            EditorField::StatPositions,
+                            EditorField::GraphPositions,
+                            EditorField::KnobPositions,
+                            EditorField::LayerGroups,
+                        ],
+                        plugin_instances_reset: PluginInstancesResetScope::Mode(id.clone()),
+                    },
+                    admission,
+                    runtime_counters,
+                    |store| {
+                        let Some(plan) = plan_custom_tab_delete(store, &id) else {
+                            return Ok(Err(store.selected_key_type.clone()));
+                        };
+                        delete_custom_tab_data(store, &id, &plan);
+                        Ok(Ok((
+                            store.custom_tabs.clone(),
+                            store.selected_key_type.clone(),
+                            store.tab_note_overrides.clone(),
+                        )))
+                    },
+                )
+        })?;
     let (custom_tabs, selected_key_type, tab_note_overrides) = match transaction.value {
         Ok(result) => result,
         Err(selected) => {
@@ -891,7 +927,11 @@ fn custom_tabs_delete_inner(
             });
         }
     };
-    publish_editor_change(state, app, &transaction.change, false);
+    if key_runtime_applied {
+        publish_editor_change_after_key_runtime(state, app, &transaction.change);
+    } else {
+        publish_editor_change(state, app, &transaction.change, false);
+    }
     publish_reset_plugin_instances(app, &transaction.change);
     state.unwatch_tab_css(&id);
 
@@ -986,10 +1026,12 @@ fn custom_tabs_select_inner(
 ) -> CmdResult<CustomTabSelectResult> {
     let requested = id;
     let transaction = state.store.commit_aux_editor_transaction_with_admission(
-        HistoryScope::Mode,
-        observed_history_epoch,
-        EditorCommitOrigin::LegacyAdapter("custom_tabs_select".to_string()),
-        &[],
+        AuxEditorTransactionOptions {
+            scope: HistoryScope::Mode,
+            observed_history_epoch,
+            origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_select".to_string()),
+            touched_fields: &[],
+        },
         admission,
         move |store| Ok(select_mode_if_available(store, &requested)),
     )?;
@@ -1051,23 +1093,33 @@ fn custom_tabs_restore_inner(
     observed_history_epoch: Option<u64>,
     admission: HistoryAdmissionLease,
 ) -> CmdResult<()> {
-    let transaction = state.store.commit_aux_editor_transaction_with_admission(
-        HistoryScope::CustomTabs,
-        observed_history_epoch,
-        EditorCommitOrigin::LegacyAdapter("custom_tabs_restore".to_string()),
-        &[],
-        admission,
-        move |store| {
-            validate_history_restore_metadata(
-                &EditorDocumentV1::from_store(store),
-                &custom_tabs,
-                &selected_key_type,
-            )?;
-            store.custom_tabs = custom_tabs;
-            store.selected_key_type = selected_key_type;
-            Ok((store.custom_tabs.clone(), store.selected_key_type.clone()))
-        },
-    )?;
+    let (transaction, _) =
+        state.commit_editor_transaction_preserving_runtime_counters(app, |runtime_counters| {
+            state
+                .store
+                .commit_aux_editor_transaction_with_runtime_counters_admission(
+                    AuxEditorTransactionOptions {
+                        scope: HistoryScope::CustomTabs,
+                        observed_history_epoch,
+                        origin: EditorCommitOrigin::LegacyAdapter(
+                            "custom_tabs_restore".to_string(),
+                        ),
+                        touched_fields: &[],
+                    },
+                    admission,
+                    runtime_counters,
+                    move |store| {
+                        validate_history_restore_metadata(
+                            &EditorDocumentV1::from_store(store),
+                            &custom_tabs,
+                            &selected_key_type,
+                        )?;
+                        store.custom_tabs = custom_tabs;
+                        store.selected_key_type = selected_key_type;
+                        Ok((store.custom_tabs.clone(), store.selected_key_type.clone()))
+                    },
+                )
+        })?;
     let (custom_tabs, selected_key_type) = transaction.value;
 
     state.apply_committed_editor_keys_without_counters(
@@ -1236,20 +1288,48 @@ pub fn raw_input_unsubscribe(state: State<'_, AppState>) -> CmdResult<RawInputSu
 mod tests {
     use super::{
         delete_custom_tab_data, plan_custom_tab_delete, reset_all_editor_data,
-        reset_all_editor_data_with_images, reset_mode_data, reset_mode_kind,
-        select_mode_if_available, set_mode_with, ModeResetKind,
+        reset_all_editor_data_with_images, reset_mode_data, reset_mode_data_with_images,
+        reset_mode_kind, select_mode_if_available, set_mode_with, ModeResetKind,
     };
     use crate::{
         defaults::{default_keys, default_positions, default_stat_positions},
         keyboard::KeyboardManager,
         models::{
-            AppStoreData, CustomTab, GraphPosition, GraphStatType, GraphType, KeySlot,
-            KnobPosition, LayerGroupDef, StatPosition, StatType, TabCss, TabNoteSettings,
+            AppStoreData, CustomTab, EditorCommitOrigin, EditorField, GraphPosition, GraphStatType,
+            GraphType, KeyCounters, KeySlot, KnobPosition, LayerGroupDef, StatPosition, StatType,
+            TabCss, TabNoteSettings,
+        },
+        state::{
+            app_state::KeyCounterEventEmitter, store::PluginInstancesResetScope, AppState, AppStore,
         },
     };
     use std::{cell::Cell, collections::HashSet};
 
     const TARGET_TAB: &str = "custom-target";
+
+    struct NoopCounterEmitter;
+
+    impl KeyCounterEventEmitter for NoopCounterEmitter {
+        fn emit_key_counters(
+            &self,
+            _counters: &KeyCounters,
+            _session_id: &str,
+            _revision: u64,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn emit_key_counter(
+            &self,
+            _mode: &str,
+            _key: &str,
+            _count: u32,
+            _session_id: &str,
+            _revision: u64,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
 
     fn populated_custom_tab_store() -> AppStoreData {
         let position = default_positions()
@@ -1589,5 +1669,509 @@ mod tests {
         assert_eq!(selected, selected_after_delete);
         assert_eq!(locked_store.selected_key_type, selected_after_delete);
         assert!(!locked_store.keys.contains_key(TARGET_TAB));
+    }
+
+    #[test]
+    fn reset_mode_with_changed_keys_preserves_other_live_mode_counters() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let customized = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("reset-test-setup".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.keys.get_mut("4key").unwrap()[0] = KeySlot::from("QA RESET KEY");
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(customized);
+        let state = AppState::initialize(store).unwrap();
+        let emitter = NoopCounterEmitter;
+        let reset_mode = "4key";
+        let reset_key = state.store.snapshot().keys[reset_mode][0].canonical();
+        let preserved_mode = "5key";
+        let preserved_key = state.store.snapshot().keys[preserved_mode][0].canonical();
+        for expected in 1..=3 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, reset_mode, &reset_key),
+                Some(expected)
+            );
+        }
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, preserved_mode, &preserved_key),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            state.store.snapshot().key_counters[preserved_mode][&preserved_key],
+            0
+        );
+
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (transaction, key_runtime_applied) = state
+            .commit_legacy_editor_reset_preserving_runtime_counters(
+                &emitter,
+                EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::Mode(reset_mode.to_string()),
+                admission,
+                |data| {
+                    reset_mode_data_with_images(
+                        data,
+                        reset_mode,
+                        ModeResetKind::Default,
+                        directory.path(),
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert!(key_runtime_applied);
+        assert!(transaction
+            .change
+            .result
+            .changed_fields
+            .contains(&EditorField::Keys));
+
+        assert_eq!(
+            state.snapshot_key_counters()[preserved_mode][&preserved_key],
+            7
+        );
+        assert!(state.snapshot_key_counters()[reset_mode]
+            .values()
+            .all(|count| *count == 0));
+        assert_eq!(
+            state.store.snapshot().key_counters[preserved_mode][&preserved_key],
+            7
+        );
+        state.shutdown();
+    }
+
+    #[test]
+    fn reset_mode_with_default_keys_applies_counter_only_reset_to_runtime() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let state = AppState::initialize(store).unwrap();
+        let emitter = NoopCounterEmitter;
+        let mode = "4key";
+        let key = state.store.snapshot().keys[mode][0].canonical();
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, mode, &key),
+                Some(expected)
+            );
+        }
+        assert_eq!(state.store.snapshot().key_counters[mode][&key], 0);
+        let generation_before = state.store.runtime_publication_generation();
+
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (transaction, key_runtime_applied) = state
+            .commit_legacy_editor_reset_preserving_runtime_counters(
+                &emitter,
+                EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::Mode(mode.to_string()),
+                admission,
+                |data| {
+                    reset_mode_data_with_images(
+                        data,
+                        mode,
+                        ModeResetKind::Default,
+                        directory.path(),
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert!(key_runtime_applied);
+        assert!(!transaction
+            .change
+            .result
+            .changed_fields
+            .contains(&EditorField::Keys));
+        assert!(transaction.change.runtime_publication_generation > generation_before);
+
+        assert_eq!(state.snapshot_key_counters()[mode][&key], 0);
+        assert_eq!(state.store.snapshot().key_counters[mode][&key], 0);
+        state.shutdown();
+    }
+
+    #[test]
+    fn reset_mode_replays_queued_increment_for_unchanged_mapping() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let state = AppState::initialize(store).unwrap();
+        let emitter = NoopCounterEmitter;
+        let reset_mode = "4key";
+        let reset_key = state.store.snapshot().keys[reset_mode][0].canonical();
+        let preserved_mode = "5key";
+        let preserved_key = state.store.snapshot().keys[preserved_mode][0].canonical();
+        for expected in 1..=3 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, reset_mode, &reset_key),
+                Some(expected)
+            );
+        }
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, preserved_mode, &preserved_key),
+                Some(expected)
+            );
+        }
+
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (_, key_runtime_applied) = state
+            .commit_legacy_editor_reset_preserving_runtime_counters(
+                &emitter,
+                EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::Mode(reset_mode.to_string()),
+                admission,
+                |data| {
+                    assert_eq!(
+                        state.increment_key_counter_and_emit(&emitter, reset_mode, &reset_key,),
+                        None
+                    );
+                    reset_mode_data_with_images(
+                        data,
+                        reset_mode,
+                        ModeResetKind::Default,
+                        directory.path(),
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(key_runtime_applied);
+        assert_eq!(state.snapshot_key_counters()[reset_mode][&reset_key], 1);
+        assert_eq!(
+            state.snapshot_key_counters()[preserved_mode][&preserved_key],
+            7
+        );
+        assert_eq!(
+            state.store.snapshot().key_counters[reset_mode][&reset_key],
+            0
+        );
+        assert_eq!(
+            state.store.snapshot().key_counters[preserved_mode][&preserved_key],
+            7
+        );
+        state.shutdown();
+    }
+
+    #[test]
+    fn reset_mode_drops_queued_increment_for_replaced_key() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let mode = "4key";
+        let replaced_key = "QA REPLACED KEY";
+        let setup = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("reset-queue-test-setup".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.keys.get_mut(mode).unwrap()[0] = KeySlot::from(replaced_key);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(setup);
+        let state = AppState::initialize(store).unwrap();
+        let emitter = NoopCounterEmitter;
+
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (_, key_runtime_applied) = state
+            .commit_legacy_editor_reset_preserving_runtime_counters(
+                &emitter,
+                EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::Mode(mode.to_string()),
+                admission,
+                |data| {
+                    assert_eq!(
+                        state.increment_key_counter_and_emit(&emitter, mode, replaced_key),
+                        None
+                    );
+                    reset_mode_data_with_images(
+                        data,
+                        mode,
+                        ModeResetKind::Default,
+                        directory.path(),
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(key_runtime_applied);
+        assert!(!state.snapshot_key_counters()[mode].contains_key(replaced_key));
+        assert!(!state.store.snapshot().key_counters[mode].contains_key(replaced_key));
+        state.shutdown();
+        drop(state);
+        let reloaded = AppStore::initialize_for_test(directory.path()).unwrap();
+        assert!(!reloaded.snapshot().key_counters[mode].contains_key(replaced_key));
+        reloaded.flush_and_shutdown().unwrap();
+    }
+
+    #[test]
+    fn reset_all_drops_queued_increment_for_removed_custom_mode() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let mode = "qa-removed-custom-mode";
+        let key = "QA REMOVED KEY";
+        let mut position = default_positions()["4key"][0].clone();
+        position.id = uuid::Uuid::new_v4().to_string();
+        let setup = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("reset-queue-test-setup".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.custom_tabs.push(CustomTab {
+                        id: mode.to_string(),
+                        name: "Removed during reset".to_string(),
+                    });
+                    data.keys.insert(mode.to_string(), vec![KeySlot::from(key)]);
+                    data.key_positions.insert(mode.to_string(), vec![position]);
+                    data.selected_key_type = mode.to_string();
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(setup);
+        let state = AppState::initialize(store).unwrap();
+        let emitter = NoopCounterEmitter;
+
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (_, key_runtime_applied) = state
+            .commit_legacy_editor_reset_preserving_runtime_counters(
+                &emitter,
+                EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::All,
+                admission,
+                |data| {
+                    assert_eq!(
+                        state.increment_key_counter_and_emit(&emitter, mode, key),
+                        None
+                    );
+                    reset_all_editor_data_with_images(
+                        data,
+                        default_keys(),
+                        default_positions(),
+                        default_stat_positions(),
+                        directory.path(),
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(key_runtime_applied);
+        assert!(!state.snapshot_key_counters().contains_key(mode));
+        assert!(!state.store.snapshot().key_counters.contains_key(mode));
+        state.shutdown();
+        drop(state);
+        let reloaded = AppStore::initialize_for_test(directory.path()).unwrap();
+        assert!(!reloaded.snapshot().key_counters.contains_key(mode));
+        reloaded.flush_and_shutdown().unwrap();
+    }
+
+    #[test]
+    fn reset_all_with_default_keys_applies_counter_only_reset_to_runtime() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let state = AppState::initialize(store).unwrap();
+        let emitter = NoopCounterEmitter;
+        let mode = "4key";
+        let key = state.store.snapshot().keys[mode][0].canonical();
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, mode, &key),
+                Some(expected)
+            );
+        }
+        assert_eq!(state.store.snapshot().key_counters[mode][&key], 0);
+        let generation_before = state.store.runtime_publication_generation();
+
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (transaction, key_runtime_applied) = state
+            .commit_legacy_editor_reset_preserving_runtime_counters(
+                &emitter,
+                EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::All,
+                admission,
+                |data| {
+                    reset_all_editor_data_with_images(
+                        data,
+                        default_keys(),
+                        default_positions(),
+                        default_stat_positions(),
+                        directory.path(),
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert!(key_runtime_applied);
+        assert!(!transaction
+            .change
+            .result
+            .changed_fields
+            .contains(&EditorField::Keys));
+        assert!(transaction.change.runtime_publication_generation > generation_before);
+
+        assert_eq!(state.snapshot_key_counters()[mode][&key], 0);
+        assert!(state
+            .store
+            .snapshot()
+            .key_counters
+            .values()
+            .flat_map(|counters| counters.values())
+            .all(|count| *count == 0));
+        state.shutdown();
+    }
+
+    #[test]
+    fn reset_all_with_changed_keys_zeroes_every_live_counter() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let customized = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("reset-all-test-setup".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.keys.get_mut("4key").unwrap()[0] = KeySlot::from("QA RESET ALL KEY");
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(customized);
+        let state = AppState::initialize(store).unwrap();
+        let emitter = NoopCounterEmitter;
+        for mode in ["4key", "5key"] {
+            let key = state.store.snapshot().keys[mode][0].canonical();
+            for expected in 1..=7 {
+                assert_eq!(
+                    state.increment_key_counter_and_emit(&emitter, mode, &key),
+                    Some(expected)
+                );
+            }
+        }
+
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (transaction, key_runtime_applied) = state
+            .commit_legacy_editor_reset_preserving_runtime_counters(
+                &emitter,
+                EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                PluginInstancesResetScope::All,
+                admission,
+                |data| {
+                    reset_all_editor_data_with_images(
+                        data,
+                        default_keys(),
+                        default_positions(),
+                        default_stat_positions(),
+                        directory.path(),
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert!(key_runtime_applied);
+        assert!(transaction
+            .change
+            .result
+            .changed_fields
+            .contains(&EditorField::Keys));
+        assert_eq!(transaction.change.document.keys, *default_keys());
+        assert!(state
+            .snapshot_key_counters()
+            .values()
+            .flat_map(|counters| counters.values())
+            .all(|count| *count == 0));
+        assert!(state
+            .store
+            .snapshot()
+            .key_counters
+            .values()
+            .flat_map(|counters| counters.values())
+            .all(|count| *count == 0));
+        state.shutdown();
     }
 }

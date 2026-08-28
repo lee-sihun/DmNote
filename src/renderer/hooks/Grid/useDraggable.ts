@@ -8,7 +8,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { calculateBounds, calculateSnapPoints } from '@utils/grid/smartGuides';
 import { isMac } from '@utils/core/platform';
-import { snapToGrid } from '@hooks/Grid/utils';
+import { calculateZoomAdjustedGridSize, snapToGrid } from '@hooks/Grid/utils';
 import {
   resumeCustomCursorHover,
   suspendCustomCursorHover,
@@ -60,19 +60,6 @@ const DRAG_CURSOR_CLASS = 'dmn-dragging';
 // 위치 클램핑 함수
 const clampPosition = (value: number): number => {
   return Math.min(Math.max(value, MIN_GRID_POSITION), MAX_GRID_POSITION);
-};
-
-// 줌 레벨에 따른 동적 그리드 스냅 크기 계산
-// 화면상 일정한 드래그 거리를 유지하면서 최소 1px 보장, 0은 스냅 끄기
-const MIN_GRID_SIZE = 1;
-
-const calculateDynamicGridSize = (
-  zoom: number,
-  baseGridSize: number,
-): number => {
-  if (baseGridSize <= 0) return 0;
-  const dynamicSize = Math.round(baseGridSize / zoom);
-  return Math.max(dynamicSize, MIN_GRID_SIZE);
 };
 
 export const useDraggable = ({
@@ -254,7 +241,10 @@ export const useDraggable = ({
       useSettingsStore.getState().gridSettings?.gridSnapSize ?? 5;
 
     // 줌 레벨에 따른 동적 그리드 크기 계산
-    const dynamicGridSize = calculateDynamicGridSize(currentZoom, gridSnapSize);
+    const dynamicGridSize = calculateZoomAdjustedGridSize(
+      currentZoom,
+      gridSnapSize,
+    );
 
     // 무한 캔버스에서는 경계 제한 없음
     // 시작 위치 계산 (줌 반영)

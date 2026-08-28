@@ -132,11 +132,18 @@ fn run_history_operation(
                     &snapshot.document.keys,
                     &snapshot.selected_key_type,
                 );
-                counters_restored = state.replace_history_counters_locked(
-                    &mut counter_guard,
-                    outcome.runtime_publication_generation,
-                    &snapshot.key_counters,
-                );
+                if let Some(change) = committed_change.filter(|change| {
+                    change
+                        .result
+                        .changed_fields
+                        .contains(&crate::models::EditorField::Keys)
+                }) {
+                    counters_restored = state.replace_history_counters_locked(
+                        &mut counter_guard,
+                        outcome.runtime_publication_generation,
+                        &change.key_counters,
+                    );
+                }
             }
             Some(HistoryAuxChange::PresetFull { snapshot, .. }) => {
                 state.apply_committed_editor_keys_without_counters(
@@ -144,11 +151,18 @@ fn run_history_operation(
                     &snapshot.document.keys,
                     &snapshot.selected_key_type,
                 );
-                counters_restored = state.replace_history_counters_locked(
-                    &mut counter_guard,
-                    outcome.runtime_publication_generation,
-                    &snapshot.key_counters,
-                );
+                if let Some(change) = committed_change.filter(|change| {
+                    change
+                        .result
+                        .changed_fields
+                        .contains(&crate::models::EditorField::Keys)
+                }) {
+                    counters_restored = state.replace_history_counters_locked(
+                        &mut counter_guard,
+                        outcome.runtime_publication_generation,
+                        &change.key_counters,
+                    );
+                }
             }
             Some(HistoryAuxChange::Mode(mode)) => {
                 let keys = state.store.snapshot().keys;
@@ -166,32 +180,10 @@ fn run_history_operation(
                 );
             }
             Some(HistoryAuxChange::PluginElements { .. }) => {}
-            Some(HistoryAuxChange::PluginElementsBatch { .. }) => {
-                if let Some(change) = committed_change.filter(|change| {
-                    change
-                        .result
-                        .changed_fields
-                        .contains(&crate::models::EditorField::Keys)
-                }) {
-                    state.apply_committed_editor_keys_without_counters(
-                        outcome.runtime_publication_generation,
-                        &change.document.keys,
-                        &change.selected_key_type,
-                    );
-                }
-            }
-            None => {
-                if let Some(change) = committed_change.filter(|change| {
-                    change
-                        .result
-                        .changed_fields
-                        .contains(&crate::models::EditorField::Keys)
-                }) {
-                    state.apply_committed_editor_keys_without_counters(
-                        outcome.runtime_publication_generation,
-                        &change.document.keys,
-                        &change.selected_key_type,
-                    );
+            Some(HistoryAuxChange::PluginElementsBatch { .. }) | None => {
+                if let Some(change) = committed_change {
+                    counters_restored =
+                        state.apply_history_editor_key_runtime_locked(&mut counter_guard, change);
                 }
             }
         }

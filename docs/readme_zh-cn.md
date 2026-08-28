@@ -23,7 +23,7 @@
 
 ## 概述
 
-**DM Note** 是一款专为 DJMAX RESPECT V 打造的按键显示程序。
+[前往下载 DM NOTE v2.0.0](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
 
 它同样可以自由用于其他游戏，设置也很简单，可以直接把按键输入显示在直播或游戏视频中。
 

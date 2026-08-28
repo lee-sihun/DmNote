@@ -28,6 +28,18 @@ pub struct GestureCommitRequest {
     pub plugin_changes: Vec<GesturePluginInstancesChange>,
 }
 
+impl GestureCommitRequest {
+    pub(crate) fn may_change_keys(&self) -> bool {
+        self.editor_changes
+            .as_ref()
+            .is_some_and(|changes| changes.keys.is_some())
+            || self
+                .editor_ops
+                .as_ref()
+                .is_some_and(|ops| ops.iter().any(EditorOpV1::may_change_keys))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GestureCommitResult {
@@ -104,5 +116,50 @@ mod tests {
             .unwrap()
             .get("editorOpResults")
             .is_none());
+    }
+
+    #[test]
+    fn gesture_request_detects_key_mapping_mutations_only() {
+        let base = GestureCommitRequest {
+            gesture_id: uuid::Uuid::new_v4().to_string(),
+            mutation_id: uuid::Uuid::new_v4().to_string(),
+            editor_base_revision: 0,
+            plugin_base_revision: 0,
+            observed_history_epoch: None,
+            authority_generation: 1,
+            editor_changes: None,
+            editor_ops_version: None,
+            editor_ops: None,
+            plugin_changes: Vec::new(),
+        };
+
+        let mut patch = base.clone();
+        patch.editor_changes = Some(EditorPatchV1 {
+            keys: Some(Default::default()),
+            ..EditorPatchV1::default()
+        });
+        assert!(patch.may_change_keys());
+
+        let mut delete = base.clone();
+        delete.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        delete.editor_ops = Some(vec![EditorOpV1::DeleteElement {
+            element_type: EditorElementTypeV1::Key,
+            id: uuid::Uuid::new_v4().to_string(),
+        }]);
+        assert!(delete.may_change_keys());
+
+        let mut bounds = base;
+        bounds.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        bounds.editor_ops = Some(vec![EditorOpV1::SetBounds {
+            element_type: EditorElementTypeV1::Key,
+            id: uuid::Uuid::new_v4().to_string(),
+            bounds: EditorBoundsV1 {
+                dx: 1.0,
+                dy: 2.0,
+                width: 60.0,
+                height: 60.0,
+            },
+        }]);
+        assert!(!bounds.may_change_keys());
     }
 }

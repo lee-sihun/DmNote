@@ -793,7 +793,9 @@ export function useAppBootstrap() {
         }
 
         // 백엔드 undo authority 상태 초기 조회
-        void syncHistoryStatus();
+        if (window.__dmn_runtime !== 'obs') {
+          void syncHistoryStatus();
+        }
 
         finalizeBootstrap();
 

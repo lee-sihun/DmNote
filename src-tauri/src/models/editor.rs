@@ -570,6 +570,21 @@ pub enum EditorOpV1 {
 }
 
 impl EditorOpV1 {
+    pub(crate) fn may_change_keys(&self) -> bool {
+        match self {
+            Self::SetKeySlot { .. } => true,
+            Self::DeleteElement { element_type, .. } => *element_type == EditorElementTypeV1::Key,
+            Self::InsertFrozenElements { elements, .. } => elements
+                .iter()
+                .any(|element| matches!(element, EditorFrozenElementV1::Key { .. })),
+            Self::SetBounds { .. }
+            | Self::PatchElement { .. }
+            | Self::ReorderElements { .. }
+            | Self::SetElementGroups { .. }
+            | Self::RenameLayerGroup { .. } => false,
+        }
+    }
+
     pub fn target_id(&self) -> Option<&str> {
         match self {
             Self::SetBounds { id, .. }
@@ -730,6 +745,16 @@ pub struct EditorCommitRequest {
 }
 
 impl EditorCommitRequest {
+    pub(crate) fn may_change_keys(&self) -> bool {
+        self.changes
+            .as_ref()
+            .is_some_and(|changes| changes.keys.is_some())
+            || self
+                .ops
+                .as_ref()
+                .is_some_and(|ops| ops.iter().any(EditorOpV1::may_change_keys))
+    }
+
     pub fn echoed_gesture_ids(&self) -> Vec<String> {
         let mut gesture_ids =
             Vec::with_capacity(self.gesture_ids.len() + usize::from(self.gesture_id.is_some()));
@@ -1422,5 +1447,56 @@ mod tests {
                 "expected image transform leaf rejection: {invalid}"
             );
         }
+    }
+
+    #[test]
+    fn editor_request_detects_every_direct_key_mapping_mutation() {
+        let request =
+            |changes: Option<EditorPatchV1>, ops: Option<Vec<EditorOpV1>>| EditorCommitRequest {
+                base_revision: 0,
+                mutation_id: uuid::Uuid::new_v4().to_string(),
+                multi_key: false,
+                gesture_id: None,
+                gesture_ids: Vec::new(),
+                changes,
+                ops_version: ops.as_ref().map(|_| EDITOR_OPS_VERSION),
+                ops,
+            };
+
+        let key_patch = EditorPatchV1 {
+            keys: Some(KeyMappings::new()),
+            ..EditorPatchV1::default()
+        };
+        assert!(request(Some(key_patch), None).may_change_keys());
+        assert!(request(
+            None,
+            Some(vec![EditorOpV1::SetKeySlot {
+                id: uuid::Uuid::new_v4().to_string(),
+                slot: EditorFrozenKeySlotV1::Single("A".to_string()),
+            }]),
+        )
+        .may_change_keys());
+        assert!(request(
+            None,
+            Some(vec![EditorOpV1::DeleteElement {
+                element_type: EditorElementTypeV1::Key,
+                id: uuid::Uuid::new_v4().to_string(),
+            }]),
+        )
+        .may_change_keys());
+        assert!(!request(
+            None,
+            Some(vec![EditorOpV1::SetBounds {
+                element_type: EditorElementTypeV1::Key,
+                id: uuid::Uuid::new_v4().to_string(),
+                bounds: EditorBoundsV1 {
+                    dx: 1.0,
+                    dy: 2.0,
+                    width: 60.0,
+                    height: 60.0,
+                },
+            }]),
+        )
+        .may_change_keys());
     }
 }
