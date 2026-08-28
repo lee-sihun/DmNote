@@ -10,10 +10,7 @@
       file-version="${version}"
       company-name="dmnote"
     >
-      <authenticode-sign
-        description="DM NOTE"
-        description-url="https://dmnote.app"
-      />
+      <authenticode-sign />
     </pe-file>
   </zip-file>
 </artifact-configuration>

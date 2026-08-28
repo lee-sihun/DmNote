@@ -30,6 +30,8 @@ SignPath 프로젝트에서 Artifact Configuration을 추가하고 slug를 기�
 
 저장소의 `.signpath/artifact-configurations/windows-exe.xml` 내용을 SignPath 설정에 등록한다. 이 구성은 `DM.NOTE.exe` 하나만 서명하며 Product Name과 버전을 제한한다.
 
+Open Source Code Signing 구독은 Authenticode 설명에 자동 워터마크를 적용하므로 `<authenticode-sign>`에 `description`이나 `description-url` 속성을 지정하지 않는다.
+
 ## 3. GitHub 설정
 
 SignPath에서 다음을 완료한다.
