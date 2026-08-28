@@ -16,9 +16,9 @@ use crate::models::{
     CustomCssPatch, CustomJsPatch, EditorCommitOrigin, EditorCommitRequest, EditorCommitResult,
     EditorCommittedV1, EditorDocumentV1, EditorField, EditorGetResult, EditorOpResultStatusV1,
     EditorOpResultV1, EditorTransactionResult, FontType, GestureCommitRequest, GestureCommitResult,
-    HistoryStatus, KeyCounters, KeyPosition, NoteSettingsPatch, PluginInstancesChangedPayload,
-    PluginInstancesCommitRequest, PluginInstancesReconcileRequest, SavedPluginInstance,
-    SettingsDiff, SettingsPatchInput, SettingsState, EDITOR_SCHEMA_VERSION,
+    HistoryStatus, KeyCounters, KeyMappings, KeyPosition, NoteSettingsPatch,
+    PluginInstancesChangedPayload, PluginInstancesCommitRequest, PluginInstancesReconcileRequest,
+    SavedPluginInstance, SettingsDiff, SettingsPatchInput, SettingsState, EDITOR_SCHEMA_VERSION,
 };
 use anyhow::{anyhow, Context, Result};
 use parking_lot::{Mutex, RwLock, RwLockWriteGuard};
@@ -242,6 +242,13 @@ struct EditorTransactionHistoryOptions {
 pub(crate) enum PluginInstancesResetScope {
     All,
     Mode(String),
+}
+
+pub(crate) struct AuxEditorTransactionOptions<'a> {
+    pub(crate) scope: HistoryScope,
+    pub(crate) observed_history_epoch: Option<u64>,
+    pub(crate) origin: EditorCommitOrigin,
+    pub(crate) touched_fields: &'a [EditorField],
 }
 
 pub(crate) struct AuxEditorResetTransactionOptions<'a> {
@@ -574,26 +581,42 @@ impl AppStore {
                 HistorySnapshot::Editor {
                     changed_fields,
                     before,
+                    key_counters,
                 } => {
+                    let restores_keys = changed_fields.contains(&EditorField::Keys);
                     let current = EditorDocumentV1::from_store(&current_store);
                     let opposite =
                         require_history_entry(guard.history.prepare_opposite_editor_entry(
                             changed_fields.clone(),
                             current.patch_for_fields(&changed_fields),
+                            restores_keys.then(|| current_key_counters.clone()),
                             target_gesture_id,
                         )?)?;
+                    let projected_counters = if restores_keys {
+                        let target_keys = before.keys.as_ref().ok_or_else(|| {
+                            "history key snapshot is missing target mappings".to_string()
+                        })?;
+                        Some(project_editor_history_key_counters(
+                            current_key_counters,
+                            key_counters.as_ref(),
+                            target_keys,
+                        ))
+                    } else {
+                        None
+                    };
                     let change = self
                         .commit_editor_patch_locked(
                             &mut guard,
                             &before,
                             &changed_fields,
+                            projected_counters.as_ref(),
                             EditorPatchCommitOptions {
                                 mutation_id: operation_id.to_string(),
                                 gesture_id: None,
                                 gesture_ids: Vec::new(),
                                 origin,
                                 record_history: false,
-                                apply_key_side_effects: false,
+                                apply_key_side_effects: restores_keys,
                                 enforce_touched_fields: true,
                             },
                         )
@@ -619,6 +642,7 @@ impl AppStore {
                             &before,
                             operation_id,
                             origin,
+                            current_key_counters,
                         )
                         .map_err(editor_history_error)?;
                     (
@@ -633,12 +657,12 @@ impl AppStore {
                     )
                 }
                 HistorySnapshot::PresetFull(before) => {
+                    if before.matches_store(&current_store) {
+                        return Err(HISTORY_TARGET_ALREADY_APPLIED.to_string());
+                    }
                     let mut current_snapshot =
                         PresetFullHistorySnapshot::from_store(&current_store);
                     current_snapshot.key_counters = current_key_counters.clone();
-                    if current_snapshot == *before {
-                        return Err(HISTORY_TARGET_ALREADY_APPLIED.to_string());
-                    }
                     let changed_tab_css_ids = changed_map_ids(
                         &current_store.tab_css_overrides,
                         &before.tab_css_overrides,
@@ -652,6 +676,7 @@ impl AppStore {
                             &before,
                             operation_id,
                             origin,
+                            current_key_counters,
                         )
                         .map_err(editor_history_error)?;
                     (
@@ -730,6 +755,9 @@ impl AppStore {
                                 opposite_snapshots.push(HistorySnapshot::Editor {
                                     changed_fields: changed_fields.clone(),
                                     before: Box::new(current.patch_for_fields(changed_fields)),
+                                    key_counters: changed_fields
+                                        .contains(&EditorField::Keys)
+                                        .then(|| current_key_counters.clone()),
                                 });
                             }
                             HistorySnapshot::PluginElements(before) => {
@@ -755,6 +783,7 @@ impl AppStore {
                             &snapshots,
                             operation_id,
                             origin,
+                            current_key_counters,
                         )
                         .map_err(editor_history_error)?;
                     (
@@ -811,6 +840,28 @@ impl AppStore {
         request: EditorCommitRequest,
         admission: &HistoryAdmissionLease,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
+        self.commit_editor_document_admitted_with_runtime_counters(request, admission, None)
+    }
+
+    pub(crate) fn commit_editor_document_with_runtime_counters_admitted(
+        &self,
+        request: EditorCommitRequest,
+        admission: &HistoryAdmissionLease,
+        runtime_counters: &KeyCounters,
+    ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
+        self.commit_editor_document_admitted_with_runtime_counters(
+            request,
+            admission,
+            Some(runtime_counters),
+        )
+    }
+
+    fn commit_editor_document_admitted_with_runtime_counters(
+        &self,
+        request: EditorCommitRequest,
+        admission: &HistoryAdmissionLease,
+        runtime_counters: Option<&KeyCounters>,
+    ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
         let started = Instant::now();
         let base_revision = request.base_revision;
         let mutation_id = uuid::Uuid::parse_str(&request.mutation_id)
@@ -828,7 +879,7 @@ impl AppStore {
         let payload_size = request_payload_size(&request);
         let payload_bytes = payload_size.as_ref().copied().unwrap_or(0);
         let result = match payload_size {
-            Ok(_) => self.commit_editor_document_inner(request, admission),
+            Ok(_) => self.commit_editor_document_inner(request, admission, runtime_counters),
             Err(error) => Err(error),
         };
         let current_revision = result
@@ -881,6 +932,7 @@ impl AppStore {
         &self,
         mut request: EditorCommitRequest,
         admission: &HistoryAdmissionLease,
+        runtime_counters: Option<&KeyCounters>,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
         if let Some(changes) = request.changes.as_mut() {
             if let Some(keys) = changes.keys.as_mut() {
@@ -947,9 +999,15 @@ impl AppStore {
         let change = if let Some(changes) = request.changes.as_mut() {
             super::native_element_id::prepare_commit_patch_element_ids(&guard.data, changes)?;
             let touched_fields = changes.included_fields();
-            self.commit_editor_patch_locked(&mut guard, changes, &touched_fields, options)?
+            self.commit_editor_patch_locked(
+                &mut guard,
+                changes,
+                &touched_fields,
+                runtime_counters,
+                options,
+            )?
         } else if let Some(ops) = request.ops.as_ref() {
-            self.commit_editor_ops_locked(&mut guard, ops, options)?
+            self.commit_editor_ops_locked(&mut guard, ops, runtime_counters, options)?
         } else {
             return Err(EditorCommitError::validation(
                 "EDITOR_MUTATION_REQUIRED",
@@ -970,9 +1028,13 @@ impl AppStore {
         guard: &mut VersionedStoreState,
         changes: &crate::models::EditorPatchV1,
         touched_fields: &[EditorField],
+        runtime_counters: Option<&KeyCounters>,
         options: EditorPatchCommitOptions,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
-        let current_store = guard.data.clone();
+        let mut current_store = guard.data.clone();
+        if let Some(counters) = runtime_counters {
+            current_store.key_counters = counters.clone();
+        }
         let (current, candidate, scratch, changed_fields) =
             prepare_editor_patch_transition(&current_store, changes, touched_fields)?;
         if options.enforce_touched_fields
@@ -1001,9 +1063,13 @@ impl AppStore {
         &self,
         guard: &mut VersionedStoreState,
         ops: &[crate::models::EditorOpV1],
+        runtime_counters: Option<&KeyCounters>,
         options: EditorPatchCommitOptions,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
-        let current_store = guard.data.clone();
+        let mut current_store = guard.data.clone();
+        if let Some(counters) = runtime_counters {
+            current_store.key_counters = counters.clone();
+        }
         let transition = prepare_editor_ops_transition(&current_store, ops)?;
         self.commit_editor_transition_locked(
             guard,
@@ -1053,6 +1119,9 @@ impl AppStore {
                 guard.history.prepare_entry_with_gesture_ids(
                     changed_fields.clone(),
                     current.patch_for_fields(&changed_fields),
+                    changed_fields
+                        .contains(&EditorField::Keys)
+                        .then(|| current_store.key_counters.clone()),
                     options.gesture_ids.clone(),
                 )
             })
@@ -1119,8 +1188,30 @@ impl AppStore {
         request: GestureCommitRequest,
         admission: HistoryAdmissionLease,
     ) -> std::result::Result<AdmittedGestureCommit, EditorCommitError> {
+        self.commit_gesture_with_runtime_counters_and_admission(request, admission, None)
+    }
+
+    pub(crate) fn commit_gesture_with_runtime_counters_admission(
+        &self,
+        request: GestureCommitRequest,
+        admission: HistoryAdmissionLease,
+        runtime_counters: &KeyCounters,
+    ) -> std::result::Result<AdmittedGestureCommit, EditorCommitError> {
+        self.commit_gesture_with_runtime_counters_and_admission(
+            request,
+            admission,
+            Some(runtime_counters),
+        )
+    }
+
+    fn commit_gesture_with_runtime_counters_and_admission(
+        &self,
+        request: GestureCommitRequest,
+        admission: HistoryAdmissionLease,
+        runtime_counters: Option<&KeyCounters>,
+    ) -> std::result::Result<AdmittedGestureCommit, EditorCommitError> {
         validate_gesture_commit_request(&request)?;
-        let outcome = self.commit_gesture_admitted(request, &admission)?;
+        let outcome = self.commit_gesture_admitted(request, &admission, runtime_counters)?;
         Ok(AdmittedGestureCommit {
             outcome,
             _admission: admission,
@@ -1131,6 +1222,7 @@ impl AppStore {
         &self,
         mut request: GestureCommitRequest,
         admission: &HistoryAdmissionLease,
+        runtime_counters: Option<&KeyCounters>,
     ) -> std::result::Result<GestureCommitOutcome, EditorCommitError> {
         let fingerprint = canonical_request_fingerprint(&request)?;
         let mut guard = self
@@ -1173,7 +1265,10 @@ impl AppStore {
             super::native_element_id::prepare_commit_patch_element_ids(&guard.data, changes)?;
         }
 
-        let current_store = guard.data.clone();
+        let mut current_store = guard.data.clone();
+        if let Some(counters) = runtime_counters {
+            current_store.key_counters = counters.clone();
+        }
         let (current_editor, candidate_editor, mut scratch, changed_fields, editor_op_results) =
             if let Some(changes) = request.editor_changes.as_ref() {
                 let touched_fields = changes.included_fields();
@@ -1221,6 +1316,9 @@ impl AppStore {
             history_snapshots.push(HistorySnapshot::Editor {
                 changed_fields: changed_fields.clone(),
                 before: Box::new(current_editor.patch_for_fields(&changed_fields)),
+                key_counters: changed_fields
+                    .contains(&EditorField::Keys)
+                    .then(|| current_store.key_counters.clone()),
             });
         }
 
@@ -1369,18 +1467,21 @@ impl AppStore {
         snapshots: &[HistorySnapshot],
         operation_id: &str,
         origin: EditorCommitOrigin,
+        current_key_counters: &KeyCounters,
     ) -> std::result::Result<(Option<CommittedEditorChange>, Vec<String>, u64), EditorCommitError>
     {
-        let current_store = guard.data.clone();
+        let mut current_store = guard.data.clone();
         let mut editor_target = None;
         let mut plugin_targets = Vec::new();
         let mut seen_plugin_ids = HashSet::new();
+        let mut restores_keys = false;
 
         for snapshot in snapshots {
             match snapshot {
                 HistorySnapshot::Editor {
                     changed_fields,
                     before,
+                    key_counters,
                 } => {
                     if editor_target.is_some() {
                         return Err(EditorCommitError::validation(
@@ -1388,7 +1489,8 @@ impl AppStore {
                             "compound history contains duplicate editor snapshots",
                         ));
                     }
-                    editor_target = Some((changed_fields, before));
+                    restores_keys = changed_fields.contains(&EditorField::Keys);
+                    editor_target = Some((changed_fields, before, key_counters));
                 }
                 HistorySnapshot::PluginElements(target) => {
                     if !seen_plugin_ids.insert(target.plugin_id.as_str()) {
@@ -1408,22 +1510,30 @@ impl AppStore {
             }
         }
 
-        let (mut scratch, editor_restore) = if let Some((changed_fields, before)) = editor_target {
-            let (_, candidate, next_store, actual_fields) =
-                prepare_editor_patch_transition(&current_store, before, changed_fields)?;
-            if actual_fields
-                .iter()
-                .any(|field| !changed_fields.contains(field))
-            {
-                return Err(EditorCommitError::validation(
-                    "HISTORY_RESTORE_CHANGED_UNDECLARED_FIELD",
-                    "history restore changed an editor field outside its entry",
-                ));
-            }
-            (next_store, Some((candidate, actual_fields)))
-        } else {
-            (current_store.clone(), None)
-        };
+        if restores_keys {
+            current_store.key_counters = current_key_counters.clone();
+        }
+
+        let (mut scratch, editor_restore) =
+            if let Some((changed_fields, before, key_counters)) = editor_target {
+                let (_, candidate, next_store, actual_fields) =
+                    prepare_editor_patch_transition(&current_store, before, changed_fields)?;
+                if actual_fields
+                    .iter()
+                    .any(|field| !changed_fields.contains(field))
+                {
+                    return Err(EditorCommitError::validation(
+                        "HISTORY_RESTORE_CHANGED_UNDECLARED_FIELD",
+                        "history restore changed an editor field outside its entry",
+                    ));
+                }
+                (
+                    next_store,
+                    Some((candidate, actual_fields, key_counters.as_ref())),
+                )
+            } else {
+                (current_store.clone(), None)
+            };
         let mut plugin_ids = Vec::new();
         for target in plugin_targets {
             let current =
@@ -1441,12 +1551,23 @@ impl AppStore {
 
         let editor_changed = editor_restore
             .as_ref()
-            .is_some_and(|(_, changed_fields)| !changed_fields.is_empty());
+            .is_some_and(|(_, changed_fields, _)| !changed_fields.is_empty());
         if !editor_changed && plugin_ids.is_empty() {
             return Err(EditorCommitError::validation(
                 "HISTORY_TARGET_ALREADY_APPLIED",
                 "history target is already applied",
             ));
+        }
+
+        if let Some((candidate, changed_fields, historical_counters)) = editor_restore.as_ref() {
+            if changed_fields.contains(&EditorField::Keys) {
+                scratch.key_counters = project_editor_history_key_counters(
+                    current_key_counters,
+                    *historical_counters,
+                    &candidate.keys,
+                );
+                repair_selected_mode(&mut scratch);
+            }
         }
 
         let editor_revision = if editor_changed {
@@ -1470,7 +1591,7 @@ impl AppStore {
             .map_err(|error| EditorCommitError::io(error.to_string()))?;
         guard.plugin_model_revision = plugin_model_revision;
 
-        let change = editor_restore.and_then(|(candidate, changed_fields)| {
+        let change = editor_restore.and_then(|(candidate, changed_fields, _)| {
             if changed_fields.is_empty() {
                 return None;
             }
@@ -1510,6 +1631,7 @@ impl AppStore {
         target: &CustomTabsHistorySnapshot,
         operation_id: &str,
         origin: EditorCommitOrigin,
+        current_key_counters: &KeyCounters,
     ) -> std::result::Result<(Option<CommittedEditorChange>, Vec<String>, u64), EditorCommitError>
     {
         let current_store = guard.data.clone();
@@ -1530,7 +1652,11 @@ impl AppStore {
         target.document.apply_to_store(&mut scratch);
         scratch.custom_tabs = target.custom_tabs.clone();
         scratch.selected_key_type = target.selected_key_type.clone();
-        scratch.key_counters = target.key_counters.clone();
+        scratch.key_counters = project_history_key_counters(
+            current_key_counters,
+            &target.key_counters,
+            &target.document.keys,
+        );
         target.apply_override_patches(&mut scratch);
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
         crate::state::migration::canonicalize_image_modes(&mut scratch);
@@ -1608,6 +1734,7 @@ impl AppStore {
         target: &PresetFullHistorySnapshot,
         operation_id: &str,
         origin: EditorCommitOrigin,
+        current_key_counters: &KeyCounters,
     ) -> std::result::Result<(Option<CommittedEditorChange>, SettingsDiff), EditorCommitError> {
         let current_store = guard.data.clone();
         validate_history_restore_metadata(
@@ -1620,7 +1747,11 @@ impl AppStore {
         target.document.apply_to_store(&mut scratch);
         scratch.custom_tabs = target.custom_tabs.clone();
         scratch.selected_key_type = target.selected_key_type.clone();
-        scratch.key_counters = target.key_counters.clone();
+        scratch.key_counters = project_history_key_counters(
+            current_key_counters,
+            &target.key_counters,
+            &target.document.keys,
+        );
         scratch.tab_note_overrides = target.settings.tab_note_overrides.clone();
         scratch.tab_css_overrides = target.tab_css_overrides.clone();
         let settings_diff = crate::services::settings::apply_patch_to_store(
@@ -1718,6 +1849,7 @@ impl AppStore {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn commit_legacy_editor_reset_transaction_with_admission<T>(
         &self,
         origin: EditorCommitOrigin,
@@ -1726,11 +1858,50 @@ impl AppStore {
         admission: HistoryAdmissionLease,
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_legacy_editor_reset_transaction_with_runtime_counters_and_admission(
+            origin,
+            touched_fields,
+            plugin_instances_reset,
+            admission,
+            None,
+            updater,
+        )
+    }
+
+    pub(super) fn commit_legacy_editor_reset_transaction_with_runtime_counters_admission<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        plugin_instances_reset: PluginInstancesResetScope,
+        admission: HistoryAdmissionLease,
+        runtime_counters: &KeyCounters,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_legacy_editor_reset_transaction_with_runtime_counters_and_admission(
+            origin,
+            touched_fields,
+            plugin_instances_reset,
+            admission,
+            Some(runtime_counters),
+            updater,
+        )
+    }
+
+    fn commit_legacy_editor_reset_transaction_with_runtime_counters_and_admission<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        plugin_instances_reset: PluginInstancesResetScope,
+        admission: HistoryAdmissionLease,
+        runtime_counters: Option<&KeyCounters>,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
         self.commit_editor_transaction_with_history_admission(
             origin,
             touched_fields,
             EditorTransactionHistoryOptions {
                 plugin_instances_reset: Some(plugin_instances_reset),
+                key_counters: runtime_counters.cloned(),
                 ..EditorTransactionHistoryOptions::default()
             },
             admission,
@@ -1896,37 +2067,35 @@ impl AppStore {
 
     pub(crate) fn commit_aux_editor_transaction_with_admission<T>(
         &self,
-        scope: HistoryScope,
-        observed_history_epoch: Option<u64>,
-        origin: EditorCommitOrigin,
-        touched_fields: &[EditorField],
+        options: AuxEditorTransactionOptions<'_>,
         admission: HistoryAdmissionLease,
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
-        if !matches!(scope, HistoryScope::CustomTabs | HistoryScope::Mode) {
-            return Err(EditorCommitError::validation(
-                "INVALID_AUX_HISTORY_SCOPE",
-                "aux editor transaction requires a custom tabs or mode scope",
-            ));
-        }
-        self.commit_editor_transaction_with_history_admission(
-            origin,
-            touched_fields,
-            EditorTransactionHistoryOptions {
-                scope: Some(scope),
-                observed_epoch: observed_history_epoch,
-                key_counters: None,
-                ..EditorTransactionHistoryOptions::default()
-            },
+        self.commit_aux_editor_transaction_with_runtime_counters_and_admission(
+            options, admission, None, updater,
+        )
+    }
+
+    pub(crate) fn commit_aux_editor_transaction_with_runtime_counters_admission<T>(
+        &self,
+        options: AuxEditorTransactionOptions<'_>,
+        admission: HistoryAdmissionLease,
+        runtime_counters: &KeyCounters,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_aux_editor_transaction_with_runtime_counters_and_admission(
+            options,
             admission,
+            Some(runtime_counters),
             updater,
         )
     }
 
-    pub(crate) fn commit_aux_editor_reset_transaction_with_admission<T>(
+    fn commit_aux_editor_transaction_with_runtime_counters_and_admission<T>(
         &self,
-        options: AuxEditorResetTransactionOptions<'_>,
+        options: AuxEditorTransactionOptions<'_>,
         admission: HistoryAdmissionLease,
+        runtime_counters: Option<&KeyCounters>,
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
         if !matches!(options.scope, HistoryScope::CustomTabs | HistoryScope::Mode) {
@@ -1941,6 +2110,61 @@ impl AppStore {
             EditorTransactionHistoryOptions {
                 scope: Some(options.scope),
                 observed_epoch: options.observed_history_epoch,
+                key_counters: runtime_counters.cloned(),
+                ..EditorTransactionHistoryOptions::default()
+            },
+            admission,
+            updater,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn commit_aux_editor_reset_transaction_with_admission<T>(
+        &self,
+        options: AuxEditorResetTransactionOptions<'_>,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_aux_editor_reset_transaction_with_runtime_counters_and_admission(
+            options, admission, None, updater,
+        )
+    }
+
+    pub(crate) fn commit_aux_editor_reset_transaction_with_runtime_counters_admission<T>(
+        &self,
+        options: AuxEditorResetTransactionOptions<'_>,
+        admission: HistoryAdmissionLease,
+        runtime_counters: &KeyCounters,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_aux_editor_reset_transaction_with_runtime_counters_and_admission(
+            options,
+            admission,
+            Some(runtime_counters),
+            updater,
+        )
+    }
+
+    fn commit_aux_editor_reset_transaction_with_runtime_counters_and_admission<T>(
+        &self,
+        options: AuxEditorResetTransactionOptions<'_>,
+        admission: HistoryAdmissionLease,
+        runtime_counters: Option<&KeyCounters>,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        if !matches!(options.scope, HistoryScope::CustomTabs | HistoryScope::Mode) {
+            return Err(EditorCommitError::validation(
+                "INVALID_AUX_HISTORY_SCOPE",
+                "aux editor transaction requires a custom tabs or mode scope",
+            ));
+        }
+        self.commit_editor_transaction_with_history_admission(
+            options.origin,
+            options.touched_fields,
+            EditorTransactionHistoryOptions {
+                scope: Some(options.scope),
+                observed_epoch: options.observed_history_epoch,
+                key_counters: runtime_counters.cloned(),
                 plugin_instances_reset: Some(options.plugin_instances_reset),
                 ..EditorTransactionHistoryOptions::default()
             },
@@ -2092,9 +2316,18 @@ impl AppStore {
             sync_key_counters(&mut scratch.key_counters, &candidate.keys);
         }
 
+        let runtime_counters_changed = history_options
+            .key_counters
+            .as_ref()
+            .is_some_and(|baseline| baseline != &scratch.key_counters);
+
         let history_plan = match history_options.scope {
             Some(HistoryScope::CustomTabs) => {
-                let before = CustomTabsHistorySnapshot::from_transition(&current_store, &scratch);
+                let mut before =
+                    CustomTabsHistorySnapshot::from_transition(&current_store, &scratch);
+                if let Some(counters) = history_options.key_counters.as_ref() {
+                    before.key_counters = counters.clone();
+                }
                 (!before.matches_store(&scratch))
                     .then(|| guard.history.prepare_custom_tabs_entry(before))
                     .transpose()
@@ -2144,7 +2377,7 @@ impl AppStore {
         };
         let selected_key_type = scratch.selected_key_type.clone();
         let key_counters = scratch.key_counters.clone();
-        if has_store_changes {
+        if has_store_changes || runtime_counters_changed {
             self.commit_locked(&mut guard, scratch, ())
                 .map_err(|error| EditorCommitError::io(error.to_string()))?;
         }
@@ -3429,6 +3662,39 @@ fn changed_map_ids<T: PartialEq>(
     ids
 }
 
+fn project_history_key_counters(
+    current: &KeyCounters,
+    historical: &KeyCounters,
+    target_keys: &KeyMappings,
+) -> KeyCounters {
+    let mut projected = historical.clone();
+    sync_key_counters(&mut projected, target_keys);
+    for (mode, counters) in &mut projected {
+        let Some(current_mode) = current.get(mode) else {
+            continue;
+        };
+        for (key, count) in counters {
+            if let Some(current_count) = current_mode.get(key) {
+                *count = *current_count;
+            }
+        }
+    }
+    projected
+}
+
+fn project_editor_history_key_counters(
+    current: &KeyCounters,
+    historical: Option<&KeyCounters>,
+    target_keys: &KeyMappings,
+) -> KeyCounters {
+    let Some(historical) = historical else {
+        let mut projected = current.clone();
+        sync_key_counters(&mut projected, target_keys);
+        return projected;
+    };
+    project_history_key_counters(current, historical, target_keys)
+}
+
 fn insert_mutation_ack(
     acks: &mut VecDeque<MutationAck>,
     id: String,
@@ -4514,8 +4780,8 @@ mod tests {
     use super::{
         collect_local_font_paths, collect_local_image_path_keys, collect_local_image_paths,
         collect_local_sound_path_keys, collect_local_sound_paths, initialize_default_state,
-        plugin_instances_storage_key, purge_expired_trash_sessions_at,
-        recover_interrupted_processed_wav_replacements_with,
+        plugin_instances_storage_key, project_history_key_counters,
+        purge_expired_trash_sessions_at, recover_interrupted_processed_wav_replacements_with,
         recover_interrupted_sound_deletions_with, stage_sound_files_for_deletion,
         sweep_unreferenced_asset_files, system_time_millis, AppStore,
         AuxEditorResetTransactionOptions, HistoryAuxChange, PluginInstancesResetScope,
@@ -5898,6 +6164,115 @@ mod tests {
             vec![saved_plugin_instance(84.0)]
         );
         assert!(redo.status.can_undo);
+        drop(redo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn compound_history_projects_live_and_historical_key_counters() {
+        let dir = test_directory("compound-history-counter-scope-test");
+        let store = initialize_neutral_editor_store(&dir);
+        let before = store.snapshot();
+        let old_key = before.keys["4key"][0].canonical();
+        let preserved_key = before.keys["4key"][1].canonical();
+        let mut historical_counters = before.key_counters.clone();
+        historical_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(old_key.clone(), 12);
+        let new_key = "CompoundHistoryCounterScopeKey".to_string();
+        let mut keys = before.keys;
+        keys.get_mut("4key").unwrap()[0] = new_key.clone().into();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let mut editor = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                keys: Some(keys),
+                ..EditorPatchV1::default()
+            },
+        );
+        editor.gesture_id = Some(gesture_id.clone());
+        let admission = store.admit_editor_mutation().unwrap();
+        store
+            .commit_editor_document_with_runtime_counters_admitted(
+                editor,
+                &admission,
+                &historical_counters,
+            )
+            .unwrap();
+        drop(admission);
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(42.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let mut undo_counters = store.snapshot().key_counters;
+        undo_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(new_key.clone(), 9);
+        undo_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(preserved_key.clone(), 7);
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &undo_counters, || {})
+            .unwrap();
+        let restored = store.snapshot();
+        assert_eq!(restored.keys["4key"][0].canonical(), old_key);
+        assert_eq!(restored.key_counters["4key"][&old_key], 12);
+        assert_eq!(restored.key_counters["4key"][&preserved_key], 7);
+        assert!(!restored.key_counters["4key"].contains_key(&new_key));
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(undo
+            .change
+            .as_ref()
+            .is_some_and(|change| change.result.changed_fields.contains(&EditorField::Keys)));
+        assert!(matches!(
+            undo.aux_change,
+            Some(HistoryAuxChange::PluginElementsBatch { .. })
+        ));
+        drop(undo_barrier);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let mut redo_counters = restored.key_counters;
+        redo_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(old_key.clone(), 5);
+        redo_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(preserved_key.clone(), 8);
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &redo_counters, || {})
+            .unwrap();
+        let redone = store.snapshot();
+        assert_eq!(redone.keys["4key"][0].canonical(), new_key);
+        assert_eq!(redone.key_counters["4key"][&new_key], 9);
+        assert_eq!(redone.key_counters["4key"][&preserved_key], 8);
+        assert!(!redone.key_counters["4key"].contains_key(&old_key));
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(42.0)]
+        );
         drop(redo_barrier);
 
         store.flush_and_shutdown().unwrap();
@@ -17931,6 +18306,7 @@ mod tests {
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let mode = store.snapshot().selected_key_type;
         let original_key = store.snapshot().keys[&mode][0].canonical();
+        let preserved_key = store.snapshot().keys[&mode][1].canonical();
         let initial_plugin = JsPlugin {
             id: "initial-plugin".to_string(),
             name: "Initial Plugin".to_string(),
@@ -17992,6 +18368,10 @@ mod tests {
             .entry(mode.clone())
             .or_default()
             .insert(original_key.clone(), 11);
+        runtime_counters
+            .entry(mode.clone())
+            .or_default()
+            .insert(preserved_key.clone(), 13);
         let mut initial = PresetFullHistorySnapshot::from_store(&store.snapshot());
         initial.key_counters = runtime_counters.clone();
 
@@ -18071,7 +18451,11 @@ mod tests {
         let gate = store.history_gate();
         let undo_id = uuid::Uuid::new_v4().to_string();
         let undo_barrier = gate.close(&undo_id).unwrap();
-        let current_counters = store.snapshot().key_counters;
+        let mut current_counters = store.snapshot().key_counters;
+        current_counters
+            .get_mut(&mode)
+            .unwrap()
+            .insert(preserved_key.clone(), 17);
         let undo = store
             .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {})
             .unwrap();
@@ -18095,15 +18479,25 @@ mod tests {
         assert!(settings_diff.changed.note_effect.is_some());
         assert!(settings_diff.changed.laboratory_enabled.is_some());
         assert_eq!(changed_tab_css_ids, std::slice::from_ref(&mode));
+        let mut restored = initial.clone();
+        restored
+            .key_counters
+            .get_mut(&mode)
+            .unwrap()
+            .insert(preserved_key.clone(), 17);
         assert_eq!(
             PresetFullHistorySnapshot::from_store(&store.snapshot()),
-            initial
+            restored
         );
         assert_eq!(store.snapshot().editor_revision, 2);
 
         let redo_id = uuid::Uuid::new_v4().to_string();
         let redo_barrier = gate.close(&redo_id).unwrap();
-        let current_counters = store.snapshot().key_counters;
+        let mut current_counters = store.snapshot().key_counters;
+        current_counters
+            .get_mut(&mode)
+            .unwrap()
+            .insert(preserved_key.clone(), 19);
         let redo = store
             .apply_history_operation(HistoryDirection::Redo, &redo_id, &current_counters, || {})
             .unwrap();
@@ -18116,15 +18510,27 @@ mod tests {
         else {
             panic!("preset full redo change expected");
         };
-        assert_eq!(snapshot.as_ref(), &preset);
+        let mut redo_snapshot = preset.clone();
+        redo_snapshot
+            .key_counters
+            .get_mut(&mode)
+            .unwrap()
+            .insert(preserved_key.clone(), 17);
+        assert_eq!(snapshot.as_ref(), &redo_snapshot);
         assert_eq!(
             settings_diff.changed.background_color.as_deref(),
             Some("#abcdef")
         );
         assert_eq!(changed_tab_css_ids, std::slice::from_ref(&mode));
+        let mut redone = preset;
+        redone
+            .key_counters
+            .get_mut(&mode)
+            .unwrap()
+            .insert(preserved_key, 19);
         assert_eq!(
             PresetFullHistorySnapshot::from_store(&store.snapshot()),
-            preset
+            redone
         );
         assert_eq!(store.snapshot().editor_revision, 3);
 
@@ -18300,12 +18706,18 @@ mod tests {
     }
 
     #[test]
-    fn editor_history_undo_does_not_restore_key_counters() {
+    fn editor_history_projects_live_and_historical_key_counters() {
         let dir = test_directory("editor-history-counter-scope-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = initialize_neutral_editor_store(&dir);
         let before = store.snapshot();
         let old_key = before.keys["4key"][0].canonical();
+        let preserved_key = before.keys["4key"][1].canonical();
+        let mut historical_counters = before.key_counters.clone();
+        historical_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(old_key.clone(), 12);
         let new_key = "HistoryCounterScopeKey".to_string();
         let mut keys = before.keys;
         keys.get_mut("4key").unwrap()[0] = new_key.clone().into();
@@ -18317,7 +18729,15 @@ mod tests {
                 ..EditorPatchV1::default()
             },
         );
-        store.commit_editor_document(commit).unwrap();
+        let admission = store.admit_editor_mutation().unwrap();
+        store
+            .commit_editor_document_with_runtime_counters_admitted(
+                commit,
+                &admission,
+                &historical_counters,
+            )
+            .unwrap();
+        drop(admission);
         let counters_after_commit = store.snapshot().key_counters;
         assert!(counters_after_commit["4key"].contains_key(&new_key));
         assert!(!counters_after_commit["4key"].contains_key(&old_key));
@@ -18325,7 +18745,15 @@ mod tests {
         let operation_id = uuid::Uuid::new_v4().to_string();
         let gate = store.history_gate();
         let barrier = gate.close(&operation_id).unwrap();
-        let current_counters = store.snapshot().key_counters;
+        let mut current_counters = store.snapshot().key_counters;
+        current_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(new_key.clone(), 9);
+        current_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(preserved_key.clone(), 7);
         store
             .apply_history_operation(
                 HistoryDirection::Undo,
@@ -18338,10 +18766,79 @@ mod tests {
 
         let restored = store.snapshot();
         assert_eq!(restored.keys["4key"][0].canonical(), old_key);
-        assert_eq!(restored.key_counters, counters_after_commit);
+        assert_eq!(restored.key_counters["4key"][&old_key], 12);
+        assert_eq!(restored.key_counters["4key"][&preserved_key], 7);
+        assert!(!restored.key_counters["4key"].contains_key(&new_key));
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let mut redo_counters = restored.key_counters;
+        redo_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(old_key.clone(), 14);
+        redo_counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(preserved_key.clone(), 8);
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &redo_counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+
+        let redone = store.snapshot();
+        assert_eq!(redone.keys["4key"][0].canonical(), new_key);
+        assert_eq!(redone.key_counters["4key"][&new_key], 9);
+        assert_eq!(redone.key_counters["4key"][&preserved_key], 8);
+        assert!(!redone.key_counters["4key"].contains_key(&old_key));
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn history_counter_projection_keeps_live_overlap_and_restores_missing_domain() {
+        let target_keys = HashMap::from([
+            (
+                "shared-mode".to_string(),
+                vec![KeySlot::from("shared"), KeySlot::from("restored")],
+            ),
+            ("restored-mode".to_string(), vec![KeySlot::from("mode-key")]),
+        ]);
+        let current = HashMap::from([(
+            "shared-mode".to_string(),
+            HashMap::from([("shared".to_string(), 8), ("removed".to_string(), 5)]),
+        )]);
+        let historical = HashMap::from([
+            (
+                "shared-mode".to_string(),
+                HashMap::from([
+                    ("shared".to_string(), 3),
+                    ("restored".to_string(), 12),
+                    ("obsolete".to_string(), 4),
+                ]),
+            ),
+            (
+                "restored-mode".to_string(),
+                HashMap::from([("mode-key".to_string(), 21)]),
+            ),
+        ]);
+
+        let projected = project_history_key_counters(&current, &historical, &target_keys);
+
+        assert_eq!(
+            projected,
+            HashMap::from([
+                (
+                    "shared-mode".to_string(),
+                    HashMap::from([("shared".to_string(), 8), ("restored".to_string(), 12)]),
+                ),
+                (
+                    "restored-mode".to_string(),
+                    HashMap::from([("mode-key".to_string(), 21)]),
+                ),
+            ])
+        );
     }
 
     #[test]

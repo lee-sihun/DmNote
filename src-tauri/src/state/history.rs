@@ -132,7 +132,6 @@ impl CustomTabsHistorySnapshot {
         self.document == EditorDocumentV1::from_store(store)
             && self.custom_tabs == store.custom_tabs
             && self.selected_key_type == store.selected_key_type
-            && self.key_counters == store.key_counters
             && patch_matches(&self.tab_css_patch, &store.tab_css_overrides)
             && patch_matches(&self.tab_note_patch, &store.tab_note_overrides)
             && patch_matches(&self.plugin_instances_patch, &store.plugin_data)
@@ -214,7 +213,12 @@ impl PresetFullHistorySnapshot {
     }
 
     pub(crate) fn matches_store(&self, store: &AppStoreData) -> bool {
-        *self == Self::from_store(store)
+        let current = Self::from_store(store);
+        self.document == current.document
+            && self.custom_tabs == current.custom_tabs
+            && self.selected_key_type == current.selected_key_type
+            && self.settings == current.settings
+            && self.tab_css_overrides == current.tab_css_overrides
     }
 }
 
@@ -292,6 +296,8 @@ pub(crate) enum HistorySnapshot {
     Editor {
         changed_fields: Vec<EditorField>,
         before: Box<EditorPatchV1>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        key_counters: Option<KeyCounters>,
     },
     CustomTabs(Box<CustomTabsHistorySnapshot>),
     Mode(String),
@@ -320,8 +326,10 @@ impl HistorySnapshot {
 fn merged_editor_before(
     first_fields: &[EditorField],
     first_before: &EditorPatchV1,
+    first_key_counters: &Option<KeyCounters>,
     changed_fields: Vec<EditorField>,
     before: EditorPatchV1,
+    key_counters: Option<KeyCounters>,
 ) -> HistorySnapshot {
     let mut merged_fields = first_fields.to_vec();
     for field in changed_fields {
@@ -331,9 +339,17 @@ fn merged_editor_before(
     }
     let mut merged_before = before;
     preserve_editor_before_values(&mut merged_before, first_before);
+    let key_counters = if first_fields.contains(&EditorField::Keys) {
+        first_key_counters.clone().or(key_counters)
+    } else if merged_fields.contains(&EditorField::Keys) {
+        key_counters
+    } else {
+        None
+    };
     HistorySnapshot::Editor {
         changed_fields: merged_fields,
         before: Box::new(merged_before),
+        key_counters,
     }
 }
 
@@ -341,16 +357,20 @@ fn merge_editor_snapshot(
     existing: &HistorySnapshot,
     changed_fields: Vec<EditorField>,
     before: EditorPatchV1,
+    key_counters: Option<KeyCounters>,
 ) -> Result<HistorySnapshot, String> {
     match existing {
         HistorySnapshot::Editor {
             changed_fields: first_fields,
             before: first_before,
+            key_counters: first_key_counters,
         } => Ok(merged_editor_before(
             first_fields,
             first_before,
+            first_key_counters,
             changed_fields,
             before,
+            key_counters,
         )),
         HistorySnapshot::PluginElements(_) => Ok(HistorySnapshot::Compound {
             snapshots: vec![
@@ -358,6 +378,7 @@ fn merge_editor_snapshot(
                 HistorySnapshot::Editor {
                     changed_fields,
                     before: Box::new(before),
+                    key_counters,
                 },
             ],
         }),
@@ -371,16 +392,24 @@ fn merge_editor_snapshot(
                 let HistorySnapshot::Editor {
                     changed_fields: first_fields,
                     before: first_before,
+                    key_counters: first_key_counters,
                 } = &merged[index]
                 else {
                     unreachable!();
                 };
-                merged[index] =
-                    merged_editor_before(first_fields, first_before, changed_fields, before);
+                merged[index] = merged_editor_before(
+                    first_fields,
+                    first_before,
+                    first_key_counters,
+                    changed_fields,
+                    before,
+                    key_counters,
+                );
             } else {
                 merged.push(HistorySnapshot::Editor {
                     changed_fields,
                     before: Box::new(before),
+                    key_counters,
                 });
             }
             Ok(HistorySnapshot::Compound { snapshots: merged })
@@ -435,7 +464,13 @@ fn merge_gesture_snapshots(
             HistorySnapshot::Editor {
                 changed_fields,
                 before,
-            } => merge_editor_snapshot(&merged, changed_fields.clone(), before.as_ref().clone())?,
+                key_counters,
+            } => merge_editor_snapshot(
+                &merged,
+                changed_fields.clone(),
+                before.as_ref().clone(),
+                key_counters.clone(),
+            )?,
             HistorySnapshot::PluginElements(before) => {
                 merge_plugin_elements_snapshot(&merged, before.clone())?
             }
@@ -504,6 +539,7 @@ fn remove_net_zero_editor_snapshot(entry: &mut HistoryEntry, canonical: &EditorD
             HistorySnapshot::Editor {
                 changed_fields,
                 before,
+                ..
             } if canonical.patch_for_fields(changed_fields) == **before
         )
     };
@@ -631,6 +667,7 @@ impl HistoryService {
         self.prepare_entry_with_gesture_ids(
             changed_fields,
             before,
+            None,
             gesture_id.into_iter().collect(),
         )
     }
@@ -639,6 +676,7 @@ impl HistoryService {
         &self,
         changed_fields: Vec<EditorField>,
         before: EditorPatchV1,
+        key_counters: Option<KeyCounters>,
         gesture_ids: Vec<String>,
     ) -> Result<HistoryRecordPlan, String> {
         let gesture_ids = normalize_gesture_ids(gesture_ids);
@@ -648,7 +686,8 @@ impl HistoryService {
                 .back()
                 .filter(|entry| entry.matches_any_gesture(&gesture_ids))
             {
-                let merged = merge_editor_snapshot(&top.before, changed_fields, before)?;
+                let merged =
+                    merge_editor_snapshot(&top.before, changed_fields, before, key_counters)?;
                 let mut merged_gesture_ids = top
                     .gesture_ids
                     .iter()
@@ -671,6 +710,7 @@ impl HistoryService {
             HistorySnapshot::Editor {
                 changed_fields,
                 before: Box::new(before),
+                key_counters,
             },
             gesture_ids,
             None,
@@ -682,6 +722,7 @@ impl HistoryService {
         &self,
         changed_fields: Vec<EditorField>,
         before: EditorPatchV1,
+        key_counters: Option<KeyCounters>,
         gesture_id: Option<String>,
     ) -> Result<HistoryRecordPlan, String> {
         self.prepare_snapshot(
@@ -689,6 +730,7 @@ impl HistoryService {
             HistorySnapshot::Editor {
                 changed_fields,
                 before: Box::new(before),
+                key_counters,
             },
             gesture_id,
             None,
@@ -1440,6 +1482,19 @@ mod tests {
     }
 
     #[test]
+    fn preset_history_target_match_ignores_live_counter_drift() {
+        let mut store = AppStoreData::default();
+        let target = PresetFullHistorySnapshot::from_store(&store);
+        store.key_counters.insert(
+            "counter-only-mode".to_string(),
+            HashMap::from([("counter-only-key".to_string(), 1)]),
+        );
+
+        assert_ne!(target, PresetFullHistorySnapshot::from_store(&store));
+        assert!(target.matches_store(&store));
+    }
+
+    #[test]
     fn shared_gesture_merges_editor_and_plugins_into_one_compound_entry() {
         let mut history = HistoryService::default();
         let gesture_id = uuid::Uuid::new_v4().to_string();
@@ -1563,6 +1618,7 @@ mod tests {
             .prepare_entry_with_gesture_ids(
                 vec![EditorField::Keys],
                 patch("before"),
+                None,
                 vec![first_gesture.clone(), second_gesture.clone()],
             )
             .unwrap();
@@ -1620,6 +1676,7 @@ mod tests {
             .prepare_entry_with_gesture_ids(
                 vec![EditorField::Keys],
                 patch("after-intervening-editor"),
+                None,
                 vec![first_gesture.clone(), second_gesture.clone()],
             )
             .unwrap();
@@ -1686,6 +1743,7 @@ mod tests {
                 vec![HistorySnapshot::Editor {
                     changed_fields: vec![EditorField::Keys],
                     before: Box::new(patch("before")),
+                    key_counters: None,
                 }],
                 gesture_id.clone(),
             )
@@ -1713,13 +1771,17 @@ mod tests {
     fn repeated_gesture_commits_merge_and_keep_the_first_editor_before() {
         let mut history = HistoryService::default();
         let gesture_id = uuid::Uuid::new_v4().to_string();
-        for text in ["first", "second"] {
+        for (text, count) in [("first", 12), ("second", 3)] {
             let plan = history
                 .prepare_gesture_entry(
                     vec![
                         HistorySnapshot::Editor {
                             changed_fields: vec![EditorField::Keys],
                             before: Box::new(patch(text)),
+                            key_counters: Some(HashMap::from([(
+                                "mode".to_string(),
+                                HashMap::from([(text.to_string(), count)]),
+                            )])),
                         },
                         HistorySnapshot::PluginElements(plugin_snapshot("plugin-a")),
                     ],
@@ -1736,9 +1798,14 @@ mod tests {
         assert!(matches!(
             snapshots.as_slice(),
             [
-                HistorySnapshot::Editor { before, .. },
+                HistorySnapshot::Editor {
+                    before,
+                    key_counters: Some(key_counters),
+                    ..
+                },
                 HistorySnapshot::PluginElements(plugin)
             ] if before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("first")]
+                && key_counters["mode"]["first"] == 12
                 && plugin.plugin_id == "plugin-a"
         ));
     }
@@ -1759,6 +1826,7 @@ mod tests {
                 vec![HistorySnapshot::Editor {
                     changed_fields: vec![EditorField::Keys],
                     before: Box::new(patch("before")),
+                    key_counters: None,
                 }],
                 uuid::Uuid::new_v4().to_string(),
             )
@@ -1775,6 +1843,7 @@ mod tests {
         let editor_snapshots = vec![HistorySnapshot::Editor {
             changed_fields: vec![EditorField::Keys],
             before: Box::new(patch("before")),
+            key_counters: None,
         }];
         let mut probe = HistoryService::default();
         let plugin = probe
@@ -1908,6 +1977,7 @@ mod tests {
             HistorySnapshot::Editor {
                 changed_fields: vec![EditorField::Keys],
                 before: Box::new(patch("two")),
+                key_counters: None,
             }
         );
         assert_eq!(
@@ -1915,6 +1985,7 @@ mod tests {
             HistorySnapshot::Editor {
                 changed_fields: vec![EditorField::Keys],
                 before: Box::new(patch("three")),
+                key_counters: None,
             }
         );
     }
