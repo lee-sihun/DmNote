@@ -494,6 +494,8 @@ export const Key = React.memo(function Key({
 
   const counterSettings = useCounterSettings(position?.counter);
 
+  if (position.hidden) return null;
+
   if (isTransparent) return null;
 
   const showInsideCounter =
