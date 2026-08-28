@@ -115,10 +115,14 @@ describe('overlay hit revision lease', () => {
     mocks.invoke.mockClear();
     vi.spyOn(Date, 'now').mockReturnValue(1_900_000_000_000);
 
-    await runHookSession();
+    const secondRoot = await runHookSession();
     const secondSessionRevisions = sentRevisions();
     expect(secondSessionRevisions.length).toBeGreaterThan(0);
     expect(Math.min(...secondSessionRevisions)).toBeGreaterThan(lastIssued);
+
+    await act(async () => {
+      secondRoot.unmount();
+    });
   });
 
   it('손상된 저장값은 무시하고 시각 시드로 폴백한다', async () => {
@@ -176,6 +180,106 @@ describe('overlay hit 발행 판정', () => {
   it('첫 발행은 항상 내보낸다', async () => {
     const shouldPublish = await load();
     expect(shouldPublish(null, null, rects, 1)).toBe(true);
+  });
+});
+
+describe('overlay hit 표시 요소 수집', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    mocks.handlers.clear();
+    mocks.invoke.mockClear();
+    vi.useFakeTimers();
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    document.body.replaceChildren();
+  });
+
+  it('공용 표식이 있는 키·스탯·그래프·노브·플러그인을 모두 발행한다', async () => {
+    const expected = ['key', 'stat', 'graph', 'knob', 'plugin'].map(
+      (kind, index) => {
+        const node = document.createElement('div');
+        node.dataset.overlayHit = 'true';
+        node.dataset.kind = kind;
+        vi.spyOn(node, 'getBoundingClientRect').mockReturnValue({
+          x: index * 20,
+          y: index * 10,
+          left: index * 20,
+          top: index * 10,
+          right: index * 20 + 10,
+          bottom: index * 10 + 10,
+          width: 10,
+          height: 10,
+          toJSON: () => ({}),
+        } as DOMRect);
+        document.body.appendChild(node);
+        return { x: index * 20, y: index * 10, width: 10, height: 10 };
+      },
+    );
+
+    const root = await runHookSession();
+    const syncCall = (
+      mocks.invoke.mock.calls as unknown as [
+        string,
+        { payload: { rects: Array<Record<string, number>> } },
+      ][]
+    ).find(([command]) => command === 'overlay_sync_hit_regions');
+
+    expect(syncCall?.[1].payload.rects).toEqual(expected);
+
+    await act(async () => root.unmount());
+  });
+
+  it('마운트 뒤 추가된 표시 요소도 generation 변경 없이 다시 발행한다', async () => {
+    const root = await runHookSession();
+    const initialSyncCount = (
+      mocks.invoke.mock.calls as unknown as [string, unknown][]
+    ).filter(([command]) => command === 'overlay_sync_hit_regions').length;
+
+    const node = document.createElement('div');
+    node.dataset.overlayHit = 'true';
+    vi.spyOn(node, 'getBoundingClientRect').mockReturnValue({
+      x: 12,
+      y: 34,
+      left: 12,
+      top: 34,
+      right: 68,
+      bottom: 112,
+      width: 56,
+      height: 78,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    await act(async () => {
+      document.body.appendChild(node);
+      await Promise.resolve();
+      vi.advanceTimersByTime(64);
+    });
+
+    const syncCalls = (
+      mocks.invoke.mock.calls as unknown as [
+        string,
+        {
+          payload: {
+            rects: Array<{
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            }>;
+          };
+        },
+      ][]
+    ).filter(([command]) => command === 'overlay_sync_hit_regions');
+    expect(syncCalls).toHaveLength(initialSyncCount + 1);
+    expect(syncCalls.at(-1)?.[1].payload.rects).toEqual([
+      { x: 12, y: 34, width: 56, height: 78 },
+    ]);
+
+    await act(async () => root.unmount());
   });
 });
 

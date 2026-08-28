@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Key } from '@components/shared/Key';
 import StatItem from '@components/overlay/counters/StatItem';
 import OverlayKnobItem from '@components/overlay/counters/OverlayKnobItem';
+import OutsideCounter from '@components/overlay/counters/OutsideCounter';
 import GraphPanel from '@components/shared/GraphPanel';
 import { resetAllKeySignals, setKeyActive } from '@stores/signals/keySignals';
 import { addAxisDelta, resetAllAxisSignals } from '@stores/signals/axisSignals';
@@ -63,6 +64,7 @@ describe('렌더 DOM 계약', () => {
   let root: Root;
 
   beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -89,6 +91,7 @@ describe('렌더 DOM 계약', () => {
       const el = renderKey(basePosition, 'KeyA');
       expect(el).not.toBeNull();
       expect(el!.getAttribute('data-state')).toBe('inactive');
+      expect(el!.dataset.overlayHit).toBe('true');
       // 일반 모드는 인라인 boxShadow 선언 없이 변수만 제공
       expect(el!.style.boxShadow).toBe('');
       expect(el!.style.getPropertyValue('--dmn-key-shadow-default')).toBe(
@@ -105,6 +108,23 @@ describe('렌더 DOM 계약', () => {
           label: 'A',
         }).keyStyle,
       );
+    });
+
+    it('투명 키는 화면 없이 저장된 본체 박스만 히트 영역으로 남긴다', () => {
+      const el = renderKey(
+        { ...basePosition, idleTransparent: true },
+        'KeyTransparent',
+      );
+
+      expect(el).toBeNull();
+      const hitBox = host.querySelector<HTMLElement>(
+        '[data-overlay-hit-only="true"]',
+      );
+      expect(hitBox).not.toBeNull();
+      expect(hitBox!.dataset.overlayHit).toBe('true');
+      expect(hitBox!.style.width).toBe('60px');
+      expect(hitBox!.style.height).toBe('60px');
+      expect(hitBox!.style.visibility).toBe('hidden');
     });
 
     it('키 시그널에 따라 data-state와 상태 변수가 바뀐다', () => {
@@ -238,6 +258,28 @@ describe('렌더 DOM 계약', () => {
         DEFAULT_ELEMENT_ACTIVE_SHADOW,
       );
     });
+
+    it('투명 Stat도 화면 없이 저장된 본체 박스만 히트 영역으로 남긴다', () => {
+      act(() => {
+        root.render(
+          <StatItem
+            statType="total"
+            position={{ ...basePosition, idleTransparent: true }}
+            label="Total"
+          />,
+        );
+      });
+
+      expect(
+        host.querySelector<HTMLElement>('[data-key-element="true"]'),
+      ).toBeNull();
+      const hitBox = host.querySelector<HTMLElement>(
+        '[data-overlay-hit-only="true"]',
+      );
+      expect(hitBox).not.toBeNull();
+      expect(hitBox!.style.width).toBe('60px');
+      expect(hitBox!.style.height).toBe('60px');
+    });
   });
 
   describe('오버레이 KnobItem', () => {
@@ -251,6 +293,9 @@ describe('렌더 DOM 계약', () => {
       });
       const el = host.querySelector<HTMLElement>('[data-knob-element="true"]');
       expect(el).not.toBeNull();
+      expect(
+        host.querySelector<HTMLElement>('[data-overlay-hit="true"]'),
+      ).not.toBeNull();
       expect(el!.getAttribute('data-knob-state')).toBe('inactive');
       expect(el!.style.getPropertyValue('--dmn-knob-bg-default')).toBe(
         DEFAULT_ELEMENT_BG,
@@ -293,16 +338,39 @@ describe('렌더 DOM 계약', () => {
     });
   });
 
+  describe('오버레이 외부 카운터', () => {
+    it('실시간 숫자 노드는 별도 히트 영역을 만들지 않는다', () => {
+      host.innerHTML = renderToStaticMarkup(
+        <OutsideCounter
+          position={{
+            ...basePosition,
+            counter: { enabled: true, placement: 'outside' },
+          }}
+          count={123456}
+          active={false}
+        />,
+      );
+
+      expect(
+        host.querySelector<HTMLElement>('[data-overlay-hit="true"]'),
+      ).toBeNull();
+    });
+  });
+
   describe('GraphPanel', () => {
-    // 앱 빌드는 React Compiler가 history 정규화 결과를 메모하지만 테스트 변환은
-    // 컴파일러 없이 실행되어 애니메이션 effect가 매 렌더 재발화 → mount 대신
-    // 정적 렌더로 실제 렌더 출력의 DOM 계약만 고정
     it('data 속성과 그래프 변수를 싣는다', () => {
       host.innerHTML = renderToStaticMarkup(
-        <GraphPanel history={[1, 2, 3]} avg={2} maxval={3} uid="contract" />,
+        <GraphPanel
+          history={[1, 2, 3]}
+          avg={2}
+          maxval={3}
+          uid="contract"
+          overlayHitRegion
+        />,
       );
       const el = host.querySelector<HTMLElement>('[data-graph-element="true"]');
       expect(el).not.toBeNull();
+      expect(el!.dataset.overlayHit).toBe('true');
       expect(el!.getAttribute('data-state')).toBe('inactive');
       expect(el!.style.getPropertyValue('--dmn-graph-bg-default')).toBe(
         DEFAULT_ELEMENT_BG,
@@ -326,6 +394,15 @@ describe('렌더 DOM 계약', () => {
           '--dmn-border-gradient-image-default',
         ),
       ).toBe(gradientToCss(DEFAULT_ELEMENT_BORDER_GRADIENT));
+    });
+
+    it('공유 GraphPanel은 요청한 오버레이 렌더에서만 히트 표식을 단다', () => {
+      host.innerHTML = renderToStaticMarkup(
+        <GraphPanel history={[1, 2, 3]} avg={2} maxval={3} />,
+      );
+
+      const el = host.querySelector<HTMLElement>('[data-graph-element="true"]');
+      expect(el?.dataset.overlayHit).toBeUndefined();
     });
 
     it('store가 null로 직렬화한 두께·반경도 미지정으로 읽어 기본 립을 낸다', () => {

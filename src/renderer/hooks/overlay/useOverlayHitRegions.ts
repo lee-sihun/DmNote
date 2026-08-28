@@ -249,13 +249,31 @@ const watchDevicePixelRatio = (onChange: () => void): (() => void) => {
   };
 };
 
-const hitNodes = (): HTMLElement[] =>
-  // 키 전용 표식만 측정 - data-key-element는 스탯 등 다른 요소도 공유하는 스타일 표식
-  Array.from(
-    document.querySelectorAll<HTMLElement>('[data-overlay-hit="true"]'),
-  );
+const HIT_NODE_SELECTOR = '[data-overlay-hit="true"]';
 
-const measureKeyRects = (nodes: HTMLElement[]): HitRegionRect[] => {
+const hitNodes = (): HTMLElement[] =>
+  // 오버레이에서 드래그·우클릭을 받을 모든 표시 요소의 공용 표식
+  Array.from(document.querySelectorAll<HTMLElement>(HIT_NODE_SELECTOR));
+
+const containsHitNode = (node: Node): boolean => {
+  if (node.nodeType !== 1) return false;
+  const element = node as Element;
+  return (
+    element.matches(HIT_NODE_SELECTOR) ||
+    element.querySelector(HIT_NODE_SELECTOR) !== null
+  );
+};
+
+const mutationAffectsHitNodes = (records: MutationRecord[]): boolean =>
+  records.some((record) => {
+    if (record.type === 'attributes') return true;
+    return (
+      Array.from(record.addedNodes).some(containsHitNode) ||
+      Array.from(record.removedNodes).some(containsHitNode)
+    );
+  });
+
+const measureHitRects = (nodes: HTMLElement[]): HitRegionRect[] => {
   const rects: HitRegionRect[] = [];
   nodes.forEach((node) => {
     const rect = node.getBoundingClientRect();
@@ -271,11 +289,11 @@ const measureKeyRects = (nodes: HTMLElement[]): HitRegionRect[] => {
 };
 
 /**
- * 키 rect를 실측해 백엔드 히트 창과 동기화
+ * 표시 요소 rect를 실측해 백엔드 히트 창과 동기화
  *
  * `generation`(레이아웃 계산 결과)이 바뀌면 노드 집합을 다시 모으고 옵저버를
  * 재등록한다. 실제 재측정은 ResizeObserver와 CSS 변경 이벤트가 몰아주므로,
- * 폰트 로드·커스텀 CSS/JS·플러그인 스타일처럼 레이아웃 계산 밖에서 키 크기가
+ * 폰트 로드·커스텀 CSS/JS·플러그인 스타일처럼 레이아웃 계산 밖에서 요소 크기가
  * 변하는 경로까지 원인 열거 없이 덮인다. 같은 rect면 IPC는 생략된다
  */
 export const useOverlayHitRegions = (generation: unknown) => {
@@ -319,6 +337,9 @@ export const useOverlayHitRegions = (generation: unknown) => {
     let cancelled = false;
     let raf = 0;
     const observer = new ResizeObserver(() => scheduleMeasure());
+    const mutationObserver = new MutationObserver((records) => {
+      if (mutationAffectsHitNodes(records)) scheduleMeasure();
+    });
 
     // rAF 1회로 coalesce - 페인트 확정 후 실측.
     // 노드 집합을 매번 다시 모아 커스텀 JS·플러그인이 키를 추가·제거한 경우도 덮는다
@@ -329,7 +350,7 @@ export const useOverlayHitRegions = (generation: unknown) => {
         const nodes = hitNodes();
         observer.disconnect();
         nodes.forEach((node) => observer.observe(node));
-        syncHitRegions(measureKeyRects(nodes));
+        syncHitRegions(measureHitRects(nodes));
       });
     };
 
@@ -339,12 +360,19 @@ export const useOverlayHitRegions = (generation: unknown) => {
     // 미디어 쿼리가 발화하지 않는 웹뷰를 대비한 두 번째 그물.
     // 발행 기준에 배율이 들어 있으므로 헛호출은 IPC로 이어지지 않는다
     window.addEventListener('resize', scheduleMeasure);
+    mutationObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-overlay-hit'],
+      childList: true,
+      subtree: true,
+    });
     scheduleMeasure();
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
+      mutationObserver.disconnect();
       unwatchScale();
       window.removeEventListener('resize', scheduleMeasure);
       requestMeasure = () => {};

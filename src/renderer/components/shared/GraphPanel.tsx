@@ -41,6 +41,7 @@ interface GraphPanelProps {
   withOffsetVars?: boolean;
   interactive?: boolean;
   dataEditing?: boolean;
+  overlayHitRegion?: boolean;
   promoteTransformLayer?: boolean;
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
@@ -199,6 +200,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       withOffsetVars = true,
       interactive = true,
       dataEditing,
+      overlayHitRegion = false,
       promoteTransformLayer,
       onClick,
       onDoubleClick,
@@ -499,6 +501,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
         }
         data-state="inactive"
         data-graph-element="true"
+        data-overlay-hit={overlayHitRegion ? 'true' : undefined}
         data-editing={dataEditing ? 'true' : undefined}
         onClick={onClick}
         onDoubleClick={onDoubleClick}

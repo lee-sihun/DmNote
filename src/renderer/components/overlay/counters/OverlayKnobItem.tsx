@@ -221,6 +221,7 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
   return (
     <div
       className={`absolute select-none ${className || ''}`}
+      data-overlay-hit="true"
       style={{
         width: `${width}px`,
         height: `${height}px`,
