@@ -9,8 +9,12 @@ export const SIDE_PANEL_MATERIAL_CLASS =
 // 접힘 토글 칩 - opacity로 등퇴장하므로 라이브 블러 금지
 // (블러+opacity 조합은 WKWebView에서 블러 레이어가 점멸하고, 페이드를 래퍼로
 //  옮겨도 opacity < 1인 조상이 backdrop root가 되어 같은 증상 - Modal.tsx 참조).
-// 프레임과 같은 L*에 서도록 상주 크롬 솔리드 토큰을 쓴다
-export const SIDE_PANEL_CHIP_MATERIAL_CLASS = 'bg-glass-panel-solid';
+// 재질은 패널 계열이 아니라 캔버스 상주 크롬이다 - 칩이 보이는 건 패널이 닫혀 있을
+// 때뿐이고, 그때는 미니맵과 같은 티어의 부유 칩이라 같은 면으로 읽혀야 한다.
+// 열릴 때 프레임과 L*가 어긋나는 구간이 생기지만 그건 페이드 200ms 안이고,
+// 상시 보이는 상태가 우선한다.
+// -solid는 라이브 dim과 같은 L*에 서도록 맞춰 둔 솔리드 쌍둥이다
+export const SIDE_PANEL_CHIP_MATERIAL_CLASS = 'bg-glass-dim-solid';
 
 export const SIDE_PANEL_FRAME_CLASS = `absolute right-0 top-0 bottom-0 w-[240px] ${SIDE_PANEL_MATERIAL_CLASS} shadow-elevation-panel z-[var(--z-chrome-panel)]`;
 

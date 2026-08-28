@@ -1,4 +1,5 @@
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
+import { MINIMAP_SURFACE_CLASS } from './minimapChrome';
 import React, { useState, useRef, useEffect } from 'react';
 import { useGridViewStore } from '@stores/grid/useGridViewStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
@@ -442,10 +443,9 @@ const GridMinimap = ({
   return (
     <div
       ref={minimapRef}
-      className="absolute bottom-2 left-2 z-[var(--z-chrome-panel)] select-none bg-glass-dim backdrop-glass-popup backdrop-glass-canvas rounded-[8px] shadow-elevation-chrome overflow-hidden"
+      className={`absolute bottom-2 left-2 z-[var(--z-chrome-panel)] select-none ${MINIMAP_SURFACE_CLASS} rounded-[8px] shadow-elevation-chrome overflow-hidden`}
       // 상주 글래스 표면이라 opacity 페이드 금지 - 블러+opacity 조합은 WKWebView에서
-      // 블러 레이어가 점멸한다 (panelChrome 규칙). 등퇴장이 필요하면 마운트 토글로.
-      // 라이브 블러 유지 조건은 Windows 키 연타 프레임 실측 (미달 시 -solid 토큰 복귀)
+      // 블러 레이어가 점멸한다 (panelChrome 규칙). 등퇴장이 필요하면 마운트 토글로
       style={{
         width: MINIMAP_WIDTH,
         opacity: shouldShow ? 1 : 0,
