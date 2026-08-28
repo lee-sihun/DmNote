@@ -32,6 +32,8 @@ jobs:
     name: 설정·버전 검사
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write # 빌드 전에 원격 릴리스 태그 생성
     outputs:
       version: ${{ steps.check.outputs.version }}
       release: ${{ steps.check.outputs.release }}
@@ -138,6 +140,41 @@ jobs:
           echo "should_build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
           echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
           echo "release=$RELEASE test_signing=$TEST_SIGNING should_build=$SHOULD_BUILD release_sha=$RELEASE_SHA"
+
+      - name: 릴리스 태그 확인 / 생성
+        if: steps.check.outputs.release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.version }}
+          TARGET: ${{ steps.check.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+
+          resolve_tag_commit() {
+            gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG}" --jq .sha 2>/dev/null || true
+          }
+
+          EXISTING="$(resolve_tag_commit)"
+          if [ -n "$EXISTING" ]; then
+            if [ "$EXISTING" != "$TARGET" ]; then
+              echo "::error::원격 태그 $TAG 대상 불일치: actual=$EXISTING expected=$TARGET"
+              exit 1
+            fi
+            echo "기존 원격 태그 확인: $TAG -> $TARGET"
+            exit 0
+          fi
+
+          if ! gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f "ref=refs/tags/${TAG}" -f "sha=${TARGET}" >/dev/null; then
+            echo "태그 생성 경합 감지 — 원격 태그 재확인"
+            EXISTING="$(resolve_tag_commit)"
+            if [ "$EXISTING" != "$TARGET" ]; then
+              echo "::error::원격 태그 생성 실패: tag=$TAG actual=${EXISTING:-missing} expected=$TARGET"
+              exit 1
+            fi
+          fi
+          echo "원격 태그 생성 완료: $TAG -> $TARGET"
 
   build-sign-package:
     name: Windows 빌드·패키징
@@ -365,7 +402,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.preflight.outputs.version }}
-          TARGET: ${{ needs.preflight.outputs.release_sha }}
         run: |
           set -euo pipefail
           EXE_PATH="dist/windows-final/DM.NOTE.exe"
@@ -390,7 +426,7 @@ jobs:
             upload_to_existing_release
           else
             if ! gh release create "$TAG" "$EXE_PATH" "$ZIP_PATH" \
-              --target "$TARGET" --draft --title "DM NOTE v $VERSION" --notes-file "$NOTES_PATH"; then
+              --verify-tag --draft --title "DM NOTE v $VERSION" --notes-file "$NOTES_PATH"; then
               echo "draft 생성 경합 감지 — 기존 릴리즈 재확인"
               gh release view "$TAG" >/dev/null
               upload_to_existing_release
