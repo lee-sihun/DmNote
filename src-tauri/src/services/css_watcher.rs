@@ -47,6 +47,27 @@ struct WatcherEntry {
     targets: Vec<CssWatchTarget>,
 }
 
+fn resolve_css_watch_path(path: &str) -> Result<PathBuf, String> {
+    let requested = PathBuf::from(path);
+    match std::fs::canonicalize(&requested) {
+        Ok(canonical) => Ok(canonical),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let file_name = requested
+                .file_name()
+                .ok_or_else(|| format!("Failed to resolve CSS file name from {path}"))?;
+            let parent = requested
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            let canonical_parent = std::fs::canonicalize(parent).map_err(|parent_error| {
+                format!("Failed to resolve CSS parent directory {path}: {parent_error}")
+            })?;
+            Ok(canonical_parent.join(file_name))
+        }
+        Err(error) => Err(format!("Failed to resolve CSS path {path}: {error}")),
+    }
+}
+
 impl CssWatcher {
     pub fn new(store: Arc<AppStore>, app: AppHandle) -> Self {
         Self {
@@ -102,8 +123,7 @@ impl CssWatcher {
 
     /// 특정 경로에 대한 워칭 시작
     fn watch_path(&self, path: &str, target: CssWatchTarget) -> Result<(), String> {
-        let path_buf = std::fs::canonicalize(path)
-            .map_err(|error| format!("Failed to resolve CSS path {path}: {error}"))?;
+        let path_buf = resolve_css_watch_path(path)?;
         let identity = path_identity_key(&path_buf);
 
         let mut watchers = self.watchers.write();
@@ -153,10 +173,10 @@ impl CssWatcher {
         .map_err(|e| format!("Failed to create debouncer: {}", e))?;
 
         // 파일의 부모 디렉토리 또는 파일 자체를 워칭
-        let watch_target = if path_buf.is_file() {
-            path_buf.parent().unwrap_or(&path_buf)
-        } else {
+        let watch_target = if path_buf.is_dir() {
             &path_buf
+        } else {
+            path_buf.parent().unwrap_or(&path_buf)
         };
 
         debouncer
@@ -376,7 +396,7 @@ fn paths_match(path1: &str, path2: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::apply_reload_if_current;
+    use super::{apply_reload_if_current, resolve_css_watch_path};
     use crate::{
         custom_css::ValidatedCssFile,
         models::{AppStoreData, CustomCss, TabCss},
@@ -444,6 +464,24 @@ mod tests {
             &alias.to_string_lossy(),
             &target.to_string_lossy()
         ));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn missing_css_file_keeps_a_watchable_path_under_its_existing_parent() {
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-css-watcher-missing-start-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let missing = root.join("restored.css");
+
+        let resolved = resolve_css_watch_path(&missing.to_string_lossy()).unwrap();
+        let canonical_root = root.canonicalize().unwrap();
+
+        assert_eq!(resolved.parent(), Some(canonical_root.as_path()));
+        assert_eq!(resolved.file_name(), missing.file_name());
+        assert!(!resolved.exists());
         let _ = std::fs::remove_dir_all(root);
     }
 
