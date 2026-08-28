@@ -172,22 +172,62 @@ jobs:
             throw "SignPath 출력 EXE를 찾을 수 없습니다: $signedExe"
           }
 
-          $signature = Get-AuthenticodeSignature -LiteralPath $signedExe
-          if ($null -eq $signature.SignerCertificate -or $signature.Status -eq 'NotSigned') {
-            throw "Authenticode 서명이 없습니다: $($signature.StatusMessage)"
+          $signTool = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter 'signtool.exe' -Recurse |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if ($null -eq $signTool) {
+            throw 'Windows SDK signtool.exe를 찾을 수 없습니다.'
           }
 
-          # 자체 서명 테스트 인증서를 임시 러너에서만 신뢰한 뒤 암호학적 검증
-          $certificatePath = Join-Path $env:RUNNER_TEMP 'signpath-test-certificate.cer'
-          Export-Certificate -Cert $signature.SignerCertificate -FilePath $certificatePath | Out-Null
-          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
-          $trustedSignature = Get-AuthenticodeSignature -LiteralPath $signedExe
-          if ($trustedSignature.Status -ne 'Valid') {
-            throw "Authenticode 검증 실패: $($trustedSignature.Status) $($trustedSignature.StatusMessage)"
+          "Authenticode 검증 시작: $($signTool.FullName)"
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $signTool.FullName
+          $startInfo.UseShellExecute = $false
+          $startInfo.RedirectStandardOutput = $true
+          $startInfo.RedirectStandardError = $true
+          foreach ($argument in @('verify', '/pa', '/v', $signedExe)) {
+            $startInfo.ArgumentList.Add($argument)
           }
 
-          "Signer: $($trustedSignature.SignerCertificate.Subject)"
-          "Thumbprint: $($trustedSignature.SignerCertificate.Thumbprint)"
+          $process = [System.Diagnostics.Process]::new()
+          $process.StartInfo = $startInfo
+          try {
+            if (-not $process.Start()) {
+              throw 'signtool.exe 실행에 실패했습니다.'
+            }
+
+            $standardOutput = $process.StandardOutput.ReadToEndAsync()
+            $standardError = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit(120000)) {
+              $process.Kill($true)
+              $process.WaitForExit()
+              throw 'Authenticode 검증이 120초를 초과했습니다.'
+            }
+
+            $verificationOutput = ($standardOutput.GetAwaiter().GetResult() + $standardError.GetAwaiter().GetResult()).Trim()
+            $verificationOutput
+            $verificationExitCode = $process.ExitCode
+          }
+          finally {
+            $process.Dispose()
+          }
+
+          # 테스트 인증서는 자체 서명이므로 파일·서명 검증 후 미신뢰 루트 오류 하나만 허용
+          $expectedTestTrustFailure =
+            $env:SIGNING_POLICY_SLUG -eq 'test-signing' -and
+            $verificationExitCode -eq 1 -and
+            $verificationOutput -match 'Signature Index:\s+0' -and
+            $verificationOutput -match 'Hash of file \(sha256\):\s+[0-9A-F]{64}' -and
+            $verificationOutput -match 'Number of errors:\s+1' -and
+            $verificationOutput -match 'terminated in a root\s+certificate which is not trusted by the trust provider'
+
+          if ($verificationExitCode -ne 0 -and -not $expectedTestTrustFailure) {
+            throw "Authenticode 검증 실패: signtool 종료 코드 $verificationExitCode"
+          }
+
+          if ($expectedTestTrustFailure) {
+            'Authenticode 서명과 파일 무결성 확인 완료 (자체 서명 테스트 루트 미신뢰는 예상된 상태)'
+          }
 
       # 서명 이후 ZIP 생성 — 단독 EXE와 ZIP 내부 EXE의 Authenticode 바이트를 동일하게 유지
       - name: 최종 자산 패키징
