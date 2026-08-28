@@ -14,12 +14,24 @@ globalThis.ResizeObserver =
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const mocks = vi.hoisted(() => ({
-  invoke: vi.fn(() => Promise.resolve()),
+  // ready handshake는 epoch를 돌려줘야 발행이 열린다
+  invoke: vi.fn(
+    (command: string): Promise<unknown> =>
+      command === 'overlay_hit_renderer_ready'
+        ? Promise.resolve({ epoch: 1 })
+        : Promise.resolve(),
+  ),
+  handlers: new Map<string, (payload: unknown) => void>(),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }));
 vi.mock('@api/modules/shared', () => ({
-  subscribe: vi.fn(() => Object.assign(() => {}, { ready: Promise.resolve() })),
+  subscribe: vi.fn((event: string, handler: (payload: unknown) => void) => {
+    mocks.handlers.set(event, handler);
+    return Object.assign(() => mocks.handlers.delete(event), {
+      ready: Promise.resolve(),
+    });
+  }),
 }));
 
 const STORAGE_KEY = 'dmnote:overlay-hit-revision';
@@ -27,11 +39,14 @@ const STORAGE_KEY = 'dmnote:overlay-hit-revision';
 const LEASE_SPAN = 10_000_000;
 
 const sentRevisions = () =>
-  mocks.invoke.mock.calls.map(
-    (call) =>
-      (call as unknown as [string, { payload: { revision: number } }])[1]
-        .payload.revision,
-  );
+  (
+    mocks.invoke.mock.calls as unknown as [
+      string,
+      { payload: { revision: number } },
+    ][]
+  )
+    .filter(([command]) => command === 'overlay_sync_hit_regions')
+    .map(([, args]) => args.payload.revision);
 
 // 훅을 마운트하고 더블 rAF를 소진해 실제 발급 경로로 sync를 발생시킨다
 const runHookSession = async (): Promise<Root> => {
@@ -50,6 +65,10 @@ const runHookSession = async (): Promise<Root> => {
   await act(async () => {
     vi.advanceTimersByTime(64);
   });
+  // handshake가 epoch를 채운 뒤의 재측정까지 소진한다
+  await act(async () => {
+    vi.advanceTimersByTime(64);
+  });
   return root!;
 };
 
@@ -57,6 +76,7 @@ describe('overlay hit revision lease', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
+    mocks.handlers.clear();
     vi.useFakeTimers();
     mocks.invoke.mockClear();
     window.localStorage.clear();
@@ -156,5 +176,124 @@ describe('overlay hit 발행 판정', () => {
   it('첫 발행은 항상 내보낸다', async () => {
     const shouldPublish = await load();
     expect(shouldPublish(null, null, rects, 1)).toBe(true);
+  });
+});
+
+describe('overlay hit 재동기화 요청', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    mocks.handlers.clear();
+    mocks.invoke.mockClear();
+    vi.useFakeTimers();
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const syncCalls = () =>
+    (mocks.invoke.mock.calls as unknown as [string, unknown][]).filter(
+      ([command]) => command === 'overlay_sync_hit_regions',
+    );
+
+  it('요청을 받으면 좌표가 같아도 다시 발행한다', async () => {
+    const root = await runHookSession();
+    expect(syncCalls()).toHaveLength(1);
+
+    // 같은 좌표로 재측정만 걸면 중복 제거에 막힌다
+    await act(async () => {
+      mocks.handlers.get('css:use')?.(undefined);
+      vi.advanceTimersByTime(64);
+    });
+    expect(syncCalls()).toHaveLength(1);
+
+    // 재동기화 요청은 그 기준선을 지우므로 반드시 다시 나간다
+    await act(async () => {
+      mocks.handlers.get('overlay:hit-resync')?.({
+        epoch: 2,
+        reason: 'parent-changed',
+      });
+      vi.advanceTimersByTime(64);
+    });
+    const calls = syncCalls();
+    expect(calls).toHaveLength(2);
+    expect((calls[1][1] as { payload: { epoch: number } }).payload.epoch).toBe(
+      2,
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('역행하는 epoch는 무시한다', async () => {
+    const root = await runHookSession();
+    expect(syncCalls()).toHaveLength(1);
+
+    await act(async () => {
+      mocks.handlers.get('overlay:hit-resync')?.({
+        epoch: 0,
+        reason: 'probe',
+      });
+      vi.advanceTimersByTime(64);
+    });
+    expect(syncCalls()).toHaveLength(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+});
+
+describe('overlay hit lease 회수', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    mocks.handlers.clear();
+    mocks.invoke.mockClear();
+    vi.useFakeTimers();
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const callsOf = (command: string) =>
+    (mocks.invoke.mock.calls as unknown as [string, unknown][]).filter(
+      ([name]) => name === command,
+    );
+
+  it('채택 거부를 받으면 준비를 다시 알려 lease를 되찾는다', async () => {
+    const root = await runHookSession();
+    expect(callsOf('overlay_hit_renderer_ready')).toHaveLength(1);
+
+    // 죽은 세션이 lease를 가져간 상태를 흉내낸다
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === 'overlay_hit_renderer_ready') {
+        return Promise.resolve({ epoch: 3 });
+      }
+      return Promise.resolve({ accepted: false });
+    });
+
+    // 재호출 최소 간격을 넘긴다
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+    });
+    await act(async () => {
+      mocks.handlers.get('overlay:hit-resync')?.({
+        epoch: 2,
+        reason: 'probe',
+      });
+      vi.advanceTimersByTime(64);
+    });
+
+    expect(callsOf('overlay_hit_renderer_ready')).toHaveLength(2);
+
+    await act(async () => {
+      root.unmount();
+    });
   });
 });

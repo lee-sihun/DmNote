@@ -85,6 +85,14 @@ fn main() {
 
     let builder = tauri::Builder::default()
         .on_page_load(|webview, payload| {
+            if matches!(payload.event(), PageLoadEvent::Started) && webview.label() == "overlay" {
+                if let Some(state) = webview.app_handle().try_state::<AppState>() {
+                    if let Err(err) = state.overlay_hit_renderer_load_started(webview.app_handle())
+                    {
+                        log::warn!("failed to revoke overlay hit renderer lease: {err:#}");
+                    }
+                }
+            }
             // 메인 문서가 다시 로드되면 분리 패널의 opener 참조가 끊긴다 - 창은 살려 둔 채
             // 감춰서 새 문서가 다시 붙일 수 있게 한다 (dev reload)
             if matches!(payload.event(), PageLoadEvent::Started) && webview.label() == "main" {
@@ -322,6 +330,7 @@ fn main() {
             commands::layout::overlay::overlay_get,
             commands::layout::overlay::overlay_set_visible,
             commands::layout::overlay::overlay_set_lock,
+            commands::layout::overlay::overlay_hit_renderer_ready,
             commands::layout::overlay::overlay_sync_hit_regions,
             commands::layout::overlay::overlay_set_anchor,
             commands::layout::overlay::overlay_resize,
