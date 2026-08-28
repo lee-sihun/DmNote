@@ -297,6 +297,7 @@ const FloatingPopup = ({
   });
 
   const floatingRef = useRef<HTMLDivElement>(null);
+  const syncedReferenceNodeRef = useRef<HTMLElement | null>(null);
   const [adjustedPos, setAdjustedPos] = useState<{
     x: number;
     y: number;
@@ -338,12 +339,16 @@ const FloatingPopup = ({
   // 의존성을 걸면 ref 객체 교체만 보고 그 안의 노드 교체는 놓친다. 트리거가
   // 사라졌다 다시 생기거나 여러 버튼이 ref 하나를 돌려쓰면, Floating UI가 연결
   // 끊긴 옛 노드를 계속 재서 팝업이 화면 좌상단으로 날아간다.
-  // 매 렌더 동기화가 노드 교체를 잡는 유일한 방법이고, 같은 노드면 내부에서 무시된다.
+  // 매 렌더 동기화가 노드 교체를 잡는 유일한 방법이다. 같은 노드를 다시 밀면
+  // Floating UI 내부 상태 갱신이 연쇄 렌더를 만들 수 있으므로 호출 전에 막는다.
   // paint 전에 맞춰야 이전 좌표가 한 프레임 비치지 않는다.
   // null은 밀지 않는다 - 끊으면 좌표가 0으로 초기화돼 팝업이 좌상단으로 튄다
   useLayoutEffect(() => {
     const node = referenceRef?.current;
-    if (node) refs.setReference(node);
+    if (node && syncedReferenceNodeRef.current !== node) {
+      syncedReferenceNodeRef.current = node;
+      refs.setReference(node);
+    }
   });
 
   // Escape 소유는 autoClose와 무관 — 한 번에 한 겹씩 닫힘.

@@ -133,10 +133,12 @@ export const usePanelAnchoredPopupPosition = ({
   fallbackHeight,
 }: UsePanelAnchoredPopupPositionOptions): PopupPosition | null => {
   const [position, setPosition] = useState<PopupPosition | null>(null);
+  const lastPositionRef = useRef<PopupPosition | null>(null);
   const computePositionRef = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
     if (!open || !panelElement) {
+      lastPositionRef.current = null;
       setPosition(null);
       computePositionRef.current = null;
       return;
@@ -162,11 +164,11 @@ export const usePanelAnchoredPopupPosition = ({
         viewportHeight: ownerWindow.innerHeight,
       });
 
-      setPosition((previous) =>
-        previous && previous.x === next.x && previous.y === next.y
-          ? previous
-          : next,
-      );
+      const previous = lastPositionRef.current;
+      if (previous && previous.x === next.x && previous.y === next.y) return;
+
+      lastPositionRef.current = next;
+      setPosition(next);
     };
 
     computePositionRef.current = compute;
@@ -219,18 +221,21 @@ export const useTriggerAnchoredPopupPosition = ({
   fallbackHeight,
 }: UseTriggerAnchoredPopupPositionOptions): TriggerAnchoredResult => {
   const [result, setResult] = useState<TriggerAnchoredResult>(UNSETTLED);
+  const lastPositionRef = useRef<TriggerAnchoredPosition | null>(null);
   const computePositionRef = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
     const trigger = referenceRef?.current;
     const section = trigger?.closest<HTMLElement>('[data-dmn-section="true"]');
     if (!open) {
+      lastPositionRef.current = null;
       setResult(UNSETTLED);
       computePositionRef.current = null;
       return;
     }
     // 섹션 밖 트리거는 정렬 기준이 없음 — 감추지 말고 기본 배치로 넘김
     if (!trigger || !section) {
+      lastPositionRef.current = null;
       setResult(NO_ANCHOR);
       computePositionRef.current = null;
       return;
@@ -251,15 +256,17 @@ export const useTriggerAnchoredPopupPosition = ({
         viewportHeight: ownerWindow.innerHeight,
       });
 
-      setResult((previous) => {
-        const current = previous.position;
-        return current &&
-          current.x === next.x &&
-          current.y === next.y &&
-          current.width === next.width
-          ? previous
-          : { settled: true, position: next };
-      });
+      const previous = lastPositionRef.current;
+      if (
+        previous &&
+        previous.x === next.x &&
+        previous.y === next.y &&
+        previous.width === next.width
+      )
+        return;
+
+      lastPositionRef.current = next;
+      setResult({ settled: true, position: next });
     };
 
     computePositionRef.current = compute;
