@@ -1,7 +1,7 @@
 name: Release macOS
 
 # macOS 유니버설 DMG 빌드 → 서명 → 공증 → draft 릴리즈 첨부
-# - 태그 푸시(1.2.3 형식): draft 릴리즈 생성/갱신. Windows 자산은 수동 추가 후 사람이 publish
+# - 태그 푸시(1.2.3 형식): draft 릴리즈 생성/갱신. Windows workflow 완료 후 사람이 publish
 # - workflow_dispatch(dry_run=true): 릴리즈 없이 빌드·검증만, 산출물은 workflow artifact
 # - 인증서는 이 워크플로가 직접 임시 키체인에 import (Tauri의 APPLE_CERTIFICATE 사용 금지 —
 #   beforeBundleCommand 훅 scripts/sign-macos-helper.sh가 번들 전에 키체인에서 identity를 찾음)
@@ -274,7 +274,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # 기존 릴리즈가 있으면 DMG만 덮어쓰기 — 노트·draft 상태·수동 업로드된 Windows 자산 보존
+      # 기존 릴리즈가 있으면 DMG만 덮어쓰기 — 노트·draft 상태·Windows workflow 자산 보존
       - name: draft 릴리즈 생성 / DMG 업로드
         if: needs.preflight.outputs.release == 'true'
         env:
@@ -292,7 +292,7 @@ jobs:
             gh release upload "$TAG" "$ASSET_PATH" --clobber
           else
             NOTES="**한국어** | [English](https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/releases/${VERSION}_en.md)"
-            NOTES="$NOTES"$'\n\n'"_(한국어 릴리즈 노트를 작성하고 Windows 자산을 추가한 뒤 publish)_"
+            NOTES="$NOTES"$'\n\n'"_(한국어 릴리즈 노트를 작성하고 macOS/Windows 자산을 확인한 뒤 publish — 운영 인증서 활성화 전 Windows 파일은 미서명)_"
             gh release create "$TAG" "$ASSET_PATH" \
               --draft --title "DM NOTE v $VERSION" --notes "$NOTES" --generate-notes
           fi

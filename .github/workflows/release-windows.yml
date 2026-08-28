@@ -1,10 +1,15 @@
-name: Release Windows (test signing)
+name: Release Windows
 
-# Windows x64 빌드 -> SignPath 테스트 서명 -> 포터블 ZIP 패키징
-# - 운영 인증서 활성화 전: workflow_dispatch로만 실행, GitHub Release에는 게시하지 않음
-# - 단독 업데이트 EXE와 ZIP 내부 EXE는 같은 서명 완료 파일을 사용
+# Windows x64 빌드 -> 포터블 ZIP 패키징 -> draft 릴리즈 첨부
+# - 태그 푸시: 운영 인증서 활성화 전까지 서명을 건너뛴 EXE/ZIP을 draft 릴리즈에 업로드
+# - workflow_dispatch: SignPath 테스트 서명 후 Actions artifact로만 업로드
+# - 단독 업데이트 EXE와 ZIP 내부 EXE는 같은 빌드 파일을 사용
 
 on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+" # 컨벤션 위반 — preflight에서 명시적으로 실패
   workflow_dispatch:
 
 permissions:
@@ -12,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-windows-test-signing
+  group: release-windows
   cancel-in-progress: false
 
 jobs:
@@ -22,12 +27,15 @@ jobs:
     timeout-minutes: 5
     outputs:
       version: ${{ steps.check.outputs.version }}
+      release: ${{ steps.check.outputs.release }}
+      test_signing: ${{ steps.check.outputs.test_signing }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: SignPath 설정 확인
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -47,19 +55,15 @@ jobs:
           echo "SignPath 필수 설정 확인"
 
       - id: check
-        name: 기본 브랜치·버전 확인
+        name: 실행 모드·버전 확인
         shell: bash
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
         run: |
           set -euo pipefail
-
-          if [ "$REF_TYPE" != "branch" ] || [ "$REF_NAME" != "$DEFAULT_BRANCH" ]; then
-            echo "::error::테스트 서명은 기본 브랜치($DEFAULT_BRANCH)에서만 실행 가능"
-            exit 1
-          fi
 
           PKG="$(node -p "require('./package.json').version")"
           CONF="$(node -p "require('./src-tauri/tauri.conf.json').version")"
@@ -70,16 +74,51 @@ jobs:
             exit 1
           fi
 
+          RELEASE=false
+          TEST_SIGNING=false
+          if [ "$EVENT_NAME" = "push" ]; then
+            if [ "$REF_TYPE" != "tag" ]; then
+              echo "::error::릴리즈 실행은 태그 push에서만 허용"
+              exit 1
+            fi
+            case "$REF_NAME" in
+              v*)
+                echo "::error::태그에 v 접두사 금지 — 이 저장소 컨벤션은 '$PKG' 형식"
+                exit 1 ;;
+            esac
+            if [ "$REF_NAME" != "$PKG" ]; then
+              echo "::error::태그($REF_NAME) ↔ package.json($PKG) 불일치"
+              exit 1
+            fi
+            RELEASE=true
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$REF_TYPE" != "branch" ] || [ "$REF_NAME" != "$DEFAULT_BRANCH" ]; then
+              echo "::error::테스트 서명은 기본 브랜치($DEFAULT_BRANCH)에서만 실행 가능"
+              exit 1
+            fi
+            TEST_SIGNING=true
+          else
+            echo "::error::지원하지 않는 이벤트: $EVENT_NAME"
+            exit 1
+          fi
+
           echo "version=$PKG" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "test_signing=$TEST_SIGNING" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE test_signing=$TEST_SIGNING"
 
   build-sign-package:
-    name: Windows 빌드·테스트 서명·패키징
+    name: Windows 빌드·패키징
     needs: preflight
     runs-on: windows-latest
     timeout-minutes: 120
+    permissions:
+      actions: read
+      contents: write # draft 릴리즈 생성·자산 업로드
     env:
       VERSION: ${{ needs.preflight.outputs.version }}
       SIGNING_POLICY_SLUG: test-signing
+      TEST_SIGNING: ${{ needs.preflight.outputs.test_signing }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -115,7 +154,7 @@ jobs:
       - name: Windows x64 빌드
         run: npm run tauri:build -- --no-bundle
 
-      - name: 서명 입력 준비
+      - name: 빌드 산출물 준비
         id: prepare
         shell: pwsh
         run: |
@@ -139,6 +178,7 @@ jobs:
 
       # GitHub artifact가 ZIP 래퍼를 만들므로 SignPath Artifact Configuration의 루트는 <zip-file>
       - name: 미서명 EXE 업로드
+        if: needs.preflight.outputs.test_signing == 'true'
         id: upload-unsigned
         uses: actions/upload-artifact@v4
         with:
@@ -148,6 +188,7 @@ jobs:
           retention-days: 3
 
       - name: SignPath 테스트 서명
+        if: needs.preflight.outputs.test_signing == 'true'
         id: signpath
         uses: signpath/github-action-submit-signing-request@v2
         with:
@@ -164,6 +205,7 @@ jobs:
             version: ${{ toJSON(env.VERSION) }}
 
       - name: 테스트 서명 검증
+        if: needs.preflight.outputs.test_signing == 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -229,19 +271,28 @@ jobs:
             'Authenticode 서명과 파일 무결성 확인 완료 (자체 서명 테스트 루트 미신뢰는 예상된 상태)'
           }
 
-      # 서명 이후 ZIP 생성 — 단독 EXE와 ZIP 내부 EXE의 Authenticode 바이트를 동일하게 유지
+      # 테스트 실행은 서명 완료 EXE, 태그 릴리즈는 동일 빌드의 미서명 EXE로 패키징
       - name: 최종 자산 패키징
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $signedExe = 'dist\signing-output\DM.NOTE.exe'
+          $releaseExe = if ($env:TEST_SIGNING -eq 'true') {
+            'dist\signing-output\DM.NOTE.exe'
+          }
+          else {
+            'dist\signing-input\DM.NOTE.exe'
+          }
+          if (-not (Test-Path -LiteralPath $releaseExe -PathType Leaf)) {
+            throw "패키징할 EXE를 찾을 수 없습니다: $releaseExe"
+          }
+
           $packageDir = 'dist\windows-package'
           $finalDir = 'dist\windows-final'
           New-Item -ItemType Directory -Path $packageDir | Out-Null
           New-Item -ItemType Directory -Path $finalDir | Out-Null
 
-          Copy-Item -LiteralPath $signedExe -Destination (Join-Path $finalDir 'DM.NOTE.exe')
-          Copy-Item -LiteralPath $signedExe -Destination (Join-Path $packageDir 'dm-note.exe')
+          Copy-Item -LiteralPath $releaseExe -Destination (Join-Path $finalDir 'DM.NOTE.exe')
+          Copy-Item -LiteralPath $releaseExe -Destination (Join-Path $packageDir 'dm-note.exe')
           $releaseAssets = 'distribution\windows\assets'
           if (-not (Test-Path -LiteralPath $releaseAssets -PathType Container)) {
             throw "Windows 배포 자산 폴더를 찾을 수 없습니다: $releaseAssets"
@@ -266,6 +317,7 @@ jobs:
           Get-ChildItem -LiteralPath $finalDir | Select-Object Name, Length
 
       - name: 테스트 서명 산출물 업로드
+        if: needs.preflight.outputs.test_signing == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: dmnote-windows-test-signed-${{ env.VERSION }}
@@ -273,7 +325,44 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: 실행 요약
+      - name: draft 릴리즈 생성 / Windows 자산 업로드
+        if: needs.preflight.outputs.release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          EXE_PATH="dist/windows-final/DM.NOTE.exe"
+          ZIP_PATH="dist/windows-final/DM.NOTE.v.${VERSION}.zip"
+
+          upload_to_existing_release() {
+            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != "true" ]; then
+              echo "::error::릴리즈 $TAG 는 이미 publish됨 — 자동 덮어쓰기 거부. 필요하면 gh release upload --clobber 로 수동 교체"
+              exit 1
+            fi
+            echo "기존 draft 릴리즈 발견 — Windows 자산 덮어쓰기"
+            gh release upload "$TAG" "$EXE_PATH" "$ZIP_PATH" --clobber
+          }
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            upload_to_existing_release
+          else
+            NOTES="**한국어** | [English](https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/releases/${VERSION}_en.md)"
+            NOTES="$NOTES"$'\n\n'"_(한국어 릴리즈 노트를 작성하고 macOS/Windows 자산을 확인한 뒤 publish — 운영 인증서 활성화 전 Windows 파일은 미서명)_"
+            if ! gh release create "$TAG" "$EXE_PATH" "$ZIP_PATH" \
+              --draft --title "DM NOTE v $VERSION" --notes "$NOTES" --generate-notes; then
+              echo "draft 생성 경합 감지 — 기존 릴리즈 재확인"
+              gh release view "$TAG" >/dev/null
+              upload_to_existing_release
+            fi
+          fi
+
+          gh release view "$TAG" --json isDraft,name,assets \
+            --jq '"draft=\(.isDraft) name=\(.name) assets=\([.assets[].name] | join(", "))"'
+
+      - name: 테스트 서명 실행 요약
+        if: needs.preflight.outputs.test_signing == 'true'
         shell: pwsh
         env:
           SIGNING_REQUEST_URL: ${{ steps.signpath.outputs.signing-request-web-url }}
@@ -285,4 +374,16 @@ jobs:
           - Policy: ``$env:SIGNING_POLICY_SLUG``
           - Signing Request: $env:SIGNING_REQUEST_URL
           - 테스트 인증서 산출물은 GitHub Release에 게시하지 않음
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+      - name: unsigned 릴리즈 실행 요약
+        if: needs.preflight.outputs.release == 'true'
+        shell: pwsh
+        run: |
+          @"
+          ## Windows draft 릴리즈 업로드 완료
+
+          - Version: ``$env:VERSION``
+          - Signing: 운영 인증서 활성화 전 임시 미서명
+          - Assets: ``DM.NOTE.exe``, ``DM.NOTE.v.$env:VERSION.zip``
           "@ >> $env:GITHUB_STEP_SUMMARY
