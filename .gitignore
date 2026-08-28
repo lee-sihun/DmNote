@@ -18,3 +18,5 @@ mcp.json
 tasks/
 
 *.pfx
+
+video/
