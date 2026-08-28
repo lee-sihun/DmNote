@@ -23,10 +23,6 @@ permissions:
   actions: read
   contents: read
 
-concurrency:
-  group: release-windows
-  cancel-in-progress: false
-
 jobs:
   preflight:
     name: 설정·버전 검사
@@ -180,6 +176,9 @@ jobs:
     name: Windows 빌드·패키징
     needs: preflight
     if: needs.preflight.outputs.should_build == 'true'
+    concurrency:
+      group: release-windows
+      cancel-in-progress: false
     runs-on: windows-latest
     timeout-minutes: 120
     permissions:

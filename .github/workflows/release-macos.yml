@@ -23,11 +23,6 @@ on:
 permissions:
   contents: read
 
-# 릴리즈 업로드가 겹치지 않도록 직렬화. 공증 대기 중 취소 금지
-concurrency:
-  group: release-macos
-  cancel-in-progress: false
-
 jobs:
   preflight:
     name: 실행 모드·버전 검사
@@ -171,6 +166,10 @@ jobs:
     name: 유니버설 빌드·서명·공증
     needs: preflight
     if: needs.preflight.outputs.should_build == 'true'
+    # 실제 릴리즈만 직렬화. 일반 package.json 변경의 사전 검사는 대기시키지 않음
+    concurrency:
+      group: release-macos
+      cancel-in-progress: false
     runs-on: macos-15
     # 콜드 빌드(~45분) + 앱 공증(Tauri 내부, 타임아웃 없음) + DMG 공증(60분)이 직렬로 쌓임
     timeout-minutes: 180
