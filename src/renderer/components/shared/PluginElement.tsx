@@ -1043,9 +1043,16 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
     console.warn(`[PluginElement] Mounting ${element.fullId}`);
 
-    const mountCleanup = definition.onMount(context);
-    if (typeof mountCleanup === 'function') {
-      cleanups.push(mountCleanup);
+    try {
+      const mountCleanup = definition.onMount(context);
+      if (typeof mountCleanup === 'function') {
+        cleanups.push(mountCleanup);
+      }
+    } catch (error) {
+      console.error(
+        `[PluginElement] onMount failed for ${element.fullId}:`,
+        error,
+      );
     }
 
     // 동기 onMount 완료 후 초기 1회 송신 — 이미 setState로 보낸 키는 dedup됨
