@@ -148,7 +148,10 @@ jobs:
           set -euo pipefail
 
           resolve_tag_commit() {
-            gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG}" --jq .sha 2>/dev/null || true
+            local commit
+            if commit="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG}" --jq .sha 2>/dev/null)"; then
+              printf '%s\n' "$commit"
+            fi
           }
 
           EXISTING="$(resolve_tag_commit)"
