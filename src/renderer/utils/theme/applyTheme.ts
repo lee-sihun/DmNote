@@ -57,6 +57,19 @@ export const cacheThemePreference = (preference: UiThemePreference) => {
   }
 };
 
+export const readCachedThemePreference = (
+  fallback: UiThemePreference,
+): UiThemePreference => {
+  try {
+    const cached = localStorage.getItem(THEME_CACHE_KEY);
+    return cached === 'system' || cached === 'light' || cached === 'dark'
+      ? cached
+      : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 /**
  * 문서 하나에 테마를 싣는다. 분리 패널 자식 문서도 같은 함수를 쓴다 -
  * 자식은 opener의 head 스타일 노드만 복제받고 html 속성은 물려받지 않는다

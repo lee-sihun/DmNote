@@ -149,7 +149,6 @@ const Settings = ({
     language,
     setLanguage,
     uiTheme,
-    setUiTheme,
     overlayResizeAnchor,
     setOverlayResizeAnchor,
     keyCounterEnabled,
@@ -1001,15 +1000,11 @@ const Settings = ({
     });
   };
 
-  // 화면은 스토어를 보고 즉시 바뀌고, 저장 실패 시 백엔드가 보내는
-  // settings:changed로 값이 되돌아온다
+  // 백엔드가 확정한 값만 반영해 저장 실패가 첫 화면 캐시까지 남지 않게 한다
   const handleUiThemeChange = (val: string): void => {
     if (!isUiThemePreference(val)) return;
-    startTransition(() => {
-      setUiTheme(val);
-      void settingsApi.update({ uiTheme: val }).catch((error) => {
-        console.error('Failed to update ui theme', error);
-      });
+    void settingsApi.update({ uiTheme: val }).catch((error) => {
+      console.error('Failed to update ui theme', error);
     });
   };
 

@@ -12,6 +12,7 @@ import type { JsPlugin } from '@src/types/plugin/js';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import { getDefaultSettingsState } from '@src/renderer/defaults';
 import { stableStringify } from '@utils/core/stableStringify';
+import { readCachedThemePreference } from '@utils/theme/applyTheme';
 
 export interface GridSettings {
   alignmentGuides: boolean;
@@ -129,7 +130,7 @@ const initialState: SettingsStateSnapshot = {
   jsPlugins: settingsDefaults.customJS.plugins,
   backgroundColor: settingsDefaults.backgroundColor,
   language: settingsDefaults.language,
-  uiTheme: settingsDefaults.uiTheme,
+  uiTheme: readCachedThemePreference(settingsDefaults.uiTheme),
   laboratoryEnabled: settingsDefaults.laboratoryEnabled,
   developerModeEnabled: settingsDefaults.developerModeEnabled,
   trayEnabled: settingsDefaults.trayEnabled,
