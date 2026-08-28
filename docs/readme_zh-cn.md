@@ -13,7 +13,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 </div>
 
@@ -23,7 +23,7 @@ https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
 
 **DM Note** 是一款专为 DJMAX RESPECT V 设计的按键显示程序，也可以自由用于任何其他游戏。通过简单设置，您可以在直播或游戏视频创作时可视化显示按键输入。目前仅官方支持 Windows 10/11 和 macOS 环境。如果您使用的是 Linux，我们推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote)。
 
-[前往下载 DM NOTE v1.6.1](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
+[前往下载 DM NOTE v2.0.0](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
 
 [Code signing policy](../CODE_SIGNING_POLICY.md)
 

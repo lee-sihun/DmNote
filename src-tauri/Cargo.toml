@@ -1,6 +1,6 @@
 [package]
 name = "dm-note"
-version = "1.6.1"
+version = "2.0.0"
 edition = "2021"
 rust-version = "1.88"
 default-run = "dm-note"
