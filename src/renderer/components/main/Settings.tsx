@@ -15,9 +15,10 @@ import {
   SettingRow,
   SettingToggleRow,
 } from '@components/main/common/SettingRow';
-import FlaskIcon from '@assets/svgs/flask.svg';
 import { PluginDataDeleteModal } from '@components/main/Modal/content/dialogs/PluginDataDeleteModal';
+import { useDeferredHover } from '@hooks/ui/useDeferredHover';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
+import SettingsPreview from '@components/main/SettingsPreview';
 import SettingsSidePanel from '@components/main/SettingsPanel/SettingsSidePanel';
 import type { SettingsPanelKey } from '@components/main/SettingsPanel/SettingsSidePanel';
 import ShortcutsPanelContent from '@components/main/SettingsPanel/ShortcutsPanelContent';
@@ -68,26 +69,6 @@ import type {
 import type { ObsStatus } from '@src/types/obs';
 import { DEFAULT_OBS_PORT } from '@src/types/obs';
 import { assertCanonicalEditorDocument } from '@src/types/editor';
-
-// 설정 미리보기 영상
-const PREVIEW_SOURCES: Record<string, string> = {
-  overlayLock:
-    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/overlay-lock.webm',
-  alwaysOnTop:
-    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/alwaysontop.webm',
-  noteEffect:
-    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/noteeffect.webm',
-  keyCounter:
-    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/counter.webm',
-  customCSS:
-    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/css.webm',
-  customJS:
-    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/plugin.webm',
-  resizeAnchor:
-    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/resize.webm',
-  obsMode:
-    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/obs.webm',
-};
 
 // ASIO 버퍼 크기 선택지(프레임). 게임 설정값과 맞춰야 ASIO 공존 가능.
 const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
@@ -173,7 +154,7 @@ const Settings = ({
 
   const { checkForUpdates, isChecking } = useUpdateCheck();
 
-  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [hoveredKey, hoverPreview] = useDeferredHover();
   const [activeSettingsPanel, setActiveSettingsPanel] =
     useState<SettingsPanelKey | null>(null);
   // CSS 패널 헤더 개수 배지용 (패널 콘텐츠가 보고)
@@ -1068,43 +1049,45 @@ const Settings = ({
                 label={t('settings.overlayLock')}
                 checked={overlayLocked}
                 onToggle={handleOverlayLockChange}
-                onMouseEnter={() => setHoveredKey('overlayLock')}
-                onMouseLeave={() => setHoveredKey(null)}
+                onMouseEnter={() => hoverPreview('overlayLock')}
+                onMouseLeave={() => hoverPreview(null)}
               />
               <SettingToggleRow
                 commitStrategy="after-paint"
                 label={t('settings.alwaysOnTop')}
                 checked={alwaysOnTop}
                 onToggle={handleAlwaysOnTopChange}
-                onMouseEnter={() => setHoveredKey('alwaysOnTop')}
-                onMouseLeave={() => setHoveredKey(null)}
+                onMouseEnter={() => hoverPreview('alwaysOnTop')}
+                onMouseLeave={() => hoverPreview(null)}
               />
               <SettingToggleRow
                 commitStrategy="after-paint"
                 label={t('settings.noteEffect')}
                 checked={noteEffect}
                 onToggle={handleNoteEffectChange}
-                onMouseEnter={() => setHoveredKey('noteEffect')}
-                onMouseLeave={() => setHoveredKey(null)}
+                onMouseEnter={() => hoverPreview('noteEffect')}
+                onMouseLeave={() => hoverPreview(null)}
               />
               <SettingToggleRow
                 commitStrategy="after-paint"
                 label={t('settings.keyCounter')}
                 checked={keyCounterEnabled}
                 onToggle={handleKeyCounterToggle}
-                onMouseEnter={() => setHoveredKey('keyCounter')}
-                onMouseLeave={() => setHoveredKey(null)}
+                onMouseEnter={() => hoverPreview('keyCounter')}
+                onMouseLeave={() => hoverPreview(null)}
               />
               <SettingToggleRow
                 commitStrategy="after-paint"
                 label={t('settings.trayEnabled')}
                 checked={trayEnabled}
                 onToggle={handleTrayToggle}
+                onMouseEnter={() => hoverPreview('trayEnabled')}
+                onMouseLeave={() => hoverPreview(null)}
               />
               <SettingRow
                 label={t('settings.resizeAnchor')}
-                onMouseEnter={() => setHoveredKey('resizeAnchor')}
-                onMouseLeave={() => setHoveredKey(null)}
+                onMouseEnter={() => hoverPreview('resizeAnchor')}
+                onMouseLeave={() => hoverPreview(null)}
               >
                 <Dropdown
                   options={RESIZE_ANCHOR_OPTIONS.map((opt) => ({
@@ -1123,8 +1106,8 @@ const Settings = ({
             {/* 커스텀 CSS & JS 설정 */}
             <SettingCard>
               <div
-                onMouseEnter={() => setHoveredKey('customCSS')}
-                onMouseLeave={() => setHoveredKey(null)}
+                onMouseEnter={() => hoverPreview('customCSS')}
+                onMouseLeave={() => hoverPreview(null)}
               >
                 <SettingRow label={t('settings.customCSSLabel')}>
                   <button
@@ -1140,8 +1123,8 @@ const Settings = ({
                 </SettingRow>
               </div>
               <div
-                onMouseEnter={() => setHoveredKey('customJS')}
-                onMouseLeave={() => setHoveredKey(null)}
+                onMouseEnter={() => hoverPreview('customJS')}
+                onMouseLeave={() => hoverPreview(null)}
               >
                 <SettingRow label={t('settings.customJSLabel')}>
                   <div className="flex flex-row gap-[6px]">
@@ -1167,8 +1150,8 @@ const Settings = ({
             </SettingCard>
             {/* OBS 모드 */}
             <SettingCard
-              onMouseEnter={() => setHoveredKey('obsMode')}
-              onMouseLeave={() => setHoveredKey(null)}
+              onMouseEnter={() => hoverPreview('obsMode')}
+              onMouseLeave={() => hoverPreview(null)}
             >
               <SettingToggleRow
                 commitStrategy="after-paint"
@@ -1219,8 +1202,8 @@ const Settings = ({
                     {t('settings.keySoundOutput') || '키 사운드 출력'}
                   </p>
                 }
-                onMouseEnter={() => setHoveredKey('keySoundOutput')}
-                onMouseLeave={() => setHoveredKey(null)}
+                onMouseEnter={() => hoverPreview('keySoundOutput')}
+                onMouseLeave={() => hoverPreview(null)}
               >
                 <Dropdown
                   options={[
@@ -1361,34 +1344,7 @@ const Settings = ({
           (activeSettingsPanel ? '' : ' pointer-events-none')
         }
       >
-        {!activeSettingsPanel && (
-          <div className="flex items-center justify-center w-full h-full">
-            {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
-              <div className="relative w-full h-full">
-                <video
-                  key={hoveredKey}
-                  src={PREVIEW_SOURCES[hoveredKey]}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
-                  <span className="mb-[16px] text-white text-title">
-                    {t(
-                      hoveredKey === 'obsMode'
-                        ? 'settings.obsGuide'
-                        : `settings.${hoveredKey}Desc`,
-                    )}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <FlaskIcon className="text-fill" />
-            )}
-          </div>
-        )}
+        {!activeSettingsPanel && <SettingsPreview hoveredKey={hoveredKey} />}
         {activeSettingsPanel && (
           <SettingsSidePanel
             activePanel={activeSettingsPanel}

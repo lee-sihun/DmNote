@@ -5,6 +5,7 @@ use crate::{
     commands::run_blocking,
     errors::CmdResult,
     models::{BootstrapOverlayState, OverlayBounds},
+    services::overlay_hit::OverlayHitRect,
 };
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +47,45 @@ pub async fn overlay_set_visible(app: AppHandle, visible: bool) -> CmdResult<()>
 pub async fn overlay_set_lock(app: AppHandle, locked: bool) -> CmdResult<()> {
     run_blocking(app, move |app, state| {
         Ok(state.set_overlay_lock(app, locked, true)?)
+    })
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlaySyncHitRegionsArgs {
+    pub rects: Vec<OverlayHitRect>,
+    pub revision: u64,
+    /// 웹뷰 실측 배율 - 보정 줌이 곱해져 있어 백엔드가 DPI로 대신 계산할 수 없다
+    #[serde(default = "default_device_pixel_ratio")]
+    pub device_pixel_ratio: f64,
+}
+
+fn default_device_pixel_ratio() -> f64 {
+    1.0
+}
+
+/// 오버레이 웹뷰가 실측한 키 영역을 히트 창에 반영.
+/// store 쓰기가 없으므로 번호표(run_mutation)가 아니라 run_blocking을 쓴다 -
+/// 저장 FIFO 뒤에 줄서면 레이아웃 변경마다 fsync를 기다리게 된다
+#[tauri::command]
+pub async fn overlay_sync_hit_regions(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    payload: OverlaySyncHitRegionsArgs,
+) -> CmdResult<()> {
+    if window.label() != "overlay" {
+        return Err(crate::errors::CommandError::msg(
+            "overlay hit regions can only be synced from the overlay window",
+        ));
+    }
+    run_blocking(app, move |app, state| {
+        Ok(state.sync_overlay_hit_regions(
+            app,
+            payload.rects,
+            payload.revision,
+            payload.device_pixel_ratio,
+        )?)
     })
     .await
 }

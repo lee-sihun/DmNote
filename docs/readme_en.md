@@ -25,6 +25,8 @@ https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
 
 [Download DM NOTE v1.6.1](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
 
+[Code signing policy](../CODE_SIGNING_POLICY.md)
+
 ## 🖼️ Screenshots
 
 <img src="assets/image.png" alt="Screenshot" width="700">

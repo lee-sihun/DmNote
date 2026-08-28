@@ -14,6 +14,10 @@ import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
+import {
+  useOverlayHitRegions,
+  subscribeHitContextMenu,
+} from '@hooks/overlay/useOverlayHitRegions';
 import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransition';
 import { useOverlayReveal } from '@hooks/overlay/useOverlayReveal';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
@@ -191,19 +195,6 @@ export default function App() {
     return { id, name: t(`mode.button${num}`) };
   });
 
-  const handleOverlayMouseDownCapture = (
-    e: React.MouseEvent<HTMLDivElement>,
-  ) => {
-    // 좌클릭은 창 전체 드래그 유지
-    if (e.button !== 0) return;
-
-    getCurrentWindow()
-      .startDragging()
-      .catch((error) => {
-        console.error('Failed to start overlay dragging', error);
-      });
-  };
-
   const closeOverlayWindow = async () => {
     try {
       await overlayApi.setVisible(false);
@@ -374,16 +365,14 @@ export default function App() {
     }
   };
 
+  // 본체 창은 상시 클릭 통과라 웹뷰가 우클릭을 못 받는다 - 히트 창이 emit한
+  // 좌표로 기존 네이티브 메뉴를 연다
   useEffect(() => {
-    const handleWindowContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void openOverlayContextMenuAt(event.clientX, event.clientY);
-    };
-
-    window.addEventListener('contextmenu', handleWindowContextMenu, true);
+    const unsubscribe = subscribeHitContextMenu(({ x, y }) => {
+      void openOverlayContextMenuAt(x, y);
+    });
     return () => {
-      window.removeEventListener('contextmenu', handleWindowContextMenu, true);
+      unsubscribe();
     };
   }, []);
 
@@ -784,16 +773,7 @@ export default function App() {
 
   // 레이아웃 입력이 실제로 바뀔 때만 재계산 - webglTracks identity가 안정되어
   // updateTrackLayouts effect·WebGL uniform effect가 무관한 리렌더에 재실행되지 않음
-  const {
-    bounds,
-    displayPositions,
-    displayStatPositions,
-    displayGraphPositions,
-    displayKnobPositions,
-    positionOffset,
-    topOffset,
-    webglTracks,
-  } = useMemo(
+  const layout = useMemo(
     () =>
       computeLayout({
         currentKeys,
@@ -820,6 +800,19 @@ export default function App() {
       overlayPadding,
     ],
   );
+  const {
+    bounds,
+    displayPositions,
+    displayStatPositions,
+    displayGraphPositions,
+    displayKnobPositions,
+    positionOffset,
+    topOffset,
+    webglTracks,
+  } = layout;
+
+  // 레이아웃이 DOM에 반영된 뒤 키 rect를 실측해 네이티브 히트 창과 동기화
+  useOverlayHitRegions(layout);
 
   // 창 크기와 배경 박스가 같은 공식을 공유 (창 == 콘텐츠 박스 불변식)
   // 높이는 computeLayout의 topOffset을 그대로 재사용 - 공식이 한 곳에만 있다
@@ -948,7 +941,6 @@ export default function App() {
       backgroundColor={backgroundColor}
       keyCounterEnabled={keyCounterEnabled}
       positionOffset={positionOffset}
-      onMouseDownCapture={handleOverlayMouseDownCapture}
       showPluginElements={true}
     />
   );

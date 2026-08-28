@@ -1,0 +1,85 @@
+/* 커스텀 CSS 가이드 */
+
+/* 
+- 일부 속성 적용이 안된다면 !important를 사용해보세요.
+- 실시간 CSS 반영을 지원하지 않습니다. CSS 수정 후 파일을 다시 불러와야 합니다. 
+*/
+
+/* 키 스타일 예제 */
+
+/* 키 스타일 변수
+--key-radius: 키의 테두리 반경
+--key-bg: 키의 배경색
+--key-border: 키의 테두리 스타일
+--key-text-color: 키의 텍스트 색상
+*/
+
+/* 전역 키 스타일 */
+[data-state="inactive"],
+[data-state="active"] {
+  --key-radius: 6px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+/* 전역 키 비활성 스타일 */
+[data-state="inactive"] {
+  --key-bg: transparent;
+  --key-border: 3px solid #474244;
+  --key-text-color: #474244;
+}
+
+/* 전역 키 활성 스타일 */
+[data-state="active"] {
+  --key-bg: transparent;
+  --key-border: 3px solid #ff2b80;
+  --key-text-color: #ff2b80;
+  text-shadow: 0px 0px 3px #ff2b80;
+  box-shadow: 0px 0px 4px #b3245d, 0px 0px 4px #b3245d;
+}
+
+/* 특정 키 활성 스타일 */
+.blue[data-state="active"] {
+  --key-bg: transparent;
+  --key-border: 3px solid #2ebef3;
+  --key-text-color: #2ebef3;
+  text-shadow: 0px 0px 3px #2ebef3;
+  box-shadow: 0px 0px 4px #2b8eff, 0px 0px 4px #2b8eff;
+}
+
+/* 카운터 스타일 예제 */
+
+/* 카운터 스타일 변수 
+--counter-color: 텍스트 색상
+--counter-stroke-color: 텍스트 외곽선 색상
+--counter-stroke-width: 텍스트 외곽선 두께
+*/
+
+/* 전역 카운터 스타일 */
+.counter {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+/* 전역 카운터 비활성 스타일 */
+.counter[data-counter-state="inactive"] {
+  --counter-color: #474244;
+  --counter-stroke-color: transparent;
+}
+
+/* 전역 카운터 활성 스타일  */
+.counter[data-counter-state="active"] {
+  --counter-color: #ff2b80;
+  --counter-stroke-color: transparent;
+  text-shadow: 0px 0px 3px #ff2b80;
+}
+
+/* 특정 키의 카운터 스타일 예제 */
+/* 클래스 선택자를 조합하여 특정 키의 카운터를 스타일링할 수 있습니다 */
+
+/* 클래스 조합 예제: .blue 클래스를 가진 키의 카운터 */
+.blue .counter[data-counter-state="active"] {
+  --counter-color: #2ebef3;
+  --counter-stroke-color: transparent;
+  text-shadow: 0px 0px 3px #2ebef3;
+}

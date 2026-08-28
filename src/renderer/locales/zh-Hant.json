@@ -91,6 +91,7 @@
     "customJSDesc": "運行 JS 插件以實現進階行為.",
     "resizeAnchorDesc": "選擇懸浮窗調整大小的錨點.",
     "keyCounterDesc": "追蹤並顯示每個按鍵的按下次數.",
+    "trayEnabledDesc": "關閉視窗時不結束, 將應用程式保留在系統匣.",
     "counterReset": "按鍵計數器已重置.",
     "counterResetFailed": "重置按鍵計數器失敗.",
     "obsMode": "啟用 OBS 模式",

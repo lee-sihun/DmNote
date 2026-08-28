@@ -98,6 +98,7 @@
           "overlay_set_anchor",
           "overlay_set_lock",
           "overlay_set_visible",
+          "overlay_sync_hit_regions",
           "overlay_transition_fade",
           "panel_window_apply_native_chrome",
           "panel_window_arm_open",

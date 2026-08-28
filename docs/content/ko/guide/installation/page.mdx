@@ -11,7 +11,7 @@ DM Note는 GitHub Releases에서 다운로드할 수 있습니다.
 
 1. [GitHub Releases 페이지](https://github.com/DmNote-App/DmNote/releases)에서 최신 버전을 다운로드합니다.
 2. 다운로드한 ZIP 파일의 압축을 원하는 위치에 해제합니다.
-3. `DM Note.exe` 파일을 실행합니다.
+3. `dm-note.exe` 파일을 실행합니다.
 
 <Callout type="info">
   **별도 설치 과정이 필요 없습니다.** 압축을 해제한 후 바로 실행할 수 있는
@@ -35,6 +35,12 @@ DM Note는 GitHub Releases에서 다운로드할 수 있습니다.
   보호했습니다" 메시지가 나타나면, "추가 정보"를 클릭한 후 "실행"을 선택하세요.
 </Callout>
 
+Windows 릴리스의 빌드·승인·서명 범위는 [Code signing policy](https://github.com/DmNote-App/DmNote/blob/main/CODE_SIGNING_POLICY.md)에서 확인할 수 있습니다.
+
+## 제거
+
+DM Note는 포터블 앱입니다. 앱을 종료하고 압축을 해제한 폴더를 삭제하면 프로그램이 제거됩니다. 저장된 설정과 사용자가 추가한 자산도 모두 지우려면 필요한 내용을 백업한 뒤 `%appdata%/com.dmnote.desktop` 폴더를 삭제합니다.
+
 ## 설정 파일 위치
 
 프로그램 설정은 다음 경로에 자동으로 저장됩니다.
@@ -43,9 +49,10 @@ DM Note는 GitHub Releases에서 다운로드할 수 있습니다.
 %appdata%/com.dmnote.desktop/store.json
 ```
 
-전체 설정을 백업하고 싶으면 해당 파일의 복사본을 만드는걸 추천합니다. 
+전체 설정을 백업하고 싶으면 해당 파일의 복사본을 만드는걸 추천합니다.
 
 {/*
+
 ## 업데이트
 
 새 버전이 출시되면.

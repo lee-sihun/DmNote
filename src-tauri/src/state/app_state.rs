@@ -51,7 +51,10 @@ use crate::{
         SettingsDiff, SettingsState, TabCssOverrides,
     },
     services::{
-        css_watcher::CssWatcher, event_publisher::publish_event, obs_bridge::ObsBridgeService,
+        css_watcher::CssWatcher,
+        event_publisher::publish_event,
+        obs_bridge::ObsBridgeService,
+        overlay_hit::{OverlayHitRect, OverlayHitService},
         settings::SettingsService,
     },
     state::local_asset_path::path_identity_key,
@@ -1055,6 +1058,9 @@ pub struct AppState {
     /// 오버레이 생성·가시성 전환 single-flight 가드
     /// 메인 스레드 이벤트 콜백에서 획득 금지 — setup 훅은 이벤트 루프 가동 전이라 예외
     overlay_creation_lock: Mutex<()>,
+    /// 키 영역 히트 창. 내부 잠금은 store·overlay_creation_lock·번호표와 교차하지 않는다 -
+    /// reconcile 경로에서 store.update를 호출하면 이 불변식이 깨진다
+    overlay_hit: OverlayHitService,
     overlay_bounds_generation: Arc<AtomicU64>,
     plugin_authority: PluginRuntimeAuthority,
     panel_bounds_persistence: Arc<PanelBoundsPersistenceController>,
@@ -1259,6 +1265,11 @@ impl AppState {
             overlay_force_close: Arc::new(AtomicBool::new(false)),
             overlay_initializing: Arc::new(AtomicBool::new(false)),
             overlay_creation_lock: Mutex::new(()),
+            overlay_hit: OverlayHitService::new(
+                snapshot.overlay_visible,
+                snapshot.overlay_locked,
+                snapshot.always_on_top,
+            ),
             overlay_bounds_generation: Arc::new(AtomicU64::new(0)),
             plugin_authority: PluginRuntimeAuthority::default(),
             panel_bounds_persistence,
@@ -1646,6 +1657,7 @@ impl AppState {
                 return;
             }
         }
+        self.overlay_hit.reset_for_parent_loss();
         // destroy 성공(또는 윈도우 부재) 후 런타임 플래그만 갱신
         // store.overlay_visible은 변경하지 않음 — ensure_overlay_window가 재생성 시
         // 이 값을 기준으로 show/hide를 결정하므로, 원래 값을 유지해야 함
@@ -1736,14 +1748,27 @@ impl AppState {
             let snapshot = self.store.snapshot();
             show_overlay_window(&window, snapshot.always_on_top)?;
 
-            // 오버레이가 숨겨진 동안 변경된 설정을 다시 적용
-            window.set_ignore_cursor_events(snapshot.overlay_locked)?;
+            // 오버레이가 숨겨진 동안 변경된 설정을 다시 적용.
+            // 본체는 상시 클릭 통과 - 실제 잠금은 히트 창이 강제한다
+            window.set_ignore_cursor_events(true)?;
             window.set_always_on_top(snapshot.always_on_top)?;
             #[cfg(target_os = "macos")]
             apply_macos_overlay_fullscreen_behavior(&window, snapshot.always_on_top);
+            if let Err(error) = self.overlay_hit.set_configuration(
+                app,
+                true,
+                snapshot.overlay_locked,
+                snapshot.always_on_top,
+            ) {
+                log::warn!("failed to configure overlay hit windows: {error:#}");
+            }
         } else {
             // 오버레이를 숨길 때: 창이 존재하는 경우에만 숨김
             // 창 미존재 시 무시 (창 생성하지 않음)
+            // 히트 창 먼저 - CloseRequested의 HideAndPersist와 같은 전환 순서
+            if let Err(error) = self.overlay_hit.set_visible(app, false) {
+                log::warn!("failed to hide overlay hit windows: {error:#}");
+            }
             if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
                 hide_overlay_window(&window)?;
             }
@@ -1772,6 +1797,8 @@ impl AppState {
                 );
                 *self.overlay_visible.write() = visible;
                 publish_event(app, "overlay:visibility", json!({ "visible": visible }));
+            } else if let Err(error) = self.overlay_hit.set_visible(app, !visible) {
+                log::warn!("failed to restore overlay hit visibility: {error:#}");
             }
             return Err(persist_err);
         }
@@ -1793,16 +1820,23 @@ impl AppState {
             })?;
         }
 
-        // 오버레이가 보이는 상태일 때만 설정 적용
-        // 비표시 상태: 설정값만 저장, 오버레이 열 때 적용
-        let is_visible = *self.overlay_visible.read();
-        if is_visible {
-            if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
-                window.set_ignore_cursor_events(locked)?;
-            }
+        // 본체는 상시 클릭 통과라 잠금은 히트 창에만 반영한다
+        if let Err(error) = self.overlay_hit.set_locked(app, locked) {
+            log::warn!("failed to update overlay hit lock: {error:#}");
         }
         publish_event(app, "overlay:lock", json!({ "locked": locked }));
         Ok(())
+    }
+
+    pub fn sync_overlay_hit_regions(
+        &self,
+        app: &AppHandle,
+        rects: Vec<OverlayHitRect>,
+        revision: u64,
+        device_pixel_ratio: f64,
+    ) -> Result<()> {
+        self.overlay_hit
+            .sync_regions(app, rects, revision, device_pixel_ratio)
     }
 
     pub fn shutdown(&self) {
@@ -3864,8 +3898,17 @@ impl AppState {
             }
         }
 
-        window.set_ignore_cursor_events(snapshot.overlay_locked)?;
+        // 본체는 상시 클릭 통과 - 실제 잠금은 히트 창이 강제한다
+        window.set_ignore_cursor_events(true)?;
         window.set_always_on_top(snapshot.always_on_top)?;
+        if let Err(error) = self.overlay_hit.set_configuration(
+            app,
+            snapshot.overlay_visible,
+            snapshot.overlay_locked,
+            snapshot.always_on_top,
+        ) {
+            log::warn!("failed to configure overlay hit windows: {error:#}");
+        }
         // show_overlay_window 내부에서 호출하므로, visible일 때만 적용
         // hidden 상태에서 호출 시 orderFrontRegardless가 윈도우를 강제 표시함
         #[cfg(target_os = "macos")]
@@ -3912,6 +3955,7 @@ impl AppState {
         let force_close_flag = self.overlay_force_close.clone();
         let initializing_flag = self.overlay_initializing.clone();
         let bounds_generation = self.overlay_bounds_generation.clone();
+        let overlay_hit = self.overlay_hit.clone();
 
         window.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {
@@ -3927,11 +3971,14 @@ impl AppState {
                     lifecycle_pending,
                 ) {
                     OverlayCloseAction::AllowClose => {
-                        // 앱 종료 시 — 실제 close 허용
+                        // 앱 종료 시 — 실제 close 허용.
+                        // 히트 창 정리는 뒤따르는 Destroyed가 맡는다 - 종료 중
+                        // 메인 스레드 디스패치는 도달을 보장할 수 없다
                         *overlay_visible.write() = false;
                     }
                     OverlayCloseAction::PreserveVisibility => {
-                        // Windows의 작업 표시줄 그룹 종료가 오버레이에도 WM_CLOSE를 보내는 구간
+                        // Windows의 작업 표시줄 그룹 종료가 오버레이에도 WM_CLOSE를 보내는 구간.
+                        // 표시 상태를 보존하는 경로라 히트 창도 그대로 둔다
                         api.prevent_close();
                         log::debug!(
                             "[Overlay] preserving visibility during frontend lifecycle flush"
@@ -3946,8 +3993,12 @@ impl AppState {
                             return;
                         }
                         // 숨김 먼저, 저장은 성공 후 — set_overlay_visibility와 같은 전환 계약
+                        if let Err(err) = overlay_hit.set_visible(&app_handle, false) {
+                            log::warn!("failed to hide overlay hit windows on close: {err:#}");
+                        }
                         if let Err(err) = overlay_window.hide() {
                             log::error!("failed to hide overlay window on close: {err}");
+                            let _ = overlay_hit.set_visible(&app_handle, true);
                             return;
                         }
                         if let Err(err) = store.update(|state| {
@@ -3964,6 +4015,10 @@ impl AppState {
                                     "overlay:visibility",
                                     json!({ "visible": false }),
                                 );
+                            } else if let Err(error) =
+                                overlay_hit.set_visible(&app_handle, true)
+                            {
+                                log::warn!("failed to restore overlay hit windows: {error:#}");
                             }
                             return;
                         }
@@ -3998,7 +4053,18 @@ impl AppState {
                     ) {
                         log::warn!("failed to defer overlay bounds: {err}");
                     }
+                    if let Err(err) = overlay_hit.reconcile(&app_handle) {
+                        log::warn!("failed to follow overlay hit windows: {err:#}");
+                    }
                 }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                if let Err(err) = overlay_hit.reconcile(&app_handle) {
+                    log::warn!("failed to rescale overlay hit windows: {err:#}");
+                }
+            }
+            WindowEvent::Destroyed => {
+                overlay_hit.reset_for_parent_loss();
+            }
             _ => {}
         });
     }
@@ -4015,15 +4081,15 @@ impl AppState {
                     apply_macos_overlay_fullscreen_behavior(&window, value);
                 }
             }
+            if let Err(error) = self.overlay_hit.set_always_on_top(app, value) {
+                log::warn!("failed to update overlay hit always-on-top: {error:#}");
+            }
         }
 
         if let Some(value) = diff.changed.overlay_locked {
-            // 오버레이가 보이는 상태일 때만 lock 설정 적용
-            // 비표시 상태: 설정값 저장 완료, 오버레이 열 때 적용
-            if is_visible {
-                if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
-                    window.set_ignore_cursor_events(value)?;
-                }
+            // 본체는 상시 클릭 통과라 잠금은 히트 창에만 반영한다
+            if let Err(error) = self.overlay_hit.set_locked(app, value) {
+                log::warn!("failed to update overlay hit lock: {error:#}");
             }
             publish_event(app, "overlay:lock", json!({ "locked": value }));
         }

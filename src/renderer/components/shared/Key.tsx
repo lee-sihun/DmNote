@@ -512,6 +512,7 @@ export const Key = React.memo(function Key({
       style={keyStyle}
       data-state={active ? 'active' : 'inactive'}
       data-key-element="true"
+      data-overlay-hit="true"
       data-key-image={hasCurrentImage ? 'true' : undefined}
       data-key-image-mode={hasCurrentImage ? imageMode : undefined}
     >

@@ -91,6 +91,7 @@
     "customJSDesc": "Runs JS plugins for advanced behavior.",
     "resizeAnchorDesc": "Selects the resize anchor point for the overlay window.",
     "keyCounterDesc": "Track and display the number of presses for each key.",
+    "trayEnabledDesc": "Keeps the app in the tray instead of quitting when the window closes.",
     "counterReset": "Key counters have been reset.",
     "counterResetFailed": "Failed to reset key counters.",
     "obsMode": "Enable OBS Mode",
