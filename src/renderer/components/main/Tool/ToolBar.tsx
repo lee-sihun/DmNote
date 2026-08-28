@@ -76,6 +76,8 @@ const ToolBar = ({
             <div className="flex items-center h-[40px] p-[5px] bg-fill-faint rounded-surface gap-[4px]">
               <FloatingTooltip content={t('tooltip.github')}>
                 <button
+                  type="button"
+                  aria-label={t('tooltip.github')}
                   onClick={() =>
                     handleExternal('https://github.com/DmNote-App/DmNote')
                   }
@@ -167,6 +169,7 @@ const TrackSettingButton = ({
         <FloatingTooltip content={t('tooltip.trackSettings') || '트랙 설정'}>
           <button
             type="button"
+            aria-label={t('tooltip.trackSettings') || '트랙 설정'}
             onClick={onOpenNoteSetting}
             className="flex items-center justify-center h-[30px] w-[30px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
             {...motionProps}

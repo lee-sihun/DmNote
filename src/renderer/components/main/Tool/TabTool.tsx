@@ -38,6 +38,9 @@ const TabTool = () => {
       </div>
       <button
         ref={gridButtonRef}
+        type="button"
+        aria-label={t('tabs.title')}
+        title={t('tabs.title')}
         className="flex items-center justify-center w-[40px] h-[40px] p-[5px] bg-fill-faint rounded-surface"
         onClick={() => {
           if (!isBootstrapped) return;

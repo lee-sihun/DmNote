@@ -97,4 +97,39 @@ describe('SettingTool modal lock', () => {
     ).toBe('false');
     expect(useUIStore.getState().isExportImportPopupOpen).toBe(false);
   });
+
+  it('FloatingTooltip 버튼은 접근성 이름만 제공하고 native title을 중복하지 않는다', async () => {
+    await render();
+
+    for (const label of [
+      'tooltip.exportPreset',
+      'tooltip.importExport',
+      'tooltip.overlayClose',
+      'tooltip.settings',
+    ]) {
+      const button = host.querySelector<HTMLButtonElement>(
+        `[aria-label="${label}"]`,
+      );
+      expect(button, label).not.toBeNull();
+      expect(button?.hasAttribute('title')).toBe(false);
+    }
+
+    await act(async () => {
+      host
+        .querySelector<HTMLButtonElement>('[aria-label="tooltip.overlayClose"]')
+        ?.click();
+    });
+    const openOverlayButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="tooltip.overlayOpen"]',
+    );
+    expect(openOverlayButton).not.toBeNull();
+    expect(openOverlayButton?.hasAttribute('title')).toBe(false);
+
+    await act(async () => root.render(<SettingTool isSettingsOpen />));
+    const backButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="tooltip.back"]',
+    );
+    expect(backButton).not.toBeNull();
+    expect(backButton?.hasAttribute('title')).toBe(false);
+  });
 });

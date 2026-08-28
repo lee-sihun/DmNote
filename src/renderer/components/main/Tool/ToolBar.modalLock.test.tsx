@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerPopupLayer } from '../Modal/popupLayer';
 import ToolBar from './ToolBar';
 
+const settingsState = vi.hoisted(() => ({ noteEffect: false }));
+
 vi.mock('./CanvasTool', () => ({
   default: ({ interactionDisabled }: { interactionDisabled?: boolean }) => (
     <button data-testid="canvas" disabled={interactionDisabled} />
@@ -18,6 +20,9 @@ vi.mock('./SettingTool', () => ({
 vi.mock('./TabTool', () => ({
   default: () => <button data-testid="tabs" />,
 }));
+vi.mock('@assets/svgs/github.svg', () => ({ default: () => null }));
+vi.mock('@assets/svgs/code.svg', () => ({ default: () => null }));
+vi.mock('./icons/FaderIcon', () => ({ default: () => null }));
 vi.mock('../Modal/TooltipGroup', () => ({
   TooltipGroup: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -28,7 +33,7 @@ vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock('@stores/useSettingsStore', () => ({
-  useSettingsStore: () => ({ noteEffect: false }),
+  useSettingsStore: () => settingsState,
 }));
 vi.mock('@hooks/useSingleFlightAction', () => ({
   useSingleFlightAction: () => ({ run: vi.fn(), pending: false }),
@@ -52,6 +57,7 @@ describe('ToolBar modal lock', () => {
   beforeEach(async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     vi.clearAllMocks();
+    settingsState.noteEffect = false;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -121,5 +127,23 @@ describe('ToolBar modal lock', () => {
     await registerLayer('modal');
 
     expect(props.onClosePalette).toHaveBeenCalledOnce();
+  });
+
+  it('FloatingTooltip 버튼은 번역된 접근성 이름만 제공한다', async () => {
+    settingsState.noteEffect = true;
+    await act(async () => root.render(<ToolBar {...props} />));
+
+    const trackButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="tooltip.trackSettings"]',
+    );
+    expect(trackButton).not.toBeNull();
+    expect(trackButton?.hasAttribute('title')).toBe(false);
+
+    await act(async () => root.render(<ToolBar {...props} isSettingsOpen />));
+    const githubButton = host.querySelector<HTMLButtonElement>(
+      '[aria-label="tooltip.github"]',
+    );
+    expect(githubButton).not.toBeNull();
+    expect(githubButton?.hasAttribute('title')).toBe(false);
   });
 });
