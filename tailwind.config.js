@@ -37,9 +37,20 @@ module.exports = {
         },
         fg: {
           DEFAULT: 'var(--ui-fg)',
+          strong: 'var(--ui-fg-strong)',
           muted: 'var(--ui-fg-muted)',
           faint: 'var(--ui-fg-faint)',
           disabled: 'var(--ui-fg-disabled)',
+        },
+        scrim: 'var(--ui-scrim)',
+        control: {
+          knob: 'var(--ui-control-knob)',
+          'track-off': 'var(--ui-control-track-off)',
+          'track-off-hover': 'var(--ui-control-track-off-hover)',
+        },
+        handle: {
+          DEFAULT: 'var(--ui-handle-fill)',
+          ring: 'var(--ui-handle-ring)',
         },
         accent: {
           DEFAULT: 'var(--ui-accent)',
@@ -96,6 +107,7 @@ module.exports = {
         'elevation-popup': 'var(--ui-shadow-popup)',
         'elevation-chrome': 'var(--ui-shadow-chrome)',
         'elevation-panel': 'var(--ui-shadow-panel)',
+        handle: 'var(--ui-handle-shadow)',
         'focus-ring': 'var(--ui-focus-ring)',
         'danger-ring': 'var(--ui-danger-ring)',
       },

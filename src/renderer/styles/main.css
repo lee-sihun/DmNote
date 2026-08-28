@@ -100,33 +100,43 @@ body.dmn-dragging * {
    글래스는 일시 표면(모달·팝업) 전용 유지. 표면 transform은 등퇴장 한 번만
    허용하고, 상주 중 반복 애니메이션은 금지 (프레임마다 재필터를 부름) */
 .backdrop-glass {
-  -webkit-backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
+  -webkit-backdrop-filter: blur(32px)
+    contrast(var(--ui-glass-backdrop-contrast))
+    brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
-  backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
+  backdrop-filter: blur(32px) contrast(var(--ui-glass-backdrop-contrast))
+    brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
 }
 
 .backdrop-glass-popup {
-  -webkit-backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
+  -webkit-backdrop-filter: blur(24px)
+    contrast(var(--ui-glass-backdrop-contrast))
+    brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
-  backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
+  backdrop-filter: blur(24px) contrast(var(--ui-glass-backdrop-contrast))
+    brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
 }
 
 /* canvas 위 표면은 배경색이 재질을 지배하지 않게 clamp 강화 */
 :where(.backdrop-glass-canvas).backdrop-glass {
   -webkit-backdrop-filter: blur(32px)
+    contrast(var(--ui-glass-canvas-backdrop-contrast))
     brightness(var(--ui-glass-canvas-backdrop-dim))
     saturate(var(--ui-glass-canvas-backdrop-sat));
-  backdrop-filter: blur(32px) brightness(var(--ui-glass-canvas-backdrop-dim))
+  backdrop-filter: blur(32px) contrast(var(--ui-glass-canvas-backdrop-contrast))
+    brightness(var(--ui-glass-canvas-backdrop-dim))
     saturate(var(--ui-glass-canvas-backdrop-sat));
 }
 
 :where(.backdrop-glass-canvas).backdrop-glass-popup {
   -webkit-backdrop-filter: blur(24px)
+    contrast(var(--ui-glass-canvas-backdrop-contrast))
     brightness(var(--ui-glass-canvas-backdrop-dim))
     saturate(var(--ui-glass-canvas-backdrop-sat));
-  backdrop-filter: blur(24px) brightness(var(--ui-glass-canvas-backdrop-dim))
+  backdrop-filter: blur(24px) contrast(var(--ui-glass-canvas-backdrop-contrast))
+    brightness(var(--ui-glass-canvas-backdrop-dim))
     saturate(var(--ui-glass-canvas-backdrop-sat));
 }
 
@@ -136,7 +146,7 @@ body.dmn-dragging * {
    블러는 첫 프레임부터 상수, 틴트만 페이드. Windows에서 모달 연 채
    키 연타 프레임 실측이 유지 조건 */
 .backdrop-glass-scrim {
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--ui-scrim);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
@@ -164,15 +174,17 @@ body.dmn-dragging * {
 /* 투명도 축소 설정 존중 — 남는 라이브 글래스(모달 카드·팝오버)를 고알파 솔리드로 강등
    틴트 토큰만 요소 스코프에서 승격해 라운딩·인셋 링 재질은 그대로 유지.
    값은 캔버스 위 라이브 합성 결과 기준 — 고알파 솔리드는 뒷면을 거의 안 받으므로
-   스크림 위 모달에서는 라이브보다 한 톤 밝게 뜬다. blur 없이는 맥락 반영이 불가능 */
+   스크림 위 모달에서는 라이브보다 한 톤 밝게 뜬다. blur 없이는 맥락 반영이 불가능.
+   승격 값을 리터럴로 두면 요소 스코프가 테마 루트를 이겨 라이트에서도 다크 면이 뜬다 -
+   반드시 테마가 소유한 *-reduced 토큰을 거칠 것 */
 @media (prefers-reduced-transparency: reduce) {
   .backdrop-glass,
   .backdrop-glass-popup {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    --ui-glass: rgba(26, 26, 30, 0.96);
-    --ui-glass-heavy: rgba(32, 32, 36, 0.96);
-    --ui-glass-dim: rgba(22, 22, 26, 0.94);
+    --ui-glass: var(--ui-glass-reduced);
+    --ui-glass-heavy: var(--ui-glass-heavy-reduced);
+    --ui-glass-dim: var(--ui-glass-dim-reduced);
   }
 
   /* 스크림은 블러만 끄고 알파 딤으로 폴백 */
@@ -189,7 +201,7 @@ body.dmn-dragging * {
 
   /* 글래스 패널 틴트 사용처(사이드 패널 프레임·캔버스 팝업)도 동일 승격 */
   .bg-glass-panel {
-    --ui-glass-panel: rgba(25, 25, 29, 0.96);
+    --ui-glass-panel: var(--ui-glass-panel-reduced);
   }
 }
 
@@ -846,16 +858,16 @@ body.dmn-dragging * {
 }
 
 .webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--ui-scrollbar-thumb);
   border-radius: 2px;
 }
 
 .webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--ui-scrollbar-thumb-hover);
 }
 
 .webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.26);
+  background: var(--ui-scrollbar-thumb-active);
 }
 
 /* 모션 축소 설정 존중 — 이동은 제거, 표시 자체는 유지 */

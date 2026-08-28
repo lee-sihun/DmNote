@@ -1,6 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html data-theme="dark">
   <head>
+    <!-- 사용자 콘텐츠 전용 창이라 앱 테마를 따라가지 않는다.
+         tokens.css가 여기에도 로드되는데 다크 값이 bare :root에 없으므로
+         속성이 빠지면 --ui-* 가 전부 미정의가 된다. 정적 다크로 고정 -->
     <meta charset="UTF-8" />
     <link rel="icon" href="data:," />
   </head>

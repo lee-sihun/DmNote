@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const readSource = (path: string) =>
   readFileSync(resolve(process.cwd(), path), 'utf8');
 
-const TOKENS = readSource('src/renderer/styles/tokens.css');
+const TOKENS = readSource('src/renderer/styles/tokens/base.css');
 
 const tokenValue = (name: string): number => {
   const match = TOKENS.match(new RegExp(`--${name}:\\s*(-?\\d+);`));
@@ -91,7 +91,7 @@ describe('z-index 층 계약', () => {
   });
 
   // 컴포넌트 안에서만 겨루는 작은 값(z-10 등)은 계약 밖이다.
-  // 사다리 구간을 맨숫자로 쓰면 tokens.css가 단일 소스가 아니게 된다
+  // 사다리 구간을 맨숫자로 쓰면 tokens/base.css가 단일 소스가 아니게 된다
   it('크롬 사다리 구간을 맨숫자로 쓰지 않는다', () => {
     const offenders = collectSources('src/renderer').filter((path) => {
       const source = stripComments(readSource(path));

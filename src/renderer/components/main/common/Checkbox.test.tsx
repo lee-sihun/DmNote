@@ -148,7 +148,7 @@ describe('Checkbox commit 전략', () => {
     const trackWidth = pxOf(track.className, /w-\[(\d+)px\]/);
     const thumbWidth = pxOf(thumb.className, /w-\[(\d+)px\]/);
     const inset = pxOf(thumb.className, /left-\[(\d+)px\]/);
-    const tokens = readFileSync('src/renderer/styles/tokens.css', 'utf8');
+    const tokens = readFileSync('src/renderer/styles/tokens/base.css', 'utf8');
     const travel = Number(
       tokens.match(/--ui-toggle-travel:\s*(\d+)px/)?.[1] ?? NaN,
     );

@@ -7,7 +7,7 @@ const mainCss = readFileSync(
   'utf8',
 );
 const tokensCss = readFileSync(
-  resolve(process.cwd(), 'src/renderer/styles/tokens.css'),
+  resolve(process.cwd(), 'src/renderer/styles/tokens/base.css'),
   'utf8',
 );
 

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html data-theme="dark" style="background-color: #131315">
   <head>
     <meta charset="UTF-8" />
-    <!-- 다크 단일 모드 선언. 웹뷰가 직접 그리는 것들(텍스트 선택, autofill,
-         네이티브 폼 컨트롤)에 문서가 다크임을 알린다.
+    <!-- 웹뷰가 직접 그리는 것들(텍스트 선택, autofill, 네이티브 폼 컨트롤)에
+         문서 테마를 알린다. 아래 부트 스크립트가 해석된 값으로 덮어쓴다.
          현재 이 앱에서 눈에 보이는 차이는 없다 - 전역 user-select: none이라 선택이
          막혀 있고, 네이티브 select 0개, 스크롤바 전역 숨김, autofill 대상 폼 없음.
          네이티브 컨트롤이 늘어날 때를 위한 선언적 안전장치다.
@@ -11,8 +11,37 @@
          UA 캔버스가 불투명해지면 오버레이가 검은 박스가 된다 -->
     <meta name="color-scheme" content="dark" />
     <link rel="icon" href="data:," />
+    <!-- 첫 페인트 전에 테마를 확정한다. 토큰이 [data-theme] 아래에만 있고
+         다크 폴백을 bare :root에 두지 않으므로 속성이 반드시 있어야 한다.
+         html 태그의 정적 속성이 그 보증이고, 여기서는 라이트일 때만 바꾼다.
+         이 스크립트가 통째로 실패해도 다크로 남는다.
+
+         localStorage는 표시용 힌트다. 진짜 값은 설정 store가 갖고 부팅 후 덮어쓴다 -
+         설정 도착을 기다리면 첫 프레임이 다크로 번쩍인다.
+         번들 CSS는 dev에서 JS로 주입돼 첫 프레임에 없으므로 바탕색도 여기서 심는다 -->
+    <script>
+      (function () {
+        var LIGHT_ROOT_BG = '#ccd3dc';
+        try {
+          var stored = localStorage.getItem('dmn-ui-theme');
+          var resolved =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark';
+          if (resolved !== 'light') return;
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.documentElement.style.backgroundColor = LIGHT_ROOT_BG;
+          var meta = document.querySelector('meta[name="color-scheme"]');
+          if (meta) meta.setAttribute('content', 'light');
+        } catch (error) {
+          // 저장소 접근이 막힌 환경에서도 다크로 계속 뜬다
+        }
+      })();
+    </script>
   </head>
-  <body style="background-color: #131315">
+  <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
   </body>
