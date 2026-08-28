@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   presetSnapshotListener: null as null | ((payload: unknown) => void),
   resyncListener: null as null | (() => void),
   bootstrap: vi.fn(),
+  syncHistoryStatus: vi.fn(),
   dialogAlert: vi.fn(() => Promise.resolve()),
   editorStateListener: null as null | ((state: EditorCoordinatorState) => void),
   editorState: {
@@ -161,7 +162,7 @@ vi.mock('@api/modules/historyApi', () => ({
 }));
 vi.mock('@stores/data/useHistoryStatusStore', () => ({
   useHistoryStatusStore: { getState: vi.fn(() => ({ applyStatus: vi.fn() })) },
-  syncHistoryStatus: vi.fn(),
+  syncHistoryStatus: mocks.syncHistoryStatus,
 }));
 vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
   flushFocusedEditor: vi.fn(),
@@ -301,6 +302,7 @@ describe('모드 전환 선택 리셋', () => {
   let root: Root;
   let originalApi: Window['api'];
   let originalWindowType: typeof window.__dmn_window_type;
+  let originalRuntime: typeof window.__dmn_runtime;
 
   const snapshotPayload = (selectedKeyType: string) => ({
     customTabs: [],
@@ -320,9 +322,12 @@ describe('모드 전환 선택 리셋', () => {
   beforeEach(async () => {
     originalApi = window.api;
     originalWindowType = window.__dmn_window_type;
+    originalRuntime = window.__dmn_runtime;
     window.__dmn_window_type = 'main';
+    window.__dmn_runtime = 'tauri';
     window.api = makeApiMock();
     mocks.bootstrap.mockReset();
+    mocks.syncHistoryStatus.mockClear();
     mocks.customTabsListener = null;
     mocks.presetSnapshotListener = null;
     mocks.dialogAlert.mockClear();
@@ -343,6 +348,7 @@ describe('모드 전환 선택 리셋', () => {
 
     await mount();
     expect(mocks.bootstrap).toHaveBeenCalledTimes(1);
+    expect(mocks.syncHistoryStatus).toHaveBeenCalledTimes(1);
   });
 
   afterEach(() => {
@@ -350,6 +356,7 @@ describe('모드 전환 선택 리셋', () => {
     container.remove();
     window.api = originalApi;
     window.__dmn_window_type = originalWindowType;
+    window.__dmn_runtime = originalRuntime;
     vi.restoreAllMocks();
   });
 
@@ -388,6 +395,22 @@ describe('모드 전환 선택 리셋', () => {
     });
 
     expect(clearSelection).not.toHaveBeenCalled();
+  });
+
+  it('OBS 런타임에서는 편집 히스토리 상태를 조회하지 않는다', async () => {
+    act(() => root.unmount());
+    container.remove();
+    window.__dmn_runtime = 'obs';
+    mocks.syncHistoryStatus.mockClear();
+    mocks.keyState = {
+      selectedKeyType: '4key',
+      isBootstrapped: false,
+      customTabs: [],
+    };
+
+    await mount();
+
+    expect(mocks.syncHistoryStatus).not.toHaveBeenCalled();
   });
 
   it('오버레이 창에서는 리셋하지 않는다', async () => {
