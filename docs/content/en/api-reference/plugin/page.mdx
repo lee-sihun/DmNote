@@ -101,7 +101,7 @@ interface PluginDefinition {
   /** Settings schema */
   settings?: Record<string, PluginSettingSchema>;
 
-  /** i18n messages (nested objects allowed — PluginMessages) */
+  /** i18n messages (nested objects allowed, PluginMessages) */
   messages?: Record<string, Record<string, unknown>>;
 
   /** Preview state (for the main window) */
@@ -282,8 +282,8 @@ A section starts a card and controls the whole group through `visible`. Its key 
 a layout identifier and never appears in stored values, defaults, getters, or
 change callbacks. Panel and modal settings UIs follow the same rules, and
 visibility exceptions hide the affected item or group (fail-closed). The legacy
-`divider` type was removed — divider entries in existing plugins are ignored as
-an unsupported type.
+`divider` type was removed, so divider entries in existing plugins are ignored
+as an unsupported type.
 
 ---
 

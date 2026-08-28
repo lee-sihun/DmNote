@@ -93,7 +93,7 @@ use `settingsUI: "modal"` for modal style.
 
 ```javascript fragment=object-members
 settings: {
-  // Card section — starts a new settings card
+  // Card section: starts a new settings card
   appearanceSection: {
     type: "section",
     label: "Appearance", // optional caption above the card
@@ -152,7 +152,7 @@ label still creates a card boundary.
 <Callout type="info">
   The legacy `type: "divider"` (an in-card separator line) was removed together
   with the introduction of sections. Divider entries in existing plugins are
-  ignored (no crash) — use sections to group settings instead.
+  ignored (no crash). Use sections to group settings instead.
 </Callout>
 
 Sections behave identically in the property panel and with `settingsUI: "modal"`.
@@ -177,7 +177,7 @@ settings: {
     visible: (settings) => settings.showGraph,
   },
 
-  // Static boolean — always hidden
+  // Static boolean, always hidden
   hiddenOption: {
     type: "number",
     default: 5,
@@ -185,7 +185,7 @@ settings: {
     visible: false,
   },
 
-  // Function — dynamically show/hide based on other settings
+  // Function, dynamically show/hide based on other settings
   graphColor: {
     type: "color",
     default: "#86EFAC",
@@ -202,7 +202,7 @@ settings: {
 ```
 
 <Callout type="info">
-  Hidden settings retain their stored values — only display is controlled, no data loss.
+  Hidden settings retain their stored values. Only display is controlled, no data loss.
 </Callout>
 
 On a `section`, `visible` hides the entire group up to the next section. The boundary
@@ -429,7 +429,7 @@ appear below them.
 
 <Callout type="info">
   Menu predicates run in the main window with `{ element, actions }`. Overlay
-  runtime state set via `setState` is not synced into this context by default —
+  runtime state set via `setState` is not synced into this context by default, so
   `element.state` here reflects the main-window state (initialized from
   `previewState`). To base conditions on overlay state, declare the keys in
   `contextMenuStateKeys`.

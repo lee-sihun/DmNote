@@ -5,20 +5,20 @@ description: 키음 라이브러리를 위한 dmn.sound API 레퍼런스
 
 # 사운드 API
 
-키음 라이브러리 — 키 요소가 눌릴 때 재생할 수 있는 오디오 파일 풀 — 를
-관리합니다. 사운드는 앱 데이터의 `sounds` 디렉토리에 저장되며, 사용자가
+키음 라이브러리를 관리합니다. 키 요소가 눌릴 때 재생할 수 있는 오디오 파일
+풀입니다. 사운드는 앱 데이터의 `sounds` 디렉토리에 저장되며, 사용자가
 가져온 파일(`local`)과 기본 내장 파일(`builtin`)로 나뉩니다.
 
 ## 타입
 
 ```typescript
 type SoundListItem = {
-  soundPath: string; // 절대 경로 — 안정적인 식별자로도 사용
+  soundPath: string; // 절대 경로, 안정적인 식별자로도 사용
   fileName: string;
   sizeBytes: number;
   modifiedAtMs?: number;
-  hidden: boolean; // 피커 목록에서 숨김 — 재생에는 영향 없음
-  enabled: boolean; // deprecated — hidden의 역논리 별칭, 1.6.1 호환 유지용
+  hidden: boolean; // 피커 목록에서 숨김, 재생에는 영향 없음
+  enabled: boolean; // deprecated. hidden의 역논리 별칭, 1.6.1 호환 유지용
   source: 'local' | 'builtin';
   originalPath?: string; // 트림 전 원본 (편집된 사운드에 존재)
   trimStartRatio?: number;
@@ -77,7 +77,7 @@ type SoundSetHiddenResult = {
 ### `dmn.sound.setEnabled(soundPath, enabled): Promise<SoundSetEnabledResult>`
 
 <Callout type="warning">
-  Deprecated — 하위 호환용 역논리 별칭입니다. `enabled`는 단순히
+  Deprecated. 하위 호환용 역논리 별칭입니다. `enabled`는 단순히
   `!hidden`이며, `setHidden`을 사용하세요.
 </Callout>
 

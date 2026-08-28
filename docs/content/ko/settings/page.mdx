@@ -49,7 +49,7 @@ const pluginSettings = dmn.plugin.defineSettings({
       default: true,
       label: "활성화",
     },
-    // 조건부 표시 — 정적 boolean 또는 함수, enabled가 true일 때만 표시
+    // 조건부 표시. 정적 boolean 또는 함수, enabled가 true일 때만 표시
     advancedOption: {
       type: "number",
       default: 5,
@@ -59,7 +59,7 @@ const pluginSettings = dmn.plugin.defineSettings({
   },
 });
 
-// section은 새 카드를 시작합니다. (과거의 divider 타입은 제거됨 — 기존 플러그인의 divider는 무시)
+// section은 새 카드를 시작합니다. (과거의 divider 타입은 제거됨, 기존 플러그인의 divider는 무시)
 
 // 설정값 조회
 const current = pluginSettings.get();

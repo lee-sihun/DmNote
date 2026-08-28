@@ -10,7 +10,7 @@ description: dmn.knobItems API reference for HID knob elements
   changes through the revision coordinator.
 </Callout>
 
-Manage knob elements — rotary visualization elements bound to HID device axes
+Manage knob elements: rotary visualization elements bound to HID device axes
 (e.g., rhythm game controller knobs). While HID device **buttons** are mapped
 and visualized exactly like keyboard keys, **axes** are visualized with
 dedicated knob elements that rotate along with the physical knob.
@@ -54,15 +54,15 @@ type KnobItemPositions = Record<string, KnobItemPosition[]>;
 
 Commonly used inherited styling fields:
 
-- `backgroundColor` / `activeBackgroundColor` — idle / turning fill color
-- `borderColor` / `activeBorderColor` — idle / turning border color
-- `borderWidth` — solid border thickness in px when explicitly greater than 0; an omitted width uses a 1 px fallback only for a gradient border, and 0 disables both border forms
-- `backgroundGradient` / `activeBackgroundGradient` — background gradient (GradientSpec, takes priority over the solid color)
-- `borderGradient` / `activeBorderGradient` — border gradient (GradientSpec)
-- `shadow` / `activeShadow` — idle / turning shadow (ElementShadowSpec; color alpha controls opacity)
-- `borderRadius` — corner radius in px; when unset the knob is a circle
-- `inactiveImage` / `activeImage` — idle / turning custom image
-- `idleTransparent` / `activeTransparent` — transparent background toggles
+- `backgroundColor` / `activeBackgroundColor`: idle / turning fill color
+- `borderColor` / `activeBorderColor`: idle / turning border color
+- `borderWidth`: solid border thickness in px when explicitly greater than 0; an omitted width uses a 1 px fallback only for a gradient border, and 0 disables both border forms
+- `backgroundGradient` / `activeBackgroundGradient`: background gradient (GradientSpec, takes priority over the solid color)
+- `borderGradient` / `activeBorderGradient`: border gradient (GradientSpec)
+- `shadow` / `activeShadow`: idle / turning shadow (ElementShadowSpec; color alpha controls opacity)
+- `borderRadius`: corner radius in px; when unset the knob is a circle
+- `inactiveImage` / `activeImage`: idle / turning custom image
+- `idleTransparent` / `activeTransparent`: transparent background toggles
 
 `ElementShadowSpec` contains `enabled`, `color`, `offsetX`, `offsetY`, and
 `blur`. Offsets accept -100–100 px and blur accepts 0–100 px.

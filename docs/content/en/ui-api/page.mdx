@@ -82,7 +82,7 @@ dmn.ui.contextMenu.addGridMenuItem({
 }
 ```
 
-`visible` and `disabled` accept a boolean or a function of the context. A function that throws is treated as hidden / disabled (the rest of the menu still renders), and non-function values are coerced by truthiness — `0`, `""`, and `null` hide an item when passed to `visible`, and leave it enabled when passed to `disabled`.
+`visible` and `disabled` accept a boolean or a function of the context. A function that throws is treated as hidden / disabled (the rest of the menu still renders), and non-function values are coerced by truthiness. `0`, `""`, and `null` hide an item when passed to `visible`, and leave it enabled when passed to `disabled`.
 
 ### Menu Management
 

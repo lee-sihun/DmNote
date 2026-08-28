@@ -5,7 +5,7 @@ description: dmn.sound API reference for the key sound library
 
 # Sound API
 
-Manage the key sound library — the pool of audio files that key elements can
+Manage the key sound library: the pool of audio files that key elements can
 play on press. Sounds live in the app data `sounds` directory and include both
 user-imported files (`local`) and bundled ones (`builtin`).
 
@@ -13,12 +13,12 @@ user-imported files (`local`) and bundled ones (`builtin`).
 
 ```typescript
 type SoundListItem = {
-  soundPath: string; // absolute path — also the stable identifier
+  soundPath: string; // absolute path, also the stable identifier
   fileName: string;
   sizeBytes: number;
   modifiedAtMs?: number;
-  hidden: boolean; // hidden from picker lists — playback is unaffected
-  enabled: boolean; // deprecated — inverse alias of hidden, kept for 1.6.1 compat
+  hidden: boolean; // hidden from picker lists, playback is unaffected
+  enabled: boolean; // deprecated, inverse alias of hidden kept for 1.6.1 compat
   source: 'local' | 'builtin';
   originalPath?: string; // pre-trim original (present for edited sounds)
   trimStartRatio?: number;
@@ -31,7 +31,7 @@ type SoundListItem = {
 
 ### `dmn.sound.list(): Promise<SoundListItem[]>`
 
-Returns every sound in the library, **including hidden ones** — filtering by
+Returns every sound in the library, **including hidden ones**. Filtering by
 `hidden` is up to the caller (the built-in picker hides them from its default
 views and shows them under a "Hidden Sounds" filter).
 
@@ -77,7 +77,7 @@ type SoundSetHiddenResult = {
 ### `dmn.sound.setEnabled(soundPath, enabled): Promise<SoundSetEnabledResult>`
 
 <Callout type="warning">
-  Deprecated — inverse alias kept for backward compatibility. `enabled` is
+  Deprecated. Inverse alias kept for backward compatibility. `enabled` is
   simply `!hidden`; use `setHidden` instead.
 </Callout>
 
@@ -101,5 +101,5 @@ Overwrites an edited sound's processed WAV in place.
 ### `dmn.sound.setLatencyLogging(enabled): Promise<void>`
 
 Toggles key-sound latency logging in the audio engine. Enabling is only
-available in dev/debug builds — release builds reject `enabled: true` with an
+available in dev/debug builds. Release builds reject `enabled: true` with an
 error.

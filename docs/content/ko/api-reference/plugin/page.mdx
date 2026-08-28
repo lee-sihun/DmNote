@@ -117,7 +117,7 @@ interface PluginDefinition {
   /** 설정 스키마 */
   settings?: Record<string, PluginSettingSchema>;
 
-  /** 다국어 메시지 (중첩 객체 허용 — PluginMessages) */
+  /** 다국어 메시지 (중첩 객체 허용, PluginMessages) */
   messages?: Record<string, Record<string, unknown>>;
 
   /** 미리보기 상태 (메인 윈도우용) */
@@ -262,7 +262,7 @@ type PluginSettingSchema =
 값 설정과 section의 union입니다. section 키는 레이아웃 식별자로 저장값·기본값·조회값·
 변경 콜백에 포함되지 않으며, 카드를 시작하고 `visible`로 그룹 전체를 제어합니다.
 패널과 모달은 같은 의미 규칙을 사용하고 visibility 예외는 해당 항목/그룹을 숨기는
-fail-closed 방식으로 처리합니다. 과거의 `divider` 타입은 제거되었습니다 —
+fail-closed 방식으로 처리합니다. 과거의 `divider` 타입은 제거되었고
 기존 플러그인의 divider 항목은 미지원 타입으로 무시됩니다.
 
 ## 예시

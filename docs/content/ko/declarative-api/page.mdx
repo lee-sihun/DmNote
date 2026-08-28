@@ -93,7 +93,7 @@ dmn.plugin.defineElement({
 
 ```javascript fragment=object-members
 settings: {
-  // 카드 섹션 — 새 설정 카드를 시작
+  // 카드 섹션. 새 설정 카드를 시작
   appearanceSection: {
     type: "section",
     label: "모양", // 카드 위 캡션, 선택사항
@@ -176,7 +176,7 @@ settings: {
     visible: (settings) => settings.showGraph,
   },
 
-  // 정적 boolean — 항상 숨김
+  // 정적 boolean, 항상 숨김
   hiddenOption: {
     type: "number",
     default: 5,
@@ -184,7 +184,7 @@ settings: {
     visible: false,
   },
 
-  // 함수 — 다른 설정값에 따라 동적으로 표시/숨김
+  // 함수, 다른 설정값에 따라 동적으로 표시/숨김
   graphColor: {
     type: "color",
     default: "#86EFAC",
@@ -201,7 +201,7 @@ settings: {
 ```
 
 <Callout type="info">
-  숨겨진 설정의 저장값은 유지됩니다 — 표시만 제어하며 데이터 손실은 없습니다.
+  숨겨진 설정의 저장값은 유지됩니다. 표시만 제어하며 데이터 손실은 없습니다.
 </Callout>
 
 section의 `visible`은 다음 section 전까지의 그룹 전체에 적용됩니다. 숨겨져도 경계는
