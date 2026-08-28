@@ -1657,7 +1657,9 @@ impl AppState {
                 return;
             }
         }
-        self.overlay_hit.reset_for_parent_loss();
+        if let Err(error) = self.overlay_hit.reset_for_parent_loss(app) {
+            log::warn!("failed to reset overlay hit state for OBS mode: {error:#}");
+        }
         // destroy 성공(또는 윈도우 부재) 후 런타임 플래그만 갱신
         // store.overlay_visible은 변경하지 않음 — ensure_overlay_window가 재생성 시
         // 이 값을 기준으로 show/hide를 결정하므로, 원래 값을 유지해야 함
@@ -1834,9 +1836,29 @@ impl AppState {
         rects: Vec<OverlayHitRect>,
         revision: u64,
         device_pixel_ratio: f64,
-    ) -> Result<()> {
-        self.overlay_hit
-            .sync_regions(app, rects, revision, device_pixel_ratio)
+        epoch: u64,
+        renderer_session_id: String,
+    ) -> Result<bool> {
+        self.overlay_hit.sync_regions(
+            app,
+            rects,
+            revision,
+            device_pixel_ratio,
+            epoch,
+            renderer_session_id,
+        )
+    }
+
+    pub fn overlay_hit_renderer_ready(
+        &self,
+        app: &AppHandle,
+        renderer_session_id: String,
+    ) -> Result<u64> {
+        self.overlay_hit.renderer_ready(app, renderer_session_id)
+    }
+
+    pub fn overlay_hit_renderer_load_started(&self, app: &AppHandle) -> Result<()> {
+        self.overlay_hit.renderer_load_started(app)
     }
 
     pub fn shutdown(&self) {
@@ -4058,12 +4080,14 @@ impl AppState {
                     }
                 }
             WindowEvent::ScaleFactorChanged { .. } => {
-                if let Err(err) = overlay_hit.reconcile(&app_handle) {
-                    log::warn!("failed to rescale overlay hit windows: {err:#}");
+                if let Err(err) = overlay_hit.invalidate_for_scale_change(&app_handle) {
+                    log::warn!("failed to invalidate scaled overlay hit regions: {err:#}");
                 }
             }
             WindowEvent::Destroyed => {
-                overlay_hit.reset_for_parent_loss();
+                if let Err(err) = overlay_hit.reset_for_parent_loss(&app_handle) {
+                    log::warn!("failed to reset overlay hit state after parent loss: {err:#}");
+                }
             }
             _ => {}
         });

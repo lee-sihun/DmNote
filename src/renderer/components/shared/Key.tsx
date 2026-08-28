@@ -494,7 +494,19 @@ export const Key = React.memo(function Key({
 
   const counterSettings = useCounterSettings(position?.counter);
 
-  if (isTransparent) return null;
+  if (position.hidden) return null;
+
+  if (isTransparent) {
+    return (
+      <div
+        aria-hidden="true"
+        className={`absolute ${position.className || ''}`}
+        style={{ ...keyStyle, visibility: 'hidden', pointerEvents: 'none' }}
+        data-overlay-hit="true"
+        data-overlay-hit-only="true"
+      />
+    );
+  }
 
   const showInsideCounter =
     counterEnabled &&

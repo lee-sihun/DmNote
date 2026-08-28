@@ -198,6 +198,7 @@ const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
       uid={uid}
       withOffsetVars={true}
       interactive={false}
+      overlayHitRegion
     />
   );
 };

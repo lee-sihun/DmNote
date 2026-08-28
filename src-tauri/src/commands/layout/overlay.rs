@@ -1,11 +1,12 @@
-use serde::Deserialize;
-use tauri::AppHandle;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
     commands::run_blocking,
     errors::CmdResult,
     models::{BootstrapOverlayState, OverlayBounds},
     services::overlay_hit::OverlayHitRect,
+    state::AppState,
 };
 
 #[derive(Debug, Deserialize)]
@@ -57,12 +58,37 @@ pub struct OverlaySyncHitRegionsArgs {
     pub rects: Vec<OverlayHitRect>,
     pub revision: u64,
     /// 웹뷰 실측 배율 - 보정 줌이 곱해져 있어 백엔드가 DPI로 대신 계산할 수 없다
-    #[serde(default = "default_device_pixel_ratio")]
     pub device_pixel_ratio: f64,
+    pub epoch: u64,
+    pub renderer_session_id: String,
 }
 
-fn default_device_pixel_ratio() -> f64 {
-    1.0
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayHitRendererReadyResponse {
+    pub epoch: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlaySyncHitRegionsResponse {
+    pub accepted: bool,
+}
+
+#[tauri::command]
+pub fn overlay_hit_renderer_ready(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    renderer_session_id: String,
+) -> CmdResult<OverlayHitRendererReadyResponse> {
+    if window.label() != "overlay" {
+        return Err(crate::errors::CommandError::msg(
+            "overlay hit renderer can only be readied from the overlay window",
+        ));
+    }
+    let epoch = state.overlay_hit_renderer_ready(&app, renderer_session_id)?;
+    Ok(OverlayHitRendererReadyResponse { epoch })
 }
 
 /// 오버레이 웹뷰가 실측한 키 영역을 히트 창에 반영.
@@ -73,19 +99,22 @@ pub async fn overlay_sync_hit_regions(
     app: AppHandle,
     window: tauri::WebviewWindow,
     payload: OverlaySyncHitRegionsArgs,
-) -> CmdResult<()> {
+) -> CmdResult<OverlaySyncHitRegionsResponse> {
     if window.label() != "overlay" {
         return Err(crate::errors::CommandError::msg(
             "overlay hit regions can only be synced from the overlay window",
         ));
     }
     run_blocking(app, move |app, state| {
-        Ok(state.sync_overlay_hit_regions(
+        let accepted = state.sync_overlay_hit_regions(
             app,
             payload.rects,
             payload.revision,
             payload.device_pixel_ratio,
-        )?)
+            payload.epoch,
+            payload.renderer_session_id,
+        )?;
+        Ok(OverlaySyncHitRegionsResponse { accepted })
     })
     .await
 }

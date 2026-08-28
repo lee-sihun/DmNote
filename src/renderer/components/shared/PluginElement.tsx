@@ -1098,6 +1098,25 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     return { ...baseStyle, ...element.style };
   })();
 
+  const overlayHitStyle: React.CSSProperties | undefined = (() => {
+    if (windowType !== 'overlay') return undefined;
+
+    const hitSize = resolveResizablePluginElementSize(element);
+    return {
+      position: 'absolute',
+      left: elementStyle.left,
+      top: elementStyle.top,
+      right: elementStyle.right,
+      bottom: elementStyle.bottom,
+      transform: elementStyle.transform,
+      transformOrigin: elementStyle.transformOrigin,
+      width: hitSize.width,
+      height: hitSize.height,
+      boxSizing: 'border-box',
+      pointerEvents: 'none',
+    };
+  })();
+
   const attachRef = (node: HTMLDivElement | null) => {
     containerRef.current = node;
     if (node) {
@@ -1572,6 +1591,14 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
   return (
     <>
+      {overlayHitStyle ? (
+        <div
+          aria-hidden="true"
+          style={overlayHitStyle}
+          data-overlay-hit="true"
+          data-plugin-hit-box={element.fullId}
+        />
+      ) : null}
       <div
         ref={attachRef}
         id={element.id}

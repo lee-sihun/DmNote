@@ -79,6 +79,50 @@ const nextRevision = () => {
   return hitRegionRevision;
 };
 
+// 문서마다 1회 발급. 백엔드는 이 값이 현재 ready lease와 같을 때만 측정값을 채택한다.
+// 리로드 전 문서의 늦은 응답이 새 문서 것으로 오인되는 경쟁을 막는다
+const createSessionId = (): string => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+};
+
+const RENDERER_SESSION_ID = createSessionId();
+
+// 백엔드가 무효화할 때마다 올리는 세대. 이 값이 맞아야 측정값이 채택된다
+let currentEpoch: number | null = null;
+
+// 훅이 설치하는 재측정 트리거. 모듈 수준 복구 경로에서도 써야 한다
+let requestMeasure: () => void = () => {};
+
+// ready 재호출 폭주 방지. 거부가 반복돼도 초당 1회를 넘지 않는다
+let announcing = false;
+let lastAnnounceAt = 0;
+const ANNOUNCE_MIN_INTERVAL_MS = 1_000;
+
+// 준비 통보. 최초 handshake와 lease 회수 복구가 같은 경로를 쓴다
+const announceRenderer = (): Promise<void> => {
+  const now = Date.now();
+  if (announcing || now - lastAnnounceAt < ANNOUNCE_MIN_INTERVAL_MS) {
+    return Promise.resolve();
+  }
+  announcing = true;
+  lastAnnounceAt = now;
+  return invoke<{ epoch: number }>('overlay_hit_renderer_ready', {
+    rendererSessionId: RENDERER_SESSION_ID,
+  })
+    .then((result) => {
+      if (adoptEpoch(result.epoch)) requestMeasure();
+    })
+    .catch((error) => {
+      console.warn('Failed to announce overlay hit renderer', error);
+    })
+    .finally(() => {
+      announcing = false;
+    });
+};
+
 // 동일 오류 반복만 억제 - 새로운 오류는 항상 노출
 let lastSyncFailureMessage: string | null = null;
 // 직전 발행 rect - 동일하면 IPC를 생략한다 (옵저버·이벤트 중복 트리거 흡수)
@@ -109,7 +153,25 @@ export const shouldPublishHitRegions = (
 ): boolean =>
   !lastRects || lastDpr !== devicePixelRatio || !rectsEqual(lastRects, rects);
 
+// 역행하는 epoch는 무시한다. handshake 응답과 resync 요청이 엇갈려 도착할 수 있다
+const adoptEpoch = (epoch: number): boolean => {
+  if (
+    !Number.isSafeInteger(epoch) ||
+    (currentEpoch !== null && epoch < currentEpoch)
+  ) {
+    return false;
+  }
+  currentEpoch = epoch;
+  // 재동기화의 핵심 - 좌표가 같아도 반드시 다시 보내도록 기준선을 지운다
+  lastSentRects = null;
+  lastSentDpr = null;
+  return true;
+};
+
 const syncHitRegions = (rects: HitRegionRect[]) => {
+  // handshake 전에는 유효한 epoch가 없다. 보내도 거부되므로 보류하고,
+  // epoch를 받는 즉시 재측정이 걸린다
+  if (currentEpoch === null) return;
   // 보정 줌이 곱해진 실측 배율 - 백엔드가 DPI로 대신 계산할 수 없다
   const devicePixelRatio = window.devicePixelRatio;
   if (
@@ -124,15 +186,24 @@ const syncHitRegions = (rects: HitRegionRect[]) => {
   }
   lastSentRects = rects;
   lastSentDpr = devicePixelRatio;
-  invoke<void>('overlay_sync_hit_regions', {
+  invoke<{ accepted: boolean }>('overlay_sync_hit_regions', {
     payload: {
       rects,
       revision: nextRevision(),
       devicePixelRatio,
+      epoch: currentEpoch,
+      rendererSessionId: RENDERER_SESSION_ID,
     },
   })
-    .then(() => {
+    .then((result) => {
       lastSyncFailureMessage = null;
+      // 거부는 lease나 세대가 어긋났다는 뜻이다. 준비를 다시 알려 되찾는다.
+      // 이걸 안 하면 요청과 거부가 무한 반복되며 히트 창이 영영 안 살아난다
+      if (result && !result.accepted) {
+        lastSentRects = null;
+        lastSentDpr = null;
+        void announceRenderer();
+      }
     })
     .catch((error) => {
       // 실패한 발행은 기준선으로 남기지 않는다 - 같은 rect 재시도가 막히면
@@ -178,13 +249,31 @@ const watchDevicePixelRatio = (onChange: () => void): (() => void) => {
   };
 };
 
-const hitNodes = (): HTMLElement[] =>
-  // 키 전용 표식만 측정 - data-key-element는 스탯 등 다른 요소도 공유하는 스타일 표식
-  Array.from(
-    document.querySelectorAll<HTMLElement>('[data-overlay-hit="true"]'),
-  );
+const HIT_NODE_SELECTOR = '[data-overlay-hit="true"]';
 
-const measureKeyRects = (nodes: HTMLElement[]): HitRegionRect[] => {
+const hitNodes = (): HTMLElement[] =>
+  // 오버레이에서 드래그·우클릭을 받을 모든 표시 요소의 공용 표식
+  Array.from(document.querySelectorAll<HTMLElement>(HIT_NODE_SELECTOR));
+
+const containsHitNode = (node: Node): boolean => {
+  if (node.nodeType !== 1) return false;
+  const element = node as Element;
+  return (
+    element.matches(HIT_NODE_SELECTOR) ||
+    element.querySelector(HIT_NODE_SELECTOR) !== null
+  );
+};
+
+const mutationAffectsHitNodes = (records: MutationRecord[]): boolean =>
+  records.some((record) => {
+    if (record.type === 'attributes') return true;
+    return (
+      Array.from(record.addedNodes).some(containsHitNode) ||
+      Array.from(record.removedNodes).some(containsHitNode)
+    );
+  });
+
+const measureHitRects = (nodes: HTMLElement[]): HitRegionRect[] => {
   const rects: HitRegionRect[] = [];
   nodes.forEach((node) => {
     const rect = node.getBoundingClientRect();
@@ -200,11 +289,11 @@ const measureKeyRects = (nodes: HTMLElement[]): HitRegionRect[] => {
 };
 
 /**
- * 키 rect를 실측해 백엔드 히트 창과 동기화
+ * 표시 요소 rect를 실측해 백엔드 히트 창과 동기화
  *
  * `generation`(레이아웃 계산 결과)이 바뀌면 노드 집합을 다시 모으고 옵저버를
  * 재등록한다. 실제 재측정은 ResizeObserver와 CSS 변경 이벤트가 몰아주므로,
- * 폰트 로드·커스텀 CSS/JS·플러그인 스타일처럼 레이아웃 계산 밖에서 키 크기가
+ * 폰트 로드·커스텀 CSS/JS·플러그인 스타일처럼 레이아웃 계산 밖에서 요소 크기가
  * 변하는 경로까지 원인 열거 없이 덮인다. 같은 rect면 IPC는 생략된다
  */
 export const useOverlayHitRegions = (generation: unknown) => {
@@ -214,14 +303,31 @@ export const useOverlayHitRegions = (generation: unknown) => {
   // IPC 처닝과 재등록 구간의 이벤트 유실이 생김
   useEffect(() => {
     if (IS_OBS) return;
+    let cancelled = false;
     const notify = () => scheduleRef.current();
+    // 백엔드가 측정값을 버렸을 때 오는 요청. 좌표가 같아도 반드시 다시 보낸다
+    const resync = subscribe<{ epoch: number; reason: string }>(
+      'overlay:hit-resync',
+      ({ epoch }) => {
+        if (adoptEpoch(epoch)) notify();
+      },
+    );
     const unsubscribers = [
+      resync,
       subscribe('css:use', notify),
       subscribe('css:content', notify),
       // 탭 스코프 CSS는 별도 채널로 전달됨
       subscribe('tabCss:changed', notify),
     ];
+
+    // 리스너 등록이 끝난 뒤에 준비를 알린다. 먼저 부르면 백엔드의 첫 요청을 놓친다
+    void resync.ready.then(() => {
+      if (cancelled) return;
+      return announceRenderer();
+    });
+
     return () => {
+      cancelled = true;
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, []);
@@ -231,6 +337,9 @@ export const useOverlayHitRegions = (generation: unknown) => {
     let cancelled = false;
     let raf = 0;
     const observer = new ResizeObserver(() => scheduleMeasure());
+    const mutationObserver = new MutationObserver((records) => {
+      if (mutationAffectsHitNodes(records)) scheduleMeasure();
+    });
 
     // rAF 1회로 coalesce - 페인트 확정 후 실측.
     // 노드 집합을 매번 다시 모아 커스텀 JS·플러그인이 키를 추가·제거한 경우도 덮는다
@@ -241,23 +350,32 @@ export const useOverlayHitRegions = (generation: unknown) => {
         const nodes = hitNodes();
         observer.disconnect();
         nodes.forEach((node) => observer.observe(node));
-        syncHitRegions(measureKeyRects(nodes));
+        syncHitRegions(measureHitRects(nodes));
       });
     };
 
     scheduleRef.current = scheduleMeasure;
+    requestMeasure = scheduleMeasure;
     const unwatchScale = watchDevicePixelRatio(scheduleMeasure);
     // 미디어 쿼리가 발화하지 않는 웹뷰를 대비한 두 번째 그물.
     // 발행 기준에 배율이 들어 있으므로 헛호출은 IPC로 이어지지 않는다
     window.addEventListener('resize', scheduleMeasure);
+    mutationObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-overlay-hit'],
+      childList: true,
+      subtree: true,
+    });
     scheduleMeasure();
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
+      mutationObserver.disconnect();
       unwatchScale();
       window.removeEventListener('resize', scheduleMeasure);
+      requestMeasure = () => {};
       scheduleRef.current = () => {};
     };
   }, [generation]);

@@ -78,7 +78,19 @@ const StatItem = React.memo(
       ? getStatValueSignal(statType as StatItemType)
       : undefined;
 
-    if (position?.hidden || isTransparent) return null;
+    if (position?.hidden) return null;
+
+    if (isTransparent) {
+      return (
+        <div
+          aria-hidden="true"
+          className={`absolute ${position.className || ''}`}
+          style={{ ...keyStyle, visibility: 'hidden', pointerEvents: 'none' }}
+          data-overlay-hit="true"
+          data-overlay-hit-only="true"
+        />
+      );
+    }
 
     return (
       <div
@@ -86,6 +98,7 @@ const StatItem = React.memo(
         style={keyStyle}
         data-state={active ? 'active' : 'inactive'}
         data-key-element="true"
+        data-overlay-hit="true"
         data-key-image={hasCurrentImage ? 'true' : undefined}
         data-key-image-mode={hasCurrentImage ? imageMode : undefined}
       >

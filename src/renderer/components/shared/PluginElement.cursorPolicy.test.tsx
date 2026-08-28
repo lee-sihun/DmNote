@@ -31,6 +31,7 @@ const makePluginElement = (options?: {
     fullId: PLUGIN_FULL_ID,
     pluginId: 'plugin-a',
     position: { x: 10, y: 10 },
+    measuredSize: { width: 180, height: 120 },
     tabId: '4key',
     scoped: options?.scoped,
   } as unknown as PluginDisplayElementInternal);
@@ -95,6 +96,8 @@ describe('플러그인 요소 커서 정책 스코프', () => {
     const node = renderElement('main');
 
     expect(node.classList.contains('dmn-grabbable')).toBe(true);
+    expect(node.dataset.overlayHit).toBeUndefined();
+    expect(container.querySelector('[data-plugin-hit-box]')).toBeNull();
     // 커서 소유는 클래스 규칙 - 래퍼 인라인 커서 없음
     expect(node.style.cursor).toBe('');
   });
@@ -104,6 +107,15 @@ describe('플러그인 요소 커서 정책 스코프', () => {
 
     expect(node.classList.contains('dmn-grabbable')).toBe(false);
     expect(node.style.cursor).toBe('default');
+    expect(node.dataset.overlayHit).toBeUndefined();
+    const hitBox = container.querySelector<HTMLElement>(
+      `[data-plugin-hit-box="${PLUGIN_FULL_ID}"]`,
+    );
+    expect(hitBox).not.toBeNull();
+    expect(hitBox!.dataset.overlayHit).toBe('true');
+    expect(hitBox!.style.width).toBe('180px');
+    expect(hitBox!.style.height).toBe('120px');
+    expect(hitBox!.style.transform).toBe(node.style.transform);
   });
 
   it('scoped 플러그인은 메인 창 shadow root에 커서 상속 스타일이 주입된다', () => {
