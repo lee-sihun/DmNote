@@ -46,7 +46,7 @@ export const PANEL_LIST_WELL_CLASS =
 export const PANEL_LIST_SCROLL_CLASS =
   'flex-1 min-h-0 overflow-y-auto modal-content-scroll dmn-scroll-mask-inset px-[14px]';
 export const PANEL_LIST_EMPTY_CLASS =
-  'h-full flex items-center justify-center text-fg-faint text-body';
+  'h-full flex items-center justify-center text-fg-caption text-body';
 export const PANEL_ROW_NAME_CLASS =
   'min-w-0 flex-1 truncate text-left transition-colors duration-fast';
 

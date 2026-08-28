@@ -441,7 +441,7 @@ const NoteSetting = ({
           />
         </PropertyRow>
         <div className="flex justify-between items-center w-full min-h-[32px]">
-          <p className="text-fg-faint text-body">
+          <p className="text-fg-caption text-body">
             {t('laboratory.keyDelayAuto', { value: calculatedDelay })}
           </p>
           <button

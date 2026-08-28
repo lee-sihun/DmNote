@@ -726,7 +726,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               {!(slotListening && !slotPickerOpen) && slotParts.extra && (
                 // case 피처: +를 숫자 중심에 맞춘 글리프로 치환.
                 // tracking은 +와 숫자 사이 0.25px 확보용, 끝 글자 뒤 여분은 -mr로 상쇄 (배지는 한 자리 전제)
-                <span className="pl-[3px] tracking-[0.25px] -mr-[0.25px] text-fg-faint [font-feature-settings:'case']">
+                <span className="pl-[3px] tracking-[0.25px] -mr-[0.25px] text-fg-caption [font-feature-settings:'case']">
                   {slotParts.extra}
                 </span>
               )}

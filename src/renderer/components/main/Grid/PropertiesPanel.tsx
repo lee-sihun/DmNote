@@ -2430,7 +2430,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
     if (!sections.some((section) => section.renderVisible)) {
       return (
-        <p className="text-fg-faint text-body text-center">
+        <p className="text-fg-caption text-body text-center">
           {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
         </p>
       );
@@ -2602,7 +2602,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               className="flex flex-col gap-[6px]"
             >
               {section.label && (
-                <p className="text-fg-faint text-body text-left px-[2px]">
+                <p className="text-fg-caption text-body text-left px-[2px]">
                   {sectionLabel}
                 </p>
               )}

@@ -372,7 +372,7 @@ const BatchPanelHeader: React.FC<BatchPanelHeaderProps> = ({
         </span>
       )}
       {!selectedGroupInfo && (
-        <span className="text-fg-faint text-body">({totalCount})</span>
+        <span className="text-fg-caption text-body">({totalCount})</span>
       )}
     </div>
   </div>

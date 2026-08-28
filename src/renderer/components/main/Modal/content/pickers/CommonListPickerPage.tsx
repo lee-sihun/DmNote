@@ -187,7 +187,7 @@ export default function CommonListPickerPage<T>({
               <div
                 className={`${
                   addRowPlacement === 'end' ? '' : 'flex-1 '
-                }flex items-center justify-center py-[14px] text-fg-faint text-body`}
+                }flex items-center justify-center py-[14px] text-fg-caption text-body`}
               >
                 {emptyText}
               </div>

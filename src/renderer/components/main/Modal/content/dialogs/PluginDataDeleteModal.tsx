@@ -72,7 +72,7 @@ export function PluginDataDeleteModal({
             로케일 문장은 "명사구 + 서술부"로 갈리는 것이 전제다 */}
         <span
           className={`text-body transition-colors duration-fast ${
-            preview ? 'text-warning' : 'text-fg-faint'
+            preview ? 'text-warning' : 'text-fg-caption'
           }`}
         >
           {t('settings.pluginDataScope')}

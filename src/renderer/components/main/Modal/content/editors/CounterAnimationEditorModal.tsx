@@ -897,7 +897,7 @@ const CounterAnimationEditorModal = ({
       onClose={onClose}
       title={headerTitle}
       headerInfo={
-        <div className="min-w-0 flex items-center gap-[6px] text-fg-faint">
+        <div className="min-w-0 flex items-center gap-[6px] text-fg-caption">
           <svg
             className="w-[14px] h-[14px] shrink-0"
             viewBox="0 0 24 24"
@@ -1293,7 +1293,7 @@ const CounterAnimationEditorModal = ({
               </div>
               {/* 하단 안내 — 스크림 없이 흐린 캡션만 (풀하이트 스테이지라 키와 충돌 없음) */}
               <div className="absolute inset-x-0 bottom-[10px] z-20 text-center pointer-events-none">
-                <span className="text-caption text-fg-faint">
+                <span className="text-caption text-fg-caption">
                   {t('counterSetting.pressToPreview') || '눌러서 미리보기'}
                 </span>
               </div>

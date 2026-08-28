@@ -23,6 +23,44 @@ const declaredKeys = (css: string): string[] =>
 const darkKeys = declaredKeys(darkCss);
 const lightKeys = declaredKeys(lightCss);
 
+const tokenHex = (css: string, key: string): string => {
+  const match = stripComments(css).match(
+    new RegExp(`${key}\\s*:\\s*(#[0-9a-fA-F]{6})\\b`),
+  );
+  if (!match) throw new Error(`${key} hex token not found`);
+  return match[1];
+};
+
+const relativeLuminance = (hex: string): number => {
+  const channels = hex
+    .slice(1)
+    .match(/.{2}/g)!
+    .map((channel) => Number.parseInt(channel, 16) / 255)
+    .map((channel) =>
+      channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+    );
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+};
+
+const contrastRatio = (foreground: string, background: string): number => {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+};
+
+const labLightness = (hex: string): number => {
+  const luminance = relativeLuminance(hex);
+  const threshold = 216 / 24389;
+  const transformed =
+    luminance > threshold
+      ? Math.cbrt(luminance)
+      : (24389 / 27 / 116) * luminance + 16 / 116;
+  return 116 * transformed - 16;
+};
+
 describe('테마 토큰 파리티 계약', () => {
   it('다크와 라이트가 같은 키를 같은 순서로 선언한다', () => {
     // 순서까지 묶어 두면 두 파일을 나란히 놓고 읽을 수 있다
@@ -104,5 +142,35 @@ describe('테마 토큰 파리티 계약', () => {
       }
     }
     expect(Object.fromEntries(missing)).toEqual({});
+  });
+
+  it('라이트 저강도 읽기 텍스트가 앱 바닥과 패널에서 AA 대비를 지킨다', () => {
+    for (const foreground of ['--ui-fg-muted', '--ui-fg-caption']) {
+      for (const surface of [
+        '--ui-bg-app',
+        '--ui-bg-panel',
+        '--ui-bg-panel-detached',
+      ]) {
+        expect(
+          contrastRatio(
+            tokenHex(lightCss, foreground),
+            tokenHex(lightCss, surface),
+          ),
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('라이트 muted, caption, 장식 faint의 명도 단계를 분리한다', () => {
+    const muted = tokenHex(lightCss, '--ui-fg-muted');
+    const caption = tokenHex(lightCss, '--ui-fg-caption');
+    const faint = tokenHex(lightCss, '--ui-fg-faint');
+    const mutedLightness = labLightness(muted);
+    const captionLightness = labLightness(caption);
+    const faintLightness = labLightness(faint);
+
+    expect(captionLightness).toBeGreaterThan(mutedLightness);
+    expect(faintLightness).toBeGreaterThan(captionLightness);
+    expect(faintLightness - mutedLightness).toBeGreaterThanOrEqual(8);
   });
 });

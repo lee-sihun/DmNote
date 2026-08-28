@@ -1132,7 +1132,7 @@ const SoundTrimModal = ({
       title={sheetTitle}
       headerInfo={
         headerFileName ? (
-          <span className="min-w-0 text-caption text-fg-faint truncate">
+          <span className="min-w-0 text-caption text-fg-caption truncate">
             {headerFileName}
           </span>
         ) : undefined
@@ -1166,7 +1166,7 @@ const SoundTrimModal = ({
                 <canvas ref={canvasRef} className="w-full h-full block" />
                 {/* 하단 안내 — 스크림 없이 흐린 캡션만 */}
                 <div className="absolute inset-x-0 bottom-[10px] text-center pointer-events-none">
-                  <span className="text-caption text-fg-faint">
+                  <span className="text-caption text-fg-caption">
                     {t('soundTrimModal.dragHint')}
                   </span>
                 </div>

@@ -73,7 +73,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
             {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
           </span>
           <span
-            className="text-fg-faint text-body truncate max-w-[100px]"
+            className="text-fg-caption text-body truncate max-w-[100px]"
             title={pluginSettingsPanel.pluginId}
           >
             {pluginSettingsPanel.pluginId}
@@ -100,7 +100,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center px-[24px]">
-          <p className="text-fg-faint text-body text-center">
+          <p className="text-fg-caption text-body text-center">
             {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
           </p>
         </div>

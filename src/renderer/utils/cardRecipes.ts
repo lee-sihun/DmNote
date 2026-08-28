@@ -5,8 +5,9 @@
 // 섹션 래퍼 — 라벨 + 카드를 6px 간격으로 묶음
 export const SECTION_WRAPPER_CLASS = 'flex flex-col gap-[6px]';
 
-// 섹션 라벨 — 카드 위 faint 서브헤더
-export const SECTION_LABEL_CLASS = 'text-fg-faint text-body text-left px-[2px]';
+// 섹션 라벨 — 카드 위에서 읽혀야 하는 저강도 서브헤더
+export const SECTION_LABEL_CLASS =
+  'text-fg-caption text-body text-left px-[2px]';
 
 // 그룹 카드 — 관련 행을 하나의 면으로 묶는 컨테이너
 export const SECTION_CARD_CLASS =

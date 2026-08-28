@@ -39,6 +39,7 @@ module.exports = {
           DEFAULT: 'var(--ui-fg)',
           strong: 'var(--ui-fg-strong)',
           muted: 'var(--ui-fg-muted)',
+          caption: 'var(--ui-fg-caption)',
           faint: 'var(--ui-fg-faint)',
           disabled: 'var(--ui-fg-disabled)',
         },

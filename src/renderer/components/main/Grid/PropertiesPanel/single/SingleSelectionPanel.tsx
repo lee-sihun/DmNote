@@ -304,7 +304,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
           </span>
         </div>
         <div className="flex-1 flex items-center justify-center px-[24px] pb-[48px]">
-          <p className="text-fg-faint text-body text-center">{noticeText}</p>
+          <p className="text-fg-caption text-body text-center">{noticeText}</p>
         </div>
       </div>
     );
@@ -341,13 +341,13 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
               />
             )}
             {!hasSinglePluginSelection && (
-              <p className="text-fg-faint text-body text-center">
+              <p className="text-fg-caption text-body text-center">
                 {t('propertiesPanel.pluginMultiSelection') ||
                   '플러그인 요소는 한 번에 하나만 편집할 수 있습니다.'}
               </p>
             )}
             {hasSinglePluginSelection && showModalHint && (
-              <p className="text-fg-faint text-body text-center">
+              <p className="text-fg-caption text-body text-center">
                 {t('propertiesPanel.pluginModalHint') ||
                   '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'}
               </p>

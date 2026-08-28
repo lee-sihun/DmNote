@@ -137,6 +137,9 @@
   --ui-fg-strong: #ffffff;
   --ui-fg: #dcdcde;
   --ui-fg-muted: #9d9d9f;
+  /* 작은 안내·수치처럼 반드시 읽혀야 하는 저강도 텍스트 */
+  --ui-fg-caption: #8c8c8e;
+  /* placeholder·장식 아이콘처럼 정보 위계 밖의 보조 표현 */
   --ui-fg-faint: #8c8c8e;
   --ui-fg-disabled: #68686a;
 

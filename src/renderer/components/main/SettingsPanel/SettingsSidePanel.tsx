@@ -99,7 +99,7 @@ const SettingsSidePanel = ({
           {activeTitle}
         </span>
         {activePage?.headerBadge ? (
-          <span className="shrink-0 text-body text-fg-faint tabular-nums">
+          <span className="shrink-0 text-body text-fg-caption tabular-nums">
             {activePage.headerBadge}
           </span>
         ) : null}

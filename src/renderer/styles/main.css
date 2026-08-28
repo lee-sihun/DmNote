@@ -808,7 +808,7 @@ body.dmn-dragging * {
    램프를 올릴 때마다 거터만 유독 깊게 파인다 */
 .webfont-cm-editor .cm-gutters {
   background: var(--ui-bg-app);
-  color: var(--ui-fg-faint);
+  color: var(--ui-fg-caption);
   border: none;
 }
 

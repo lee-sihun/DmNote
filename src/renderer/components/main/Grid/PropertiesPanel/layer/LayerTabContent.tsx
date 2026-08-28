@@ -638,7 +638,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       >
         {layerItems.length === 0 ? (
           <div className="flex items-center justify-center h-full p-[16px]">
-            <p className="text-fg-faint text-body text-center">
+            <p className="text-fg-caption text-body text-center">
               {t('propertiesPanel.noLayers') || 'No layers'}
             </p>
           </div>
