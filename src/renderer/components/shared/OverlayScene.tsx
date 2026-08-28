@@ -102,7 +102,6 @@ interface OverlaySceneProps {
   // 초기 리빌 게이트 - false면 모든 요소가 자리 잡을 때까지 화면을 감춘다
   revealed?: boolean;
   positionOffset?: { x: number; y: number };
-  onMouseDownCapture?: (e: React.MouseEvent<HTMLDivElement>) => void;
   /** PluginElementsRenderer 표시 여부 (Tauri 컨텍스트에서만 true) */
   showPluginElements?: boolean;
 }
@@ -128,7 +127,6 @@ const OverlayScene = ({
   contentFade,
   revealed = true,
   positionOffset,
-  onMouseDownCapture,
   showPluginElements = true,
 }: OverlaySceneProps) => {
   const macOS = isMac();
@@ -151,7 +149,6 @@ const OverlayScene = ({
               contain: 'layout style paint',
             }),
       }}
-      onMouseDownCapture={onMouseDownCapture}
     >
       {/* 배경은 콘텐츠 박스에만 - 데스크톱은 창==콘텐츠라 동일하고 OBS 소스에서는 남는 영역이 투명 */}
       <div

@@ -14,7 +14,10 @@ import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
-import { useOverlayHitRegions } from '@hooks/overlay/useOverlayHitRegions';
+import {
+  useOverlayHitRegions,
+  subscribeHitContextMenu,
+} from '@hooks/overlay/useOverlayHitRegions';
 import { useTrackReserveTransition } from '@hooks/overlay/useTrackReserveTransition';
 import { useOverlayReveal } from '@hooks/overlay/useOverlayReveal';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
@@ -192,19 +195,6 @@ export default function App() {
     return { id, name: t(`mode.button${num}`) };
   });
 
-  const handleOverlayMouseDownCapture = (
-    e: React.MouseEvent<HTMLDivElement>,
-  ) => {
-    // 좌클릭은 창 전체 드래그 유지
-    if (e.button !== 0) return;
-
-    getCurrentWindow()
-      .startDragging()
-      .catch((error) => {
-        console.error('Failed to start overlay dragging', error);
-      });
-  };
-
   const closeOverlayWindow = async () => {
     try {
       await overlayApi.setVisible(false);
@@ -375,16 +365,14 @@ export default function App() {
     }
   };
 
+  // 본체 창은 상시 클릭 통과라 웹뷰가 우클릭을 못 받는다 - 히트 창이 emit한
+  // 좌표로 기존 네이티브 메뉴를 연다
   useEffect(() => {
-    const handleWindowContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void openOverlayContextMenuAt(event.clientX, event.clientY);
-    };
-
-    window.addEventListener('contextmenu', handleWindowContextMenu, true);
+    const unsubscribe = subscribeHitContextMenu(({ x, y }) => {
+      void openOverlayContextMenuAt(x, y);
+    });
     return () => {
-      window.removeEventListener('contextmenu', handleWindowContextMenu, true);
+      unsubscribe();
     };
   }, []);
 
@@ -953,7 +941,6 @@ export default function App() {
       backgroundColor={backgroundColor}
       keyCounterEnabled={keyCounterEnabled}
       positionOffset={positionOffset}
-      onMouseDownCapture={handleOverlayMouseDownCapture}
       showPluginElements={true}
     />
   );

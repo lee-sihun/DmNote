@@ -56,6 +56,13 @@ pub async fn overlay_set_lock(app: AppHandle, locked: bool) -> CmdResult<()> {
 pub struct OverlaySyncHitRegionsArgs {
     pub rects: Vec<OverlayHitRect>,
     pub revision: u64,
+    /// 웹뷰 실측 배율 - 보정 줌이 곱해져 있어 백엔드가 DPI로 대신 계산할 수 없다
+    #[serde(default = "default_device_pixel_ratio")]
+    pub device_pixel_ratio: f64,
+}
+
+fn default_device_pixel_ratio() -> f64 {
+    1.0
 }
 
 /// 오버레이 웹뷰가 실측한 키 영역을 히트 창에 반영.
@@ -73,7 +80,12 @@ pub async fn overlay_sync_hit_regions(
         ));
     }
     run_blocking(app, move |app, state| {
-        Ok(state.sync_overlay_hit_regions(app, payload.rects, payload.revision)?)
+        Ok(state.sync_overlay_hit_regions(
+            app,
+            payload.rects,
+            payload.revision,
+            payload.device_pixel_ratio,
+        )?)
     })
     .await
 }

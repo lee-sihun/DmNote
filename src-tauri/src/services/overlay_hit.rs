@@ -40,6 +40,10 @@ struct OverlayHitServiceInner {
 #[derive(Debug, Clone)]
 struct OverlayHitDesiredState {
     rects: Vec<OverlayHitRect>,
+    /// 웹뷰의 CSS px -> 물리 px 배율(devicePixelRatio).
+    /// WebView2 보정 줌(접근성 텍스트 배율 상쇄)이 곱해진 실측값이라
+    /// GetDpiForWindow만으로는 대신할 수 없다
+    device_pixel_ratio: f64,
     last_revision: Option<u64>,
     parent: Option<usize>,
     visible: bool,
@@ -48,7 +52,12 @@ struct OverlayHitDesiredState {
 }
 
 impl OverlayHitDesiredState {
-    fn apply_regions(&mut self, rects: Vec<OverlayHitRect>, revision: u64) -> Result<bool> {
+    fn apply_regions(
+        &mut self,
+        rects: Vec<OverlayHitRect>,
+        revision: u64,
+        device_pixel_ratio: f64,
+    ) -> Result<bool> {
         if self
             .last_revision
             .is_some_and(|last_revision| revision <= last_revision)
@@ -57,6 +66,11 @@ impl OverlayHitDesiredState {
         }
         validate_hit_rects(&rects)?;
         self.rects = rects;
+        self.device_pixel_ratio = if device_pixel_ratio.is_finite() && device_pixel_ratio > 0.0 {
+            device_pixel_ratio
+        } else {
+            1.0
+        };
         self.last_revision = Some(revision);
         Ok(true)
     }
@@ -89,6 +103,7 @@ impl OverlayHitService {
             inner: Arc::new(OverlayHitServiceInner {
                 desired: Mutex::new(OverlayHitDesiredState {
                     rects: Vec::new(),
+                    device_pixel_ratio: 1.0,
                     last_revision: None,
                     parent: None,
                     visible,
@@ -106,10 +121,11 @@ impl OverlayHitService {
         app: &AppHandle,
         rects: Vec<OverlayHitRect>,
         revision: u64,
+        device_pixel_ratio: f64,
     ) -> Result<()> {
         {
             let mut desired = self.inner.desired.lock();
-            if !desired.apply_regions(rects, revision)? {
+            if !desired.apply_regions(rects, revision, device_pixel_ratio)? {
                 log::debug!(
                     "[OverlayHit] stale revision ignored: revision={revision}, last={:?}",
                     desired.last_revision
@@ -358,8 +374,14 @@ mod platform {
         let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
             let cursor: id = msg_send![class!(NSCursor), closedHandCursor];
             let _: () = msg_send![cursor, set];
-            if let Some(context) = hit_context(this).filter(|context| context.active) {
-                if let Err(error) = start_parent_drag(context, event) {
+            // performWindowDragWithEvent는 모달 이벤트 루프를 돈다 - 그 사이 창 이동이
+            // reconcile을 재진입시켜 이 컨텍스트를 덮어쓰거나 패널을 해제할 수 있으므로
+            // 필요한 값만 복사해 참조를 놓고 호출한다
+            let drag_target = hit_context(this)
+                .filter(|context| context.active)
+                .map(|context| (context.parent, context.rect));
+            if let Some((parent, rect)) = drag_target {
+                if let Err(error) = start_parent_drag(parent, rect, event) {
                     log::warn!("failed to start macOS overlay hit drag: {error:#}");
                 }
             }
@@ -404,19 +426,23 @@ mod platform {
         context.cast::<HitContext>().as_ref()
     }
 
-    unsafe fn start_parent_drag(context: &HitContext, source_event: id) -> Result<()> {
-        if source_event.is_null() || context.parent == 0 {
+    unsafe fn start_parent_drag(
+        parent: usize,
+        rect: OverlayHitRect,
+        source_event: id,
+    ) -> Result<()> {
+        if source_event.is_null() || parent == 0 {
             return Err(anyhow!("overlay hit drag context is unavailable"));
         }
-        let parent = context.parent as id;
+        let parent = parent as id;
         let content_view: id = msg_send![parent, contentView];
         if content_view.is_null() {
             return Err(anyhow!("overlay content view is unavailable"));
         }
 
         let panel_location: NSPoint = msg_send![source_event, locationInWindow];
-        let client_x = context.rect.x + panel_location.x;
-        let client_y = context.rect.y + context.rect.height - panel_location.y;
+        let client_x = rect.x + panel_location.x;
+        let client_y = rect.y + rect.height - panel_location.y;
         let content_bounds: NSRect = msg_send![content_view, bounds];
         let content_location = NSPoint::new(client_x, content_bounds.size.height - client_y);
         let window_location: NSPoint =
@@ -476,8 +502,21 @@ mod platform {
         }
 
         let parent_visible: BOOL = unsafe { msg_send![parent, isVisible] };
+        // 프론트가 "키 0개"를 확정 보고했으면 콘텐츠 전체를 잡는다 - 모든 키를 숨기거나
+        // 커스텀 CSS로 지웠을 때 창을 옮길 수도 우클릭할 수도 없게 되는 것을 막는다.
+        // 첫 측정 전(last_revision == None)에는 그대로 클릭 통과
         let clipped_rects = if desired.rects.is_empty() {
-            Vec::new()
+            if desired.last_revision.is_some() {
+                let (content_width, content_height) = content_size(parent)?;
+                vec![OverlayHitRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: content_width,
+                    height: content_height,
+                }]
+            } else {
+                Vec::new()
+            }
         } else {
             let (content_width, content_height) = content_size(parent)?;
             desired
@@ -661,7 +700,7 @@ mod platform {
         ffi::c_void,
         mem::size_of,
         panic::{catch_unwind, AssertUnwindSafe},
-        sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+        sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     };
 
     use anyhow::{anyhow, Context, Result};
@@ -689,9 +728,9 @@ mod platform {
                     RegisterClassExW, SetCursor, SetWindowLongPtrW, SetWindowPos, ShowWindow,
                     CREATESTRUCTW, GWLP_USERDATA, HTCAPTION, HWND_NOTOPMOST, HWND_TOPMOST,
                     IDC_SIZEALL, MA_NOACTIVATE, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_SHOWWINDOW,
-                    SW_HIDE, WM_DPICHANGED, WM_ERASEBKGND, WM_LBUTTONDOWN, WM_MOUSEACTIVATE,
-                    WM_NCCREATE, WM_NCDESTROY, WM_NCLBUTTONDOWN, WM_PAINT, WM_RBUTTONUP,
-                    WM_SETCURSOR, WM_WINDOWPOSCHANGED, WNDCLASSEXW, WS_EX_NOACTIVATE,
+                    SW_HIDE, WM_CLOSE, WM_DPICHANGED, WM_ERASEBKGND, WM_LBUTTONDOWN,
+                    WM_MOUSEACTIVATE, WM_NCCREATE, WM_NCDESTROY, WM_NCLBUTTONDOWN, WM_PAINT,
+                    WM_RBUTTONUP, WM_SETCURSOR, WM_WINDOWPOSCHANGED, WNDCLASSEXW, WS_EX_NOACTIVATE,
                     WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_POPUP,
                 },
             },
@@ -713,6 +752,8 @@ mod platform {
         parent: AtomicUsize,
         hit: AtomicUsize,
         rects: RwLock<Vec<OverlayHitRect>>,
+        // CSS px -> 물리 px 배율. f64 원자값이 없어 비트 패턴으로 보관
+        device_pixel_ratio: AtomicU64,
         active: AtomicBool,
         always_on_top: AtomicBool,
     }
@@ -742,8 +783,12 @@ mod platform {
             .as_ref()
             .ok_or_else(|| anyhow!("overlay hit HWND context is unavailable"))?;
         *context.rects.write() = desired.rects.clone();
+        context
+            .device_pixel_ratio
+            .store(desired.device_pixel_ratio.to_bits(), Ordering::Release);
+        // rect가 비어도 측정이 끝났으면 활성 - apply_hit_region이 클라이언트 전체를 잡는다
         context.active.store(
-            desired.visible && !desired.locked && !desired.rects.is_empty(),
+            desired.visible && !desired.locked && desired.last_revision.is_some(),
             Ordering::Release,
         );
         context
@@ -768,6 +813,7 @@ mod platform {
             parent: AtomicUsize::new(parent.0 as usize),
             hit: AtomicUsize::new(0),
             rects: RwLock::new(Vec::new()),
+            device_pixel_ratio: AtomicU64::new(1.0f64.to_bits()),
             active: AtomicBool::new(false),
             always_on_top: AtomicBool::new(true),
         });
@@ -869,6 +915,9 @@ mod platform {
                         return LRESULT(1);
                     }
                 }
+                // 작업 표시줄 그룹 종료 등 외부 WM_CLOSE로 히트 창이 사라지면
+                // 재생성 트리거(reconcile)가 올 때까지 상호작용이 죽는다
+                WM_CLOSE => return LRESULT(0),
                 WM_ERASEBKGND => return LRESULT(1),
                 WM_PAINT => {
                     let _ = ValidateRect(Some(window), None);
@@ -975,16 +1024,28 @@ mod platform {
         if union.0.is_null() {
             return Err(WindowsError::from_win32().into());
         }
-        let scale = f64::from(GetDpiForWindow(hwnd(
-            context.parent.load(Ordering::Acquire),
-        ))) / 96.0;
+        // 웹뷰 실측 배율(devicePixelRatio)을 쓴다 - WebView2 보정 줌이 곱해져 있어
+        // GetDpiForWindow/96으로는 접근성 텍스트 배율 사용자에서 좌표가 어긋난다.
+        // (emit_context_menu의 dpi 나눗셈은 LogicalPosition 계약이라 별개 - 함께 바꾸지 말 것)
+        let scale = f64::from_bits(context.device_pixel_ratio.load(Ordering::Acquire));
+        let scale = if scale.is_finite() && scale > 0.0 {
+            scale
+        } else {
+            f64::from(GetDpiForWindow(hwnd(
+                context.parent.load(Ordering::Acquire),
+            ))) / 96.0
+        };
         let scale = if scale.is_finite() && scale > 0.0 {
             scale
         } else {
             1.0
         };
         let mut region_count = 0usize;
-        for rect in context.rects.read().iter() {
+        let measured_rects = context.rects.read();
+        // 측정 결과가 통째로 비었는지와, 클리핑으로 전부 날아갔는지는 다르다.
+        // 후자는 리사이즈·DPI 변경 직후의 과도기라 창 전체를 잡으면 안 된다
+        let measured_empty = measured_rects.is_empty();
+        for rect in measured_rects.iter() {
             let left = (rect.x * scale).floor().clamp(0.0, f64::from(client_width)) as i32;
             let top = (rect.y * scale)
                 .floor()
@@ -1008,8 +1069,19 @@ mod platform {
             region_count += 1;
         }
         if region_count == 0 {
-            let _ = DeleteObject(HGDIOBJ(union.0));
-            return Ok(false);
+            if !measured_empty {
+                // 옛 rect가 새 클라이언트 밖으로 밀린 과도기 - 다음 측정까지 숨긴다
+                let _ = DeleteObject(HGDIOBJ(union.0));
+                return Ok(false);
+            }
+            // 측정 결과가 "키 0개" - 창 전체를 잡아 이식 전 동작으로 폴백한다
+            let full = CreateRectRgn(0, 0, client_width, client_height);
+            if full.0.is_null() {
+                let _ = DeleteObject(HGDIOBJ(union.0));
+                return Err(WindowsError::from_win32().into());
+            }
+            let _ = CombineRgn(Some(union), Some(union), Some(full), RGN_OR);
+            let _ = DeleteObject(HGDIOBJ(full.0));
         }
         if SetWindowRgn(hit, Some(union), false) == 0 {
             let _ = DeleteObject(HGDIOBJ(union.0));
@@ -1125,12 +1197,28 @@ mod tests {
     fn desired_state() -> OverlayHitDesiredState {
         OverlayHitDesiredState {
             rects: Vec::new(),
+            device_pixel_ratio: 1.0,
             last_revision: None,
             parent: None,
             visible: true,
             locked: false,
             always_on_top: true,
         }
+    }
+
+    // 보정 줌이 곱해진 실측 배율만 채택하고, 비정상값은 1.0으로 떨어뜨린다
+    #[test]
+    fn device_pixel_ratio_is_adopted_and_sanitized() {
+        let mut desired = desired_state();
+
+        assert!(desired.apply_regions(vec![rect(1.0)], 1, 1.25).unwrap());
+        assert_eq!(desired.device_pixel_ratio, 1.25);
+
+        assert!(desired.apply_regions(vec![rect(2.0)], 2, f64::NAN).unwrap());
+        assert_eq!(desired.device_pixel_ratio, 1.0);
+
+        assert!(desired.apply_regions(vec![rect(3.0)], 3, 0.0).unwrap());
+        assert_eq!(desired.device_pixel_ratio, 1.0);
     }
 
     fn rect(x: f64) -> OverlayHitRect {
@@ -1145,8 +1233,8 @@ mod tests {
     #[test]
     fn hit_region_revision_only_accepts_newer_values() {
         let mut desired = desired_state();
-        assert!(desired.apply_regions(vec![rect(1.0)], 10).unwrap());
-        assert!(!desired.apply_regions(vec![rect(2.0)], 10).unwrap());
+        assert!(desired.apply_regions(vec![rect(1.0)], 10, 1.0).unwrap());
+        assert!(!desired.apply_regions(vec![rect(2.0)], 10, 1.0).unwrap());
         assert!(!desired
             .apply_regions(
                 vec![OverlayHitRect {
@@ -1156,6 +1244,7 @@ mod tests {
                     height: 10.0,
                 }],
                 9,
+                1.0,
             )
             .unwrap());
         assert_eq!(desired.rects, vec![rect(1.0)]);
@@ -1168,10 +1257,11 @@ mod tests {
                     height: 10.0,
                 }],
                 11,
+                1.0,
             )
             .is_err());
         assert_eq!(desired.rects, vec![rect(1.0)]);
-        assert!(desired.apply_regions(vec![rect(4.0)], 11).unwrap());
+        assert!(desired.apply_regions(vec![rect(4.0)], 11, 1.0).unwrap());
         assert_eq!(desired.rects, vec![rect(4.0)]);
     }
 
@@ -1179,20 +1269,20 @@ mod tests {
     fn parent_replacement_and_loss_reset_regions_and_revision() {
         let mut desired = desired_state();
         assert!(!desired.observe_parent(Some(10)));
-        assert!(desired.apply_regions(vec![rect(1.0)], 90).unwrap());
+        assert!(desired.apply_regions(vec![rect(1.0)], 90, 1.0).unwrap());
         assert!(!desired.observe_parent(Some(10)));
 
         assert!(desired.observe_parent(Some(11)));
         assert!(desired.rects.is_empty());
         assert_eq!(desired.last_revision, None);
-        assert!(desired.apply_regions(vec![rect(2.0)], 1).unwrap());
+        assert!(desired.apply_regions(vec![rect(2.0)], 1, 1.0).unwrap());
 
         desired.mark_parent_absent();
         assert!(desired.rects.is_empty());
         assert_eq!(desired.last_revision, None);
         assert!(!desired.observe_parent(None));
         assert!(!desired.observe_parent(Some(12)));
-        assert!(desired.apply_regions(vec![rect(3.0)], 1).unwrap());
+        assert!(desired.apply_regions(vec![rect(3.0)], 1, 1.0).unwrap());
         assert!(desired.observe_parent(None));
         assert!(!desired.observe_parent(None));
     }

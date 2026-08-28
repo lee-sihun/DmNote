@@ -100,7 +100,12 @@ const syncHitRegions = (rects: HitRegionRect[]) => {
   if (lastSentRects && rectsEqual(lastSentRects, rects)) return;
   lastSentRects = rects;
   invoke<void>('overlay_sync_hit_regions', {
-    payload: { rects, revision: nextRevision() },
+    payload: {
+      rects,
+      revision: nextRevision(),
+      // 보정 줌이 곱해진 실측 배율 - 백엔드가 DPI로 대신 계산할 수 없다
+      devicePixelRatio: window.devicePixelRatio,
+    },
   })
     .then(() => {
       lastSyncFailureMessage = null;
@@ -168,21 +173,22 @@ export const useOverlayHitRegions = (generation: unknown) => {
     if (IS_OBS) return;
     let cancelled = false;
     let raf = 0;
-    const nodes = hitNodes();
+    const observer = new ResizeObserver(() => scheduleMeasure());
 
-    // rAF 1회로 coalesce - 페인트 확정 후 실측
+    // rAF 1회로 coalesce - 페인트 확정 후 실측.
+    // 노드 집합을 매번 다시 모아 커스텀 JS·플러그인이 키를 추가·제거한 경우도 덮는다
     const scheduleMeasure = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         if (cancelled) return;
+        const nodes = hitNodes();
+        observer.disconnect();
+        nodes.forEach((node) => observer.observe(node));
         syncHitRegions(measureKeyRects(nodes));
       });
     };
 
     scheduleRef.current = scheduleMeasure;
-
-    const observer = new ResizeObserver(scheduleMeasure);
-    nodes.forEach((node) => observer.observe(node));
     scheduleMeasure();
 
     return () => {

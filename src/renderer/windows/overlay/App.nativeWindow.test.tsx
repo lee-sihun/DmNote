@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   resize: vi.fn(),
   currentMonitor: vi.fn(),
   menuNew: vi.fn(),
+  hitContextMenuListeners: [] as ((pos: { x: number; y: number }) => void)[],
   overlayWindow: {
     startDragging: vi.fn(() => Promise.resolve()),
     outerPosition: vi.fn(),
@@ -114,7 +115,16 @@ vi.mock('@api/modules/overlayApi', () => ({
 // 히트 영역 실측은 ResizeObserver·네이티브 IPC에 의존 - 이 파일들의 관심사 밖
 vi.mock('@hooks/overlay/useOverlayHitRegions', () => ({
   useOverlayHitRegions: () => {},
-  subscribeHitContextMenu: () => () => {},
+  subscribeHitContextMenu: (
+    listener: (pos: { x: number; y: number }) => void,
+  ) => {
+    mocks.hitContextMenuListeners.push(listener);
+    return () => {
+      mocks.hitContextMenuListeners = mocks.hitContextMenuListeners.filter(
+        (registered) => registered !== listener,
+      );
+    };
+  },
 }));
 vi.mock('@components/shared/OverlayScene', () => ({ default: () => null }));
 vi.mock('@utils/core/axisEventBus', () => ({
@@ -160,6 +170,7 @@ const setupOverlay = () => {
   mocks.currentMonitor.mockReset().mockResolvedValue(null);
   mocks.menuNew.mockReset();
   mocks.overlayWindow.setPosition.mockClear();
+  mocks.hitContextMenuListeners = [];
   window.api = {
     app: { bootstrap: mocks.bootstrap },
     keys: { onKeysReset: vi.fn(() => vi.fn()) },
@@ -210,8 +221,8 @@ describe('모서리 스냅', () => {
 
     await mount();
     await act(async () => {
-      globalThis.window.dispatchEvent(
-        new MouseEvent('contextmenu', { bubbles: true }),
+      mocks.hitContextMenuListeners.forEach((listener) =>
+        listener({ x: 0, y: 0 }),
       );
     });
     await flushAsync();
