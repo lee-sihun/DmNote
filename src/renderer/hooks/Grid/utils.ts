@@ -5,6 +5,17 @@
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { roundToGrid } from '@utils/grid/gridSnap';
 
+const MIN_GRID_SIZE = 1;
+
+export const calculateZoomAdjustedGridSize = (
+  zoom: number,
+  baseGridSize: number,
+): number => {
+  if (baseGridSize <= 0) return 0;
+  const adjustedSize = Math.round(baseGridSize / zoom);
+  return Math.max(adjustedSize, MIN_GRID_SIZE);
+};
+
 /**
  * 값을 그리드 스냅에 맞춰 반올림
  * @param value - 스냅할 값
