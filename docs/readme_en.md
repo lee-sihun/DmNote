@@ -13,7 +13,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.1/DM.NOTE.v.2.0.1.zip)
   [![GitHub license](https://img.shields.io/github/license/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 </div>
 
@@ -30,7 +30,7 @@ It works just as well with any other game, and the setup is simple enough to put
 **Supported** · Windows 10/11 · macOS
 On Linux, try the [community fork](https://github.com/northernorca/DmNote).
 
-[Download DM NOTE v2.0.0](https://github.com/DmNote-App/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+[Download DM NOTE v2.0.1](https://github.com/DmNote-App/DmNote/releases/download/2.0.1/DM.NOTE.v.2.0.1.zip)
 
 [Code signing policy](../CODE_SIGNING_POLICY.md)
 
