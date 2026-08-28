@@ -1,0 +1,269 @@
+name: Release Windows (test signing)
+
+# Windows x64 빌드 -> SignPath 테스트 서명 -> 포터블 ZIP 패키징
+# - 운영 인증서 활성화 전: workflow_dispatch로만 실행, GitHub Release에는 게시하지 않음
+# - 단독 업데이트 EXE와 ZIP 내부 EXE는 같은 서명 완료 파일을 사용
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: release-windows-test-signing
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: 설정·버전 검사
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: SignPath 설정 확인
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+        run: |
+          set -euo pipefail
+          MISSING=""
+          for name in SIGNPATH_API_TOKEN SIGNPATH_ORGANIZATION_ID SIGNPATH_PROJECT_SLUG SIGNPATH_ARTIFACT_CONFIGURATION_SLUG; do
+            [ -n "${!name}" ] || MISSING="$MISSING $name"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::SignPath 설정 누락:$MISSING — docs/release_windows.md 참고"
+            exit 1
+          fi
+          echo "SignPath 필수 설정 확인"
+
+      - id: check
+        name: 기본 브랜치·버전 확인
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+
+          if [ "$REF_TYPE" != "branch" ] || [ "$REF_NAME" != "$DEFAULT_BRANCH" ]; then
+            echo "::error::테스트 서명은 기본 브랜치($DEFAULT_BRANCH)에서만 실행 가능"
+            exit 1
+          fi
+
+          PKG="$(node -p "require('./package.json').version")"
+          CONF="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          CARGO="$(grep -m1 '^version = ' src-tauri/Cargo.toml | sed -E 's/version = "(.*)"/\1/')"
+          echo "package.json=$PKG tauri.conf.json=$CONF Cargo.toml=$CARGO"
+          if [ "$PKG" != "$CONF" ] || [ "$PKG" != "$CARGO" ]; then
+            echo "::error::버전 불일치 — npm run sync-version 실행 후 다시 시도"
+            exit 1
+          fi
+
+          echo "version=$PKG" >> "$GITHUB_OUTPUT"
+
+  build-sign-package:
+    name: Windows 빌드·테스트 서명·패키징
+    needs: preflight
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      SIGNING_POLICY_SLUG: test-signing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-05
+        with:
+          toolchain: stable
+
+      - name: Windows 빌드 도구 확인
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $llvmBin = Join-Path $env:ProgramFiles 'LLVM\bin'
+          $libclang = Join-Path $llvmBin 'libclang.dll'
+          if (-not (Test-Path -LiteralPath $libclang -PathType Leaf)) {
+            throw "libclang.dll을 찾을 수 없습니다: $libclang"
+          }
+          "LIBCLANG_PATH=$llvmBin" >> $env:GITHUB_ENV
+          rustc --version
+          cargo --version
+          node --version
+          npm --version
+
+      - run: npm ci
+
+      - name: 프론트엔드 검사
+        run: |
+          npm run type-check
+          npm run lint
+          npm test
+
+      # 자동 업데이트 자산과 포터블 ZIP이 공유할 raw EXE를 한 번만 빌드
+      - name: Windows x64 빌드
+        run: npm run tauri:build -- --no-bundle
+
+      - name: 서명 입력 준비
+        id: prepare
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sourceExe = 'src-tauri\target\release\dm-note.exe'
+          if (-not (Test-Path -LiteralPath $sourceExe -PathType Leaf)) {
+            throw "빌드 EXE를 찾을 수 없습니다: $sourceExe"
+          }
+
+          $versionInfo = (Get-Item -LiteralPath $sourceExe).VersionInfo
+          if ($versionInfo.ProductName -ne 'DM NOTE') {
+            throw "ProductName 불일치: $($versionInfo.ProductName)"
+          }
+          if ($versionInfo.ProductVersion -ne $env:VERSION -or $versionInfo.FileVersion -ne $env:VERSION) {
+            throw "EXE 버전 불일치: product=$($versionInfo.ProductVersion) file=$($versionInfo.FileVersion) expected=$env:VERSION"
+          }
+
+          $inputDir = 'dist\signing-input'
+          New-Item -ItemType Directory -Path $inputDir | Out-Null
+          Copy-Item -LiteralPath $sourceExe -Destination (Join-Path $inputDir 'DM.NOTE.exe')
+
+      # GitHub artifact가 ZIP 래퍼를 만들므로 SignPath Artifact Configuration의 루트는 <zip-file>
+      - name: 미서명 EXE 업로드
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmnote-windows-unsigned-${{ env.VERSION }}
+          path: dist/signing-input/DM.NOTE.exe
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: SignPath 테스트 서명
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 1800
+          output-artifact-directory: dist/signing-output
+          parameters: |
+            version: ${{ toJSON(env.VERSION) }}
+
+      - name: 테스트 서명 검증
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signedExe = 'dist\signing-output\DM.NOTE.exe'
+          if (-not (Test-Path -LiteralPath $signedExe -PathType Leaf)) {
+            throw "SignPath 출력 EXE를 찾을 수 없습니다: $signedExe"
+          }
+
+          $signature = Get-AuthenticodeSignature -LiteralPath $signedExe
+          if ($null -eq $signature.SignerCertificate -or $signature.Status -eq 'NotSigned') {
+            throw "Authenticode 서명이 없습니다: $($signature.StatusMessage)"
+          }
+
+          # 자체 서명 테스트 인증서를 임시 러너에서만 신뢰한 뒤 암호학적 검증
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'signpath-test-certificate.cer'
+          Export-Certificate -Cert $signature.SignerCertificate -FilePath $certificatePath | Out-Null
+          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+          $trustedSignature = Get-AuthenticodeSignature -LiteralPath $signedExe
+          if ($trustedSignature.Status -ne 'Valid') {
+            throw "Authenticode 검증 실패: $($trustedSignature.Status) $($trustedSignature.StatusMessage)"
+          }
+
+          "Signer: $($trustedSignature.SignerCertificate.Subject)"
+          "Thumbprint: $($trustedSignature.SignerCertificate.Thumbprint)"
+
+      # 서명 이후 ZIP 생성 — 단독 EXE와 ZIP 내부 EXE의 Authenticode 바이트를 동일하게 유지
+      - name: 최종 자산 패키징
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signedExe = 'dist\signing-output\DM.NOTE.exe'
+          $packageDir = 'dist\windows-package'
+          $pluginDir = Join-Path $packageDir 'assets\plugin'
+          $finalDir = 'dist\windows-final'
+          New-Item -ItemType Directory -Path $pluginDir | Out-Null
+          New-Item -ItemType Directory -Path $finalDir | Out-Null
+
+          Copy-Item -LiteralPath $signedExe -Destination (Join-Path $finalDir 'DM.NOTE.exe')
+          Copy-Item -LiteralPath $signedExe -Destination (Join-Path $packageDir 'dm-note.exe')
+          $releaseAssets = 'distribution\windows'
+          $assetFiles = @(
+            'assets\neonsign.css',
+            'assets\rainbow.css',
+            'assets\plugin\key-interval.js',
+            'assets\plugin\kps.js',
+            'assets\plugin\v-archive.js'
+          )
+          foreach ($assetFile in $assetFiles) {
+            $sourcePath = Join-Path $releaseAssets $assetFile
+            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+              throw "Windows 배포 자산을 찾을 수 없습니다: $sourcePath"
+            }
+          }
+
+          Copy-Item -LiteralPath 'THIRD_PARTY_NOTICES.txt' -Destination $packageDir
+          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\neonsign.css') -Destination (Join-Path $packageDir 'assets\neonsign.css')
+          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\rainbow.css') -Destination (Join-Path $packageDir 'assets\rainbow.css')
+          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\plugin\key-interval.js') -Destination $pluginDir
+          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\plugin\kps.js') -Destination $pluginDir
+          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\plugin\v-archive.js') -Destination $pluginDir
+
+          $zipPath = Join-Path $finalDir "DM.NOTE.v.$env:VERSION.zip"
+          Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
+
+          $verifyDir = Join-Path $env:RUNNER_TEMP 'dmnote-windows-zip-verify'
+          New-Item -ItemType Directory -Path $verifyDir | Out-Null
+          Expand-Archive -LiteralPath $zipPath -DestinationPath $verifyDir
+          $standaloneHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $finalDir 'DM.NOTE.exe')).Hash
+          $packagedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $verifyDir 'dm-note.exe')).Hash
+          if ($standaloneHash -ne $packagedHash) {
+            throw "단독 EXE와 ZIP 내부 EXE 해시 불일치: $standaloneHash != $packagedHash"
+          }
+
+          "DM.NOTE.exe SHA-256: $standaloneHash"
+          Get-ChildItem -LiteralPath $finalDir | Select-Object Name, Length
+
+      - name: 테스트 서명 산출물 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmnote-windows-test-signed-${{ env.VERSION }}
+          path: dist/windows-final/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 실행 요약
+        shell: pwsh
+        env:
+          SIGNING_REQUEST_URL: ${{ steps.signpath.outputs.signing-request-web-url }}
+        run: |
+          @"
+          ## Windows test signing 완료
+
+          - Version: ``$env:VERSION``
+          - Policy: ``$env:SIGNING_POLICY_SLUG``
+          - Signing Request: $env:SIGNING_REQUEST_URL
+          - 테스트 인증서 산출물은 GitHub Release에 게시하지 않음
+          "@ >> $env:GITHUB_STEP_SUMMARY

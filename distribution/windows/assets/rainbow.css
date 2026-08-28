@@ -1,0 +1,283 @@
+@font-face {
+    font-family: 'OmuDaye';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2304-01@1.0/omyu_pretty.woff2') format('woff2');
+    font-weight: normal;
+    font-display: swap;
+}
+
+/* 키 공통 스타일 */
+[data-state="inactive"],
+[data-state="active"] {
+  padding: 0 !important;
+  border: none !important;
+  outline: none !important;
+  color: rgb(255, 255, 255) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  z-index: 0 !important;
+  border-radius: var(--key-radius) !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: manipulation !important;
+  font-size: 16px !important; /* 글자 크기 */
+  font-family: 'OmuDaye', sans-serif !important; /* 폰트 변경 */
+  font-weight: 400 !important; /* 기본 두께 */
+  font-synthesis: none !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  letter-spacing: 0.5px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  gap: 4px !important;
+  font-variant-numeric: tabular-nums !important;
+
+  /* assets/css.css 오버라이드 */
+  overflow: visible !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  contain: none !important;
+
+  /* 테마 변수 */
+  --key-radius: 6px;
+  --key-bg: #111;
+  --key-border: none;
+  --key-text-color: rgb(255, 255, 255);
+}
+
+/* 공통 가상요소: 비활성 */
+[data-state="inactive"]:before {
+  content: "";
+  background: linear-gradient(
+    45deg,
+    #ff0000,
+    #ff7300,
+    #fffb00,
+    #48ff00,
+    #00ffd5,
+    #002bff,
+    #7a00ff,
+    #ff00c8,
+    #ff0000
+  );
+  position: absolute;
+  inset: -2px !important;
+  background-size: 400%;
+  z-index: -1;
+  filter: blur(3px); /* 글로우 번짐 정도 */
+  -webkit-filter: blur(3px);
+  width: auto;
+  height: auto;
+  animation: glowing-button-85 20s linear infinite;
+  transition: opacity 0.3s ease-in-out;
+  border-radius: var(--key-radius);
+  mask: none;
+  -webkit-mask: none;
+}
+
+[data-state="inactive"]:after {
+  z-index: 0;
+  content: "";
+  position: absolute;
+  inset: 0 !important;
+  background: linear-gradient(135deg, #111111, #252525, #111111, #252525, #111111) !important;
+  background-size: 400% 400% !important;
+  animation: key-breathing 10s linear infinite !important;
+  border-radius: var(--key-radius);
+  width: auto;
+  height: auto;
+  mask: none;
+  -webkit-mask: none;
+  mix-blend-mode: normal;
+}
+
+/* 공통 가상요소: 활성 */
+[data-state="active"]:before {
+  content: "";
+  background: linear-gradient(
+    45deg,
+    #ff0000,
+    #ff7300,
+    #fffb00,
+    #48ff00,
+    #00ffd5,
+    #002bff,
+    #7a00ff,
+    #ff00c8,
+    #ff0000
+  );
+  position: absolute;
+  inset: -2px !important;
+  background-size: 400%;
+  z-index: -1;
+  filter: blur(3px); /* 글로우 번짐 정도 */
+  -webkit-filter: blur(3px);
+  width: auto;
+  height: auto;
+  animation: glowing-button-85 20s linear infinite;
+  transition: opacity 0.3s ease-in-out;
+  border-radius: var(--key-radius);
+  mask: none;
+  -webkit-mask: none;
+}
+
+[data-state="active"]:after {
+  z-index: 0;
+  content: "";
+  position: absolute;
+  inset: 0 !important;
+  background: rgba(17, 17, 17, 0.75) !important; /* 배경 반투명으로 변경하여 글로우 비치게 */
+  border-radius: var(--key-radius);
+  width: auto;
+  height: auto;
+  mask: none;
+  -webkit-mask: none;
+  mix-blend-mode: normal;
+}
+
+/* 콘텐츠 보이게 */
+[data-state="inactive"] > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+[data-state="active"] > * {
+  position: relative !important;
+  z-index: 10 !important;
+  contain: none !important;
+  transform: none !important;
+  will-change: auto !important;
+}
+
+/* 키 텍스트(span)에만 폰트 상속 - 카운터 제외 */
+[data-state="inactive"] > * > span:not(.counter),
+[data-state="active"] > * > span:not(.counter) {
+  font-size: inherit !important;
+  font-family: inherit !important;
+  font-weight: inherit !important;
+  font-synthesis: inherit !important;
+  -webkit-font-smoothing: inherit !important;
+  -moz-osx-font-smoothing: inherit !important;
+}
+
+/* 활성 그라데이션 텍스트 효과 */
+[data-state="active"] > *,
+[data-state="active"] > * * {
+  background-image: linear-gradient(
+    45deg,
+    #ff0000,
+    #ff7300,
+    #fffb00,
+    #48ff00,
+    #00ffd5,
+    #002bff,
+    #7a00ff,
+    #ff00c8,
+    #ff0000
+  ) !important;
+  background-color: transparent !important;
+  background-size: 400% !important;
+  background-origin: border-box !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  animation: glowing-button-85 20s linear infinite !important;
+  text-shadow: none !important;
+}
+
+@keyframes glowing-button-85 {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 400% 0;
+  }
+}
+
+/* 활성 상태 오프셋 */
+[data-state="active"] {
+  --key-offset-x: 0px;
+  --key-offset-y: 0px;
+}
+
+/* 테마: blue 활성 */
+.blue[data-state="active"] {
+  --key-bg: transparent;
+  --key-border: 3px solid #2ebef3;
+  --key-text-color: #2ebef3;
+  text-shadow: 0px 0px 3px #2ebef3;
+  box-shadow: 0px 0px 4px #2b8eff, 0px 0px 4px #2b8eff;
+}
+
+/* 카운터 스타일 변수 설명
+
+--counter-color: 텍스트 색상
+--counter-stroke-color: 텍스트 외곽선 색상
+--counter-stroke-width: 텍스트 외곽선 두께
+
+*/
+
+/* 공통 카운터 스타일 */
+.counter {
+  /* 카운터 글자 크기: 기본보다 작게 */
+  font-size: 16px !important;
+  font-family: 'OmuDaye', sans-serif !important;
+  font-weight: 400 !important;
+}
+
+/* 카운터가 활성/비활성일 때도 폰트 유지 */
+.counter[data-counter-state],
+.counter[data-counter-state] * {
+  font-family: 'OmuDaye', sans-serif !important;
+  font-weight: 400 !important;
+}
+
+/* 비활성 카운터 */
+.counter[data-counter-state="inactive"] {
+  color: rgba(255, 255, 255, 0.8) !important;
+  --counter-color: #474244;
+  --counter-stroke-color: transparent;
+}
+
+/* 활성 카운터 */
+.counter[data-counter-state="active"],
+.counter[data-counter-state="active"] * {
+  background: linear-gradient(
+    45deg,
+    #ff0000,
+    #ff7300,
+    #fffb00,
+    #48ff00,
+    #00ffd5,
+    #002bff,
+    #7a00ff,
+    #ff00c8,
+    #ff0000
+  ) !important;
+  background-size: 400% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  animation: glowing-button-85 20s linear infinite !important;
+  --counter-stroke-color: transparent;
+  text-shadow: none;
+}
+
+/* 테마별 카운터 예시 */
+.blue .counter[data-counter-state="active"] {
+  --counter-color: #2ebef3;
+  --counter-stroke-color: transparent;
+  text-shadow: 0px 0px 3px #2ebef3;
+}
+
+@keyframes key-breathing {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}

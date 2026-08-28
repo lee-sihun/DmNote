@@ -1,2 +1,10 @@
 # 벤더링된 Steinberg ASIO SDK 소스는 원본 바이트 보존 (EOL 정규화 금지)
 src-tauri/vendor/asio-sdk/** -text
+
+# 기존 Windows ZIP 예제 자산 바이트 보존
+distribution/windows/assets/** whitespace=-trailing-space
+distribution/windows/assets/neonsign.css text eol=crlf
+distribution/windows/assets/rainbow.css text eol=crlf
+distribution/windows/assets/plugin/key-interval.js text eol=crlf
+distribution/windows/assets/plugin/kps.js text eol=crlf
+distribution/windows/assets/plugin/v-archive.js text eol=lf
