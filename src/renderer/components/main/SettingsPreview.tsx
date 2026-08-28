@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import FlaskIcon from '@assets/svgs/flask.svg';
 import { useTranslation } from '@contexts/useTranslation';
 import { PREVIEW_CLIPS, PREVIEW_KEYS } from '@constants/settingsPreviewClips';
+import { useResolvedTheme } from '@hooks/app/useResolvedTheme';
 
 interface SettingsPreviewProps {
   /** 지금 가리키는 설정. 미리보기가 없는 항목이면 기본 화면으로 돌아간다 */
@@ -23,11 +24,19 @@ const SettingsPreview = ({
   hoveredKey,
 }: SettingsPreviewProps): React.ReactElement => {
   const { t } = useTranslation();
+  // 클립은 테마별로 한 벌씩 있다. 색만 다르고 구성·길이는 같다
+  const theme = useResolvedTheme();
   const videosRef = useRef<Record<string, HTMLVideoElement | null>>({});
   const activeKey = hoveredKey && PREVIEW_CLIPS[hoveredKey] ? hoveredKey : null;
   const warmedRef = useRef(false);
+  const themeRef = useRef(theme);
 
   useEffect(() => {
+    // 테마가 바뀌면 아홉 개의 src가 통째로 갈린다 - 데워둔 것도 같이 무효다
+    if (themeRef.current !== theme) {
+      themeRef.current = theme;
+      warmedRef.current = false;
+    }
     // 처음 무엇이든 가리키는 순간 나머지도 받아둔다. 그 전까진 preload가 none이라
     // 설정만 열고 아무것도 안 가리킨 방문에서는 미리 받아두지 않는다.
     // none은 강제가 아니라 힌트라 브라우저가 조금 읽을 수는 있다.
@@ -51,7 +60,7 @@ const SettingsPreview = ({
       video.pause();
       if (video.currentTime !== 0) video.currentTime = 0;
     }
-  }, [activeKey]);
+  }, [activeKey, theme]);
 
   return (
     <div className="relative w-full h-full">
@@ -61,7 +70,7 @@ const SettingsPreview = ({
           ref={(el) => {
             videosRef.current[key] = el;
           }}
-          src={PREVIEW_CLIPS[key].src}
+          src={PREVIEW_CLIPS[key].src[theme]}
           loop
           muted
           playsInline
