@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { forwardRef, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_RADIUS,
@@ -221,7 +221,10 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       ? `translate(${dx}px, ${dy}px)`
       : `translate3d(${dx}px, ${dy}px, 0)`;
 
-    const normalizedHistory = normalizeHistory(history);
+    const normalizedHistory = useMemo(
+      () => normalizeHistory(history),
+      [history],
+    );
     const [animatedLineHistory, setAnimatedLineHistory] = useState<number[]>(
       () => normalizeHistory(history),
     );
@@ -258,8 +261,12 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           cancelAnimationFrame(lineAnimationFrameRef.current);
           lineAnimationFrameRef.current = null;
         }
-        setAnimatedLineHistory(normalizedHistory);
-        animatedLineHistoryRef.current = normalizedHistory;
+        if (
+          !areHistoriesEqual(animatedLineHistoryRef.current, normalizedHistory)
+        ) {
+          animatedLineHistoryRef.current = normalizedHistory;
+          setAnimatedLineHistory(normalizedHistory);
+        }
         return;
       }
 
@@ -270,8 +277,10 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           cancelAnimationFrame(lineAnimationFrameRef.current);
           lineAnimationFrameRef.current = null;
         }
-        setAnimatedLineHistory([]);
-        animatedLineHistoryRef.current = [];
+        if (animatedLineHistoryRef.current.length > 0) {
+          animatedLineHistoryRef.current = [];
+          setAnimatedLineHistory([]);
+        }
         return;
       }
 
@@ -284,8 +293,10 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           cancelAnimationFrame(lineAnimationFrameRef.current);
           lineAnimationFrameRef.current = null;
         }
-        setAnimatedLineHistory(targetHistory);
-        animatedLineHistoryRef.current = targetHistory;
+        if (!areHistoriesEqual(animatedLineHistoryRef.current, targetHistory)) {
+          animatedLineHistoryRef.current = targetHistory;
+          setAnimatedLineHistory(targetHistory);
+        }
         return;
       }
 
@@ -324,8 +335,12 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           cancelAnimationFrame(barAnimationFrameRef.current);
           barAnimationFrameRef.current = null;
         }
-        setAnimatedBarHistory(normalizedHistory);
-        animatedBarHistoryRef.current = normalizedHistory;
+        if (
+          !areHistoriesEqual(animatedBarHistoryRef.current, normalizedHistory)
+        ) {
+          animatedBarHistoryRef.current = normalizedHistory;
+          setAnimatedBarHistory(normalizedHistory);
+        }
         return;
       }
 
@@ -336,8 +351,10 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           cancelAnimationFrame(barAnimationFrameRef.current);
           barAnimationFrameRef.current = null;
         }
-        setAnimatedBarHistory([]);
-        animatedBarHistoryRef.current = [];
+        if (animatedBarHistoryRef.current.length > 0) {
+          animatedBarHistoryRef.current = [];
+          setAnimatedBarHistory([]);
+        }
         return;
       }
 
@@ -350,8 +367,10 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           cancelAnimationFrame(barAnimationFrameRef.current);
           barAnimationFrameRef.current = null;
         }
-        setAnimatedBarHistory(targetHistory);
-        animatedBarHistoryRef.current = targetHistory;
+        if (!areHistoriesEqual(animatedBarHistoryRef.current, targetHistory)) {
+          animatedBarHistoryRef.current = targetHistory;
+          setAnimatedBarHistory(targetHistory);
+        }
         return;
       }
 
