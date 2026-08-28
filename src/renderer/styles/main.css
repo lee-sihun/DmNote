@@ -161,37 +161,11 @@ body.dmn-dragging * {
   pointer-events: none;
 }
 
-/* 투명도 축소 설정 존중 — 남는 라이브 글래스(모달 카드·팝오버)를 고알파 솔리드로 강등
-   틴트 토큰만 요소 스코프에서 승격해 라운딩·인셋 링 재질은 그대로 유지.
-   값은 캔버스 위 라이브 합성 결과 기준 — 고알파 솔리드는 뒷면을 거의 안 받으므로
-   스크림 위 모달에서는 라이브보다 한 톤 밝게 뜬다. blur 없이는 맥락 반영이 불가능 */
-@media (prefers-reduced-transparency: reduce) {
-  .backdrop-glass,
-  .backdrop-glass-popup {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    --ui-glass: rgba(26, 26, 30, 0.96);
-    --ui-glass-heavy: rgba(32, 32, 36, 0.96);
-    --ui-glass-dim: rgba(22, 22, 26, 0.94);
-  }
-
-  /* 스크림은 블러만 끄고 알파 딤으로 폴백 */
-  .backdrop-glass-scrim {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  /* 루미노시티 캡은 블러 없는 표면에서 무의미 — 블렌드 패스도 함께 제거 */
-  .backdrop-glass::after,
-  .backdrop-glass-popup::after {
-    content: none;
-  }
-
-  /* 글래스 패널 틴트 사용처(사이드 패널 프레임·캔버스 팝업)도 동일 승격 */
-  .bg-glass-panel {
-    --ui-glass-panel: rgba(25, 25, 29, 0.96);
-  }
-}
+/* 투명도 축소 설정(prefers-reduced-transparency)은 재질 결정에 쓰지 않는다.
+   Windows 쪽은 접근성 항목이 아니라 개인 설정 > 색의 토글이고 배터리 절약 모드가 임의로 끈다.
+   macOS는 WebKit이 지문 채취를 이유로 미구현이라 이 쿼리가 애초에 걸리지 않는다.
+   대신 앱 크롬에는 솔리드 폴백이 남지 않는다. 메인 창 유저 CSS는 그리드 미리보기로
+   스코프되므로(App.tsx의 USER_CSS_SCOPE_SELECTOR) 모달·패널을 덮지 못한다 */
 
 /* ===== 스크롤바 ===== */
 
