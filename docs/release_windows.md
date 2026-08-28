@@ -13,7 +13,7 @@
 
 ZIP 내부의 `dm-note.exe`는 `DM.NOTE.exe`와 파일명만 다르고 바이트는 동일하다. 워크플로가 두 파일의 SHA-256 일치를 검사한다. ZIP은 Authenticode 서명 이후 생성하므로 서명 요청은 한 번만 발생한다.
 
-ZIP에는 다음 부가 자산이 포함된다.
+`distribution/windows/assets/`의 전체 내용은 ZIP의 `assets/`로 재귀 복사된다. 현재 구성은 다음과 같다.
 
 - `assets/neonsign.css`
 - `assets/rainbow.css`
@@ -22,7 +22,7 @@ ZIP에는 다음 부가 자산이 포함된다.
 - `assets/plugin/v-archive.js`
 - `THIRD_PARTY_NOTICES.txt`
 
-`assets/` 아래의 CSS·플러그인 5개는 기존 1.6.1 Windows ZIP의 내용을 기준으로 `distribution/windows/`에 고정되어 있다. 저장소의 일반 문서·플러그인 파일이 바뀌어도 Windows ZIP 구성이 암묵적으로 달라지지 않는다. `THIRD_PARTY_NOTICES.txt`는 현재 바이너리 의존성과 맞아야 하므로 저장소 최신본을 사용한다.
+CSS·플러그인 5개는 기존 1.6.1 Windows ZIP의 내용을 기준으로 저장되어 있다. 이후 배포 자산을 추가하거나 제거할 때는 `distribution/windows/assets/`만 수정하면 ZIP 구성이 자동으로 따라간다. `THIRD_PARTY_NOTICES.txt`는 현재 바이너리 의존성과 맞아야 하므로 저장소 최신본을 별도로 포함한다.
 
 ## 2. SignPath Artifact Configuration
 

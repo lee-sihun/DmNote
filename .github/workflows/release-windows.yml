@@ -202,34 +202,19 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $signedExe = 'dist\signing-output\DM.NOTE.exe'
           $packageDir = 'dist\windows-package'
-          $pluginDir = Join-Path $packageDir 'assets\plugin'
           $finalDir = 'dist\windows-final'
-          New-Item -ItemType Directory -Path $pluginDir | Out-Null
+          New-Item -ItemType Directory -Path $packageDir | Out-Null
           New-Item -ItemType Directory -Path $finalDir | Out-Null
 
           Copy-Item -LiteralPath $signedExe -Destination (Join-Path $finalDir 'DM.NOTE.exe')
           Copy-Item -LiteralPath $signedExe -Destination (Join-Path $packageDir 'dm-note.exe')
-          $releaseAssets = 'distribution\windows'
-          $assetFiles = @(
-            'assets\neonsign.css',
-            'assets\rainbow.css',
-            'assets\plugin\key-interval.js',
-            'assets\plugin\kps.js',
-            'assets\plugin\v-archive.js'
-          )
-          foreach ($assetFile in $assetFiles) {
-            $sourcePath = Join-Path $releaseAssets $assetFile
-            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-              throw "Windows 배포 자산을 찾을 수 없습니다: $sourcePath"
-            }
+          $releaseAssets = 'distribution\windows\assets'
+          if (-not (Test-Path -LiteralPath $releaseAssets -PathType Container)) {
+            throw "Windows 배포 자산 폴더를 찾을 수 없습니다: $releaseAssets"
           }
 
           Copy-Item -LiteralPath 'THIRD_PARTY_NOTICES.txt' -Destination $packageDir
-          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\neonsign.css') -Destination (Join-Path $packageDir 'assets\neonsign.css')
-          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\rainbow.css') -Destination (Join-Path $packageDir 'assets\rainbow.css')
-          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\plugin\key-interval.js') -Destination $pluginDir
-          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\plugin\kps.js') -Destination $pluginDir
-          Copy-Item -LiteralPath (Join-Path $releaseAssets 'assets\plugin\v-archive.js') -Destination $pluginDir
+          Copy-Item -LiteralPath $releaseAssets -Destination $packageDir -Recurse
 
           $zipPath = Join-Path $finalDir "DM.NOTE.v.$env:VERSION.zip"
           Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
