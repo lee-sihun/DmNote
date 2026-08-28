@@ -17,15 +17,9 @@
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 </div>
 
-https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
-
-## 🌟 개요
-
-**DM Note**는 DJMAX RESPECT V에서 사용하기 위해 만들어진 키뷰어 프로그램입니다. 다른 게임에서도 자유롭게 사용할 수 있으며 간편한 설정으로 스트리밍이나 플레이 영상 제작 시 키 입력을 시각적으로 보여줄 수 있습니다. 현재는 공식적으로 Windows 10/11, macOS 환경만 지원하고 있습니다. 만약 리눅스 환경이라면 [커뮤니티 포크 버전](https://github.com/northernorca/DmNote)을 사용해보는걸 추천합니다.
-
-[DM NOTE v2.0.0 다운로드](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
-
-[Code signing policy](CODE_SIGNING_POLICY.md)
+<div align="center">
+  <img src="docs/assets/screenshot-ko.png" alt="Screenshot" width="820">
+</div>
 
 ## 개요
 

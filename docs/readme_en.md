@@ -23,7 +23,7 @@
 
 ## Overview
 
-[Download DM NOTE v2.0.0](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+**DM Note** is a key viewer built for DJMAX RESPECT V.
 
 It works just as well with any other game, and the setup is simple enough to put your key input on a stream or a gameplay video right away.
 
