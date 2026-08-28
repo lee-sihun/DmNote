@@ -13,96 +13,88 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 </div>
 
-https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
+<div align="center">
+  <img src="assets/screenshot-zh-cn.png" alt="Screenshot" width="820">
+</div>
 
-## 🌟 概述
+## 概述
 
-**DM Note** 是一款专为 DJMAX RESPECT V 设计的按键显示程序，也可以自由用于任何其他游戏。通过简单设置，您可以在直播或游戏视频创作时可视化显示按键输入。目前仅官方支持 Windows 10/11 和 macOS 环境。如果您使用的是 Linux，我们推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote)。
+**DM Note** 是一款专为 DJMAX RESPECT V 打造的按键显示程序。
 
-[前往下载 DM NOTE v1.6.1](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
+它同样可以自由用于其他游戏，设置也很简单，可以直接把按键输入显示在直播或游戏视频中。
+
+**支持环境** · Windows 10/11 · macOS
+如果您使用 Linux，推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote)。
+
+[前往下载 DM NOTE v2.0.0](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
 
 [Code signing policy](../CODE_SIGNING_POLICY.md)
 
-## 🖼️ 截图
+## 功能特性
 
-<img src="assets/image.png" alt="Screenshot" width="700">
-<img src="assets/IMG_1005.gif" alt="Note Effect" width="700">
+**输入与显示**：[实时可视化](https://dmnote.app/en/docs/guide/interface) · [按键映射](https://dmnote.app/en/docs/guide/key-mapping) · [音符效果](https://dmnote.app/en/docs/guide/note-effects) · [按键计数器](https://dmnote.app/en/docs/guide/key-counter) · KPS 统计与图表 · 键音
 
-## ✨ 功能特性
+**外观定制**：网格编辑 · 为每个键指定图片 · [自定义 CSS](https://dmnote.app/en/docs/custom-css) · 插件 · [预设](https://dmnote.app/en/docs/guide/presets)
 
-### ⌨️ 键盘输入 与 映射
+**覆盖层**：始终置顶 · 锁定位置 · 缩放锚点 · OBS 浏览器源
 
-- 实时键盘输入检测与可视化
-- 自定义按键映射配置
+此外还支持 5 种界面语言、快捷键、重置设置和自动更新。详细用法请查阅[文档](https://dmnote.app/en/docs/)。
 
-### 🎨 按键样式 自定义
+## 安装
 
-- 基于网格的按键编辑
-- 支持图片分配
+通过上方下载链接获取最新版本，解压后即可运行。
 
-### 🌧️ 音符键雨自定义
+macOS 需要先设置权限，请先查阅 [macOS 安装与权限设置指南](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_zh-cn.md)。
 
-- 音符键雨样式自定义
-- 轨道速度、高度及反转模式支持
+设置保存在 `%appdata%/com.dmnote.desktop` 文件夹中。
 
-### 🔢 按键计数器
+> 本程序可自由用于直播或游戏视频制作。
 
-- 显示每个按键的输入次数
-- 自定义计数器位置、颜色和样式
+## 使用技巧
 
-### 📊 输入统计
+> [!TIP]
+> 如果您不需要实时查看覆盖层，只用于直播或录制，推荐使用 **OBS 模式**。
+>
+> 相比普通覆盖层模式，它对游戏帧率的影响更小。
 
-- KPS、AVG、MAX、TOTAL 统计显示
-- KPS 图表可视化
-- 统计元素及图表样式自定义
+如果游戏电脑和直播、录制电脑是分开的，建议在游戏电脑上运行 DM Note，再从直播电脑通过 OBS 浏览器源连接。
 
-### 🎵 按键音效
+这样几乎可以完全消除按键显示程序造成的掉帧。
 
-- 按键输入时播放音效
-- 支持自定义音效文件
+### 覆盖层被游戏遮挡时
 
-### 🖼️ 覆盖层 与 窗口管理
+即使开启**始终置顶**，部分游戏在全屏模式下仍会遮挡覆盖层。此时请将该游戏切换为无边框窗口模式。
 
-- 锁定窗口位置 & 始终置顶
-- 选择调整锚点大小
+## 插件与 CSS
 
-### 🖥️ OBS 模式
+> [!WARNING]
+> **请勿加载不受信任的插件。**
+>
+> 使用非官方插件前，请用 ChatGPT 等工具确认其安全性。
 
-- 兼容 OBS 浏览器源
+自定义 CSS 可以随心改变程序界面和覆盖层的样式。
 
-### 🧩 自定义 CSS 与插件支持
+官方插件和 CSS 示例包含在 `assets.zip` 中。
 
-- 通过自定义 CSS 完全自定义程序界面和覆盖层样式
-- 支持自定义插件
+填写类名时只输入名称，不要带选择器（`blue` ✅，`.blue` ❌）。
 
-### 💾 预设 与 设置管理
-
-- 自动保存用户设置
-- 保存/加载预设
-
-### ⚙️ 其他设置
-
-- 多语言界面支持（韩文、英文、中文简体/繁体、俄语）
-- 快捷键设置支持
-- 重置设置及自动更新
-
-## 🚀 开发
+## 开发
 
 ### 技术结构
 
-- **前端**: React 19 + Typescript + Vite 7
-- **后端**: Tauri
-- **样式**: Tailwind CSS 3
-- **输入检测**: Raw Input API (Windows), 全局输入事件 (macOS)
-- **包管理器**: npm
+- **前端**：React 19 + TypeScript + Vite 7
+- **后端**：Tauri
+- **样式**：Tailwind CSS 3
+- **输入检测**：Raw Input API (Windows)、全局输入事件 (macOS)
+- **包管理器**：npm
 
-### 基本安装 与 运行
+### 安装与运行
 
-在终端中按顺序输入一下命令:
+在终端中按顺序输入以下命令。
 
 ```bash
 git clone https://github.com/lee-sihun/DmNote.git
@@ -111,36 +103,27 @@ npm install
 npm run tauri:dev
 ```
 
-### Windows ASIO 构建
+<details>
+<summary><b>Windows ASIO 构建</b></summary>
 
 在 Windows 上，`npm run tauri:dev` / `npm run tauri:build` 默认包含键音 ASIO 输出（npm 脚本会启用 `asio-backend` 特性）。
 
-包含 ASIO 的构建除常规依赖外还需要：
+包含 ASIO 的构建除常规依赖外还需要以下两项。
 
 - **LLVM/Clang**：供 bindgen 生成 ASIO 头文件绑定。安装 LLVM（`winget install LLVM.LLVM` 或 `scoop install llvm`），并将环境变量 `LIBCLANG_PATH` 设置为 LLVM 的 `bin` 文件夹路径。
-- **ASIO SDK**: Steinberg ASIO SDK 已内置在仓库中（`src-tauri/vendor/asio-sdk`）并自动使用。无需额外设置或网络连接；如需使用自己的 SDK，可通过环境变量 `CPAL_ASIO_DIR` 覆盖。
+- **ASIO SDK**：Steinberg ASIO SDK 已内置在仓库中（`src-tauri/vendor/asio-sdk`）并自动使用。无需额外设置或网络连接，如需使用自己的 SDK，可通过环境变量 `CPAL_ASIO_DIR` 覆盖。
 
-如需不含 ASIO 的构建（无需 LLVM，便于参与贡献），请使用 `npm run tauri:dev:no-asio` / `npm run tauri:build:no-asio`。在 `src-tauri` 中直接运行的 `cargo check` / `cargo build` 默认也不包含 ASIO；如需检查 ASIO 代码路径，请加上 `--features asio-backend`。
+如需不含 ASIO 的构建（无需 LLVM，便于参与贡献），请使用 `npm run tauri:dev:no-asio` / `npm run tauri:build:no-asio`。在 `src-tauri` 中直接运行的 `cargo check` / `cargo build` 默认也不包含 ASIO，如需检查 ASIO 代码路径请加上 `--features asio-backend`。
 
 > 本仓库依据 Steinberg ASIO SDK 双重许可中的 GPLv3 选项使用该 SDK。详见 [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt)。_ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 
-## � 注意事项
+</details>
 
-- **本程序可自由用于直播或游戏视频制作等场景。**
-- [macOS 安装与权限设置指南](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_zh-cn.md)
-- 程序默认设置保存在 `%appdata%/com.dmnote.desktop` 文件夹中。
-- 如果您不需要实时查看覆盖层，且用于直播或游戏视频制作，默认推荐使用 **OBS 模式**。这可以减少对游戏帧率的负面影响。
-- 如果游戏电脑和直播/录制电脑是分开的，建议在游戏电脑上运行 DM Note，在直播/录制电脑上通过 OBS 浏览器源连接。这样可以几乎完全解决因按键显示器导致的游戏帧率下降问题。
-- 即使启用了 **始终置顶** 功能，部分游戏的全屏模式下覆盖层可能会被游戏遮挡。此时请使用无边框窗口模式。
-- 官方插件和 CSS 示例文件包含在 `assets.zip` 文件中。
-- **请勿加载不受信任的插件。** 使用非官方插件时，请使用 ChatGPT 等工具确认其安全性后再使用。
-- 分配类名时，只输入名称，不输入选择器（`blue` ✅，`.blue` ❌）
+## 贡献指南
 
-## 🤝 贡献指南
+欢迎各位参与贡献。详情请查阅 [贡献指南](../CONTRIBUTING.md)。
 
-我们欢迎各位的贡献！详情请查阅 [贡献指南](../CONTRIBUTING.md)
-
-### ✨ 贡献者
+### 贡献者
 
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
 <!-- prettier-ignore-start -->
@@ -149,7 +132,7 @@ npm run tauri:dev
   <tbody>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/lee-sihun"><img src="https://avatars.githubusercontent.com/u/111095268?v=4?s=100" width="100px;" alt="이시훈"/><br /><sub><b>이시훈</b></sub></a><br /><a href="#maintenance-lee-sihun" title="Maintenance">🚧</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/eun-yeon"><img src="https://avatars.githubusercontent.com/u/173552527?v=4?s=100" width="100px;" alt="연우"/><br /><sub><b>연우</b></sub></a><br /><a href="#design-eun-yeon" title="Design">🎨</a> <a href="#ideas-eun-yeon" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/eun-yeon"><img src="https://avatars.githubusercontent.com/u/173552527?v=4?s=100" width="100px;" alt="연우"/><br /><sub><b>연우</b></sub></a><br /><a href="#maintenance-eun-yeon" title="Maintenance">🚧</a> <a href="#design-eun-yeon" title="Design">🎨</a> <a href="#ideas-eun-yeon" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/mohong2"><img src="https://avatars.githubusercontent.com/u/150683765?v=4?s=100" width="100px;" alt="mo_hong"/><br /><sub><b>mo_hong</b></sub></a><br /><a href="#translation-mohong2" title="Translation">🌍</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/LSVoiid"><img src="https://avatars.githubusercontent.com/u/187824877?v=4?s=100" width="100px;" alt="LSVoiid"/><br /><sub><b>LSVoiid</b></sub></a><br /><a href="#translation-LSVoiid" title="Translation">🌍</a> <a href="https://github.com/DmNote-App/DmNote/commits?author=LSVoiid" title="Documentation">📖</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/kahyou22"><img src="https://avatars.githubusercontent.com/u/136758821?v=4?s=100" width="100px;" alt="문주"/><br /><sub><b>문주</b></sub></a><br /><a href="https://github.com/DmNote-App/DmNote/commits?author=kahyou22" title="Code">💻</a></td>
@@ -167,10 +150,10 @@ npm run tauri:dev
 
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
-## 📄 许可证
+## 许可证
 
 [GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 
-## ❤️ 特别致谢!
+## 特别致谢
 
 - [tauri-apps/tauri](https://github.com/tauri-apps/tauri)

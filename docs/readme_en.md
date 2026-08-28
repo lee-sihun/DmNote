@@ -13,96 +13,88 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 </div>
 
-https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
+<div align="center">
+  <img src="assets/screenshot-en.png" alt="Screenshot" width="820">
+</div>
 
-## 🌟 Overview
+## Overview
 
-**DM Note** is a customizable key viewer for DJMAX RESPECT V and any other game. With simple setup, you can visually display key inputs during streaming or gameplay video creation. Currently, it officially supports Windows 10/11 and macOS environments only. If you are on Linux, we recommend trying the [community fork version](https://github.com/northernorca/DmNote).
+**DM Note** is a key viewer built for DJMAX RESPECT V.
 
-[Download DM NOTE v1.6.1](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
+It works just as well with any other game, and the setup is simple enough to put your key input on a stream or a gameplay video right away.
+
+**Supported** · Windows 10/11 · macOS
+On Linux, try the [community fork](https://github.com/northernorca/DmNote).
+
+[Download DM NOTE v2.0.0](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
 
 [Code signing policy](../CODE_SIGNING_POLICY.md)
 
-## 🖼️ Screenshots
+## Features
 
-<img src="assets/image.png" alt="Screenshot" width="700">
-<img src="assets/IMG_1005.gif" alt="Note Effect" width="700">
+**Input and display**: [live visualization](https://dmnote.app/en/docs/guide/interface) · [key mapping](https://dmnote.app/en/docs/guide/key-mapping) · [note effects](https://dmnote.app/en/docs/guide/note-effects) · [key counter](https://dmnote.app/en/docs/guide/key-counter) · KPS stats and graph · key sounds
 
-## ✨ Features
+**Styling**: grid editing · per-key images · [custom CSS](https://dmnote.app/en/docs/custom-css) · plugins · [presets](https://dmnote.app/en/docs/guide/presets)
 
-### ⌨️ Keyboard Input & Mapping
+**Overlay**: always on top · lock position · resize anchor · OBS browser source
 
-- Real-time keyboard input detection and visualization
-- Custom key mapping configuration
+Five interface languages, shortcuts, settings reset, and auto-update round it out. See the [documentation](https://dmnote.app/en/docs/) for the details.
 
-### 🎨 Key Style Customization
+## Installation
 
-- Grid-based key editing
-- Support for image assignment
+Grab the latest build from the download link above, unzip it, and run it.
 
-### 🌧️ Note Effect (Raining Effect) Customization
+macOS needs a few permissions first. Check the [macOS installation and permission guide](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_en.md).
 
-- Note effect style customization
-- Track speed, height, and reverse mode support
+Settings live in the `%appdata%/com.dmnote.desktop` folder.
 
-### 🔢 Key Counter
+> Free to use for streaming and gameplay video production.
 
-- Display input counts per key
-- Customize counter position, color, and style
+## Tips
 
-### 📊 Input Statistics
+> [!TIP]
+> If you never look at the overlay yourself and only stream or record, use **OBS Mode**.
+>
+> It puts less load on game frame rates than the regular overlay.
 
-- KPS, AVG, MAX, TOTAL statistics display
-- KPS graph visualization
-- Statistics elements and graph style customization
+With a separate gaming PC and streaming PC, run DM Note on the gaming PC and connect from the streaming PC through an OBS browser source.
 
-### 🎵 Key Sound
+That all but removes the frame drops the key viewer causes.
 
-- Play sound effects on key input
-- Custom sound file support
+### When the overlay hides behind the game
 
-### 🖼️ Overlay & Window Management
+**Always on top** still loses to full-screen mode in some games. Switch that game to borderless window mode.
 
-- Lock window position & always on top
-- Select resize anchor
+## Plugins and CSS
 
-### 🖥️ OBS Mode
+> [!WARNING]
+> **Never load a plugin you do not trust.**
+>
+> Before running an unofficial plugin, check it with a tool like ChatGPT.
 
-- Compatible with OBS browser source
+Custom CSS reshapes the interface and the overlay however you want.
 
-### 🧩 Custom CSS & Plugin Support
+Official plugins and CSS samples ship inside `assets.zip`.
 
-- Fully customizable overlay styles with custom CSS, mirrored live in the editor preview
-- Custom plugin support
+Enter class names without the selector (`blue` ✅, `.blue` ❌).
 
-### 💾 Presets & Settings Management
+## Development
 
-- Auto-save user settings
-- Save/Load presets
+### Tech stack
 
-### ⚙️ Other Settings
-
-- Multilingual interface support (Korean, English, Chinese Simplified/Traditional, Russian)
-- Shortcut key settings support
-- Reset settings and auto-update
-
-## 🚀 Development
-
-### Tech Stack
-
-- **Frontend**: React 19 + Typescript + Vite 7
+- **Frontend**: React 19 + TypeScript + Vite 7
 - **Backend**: Tauri
 - **Styling**: Tailwind CSS 3
-- **Input Detection**: Raw Input API (Windows), Global input events (macOS)
-- **Package Manager**: npm
+- **Input detection**: Raw Input API (Windows), global input events (macOS)
+- **Package manager**: npm
 
-### Basic Installation & Run
+### Install and run
 
-Enter the following commands in your terminal in order:
+Run these in your terminal, in order.
 
 ```bash
 git clone https://github.com/lee-sihun/DmNote.git
@@ -111,36 +103,27 @@ npm install
 npm run tauri:dev
 ```
 
-### Windows ASIO Build
+<details>
+<summary><b>Windows ASIO build</b></summary>
 
 On Windows, `npm run tauri:dev` / `npm run tauri:build` include ASIO key sound output by default (the npm scripts enable the `asio-backend` feature).
 
-ASIO-enabled builds require the following in addition to the regular dependencies:
+An ASIO build needs two things beyond the regular dependencies.
 
-- **LLVM/Clang**: Used by bindgen to generate ASIO header bindings. Install LLVM (`winget install LLVM.LLVM` or `scoop install llvm`) and set the `LIBCLANG_PATH` environment variable to LLVM's `bin` folder.
-- **ASIO SDK**: The Steinberg ASIO SDK is vendored in this repository (`src-tauri/vendor/asio-sdk`) and used automatically. No extra setup or network connection is needed; set the `CPAL_ASIO_DIR` environment variable to override it with your own SDK.
+- **LLVM/Clang**: used by bindgen to generate ASIO header bindings. Install LLVM (`winget install LLVM.LLVM` or `scoop install llvm`) and point `LIBCLANG_PATH` at LLVM's `bin` folder.
+- **ASIO SDK**: the Steinberg ASIO SDK is vendored here (`src-tauri/vendor/asio-sdk`) and picked up automatically. No extra setup or network access is required, and `CPAL_ASIO_DIR` overrides it with your own SDK.
 
-To build without ASIO (no LLVM required — handy for contributing), use `npm run tauri:dev:no-asio` / `npm run tauri:build:no-asio`. Plain `cargo check` / `cargo build` in `src-tauri` also exclude ASIO by default; add `--features asio-backend` to cover the ASIO code paths.
+To build without ASIO (no LLVM needed, handy when contributing) use `npm run tauri:dev:no-asio` / `npm run tauri:build:no-asio`. Plain `cargo check` / `cargo build` in `src-tauri` also leave ASIO out; add `--features asio-backend` to cover those code paths.
 
 > This repository uses the Steinberg ASIO SDK under the GPLv3 option of its dual license. See [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt). _ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 
-## � Notes
+</details>
 
-- **This program is free to use for streaming or gameplay video production.**
-- [macOS installation and permission setup guide](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_en.md)
-- Program default settings are saved in the `%appdata%/com.dmnote.desktop` folder.
-- If you don't need to check the overlay in real-time and are using it for streaming or gameplay video production, **OBS Mode** is recommended by default. This can reduce the negative impact on game frame rates compared to the regular overlay mode.
-- If your gaming PC and streaming/recording PC are separate, we recommend running DM Note on the gaming PC and connecting via OBS browser source on the streaming/recording PC. This can almost completely resolve game frame drop issues caused by the key viewer.
-- Even with the **Always on top** feature enabled, the overlay may be hidden behind the game in full-screen mode for some games. In this case, please use borderless window mode.
-- Official plugins and CSS example files are included in the `assets.zip` file.
-- **Never load untrusted plugins.** When using unofficial plugins, make sure to verify their safety using tools like ChatGPT before use.
-- When assigning class names, enter only the name excluding the selector (`blue` ✅, `.blue` ❌)
+## Contributing
 
-## 🤝 Contributing
+Contributions are always welcome. See the [contributing guide](../CONTRIBUTING.md) for details.
 
-We welcome your contributions! Please check the [Contributing Guide](../CONTRIBUTING.md) for details.
-
-### ✨ Contributors
+### Contributors
 
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
 <!-- prettier-ignore-start -->
@@ -149,7 +132,7 @@ We welcome your contributions! Please check the [Contributing Guide](../CONTRIBU
   <tbody>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/lee-sihun"><img src="https://avatars.githubusercontent.com/u/111095268?v=4?s=100" width="100px;" alt="이시훈"/><br /><sub><b>이시훈</b></sub></a><br /><a href="#maintenance-lee-sihun" title="Maintenance">🚧</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/eun-yeon"><img src="https://avatars.githubusercontent.com/u/173552527?v=4?s=100" width="100px;" alt="연우"/><br /><sub><b>연우</b></sub></a><br /><a href="#design-eun-yeon" title="Design">🎨</a> <a href="#ideas-eun-yeon" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/eun-yeon"><img src="https://avatars.githubusercontent.com/u/173552527?v=4?s=100" width="100px;" alt="연우"/><br /><sub><b>연우</b></sub></a><br /><a href="#maintenance-eun-yeon" title="Maintenance">🚧</a> <a href="#design-eun-yeon" title="Design">🎨</a> <a href="#ideas-eun-yeon" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/mohong2"><img src="https://avatars.githubusercontent.com/u/150683765?v=4?s=100" width="100px;" alt="mo_hong"/><br /><sub><b>mo_hong</b></sub></a><br /><a href="#translation-mohong2" title="Translation">🌍</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/LSVoiid"><img src="https://avatars.githubusercontent.com/u/187824877?v=4?s=100" width="100px;" alt="LSVoiid"/><br /><sub><b>LSVoiid</b></sub></a><br /><a href="#translation-LSVoiid" title="Translation">🌍</a> <a href="https://github.com/DmNote-App/DmNote/commits?author=LSVoiid" title="Documentation">📖</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/kahyou22"><img src="https://avatars.githubusercontent.com/u/136758821?v=4?s=100" width="100px;" alt="문주"/><br /><sub><b>문주</b></sub></a><br /><a href="https://github.com/DmNote-App/DmNote/commits?author=kahyou22" title="Code">💻</a></td>
@@ -167,10 +150,10 @@ We welcome your contributions! Please check the [Contributing Guide](../CONTRIBU
 
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
-## 📄 License
+## License
 
 [GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
 
-## ❤️ Special Thanks!
+## Special Thanks
 
 - [tauri-apps/tauri](https://github.com/tauri-apps/tauri)
