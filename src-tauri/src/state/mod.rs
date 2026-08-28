@@ -19,6 +19,7 @@ pub(crate) mod migration;
 pub(crate) mod native_element_id;
 pub(crate) mod plugin;
 pub mod store;
+pub(crate) mod window_theme;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows_window_corners;
 

@@ -74,17 +74,6 @@ const MIN_OVERLAY_DIMENSION: f64 = 100.0;
 // 넓은 배치에 트랙 높이를 크게 잡으면 이전 상한 2000에서 조용히 잘렸음
 const MAX_OVERLAY_DIMENSION: f64 = 4096.0;
 
-fn resolve_ui_theme(app: &AppHandle, preference: UiTheme) -> tauri::Theme {
-    match preference {
-        UiTheme::Light => tauri::Theme::Light,
-        UiTheme::Dark => tauri::Theme::Dark,
-        UiTheme::System => app
-            .get_webview_window("main")
-            .and_then(|window| window.theme().ok())
-            .unwrap_or(tauri::Theme::Dark),
-    }
-}
-
 #[cfg(target_os = "macos")]
 const OVERLAY_FRAME_APPLY_TIMEOUT_MS: u64 = 250;
 
@@ -1352,7 +1341,7 @@ impl AppState {
     fn attach_main_window_handlers(&self, app: &AppHandle) {
         let overlay_force_close = self.overlay_force_close.clone();
         if let Some(window) = app.get_webview_window("main") {
-            attach_main_window_close_handler(window, overlay_force_close, app.clone());
+            attach_main_window_event_handler(window, overlay_force_close, app.clone());
             return;
         }
 
@@ -1361,7 +1350,7 @@ impl AppState {
         thread::spawn(move || {
             for _ in 0..15 {
                 if let Some(window) = app_handle.get_webview_window("main") {
-                    attach_main_window_close_handler(
+                    attach_main_window_event_handler(
                         window,
                         overlay_force_close.clone(),
                         app_handle.clone(),
@@ -3618,7 +3607,10 @@ impl AppState {
         let snapshot = self.store.snapshot();
         let stored_bounds = snapshot.panel_bounds;
         let layout = resolve_panel_window_layout(stored_bounds, main_rect, monitors, None);
-        let resolved_theme = resolve_ui_theme(app, snapshot.ui_theme);
+        let native_theme = app
+            .get_webview_window("main")
+            .and_then(|window| window.theme().ok());
+        let resolved_theme = super::window_theme::resolve_theme(snapshot.ui_theme, native_theme);
 
         // about:blank는 runtime-wry가 초기 네비게이션을 건너뛴다 - opener가 문서를 채우고,
         // WebView2의 "NewWindow는 네비게이션 전이어야 함" 요건도 이걸로 맞는다.
@@ -4089,9 +4081,14 @@ impl AppState {
         let is_visible = *self.overlay_visible.read();
 
         if let Some(value) = diff.changed.ui_theme {
-            for label in ["main", PANEL_LABEL] {
-                if let Some(window) = app.get_webview_window(label) {
-                    window.set_theme(value.as_tauri_theme())?;
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(err) = super::window_theme::apply_main_window_theme(&window, value) {
+                    log::warn!("failed to synchronize main window theme: {err:#}");
+                }
+            }
+            if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+                if let Err(err) = window.set_theme(value.as_tauri_theme()) {
+                    log::warn!("failed to apply panel window theme: {err}");
                 }
             }
         }
@@ -5162,7 +5159,7 @@ mod output_backend_tests {
     }
 }
 
-fn attach_main_window_close_handler(
+fn attach_main_window_event_handler(
     window: WebviewWindow,
     overlay_force_close: Arc<AtomicBool>,
     app_handle: AppHandle,
@@ -5176,8 +5173,17 @@ fn attach_main_window_close_handler(
     }
 
     let main_window = window.clone();
-    window.on_window_event(move |event| {
-        if let WindowEvent::CloseRequested { api, .. } = event {
+    window.on_window_event(move |event| match event {
+        WindowEvent::ThemeChanged(theme)
+            if app_handle.state::<AppState>().store.snapshot().ui_theme == UiTheme::System =>
+        {
+            if let Err(err) =
+                super::window_theme::apply_main_window_background(&main_window, *theme)
+            {
+                log::warn!("failed to follow system theme for main window: {err:#}");
+            }
+        }
+        WindowEvent::CloseRequested { api, .. } => {
             if overlay_force_close.load(Ordering::SeqCst) {
                 return;
             }
@@ -5202,6 +5208,7 @@ fn attach_main_window_close_handler(
             api.prevent_close();
             state.request_frontend_shutdown(app_handle.clone());
         }
+        _ => {}
     });
 }
 
