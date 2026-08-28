@@ -12,9 +12,9 @@
     <strong>打造专属于你的按键显示程序</strong>
   </p>
   
-  [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
-  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
+  [![GitHub release](https://img.shields.io/github/release/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases)
+  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+  [![GitHub license](https://img.shields.io/github/license/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 </div>
 
 <div align="center">
@@ -30,7 +30,7 @@
 **支持环境** · Windows 10/11 · macOS
 如果您使用 Linux，推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote)。
 
-[前往下载 DM NOTE v2.0.0](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+[前往下载 DM NOTE v2.0.0](https://github.com/DmNote-App/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
 
 [Code signing policy](../CODE_SIGNING_POLICY.md)
 
@@ -97,7 +97,7 @@
 在终端中按顺序输入以下命令。
 
 ```bash
-git clone https://github.com/lee-sihun/DmNote.git
+git clone https://github.com/DmNote-App/DmNote.git
 cd DmNote
 npm install
 npm run tauri:dev
@@ -152,7 +152,7 @@ npm run tauri:dev
 
 ## 许可证
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 
 ## 特别致谢
 

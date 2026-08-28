@@ -12,9 +12,9 @@
     <strong>A customizable key viewer for DJMAX RESPECT V and any game</strong>
   </p>
   
-  [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
-  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
+  [![GitHub release](https://img.shields.io/github/release/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases)
+  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+  [![GitHub license](https://img.shields.io/github/license/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 </div>
 
 <div align="center">
@@ -30,7 +30,7 @@ It works just as well with any other game, and the setup is simple enough to put
 **Supported** · Windows 10/11 · macOS
 On Linux, try the [community fork](https://github.com/northernorca/DmNote).
 
-[Download DM NOTE v2.0.0](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+[Download DM NOTE v2.0.0](https://github.com/DmNote-App/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
 
 [Code signing policy](../CODE_SIGNING_POLICY.md)
 
@@ -97,7 +97,7 @@ Enter class names without the selector (`blue` ✅, `.blue` ❌).
 Run these in your terminal, in order.
 
 ```bash
-git clone https://github.com/lee-sihun/DmNote.git
+git clone https://github.com/DmNote-App/DmNote.git
 cd DmNote
 npm install
 npm run tauri:dev
@@ -152,7 +152,7 @@ Contributions are always welcome. See the [contributing guide](../CONTRIBUTING.m
 
 ## License
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 
 ## Special Thanks
 

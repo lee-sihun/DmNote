@@ -38,7 +38,7 @@ DM Note에 관심을 가져주셔서 감사합니다! 이 문서는 프로젝트
 ### 개발 환경 설정
 
 ```bash
-git clone https://github.com/lee-sihun/DmNote.git
+git clone https://github.com/DmNote-App/DmNote.git
 cd DmNote
 npm install
 npm run tauri:dev

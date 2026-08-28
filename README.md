@@ -12,9 +12,9 @@
     <strong>나만의 스타일로 완성하는 키뷰어</strong>
   </p>
 
-  [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
-  [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
+  [![GitHub release](https://img.shields.io/github/release/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases)
+  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+  [![GitHub license](https://img.shields.io/github/license/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 </div>
 
 <div align="center">
@@ -30,7 +30,7 @@
 **지원 환경** · Windows 10/11 · macOS
 리눅스 환경이라면 [커뮤니티 포크 버전](https://github.com/northernorca/DmNote)을 사용해 보시는 것을 추천합니다.
 
-[DM NOTE v2.0.0 다운로드](https://github.com/lee-sihun/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
+[DM NOTE v2.0.0 다운로드](https://github.com/DmNote-App/DmNote/releases/download/2.0.0/DM.NOTE.v.2.0.0.zip)
 
 [Code signing policy](CODE_SIGNING_POLICY.md)
 
@@ -97,7 +97,7 @@
 터미널에서 다음 명령어를 순서대로 입력해 주세요.
 
 ```bash
-git clone https://github.com/lee-sihun/DmNote.git
+git clone https://github.com/DmNote-App/DmNote.git
 cd DmNote
 npm install
 npm run tauri:dev
@@ -152,7 +152,7 @@ ASIO 없이 빌드하려면(LLVM 불필요, 기여할 때 편합니다) `npm run
 
 ## 라이선스
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/lee-sihun/DmNote/blob/main/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 
 ## Special Thanks
 

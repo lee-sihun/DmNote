@@ -38,7 +38,7 @@ We welcome all forms of contribution.
 ### Development Setup
 
 ```bash
-git clone https://github.com/lee-sihun/DmNote.git
+git clone https://github.com/DmNote-App/DmNote.git
 cd DmNote
 npm install
 npm run tauri:dev
