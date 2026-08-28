@@ -5,9 +5,9 @@ use anyhow::{Context, Result};
 use crate::models::{
     AppStoreData, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, FontType, NoteSettings,
     NoteSettingsPatch, SettingsDiff, SettingsPatch, SettingsPatchInput, SettingsState,
-    ShortcutsState,
+    ShortcutsState, UiTheme,
 };
-use crate::state::AppStore;
+use crate::{errors::EditorCommitError, state::AppStore};
 
 #[derive(Clone)]
 pub struct SettingsService {
@@ -28,7 +28,7 @@ impl SettingsService {
         self.store.update(|state| {
             diff = Some(apply_patch_to_store(state, &patch));
         })?;
-        diff.context("settings patch did not produce a diff")
+        diff.context("settings patch did not produce a diff")?
     }
 }
 
@@ -36,16 +36,21 @@ pub(crate) fn settings_from_store(store: &AppStoreData) -> SettingsState {
     store.settings_state()
 }
 
+pub(crate) fn settings_patch_validation_error(error: anyhow::Error) -> EditorCommitError {
+    EditorCommitError::validation("INVALID_SETTINGS_PATCH", error.to_string())
+}
+
 pub(crate) fn apply_patch_to_store(
     store: &mut AppStoreData,
     patch: &SettingsPatchInput,
-) -> SettingsDiff {
+) -> Result<SettingsDiff> {
     let current = settings_from_store(store);
-    let normalized = normalize_patch(patch, &current);
+    let normalized = normalize_patch(patch, &current)?;
     let next = apply_changes(current, &normalized);
 
     store.hardware_acceleration = next.hardware_acceleration;
     store.always_on_top = next.always_on_top;
+    store.ui_theme = next.ui_theme;
     store.overlay_locked = next.overlay_locked;
     store.note_effect = next.note_effect;
     store.note_settings = next.note_settings.clone();
@@ -67,19 +72,25 @@ pub(crate) fn apply_patch_to_store(
     store.shortcuts = next.shortcuts.clone();
     store.obs_mode_enabled = next.obs_mode_enabled;
 
-    SettingsDiff {
+    Ok(SettingsDiff {
         changed: normalized,
         full: Some(next),
-    }
+    })
 }
 
-fn normalize_patch(patch: &SettingsPatchInput, current: &SettingsState) -> SettingsPatch {
+fn normalize_patch(patch: &SettingsPatchInput, current: &SettingsState) -> Result<SettingsPatch> {
     let mut normalized = SettingsPatch::default();
     if let Some(value) = patch.hardware_acceleration {
         normalized.hardware_acceleration = Some(value);
     }
     if let Some(value) = patch.always_on_top {
         normalized.always_on_top = Some(value);
+    }
+    if let Some(value) = patch.ui_theme.as_deref() {
+        normalized.ui_theme = Some(
+            UiTheme::try_from(value)
+                .map_err(|()| anyhow::anyhow!("invalid uiTheme value: {value}"))?,
+        );
     }
     if let Some(value) = patch.overlay_locked {
         normalized.overlay_locked = Some(value);
@@ -195,7 +206,7 @@ fn normalize_patch(patch: &SettingsPatchInput, current: &SettingsState) -> Setti
     if let Some(value) = patch.obs_mode_enabled {
         normalized.obs_mode_enabled = Some(value);
     }
-    normalized
+    Ok(normalized)
 }
 
 fn apply_changes(mut current: SettingsState, patch: &SettingsPatch) -> SettingsState {
@@ -204,6 +215,9 @@ fn apply_changes(mut current: SettingsState, patch: &SettingsPatch) -> SettingsS
     }
     if let Some(value) = patch.always_on_top {
         current.always_on_top = value;
+    }
+    if let Some(value) = patch.ui_theme {
+        current.ui_theme = value;
     }
     if let Some(value) = patch.overlay_locked {
         current.overlay_locked = value;
@@ -350,6 +364,7 @@ mod tests {
 
         assert!(d.hardware_acceleration);
         assert!(d.always_on_top);
+        assert_eq!(d.ui_theme, UiTheme::System);
         assert!(!d.overlay_locked);
         assert!(!d.note_effect);
         if cfg!(target_os = "macos") {
@@ -499,6 +514,7 @@ mod tests {
         let expected_a = SettingsState {
             hardware_acceleration: false,
             always_on_top: false,
+            ui_theme: UiTheme::Light,
             overlay_locked: true,
             note_effect: true,
             note_settings: expected_note.clone(),
@@ -531,6 +547,7 @@ mod tests {
         let patch_a = SettingsPatchInput {
             hardware_acceleration: Some(false),
             always_on_top: Some(false),
+            ui_theme: Some("light".to_string()),
             overlay_locked: Some(true),
             note_effect: Some(true),
             note_settings: Some(NoteSettingsPatch {
@@ -579,13 +596,14 @@ mod tests {
         };
 
         let mut store = AppStoreData::default();
-        let diff_a = apply_patch_to_store(&mut store, &patch_a);
+        let diff_a = apply_patch_to_store(&mut store, &patch_a).expect("첫 patch 적용");
         assert_eq!(diff_a.full.expect("full snapshot 반환"), expected_a);
         assert_eq!(settings_from_store(&store), expected_a);
 
         // 같은 기본값을 공유하는 bool 쌍이 서로 반대가 되도록 절반만 반전
         let patch_b = SettingsPatchInput {
             always_on_top: Some(true),
+            ui_theme: Some("dark".to_string()),
             note_effect: Some(false),
             developer_mode_enabled: Some(false),
             auto_update_enabled: Some(true),
@@ -595,6 +613,7 @@ mod tests {
         };
         let expected_b = SettingsState {
             always_on_top: true,
+            ui_theme: UiTheme::Dark,
             note_effect: false,
             developer_mode_enabled: false,
             auto_update_enabled: true,
@@ -603,8 +622,8 @@ mod tests {
             ..expected_a
         };
 
-        let diff_b = apply_patch_to_store(&mut store, &patch_b);
-        assert_eq!(diff_b.changed_count(), 6);
+        let diff_b = apply_patch_to_store(&mut store, &patch_b).expect("두 번째 patch 적용");
+        assert_eq!(diff_b.changed_count(), 7);
         assert_eq!(diff_b.full.expect("full snapshot 반환"), expected_b);
         assert_eq!(settings_from_store(&store), expected_b);
         // 교차 매핑 검출 핵심 쌍, use_custom_css와 use_custom_js가 서로 반대
@@ -619,7 +638,8 @@ mod tests {
         let from_empty_store = settings_from_store(&AppStoreData::default());
 
         let mut store = AppStoreData::default();
-        let diff = apply_patch_to_store(&mut store, &SettingsPatchInput::default());
+        let diff = apply_patch_to_store(&mut store, &SettingsPatchInput::default())
+            .expect("빈 patch 적용");
         assert_eq!(diff.changed_count(), 0);
         let from_empty_patch = diff.full.expect("빈 patch도 full snapshot 반환");
 
@@ -627,5 +647,38 @@ mod tests {
         assert_eq!(from_default, from_empty_patch);
         // 빈 patch가 store 기본값을 변경하지 않음
         assert_eq!(settings_from_store(&store), from_default);
+    }
+
+    #[test]
+    fn unknown_ui_theme_is_rejected_without_mutating_store() {
+        let mut store = AppStoreData::default();
+        let before = store.clone();
+        let patch = SettingsPatchInput {
+            ui_theme: Some("neon".to_string()),
+            ..SettingsPatchInput::default()
+        };
+
+        let error = apply_patch_to_store(&mut store, &patch).expect_err("미지 테마 거절");
+
+        assert!(error.to_string().contains("invalid uiTheme value: neon"));
+        assert_eq!(store, before);
+    }
+
+    #[test]
+    fn ui_theme_uses_camel_case_in_settings_payloads() {
+        let mut store = AppStoreData::default();
+        let diff = apply_patch_to_store(
+            &mut store,
+            &SettingsPatchInput {
+                ui_theme: Some("light".to_string()),
+                ..SettingsPatchInput::default()
+            },
+        )
+        .expect("테마 patch 적용");
+
+        let wire = serde_json::to_value(diff).expect("설정 diff 직렬화");
+        assert_eq!(wire["changed"]["uiTheme"], "light");
+        assert_eq!(wire["full"]["uiTheme"], "light");
+        assert!(wire["changed"].get("ui_theme").is_none());
     }
 }

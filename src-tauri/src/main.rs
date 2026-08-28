@@ -25,7 +25,8 @@ use std::{fs, path::PathBuf};
 use tauri::{
     ipc::CapabilityBuilder,
     webview::{NewWindowResponse, PageLoadEvent},
-    LogicalSize, Manager, PhysicalPosition, Position,
+    window::Color,
+    LogicalSize, Manager, PhysicalPosition, Position, Theme,
 };
 
 use dm_note::{compute_compensating_zoom, should_apply_compensating_zoom};
@@ -37,6 +38,18 @@ const INTERACTION_BENCHMARK_ENV: &str = "DMN_INTERACTION_WEBVIEW_BENCHMARK";
 // 메인 창 논리 크기 - 고정 크기이고, 분리 패널이 이 사각형을 기준으로 옆에 붙는다
 const MAIN_WINDOW_WIDTH: f64 = 902.0;
 const MAIN_WINDOW_HEIGHT: f64 = 488.0;
+// tokens/dark.css, tokens/light.css의 --ui-bg-app과 같은 값을 유지한다.
+// 메인 창 바닥이라 분리 패널 씨앗 색(--ui-bg-panel-detached)과는 다른 토큰이다
+const MAIN_DARK_BACKGROUND: Color = Color(0x13, 0x13, 0x15, 0xFF);
+const MAIN_LIGHT_BACKGROUND: Color = Color(0xCC, 0xD3, 0xDC, 0xFF);
+
+fn main_background_color(theme: Theme) -> Color {
+    match theme {
+        Theme::Light => MAIN_LIGHT_BACKGROUND,
+        Theme::Dark => MAIN_DARK_BACKGROUND,
+        _ => MAIN_DARK_BACKGROUND,
+    }
+}
 
 fn is_interaction_benchmark_mode() -> bool {
     std::env::var_os(INTERACTION_BENCHMARK_ENV).is_some()
@@ -593,6 +606,19 @@ fn apply_main_window_configuration(
 
     if let Err(err) = window.hide() {
         log::debug!("failed to hide main window before configuration: {err}");
+    }
+
+    let preference = app.state::<AppState>().store.snapshot().ui_theme;
+    if let Err(err) = window.set_theme(preference.as_tauri_theme()) {
+        log::warn!("failed to apply main window theme: {err}");
+    }
+    let resolved_theme = match preference {
+        models::UiTheme::Light => Theme::Light,
+        models::UiTheme::Dark => Theme::Dark,
+        models::UiTheme::System => window.theme().unwrap_or(Theme::Dark),
+    };
+    if let Err(err) = window.set_background_color(Some(main_background_color(resolved_theme))) {
+        log::warn!("failed to apply main window background color: {err}");
     }
 
     if cfg!(target_os = "windows") {

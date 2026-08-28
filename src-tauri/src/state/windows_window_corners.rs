@@ -1,7 +1,7 @@
 // lib와 bin의 독립 state 모듈 컴파일
 #![allow(dead_code)]
 
-use tauri::{window::Color, WebviewWindow};
+use tauri::{window::Color, Theme, WebviewWindow};
 use windows::Win32::Foundation::COLORREF;
 use windows::Win32::Graphics::Dwm::{
     DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
@@ -27,24 +27,45 @@ use windows::Win32::Graphics::Dwm::{
 // 첫 페인트 전 구간을 메우는 씨앗값 - tokens.css의 --ui-bg-panel-detached와 같은 값을 유지한다.
 // 창 빌더에 실려 WebView2 컨트롤러 생성 옵션으로 들어가므로 첫 프레임부터 유효하고,
 // 실제 색은 렌더러가 토큰을 읽어 apply_surface_chrome으로 덮는다
-pub(crate) const SEED_FILL: Color = Color(0x1C, 0x1C, 0x1E, 0xFF);
+const DARK_SEED_FILL: Color = Color(0x1C, 0x1C, 0x1E, 0xFF);
+const LIGHT_SEED_FILL: Color = Color(0xEE, 0xF3, 0xF7, 0xFF);
 
 // tokens.css의 --ui-line과 같은 값. DWM 기본 보더는 시스템 색이라 훨씬 진해서, 렌더러가
 // 토큰을 읽어 덮는 순간 선 굵기가 바뀐 것처럼 보인다 - 창 생성 시점에 미리 맞춰 전환을 없앤다
-const SEED_LINE: [f64; 4] = [1.0, 1.0, 1.0, 0.1];
+const DARK_SEED_LINE: [f64; 4] = [1.0, 1.0, 1.0, 0.1];
+// 라이트 --ui-line은 순흑이 아니라 살짝 남색으로 기운 잉크다.
+// 무채색 위 순흑 저알파는 때가 탄 것처럼 보인다
+const LIGHT_SEED_LINE: [f64; 4] = [0.062745, 0.094118, 0.156863, 0.12];
 
-fn seed_fill_components() -> [f64; 4] {
+pub(crate) fn seed_fill(theme: Theme) -> Color {
+    match theme {
+        Theme::Light => LIGHT_SEED_FILL,
+        Theme::Dark => DARK_SEED_FILL,
+        _ => DARK_SEED_FILL,
+    }
+}
+
+fn seed_line(theme: Theme) -> [f64; 4] {
+    match theme {
+        Theme::Light => LIGHT_SEED_LINE,
+        Theme::Dark => DARK_SEED_LINE,
+        _ => DARK_SEED_LINE,
+    }
+}
+
+fn seed_fill_components(theme: Theme) -> [f64; 4] {
+    let fill = seed_fill(theme);
     [
-        f64::from(SEED_FILL.0) / 255.0,
-        f64::from(SEED_FILL.1) / 255.0,
-        f64::from(SEED_FILL.2) / 255.0,
+        f64::from(fill.0) / 255.0,
+        f64::from(fill.1) / 255.0,
+        f64::from(fill.2) / 255.0,
         1.0,
     ]
 }
 
 // 창 생성 시점 - 결과를 기다릴 소비자가 없어 fire-and-forget.
 // Win11의 기본값이 이미 라운드지만, 창 종류에 따라 달라지는 휴리스틱에 기대지 않는다
-pub(crate) fn apply_initial_chrome(window: &WebviewWindow) {
+pub(crate) fn apply_initial_chrome(window: &WebviewWindow, theme: Theme) {
     match set_corner_preference(window) {
         Ok(()) => log::info!(
             "[window-corners] applied native corner preference to '{}'",
@@ -56,8 +77,10 @@ pub(crate) fn apply_initial_chrome(window: &WebviewWindow) {
         ),
     }
 
-    if let Err(reason) = set_border_color(window, composite_over(SEED_LINE, seed_fill_components()))
-    {
+    if let Err(reason) = set_border_color(
+        window,
+        composite_over(seed_line(theme), seed_fill_components(theme)),
+    ) {
         log::debug!(
             "[window-corners] skipped seed border color for '{}': {reason}",
             window.label()
@@ -170,7 +193,8 @@ fn to_colorref(rgb: [f64; 3]) -> COLORREF {
 
 #[cfg(test)]
 mod tests {
-    use super::{composite_over, to_colorref};
+    use super::{composite_over, seed_fill_components, seed_line, to_colorref};
+    use tauri::Theme;
 
     #[test]
     fn opaque_line_replaces_the_fill() {
@@ -190,13 +214,18 @@ mod tests {
 
     // --ui-line rgba(255,255,255,0.1)을 --ui-bg-panel-detached #1c1c1e 위에 올린 값
     #[test]
-    fn translucent_line_blends_toward_the_fill() {
-        let blended = composite_over(
-            [1.0, 1.0, 1.0, 0.1],
-            [28.0 / 255.0, 28.0 / 255.0, 30.0 / 255.0, 1.0],
-        );
+    fn dark_translucent_line_blends_toward_the_fill() {
+        let blended = composite_over(seed_line(Theme::Dark), seed_fill_components(Theme::Dark));
         assert_eq!(super::channel(blended[0]), 51);
         assert_eq!(super::channel(blended[2]), 53);
+    }
+
+    // --ui-line rgba(16,24,40,0.12)을 --ui-bg-panel-detached #eef3f7 위에 올린 값
+    #[test]
+    fn light_translucent_line_blends_toward_the_fill() {
+        let blended = composite_over(seed_line(Theme::Light), seed_fill_components(Theme::Light));
+        assert_eq!(super::channel(blended[0]), 211);
+        assert_eq!(super::channel(blended[2]), 222);
     }
 
     #[test]

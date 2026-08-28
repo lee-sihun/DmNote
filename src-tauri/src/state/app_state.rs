@@ -48,7 +48,7 @@ use crate::{
         CommittedEditorChange, DefaultsPayload, EditorCommitRequest, GestureCommitRequest,
         HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings, KeyPositions, KeySlot,
         KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
-        SettingsDiff, SettingsState, TabCssOverrides,
+        SettingsDiff, SettingsState, TabCssOverrides, UiTheme,
     },
     services::{
         css_watcher::CssWatcher,
@@ -73,6 +73,17 @@ const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const MIN_OVERLAY_DIMENSION: f64 = 100.0;
 // 넓은 배치에 트랙 높이를 크게 잡으면 이전 상한 2000에서 조용히 잘렸음
 const MAX_OVERLAY_DIMENSION: f64 = 4096.0;
+
+fn resolve_ui_theme(app: &AppHandle, preference: UiTheme) -> tauri::Theme {
+    match preference {
+        UiTheme::Light => tauri::Theme::Light,
+        UiTheme::Dark => tauri::Theme::Dark,
+        UiTheme::System => app
+            .get_webview_window("main")
+            .and_then(|window| window.theme().ok())
+            .unwrap_or(tauri::Theme::Dark),
+    }
+}
 
 #[cfg(target_os = "macos")]
 const OVERLAY_FRAME_APPLY_TIMEOUT_MS: u64 = 250;
@@ -3607,6 +3618,7 @@ impl AppState {
         let snapshot = self.store.snapshot();
         let stored_bounds = snapshot.panel_bounds;
         let layout = resolve_panel_window_layout(stored_bounds, main_rect, monitors, None);
+        let resolved_theme = resolve_ui_theme(app, snapshot.ui_theme);
 
         // about:blank는 runtime-wry가 초기 네비게이션을 건너뛴다 - opener가 문서를 채우고,
         // WebView2의 "NewWindow는 네비게이션 전이어야 함" 요건도 이걸로 맞는다.
@@ -3636,6 +3648,7 @@ impl AppState {
         // (유틸리티 패널 관례 - 버튼이 첫 클릭에 바로 동작)
         .accept_first_mouse(true)
         .visible(false)
+        .theme(snapshot.ui_theme.as_tauri_theme())
         .inner_size(PANEL_WIDTH, layout.height)
         .min_inner_size(PANEL_WIDTH, layout.min_height)
         .max_inner_size(PANEL_WIDTH, layout.max_height)
@@ -3645,7 +3658,8 @@ impl AppState {
         // 이미 내비게이션이 시작된 뒤라 늦다. 실제 색은 렌더러가 토큰을 읽어 덮는다
         #[cfg(target_os = "windows")]
         {
-            builder = builder.background_color(super::windows_window_corners::SEED_FILL);
+            builder =
+                builder.background_color(super::windows_window_corners::seed_fill(resolved_theme));
         }
 
         if let Some(position) = layout.position {
@@ -3671,7 +3685,7 @@ impl AppState {
             }
         }
 
-        self.configure_panel_window(&window, app, layout.max_height);
+        self.configure_panel_window(&window, app, layout.max_height, resolved_theme);
         Ok(window)
     }
 
@@ -3680,6 +3694,7 @@ impl AppState {
         window: &WebviewWindow,
         app: &AppHandle,
         initial_max_height: f64,
+        _resolved_theme: tauri::Theme,
     ) {
         // 웹 콘텐츠가 그리는 라운딩은 리사이즈 프레임을 못 따라옴 - 실루엣은 컴포지터가 소유
         #[cfg(target_os = "macos")]
@@ -3687,7 +3702,7 @@ impl AppState {
         // Windows는 DWM이 이미 자기 반경으로 자르고 있어 웹 라운딩과 어긋난다 - 반경 지정이
         // 불가능하므로 실루엣을 DWM에 넘기고 웹은 사각으로 채운다 (메인 창과 같은 처리)
         #[cfg(target_os = "windows")]
-        super::windows_window_corners::apply_initial_chrome(window);
+        super::windows_window_corners::apply_initial_chrome(window, _resolved_theme);
 
         let bounds_session = self
             .panel_bounds_persistence
@@ -4072,6 +4087,14 @@ impl AppState {
     fn apply_settings_effects(&self, diff: &SettingsDiff, app: &AppHandle) -> Result<()> {
         // 오버레이가 보이는 상태일 때만 설정 적용
         let is_visible = *self.overlay_visible.read();
+
+        if let Some(value) = diff.changed.ui_theme {
+            for label in ["main", PANEL_LABEL] {
+                if let Some(window) = app.get_webview_window(label) {
+                    window.set_theme(value.as_tauri_theme())?;
+                }
+            }
+        }
 
         if let Some(value) = diff.changed.always_on_top {
             if is_visible {

@@ -520,7 +520,8 @@ fn preset_load_from_path(
                 }
                 rekey_full_preset_elements(store);
                 crate::state::migration::clear_dangling_group_ids(store);
-                let diff = apply_patch_to_store(store, &settings_patch);
+                let diff = apply_patch_to_store(store, &settings_patch)
+                    .map_err(crate::services::settings::settings_patch_validation_error)?;
                 Ok((
                     diff,
                     previous_tab_css_overrides,
@@ -824,7 +825,9 @@ fn preset_load_tab_from_path(
                                 ..SettingsPatchInput::default()
                             },
                         )
-                    });
+                    })
+                    .transpose()
+                    .map_err(crate::services::settings::settings_patch_validation_error)?;
                 crate::state::migration::clear_dangling_group_ids(store);
                 Ok((
                     settings_diff,
@@ -1791,6 +1794,7 @@ mod tests {
         }];
         let mut store = AppStoreData {
             custom_css_history: history.clone(),
+            ui_theme: crate::models::UiTheme::Light,
             ..AppStoreData::default()
         };
         let mut preset = PresetFile {
@@ -1802,6 +1806,8 @@ mod tests {
             ..PresetFile::default()
         };
         let resolved = resolve_full_preset_settings(&mut preset, &store);
+        let preset_wire = serde_json::to_value(&preset).expect("preset 직렬화");
+        assert!(preset_wire.get("uiTheme").is_none());
         let patch = SettingsPatchInput {
             use_custom_css: Some(resolved.use_custom_css),
             custom_css: Some(CustomCssPatch {
@@ -1811,9 +1817,10 @@ mod tests {
             ..SettingsPatchInput::default()
         };
 
-        apply_patch_to_store(&mut store, &patch);
+        apply_patch_to_store(&mut store, &patch).expect("preset 설정 적용");
 
         assert_eq!(store.custom_css_history, history);
+        assert_eq!(store.ui_theme, crate::models::UiTheme::Light);
     }
 
     #[test]

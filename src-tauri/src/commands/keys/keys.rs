@@ -571,7 +571,8 @@ fn keys_reset_all_inner(
                     &stat_positions,
                     &app_data_dir,
                 );
-                let settings_diff = apply_patch_to_store(store, &settings_patch);
+                let settings_diff = apply_patch_to_store(store, &settings_patch)
+                    .map_err(crate::services::settings::settings_patch_validation_error)?;
                 Ok((settings_diff, cleared_tab_css_ids))
             },
         )?;

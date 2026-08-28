@@ -36,9 +36,8 @@ pub async fn settings_update(
                 state
                     .store
                     .commit_history_overlap_mutation_with_admission(admission, |store| {
-                        Ok(crate::services::settings::apply_patch_to_store(
-                            store, &patch,
-                        ))
+                        crate::services::settings::apply_patch_to_store(store, &patch)
+                            .map_err(crate::services::settings::settings_patch_validation_error)
                     })?;
             if let Some(previous) = previous.as_ref() {
                 state.resync_global_css_watcher(previous, &state.store.snapshot());
