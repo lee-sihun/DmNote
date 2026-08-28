@@ -4280,6 +4280,25 @@ impl AppState {
         result.map(|transaction| (transaction, runtime_applied))
     }
 
+    pub(crate) fn commit_preset_editor_transaction_preserving_runtime_counters<T>(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        origin: crate::models::EditorCommitOrigin,
+        touched_fields: &[crate::models::EditorField],
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<(AdmittedEditorTransaction<T>, bool), EditorCommitError> {
+        self.commit_editor_transaction_preserving_runtime_counters(emitter, |runtime_counters| {
+            self.store.commit_preset_editor_transaction_with_admission(
+                origin,
+                touched_fields,
+                runtime_counters.clone(),
+                admission,
+                updater,
+            )
+        })
+    }
+
     pub(crate) fn commit_legacy_editor_reset_preserving_runtime_counters<T>(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
@@ -6583,6 +6602,17 @@ mod tests {
         let emitter = NoopCounterEmitter;
         let mode = state.store.snapshot().selected_key_type;
         let replaced_key = state.store.snapshot().keys[&mode][0].canonical();
+        let preserved_key = state.store.snapshot().keys[&mode][1].canonical();
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            0
+        );
         let replacement_key = "QA PRESET REPLACEMENT";
         let commit_state = Arc::clone(&state);
         let commit_mode = mode.clone();
@@ -6590,26 +6620,18 @@ mod tests {
         let (release_commit_tx, release_commit_rx) = mpsc::channel();
         let commit = thread::spawn(move || {
             let admission = commit_state.store.admit_editor_mutation().unwrap();
-            commit_state.commit_editor_transaction_preserving_runtime_counters(
+            commit_state.commit_preset_editor_transaction_preserving_runtime_counters(
                 &NoopCounterEmitter,
-                |runtime_counters| {
+                EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                admission,
+                |data| {
                     barrier_ready_tx.send(()).unwrap();
                     release_commit_rx
                         .recv_timeout(Duration::from_secs(3))
                         .unwrap();
-                    commit_state
-                        .store
-                        .commit_preset_editor_transaction_with_admission(
-                            EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
-                            &[EditorField::Keys, EditorField::KeyPositions],
-                            runtime_counters.clone(),
-                            admission,
-                            |data| {
-                                data.keys.get_mut(&commit_mode).unwrap()[0] =
-                                    KeySlot::from(replacement_key);
-                                Ok(())
-                            },
-                        )
+                    data.keys.get_mut(&commit_mode).unwrap()[0] = KeySlot::from(replacement_key);
+                    Ok(())
                 },
             )
         });
@@ -6631,11 +6653,17 @@ mod tests {
             .contains(&EditorField::Keys));
         assert!(!state.snapshot_key_counters()[&mode].contains_key(&replaced_key));
         assert_eq!(state.snapshot_key_counters()[&mode][replacement_key], 0);
+        assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 7);
         assert!(!state.store.snapshot().key_counters[&mode].contains_key(&replaced_key));
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            7
+        );
         state.shutdown();
         drop(state);
         let reloaded = AppStore::initialize_for_test(directory.path()).unwrap();
         assert!(!reloaded.snapshot().key_counters[&mode].contains_key(&replaced_key));
+        assert_eq!(reloaded.snapshot().key_counters[&mode][&preserved_key], 7);
         reloaded.flush_and_shutdown().unwrap();
     }
 

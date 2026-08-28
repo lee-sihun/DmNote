@@ -66,7 +66,15 @@ use super::plugin::{
 
 const TRASH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const SOUND_DELETE_BACKUP_MARKER: &str = ".delete-backup-";
+const KEY_COUNTER_BASELINE_REQUIRED: &str = "KEY_COUNTER_BASELINE_REQUIRED";
 pub(crate) static PROCESSED_WAV_TRANSACTION_LOCK: Mutex<()> = Mutex::new(());
+
+fn key_counter_baseline_required() -> EditorCommitError {
+    EditorCommitError::validation(
+        KEY_COUNTER_BASELINE_REQUIRED,
+        "key-changing editor mutations require live key counters",
+    )
+}
 
 #[derive(Debug)]
 pub(crate) struct StagedSoundDeletionFile {
@@ -821,7 +829,14 @@ impl AppStore {
         request: EditorCommitRequest,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
         let admission = self.admit_editor_mutation()?;
-        self.commit_editor_document_admitted(request, &admission)
+        if request.may_change_keys() {
+            let counters = self.snapshot().key_counters;
+            self.commit_editor_document_with_runtime_counters_admitted(
+                request, &admission, &counters,
+            )
+        } else {
+            self.commit_editor_document_admitted(request, &admission)
+        }
     }
 
     pub(crate) fn admit_editor_mutation(
@@ -840,6 +855,9 @@ impl AppStore {
         request: EditorCommitRequest,
         admission: &HistoryAdmissionLease,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
+        if request.may_change_keys() {
+            return Err(key_counter_baseline_required());
+        }
         self.commit_editor_document_admitted_with_runtime_counters(request, admission, None)
     }
 
@@ -1180,7 +1198,12 @@ impl AppStore {
         request: GestureCommitRequest,
     ) -> std::result::Result<AdmittedGestureCommit, EditorCommitError> {
         let admission = self.admit_editor_mutation()?;
-        self.commit_gesture_with_admission(request, admission)
+        if request.may_change_keys() {
+            let counters = self.snapshot().key_counters;
+            self.commit_gesture_with_runtime_counters_admission(request, admission, &counters)
+        } else {
+            self.commit_gesture_with_admission(request, admission)
+        }
     }
 
     pub(crate) fn commit_gesture_with_admission(
@@ -1188,6 +1211,9 @@ impl AppStore {
         request: GestureCommitRequest,
         admission: HistoryAdmissionLease,
     ) -> std::result::Result<AdmittedGestureCommit, EditorCommitError> {
+        if request.may_change_keys() {
+            return Err(key_counter_baseline_required());
+        }
         self.commit_gesture_with_runtime_counters_and_admission(request, admission, None)
     }
 
@@ -1825,10 +1851,16 @@ impl AppStore {
         touched_fields: &[EditorField],
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        let key_counters = touched_fields
+            .contains(&EditorField::Keys)
+            .then(|| self.snapshot().key_counters);
         self.commit_editor_transaction_with_history(
             origin,
             touched_fields,
-            EditorTransactionHistoryOptions::default(),
+            EditorTransactionHistoryOptions {
+                key_counters,
+                ..EditorTransactionHistoryOptions::default()
+            },
             updater,
         )
     }
@@ -1858,12 +1890,13 @@ impl AppStore {
         admission: HistoryAdmissionLease,
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        let counters = self.snapshot().key_counters;
         self.commit_legacy_editor_reset_transaction_with_runtime_counters_and_admission(
             origin,
             touched_fields,
             plugin_instances_reset,
             admission,
-            None,
+            Some(&counters),
             updater,
         )
     }
@@ -2015,7 +2048,7 @@ impl AppStore {
         )
     }
 
-    pub(crate) fn commit_preset_editor_transaction_with_admission<T>(
+    pub(super) fn commit_preset_editor_transaction_with_admission<T>(
         &self,
         origin: EditorCommitOrigin,
         touched_fields: &[EditorField],
@@ -2052,13 +2085,16 @@ impl AppStore {
                 "aux editor transaction requires a custom tabs or mode scope",
             ));
         }
+        let key_counters = touched_fields
+            .contains(&EditorField::Keys)
+            .then(|| self.snapshot().key_counters);
         self.commit_editor_transaction_with_history(
             origin,
             touched_fields,
             EditorTransactionHistoryOptions {
                 scope: Some(scope),
                 observed_epoch: observed_history_epoch,
-                key_counters: None,
+                key_counters,
                 ..EditorTransactionHistoryOptions::default()
             },
             updater,
@@ -2125,8 +2161,12 @@ impl AppStore {
         admission: HistoryAdmissionLease,
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        let counters = self.snapshot().key_counters;
         self.commit_aux_editor_reset_transaction_with_runtime_counters_and_admission(
-            options, admission, None, updater,
+            options,
+            admission,
+            Some(&counters),
+            updater,
         )
     }
 
@@ -2200,6 +2240,9 @@ impl AppStore {
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
         let started = Instant::now();
+        if touched_fields.contains(&EditorField::Keys) && history_options.key_counters.is_none() {
+            return Err(key_counter_baseline_required());
+        }
         let origin_name = origin
             .event_name()
             .unwrap_or_else(|| "loadRecovery".to_string());
@@ -4784,8 +4827,8 @@ mod tests {
         purge_expired_trash_sessions_at, recover_interrupted_processed_wav_replacements_with,
         recover_interrupted_sound_deletions_with, stage_sound_files_for_deletion,
         sweep_unreferenced_asset_files, system_time_millis, AppStore,
-        AuxEditorResetTransactionOptions, HistoryAuxChange, PluginInstancesResetScope,
-        TrashSession, PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
+        AuxEditorResetTransactionOptions, AuxEditorTransactionOptions, HistoryAuxChange,
+        PluginInstancesResetScope, TrashSession, PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
     };
     use crate::{
         commands::keys::keys::reset_mode_data_for_test,
@@ -5766,6 +5809,99 @@ mod tests {
                 },
             )
             .map(|transaction| transaction.change)
+    }
+
+    fn assert_counter_baseline_required(error: &EditorCommitError) {
+        assert_eq!(error.error_code, EditorCommitErrorCode::ValidationFailed);
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|details| details.validation_code.as_deref()),
+            Some("KEY_COUNTER_BASELINE_REQUIRED")
+        );
+    }
+
+    #[test]
+    fn editor_admission_without_runtime_counters_rejects_key_changes() {
+        let dir = test_directory("editor-counter-baseline-required-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut keys = store.snapshot().keys;
+        keys.get_mut("4key").unwrap()[0] = KeySlot::from("CounterBaselineEditorKey");
+        let mut request = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                keys: Some(keys),
+                ..EditorPatchV1::default()
+            },
+        );
+        request.multi_key = true;
+        let admission = store.admit_editor_mutation().unwrap();
+        let error = store
+            .commit_editor_document_admitted(request, &admission)
+            .expect_err("key-changing editor commit must require live counters");
+        assert_counter_baseline_required(&error);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn gesture_admission_without_runtime_counters_rejects_key_changes() {
+        let dir = test_directory("gesture-counter-baseline-required-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut keys = store.snapshot().keys;
+        keys.get_mut("4key").unwrap()[0] = KeySlot::from("CounterBaselineGestureKey");
+        let request = gesture_request(
+            &store,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                keys: Some(keys),
+                ..EditorPatchV1::default()
+            },
+            "demo-plugin",
+            Vec::new(),
+        );
+        let admission = store.admit_editor_mutation().unwrap();
+        let error = store
+            .commit_gesture_with_admission(request, admission)
+            .expect_err("key-changing gesture must require live counters");
+        assert_counter_baseline_required(&error);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn aux_admission_without_runtime_counters_rejects_declared_keys() {
+        let dir = test_directory("aux-counter-baseline-required-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let admission = store.admit_editor_mutation().unwrap();
+        let error = store
+            .commit_aux_editor_transaction_with_admission(
+                AuxEditorTransactionOptions {
+                    scope: HistoryScope::CustomTabs,
+                    observed_history_epoch: None,
+                    origin: EditorCommitOrigin::LegacyAdapter(
+                        "counter_baseline_required_test".to_string(),
+                    ),
+                    touched_fields: &[EditorField::Keys],
+                },
+                admission,
+                |data| {
+                    data.keys.get_mut("4key").unwrap()[0] = KeySlot::from("CounterBaselineAuxKey");
+                    Ok(())
+                },
+            )
+            .expect_err("key-changing aux transaction must require live counters");
+        assert_counter_baseline_required(&error);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
