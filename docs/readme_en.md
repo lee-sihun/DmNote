@@ -152,7 +152,7 @@ Contributions are always welcome. See the [contributing guide](../CONTRIBUTING.m
 
 ## License
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 DM NOTE](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 
 ## Special Thanks
 

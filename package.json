@@ -79,9 +79,9 @@
   },
   "authors": [
     {
-      "name": "lee-sihun",
+      "name": "DM NOTE",
       "role": "Developer",
-      "url": "https://github.com/lee-sihun"
+      "url": "https://github.com/DmNote-App"
     },
     {
       "name": "yeonu-me",
@@ -89,7 +89,7 @@
       "url": "https://github.com/yeonu-me"
     }
   ],
-  "author": "lee-sihun",
+  "author": "DM NOTE",
   "license": "GPL-3.0-only",
   "devDependencies": {
     "@eslint/js": "^9.39.4",

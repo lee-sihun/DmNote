@@ -152,7 +152,7 @@ ASIO 없이 빌드하려면(LLVM 불필요, 기여할 때 편합니다) `npm run
 
 ## 라이선스
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 DM NOTE](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 
 ## Special Thanks
 

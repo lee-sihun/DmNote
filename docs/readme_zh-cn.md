@@ -152,7 +152,7 @@ npm run tauri:dev
 
 ## 许可证
 
-[GPL-3.0 License Copyright (C) 2024 lee-sihun](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
+[GPL-3.0 License Copyright (C) 2024 DM NOTE](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 
 ## 特别致谢
 
