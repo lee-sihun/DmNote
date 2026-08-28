@@ -48,7 +48,7 @@
 
 위 다운로드 링크에서 최신 버전을 받아 압축을 풀고 실행하면 바로 사용할 수 있습니다.
 
-macOS는 별도 권한 설정이 필요합니다. [macOS 설치 및 권한 설정 가이드](docs/mac_guide.md)를 먼저 확인해 주세요.
+<!-- macOS는 별도 권한 설정이 필요합니다. [macOS 설치 및 권한 설정 가이드](docs/mac_guide.md)를 먼저 확인해 주세요. -->
 
 설정은 `%appdata%/com.dmnote.desktop` 폴더에 저장됩니다.
 
@@ -121,10 +121,14 @@ ASIO 없이 빌드하려면(LLVM 불필요, 기여할 때 편합니다) `npm run
 
 ## 기여하기
 
-기여는 언제나 환영합니다. 자세한 내용은 [기여 가이드](<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+기여는 언제나 환영합니다. 자세한 내용은 [기여 가이드](CONTRIBUTING.md)를 확인해 주세요.
+
+### 기여자
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
 <!-- prettier-ignore-start -->
 <!-- markdownlint-disable -->
-                                <table>
+<table>
   <tbody>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/lee-sihun"><img src="https://avatars.githubusercontent.com/u/111095268?v=4?s=100" width="100px;" alt="이시훈"/><br /><sub><b>이시훈</b></sub></a><br /><a href="#maintenance-lee-sihun" title="Maintenance">🚧</a></td>
@@ -144,9 +148,7 @@ ASIO 없이 빌드하려면(LLVM 불필요, 기여할 때 편합니다) `npm run
 <!-- markdownlint-restore -->
 <!-- prettier-ignore-end -->
 
-<!-- ALL-CONTRIBUTORS-LIST:END -->UTING.md)를 확인해 주세요.
-
-### 기여자
+<!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ## 라이선스
 

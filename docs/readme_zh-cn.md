@@ -48,7 +48,7 @@
 
 通过上方下载链接获取最新版本，解压后即可运行。
 
-macOS 需要先设置权限，请先查阅 [macOS 安装与权限设置指南](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_zh-cn.md)。
+<!-- macOS 需要先设置权限，请先查阅 [macOS 安装与权限设置指南](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_zh-cn.md)。 -->
 
 设置保存在 `%appdata%/com.dmnote.desktop` 文件夹中。
 
