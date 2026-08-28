@@ -7,6 +7,7 @@ import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { usePanelHeaderDrag } from '@hooks/panel/usePanelHeaderDrag';
 import { restoreLenisScroll } from '@hooks/useLenis';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
+import { subscribeResolvedTheme } from '@utils/theme/applyTheme';
 import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import {
@@ -392,8 +393,15 @@ const PropertiesPanelHost = ({
       subtree: true,
       characterData: true,
     });
+    // 테마 전환은 html 속성만 바꾼다 - head 옵저버에 안 걸려 네이티브 가장자리가
+    // 옛 색으로 고착된다. 속성이 바뀐 뒤 토큰이 새 값이므로 다음 프레임에 읽는다
+    const unsubscribeTheme = subscribeResolvedTheme(() => {
+      cancelAnimationFrame(scheduled);
+      scheduled = requestAnimationFrame(sync);
+    });
     return () => {
       observer.disconnect();
+      unsubscribeTheme();
       cancelAnimationFrame(scheduled);
     };
   }, [childWindow]);
@@ -405,7 +413,7 @@ const PropertiesPanelHost = ({
       {dockHint && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute right-0 top-0 bottom-0 w-[240px] z-[var(--z-chrome-popup)] bg-white/[0.06] shadow-[inset_0_0_0_1px_var(--ui-line)]"
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-[240px] z-[var(--z-chrome-popup)] bg-fill shadow-[inset_0_0_0_1px_var(--ui-line)]"
         />
       )}
       {createPortal(

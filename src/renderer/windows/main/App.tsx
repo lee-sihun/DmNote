@@ -32,6 +32,7 @@ import Palette from '@components/main/Modal/content/pickers/Palette';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
+import { useAppTheme } from '@hooks/app/useAppTheme';
 import { usePluginDisplayElementsResponder } from '@hooks/app/usePluginDisplayElementsResponder';
 import {
   UpdateInstalledRestartFailedError,
@@ -80,6 +81,7 @@ export default function App() {
   useCustomCssInjection({ scopeSelector: USER_CSS_SCOPE_SELECTOR });
   useCustomJsInjection(isBootstrapped);
   useAppBootstrap();
+  useAppTheme();
   usePluginDisplayElementsResponder();
   useBlockBrowserShortcuts();
 

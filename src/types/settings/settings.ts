@@ -10,6 +10,23 @@ import { type CustomCss } from '@src/types/plugin/css';
 import { type CustomJs } from '@src/types/plugin/js';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 
+// 앱 UI 테마 선택. system은 OS 설정을 따라간다
+export type UiThemePreference = 'system' | 'light' | 'dark';
+// data-theme 속성에 실제로 실리는 값. system이 해석된 결과다
+export type ResolvedUiTheme = 'light' | 'dark';
+
+export const UI_THEME_PREFERENCES: readonly UiThemePreference[] = [
+  'system',
+  'light',
+  'dark',
+];
+
+export const isUiThemePreference = (
+  value: unknown,
+): value is UiThemePreference =>
+  typeof value === 'string' &&
+  (UI_THEME_PREFERENCES as readonly string[]).includes(value);
+
 export type OverlayResizeAnchor =
   | 'top-left'
   | 'top-right'
@@ -36,6 +53,7 @@ export interface SettingsState {
   fontSettings: FontSettings;
   angleMode: string;
   language: string;
+  uiTheme: UiThemePreference;
   laboratoryEnabled: boolean;
   developerModeEnabled: boolean;
   trayEnabled: boolean;

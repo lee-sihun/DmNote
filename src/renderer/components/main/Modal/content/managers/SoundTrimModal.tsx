@@ -1,5 +1,6 @@
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { subscribeResolvedTheme } from '@utils/theme/applyTheme';
 import { useTranslation } from '@contexts/useTranslation';
 import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
 import { isTopmostPopupLayer } from '@components/main/Modal/popupLayer';
@@ -749,6 +750,16 @@ const SoundTrimModal = ({
     observer.observe(node);
     return () => observer.disconnect();
   }, [isOpen, isPlaying, waveformHost]);
+
+  // 파형은 토큰 계산값을 캔버스에 구워 그린다 - 테마가 바뀌면 다시 그려야
+  // 옛 색이 남지 않는다. 재생 중이면 다음 프레임이 알아서 새 색으로 그린다
+  useEffect(() => {
+    if (!isOpen) return;
+    return subscribeResolvedTheme(() => {
+      if (isPlaying) return;
+      redrawWaveformStatic(pausedAtRatioRef.current);
+    });
+  }, [isOpen, isPlaying]);
 
   const selectFile = () => {
     fileInputRef.current?.click();

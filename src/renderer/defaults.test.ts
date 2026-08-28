@@ -46,6 +46,7 @@ describe('부트스트랩 전 폴백 기본값 (Rust SettingsState::default 파�
       },
       fontSettings: { customFonts: [] },
       angleMode: 'd3d11',
+      uiTheme: 'system',
       language: 'ko',
       laboratoryEnabled: false,
       developerModeEnabled: false,

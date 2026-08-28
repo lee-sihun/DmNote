@@ -106,6 +106,7 @@ function buildSettingsSnapshot(
     alwaysOnTop: bootstrap.settings.alwaysOnTop,
     overlayLocked: bootstrap.settings.overlayLocked,
     angleMode: bootstrap.settings.angleMode,
+    uiTheme: bootstrap.settings.uiTheme,
     noteEffect: bootstrap.settings.noteEffect,
     noteSettings: bootstrap.settings.noteSettings,
     tabNoteOverrides,

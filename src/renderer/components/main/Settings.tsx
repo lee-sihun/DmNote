@@ -40,7 +40,11 @@ import {
 import { classifyPluginAddResult } from '@utils/plugin/pluginAddResult';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
-import type { OverlayResizeAnchor } from '@src/types/settings/settings';
+import {
+  isUiThemePreference,
+  type OverlayResizeAnchor,
+  type UiThemePreference,
+} from '@src/types/settings/settings';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { SupportedLocale } from '@contexts/I18nContextDef';
 import type {
@@ -144,6 +148,8 @@ const Settings = ({
     jsPlugins,
     language,
     setLanguage,
+    uiTheme,
+    setUiTheme,
     overlayResizeAnchor,
     setOverlayResizeAnchor,
     keyCounterEnabled,
@@ -379,6 +385,12 @@ const Settings = ({
       clearInterval(interval);
     };
   }, []);
+
+  const UI_THEME_OPTIONS: { value: UiThemePreference; label: string }[] = [
+    { value: 'system', label: t('settings.themeSystem') },
+    { value: 'light', label: t('settings.themeLight') },
+    { value: 'dark', label: t('settings.themeDark') },
+  ];
 
   const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
     { value: 'ko', label: '한국어' },
@@ -989,6 +1001,18 @@ const Settings = ({
     });
   };
 
+  // 화면은 스토어를 보고 즉시 바뀌고, 저장 실패 시 백엔드가 보내는
+  // settings:changed로 값이 되돌아온다
+  const handleUiThemeChange = (val: string): void => {
+    if (!isUiThemePreference(val)) return;
+    startTransition(() => {
+      setUiTheme(val);
+      void settingsApi.update({ uiTheme: val }).catch((error) => {
+        console.error('Failed to update ui theme', error);
+      });
+    });
+  };
+
   const requestedBackend = keySoundOutput?.requested;
   const requestedAsioDriver =
     requestedBackend?.kind === 'asio' ? requestedBackend.driverName : null;
@@ -1267,6 +1291,14 @@ const Settings = ({
             </SettingCard>
             {/* 기타 설정 */}
             <SettingCard>
+              <SettingRow label={t('settings.appTheme')}>
+                <Dropdown
+                  options={UI_THEME_OPTIONS}
+                  value={uiTheme}
+                  onChange={handleUiThemeChange}
+                  align="right"
+                />
+              </SettingRow>
               <SettingRow label={t('settings.language')}>
                 <Dropdown
                   options={LANGUAGE_OPTIONS}

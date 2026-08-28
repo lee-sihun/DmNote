@@ -4,7 +4,10 @@ import type {
   TabNoteOverrides,
 } from '@src/types/settings/noteSettings';
 import type { FontSettings } from '@src/types/settings/fonts';
-import type { OverlayResizeAnchor } from '@src/types/settings/settings';
+import type {
+  OverlayResizeAnchor,
+  UiThemePreference,
+} from '@src/types/settings/settings';
 import type { JsPlugin } from '@src/types/plugin/js';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import { getDefaultSettingsState } from '@src/renderer/defaults';
@@ -35,6 +38,7 @@ interface SettingsState {
   jsPlugins: JsPlugin[];
   backgroundColor: string;
   language: string;
+  uiTheme: UiThemePreference;
   laboratoryEnabled: boolean;
   developerModeEnabled: boolean;
   trayEnabled: boolean;
@@ -65,6 +69,7 @@ interface SettingsState {
   setTabNoteOverrides: (value: TabNoteOverrides) => void;
   setFontSettings: (value: FontSettings) => void;
   setLanguage: (value: string) => void;
+  setUiTheme: (value: UiThemePreference) => void;
   setBackgroundColor: (value: string) => void;
   setOverlayResizeAnchor: (value: OverlayResizeAnchor) => void;
   setKeyCounterEnabled: (value: boolean) => void;
@@ -79,6 +84,7 @@ export type SettingsStateSnapshot = Omit<
   | 'merge'
   | 'syncFromSnapshot'
   | 'setLaboratoryEnabled'
+  | 'setUiTheme'
   | 'setTrayEnabled'
   | 'setAutoUpdateEnabled'
   | 'setHardwareAcceleration'
@@ -123,6 +129,7 @@ const initialState: SettingsStateSnapshot = {
   jsPlugins: settingsDefaults.customJS.plugins,
   backgroundColor: settingsDefaults.backgroundColor,
   language: settingsDefaults.language,
+  uiTheme: settingsDefaults.uiTheme,
   laboratoryEnabled: settingsDefaults.laboratoryEnabled,
   developerModeEnabled: settingsDefaults.developerModeEnabled,
   trayEnabled: settingsDefaults.trayEnabled,
@@ -233,6 +240,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setTabNoteOverrides: (value) => set({ tabNoteOverrides: value }),
   setFontSettings: (value) => set({ fontSettings: value }),
   setLanguage: (value) => set({ language: value }),
+  setUiTheme: (value) => set({ uiTheme: value }),
   setLaboratoryEnabled: (value) => set({ laboratoryEnabled: value }),
   setTrayEnabled: (value) => set({ trayEnabled: value }),
   setBackgroundColor: (value) => set({ backgroundColor: value }),

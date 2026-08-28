@@ -199,6 +199,7 @@ function FALLBACK_SETTINGS_STATE(): SettingsState {
     fontSettings: { customFonts: [] },
     angleMode: isMac() ? 'metal' : 'd3d11',
     language: 'ko',
+    uiTheme: 'system',
     laboratoryEnabled: false,
     developerModeEnabled: false,
     trayEnabled: false,

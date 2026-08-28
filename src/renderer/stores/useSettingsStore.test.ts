@@ -17,6 +17,7 @@ const createSnapshot = (
   alwaysOnTop: true,
   overlayLocked: false,
   angleMode: 'd3d11',
+  uiTheme: 'system',
   noteEffect: true,
   noteSettings: getDefaultNoteSettings(),
   tabNoteOverrides: {},
