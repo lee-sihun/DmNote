@@ -30,7 +30,9 @@ use super::{
         HistoryAdmissionGate, HistoryAdmissionLease, HistoryBarrierLease, HistoryBarrierWaiter,
     },
     plugin::{PluginAuthorityLease, PluginRuntimeAuthority},
-    store::AppStore,
+    store::{
+        AdmittedEditorTransaction, AdmittedGestureCommit, AppStore, PluginInstancesResetScope,
+    },
 };
 #[cfg(debug_assertions)]
 use crate::audio::KeySoundDispatchTrace;
@@ -43,9 +45,10 @@ use crate::{
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
-        CommittedEditorChange, DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters,
-        KeyMappings, KeyPositions, KeySlot, KeySoundOutputBackendPersist, OverlayBounds,
-        OverlayResizeAnchor, PanelBounds, SettingsDiff, SettingsState, TabCssOverrides,
+        CommittedEditorChange, DefaultsPayload, EditorCommitRequest, GestureCommitRequest,
+        HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings, KeyPositions, KeySlot,
+        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
+        SettingsDiff, SettingsState, TabCssOverrides,
     },
     services::{
         css_watcher::CssWatcher,
@@ -4182,6 +4185,208 @@ impl AppState {
         self.key_counters.read().clone()
     }
 
+    pub(crate) fn commit_editor_document_preserving_runtime_counters(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        request: EditorCommitRequest,
+        admission: &HistoryAdmissionLease,
+    ) -> std::result::Result<(CommittedEditorChange, bool), EditorCommitError> {
+        if !request.may_change_keys() {
+            return self
+                .store
+                .commit_editor_document_admitted(request, admission)
+                .map(|change| (change, false));
+        }
+
+        self.begin_counter_history_barrier();
+        let mut counter_guard = self.lock_key_counters_for_history();
+        let result = self
+            .store
+            .commit_editor_document_with_runtime_counters_admitted(
+                request,
+                admission,
+                &counter_guard,
+            );
+        let mut runtime_applied = false;
+        if let Ok(change) = &result {
+            if change.event.is_some()
+                && change
+                    .result
+                    .changed_fields
+                    .contains(&crate::models::EditorField::Keys)
+            {
+                self.apply_committed_editor_keys_without_counters(
+                    change.runtime_publication_generation,
+                    &change.document.keys,
+                    &change.selected_key_type,
+                );
+                runtime_applied = self.replace_history_counters_locked(
+                    &mut counter_guard,
+                    change.runtime_publication_generation,
+                    &change.key_counters,
+                );
+            }
+        }
+        let publication_generation = result
+            .as_ref()
+            .map(|change| change.runtime_publication_generation)
+            .unwrap_or_else(|_| self.store.runtime_publication_generation());
+        self.finish_counter_history_barrier(
+            emitter,
+            counter_guard,
+            runtime_applied,
+            publication_generation,
+        );
+
+        result.map(|change| (change, runtime_applied))
+    }
+
+    pub(crate) fn commit_gesture_preserving_runtime_counters(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        request: GestureCommitRequest,
+        admission: HistoryAdmissionLease,
+    ) -> std::result::Result<(AdmittedGestureCommit, bool), EditorCommitError> {
+        if !request.may_change_keys() {
+            return self
+                .store
+                .commit_gesture_with_admission(request, admission)
+                .map(|committed| (committed, false));
+        }
+
+        self.begin_counter_history_barrier();
+        let mut counter_guard = self.lock_key_counters_for_history();
+        let result = self.store.commit_gesture_with_runtime_counters_admission(
+            request,
+            admission,
+            &counter_guard,
+        );
+        let mut runtime_applied = false;
+        if let Ok(committed) = &result {
+            if let Some(change) = committed.outcome.change.as_ref() {
+                if change
+                    .result
+                    .changed_fields
+                    .contains(&crate::models::EditorField::Keys)
+                {
+                    self.apply_committed_editor_keys_without_counters(
+                        change.runtime_publication_generation,
+                        &change.document.keys,
+                        &change.selected_key_type,
+                    );
+                    runtime_applied = self.replace_history_counters_locked(
+                        &mut counter_guard,
+                        change.runtime_publication_generation,
+                        &change.key_counters,
+                    );
+                }
+            }
+        }
+        let publication_generation = result
+            .as_ref()
+            .ok()
+            .and_then(|committed| committed.outcome.change.as_ref())
+            .map(|change| change.runtime_publication_generation)
+            .unwrap_or_else(|| self.store.runtime_publication_generation());
+        self.finish_counter_history_barrier(
+            emitter,
+            counter_guard,
+            runtime_applied,
+            publication_generation,
+        );
+
+        result.map(|committed| (committed, runtime_applied))
+    }
+
+    pub(crate) fn commit_editor_transaction_preserving_runtime_counters<T>(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        commit: impl FnOnce(
+            &KeyCounters,
+        )
+            -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError>,
+    ) -> std::result::Result<(AdmittedEditorTransaction<T>, bool), EditorCommitError> {
+        self.begin_counter_history_barrier();
+        let mut counter_guard = self.lock_key_counters_for_history();
+        let result = commit(&counter_guard);
+        let mut runtime_applied = false;
+        if let Ok(transaction) = &result {
+            let keys_changed = transaction
+                .change
+                .result
+                .changed_fields
+                .contains(&crate::models::EditorField::Keys);
+            let counters_changed = transaction.change.key_counters != *counter_guard;
+            if keys_changed {
+                self.apply_committed_editor_keys_without_counters(
+                    transaction.change.runtime_publication_generation,
+                    &transaction.change.document.keys,
+                    &transaction.change.selected_key_type,
+                );
+            }
+            if keys_changed || counters_changed {
+                runtime_applied = self.replace_history_counters_locked(
+                    &mut counter_guard,
+                    transaction.change.runtime_publication_generation,
+                    &transaction.change.key_counters,
+                );
+            }
+        }
+        let publication_generation = result
+            .as_ref()
+            .map(|transaction| transaction.change.runtime_publication_generation)
+            .unwrap_or_else(|_| self.store.runtime_publication_generation());
+        self.finish_counter_history_barrier(
+            emitter,
+            counter_guard,
+            runtime_applied,
+            publication_generation,
+        );
+
+        result.map(|transaction| (transaction, runtime_applied))
+    }
+
+    pub(crate) fn commit_preset_editor_transaction_preserving_runtime_counters<T>(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        origin: crate::models::EditorCommitOrigin,
+        touched_fields: &[crate::models::EditorField],
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<(AdmittedEditorTransaction<T>, bool), EditorCommitError> {
+        self.commit_editor_transaction_preserving_runtime_counters(emitter, |runtime_counters| {
+            self.store.commit_preset_editor_transaction_with_admission(
+                origin,
+                touched_fields,
+                runtime_counters.clone(),
+                admission,
+                updater,
+            )
+        })
+    }
+
+    pub(crate) fn commit_legacy_editor_reset_preserving_runtime_counters<T>(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        origin: crate::models::EditorCommitOrigin,
+        touched_fields: &[crate::models::EditorField],
+        plugin_instances_reset: PluginInstancesResetScope,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<(AdmittedEditorTransaction<T>, bool), EditorCommitError> {
+        self.commit_editor_transaction_preserving_runtime_counters(emitter, |runtime_counters| {
+            self.store
+                .commit_legacy_editor_reset_transaction_with_runtime_counters_admission(
+                    origin,
+                    touched_fields,
+                    plugin_instances_reset,
+                    admission,
+                    runtime_counters,
+                    updater,
+                )
+        })
+    }
+
     /// key_counters write lock 보유 중에만 호출 — 스냅샷과 이벤트 revision의 인과 순서 보장
     fn next_key_counters_revision(&self) -> u64 {
         self.key_counters_revision
@@ -4219,6 +4424,30 @@ impl AppState {
         true
     }
 
+    pub(crate) fn apply_history_editor_key_runtime_locked(
+        &self,
+        counter_guard: &mut KeyCounters,
+        change: &CommittedEditorChange,
+    ) -> bool {
+        if !change
+            .result
+            .changed_fields
+            .contains(&crate::models::EditorField::Keys)
+        {
+            return false;
+        }
+        self.apply_committed_editor_keys_without_counters(
+            change.runtime_publication_generation,
+            &change.document.keys,
+            &change.selected_key_type,
+        );
+        self.replace_history_counters_locked(
+            counter_guard,
+            change.runtime_publication_generation,
+            &change.key_counters,
+        )
+    }
+
     pub(crate) fn finish_counter_history_barrier(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
@@ -4226,26 +4455,27 @@ impl AppState {
         counters_restored: bool,
         publication_generation: u64,
     ) {
-        let queued_count = {
+        let replayed_count = {
             let mut barrier = self.counter_history_barrier.lock();
-            let queued_count = barrier.queued.len();
+            let mut replayed_count = 0;
             while let Some(increment) = barrier.queued.pop_front() {
-                let count = counters
-                    .entry(increment.mode)
-                    .or_default()
-                    .entry(increment.key)
-                    .or_insert(0);
-                *count = count.saturating_add(1);
+                if let Some(count) = counters
+                    .get_mut(&increment.mode)
+                    .and_then(|mode| mode.get_mut(&increment.key))
+                {
+                    *count = count.saturating_add(1);
+                    replayed_count += 1;
+                }
             }
             barrier.queueing = false;
-            queued_count
+            replayed_count
         };
-        if queued_count != 0 {
+        if replayed_count != 0 {
             let mut publication = self.runtime_publication.lock();
             publication.counters_generation =
                 publication.counters_generation.max(publication_generation);
         }
-        if counters_restored || queued_count != 0 {
+        if counters_restored || replayed_count != 0 {
             let revision = self.next_key_counters_revision();
             if let Err(error) =
                 emitter.emit_key_counters(&counters, &self.key_counters_session_id, revision)
@@ -6373,27 +6603,135 @@ mod tests {
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake, take_panel_open_arm,
         AppState, EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake,
         EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
-        FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, LogicalRect,
-        MonitorData, MonitorSpec, MutationPublicationSequencer, Mutex, OverlayCloseAction,
-        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
-        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload,
-        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
-        PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
-        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-        KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
-        PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
+        FrontendHistoryFlushReady, FrontendLifecycleAction, KeyCounterEventEmitter,
+        LifecycleHandshakeInstall, LogicalRect, MonitorData, MonitorSpec,
+        MutationPublicationSequencer, Mutex, OverlayCloseAction, PanelBoundsChange,
+        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
+        PanelCloseRequestState, PanelCloseRequestedPayload, PanelVisibilityEventEmitter,
+        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
+        DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+        KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL,
+        PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
+        PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
     };
     use crate::{
         keyboard::KeyboardManager,
         models::{
-            AppStoreData, CustomCss, EditorCommitOrigin, EditorField, OverlayBounds, PanelBounds,
-            TabCss,
+            AppStoreData, CustomCss, CustomTab, EditorCommitOrigin, EditorCommitRequest,
+            EditorField, EditorFrozenKeySlotV1, EditorOpV1, GestureCommitRequest,
+            GesturePluginInstancesChange, KeyCounters, KeySlot, OverlayBounds, PanelBounds,
+            PluginPoint, SavedPluginInstance, TabCss, EDITOR_OPS_VERSION,
         },
         state::{
-            history::HistoryAdmissionGate, local_asset_path::path_identity_key, store::AppStore,
+            history::{HistoryAdmissionGate, HistoryDirection, HistoryScope},
+            local_asset_path::path_identity_key,
+            store::{
+                AppStore, AuxEditorResetTransactionOptions, AuxEditorTransactionOptions,
+                PluginInstancesResetScope,
+            },
         },
     };
     use std::path::Path;
+
+    struct NoopCounterEmitter;
+
+    impl KeyCounterEventEmitter for NoopCounterEmitter {
+        fn emit_key_counters(
+            &self,
+            _counters: &KeyCounters,
+            _session_id: &str,
+            _revision: u64,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn emit_key_counter(
+            &self,
+            _mode: &str,
+            _key: &str,
+            _count: u32,
+            _session_id: &str,
+            _revision: u64,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn preset_mapping_commit_drops_queued_increment_for_replaced_key() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let state = Arc::new(AppState::initialize(store).unwrap());
+        let emitter = NoopCounterEmitter;
+        let mode = state.store.snapshot().selected_key_type;
+        let replaced_key = state.store.snapshot().keys[&mode][0].canonical();
+        let preserved_key = state.store.snapshot().keys[&mode][1].canonical();
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            0
+        );
+        let replacement_key = "QA PRESET REPLACEMENT";
+        let commit_state = Arc::clone(&state);
+        let commit_mode = mode.clone();
+        let (barrier_ready_tx, barrier_ready_rx) = mpsc::channel();
+        let (release_commit_tx, release_commit_rx) = mpsc::channel();
+        let commit = thread::spawn(move || {
+            let admission = commit_state.store.admit_editor_mutation().unwrap();
+            commit_state.commit_preset_editor_transaction_preserving_runtime_counters(
+                &NoopCounterEmitter,
+                EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                admission,
+                |data| {
+                    barrier_ready_tx.send(()).unwrap();
+                    release_commit_rx
+                        .recv_timeout(Duration::from_secs(3))
+                        .unwrap();
+                    data.keys.get_mut(&commit_mode).unwrap()[0] = KeySlot::from(replacement_key);
+                    Ok(())
+                },
+            )
+        });
+        barrier_ready_rx
+            .recv_timeout(Duration::from_secs(3))
+            .unwrap();
+        assert_eq!(
+            state.increment_key_counter_and_emit(&emitter, &mode, &replaced_key),
+            None
+        );
+        release_commit_tx.send(()).unwrap();
+        let (transaction, runtime_applied) = commit.join().unwrap().unwrap();
+
+        assert!(runtime_applied);
+        assert!(transaction
+            .change
+            .result
+            .changed_fields
+            .contains(&EditorField::Keys));
+        assert!(!state.snapshot_key_counters()[&mode].contains_key(&replaced_key));
+        assert_eq!(state.snapshot_key_counters()[&mode][replacement_key], 0);
+        assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 7);
+        assert!(!state.store.snapshot().key_counters[&mode].contains_key(&replaced_key));
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            7
+        );
+        state.shutdown();
+        drop(state);
+        let reloaded = AppStore::initialize_for_test(directory.path()).unwrap();
+        assert!(!reloaded.snapshot().key_counters[&mode].contains_key(&replaced_key));
+        assert_eq!(reloaded.snapshot().key_counters[&mode][&preserved_key], 7);
+        reloaded.flush_and_shutdown().unwrap();
+    }
 
     #[test]
     fn startup_overlay_creation_covers_all_visibility_and_obs_combinations() {
@@ -6401,6 +6739,629 @@ mod tests {
         assert!(should_create_overlay_on_startup(false, true));
         assert!(!should_create_overlay_on_startup(true, false));
         assert!(!should_create_overlay_on_startup(true, true));
+    }
+
+    #[test]
+    fn key_mapping_commit_preserves_unflushed_runtime_counters() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-editor-live-counter-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state =
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap();
+        state.key_counter_enabled.store(true, Ordering::SeqCst);
+        let emitter = NoopCounterEmitter;
+        let editor = state.store.editor_get();
+        let mode = state.store.snapshot().selected_key_type;
+        let preserved_key = editor.document.keys[&mode][0].canonical();
+
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            0
+        );
+
+        let replaced_key = editor.document.keys[&mode][1].canonical();
+        let replaced_id = editor.document.key_positions[&mode][1].id.clone();
+        let request = EditorCommitRequest {
+            base_revision: editor.revision,
+            mutation_id: uuid::Uuid::new_v4().to_string(),
+            multi_key: false,
+            gesture_id: None,
+            gesture_ids: Vec::new(),
+            changes: None,
+            ops_version: Some(EDITOR_OPS_VERSION),
+            ops: Some(vec![EditorOpV1::SetKeySlot {
+                id: replaced_id,
+                slot: EditorFrozenKeySlotV1::Single("QA NEW KEY".to_string()),
+            }]),
+        };
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (change, runtime_applied) = state
+            .commit_editor_document_preserving_runtime_counters(&emitter, request, &admission)
+            .unwrap();
+        drop(admission);
+
+        assert!(runtime_applied);
+        assert_eq!(change.key_counters[&mode][&preserved_key], 7);
+        assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 7);
+        let persisted = state.store.snapshot().key_counters;
+        assert_eq!(persisted[&mode][&preserved_key], 7);
+        assert_eq!(persisted[&mode]["QA NEW KEY"], 0);
+        assert!(!persisted[&mode].contains_key(&replaced_key));
+
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn history_mapping_change_restores_historical_counter_domain() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = AppStore::initialize_for_test(directory.path()).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let state = AppState::initialize(store).unwrap();
+        let emitter = NoopCounterEmitter;
+        let editor = state.store.editor_get();
+        let mode = state.store.snapshot().selected_key_type;
+        let restored_key = editor.document.keys[&mode][0].canonical();
+        let replaced_id = editor.document.key_positions[&mode][0].id.clone();
+        let replacement_key = "QA HISTORY REPLACEMENT";
+        for expected in 1..=12 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &restored_key),
+                Some(expected)
+            );
+        }
+        assert!(!state.store.history_status().can_undo);
+        let request = EditorCommitRequest {
+            base_revision: editor.revision,
+            mutation_id: uuid::Uuid::new_v4().to_string(),
+            multi_key: false,
+            gesture_id: None,
+            gesture_ids: Vec::new(),
+            changes: None,
+            ops_version: Some(EDITOR_OPS_VERSION),
+            ops: Some(vec![EditorOpV1::SetKeySlot {
+                id: replaced_id,
+                slot: EditorFrozenKeySlotV1::Single(replacement_key.to_string()),
+            }]),
+        };
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (committed, runtime_applied) = state
+            .commit_editor_document_preserving_runtime_counters(&emitter, request, &admission)
+            .unwrap();
+        drop(admission);
+        assert!(runtime_applied);
+        assert!(!committed.key_counters[&mode].contains_key(&restored_key));
+        assert_eq!(committed.key_counters[&mode][replacement_key], 0);
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = state.store.history_gate();
+        let history_barrier = gate.close(&operation_id).unwrap();
+        state.begin_counter_history_barrier();
+        let mut counter_guard = state.lock_key_counters_for_history();
+        assert_eq!(
+            state.increment_key_counter_and_emit(&emitter, &mode, replacement_key),
+            None
+        );
+        let current_counters = counter_guard.clone();
+        let undo = state
+            .store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        let change = undo.change.as_ref().unwrap();
+        assert!(state.apply_history_editor_key_runtime_locked(&mut counter_guard, change));
+        assert_eq!(
+            state.increment_key_counter_and_emit(&emitter, &mode, &restored_key),
+            None
+        );
+        state.finish_counter_history_barrier(
+            &emitter,
+            counter_guard,
+            true,
+            undo.runtime_publication_generation,
+        );
+        drop(history_barrier);
+
+        let runtime = state.snapshot_key_counters();
+        assert_eq!(runtime[&mode][&restored_key], 13);
+        assert!(!runtime[&mode].contains_key(replacement_key));
+        let persisted = state.store.snapshot().key_counters;
+        assert_eq!(persisted[&mode][&restored_key], 12);
+        assert!(!persisted[&mode].contains_key(replacement_key));
+
+        state.shutdown();
+        drop(state);
+        let reloaded = AppStore::initialize_for_test(directory.path()).unwrap();
+        assert_eq!(reloaded.snapshot().key_counters[&mode][&restored_key], 13);
+        assert!(!reloaded.snapshot().key_counters[&mode].contains_key(replacement_key));
+        reloaded.flush_and_shutdown().unwrap();
+    }
+
+    #[test]
+    fn custom_tab_create_preserves_unflushed_runtime_counters() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-custom-tab-live-counter-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state =
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap();
+        state.key_counter_enabled.store(true, Ordering::SeqCst);
+        let emitter = NoopCounterEmitter;
+        let snapshot = state.store.snapshot();
+        let mode = snapshot.selected_key_type;
+        let preserved_key = snapshot.keys[&mode][0].canonical();
+
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            0
+        );
+
+        let tab_id = "qa-counter-tab".to_string();
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (transaction, runtime_applied) = state
+            .commit_editor_transaction_preserving_runtime_counters(&emitter, |runtime_counters| {
+                state
+                    .store
+                    .commit_aux_editor_transaction_with_runtime_counters_admission(
+                        AuxEditorTransactionOptions {
+                            scope: HistoryScope::CustomTabs,
+                            observed_history_epoch: None,
+                            origin: EditorCommitOrigin::LegacyAdapter(
+                                "custom_tabs_create".to_string(),
+                            ),
+                            touched_fields: &[EditorField::Keys, EditorField::KeyPositions],
+                        },
+                        admission,
+                        runtime_counters,
+                        |store| {
+                            store.custom_tabs.push(CustomTab {
+                                id: tab_id.clone(),
+                                name: "QA Counter Tab".to_string(),
+                            });
+                            store.keys.insert(tab_id.clone(), Vec::new());
+                            store.key_positions.insert(tab_id.clone(), Vec::new());
+                            store.selected_key_type = tab_id.clone();
+                            Ok(())
+                        },
+                    )
+            })
+            .unwrap();
+
+        assert!(runtime_applied);
+        assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 7);
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            7
+        );
+        assert!(transaction.change.document.keys.contains_key(&tab_id));
+        drop(transaction);
+
+        assert_eq!(
+            state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+            Some(8)
+        );
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = state.store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        state.begin_counter_history_barrier();
+        let mut counter_guard = state.lock_key_counters_for_history();
+        let current_counters = counter_guard.clone();
+        let undo = state
+            .store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        assert!(state.apply_history_editor_key_runtime_locked(
+            &mut counter_guard,
+            undo.change.as_ref().unwrap(),
+        ));
+        state.finish_counter_history_barrier(
+            &emitter,
+            counter_guard,
+            true,
+            undo.runtime_publication_generation,
+        );
+        drop(barrier);
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            8
+        );
+        assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 8);
+
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn custom_tab_delete_preserves_unflushed_runtime_counters() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-custom-tab-delete-live-counter-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state =
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap();
+        state.key_counter_enabled.store(true, Ordering::SeqCst);
+        let emitter = NoopCounterEmitter;
+        let snapshot = state.store.snapshot();
+        let mode = snapshot.selected_key_type;
+        let preserved_key = snapshot.keys[&mode][0].canonical();
+        let tab_id = "qa-counter-delete-tab".to_string();
+        let create = state
+            .store
+            .commit_aux_editor_transaction(
+                HistoryScope::CustomTabs,
+                None,
+                EditorCommitOrigin::LegacyAdapter("custom_tabs_create".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |store| {
+                    store.custom_tabs.push(CustomTab {
+                        id: tab_id.clone(),
+                        name: "QA Counter Delete Tab".to_string(),
+                    });
+                    store.keys.insert(tab_id.clone(), Vec::new());
+                    store.key_positions.insert(tab_id.clone(), Vec::new());
+                    store.selected_key_type = tab_id.clone();
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(create);
+
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            0
+        );
+
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (transaction, runtime_applied) = state
+            .commit_editor_transaction_preserving_runtime_counters(&emitter, |runtime_counters| {
+                state
+                    .store
+                    .commit_aux_editor_reset_transaction_with_runtime_counters_admission(
+                        AuxEditorResetTransactionOptions {
+                            scope: HistoryScope::CustomTabs,
+                            observed_history_epoch: None,
+                            origin: EditorCommitOrigin::LegacyAdapter(
+                                "custom_tabs_delete".to_string(),
+                            ),
+                            touched_fields: &[
+                                EditorField::Keys,
+                                EditorField::KeyPositions,
+                                EditorField::StatPositions,
+                                EditorField::GraphPositions,
+                                EditorField::KnobPositions,
+                                EditorField::LayerGroups,
+                            ],
+                            plugin_instances_reset: PluginInstancesResetScope::Mode(tab_id.clone()),
+                        },
+                        admission,
+                        runtime_counters,
+                        |store| {
+                            store.custom_tabs.retain(|tab| tab.id != tab_id);
+                            store.keys.remove(&tab_id);
+                            store.key_positions.remove(&tab_id);
+                            store.stat_positions.remove(&tab_id);
+                            store.graph_positions.remove(&tab_id);
+                            store.knob_positions.remove(&tab_id);
+                            store.layer_groups.remove(&tab_id);
+                            store.key_counters.remove(&tab_id);
+                            store.selected_key_type = mode.clone();
+                            Ok(())
+                        },
+                    )
+            })
+            .unwrap();
+
+        assert!(runtime_applied);
+        assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 7);
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            7
+        );
+        assert!(!transaction.change.document.keys.contains_key(&tab_id));
+        drop(transaction);
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = state.store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        state
+            .store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &state.snapshot_key_counters(),
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            7
+        );
+
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn custom_tab_restore_history_preserves_unflushed_runtime_counters() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-custom-tab-restore-live-counter-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state =
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap();
+        state.key_counter_enabled.store(true, Ordering::SeqCst);
+        let emitter = NoopCounterEmitter;
+        let snapshot = state.store.snapshot();
+        let mode = snapshot.selected_key_type;
+        let preserved_key = snapshot.keys[&mode][0].canonical();
+        let tab_id = "qa-counter-restore-tab".to_string();
+        let create = state
+            .store
+            .commit_aux_editor_transaction(
+                HistoryScope::CustomTabs,
+                None,
+                EditorCommitOrigin::LegacyAdapter("custom_tabs_create".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |store| {
+                    store.custom_tabs.push(CustomTab {
+                        id: tab_id.clone(),
+                        name: "Before Restore".to_string(),
+                    });
+                    store.keys.insert(tab_id.clone(), Vec::new());
+                    store.key_positions.insert(tab_id.clone(), Vec::new());
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(create);
+
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+                Some(expected)
+            );
+        }
+        let mut restored_tabs = state.store.snapshot().custom_tabs;
+        restored_tabs[0].name = "After Restore".to_string();
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (transaction, runtime_applied) = state
+            .commit_editor_transaction_preserving_runtime_counters(&emitter, |runtime_counters| {
+                state
+                    .store
+                    .commit_aux_editor_transaction_with_runtime_counters_admission(
+                        AuxEditorTransactionOptions {
+                            scope: HistoryScope::CustomTabs,
+                            observed_history_epoch: None,
+                            origin: EditorCommitOrigin::LegacyAdapter(
+                                "custom_tabs_restore".to_string(),
+                            ),
+                            touched_fields: &[],
+                        },
+                        admission,
+                        runtime_counters,
+                        |store| {
+                            store.custom_tabs = restored_tabs;
+                            Ok(())
+                        },
+                    )
+            })
+            .unwrap();
+
+        assert!(!runtime_applied);
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            7
+        );
+        assert_eq!(state.store.snapshot().custom_tabs[0].name, "After Restore");
+        drop(transaction);
+
+        assert_eq!(
+            state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+            Some(8)
+        );
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = state.store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        state
+            .store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &state.snapshot_key_counters(),
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            8
+        );
+        assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 8);
+        assert_eq!(state.store.snapshot().custom_tabs[0].name, "Before Restore");
+
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn mixed_gesture_history_preserves_live_and_restores_historical_counters() {
+        let directory = std::env::temp_dir().join(format!(
+            "dmnote-gesture-live-counter-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let state =
+            AppState::initialize(AppStore::initialize_for_test(&directory).unwrap()).unwrap();
+        state.key_counter_enabled.store(true, Ordering::SeqCst);
+        let emitter = NoopCounterEmitter;
+        let editor = state.store.editor_get();
+        let mode = state.store.snapshot().selected_key_type;
+        let preserved_key = editor.document.keys[&mode][0].canonical();
+        let replaced_key = editor.document.keys[&mode][1].canonical();
+
+        for expected in 1..=7 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+                Some(expected)
+            );
+        }
+        for expected in 1..=12 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, &replaced_key),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            state.store.snapshot().key_counters[&mode][&preserved_key],
+            0
+        );
+
+        let replaced_id = editor.document.key_positions[&mode][1].id.clone();
+        let plugin_id = "qa-mixed-counter";
+        let plugin_instance_id = uuid::Uuid::new_v4().to_string();
+        let request = GestureCommitRequest {
+            gesture_id: uuid::Uuid::new_v4().to_string(),
+            mutation_id: uuid::Uuid::new_v4().to_string(),
+            editor_base_revision: editor.revision,
+            plugin_base_revision: state.store.plugin_model_revision(),
+            observed_history_epoch: Some(state.store.history_status().history_epoch),
+            authority_generation: 1,
+            editor_changes: None,
+            editor_ops_version: Some(EDITOR_OPS_VERSION),
+            editor_ops: Some(vec![EditorOpV1::SetKeySlot {
+                id: replaced_id,
+                slot: EditorFrozenKeySlotV1::Single("QA MIXED KEY".to_string()),
+            }]),
+            plugin_changes: vec![GesturePluginInstancesChange {
+                plugin_id: plugin_id.to_string(),
+                instances: vec![SavedPluginInstance {
+                    instance_id: Some(plugin_instance_id.clone()),
+                    position: PluginPoint { x: 20.0, y: 30.0 },
+                    settings: None,
+                    measured_size: None,
+                    tab_id: None,
+                    hidden: false,
+                    z_index: None,
+                    group_id: None,
+                }],
+            }],
+        };
+        let admission = state.store.admit_editor_mutation().unwrap();
+        let (committed, runtime_applied) = state
+            .commit_gesture_preserving_runtime_counters(&emitter, request, admission)
+            .unwrap();
+
+        assert!(runtime_applied);
+        assert_eq!(committed.outcome.changed_plugin_ids, [plugin_id]);
+        let change = committed.outcome.change.as_ref().unwrap();
+        assert_eq!(change.key_counters[&mode][&preserved_key], 7);
+        assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 7);
+        let persisted = state.store.snapshot().key_counters;
+        assert_eq!(persisted[&mode][&preserved_key], 7);
+        assert_eq!(persisted[&mode]["QA MIXED KEY"], 0);
+        assert!(!persisted[&mode].contains_key(&replaced_key));
+        let (instances, revision) = state.store.plugin_instances_get(plugin_id).unwrap();
+        assert_eq!(revision, 1);
+        assert_eq!(instances.len(), 1);
+        assert_eq!(
+            instances[0].instance_id.as_deref(),
+            Some(plugin_instance_id.as_str())
+        );
+        drop(committed);
+
+        for expected in 1..=9 {
+            assert_eq!(
+                state.increment_key_counter_and_emit(&emitter, &mode, "QA MIXED KEY"),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            state.increment_key_counter_and_emit(&emitter, &mode, &preserved_key),
+            Some(8)
+        );
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = state.store.history_gate();
+        let history_barrier = gate.close(&operation_id).unwrap();
+        state.begin_counter_history_barrier();
+        let mut counter_guard = state.lock_key_counters_for_history();
+        let current_counters = counter_guard.clone();
+        let undo = state
+            .store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        assert!(state.apply_history_editor_key_runtime_locked(
+            &mut counter_guard,
+            undo.change.as_ref().unwrap(),
+        ));
+        state.finish_counter_history_barrier(
+            &emitter,
+            counter_guard,
+            true,
+            undo.runtime_publication_generation,
+        );
+        drop(history_barrier);
+
+        let restored = state.snapshot_key_counters();
+        assert_eq!(restored[&mode][&replaced_key], 12);
+        assert_eq!(restored[&mode][&preserved_key], 8);
+        assert!(!restored[&mode].contains_key("QA MIXED KEY"));
+        assert!(state
+            .store
+            .plugin_instances_get(plugin_id)
+            .unwrap()
+            .0
+            .is_empty());
+
+        state.shutdown();
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

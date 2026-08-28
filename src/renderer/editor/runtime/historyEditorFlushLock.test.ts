@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   acquireHistoryEditorFlushLock,
@@ -6,6 +6,12 @@ import {
   releaseHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
 } from './historyEditorFlushLock';
+
+beforeEach(() => {
+  resetHistoryEditorFlushLock();
+  document.documentElement.inert = false;
+  document.documentElement.removeAttribute('aria-busy');
+});
 
 afterEach(() => {
   resetHistoryEditorFlushLock();

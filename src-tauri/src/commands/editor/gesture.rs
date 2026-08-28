@@ -2,7 +2,10 @@ use tauri::{AppHandle, Manager, WebviewWindow};
 
 use crate::{
     commands::{
-        editor::state::{emit_best_effort, publish_editor_change, publish_legacy_editor_fields},
+        editor::state::{
+            emit_best_effort, publish_editor_change, publish_editor_change_after_key_runtime,
+            publish_legacy_editor_fields,
+        },
         plugin::instances::publish_plugin_instances_changed,
         run_mutation_task,
     },
@@ -54,9 +57,8 @@ pub async fn commit_gesture(
                 .contains(&crate::models::EditorField::Keys)
                 .then(|| state.keyboard.current_mode());
 
-            let committed = state
-                .store
-                .commit_gesture_with_admission(request, admission)?;
+            let (committed, key_runtime_applied) =
+                state.commit_gesture_preserving_runtime_counters(app, request, admission)?;
             let outcome = &committed.outcome;
             if let Err(error) = broker.finish_committed_session(
                 &window_label,
@@ -67,7 +69,11 @@ pub async fn commit_gesture(
             }
 
             if let Some(change) = outcome.change.as_ref() {
-                publish_editor_change(state, app, change, false);
+                if key_runtime_applied {
+                    publish_editor_change_after_key_runtime(state, app, change);
+                } else {
+                    publish_editor_change(state, app, change, false);
+                }
                 if !outcome.replayed {
                     let legacy_fields = if is_editor_ops {
                         change.result.changed_fields.as_slice()

@@ -248,9 +248,8 @@ pub async fn editor_commit(
             let previous_mode = requested_fields
                 .contains(&EditorField::Keys)
                 .then(|| state.keyboard.current_mode());
-            let change = state
-                .store
-                .commit_editor_document_admitted(request, &admission)?;
+            let (change, key_runtime_applied) = state
+                .commit_editor_document_preserving_runtime_counters(app, request, &admission)?;
             for gesture_id in &gesture_ids {
                 if let Err(error) = broker.finish_committed_session(
                     &committed_window_label,
@@ -261,7 +260,11 @@ pub async fn editor_commit(
                 }
             }
             if change.event.is_some() {
-                publish_editor_change(state, app, &change, false);
+                if key_runtime_applied {
+                    publish_editor_change_after_key_runtime(state, app, &change);
+                } else {
+                    publish_editor_change(state, app, &change, false);
+                }
             }
             if !change.replayed {
                 let legacy_fields =

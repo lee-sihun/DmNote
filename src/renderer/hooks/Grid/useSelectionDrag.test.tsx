@@ -63,6 +63,7 @@ vi.mock('@utils/grid/smartGuides', async (importOriginal) => {
 
 interface HarnessProps {
   enabled?: boolean;
+  zoom?: number;
   startX?: number;
   startY?: number;
   onClick: () => void;
@@ -75,6 +76,7 @@ interface HarnessProps {
 
 const Harness = ({
   enabled = true,
+  zoom = 1,
   startX = 0,
   startY = 0,
   onClick,
@@ -87,7 +89,7 @@ const Harness = ({
   const { handlePointerDown, movedDuringPressRef, pressMovedRef } =
     useSelectionDrag({
       enabled,
-      zoom: 1,
+      zoom,
       startX,
       startY,
       elementId: 'key-0',
@@ -189,7 +191,10 @@ describe('useSelectionDrag', () => {
 
   const renderHarness = async (
     props: Partial<
-      Pick<HarnessProps, 'enabled' | 'startX' | 'startY' | 'onPressMovedCheck'>
+      Pick<
+        HarnessProps,
+        'enabled' | 'zoom' | 'startX' | 'startY' | 'onPressMovedCheck'
+      >
     > = {},
   ) => {
     await act(async () => {
@@ -289,6 +294,20 @@ describe('useSelectionDrag', () => {
     expect(onMultiDrag).toHaveBeenCalledWith(5, 0);
     expect(onMultiDragEnd).toHaveBeenCalledTimes(1);
     expect(onMovedCheck).toHaveBeenCalledWith(true);
+  });
+
+  it('축소 배율에서도 개별 드래그와 같은 화면 기준 스냅을 적용한다', async () => {
+    const element = await renderHarness({ zoom: 0.5 });
+
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 7 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 7 }));
+    });
+
+    expect(onMultiDrag).toHaveBeenCalledOnce();
+    expect(onMultiDrag).toHaveBeenCalledWith(10, 0);
   });
 
   it('한 프레임의 연속 이동에서 최신 좌표를 사용한다', async () => {
