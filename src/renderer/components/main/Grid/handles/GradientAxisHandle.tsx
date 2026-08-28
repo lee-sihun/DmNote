@@ -830,8 +830,8 @@ const GradientAxisOverlay = ({
                   width: ANCHOR_DOT_SIZE,
                   height: ANCHOR_DOT_SIZE,
                   borderRadius: '50%',
-                  background: 'white',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                  background: 'var(--ui-handle-fill)',
+                  boxShadow: 'var(--ui-handle-shadow)',
                 }}
               />
             </div>
@@ -853,8 +853,8 @@ const GradientAxisOverlay = ({
                     width: STOP_ANCHOR_DOT_SIZE,
                     height: STOP_ANCHOR_DOT_SIZE,
                     borderRadius: '50%',
-                    background: 'white',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                    background: 'var(--ui-handle-fill)',
+                    boxShadow: 'var(--ui-handle-shadow)',
                     transform: 'translate(-50%, -50%)',
                     pointerEvents: 'none',
                   }}
@@ -875,11 +875,11 @@ const GradientAxisOverlay = ({
                   borderRadius: 4,
                   // 반투명 색은 격자 위 합성으로 표시 - 뒤 요소 비침 방지
                   background: `linear-gradient(${stop.color}, ${stop.color}), var(--ui-checker-pattern) center / var(--ui-checker-size-sm) var(--ui-checker-size-sm) repeat`,
-                  border: '1.5px solid white',
+                  border: '1.5px solid var(--ui-handle-fill)',
                   boxShadow:
                     i === session.selectedIndex
-                      ? '0 0 0 2px var(--ui-selection-border-strong), 0 1px 4px rgba(0,0,0,0.5)'
-                      : '0 1px 4px rgba(0,0,0,0.5)',
+                      ? '0 0 0 2px var(--ui-selection-border-strong), var(--ui-handle-shadow)'
+                      : 'var(--ui-handle-shadow)',
                   transform: 'translate(-50%, -50%)',
                   cursor: dragStop?.index === i ? 'grabbing' : 'default',
                   pointerEvents: 'auto',
@@ -900,7 +900,7 @@ const GradientAxisOverlay = ({
             top: endY - 24,
             padding: '2px 6px',
             borderRadius: 6,
-            background: 'var(--ui-bg-inset-solid, rgba(24,24,29,0.9))',
+            background: 'var(--ui-bg-inset-solid)',
             boxShadow: 'inset 0 0 0 1px var(--ui-line)',
             whiteSpace: 'nowrap',
           }}
@@ -918,7 +918,7 @@ const GradientAxisOverlay = ({
             top: dragStopScreen.y - 24,
             padding: '2px 6px',
             borderRadius: 6,
-            background: 'var(--ui-bg-inset-solid, rgba(24,24,29,0.9))',
+            background: 'var(--ui-bg-inset-solid)',
             boxShadow: 'inset 0 0 0 1px var(--ui-line)',
             whiteSpace: 'nowrap',
           }}

@@ -132,7 +132,7 @@ export function createCheckbox(options: CheckboxOptions = {}): string {
   const { checked = false, onChange, id = '' } = options;
 
   // 메인 UI Checkbox와 동일한 크기·토큰 (30x18, 액센트/line-strong 트랙, 14px 흰 노브)
-  const bgClass = checked ? 'bg-accent' : 'bg-line-strong';
+  const bgClass = checked ? 'bg-accent' : 'bg-control-track-off';
   const knobClass = checked ? 'left-[14px]' : 'left-[2px]';
 
   // 핸들러 처리: 함수면 등록, 문자열이면 레거시 방식
@@ -162,7 +162,7 @@ export function createCheckbox(options: CheckboxOptions = {}): string {
     <input type="checkbox" ${inputIdAttr} ${
     checked ? 'checked' : ''
   } class="absolute opacity-0 w-0 h-0" />
-    <div class="absolute w-[14px] h-[14px] rounded-full top-[2px] bg-white shadow-elevation-1 transition-all duration-base ease-out-expo ${knobClass}"></div>
+    <div class="absolute w-[14px] h-[14px] rounded-full top-[2px] bg-control-knob shadow-elevation-1 transition-all duration-base ease-out-expo ${knobClass}"></div>
   </label>`;
 }
 

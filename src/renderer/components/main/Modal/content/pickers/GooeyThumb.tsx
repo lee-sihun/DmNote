@@ -11,6 +11,8 @@ const GOO_OFFSET = -6;
 // erode의 사각 커널과 달리 방향에 상관없이 링 두께만큼 들어온다
 const INSET_BLUR = 1.5;
 const INSET_CONTRAST = 20;
+// 노브 안쪽 알파 타일. 링이 두 테마 모두 흰색이라 타일도 고정이다 -
+// feImage 데이터 URI라 CSS 변수를 못 받는 것도 같은 결론을 가리킨다
 const CHECKER_CELL = 4;
 const CHECKER_TILE = `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="${
@@ -189,7 +191,7 @@ const GooeyThumb = ({
           </feMerge>
         </filter>
       </defs>
-      <g filter={`url(#${filterId})`} fill="#fff">
+      <g filter={`url(#${filterId})`} fill="var(--ui-handle-fill)">
         <circle ref={tailRef} r={0} />
         <rect ref={rectRef} />
       </g>

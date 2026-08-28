@@ -77,11 +77,17 @@ const removeDraftPreviewCSS = () => {
 };
 
 const WEBFONT_EDITOR_HIGHLIGHT_STYLE = HighlightStyle.define([
-  { tag: tags.comment, color: '#6A9955' },
-  { tag: [tags.string, tags.special(tags.string)], color: '#CE9178' },
-  { tag: tags.keyword, color: '#C586C0' },
-  { tag: [tags.propertyName], color: '#9CDCFE' },
-  { tag: [tags.bracket, tags.punctuation], color: '#D4D4D4' },
+  { tag: tags.comment, color: 'var(--ui-syntax-comment)' },
+  {
+    tag: [tags.string, tags.special(tags.string)],
+    color: 'var(--ui-syntax-string)',
+  },
+  { tag: tags.keyword, color: 'var(--ui-syntax-keyword)' },
+  { tag: [tags.propertyName], color: 'var(--ui-syntax-property)' },
+  {
+    tag: [tags.bracket, tags.punctuation],
+    color: 'var(--ui-syntax-punctuation)',
+  },
 ]);
 
 // 활성 줄 하이라이트는 제외 — 여러 줄 placeholder가 한 줄에 담겨

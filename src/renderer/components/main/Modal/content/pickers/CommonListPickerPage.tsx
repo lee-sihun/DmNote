@@ -147,7 +147,7 @@ export default function CommonListPickerPage<T>({
               strokeLinejoin="round"
             />
           </svg>
-          <span className="text-fg group-hover:text-white text-label leading-none truncate transition-colors duration-fast">
+          <span className="text-fg group-hover:text-fg-strong text-label leading-none truncate transition-colors duration-fast">
             {pageTitle}
           </span>
         </button>

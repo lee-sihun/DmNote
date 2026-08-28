@@ -150,7 +150,9 @@ const getHandleStyle = (
   isHovered: boolean,
 ): React.CSSProperties => {
   const baseStyle: React.CSSProperties = {
-    backgroundColor: isHovered ? 'var(--ui-selection)' : 'white',
+    backgroundColor: isHovered
+      ? 'var(--ui-selection)'
+      : 'var(--ui-handle-fill)',
     border: '2px solid var(--ui-selection-border-strong)',
     pointerEvents: 'none',
     transition: 'background-color 0.15s ease',
@@ -875,7 +877,7 @@ const GroupResizeHandles = ({
               top: bounds.y * zoom + panY - 2,
               width: bounds.width * zoom + 4,
               height: bounds.height * zoom + 4,
-              border: '2px dashed rgba(251, 146, 60, 0.9)',
+              border: '2px dashed var(--ui-warning)',
               borderRadius: '4px',
               pointerEvents: 'none' as const,
               zIndex: 'var(--z-canvas-selection-handle)',

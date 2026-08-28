@@ -265,7 +265,7 @@ describe('ResizeHandles 핸들 호버 생명주기', () => {
     expect(hasCursorBodyClass()).toBe(false);
     // 시각적 호버 상태도 켜지지 않음
     const visual = handle.firstElementChild as HTMLElement;
-    expect(visual.style.backgroundColor).toBe('white');
+    expect(visual.style.backgroundColor).toBe('var(--ui-handle-fill)');
   });
 
   it('억제 중 enter는 resume 시 hover로 적용된다', async () => {
@@ -306,7 +306,7 @@ describe('ResizeHandles 핸들 호버 생명주기', () => {
 
     expect(hasCursorBodyClass()).toBe(false);
     const visual = handle.firstElementChild as HTMLElement;
-    expect(visual.style.backgroundColor).toBe('white');
+    expect(visual.style.backgroundColor).toBe('var(--ui-handle-fill)');
   });
 
   it('보류 중 핸들이 unmount되면 pending도 정리한다', async () => {

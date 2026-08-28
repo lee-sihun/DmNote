@@ -143,7 +143,9 @@ const getHandleStyle = (
   isHovered: boolean,
 ): React.CSSProperties => {
   const baseStyle: React.CSSProperties = {
-    backgroundColor: isHovered ? 'var(--ui-selection)' : 'white',
+    backgroundColor: isHovered
+      ? 'var(--ui-selection)'
+      : 'var(--ui-handle-fill)',
     border: '1.5px solid var(--ui-selection-border-strong)',
     pointerEvents: 'none',
     transition: 'background-color 0.15s ease',

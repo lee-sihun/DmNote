@@ -264,10 +264,8 @@ export const GradientStopEditor = ({
           style={{ left: `${stop.pos * 100}%` }}
         >
           <i
-            className={`block w-[14px] h-[14px] rounded-full border-[2px] border-white ${
-              i === selectedIndex
-                ? 'shadow-focus-ring'
-                : 'shadow-[0_1px_4px_rgba(0,0,0,0.5)]'
+            className={`block w-[14px] h-[14px] rounded-full border-[2px] border-handle ${
+              i === selectedIndex ? 'shadow-focus-ring' : 'shadow-handle'
             }`}
             style={{
               // 반투명 색은 격자 위 합성으로 표시 — 트랙 그라데이션 비침 방지

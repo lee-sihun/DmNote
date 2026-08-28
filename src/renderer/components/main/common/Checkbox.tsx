@@ -63,14 +63,16 @@ const Checkbox = ({
       role="switch"
       aria-checked={visualChecked}
       className={`dmn-toggle-track relative w-[28px] h-[16px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${
-        displayChecked ? 'bg-accent' : 'bg-line-strong hover:bg-white/[0.19]'
+        displayChecked
+          ? 'bg-accent'
+          : 'bg-control-track-off hover:bg-control-track-off-hover'
       }`}
       onClick={handleClick}
       {...drag.handlers}
     >
       {/* 이동량은 --ui-toggle-travel이 소유, 트랙 28 - 노브 12 - 인셋 2×2.
           드래그 훅이 이 클래스로 노브를 찾으므로 클래스명은 계약 */}
-      <div className="dmn-toggle-thumb absolute top-[2px] left-[2px] w-[12px] h-[12px] rounded-full bg-white shadow-elevation-1" />
+      <div className="dmn-toggle-thumb absolute top-[2px] left-[2px] w-[12px] h-[12px] rounded-full bg-control-knob shadow-elevation-1" />
     </div>
   );
 };
