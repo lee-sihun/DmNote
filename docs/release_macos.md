@@ -33,11 +33,11 @@ Actions → **Release macOS** → Run workflow → ref: `main`, `dry_run: true`
 
 ```bash
 npm version patch        # package.json 버전 올리고 tauri.conf.json / Cargo.toml / Cargo.lock / README 동기화 후
-                         # "X.Y.Z" 커밋 + X.Y.Z 태그 생성 (.npmrc의 tag-version-prefix= 로 v 접두사 없음)
-git push origin main X.Y.Z
+                         # "X.Y.Z" 커밋 + 로컬 X.Y.Z 태그 생성 (.npmrc의 tag-version-prefix= 로 v 접두사 없음)
+git push origin main     # 태그는 push하지 않음
 ```
 
-태그 푸시 → macOS와 Windows workflow가 각각 빌드한 자산을 draft 릴리즈 `DM NOTE v X.Y.Z`에 첨부한다. 이후:
+`package.json` 버전 변경과 커밋 제목 `X.Y.Z`가 일치하는 main push를 감지하면 macOS와 Windows workflow가 실행된다. 원격 `X.Y.Z` 태그와 draft 릴리즈는 Actions가 자동 생성하고 각 자산을 첨부한다. 릴리즈 본문은 `docs/releases/X.Y.Z_ko.md`를 사용한다. 이후:
 
 > 자산 이름 `DM.NOTE_<tag>_{aarch64|x64|universal}.dmg`는 **앱 내 자동 업데이트가 의존하는 계약**이다 (`src-tauri/src/commands/app/update_macos.rs`의 `asset_candidates`). 아키텍처 전용 자산이 있으면 그것을 우선 받으므로, 서명·공증되지 않은 DMG를 그 이름으로 수동 업로드하지 말 것.
 
@@ -46,7 +46,7 @@ git push origin main X.Y.Z
 3. 운영 인증서 활성화 전에는 Windows 자산이 미서명임을 릴리즈 노트에 명시
 4. **Publish** → `update-website.yml`이 DmSite 갱신을 트리거
 
-같은 태그로 다시 빌드하려면 Run workflow → ref에서 **태그 선택** + `dry_run` 해제. draft면 DMG만 덮어쓰고 노트·다른 자산은 유지되며, 이미 publish된 릴리즈는 자동 덮어쓰기를 거부한다(수동 `gh release upload --clobber`).
+현재 버전을 다시 빌드하려면 Run workflow → ref: `main` + `dry_run` 해제. draft면 DMG만 덮어쓰고 노트·다른 자산은 유지되며, 이미 publish된 릴리즈는 자동 덮어쓰기를 거부한다(수동 `gh release upload --clobber`).
 
 `npm version`이 중간에 실패하면(예: `cargo update` 오프라인) 커밋·태그 없이 버전 파일만 바뀐 상태로 남는다 — `git checkout -- . && git status`로 되돌린 뒤 재시도.
 

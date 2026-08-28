@@ -1,16 +1,23 @@
 name: Release Windows
 
 # Windows x64 빌드 -> 포터블 ZIP 패키징 -> draft 릴리즈 첨부
-# - 태그 푸시: 운영 인증서 활성화 전까지 서명을 건너뛴 EXE/ZIP을 draft 릴리즈에 업로드
-# - workflow_dispatch: SignPath 테스트 서명 후 Actions artifact로만 업로드
+# - main의 npm version 커밋: 운영 인증서 활성화 전까지 서명을 건너뛴 EXE/ZIP을 draft 릴리즈에 업로드
+# - workflow_dispatch(release=true): 현재 버전을 수동 릴리즈
+# - workflow_dispatch(release=false): SignPath 테스트 서명 후 Actions artifact로만 업로드
 # - 단독 업데이트 EXE와 ZIP 내부 EXE는 같은 빌드 파일을 사용
 
 on:
   push:
-    tags:
-      - "[0-9]+.[0-9]+.[0-9]+"
-      - "v[0-9]+.[0-9]+.[0-9]+" # 컨벤션 위반 — preflight에서 명시적으로 실패
+    branches:
+      - main
+    paths:
+      - package.json
   workflow_dispatch:
+    inputs:
+      release:
+        description: "현재 버전을 draft 릴리즈에 업로드 (false면 SignPath 테스트 서명)"
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -29,13 +36,16 @@ jobs:
       version: ${{ steps.check.outputs.version }}
       release: ${{ steps.check.outputs.release }}
       test_signing: ${{ steps.check.outputs.test_signing }}
+      should_build: ${{ steps.check.outputs.should_build }}
+      release_sha: ${{ steps.check.outputs.release_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: SignPath 설정 확인
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.release != true
         shell: bash
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -60,6 +70,9 @@ jobs:
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          MANUAL_RELEASE: ${{ inputs.release }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
         run: |
@@ -76,27 +89,44 @@ jobs:
 
           RELEASE=false
           TEST_SIGNING=false
+          SHOULD_BUILD=false
+          RELEASE_SHA="$CURRENT_SHA"
           if [ "$EVENT_NAME" = "push" ]; then
-            if [ "$REF_TYPE" != "tag" ]; then
-              echo "::error::릴리즈 실행은 태그 push에서만 허용"
+            if [ "$REF_TYPE" != "branch" ] || [ "$REF_NAME" != "$DEFAULT_BRANCH" ]; then
+              echo "::error::버전 릴리즈는 기본 브랜치($DEFAULT_BRANCH) push에서만 허용"
               exit 1
             fi
-            case "$REF_NAME" in
-              v*)
-                echo "::error::태그에 v 접두사 금지 — 이 저장소 컨벤션은 '$PKG' 형식"
-                exit 1 ;;
-            esac
-            if [ "$REF_NAME" != "$PKG" ]; then
-              echo "::error::태그($REF_NAME) ↔ package.json($PKG) 불일치"
-              exit 1
+
+            SUBJECT="$(git log -1 --format=%s "$CURRENT_SHA")"
+            PREVIOUS_PKG="$(git show "$BEFORE_SHA:package.json" 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s).version))" || true)"
+            if [ "$SUBJECT" = "$PKG" ] && [ -n "$PREVIOUS_PKG" ] && [ "$PREVIOUS_PKG" != "$PKG" ]; then
+              RELEASE=true
+              SHOULD_BUILD=true
+              echo "npm version 커밋 감지: $PREVIOUS_PKG -> $PKG"
+            else
+              echo "package.json 변경이 npm version 커밋이 아님 — 릴리즈 빌드 생략 (subject=$SUBJECT previous=$PREVIOUS_PKG current=$PKG)"
             fi
-            RELEASE=true
           elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             if [ "$REF_TYPE" != "branch" ] || [ "$REF_NAME" != "$DEFAULT_BRANCH" ]; then
-              echo "::error::테스트 서명은 기본 브랜치($DEFAULT_BRANCH)에서만 실행 가능"
+              echo "::error::수동 실행은 기본 브랜치($DEFAULT_BRANCH)에서만 가능"
               exit 1
             fi
-            TEST_SIGNING=true
+            SHOULD_BUILD=true
+            if [ "$MANUAL_RELEASE" = "true" ]; then
+              RELEASE=true
+              RELEASE_SHA="$(git log --format='%H%x09%s' -- package.json | awk -F '\t' -v expected="$PKG" '$2 == expected && !found { print $1; found=1 }')"
+              if [ -z "$RELEASE_SHA" ]; then
+                echo "::error::버전 커밋 '$PKG'를 찾을 수 없음"
+                exit 1
+              fi
+              RELEASE_PKG="$(git show "$RELEASE_SHA:package.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s).version))")"
+              if [ "$RELEASE_PKG" != "$PKG" ]; then
+                echo "::error::버전 커밋 검증 실패: sha=$RELEASE_SHA package=$RELEASE_PKG expected=$PKG"
+                exit 1
+              fi
+            else
+              TEST_SIGNING=true
+            fi
           else
             echo "::error::지원하지 않는 이벤트: $EVENT_NAME"
             exit 1
@@ -105,11 +135,14 @@ jobs:
           echo "version=$PKG" >> "$GITHUB_OUTPUT"
           echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
           echo "test_signing=$TEST_SIGNING" >> "$GITHUB_OUTPUT"
-          echo "release=$RELEASE test_signing=$TEST_SIGNING"
+          echo "should_build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE test_signing=$TEST_SIGNING should_build=$SHOULD_BUILD release_sha=$RELEASE_SHA"
 
   build-sign-package:
     name: Windows 빌드·패키징
     needs: preflight
+    if: needs.preflight.outputs.should_build == 'true'
     runs-on: windows-latest
     timeout-minutes: 120
     permissions:
@@ -122,6 +155,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.release_sha }}
           persist-credentials: false
 
       - uses: actions/setup-node@v4
@@ -271,7 +305,7 @@ jobs:
             'Authenticode 서명과 파일 무결성 확인 완료 (자체 서명 테스트 루트 미신뢰는 예상된 상태)'
           }
 
-      # 테스트 실행은 서명 완료 EXE, 태그 릴리즈는 동일 빌드의 미서명 EXE로 패키징
+      # 테스트 실행은 서명 완료 EXE, 버전 릴리즈는 동일 빌드의 미서명 EXE로 패키징
       - name: 최종 자산 패키징
         shell: pwsh
         run: |
@@ -330,11 +364,18 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.preflight.outputs.version }}
+          TARGET: ${{ needs.preflight.outputs.release_sha }}
         run: |
           set -euo pipefail
           EXE_PATH="dist/windows-final/DM.NOTE.exe"
           ZIP_PATH="dist/windows-final/DM.NOTE.v.${VERSION}.zip"
+          NOTES_PATH="$RUNNER_TEMP/release-notes-${VERSION}.md"
+
+          gh api \
+            -H "Accept: application/vnd.github.raw+json" \
+            "repos/${GITHUB_REPOSITORY}/contents/docs/releases/${VERSION}_ko.md?ref=main" \
+            > "$NOTES_PATH"
 
           upload_to_existing_release() {
             if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != "true" ]; then
@@ -348,10 +389,8 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             upload_to_existing_release
           else
-            NOTES="**한국어** | [English](https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/releases/${VERSION}_en.md)"
-            NOTES="$NOTES"$'\n\n'"_(한국어 릴리즈 노트를 작성하고 macOS/Windows 자산을 확인한 뒤 publish — 운영 인증서 활성화 전 Windows 파일은 미서명)_"
             if ! gh release create "$TAG" "$EXE_PATH" "$ZIP_PATH" \
-              --draft --title "DM NOTE v $VERSION" --notes "$NOTES" --generate-notes; then
+              --target "$TARGET" --draft --title "DM NOTE v $VERSION" --notes-file "$NOTES_PATH"; then
               echo "draft 생성 경합 감지 — 기존 릴리즈 재확인"
               gh release view "$TAG" >/dev/null
               upload_to_existing_release
