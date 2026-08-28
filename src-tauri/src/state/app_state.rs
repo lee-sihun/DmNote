@@ -48,7 +48,10 @@ use crate::{
         OverlayResizeAnchor, PanelBounds, SettingsDiff, SettingsState, TabCssOverrides,
     },
     services::{
-        css_watcher::CssWatcher, event_publisher::publish_event, obs_bridge::ObsBridgeService,
+        css_watcher::CssWatcher,
+        event_publisher::publish_event,
+        obs_bridge::ObsBridgeService,
+        overlay_hit::{OverlayHitRect, OverlayHitService},
         settings::SettingsService,
     },
     state::local_asset_path::path_identity_key,
@@ -1052,6 +1055,9 @@ pub struct AppState {
     /// 오버레이 생성·가시성 전환 single-flight 가드
     /// 메인 스레드 이벤트 콜백에서 획득 금지 — setup 훅은 이벤트 루프 가동 전이라 예외
     overlay_creation_lock: Mutex<()>,
+    /// 키 영역 히트 창. 내부 잠금은 store·overlay_creation_lock·번호표와 교차하지 않는다 -
+    /// reconcile 경로에서 store.update를 호출하면 이 불변식이 깨진다
+    overlay_hit: OverlayHitService,
     overlay_bounds_generation: Arc<AtomicU64>,
     plugin_authority: PluginRuntimeAuthority,
     panel_bounds_persistence: Arc<PanelBoundsPersistenceController>,
@@ -1256,6 +1262,11 @@ impl AppState {
             overlay_force_close: Arc::new(AtomicBool::new(false)),
             overlay_initializing: Arc::new(AtomicBool::new(false)),
             overlay_creation_lock: Mutex::new(()),
+            overlay_hit: OverlayHitService::new(
+                snapshot.overlay_visible,
+                snapshot.overlay_locked,
+                snapshot.always_on_top,
+            ),
             overlay_bounds_generation: Arc::new(AtomicU64::new(0)),
             plugin_authority: PluginRuntimeAuthority::default(),
             panel_bounds_persistence,
@@ -1800,6 +1811,15 @@ impl AppState {
         }
         publish_event(app, "overlay:lock", json!({ "locked": locked }));
         Ok(())
+    }
+
+    pub fn sync_overlay_hit_regions(
+        &self,
+        app: &AppHandle,
+        rects: Vec<OverlayHitRect>,
+        revision: u64,
+    ) -> Result<()> {
+        self.overlay_hit.sync_regions(app, rects, revision)
     }
 
     pub fn shutdown(&self) {
