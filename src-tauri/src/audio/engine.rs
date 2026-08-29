@@ -18,8 +18,6 @@ use std::{error::Error, fmt};
 use anyhow::{Context, Result};
 #[cfg(debug_assertions)]
 use log::debug;
-#[cfg(all(windows, feature = "asio-backend"))]
-use log::info;
 use log::warn;
 use parking_lot::RwLock;
 use rodio::{cpal, DeviceSinkBuilder, MixerDeviceSink, Source};
@@ -35,6 +33,13 @@ use symphonia::{
         units::TimeBase,
     },
     default::{get_codecs, get_probe},
+};
+
+mod asio;
+
+use asio::{
+    backend_available as asio_backend_available, list_drivers as list_asio_drivers,
+    open_audio_sink as open_asio_audio_sink,
 };
 
 #[cfg(debug_assertions)]
@@ -213,8 +218,8 @@ impl KeySoundOutputBackend {
                 driver_name,
                 buffer_size,
             } => Self::Asio {
-                driver_name: driver_name.trim().to_string(),
-                buffer_size: buffer_size.filter(|size| *size > 0),
+                driver_name: asio::normalize_driver_name(&driver_name),
+                buffer_size: asio::normalize_buffer_size(buffer_size),
             },
         }
     }
@@ -752,10 +757,6 @@ impl Error for AudioSinkOpenError {
     }
 }
 
-fn asio_backend_available() -> bool {
-    cfg!(all(windows, feature = "asio-backend"))
-}
-
 fn stream_error_callback(
     label: &'static str,
 ) -> (
@@ -1043,147 +1044,6 @@ fn open_system_device_audio_sink(id: &str, stored_name: &str) -> AudioSinkResult
     })
 }
 
-#[cfg(all(windows, feature = "asio-backend"))]
-fn open_asio_audio_sink(
-    driver_name: &str,
-    buffer_size: Option<u32>,
-) -> AudioSinkResult<StreamHandler> {
-    use cpal::traits::{DeviceTrait, HostTrait};
-
-    let driver_name = driver_name.trim();
-    if driver_name.is_empty() {
-        return Err(AudioSinkOpenError::AsioDeviceNotFound);
-    }
-
-    let host = cpal::host_from_id(cpal::HostId::Asio)
-        .map_err(|_| AudioSinkOpenError::AsioDeviceNotFound)?;
-    let devices = host
-        .output_devices()
-        .map_err(|_| AudioSinkOpenError::AsioDeviceNotFound)?;
-
-    for device in devices {
-        let name = match device.description() {
-            Ok(description) => description.name().trim().to_string(),
-            Err(err) => {
-                warn!("[KeySound] failed to read ASIO device name: {err}");
-                continue;
-            }
-        };
-        if name == driver_name {
-            return open_device_audio_sink(device, buffer_size);
-        }
-    }
-
-    Err(AudioSinkOpenError::AsioDeviceNotFound)
-}
-
-#[cfg(not(all(windows, feature = "asio-backend")))]
-fn open_asio_audio_sink(
-    _driver_name: &str,
-    _buffer_size: Option<u32>,
-) -> AudioSinkResult<StreamHandler> {
-    Err(AudioSinkOpenError::AsioUnavailableBuild)
-}
-
-/// ASIO 기본 버퍼 크기(프레임). 미지정 시 이 값으로 고정 오픈
-#[cfg(all(windows, feature = "asio-backend"))]
-const DEFAULT_ASIO_BUFFER_FRAMES: u32 = 64;
-
-#[cfg(all(windows, feature = "asio-backend"))]
-fn open_device_audio_sink(
-    device: cpal::Device,
-    buffer_size: Option<u32>,
-) -> AudioSinkResult<StreamHandler> {
-    // 미지정(None)이면 기본 64로 오픈
-    let frames = buffer_size
-        .filter(|frames| *frames > 0)
-        .unwrap_or(DEFAULT_ASIO_BUFFER_FRAMES);
-
-    // 고정 버퍼 지정 시 그 값 그대로 오픈
-    try_open_asio_sink(device, frames)
-}
-
-#[cfg(all(windows, feature = "asio-backend"))]
-fn try_open_asio_sink(device: cpal::Device, buffer_size: u32) -> AudioSinkResult<StreamHandler> {
-    use cpal::traits::DeviceTrait;
-
-    // 일부 드라이버(Realtek ASIO 등)는 클럭 미확립 상태에서 sample rate 0을 보고함.
-    // rodio from_device 내부의 NonZero unwrap 패닉(release는 abort) 방지를 위한 사전 검증
-    let default_config = device
-        .default_output_config()
-        .map_err(|err| AudioSinkOpenError::OpenFailed(anyhow::Error::new(err)))?;
-    if default_config.sample_rate() == 0 || default_config.channels() == 0 {
-        return Err(AudioSinkOpenError::OpenFailed(anyhow::anyhow!(
-            "ASIO 드라이버가 유효한 샘플레이트/채널 구성을 보고하지 않았습니다"
-        )));
-    }
-
-    let (error, callback) = stream_error_callback("ASIO stream");
-
-    let builder = DeviceSinkBuilder::from_device(device)
-        .map_err(|err| AudioSinkOpenError::OpenFailed(anyhow::Error::new(err)))?
-        .with_error_callback(callback);
-
-    // 샘플레이트는 드라이버 현재값(default_output_config)을 그대로 사용 → ASIOSetSampleRate 회피.
-    // 버퍼는 명시 고정만 사용
-    let sink = builder
-        .with_buffer_size(cpal::BufferSize::Fixed(buffer_size))
-        .open_stream()
-        .map_err(|err| AudioSinkOpenError::OpenFailed(anyhow::Error::new(err)))?;
-
-    let config = sink.config();
-    info!(
-        "[KeySound] ASIO 스트림 오픈: 요청 버퍼={}, 적용 sample_rate={}Hz, buffer={:?}",
-        buffer_size,
-        config.sample_rate().get(),
-        config.buffer_size()
-    );
-
-    Ok(StreamHandler { sink, error })
-}
-
-#[cfg(all(windows, feature = "asio-backend"))]
-fn list_asio_drivers() -> Vec<String> {
-    use cpal::traits::{DeviceTrait, HostTrait};
-
-    let Ok(host) = cpal::host_from_id(cpal::HostId::Asio) else {
-        return Vec::new();
-    };
-    let Ok(devices) = host.output_devices() else {
-        return Vec::new();
-    };
-
-    let mut names: Vec<String> = devices
-        .filter_map(|device| {
-            let name = device
-                .description()
-                .ok()
-                .map(|description| description.name().trim().to_string())
-                .filter(|name| !name.is_empty())?;
-            // 불량 드라이버 제외, 샘플레이트/채널 0 보고
-            match device.default_output_config() {
-                Ok(config) if config.sample_rate() > 0 && config.channels() > 0 => Some(name),
-                Ok(_) => {
-                    warn!("[KeySound] ASIO 드라이버 '{name}' 목록 제외: 유효하지 않은 샘플레이트/채널 보고");
-                    None
-                }
-                Err(err) => {
-                    warn!("[KeySound] ASIO 드라이버 '{name}' 목록 제외: 기본 구성 조회 실패 ({err})");
-                    None
-                }
-            }
-        })
-        .collect();
-    names.sort();
-    names.dedup();
-    names
-}
-
-#[cfg(not(all(windows, feature = "asio-backend")))]
-fn list_asio_drivers() -> Vec<String> {
-    Vec::new()
-}
-
 fn list_system_output_devices() -> Vec<KeySoundOutputDevice> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
@@ -1277,7 +1137,8 @@ mod output_backend_tests {
     };
 
     use super::{
-        open_initial_output_backend, open_system_device_audio_sink, startup_fallback_forgets,
+        asio_output_error_code, asio_output_error_message, open_initial_output_backend,
+        open_system_device_audio_sink, output_fallback_error, startup_fallback_forgets,
         switch_output_backend_with_notification, AudioSinkOpenError, KeySoundEngine,
         KeySoundOutputBackend, ERROR_CODE_ASIO_DEVICE_NOT_FOUND, ERROR_CODE_ASIO_OPEN_FAILED,
         ERROR_CODE_ASIO_UNAVAILABLE_BUILD, ERROR_CODE_DEFAULT_OPEN_FAILED,
@@ -1296,6 +1157,69 @@ mod output_backend_tests {
                 id: "coreaudio:device-id".to_string(),
                 name: "Speakers".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn asio_backend_normalizes_driver_name_and_zero_buffer() {
+        assert_eq!(
+            KeySoundOutputBackend::Asio {
+                driver_name: "  Focusrite USB ASIO  ".to_string(),
+                buffer_size: Some(0),
+            }
+            .normalized(),
+            KeySoundOutputBackend::Asio {
+                driver_name: "Focusrite USB ASIO".to_string(),
+                buffer_size: None,
+            }
+        );
+    }
+
+    #[test]
+    fn asio_error_contract_distinguishes_build_device_and_open_failures() {
+        let cases = [
+            (
+                AudioSinkOpenError::AsioUnavailableBuild,
+                ERROR_CODE_ASIO_UNAVAILABLE_BUILD,
+                "ASIO 미지원 빌드",
+            ),
+            (
+                AudioSinkOpenError::AsioDeviceNotFound,
+                ERROR_CODE_ASIO_DEVICE_NOT_FOUND,
+                "ASIO 장치를 찾을 수 없습니다",
+            ),
+            (
+                AudioSinkOpenError::DeviceNotFound,
+                ERROR_CODE_DEVICE_NOT_FOUND,
+                "출력 장치를 찾을 수 없습니다",
+            ),
+        ];
+
+        for (error, expected_code, expected_message) in cases {
+            assert_eq!(asio_output_error_code(&error), expected_code);
+            assert_eq!(asio_output_error_message(&error), expected_message);
+        }
+
+        let open_error = AudioSinkOpenError::OpenFailed(anyhow::anyhow!("driver busy"));
+        assert_eq!(
+            asio_output_error_code(&open_error),
+            ERROR_CODE_ASIO_OPEN_FAILED
+        );
+        assert_eq!(
+            asio_output_error_message(&open_error),
+            "ASIO 장치를 열 수 없어 기본 출력으로 재생합니다"
+        );
+
+        let backend = KeySoundOutputBackend::Asio {
+            driver_name: "Focusrite USB ASIO".to_string(),
+            buffer_size: Some(64),
+        };
+        assert_eq!(
+            output_fallback_error(&backend, &open_error),
+            (
+                "ASIO 장치를 열 수 없어 기본 출력으로 재생합니다".to_string(),
+                ERROR_CODE_ASIO_OPEN_FAILED.to_string(),
+            )
         );
     }
 
