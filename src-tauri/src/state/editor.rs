@@ -14,6 +14,7 @@ use crate::{
         KeyMappings, KeyPosition, KeySlot, KnobPosition, StatPosition,
         EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
     },
+    state::tab_metadata::normalize_tab_order,
 };
 
 // JS Number.MAX_SAFE_INTEGER - 프론트와 오가는 모든 u64 리비전의 공통 wire 상한
@@ -843,6 +844,7 @@ pub(crate) fn next_revision(current: u64) -> Result<u64, EditorCommitError> {
 pub(crate) fn validate_history_restore_metadata(
     document: &EditorDocumentV1,
     custom_tabs: &[CustomTab],
+    tab_order: &[String],
     selected_key_type: &str,
 ) -> Result<(), EditorCommitError> {
     if custom_tabs.len() > MAX_CUSTOM_TABS {
@@ -857,23 +859,20 @@ pub(crate) fn validate_history_restore_metadata(
     let mut names = HashSet::with_capacity(custom_tabs.len());
     for tab in custom_tabs {
         let id = tab.id.trim();
+        // 10자 상한은 입력 제약이지 데이터 불변식이 아니다. 여기서 강제하면 이미 긴 이름을
+        // 가진 스토어는 undo가 통째로 막히고 그런 프리셋은 영영 못 연다.
+        // 길이·예약어 검사는 create/rename 입구가 맡는다
         let name = tab.name.trim();
-        if id.is_empty() || id.len() > MAX_MODE_ID_BYTES {
-            return Err(EditorCommitError::validation(
-                "INVALID_CUSTOM_TAB_ID",
-                "custom tab id is empty or too long",
-            ));
-        }
         if name.is_empty() || name.len() > MAX_GROUP_NAME_BYTES {
             return Err(EditorCommitError::validation(
                 "INVALID_CUSTOM_TAB_NAME",
                 "custom tab name is empty or too long",
             ));
         }
-        if built_in_modes.contains_key(id) || !ids.insert(id.to_string()) {
+        if id.is_empty() || id.len() > MAX_MODE_ID_BYTES {
             return Err(EditorCommitError::validation(
-                "DUPLICATE_CUSTOM_TAB_ID",
-                format!("custom tab id '{id}' is duplicated or reserved"),
+                "INVALID_CUSTOM_TAB_ID",
+                "custom tab id is empty or too long",
             ));
         }
         if !names.insert(name.to_string()) {
@@ -882,12 +881,25 @@ pub(crate) fn validate_history_restore_metadata(
                 format!("custom tab name '{name}' is duplicated"),
             ));
         }
+        if built_in_modes.contains_key(id) || !ids.insert(id.to_string()) {
+            return Err(EditorCommitError::validation(
+                "DUPLICATE_CUSTOM_TAB_ID",
+                format!("custom tab id '{id}' is duplicated or reserved"),
+            ));
+        }
         if !document.keys.contains_key(id) || !document.key_positions.contains_key(id) {
             return Err(EditorCommitError::validation(
                 "CUSTOM_TAB_DOCUMENT_MISSING",
                 format!("custom tab '{id}' has no paired editor collections"),
             ));
         }
+    }
+
+    if normalize_tab_order(tab_order, custom_tabs) != tab_order {
+        return Err(EditorCommitError::validation(
+            "INVALID_TAB_ORDER",
+            "tab order is incomplete or contains invalid entries",
+        ));
     }
 
     for mode in document.keys.keys() {
@@ -4501,7 +4513,13 @@ mod tests {
             .insert("custom".to_string(), vec![KeyPosition::default()]);
         let document = EditorDocumentV1::from_store(&store);
 
-        let error = validate_history_restore_metadata(&document, &[], "4key").unwrap_err();
+        let error = validate_history_restore_metadata(
+            &document,
+            &[],
+            &AppStoreData::default().tab_order,
+            "4key",
+        )
+        .unwrap_err();
 
         assert_eq!(
             error.details.unwrap().validation_code.as_deref(),
@@ -4517,11 +4535,42 @@ mod tests {
             name: "Custom".to_string(),
         }];
 
-        let error = validate_history_restore_metadata(&document, &tabs, "custom").unwrap_err();
+        let tab_order = crate::state::tab_metadata::normalize_tab_order(&[], &tabs);
+        let error =
+            validate_history_restore_metadata(&document, &tabs, &tab_order, "custom").unwrap_err();
 
         assert_eq!(
             error.details.unwrap().validation_code.as_deref(),
             Some("CUSTOM_TAB_DOCUMENT_MISSING")
+        );
+    }
+
+    // 10자 상한을 복원 경로에서 강제하면 이미 긴 이름을 가진 스토어의 undo가 막히고
+    // 그런 프리셋은 영영 못 연다. 상한은 create/rename 입구에서만 본다
+    #[test]
+    fn history_restore_accepts_names_longer_than_the_input_limit() {
+        let mut store = AppStoreData::default();
+        store
+            .keys
+            .insert("custom".to_string(), vec![KeySlot::from("A")]);
+        store
+            .key_positions
+            .insert("custom".to_string(), vec![KeyPosition::default()]);
+        let document = EditorDocumentV1::from_store(&store);
+        let long_name = "내 커스텀 연습 세팅";
+        assert!(long_name.encode_utf16().count() > 10);
+        let tabs = vec![CustomTab {
+            id: "custom".to_string(),
+            name: long_name.to_string(),
+        }];
+        let tab_order = crate::state::tab_metadata::normalize_tab_order(&[], &tabs);
+
+        validate_history_restore_metadata(&document, &tabs, &tab_order, "custom").unwrap();
+
+        // 같은 이름이 입력으로 들어오면 여전히 거절한다
+        assert_eq!(
+            crate::state::tab_metadata::validate_custom_tab_name(long_name, &[], None),
+            Err("name-too-long")
         );
     }
 

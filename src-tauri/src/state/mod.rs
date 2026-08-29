@@ -20,6 +20,7 @@ pub(crate) mod native_element_id;
 pub(crate) mod panel_drag;
 pub(crate) mod plugin;
 pub mod store;
+pub(crate) mod tab_metadata;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows_window_corners;
 

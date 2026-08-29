@@ -81,6 +81,8 @@ impl HistoryEntry {
 pub(crate) struct CustomTabsHistorySnapshot {
     pub(crate) document: EditorDocumentV1,
     pub(crate) custom_tabs: Vec<CustomTab>,
+    pub(crate) tab_order: Vec<String>,
+    pub(crate) bar_count: u8,
     pub(crate) selected_key_type: String,
     pub(crate) key_counters: KeyCounters,
     pub(crate) tab_css_patch: HashMap<String, Option<TabCss>>,
@@ -93,6 +95,8 @@ impl CustomTabsHistorySnapshot {
         Self {
             document: EditorDocumentV1::from_store(before),
             custom_tabs: before.custom_tabs.clone(),
+            tab_order: before.tab_order.clone(),
+            bar_count: before.bar_count,
             selected_key_type: before.selected_key_type.clone(),
             key_counters: before.key_counters.clone(),
             tab_css_patch: changed_value_patch(&before.tab_css_overrides, &after.tab_css_overrides),
@@ -111,6 +115,8 @@ impl CustomTabsHistorySnapshot {
         Self {
             document: EditorDocumentV1::from_store(store),
             custom_tabs: store.custom_tabs.clone(),
+            tab_order: store.tab_order.clone(),
+            bar_count: store.bar_count,
             selected_key_type: store.selected_key_type.clone(),
             key_counters: store.key_counters.clone(),
             tab_css_patch: current_values_for_keys(
@@ -131,6 +137,8 @@ impl CustomTabsHistorySnapshot {
     pub(crate) fn matches_store(&self, store: &AppStoreData) -> bool {
         self.document == EditorDocumentV1::from_store(store)
             && self.custom_tabs == store.custom_tabs
+            && self.tab_order == store.tab_order
+            && self.bar_count == store.bar_count
             && self.selected_key_type == store.selected_key_type
             && patch_matches(&self.tab_css_patch, &store.tab_css_overrides)
             && patch_matches(&self.tab_note_patch, &store.tab_note_overrides)
@@ -176,6 +184,8 @@ pub(crate) struct PresetHistorySettingsSnapshot {
 pub(crate) struct PresetFullHistorySnapshot {
     pub(crate) document: EditorDocumentV1,
     pub(crate) custom_tabs: Vec<CustomTab>,
+    pub(crate) tab_order: Vec<String>,
+    pub(crate) bar_count: u8,
     pub(crate) selected_key_type: String,
     pub(crate) key_counters: KeyCounters,
     pub(crate) settings: PresetHistorySettingsSnapshot,
@@ -194,6 +204,8 @@ impl PresetFullHistorySnapshot {
         Self {
             document: EditorDocumentV1::from_store(store),
             custom_tabs: store.custom_tabs.clone(),
+            tab_order: store.tab_order.clone(),
+            bar_count: store.bar_count,
             selected_key_type: store.selected_key_type.clone(),
             key_counters: store.key_counters.clone(),
             settings: PresetHistorySettingsSnapshot {
@@ -216,6 +228,8 @@ impl PresetFullHistorySnapshot {
         let current = Self::from_store(store);
         self.document == current.document
             && self.custom_tabs == current.custom_tabs
+            && self.tab_order == current.tab_order
+            && self.bar_count == current.bar_count
             && self.selected_key_type == current.selected_key_type
             && self.settings == current.settings
             && self.tab_css_overrides == current.tab_css_overrides
