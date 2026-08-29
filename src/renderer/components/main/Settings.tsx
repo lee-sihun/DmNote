@@ -24,6 +24,7 @@ import type { SettingsPanelKey } from '@components/main/SettingsPanel/SettingsSi
 import ShortcutsPanelContent from '@components/main/SettingsPanel/ShortcutsPanelContent';
 import PluginsPanelContent from '@components/main/SettingsPanel/PluginsPanelContent';
 import CssPanelContent from '@components/main/SettingsPanel/CssPanelContent';
+import KeySoundOutputSettings from '@components/main/SettingsPanel/KeySoundOutputSettings';
 import {
   FILL_DISABLED_CLASS,
   FILL_INTERACTIVE_CLASS,
@@ -60,33 +61,9 @@ import { pluginApi } from '@api/modules/pluginApi';
 import { keysApi } from '@api/modules/keysApi';
 import { appApi, windowApi } from '@api/modules/appApi';
 import { obsApi } from '@api/modules/obsApi';
-import { keySoundOutputApi } from '@api/modules/resourceApi';
-import type {
-  KeySoundOutputBackend,
-  KeySoundOutputDevices,
-  KeySoundOutputState,
-} from '@api/modules/resourceApi';
 import type { ObsStatus } from '@src/types/obs';
 import { DEFAULT_OBS_PORT } from '@src/types/obs';
 import { assertCanonicalEditorDocument } from '@src/types/editor';
-
-// ASIO 버퍼 크기 선택지(프레임). 게임 설정값과 맞춰야 ASIO 공존 가능.
-const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
-// 기본 버퍼 크기 (게임 기본값과 동일한 최저값)
-const DEFAULT_ASIO_BUFFER = 64;
-
-// 설정 패널은 열 때마다 재마운트되므로, 마지막 출력 상태를 모듈에 캐시해
-// 재진입 시 '기본 장치 → 선택 장치' 드롭다운 깜빡임을 방지한다.
-let cachedKeySoundOutput: KeySoundOutputState | null = null;
-// null이면 목록 미로딩
-let cachedOutputDevices: KeySoundOutputDevices | null = null;
-
-const KEY_SOUND_DEVICE_PREFIX = 'device:';
-const KEY_SOUND_ASIO_PREFIX = 'asio:';
-
-// 드롭다운 라벨용 축약
-const truncateDeviceName = (name: string) =>
-  name.length > 16 ? `${name.slice(0, 16)}…` : name;
 
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
@@ -192,129 +169,11 @@ const Settings = ({
   });
   const obsTogglingRef = useRef(false);
 
-  // 키음 출력 백엔드 (기본 장치 / 시스템 장치 / ASIO) — 캐시로 초기화해 재진입 깜빡임 방지
-  const [keySoundOutput, setKeySoundOutputRaw] =
-    useState<KeySoundOutputState | null>(cachedKeySoundOutput);
-  // 목록 로딩 완료(null 아님) 전에는 드롭다운을 잠그지 않음 (첫 마운트 비활성 깜빡임 방지)
-  const [outputDevices, setOutputDevices] =
-    useState<KeySoundOutputDevices | null>(cachedOutputDevices);
-  const pendingKeySoundOutputRef = useRef<KeySoundOutputBackend | null>(null);
-  const applyingKeySoundOutputRef = useRef(false);
-
-  const setKeySoundOutput = (state: KeySoundOutputState) => {
-    cachedKeySoundOutput = state;
-    setKeySoundOutputRaw(state);
-  };
-
   useEffect(() => {
     if (!applyingResizeAnchorRef.current) {
       confirmedResizeAnchorRef.current = overlayResizeAnchor;
     }
   }, [overlayResizeAnchor]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [devices, state] = await Promise.all([
-          keySoundOutputApi.listDevices(),
-          keySoundOutputApi.getState(),
-        ]);
-        if (cancelled) return;
-        cachedOutputDevices = devices;
-        setOutputDevices(devices);
-        if (
-          !applyingKeySoundOutputRef.current &&
-          !pendingKeySoundOutputRef.current
-        ) {
-          setKeySoundOutput(state);
-        }
-      } catch (error) {
-        console.error('Failed to load key sound output state', error);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const enqueueKeySoundOutput = (backend: KeySoundOutputBackend) => {
-    pendingKeySoundOutputRef.current = backend;
-    setKeySoundOutputRaw((current) => {
-      if (!current) return current;
-      const optimistic = {
-        ...current,
-        requested: backend,
-        error: null,
-        errorCode: null,
-      };
-      cachedKeySoundOutput = optimistic;
-      return optimistic;
-    });
-    if (applyingKeySoundOutputRef.current) return;
-
-    applyingKeySoundOutputRef.current = true;
-    void (async () => {
-      while (pendingKeySoundOutputRef.current) {
-        const requested = pendingKeySoundOutputRef.current;
-        pendingKeySoundOutputRef.current = null;
-        try {
-          const result = await keySoundOutputApi.setBackend(requested);
-          if (!pendingKeySoundOutputRef.current) setKeySoundOutput(result);
-        } catch (error) {
-          console.error('Failed to set key sound output backend', error);
-          if (!pendingKeySoundOutputRef.current) {
-            try {
-              const authoritative = await keySoundOutputApi.getState();
-              if (!pendingKeySoundOutputRef.current) {
-                setKeySoundOutput(authoritative);
-              }
-            } catch (syncError) {
-              console.error('Failed to resync key sound output', syncError);
-            }
-          }
-        }
-      }
-      applyingKeySoundOutputRef.current = false;
-    })();
-  };
-
-  const handleKeySoundOutputChange = (val: string) => {
-    if (val.startsWith(KEY_SOUND_ASIO_PREFIX)) {
-      enqueueKeySoundOutput({
-        kind: 'asio',
-        driverName: val.slice(KEY_SOUND_ASIO_PREFIX.length),
-        // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
-        bufferSize: DEFAULT_ASIO_BUFFER,
-      });
-      return;
-    }
-    if (val.startsWith(KEY_SOUND_DEVICE_PREFIX)) {
-      const id = val.slice(KEY_SOUND_DEVICE_PREFIX.length);
-      const requested = keySoundOutput?.requested;
-      // 목록에 없는 장치는 저장된(분리된) 선택 항목뿐
-      const name =
-        outputDevices?.system.find((item) => item.id === id)?.name ??
-        (requested?.kind === 'device' && requested.id === id
-          ? requested.name
-          : null);
-      if (name === null) return;
-      enqueueKeySoundOutput({ kind: 'device', id, name });
-      return;
-    }
-    enqueueKeySoundOutput({ kind: 'defaultDevice' });
-  };
-
-  // ASIO 버퍼 크기 변경 (게임과 동일 버퍼로 맞춰야 ASIO 공존 가능)
-  const handleAsioBufferChange = (val: string) => {
-    const requested = keySoundOutput?.requested;
-    if (requested?.kind !== 'asio') return;
-    enqueueKeySoundOutput({
-      kind: 'asio',
-      driverName: requested.driverName,
-      bufferSize: Number(val),
-    });
-  };
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
   const { scrollContainerRef } = useLenis();
@@ -989,50 +848,6 @@ const Settings = ({
     });
   };
 
-  const requestedBackend = keySoundOutput?.requested;
-  const requestedAsioDriver =
-    requestedBackend?.kind === 'asio' ? requestedBackend.driverName : null;
-  const asioDrivers = outputDevices?.asio ?? [];
-  const visibleAsioDrivers =
-    requestedAsioDriver && !asioDrivers.includes(requestedAsioDriver)
-      ? [...asioDrivers, requestedAsioDriver]
-      : asioDrivers;
-  // 저장된 장치가 현재 목록에 없어도(분리됨) 선택 상태가 보이도록 병합
-  const requestedDevice =
-    requestedBackend?.kind === 'device' ? requestedBackend : null;
-  const systemDevices = outputDevices?.system ?? [];
-  const visibleSystemDevices =
-    requestedDevice && !systemDevices.some((d) => d.id === requestedDevice.id)
-      ? [
-          ...systemDevices,
-          { id: requestedDevice.id, name: requestedDevice.name },
-        ]
-      : systemDevices;
-  // 같은 이름 장치는 순번으로 구분, 순번은 축약 밖에 붙여 항상 보이게
-  const systemDeviceLabels = new Map<string, string>();
-  const nameCounts = new Map<string, number>();
-  for (const device of visibleSystemDevices) {
-    const seen = (nameCounts.get(device.name) ?? 0) + 1;
-    nameCounts.set(device.name, seen);
-    const base = truncateDeviceName(device.name);
-    systemDeviceLabels.set(device.id, seen > 1 ? `${base} (${seen})` : base);
-  }
-  const keySoundOutputValue =
-    requestedBackend?.kind === 'asio'
-      ? `${KEY_SOUND_ASIO_PREFIX}${requestedBackend.driverName}`
-      : requestedBackend?.kind === 'device'
-      ? `${KEY_SOUND_DEVICE_PREFIX}${requestedBackend.id}`
-      : 'defaultDevice';
-  const requestedAsioBuffer =
-    keySoundOutput?.requested.kind === 'asio'
-      ? keySoundOutput.requested.bufferSize || DEFAULT_ASIO_BUFFER
-      : DEFAULT_ASIO_BUFFER;
-  const visibleAsioBuffers = ASIO_BUFFER_SIZES.some(
-    (size) => size === requestedAsioBuffer,
-  )
-    ? ASIO_BUFFER_SIZES
-    : [...ASIO_BUFFER_SIZES, requestedAsioBuffer].sort((a, b) => a - b);
-
   return (
     <div className="relative w-full h-full">
       <div
@@ -1195,76 +1010,10 @@ const Settings = ({
               </SettingRow>
             </SettingCard>
             {/* 키음 출력 설정 */}
-            <SettingCard>
-              <SettingRow
-                label={
-                  <p className="text-label text-fg flex-1 min-w-0 truncate pr-[10px]">
-                    {t('settings.keySoundOutput') || '키 사운드 출력'}
-                  </p>
-                }
-                onMouseEnter={() => hoverPreview('keySoundOutput')}
-                onMouseLeave={() => hoverPreview(null)}
-              >
-                <Dropdown
-                  options={[
-                    {
-                      value: 'defaultDevice',
-                      label:
-                        t('settings.keySoundOutputDefault') || '기본 재생 장치',
-                    },
-                    // 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유)
-                    // 장치를 못 열면 백엔드가 선택을 기본 장치로 되돌리므로 경고 라벨 없음
-                    ...visibleSystemDevices.map((device) => ({
-                      value: `${KEY_SOUND_DEVICE_PREFIX}${device.id}`,
-                      label:
-                        systemDeviceLabels.get(device.id) ??
-                        truncateDeviceName(device.name),
-                    })),
-                    ...visibleAsioDrivers.map((name) => ({
-                      value: `${KEY_SOUND_ASIO_PREFIX}${name}`,
-                      label: `ASIO: ${truncateDeviceName(name)}`,
-                    })),
-                  ]}
-                  value={keySoundOutputValue}
-                  onChange={handleKeySoundOutputChange}
-                  placeholder={
-                    t('settings.keySoundOutputDefault') || '기본 재생 장치'
-                  }
-                  align="right"
-                  widthClass="max-w-[160px]"
-                  disabled={
-                    outputDevices !== null &&
-                    visibleSystemDevices.length + visibleAsioDrivers.length ===
-                      0
-                  }
-                />
-              </SettingRow>
-              <SettingRow
-                label={
-                  <p
-                    className={`text-label ${
-                      keySoundOutput?.requested.kind === 'asio'
-                        ? 'text-fg'
-                        : 'text-fg-disabled'
-                    }`}
-                  >
-                    {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
-                  </p>
-                }
-              >
-                <Dropdown
-                  options={visibleAsioBuffers.map((size) => ({
-                    value: String(size),
-                    label: String(size),
-                  }))}
-                  value={String(requestedAsioBuffer)}
-                  onChange={handleAsioBufferChange}
-                  placeholder={String(DEFAULT_ASIO_BUFFER)}
-                  align="right"
-                  disabled={keySoundOutput?.requested.kind !== 'asio'}
-                />
-              </SettingRow>
-            </SettingCard>
+            <KeySoundOutputSettings
+              onMouseEnter={() => hoverPreview('keySoundOutput')}
+              onMouseLeave={() => hoverPreview(null)}
+            />
             {/* 기타 설정 */}
             <SettingCard>
               <SettingRow label={t('settings.language')}>
