@@ -72,7 +72,9 @@ const WebFontEditorSheet = ({ editingId, onDone }: WebFontEditorSheetProps) => {
   }, [editingTargetMissing]);
 
   const handleSubmit = (css: string, displayName: string) => {
-    if (fontLibrary.submitWebFont(css, displayName, editingId)) onDone('saved');
+    const saved = fontLibrary.submitWebFont(css, displayName, editingId);
+    if (saved) onDone('saved');
+    return saved;
   };
 
   if (editingTargetMissing) return null;
