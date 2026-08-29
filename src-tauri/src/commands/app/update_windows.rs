@@ -10,8 +10,8 @@ const UPDATE_PUBLIC_KEY: &str = "";
 #[cfg(target_os = "windows")]
 pub fn run(app: tauri::AppHandle, tag: &str) -> CmdResult<super::update::AutoUpdateResult> {
     use super::update::{
-        asset_download_url, build_download_client, download_asset, emit_update_progress,
-        validate_update_target, AutoUpdateResult, UpdatePhase,
+        asset_download_url, build_download_client, download_asset, download_asset_with_progress,
+        emit_update_progress, validate_update_target, AutoUpdateResult, UpdatePhase,
     };
 
     const ASSET_NAME: &str = "DM.NOTE.exe";
@@ -21,11 +21,9 @@ pub fn run(app: tauri::AppHandle, tag: &str) -> CmdResult<super::update::AutoUpd
     let download_url = asset_download_url(&target.tag, ASSET_NAME);
     let client = build_download_client()?;
 
-    emit_update_progress(&app, UpdatePhase::Downloading, None);
-    let bytes = download_asset(&client, &download_url, "update")?;
-    if bytes.is_empty() {
-        return Err(CommandError::msg("downloaded update file is empty"));
-    }
+    let bytes = download_asset_with_progress(&client, &download_url, "update", |percent| {
+        emit_update_progress(&app, UpdatePhase::Downloading, percent)
+    })?;
 
     emit_update_progress(&app, UpdatePhase::Verifying, None);
     if UPDATE_PUBLIC_KEY.trim().is_empty() {

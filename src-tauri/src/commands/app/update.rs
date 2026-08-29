@@ -1,7 +1,7 @@
 //! 자동 업데이트 진입점 — 플랫폼 공통 검증·다운로드·진행 이벤트
 //! 플랫폼별 설치 로직: update_windows.rs(exe 교체), update_macos.rs(DMG 번들 교체)
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::time::Duration;
 
@@ -169,43 +169,21 @@ fn send_download_request(
     })
 }
 
-/// 자산을 메모리로 다운로드 (소형 자산용 — Windows exe/서명)
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub fn download_asset(
-    client: &reqwest::blocking::Client,
-    url: &str,
-    asset_label: &str,
-) -> CmdResult<Vec<u8>> {
-    let response = send_download_request(client, url, asset_label)?;
-    let bytes = response.bytes().map_err(|error| {
-        CommandError::msg(format!("failed to read downloaded {asset_label}: {error}"))
-    })?;
-    Ok(bytes.to_vec())
-}
-
-/// 자산을 파일로 스트리밍 다운로드 — 진행률(%)을 콜백으로 전달, 404는 NotFound로 구분 (macOS DMG)
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub fn download_asset_to_file(
-    client: &reqwest::blocking::Client,
-    url: &str,
-    dest: &Path,
+fn stream_download(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+    total: Option<u64>,
     asset_label: &str,
     mut on_progress: impl FnMut(Option<u8>),
-) -> Result<(), DownloadError> {
-    let mut response = send_download_request(client, url, asset_label)?;
-    let total = response.content_length();
-    let mut file = std::fs::File::create(dest).map_err(|error| {
-        DownloadError::Other(CommandError::msg(format!(
-            "failed to create download file: {error}"
-        )))
-    })?;
-
+) -> Result<u64, DownloadError> {
     let mut buffer = [0u8; 64 * 1024];
     let mut received: u64 = 0;
-    let mut last_percent: Option<u8> = None;
-    on_progress(total.map(|_| 0));
+    let initial_percent = total.map(|_| 0);
+    let mut last_percent = initial_percent;
+    on_progress(initial_percent);
+
     loop {
-        let read = response.read(&mut buffer).map_err(|error| {
+        let read = reader.read(&mut buffer).map_err(|error| {
             DownloadError::Other(CommandError::msg(format!(
                 "failed to read downloaded {asset_label}: {error}"
             )))
@@ -213,9 +191,9 @@ pub fn download_asset_to_file(
         if read == 0 {
             break;
         }
-        std::io::Write::write_all(&mut file, &buffer[..read]).map_err(|error| {
+        writer.write_all(&buffer[..read]).map_err(|error| {
             DownloadError::Other(CommandError::msg(format!(
-                "failed to write download file: {error}"
+                "failed to write downloaded {asset_label}: {error}"
             )))
         })?;
         received += read as u64;
@@ -227,10 +205,63 @@ pub fn download_asset_to_file(
     }
 
     if received == 0 {
-        return Err(DownloadError::Other(CommandError::msg(
-            "downloaded update file is empty",
-        )));
+        return Err(DownloadError::Other(CommandError::msg(format!(
+            "downloaded {asset_label} file is empty"
+        ))));
     }
+    if let Some(expected) = total {
+        if received != expected {
+            return Err(DownloadError::Other(CommandError::msg(format!(
+                "downloaded {asset_label} length mismatch: expected {expected} bytes, received {received}"
+            ))));
+        }
+    }
+
+    Ok(received)
+}
+
+/// 자산을 메모리로 다운로드 (소형 자산용 - 서명)
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn download_asset(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    asset_label: &str,
+) -> CmdResult<Vec<u8>> {
+    download_asset_with_progress(client, url, asset_label, |_| {})
+}
+
+/// 자산을 메모리로 스트리밍 다운로드 - 진행률(%)을 콜백으로 전달
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn download_asset_with_progress(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    asset_label: &str,
+    on_progress: impl FnMut(Option<u8>),
+) -> CmdResult<Vec<u8>> {
+    let mut response = send_download_request(client, url, asset_label)?;
+    let total = response.content_length();
+    let mut bytes = Vec::new();
+    stream_download(&mut response, &mut bytes, total, asset_label, on_progress)?;
+    Ok(bytes)
+}
+
+/// 자산을 파일로 스트리밍 다운로드 - 진행률(%)을 콜백으로 전달, 404는 NotFound로 구분 (macOS DMG)
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn download_asset_to_file(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    dest: &Path,
+    asset_label: &str,
+    on_progress: impl FnMut(Option<u8>),
+) -> Result<(), DownloadError> {
+    let mut response = send_download_request(client, url, asset_label)?;
+    let total = response.content_length();
+    let mut file = std::fs::File::create(dest).map_err(|error| {
+        DownloadError::Other(CommandError::msg(format!(
+            "failed to create download file: {error}"
+        )))
+    })?;
+    stream_download(&mut response, &mut file, total, asset_label, on_progress)?;
     Ok(())
 }
 
@@ -252,7 +283,12 @@ pub fn is_safe_tag(tag: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{asset_download_url, download_percent, is_safe_tag, parse_semver_version};
+    use std::io::Cursor;
+
+    use super::{
+        asset_download_url, download_percent, is_safe_tag, parse_semver_version, stream_download,
+        DownloadError,
+    };
 
     #[test]
     fn safe_tag_accepts_release_tags_and_rejects_path_tricks() {
@@ -278,9 +314,76 @@ mod tests {
 
     #[test]
     fn download_percent_handles_unknown_and_zero_totals() {
+        assert_eq!(download_percent(0, Some(200)), Some(0));
         assert_eq!(download_percent(50, Some(200)), Some(25));
+        assert_eq!(download_percent(199, Some(200)), Some(99));
         assert_eq!(download_percent(300, Some(200)), Some(100));
         assert_eq!(download_percent(10, Some(0)), None);
         assert_eq!(download_percent(10, None), None);
+    }
+
+    #[test]
+    fn stream_download_reports_unique_monotonic_progress() {
+        let payload = vec![7; 10 * 1024 * 1024];
+        let mut reader = Cursor::new(&payload);
+        let mut output = Vec::new();
+        let mut progress = Vec::new();
+
+        let result = stream_download(
+            &mut reader,
+            &mut output,
+            Some(payload.len() as u64),
+            "update",
+            |percent| progress.push(percent),
+        );
+
+        assert_eq!(result.ok(), Some(payload.len() as u64));
+        assert_eq!(output, payload);
+        assert_eq!(progress.first(), Some(&Some(0)));
+        assert_eq!(progress.last(), Some(&Some(100)));
+        assert!(progress.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+
+    #[test]
+    fn stream_download_reports_unknown_total_once() {
+        let mut reader = Cursor::new(b"update payload");
+        let mut output = Vec::new();
+        let mut progress = Vec::new();
+
+        let result = stream_download(&mut reader, &mut output, None, "update", |percent| {
+            progress.push(percent)
+        });
+
+        assert_eq!(result.ok(), Some(14));
+        assert_eq!(progress, vec![None]);
+    }
+
+    #[test]
+    fn stream_download_rejects_short_body() {
+        let mut reader = Cursor::new(b"short");
+        let mut output = Vec::new();
+        let error = stream_download(&mut reader, &mut output, Some(10), "update", |_| {});
+
+        match error {
+            Err(DownloadError::Other(error)) => assert_eq!(
+                error.to_string(),
+                "downloaded update length mismatch: expected 10 bytes, received 5"
+            ),
+            _ => panic!("expected a download length mismatch"),
+        }
+    }
+
+    #[test]
+    fn stream_download_rejects_empty_body() {
+        let mut reader = Cursor::new([]);
+        let mut output = Vec::new();
+        let error = stream_download(&mut reader, &mut output, None, "update", |_| {});
+
+        match error {
+            Err(DownloadError::Other(error)) => {
+                assert_eq!(error.to_string(), "downloaded update file is empty")
+            }
+            _ => panic!("expected an empty download error"),
+        }
     }
 }

@@ -55,7 +55,6 @@ pub fn run(app: AppHandle, tag: &str) -> CmdResult<AutoUpdateResult> {
         .prefix("dmnote-update-")
         .tempdir()?;
 
-    emit_update_progress(&app, UpdatePhase::Downloading, None);
     let (dmg_path, download_url) = download_first_available(&app, &target.tag, temp_dir.path())?;
 
     emit_update_progress(&app, UpdatePhase::Verifying, None);
