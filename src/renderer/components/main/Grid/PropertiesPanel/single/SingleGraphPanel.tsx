@@ -37,7 +37,7 @@ import type {
   EditorPreviewStylePropertyPatchV1,
 } from '@src/types/editor';
 import RenameIcon from './RenameIcon';
-import { getStatTypeLabel } from './singlePanelModel';
+import { getStatTypeLabel } from '@utils/grid/statTypeLabel';
 
 // ============================================================================
 // Single Graph Selection Panel

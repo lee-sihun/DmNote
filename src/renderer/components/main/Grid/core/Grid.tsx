@@ -117,6 +117,7 @@ import {
 } from './gridContextMenuModel';
 import DuplicateElementGhost from './DuplicateElementGhost';
 import { collectElementsInKeyRange } from '@utils/grid/rangeSelection';
+import { getLooseStatTypeLabel } from '@utils/grid/statTypeLabel';
 
 type ToolbarAddRequest = {
   id: number;
@@ -145,14 +146,6 @@ interface GridProps {
   onToolbarAddConsumed: (() => void) | undefined;
   isNoteSettingOpen: boolean;
   setIsNoteSettingOpen: (open: boolean) => void;
-}
-
-function getStatTypeLabel(type: string): string {
-  if (type === 'kps') return 'KPS';
-  if (type === 'kpsAvg') return 'AVG';
-  if (type === 'kpsMax') return 'MAX';
-  if (type === 'total') return 'Total';
-  return String(type || '');
 }
 
 const Grid = ({
@@ -995,7 +988,7 @@ const Grid = ({
           elementId={position.id}
           anchorKind="stat"
           position={position}
-          keyName={getStatTypeLabel(position.statType)}
+          keyName={getLooseStatTypeLabel(position.statType)}
           zIndex={position.zIndex ?? index}
           isSelected={selectedElements.some(
             (el) => el.type === 'stat' && el.id === position.id,

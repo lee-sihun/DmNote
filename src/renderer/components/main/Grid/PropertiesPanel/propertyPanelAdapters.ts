@@ -1,7 +1,6 @@
 import type { NativeLayerBoundsTarget } from '@plugins/runtime/displayElement/pluginElementActions';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import type { StatItemType } from '@src/types/key/statItems';
 import type {
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
@@ -10,20 +9,7 @@ import type {
   EditorNotePropertyPatchV1,
 } from '@src/types/editor';
 import { TABS } from './types';
-
-export const getStatTypeLabel = (statType?: StatItemType | null): string => {
-  switch (statType) {
-    case 'kpsAvg':
-      return 'AVG';
-    case 'kpsMax':
-      return 'MAX';
-    case 'total':
-      return 'Total';
-    case 'kps':
-    default:
-      return 'KPS';
-  }
-};
+export { getStatTypeLabel } from '@utils/grid/statTypeLabel';
 
 export const geometryAxisPatch = (
   field: 'dx' | 'dy' | 'width' | 'height',
