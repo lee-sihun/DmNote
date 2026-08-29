@@ -6,8 +6,6 @@
 //
 // 본문은 버전 문자열만으로 결정된다. 체인지로그 파일을 읽지 않으며,
 // 앵커는 버전에서 점을 제거해 계산한다 (2.0.1 -> #201).
-//
-// TODO: Windows 운영 코드 서명 인증서가 활성화되면 "미서명 상태입니다" 줄을 제거한다.
 
 const version = process.argv[2];
 
@@ -35,7 +33,6 @@ process.stdout.write(
 | macOS | \`DM.NOTE_${version}_universal.dmg\` | Intel · Apple Silicon 공용 |
 
 - 리눅스 환경이라면 [커뮤니티 포크 버전](https://github.com/northernorca/DmNote)을 사용해 보는 걸 추천합니다.
-- 현재 Windows 자산은 운영 코드 서명 인증서 활성화 전이라 미서명 상태입니다.
 - Windows builds include the Steinberg ASIO SDK (GPLv3) · [Third-party notices](${repoUrl}/blob/main/THIRD_PARTY_NOTICES.txt) · ASIO is a trademark of Steinberg Media Technologies GmbH.
 `,
 );
