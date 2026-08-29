@@ -106,16 +106,14 @@ npm run tauri:dev
 <details>
 <summary><b>Windows ASIO 빌드</b></summary>
 
-Windows에서는 `npm run tauri:dev` / `npm run tauri:build:win`에 키음 ASIO 출력이 기본으로 포함됩니다 (npm 스크립트가 `asio-backend` 피처를 활성화합니다). 배포 빌드는 바이너리 크기를 줄이기 위해 Windows에서만 `panic=abort`를 사용하며, macOS 빌드는 Objective-C 예외 처리를 위해 `panic=unwind`를 유지합니다.
+Windows에서는 `npm run tauri:dev` / `npm run tauri:build`에 키음 ASIO 출력이 기본으로 포함됩니다 (npm 스크립트가 `asio-backend` 피처를 활성화합니다).
 
 ASIO 빌드에는 일반 종속성 외에 다음이 필요합니다.
 
 - **LLVM/Clang**: ASIO 헤더 바인딩 생성(bindgen)에 사용됩니다. LLVM을 설치하고(`winget install LLVM.LLVM` 또는 `scoop install llvm`) 환경 변수 `LIBCLANG_PATH`를 LLVM의 `bin` 폴더 경로로 설정해 주세요.
 - **ASIO SDK**: Steinberg ASIO SDK가 저장소에 포함되어 있어(`src-tauri/vendor/asio-sdk`) 자동으로 사용됩니다. 별도 설정이나 네트워크 연결은 필요 없고 다른 SDK를 사용하려면 `CPAL_ASIO_DIR` 환경 변수로 바꾸시면 됩니다.
 
-ASIO 없이 빌드하려면(LLVM 불필요, 기여할 때 편합니다) `npm run tauri:dev:no-asio` / `npm run tauri:build:win:no-asio`를 사용해 주세요. `src-tauri`에서 직접 실행하는 `cargo check` / `cargo build`도 기본은 ASIO를 포함하지 않으며 ASIO 코드 경로까지 검사하려면 `--features asio-backend`를 붙여 주세요.
-
-반복 검증 중에는 `npm run tauri:build:fast:win`을 사용할 수 있습니다. 프론트엔드를 빌드한 뒤 LTO를 생략하고 병렬 코드 생성을 사용하는 `release-fast` 실행 파일(`src-tauri/target/release-fast/dm-note.exe`)을 만들며, 설치 프로그램은 생성하지 않습니다. ASIO가 필요 없으면 `npm run tauri:build:fast:win:no-asio`를 사용하세요. 최종 배포물은 반드시 `npm run tauri:build:win`으로 빌드해야 합니다.
+ASIO 없이 빌드하려면(LLVM 불필요, 기여할 때 편합니다) `npm run tauri:dev:no-asio` / `npm run tauri:build:no-asio`를 사용해 주세요. `src-tauri`에서 직접 실행하는 `cargo check` / `cargo build`도 기본은 ASIO를 포함하지 않으며 ASIO 코드 경로까지 검사하려면 `--features asio-backend`를 붙여 주세요.
 
 > 이 저장소는 Steinberg ASIO SDK를 듀얼 라이선스 중 GPLv3 옵션으로 사용합니다. 자세한 내용은 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)를 참고해 주세요. _ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 
