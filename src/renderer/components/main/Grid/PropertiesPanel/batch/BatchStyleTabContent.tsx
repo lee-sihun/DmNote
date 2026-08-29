@@ -60,6 +60,7 @@ import type {
 import type { BatchElementPropertyUpdate } from '../types';
 import FontWeightDropdown from '../FontWeightDropdown';
 import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
+import { aggregateMixedValue } from '@utils/core/mixedValue';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -358,20 +359,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
   const getDisplayTextMixed = (): { isMixed: boolean; value: string } => {
     const keysData = getSelectedKeysData();
-    if (keysData.length === 0) return { isMixed: false, value: '' };
-
     const getEffectiveDisplayText = (data: KeyData): string => {
       const displayText = data.position?.displayText;
       if (displayText) return displayText;
       return data.keyInfo?.displayName || '';
     };
-
-    const firstValue = getEffectiveDisplayText(keysData[0]);
-    const isMixed = keysData.some(
-      (data) => getEffectiveDisplayText(data) !== firstValue,
-    );
-
-    return { isMixed, value: firstValue };
+    return aggregateMixedValue(keysData, getEffectiveDisplayText, '');
   };
 
   return (

@@ -1,47 +1,41 @@
 import type { CanonicalKnobItemPosition } from '@src/types/editor';
-import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { KeyPosition } from '@src/types/key/keys';
-import type { KnobItemPosition } from '@src/types/key/knobs';
+import type {
+  GraphItemPosition,
+  GraphItemPositions,
+} from '@src/types/key/graphItems';
+import type {
+  KeyMappings,
+  KeyPosition,
+  KeyPositions,
+} from '@src/types/key/keys';
+import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
+import type { StatItemPositions } from '@src/types/key/statItems';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { aggregateMixedValue } from '@utils/core/mixedValue';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
-import { getStatTypeLabel } from './propertyPanelAdapters';
-import type { usePropertiesPanelSelection } from './usePropertiesPanelSelection';
+import { getStatTypeLabel } from '@utils/grid/statTypeLabel';
 
-type PropertiesPanelSelection = ReturnType<typeof usePropertiesPanelSelection>;
+interface BatchSelectedElement<Type extends string> {
+  type: Type;
+  id: string;
+}
 
-type BatchSelectionModelInput = Pick<
-  PropertiesPanelSelection,
-  | 'selectedKeyType'
-  | 'positions'
-  | 'canonicalPositions'
-  | 'keyMappings'
-  | 'statItemPositions'
-  | 'graphItemPositions'
-  | 'knobItemPositions'
-  | 'selectedKeyElements'
-  | 'selectedKeyLikeElements'
-  | 'selectedGraphElements'
-  | 'selectedKnobElements'
-  | 'selectedBatchStyleElements'
->;
-
-const aggregateMixedValue = <Position, Value>(
-  positions: Position[],
-  getter: (position: Position) => Value | undefined,
-  defaultValue: Value,
-): { isMixed: boolean; value: Value } => {
-  if (positions.length === 0) return { isMixed: false, value: defaultValue };
-
-  const firstValue = getter(positions[0]) ?? defaultValue;
-  const isMixed = positions.some((position) => {
-    const value = getter(position) ?? defaultValue;
-    if (typeof value === 'object' && typeof firstValue === 'object') {
-      return JSON.stringify(value) !== JSON.stringify(firstValue);
-    }
-    return value !== firstValue;
-  });
-  return { isMixed, value: firstValue };
-};
+export interface BatchSelectionModelInput {
+  selectedKeyType: string;
+  positions: KeyPositions;
+  canonicalPositions: KeyPositions;
+  keyMappings: KeyMappings;
+  statItemPositions: StatItemPositions;
+  graphItemPositions: GraphItemPositions;
+  knobItemPositions: KnobItemPositions;
+  selectedKeyElements: readonly BatchSelectedElement<'key'>[];
+  selectedKeyLikeElements: readonly BatchSelectedElement<'key' | 'stat'>[];
+  selectedGraphElements: readonly BatchSelectedElement<'graph'>[];
+  selectedKnobElements: readonly BatchSelectedElement<'knob'>[];
+  selectedBatchStyleElements: readonly BatchSelectedElement<
+    'key' | 'stat' | 'graph' | 'knob'
+  >[];
+}
 
 export const createBatchSelectionModel = ({
   selectedKeyType,
