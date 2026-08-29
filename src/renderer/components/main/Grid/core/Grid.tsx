@@ -44,14 +44,7 @@ import GridMinimap from './GridMinimap';
 import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
-import ResizeHandles from '../handles/ResizeHandles';
-import GradientAxisOverlay from '../handles/GradientAxisHandle';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
-import GroupResizeHandles from '../handles/GroupResizeHandles';
-import {
-  getElementBounds,
-  isElementResizable,
-} from '../handles/groupResizeUtils';
 import { getGridViewportLayerStyles } from '@utils/core/gridViewportStyles';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
@@ -104,6 +97,7 @@ import {
 } from './gridContextMenuModel';
 import DuplicateElementGhost from './DuplicateElementGhost';
 import NativeGridElements from './NativeGridElements';
+import GridSelectionOverlays from '../overlays/GridSelectionOverlays';
 
 type ToolbarAddRequest = {
   id: number;
@@ -944,158 +938,27 @@ const Grid = ({
       <SmartGuidesOverlay zoom={zoom} panX={panX} panY={panY} />
       {/* 마퀴 선택 오버레이 */}
       <MarqueeSelectionOverlay zoom={zoom} panX={panX} panY={panY} />
-      {/* 선택된 요소 표시 - 그룹 리사이즈 중에는 개별 테두리 숨김 (흔들림 방지) */}
-      {selectedElements.map((el, _idx) => {
-        // 온캔버스 그라데이션 편집 중에는 선택 테두리 숨김 (축·스톱만 표시)
-        if (hasGradientEditSession) return null;
-        // 그룹 리사이즈 중에는 개별 요소 테두리 숨김 (스냅으로 인한 흔들림 방지)
-        if (selectedElements.length > 1 && previewElementBounds) {
-          return null;
-        }
-
-        // 다중 선택 시 리사이즈 불가능한 요소는 파란 선 대신 주황색 선으로 표시됨 (GroupResizeHandles에서 처리)
-        if (selectedElements.length > 1) {
-          const isResizable = isElementResizable(
-            el,
-            positions,
-            statPositions,
-            graphPositions,
-            knobPositions,
-            selectedKeyType,
-            pluginElements,
-          );
-          if (!isResizable) {
-            return null; // 주황색 선은 GroupResizeHandles에서 표시
-          }
-        }
-
-        const bounds = getElementBounds(
-          el,
-          positions,
-          statPositions,
-          graphPositions,
-          knobPositions,
-          selectedKeyType,
-          pluginElements,
-        );
-        if (!bounds) return null;
-
-        // 단일 선택이고 프리뷰 bounds가 있으면 프리뷰 bounds 사용 (드래그 중 파란 선도 함께 이동)
-        let displayBounds = bounds;
-        if (selectedElements.length === 1 && previewBounds) {
-          displayBounds = previewBounds;
-        }
-
-        return (
-          <div
-            key={el.id}
-            style={{
-              position: 'absolute',
-              left: displayBounds.x * zoom + panX - 2,
-              top: displayBounds.y * zoom + panY - 2,
-              width: displayBounds.width * zoom + 4,
-              height: displayBounds.height * zoom + 4,
-              border: '2px solid var(--ui-selection-border)',
-              borderRadius: '4px',
-              pointerEvents: 'none',
-              zIndex: 'var(--z-canvas-selection-outline)',
-            }}
-          />
-        );
-      })}
-      {/* 단일 선택 시 리사이즈 핸들 표시 */}
-      {selectedElements.length === 1 &&
-        (() => {
-          const el = selectedElements[0];
-          let bounds = getElementBounds(
-            el,
-            positions,
-            statPositions,
-            graphPositions,
-            knobPositions,
-            selectedKeyType,
-            pluginElements,
-          );
-          const elementId = el.id;
-
-          if (el.type === 'plugin') {
-            // 플러그인 요소 - resizable 속성 확인
-            const pluginEl = pluginElements.find((p) => p.fullId === el.id);
-            if (!pluginEl || !pluginEl.measuredSize) {
-              return null;
-            }
-
-            // definitions에서 해당 플러그인의 resizable 설정 확인
-            const definitions =
-              usePluginDisplayElementStore.getState().definitions;
-            const definition = pluginEl.definitionId
-              ? definitions.get(pluginEl.definitionId)
-              : null;
-
-            // resizable이 true인 경우에만 리사이즈 핸들 표시
-            if (!definition?.resizable) return null;
-
-            bounds = getElementBounds(
-              el,
-              positions,
-              statPositions,
-              graphPositions,
-              knobPositions,
-              selectedKeyType,
-              pluginElements,
-            );
-          }
-
-          if (!bounds || !elementId) return null;
-
-          if (hasGradientEditSession) return null;
-
-          return (
-            <ResizeHandles
-              bounds={bounds}
-              previewBounds={previewBounds}
-              zoom={zoom}
-              panX={panX}
-              panY={panY}
-              onResizeStart={handleResizeStart}
-              onResize={handleResize}
-              onResizeEnd={handleResizeComplete}
-              elementId={elementId}
-              getOtherElements={getOtherElements}
-            />
-          );
-        })()}
-      {/* 다중 선택 시 그룹 리사이즈 핸들 표시 */}
-      {selectedElements.length > 1 && !hasGradientEditSession && (
-        <GroupResizeHandles
-          selectedElements={selectedElements}
-          positions={positions}
-          statPositions={statPositions}
-          graphPositions={graphPositions}
-          knobPositions={knobPositions}
-          selectedKeyType={selectedKeyType}
-          pluginElements={pluginElements}
-          zoom={zoom}
-          panX={panX}
-          panY={panY}
-          previewGroupBounds={previewGroupBounds}
-          onGroupResizeStart={handleResizeStart}
-          onGroupResize={(result) => handleGroupResize(result)}
-          onGroupResizeEnd={handleGroupResizeComplete}
-          getOtherElements={getOtherElements}
-        />
-      )}
-      {/* 온캔버스 그라데이션 각도 핸들 — 피커가 그라데이션 형식일 때만 표시 */}
-      <GradientAxisOverlay
+      <GridSelectionOverlays
+        selectedElements={selectedElements}
         positions={positions}
         statPositions={statPositions}
         graphPositions={graphPositions}
         knobPositions={knobPositions}
-        selectedElements={selectedElements}
-        selectedKeyType={selectedKeyType}
+        mode={selectedKeyType}
+        pluginElements={pluginElements}
         zoom={zoom}
         panX={panX}
         panY={panY}
+        hasGradientEditSession={hasGradientEditSession}
+        previewBounds={previewBounds}
+        previewGroupBounds={previewGroupBounds}
+        previewElementBounds={previewElementBounds}
+        onResizeStart={handleResizeStart}
+        onResize={handleResize}
+        onResizeEnd={handleResizeComplete}
+        onGroupResize={handleGroupResize}
+        onGroupResizeEnd={handleGroupResizeComplete}
+        getOtherElements={getOtherElements}
       />
       {/* 우클릭 리스트 팝업 */}
       <div className="relative">
