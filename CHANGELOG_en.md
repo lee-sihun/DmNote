@@ -7,7 +7,7 @@
 <!-- Release bodies link here with an anchor derived from the version (2.0.1 -> #201).
      Changing the version heading format silently breaks links in existing releases.
      Two-digit segments collide (1.2.10 / 1.21.0 both -> #1210); introduce explicit
-     anchors in scripts/build-release-notes.js and the headings if that day comes. -->
+     anchors in scripts/lib/release-notes.js and the headings if that day comes. -->
 
 ---
 

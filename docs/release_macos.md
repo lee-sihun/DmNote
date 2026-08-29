@@ -37,7 +37,7 @@ npm version patch        # package.json 버전 올리고 tauri.conf.json / Cargo
 git push origin main     # 태그는 push하지 않음
 ```
 
-`package.json` 버전 변경과 커밋 제목 `X.Y.Z`가 일치하는 main push를 감지하면 macOS와 Windows workflow가 실행된다. 원격 `X.Y.Z` 태그와 draft 릴리즈는 Actions가 자동 생성하고 각 자산을 첨부한다. 릴리즈 본문은 `scripts/build-release-notes.js`가 버전만으로 생성하며 (체인지로그 링크 + 자산 안내), 변경 내역 자체는 `CHANGELOG.md`에 유지한다. 이후:
+`package.json` 버전 변경과 커밋 제목 `X.Y.Z`가 일치하는 main push를 감지하면 macOS와 Windows workflow가 실행된다. 원격 `X.Y.Z` 태그와 draft 릴리즈는 Actions가 자동 생성하고 각 자산을 첨부한다. 릴리즈 본문은 `scripts/build-release-notes.js`가 생성한다 (체인지로그 링크 + 자산 안내 + `CHANGELOG.md`에서 추출한 기여자 섹션). 변경 내역 자체는 `CHANGELOG.md`에 유지한다. 이후:
 
 > 자산 이름 `DM.NOTE_<tag>_{aarch64|x64|universal}.dmg`는 **앱 내 자동 업데이트가 의존하는 계약**이다 (`src-tauri/src/commands/app/update_macos/mod.rs`의 `asset_candidates`). 아키텍처 전용 자산이 있으면 그것을 우선 받으므로, 서명·공증되지 않은 DMG를 그 이름으로 수동 업로드하지 말 것.
 
@@ -47,7 +47,14 @@ git push origin main     # 태그는 push하지 않음
 
 `docs/releases/*.md`는 2.0.1까지의 published 릴리즈 본문이 링크하고 있으므로 **삭제하지 않는다**. 신규 버전 노트는 더 추가하지 않고 `CHANGELOG.md`에만 쓴다.
 
-릴리즈 본문은 draft를 처음 만든 workflow가 한 번만 기록한다. 문구를 고치려면 `scripts/build-release-notes.js` 수정 후 draft 본문을 직접 교체한다(`gh release edit "$TAG" --notes-file`).
+릴리즈 본문은 draft를 처음 만든 workflow가 **한 번만** 기록한다. publish 후에 기여자 크레딧이나 영문 노트를 체인지로그에 추가했다면 본문에 반영되지 않으므로 다음으로 다시 쓴다.
+
+```bash
+node scripts/refresh-release-notes.js 2.0.2          # 미리보기
+node scripts/refresh-release-notes.js 2.0.2 --apply  # 반영
+```
+
+본문 문구 자체를 바꾸려면 템플릿이 있는 `scripts/lib/release-notes.js`를 수정한다 (두 진입점이 공유한다).
 
 현재 버전을 다시 빌드하려면 Run workflow → ref: `main` + `dry_run` 해제. draft면 DMG만 덮어쓰고 노트·다른 자산은 유지되며, 이미 publish된 릴리즈는 자동 덮어쓰기를 거부한다(수동 `gh release upload --clobber`).
 
