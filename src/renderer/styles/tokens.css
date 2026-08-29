@@ -261,6 +261,17 @@
   --ui-text-swap-blur: 2px;
   --ui-text-swap-shift: 4px;
 
+  /* 업데이트 진행 게이지 - 채움이 앉을 바닥.
+     알파를 올리면 트랙이 채움에 붙어 경계가 뭉갠다 */
+  --ui-gauge-track: color-mix(in srgb, var(--ui-accent-deep) 34%, transparent);
+  /* 띄엄띄엄 도착하는 진행률을 잇는 시간. 진행은 물리량이라 가속을 걸면 속도가 거짓말을 해서 선형이다 */
+  --ui-gauge-catchup: 260ms;
+  --ui-gauge-shimmer-duration: 2000ms;
+  /* 셔머가 읽히려면 기본색이 흰색보다 낮아야 한다. 모션을 끄면 --ui-accent-fg로 되돌려
+     대비를 회복한다 */
+  --ui-gauge-text-base: rgba(255, 255, 255, 0.82);
+  --ui-gauge-text-lit: #ffffff;
+
   /* 툴바 아이콘 호버 모션 - 호버 진입에 한 번 재생되고 멈춘다. 반복 없음.
      400ms 아래로 내리면 무슨 동작인지 읽기 전에 끝나므로 다른 모션보다 느긋하다.
      동작마다 자연스러운 clock이 달라 지속 시간은 용도별로 따로 둔다 */

@@ -92,6 +92,7 @@ export default function App() {
     skipVersion,
     checkForUpdates,
     runAutoUpdate,
+    retryRestart,
     isAutoUpdating,
     autoUpdatePhase,
     autoUpdateProgress,
@@ -395,8 +396,33 @@ export default function App() {
   // 설정 화면에서도 분리 패널의 네이티브 닫기 요청 처리 유지
   usePanelCloseRequest(() => handlePanelTransitionFailure('dock'));
 
+  // 설치는 끝났는데 재시작만 실패한 경우. 원인은 대개 에디터 저장 취소라 함께 보여준다
+  const showRestartFailedAlert = (cause: unknown) => {
+    const detail = getErrorMessage(cause);
+    showAlert(
+      detail
+        ? `${t('update.installedRestartFailed')}\n${detail}`
+        : t('update.installedRestartFailed'),
+    );
+  };
+
   const handleUpdatePrimaryAction = async () => {
     if (!updateInfo) return;
+
+    // 설치는 끝났고 재시작만 실패한 상태, 설치를 반복하지 않고 재시작만 다시 요청한다
+    if (autoUpdatePhase === 'installed') {
+      try {
+        await retryRestart();
+      } catch (error) {
+        const cause =
+          error instanceof UpdateInstalledRestartFailedError
+            ? error.originalError
+            : error;
+        console.error('Restart retry failed:', cause);
+        showRestartFailedAlert(cause);
+      }
+      return;
+    }
 
     if (!autoUpdateEnabled) {
       try {
@@ -411,17 +437,11 @@ export default function App() {
       await runAutoUpdate(updateInfo.latestVersion);
     } catch (error) {
       if (error instanceof UpdateInstalledRestartFailedError) {
-        // 대개 에디터 저장 실패로 재시작이 취소된 경우 — 원인을 함께 보여줌
         console.error(
           'Update installed but restart failed:',
           error.originalError,
         );
-        const restartDetail = getErrorMessage(error.originalError);
-        showAlert(
-          restartDetail
-            ? `${t('update.installedRestartFailed')}\n${restartDetail}`
-            : t('update.installedRestartFailed'),
-        );
+        showRestartFailedAlert(error.originalError);
         return;
       }
       const detail = getErrorMessage(error);
@@ -876,7 +896,11 @@ export default function App() {
             progress: autoUpdateProgress,
             t,
           })}
-          primaryActionDisabled={isAutoUpdating}
+          primaryActionDisabled={
+            isAutoUpdating && autoUpdatePhase !== 'installed'
+          }
+          progressPhase={autoUpdatePhase}
+          progressPercent={autoUpdateProgress}
         />
       )}
     </div>

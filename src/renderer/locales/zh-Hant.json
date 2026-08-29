@@ -470,7 +470,7 @@
     "phaseVerifying": "驗證中...",
     "phaseInstalling": "安裝中...",
     "phaseRestarting": "重新啟動中...",
-    "phaseInstalled": "已安裝 — 請重新啟動",
+    "phaseInstalled": "重新啟動",
     "installedRestartFailed": "更新已安裝。重新啟動 DM NOTE 即可使用新版本。",
     "later": "稍後",
     "checkUpdate": "檢查更新",

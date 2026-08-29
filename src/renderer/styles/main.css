@@ -1485,3 +1485,165 @@ svg [data-dmn-icon-motion] {
     animation-name: none;
   }
 }
+
+/* ===== 업데이트 진행 게이지 ===== */
+
+/* 버튼 자체가 트랙이 된다. 진행량은 채움이, 일하는 중이라는 신호는
+   글자 셔머가 나눠 맡는다.
+   경계는 색 대비로만 세운다 - 채움 머리에 1px 밝은 선을 두면 다 찼을 때
+   버튼 오른쪽 모서리에 흰 줄로 눌러앉고, 100%에서만 지우는 예외를 요구한다 */
+.dmn-gauge {
+  position: relative;
+  overflow: hidden;
+  /* 음수 z-index 채움이 버튼 배경 위, 라벨 아래에 서도록 스택 컨텍스트를 연다 */
+  isolation: isolate;
+}
+
+.dmn-gauge[data-busy='true'] {
+  background: var(--ui-gauge-track);
+}
+
+/* 진행 중은 비활이 아니라 작업 중이다. Tailwind disabled:opacity-50이
+   게이지까지 반투명하게 만들지 않도록 한 단 높은 특이도로 되돌리고,
+   커서도 금지가 아니라 기본으로 둔다 */
+.dmn-gauge[data-busy='true']:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* 채움이 버튼 배경을 덮으므로 호버·누름 피드백도 채움이 낸다.
+   게이지가 떠 있는데 잠금이 풀린 구간에서만 쓰인다 */
+.dmn-gauge[data-busy='true']:not(:disabled):hover .dmn-gauge-fill {
+  background: var(--ui-accent-deep-hover);
+}
+
+.dmn-gauge[data-busy='true']:not(:disabled):active .dmn-gauge-fill {
+  background: var(--ui-accent-deep-active);
+}
+
+.dmn-gauge-fill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ui-accent-deep);
+  /* 폭을 건드리지 않고 자기 몸을 밀어 넣는다. 레이아웃 없이 합성만 */
+  transform: translate3d(calc(var(--dmn-gauge-p, 0) * 1% - 100%), 0, 0);
+  transition: transform var(--ui-gauge-catchup) linear,
+    background-color var(--ui-duration-fast);
+}
+
+/* 라벨은 절대 배치로 겹쳐 둔다. 단계가 바뀌면 두 줄이 같은 자리에서 교차하고,
+   버튼 폭이 이미 고정이라 폭을 재는 자리표시자가 없어도 된다.
+   한 칸짜리 트랙이 폭을 다 쓰게 두어야 가운데 정렬이 산다 */
+.dmn-gauge-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  padding-inline: 8px;
+  pointer-events: none;
+}
+
+.dmn-gauge-line {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 첫 줄은 모달 등장 모션에 얹혀 들어오므로 교차를 걸지 않는다 */
+.dmn-gauge-line[data-enter='true'] {
+  animation: dmnGaugeLineIn var(--ui-text-swap-duration)
+    var(--ui-text-swap-ease) both;
+}
+
+.dmn-gauge-line[data-leaving='true'] {
+  animation: dmnGaugeLineOut var(--ui-text-swap-duration)
+    var(--ui-text-swap-ease) both;
+}
+
+/* 나가는 줄은 위로 밀리며 흐려지고, 들어오는 줄은 아래에서 올라온다.
+   전환이 아니라 애니메이션인 이유 - 줄이 그때그때 붙었다 떨어지므로
+   시작값을 잡으려고 프레임을 한 번 흘려보낼 필요가 없다 */
+@keyframes dmnGaugeLineIn {
+  from {
+    opacity: 0;
+    filter: blur(var(--ui-text-swap-blur));
+    transform: translateY(var(--ui-text-swap-shift));
+  }
+
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes dmnGaugeLineOut {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    filter: blur(var(--ui-text-swap-blur));
+    transform: translateY(calc(var(--ui-text-swap-shift) * -1));
+  }
+}
+
+/* 셔머는 글리프에만 흐른다. 그라데이션이 기본색까지 들고 있어서 텍스트 사본을
+   겹치지 않아도 되고, 교차 애니메이션과 자리를 나눠 가지려고 안쪽 span에 건다 */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .dmn-gauge[data-shimmer='on'] .dmn-gauge-ink {
+    background-image: linear-gradient(
+      90deg,
+      var(--ui-gauge-text-base) 40%,
+      var(--ui-gauge-text-lit) 50%,
+      var(--ui-gauge-text-base) 60%
+    );
+    background-size: 400% 100%;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: dmnGaugeShimmer var(--ui-gauge-shimmer-duration) linear infinite;
+  }
+}
+
+@keyframes dmnGaugeShimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 채움 위치는 장식이 아니라 정보다. 보간과 셔머만 끈다 */
+  .dmn-gauge-fill {
+    transition: none;
+  }
+
+  .dmn-gauge-line[data-enter='true'] {
+    animation: none;
+  }
+
+  /* 교차를 끄면 나가는 줄이 제거될 때까지 새 줄과 겹친다 - 즉시 감춘다 */
+  .dmn-gauge-line[data-leaving='true'] {
+    animation: none;
+    opacity: 0;
+  }
+
+  .dmn-gauge[data-shimmer='on'] .dmn-gauge-ink {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentcolor;
+    color: var(--ui-accent-fg);
+  }
+}

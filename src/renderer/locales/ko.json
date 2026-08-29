@@ -470,7 +470,7 @@
     "phaseVerifying": "검증 중...",
     "phaseInstalling": "설치 중...",
     "phaseRestarting": "재시작 중...",
-    "phaseInstalled": "설치 완료 — 다시 실행 필요",
+    "phaseInstalled": "재실행",
     "installedRestartFailed": "업데이트가 설치되었습니다. DM NOTE를 다시 실행하면 새 버전이 적용됩니다.",
     "later": "나중에",
     "checkUpdate": "업데이트 확인",
