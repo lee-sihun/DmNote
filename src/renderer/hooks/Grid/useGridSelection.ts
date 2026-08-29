@@ -69,6 +69,7 @@ import {
   moveSelectedPluginElements,
   selectedPluginIds,
 } from '@utils/grid/selectionMovement';
+import { createSelectionClipboardSnapshot } from '@utils/grid/selectionClipboard';
 
 // 붙여넣기 블록의 스택 순서 결정. 배열 위치가 곧 최종 z이므로 원본의 상대
 // 스택(동결 payload zIndex 내림차순)을 따르고, 동률은 payload 순서로 안정
@@ -493,110 +494,26 @@ export function useGridSelection({
   const copySelectedElements = () => {
     if (selectedElements.length === 0) return;
 
-    // 최신 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
-    // 클립보드는 이후 paste 커밋의 원본이므로 canonical 기준으로 캡처
-    const { keyMappings: km, canonicalPositions: pos } = useKeyStore.getState();
-    const currentMappings = km[selectedKeyType] || [];
-    const currentPositions = pos[selectedKeyType] || [];
-    const currentStatPositions =
-      useStatItemStore.getState().positions[selectedKeyType] || [];
-    const currentGraphPositions =
-      useGraphItemStore.getState().positions[selectedKeyType] || [];
-    const currentKnobPositions =
-      useKnobItemStore.getState().positions[selectedKeyType] || [];
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-
-    const clipboardItems: ClipboardItem[] = [];
-
-    for (const element of selectedElements) {
-      if (element.type === 'key') {
-        const index = currentPositions.findIndex(
-          (position) => position.id === element.id,
-        );
-        const keyCode = index >= 0 ? currentMappings[index] : undefined;
-        const position = index >= 0 ? currentPositions[index] : undefined;
-        // 미할당 키는 빈 문자열 슬롯이라 truthy 검사로 거르면 복사가 누락된다
-        if (keyCode !== undefined && position) {
-          clipboardItems.push({
-            type: 'key',
-            keyCode: cloneSlot(keyCode),
-            position: { ...position },
-          });
-        }
-      } else if (element.type === 'stat') {
-        const position = currentStatPositions.find(
-          (candidate) => candidate.id === element.id,
-        );
-        if (position) {
-          clipboardItems.push({
-            type: 'stat',
-            position: { ...position },
-          });
-        }
-      } else if (element.type === 'graph') {
-        const position = currentGraphPositions.find(
-          (candidate) => candidate.id === element.id,
-        );
-        if (position) {
-          clipboardItems.push({
-            type: 'graph',
-            position: { ...position },
-          });
-        }
-      } else if (element.type === 'knob') {
-        const position = currentKnobPositions.find(
-          (candidate) => candidate.id === element.id,
-        );
-        if (position) {
-          clipboardItems.push({
-            type: 'knob',
-            position: { ...position },
-          });
-        }
-      } else if (element.type === 'plugin') {
-        const pluginElement = currentPluginElements.find(
-          (el) => el.fullId === element.id,
-        );
-        if (pluginElement) {
-          // fullId를 제외한 나머지 데이터 복사
-          const { fullId: _fullId, ...elementData } = pluginElement;
-          clipboardItems.push({
-            type: 'plugin',
-            element: elementData,
-          });
-        }
-      }
-    }
-
-    if (clipboardItems.length > 0) {
-      // 그룹 헤더가 선택된 경우 그룹 정보도 함께 저장
-      const selectedGroupIds =
-        useGridSelectionStore.getState().selectedGroupIds;
-      const clipboardGroups: {
-        id: string;
-        name: string;
-        collapsed?: boolean;
-      }[] = [];
-
-      if (selectedGroupIds.length > 0) {
-        const layerGroups = useLayerGroupStore
-          .getState()
-          .getGroupsForMode(selectedKeyType);
-        const collapsedGroups = useLayerGroupStore.getState().collapsedGroups;
-        for (const gid of selectedGroupIds) {
-          const group = layerGroups.find((g) => g.id === gid);
-          if (group) {
-            clipboardGroups.push({
-              id: gid,
-              name: group.name,
-              collapsed: collapsedGroups.has(gid) || undefined,
-            });
-          }
-        }
-      }
-
-      setClipboard(clipboardItems, clipboardGroups);
+    const keyState = useKeyStore.getState();
+    const layerGroupState = useLayerGroupStore.getState();
+    const selectionState = useGridSelectionStore.getState();
+    const snapshot = createSelectionClipboardSnapshot({
+      selectedElements,
+      keyMappings: keyState.keyMappings[selectedKeyType] || [],
+      keyPositions: keyState.canonicalPositions[selectedKeyType] || [],
+      statPositions:
+        useStatItemStore.getState().positions[selectedKeyType] || [],
+      graphPositions:
+        useGraphItemStore.getState().positions[selectedKeyType] || [],
+      knobPositions:
+        useKnobItemStore.getState().positions[selectedKeyType] || [],
+      pluginElements: usePluginDisplayElementStore.getState().elements,
+      selectedGroupIds: selectionState.selectedGroupIds,
+      layerGroups: layerGroupState.getGroupsForMode(selectedKeyType),
+      collapsedGroupIds: layerGroupState.collapsedGroups,
+    });
+    if (snapshot.items.length > 0) {
+      setClipboard(snapshot.items, snapshot.groups);
     }
   };
 
