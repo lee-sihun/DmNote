@@ -41,6 +41,14 @@ const WebFontEditorSheet = ({ editingId, onDone }: WebFontEditorSheetProps) => {
   const [editingTargetMissing] = useState(
     () => editingId != null && editingWebFont === null,
   );
+  // 대상이 지워져도 쓰던 CSS를 걷어가지 않는다 - 편집 대상이 바뀔 때만 다시 읽는다
+  const [cssSnapshot, setCssSnapshot] = useState(() => ({
+    id: editingId,
+    css: editingWebFont?.cssContent || '',
+  }));
+  if (cssSnapshot.id !== editingId) {
+    setCssSnapshot({ id: editingId, css: editingWebFont?.cssContent || '' });
+  }
 
   const failToOpen = (message: string, notice: string, error?: unknown) => {
     console.error(message, error);
@@ -86,8 +94,8 @@ const WebFontEditorSheet = ({ editingId, onDone }: WebFontEditorSheetProps) => {
           isOpen
           onClose={() => onDone('cancelled')}
           onSubmit={handleSubmit}
-          initialCss={editingWebFont?.cssContent || ''}
-          mode={editingWebFont ? 'edit' : 'add'}
+          initialCss={cssSnapshot.css}
+          mode={editingId ? 'edit' : 'add'}
           isDuplicateFontFamily={(fontFamily) =>
             fontLibrary.isDuplicateFontFamily(fontFamily, {
               excludeId: editingId,

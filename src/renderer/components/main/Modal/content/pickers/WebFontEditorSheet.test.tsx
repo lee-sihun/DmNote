@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   submitWebFont: vi.fn<() => boolean>(),
   alert: vi.fn<() => Promise<void>>(),
   submitFromEditor: null as null | ((css: string, name: string) => void),
+  initialCss: null as string | null,
   customFonts: [] as { id: string; type: string; cssContent: string }[],
 }));
 
@@ -28,13 +29,16 @@ vi.mock('@hooks/useFontLibrary', () => ({
 vi.mock('./WebFontInputModal', () => ({
   default: ({
     onSubmit,
+    initialCss,
   }: {
     onSubmit: (css: string, displayName: string) => void;
+    initialCss?: string;
   }) => {
     if (mocks.editorBroken) {
       throw new TypeError('Importing a module script failed.');
     }
     mocks.submitFromEditor = onSubmit;
+    mocks.initialCss = initialCss ?? null;
     return <div data-testid="web-font-editor">editor</div>;
   },
 }));
@@ -65,6 +69,7 @@ describe('WebFontEditorSheet', () => {
     onDone = vi.fn<(outcome: string) => void>();
     mocks.editorBroken = false;
     mocks.submitFromEditor = null;
+    mocks.initialCss = null;
     mocks.customFonts = [];
     // 테스트마다 import 프라미스를 새로 - 이미 이행된 프라미스를 새 lazy가 다시 쓰면
     // act()의 동기 flush가 재시도를 무한 반복한다(실제 스케줄러에서는 정상, act 한정 특성)
@@ -116,6 +121,25 @@ describe('WebFontEditorSheet', () => {
     });
     expect(onDone).toHaveBeenCalledWith('failed');
     expect(mocks.submitWebFont).not.toHaveBeenCalled();
+  });
+
+  it('편집 중 다른 창이 대상을 지워도 쓰던 CSS를 걷어가지 않는다', async () => {
+    mocks.customFonts = [{ id: 'f1', type: 'web', cssContent: 'css' }];
+    await act(async () => {
+      root.render(<WebFontEditorSheet editingId="f1" onDone={onDone} />);
+    });
+    await flush();
+    expect(mocks.initialCss).toBe('css');
+
+    // 다른 창이 폰트를 지운 뒤 이 창이 다시 그려진다
+    mocks.customFonts = [];
+    await act(async () => {
+      root.render(<WebFontEditorSheet editingId="f1" onDone={onDone} />);
+    });
+    await flush();
+
+    expect(mocks.initialCss).toBe('css');
+    expect(onDone).not.toHaveBeenCalled();
   });
 
   it('편집 대상이 있으면 그 id로 편집 모드로 연다', async () => {

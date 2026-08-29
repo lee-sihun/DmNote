@@ -175,6 +175,22 @@ describe('useFontLibrary 로컬 폰트 추가', () => {
     );
   });
 
+  it('편집 대상이 사라졌으면 저장 성공으로 처리하지 않는다', () => {
+    useFontStore.setState({ customFonts: [] });
+
+    const saved = submitWebFont(
+      "@font-face { font-family: 'Gone'; src: url(gone.woff2); }",
+      'Gone',
+      'web-font',
+    );
+
+    expect(saved).toBe(false);
+    expect(mocks.settingsUpdate).not.toHaveBeenCalled();
+    expect(mocks.alert).toHaveBeenCalledWith('fontPicker.editTargetMissing', {
+      confirmText: 'common.ok',
+    });
+  });
+
   it('font-family를 유지하면 웹 폰트 CSS를 수정할 수 있다', () => {
     useFontStore.setState({
       customFonts: [

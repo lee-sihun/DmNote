@@ -101,6 +101,16 @@ export const useFontLibrary = () => {
       });
   };
 
+  const showEditTargetMissingAlert = () => {
+    void window.api.ui.dialog
+      .alert(t('fontPicker.editTargetMissing'), {
+        confirmText: t('common.ok') || '확인',
+      })
+      .catch((error) => {
+        console.error('Failed to open missing edit target alert:', error);
+      });
+  };
+
   const showFontFamilyChangeAlert = () => {
     void window.api.ui.dialog
       .alert(t('webFontInput.familyChangeNotAllowed'), {
@@ -206,6 +216,11 @@ export const useFontLibrary = () => {
           (font) => font.id === editingWebFontId && font.type === 'web',
         )
       : null;
+    // 편집 중 다른 창이 대상을 지웠다 - 아무것도 못 바꾸면서 저장 성공으로 닫으면 안 된다
+    if (editingWebFontId && !editingWebFont) {
+      showEditTargetMissingAlert();
+      return false;
+    }
     if (editingWebFont && editingWebFont.name !== fontFamily) {
       showFontFamilyChangeAlert();
       return false;
