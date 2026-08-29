@@ -97,9 +97,20 @@ lto = true
 codegen-units = 1
 opt-level = "z"  # 's'보다 더 공격적인 크기 최적화
 strip = true
-panic = "unwind" # macOS Objective-C 예외 포착에 필요
+panic = "unwind" # macOS Objective-C 예외 포착용 기본값 (Windows 배포 빌드는 abort로 재정의)
 
 # 빌드 시 release 의존성도 최적화
 [profile.release.package."*"]
 opt-level = "z"
 strip = true
+
+# Windows 반복 검증용 빠른 최적화 빌드 (설치 번들 생성 없음)
+[profile.release-fast]
+inherits = "release"
+codegen-units = 16
+incremental = true
+lto = false
+opt-level = 2
+
+[profile.release-fast.package."*"]
+opt-level = 2

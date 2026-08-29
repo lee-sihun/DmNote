@@ -225,7 +225,7 @@ jobs:
 
       # 자동 업데이트 자산과 포터블 ZIP이 공유할 raw EXE를 한 번만 빌드
       - name: Windows x64 빌드
-        run: npm run tauri:build -- --no-bundle
+        run: npm run tauri:build:win -- --no-bundle
 
       - name: 빌드 산출물 준비
         id: prepare

@@ -89,6 +89,7 @@ function main() {
   // 2) Build binary only, embedding the fixed runtime zip into the exe (huge output).
   const buildEnv = {
     ...process.env,
+    CARGO_PROFILE_RELEASE_PANIC: "abort",
     DMNOTE_EMBED_WEBVIEW2_FIXED_RUNTIME: "1",
     DMNOTE_WEBVIEW2_ARCH: arch,
   };

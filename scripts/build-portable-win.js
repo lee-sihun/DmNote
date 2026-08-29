@@ -95,7 +95,10 @@ function main() {
   );
 
   // 2) Build binary only (no installer)
-  run("npx tauri build --no-bundle -f asio-backend", { cwd: repoRoot });
+  run("npx tauri build --no-bundle -f asio-backend", {
+    cwd: repoRoot,
+    env: { ...process.env, CARGO_PROFILE_RELEASE_PANIC: "abort" }
+  });
 
   const exeSrc = path.join(
     repoRoot,
