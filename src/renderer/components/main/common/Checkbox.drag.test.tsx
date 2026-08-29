@@ -10,6 +10,9 @@ import Checkbox from './Checkbox';
 const TRACK = { x: 100, y: 0, width: 28, height: 16 };
 const THUMB = { width: 12, height: 12 };
 const TRAVEL = TRACK.width - THUMB.width - (TRACK.height - THUMB.height);
+// useSwitchDrag의 DRAG_SLOP_PX. 문턱은 노브에 실리지 않으므로 노브를 이동 폭만큼
+// 끌어보려면 손가락은 슬롭만큼 더 가야 한다
+const SLOP = 3;
 
 const rect = (width: number, height: number, left = 0): DOMRect =>
   ({
@@ -214,8 +217,8 @@ describe('Checkbox 노브 드래그', () => {
     render(true, onChange);
 
     send('pointerdown', { clientX: TRACK.x + 14 });
-    send('pointermove', { clientX: TRACK.x + 14 + TRAVEL });
-    send('pointerup', { clientX: TRACK.x + 14 + TRAVEL });
+    send('pointermove', { clientX: TRACK.x + 14 + TRAVEL + SLOP });
+    send('pointerup', { clientX: TRACK.x + 14 + TRAVEL + SLOP });
     clickAfterRelease();
 
     expect(onChange).not.toHaveBeenCalled();
@@ -268,7 +271,7 @@ describe('Checkbox 노브 드래그', () => {
     render(false, onChange);
 
     send('pointerdown', { clientX: TRACK.x + 4 });
-    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL + SLOP });
     send('pointermove', { clientX: TRACK.x + 4 + 2 });
     send('pointerup', { clientX: TRACK.x + 4 + 2 });
     clickAfterRelease();
@@ -302,9 +305,28 @@ describe('Checkbox 노브 드래그', () => {
     render(false, onChange);
 
     send('pointerdown', { clientX: TRACK.x + 4 });
-    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL + SLOP });
     send('pointermove', { clientX: TRACK.x + 4 });
     send('pointerup', { clientX: TRACK.x + 4 });
+    clickAfterRelease();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // 최대 이동량을 원시 dx로 재면 승격 방향과 반대로 끄는 세션이 슬롭만큼 모자라,
+  // 노브를 끝까지 왕복시켜도 강등을 못 벗어나고 의도한 취소가 반대 값으로 커밋된다
+  it('반대 방향 지터로 승격해도 이동 폭 왕복은 취소로 남는다', () => {
+    const onChange = vi.fn();
+    render(true, onChange);
+
+    send('pointerdown', { clientX: TRACK.x + 14 });
+    // 오른쪽으로 슬롭만큼 흔들려 승격 - 노브는 켜짐 끝이라 제자리다
+    send('pointermove', { clientX: TRACK.x + 17 });
+    // 왼쪽으로 이동 폭만큼 끌어 노브를 꺼짐 끝까지 보낸다
+    send('pointermove', { clientX: TRACK.x + 17 - TRAVEL });
+    // 마음을 바꿔 되돌아온다
+    send('pointermove', { clientX: TRACK.x + 17 });
+    send('pointerup', { clientX: TRACK.x + 17 });
     clickAfterRelease();
 
     expect(onChange).not.toHaveBeenCalled();
@@ -321,7 +343,8 @@ describe('Checkbox 노브 드래그', () => {
     flushRaf();
 
     expect(track().hasAttribute('data-dmn-dragging')).toBe(true);
-    expect(thumb().style.translate).toBe('6px 0');
+    // 슬롭(3)은 의도를 가르는 문턱이라 노브에 실리지 않는다 - 6 - 3 = 3
+    expect(thumb().style.translate).toBe('3px 0');
 
     send('pointerup', { clientX: TRACK.x + 10 });
     // 표시값이 목표로 확정된 렌더가 끝난 다음 프레임에 CSS로 넘긴다
@@ -329,6 +352,57 @@ describe('Checkbox 노브 드래그', () => {
 
     expect(track().hasAttribute('data-dmn-dragging')).toBe(false);
     expect(thumb().style.translate).toBe('');
+  });
+
+  it('슬롭을 막 넘긴 순간에는 노브가 제자리에서 출발한다', () => {
+    render(false, vi.fn());
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    // 문턱을 딱 넘긴 이동. 슬롭을 안 빼면 여기서 이동 폭의 1/4이 한 프레임에 튄다
+    send('pointermove', { clientX: TRACK.x + 7 });
+    flushRaf();
+
+    expect(track().hasAttribute('data-dmn-dragging')).toBe(true);
+    expect(thumb().style.translate).toBe('0px 0');
+
+    // 그 뒤로는 손끝과 1:1
+    send('pointermove', { clientX: TRACK.x + 9 });
+    flushRaf();
+    expect(thumb().style.translate).toBe('2px 0');
+  });
+
+  it('누른 순간부터 손을 뗄 때까지 누름 표식이 남는다', () => {
+    render(false, vi.fn());
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    expect(track().hasAttribute('data-dmn-pressed')).toBe(true);
+
+    // 트랙 28×16 밖까지 끌어도 누름은 세션이 소유하므로 풀리지 않는다
+    send('pointermove', { clientX: TRACK.x + 40 });
+    expect(track().hasAttribute('data-dmn-pressed')).toBe(true);
+
+    send('pointerup', { clientX: TRACK.x + 40 });
+    expect(track().hasAttribute('data-dmn-pressed')).toBe(false);
+  });
+
+  it('슬롭 안에서 끝난 탭도 뗄 때 누름 표식을 걷는다', () => {
+    render(false, vi.fn());
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    send('pointermove', { clientX: TRACK.x + 5 });
+    send('pointerup', { clientX: TRACK.x + 5 });
+
+    expect(track().hasAttribute('data-dmn-pressed')).toBe(false);
+  });
+
+  it('취소로 끝난 드래그도 누름 표식을 걷는다', () => {
+    render(false, vi.fn());
+
+    send('pointerdown', { clientX: TRACK.x + 4 });
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointercancel', { clientX: TRACK.x + 4 + TRAVEL });
+
+    expect(track().hasAttribute('data-dmn-pressed')).toBe(false);
   });
 
   it('끄는 동안 트랙 색이 넘어간 쪽을 미리 따라간다', () => {
@@ -357,6 +431,7 @@ describe('Checkbox 노브 드래그', () => {
 
     expect(onChange).not.toHaveBeenCalled();
     expect(track().hasAttribute('data-dmn-dragging')).toBe(false);
+    expect(track().hasAttribute('data-dmn-pressed')).toBe(false);
     expect(track().getAttribute('aria-checked')).toBe('false');
   });
 
@@ -450,17 +525,18 @@ describe('Checkbox 노브 드래그', () => {
   it('이동 폭 토큰이 있으면 실측 대신 토큰으로 중앙선을 잡는다', () => {
     const onChange = vi.fn();
     render(false, onChange);
-    // 토큰 24 > 실측 12. 실측 기준(6px)으로는 넘지만 토큰 기준(12px)으로는 못 넘는 지점
+    // 토큰 24 > 실측 12. 판정은 슬롭(3)을 뺀 노브 위치로 한다 -
+    // 10은 노브 7이라 실측 중앙선(6)은 넘지만 토큰 중앙선(12)은 못 넘는 지점
     track().style.setProperty('--ui-toggle-travel', '24');
 
     send('pointerdown', { clientX: TRACK.x + 4 });
-    send('pointermove', { clientX: TRACK.x + 4 + 8 });
+    send('pointermove', { clientX: TRACK.x + 4 + 10 });
     // 토큰 기준으로는 아직 중앙선 앞이라 트랙 색이 넘어가지 않는다
     expect(track().className).not.toContain('bg-accent');
-    send('pointermove', { clientX: TRACK.x + 4 + 14 });
+    send('pointermove', { clientX: TRACK.x + 4 + 17 });
     expect(track().className).toContain('bg-accent');
-    // 되돌아와 놓으면 취소 - 토큰 기준 이동 폭(24)을 채웠으니 탭으로 강등되지 않는다
-    send('pointermove', { clientX: TRACK.x + 4 + 24 });
+    // 되돌아와 놓으면 취소 - 27은 노브 24라 토큰 이동 폭을 채웠고, 탭으로 강등되지 않는다
+    send('pointermove', { clientX: TRACK.x + 4 + 27 });
     send('pointermove', { clientX: TRACK.x + 4 + 8 });
     send('pointerup', { clientX: TRACK.x + 4 + 8 });
     clickAfterRelease();
@@ -499,7 +575,7 @@ describe('Checkbox 노브 드래그', () => {
 
     // 이전 세션의 늦은 handBack이 새 세션의 표식·인라인 위치를 걷어가면 안 된다
     expect(track().hasAttribute('data-dmn-dragging')).toBe(true);
-    expect(thumb().style.translate).toBe('5px 0');
+    expect(thumb().style.translate).toBe('2px 0');
   });
 
   it('드래그 뒤 click이 조상 버튼에 꽂혀도 조상 핸들러까지 삼킨다', () => {
@@ -583,8 +659,8 @@ describe('Checkbox 노브 드래그', () => {
     render(false, onChange);
 
     send('pointerdown', { clientX: TRACK.x + 20 });
-    send('pointermove', { clientX: TRACK.x + 20 - TRAVEL });
-    send('pointerup', { clientX: TRACK.x + 20 - TRAVEL });
+    send('pointermove', { clientX: TRACK.x + 20 - TRAVEL - SLOP });
+    send('pointerup', { clientX: TRACK.x + 20 - TRAVEL - SLOP });
     clickAfterRelease();
 
     expect(onChange).not.toHaveBeenCalled();
@@ -596,10 +672,11 @@ describe('Checkbox 노브 드래그', () => {
     render(false, onChange);
 
     send('pointerdown', { clientX: TRACK.x + 4 });
-    send('pointermove', { clientX: TRACK.x + 11 });
+    // 9 - 슬롭 3 = 노브 6, 중앙선에 딱 닿는다
+    send('pointermove', { clientX: TRACK.x + 13 });
     // 노브가 중앙선을 넘긴 사이 외부에서 켜진다
     act(() => root.render(<Checkbox checked={true} onChange={onChange} />));
-    send('pointerup', { clientX: TRACK.x + 11 });
+    send('pointerup', { clientX: TRACK.x + 13 });
     clickAfterRelease();
     flushRaf();
 
@@ -620,8 +697,8 @@ describe('Checkbox 노브 드래그', () => {
 
     // 이동 폭에는 못 미치지만 값이 바뀌는 드래그다 - 억제까지 살아 있어야 한다
     send('pointerdown', { clientX: TRACK.x + 22 });
-    send('pointermove', { clientX: TRACK.x + 29 });
-    send('pointerup', { clientX: TRACK.x + 29 });
+    send('pointermove', { clientX: TRACK.x + 31 });
+    send('pointerup', { clientX: TRACK.x + 31 });
     act(() => {
       track().parentElement!.dispatchEvent(pointer('click'));
     });
@@ -639,7 +716,8 @@ describe('Checkbox 노브 드래그', () => {
 
     send('pointerdown', { clientX: TRACK.x + 20 });
     send('pointermove', { clientX: TRACK.x + 13 });
-    send('pointerup', { clientX: TRACK.x + 8 });
+    // 노브 척도로 이동 폭(12)을 채우는 지점 - 손가락은 슬롭만큼 더 간 15px
+    send('pointerup', { clientX: TRACK.x + 5 });
     clickAfterRelease();
 
     expect(onChange).not.toHaveBeenCalled();

@@ -165,6 +165,17 @@ describe('Checkbox commit 전략', () => {
     expect(px('--ui-toggle-thumb-size')).toBe(thumbWidth);
     expect(px('--ui-toggle-press-height')).toBeLessThan(thumbWidth);
 
+    // 눌림은 scale이 만들고 반지름을 축별 배율로 나눠 되돌려 캡슐을 지킨다.
+    // 배율이 press-height ÷ thumb-size에서 어긋나면 눌린 노브가 타원으로 무너진다
+    const scaleY = Number(
+      tokens.match(new RegExp('--ui-toggle-press-scale-y: *([0-9.]+)'))?.[1] ??
+        NaN,
+    );
+    expect(scaleY).toBeCloseTo(
+      px('--ui-toggle-press-height') / px('--ui-toggle-thumb-size'),
+      4,
+    );
+
     const [, y1] =
       tokens
         .match(/--ui-toggle-ease:\s*cubic-bezier\(([^)]+)\)/)?.[1]

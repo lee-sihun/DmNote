@@ -11,6 +11,9 @@ import Checkbox from './Checkbox';
 const TRACK = { x: 100, y: 0, width: 28, height: 16 };
 const THUMB = { width: 12, height: 12 };
 const TRAVEL = TRACK.width - THUMB.width - (TRACK.height - THUMB.height);
+// useSwitchDrag의 DRAG_SLOP_PX. 문턱은 노브에 실리지 않으므로 이동 폭만큼
+// 끌어보려면 좌표에 슬롭을 더해야 한다
+const SLOP = 3;
 
 const rect = (width: number, height: number, left = 0): DOMRect =>
   ({
@@ -201,12 +204,12 @@ describe('Checkbox 자식 창 노브 드래그', () => {
     flushMainRaf();
     expect(track().hasAttribute('data-dmn-dragging')).toBe(true);
 
-    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL + SLOP });
     flushChildRaf();
     // 세션이 살아 있어야 이어지는 이동이 노브에 계속 실린다
     expect(thumb().style.translate).toBe(`${TRAVEL}px 0`);
 
-    send('pointerup', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointerup', { clientX: TRACK.x + 4 + TRAVEL + SLOP });
     clickChild();
 
     expect(onChange).toHaveBeenCalledOnce();
@@ -247,10 +250,11 @@ describe('Checkbox 자식 창 노브 드래그', () => {
 
     send('pointerdown', { clientX: TRACK.x + 4 });
     send('pointermove', { clientX: TRACK.x + 10 });
+    // 슬롭(3)은 문턱이라 노브에 실리지 않는다 - 6 - 3 = 3
     // 노브 위치는 자식 창 프레임에서 반영된다
     expect(thumb().style.translate).toBe('');
     flushChildRaf();
-    expect(thumb().style.translate).toBe('6px 0');
+    expect(thumb().style.translate).toBe('3px 0');
 
     send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
     send('pointerup', { clientX: TRACK.x + 4 + TRAVEL });
@@ -298,7 +302,7 @@ describe('Checkbox 자식 창 노브 드래그', () => {
     render(false, onChange);
 
     send('pointerdown', { clientX: TRACK.x + 4 });
-    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL });
+    send('pointermove', { clientX: TRACK.x + 4 + TRAVEL + SLOP });
     flushChildRaf();
     expect(childDoc.body.style.userSelect).toBe('none');
     expect(thumb().style.translate).toBe(`${TRAVEL}px 0`);
@@ -308,7 +312,9 @@ describe('Checkbox 자식 창 노브 드래그', () => {
     });
     act(() => {
       track().dispatchEvent(
-        pointerEvent(window, 'pointerup', { clientX: TRACK.x + 4 + TRAVEL }),
+        pointerEvent(window, 'pointerup', {
+          clientX: TRACK.x + 4 + TRAVEL + SLOP,
+        }),
       );
     });
 
@@ -327,13 +333,14 @@ describe('Checkbox 자식 창 노브 드래그', () => {
   it('자식 문서 요소의 토큰 이동 폭이 실측을 이긴다', () => {
     const onChange = vi.fn();
     render(false, onChange);
-    // 토큰 24 > 실측 12. 실측 기준(6px)으로는 넘지만 토큰 기준(12px)으로는 못 넘는 지점
+    // 토큰 24 > 실측 12. 판정은 슬롭(3)을 뺀 노브 위치로 한다 -
+    // 10은 노브 7이라 실측 중앙선(6)은 넘지만 토큰 중앙선(12)은 못 넘는 지점
     track().style.setProperty('--ui-toggle-travel', '24');
 
     send('pointerdown', { clientX: TRACK.x + 4 });
-    send('pointermove', { clientX: TRACK.x + 4 + 8 });
+    send('pointermove', { clientX: TRACK.x + 4 + 10 });
     expect(track().className).not.toContain('bg-accent');
-    send('pointermove', { clientX: TRACK.x + 4 + 14 });
+    send('pointermove', { clientX: TRACK.x + 4 + 17 });
     expect(track().className).toContain('bg-accent');
   });
 

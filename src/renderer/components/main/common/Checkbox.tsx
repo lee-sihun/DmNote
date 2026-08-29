@@ -69,8 +69,10 @@ const Checkbox = ({
       {...drag.handlers}
     >
       {/* 이동량은 --ui-toggle-travel이 소유, 트랙 28 - 노브 12 - 인셋 2×2.
-          드래그 훅이 이 클래스로 노브를 찾으므로 클래스명은 계약 */}
-      <div className="dmn-toggle-thumb absolute top-[2px] left-[2px] w-[12px] h-[12px] rounded-full bg-white shadow-elevation-1" />
+          드래그 훅이 이 클래스로 노브를 찾으므로 클래스명은 계약.
+          반지름은 rounded-full이 아니라 CSS가 소유한다 - 누름 캡슐이 scale과
+          짝지어 반지름을 되돌려야 해서 전환 가능한 값이어야 한다 */}
+      <div className="dmn-toggle-thumb absolute top-[2px] left-[2px] w-[12px] h-[12px] bg-white shadow-elevation-1" />
     </div>
   );
 };

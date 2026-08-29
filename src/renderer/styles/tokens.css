@@ -188,14 +188,21 @@
   --ui-toggle-duration: var(--ui-duration-slow);
   --ui-toggle-travel: 12px;
   --ui-toggle-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
-  /* 누름 변형 - 원이 아니라 캡슐이 된다.
-     scale로는 만들 수 없다. 원을 비균등 스케일하면 반지름도 같이 눌려 타원이 될 뿐,
-     위아래 평평한 변이 생기지 않는다. 실제 폭·높이를 바꿔야 반지름이 높이의 절반으로
-     고정된 캡슐이 나온다. 노브는 out-of-flow라 형제 레이아웃에는 영향이 없다 */
+  /* 누름 변형 - 원이 아니라 캡슐이 된다. 가로는 건드리지 않는다,
+     폭까지 자라면 노브가 부푸는 것처럼 보인다.
+     실제 height를 줄이면 안 된다. 레이아웃 속성은 애니메이션 중 정수 픽셀로 스냅돼,
+     2px(배율 150%에서 3 device px)짜리 눌림이 420ms 동안 계단 두세 칸으로 끊긴다.
+     맥은 2x라 같은 계단이 절반 크기로 나뉘어 안 보였다.
+     scale은 스냅되지 않아 서브픽셀로 그려진다. 대신 원을 세로로 누르면 반지름도
+     같이 눌려 캡슐이 아니라 타원이 되므로, 반지름을 축별 배율로 나눠 되돌린다
+     (border-radius: r/fx / r/fy + scale(fx, fy) - 스케일해도 모양을 지키는 정석).
+     세로 반지름 thumb-size/2가 scale-y를 먹으면 정확히 press-height/2가 되어
+     전환 내내 반지름이 높이의 절반으로 유지된다 - 모든 프레임이 정확한 캡슐이다 */
   --ui-toggle-thumb-size: 12px;
-  /* 가로는 건드리지 않는다 - 폭까지 자라면 노브가 부푸는 것처럼 보인다.
-     폭이 높이보다 크기만 하면 반지름이 높이 절반으로 잡혀 위아래 평평한 변이 생긴다 */
   --ui-toggle-press-height: 10px;
+  /* press-height ÷ thumb-size = 10 / 12. 위 둘을 바꾸면 여기도 같이 바꾼다 -
+     어긋나면 캡슐이 타원으로 무너진다 (Checkbox.test.tsx가 비율을 지킨다) */
+  --ui-toggle-press-scale-y: 0.833333;
   /* 누르는 동안 천천히 눌리고, 손을 떼면 빠르게 돌아온다 */
   --ui-toggle-press-duration: 420ms;
   --ui-toggle-press-ease: cubic-bezier(0.33, 1, 0.68, 1);

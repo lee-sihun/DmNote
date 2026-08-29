@@ -432,11 +432,15 @@ body.dmn-dragging * {
    외부 상태 변경의 차단은 위 data-dmn-instant 규칙이 이미 소유 */
 .dmn-toggle-thumb {
   translate: 0 0;
-  /* 손을 뗀 뒤 원형으로 돌아오는 clock. 크기는 Tailwind 유틸이 소유하고
+  scale: 1;
+  /* 반지름은 눌림 안무의 일부라 CSS가 소유한다 (Tailwind rounded-full 대신).
+     9999px로 두면 전환이 클램프 구간에 갇혀 끝에서 툭 꺾인다 */
+  border-radius: calc(var(--ui-toggle-thumb-size) / 2);
+  /* 손을 뗀 뒤 원형으로 돌아오는 clock. 치수는 Tailwind 유틸이 소유하고
      여기서는 전환만 건다 */
   transition: translate var(--ui-toggle-duration) var(--ui-toggle-ease),
-    height var(--ui-toggle-release-duration) var(--ui-ease-out),
-    margin-top var(--ui-toggle-release-duration) var(--ui-ease-out);
+    scale var(--ui-toggle-release-duration) var(--ui-ease-out),
+    border-radius var(--ui-toggle-release-duration) var(--ui-ease-out);
 }
 
 [role='switch'][aria-checked='true'] .dmn-toggle-thumb {
@@ -444,32 +448,42 @@ body.dmn-dragging * {
 }
 
 /* 누르고 있는 동안 노브가 캡슐로 눌린다. 들어갈 때는 천천히, 나올 때는 빠르게 -
-   duration을 :active 쪽에 따로 걸어 비대칭으로 만든다.
-   커진 만큼 margin으로 절반씩 되밀어 제자리에서 퍼지게 한다. 진행 방향으로
-   퍼뜨리려면 기준변이 aria-checked를 따라가야 하는데, 손을 떼는 순간 기준이
-   뒤집히면서 아직 원형으로 안 돌아온 상태라 노브가 툭 튄다.
-   중심 유지면 그 충돌이 생기지 않고, 양쪽 다 인셋 안에서 끝난다.
-   이동은 translate라 크기 전환과 속성이 갈려 서로 덮어쓰지 않는다 */
-[role='switch']:active .dmn-toggle-thumb {
-  height: var(--ui-toggle-press-height);
-  /* 줄어든 만큼 되밀어 제자리에서 눌리게 한다 */
-  margin-top: calc(
-    (var(--ui-toggle-thumb-size) - var(--ui-toggle-press-height)) / 2
-  );
+   duration을 누름 쪽에 따로 걸어 비대칭으로 만든다.
+   누름 표면은 둘이다. :active는 행 전체가 role=switch인 설정 행에서 행을 눌렀을 때를
+   맡고, data-dmn-pressed는 노브를 직접 잡은 드래그 세션이 소유한다.
+   :active만으로는 부족하다 - 크로뮴은 포인터 캡처 중에도 :active를 히트테스트로 정해
+   트랙(28×16) 밖으로 커서가 나가는 순간 캡슐이 풀린다. 웹킷은 캡처 대상에 남겨
+   두 플랫폼이 갈리므로, 세션이 소유하는 표식으로 눌린 동안을 못 박는다.
+   눌림은 scale이 만든다 - 레이아웃 height는 정수 픽셀로 스냅돼 계단이 진다(토큰 주석).
+   scale 기준점이 중심이라 제자리에서 눌린다. 진행 방향으로 퍼뜨리려 기준변을
+   aria-checked에 묶던 옛 방식과 달리, 손을 떼는 순간 기준이 뒤집혀 노브가 툭 튀는
+   일이 없고 양쪽 다 인셋 안에서 끝난다.
+   translate와 scale은 각각 독립 변형 속성이라 이동과 눌림이 서로 덮어쓰지 않는다 */
+[role='switch']:active .dmn-toggle-thumb,
+[role='switch'][data-dmn-pressed] .dmn-toggle-thumb {
+  scale: 1 var(--ui-toggle-press-scale-y);
+  /* 반지름을 축별 배율로 나눠 되돌린다. 세로는 scale-y를 먹고 나면 press-height/2로
+     내려앉아 가로와 같아진다 - 그래서 눌린 노브가 타원이 아니라 캡슐이다 */
+  border-radius: calc(var(--ui-toggle-press-height) / 2) /
+    calc(var(--ui-toggle-thumb-size) / 2);
   transition: translate var(--ui-toggle-duration) var(--ui-toggle-ease),
-    height var(--ui-toggle-press-duration) var(--ui-toggle-press-ease),
-    margin-top var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
+    scale var(--ui-toggle-press-duration) var(--ui-toggle-press-ease),
+    border-radius var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
 }
 
 /* 노브를 끌고 있는 동안 - 손끝을 그대로 따라가야 하므로 이동 전환만 끈다.
    data-dmn-instant로 통째 끄면 트랙 색이 계단으로 튀고 누름 캡슐도 같이 죽는다.
-   위 :active 규칙이 transition 숏핸드를 다시 선언하므로 그보다 한 단계 위에서 잡는다.
+   위 누름 규칙이 transition 숏핸드를 다시 선언하므로 그보다 세게 잡는다. 첫 선택자는
+   누름 규칙과 특이도가 같아 소스 순서로만 이기니 순서를 바꾸면 조용히 진다.
    transition-property만 덮으면 안 된다 - 남은 duration·easing 목록이 인덱스로
-   다시 짝지어져 높이가 이동용 스프링 커브를 타고 캡슐이 튄다. 숏핸드로 다시 쓴다 */
+   다시 짝지어져 눌림이 이동용 스프링 커브를 타고 캡슐이 튄다. 숏핸드로 다시 쓴다.
+   scale과 border-radius는 반드시 같은 clock으로 묶는다 - 갈리면 중간 프레임에서
+   반지름이 높이 절반에서 어긋나 캡슐이 잠깐 타원이 된다 */
 [role='switch'][data-dmn-dragging] .dmn-toggle-thumb,
-[role='switch'][data-dmn-dragging]:active .dmn-toggle-thumb {
-  transition: height var(--ui-toggle-press-duration) var(--ui-toggle-press-ease),
-    margin-top var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
+[role='switch'][data-dmn-dragging]:active .dmn-toggle-thumb,
+[role='switch'][data-dmn-dragging][data-dmn-pressed] .dmn-toggle-thumb {
+  transition: scale var(--ui-toggle-press-duration) var(--ui-toggle-press-ease),
+    border-radius var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -481,11 +495,12 @@ body.dmn-dragging * {
   }
 
   .dmn-toggle-thumb,
-  [role='switch']:active .dmn-toggle-thumb {
+  [role='switch']:active .dmn-toggle-thumb,
+  [role='switch'][data-dmn-pressed] .dmn-toggle-thumb {
     transition: none;
     /* 전환이 없으면 눌림이 깜빡임으로 읽히므로 변형 자체를 끈다 */
-    height: var(--ui-toggle-thumb-size);
-    margin-top: 0;
+    scale: 1;
+    border-radius: calc(var(--ui-toggle-thumb-size) / 2);
   }
 
   /* 세그먼트 인디케이터 — 토글 노브와 같은 성격의 슬라이딩이라 함께 끈다.

@@ -12,10 +12,16 @@ import { prefersReducedMotion } from '@utils/animation/motionPreferences';
 
 // 드래그 중 이동 전환을 끄는 표식. dmn- 접두사는 플러그인 마크업과의 속성 충돌 방지
 const DRAG_ATTR = 'data-dmn-dragging';
+// 누름 캡슐을 잡아두는 표식. :active는 엔진마다 다르게 풀린다 - 크로뮴은 포인터 캡처
+// 중에도 :active를 히트테스트로 정해(dragCursor와 같은 원인) 노브를 끌어 커서가
+// 28×16 트랙을 벗어나는 순간 눌림이 풀리고, 웹킷은 캡처 대상에 그대로 남긴다.
+// 세션이 소유하면 누른 순간부터 뗄 때까지 엔진과 무관하게 유지된다
+const PRESS_ATTR = 'data-dmn-pressed';
 const THUMB_SELECTOR = '.dmn-toggle-thumb';
 
 // 탭과 드래그를 가르는 이동 슬롭. 분류에만 쓰고 값 판정에는 안 쓴다.
-// 넘고 나면 이동 구간 전체가 그대로 살아 있어 데드존이 아니다.
+// 넘고 나면 이동 구간 전체가 그대로 살아 있어 데드존이 아니다 - 다만 추적 기준점이
+// 승격 지점으로 옮겨가므로(anchorDx) 구간 전체를 지나려면 슬롭만큼 더 끌어야 한다.
 //
 // 이동 폭이 12px뿐이라 흔한 10px 임계는 구간 대부분을 먹고, 0으로 두면 노브를 누른 채
 // 1px만 흔들려도 드래그로 잡혀 클릭을 삼킨다. 중앙선(6)보다 작아야 의도한 횡단을 놓치지
@@ -36,9 +42,14 @@ interface DragSession {
   // 누른 순간의 값. 강등 판정 기준이라 손 밑에서 바뀌는 현재 값과 따로 둔다
   startValue: boolean;
   startOffset: number;
+  // 노브에 싣지 않고 떼어둘 이동량 = 넘어간 방향의 슬롭. 원시 dx를 그대로 쓰면
+  // 승격되는 순간 노브가 슬롭만큼(이동 폭의 1/4) 툭 뛴다
+  anchorDx: number;
   offset: number;
-  // 세션 동안 본 최대 이동량 절댓값. 이동 폭만큼 끌어본 적이 있는지 가른다.
-  // clamp된 offset과 달리 끝에서 바깥으로 민 거리도 남는다
+  // 세션 동안 노브를 끌어본 최대 거리. 이동 폭만큼 끌어본 적이 있는지 가른다.
+  // clamp된 offset과 달리 끝에서 바깥으로 민 거리도 남는다.
+  // 척도는 offset과 같은 노브 기준이다 - 원시 dx로 재면 승격 방향과 반대로 끄는
+  // 세션이 슬롭만큼 모자라, 이동 폭을 다 끌어도 강등을 영영 못 벗어난다
   maxAbsDx: number;
   intent: DragIntent;
   displayed: boolean;
@@ -58,6 +69,11 @@ interface UseSwitchDragOptions {
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+// 슬롭은 의도를 가르는 문턱일 뿐 이동량이 아니다. 문턱을 넘은 만큼만 노브에 실어야
+// 승격 순간에 튀지 않고 그 뒤로도 손끝과 1:1로 붙는다
+const offsetFor = (session: DragSession, dx: number) =>
+  clamp(session.startOffset + dx - session.anchorDx, 0, session.travel);
 
 // 포인터 캡처는 네이티브 텍스트 선택을 막지 않는다. 노브가 실제로 움직인 뒤에만
 // 잠가 단순 클릭의 선택 동작은 건드리지 않는다 (useDraggable과 같은 관례)
@@ -83,7 +99,10 @@ const readTravel = (track: HTMLElement, thumb: HTMLElement | null) => {
 // 손을 떼는 순간에도 한 번 더 반영해야 빠른 플릭이 짧게 잡히지 않는다
 const foldPointer = (session: DragSession, clientX: number) => {
   const dx = clientX - session.startX;
-  session.maxAbsDx = Math.max(session.maxAbsDx, Math.abs(dx));
+  session.maxAbsDx = Math.max(
+    session.maxAbsDx,
+    Math.abs(dx - session.anchorDx),
+  );
   return dx;
 };
 
@@ -193,6 +212,9 @@ export const useSwitchDrag = ({
       if (session.track.hasPointerCapture?.(session.pointerId)) {
         session.track.releasePointerCapture(session.pointerId);
       }
+      // 누름은 손을 뗀 지금 푼다. 위치 반환(handBack)은 한 프레임 뒤라 같이 묶으면
+      // 캡슐이 그만큼 늦게 원형으로 돌아온다
+      session.track.removeAttribute(PRESS_ATTR);
 
       // 슬롭을 못 넘겼으면 탭이다. 뒤따르는 click이 뒤집게 두고 아무것도 삼키지 않는다
       if (session.intent === 'undecided') {
@@ -276,6 +298,7 @@ export const useSwitchDrag = ({
       if (session) {
         session.releaseBlur();
         session.scheduler.cancel();
+        session.track.removeAttribute(PRESS_ATTR);
         handBack(session);
         if (session.intent === 'drag') {
           lockTextSelection(session.ownerDocument, false);
@@ -296,6 +319,9 @@ export const useSwitchDrag = ({
     if (travel <= 0) return;
     flushPendingHandBack();
     track.setPointerCapture?.(event.pointerId);
+    // 캡처를 잡은 뒤에 붙인다. setPointerCapture가 던지면 세션이 안 만들어져
+    // 걷을 주체가 없고, 노브가 눌린 채로 굳는다
+    track.setAttribute(PRESS_ATTR, '');
     const ownerDocument = track.ownerDocument;
     const ownerWindow = ownerDocument.defaultView ?? window;
     // 자식 창에 그려진 토글은 자기 창의 blur만 취소 사유다. 메인 창 blur는 자식이
@@ -312,6 +338,7 @@ export const useSwitchDrag = ({
       startX: event.clientX,
       startValue: checkedRef.current,
       startOffset: checkedRef.current ? travel : 0,
+      anchorDx: 0,
       offset: checkedRef.current ? travel : 0,
       maxAbsDx: 0,
       intent: 'undecided',
@@ -335,6 +362,12 @@ export const useSwitchDrag = ({
     if (session.intent === 'undecided') {
       if (Math.abs(dx) < DRAG_SLOP_PX) return;
       session.intent = 'drag';
+      // 넘어간 방향으로 문턱만큼만 떼어둔다. 승격 시점의 dx 전체를 떼면 한 번에 크게
+      // 뛰어 들어온 첫 이동(윈도우 마우스 가속, 빠른 플릭)이 통째로 먹혀 노브가 안 움직인다
+      session.anchorDx = Math.sign(dx) * DRAG_SLOP_PX;
+      // 최대 이동량도 노브 척도로 다시 잡는다. 승격 전 표본은 노브가 멈춰 있던
+      // 구간이라 버려야 "노브를 이동 폭만큼 끌었나"와 강등 판정이 다시 맞는다
+      session.maxAbsDx = Math.abs(dx - session.anchorDx);
       // 표식은 여기서 붙인다. 누르자마자 붙이면 단순 클릭에도 전환 규칙이 갈려
       // 기존 누름 감각을 건드린다
       session.track.setAttribute(DRAG_ATTR, '');
@@ -345,7 +378,7 @@ export const useSwitchDrag = ({
         session.ownerDocument,
       );
     }
-    session.offset = clamp(session.startOffset + dx, 0, session.travel);
+    session.offset = offsetFor(session, dx);
     session.scheduler.push(session.offset);
     const next = session.offset >= session.travel / 2;
     if (next === session.displayed) return;
@@ -359,7 +392,7 @@ export const useSwitchDrag = ({
     const dx = foldPointer(session, event.clientX);
     // 표시값은 건드리지 않는다. 어차피 바로 목표로 확정된다
     if (session.intent === 'drag') {
-      session.offset = clamp(session.startOffset + dx, 0, session.travel);
+      session.offset = offsetFor(session, dx);
     }
     endSession(true);
   };
