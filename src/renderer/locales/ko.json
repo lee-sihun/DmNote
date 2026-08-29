@@ -680,6 +680,7 @@
     "availabilityDuplicateFontFamily": "이미 등록된 font-family",
     "availabilityMultipleFamilies": "다중 폰트 감지",
     "duplicateFontFamilyAlert": "\"{{name}}\" 폰트가 이미 등록되어 있습니다.",
+    "familyChangeNotAllowed": "사용 중인 폰트가 깨질 수 있어 font-family 이름은 수정할 수 없습니다.",
     "titleAdd": "웹 폰트 추가",
     "titleEdit": "웹 폰트 수정",
     "previewLabel": "미리보기",

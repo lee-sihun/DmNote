@@ -680,6 +680,7 @@
     "availabilityDuplicateFontFamily": "font-family уже есть",
     "availabilityMultipleFamilies": "Несколько шрифтов",
     "duplicateFontFamilyAlert": "Шрифт \"{{name}}\" уже добавлен.",
+    "familyChangeNotAllowed": "Нельзя изменить имя font-family, потому что его могут использовать существующие элементы.",
     "titleAdd": "Добавить веб-шрифт",
     "titleEdit": "Изменить веб-шрифт",
     "previewLabel": "Предпросмотр",

@@ -101,6 +101,16 @@ export const useFontLibrary = () => {
       });
   };
 
+  const showFontFamilyChangeAlert = () => {
+    void window.api.ui.dialog
+      .alert(t('webFontInput.familyChangeNotAllowed'), {
+        confirmText: t('common.ok') || '확인',
+      })
+      .catch((error) => {
+        console.error('Failed to open font-family change alert:', error);
+      });
+  };
+
   const addLocalFont = async () => {
     if (isAddingRef.current) return;
     isAddingRef.current = true;
@@ -191,6 +201,15 @@ export const useFontLibrary = () => {
     }
 
     const currentCustomFonts = useFontStore.getState().customFonts;
+    const editingWebFont = editingWebFontId
+      ? currentCustomFonts.find(
+          (font) => font.id === editingWebFontId && font.type === 'web',
+        )
+      : null;
+    if (editingWebFont && editingWebFont.name !== fontFamily) {
+      showFontFamilyChangeAlert();
+      return false;
+    }
     const newWebFont: CustomFont = {
       id: generateFontId(),
       type: 'web',

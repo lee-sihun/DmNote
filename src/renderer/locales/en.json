@@ -680,6 +680,7 @@
     "availabilityDuplicateFontFamily": "Already registered font-family",
     "availabilityMultipleFamilies": "Multiple fonts detected",
     "duplicateFontFamilyAlert": "\"{{name}}\" font is already registered.",
+    "familyChangeNotAllowed": "The font-family name cannot be changed because existing elements may use it.",
     "titleAdd": "Add web font",
     "titleEdit": "Edit web font",
     "previewLabel": "Preview",
