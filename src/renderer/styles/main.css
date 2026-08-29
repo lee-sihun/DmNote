@@ -92,6 +92,106 @@ body.dmn-dragging * {
   cursor: grabbing !important;
 }
 
+/* ===== 탭 드래그 ===== */
+
+/* 개별 transform 속성을 쓴다. 한 덩어리 transform이면 위치는 즉시 따라가면서
+   집는 배율만 전이를 거는 게 불가능하다.
+   위치에는 전이가 없다 - 칩이 커서 뒤를 따라오면 드롭 슬롯을 겨눌 수 없다.
+   기울기도 전이를 걸지 않는다. 추종 스프링이 이미 늦춰서 주는데 여기서 또
+   늦추면 두 번 지연된다.
+   색에도 전이를 걸지 않는다 - 소켓을 켠 상대가 놓는 순간 반대편 자리로 옮겨가는데,
+   전이가 있으면 밝은 필이 그 자리까지 따라가 스르륵 꺼진다. 아무것도 없어야 할
+   자리에서 뭔가 번쩍이는 걸로 읽힌다 */
+.dmn-tab-chip {
+  position: relative;
+  translate: var(--tab-drag-x, 0px) var(--tab-drag-y, 0px);
+  rotate: var(--tab-tilt, 0deg);
+  scale: var(--tab-lift, 1);
+  transition: scale var(--ui-tab-lift-duration) var(--ui-tab-lift-ease);
+}
+
+/* 원본은 자리를 지키되 물러나 있는다 - 어디서 집었는지 보여야 한다 */
+.dmn-tab-chip[data-dragging='true'] {
+  opacity: 0.3;
+}
+
+/* 잡은 칩의 복제본. 팝업의 overflow·contain·마스크 밖으로 나와야 해서 body에 붙는다.
+   원본을 그대로 끌면 팝업 안에 갇힌다 - z-index로는 못 푸는 클리핑이다 */
+.dmn-tab-ghost {
+  z-index: var(--z-chrome-drag);
+  cursor: grabbing;
+  background-color: var(--ui-bg-elevated);
+  box-shadow: var(--ui-shadow-3);
+  /* 밑이 비쳐야 어디에 놓을지 보인다 */
+  opacity: var(--ui-tab-ghost-opacity);
+}
+
+/* 빗나가서 제자리로 돌아갈 때만 위치와 기울기에도 전이를 건다 */
+.dmn-tab-chip.dmn-tab-returning {
+  transition: translate var(--ui-tab-return-duration) var(--ui-tab-return-ease),
+    rotate var(--ui-tab-return-duration) var(--ui-tab-return-ease),
+    scale var(--ui-tab-return-duration) var(--ui-tab-return-ease);
+}
+
+/* 내용물이 뒤처지며 기운다. bend 변수는 드래그 컨트롤러가 rAF로 직접 쓴다.
+   xn/yn은 정규화값이 아니라 calc()에 넣으려고 단위만 뺀 같은 수다 */
+.dmn-tab-chip > * {
+  transform: translate(
+      calc(var(--tab-bend-x, 0px) * var(--ui-tab-bend-strength) * 2.4),
+      calc(var(--tab-bend-y, 0px) * var(--ui-tab-bend-strength) * 2.4)
+    )
+    skew(calc(var(--tab-bend-xn, 0) * var(--ui-tab-bend-strength) * -0.55deg))
+    scaleX(
+      calc(1 - var(--tab-bend-xn, 0) * var(--ui-tab-bend-strength) * 0.014)
+    );
+  transform-origin: center;
+}
+
+/* 자리에 내려앉는 순간. 눌렸다 살짝 넘어갔다 선다 - 이게 '탁' 하는 느낌을 만든다.
+   집혀 있던 배율에서 시작해야 튀지 않는다 */
+@keyframes dmn-tab-land {
+  0% {
+    scale: var(--ui-tab-lift-scale);
+  }
+  22% {
+    scale: 0.955;
+  }
+  58% {
+    scale: 1.018;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+.dmn-tab-chip.dmn-tab-landed {
+  animation: dmn-tab-land var(--ui-tab-land-duration) var(--ui-tab-land-ease)
+    both;
+}
+
+/* 교체 상대가 내주는 자리. 톤만 바꾼다 - 배율이나 이동을 넣으면 라운딩과
+   1px 인셋 링이 같이 줄어 패딩 공식이 깨지고 글자도 뭉갠다.
+   깊이는 위쪽 안쪽 그림자가 만든다 - 파인 자리로 읽힌다 */
+.dmn-tab-swap-target {
+  background-color: var(--ui-tab-socket-fill);
+  box-shadow: var(--ui-tab-socket-shadow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-tab-chip,
+  .dmn-tab-chip.dmn-tab-returning {
+    transition: none;
+    rotate: none;
+    scale: none;
+  }
+  .dmn-tab-chip > * {
+    transform: none;
+  }
+  .dmn-tab-chip.dmn-tab-landed {
+    animation: none;
+  }
+}
+
 /* ===== 글래스 백드롭 ===== */
 
 /* 글래스 백드롭 — 블러에 밝기·채도 클램프를 결합.

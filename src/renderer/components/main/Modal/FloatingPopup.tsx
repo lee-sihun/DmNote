@@ -401,6 +401,12 @@ const FloatingPopup = ({
           isElementNode(target) &&
           !!target.closest('[data-dmn-popup-submenu="true"]');
         if (isInsideSubMenu) return;
+        // 툴바 탭을 집는 것은 팝업 목록과 주고받는 동작이라 닫으면 안 된다
+        const isTabDragHandle =
+          isElementNode(target) &&
+          !!target.closest('[data-dmn-tab-drag="true"]');
+        if (isTabDragHandle) return;
+
         // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
         const isInsideGradientOverlay =
           isElementNode(target) &&
@@ -563,6 +569,14 @@ const FloatingPopup = ({
         isElementNode(target) &&
         !!target.closest('[data-dmn-popup-submenu="true"]');
       if (isInsideSubMenu) {
+        pointerCapturedInside = false;
+        return;
+      }
+
+      // 툴바 탭을 집는 것은 팝업 목록과 주고받는 동작이라 닫으면 안 된다
+      const isTabDragHandle =
+        isElementNode(target) && !!target.closest('[data-dmn-tab-drag="true"]');
+      if (isTabDragHandle) {
         pointerCapturedInside = false;
         return;
       }
