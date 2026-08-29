@@ -81,14 +81,6 @@ import {
   subscribePreviewOverlay,
 } from '@src/renderer/editor/runtime/previewOverlay';
 import {
-  beginPluginInstancesEditSession,
-  endPluginInstancesEditSession,
-} from '@plugins/runtime/displayElement/instancesCommitQueue';
-import {
-  beginMixedGestureTransaction,
-  cancelUncommittedMixedGestureTransaction,
-} from '@plugins/runtime/displayElement/gestureTransaction';
-import {
   buildMixedSelectionMenuItems,
   gridAddTypeForMenuItem,
   isStableNativeSelection,
@@ -98,6 +90,7 @@ import DuplicateElementGhost from './DuplicateElementGhost';
 import NativeGridElements from './NativeGridElements';
 import GridSelectionOverlays from '../overlays/GridSelectionOverlays';
 import { executeNativeContextMenuAction } from './nativeContextMenuActions';
+import { useSelectedElementDragLifecycle } from '@hooks/Grid/useSelectedElementDragLifecycle';
 
 type ToolbarAddRequest = {
   id: number;
@@ -236,48 +229,6 @@ const Grid = ({
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
-  const selectedDragGestureIdRef = useRef<string | null>(null);
-
-  const beginSelectedPluginInstancesDrag = () => {
-    const gestureId = crypto.randomUUID();
-    selectedDragGestureIdRef.current = gestureId;
-    freezeSelectionForGesture();
-    const frozenSelection = useGridSelectionStore.getState().selectedElements;
-    const selectedPluginElementIds = new Set(
-      frozenSelection
-        .filter((element) => element.type === 'plugin')
-        .map((element) => element.id),
-    );
-    const tokens = new Map<string, string>();
-    usePluginDisplayElementStore
-      .getState()
-      .elements.filter((element) =>
-        selectedPluginElementIds.has(element.fullId),
-      )
-      .forEach((element) => {
-        if (!tokens.has(element.pluginId)) {
-          tokens.set(
-            element.pluginId,
-            beginPluginInstancesEditSession(element.pluginId, gestureId),
-          );
-        }
-      });
-    if (tokens.size > 0) {
-      beginMixedGestureTransaction(gestureId, [...tokens.keys()]);
-    }
-    return () => {
-      tokens.forEach((token, pluginId) => {
-        endPluginInstancesEditSession(pluginId, token);
-      });
-      // 종료 경로가 혼합 커밋을 타지 않은 경우 staged 잔존으로 barrier가
-      // 영구 대기하지 않도록 미커밋 staged만 정산
-      cancelUncommittedMixedGestureTransaction(gestureId);
-      if (selectedDragGestureIdRef.current === gestureId) {
-        selectedDragGestureIdRef.current = null;
-      }
-    };
-  };
-
   // 내장 통계 요소(Stat Items) 위치 정보
   const canonicalStatPositions = useStatItemStore((state) => state.positions);
   const canonicalGraphPositions = useGraphItemStore((state) => state.positions);
@@ -314,13 +265,13 @@ const Grid = ({
     keyMappings,
     positions,
   });
-  const commitSelectedElementsDrag = () => {
-    // 동결 집합은 훅이 소유한다 - 여기서 인자를 넘기지 않아도 시작 시점
-    // 대상으로 정산된다
-    syncSelectedElementsToOverlay(
-      selectedDragGestureIdRef.current ?? undefined,
-    );
-  };
+  const {
+    beginSelectedElementsDrag: beginSelectedPluginInstancesDrag,
+    commitSelectedElementsDrag,
+  } = useSelectedElementDragLifecycle({
+    freezeSelectionForGesture,
+    syncSelectedElementsToOverlay,
+  });
 
   // 마퀴 선택 훅 사용
   const { isMarqueeSelecting: _isMarqueeSelecting, startMarqueeSelection } =
