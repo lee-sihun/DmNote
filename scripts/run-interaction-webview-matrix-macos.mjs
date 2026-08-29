@@ -200,6 +200,7 @@ await writeFile(
         windows: [
           {
             label: 'main',
+            create: false,
             title: 'DM Note WKWebView Interaction Matrix',
             width: 902,
             height: 620,

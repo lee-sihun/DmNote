@@ -32,7 +32,8 @@ import type { CSSProperties } from 'react';
 interface WebFontInputModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (css: string, displayName: string) => void;
+  // 저장 성공 여부를 돌려준다 - 거절되면 편집 중이던 내용을 지우지 않는다
+  onSubmit: (css: string, displayName: string) => boolean;
   initialCss?: string;
   isDuplicateFontFamily?: (fontFamily: string) => boolean;
   /** 시트 제목 분기 — 추가/수정 */
@@ -224,7 +225,7 @@ const WebFontInputModal = ({
       return;
     }
 
-    onSubmit(trimmedCSS, extractedFontFamily || '');
+    if (!onSubmit(trimmedCSS, extractedFontFamily || '')) return;
     resetEditorContent('');
   };
 

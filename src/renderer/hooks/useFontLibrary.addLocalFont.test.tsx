@@ -47,6 +47,11 @@ describe('useFontLibrary 로컬 폰트 추가', () => {
   let container: HTMLDivElement;
   let root: Root;
   let addLocalFont: () => Promise<void>;
+  let submitWebFont: (
+    css: string,
+    displayName: string,
+    editingWebFontId: string | null,
+  ) => boolean;
 
   const mount = () => {
     const Probe = (): null => {
@@ -54,6 +59,7 @@ describe('useFontLibrary 로컬 폰트 추가', () => {
       // 렌더 중 외부 변수 재할당은 금지 - 커밋 이후에 꺼낸다
       useEffect(() => {
         addLocalFont = library.addLocalFont;
+        submitWebFont = library.submitWebFont;
       });
       return null;
     };
@@ -135,6 +141,115 @@ describe('useFontLibrary 로컬 폰트 추가', () => {
     });
 
     expect(localFonts()).toHaveLength(0);
+    expect(mocks.alert).not.toHaveBeenCalled();
+  });
+
+  it('사용 중인 웹 폰트의 font-family 이름 변경은 저장하지 않는다', () => {
+    useFontStore.setState({
+      customFonts: [
+        {
+          id: 'web-font',
+          type: 'web',
+          name: 'Stable Family',
+          displayName: 'Stable Family',
+          enabled: true,
+          cssContent:
+            "@font-face { font-family: 'Stable Family'; src: url(old.woff2); }",
+          weightRanges: [{ min: 400, max: 400 }],
+        },
+      ],
+    });
+
+    const saved = submitWebFont(
+      "@font-face { font-family: 'Changed Family'; src: url(new.woff2); }",
+      'Changed Family',
+      'web-font',
+    );
+
+    expect(saved).toBe(false);
+    expect(useFontStore.getState().customFonts[0]?.name).toBe('Stable Family');
+    expect(mocks.settingsUpdate).not.toHaveBeenCalled();
+    expect(mocks.alert).toHaveBeenCalledWith(
+      'webFontInput.familyChangeNotAllowed',
+      { confirmText: 'common.ok' },
+    );
+  });
+
+  it('편집 대상이 사라졌으면 저장 성공으로 처리하지 않는다', () => {
+    useFontStore.setState({ customFonts: [] });
+
+    const saved = submitWebFont(
+      "@font-face { font-family: 'Gone'; src: url(gone.woff2); }",
+      'Gone',
+      'web-font',
+    );
+
+    expect(saved).toBe(false);
+    expect(mocks.settingsUpdate).not.toHaveBeenCalled();
+    expect(mocks.alert).toHaveBeenCalledWith('fontPicker.editTargetMissing', {
+      confirmText: 'common.ok',
+    });
+  });
+
+  it('font-family를 유지하면 웹 폰트 CSS를 수정할 수 있다', () => {
+    useFontStore.setState({
+      customFonts: [
+        {
+          id: 'web-font',
+          type: 'web',
+          name: 'Stable Family',
+          displayName: 'Stable Family',
+          enabled: true,
+          cssContent:
+            "@font-face { font-family: 'Stable Family'; src: url(old.woff2); }",
+          weightRanges: [{ min: 400, max: 400 }],
+        },
+      ],
+    });
+
+    const saved = submitWebFont(
+      "@font-face { font-family: 'Stable Family'; src: url(new.woff2); font-weight: 700; }",
+      'Stable Family',
+      'web-font',
+    );
+
+    expect(saved).toBe(true);
+    expect(useFontStore.getState().customFonts[0]).toMatchObject({
+      id: 'web-font',
+      name: 'Stable Family',
+      weightRanges: [{ min: 700, max: 700 }],
+    });
+  });
+
+  it('대소문자만 다른 font-family는 기존 참조 이름을 유지하며 수정한다', () => {
+    useFontStore.setState({
+      customFonts: [
+        {
+          id: 'web-font',
+          type: 'web',
+          name: 'Stable Family',
+          displayName: 'Stable Family',
+          enabled: true,
+          cssContent:
+            "@font-face { font-family: 'Stable Family'; src: url(old.woff2); }",
+          weightRanges: [{ min: 400, max: 400 }],
+        },
+      ],
+    });
+
+    const saved = submitWebFont(
+      "@font-face { font-family: 'stable family'; src: url(new.woff2); }",
+      'stable family',
+      'web-font',
+    );
+
+    expect(saved).toBe(true);
+    expect(useFontStore.getState().customFonts[0]).toMatchObject({
+      id: 'web-font',
+      name: 'Stable Family',
+      cssContent:
+        "@font-face { font-family: 'stable family'; src: url(new.woff2); }",
+    });
     expect(mocks.alert).not.toHaveBeenCalled();
   });
 });

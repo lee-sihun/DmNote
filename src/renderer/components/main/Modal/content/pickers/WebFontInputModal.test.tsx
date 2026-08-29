@@ -33,7 +33,7 @@ describe('WebFontInputModal 편집기 마운트', () => {
         <WebFontInputModal
           isOpen
           onClose={() => undefined}
-          onSubmit={() => undefined}
+          onSubmit={() => true}
           initialCss={initialCss}
           t={(key: string) => key}
         />,
@@ -80,11 +80,92 @@ describe('WebFontInputModal 편집기 마운트', () => {
         <WebFontInputModal
           isOpen={false}
           onClose={() => undefined}
-          onSubmit={() => undefined}
+          onSubmit={() => true}
           t={(key: string) => key}
         />,
       );
     });
     expect(document.querySelector('.cm-editor')).toBeNull();
+  });
+});
+
+describe('WebFontInputModal 저장 거절', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  let originalRangeRects: (() => DOMRectList) | undefined;
+
+  const VALID_CSS = "@font-face { font-family: 'Demo'; src: url(demo.woff2); }";
+
+  // jsdom에는 Range 측정이 없어서 CodeMirror measure가 던진다
+  const rangeProto = Range.prototype as unknown as {
+    getClientRects?: () => DOMRectList;
+  };
+  const emptyRectList = () =>
+    Object.assign([], {
+      item: () => null,
+    }) as unknown as DOMRectList;
+
+  beforeEach(() => {
+    originalRangeRects = rangeProto.getClientRects;
+    rangeProto.getClientRects = emptyRectList;
+    stubAnimationFrame();
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    document.body.innerHTML = '';
+    rangeProto.getClientRects = originalRangeRects;
+    vi.unstubAllGlobals();
+  });
+
+  const renderWithOutcome = async (saved: boolean) => {
+    await act(async () => {
+      root.render(
+        <WebFontInputModal
+          isOpen
+          onClose={() => undefined}
+          onSubmit={() => saved}
+          initialCss={VALID_CSS}
+          t={(key: string) => key}
+        />,
+      );
+    });
+    await settleDeferredContent();
+  };
+
+  const editorText = () =>
+    document.querySelector('.cm-editor')?.querySelector('.cm-content')
+      ?.textContent ?? '';
+
+  const pressSubmit = async () => {
+    const submit = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'webFontInput.submit',
+    );
+    expect(submit?.disabled).toBe(false);
+    await act(async () => {
+      submit?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  };
+
+  it('저장이 거절되면 편집 중이던 CSS를 그대로 남긴다', async () => {
+    await renderWithOutcome(false);
+    expect(editorText()).toContain("font-family: 'Demo'");
+
+    await pressSubmit();
+
+    expect(editorText()).toContain("font-family: 'Demo'");
+  });
+
+  it('저장에 성공하면 편집기를 비운다', async () => {
+    await renderWithOutcome(true);
+
+    await pressSubmit();
+
+    // 비면 자리표시자 예시가 대신 보이므로 원본이 사라졌는지로 판정한다
+    expect(editorText()).not.toContain("font-family: 'Demo'");
   });
 });

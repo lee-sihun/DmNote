@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const TAURI_ROOT = join(__dirname, '..', 'src-tauri');
+const PROJECT_ROOT = join(__dirname, '..');
 
 const readConfig = (name: string) =>
   JSON.parse(readFileSync(join(TAURI_ROOT, name), 'utf8')) as {
@@ -21,4 +22,20 @@ describe('Tauri global API contract', () => {
       expect(readConfig(name).app?.withGlobalTauri, name).not.toBe(true);
     }
   });
+});
+
+describe('macOS WKWebView benchmark window contract', () => {
+  it.each([
+    'run-interaction-webview-macos.mjs',
+    'run-interaction-webview-matrix-macos.mjs',
+  ])(
+    '%s는 Rust에서 생성하는 main 윈도우를 설정에서 중복 생성하지 않는다',
+    (name) => {
+      const source = readFileSync(join(PROJECT_ROOT, 'scripts', name), 'utf8');
+
+      expect(source).toMatch(
+        /label:\s*['"]main['"][\s\S]{0,120}create:\s*false/,
+      );
+    },
+  );
 });

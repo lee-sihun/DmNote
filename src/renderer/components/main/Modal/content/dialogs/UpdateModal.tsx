@@ -93,7 +93,7 @@ const UpdateModal = ({
     <Modal
       motionState={motionState}
       onClick={handleClose}
-      ariaLabel={t('update.title')}
+      ariaLabel={t(isLatestVersion ? 'update.latestAlready' : 'update.title')}
       contentMountStrategy="after-paint"
     >
       <div

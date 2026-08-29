@@ -680,6 +680,7 @@
     "availabilityDuplicateFontFamily": "已注册的 font-family",
     "availabilityMultipleFamilies": "检测到多个字体",
     "duplicateFontFamilyAlert": "\"{{name}}\" 字体已注册。",
+    "familyChangeNotAllowed": "现有元素可能正在使用此字体，因此无法更改 font-family 名称。",
     "titleAdd": "添加网页字体",
     "titleEdit": "编辑网页字体",
     "previewLabel": "预览",
