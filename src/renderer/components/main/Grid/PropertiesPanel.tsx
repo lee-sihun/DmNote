@@ -4,7 +4,6 @@ import { usePanelHost } from '@contexts/PanelHostContext';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
-import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
   getDefaultSettings,
   omitLayoutSettingValues,
@@ -25,8 +24,6 @@ import { usePluginGeometryGesture } from '@hooks/Grid/usePluginGeometryGesture';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import {
   commitBatchGeometryByIds,
-  patchElementLayerNameById,
-  renameLayerGroupById,
   patchFontFamilyByTargets,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
@@ -81,10 +78,11 @@ import {
   getGraphRuntimePropertyPatch,
   getKnobRuntimePropertyPatch,
   getNotePropertyPatch,
-  getStatTypeLabel,
   getUseInlineStylesPatch,
   shouldNormalizePropertyTabToStyle,
 } from './PropertiesPanel/propertyPanelAdapters';
+import { usePropertiesPanelRename } from './PropertiesPanel/usePropertiesPanelRename';
+import { usePluginSettingsPanelController } from './PropertiesPanel/usePluginSettingsPanelController';
 
 // ============================================================================
 // 메인 컴포넌트 Props
@@ -152,12 +150,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedGroupInfo,
   } = usePropertiesPanelSelection();
   const { useCustomCSS } = useSettingsStore();
-  const pluginSettingsPanel = usePropertiesPanelStore(
-    (state) => state.pluginSettingsPanel,
-  );
-  const closePluginSettingsPanel = usePropertiesPanelStore(
-    (state) => state.closePluginSettingsPanel,
-  );
+  const {
+    pluginSettingsPanel,
+    pluginPanelSettings,
+    isPluginSettingsSaving,
+    cancelRef: handlePluginSettingsPanelCancelImpl,
+    handleChange: handlePluginSettingsPanelChange,
+    handleConfirm: handlePluginSettingsPanelConfirm,
+    handleCancel: handlePluginSettingsPanelCancel,
+  } = usePluginSettingsPanelController();
   const isPanelVisibleStore = usePropertiesPanelStore(
     (state) => state.isCanvasPanelOpen,
   );
@@ -177,20 +178,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     Partial<KeyPosition> & { dx?: number; dy?: number }
   >({});
   const pluginVisibilityErrorsRef = useRef(new Set<string>());
-  const [pluginPanelSettings, setPluginPanelSettings] = useState<
-    Record<string, unknown>
-  >({});
-  const [isPluginSettingsSaving, setIsPluginSettingsSaving] = useState(false);
-  const pluginSettingsSavingRef = useRef(false);
-
-  // 레이어 이름 변경 상태
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
-  const renameInputRef = useRef<HTMLInputElement>(null);
-  const renameCancelledRef = useRef(false);
-  const renameRequestSignal = usePropertiesPanelStore(
-    (state) => state.renameRequestSignal,
-  );
 
   // 이미지 픽커 상태
   const [showImagePicker, setShowImagePicker] = useState(false);
@@ -221,6 +208,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // panelMode를 ref로도 유지 (useEffect에서 최신 값 참조용)
   const panelModeRef = useRef(panelMode);
+  // eslint-disable-next-line react-hooks/refs -- 이벤트 정산의 최신 패널 모드 유지
   panelModeRef.current = panelMode;
 
   // 이전 선택 상태 추적 (선택 해제 감지용)
@@ -253,7 +241,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     (state) => state.setPropertyPanelActiveTab,
   );
 
-  const handlePluginSettingsPanelCancelImpl = useRef<() => void>(() => {});
   const panelScopeKey = [
     pluginSettingsPanel ? 'plugin-settings' : 'grid',
     selectedKeyElements.length,
@@ -287,139 +274,27 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setActiveTab(TABS.STYLE);
     }
   }, [activeTab, selectedElements, setActiveTab]);
-
-  // 레이어 이름 변경: 현재 선택된 요소의 layerName 가져오기
-  const getCurrentLayerName = (): string => {
-    if (selectedGroupInfo) return selectedGroupInfo.name || '';
-    if (singleKeyPosition) return singleKeyPosition.layerName || '';
-    if (singleStatPosition) return singleStatPosition.layerName || '';
-    if (singleGraphPosition) return singleGraphPosition.layerName || '';
-    if (singleKnobPosition) return singleKnobPosition.layerName || '';
-    return '';
-  };
-
-  // 레이어 이름 변경: 현재 선택된 요소의 기본 표시 이름 가져오기
-  const getCurrentDefaultTitle = (): string => {
-    if (selectedGroupInfo) return selectedGroupInfo.name;
-    if (singleKeyPosition) {
-      return singleKeyInfo?.displayName || singleKeyCode || 'Key';
-    }
-    if (singleStatPosition) {
-      return getStatTypeLabel(singleStatPosition.statType ?? null);
-    }
-    if (singleGraphPosition) {
-      return `${getStatTypeLabel(singleGraphPosition.statType ?? null)} Graph`;
-    }
-    if (singleKnobPosition) return 'Knob';
-    return '';
-  };
-
-  const handleGroupRenameCommit = async (groupId: string, value: string) => {
-    const trimmed = value.trim();
-    if (trimmed === '') return;
-
-    const currentGroups = useLayerGroupStore.getState().layerGroups;
-    const currentModeGroups = currentGroups[selectedKeyType] || [];
-    const currentGroup = currentModeGroups.find(
-      (group) => group.id === groupId,
-    );
-    if (!currentGroup || currentGroup.name === trimmed) return;
-
-    try {
-      await renameLayerGroupById(selectedKeyType, groupId, trimmed);
-    } catch (error) {
-      console.error('Failed to rename group', error);
-    }
-  };
-
-  // 레이어 이름 변경 시작
-  const handleRenameStartImpl = useRef<() => void>(() => {});
-  handleRenameStartImpl.current = () => {
-    const current = getCurrentLayerName();
-    setRenameValue(current || getCurrentDefaultTitle());
-    setIsRenaming(true);
-    requestAnimationFrame(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
-    });
-  };
-  const handleRenameStart = () => {
-    handleRenameStartImpl.current();
-  };
-
-  // 레이어 이름 변경 커밋
-  const handleRenameCommit = async (value: string) => {
-    setIsRenaming(false);
-
-    if (selectedGroupInfo) {
-      await handleGroupRenameCommit(selectedGroupInfo.id, value);
-      return;
-    }
-
-    const trimmed = value.trim();
-    const defaultTitle = getCurrentDefaultTitle();
-    const newLayerName =
-      trimmed === defaultTitle || trimmed === '' ? null : trimmed;
-
-    const selectedElement =
-      selectedElements.length === 1 ? selectedElements[0] : null;
-    const stableTarget =
-      selectedElement && selectedElement.type !== 'plugin'
-        ? { elementType: selectedElement.type, id: selectedElement.id }
-        : null;
-    if (stableTarget && isNativeElementId(stableTarget.id)) {
-      const target = {
-        ...stableTarget,
-        patch: { property: 'layerName', value: newLayerName },
-      } as const;
-      try {
-        await patchElementLayerNameById(
-          target.elementType,
-          target.id,
-          target.patch.value,
-        );
-      } catch (error) {
-        console.error('Failed to rename layer', error);
-      }
-    }
-  };
-
-  // 레이어 이름 변경 취소
-  const handleRenameCancel = () => {
-    renameCancelledRef.current = true;
-    setIsRenaming(false);
-  };
-
-  // 캔버스 컨텍스트 메뉴에서 rename 요청 시 트리거
-  const prevRenameSignalRef = useRef(renameRequestSignal);
-  useEffect(() => {
-    if (renameRequestSignal !== prevRenameSignalRef.current) {
-      prevRenameSignalRef.current = renameRequestSignal;
-      if (
-        selectedGroupInfo ||
-        singleKeyPosition ||
-        singleStatPosition ||
-        singleGraphPosition ||
-        singleKnobPosition
-      ) {
-        setPanelMode('property');
-        handleRenameStart();
-      }
-    }
-  }, [
-    renameRequestSignal,
+  const {
+    isRenaming,
+    renameValue,
+    setRenameValue,
+    renameInputRef,
+    renameCancelledRef,
+    handleRenameStart,
+    handleRenameCommit,
+    handleRenameCancel,
+  } = usePropertiesPanelRename({
+    selectedElements,
+    selectedKeyType,
     selectedGroupInfo,
     singleKeyPosition,
     singleStatPosition,
     singleGraphPosition,
     singleKnobPosition,
+    singleKeyInfo,
+    singleKeyCode,
     setPanelMode,
-  ]);
-
-  // 선택이 변경되면 rename 모드 해제
-  useEffect(() => {
-    setIsRenaming(false);
-  }, [selectedElements]);
+  });
 
   // 스크롤 훅 사용
   const { batchScrollRefFor, singleScrollRefFor } = usePanelScroll();
@@ -475,14 +350,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     setGraphClassNameDraft(singleGraphPosition?.className || '');
   }, [selectedKeyType, singleGraphIndex, singleGraphPosition?.className]);
-
-  useEffect(() => {
-    if (pluginSettingsPanel) {
-      setPluginPanelSettings(pluginSettingsPanel.settings || {});
-      setIsPluginSettingsSaving(false);
-      pluginSettingsSavingRef.current = false;
-    }
-  }, [pluginSettingsPanel]);
 
   // 선택된 키가 변경될 때 패널 열기/닫기
   useEffect(() => {
@@ -645,6 +512,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // ============================================================================
 
   const handleTogglePanelImpl = useRef<() => void>(() => {});
+  // eslint-disable-next-line react-hooks/refs -- 안정 래퍼의 최신 토글 콜백 유지
   handleTogglePanelImpl.current = () => {
     const willOpen = !isPanelVisible;
 
@@ -705,50 +573,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         [key]: value,
       },
     });
-  };
-
-  const handlePluginSettingsPanelChange = (key: string, value: unknown) => {
-    if (!pluginSettingsPanel) return;
-    setPluginPanelSettings((prev) => {
-      const next = { ...prev, [key]: value };
-      pluginSettingsPanel.onChange(next);
-      return next;
-    });
-  };
-
-  const handlePluginSettingsPanelConfirm = async () => {
-    if (!pluginSettingsPanel || pluginSettingsSavingRef.current) return;
-    pluginSettingsSavingRef.current = true;
-    setIsPluginSettingsSaving(true);
-    try {
-      await pluginSettingsPanel.onConfirm(
-        pluginPanelSettings,
-        pluginSettingsPanel.originalSettings,
-      );
-      pluginSettingsPanel.resolve(true);
-    } catch (error) {
-      console.error('[Plugin Settings] Failed to apply settings:', error);
-      pluginSettingsPanel.resolve(false);
-    } finally {
-      pluginSettingsSavingRef.current = false;
-      setIsPluginSettingsSaving(false);
-      closePluginSettingsPanel();
-    }
-  };
-
-  handlePluginSettingsPanelCancelImpl.current = () => {
-    if (!pluginSettingsPanel || pluginSettingsSavingRef.current) return;
-    try {
-      pluginSettingsPanel.onCancel(pluginSettingsPanel.originalSettings);
-    } catch (error) {
-      console.error('[Plugin Settings] Failed to cancel settings:', error);
-    } finally {
-      pluginSettingsPanel.resolve(false);
-      closePluginSettingsPanel();
-    }
-  };
-  const handlePluginSettingsPanelCancel = () => {
-    handlePluginSettingsPanelCancelImpl.current();
   };
 
   // 외부(단축키 등)에서 보낸 사이드 패널 토글 요청 처리
