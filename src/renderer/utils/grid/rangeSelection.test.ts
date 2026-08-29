@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectElementsInKeyRange } from './rangeSelection';
+import {
+  collectElementsInKeyRange,
+  getKeySelectionBounds,
+} from './rangeSelection';
+
+describe('getKeySelectionBounds', () => {
+  it('키 위치를 선택 앵커로 변환하며 0 크기의 기존 폴백을 유지한다', () => {
+    expect(
+      getKeySelectionBounds({ dx: 3, dy: 4, width: 0, height: 0 }),
+    ).toEqual({ x: 3, y: 4, width: 60, height: 60 });
+  });
+});
 
 describe('collectElementsInKeyRange', () => {
   it('키 앵커와 클릭 키 사이의 모든 요소를 기존 타입 순서로 수집한다', () => {

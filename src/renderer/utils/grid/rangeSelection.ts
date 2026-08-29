@@ -10,12 +10,15 @@ export interface KeySelectionBounds {
   height: number;
 }
 
-interface NativeRangeElement {
-  id: string;
+interface NativeRangeBounds {
   dx: number;
   dy: number;
   width?: number;
   height?: number;
+}
+
+interface NativeRangeElement extends NativeRangeBounds {
+  id: string;
   hidden?: boolean;
 }
 
@@ -36,7 +39,7 @@ interface KeyRangeSelectionSource {
 }
 
 const boundsFor = (
-  position: NativeRangeElement,
+  position: NativeRangeBounds,
   defaultWidth: number,
   defaultHeight: number,
 ): KeySelectionBounds => ({
@@ -46,12 +49,16 @@ const boundsFor = (
   height: position.height || defaultHeight,
 });
 
+export const getKeySelectionBounds = (
+  position: NativeRangeBounds,
+): KeySelectionBounds => boundsFor(position, 60, 60);
+
 export const collectElementsInKeyRange = (
   anchor: KeySelectionBounds,
   clickedPosition: NativeRangeElement,
   source: KeyRangeSelectionSource,
 ): SelectedElement[] => {
-  const clicked = boundsFor(clickedPosition, 60, 60);
+  const clicked = getKeySelectionBounds(clickedPosition);
   const minX = Math.min(anchor.x, clicked.x);
   const maxX = Math.max(anchor.x + anchor.width, clicked.x + clicked.width);
   const minY = Math.min(anchor.y, clicked.y);
@@ -65,7 +72,7 @@ export const collectElementsInKeyRange = (
   const selected: SelectedElement[] = [];
 
   source.keyPositions.forEach((position, index) => {
-    if (isElementInMarquee(boundsFor(position, 60, 60), rangeRect)) {
+    if (isElementInMarquee(getKeySelectionBounds(position), rangeRect)) {
       selected.push({ type: 'key', id: position.id, index });
     }
   });

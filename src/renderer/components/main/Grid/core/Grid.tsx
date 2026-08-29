@@ -12,8 +12,6 @@ declare global {
   }
 }
 import { useTranslation } from '@contexts/useTranslation';
-import DraggableKey from '@components/shared/Key';
-import { commitElementPosition } from '@src/renderer/hooks/Grid/elementPositionCommit';
 import { deleteElementById } from '@src/renderer/editor/runtime/elementOps';
 import {
   commitStableLayerZOrder,
@@ -57,8 +55,6 @@ import {
 import { getGridViewportLayerStyles } from '@utils/core/gridViewportStyles';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
-import GraphItem from '../layers/GraphItem';
-import KnobItem from '../layers/KnobItem';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelHostStore';
 import { useUIStore } from '@stores/useUIStore';
@@ -76,14 +72,12 @@ import {
 import { createDefaultCounterSettings } from '@src/types/key/keys';
 import type {
   KeyMappings,
-  KeyPosition,
   KeyCounterSettings,
   CounterAnimationBezier,
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { overlayApi } from '@api/modules/overlayApi';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
-import type { StatItemPosition } from '@src/types/key/statItems';
 import {
   groupSelectedElements,
   ungroupSelectedElements,
@@ -102,7 +96,6 @@ import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
-import { useStableHandlerSlots } from '@hooks/shared/useStableHandlerSlots';
 import {
   buildMixedSelectionMenuItems,
   gridAddTypeForMenuItem,
@@ -110,8 +103,7 @@ import {
   shouldOpenMixedSelectionMenu,
 } from './gridContextMenuModel';
 import DuplicateElementGhost from './DuplicateElementGhost';
-import { collectElementsInKeyRange } from '@utils/grid/rangeSelection';
-import { getLooseStatTypeLabel } from '@utils/grid/statTypeLabel';
+import NativeGridElements from './NativeGridElements';
 
 type ToolbarAddRequest = {
   id: number;
@@ -421,10 +413,6 @@ const Grid = ({
     x: number;
     y: number;
   } | null>(null);
-  const keyRefs = useRef<(HTMLElement | null)[]>([]);
-  const statRefs = useRef<(HTMLElement | null)[]>([]);
-  const graphRefs = useRef<(HTMLElement | null)[]>([]);
-  const knobRefs = useRef<(HTMLElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [duplicateState, setDuplicateState] = useState<DuplicateState | null>(
     null,
@@ -685,6 +673,21 @@ const Grid = ({
     setSelectedElements(nextSelection);
   };
 
+  const toggleNativeElementSelection = (
+    type: 'key' | 'stat' | 'graph' | 'knob',
+    index: number,
+  ) => {
+    const elementId =
+      type === 'key'
+        ? positions[selectedKeyType][index].id
+        : type === 'stat'
+        ? useStatItemStore.getState().positions[selectedKeyType][index].id
+        : type === 'graph'
+        ? useGraphItemStore.getState().positions[selectedKeyType][index].id
+        : useKnobItemStore.getState().positions[selectedKeyType][index].id;
+    toggleSelection({ type, id: elementId, index });
+  };
+
   // 더블클릭 편집 진입 — 대상이 다중 선택의 멤버면 선택을 보존해 배치 편집으로,
   // 아니면 해당 요소(+그룹)만 선택해 단일 편집으로 property 페이지를 연다
   const openElementEditor = (
@@ -753,382 +756,6 @@ const Grid = ({
     contextRef.current = ref;
     setContextPosition({ x: clientX, y: clientY });
     setIsContextOpen(true);
-  };
-
-  // 자식에게 넘기는 콜백 참조를 요소별로 한 번만 만든다.
-  //
-  // 인라인 화살표를 그대로 넘기면 렌더마다 새 함수라 DraggableKey의 React.memo가
-  // 항상 깨진다. 그러면 값 하나가 바뀌는 프리뷰에도 화면의 모든 요소가 다시 그려진다
-  // (실측 키 100개 기준 3.13ms -> 0.35ms, 200개 7.32ms -> 0.62ms).
-  // 참조는 고정하고 실제 동작은 매 렌더 최신 구현으로 갈아끼워 값은 항상 최신을 본다
-  const stableHandlers = useStableHandlerSlots();
-
-  const renderKeys = () => {
-    if (!positions[selectedKeyType]) return null;
-
-    return positions[selectedKeyType].map(
-      (position: KeyPosition, index: number) => {
-        const handlers = stableHandlers(position.id, {
-          onPositionChange: (
-            _targetIndex: number,
-            dx: number,
-            dy: number,
-            elementId: string,
-          ) => commitElementPosition('key', elementId, dx, dy),
-          onClick: () => {
-            selectElementWithGroup('key', index);
-            // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
-            const pos = positions[selectedKeyType]?.[index];
-            if (pos) {
-              setLastSelectedKeyBounds({
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 60,
-                height: pos.height || 60,
-              });
-            }
-          },
-          onDoubleClick: () => openElementEditor('key', index),
-          onCtrlClick: () => {
-            // 다중 선택: 기존 선택 유지하면서 추가/제거
-            toggleSelection({
-              type: 'key',
-              id: positions[selectedKeyType][index].id,
-              index,
-            });
-            // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
-            const pos = positions[selectedKeyType]?.[index];
-            if (pos) {
-              setLastSelectedKeyBounds({
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 60,
-                height: pos.height || 60,
-              });
-            }
-          },
-          onShiftClick: () => {
-            // 좌표 기반 범위 선택
-            if (!lastSelectedKeyBounds) {
-              // 이전 선택이 없으면 단일 선택처럼 동작
-              clearSelection();
-              toggleSelection({
-                type: 'key',
-                id: positions[selectedKeyType][index].id,
-                index,
-              });
-              const pos = positions[selectedKeyType]?.[index];
-              if (pos) {
-                setLastSelectedKeyBounds({
-                  x: pos.dx,
-                  y: pos.dy,
-                  width: pos.width || 60,
-                  height: pos.height || 60,
-                });
-              }
-              return;
-            }
-
-            const clickedPos = positions[selectedKeyType]?.[index];
-            if (!clickedPos) return;
-            setSelectedElements(
-              collectElementsInKeyRange(lastSelectedKeyBounds, clickedPos, {
-                mode: selectedKeyType,
-                keyPositions: positions[selectedKeyType] || [],
-                pluginElements,
-                statPositions: statPositions?.[selectedKeyType] || [],
-                graphPositions: graphPositions?.[selectedKeyType] || [],
-                knobPositions: knobPositions?.[selectedKeyType] || [],
-              }),
-            );
-          },
-          onMultiDrag: (deltaX: number, deltaY: number) =>
-            moveSelectedElements(deltaX, deltaY, undefined, false),
-          onMultiDragStart: beginSelectedPluginInstancesDrag,
-          onMultiDragEnd: commitSelectedElementsDrag,
-          onEraserClick: () => {
-            void deleteElementById('key', position.id).catch(
-              reportElementOpError,
-            );
-          },
-          onContextMenu: (e: React.MouseEvent) => {
-            openElementContextMenu(
-              'key',
-              index,
-              e.clientX,
-              e.clientY,
-              keyRefs.current[index] || null,
-            );
-          },
-          setReferenceRef: (node: HTMLElement | null) => {
-            keyRefs.current[index] = node;
-          },
-        });
-
-        return (
-          <DraggableKey
-            key={position.id}
-            index={index}
-            elementId={position.id}
-            position={position}
-            keyName={slotDisplayName(
-              keyMappings[selectedKeyType]?.[index] ?? '',
-            )}
-            zIndex={position.zIndex ?? index}
-            isSelected={selectedElements.some(
-              (el) => el.type === 'key' && el.id === position.id,
-            )}
-            selectedElements={selectedElements}
-            activeTool={activeTool}
-            zoom={zoom}
-            panX={panX}
-            panY={panY}
-            isViewportTransforming={isTransforming}
-            counterEnabled={keyCounterEnabled}
-            counterPreviewValue={0}
-            {...handlers}
-          />
-        );
-      },
-    );
-  };
-
-  const renderStatItems = () => {
-    const items = statPositions?.[selectedKeyType] || [];
-    if (!items.length) return null;
-
-    const handleStatPositionChange = (
-      index: number,
-      dx: number,
-      dy: number,
-      elementId: string,
-    ) => {
-      commitElementPosition('stat', elementId, dx, dy);
-    };
-
-    return items.map((position: StatItemPosition, index: number) => {
-      const handlers = stableHandlers(position.id, {
-        onPositionChange: handleStatPositionChange,
-        onClick: () => {
-          selectElementWithGroup('stat', index);
-        },
-        onDoubleClick: () => openElementEditor('stat', index),
-        onCtrlClick: () => {
-          toggleSelection({
-            type: 'stat',
-            id: useStatItemStore.getState().positions[selectedKeyType][index]
-              .id,
-            index,
-          });
-        },
-        onShiftClick: () => {
-          // 통계 요소는 범위 선택 대상이 아니므로 Ctrl+클릭과 동일하게 처리
-          toggleSelection({
-            type: 'stat',
-            id: useStatItemStore.getState().positions[selectedKeyType][index]
-              .id,
-            index,
-          });
-        },
-        onMultiDrag: (deltaX: number, deltaY: number) =>
-          moveSelectedElements(deltaX, deltaY, undefined, false),
-        onMultiDragStart: beginSelectedPluginInstancesDrag,
-        onMultiDragEnd: commitSelectedElementsDrag,
-        onEraserClick: () => {
-          void deleteElementById('stat', position.id).catch(
-            reportElementOpError,
-          );
-        },
-        onContextMenu: (e: React.MouseEvent) => {
-          openElementContextMenu(
-            'stat',
-            index,
-            e.clientX,
-            e.clientY,
-            statRefs.current[index] || null,
-          );
-        },
-        setReferenceRef: (node: HTMLElement | null) => {
-          statRefs.current[index] = node;
-        },
-      });
-
-      return (
-        <DraggableKey
-          key={position.id}
-          index={index}
-          elementId={position.id}
-          anchorKind="stat"
-          position={position}
-          keyName={getLooseStatTypeLabel(position.statType)}
-          zIndex={position.zIndex ?? index}
-          isSelected={selectedElements.some(
-            (el) => el.type === 'stat' && el.id === position.id,
-          )}
-          selectedElements={selectedElements}
-          activeTool={activeTool}
-          zoom={zoom}
-          panX={panX}
-          panY={panY}
-          isViewportTransforming={isTransforming}
-          counterEnabled={true}
-          counterPreviewValue={0}
-          {...handlers}
-        />
-      );
-    });
-  };
-
-  const renderGraphItems = () => {
-    const items = graphPositions?.[selectedKeyType] || [];
-    if (!items.length) return null;
-
-    const handleGraphPositionChange = (
-      index: number,
-      dx: number,
-      dy: number,
-      elementId: string,
-    ) => {
-      commitElementPosition('graph', elementId, dx, dy);
-    };
-
-    return items.map((position, index) => (
-      <GraphItem
-        key={position.id}
-        index={index}
-        elementId={position.id}
-        position={position}
-        onPositionChange={handleGraphPositionChange}
-        zIndex={position.zIndex ?? index}
-        onClick={() => {
-          selectElementWithGroup('graph', index);
-        }}
-        onDoubleClick={() => openElementEditor('graph', index)}
-        onCtrlClick={() => {
-          toggleSelection({
-            type: 'graph',
-            id: useGraphItemStore.getState().positions[selectedKeyType][index]
-              .id,
-            index,
-          });
-        }}
-        onShiftClick={() => {
-          toggleSelection({
-            type: 'graph',
-            id: useGraphItemStore.getState().positions[selectedKeyType][index]
-              .id,
-            index,
-          });
-        }}
-        isSelected={selectedElements.some(
-          (el) => el.type === 'graph' && el.id === position.id,
-        )}
-        selectedElements={selectedElements}
-        onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, undefined, false)
-        }
-        onMultiDragStart={beginSelectedPluginInstancesDrag}
-        onMultiDragEnd={commitSelectedElementsDrag}
-        activeTool={activeTool}
-        onEraserClick={() => {
-          void deleteElementById('graph', position.id).catch(
-            reportElementOpError,
-          );
-        }}
-        onContextMenu={(e) => {
-          openElementContextMenu(
-            'graph',
-            index,
-            e.clientX,
-            e.clientY,
-            graphRefs.current[index] || null,
-          );
-        }}
-        zoom={zoom}
-        panX={panX}
-        panY={panY}
-        isViewportTransforming={isTransforming}
-        setReferenceRef={(node) => {
-          graphRefs.current[index] = node;
-        }}
-      />
-    ));
-  };
-
-  const renderKnobItems = () => {
-    const items = knobPositions?.[selectedKeyType] || [];
-    if (!items.length) return null;
-
-    const handleKnobPositionChange = (
-      index: number,
-      dx: number,
-      dy: number,
-      elementId: string,
-    ) => {
-      commitElementPosition('knob', elementId, dx, dy);
-    };
-
-    return items.map((position, index) => (
-      <KnobItem
-        key={position.id}
-        index={index}
-        elementId={position.id}
-        position={position}
-        onPositionChange={handleKnobPositionChange}
-        zIndex={position.zIndex ?? index}
-        onClick={() => {
-          selectElementWithGroup('knob', index);
-        }}
-        onDoubleClick={() => openElementEditor('knob', index)}
-        onCtrlClick={() => {
-          toggleSelection({
-            type: 'knob',
-            id: useKnobItemStore.getState().positions[selectedKeyType][index]
-              .id,
-            index,
-          });
-        }}
-        onShiftClick={() => {
-          toggleSelection({
-            type: 'knob',
-            id: useKnobItemStore.getState().positions[selectedKeyType][index]
-              .id,
-            index,
-          });
-        }}
-        isSelected={selectedElements.some(
-          (el) => el.type === 'knob' && el.id === position.id,
-        )}
-        selectedElements={selectedElements}
-        onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, undefined, false)
-        }
-        onMultiDragStart={beginSelectedPluginInstancesDrag}
-        onMultiDragEnd={commitSelectedElementsDrag}
-        activeTool={activeTool}
-        onEraserClick={() => {
-          void deleteElementById('knob', position.id).catch(
-            reportElementOpError,
-          );
-        }}
-        onContextMenu={(e) => {
-          openElementContextMenu(
-            'knob',
-            index,
-            e.clientX,
-            e.clientY,
-            knobRefs.current[index] || null,
-          );
-        }}
-        zoom={zoom}
-        panX={panX}
-        panY={panY}
-        isViewportTransforming={isTransforming}
-        setReferenceRef={(node) => {
-          knobRefs.current[index] = node;
-        }}
-      />
-    ));
   };
 
   // 그리드 좌클릭 핸들러 (빈 공간에서 드래그로 마퀴 선택 시작)
@@ -1234,10 +861,35 @@ const Grid = ({
           data-dmn-user-css-scope=""
           style={gridViewportStyles.scale}
         >
-          {renderKeys()}
-          {renderStatItems()}
-          {renderGraphItems()}
-          {renderKnobItems()}
+          <NativeGridElements
+            mode={selectedKeyType}
+            keyPositions={positions[selectedKeyType]}
+            keyMappings={keyMappings[selectedKeyType]}
+            statPositions={statPositions?.[selectedKeyType] || []}
+            graphPositions={graphPositions?.[selectedKeyType] || []}
+            knobPositions={knobPositions?.[selectedKeyType] || []}
+            pluginElements={pluginElements}
+            selectedElements={selectedElements}
+            activeTool={activeTool}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+            isViewportTransforming={isTransforming}
+            keyCounterEnabled={keyCounterEnabled}
+            lastSelectedKeyBounds={lastSelectedKeyBounds}
+            onSelectElement={selectElementWithGroup}
+            onToggleElement={toggleNativeElementSelection}
+            onClearSelection={clearSelection}
+            onSetSelectedElements={setSelectedElements}
+            onSetLastSelectedKeyBounds={setLastSelectedKeyBounds}
+            onMoveSelection={(deltaX, deltaY) =>
+              moveSelectedElements(deltaX, deltaY, undefined, false)
+            }
+            onMultiDragStart={beginSelectedPluginInstancesDrag}
+            onMultiDragEnd={commitSelectedElementsDrag}
+            onOpenElementEditor={openElementEditor}
+            onOpenElementContextMenu={openElementContextMenu}
+          />
           {/* Outside 카운터 미리보기 레이어 */}
           {keyCounterEnabled && (
             <KeyCounterPreviewLayer
