@@ -60,10 +60,7 @@ import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
 import KnobItem from '../layers/KnobItem';
-import {
-  useGridSelectionStore,
-  isElementInMarquee,
-} from '@stores/grid/useGridSelectionStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelHostStore';
 import { useUIStore } from '@stores/useUIStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
@@ -119,6 +116,7 @@ import {
   shouldOpenMixedSelectionMenu,
 } from './gridContextMenuModel';
 import DuplicateElementGhost from './DuplicateElementGhost';
+import { collectElementsInKeyRange } from '@utils/grid/rangeSelection';
 
 type ToolbarAddRequest = {
   id: number;
@@ -868,126 +866,16 @@ const Grid = ({
 
             const clickedPos = positions[selectedKeyType]?.[index];
             if (!clickedPos) return;
-
-            // 두 키 사이의 사각형 영역 계산
-            const clickedBounds = {
-              x: clickedPos.dx,
-              y: clickedPos.dy,
-              width: clickedPos.width || 60,
-              height: clickedPos.height || 60,
-            };
-
-            const minX = Math.min(lastSelectedKeyBounds.x, clickedBounds.x);
-            const maxX = Math.max(
-              lastSelectedKeyBounds.x + lastSelectedKeyBounds.width,
-              clickedBounds.x + clickedBounds.width,
+            setSelectedElements(
+              collectElementsInKeyRange(lastSelectedKeyBounds, clickedPos, {
+                mode: selectedKeyType,
+                keyPositions: positions[selectedKeyType] || [],
+                pluginElements,
+                statPositions: statPositions?.[selectedKeyType] || [],
+                graphPositions: graphPositions?.[selectedKeyType] || [],
+                knobPositions: knobPositions?.[selectedKeyType] || [],
+              }),
             );
-            const minY = Math.min(lastSelectedKeyBounds.y, clickedBounds.y);
-            const maxY = Math.max(
-              lastSelectedKeyBounds.y + lastSelectedKeyBounds.height,
-              clickedBounds.y + clickedBounds.height,
-            );
-
-            const rangeRect = {
-              left: minX,
-              top: minY,
-              width: maxX - minX,
-              height: maxY - minY,
-            };
-
-            // 범위 내 모든 키 선택
-            const newSelectedElements = [];
-            positions[selectedKeyType]?.forEach((pos, i) => {
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 60,
-                height: pos.height || 60,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'key',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            // 범위 내 플러그인 요소도 선택
-            pluginElements.forEach((el) => {
-              const belongsToCurrentTab =
-                !el.tabId || el.tabId === selectedKeyType;
-              if (belongsToCurrentTab && el.measuredSize) {
-                const elementBounds = {
-                  x: el.position.x,
-                  y: el.position.y,
-                  width: el.measuredSize.width,
-                  height: el.measuredSize.height,
-                };
-                if (isElementInMarquee(elementBounds, rangeRect)) {
-                  newSelectedElements.push({
-                    type: 'plugin',
-                    id: el.fullId,
-                  });
-                }
-              }
-            });
-
-            // 범위 내 통계 요소도 선택
-            (statPositions?.[selectedKeyType] || []).forEach((pos, i) => {
-              if (!pos || pos.hidden) return;
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 60,
-                height: pos.height || 60,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'stat',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            // 범위 내 그래프 요소도 선택
-            (graphPositions?.[selectedKeyType] || []).forEach((pos, i) => {
-              if (!pos || pos.hidden) return;
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 200,
-                height: pos.height || 100,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'graph',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            // 범위 내 노브 요소도 선택
-            (knobPositions?.[selectedKeyType] || []).forEach((pos, i) => {
-              if (!pos || pos.hidden) return;
-              const elementBounds = {
-                x: pos.dx,
-                y: pos.dy,
-                width: pos.width || 80,
-                height: pos.height || 80,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: 'knob',
-                  id: pos.id,
-                  index: i,
-                });
-              }
-            });
-
-            setSelectedElements(newSelectedElements);
           },
           onMultiDrag: (deltaX: number, deltaY: number) =>
             moveSelectedElements(deltaX, deltaY, undefined, false),
