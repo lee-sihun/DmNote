@@ -1,6 +1,5 @@
 import React, {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -103,12 +102,7 @@ import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
-import {
-  commitStableHandlerSlots,
-  getStableHandlers,
-  type PendingHandlerSlotMap,
-  type StableHandlerSlotMap,
-} from './stableHandlerSlots';
+import { useStableHandlerSlots } from '@hooks/shared/useStableHandlerSlots';
 import {
   buildMixedSelectionMenuItems,
   gridAddTypeForMenuItem,
@@ -767,29 +761,7 @@ const Grid = ({
   // 항상 깨진다. 그러면 값 하나가 바뀌는 프리뷰에도 화면의 모든 요소가 다시 그려진다
   // (실측 키 100개 기준 3.13ms -> 0.35ms, 200개 7.32ms -> 0.62ms).
   // 참조는 고정하고 실제 동작은 매 렌더 최신 구현으로 갈아끼워 값은 항상 최신을 본다
-  const handlerSlotsRef = useRef<StableHandlerSlotMap>(new Map());
-
-  // 최신 구현 교체는 커밋 시점에만. 렌더 중에 바꾸면 React가 그 렌더를 버렸을 때
-  // 화면에는 이전 트리가 붙어 있는데 이벤트만 폐기된 렌더의 클로저를 호출한다
-  const pendingImplRef = useRef<PendingHandlerSlotMap>(new Map());
-  pendingImplRef.current.clear();
-
-  const stableHandlers = <
-    T extends Record<string, (...args: never[]) => unknown>,
-  >(
-    id: string,
-    impl: T,
-  ): T =>
-    getStableHandlers(
-      handlerSlotsRef.current,
-      pendingImplRef.current,
-      id,
-      impl,
-    );
-
-  useLayoutEffect(() => {
-    commitStableHandlerSlots(handlerSlotsRef.current, pendingImplRef.current);
-  });
+  const stableHandlers = useStableHandlerSlots();
 
   const renderKeys = () => {
     if (!positions[selectedKeyType]) return null;
