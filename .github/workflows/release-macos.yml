@@ -353,11 +353,6 @@ jobs:
           TAG: ${{ needs.preflight.outputs.version }}
         run: |
           set -euo pipefail
-          NOTES_PATH="$RUNNER_TEMP/release-notes-${VERSION}.md"
-          gh api \
-            -H "Accept: application/vnd.github.raw+json" \
-            "repos/${GITHUB_REPOSITORY}/contents/docs/releases/${VERSION}_ko.md?ref=main" \
-            > "$NOTES_PATH"
 
           upload_to_existing_release() {
             # 이미 publish된 릴리즈의 자산 교체는 수동으로만 (사용자가 받아간 파일이 바뀌는 것 방지)
@@ -372,6 +367,11 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             upload_to_existing_release
           else
+            # 본문은 버전만으로 생성 — Windows workflow와 같은 스크립트를 써야 경합에서 어느 쪽이
+            # 이기든 같은 본문이 남는다. 자산만 덮어쓰는 경로에서는 실행하지 않는다
+            # (그 경로의 checkout에는 이 스크립트가 없을 수 있음)
+            NOTES_PATH="$RUNNER_TEMP/release-notes-${VERSION}.md"
+            node scripts/build-release-notes.js "$VERSION" > "$NOTES_PATH"
             if ! gh release create "$TAG" "$ASSET_PATH" \
               --verify-tag --draft --title "DM NOTE v $VERSION" --notes-file "$NOTES_PATH"; then
               echo "draft 생성 경합 감지 — 기존 릴리즈 재확인"

@@ -8,3 +8,6 @@ distribution/windows/assets/rainbow.css text eol=crlf
 distribution/windows/assets/plugin/key-interval.js text eol=crlf
 distribution/windows/assets/plugin/kps.js text eol=crlf
 distribution/windows/assets/plugin/v-archive.js text eol=lf
+
+# 릴리즈 본문 생성 스크립트는 Windows 러너에서도 LF 유지 (본문 바이트를 플랫폼 무관하게)
+scripts/*.js text eol=lf

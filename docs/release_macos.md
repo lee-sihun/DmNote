@@ -37,14 +37,17 @@ npm version patch        # package.json 버전 올리고 tauri.conf.json / Cargo
 git push origin main     # 태그는 push하지 않음
 ```
 
-`package.json` 버전 변경과 커밋 제목 `X.Y.Z`가 일치하는 main push를 감지하면 macOS와 Windows workflow가 실행된다. 원격 `X.Y.Z` 태그와 draft 릴리즈는 Actions가 자동 생성하고 각 자산을 첨부한다. 릴리즈 본문은 `docs/releases/X.Y.Z_ko.md`를 사용한다. 이후:
+`package.json` 버전 변경과 커밋 제목 `X.Y.Z`가 일치하는 main push를 감지하면 macOS와 Windows workflow가 실행된다. 원격 `X.Y.Z` 태그와 draft 릴리즈는 Actions가 자동 생성하고 각 자산을 첨부한다. 릴리즈 본문은 `scripts/build-release-notes.js`가 버전만으로 생성하며 (체인지로그 링크 + 자산 안내), 변경 내역 자체는 `CHANGELOG.md`에 유지한다. 이후:
 
-> 자산 이름 `DM.NOTE_<tag>_{aarch64|x64|universal}.dmg`는 **앱 내 자동 업데이트가 의존하는 계약**이다 (`src-tauri/src/commands/app/update_macos.rs`의 `asset_candidates`). 아키텍처 전용 자산이 있으면 그것을 우선 받으므로, 서명·공증되지 않은 DMG를 그 이름으로 수동 업로드하지 말 것.
+> 자산 이름 `DM.NOTE_<tag>_{aarch64|x64|universal}.dmg`는 **앱 내 자동 업데이트가 의존하는 계약**이다 (`src-tauri/src/commands/app/update_macos/mod.rs`의 `asset_candidates`). 아키텍처 전용 자산이 있으면 그것을 우선 받으므로, 서명·공증되지 않은 DMG를 그 이름으로 수동 업로드하지 말 것.
 
-1. 한국어 릴리즈 노트 작성 (영어 노트는 `docs/releases/X.Y.Z_en.md`)
+1. `CHANGELOG.md`와 `CHANGELOG_en.md`에 `## [X.Y.Z](...)` 섹션이 있는지 확인 (본문 링크가 `#XYZ` 앵커로 걸린다)
 2. macOS DMG와 Windows 자산(`DM.NOTE.exe`, `DM.NOTE.v.X.Y.Z.zip`)이 모두 있는지 확인
-3. 운영 인증서 활성화 전에는 Windows 자산이 미서명임을 릴리즈 노트에 명시
-4. **Publish** → `update-website.yml`이 DmSite 갱신을 트리거
+3. **Publish** → `update-website.yml`이 DmSite 갱신을 트리거
+
+`docs/releases/*.md`는 2.0.1까지의 published 릴리즈 본문이 링크하고 있으므로 **삭제하지 않는다**. 신규 버전 노트는 더 추가하지 않고 `CHANGELOG.md`에만 쓴다.
+
+릴리즈 본문은 draft를 처음 만든 workflow가 한 번만 기록한다. 문구를 고치려면 `scripts/build-release-notes.js` 수정 후 draft 본문을 직접 교체한다(`gh release edit "$TAG" --notes-file`).
 
 현재 버전을 다시 빌드하려면 Run workflow → ref: `main` + `dry_run` 해제. draft면 DMG만 덮어쓰고 노트·다른 자산은 유지되며, 이미 publish된 릴리즈는 자동 덮어쓰기를 거부한다(수동 `gh release upload --clobber`).
 

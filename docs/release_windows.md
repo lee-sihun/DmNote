@@ -40,7 +40,7 @@ git push origin main
 - `DM.NOTE.exe`
 - `DM.NOTE.v.X.Y.Z.zip`
 
-이미 publish된 릴리즈는 자동으로 덮어쓰지 않는다. 운영 인증서 활성화 전 Windows 자산은 미서명이므로 publish 전에 릴리즈 노트에 이 사실을 명시한다. 테스트 인증서로 서명된 파일을 대신 배포하지 않는다.
+이미 publish된 릴리즈는 자동으로 덮어쓰지 않는다. 운영 인증서 활성화 전 Windows 자산은 미서명이며, 이 고지는 `scripts/build-release-notes.js`가 릴리즈 본문에 자동으로 넣는다 — 운영 인증서를 활성화하면 그 줄을 제거한다. 테스트 인증서로 서명된 파일을 대신 배포하지 않는다.
 
 ## 3. SignPath Artifact Configuration
 
@@ -114,6 +114,7 @@ SignPath가 운영 인증서를 import하고 `release-signing`이 valid가 된 �
 1. 버전 커밋 릴리즈에서도 SignPath 설정을 검사하도록 변경
 2. `SIGNING_POLICY_SLUG`를 `release-signing`으로 변경
 3. 버전 커밋 릴리즈의 서명 생략 분기를 제거하고 운영 서명·검증을 필수화
-4. macOS workflow와 Windows workflow가 모두 완료된 뒤 draft 자산을 확인하고 publish
+4. `scripts/build-release-notes.js`에서 "미서명 상태입니다" 줄 제거 (누락 시 이후 모든 릴리즈 본문이 미서명을 계속 주장한다)
+5. macOS workflow와 Windows workflow가 모두 완료된 뒤 draft 자산을 확인하고 publish
 
 운영 전환 전에는 테스트 인증서 자산을 릴리스에 업로드하지 않는다.
