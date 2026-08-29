@@ -64,6 +64,11 @@ import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
+import {
+  moveSelectedNativePositions,
+  moveSelectedPluginElements,
+  selectedPluginIds,
+} from '@utils/grid/selectionMovement';
 
 // 붙여넣기 블록의 스택 순서 결정. 배열 위치가 곧 최종 z이므로 원본의 상대
 // 스택(동결 payload zIndex 내림차순)을 따르고, 동률은 payload 순서로 안정
@@ -357,124 +362,91 @@ export function useGridSelection({
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
 
-    // 키 위치 배치 업데이트
-    const keyUpdates = selectedElements.filter((el) => el.type === 'key');
-    if (keyUpdates.length > 0) {
-      const newPositions = { ...currentPositions };
-      const tabPositions = [...(newPositions[selectedKeyType] || [])];
+    const selectedNativeIds = (
+      type: 'key' | 'stat' | 'graph' | 'knob',
+    ): Set<string> =>
+      new Set(
+        selectedElements
+          .filter((element) => element.type === type)
+          .map((element) => element.id),
+      );
 
-      keyUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const keyIds = selectedNativeIds('key');
+    if (keyIds.size > 0) {
+      useKeyStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            currentPositions,
+            selectedKeyType,
+            keyIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newPositions[selectedKeyType] = tabPositions;
-      useKeyStore.getState().setPositions(newPositions);
     }
 
-    // 통계 요소 배치 업데이트
-    const statUpdates = selectedElements.filter((el) => el.type === 'stat');
-    if (statUpdates.length > 0) {
-      const currentStatPositions = useStatItemStore.getState().positions;
-      const newStatPositions = { ...currentStatPositions };
-      const tabPositions = [...(newStatPositions[selectedKeyType] || [])];
-
-      statUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const statIds = selectedNativeIds('stat');
+    if (statIds.size > 0) {
+      const current = useStatItemStore.getState().positions;
+      useStatItemStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            current,
+            selectedKeyType,
+            statIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newStatPositions[selectedKeyType] = tabPositions;
-      useStatItemStore.getState().setPositions(newStatPositions);
     }
 
-    // 그래프 요소 배치 업데이트
-    const graphUpdates = selectedElements.filter((el) => el.type === 'graph');
-    if (graphUpdates.length > 0) {
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      const newGraphPositions = { ...currentGraphPositions };
-      const tabPositions = [...(newGraphPositions[selectedKeyType] || [])];
-
-      graphUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const graphIds = selectedNativeIds('graph');
+    if (graphIds.size > 0) {
+      const current = useGraphItemStore.getState().positions;
+      useGraphItemStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            current,
+            selectedKeyType,
+            graphIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newGraphPositions[selectedKeyType] = tabPositions;
-      useGraphItemStore.getState().setPositions(newGraphPositions);
     }
 
-    // 노브 요소 배치 업데이트
-    const knobUpdates = selectedElements.filter((el) => el.type === 'knob');
-    if (knobUpdates.length > 0) {
-      const currentKnobPositions = useKnobItemStore.getState().positions;
-      const newKnobPositions = { ...currentKnobPositions };
-      const tabPositions = [...(newKnobPositions[selectedKeyType] || [])];
-
-      knobUpdates.forEach((el) => {
-        const index = tabPositions.findIndex(
-          (position) => position.id === el.id,
+    const knobIds = selectedNativeIds('knob');
+    if (knobIds.size > 0) {
+      const current = useKnobItemStore.getState().positions;
+      useKnobItemStore
+        .getState()
+        .setPositions(
+          moveSelectedNativePositions(
+            current,
+            selectedKeyType,
+            knobIds,
+            deltaX,
+            deltaY,
+          ),
         );
-        if (index < 0) return;
-        const currentPos = tabPositions[index];
-        if (currentPos) {
-          tabPositions[index] = {
-            ...currentPos,
-            dx: currentPos.dx + deltaX,
-            dy: currentPos.dy + deltaY,
-          };
-        }
-      });
-
-      newKnobPositions[selectedKeyType] = tabPositions;
-      useKnobItemStore.getState().setPositions(newKnobPositions);
     }
 
     // 플러그인 요소 배치 업데이트
-    const pluginUpdates = selectedElements.filter((el) => el.type === 'plugin');
+    const pluginUpdateIds = new Set(
+      selectedElements
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
     let stagedBeforeEagerWrite = false;
-    if (pluginUpdates.length > 0) {
+    if (pluginUpdateIds.size > 0) {
       if (gestureId) {
-        const selectedPluginIds = new Set(
-          pluginUpdates.map((element) => element.id),
+        const movedPluginIds = selectedPluginIds(
+          currentPluginElements,
+          pluginUpdateIds,
         );
-        const movedPluginIds = [
-          ...new Set(
-            currentPluginElements
-              .filter((element) => selectedPluginIds.has(element.fullId))
-              .map((element) => element.pluginId),
-          ),
-        ];
         // 화살표 이동은 pointer 시작 경계가 없으므로 여기서 staging을 eager
         // 쓰기 앞에 세운다. 드래그는 Grid의 시작 경계가 이미 같은 id로 stage함
         if (syncToOverlay && movedPluginIds.length > 0) {
@@ -485,21 +457,12 @@ export function useGridSelection({
           rotatePluginInstancesEditSession(pluginId, gestureId);
         });
       }
-      const newElements = currentPluginElements.map((pluginEl) => {
-        const isSelected = pluginUpdates.some(
-          (sel) => sel.id === pluginEl.fullId,
-        );
-        if (isSelected) {
-          return {
-            ...pluginEl,
-            position: {
-              x: pluginEl.position.x + deltaX,
-              y: pluginEl.position.y + deltaY,
-            },
-          };
-        }
-        return pluginEl;
-      });
+      const newElements = moveSelectedPluginElements(
+        currentPluginElements,
+        pluginUpdateIds,
+        deltaX,
+        deltaY,
+      );
       // syncToOverlay가 false이면 오버레이 동기화 스킵 (드래그 중)
       usePluginDisplayElementStore
         .getState()
