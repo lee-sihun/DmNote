@@ -27,6 +27,7 @@ import { settingsApi } from '@api/modules/settingsApi';
 import { appApi, windowApi } from '@api/modules/appApi';
 import { useBuiltinStatsSubscription } from '@hooks/overlay/useBuiltinStatsSubscription';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { buildOrderedTabs, builtinTabLabelKey } from '@utils/tabOrder';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
@@ -170,6 +171,7 @@ export default function App() {
     (state) => state.keyCounterEnabled,
   );
   const customTabs = useKeyStore((state) => state.customTabs);
+  const tabOrder = useKeyStore((state) => state.tabOrder);
   const setSelectedKeyType = useKeyStore((state) => state.setSelectedKeyType);
   const resolveCanOpenMainSettings = async () => {
     if (!trayEnabled) {
@@ -188,12 +190,6 @@ export default function App() {
       return false;
     }
   };
-
-  // 탭 목록 (기본 탭 + 커스텀 탭)
-  const BUILTIN_TABS = ['4key', '5key', '6key', '8key'].map((id) => {
-    const num = id.replace('key', '');
-    return { id, name: t(`mode.button${num}`) };
-  });
 
   const closeOverlayWindow = async () => {
     try {
@@ -279,10 +275,11 @@ export default function App() {
   const contextMenuOpenRef = useRef(false);
   openOverlayContextMenuAtImpl.current = async (x: number, y: number) => {
     const canOpenMainSettings = await resolveCanOpenMainSettings();
-    const allTabs = [
-      ...BUILTIN_TABS,
-      ...customTabs.map((tab) => ({ id: tab.id, name: tab.name })),
-    ];
+    // 메인에서 정한 표시 순서를 그대로 따른다. 내장 뒤에 커스텀을 붙이면
+    // 사용자가 순서를 바꿔도 이 메뉴만 옛 순서로 남는다
+    const allTabs = buildOrderedTabs(tabOrder, customTabs, (id) =>
+      t(builtinTabLabelKey(id)),
+    );
 
     let menu: Menu | null = null;
     try {
