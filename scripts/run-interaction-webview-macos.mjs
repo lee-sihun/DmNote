@@ -146,6 +146,7 @@ await writeFile(
         windows: [
           {
             label: 'main',
+            create: false,
             title: 'DM Note WKWebView Benchmark',
             width: 902,
             height: 488,
