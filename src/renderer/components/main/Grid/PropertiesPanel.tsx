@@ -1,100 +1,33 @@
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-  useRef,
-  useSyncExternalStore,
-} from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePanelHost } from '@contexts/PanelHostContext';
-import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import {
-  selectPropertyPanelPluginElements,
-  usePluginDisplayElementStore,
-} from '@stores/plugin/usePluginDisplayElementStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
-import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import {
   getDefaultSettings,
-  normalizeSettingsSections,
   omitLayoutSettingValues,
   type SettingsNormalizationErrorKind,
 } from '@plugins/runtime/settingsSections';
 import { updatePluginElement } from '@plugins/runtime/displayElement/pluginElementActions';
-import type { NativeLayerBoundsTarget } from '@plugins/runtime/displayElement/pluginElementActions';
-import type { ImageFit, KeyPosition } from '@src/types/key/keys';
-import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
+import type { KeyPosition } from '@src/types/key/keys';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { BatchElementPropertyUpdate } from './PropertiesPanel/types';
 import type {
-  EditorFontStylePropertyPatchV1,
-  EditorFontFamilyPropertyPatchV1,
-  EditorGraphRuntimePropertyPatchV1,
-  EditorKnobRuntimePropertyPatchV1,
-  EditorNotePropertyPatchV1,
   EditorElementTypeV1,
-  EditorCounterAnimationPresetIntentV1,
-  EditorCounterLayoutPropertyPatchV1,
-  EditorCounterTypographyPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
-  EditorPreviewStylePropertyPatchV1,
-  EditorStylePropertyPreviewPatchV1,
-  EditorPaintPropertyPatchV1,
-  EditorShadowPropertyPatchV1,
-  EditorNotePaintPropertyPatchV1,
-  EditorElementPropertyPatchV1,
-  CanonicalKeyPosition,
-  CanonicalKnobItemPosition,
 } from '@src/types/editor';
-import type {
-  PluginSettingSchema,
-  PluginMessages,
-} from '@src/types/plugin/api';
 import { normalizeCounterSettings } from '@src/types/key/keys';
-import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { useLenis } from '@hooks/useLenis';
 import { usePluginGeometryGesture } from '@hooks/Grid/usePluginGeometryGesture';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
-import {
-  composePreviewPositions,
-  getPreviewOverlayVersion,
-  subscribePreviewOverlay,
-} from '@src/renderer/editor/runtime/previewOverlay';
 import {
   commitBatchGeometryByIds,
   patchElementLayerNameById,
   renameLayerGroupById,
-  commitElementGeometryById,
-  patchActiveImageById,
-  patchActiveImageFitById,
-  patchActiveTransparentById,
   patchFontFamilyByTargets,
-  patchStylePropertyById,
-  patchPaintById,
-  patchShadowById,
-  patchNotePaintById,
-  patchInactiveImageById,
-  patchIdleImageFitById,
-  patchIdleTransparentById,
-  patchSoundPathById,
-  patchSoundEnabledById,
-  patchSoundVolumeById,
-  patchCounterAnimationEnabledById,
-  patchCounterAnimationPresetById,
-  patchCounterEnabledById,
-  patchCounterLayoutById,
-  patchCounterTypographyById,
-  patchCounterFillById,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -102,29 +35,16 @@ import {
   patchKnobPropertiesByIds,
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
-  patchElementPropertyById,
 } from '@src/renderer/editor/runtime/elementOps';
-import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
-import type {
-  BatchGeometryDescriptor,
-  BatchGeometryTarget,
-} from '@src/renderer/editor/runtime/elementOps';
+import type { BatchGeometryDescriptor } from '@src/renderer/editor/runtime/elementOps';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
-import { captureEditorDocument } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { computeBatchGeometryPlan } from '@src/renderer/editor/runtime/batchGeometryPlan';
 import { commitMixedBatchGeometry } from '@src/renderer/editor/runtime/mixedBatchGeometry';
-import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
-import { resolveResizablePluginElementSize } from '@utils/plugin/pluginElementMeasurement';
 
 // 분리된 컴포넌트들 및 훅
 import {
   TABS,
-  PropertyRow,
-  PropertySection,
-  NumberInput,
-  ColorInput,
-  TextInput,
   LayerPanel,
   PluginSelectionPanel,
   SingleGraphPanel,
@@ -146,224 +66,25 @@ import { resolveSelectionPanelRoute } from './PropertiesPanel/selectionPanelRout
 import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
 import PanelHeaderActions from './PropertiesPanel/PanelHeaderActions';
 import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
-import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
-import { projectNotePaintPatch } from '@src/types/key/notePaint';
-import {
-  previewSingleGraphColor,
-  previewSinglePaint,
-  previewSingleStyleProperty,
-} from './PropertiesPanel/previewPatchForwarders';
+import { previewSingleGraphColor } from './PropertiesPanel/previewPatchForwarders';
 import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
-
-const getStatTypeLabel = (statType?: StatItemType | null): string => {
-  switch (statType) {
-    case 'kpsAvg':
-      return 'AVG';
-    case 'kpsMax':
-      return 'MAX';
-    case 'total':
-      return 'Total';
-    case 'kps':
-    default:
-      return 'KPS';
-  }
-};
-
-const geometryAxisPatch = (
-  field: GeometryField,
-  value: number,
-): NativeLayerBoundsTarget['patch'] => {
-  switch (field) {
-    case 'dx':
-      return { dx: value };
-    case 'dy':
-      return { dy: value };
-    case 'width':
-      return { width: value };
-    case 'height':
-      return { height: value };
-  }
-};
-
-const shouldNormalizePropertyTabToStyle = (
-  elements: Array<{ type: string }>,
-  activeTab: (typeof TABS)[keyof typeof TABS],
-): boolean => {
-  if (activeTab === TABS.STYLE) return false;
-  const hasKey = elements.some((element) => element.type === 'key');
-  const hasStat = elements.some((element) => element.type === 'stat');
-  const hasGraph = elements.some((element) => element.type === 'graph');
-
-  // 플러그인 혼합도 native 구성 기준으로 정규화 - stat+plugin에서 NOTE 탭이
-  // 남으면 배치 패널 본문이 비어 보인다
-  if (activeTab === TABS.NOTE && hasStat && !hasKey) {
-    return true;
-  }
-  return hasGraph && !hasKey && !hasStat;
-};
-
-// 서브 페이지 exit 전환 시간 — --ui-duration-page와 동기
-const PAGE_EXIT_MS = 250;
-
-const getGraphRuntimePropertyPatch = (
-  updates: Partial<GraphItemPosition>,
-): EditorGraphRuntimePropertyPatchV1 | null => {
-  const keys = Object.keys(updates);
-  if (keys.length !== 1) return null;
-  if (keys[0] === 'showAvgLine' && typeof updates.showAvgLine === 'boolean') {
-    return { property: 'showAvgLine', value: updates.showAvgLine };
-  }
-  if (
-    keys[0] === 'graphAnimationEnabled' &&
-    typeof updates.graphAnimationEnabled === 'boolean'
-  ) {
-    return {
-      property: 'graphAnimationEnabled',
-      value: updates.graphAnimationEnabled,
-    };
-  }
-  if (
-    keys[0] === 'graphSpeed' &&
-    Number.isSafeInteger(updates.graphSpeed) &&
-    (updates.graphSpeed as number) >= 0 &&
-    (updates.graphSpeed as number) <= 4_294_967_295
-  ) {
-    return { property: 'graphSpeed', value: updates.graphSpeed as number };
-  }
-  return null;
-};
-
-const getKnobRuntimePropertyPatch = (
-  updates: Partial<KnobItemPosition>,
-): EditorKnobRuntimePropertyPatchV1 | null => {
-  const keys = Object.keys(updates);
-  if (keys.length !== 1) return null;
-  if (keys[0] === 'reverse' && typeof updates.reverse === 'boolean') {
-    return { property: 'reverse', value: updates.reverse };
-  }
-  if (
-    keys[0] === 'sensitivity' &&
-    typeof updates.sensitivity === 'number' &&
-    Number.isFinite(updates.sensitivity)
-  ) {
-    return { property: 'sensitivity', value: updates.sensitivity };
-  }
-  return null;
-};
-
-const getUseInlineStylesPatch = (updates: object): boolean | null => {
-  const values = updates as Record<string, unknown>;
-  const keys = Object.keys(updates);
-  return keys.length === 1 &&
-    keys[0] === 'useInlineStyles' &&
-    typeof values.useInlineStyles === 'boolean'
-    ? values.useInlineStyles
-    : null;
-};
-
-const getFontStylePatch = (
-  updates: object,
-): EditorFontStylePropertyPatchV1 | null => {
-  const values = updates as Record<string, unknown>;
-  const keys = Object.keys(updates);
-  if (keys.length !== 1) return null;
-  if (
-    keys[0] === 'fontWeight' &&
-    Number.isSafeInteger(values.fontWeight) &&
-    (values.fontWeight as number) >= 0 &&
-    (values.fontWeight as number) <= 4_294_967_295
-  ) {
-    return { property: 'fontWeight', value: values.fontWeight as number };
-  }
-  if (keys[0] === 'fontBold' && typeof values.fontBold === 'boolean') {
-    return { property: 'fontBold', value: values.fontBold };
-  }
-  if (keys[0] === 'fontItalic' && typeof values.fontItalic === 'boolean') {
-    return { property: 'fontItalic', value: values.fontItalic };
-  }
-  if (
-    keys[0] === 'fontUnderline' &&
-    typeof values.fontUnderline === 'boolean'
-  ) {
-    return { property: 'fontUnderline', value: values.fontUnderline };
-  }
-  if (
-    keys[0] === 'fontStrikethrough' &&
-    typeof values.fontStrikethrough === 'boolean'
-  ) {
-    return { property: 'fontStrikethrough', value: values.fontStrikethrough };
-  }
-  return null;
-};
-
-const getFontFamilyPatch = (
-  updates: object,
-): EditorFontFamilyPropertyPatchV1 | null => {
-  const values = updates as Record<string, unknown>;
-  const keys = Object.keys(updates);
-  return keys.length === 1 &&
-    keys[0] === 'fontFamily' &&
-    typeof values.fontFamily === 'string'
-    ? { property: 'fontFamily', value: values.fontFamily }
-    : null;
-};
-
-const getNotePropertyPatch = (
-  updates: object,
-): EditorNotePropertyPatchV1 | null => {
-  const values = updates as Record<string, unknown>;
-  const keys = Object.keys(updates);
-  if (keys.length !== 1) return null;
-  if (
-    keys[0] === 'noteEffectEnabled' &&
-    typeof values.noteEffectEnabled === 'boolean'
-  ) {
-    return { property: 'noteEffectEnabled', value: values.noteEffectEnabled };
-  }
-  if (
-    keys[0] === 'noteAutoYCorrection' &&
-    typeof values.noteAutoYCorrection === 'boolean'
-  ) {
-    return {
-      property: 'noteAutoYCorrection',
-      value: values.noteAutoYCorrection,
-    };
-  }
-  if (
-    keys[0] === 'noteGlowEnabled' &&
-    typeof values.noteGlowEnabled === 'boolean'
-  ) {
-    return { property: 'noteGlowEnabled', value: values.noteGlowEnabled };
-  }
-  if (
-    keys[0] === 'noteGlowSyncPaint' &&
-    typeof values.noteGlowSyncPaint === 'boolean'
-  ) {
-    return { property: 'noteGlowSyncPaint', value: values.noteGlowSyncPaint };
-  }
-  if (
-    keys[0] === 'noteAlignment' &&
-    ['left', 'center', 'right'].includes(values.noteAlignment as string)
-  ) {
-    return {
-      property: 'noteAlignment',
-      value: values.noteAlignment as 'left' | 'center' | 'right',
-    };
-  }
-  if (
-    keys[0] === 'noteBorderSide' &&
-    ['all', 'vertical', 'horizontal'].includes(values.noteBorderSide as string)
-  ) {
-    return {
-      property: 'noteBorderSide',
-      value: values.noteBorderSide as 'all' | 'vertical' | 'horizontal',
-    };
-  }
-  return null;
-};
+import PluginSettingsForm from './PropertiesPanel/PluginSettingsForm';
+import { usePropertiesPanelSelection } from './PropertiesPanel/usePropertiesPanelSelection';
+import { usePanelNavigation } from './PropertiesPanel/usePanelNavigation';
+import { createBatchSelectionModel } from './PropertiesPanel/batchSelectionModel';
+import { singleSelectionHandlers } from './PropertiesPanel/singleSelectionHandlers';
+import {
+  getFontFamilyPatch,
+  getFontStylePatch,
+  getGraphRuntimePropertyPatch,
+  getKnobRuntimePropertyPatch,
+  getNotePropertyPatch,
+  getStatTypeLabel,
+  getUseInlineStylesPatch,
+  shouldNormalizePropertyTabToStyle,
+} from './PropertiesPanel/propertyPanelAdapters';
 
 // ============================================================================
 // 메인 컴포넌트 Props
@@ -391,46 +112,46 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const { t, i18n } = useTranslation();
   // 패널이 분리 창에 있으면 키·마우스 이벤트는 그 창의 document로 온다
   const { document: hostDocument } = usePanelHost();
-  const selectedElements = useGridSelectionStore(
-    (state) => state.selectedElements,
-  );
-  const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
-  const positions = useKeyStore((state) => state.positions);
-  const canonicalPositions = useKeyStore((state) => state.canonicalPositions);
-  const keyMappings = useKeyStore((state) => state.keyMappings);
-  const canonicalStatItemPositions = useStatItemStore(
-    (state) => state.positions,
-  );
-  const canonicalGraphItemPositions = useGraphItemStore(
-    (state) => state.positions,
-  );
-  const canonicalKnobItemPositions = useKnobItemStore(
-    (state) => state.positions,
-  );
-  useSyncExternalStore(
-    subscribePreviewOverlay,
-    getPreviewOverlayVersion,
-    getPreviewOverlayVersion,
-  );
-  const statItemPositions = composePreviewPositions(
-    'statPosition',
-    canonicalStatItemPositions,
-  );
-  const graphItemPositions = composePreviewPositions(
-    'graphPosition',
-    canonicalGraphItemPositions,
-  );
-  const knobItemPositions = composePreviewPositions(
-    'knobPosition',
-    canonicalKnobItemPositions,
-  );
+  const {
+    selectedElements,
+    selectedKeyType,
+    positions,
+    canonicalPositions,
+    keyMappings,
+    statItemPositions,
+    graphItemPositions,
+    knobItemPositions,
+    selectedKeyElements,
+    selectedStatElements,
+    selectedGraphElements,
+    selectedKnobElements,
+    selectedKeyLikeElements,
+    selectedBatchStyleElements,
+    selectedPluginElements,
+    selectedPluginElement,
+    stableBatchGeometryTargets,
+    stablePluginGeometryElements,
+    stablePluginGeometryTargets,
+    selectedPluginDefinition,
+    hasSinglePluginSelection,
+    showModalHint,
+    showSettings,
+    isPluginResizable,
+    pluginDisplaySize,
+    singleKeyIndex,
+    singleKeyPosition,
+    singleCanonicalKeyPosition,
+    singleKeySlot,
+    singleKeyCode,
+    singleKeyInfo,
+    singleStatIndex,
+    singleStatPosition,
+    singleGraphIndex,
+    singleGraphPosition,
+    singleKnobPosition,
+    selectedGroupInfo,
+  } = usePropertiesPanelSelection();
   const { useCustomCSS } = useSettingsStore();
-  const pluginElements = usePluginDisplayElementStore(
-    selectPropertyPanelPluginElements,
-  );
-  const pluginDefinitions = usePluginDisplayElementStore(
-    (state) => state.definitions,
-  );
   const pluginSettingsPanel = usePropertiesPanelStore(
     (state) => state.pluginSettingsPanel,
   );
@@ -450,247 +171,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     (state) => state.canvasPanelToggleSignal,
   );
   const locale = i18n.language;
-
-  // 선택된 키 요소 필터링
-  const selectedKeyElements = selectedElements.filter(
-    (el) => el.type === 'key',
-  );
-  const selectedStatElements = selectedElements.filter(
-    (el) => el.type === 'stat',
-  );
-  const selectedGraphElements = selectedElements.filter(
-    (el) => el.type === 'graph',
-  );
-  const selectedKnobElements = selectedElements.filter(
-    (el) => el.type === 'knob',
-  );
-  const selectedKeyLikeElements = selectedElements.filter(
-    (el) => el.type === 'key' || el.type === 'stat',
-  );
-  const selectedBatchStyleElements = selectedElements.filter(
-    (el) =>
-      el.type === 'key' ||
-      el.type === 'stat' ||
-      el.type === 'graph' ||
-      el.type === 'knob',
-  );
-  const selectedPluginElements = selectedElements.filter(
-    (el) => el.type === 'plugin',
-  );
-
-  const selectedPluginElement = (() => {
-    if (selectedPluginElements.length !== 1) return null;
-    return (
-      pluginElements.find((el) => el.fullId === selectedPluginElements[0].id) ||
-      null
-    );
-  })();
-  // plugin 단독 배치는 native 대상 0개(빈 배열)로 성립 - invalid ID가
-  // 하나라도 섞이면 null (fail-closed)
-  const stableBatchGeometryTargets: BatchGeometryTarget[] | null =
-    selectedBatchStyleElements.every(
-      (element) => element.id.length > 0 && isNativeElementId(element.id),
-    )
-      ? selectedBatchStyleElements.map((element) => ({
-          type: element.type as EditorElementTypeV1,
-          id: element.id,
-        }))
-      : null;
-  // 혼합 선택의 plugin 기하 대상 bounds - 소실·모드 이탈이 하나라도 있으면
-  // null (fail-closed). 크기는 캔버스 렌더와 동일한 measured/estimated 폴백
-  const stablePluginGeometryElements = (() => {
-    const resolved: Array<{
-      fullId: string;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    }> = [];
-    for (const selected of selectedPluginElements) {
-      const element = pluginElements.find(
-        (candidate) => candidate.fullId === selected.id,
-      );
-      if (!element || !isPluginVisibleInMode(element, selectedKeyType)) {
-        return null;
-      }
-      const size = resolveResizablePluginElementSize(element);
-      resolved.push({
-        fullId: element.fullId,
-        x: element.position.x,
-        y: element.position.y,
-        width: size.width,
-        height: size.height,
-      });
-    }
-    return resolved;
-  })();
-  const stablePluginGeometryTargets: string[] | null =
-    stablePluginGeometryElements?.map((element) => element.fullId) ?? null;
-
-  const selectedPluginDefinition = selectedPluginElement?.definitionId
-    ? pluginDefinitions.get(selectedPluginElement.definitionId) ?? null
-    : null;
-
-  const pluginSettingsUI = selectedPluginDefinition?.settingsUI ?? 'panel';
-  const hasSinglePluginSelection =
-    selectedPluginElements.length === 1 && !!selectedPluginElement;
-  const showModalHint =
-    hasSinglePluginSelection && pluginSettingsUI === 'modal';
-  const showSettings = hasSinglePluginSelection && pluginSettingsUI !== 'modal';
-  const isPluginResizable =
-    hasSinglePluginSelection && !!selectedPluginDefinition?.resizable;
-
-  const pluginDisplaySize = (() => {
-    const measured = selectedPluginElement?.measuredSize;
-    const estimated = selectedPluginElement?.estimatedSize;
-    return {
-      width: measured?.width ?? estimated?.width ?? 200,
-      height: measured?.height ?? estimated?.height ?? 150,
-    };
-  })();
-
-  // 단일 키 선택인 경우의 데이터
-  const singleKeyId =
-    selectedKeyElements.length === 1 ? selectedKeyElements[0].id : null;
-  const singleKeyIndex = singleKeyId
-    ? (positions[selectedKeyType] ?? []).findIndex(
-        (position) => position.id === singleKeyId,
-      )
-    : -1;
-  const singleKeyPosition =
-    singleKeyIndex >= 0 ? positions[selectedKeyType]?.[singleKeyIndex] : null;
-  const singleCanonicalKeyPosition = singleKeyId
-    ? (canonicalPositions[selectedKeyType] ?? []).find(
-        (position) => position.id === singleKeyId,
-      ) ?? null
-    : null;
-  const singleKeySlot =
-    singleKeyIndex >= 0
-      ? keyMappings[selectedKeyType]?.[singleKeyIndex] ?? null
-      : null;
-  const singleKeyCode =
-    singleKeySlot != null ? slotCanonical(singleKeySlot) : null;
-  const singleKeyInfo =
-    singleKeySlot != null && singleKeyCode
-      ? typeof singleKeySlot === 'string'
-        ? getKeyInfoByGlobalKey(singleKeySlot)
-        : {
-            browserKey: singleKeyCode,
-            globalKey: singleKeyCode,
-            displayName: slotDisplayName(singleKeySlot),
-          }
-      : null;
-
-  // 단일 통계 요소 선택인 경우의 데이터
-  const singleStatId =
-    selectedStatElements.length === 1 ? selectedStatElements[0].id : null;
-  const singleStatIndex = singleStatId
-    ? (statItemPositions[selectedKeyType] ?? []).findIndex(
-        (position) => position.id === singleStatId,
-      )
-    : -1;
-  const singleStatPosition: StatItemPosition | null =
-    singleStatIndex >= 0
-      ? statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null
-      : null;
-  const singleGraphId =
-    selectedGraphElements.length === 1 ? selectedGraphElements[0].id : null;
-  const singleGraphIndex = singleGraphId
-    ? (graphItemPositions[selectedKeyType] ?? []).findIndex(
-        (position) => position.id === singleGraphId,
-      )
-    : -1;
-  const singleGraphPosition: GraphItemPosition | null =
-    singleGraphIndex >= 0
-      ? graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null
-      : null;
-  const singleKnobId =
-    selectedKnobElements.length === 1 ? selectedKnobElements[0].id : null;
-  const singleKnobIndex = singleKnobId
-    ? (knobItemPositions[selectedKeyType] ?? []).findIndex(
-        (position) => position.id === singleKnobId,
-      )
-    : -1;
-  const singleKnobPosition: KnobItemPosition | null =
-    singleKnobIndex >= 0
-      ? knobItemPositions[selectedKeyType]?.[singleKnobIndex] ?? null
-      : null;
-  const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
-  const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
-  const selectedGroupInfo = (() => {
-    if (selectedElements.length < 2) {
-      return null;
-    }
-
-    const keyModePositions = positions[selectedKeyType] || [];
-    const statModePositions = statItemPositions[selectedKeyType] || [];
-    const graphModePositions = graphItemPositions[selectedKeyType] || [];
-    const knobModePositions = knobItemPositions[selectedKeyType] || [];
-    // 플러그인 소속은 현재 모드에 def가 있는 groupId만 유효 (레이어 패널과
-    // 동일 규칙)
-    const modeGroupIds = new Set(layerGroupsForMode.map((group) => group.id));
-
-    let groupId: string | undefined;
-
-    for (const element of selectedElements) {
-      let currentGroupId: string | undefined;
-      if (element.type === 'key') {
-        currentGroupId = keyModePositions.find(
-          (position) => position.id === element.id,
-        )?.groupId;
-      } else if (element.type === 'stat') {
-        currentGroupId = statModePositions.find(
-          (position) => position.id === element.id,
-        )?.groupId;
-      } else if (element.type === 'graph') {
-        currentGroupId = graphModePositions.find(
-          (position) => position.id === element.id,
-        )?.groupId;
-      } else if (element.type === 'knob') {
-        currentGroupId = knobModePositions.find(
-          (position) => position.id === element.id,
-        )?.groupId;
-      } else if (element.type === 'plugin') {
-        const pluginGroupId = pluginElements.find(
-          (candidate) => candidate.fullId === element.id,
-        )?.groupId;
-        currentGroupId =
-          pluginGroupId && modeGroupIds.has(pluginGroupId)
-            ? pluginGroupId
-            : undefined;
-      } else {
-        return null;
-      }
-
-      if (!currentGroupId) return null;
-      if (!groupId) {
-        groupId = currentGroupId;
-      } else if (groupId !== currentGroupId) {
-        return null;
-      }
-    }
-
-    if (!groupId) return null;
-
-    const totalMembers =
-      keyModePositions.filter((pos) => pos?.groupId === groupId).length +
-      statModePositions.filter((pos) => pos?.groupId === groupId).length +
-      graphModePositions.filter((pos) => pos?.groupId === groupId).length +
-      knobModePositions.filter((pos) => pos?.groupId === groupId).length +
-      pluginElements.filter(
-        (el) =>
-          isPluginVisibleInMode(el, selectedKeyType) && el.groupId === groupId,
-      ).length;
-
-    if (totalMembers < 2 || totalMembers !== selectedElements.length) {
-      return null;
-    }
-
-    const groupDef = layerGroupsForMode.find((group) => group.id === groupId);
-    if (!groupDef) return null;
-
-    return { id: groupDef.id, name: groupDef.name, memberCount: totalMembers };
-  })();
 
   // 로컬 상태 (실시간 편집용)
   const [localState, setLocalState] = useState<
@@ -773,49 +253,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     (state) => state.setPropertyPanelActiveTab,
   );
 
-  // 인-패널 내비게이션 — 피커 서브 페이지 (키는 트리거 사이트별 유니크)
-  // activePageKey는 애니메이션 상태, renderPageKey는 마운트 상태 —
-  // exit 전환이 끝날 때까지 콘텐츠를 유지해 빈 페이지 슬라이드 방지
-  const [activePageKey, setActivePageKey] = useState<string | null>(null);
-  const [renderPageKey, setRenderPageKey] = useState<string | null>(null);
-  const [pageHost, setPageHost] = useState<HTMLDivElement | null>(null);
-  const pageExitTimerRef = useRef<number | null>(null);
-
-  const openPage = useCallback((key: string) => {
-    if (pageExitTimerRef.current !== null) {
-      window.clearTimeout(pageExitTimerRef.current);
-      pageExitTimerRef.current = null;
-    }
-    setActivePageKey(key);
-    setRenderPageKey(key);
-  }, []);
-
-  const closePage = useCallback(() => {
-    setActivePageKey(null);
-    if (pageExitTimerRef.current !== null) {
-      window.clearTimeout(pageExitTimerRef.current);
-    }
-    pageExitTimerRef.current = window.setTimeout(() => {
-      pageExitTimerRef.current = null;
-      setRenderPageKey(null);
-    }, PAGE_EXIT_MS);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (pageExitTimerRef.current !== null) {
-        window.clearTimeout(pageExitTimerRef.current);
-      }
-    };
-  }, []);
-
-  // 탭/모드/패널 표시 전환 시 서브 페이지 닫기
-  useEffect(() => {
-    closePage();
-  }, [activeTab, panelMode, isPanelVisible, selectedKeyType, closePage]);
-
-  // 패널 본문 종류(단일/배치/플러그인 등)가 바뀌면 트리거 사이트가 함께
-  // 사라지므로 서브 페이지 무효화 — 선택 이펙트의 early return 경로 보완
+  const handlePluginSettingsPanelCancelImpl = useRef<() => void>(() => {});
   const panelScopeKey = [
     pluginSettingsPanel ? 'plugin-settings' : 'grid',
     selectedKeyElements.length,
@@ -824,78 +262,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedGraphElements.length,
     selectedKnobElements.length,
   ].join('|');
-  useEffect(() => {
-    closePage();
-  }, [panelScopeKey, closePage]);
-
-  // Escape로 서브 페이지 닫기 — 입력 필드 편집·상위 레이어와 경합 방지
-  useEffect(() => {
-    if (!activePageKey) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (isHistoryEditorFlushLocked()) return;
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      const target = event.target;
-      if (
-        isHTMLElementNode(target) &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      // 모달·포털 메뉴 등 상위 레이어가 열려 있으면 그쪽이 Escape를 소유
-      // 모달은 메인 문서에, 팝업 레이어는 패널이 있는 문서에 뜬다 - 둘 다 본다
-      if (
-        document.querySelector(
-          '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
-        ) ||
-        (hostDocument !== document &&
-          hostDocument.querySelector('[data-dmn-popup-layer="true"]'))
-      ) {
-        return;
-      }
-      // 이 레이어가 소비 — 그리드의 선택 해제까지 내려가지 않게
-      event.preventDefault();
-      event.stopPropagation();
-      closePage();
-    };
-    hostDocument.addEventListener('keydown', onKey, true);
-    return () => hostDocument.removeEventListener('keydown', onKey, true);
-  }, [activePageKey, closePage, hostDocument]);
-
-  // Escape로 플러그인 설정 세션 취소 - 서브 페이지·모달이 없을 때만
-  useEffect(() => {
-    if (!pluginSettingsPanel || activePageKey) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (isHistoryEditorFlushLocked()) return;
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      const target = event.target;
-      if (
-        isHTMLElementNode(target) &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      // 모달은 메인 문서에, 팝업 레이어는 패널이 있는 문서에 뜬다 - 둘 다 본다
-      if (
-        document.querySelector(
-          '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
-        ) ||
-        (hostDocument !== document &&
-          hostDocument.querySelector('[data-dmn-popup-layer="true"]'))
-      ) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      handlePluginSettingsPanelCancelImpl.current();
-    };
-    hostDocument.addEventListener('keydown', onKey, true);
-    return () => hostDocument.removeEventListener('keydown', onKey, true);
-  }, [pluginSettingsPanel, activePageKey, hostDocument]);
-
+  const {
+    activePageKey,
+    renderPageKey,
+    pageHost,
+    setPageHost,
+    openPage,
+    closePage,
+  } = usePanelNavigation({
+    hostDocument,
+    activeTab,
+    panelMode,
+    isPanelVisible,
+    selectedKeyType,
+    panelScopeKey,
+    hasPluginSettingsPanel: !!pluginSettingsPanel,
+    pluginSettingsCancelRef: handlePluginSettingsPanelCancelImpl,
+  });
   // 이전 렌더의 effect가 최신 탭을 덮지 않도록 커밋 직전 재확인
   useEffect(() => {
     const latestTab = usePropertiesPanelStore.getState().propertyPanelActiveTab;
@@ -1353,7 +736,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
-  const handlePluginSettingsPanelCancelImpl = useRef<() => void>(() => {});
   handlePluginSettingsPanelCancelImpl.current = () => {
     if (!pluginSettingsPanel || pluginSettingsSavingRef.current) return;
     try {
@@ -1382,688 +764,62 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleTogglePanel();
   });
 
-  const commitSingleGeometry = (
-    type: EditorElementTypeV1,
-    id: string,
-    field: GeometryField,
-    value: number,
-  ) => {
-    const patch = geometryAxisPatch(field, value);
-    // 네 종류 모두 숫자 입력이 preview 게스처를 열므로 커밋이 그 게스처를 정산한다
-    const gestureId = editGestureController.activeGestureId() ?? undefined;
-    const persisted = commitElementGeometryById(type, id, patch, { gestureId });
-    editGestureController.settleCommit(persisted);
-    void persisted.catch((error) => {
-      console.error('Failed to update element geometry', error);
-    });
-  };
-
-  const stableGeometryHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (field: GeometryField, value: number) =>
-          commitSingleGeometry(type, id, field, value)
-      : undefined;
-
-  const stableGeometryPreviewHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (field: GeometryField, value: number) => {
-          const locator = resolveElementById(type, id);
-          if (!locator) return;
-          editGestureController.preview(
-            locator.mode,
-            [
-              {
-                id,
-                patch: geometryAxisPatch(field, value),
-              },
-            ],
-            {
-              domain:
-                type === 'key'
-                  ? 'keyPosition'
-                  : type === 'stat'
-                  ? 'statPosition'
-                  : type === 'graph'
-                  ? 'graphPosition'
-                  : 'knobPosition',
-            },
-          );
-        }
-      : undefined;
-
-  const stableElementPropertyCommitHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (
-          patch: EditorElementPropertyPatchV1,
-          options?: { gestureId?: string },
-        ) => {
-          // 분리 창도 즉시 반영을 거친다 - RPC 왕복 전에 값이 되돌아가는 깜빡임 방지
-          // 그래프 색과 키 이미지 변환은 preview 게스처를 정산하고,
-          // 그 외는 호출부가 준 gestureId만 공유
-          const settlesGesture =
-            (type === 'graph' && patch.property === 'graphColor') ||
-            (type === 'key' &&
-              (patch.property === 'idleImageTransform' ||
-                patch.property === 'activeImageTransform'));
-          const gestureId =
-            options?.gestureId ??
-            (settlesGesture
-              ? editGestureController.activeGestureId() ?? undefined
-              : undefined);
-          const persisted = patchElementPropertyById(
-            type,
-            id,
-            patch,
-            gestureId ? { gestureId } : {},
-          );
-          if (settlesGesture) {
-            editGestureController.settleCommit(persisted);
-          }
-          void persisted.catch((error) => {
-            console.error('Failed to update element property', error);
-          });
-        }
-      : undefined;
-
-  const stableInactiveImageHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (inactiveImage: string) => {
-          const persisted = patchInactiveImageById(type, id, inactiveImage);
-          void persisted.catch((error) => {
-            console.error('Failed to update inactive image', error);
-          });
-        }
-      : undefined;
-
-  const stableActiveImageHandler = (
-    type: 'key' | 'knob',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (activeImage: string) => {
-          const persisted = patchActiveImageById(type, id, activeImage);
-          void persisted.catch((error) => {
-            console.error('Failed to update active image', error);
-          });
-        }
-      : undefined;
-
-  const stableIdleTransparentHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (idleTransparent: boolean) => {
-          const persisted = patchIdleTransparentById(type, id, idleTransparent);
-          void persisted.catch((error) => {
-            console.error('Failed to update idle transparency', error);
-          });
-        }
-      : undefined;
-
-  const stableActiveTransparentHandler = (
-    type: 'key' | 'knob',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (activeTransparent: boolean) => {
-          const persisted = patchActiveTransparentById(
-            type,
-            id,
-            activeTransparent,
-          );
-          void persisted.catch((error) => {
-            console.error('Failed to update active transparency', error);
-          });
-        }
-      : undefined;
-
-  const stableIdleImageFitHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (idleImageFit: ImageFit) => {
-          const persisted = patchIdleImageFitById(type, id, idleImageFit);
-          void persisted.catch((error) => {
-            console.error('Failed to update idle image fit', error);
-          });
-        }
-      : undefined;
-
-  const stableActiveImageFitHandler = (
-    type: 'key' | 'knob',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (activeImageFit: ImageFit) => {
-          const persisted = patchActiveImageFitById(type, id, activeImageFit);
-          void persisted.catch((error) => {
-            console.error('Failed to update active image fit', error);
-          });
-        }
-      : undefined;
-
-  const stableSoundPathHandler = (id: string | undefined) =>
-    id && isNativeElementId(id)
-      ? (soundPath: string) => {
-          const persisted = patchSoundPathById(id, soundPath);
-          void persisted.catch((error) => {
-            console.error('Failed to update sound path', error);
-          });
-        }
-      : undefined;
-
-  const stableSoundEnabledHandler = (id: string | undefined) =>
-    id && isNativeElementId(id)
-      ? (soundEnabled: boolean) => {
-          const persisted = patchSoundEnabledById(id, soundEnabled);
-          void persisted.catch((error) => {
-            console.error('Failed to update sound enabled', error);
-          });
-        }
-      : undefined;
-
-  const stableSoundVolumeHandler = (id: string | undefined) =>
-    id && isNativeElementId(id)
-      ? (soundVolume: number) => {
-          const gestureId =
-            editGestureController.activeGestureId() ?? undefined;
-          const persisted = patchSoundVolumeById(id, soundVolume, {
-            gestureId,
-          });
-          editGestureController.settleCommit(persisted);
-          void persisted.catch((error) => {
-            console.error('Failed to update sound volume', error);
-          });
-        }
-      : undefined;
-
-  const stableStylePropertyPreviewHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorStylePropertyPreviewPatchV1) =>
-          previewSingleStyleProperty(type, id, patch)
-      : undefined;
-
-  const stableStylePropertyCommitHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-    options: { settleGesture?: boolean } = {},
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorPreviewStylePropertyPatchV1) => {
-          const gestureId = options.settleGesture
-            ? editGestureController.activeGestureId() ?? undefined
-            : undefined;
-          const persisted = patchStylePropertyById(type, id, patch, {
-            gestureId,
-          });
-          if (options.settleGesture) {
-            editGestureController.settleCommit(persisted);
-          }
-          void persisted.catch((error) => {
-            console.error('Failed to update style property', error);
-          });
-        }
-      : undefined;
-
-  const stablePaintCommitHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorPaintPropertyPatchV1) => {
-          const gestureId =
-            editGestureController.activeGestureId() ?? undefined;
-          const persisted = patchPaintById(type, id, patch, { gestureId });
-          editGestureController.settleCommit(persisted);
-          void persisted.catch((error) => {
-            console.error('Failed to update paint', error);
-          });
-        }
-      : undefined;
-
-  const stablePaintPreviewHandler = (
-    type: EditorElementTypeV1,
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorPaintPropertyPatchV1) =>
-          previewSinglePaint(type, id, patch)
-      : undefined;
-
-  const stableShadowCommitHandler = (
-    type: 'key' | 'stat' | 'knob',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorShadowPropertyPatchV1) => {
-          // 스크럽·타이핑 preview 게스처를 이 커밋으로 정산 - 실패 시 lifecycle까지 폐기되게 id 동반
-          const gestureId =
-            editGestureController.activeGestureId() ?? undefined;
-          const persisted = patchShadowById(type, id, patch, { gestureId });
-          editGestureController.settleCommit(persisted);
-          void persisted.catch((error) => {
-            console.error('Failed to update shadow', error);
-          });
-        }
-      : undefined;
-
-  const stableNotePaintCommitHandler = (id: string | undefined) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorNotePaintPropertyPatchV1) => {
-          const gestureId =
-            editGestureController.activeGestureId() ?? undefined;
-          const persisted = patchNotePaintById(id, patch, { gestureId });
-          editGestureController.settleCommit(persisted);
-          void persisted
-            .then((applied) => {
-              // 가드 거부(false)는 rejection이 아니라서 별도 로그가 없으면 무음
-              if (!applied) {
-                reportElementOpSkipped('single note paint');
-              }
-            })
-            .catch((error) => {
-              console.error('Failed to update note paint', error);
-            });
-        }
-      : undefined;
-
-  const stableNotePaintPreviewHandler = (id: string | undefined) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorNotePaintPropertyPatchV1) => {
-          const locator = resolveElementById('key', id);
-          if (!locator) return;
-          // canonical 전달 - 동기화 켜진 키의 글로우 미러가 낙관 적용과 같은 규칙
-          const current =
-            captureEditorDocument().keyPositions[locator.mode]?.[locator.index];
-          editGestureController.preview(
-            locator.mode,
-            [
-              {
-                id,
-                patch: projectNotePaintPatch(
-                  patch,
-                  current?.id === id ? current : undefined,
-                ),
-              },
-            ],
-            { domain: 'keyPosition' },
-          );
-        }
-      : undefined;
-
-  const stableCounterAnimationPresetHandler = (
-    elementType: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (intent: EditorCounterAnimationPresetIntentV1) => {
-          const persisted = patchCounterAnimationPresetById(
-            elementType,
-            id,
-            intent,
-          );
-          void persisted.catch((error) => {
-            console.error('Failed to update counter animation preset', error);
-          });
-        }
-      : undefined;
-
-  const stableCounterEnabledHandler = (
-    elementType: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (enabled: boolean) => {
-          // 분리 창도 즉시 반영을 거친다 - 배치 경로와 같은 래퍼를 대상 하나로 재사용
-          const persisted = patchCounterEnabledById(elementType, id, enabled);
-          void persisted.catch((error) => {
-            console.error('Failed to update counter enabled', error);
-          });
-        }
-      : undefined;
-
-  const stableCounterAnimationEnabledHandler = (
-    elementType: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (enabled: boolean) => {
-          const persisted = patchCounterAnimationEnabledById(
-            elementType,
-            id,
-            enabled,
-          );
-          void persisted.catch((error) => {
-            console.error('Failed to update counter animation enabled', error);
-          });
-        }
-      : undefined;
-
-  const stableCounterLayoutHandler = (
-    elementType: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorCounterLayoutPropertyPatchV1) => {
-          const persisted = patchCounterLayoutById(elementType, id, patch);
-          void persisted.catch((error) => {
-            console.error('Failed to update counter layout', error);
-          });
-        }
-      : undefined;
-
-  const stableCounterTypographyHandler = (
-    elementType: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (
-          patch: EditorCounterTypographyPropertyPatchV1,
-          options?: { gestureId?: string },
-        ) => {
-          const persisted = options?.gestureId
-            ? patchCounterTypographyById(elementType, id, patch, {
-                gestureId: options.gestureId,
-              })
-            : patchCounterTypographyById(elementType, id, patch);
-          void persisted.catch((error) => {
-            console.error('Failed to update counter typography', error);
-          });
-        }
-      : undefined;
-
-  const stableCounterFillHandler = (
-    elementType: 'key' | 'stat',
-    id: string | undefined,
-  ) =>
-    id && isNativeElementId(id)
-      ? (patch: EditorCounterFillPropertyPatchV1) => {
-          const persisted = patchCounterFillById(elementType, id, patch);
-          void persisted.catch((error) => {
-            console.error('Failed to update counter fill', error);
-          });
-        }
-      : undefined;
-
-  // ============================================================================
-  // 다중 선택 헬퍼 함수들
-  // ============================================================================
-
-  const getSelectedKeysData = () => {
-    return selectedKeyLikeElements
-      .map((el) => {
-        if (el.type === 'key') {
-          const index = (positions[selectedKeyType] ?? []).findIndex(
-            (position) => position.id === el.id,
-          );
-          if (index < 0) return null;
-          const position = positions[selectedKeyType]?.[index];
-          const slot = keyMappings[selectedKeyType]?.[index] ?? null;
-          const keyCode = slot != null ? slotCanonical(slot) : null;
-          const keyInfo =
-            slot != null && keyCode
-              ? typeof slot === 'string'
-                ? getKeyInfoByGlobalKey(slot)
-                : {
-                    browserKey: keyCode,
-                    globalKey: keyCode,
-                    displayName: slotDisplayName(slot),
-                  }
-              : null;
-          return { index, position, keyCode, keyInfo };
-        }
-        const index = (statItemPositions[selectedKeyType] ?? []).findIndex(
-          (position) => position.id === el.id,
-        );
-        if (index < 0) return null;
-        const position = statItemPositions[selectedKeyType]?.[index];
-        const statLabel =
-          (position?.displayText || '').trim() ||
-          getStatTypeLabel(position?.statType ?? null);
-        const keyInfo = { globalKey: statLabel, displayName: statLabel };
-        return { index, position, keyCode: null, keyInfo };
-      })
-      .filter(
-        (data): data is NonNullable<typeof data> =>
-          data !== null && data.position !== undefined,
-      );
-  };
-
-  const getSelectedGraphsData = () => {
-    return selectedGraphElements
-      .map((el) => {
-        const index = (graphItemPositions[selectedKeyType] ?? []).findIndex(
-          (position) => position.id === el.id,
-        );
-        if (index < 0) return null;
-        const position = graphItemPositions[selectedKeyType]?.[index];
-        const graphLabel = `${getStatTypeLabel(
-          position?.statType ?? null,
-        )} Graph`;
-        const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
-        return { index, position, keyCode: null, keyInfo };
-      })
-      .filter(
-        (data): data is NonNullable<typeof data> =>
-          data !== null && data.position !== undefined,
-      );
-  };
-
-  const getSelectedKnobsData = () => {
-    return selectedKnobElements
-      .map((el) => {
-        const index = (knobItemPositions[selectedKeyType] ?? []).findIndex(
-          (position) => position.id === el.id,
-        );
-        if (index < 0) return null;
-        const position = knobItemPositions[selectedKeyType]?.[index];
-        const knobLabel = (position?.displayText || '').trim() || 'Knob';
-        const keyInfo = { globalKey: knobLabel, displayName: knobLabel };
-        return { index, position, keyCode: null, keyInfo };
-      })
-      .filter(
-        (data): data is NonNullable<typeof data> =>
-          data !== null && data.position !== undefined,
-      );
-  };
-
-  const getSelectedBatchStyleData = () => {
-    return selectedBatchStyleElements
-      .map((el) => {
-        if (el.type === 'key') {
-          const index = (positions[selectedKeyType] ?? []).findIndex(
-            (position) => position.id === el.id,
-          );
-          if (index < 0) return null;
-          const position = positions[selectedKeyType]?.[index];
-          const slot = keyMappings[selectedKeyType]?.[index] ?? null;
-          const keyCode = slot != null ? slotCanonical(slot) : null;
-          const keyInfo =
-            slot != null && keyCode
-              ? typeof slot === 'string'
-                ? getKeyInfoByGlobalKey(slot)
-                : {
-                    browserKey: keyCode,
-                    globalKey: keyCode,
-                    displayName: slotDisplayName(slot),
-                  }
-              : null;
-          return { index, position, keyCode, keyInfo };
-        }
-        if (el.type === 'stat') {
-          const index = (statItemPositions[selectedKeyType] ?? []).findIndex(
-            (position) => position.id === el.id,
-          );
-          if (index < 0) return null;
-          const position = statItemPositions[selectedKeyType]?.[index];
-          const statLabel =
-            (position?.displayText || '').trim() ||
-            getStatTypeLabel(position?.statType ?? null);
-          const keyInfo = { globalKey: statLabel, displayName: statLabel };
-          return { index, position, keyCode: null, keyInfo };
-        }
-        if (el.type === 'knob') {
-          const index = (knobItemPositions[selectedKeyType] ?? []).findIndex(
-            (position) => position.id === el.id,
-          );
-          if (index < 0) return null;
-          const position = knobItemPositions[selectedKeyType]?.[index];
-          const knobLabel = (position?.displayText || '').trim() || 'Knob';
-          const keyInfo = { globalKey: knobLabel, displayName: knobLabel };
-          return { index, position, keyCode: null, keyInfo };
-        }
-        const index = (graphItemPositions[selectedKeyType] ?? []).findIndex(
-          (position) => position.id === el.id,
-        );
-        if (index < 0) return null;
-        const position = graphItemPositions[selectedKeyType]?.[index];
-        const graphLabel = `${getStatTypeLabel(
-          position?.statType ?? null,
-        )} Graph`;
-        const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
-        return { index, position, keyCode: null, keyInfo };
-      })
-      .filter(
-        (data): data is NonNullable<typeof data> =>
-          data !== null && data.position !== undefined,
-      );
-  };
-
-  const getMixedValue = <T,>(
-    getter: (pos: KeyPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    const keysData = getSelectedKeysData();
-    if (keysData.length === 0) return { isMixed: false, value: defaultValue };
-
-    const firstValue = getter(keysData[0].position!) ?? defaultValue;
-    const isMixed = keysData.some((data) => {
-      const val = getter(data.position!) ?? defaultValue;
-      if (typeof val === 'object' && typeof firstValue === 'object') {
-        return JSON.stringify(val) !== JSON.stringify(firstValue);
-      }
-      return val !== firstValue;
-    });
-
-    return { isMixed, value: firstValue };
-  };
-
-  // 게스처를 취소한 직후 로컬 대표값을 되돌릴 때 쓴다. positions는 프리뷰가 합성된
-  // 렌더 상태라 취소 직전 클로저로는 되돌아간 값을 읽을 수 없다
-  const getMixedValueCanonical = <T,>(
-    getter: (pos: KeyPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    const modePositions = canonicalPositions[selectedKeyType] ?? [];
-    const selected = selectedKeyLikeElements.flatMap((el) =>
-      el.type === 'key'
-        ? modePositions.filter((position) => position.id === el.id)
-        : [],
-    );
-    if (selected.length === 0) return { isMixed: false, value: defaultValue };
-
-    const firstValue = getter(selected[0]) ?? defaultValue;
-    const isMixed = selected.some((position) => {
-      const val = getter(position) ?? defaultValue;
-      if (typeof val === 'object' && typeof firstValue === 'object') {
-        return JSON.stringify(val) !== JSON.stringify(firstValue);
-      }
-      return val !== firstValue;
-    });
-
-    return { isMixed, value: firstValue };
-  };
-
-  const getMixedValueGraphs = <T,>(
-    getter: (pos: GraphItemPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    const graphsData = getSelectedGraphsData();
-    if (graphsData.length === 0) return { isMixed: false, value: defaultValue };
-
-    const firstValue = getter(graphsData[0].position!) ?? defaultValue;
-    const isMixed = graphsData.some((data) => {
-      const val = getter(data.position!) ?? defaultValue;
-      if (typeof val === 'object' && typeof firstValue === 'object') {
-        return JSON.stringify(val) !== JSON.stringify(firstValue);
-      }
-      return val !== firstValue;
-    });
-
-    return { isMixed, value: firstValue };
-  };
-
-  const getMixedValueGraphsAsKey = <T,>(
-    getter: (pos: KeyPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    return getMixedValueGraphs((pos) => getter(pos), defaultValue);
-  };
-
-  const getMixedValueKnobs = <T,>(
-    getter: (pos: KnobItemPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    const knobsData = getSelectedKnobsData();
-    if (knobsData.length === 0) return { isMixed: false, value: defaultValue };
-
-    const firstValue = getter(knobsData[0].position!) ?? defaultValue;
-    const isMixed = knobsData.some((data) => {
-      const val = getter(data.position!) ?? defaultValue;
-      if (typeof val === 'object' && typeof firstValue === 'object') {
-        return JSON.stringify(val) !== JSON.stringify(firstValue);
-      }
-      return val !== firstValue;
-    });
-
-    return { isMixed, value: firstValue };
-  };
-
-  const getMixedValueKnobsAsKey = <T,>(
-    getter: (pos: KeyPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    return getMixedValueKnobs((pos) => getter(pos), defaultValue);
-  };
-
-  const getMixedValueBatch = <T,>(
-    getter: (pos: KeyPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    const batchData = getSelectedBatchStyleData();
-    if (batchData.length === 0) return { isMixed: false, value: defaultValue };
-
-    const firstValue =
-      getter(batchData[0].position as KeyPosition) ?? defaultValue;
-    const isMixed = batchData.some((data) => {
-      const val = getter(data.position as KeyPosition) ?? defaultValue;
-      if (typeof val === 'object' && typeof firstValue === 'object') {
-        return JSON.stringify(val) !== JSON.stringify(firstValue);
-      }
-      return val !== firstValue;
-    });
-
-    return { isMixed, value: firstValue };
-  };
-
-  // ============================================================================
+  const {
+    stableGeometryHandler,
+    stableGeometryPreviewHandler,
+    stableElementPropertyCommitHandler,
+    stableInactiveImageHandler,
+    stableActiveImageHandler,
+    stableIdleTransparentHandler,
+    stableActiveTransparentHandler,
+    stableIdleImageFitHandler,
+    stableActiveImageFitHandler,
+    stableSoundPathHandler,
+    stableSoundEnabledHandler,
+    stableSoundVolumeHandler,
+    stableStylePropertyPreviewHandler,
+    stableStylePropertyCommitHandler,
+    stablePaintCommitHandler,
+    stablePaintPreviewHandler,
+    stableShadowCommitHandler,
+    stableNotePaintCommitHandler,
+    stableNotePaintPreviewHandler,
+    stableCounterAnimationPresetHandler,
+    stableCounterEnabledHandler,
+    stableCounterAnimationEnabledHandler,
+    stableCounterLayoutHandler,
+    stableCounterTypographyHandler,
+    stableCounterFillHandler,
+  } = singleSelectionHandlers;
+  const {
+    getSelectedKeysData,
+    getSelectedGraphsData,
+    getSelectedKnobsData,
+    getSelectedBatchStyleData,
+    getSelectedKeyOnlyPositions,
+    getMixedValue,
+    getMixedValueCanonical,
+    getMixedValueGraphs,
+    getMixedValueGraphsAsKey,
+    getMixedValueKnobs,
+    getMixedValueKnobsAsKey,
+    getMixedValueBatch,
+    getMixedValueActiveCapable,
+    getMixedValueKeysOnly,
+  } = createBatchSelectionModel({
+    selectedKeyType,
+    positions,
+    canonicalPositions,
+    keyMappings,
+    statItemPositions,
+    graphItemPositions,
+    knobItemPositions,
+    selectedKeyElements,
+    selectedKeyLikeElements,
+    selectedGraphElements,
+    selectedKnobElements,
+    selectedBatchStyleElements,
+  });
   // 다중 선택 일괄 편집 핸들러 (훅 사용)
   // ============================================================================
 
@@ -2250,79 +1006,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     });
   };
 
-  // NOTE 탭은 "키"에만 적용되어야 함
-  const getSelectedKeyOnlyPositions = () => {
-    return selectedKeyElements
-      .map((el) => {
-        const index = (positions[selectedKeyType] ?? []).findIndex(
-          (position) => position.id === el.id,
-        );
-        const position = positions[selectedKeyType]?.[index];
-        return position ? { index, position } : null;
-      })
-      .filter(
-        (
-          v,
-        ): v is {
-          index: number;
-          position: CanonicalKeyPosition;
-        } => v !== null,
-      );
-  };
-
-  // 눌림 가능(키·노브) 집계 — active 상태 표시가 통계만 제외하고 노브는 포함
-  const getSelectedActiveCapablePositions = (): KeyPosition[] => {
-    const keyData = getSelectedKeyOnlyPositions().map(
-      ({ position }) => position,
-    );
-    const knobData = selectedKnobElements
-      .map((el) =>
-        knobItemPositions?.[selectedKeyType]?.find(
-          (position) => position.id === el.id,
-        ),
-      )
-      .filter((v): v is CanonicalKnobItemPosition => v != null);
-    return [...keyData, ...knobData];
-  };
-
-  const getMixedValueActiveCapable = <T,>(
-    getter: (pos: KeyPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    const data = getSelectedActiveCapablePositions();
-    if (data.length === 0) return { isMixed: false, value: defaultValue };
-
-    const firstValue = getter(data[0]) ?? defaultValue;
-    const isMixed = data.some((position) => {
-      const val = getter(position) ?? defaultValue;
-      if (typeof val === 'object' && typeof firstValue === 'object') {
-        return JSON.stringify(val) !== JSON.stringify(firstValue);
-      }
-      return val !== firstValue;
-    });
-
-    return { isMixed, value: firstValue };
-  };
-
-  const getMixedValueKeysOnly = <T,>(
-    getter: (pos: KeyPosition) => T | undefined,
-    defaultValue: T,
-  ): { isMixed: boolean; value: T } => {
-    const data = getSelectedKeyOnlyPositions();
-    if (data.length === 0) return { isMixed: false, value: defaultValue };
-
-    const firstValue = getter(data[0].position) ?? defaultValue;
-    const isMixed = data.some(({ position }) => {
-      const val = getter(position) ?? defaultValue;
-      if (typeof val === 'object' && typeof firstValue === 'object') {
-        return JSON.stringify(val) !== JSON.stringify(firstValue);
-      }
-      return val !== firstValue;
-    });
-
-    return { isMixed, value: firstValue };
-  };
-
   const handleGraphBatchSharedSetting = (
     updates: Partial<GraphItemPosition>,
   ) => {
@@ -2415,209 +1098,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const renderPluginSettingsForm = (
-    schema: Record<string, PluginSettingSchema> | undefined,
+    schema: Parameters<typeof PluginSettingsForm>[0]['schema'],
     values: Record<string, unknown>,
-    messages: PluginMessages | undefined,
+    messages: Parameters<typeof PluginSettingsForm>[0]['messages'],
     pluginId: string,
     colorIdPrefix: string,
     onChange: (key: string, value: unknown) => void,
-  ) => {
-    const sections = normalizeSettingsSections(
-      schema,
-      values,
-      (key, error, kind) =>
-        reportPluginNormalizationError(pluginId, key, error, kind),
-    );
-    if (!sections.some((section) => section.renderVisible)) {
-      return (
-        <p className="text-fg-faint text-body text-center">
-          {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
-        </p>
-      );
-    }
-
-    const translate = (key?: string, fallback?: string) => {
-      if (!key) return fallback || '';
-      return translatePluginMessage({
-        messages,
-        locale,
-        key,
-        fallback,
-      });
-    };
-
-    const getPluginInputWidth = (
-      type: 'string' | 'number',
-      value: unknown,
-    ): string => {
-      if (type === 'number') {
-        return '60px';
-      }
-      const strVal = String(value ?? '');
-      if (strVal.length <= 4) return '60px';
-      if (strVal.length <= 10) return '100px';
-      return '200px';
-    };
-
-    const renderEntry = (
-      key: string,
-      schemaValue: Exclude<PluginSettingSchema, { type: 'section' }>,
-      renderVisible: boolean,
-    ) => {
-      if (!renderVisible) return null;
-      const rawValue =
-        values[key] !== undefined ? values[key] : schemaValue.default;
-      const labelText = translate(schemaValue.label, schemaValue.label);
-      const placeholderText =
-        typeof schemaValue.placeholder === 'string'
-          ? translate(schemaValue.placeholder, schemaValue.placeholder)
-          : schemaValue.placeholder;
-
-      let control: React.ReactNode = null;
-
-      if (schemaValue.type === 'boolean') {
-        const checked = !!rawValue;
-        control = (
-          <Checkbox
-            commitStrategy="after-paint"
-            checked={checked}
-            onChange={() => onChange(key, !checked)}
-          />
-        );
-      } else if (schemaValue.type === 'color') {
-        const colorValue =
-          typeof rawValue === 'string'
-            ? rawValue
-            : (schemaValue.default as string) || '#FFFFFF';
-        control = (
-          <ColorInput
-            value={colorValue}
-            onChange={(color) => onChange(key, color)}
-            colorId={`${colorIdPrefix}-${key}`}
-            panelElement={panelElement}
-            solidOnly={true}
-          />
-        );
-      } else if (schemaValue.type === 'number') {
-        const numericValue = Number(rawValue);
-        const normalizedValue = Number.isFinite(numericValue)
-          ? numericValue
-          : typeof schemaValue.default === 'number'
-          ? schemaValue.default
-          : 0;
-        // step 값에서 소수 자릿수 자동 추론
-        const stepStr =
-          schemaValue.step != null ? String(schemaValue.step) : '';
-        const dotIdx = stepStr.indexOf('.');
-        const hasDecimal = dotIdx !== -1;
-        const decimalScale = hasDecimal ? stepStr.length - dotIdx - 1 : 0;
-        control = (
-          <NumberInput
-            value={normalizedValue}
-            min={schemaValue.min}
-            max={schemaValue.max}
-            allowDecimal={hasDecimal}
-            decimalScale={decimalScale}
-            step={schemaValue.step}
-            onChange={(nextValue) => onChange(key, nextValue)}
-            width={getPluginInputWidth('number', rawValue)}
-          />
-        );
-      } else if (schemaValue.type === 'string') {
-        const stringValue =
-          rawValue === undefined || rawValue === null ? '' : String(rawValue);
-        control = (
-          <TextInput
-            value={stringValue}
-            onChange={(nextValue) => onChange(key, nextValue)}
-            placeholder={
-              typeof placeholderText === 'string' ? placeholderText : undefined
-            }
-            width={getPluginInputWidth('string', stringValue)}
-          />
-        );
-      } else if (schemaValue.type === 'select') {
-        const options = (schemaValue.options || []).map((option) => ({
-          label: translate(option.label, option.label),
-          value: String(option.value),
-        }));
-        const optionMap = new Map(
-          (schemaValue.options || []).map((option) => [
-            String(option.value),
-            option.value,
-          ]),
-        );
-        const selectedValue = optionMap.has(String(rawValue))
-          ? String(rawValue)
-          : String(schemaValue.default ?? '');
-        control = (
-          <Dropdown
-            commitStrategy="after-paint"
-            value={selectedValue}
-            options={options}
-            placeholder={
-              typeof placeholderText === 'string' &&
-              placeholderText.trim().length > 0
-                ? placeholderText
-                : undefined
-            }
-            onChange={(nextValue) =>
-              onChange(key, optionMap.get(nextValue) ?? nextValue)
-            }
-          />
-        );
-      }
-
-      if (schemaValue.type === 'boolean') {
-        return (
-          <div
-            key={key}
-            className="flex justify-between items-center w-full min-h-[32px]"
-          >
-            <p className="text-fg-muted text-label">{labelText}</p>
-            <div className="flex items-center gap-[10.5px]">{control}</div>
-          </div>
-        );
-      }
-
-      return (
-        <PropertyRow key={key} label={labelText}>
-          {control}
-        </PropertyRow>
-      );
-    };
-
-    return (
-      // 대상이 바뀌면 폼을 통째로 새로 만든다. 설정 key만으로 묶으면 같은 스키마를 가진
-      // 다른 요소로 선택이 옮겨가도 입력 인스턴스가 살아남아, 편집 중이던 값이
-      // 새 대상에 확정되거나 취소가 옛 값을 새 대상에 쓴다.
-      // 포커스를 유지한 채 선택만 바뀌는 경로가 분리 패널 selection sync에 있다
-      <div key={colorIdPrefix} className="flex flex-col gap-[12px]">
-        {sections.map((section) => {
-          if (!section.renderVisible) return null;
-          const sectionLabel = translate(section.label, section.label);
-          return (
-            <div
-              key={section.key ?? 'implicit'}
-              className="flex flex-col gap-[6px]"
-            >
-              {section.label && (
-                <p className="text-fg-faint text-body text-left px-[2px]">
-                  {sectionLabel}
-                </p>
-              )}
-              <PropertySection>
-                {section.entries.map((entry) =>
-                  renderEntry(entry.key, entry.schema, entry.renderVisible),
-                )}
-              </PropertySection>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
+  ) => (
+    <PluginSettingsForm
+      schema={schema}
+      values={values}
+      messages={messages}
+      pluginId={pluginId}
+      colorIdPrefix={colorIdPrefix}
+      onChange={onChange}
+      locale={locale}
+      panelElement={panelElement}
+      reportNormalizationError={reportPluginNormalizationError}
+      t={t}
+    />
+  );
   // 배치 편집용 interactiveRefs
   const batchColorPickerInteractiveRefs = [
     batchNoteColorButtonRef,
