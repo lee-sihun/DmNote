@@ -28,7 +28,7 @@ import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
-import ListPopup, { type ListItem } from '../../Modal/ListPopup';
+import ListPopup from '../../Modal/ListPopup';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -130,6 +130,12 @@ import {
   type PendingHandlerSlotMap,
   type StableHandlerSlotMap,
 } from './stableHandlerSlots';
+import {
+  buildMixedSelectionMenuItems,
+  gridAddTypeForMenuItem,
+  isStableNativeSelection,
+  shouldOpenMixedSelectionMenu,
+} from './gridContextMenuModel';
 
 type ToolbarAddRequest = {
   id: number;
@@ -460,83 +466,25 @@ const Grid = ({
     y: number;
   } | null>(null);
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const mixedSelectionMenuItems = (() => {
-    const items: ListItem[] = [
-      { id: 'delete', label: t('contextMenu.deleteSelected') },
-      { id: 'duplicate', label: t('contextMenu.duplicateSelected') },
-    ];
-
-    if (selectedElements.length >= 2) {
-      // 선택된 요소들의 그룹 상태 확인
-      const modeKeyPos = positions[selectedKeyType] || [];
-      const modeStatPos =
-        useStatItemStore.getState().positions[selectedKeyType] || [];
-      const modeGraphPos =
-        useGraphItemStore.getState().positions[selectedKeyType] || [];
-      const modeKnobPos =
-        useKnobItemStore.getState().positions[selectedKeyType] || [];
-
-      let anyInGroup = false;
-      let allInSameGroup = true;
-      let firstGroupId;
-      let first = true;
-
-      const modeGroupIds = new Set(
-        (useLayerGroupStore.getState().layerGroups[selectedKeyType] || []).map(
-          (group) => group.id,
-        ),
-      );
-      selectedElements.forEach((el) => {
-        let gid;
-        if (el.type === 'key') {
-          gid = modeKeyPos.find((position) => position.id === el.id)?.groupId;
-        } else if (el.type === 'stat') {
-          gid = modeStatPos.find((position) => position.id === el.id)?.groupId;
-        } else if (el.type === 'graph') {
-          gid = modeGraphPos.find((position) => position.id === el.id)?.groupId;
-        } else if (el.type === 'knob') {
-          gid = modeKnobPos.find((position) => position.id === el.id)?.groupId;
-        } else if (el.type === 'plugin') {
-          // 플러그인 소속도 그룹 메뉴 판정에 포함 - 모드 def가 있는 것만 유효
-          const pluginGroupId = usePluginDisplayElementStore
-            .getState()
-            .elements.find((candidate) => candidate.fullId === el.id)?.groupId;
-          gid =
-            pluginGroupId && modeGroupIds.has(pluginGroupId)
-              ? pluginGroupId
-              : undefined;
+  const mixedSelectionMenuItems = buildMixedSelectionMenuItems(
+    selectedElements,
+    selectedElements.length >= 2
+      ? {
+          mode: selectedKeyType,
+          keyPositions: positions[selectedKeyType] || [],
+          statPositions:
+            useStatItemStore.getState().positions[selectedKeyType] || [],
+          graphPositions:
+            useGraphItemStore.getState().positions[selectedKeyType] || [],
+          knobPositions:
+            useKnobItemStore.getState().positions[selectedKeyType] || [],
+          pluginElements: usePluginDisplayElementStore.getState().elements,
+          modeGroups:
+            useLayerGroupStore.getState().layerGroups[selectedKeyType] || [],
         }
-        if (gid) anyInGroup = true;
-        if (first) {
-          firstGroupId = gid;
-          first = false;
-        } else if (gid !== firstGroupId) allInSameGroup = false;
-      });
-
-      if (anyInGroup && allInSameGroup && firstGroupId) {
-        // 모두 같은 그룹 → 그룹 해제만
-        items.push({ id: 'ungroupSelected', label: t('contextMenu.ungroup') });
-      } else if (!anyInGroup) {
-        // 그룹 없음 → 그룹화만
-        items.push({
-          id: 'groupSelected',
-          label: t('contextMenu.groupSelected'),
-        });
-      } else {
-        // 혼합 → 둘 다
-        items.push({
-          id: 'groupSelected',
-          label: t('contextMenu.groupSelected'),
-        });
-        items.push({ id: 'ungroupSelected', label: t('contextMenu.ungroup') });
-      }
-    }
-
-    items.push({ id: 'bringToFront', label: t('contextMenu.bringToFront') });
-    items.push({ id: 'sendToBack', label: t('contextMenu.sendToBack') });
-
-    return items;
-  })();
+      : null,
+    t,
+  );
 
   const openMixedSelectionContextMenu = (
     x: number,
@@ -548,12 +496,6 @@ const Grid = ({
     contextRef.current = referenceNode || null;
     setContextPosition({ x, y });
     setIsContextOpen(true);
-  };
-
-  const shouldOpenMixedSelectionMenu = (clickedId: string) => {
-    if (selectedElements.length <= 1) return false;
-    if (!selectedElements.some((el) => el.id === clickedId)) return false;
-    return true;
   };
 
   // 클라이언트 좌표를 그리드 좌표로 변환 (줌/팬 반영)
@@ -589,18 +531,6 @@ const Grid = ({
     copySelectedElements();
     await pasteElements().catch(reportElementOpError);
   };
-
-  // 외부 선택 입력도 canonical native id 경계에서 재검증
-  const isStableNativeSelection = (el: {
-    type: string;
-    id: string;
-  }): el is { type: 'key' | 'stat' | 'graph' | 'knob'; id: string } =>
-    (el.type === 'key' ||
-      el.type === 'stat' ||
-      el.type === 'graph' ||
-      el.type === 'knob') &&
-    el.id.length > 0 &&
-    isNativeElementId(el.id);
 
   const moveSelectedToFront = async () => {
     if (selectedElements.length === 0) return;
@@ -838,7 +768,10 @@ const Grid = ({
     // TypeError가 나고 에러 바운더리가 없어 앱이 통째로 언마운트된다.
     // id가 없으면 혼합 선택 판정 자체가 성립하지 않으므로 그냥 건너뛴다
     const clickedId = clickedPosition?.id;
-    if (clickedId && shouldOpenMixedSelectionMenu(clickedId)) {
+    if (
+      clickedId &&
+      shouldOpenMixedSelectionMenu(selectedElements, clickedId)
+    ) {
       openMixedSelectionContextMenu(clientX, clientY, ref);
       return;
     }
@@ -1642,7 +1575,8 @@ const Grid = ({
                 setDuplicateState(null);
                 setDuplicateCursor(null);
               }
-              if (!shouldOpenMixedSelectionMenu(elementId)) return false;
+              if (!shouldOpenMixedSelectionMenu(selectedElements, elementId))
+                return false;
               openMixedSelectionContextMenu(
                 clientX,
                 clientY,
@@ -2224,16 +2158,7 @@ const Grid = ({
             }
 
             // 기본 메뉴 처리
-            const addType =
-              id === 'add'
-                ? 'key'
-                : id === 'addStat'
-                ? 'stat'
-                : id === 'addGraph'
-                ? 'graph'
-                : id === 'addKnob'
-                ? 'knob'
-                : null;
+            const addType = gridAddTypeForMenuItem(id);
             if (addType && gridAddLocalPos) {
               addCanvasElementAt(
                 canvasActions,
