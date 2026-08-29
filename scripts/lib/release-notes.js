@@ -13,7 +13,14 @@ const CHANGELOG_EN_PATH = path.resolve(__dirname, '../../CHANGELOG_en.md');
 
 // 링크 텍스트가 @handle이고 대상이 같은 handle의 프로필인 형태.
 // 체인지로그 생성 시 기계적으로 만들어지므로 표기가 흔들리지 않는다.
-const HANDLE_LINK = /\[@([\w-]+)\]\(https:\/\/github\.com\/\1\)/g;
+//
+// test용과 replace용을 따로 파생시킨다. /g 정규식을 .test()에 재사용하면
+// lastIndex가 전진해 호출마다 결과가 뒤집힌다
+const HANDLE_LINK_SOURCE = String.raw`\[@([\w-]+)\]\(https://github\.com/\1\)`;
+const HAS_HANDLE_LINK = new RegExp(HANDLE_LINK_SOURCE);
+const HANDLE_LINK_ALL = new RegExp(HANDLE_LINK_SOURCE, 'g');
+
+const FENCE = /^ {0,3}(```|~~~)/;
 
 const isVersion = (value) => /^\d+\.\d+\.\d+$/.test(value ?? '');
 
@@ -54,7 +61,39 @@ const describeAsset = (name) => {
   return null;
 };
 
-const readSection = (filePath, version) => {
+// 여는 마커를 기억한다. ```js 블록 안의 ~~~ 는 본문이지 닫는 마커가 아니다
+const trackFence = (open, line) => {
+  const marker = FENCE.exec(line);
+  if (!marker) return { open, isFence: false };
+  if (!open) return { open: marker[1], isFence: true };
+  return { open: marker[1] === open ? null : open, isFence: true };
+};
+
+const scanSection = (text, version, ignoreFences) => {
+  let collected = null;
+  let open = null;
+  for (const line of text.split('\n')) {
+    if (!ignoreFences) {
+      const state = trackFence(open, line);
+      open = state.open;
+      if (state.isFence) {
+        if (collected) collected.push(line);
+        continue;
+      }
+    }
+    if (!open && /^## /.test(line)) {
+      if (collected) return collected; // 다음 섹션 시작
+      if (line.startsWith(`## [${version}]`)) collected = [];
+      continue;
+    }
+    if (collected) collected.push(line);
+  }
+  return collected;
+};
+
+// 버전 섹션의 본문 줄을 돌려준다. 코드 펜스 안의 "## ..."는 섹션 경계로 보지 않는다
+// (체인지로그에 마크다운 예시가 들어가면 가짜 섹션을 먼저 잡는다)
+const readSectionLines = (filePath, version) => {
   let text;
   try {
     text = fs.readFileSync(filePath, 'utf8');
@@ -63,34 +102,42 @@ const readSection = (filePath, version) => {
     // 이 지점은 macOS에서 서명·공증이 모두 끝난 뒤라 실패 비용이 크다
     return null;
   }
-  const sections = text.split(/^## /m).slice(1);
-  return sections.find((section) => section.startsWith(`[${version}]`)) ?? null;
+
+  const found = scanSection(text, version, false);
+  if (found) return found;
+  // 닫히지 않은 펜스 하나가 뒤쪽 섹션을 통째로 삼킬 수 있다. 균형 잡힌 펜스 안에
+  // 최상위 헤딩이 있을 수는 없으므로, 못 찾았으면 펜스를 무시하고 다시 훑는다
+  return scanSection(text, version, true);
 };
 
 // 해당 버전 섹션에서 기여자 크레딧 줄을 그대로 가져오되 handle 링크만 @멘션으로 바꾼다.
 // 릴리즈 본문에서는 @멘션이 프로필 링크로 렌더되지만 blob 마크다운에서는 되지 않기 때문에,
 // 체인지로그는 링크 형태로 두고 본문으로 옮길 때만 멘션으로 되돌린다.
+//
+// 크레딧은 리스트 항목일 수도 문단일 수도 있어(1.6.1의 블랙워터 감사 문구) 마커로 거르지 않고,
+// 크레딧이 올 수 없는 자리 — 코드 펜스 안, 표 행, 헤딩 — 만 배제한다.
 const readContributors = (version, changelogPath = CHANGELOG_PATH) => {
-  const section = readSection(changelogPath, version);
-  if (!section) return [];
+  const lines = readSectionLines(changelogPath, version);
+  if (!lines) return [];
 
-  return section
-    .split('\n')
-    .filter((line) => {
-      if (line.startsWith('#')) return false;
-      return new RegExp(HANDLE_LINK.source).test(line) || /🎉|🙏/.test(line);
-    })
-    .map((line) =>
-      line
-        .trim()
-        .replace(/^[-*]\s*/, '')
-        .replace(HANDLE_LINK, '@$1'),
-    )
-    .filter(Boolean);
+  const credits = [];
+  let open = null;
+  for (const line of lines) {
+    const state = trackFence(open, line);
+    open = state.open;
+    if (state.isFence || open) continue;
+
+    const text = line.trim();
+    if (!text || text.startsWith('#') || text.startsWith('|')) continue;
+    if (!HAS_HANDLE_LINK.test(text) && !/🎉|🙏/.test(text)) continue;
+
+    credits.push(text.replace(/^[-*]\s*/, '').replace(HANDLE_LINK_ALL, '@$1'));
+  }
+  return credits;
 };
 
 const hasEnglishChangelog = (version) =>
-  readSection(CHANGELOG_EN_PATH, version) !== null;
+  readSectionLines(CHANGELOG_EN_PATH, version) !== null;
 
 const buildReleaseNotes = ({ version, assets, contributors }) => {
   if (!isVersion(version))
