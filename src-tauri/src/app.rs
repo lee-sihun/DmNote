@@ -1,6 +1,7 @@
+#[cfg(target_os = "windows")]
+use crate::models;
 use crate::{
-    commands, compute_compensating_zoom, keyboard, models, services,
-    should_apply_compensating_zoom, state,
+    commands, compute_compensating_zoom, keyboard, services, should_apply_compensating_zoom, state,
 };
 use anyhow::Result;
 use log::LevelFilter;

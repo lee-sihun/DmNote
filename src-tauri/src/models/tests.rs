@@ -1,4 +1,3 @@
-
 use super::{
     compact_canonical_rgba, note_border_representative_hex, scrub_removed_text_outline_fields,
     FadePosition, GradientSpec, GraphPosition, GraphStatType, GraphType, KeyCounterAlign,
