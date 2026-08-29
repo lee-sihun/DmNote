@@ -220,4 +220,36 @@ describe('useFontLibrary 로컬 폰트 추가', () => {
       weightRanges: [{ min: 700, max: 700 }],
     });
   });
+
+  it('대소문자만 다른 font-family는 기존 참조 이름을 유지하며 수정한다', () => {
+    useFontStore.setState({
+      customFonts: [
+        {
+          id: 'web-font',
+          type: 'web',
+          name: 'Stable Family',
+          displayName: 'Stable Family',
+          enabled: true,
+          cssContent:
+            "@font-face { font-family: 'Stable Family'; src: url(old.woff2); }",
+          weightRanges: [{ min: 400, max: 400 }],
+        },
+      ],
+    });
+
+    const saved = submitWebFont(
+      "@font-face { font-family: 'stable family'; src: url(new.woff2); }",
+      'stable family',
+      'web-font',
+    );
+
+    expect(saved).toBe(true);
+    expect(useFontStore.getState().customFonts[0]).toMatchObject({
+      id: 'web-font',
+      name: 'Stable Family',
+      cssContent:
+        "@font-face { font-family: 'stable family'; src: url(new.woff2); }",
+    });
+    expect(mocks.alert).not.toHaveBeenCalled();
+  });
 });

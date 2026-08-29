@@ -221,14 +221,20 @@ export const useFontLibrary = () => {
       showEditTargetMissingAlert();
       return false;
     }
-    if (editingWebFont && editingWebFont.name !== fontFamily) {
+    if (
+      editingWebFont &&
+      normalizeFontFamilyName(editingWebFont.name) !==
+        normalizeFontFamilyName(fontFamily)
+    ) {
       showFontFamilyChangeAlert();
       return false;
     }
+    // 대소문자만 다른 CSS 이름은 같은 family다 - 저장된 참조 문자열은 그대로 유지한다
+    const storedFontFamily = editingWebFont?.name ?? fontFamily;
     const newWebFont: CustomFont = {
       id: generateFontId(),
       type: 'web',
-      name: fontFamily,
+      name: storedFontFamily,
       displayName: displayName || fontFamily,
       enabled: true,
       cssContent: css,
@@ -240,7 +246,7 @@ export const useFontLibrary = () => {
           font.id === editingWebFontId
             ? {
                 ...font,
-                name: fontFamily,
+                name: storedFontFamily,
                 displayName: displayName || fontFamily,
                 cssContent: css,
                 weightRanges: validation.detectedWeights,
