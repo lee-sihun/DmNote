@@ -12,7 +12,6 @@ declare global {
   }
 }
 import { useTranslation } from '@contexts/useTranslation';
-import { deleteElementById } from '@src/renderer/editor/runtime/elementOps';
 import {
   commitStableLayerZOrder,
   orderStableZTargetsForBatch,
@@ -98,6 +97,7 @@ import {
 import DuplicateElementGhost from './DuplicateElementGhost';
 import NativeGridElements from './NativeGridElements';
 import GridSelectionOverlays from '../overlays/GridSelectionOverlays';
+import { executeNativeContextMenuAction } from './nativeContextMenuActions';
 
 type ToolbarAddRequest = {
   id: number;
@@ -474,6 +474,53 @@ const Grid = ({
     const result = canvasActions.beginDuplicateKnob(sourceIndex);
     if (!result) return;
     setDuplicateState(result);
+    setDuplicateCursor(null);
+  };
+
+  const beginDuplicateKey = (sourceIndex: number) => {
+    const sourceSlot =
+      useKeyStore.getState().keyMappings[selectedKeyType]?.[sourceIndex];
+    const position =
+      useKeyStore.getState().canonicalPositions[selectedKeyType]?.[
+        sourceIndex
+      ] || null;
+    if (!position || typeof sourceSlot === 'undefined') return;
+
+    const clonedNoteColor =
+      position.noteColor &&
+      typeof position.noteColor === 'object' &&
+      position.noteColor !== null
+        ? { ...position.noteColor }
+        : position.noteColor;
+    const clonedCounter: KeyCounterSettings | null = position.counter
+      ? {
+          ...position.counter,
+          fill: { ...position.counter.fill },
+          ...(position.counter.animation
+            ? {
+                animation: {
+                  ...position.counter.animation,
+                  bezier: [
+                    ...position.counter.animation.bezier,
+                  ] as CounterAnimationBezier,
+                },
+              }
+            : {}),
+        }
+      : null;
+    const currentMousePos = lastMousePosRef.current;
+    computeSnappedCursorFromClient(currentMousePos.x, currentMousePos.y);
+    setDuplicateState({
+      elementType: 'key',
+      sourceIndex,
+      slot: sourceSlot,
+      keyName: slotDisplayName(sourceSlot),
+      position: {
+        ...position,
+        noteColor: clonedNoteColor,
+        counter: clonedCounter ?? createDefaultCounterSettings(),
+      },
+    });
     setDuplicateCursor(null);
   };
 
@@ -1024,102 +1071,26 @@ const Grid = ({
                 : null;
             };
 
-            if (contextType === 'stat') {
-              const statIndex = resolveContextTarget('stat');
-
-              if (id === 'delete') {
-                if (contextElementId) {
-                  void deleteElementById('stat', contextElementId).catch(
-                    reportElementOpError,
-                  );
-                }
-              } else if (id === 'duplicate') {
-                if (statIndex != null) beginDuplicateStat(statIndex);
-              } else if (id === 'bringToFront') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'stat', id: contextElementId }],
-                    action: 'front',
-                  }).catch(reportElementOpError);
-                }
-              } else if (id === 'sendToBack') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'stat', id: contextElementId }],
-                    action: 'back',
-                  }).catch(reportElementOpError);
-                }
-              }
-
-              setIsContextOpen(false);
-              setContextPosition(null);
-              return;
-            }
-
-            if (contextType === 'graph') {
-              const graphIndex = resolveContextTarget('graph');
-
-              if (id === 'delete') {
-                if (contextElementId) {
-                  void deleteElementById('graph', contextElementId).catch(
-                    reportElementOpError,
-                  );
-                }
-              } else if (id === 'duplicate') {
-                if (graphIndex != null) beginDuplicateGraph(graphIndex);
-              } else if (id === 'bringToFront') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'graph', id: contextElementId }],
-                    action: 'front',
-                  }).catch(reportElementOpError);
-                }
-              } else if (id === 'sendToBack') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'graph', id: contextElementId }],
-                    action: 'back',
-                  }).catch(reportElementOpError);
-                }
-              }
-
-              setIsContextOpen(false);
-              setContextPosition(null);
-              return;
-            }
-
-            if (contextType === 'knob') {
-              const knobIndex = resolveContextTarget('knob');
-              if (id === 'delete') {
-                if (contextElementId) {
-                  void deleteElementById('knob', contextElementId).catch(
-                    reportElementOpError,
-                  );
-                }
-              } else if (id === 'duplicate') {
-                if (knobIndex != null) beginDuplicateKnob(knobIndex);
-              } else if (id === 'bringToFront') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'knob', id: contextElementId }],
-                    action: 'front',
-                  }).catch(reportElementOpError);
-                }
-              } else if (id === 'sendToBack') {
-                if (contextElementId) {
-                  void commitStableLayerZOrder({
-                    mode: selectedKeyType,
-                    targets: [{ type: 'knob', id: contextElementId }],
-                    action: 'back',
-                  }).catch(reportElementOpError);
-                }
-              }
-
+            if (
+              contextType === 'stat' ||
+              contextType === 'graph' ||
+              contextType === 'knob'
+            ) {
+              const targetType = contextType;
+              const targetIndex = resolveContextTarget(targetType);
+              executeNativeContextMenuAction({
+                menuItemId: id,
+                type: targetType,
+                mode: selectedKeyType,
+                elementId: contextElementId,
+                resolvedIndex: targetIndex,
+                onDuplicate: (resolvedIndex) => {
+                  if (targetType === 'stat') beginDuplicateStat(resolvedIndex);
+                  else if (targetType === 'graph')
+                    beginDuplicateGraph(resolvedIndex);
+                  else beginDuplicateKnob(resolvedIndex);
+                },
+              });
               setIsContextOpen(false);
               setContextPosition(null);
               return;
@@ -1172,79 +1143,11 @@ const Grid = ({
               return;
             }
 
-            // 기본 메뉴 처리
-            if (id === 'delete') {
-              if (contextElementId) {
-                void deleteElementById('key', contextElementId).catch(
-                  reportElementOpError,
-                );
-              }
-            } else if (id === 'duplicate') {
-              const keyIndex = resolveContextTarget('key');
-              const sourceSlot =
-                keyIndex != null
-                  ? useKeyStore.getState().keyMappings[selectedKeyType]?.[
-                      keyIndex
-                    ]
-                  : undefined;
-              const displayLabel = slotDisplayName(sourceSlot ?? '');
-              const position =
-                keyIndex != null
-                  ? useKeyStore.getState().canonicalPositions[
-                      selectedKeyType
-                    ]?.[keyIndex] || null
-                  : null;
-              if (position && typeof sourceSlot !== 'undefined') {
-                const clonedNoteColor =
-                  position.noteColor &&
-                  typeof position.noteColor === 'object' &&
-                  position.noteColor !== null
-                    ? { ...position.noteColor }
-                    : position.noteColor;
-                const clonedCounter: KeyCounterSettings | null =
-                  position.counter
-                    ? {
-                        ...position.counter,
-                        fill: { ...position.counter.fill },
-                        ...(position.counter.animation
-                          ? {
-                              animation: {
-                                ...position.counter.animation,
-                                bezier: [
-                                  ...position.counter.animation.bezier,
-                                ] as CounterAnimationBezier,
-                              },
-                            }
-                          : {}),
-                      }
-                    : null;
-                const initialCursor = null;
-                // 현재 실제 마우스 위치를 사용 (메뉴를 클릭한 시점의 위치)
-                const currentMousePos = lastMousePosRef.current;
-                const _snapped = computeSnappedCursorFromClient(
-                  currentMousePos.x,
-                  currentMousePos.y,
-                );
-                setDuplicateState({
-                  elementType: 'key',
-                  sourceIndex: keyIndex,
-                  // 배치 시 재조회 금지 - 고스트를 따라다니는 동안의 재정렬이
-                  // 다른 키를 복제하게 만든다
-                  slot: sourceSlot,
-                  keyName: displayLabel,
-                  position: {
-                    ...position,
-                    noteColor: clonedNoteColor,
-                    counter: clonedCounter ?? createDefaultCounterSettings(),
-                  },
-                });
-                setDuplicateCursor(initialCursor);
-              }
-            } else if (id === 'counterReset') {
-              const menuIndex = resolveContextTarget('key');
+            const keyIndex = resolveContextTarget('key');
+            if (id === 'counterReset') {
               const slot =
-                menuIndex != null
-                  ? keyMappings[selectedKeyType]?.[menuIndex] ?? ''
+                keyIndex != null
+                  ? keyMappings[selectedKeyType]?.[keyIndex] ?? ''
                   : '';
               const displayName = slotDisplayName(slot);
               showConfirm(
@@ -1253,7 +1156,6 @@ const Grid = ({
                   // 확인 시점 재해석 - 모달이 떠 있는 동안의 재바인딩 반영
                   const confirmIndex = resolveContextTarget('key');
                   if (confirmIndex == null) return;
-                  // 카운터 리셋 커맨드의 key 인자 = canonical (계약 §7)
                   const globalKey = slotCanonical(
                     useKeyStore.getState().keyMappings[selectedKeyType]?.[
                       confirmIndex
@@ -1270,38 +1172,15 @@ const Grid = ({
                 },
                 { confirmText: t('confirm.reset') },
               );
-            } else if (id === 'bringToFront') {
-              if (contextElementId) {
-                void commitStableLayerZOrder({
-                  mode: selectedKeyType,
-                  targets: [{ type: 'key', id: contextElementId }],
-                  action: 'front',
-                }).catch(reportElementOpError);
-              }
-            } else if (id === 'bringForward') {
-              if (contextElementId) {
-                void commitStableLayerZOrder({
-                  mode: selectedKeyType,
-                  targets: [{ type: 'key', id: contextElementId }],
-                  action: 'forward',
-                }).catch(reportElementOpError);
-              }
-            } else if (id === 'sendBackward') {
-              if (contextElementId) {
-                void commitStableLayerZOrder({
-                  mode: selectedKeyType,
-                  targets: [{ type: 'key', id: contextElementId }],
-                  action: 'backward',
-                }).catch(reportElementOpError);
-              }
-            } else if (id === 'sendToBack') {
-              if (contextElementId) {
-                void commitStableLayerZOrder({
-                  mode: selectedKeyType,
-                  targets: [{ type: 'key', id: contextElementId }],
-                  action: 'back',
-                }).catch(reportElementOpError);
-              }
+            } else {
+              executeNativeContextMenuAction({
+                menuItemId: id,
+                type: 'key',
+                mode: selectedKeyType,
+                elementId: contextElementId,
+                resolvedIndex: keyIndex,
+                onDuplicate: beginDuplicateKey,
+              });
             }
             setIsContextOpen(false);
             setContextPosition(null);
