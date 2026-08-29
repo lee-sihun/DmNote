@@ -88,24 +88,6 @@ import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { overlayApi } from '@api/modules/overlayApi';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import type { StatItemPosition } from '@src/types/key/statItems';
-import { resolveImageSource } from '@utils/core/imageSource';
-import {
-  DEFAULT_IMAGE_MODE,
-  imageTransformToCss,
-} from '@src/types/key/imageLayer';
-import {
-  DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_SHADOW_SPEC,
-  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-} from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
-import { gradientRingStyle, gradientToCss } from '@src/types/color';
-import {
-  elementShadowToCss,
-  resolveElementShadow,
-} from '@src/types/key/shadows';
 import {
   groupSelectedElements,
   ungroupSelectedElements,
@@ -136,6 +118,7 @@ import {
   isStableNativeSelection,
   shouldOpenMixedSelectionMenu,
 } from './gridContextMenuModel';
+import DuplicateElementGhost from './DuplicateElementGhost';
 
 type ToolbarAddRequest = {
   id: number;
@@ -1295,149 +1278,6 @@ const Grid = ({
     ));
   };
 
-  // 고스트는 실제 요소와 같은 기본 립을 그린다. 링 배경은 전역 규칙이 아닌
-  // 인라인으로 - 고스트는 data-*-element가 아니라 전역 게이트를 안 탄다
-  const renderGhostBorderRing = (suppressDefault: boolean) => {
-    const border = resolveElementBorder({}, false, { suppressDefault });
-    if (!border.gradient || border.width <= 0) return null;
-    return (
-      <span
-        aria-hidden="true"
-        style={{
-          ...gradientRingStyle(border.gradient, border.width),
-          background: gradientToCss(border.gradient),
-          pointerEvents: 'none',
-        }}
-      />
-    );
-  };
-
-  const renderDuplicateGhost = () => {
-    if (!duplicateState || !duplicateCursor) return null;
-
-    if (duplicateState.elementType === 'graph') {
-      const width = duplicateState.position?.width || 200;
-      const height = duplicateState.position?.height || 100;
-      const offsetX = duplicateCursor.x - width / 2;
-      const offsetY = duplicateCursor.y - height / 2;
-      return (
-        <div
-          className="absolute pointer-events-none select-none"
-          style={{
-            width: `${width}px`,
-            height: `${height}px`,
-            transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
-            background: DEFAULT_ELEMENT_BG,
-            border: 'none',
-            borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
-            overflow: 'hidden',
-            opacity: 0.5,
-            zIndex: 'var(--z-canvas-drag-preview)',
-          }}
-        >
-          {renderGhostBorderRing(false)}
-        </div>
-      );
-    }
-
-    const {
-      position: {
-        width = 60,
-        height = 60,
-        inactiveImage,
-        activeImage,
-        imageFit,
-        idleImageFit,
-        imageMode,
-        idleImageTransform,
-        className,
-        shadow,
-        activeShadow,
-      },
-      keyName,
-    } = duplicateState;
-    const previewImage =
-      resolveImageSource(inactiveImage) ||
-      resolveImageSource(activeImage) ||
-      '';
-    // 고스트는 기본 외형(저자 의도)이되 이미지 배치만 원본 키를 따른다 - replace만
-    // 표면을 대체하므로 립·배경 억제도 그때만
-    const ghostImageReplaces =
-      Boolean(previewImage) && (imageMode ?? DEFAULT_IMAGE_MODE) === 'replace';
-    const backgroundColor = ghostImageReplaces
-      ? 'transparent'
-      : DEFAULT_ELEMENT_BG;
-    const previewShadow = elementShadowToCss(
-      resolveElementShadow({
-        active: false,
-        shadow,
-        activeShadow,
-        defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
-        defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-        suppressDefault: ghostImageReplaces,
-      }),
-    );
-    // keyName은 호출부에서 slotDisplayName으로 합성된 표시 라벨
-    const displayName = keyName || '';
-
-    // 키의 중심이 마우스에 위치하도록 오프셋 계산
-    const offsetX = duplicateCursor.x - width / 2;
-    const offsetY = duplicateCursor.y - height / 2;
-
-    return (
-      <div
-        className={`absolute pointer-events-none select-none ${
-          className || ''
-        }`}
-        style={{
-          width: `${width}px`,
-          height: `${height}px`,
-          transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
-          backgroundColor,
-          borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
-          border: 'none',
-          boxShadow: previewShadow,
-          overflow: ghostImageReplaces ? 'hidden' : 'visible',
-          opacity: 0.5,
-          zIndex: 'var(--z-canvas-drag-preview)',
-        }}
-      >
-        {renderGhostBorderRing(ghostImageReplaces)}
-        {previewImage ? (
-          <img
-            src={previewImage}
-            alt=""
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: (idleImageFit ||
-                imageFit ||
-                'cover') as React.CSSProperties['objectFit'],
-              transform: idleImageTransform
-                ? imageTransformToCss(idleImageTransform)
-                : undefined,
-              display: 'block',
-              pointerEvents: 'none',
-              userSelect: 'none',
-            }}
-            draggable={false}
-          />
-        ) : (
-          <div
-            className="flex items-center justify-center h-full font-bold leading-none text-safe-inline"
-            style={{
-              color: `var(--key-text-color, ${DEFAULT_ELEMENT_FONT})`,
-              willChange: 'auto',
-              contain: 'layout style paint',
-            }}
-          >
-            {displayName}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // 그리드 좌클릭 핸들러 (빈 공간에서 드래그로 마퀴 선택 시작)
   const handleGridMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // 좌클릭만 처리
@@ -1557,7 +1397,10 @@ const Grid = ({
             positions={statPositions?.[selectedKeyType] || []}
             selectedElements={selectedElements}
           />
-          {renderDuplicateGhost()}
+          <DuplicateElementGhost
+            duplicate={duplicateState}
+            cursor={duplicateCursor}
+          />
           <PluginElementsRenderer
             windowType="main"
             activeTool={activeTool}
