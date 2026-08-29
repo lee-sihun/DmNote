@@ -16,48 +16,53 @@
 
 | 영역 | 이전 | 현재 | 분리 결과 |
 | --- | ---: | ---: | --- |
-| `PropertiesPanel.tsx` | 3407줄 | 1907줄 | 선택 모델, navigation 훅, 단일 선택 commit handler, 플러그인 설정 폼 분리 |
+| `PropertiesPanel.tsx` | 3407줄 | 1549줄 | 선택 모델, navigation, commit handler, 이름 변경 세션, 플러그인 설정 제어, 패널 가시성 생명주기 분리 |
 | `BatchSelectionPanel.tsx` | 2367줄 | 1277줄 | 공통 handler/header와 그래프·노브·플러그인 전용 패널 분리 |
 | `SingleSelectionPanel.tsx` | 2061줄 | 674줄 | 그래프·노브 패널과 공통 표시 모델 분리 |
 | `Settings.tsx` | 1423줄 | 1172줄 | 키음 출력 UI, 비동기 적용 큐 훅, 순수 view model 분리 |
+| `editorCoordinator.ts` | 3001줄 | 2156줄 | 의미 연산의 document projection과 영향 필드 계산을 `semanticOpsProjection.ts`로 분리 |
+| `elementOps.ts` | 2611줄 | 571줄 | document model, 공통 property, group, style, geometry 연산을 도메인 모듈로 분리하고 기존 facade export 유지 |
 | `store.rs` | 22978줄 | 3349줄 | 테스트, writer 영속화, 자산 참조, 사운드 복구·trash·sweep 분리 |
 | `editor_ops.rs` | 10154줄 | 2940줄 | 인라인 테스트 모듈 분리 |
 | `migration.rs` | 6053줄 | 2238줄 | 인라인 테스트 모듈 분리 |
 | `editor.rs` | 5777줄 | 2396줄 | 인라인 테스트 모듈 분리 |
-| `app_state.rs` | 9314줄 | 6600줄 | 인라인 테스트 모듈 분리 |
+| `app_state.rs` | 9314줄 | 5650줄 | 인라인 테스트와 창 좌표·모니터 배치·패널 bounds 영속화 모듈 분리 |
 | `models/mod.rs` | 4169줄 | 3033줄 | 인라인 테스트 모듈 분리 |
 
 ASIO는 장치 I/O 경계와 순수 정책을 `audio/engine/asio.rs`로 분리했다. 버퍼 정규화, 드라이버 목록 정규화, 유효 출력 구성, 빌드 가용성, 오류 코드와 폴백 계약을 하드웨어 없이 검증한다.
 
-## 잔여 대형 프론트엔드 우선순위
+이번 분리는 IPC command/event 이름, store schema, editor wire 형식, 기존 `elementOps` 공개 export를 바꾸지 않았다. 이동한 Rust 창 좌표 코드는 가시성 키워드와 포맷 차이를 제외한 토큰 비교로 원본과 동일함을 확인했다.
+
+## 추가 조사 결과와 잔여 프론트엔드 우선순위
 
 아래 줄 수는 이번 브랜치에서 `wc -l`로 측정한 값이다.
 
-### 1. 에디터 런타임
-
-- `editor/runtime/editorCoordinator.ts` — 3001줄
-  - mutation queue와 retry/conflict 처리
-  - canonical snapshot 동기화와 event publication
-  - gesture/operation 결과 projection
-  - facade에는 public coordinator API와 조립만 유지
-- `editor/runtime/elementOps.ts` — 2611줄
-  - geometry, style, paint/shadow, media, batch operation별 모듈
-  - 기존 `elementOps` import 경로는 barrel export로 유지
-
-검증: coordinator/element operation 단위 테스트, conflict·retry·gesture focused suite, 전체 Vitest.
-
-### 2. Grid 상호작용
+### 1. Grid 상호작용
 
 - `Grid/core/Grid.tsx` — 2303줄
-  - scene/layer 조립, 포인터·키보드 interaction, overlay UI 분리
+  - scene/layer 조립, 포인터·키보드 interaction, overlay UI가 한 렌더 경계에 결합
   - 선택과 resize/drag hook은 facade에서 주입
 - `hooks/Grid/useGridSelection.ts` — 1552줄
-  - 순수 selection reducer/model과 DOM event adapter 분리
+  - 순수 selection reducer/model과 DOM event adapter 분리 후보
   - marquee, modifier, group/plugin selection을 각각 테스트
 - `components/shared/PluginElement.tsx` — 1647줄
-  - runtime props 해석, 측정/geometry, pointer/context menu bridge 분리
+  - runtime props 해석, 측정/geometry, pointer/context menu bridge 분리 후보
+
+이 영역은 호출 fan-out과 interaction 분기가 가장 높다. 현재 회귀 테스트가 DOM pointer capture, 좌표계, 플러그인 격리를 모두 독립적으로 고정하지 못하므로 이번 단계에서는 직접 이동하지 않았다. 먼저 characterization test를 보강한 뒤 scene 조립 → overlay UI → event adapter 순서로 분리한다.
 
 검증: Grid interaction focused suite, detached panel contract, plugin element isolation, 전체 Vitest.
+
+### 2. 에디터 런타임 후속 경계
+
+- `editor/runtime/editorCoordinator.ts` — 2156줄
+  - mutation queue와 retry/conflict 처리
+  - canonical snapshot 동기화와 event publication
+  - facade에는 public coordinator API와 조립만 유지
+- `editor/runtime/elementStyleOps.ts` — 1231줄
+  - 현재는 style/paint/shadow/media 속성 연산이라는 한 도메인으로 모였음
+  - 추가 분리는 속성군별 transition 테스트를 먼저 고정한 뒤 검토
+
+검증: coordinator conflict·retry·gesture focused suite, element operation export 계약, 전체 Vitest.
 
 ### 3. 공통 입력과 편집기
 
@@ -70,8 +75,9 @@ ASIO는 장치 I/O 경계와 순수 정책을 `audio/engine/asio.rs`로 분리�
 
 ## 잔여 대형 백엔드 우선순위
 
-- `state/app_state.rs` — 6600줄
-  - bootstrap, window/event publication, keyboard runtime, shutdown coordinator 분리
+- `state/app_state.rs` — 5650줄
+  - 다음 경계는 frontend flush/lifecycle handshake, keyboard runtime, shutdown coordinator
+  - 창 좌표와 패널 bounds 제어는 `state/app_state/window_geometry.rs` 989줄로 분리 완료
   - test-only emitter/harness도 별도 test support 모듈로 이동
 - `state/store.rs` — 3349줄
   - core transaction facade만 남기고 editor/history transaction과 plugin storage transaction 분리
@@ -80,6 +86,9 @@ ASIO는 장치 I/O 경계와 순수 정책을 `audio/engine/asio.rs`로 분리�
   - 파일 decode/validation, migration, store transaction, event projection 분리
 - `commands/keys/sound.rs` — 2189줄
   - scan/library, WAV processing, delete transaction command 분리
+- `audio/engine.rs` — 1712줄
+  - 실시간 `audio_thread`의 장치 전환·오류 복구 분기가 결합되어 있음
+  - timing 동작을 바꾸지 않도록 상태 전이 characterization test 이후 제어 정책만 분리
 
 store 자산 분리는 다음 불변식을 계속 지킨다.
 
