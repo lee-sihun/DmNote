@@ -83,6 +83,7 @@ import {
 } from './PropertiesPanel/propertyPanelAdapters';
 import { usePropertiesPanelRename } from './PropertiesPanel/usePropertiesPanelRename';
 import { usePluginSettingsPanelController } from './PropertiesPanel/usePluginSettingsPanelController';
+import { usePropertiesPanelVisibility } from './PropertiesPanel/usePropertiesPanelVisibility';
 
 // ============================================================================
 // 메인 컴포넌트 Props
@@ -206,34 +207,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     (state) => state.setCanvasPanelMode,
   );
 
-  // panelMode를 ref로도 유지 (useEffect에서 최신 값 참조용)
-  const panelModeRef = useRef(panelMode);
-  // eslint-disable-next-line react-hooks/refs -- 이벤트 정산의 최신 패널 모드 유지
-  panelModeRef.current = panelMode;
-
-  // 이전 선택 상태 추적 (선택 해제 감지용)
-  const prevHasSelectionRef = useRef(false);
-
-  // 레이어 패널 내부에서 선택이 발생했는지 추적 (모드 전환 방지용)
-  const selectionFromLayerPanelRef = useRef(false);
-
-  // 이전 키 타입 추적 (탭 전환 감지용)
-  const prevKeyTypeRef = useRef(selectedKeyType);
-
-  // 탭 전환으로 인한 선택 해제인지 추적
-  const keyTypeChangedRef = useRef(false);
-
-  // 사용자가 명시적으로 패널을 닫았는지 추적
-  const manuallyClosedRef = useRef(false);
-
-  // selectedKeyType 변경 감지 (clearSelection보다 먼저 플래그 설정)
-  useEffect(() => {
-    if (prevKeyTypeRef.current !== selectedKeyType) {
-      keyTypeChangedRef.current = true;
-      prevKeyTypeRef.current = selectedKeyType;
-    }
-  }, [selectedKeyType]);
-
   const activeTab = usePropertiesPanelStore(
     (state) => state.propertyPanelActiveTab,
   );
@@ -318,6 +291,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   useEffect(() => {
     if (selectedKeyElements.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 선택 소실 시 로컬 피커 세션 초기화
       setBatchCounterColorState('idle');
       setBatchPickerFor((current) => (current === 'fill' ? null : current));
     }
@@ -336,6 +310,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     const targetPosition = singleKeyPosition || singleStatPosition;
     if (targetPosition) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 선택 대상의 편집 draft 동기화
       setLocalState({
         dx: targetPosition.dx,
         dy: targetPosition.dy,
@@ -348,192 +323,35 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }, [singleKeyPosition, singleStatPosition]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 선택 그래프의 입력 draft 동기화
     setGraphClassNameDraft(singleGraphPosition?.className || '');
   }, [selectedKeyType, singleGraphIndex, singleGraphPosition?.className]);
 
-  // 선택된 키가 변경될 때 패널 열기/닫기
-  useEffect(() => {
-    const hasSelection =
-      selectedKeyElements.length > 0 || selectedElements.length > 0;
-    const hadSelection = prevHasSelectionRef.current;
-
-    if (pluginSettingsPanel) {
-      prevHasSelectionRef.current = hasSelection;
-      return;
-    }
-
-    if (hasSelection) {
-      // 열린 패널의 페이지는 sticky — 레이어 목록 표시 중 캔버스 클릭은 선택만 바꾸고
-      // 편집(property) 진입은 더블클릭·목록 더블클릭·헤더 토글만 수행한다 (포토샵식)
-      if (!hadSelection) {
-        manuallyClosedRef.current = false;
-        if (!isPanelVisible) {
-          setPanelMode('property');
-          setIsPanelVisible(true);
-        }
-      } else if (!isPanelVisible && !manuallyClosedRef.current) {
-        setPanelMode('property');
-        setIsPanelVisible(true);
-      }
-    } else if (hadSelection) {
-      if (keyTypeChangedRef.current && isPanelVisible) {
-        setPanelMode('layer');
-      } else if (
-        isPanelVisible &&
-        (selectionFromLayerPanelRef.current || panelModeRef.current === 'layer')
-      ) {
-        setPanelMode('layer');
-      } else if (!manuallyClosedRef.current) {
-        setIsPanelVisible(false);
-      }
-    }
-
-    prevHasSelectionRef.current = hasSelection;
-    selectionFromLayerPanelRef.current = false;
-    keyTypeChangedRef.current = false;
-
-    setShowImagePicker(false);
-    setShowGraphImagePicker(false);
-    setShowBatchImagePicker(false);
-    // 배치 색상 draft는 피커를 열 때 첫 요소에서 한 번만 떠 온다.
-    // 열린 채로 선택이 바뀌면 옛 대상 색이 남아 다음 드래그가 그 값을 새 선택에 쓴다
-    setBatchPickerFor(null);
-    closePage();
-  }, [
-    singleKeyIndex,
-    selectedKeyElements.length,
-    selectedElements,
-    isPanelVisible,
-    pluginSettingsPanel,
-    setIsPanelVisible,
-    setPanelMode,
-    closePage,
-  ]);
-
-  // 빈 선택 폴백으로 레이어 목록이 표시되는 동안 내부 모드도 layer로 정규화 —
-  // property로 남아 있으면 다음 캔버스 클릭이 목록을 건너뛰고 편집으로 점프함
-  // (플러그인 설정 패널 종료·설정 왕복 리마운트 경로 포함)
-  useEffect(() => {
-    if (
-      isPanelVisible &&
-      !pluginSettingsPanel &&
-      panelMode === 'property' &&
-      selectedKeyElements.length === 0 &&
-      selectedElements.length === 0
-    ) {
-      setPanelMode('layer');
-    }
-  }, [
-    isPanelVisible,
-    pluginSettingsPanel,
-    panelMode,
-    selectedKeyElements.length,
-    selectedElements,
-    setPanelMode,
-  ]);
-
-  // 다중 선택 시 패널 자동 열기 - 개수는 native+plugin 합산
-  useEffect(() => {
-    if (
-      selectedBatchStyleElements.length + selectedPluginElements.length > 1 &&
-      !isPanelVisible &&
-      !manuallyClosedRef.current
-    ) {
-      setPanelMode('property');
-      setIsPanelVisible(true);
-    }
-  }, [
-    selectedBatchStyleElements.length,
-    selectedPluginElements.length,
-    isPanelVisible,
-    setIsPanelVisible,
-    setPanelMode,
-  ]);
-
-  useEffect(() => {
-    if (pluginSettingsPanel) {
-      manuallyClosedRef.current = false;
-      setPanelMode('property');
-      setIsPanelVisible(true);
-    }
-  }, [pluginSettingsPanel, setIsPanelVisible, setPanelMode]);
-
-  // 레이어 뷰가 표시된 상태(선택 없음)에서 그리드 빈 공간 클릭 시 패널 닫기
-  // panelMode가 property로 남아 있어도 선택이 없으면 레이어 뷰가 표시되므로 동일하게 닫음.
-  // 분리 창일 때는 접힘이 없다 - 여기서 스토어를 닫으면 도킹 뒤 패널이 접힌 채 돌아온다
-  useEffect(() => {
-    const hasSelection =
-      selectedKeyElements.length > 0 || selectedElements.length > 0;
-    if (frameVariant === 'window' || !isPanelVisible || hasSelection) {
-      return undefined;
-    }
-
-    const handleGridClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-
-      const gridContainer = target.closest('[data-grid-container]');
-      if (!gridContainer) {
-        return;
-      }
-
-      if (
-        target.closest('[class*="properties-panel"]') ||
-        target.closest('[class*="PropertiesPanel"]') ||
-        target.closest('.absolute.right-0.top-0.bottom-0')
-      ) {
-        return;
-      }
-
-      if (
-        target.closest('[data-key-element]') ||
-        target.closest('[data-plugin-element]')
-      ) {
-        return;
-      }
-
-      setIsPanelVisible(false);
-    };
-
-    document.addEventListener('mousedown', handleGridClick);
-    return () => {
-      document.removeEventListener('mousedown', handleGridClick);
-    };
-  }, [
-    frameVariant,
-    isPanelVisible,
-    selectedKeyElements.length,
-    selectedKeyLikeElements.length,
-    selectedElements.length,
-    setIsPanelVisible,
-  ]);
+  const { selectionFromLayerPanelRef, handleTogglePanel } =
+    usePropertiesPanelVisibility({
+      frameVariant,
+      isPanelVisible,
+      setIsPanelVisible,
+      panelMode,
+      setPanelMode,
+      selectedKeyType,
+      singleKeyIndex,
+      selectedElements,
+      selectedKeyElementsLength: selectedKeyElements.length,
+      selectedKeyLikeElementsLength: selectedKeyLikeElements.length,
+      selectedBatchStyleElementsLength: selectedBatchStyleElements.length,
+      selectedPluginElementsLength: selectedPluginElements.length,
+      pluginSettingsPanel,
+      closePage,
+      setShowImagePicker,
+      setShowGraphImagePicker,
+      setShowBatchImagePicker,
+      setBatchPickerFor,
+    });
 
   // ============================================================================
   // 핸들러
   // ============================================================================
-
-  const handleTogglePanelImpl = useRef<() => void>(() => {});
-  // eslint-disable-next-line react-hooks/refs -- 안정 래퍼의 최신 토글 콜백 유지
-  handleTogglePanelImpl.current = () => {
-    const willOpen = !isPanelVisible;
-
-    if (willOpen) {
-      manuallyClosedRef.current = false;
-      setIsPanelVisible(true);
-      const hasSelection = selectedElements.length > 0;
-      if (!hasSelection) {
-        setPanelMode('layer');
-      }
-    } else {
-      manuallyClosedRef.current = true;
-      setIsPanelVisible(false);
-      setShowImagePicker(false);
-      setShowGraphImagePicker(false);
-      setShowBatchImagePicker(false);
-    }
-  };
-  const handleTogglePanel = () => {
-    handleTogglePanelImpl.current();
-  };
 
   const handleToggleMode = () => {
     setPanelMode(panelMode === 'layer' ? 'property' : 'layer');
