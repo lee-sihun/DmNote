@@ -58,6 +58,20 @@ async function bootstrap() {
   );
 
   await import('@api/dmnoteApi');
+
+  // 업데이트 UI 시뮬레이터, 개발 빌드에만 들어간다 (콘솔에서 __dmn_updateSim())
+  // 보조 도구가 앱 부팅을 막으면 안 되므로 실패는 여기서 끊는다
+  if (import.meta.env.DEV) {
+    try {
+      const { installUpdateSimulator } = await import(
+        '../../dev/updateSimulator'
+      );
+      installUpdateSimulator();
+    } catch (error) {
+      console.error('[UpdateSim] 시뮬레이터 설치 실패', error);
+    }
+  }
+
   const [{ createRoot }, { I18nProvider }, { default: App }] =
     await Promise.all([
       import('react-dom/client'),

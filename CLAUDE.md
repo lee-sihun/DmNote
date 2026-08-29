@@ -33,6 +33,7 @@ src/renderer/
 ├── types/           # 공유 타입 정의
 ├── contexts/        # React Context
 ├── plugins/         # 플러그인 시스템
+├── dev/             # 개발 전용 도구 (프로덕션 번들 제외)
 └── styles/          # 전역 스타일 (Tailwind)
 
 src-tauri/src/
