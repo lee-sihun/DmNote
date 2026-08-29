@@ -11,6 +11,8 @@ interface MockKeyState {
   selectedKeyType: string;
   isBootstrapped: boolean;
   customTabs: unknown[];
+  tabOrder?: string[];
+  barCount?: number;
 }
 
 type MockKeyStoreListener = (
@@ -38,6 +40,8 @@ const mocks = vi.hoisted(() => ({
     selectedKeyType: '4key',
     isBootstrapped: true,
     customTabs: [],
+    tabOrder: ['4key', '5key', '6key', '8key'],
+    barCount: 4,
   } as MockKeyState,
   keyStoreListeners: new Set<MockKeyStoreListener>(),
 }));
@@ -47,7 +51,32 @@ vi.mock('@contexts/useTranslation', () => ({
 }));
 vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: {
-    getState: vi.fn(() => mocks.keyState),
+    getState: vi.fn(() => ({
+      ...mocks.keyState,
+      adoptTabMetadataEvent: ({
+        customTabs,
+        tabOrder,
+        barCount,
+        selectedKeyType,
+      }: {
+        customTabs: unknown[];
+        tabOrder: string[];
+        barCount: number;
+        selectedKeyType: string;
+      }) => {
+        const previousState = mocks.keyState;
+        mocks.keyState = {
+          ...previousState,
+          customTabs,
+          tabOrder,
+          barCount,
+          selectedKeyType,
+        };
+        mocks.keyStoreListeners.forEach((listener) => {
+          listener(mocks.keyState, previousState);
+        });
+      },
+    })),
     setState: vi.fn(
       (
         update:

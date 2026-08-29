@@ -164,15 +164,18 @@ export function useAppBootstrap() {
     // 그 창에서 확정된 편집이 새 모드의 엉뚱한 요소에 실린다
     const adoptSelectedKeyType = (
       customTabs: CustomTab[],
+      tabOrder: string[],
+      barCount: number,
       selectedKeyType: string,
     ) => {
       const modeChanged =
         useKeyStore.getState().selectedKeyType !== selectedKeyType;
-      useKeyStore.setState((state) => ({
-        ...state,
+      useKeyStore.getState().adoptTabMetadataEvent({
         customTabs,
+        tabOrder,
+        barCount,
         selectedKeyType,
-      }));
+      });
       if (modeChanged && !isOverlayWindow && window.__dmn_runtime !== 'obs') {
         resetSelectionForModeChange();
       }
@@ -665,6 +668,8 @@ export function useAppBootstrap() {
       const keyState = useKeyStore.getState();
       const keyChanges: {
         customTabs?: CustomTab[];
+        tabOrder?: string[];
+        barCount?: number;
         selectedKeyType?: string;
       } = {};
       if (
@@ -673,11 +678,29 @@ export function useAppBootstrap() {
       ) {
         keyChanges.customTabs = bootstrap.customTabs;
       }
+      if (
+        stableStringify(keyState.tabOrder) !==
+        stableStringify(bootstrap.tabOrder)
+      ) {
+        keyChanges.tabOrder = bootstrap.tabOrder;
+      }
+      if (keyState.barCount !== bootstrap.barCount) {
+        keyChanges.barCount = bootstrap.barCount;
+      }
       if (keyState.selectedKeyType !== bootstrap.selectedKeyType) {
         keyChanges.selectedKeyType = bootstrap.selectedKeyType;
       }
       if (Object.keys(keyChanges).length > 0) {
-        useKeyStore.setState((state) => ({ ...state, ...keyChanges }));
+        // 이것도 권위 기록이다. 세대를 올려야 재동기화 직전에 띄운 요청의
+        // 낡은 응답이 여기서 맞춘 상태를 되돌리지 못한다
+        useKeyStore.setState((state) => ({
+          ...state,
+          ...keyChanges,
+          tabMetadataGeneration: state.tabMetadataGeneration + 1,
+          selectionGeneration:
+            state.selectionGeneration +
+            (keyChanges.selectedKeyType === undefined ? 0 : 1),
+        }));
       }
 
       finalizeBootstrap();
@@ -749,6 +772,8 @@ export function useAppBootstrap() {
           positions: bootstrap.positions,
           canonicalPositions: bootstrap.positions,
           customTabs: bootstrap.customTabs,
+          tabOrder: bootstrap.tabOrder,
+          barCount: bootstrap.barCount,
           selectedKeyType: bootstrap.selectedKeyType,
         }));
         useStatItemStore.setState((state) => ({
@@ -889,7 +914,9 @@ export function useAppBootstrap() {
         applyDiff(diff);
       }),
       window.api.keys.onModeChanged(({ mode }) => {
-        useKeyStore.setState((state) => ({ ...state, selectedKeyType: mode }));
+        // 권위 선택 변경이다. custom_tabs_select는 customTabs:changed 없이 이것만
+        // 내므로, 여기서 선택 세대를 안 올리면 과거 응답이 이 선택을 되돌린다
+        useKeyStore.getState().commitSelectedKeyType(mode);
         // 이전 모드 선택 index가 새 모드 요소로 재해석되는 것 방지
         if (!isOverlayWindow && window.__dmn_runtime !== 'obs') {
           resetSelectionForModeChange();
@@ -953,8 +980,8 @@ export function useAppBootstrap() {
         }
       }),
       window.api.keys.customTabs.onChanged(
-        ({ customTabs, selectedKeyType }) => {
-          adoptSelectedKeyType(customTabs, selectedKeyType);
+        ({ customTabs, tabOrder, barCount, selectedKeyType }) => {
+          adoptSelectedKeyType(customTabs, tabOrder, barCount, selectedKeyType);
         },
       ),
       window.api.noteTab.onChanged(({ tabId, settings }) => {
@@ -978,7 +1005,12 @@ export function useAppBootstrap() {
       }),
       window.api.presets.onSnapshot((snapshot) => {
         if (disposed) return;
-        adoptSelectedKeyType(snapshot.customTabs, snapshot.selectedKeyType);
+        adoptSelectedKeyType(
+          snapshot.customTabs,
+          snapshot.tabOrder,
+          snapshot.barCount,
+          snapshot.selectedKeyType,
+        );
         useSettingsStore.setState({
           tabNoteOverrides: snapshot.tabNoteOverrides,
         });

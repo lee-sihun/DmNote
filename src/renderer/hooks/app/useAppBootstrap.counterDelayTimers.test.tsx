@@ -44,7 +44,17 @@ vi.mock('@contexts/useTranslation', () => ({
 }));
 vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: {
-    getState: vi.fn(() => mocks.keyState),
+    getState: vi.fn(() => ({
+      ...mocks.keyState,
+      // keys:mode-changed 수신부가 쓴다. 선택만 바꾸는 실제 동작을 흉내 낸다
+      commitSelectedKeyType: (selectedKeyType: string) => {
+        const previousState = mocks.keyState;
+        mocks.keyState = { ...previousState, selectedKeyType };
+        mocks.keyStoreListeners.forEach((listener) => {
+          listener(mocks.keyState, previousState);
+        });
+      },
+    })),
     setState: vi.fn(
       (
         update:
