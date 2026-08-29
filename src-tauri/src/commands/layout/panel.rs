@@ -286,6 +286,7 @@ fn start_panel_window_dragging(
     Ok(())
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn panel_drag_local_coordinates(
     client_x: f64,
     client_y: f64,
@@ -307,6 +308,7 @@ fn panel_drag_local_coordinates(
     ))
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn is_panel_mouse_down_event(
     event_type: u64,
     event_window_number: i64,
@@ -316,6 +318,7 @@ fn is_panel_mouse_down_event(
 }
 
 // NSLeftMouseDown(1)~NSMouseExited(9), NSOtherMouse*(25~27)
+#[cfg(any(target_os = "macos", test))]
 fn is_mouse_event_type(event_type: u64) -> bool {
     matches!(event_type, 1..=9 | 25..=27)
 }

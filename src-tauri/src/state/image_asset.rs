@@ -185,7 +185,8 @@ mod tests {
         let expected = b"GIF89a-read-only-original";
         fs::create_dir_all(&directory).unwrap();
         fs::write(&source, expected).unwrap();
-        let mut permissions = fs::metadata(&source).unwrap().permissions();
+        let original_permissions = fs::metadata(&source).unwrap().permissions();
+        let mut permissions = original_permissions.clone();
         permissions.set_readonly(true);
         fs::set_permissions(&source, permissions).unwrap();
 
@@ -197,15 +198,7 @@ mod tests {
             .permissions()
             .readonly());
 
-        let mut permissions = fs::metadata(&source).unwrap().permissions();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            permissions.set_mode(permissions.mode() | 0o200);
-        }
-        #[cfg(windows)]
-        permissions.set_readonly(false);
-        fs::set_permissions(&source, permissions).unwrap();
+        fs::set_permissions(&source, original_permissions).unwrap();
         fs::remove_dir_all(directory).unwrap();
     }
 

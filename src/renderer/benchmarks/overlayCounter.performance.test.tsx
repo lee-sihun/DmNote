@@ -11,13 +11,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { summarizeDistribution } from './shadowToggleBenchmark';
+import { OverlayCounterBenchmarkSurface } from './overlayCounterBenchmark';
 import {
   createAnimateStub,
   createBenchmarkLayout,
   createFrameDriver,
-  OverlayCounterBenchmarkSurface,
   type CounterPlacementScenario,
-} from './overlayCounterBenchmark';
+} from './overlayCounterBenchmarkSupport';
 import { setKeyActive } from '@stores/signals/keySignals';
 import { setKeyCounter } from '@stores/signals/keyCounterSignals';
 
