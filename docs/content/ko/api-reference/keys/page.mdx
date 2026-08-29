@@ -510,10 +510,16 @@ const tabs = await dmn.keys.customTabs.list();
 
 새 커스텀 탭을 생성합니다.
 
+이름은 앞뒤 공백을 다듬은 뒤 검사합니다. 비어 있거나(`invalid-name`), UTF-16 기준
+10자를 넘거나(`name-too-long`), `4key`·`5key`·`6key`·`8key`와 같거나(`reserved-name`),
+이미 쓰는 이름이면(`duplicate-name`) 거절됩니다. 탭이 30개면 `max-reached`입니다.
+
 ```javascript
 const result = await dmn.keys.customTabs.create('My Keys');
 if (result.error) {
-  console.error(result.error); // "invalid-name", "duplicate-name", "max-reached"
+  // "invalid-name" | "name-too-long" | "reserved-name"
+  // "duplicate-name" | "max-reached"
+  console.error(result.error);
 } else {
   console.log('생성됨:', result.result);
 }
@@ -537,10 +543,15 @@ await dmn.keys.customTabs.select('custom-123');
 
 ### restore(customTabs, selectedKeyType)
 
-이미 존재하는 커스텀 탭의 이름·순서와 선택 모드를 원자적으로 복원합니다. 모든
+이미 존재하는 커스텀 탭의 이름과 선택 모드를 원자적으로 복원합니다. 모든
 탭 ID에는 짝이 맞는 `keys`와 `keyPositions`가 이미 있어야 합니다. 탭 추가·삭제나
 키 구조 변경에는 `create`, `delete`, `updateWithPositions`를 사용하세요. 고아 탭
 정보나 잘못된 입력은 저장 데이터를 바꾸지 않고 거절됩니다.
+
+<Callout type="warning">
+  표시 순서는 `tabOrder`가 소유하며 `restore`는 건드리지 않습니다. 넘긴 배열의
+  순서는 무시되고 저장된 순서가 그대로 유지됩니다.
+</Callout>
 
 ```javascript
 await dmn.keys.customTabs.restore(
@@ -553,10 +564,16 @@ await dmn.keys.customTabs.restore(
 
 커스텀 탭 변경 이벤트를 구독합니다.
 
+페이로드에는 `customTabs`와 `selectedKeyType` 외에 `tabOrder`와 `barCount`가
+함께 실립니다. `tabOrder`는 내장 모드와 커스텀 탭을 합친 표시 순서로 각 탭 ID가
+정확히 한 번씩 들어가고, `barCount`는 그중 툴바 바에 나오는 앞쪽 개수입니다(1~4).
+`list()`는 배열만 돌려주므로 표시 순서는 `tabOrder`로 확인하세요.
+
 ```javascript
 const unsub = dmn.keys.customTabs.onChanged(
-  ({ customTabs, selectedKeyType }) => {
+  ({ customTabs, tabOrder, barCount, selectedKeyType }) => {
     console.log('선택된 탭:', selectedKeyType);
+    console.log('바에 있는 탭:', tabOrder.slice(0, barCount));
   },
 );
 ```
