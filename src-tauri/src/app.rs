@@ -1,6 +1,7 @@
+#[cfg(target_os = "windows")]
+use crate::models;
 use crate::{
-    commands, compute_compensating_zoom, keyboard, models, services,
-    should_apply_compensating_zoom, state,
+    commands, compute_compensating_zoom, keyboard, services, should_apply_compensating_zoom, state,
 };
 use anyhow::Result;
 use log::LevelFilter;
@@ -334,7 +335,10 @@ pub fn run() {
             commands::layout::panel::panel_window_dock,
             commands::layout::panel::panel_window_take_restore_request,
             commands::layout::panel::panel_window_close_ack,
-            commands::layout::panel::panel_window_start_dragging,
+            commands::layout::panel::panel_drag_present_and_start,
+            commands::layout::panel::panel_drag_start_existing,
+            commands::layout::panel::panel_drag_disarm_dock_zone,
+            commands::layout::panel::panel_drag_hit_test,
             commands::layout::panel::panel_window_apply_native_chrome,
             // 미디어
             commands::media::image::image_load,

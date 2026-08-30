@@ -31,10 +31,10 @@ use crate::{
         GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
         ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
         KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
-        OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
-        TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
-        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
-        IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
+        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
+        StoredOverlayBounds, TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX,
+        IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
+        IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
     },
     services::font_metadata::parse_font_metadata,
 };
@@ -1503,8 +1503,28 @@ fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
         "customJs" => recover_custom_js(value),
         "gridSettings" => recover_object_fields::<GridSettings>(field, value),
         "shortcuts" => recover_object_fields::<ShortcutsState>(field, value),
+        "overlayBounds" => recover_overlay_bounds(value),
         _ => None,
     }
+}
+
+fn recover_overlay_bounds(value: &Value) -> Option<Value> {
+    if serde_json::from_value::<StoredOverlayBounds>(value.clone()).is_ok() {
+        return Some(value.clone());
+    }
+
+    let Value::Object(source) = value else {
+        return None;
+    };
+    let public = serde_json::from_value::<crate::models::OverlayBounds>(serde_json::json!({
+        "x": source.get("x")?,
+        "y": source.get("y")?,
+        "width": source.get("width")?,
+        "height": source.get("height")?,
+    }))
+    .ok()?;
+    log::warn!("[Store] Discarding invalid overlayBounds nativePosition during recovery");
+    serde_json::to_value(StoredOverlayBounds::from(public)).ok()
 }
 
 fn recover_object_fields<T>(field: &str, value: &Value) -> Option<Value>
@@ -2093,7 +2113,7 @@ fn migrate_legacy_repair_fields(fields: &mut Map<String, Value>) {
         return;
     }
     if let Some(value) = legacy_bounds {
-        if serde_json::from_value::<OverlayBounds>(value.clone()).is_ok() {
+        if serde_json::from_value::<StoredOverlayBounds>(value.clone()).is_ok() {
             fields.insert("overlayBounds".to_string(), value);
             return;
         }
@@ -2249,7 +2269,8 @@ mod tests {
             GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
             KeyCounterColor, KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition,
             LayerGroupDef, NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition,
-            StatType, TabCss, TabNoteSettings, POSITION_COLLECTION_FIELDS,
+            StatType, StoredOverlayBounds, StoredOverlayNativePosition, TabCss, TabNoteSettings,
+            POSITION_COLLECTION_FIELDS,
         },
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -4294,12 +4315,15 @@ mod tests {
         let mut expected = AppStoreData {
             hardware_acceleration: false,
             always_on_top: false,
-            overlay_bounds: Some(OverlayBounds {
-                x: 11.0,
-                y: 22.0,
-                width: 933.0,
-                height: 411.0,
-            }),
+            overlay_bounds: Some(
+                OverlayBounds {
+                    x: 11.0,
+                    y: 22.0,
+                    width: 933.0,
+                    height: 411.0,
+                }
+                .into(),
+            ),
             obs_mode_enabled: true,
             obs_port: 18_321,
             obs_token: Some("obs-token-sentinel".to_string()),
@@ -4384,6 +4408,97 @@ mod tests {
         remove_all_native_ids(&mut actual_value);
         remove_all_native_ids(&mut expected_value);
         assert_eq!(actual_value, expected_value);
+    }
+
+    #[test]
+    fn overlay_bounds_fixtures_load_and_resave_with_nested_recovery() {
+        let fixtures = [
+            (
+                "legacy",
+                serde_json::json!({
+                    "x": 31.0,
+                    "y": 47.0,
+                    "width": 911.0,
+                    "height": 333.0
+                }),
+                None,
+                false,
+            ),
+            (
+                "native",
+                serde_json::json!({
+                    "x": 31.0,
+                    "y": 47.0,
+                    "width": 911.0,
+                    "height": 333.0,
+                    "nativePosition": {
+                        "x": 62.0,
+                        "y": 94.0,
+                        "logicalEchoX": 31.0,
+                        "logicalEchoY": 47.0
+                    }
+                }),
+                Some(StoredOverlayNativePosition {
+                    x: 62.0,
+                    y: 94.0,
+                    logical_echo_x: 31.0,
+                    logical_echo_y: 47.0,
+                }),
+                false,
+            ),
+            (
+                "invalid-native-child",
+                serde_json::json!({
+                    "x": 31.0,
+                    "y": 47.0,
+                    "width": 911.0,
+                    "height": 333.0,
+                    "nativePosition": {
+                        "x": 62.0,
+                        "y": 94.0,
+                        "logicalEchoX": 31.0,
+                        "logicalEchoY": "broken"
+                    }
+                }),
+                None,
+                true,
+            ),
+        ];
+
+        for (label, bounds, expected_native, expected_repaired) in fixtures {
+            let path = std::env::temp_dir().join(format!(
+                "dmnote-overlay-bounds-{label}-{}.json",
+                uuid::Uuid::new_v4()
+            ));
+            let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+            fixture["overlayBounds"] = bounds;
+            std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+            let loaded = load_store_from_path(&path).unwrap();
+            assert_eq!(loaded.repaired, expected_repaired, "{label}");
+            let expected = StoredOverlayBounds {
+                x: 31.0,
+                y: 47.0,
+                width: 911.0,
+                height: 333.0,
+                native_position: expected_native.clone(),
+            };
+            assert_eq!(
+                loaded.data.overlay_bounds.as_ref(),
+                Some(&expected),
+                "{label}"
+            );
+
+            std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+            let reloaded = load_store_from_path(&path).unwrap();
+            assert!(!reloaded.repaired, "{label}");
+            assert_eq!(
+                reloaded.data.overlay_bounds.as_ref(),
+                Some(&expected),
+                "{label}"
+            );
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     #[test]
@@ -4476,12 +4591,15 @@ mod tests {
         assert_eq!(loaded.data.background_color, "#123456");
         assert_eq!(
             loaded.data.overlay_bounds,
-            Some(OverlayBounds {
-                x: 17.0,
-                y: 29.0,
-                width: LEGACY_OVERLAY_WIDTH,
-                height: LEGACY_OVERLAY_HEIGHT,
-            })
+            Some(
+                OverlayBounds {
+                    x: 17.0,
+                    y: 29.0,
+                    width: LEGACY_OVERLAY_WIDTH,
+                    height: LEGACY_OVERLAY_HEIGHT,
+                }
+                .into()
+            )
         );
     }
 

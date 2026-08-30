@@ -2345,6 +2345,49 @@ pub struct OverlayBounds {
     pub height: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredOverlayNativePosition {
+    pub x: f64,
+    pub y: f64,
+    pub logical_echo_x: f64,
+    pub logical_echo_y: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredOverlayBounds {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_position: Option<StoredOverlayNativePosition>,
+}
+
+impl StoredOverlayBounds {
+    pub fn public_bounds(&self) -> OverlayBounds {
+        OverlayBounds {
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
+impl From<OverlayBounds> for StoredOverlayBounds {
+    fn from(bounds: OverlayBounds) -> Self {
+        Self {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            native_position: None,
+        }
+    }
+}
+
 /// 분리 패널의 마지막 기하 정보. 복원에 쓰는 값은 height뿐이고
 /// x/y는 이동 기록으로만 남는다 - 패널은 열 때마다 메인 창 옆에 다시 배치된다
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -2456,7 +2499,7 @@ pub struct AppStoreData {
     #[serde(default)]
     pub custom_js: CustomJs,
     pub overlay_resize_anchor: OverlayResizeAnchor,
-    pub overlay_bounds: Option<OverlayBounds>,
+    pub overlay_bounds: Option<StoredOverlayBounds>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_bounds: Option<PanelBounds>,
     /// 분리 패널 창 존재 여부 (재시작 복원용)

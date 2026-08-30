@@ -20691,12 +20691,15 @@ mod tests {
     fn defer_test_bounds(store: &AppStore, x: f64) {
         store
             .update_deferred(|state| {
-                state.overlay_bounds = Some(OverlayBounds {
-                    x,
-                    y: 20.0,
-                    width: 800.0,
-                    height: 300.0,
-                });
+                state.overlay_bounds = Some(
+                    OverlayBounds {
+                        x,
+                        y: 20.0,
+                        width: 800.0,
+                        height: 300.0,
+                    }
+                    .into(),
+                );
                 state.overlay_bounds_are_logical = true;
             })
             .unwrap();
