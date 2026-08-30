@@ -82,6 +82,9 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
   if (position.hidden) return null;
 
+  // 히트 기준은 활동 영역 박스(루트) - 에디터 선택 박스와 같은 의미이고 포즈 전환
+  // 중에도 rect가 안정적이다. 이미지 박스는 transform을 따라 움직여 실측 시점에
+  // 따라 어긋나므로 히트 표식을 img로 옮기지 않는다
   return (
     <div
       className={`absolute ${position.className || ''}`}
@@ -95,6 +98,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
         pointerEvents: 'none',
       }}
       data-sprite-element="true"
+      data-overlay-hit="true"
       data-state={pressedIds.size > 0 ? 'active' : 'idle'}
     >
       {imageSrc && (

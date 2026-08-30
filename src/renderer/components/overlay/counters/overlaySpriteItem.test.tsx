@@ -107,8 +107,8 @@ describe('OverlaySpriteItem', () => {
     expect(el?.style.height).toBe('200px');
     expect(el?.style.zIndex).toBe('5');
     expect(el?.style.pointerEvents).toBe('none');
-    // 시각 전용 - 히트 마커 없음
-    expect(el?.hasAttribute('data-overlay-hit')).toBe(false);
+    // 히트 마커로 네이티브 히트 패널에 참여 - 상호작용은 패널 몫이라 pointer-events는 none 유지
+    expect(el?.dataset.overlayHit).toBe('true');
 
     const img = imgEl();
     expect(img?.getAttribute('src')).toBe(BASE_IMAGE);

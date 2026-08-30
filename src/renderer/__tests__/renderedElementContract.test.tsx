@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Key } from '@components/shared/Key';
 import StatItem from '@components/overlay/counters/StatItem';
 import OverlayKnobItem from '@components/overlay/counters/OverlayKnobItem';
+import OverlaySpriteItem from '@components/overlay/counters/OverlaySpriteItem';
 import OutsideCounter from '@components/overlay/counters/OutsideCounter';
 import GraphPanel from '@components/shared/GraphPanel';
 import { resetAllKeySignals, setKeyActive } from '@stores/signals/keySignals';
@@ -335,6 +336,55 @@ describe('렌더 DOM 계약', () => {
         DEFAULT_ELEMENT_ACTIVE_SHADOW,
       );
       expect(el!.style.transform).toContain('rotate(90deg)');
+    });
+  });
+
+  describe('오버레이 SpriteItem', () => {
+    it('루트에 data 속성과 히트 마커를 싣는다', () => {
+      act(() => {
+        root.render(
+          <OverlaySpriteItem
+            position={{
+              id: 'sprite-contract',
+              dx: 4,
+              dy: 8,
+              width: 60,
+              height: 60,
+              hidden: false,
+              zIndex: null,
+              layerName: null,
+              groupId: null,
+              className: null,
+              useInlineStyles: null,
+              baseImage: 'data:image/png;base64,base',
+              imageFit: null,
+              imageRect: { x: 0, y: 0, width: 60, height: 60 },
+              pivot: { x: 0.5, y: 0.5 },
+              idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+              poses: [
+                {
+                  poseId: 'pose-contract',
+                  triggers: ['el-contract'],
+                  matchMode: 'exact',
+                  transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+                  imageOverride: null,
+                },
+              ],
+              activation: 'whileHeld',
+              transitionMs: 90,
+              transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+            keyCanonicalMap={new Map()}
+          />,
+        );
+      });
+      const el = host.querySelector<HTMLElement>(
+        '[data-sprite-element="true"]',
+      );
+      expect(el).not.toBeNull();
+      // 다른 표시 요소와 같은 히트 참여 - 마커가 없으면 오버레이 클릭이 관통한다
+      expect(el!.dataset.overlayHit).toBe('true');
+      expect(el!.getAttribute('data-state')).toBe('idle');
     });
   });
 
