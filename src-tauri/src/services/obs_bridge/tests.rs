@@ -502,6 +502,101 @@ fn local_machine_ip_rejects_foreign_addresses() {
     }
 }
 
+async fn media_response_without_app_handle(expected_token: &str, rest: &str) -> Vec<u8> {
+    let bridge = ObsBridgeService::new("test");
+    bridge.set_token(expected_token.to_string());
+    let (mut client, mut server) = tcp_pair().await;
+
+    bridge.handle_media_request(&mut server, rest).await;
+    drop(server);
+
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .await
+        .expect("media 응답 수신 실패");
+    response
+}
+
+#[tokio::test]
+async fn media_token_query_uses_the_first_exact_token_parameter() {
+    for (rest, expected_status) in [
+        ("*?token=secret", "400 Bad Request"),
+        ("*?other=value&token=secret", "400 Bad Request"),
+        ("*?token=wrong&token=secret", "403 Forbidden"),
+        ("*?not-token=secret", "403 Forbidden"),
+        ("*?token=secret%20", "403 Forbidden"),
+        ("*?TOKEN=secret", "403 Forbidden"),
+    ] {
+        let response = media_response_without_app_handle("secret", rest).await;
+        assert!(
+            response.starts_with(format!("HTTP/1.1 {expected_status}").as_bytes()),
+            "rest={rest}, response={}",
+            String::from_utf8_lossy(&response)
+        );
+    }
+
+    let response = media_response_without_app_handle("", "*").await;
+    assert!(response.starts_with(b"HTTP/1.1 400 Bad Request"));
+}
+
+#[tokio::test]
+async fn media_path_decode_preserves_malformed_input_status_order() {
+    use base64::Engine as _;
+
+    let invalid_utf8 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0xff]);
+    let relative_path =
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode("images/preview.PNG");
+    let absolute_path = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+        std::env::temp_dir()
+            .join("preview.PNG")
+            .to_string_lossy()
+            .as_bytes(),
+    );
+
+    for (rest, expected_status) in [
+        ("%GG", "400 Bad Request"),
+        ("%", "400 Bad Request"),
+        (invalid_utf8.as_str(), "400 Bad Request"),
+        (relative_path.as_str(), "403 Forbidden"),
+        (absolute_path.as_str(), "403 Forbidden"),
+    ] {
+        let response = media_response_without_app_handle("", rest).await;
+        assert!(
+            response.starts_with(format!("HTTP/1.1 {expected_status}").as_bytes()),
+            "rest={rest}, response={}",
+            String::from_utf8_lossy(&response)
+        );
+    }
+}
+
+#[test]
+fn media_percent_decoding_preserves_lossy_and_incomplete_sequences() {
+    assert_eq!(percent_decode("abc%2Fdef%20ghi"), "abc/def ghi");
+    assert_eq!(percent_decode("%2f%41"), "/A");
+    assert_eq!(percent_decode("%GG%2"), "%GG%2");
+    assert_eq!(percent_decode("%FF"), "\u{fffd}");
+    assert_eq!(percent_decode("plus+sign"), "plus+sign");
+}
+
+#[test]
+fn media_mime_mapping_is_case_insensitive_and_preserves_fallbacks() {
+    for (path, expected) in [
+        ("index.HTML", "text/html; charset=utf-8"),
+        ("bundle.MJS", "application/javascript; charset=utf-8"),
+        ("theme.Css", "text/css; charset=utf-8"),
+        ("data.JSON", "application/json; charset=utf-8"),
+        ("image.JPEG", "image/jpeg"),
+        ("clip.OgG", "video/ogg"),
+        ("font.WOFF2", "font/woff2"),
+        ("module.WASM", "application/wasm"),
+        ("no-extension", "application/octet-stream"),
+        ("archive.exe", "application/octet-stream"),
+    ] {
+        assert_eq!(guess_mime(path), expected, "path={path}");
+    }
+}
+
 // dev 리다이렉트(token 쿼리 포함)는 이 머신 자신의 peer에만 허용 —
 // 같은 PC가 자기 LAN IP로 접속하는 URL 복사 경로는 유지되어야 함
 #[tokio::test]
