@@ -1,175 +1,172 @@
-# 코드 품질 리팩터링 계획
+# 코드 품질 리팩터링 결과와 후속 계획
 
-## 목표와 원칙
+## 목표와 판정 원칙
 
-대형 파일을 단순히 줄 수만 나누지 않고, 변경 이유와 검증 경계가 같은 책임끼리 모듈화한다.
+기준 커밋은 `af1bc19c`이며 작업 브랜치는 `refactor/code-quality-modularization`이다. 이번 작업의 최우선 조건은 **의도한 동작 변경이 없는 책임 분리**다.
 
-- UI 컴포넌트, 비동기 상태 훅, 순수 변환 모델을 분리한다.
-- 기존 공개 import 경로와 wire/API 계약은 가능한 한 유지한다.
-- 파일 이동 커밋과 동작 변경 커밋을 섞지 않는다.
-- 각 단계에서 관련 테스트를 먼저 실행하고, 단계 종료 시 전체 게이트를 실행한다.
-- 성능 수치는 실제 benchmark 실행 결과만 기록한다.
+- UI, 상태·비동기 runtime, 순수 변환 모델을 변경 이유와 검증 경계에 맞춰 분리한다.
+- 공개 import, Tauri command/event, 저장 schema, editor wire 형식을 유지한다.
+- characterization test로 기존 호출 순서, 오류 전파, preview/commit, cleanup 계약을 먼저 고정한다.
+- 테스트와 리팩터링을 단계별 한국어 conventional commit으로 남긴다.
+- 줄 수만 줄이는 분리나 내부 상태를 넓은 props/API로 노출하는 분리는 하지 않는다.
+- 기존 결함은 리팩터링에 섞어 고치지 않고 별도 후속 작업으로 기록한다.
+- 완전 동일성은 자동 검증 범위에서 엄격히 확인하되, 실제 Windows ASIO 장치와 Tauri WebView 같은 플랫폼 경계는 수동 smoke test가 별도로 필요하다고 명시한다.
 
-## 이번 브랜치에서 완료한 범위
+## 브랜치 결과 요약
 
-기준 브랜치: `main`의 `af1bc19c`
+코드·테스트 242개와 이 결과 문서 1개를 포함해 기준 커밋 대비 총 243개 단계별 커밋, 366개 변경 파일이다. 중간 수정 커밋 11개는 원인을 도입한 커밋에 흡수했고, rewrite 전 트리는 `backup/refactor-code-quality-pre-fixup-20260830`에 보존했다. rewrite 전후 코드 tree hash는 모두 `73d4dfccf034bc9e7290ebf978b956e4082c110a`로 동일하다.
 
-| 영역 | 이전 | 현재 | 분리 결과 |
-| --- | ---: | ---: | --- |
-| `PropertiesPanel.tsx` | 3407줄 | 1549줄 | 선택 모델, navigation, commit handler, 이름 변경 세션, 플러그인 설정 제어, 패널 가시성 생명주기 분리 |
-| `BatchSelectionPanel.tsx` | 2367줄 | 1277줄 | 공통 handler/header와 그래프·노브·플러그인 전용 패널 분리 |
-| `SingleSelectionPanel.tsx` | 2061줄 | 674줄 | 그래프·노브 패널과 공통 표시 모델 분리 |
-| `Settings.tsx` | 1423줄 | 1172줄 | 키음 출력 UI, 비동기 적용 큐 훅, 순수 view model 분리 |
-| `Grid.tsx` | 2303줄 | 1269줄 | 네이티브 장면, 선택 overlay, 컨텍스트 메뉴·복제 ghost 모델 분리 |
-| `useGridSelection.ts` | 1552줄 | 1036줄 | 드래그 생명주기, 이동·클립보드·붙여넣기 순수 모델 분리 |
-| `PluginElement.tsx` | 1647줄 | 1421줄 | DOM 상호작용 어댑터와 레이아웃 모델 분리 |
-| `editorCoordinator.ts` | 3001줄 | 2138줄 | 의미 연산 projection, 직렬 작업 큐, 커밋 재시도 정책 분리 |
-| `elementOps.ts` | 2611줄 | 571줄 | document model, 공통 property, group, style, geometry 연산을 도메인 모듈로 분리하고 기존 facade export 유지 |
-| `ColorPicker.tsx` | 1513줄 | 1036줄 | 입력 필드와 팔레트·history 제어 UI 분리 |
-| `NumberInput.tsx` | 1440줄 | 1286줄 | draft·수식 parser 모델과 입력 chrome 분리 |
-| `CounterAnimationEditorModal.tsx` | 1417줄 | 1343줄 | draft 병합·정규화 모델 분리 |
-| `SoundTrimModal.tsx` | 1275줄 | 1011줄 | decode·waveform·trim 순수 모델 분리 |
-| `store.rs` | 22978줄 | 2769줄 | 테스트, writer, 자산 참조, 사운드 복구, editor helper, plugin storage transaction 분리 |
-| `editor_ops.rs` | 10154줄 | 2940줄 | 인라인 테스트 모듈 분리 |
-| `migration.rs` | 6053줄 | 2238줄 | 인라인 테스트 모듈 분리 |
-| `editor.rs` | 5777줄 | 2396줄 | 인라인 테스트 모듈 분리 |
-| `app_state.rs` | 9314줄 | 4782줄 | 테스트, 창 geometry, 키보드 daemon 정책·제어, 종료 생명주기 분리 |
-| `models/mod.rs` | 4169줄 | 3033줄 | 인라인 테스트 모듈 분리 |
-| `preset/load.rs` | 3104줄 | 1180줄 | 테스트와 폰트·이미지·사운드 자산 복원 분리 |
-| `keys/sound.rs` | 2189줄 | 806줄 | 테스트, 라이브러리 스캔·재조정, WAV 원자 교체 분리 |
-| `audio/engine.rs` | 1712줄 | 911줄 | ASIO 경계, 출력 테스트, clip decode, 명령 스레드 분리 |
+Tauri command는 기준과 현재 모두 145개이고 정렬된 이름 집합도 동일하다. `src-tauri/permissions`와 `docs/content`에는 API 변경에 따른 차이가 없다.
 
-ASIO는 장치 I/O 경계와 순수 정책을 `audio/engine/asio.rs`로 분리했다. 버퍼 정규화, 드라이버 목록 정규화, 유효 출력 구성, 빌드 가용성, 오류 코드와 폴백 계약을 하드웨어 없이 검증한다. Windows release workflow도 `asio-backend` feature의 focused suite를 production build 전에 실행한다.
+아래 줄 수는 기준 커밋과 현재 파일을 `wc -l`로 직접 측정한 값이다. 현재 값은 추출된 하위 모듈을 제외한 façade 또는 상위 조립 파일의 크기다.
 
-이번 분리는 IPC command/event 이름, store schema, editor wire 형식, 기존 `elementOps` 공개 export를 바꾸지 않았다. 이동한 Rust 창 좌표 코드는 가시성 키워드와 포맷 차이를 제외한 토큰 비교로 원본과 동일함을 확인했다.
+### 프론트엔드
 
-## Grid 네이티브 요소 재사용성 감사
+| 파일                              | 기준 | 현재 | 완료한 책임 경계                                                   |
+| --------------------------------- | ---: | ---: | ------------------------------------------------------------------ |
+| `PropertiesPanel.tsx`             | 3407 | 1199 | 선택 route, commit/runtime, plugin 설정, rename, layer action 분리 |
+| `BatchSelectionPanel.tsx`         | 2367 |  668 | 타입별 섹션, 공통 graph/knob, key-like commit runtime 분리         |
+| `SingleSelectionPanel.tsx`        | 2061 |  646 | 타입별 패널과 표시 모델 분리                                       |
+| `Settings.tsx`                    | 1423 |  773 | 오디오 출력, 비동기 적용 큐, resize anchor controller 분리         |
+| `Grid.tsx`                        | 2303 | 1269 | 네이티브 장면, 선택 overlay, context/ghost 모델 분리               |
+| `useGridSelection.ts`             | 1552 |  494 | drag, movement, clipboard, paste, guide 모델 분리                  |
+| `PluginElement.tsx`               | 1647 |  686 | DOM adapter, layout, snapshot·persistence runtime 분리             |
+| `editorCoordinator.ts`            | 3001 | 1784 | queue, retry, semantic projection, violation 처리 분리             |
+| `elementOps.ts`                   | 2611 |  571 | document/property/group/style/geometry 모듈과 façade 분리          |
+| `ColorPicker.tsx`                 | 1513 |  611 | 입력, palette/history, surface runtime 분리                        |
+| `NumberInput.tsx`                 | 1440 |  226 | draft/parser, scrub·keyboard session, chrome 분리                  |
+| `CounterAnimationEditorModal.tsx` | 1417 |  371 | draft/model, curve canvas, preview session 분리                    |
+| `SoundTrimModal.tsx`              | 1275 |  632 | decode, waveform, trim/export 모델 분리                            |
 
-키·통계·그래프·노브의 편집 Grid 렌더러를 오버레이 렌더러와 대조했다.
+추가로 `scopeUserCss.ts`는 212줄 façade, `smartGuides.ts`는 22줄 façade, `Dropdown.tsx`는 127줄, `ListPopup.tsx`는 168줄, `useLayerActions.ts`는 13줄 façade가 됐다. CSS selector/registry, 팝업 dismissal, 사운드 선택기 cache/runtime, editor structural/violation, plugin snapshot/persistence, window geometry persistence를 각각 독립 경계로 분리했다.
 
-- 키와 통계는 공용 `components/shared/Key.tsx`를 사용한다.
-- 그래프는 공용 `components/shared/GraphPanel.tsx`을 사용한다.
-- 노브의 링·이미지·인디케이터 DOM은 `components/shared/KnobFace.tsx`로 공용화했다.
-- 네 종류의 scene 조립과 이벤트 생성은 `Grid/core/NativeGridElements.tsx`가 담당한다.
-- `useGridElementInteraction`, `useStableHandlerSlots`, range·movement·clipboard·paste 모델이 포인터와 선택 정책을 공용화한다.
-- 통계 표시명은 `utils/grid/statTypeLabel.ts`, mixed 값 집계는 `utils/core/mixedValue.ts`가 단일 소스다.
+### 백엔드
 
-따라서 네 종류의 표시 표면을 다시 하나의 거대 조건부 컴포넌트로 합치지 않는다. 차이가 큰 graph 데이터 표현과 knob 회전 상태는 각각의 얇은 adapter에 남기고, 실제로 동일한 DOM·정책만 공유한다.
+| 파일                      |  기준 | 현재 | 완료한 책임 경계                                                      |
+| ------------------------- | ----: | ---: | --------------------------------------------------------------------- |
+| `state/store.rs`          | 22978 |  829 | persistence, writer, recovery, asset, editor, plugin transaction 분리 |
+| `state/editor_ops.rs`     | 10154 |   49 | 연산군·검증·structural operation과 테스트 분리                        |
+| `state/migration.rs`      |  6053 |  247 | 복구·migration 도메인과 테스트 분리                                   |
+| `state/editor.rs`         |  5777 |  176 | editor 상태·요청·테스트 분리                                          |
+| `state/app_state.rs`      |  9314 | 1265 | 창 geometry, keyboard, shutdown, controller 경계 분리                 |
+| `models/mod.rs`           |  4169 |  805 | editor와 도메인 모델 분리                                             |
+| `commands/preset/load.rs` |  3104 |  939 | font/image/sound 복원과 테스트 분리                                   |
+| `commands/keys/sound.rs`  |  2189 |  806 | library scan, repair, WAV 교체, 테스트 분리                           |
+| `audio/engine.rs`         |  1788 |  911 | ASIO, decode, output test, command thread 분리                        |
+| `state/history.rs`        |  2101 |  690 | snapshot/admission/transaction 경계 분리                              |
+| `services/obs_bridge.rs`  |  1975 |  837 | 세션·메시지·forwarding 경계 분리                                      |
+| `commands/keys/keys.rs`   |  2177 |  887 | mapping과 import/export 경계 분리                                     |
 
-## 추가 조사 결과와 잔여 프론트엔드 우선순위
+store 분리에서도 다음 불변식은 그대로 유지했다.
 
-아래 줄 수는 이번 브랜치에서 `wc -l`로 측정한 값이다.
-
-### 1. 상위 조립 컴포넌트
-
-- `PropertiesPanel.tsx` — 1549줄: 선택 route별 조립과 preview/commit adapter가 남아 있다.
-- `PluginElement.tsx` — 1421줄: 플러그인 content lifecycle과 runtime props projection이 다음 경계다.
-- `Grid.tsx` — 1269줄: viewport·도구·장면 훅을 조립하는 상위 controller다.
-- `BatchSelectionPanel.tsx` — 1277줄: mixed 4-type adapter와 탭 조립이 남아 있다.
-
-이 파일들은 분리된 하위 모델을 호출하는 조립부 비중이 커졌다. 다음 분리는 props contract를 더 넓히는 방식이 아니라 route/controller별 characterization test를 먼저 추가한 뒤 수행한다.
-
-### 2. 에디터 런타임 후속 경계
-
-- `editor/runtime/editorCoordinator.ts` — 2138줄
-  - canonical snapshot 동기화와 event publication을 다음 후보로 유지
-  - 직렬 queue와 retry/conflict 정책은 이미 독립 모듈
-- `editor/runtime/elementStyleOps.ts` — 952줄
-  - runtime·image 속성 연산은 분리 완료
-  - paint/shadow 속성군은 transition contract를 유지한 채 추가 분리 검토
-
-검증: coordinator conflict·retry·gesture focused suite, element operation export 계약, 전체 Vitest.
-
-### 3. 공통 입력과 편집기
-
-- `ColorPicker.tsx` — 1036줄: gradient stop 편집기와 picker surface 조립
-- `NumberInput.tsx` — 1286줄: scrub·keyboard 세션 controller
-- `CounterAnimationEditorModal.tsx` — 1343줄: media preview와 form section
-- `SoundTrimModal.tsx` — 1011줄: decode/export 작업과 waveform UI
-
-입력 컴포넌트는 Escape 취소, preview/commit 경계, child window 동작을 회귀 테스트로 고정한 뒤 이동한다.
-
-## 독립 최종 감사 결과
-
-별도 코드 품질 감사와 브랜치 회귀 감사를 병렬로 수행했다. 기준점 이후 57개 커밋과 134개 변경 파일을 검토했으며 P0~P2 동작 회귀는 발견되지 않았다. Grid 장면 분리에서 새로 도입된 네이티브 요소 ref registry가 unmount 시 `null` 값을 보관해 UUID key를 누적하던 P3 항목은 `nativeElementReferenceRegistry`의 삭제 계약과 회귀 테스트로 수정했다.
-
-다음 항목은 완료 범위와 별개의 후속 작업으로 권장한다.
-
-| 우선순위 | 후보 | 권장 경계와 선행 검증 |
-| --- | --- | --- |
-| 높음 | 배치 Graph 설정 중복 | graph-only와 mixed 패널의 type·평균선·speed·color·animation 상태 해석 및 UI를 `BatchGraphSettingsSection`으로 공용화. 두 route의 Mixed 표시, 500~5000ms clamp, 100ms snap, color preview/cancel/commit 표 기반 테스트 필요 |
-| 높음 | OverlayScene 타입 경계 | canonical 위치를 `Record<string, unknown>`으로 다시 캐스팅하는 adapter 제거. Graph/Knob의 공용 render 타입을 명시하고 overlay 렌더 계약·commit budget 테스트 실행 |
-| 높음 | Windows ASIO PR 게이트 | release workflow에만 있는 feature 테스트를 PR Windows check에도 추가하고 `cargo check`·`clippy --all-targets --features asio-backend` 실행. 실제 장치 smoke test는 계속 수동 유지 |
-| 중간 | Grid Key/Stat 외부 카운터 프리뷰 | `KeyCounterPreviewLayer`와 `StatCounterLayer`의 동일한 body·layer DOM을 공용화. Stat의 정수 정규화와 Key active-state preview 차이는 adapter에 유지 |
-| 중간 | Key/Stat 표시 표면 | interaction·signal wrapper는 유지하고 transparent placeholder, border ring, image/error, label/inside counter DOM만 순수 `KeyElementFace`로 분리. active/image failure/inside counter 계약 테스트 선행 |
-| 중간 | 배치 선택 조회 인덱스 | `batchSelectionModel`의 반복 `findIndex`·`find`를 렌더 단위 ID index/snapshot으로 교체. 선택 순서, 누락 ID, canonical/preview 구분 테스트 선행 |
-
-백엔드에서는 아래의 `store.rs` editor/history transaction과 `app_state.rs` frontend/panel/overlay controller 이동이 여전히 가장 큰 구조적 후속 작업이다. helper만 옮기는 대신 inherent impl 자체를 한 책임씩 이동하고, lock·cfg·가시성은 변경하지 않는다.
-
-## 잔여 대형 백엔드 우선순위
-
-- `state/app_state.rs` — 4782줄
-  - 다음 경계는 frontend flush/history handshake와 panel/overlay window controller
-  - keyboard daemon과 shutdown lifecycle은 분리 완료
-- `state/store.rs` — 2769줄
-  - 다음 경계는 editor/history transaction inherent impl
-  - writer·asset·plugin storage 모듈은 모두 기존 `commit_locked`를 통해서만 저장
-  - writer와 asset 모듈이 store lock을 우회하지 못하도록 현재 commit 경계를 유지
-- `models/mod.rs` — 3033줄: editor 외 모델을 도메인 파일로 옮기는 후속 후보
-- `state/editor_ops.rs` — 2940줄: 연산군별 validator/apply 경계가 후속 후보
-- `commands/keys/keys.rs` — 2177줄: key mapping command와 import/export 변환 분리 후보
-- `state/history.rs` — 2101줄: snapshot serializer와 admission/stack 정책 분리 후보
-
-`preset/load.rs` 1180줄, `keys/sound.rs` 806줄, `audio/engine.rs` 911줄은 이번 단계의 목표 경계까지 분리했다.
-
-store 자산 분리는 다음 불변식을 계속 지킨다.
-
-- orphan 정리는 직접 삭제 대신 `trash/<세션>/` 30일 격리
-- store 복구 세션은 sweep 생략
-- 파일 자산 추가 시 참조 수집과 손상/크래시 복구 테스트 동시 추가
+- orphan 자산은 직접 삭제하지 않고 `trash/<세션>/`에서 30일 격리
+- store 복구가 발생한 세션은 asset sweep 생략
+- 파일 자산 참조 수집과 손상·크래시 복구의 교차 검증 유지
 - `keys[mode][i]`와 `keyPositions[mode][i]`의 인덱스 결합 유지
+- writer와 추출 모듈이 기존 lock·commit 경계를 우회하지 않음
 
-## 단계별 검증 게이트
+## Grid·프로퍼티 패널 재사용성 결과
 
-### 프론트엔드 단계
+키·통계·그래프·노브를 Grid와 overlay, single/batch panel 사이에서 다시 대조했고, 실제 DOM이나 정책이 같은 부분만 공용화했다.
+
+- `KeyElementFace`: 키·통계의 placeholder, border, image/error, label, inside counter 표면
+- `CounterPreviewBody` / `CounterPreviewLayer`: 키·통계 외부 카운터의 공통 body와 layer
+- `GraphPanel`: Grid/overlay 그래프 표면
+- `BatchGraphSettingsSection`: graph-only와 mixed 배치 설정
+- `KnobFace`: 링, 이미지, indicator 표면
+- `PanelRenameControl`: 단일·배치 이름 변경 header와 focus/select 순서
+- `NativeGridElements`: 네이티브 요소 scene 조립과 adapter
+- `nativeElementReferenceRegistry`: mount/unmount 시 ref 등록·삭제 계약
+- `useGridElementInteraction`, stable handler slot, movement/clipboard/paste/smart-guide 모델: 포인터와 선택 정책
+
+Graph 데이터 adapter, Knob 회전 상태, Key 활성 상태, Stat 정수 정규화처럼 의미가 다른 부분은 공용 컴포넌트의 조건문으로 합치지 않았다. 현재 `Grid.tsx`와 `PropertiesPanel.tsx`의 남은 대부분은 훅·route·props를 연결하는 상위 orchestration이다. 직접 테스트가 부족한 상태에서 더 분리하면 계약 면적과 회귀 위험이 커져 즉시 작업할 P0–P2 후보로 보지 않는다.
+
+## ASIO 보강 결과
+
+`audio/engine/asio.rs`에서 하드웨어 독립 정책과 장치 I/O 경계를 분리했다. 버퍼 프레임 정규화, 드라이버 목록 정렬·중복 제거, 출력 구성, build availability, 오류 코드와 fallback을 자동 검증한다.
+
+- Rust ASIO focused suite: 18개 통과
+- 프론트엔드 ASIO 설정 계약: 7개 통과
+- `.github/workflows/ci-windows-asio.yml`: pull request와 수동 실행에서 fmt, feature check, Clippy `-D warnings`, focused test 실행
+- Windows release workflow: production build 전에 ASIO focused test 실행
+
+실제 ASIO 드라이버 열기, 다른 앱의 장치 점유, 재시작 후 장치 복원은 Windows 실제 장치 smoke test로 남는다. macOS의 Windows cross target은 로컬 MSVC CRT header가 없어 프로젝트 코드 전에 중단되므로 이를 대체하지 않는다.
+
+## 검증 결과
+
+단계별 focused suite와 독립 서브에이전트 감사를 반복했고, 최종 코드 트리에서 다음 결과를 확인했다.
+
+- TypeScript type check 통과
+- ESLint 오류 0; 기존 `SoundTrimModal.tsx` exhaustive-deps 경고 1건만 유지
+- Prettier check 통과
+- 전체 Vitest: 360개 파일, 3472개 테스트 통과, 18개 skip
+- Vite production build 통과; 기존 대형 chunk 경고만 유지
+- Rust 전체: 989개 통과, 6개 ignored
+- Rust fmt, all-target check, Clippy `-D warnings` 통과
+- ASIO feature check·Clippy와 focused 18개 테스트 통과
+- 242개 코드·테스트 커밋 모두 `git diff-tree --check` 통과
+- Rust module 175개와 literal `include_str!` / `include_bytes!` 경로 확인
+
+동작 동일성 판정에는 AST/토큰 정규화 비교, 공개 반환 객체와 hook/ref 선언 순서 비교, close/await/RAF/focus 순서 테스트, 오류 전파·rollback·preview/commit characterization을 함께 사용했다. 마지막 독립 감사에서는 즉시 안전하고 고가치인 추가 P0–P2 회귀·분리 후보를 발견하지 못했다.
+
+## 의도적으로 보존한 기존 결함
+
+아래 항목은 이번 리팩터링에서 발견했지만 동작 변경을 섞지 않기 위해 고치지 않았다. 별도 bug-fix 브랜치에서 먼저 실패 테스트와 기대 동작을 합의해야 한다.
+
+| 영역                         | 기존 동작                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| `PluginElement` subscription | 비동기 key/rawKey 구독이 unmount 뒤 완료되면 cleanup 누락 가능                       |
+| `PluginElement` state        | 같은 tick의 shallow `setState`가 서로 다른 leaf 하나를 잃을 수 있음                  |
+| `NativeGridElements`         | type+index 기반 action이 reorder/delete 뒤 다른 요소를 가리키거나 실패할 수 있음     |
+| main dialog / color picker   | 기존 timer·ref 재진입 경계가 완전히 정산되지 않음                                    |
+| `SoundTrimModal`             | 열린 상태에서 직접 unmount하면 playback/pointer cleanup 계약이 없음                  |
+| counter animation preview    | Escape/window blur 및 복수 preview press의 첫 release 동작이 기존대로 유지됨         |
+| `useLayerDnD`                | active drag 중 unmount 시 document listener, scheduler, body cursor 정산 계약이 없음 |
+
+## 후속 작업 분류
+
+### 선행 harness가 필요한 고위험 경계
+
+- `WebGLTracksOGL` / `noteBuffer`: 실제 GPU resource 수명과 성능 회귀 harness
+- `useNoteSystem`: fake clock 기반 timing·pool·subscription continuity 검증
+- `editorCoordinator`: queue/rebase의 결정적 trace와 failure injection
+- editor transition/migration recovery: property/fuzz와 오류 우선순위 검증
+- OBS/Tauri window runtime: 실제 창·WebSocket·종료 timing 통합 테스트
+- ASIO/audio와 Windows keyboard: 실제 Windows driver/device smoke test
+- 위 표의 기존 결함: 기대 동작 결정 후 별도 수정
+
+### 낮은 우선순위
+
+- `listPopupMenuRows.tsx`, `registryRewrite.ts` 등은 더 나눌 수 있지만 내부 pointer/registry 상태를 새 API로 노출하는 비용이 더 큼
+- `Grid.tsx`, `PropertiesPanel.tsx`의 추가 분리는 stable ID와 직접 orchestration test를 먼저 갖춘 뒤 재평가
+- Vitest의 기존 React `act(...)`, mock DOM prop, CSS parser stderr는 실패와 구분되지만 회귀 로그의 신호 대 잡음비를 낮추므로 별도 테스트 위생 작업으로 정리
+- cohesive wire schema와 단순 route table은 파일 크기만으로 분할하지 않음
+
+## 재현 가능한 최종 게이트
 
 ```bash
 npx tsc --noEmit
 npm run lint
-npm run format
+npm run format:check
 npm test -- --reporter=dot
 npm run build
-```
 
-### Rust 단계
-
-```bash
 cd src-tauri
-cargo fmt --check
-cargo check
+cargo fmt --all -- --check
+cargo check --all-targets
 cargo clippy --all-targets -- -D warnings
-cargo test
+cargo test --all-targets --quiet
+cargo check --all-targets --features asio-backend
+cargo clippy --all-targets --features asio-backend -- -D warnings
+cargo test --lib --features asio-backend audio::engine
 ```
 
-Tauri command를 추가하거나 삭제한 단계에서는 production build 후 `permissions/dmnote-allow-all.json` 갱신 여부도 확인한다.
+## 완료 판정
 
-## ASIO 검증 행렬
-
-자동 테스트는 하드웨어와 무관한 정책을 모든 개발 플랫폼에서 실행한다. 실제 Windows/ASIO 경계는 다음 순서로 별도 확인한다.
-
-1. Windows release workflow에서 `cargo test --features asio-backend audio::engine --lib` 자동 실행
-2. `npm run tauri:build`로 ASIO feature production build 확인
-3. 장치 목록 정렬·중복 제거와 저장된 분리 장치 표시 확인
-4. 기본값, 0, 비표준 buffer frame 처리 확인
-5. 장치 부재와 장치 open 실패의 서로 다른 오류 코드·기동 폴백 확인
-6. 실제 드라이버에서 선택, 재시작 복원, 다른 ASIO 앱 점유 중 폴백을 수동 smoke test
-
-macOS의 Windows cross-check는 MSVC C 런타임 헤더가 없는 환경에서 `ring` C 빌드 전에 중단되므로 Windows 네이티브 검증을 대체하지 않는다.
-
-## 완료 조건
-
-- 단계별 commit이 한 책임만 설명한다.
-- 기존 공개 API와 저장 데이터 형식이 유지된다.
-- focused suite와 전체 게이트가 모두 통과한다.
-- 새 경고가 없고 Rust는 Clippy `-D warnings`를 통과한다.
-- 남은 대형 파일은 이 문서의 다음 책임 경계로 이어지며, 줄 수만 줄이기 위한 임의 분할은 하지 않는다.
+- 공개 API·저장 형식·command/event 집합에 의도한 변경 없음
+- 단계별 커밋과 focused/전체 검증 통과
+- rewrite 전후 tree 동일성 확인 및 복구 branch 보존
+- Grid 핵심 표면과 패널 반복 UI 공용화 완료
+- 대형 프론트엔드·백엔드 파일의 고가치 책임 경계 분리 완료
+- 마지막 독립 감사에서 즉시 진행할 추가 P0–P2 후보 없음
+- 실제 장치·GPU·native window가 필요한 항목과 기존 결함은 검증 조건을 붙여 후속 범위로 보존
