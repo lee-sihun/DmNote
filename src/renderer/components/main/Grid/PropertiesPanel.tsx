@@ -11,8 +11,6 @@ import {
 } from '@plugins/runtime/settingsSections';
 import { updatePluginElement } from '@plugins/runtime/displayElement/pluginElementActions';
 import type { KeyPosition } from '@src/types/key/keys';
-import type { EditorCounterFillPropertyPatchV1 } from '@src/types/editor';
-import { normalizeCounterSettings } from '@src/types/key/keys';
 import { useLenis } from '@hooks/useLenis';
 import { usePluginGeometryGesture } from '@hooks/Grid/usePluginGeometryGesture';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
@@ -40,7 +38,6 @@ import { resolveSelectionPanelRoute } from './PropertiesPanel/selectionPanelRout
 import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
 import PanelHeaderActions from './PropertiesPanel/PanelHeaderActions';
 import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
-import type { NoteColor } from '@src/types/key/keys';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
 import { previewSingleGraphColor } from './PropertiesPanel/previewPatchForwarders';
 import PluginSettingsForm from './PropertiesPanel/PluginSettingsForm';
@@ -54,6 +51,7 @@ import { usePluginSettingsPanelController } from './PropertiesPanel/usePluginSet
 import { usePropertiesPanelVisibility } from './PropertiesPanel/usePropertiesPanelVisibility';
 import { usePropertiesPanelBatchGeometry } from './PropertiesPanel/usePropertiesPanelBatchGeometry';
 import { usePropertiesPanelBatchCommitHandlers } from './PropertiesPanel/usePropertiesPanelBatchCommitHandlers';
+import { useBatchColorPickerController } from './PropertiesPanel/useBatchColorPickerController';
 
 // ============================================================================
 // 메인 컴포넌트 Props
@@ -120,6 +118,35 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleKnobPosition,
     selectedGroupInfo,
   } = usePropertiesPanelSelection();
+  const {
+    getSelectedKeysData,
+    getSelectedGraphsData,
+    getSelectedKnobsData,
+    getSelectedBatchStyleData,
+    getSelectedKeyOnlyPositions,
+    getMixedValue,
+    getMixedValueCanonical,
+    getMixedValueGraphs,
+    getMixedValueGraphsAsKey,
+    getMixedValueKnobs,
+    getMixedValueKnobsAsKey,
+    getMixedValueBatch,
+    getMixedValueActiveCapable,
+    getMixedValueKeysOnly,
+  } = createBatchSelectionModel({
+    selectedKeyType,
+    positions,
+    canonicalPositions,
+    keyMappings,
+    statItemPositions,
+    graphItemPositions,
+    knobItemPositions,
+    selectedKeyElements,
+    selectedKeyLikeElements,
+    selectedGraphElements,
+    selectedKnobElements,
+    selectedBatchStyleElements,
+  });
   const { useCustomCSS } = useSettingsStore();
   const {
     pluginSettingsPanel,
@@ -160,12 +187,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 다중 선택용 이미지 픽커 상태
   const [showBatchImagePicker, setShowBatchImagePicker] = useState(false);
   const batchImageButtonRef = useRef<HTMLButtonElement>(null);
-
-  // 일괄 편집용 컬러 버튼 refs
-  const batchNoteColorButtonRef = useRef<HTMLButtonElement>(null);
-  const batchGlowColorButtonRef = useRef<HTMLButtonElement>(null);
-  const batchBorderColorButtonRef = useRef<HTMLButtonElement>(null);
-  const batchCounterFillButtonRef = useRef<HTMLButtonElement>(null);
 
   // 패널 ref (컬러픽커/이미지픽커 위치 기준)
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
@@ -245,35 +266,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 플러그인 패널 스크롤
   const { scrollContainerRef: setPluginScrollRef } = useLenis();
 
-  // 배치 편집용 로컬 ColorPicker 상태
-  type BatchPickerTarget =
-    | 'noteColor'
-    | 'glowColor'
-    | 'borderColor'
-    | 'fill'
-    | null;
-  const [batchPickerFor, setBatchPickerFor] = useState<BatchPickerTarget>(null);
-  const [batchCounterColorState, setBatchCounterColorState] = useState<
-    'idle' | 'active'
-  >('idle');
-  const effectiveBatchCounterColorState =
-    selectedKeyElements.length > 0 ? batchCounterColorState : 'idle';
-
-  useEffect(() => {
-    if (selectedKeyElements.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 선택 소실 시 로컬 피커 세션 초기화
-      setBatchCounterColorState('idle');
-      setBatchPickerFor((current) => (current === 'fill' ? null : current));
-    }
-  }, [selectedKeyElements.length]);
-
-  // 노트 표면(note/glow/border) 로컬 상태는 useBatchNotePaint가 소유
-  const [batchLocalColors, setBatchLocalColors] = useState<{
-    fillIdle: string;
-    fillActive: string;
-  }>({
-    fillIdle: '#FFFFFF',
-    fillActive: '#FFFFFF',
+  const {
+    batchNoteColorButtonRef,
+    batchGlowColorButtonRef,
+    batchBorderColorButtonRef,
+    batchCounterFillButtonRef,
+    batchPickerFor,
+    setBatchPickerFor,
+    effectiveBatchCounterColorState,
+    setBatchCounterColorState,
+    batchLocalColors,
+    setBatchLocalColors,
+    batchColorPickerInteractiveRefs,
+    handleBatchPickerToggle,
+    getBatchPickerColor,
+    getBatchPickerRef,
+    handleBatchPickerColorChange,
+    handleBatchPickerColorChangeComplete,
+    handleBatchFillPickerColorChangeComplete,
+  } = useBatchColorPickerController({
+    selectedKeyCount: selectedKeyElements.length,
+    getSelectedKeysData,
+    getSelectedKeyOnlyPositions,
   });
 
   // 선택이 변경되면 로컬 상태 초기화
@@ -403,35 +417,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     stableCounterTypographyHandler,
     stableCounterFillHandler,
   } = singleSelectionHandlers;
-  const {
-    getSelectedKeysData,
-    getSelectedGraphsData,
-    getSelectedKnobsData,
-    getSelectedBatchStyleData,
-    getSelectedKeyOnlyPositions,
-    getMixedValue,
-    getMixedValueCanonical,
-    getMixedValueGraphs,
-    getMixedValueGraphsAsKey,
-    getMixedValueKnobs,
-    getMixedValueKnobsAsKey,
-    getMixedValueBatch,
-    getMixedValueActiveCapable,
-    getMixedValueKeysOnly,
-  } = createBatchSelectionModel({
-    selectedKeyType,
-    positions,
-    canonicalPositions,
-    keyMappings,
-    statItemPositions,
-    graphItemPositions,
-    knobItemPositions,
-    selectedKeyElements,
-    selectedKeyLikeElements,
-    selectedGraphElements,
-    selectedKnobElements,
-    selectedBatchStyleElements,
-  });
   // 다중 선택 일괄 편집 핸들러 (훅 사용)
   // ============================================================================
 
@@ -507,88 +492,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       t={t}
     />
   );
-  // 배치 편집용 interactiveRefs
-  const batchColorPickerInteractiveRefs = [
-    batchNoteColorButtonRef,
-    batchGlowColorButtonRef,
-    batchBorderColorButtonRef,
-    batchCounterFillButtonRef,
-  ];
-
-  // 배치 피커 토글 - 노트 표면 로컬 상태는 useBatchNotePaint가 소유
-  const handleBatchPickerToggle = (target: BatchPickerTarget) => {
-    if (target && target !== batchPickerFor) {
-      // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 배치로 리셋
-      setBatchCounterColorState('idle');
-      const keysData = getSelectedKeysData();
-      const keyOnly = getSelectedKeyOnlyPositions();
-      const firstPos =
-        target === 'fill' && keyOnly.length > 0
-          ? keyOnly[0].position
-          : keysData[0]?.position;
-      if (firstPos) {
-        const counterSettings = normalizeCounterSettings(firstPos.counter);
-        setBatchLocalColors({
-          fillIdle: counterSettings.fill.idle,
-          fillActive: counterSettings.fill.active,
-        });
-      }
-    }
-    setBatchPickerFor((prev) => (prev === target ? null : target));
-  };
-
-  // 노트 표면(note/glow/border)의 피커 색은 useBatchNotePaint가 직접 공급
-  const getBatchPickerColor = (): NoteColor | string => {
-    switch (batchPickerFor) {
-      case 'fill':
-        return effectiveBatchCounterColorState === 'active'
-          ? batchLocalColors.fillActive
-          : batchLocalColors.fillIdle;
-      default:
-        return '#FFFFFF';
-    }
-  };
-
-  const getBatchPickerRef = () => {
-    switch (batchPickerFor) {
-      case 'noteColor':
-        return batchNoteColorButtonRef;
-      case 'glowColor':
-        return batchGlowColorButtonRef;
-      case 'borderColor':
-        return batchBorderColorButtonRef;
-      case 'fill':
-        return batchCounterFillButtonRef;
-      default:
-        return null;
-    }
-  };
-
-  const handleBatchPickerColorChange = (newColor: NoteColor) => {
-    if (batchPickerFor !== 'fill') return;
-    const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-    const key =
-      effectiveBatchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
-    setBatchLocalColors((prev) => ({
-      ...prev,
-      [key]: solidColor,
-    }));
-  };
-  const handleBatchPickerColorChangeComplete = (newColor: NoteColor) =>
-    handleBatchPickerColorChange(newColor);
-  const handleBatchFillPickerColorChangeComplete = (
-    newColor: string,
-    onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
-  ) => {
-    const key =
-      effectiveBatchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
-    setBatchLocalColors((prev) => ({ ...prev, [key]: newColor }));
-    onCounterFillCommit(
-      effectiveBatchCounterColorState === 'active'
-        ? { property: 'counterFillActive', value: { color: newColor } }
-        : { property: 'counterFillIdle', value: { color: newColor } },
-    );
-  };
 
   // ============================================================================
   // 렌더링
