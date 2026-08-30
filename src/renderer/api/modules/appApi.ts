@@ -56,6 +56,8 @@ export const cancelLifecycleEditorFlush = (handshakeId: string) =>
 export const appApi = {
   bootstrap: async (): Promise<CanonicalBootstrapPayload> => {
     const payload = await invoke<BootstrapPayload>('app_bootstrap');
+    // 구버전 payload 호환: 스프라이트 미포함이면 빈 컬렉션
+    payload.spritePositions ??= {};
     assertCanonicalEditorDocument(
       {
         schemaVersion: 1,
@@ -64,6 +66,7 @@ export const appApi = {
         statPositions: payload.statPositions,
         graphPositions: payload.graphPositions,
         knobPositions: payload.knobPositions,
+        spritePositions: payload.spritePositions,
         layerGroups: payload.layerGroups,
       },
       'app_bootstrap editor document',

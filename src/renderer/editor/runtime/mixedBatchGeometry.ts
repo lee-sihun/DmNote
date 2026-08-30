@@ -5,6 +5,7 @@
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import {
@@ -55,7 +56,8 @@ const validNativeGeometryTargets = (
   descriptor.targets.length <= MAX_BATCH_GEOMETRY_TARGETS &&
   descriptor.targets.every(
     ({ type, id }) =>
-      ['key', 'stat', 'graph', 'knob'].includes(type) && isNativeElementId(id),
+      ['key', 'stat', 'graph', 'knob', 'sprite'].includes(type) &&
+      isNativeElementId(id),
   ) &&
   new Set(descriptor.targets.map(({ id }) => id)).size ===
     descriptor.targets.length;
@@ -72,7 +74,9 @@ const readStorePositions = (type: NativeElementType): PositionSlice =>
     ? useStatItemStore.getState().positions
     : type === 'graph'
     ? useGraphItemStore.getState().positions
-    : useKnobItemStore.getState().positions) as unknown as PositionSlice;
+    : type === 'knob'
+    ? useKnobItemStore.getState().positions
+    : useSpriteStore.getState().positions) as unknown as PositionSlice;
 
 const readDocumentPositions =
   (base: CanonicalEditorDocumentV1) =>
@@ -83,7 +87,9 @@ const readDocumentPositions =
       ? base.statPositions
       : type === 'graph'
       ? base.graphPositions
-      : base.knobPositions) as unknown as PositionSlice;
+      : type === 'knob'
+      ? base.knobPositions
+      : base.spritePositions) as unknown as PositionSlice;
 
 // native 대상 bounds 수집 - 지정 모드에서의 소실·비유한 값은 전체 거절
 const readNativeLayoutElements = (

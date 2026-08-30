@@ -76,6 +76,7 @@ const makeDocument = (key = 'A'): CanonicalEditorDocumentV1 => ({
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
+  spritePositions: {},
   layerGroups: {},
 });
 
@@ -343,6 +344,7 @@ const applyOpsForTest = (
         statPositions: next.statPositions,
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
+        spritePositions: next.spritePositions,
         layerGroups: next.layerGroups,
         pluginElements: [],
       });

@@ -14,6 +14,7 @@ import {
   graphItemsApi,
   knobItemsApi,
   layerGroupsApi,
+  spriteItemsApi,
   statItemsApi,
 } from './itemsApi';
 
@@ -27,6 +28,7 @@ const document: EditorDocumentV1 = {
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
+  spritePositions: {},
   layerGroups: { '4key': [{ id: 'group-1', name: 'Group 1' }] },
 };
 
@@ -81,6 +83,7 @@ describe('editor API compatibility adapters', () => {
     await expect(statItemsApi.updatePositions({})).resolves.toEqual({});
     await expect(graphItemsApi.updatePositions({})).resolves.toEqual({});
     await expect(knobItemsApi.updatePositions({})).resolves.toEqual({});
+    await expect(spriteItemsApi.updatePositions({})).resolves.toEqual({});
     await expect(layerGroupsApi.update(document.layerGroups)).resolves.toEqual(
       document.layerGroups,
     );
@@ -89,8 +92,23 @@ describe('editor API compatibility adapters', () => {
       [{ schemaVersion: 1, statPositions: {} }],
       [{ schemaVersion: 1, graphPositions: {} }],
       [{ schemaVersion: 1, knobPositions: {} }],
+      [{ schemaVersion: 1, spritePositions: {} }, undefined],
       [{ schemaVersion: 1, layerGroups: document.layerGroups }],
     ]);
+  });
+
+  it('sprite writer는 gestureId를 editor_commit 메타로 실어 보낸다', async () => {
+    await expect(
+      spriteItemsApi.updatePositions(
+        {},
+        '6f9c2f6a-0b1d-4e5f-8a3c-2d7e9b4c1a50',
+      ),
+    ).resolves.toEqual({});
+
+    expect(commitPatch).toHaveBeenCalledWith(
+      { schemaVersion: 1, spritePositions: {} },
+      { gestureId: '6f9c2f6a-0b1d-4e5f-8a3c-2d7e9b4c1a50' },
+    );
   });
 
   it('preserves each legacy caller return value when writes are queued together', async () => {

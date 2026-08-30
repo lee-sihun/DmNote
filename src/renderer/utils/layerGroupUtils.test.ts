@@ -10,6 +10,7 @@ const emptyPositions = {
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
+  spritePositions: {},
 };
 
 // Rust remove_empty_layer_groups와 같은 시나리오를 고정하는 교차 테스트 -

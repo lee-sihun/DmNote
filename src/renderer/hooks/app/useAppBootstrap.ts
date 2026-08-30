@@ -4,6 +4,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useFontStore, syncFontCSS } from '@stores/useFontStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
@@ -762,6 +763,10 @@ export function useAppBootstrap() {
         useKnobItemStore.setState((state) => ({
           ...state,
           positions: bootstrap.knobPositions ?? {},
+        }));
+        useSpriteStore.setState((state) => ({
+          ...state,
+          positions: bootstrap.spritePositions ?? {},
         }));
         useLayerGroupStore
           .getState()

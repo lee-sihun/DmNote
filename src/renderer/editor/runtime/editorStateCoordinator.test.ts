@@ -10,6 +10,7 @@ const runtime = vi.hoisted(() => {
     statPositions: {},
     graphPositions: {},
     knobPositions: {},
+    spritePositions: {},
     layerGroups: {},
   };
   let listener: ((event: EditorCommittedV1) => void) | null = null;

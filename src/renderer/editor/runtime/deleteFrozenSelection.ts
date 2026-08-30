@@ -2,6 +2,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -29,7 +30,7 @@ import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import type { EditorOpV1 } from '@src/types/editor';
 
-type NativeType = 'key' | 'stat' | 'graph' | 'knob';
+type NativeType = 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 
 interface DeleteDocumentView {
   keys: Record<string, unknown[]>;
@@ -37,6 +38,7 @@ interface DeleteDocumentView {
   statPositions: Record<string, Array<{ id: string }>>;
   graphPositions: Record<string, Array<{ id: string }>>;
   knobPositions: Record<string, Array<{ id: string }>>;
+  spritePositions: Record<string, Array<{ id: string }>>;
   layerGroups: Record<string, unknown[]>;
 }
 
@@ -46,6 +48,7 @@ const storeView = (): DeleteDocumentView => ({
   statPositions: useStatItemStore.getState().positions as never,
   graphPositions: useGraphItemStore.getState().positions as never,
   knobPositions: useKnobItemStore.getState().positions as never,
+  spritePositions: useSpriteStore.getState().positions as never,
   layerGroups: useLayerGroupStore.getState().layerGroups as never,
 });
 
@@ -98,6 +101,7 @@ export const deleteFrozenSelection = async (
       stat: 'statPositions',
       graph: 'graphPositions',
       knob: 'knobPositions',
+      sprite: 'spritePositions',
     } as const;
     const removal = new Map<NativeType, Map<string, Set<number>>>();
     let found = 0;
@@ -133,6 +137,7 @@ export const deleteFrozenSelection = async (
       statPositions: { ...document.statPositions },
       graphPositions: { ...document.graphPositions },
       knobPositions: { ...document.knobPositions },
+      spritePositions: { ...document.spritePositions },
     };
     const affectedModes = new Set<string>();
     for (const [type, byMode] of removal) {
@@ -143,7 +148,9 @@ export const deleteFrozenSelection = async (
           ? 'statPositions'
           : type === 'graph'
           ? 'graphPositions'
-          : 'knobPositions';
+          : type === 'knob'
+          ? 'knobPositions'
+          : 'spritePositions';
       for (const [mode, indices] of byMode) {
         affectedModes.add(mode);
         next[field] = {
@@ -191,6 +198,7 @@ export const deleteFrozenSelection = async (
         statPositions: next.statPositions as never,
         graphPositions: next.graphPositions as never,
         knobPositions: next.knobPositions as never,
+        spritePositions: next.spritePositions as never,
         layerGroups: layerGroups as never,
         pluginElements: remainingPluginElements,
       });
@@ -198,6 +206,7 @@ export const deleteFrozenSelection = async (
       next.statPositions = normalized.statPositions as never;
       next.graphPositions = normalized.graphPositions as never;
       next.knobPositions = normalized.knobPositions as never;
+      next.spritePositions = normalized.spritePositions as never;
       if (normalized.groupsChanged) {
         layerGroups = normalized.layerGroups as never;
         groupsChanged = true;
@@ -226,6 +235,7 @@ export const deleteFrozenSelection = async (
             'statPositions',
             'graphPositions',
             'knobPositions',
+            'spritePositions',
             'layerGroups',
           ],
           mutate: () => {
@@ -246,6 +256,9 @@ export const deleteFrozenSelection = async (
             useKnobItemStore
               .getState()
               .setPositions(applied.next.knobPositions as never);
+            useSpriteStore
+              .getState()
+              .setPositions(applied.next.spritePositions as never);
             if (applied.groupsChanged) {
               useLayerGroupStore
                 .getState()

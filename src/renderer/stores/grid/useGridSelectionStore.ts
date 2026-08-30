@@ -4,6 +4,7 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
 export type SelectableElementType =
@@ -11,6 +12,7 @@ export type SelectableElementType =
   | 'stat'
   | 'graph'
   | 'knob'
+  | 'sprite'
   | 'plugin';
 
 export type IndexedSelectableElementType = Exclude<
@@ -24,6 +26,7 @@ export interface IndexedElementArrays {
   stat: readonly CanonicalEditorDocumentV1['statPositions'][string][number][];
   graph: readonly CanonicalEditorDocumentV1['graphPositions'][string][number][];
   knob: readonly CanonicalEditorDocumentV1['knobPositions'][string][number][];
+  sprite: readonly CanonicalEditorDocumentV1['spritePositions'][string][number][];
 }
 
 interface NativeSelectedElement {
@@ -66,6 +69,12 @@ export interface ClipboardKnobData {
   position: KnobItemPosition;
 }
 
+// 클립보드에 저장되는 스프라이트 데이터
+export interface ClipboardSpriteData {
+  type: 'sprite';
+  position: ReactiveSpritePosition;
+}
+
 // 클립보드에 저장되는 플러그인 요소 데이터
 export interface ClipboardPluginData {
   type: 'plugin';
@@ -77,6 +86,7 @@ export type ClipboardItem =
   | ClipboardStatData
   | ClipboardGraphData
   | ClipboardKnobData
+  | ClipboardSpriteData
   | ClipboardPluginData;
 
 interface GridSelectionState {

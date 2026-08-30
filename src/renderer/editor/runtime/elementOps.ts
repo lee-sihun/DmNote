@@ -1,6 +1,7 @@
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
@@ -14,6 +15,7 @@ import {
 } from '../model/keys';
 import { newElementId } from '../model/elementId';
 import { cloneSlot } from '@utils/keySlot';
+import { reissueSpritePoseIds } from '@utils/sprite/poseIdentity';
 import { stableStringify } from '@utils/core/stableStringify';
 import {
   normalizeLayerGroupsForMode,
@@ -72,6 +74,7 @@ import type { KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
 import { paintPropertyFields, projectPaintDescriptor } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
@@ -169,7 +172,9 @@ export const deleteElementById = (
           ? useStatItemStore.getState()
           : type === 'graph'
           ? useGraphItemStore.getState()
-          : useKnobItemStore.getState();
+          : type === 'knob'
+          ? useKnobItemStore.getState()
+          : useSpriteStore.getState();
       removedPosition = (state.positions as unknown as LooseRecord)[
         locator.mode
       ]?.[locator.index];
@@ -194,6 +199,7 @@ export const deleteElementById = (
       statPositions: useStatItemStore.getState().positions,
       graphPositions: useGraphItemStore.getState().positions,
       knobPositions: useKnobItemStore.getState().positions,
+      spritePositions: useSpriteStore.getState().positions,
       layerGroups: useLayerGroupStore.getState().layerGroups,
       pluginElements: currentPluginGroupMembers(),
     });
@@ -205,6 +211,7 @@ export const deleteElementById = (
       useStatItemStore.getState().setPositions(normalized.statPositions);
       useGraphItemStore.getState().setPositions(normalized.graphPositions);
       useKnobItemStore.getState().setPositions(normalized.knobPositions);
+      useSpriteStore.getState().setPositions(normalized.spritePositions);
     }
     if (normalized.groupsChanged) {
       const remaining = new Set(
@@ -226,7 +233,9 @@ export const deleteElementById = (
             ? 'statPositions'
             : type === 'graph'
             ? 'graphPositions'
-            : 'knobPositions'
+            : type === 'knob'
+            ? 'knobPositions'
+            : 'spritePositions'
         ] as LooseRecord | undefined;
         if (canonicalRecord && !findInRecord(canonicalRecord, id)) return;
         const currentRecord =
@@ -237,7 +246,9 @@ export const deleteElementById = (
             ? (useStatItemStore.getState().positions as unknown as LooseRecord)
             : type === 'graph'
             ? (useGraphItemStore.getState().positions as unknown as LooseRecord)
-            : (useKnobItemStore.getState().positions as unknown as LooseRecord);
+            : type === 'knob'
+            ? (useKnobItemStore.getState().positions as unknown as LooseRecord)
+            : (useSpriteStore.getState().positions as unknown as LooseRecord);
         // 다른 경로가 같은 ID를 이미 복원·갱신했으면 그룹까지 그 경로 소유
         if (findInRecord(currentRecord, id)) return;
         if (removedGroups.length > 0) {
@@ -296,7 +307,9 @@ export const deleteElementById = (
             ? useStatItemStore.getState()
             : type === 'graph'
             ? useGraphItemStore.getState()
-            : useKnobItemStore.getState();
+            : type === 'knob'
+            ? useKnobItemStore.getState()
+            : useSpriteStore.getState();
         const record = state.positions as unknown as LooseRecord;
         if (findInRecord(record, id)) return;
         const list = record[locator.mode] ?? [];
@@ -344,6 +357,7 @@ const documentHasElementId = (
     document.statPositions,
     document.graphPositions,
     document.knobPositions,
+    document.spritePositions,
   ].some((record) => findInRecord(record as unknown as LooseRecord, id));
 
 const documentHasExactFrozenElement = (
@@ -358,7 +372,9 @@ const documentHasExactFrozenElement = (
       ? 'statPositions'
       : element.elementType === 'graph'
       ? 'graphPositions'
-      : 'knobPositions';
+      : element.elementType === 'knob'
+      ? 'knobPositions'
+      : 'spritePositions';
   const index = document[field][mode]?.findIndex(
     (position) => position.id === element.position.id,
   );
@@ -411,7 +427,9 @@ const insertFrozenElement = (
           ? useStatItemStore.getState()
           : element.elementType === 'graph'
           ? useGraphItemStore.getState()
-          : useKnobItemStore.getState();
+          : element.elementType === 'knob'
+          ? useKnobItemStore.getState()
+          : useSpriteStore.getState();
       const positions = state.positions as unknown as LooseRecord;
       state.setPositions({
         ...positions,
@@ -451,7 +469,9 @@ const insertFrozenElement = (
             ? useStatItemStore.getState()
             : element.elementType === 'graph'
             ? useGraphItemStore.getState()
-            : useKnobItemStore.getState();
+            : element.elementType === 'knob'
+            ? useKnobItemStore.getState()
+            : useSpriteStore.getState();
         const positions = state.positions as unknown as LooseRecord;
         const located = findInRecord(positions, id);
         if (!located) return;
@@ -508,6 +528,11 @@ export const addKnobAt = (
   mode: string,
   position: KnobItemPosition & { id: string },
 ) => insertFrozenElement(mode, { elementType: 'knob', position });
+
+export const addSpriteAt = (
+  mode: string,
+  position: ReactiveSpritePosition & { id: string },
+) => insertFrozenElement(mode, { elementType: 'sprite', position });
 
 const groupForMode = (mode: string, groupId: string | undefined) =>
   groupId &&
@@ -591,14 +616,42 @@ export const placeDuplicatedKnob = (
     },
   });
 
+export const placeDuplicatedSprite = (
+  mode: string,
+  source: ReactiveSpritePosition,
+  dx: number,
+  dy: number,
+  zIndex: number,
+) => {
+  const cloned = structuredClone(source);
+  return insertFrozenElement(mode, {
+    elementType: 'sprite',
+    position: {
+      ...cloned,
+      id: newElementId(),
+      // 사본 poseId 재발급 - 원본과 공유하면 백엔드가 중복으로 거부
+      poses: reissueSpritePoseIds(cloned.poses),
+      groupId: groupForMode(mode, source.groupId ?? undefined) ?? null,
+      dx,
+      dy,
+      zIndex,
+    },
+  });
+};
+
 const FIELD_BY_TYPE: Record<
   NativeElementType,
-  'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+  | 'keyPositions'
+  | 'statPositions'
+  | 'graphPositions'
+  | 'knobPositions'
+  | 'spritePositions'
 > = {
   key: 'keyPositions',
   stat: 'statPositions',
   graph: 'graphPositions',
   knob: 'knobPositions',
+  sprite: 'spritePositions',
 };
 
 // 키 슬롯 재바인딩: keys만 바꾸되 대상은 paired 위치의 안정 id로 재결합한다.
@@ -665,6 +718,7 @@ const POSITION_FIELD_BY_TYPE: Record<NativeElementType, string> = {
   stat: 'statPositions',
   graph: 'graphPositions',
   knob: 'knobPositions',
+  sprite: 'spritePositions',
 };
 
 // 현재 문서의 요소 레코드 (없으면 null)
@@ -972,7 +1026,7 @@ const validElementGroupTargets = (
   targets.length <= 4096 &&
   targets.every(
     ({ elementType, id }) =>
-      ['key', 'stat', 'graph', 'knob'].includes(elementType) &&
+      ['key', 'stat', 'graph', 'knob', 'sprite'].includes(elementType) &&
       isNativeElementId(id),
   ) &&
   new Set(targets.map(({ id }) => id)).size === targets.length;
@@ -1004,6 +1058,7 @@ export const setElementGroupsByTargets = (
     statPositions: useStatItemStore.getState().positions,
     graphPositions: useGraphItemStore.getState().positions,
     knobPositions: useKnobItemStore.getState().positions,
+    spritePositions: useSpriteStore.getState().positions,
     layerGroups: useLayerGroupStore.getState().layerGroups,
   };
   const projected = projectStableElementGroups({
@@ -1019,6 +1074,7 @@ export const setElementGroupsByTargets = (
     useStatItemStore.getState().setPositions(projected.statPositions);
     useGraphItemStore.getState().setPositions(projected.graphPositions);
     useKnobItemStore.getState().setPositions(projected.knobPositions);
+    useSpriteStore.getState().setPositions(projected.spritePositions);
     useLayerGroupStore.getState().setLayerGroups(projected.layerGroups);
   }
   let enrolled = false;
@@ -1056,6 +1112,9 @@ export const setElementGroupsByTargets = (
         }
         if (useKnobItemStore.getState().positions === projected.knobPositions) {
           useKnobItemStore.getState().setPositions(before.knobPositions);
+        }
+        if (useSpriteStore.getState().positions === projected.spritePositions) {
+          useSpriteStore.getState().setPositions(before.spritePositions);
         }
         if (
           useLayerGroupStore.getState().layerGroups === projected.layerGroups
@@ -1899,6 +1958,8 @@ const paintPropertyIntents = (
     Map<string, Record<string, unknown>>
   >();
   for (const { elementType, id } of targets) {
+    // 스프라이트는 페인트 속성이 없다
+    if (elementType === 'sprite') continue;
     const collection =
       elementType === 'key'
         ? document.keyPositions
@@ -2082,7 +2143,7 @@ const shadowPropertyIntents = (
     Map<string, Record<string, unknown>>
   >();
   for (const { elementType, id } of targets) {
-    if (elementType === 'graph') continue;
+    if (elementType === 'graph' || elementType === 'sprite') continue;
     const collection =
       elementType === 'key'
         ? document.keyPositions

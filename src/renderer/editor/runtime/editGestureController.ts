@@ -8,6 +8,7 @@ import { previewApi } from '@api/modules/previewApi';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { PREVIEW_SCHEMA_VERSION, type PreviewDomain } from '@src/types/preview';
@@ -68,7 +69,9 @@ const authorityRecordFor = (domain: PreviewDomain): PositionsRecordLike =>
     ? useStatItemStore.getState().positions
     : domain === 'graphPosition'
     ? useGraphItemStore.getState().positions
-    : useKnobItemStore.getState().positions) as PositionsRecordLike;
+    : domain === 'knobPosition'
+    ? useKnobItemStore.getState().positions
+    : useSpriteStore.getState().positions) as PositionsRecordLike;
 
 const currentIndexForId = (
   domain: PreviewDomain,
@@ -330,6 +333,7 @@ export const editGestureController = {
       statPosition: 'stat',
       graphPosition: 'graph',
       knobPosition: 'knob',
+      spritePosition: 'sprite',
     } as const;
     const propertyIntents: PropertyIntents = new Map(
       [...intents].map(([domain, resolved]) => [

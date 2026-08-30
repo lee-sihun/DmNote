@@ -1,6 +1,7 @@
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -66,6 +67,7 @@ const localDocument = (): CanonicalEditorDocumentV1 => ({
   statPositions: useStatItemStore.getState().positions,
   graphPositions: useGraphItemStore.getState().positions,
   knobPositions: useKnobItemStore.getState().positions,
+  spritePositions: useSpriteStore.getState().positions,
   layerGroups: useLayerGroupStore.getState().layerGroups,
 });
 
@@ -78,6 +80,7 @@ const nativeEntries = (
     ['stat', document.statPositions],
     ['graph', document.graphPositions],
     ['knob', document.knobPositions],
+    ['sprite', document.spritePositions],
   ] as const;
   return records.flatMap(([type, record]) =>
     (record[mode] ?? []).map((position, index) => ({

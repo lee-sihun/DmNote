@@ -7,9 +7,13 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import type { CanonicalKeyPosition } from '@src/types/editor';
+import type {
+  CanonicalKeyPosition,
+  CanonicalReactiveSpritePosition,
+} from '@src/types/editor';
 import type {
   PluginDefinitionInternal,
   PluginDisplayElementInternal,
@@ -124,6 +128,37 @@ const STABLE_KEY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const STABLE_STAT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const STABLE_GRAPH_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const STABLE_KNOB_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const STABLE_SPRITE_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
+  id,
+  dx: 15,
+  dy: 25,
+  width: 200,
+  height: 120,
+  hidden: false,
+  zIndex: null,
+  layerName: null,
+  groupId: null,
+  className: null,
+  useInlineStyles: null,
+  baseImage: null,
+  imageFit: null,
+  imageRect: { x: 4, y: 8, width: 96, height: 64 },
+  pivot: { x: 0.5, y: 0.5 },
+  idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+  poses: [
+    {
+      poseId: 'pose-1',
+      triggers: [STABLE_KEY_ID],
+      matchMode: 'exact',
+      transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+      imageOverride: null,
+    },
+  ],
+  activation: 'whileHeld',
+  transitionMs: 90,
+  transitionEasing: 'linear',
+});
 const keyPosition = {
   id: STABLE_KEY_ID,
   dx: 10,
@@ -200,6 +235,7 @@ describe('useGridSelection compound history gesture', () => {
     useStatItemStore.setState({ positions: {} });
     useGraphItemStore.setState({ positions: {} });
     useKnobItemStore.setState({ positions: {} });
+    useSpriteStore.setState({ positions: {} });
     useLayerGroupStore.setState({ layerGroups: {} });
     usePluginDisplayElementStore.setState({
       elements: [pluginElement()],
@@ -386,6 +422,81 @@ describe('useGridSelection compound history gesture', () => {
     expect(useGridSelectionStore.getState().clipboard).toEqual([
       { type: 'key', keyCode: '', position: keyPosition },
     ]);
+  });
+
+  it('sprite 복사-붙여넣기 왕복은 poseId만 재발급하고 나머지 로컬 데이터를 유지한다', async () => {
+    const original = spriteAt(STABLE_SPRITE_ID);
+    act(() => {
+      useSpriteStore.setState({ positions: { '4key': [original] } });
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([
+          { type: 'sprite', id: STABLE_SPRITE_ID, index: 0 },
+        ]);
+    });
+
+    act(() => api.copySelectedElements());
+    expect(useGridSelectionStore.getState().clipboard).toEqual([
+      { type: 'sprite', position: original },
+    ]);
+
+    await act(async () => api.pasteElements());
+
+    // eager: 사본은 새 id로 추가되고 dx·dy만 PASTE_OFFSET만큼 어긋난다
+    const sprites = useSpriteStore.getState().positions['4key'];
+    expect(sprites).toHaveLength(2);
+    const pasted = sprites.find(
+      (position) => position.id !== STABLE_SPRITE_ID,
+    )!;
+    expect(pasted.dx).toBe(original.dx + PASTE_OFFSET);
+    expect(pasted.dy).toBe(original.dy + PASTE_OFFSET);
+    expect(pasted.width).toBe(original.width);
+    expect(pasted.height).toBe(original.height);
+    expect(pasted.imageRect).toEqual(original.imageRect);
+    expect(pasted.pivot).toEqual(original.pivot);
+    // 사본 poseId는 재발급 - 원본과 공유하면 백엔드 커밋이 중복으로 거부.
+    // 트리거·변환·이미지는 원본과 동일
+    expect(pasted.poses).toHaveLength(original.poses.length);
+    expect(pasted.poses[0].poseId).not.toBe(original.poses[0].poseId);
+    expect(pasted.poses[0]).toEqual({
+      ...original.poses[0],
+      poseId: pasted.poses[0].poseId,
+    });
+
+    // wire: 동결 payload가 sprite full payload로 batch op에 실린다
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        ops?: Array<{
+          elements: Array<{
+            elementType: string;
+            position: Record<string, unknown>;
+          }>;
+        }>;
+      };
+    };
+    const result = options.generate({
+      base: {
+        schemaVersion: 1,
+        keys: { '4key': [] },
+        keyPositions: { '4key': [] },
+        statPositions: {},
+        graphPositions: {},
+        knobPositions: {},
+        spritePositions: { '4key': [] },
+        layerGroups: {},
+      },
+      pluginProjection: [],
+    });
+    const spriteElement = result.ops![0].elements.find(
+      (element) => element.elementType === 'sprite',
+    )!;
+    expect(spriteElement.position.id).toBe(pasted.id);
+    expect(spriteElement.position.dx).toBe(original.dx + PASTE_OFFSET);
+    expect(spriteElement.position.imageRect).toEqual(original.imageRect);
+    // wire payload도 eager 사본과 같은 재발급 poseId를 싣는다
+    expect(spriteElement.position.poses).toEqual(pasted.poses);
   });
 
   it('혼합 붙여넣기는 editor와 plugin에 같은 gestureId를 전달한다', async () => {
@@ -832,6 +943,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     };
     const [existing, pasted] = usePluginDisplayElementStore.getState().elements;
@@ -1095,6 +1207,7 @@ describe('useGridSelection compound history gesture', () => {
     statPositions: {},
     graphPositions: {},
     knobPositions: {},
+    spritePositions: {},
     layerGroups: {},
   });
 
@@ -1412,6 +1525,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     };
     const result = options.generate({ base: emptyBase, pluginProjection: [] });
@@ -1498,6 +1612,7 @@ describe('useGridSelection compound history gesture', () => {
         statPositions: { '4key': [] },
         graphPositions: { '4key': [] },
         knobPositions: { '4key': [] },
+        spritePositions: { '4key': [] },
         layerGroups: {},
       },
       pluginProjection: [],
@@ -1555,6 +1670,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     };
     expect(() =>
@@ -1598,6 +1714,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: {},
     };
     const frozenGroup = groupedOptions.generate({
@@ -1683,6 +1800,7 @@ describe('useGridSelection compound history gesture', () => {
         statPositions: {},
         graphPositions: {},
         knobPositions: {},
+        spritePositions: {},
         layerGroups: {},
       },
       pluginProjection: [],
@@ -1734,6 +1852,7 @@ describe('useGridSelection compound history gesture', () => {
         statPositions: {},
         graphPositions: {},
         knobPositions: {},
+        spritePositions: {},
         layerGroups: {},
       },
       pluginProjection: [],
@@ -1790,6 +1909,7 @@ describe('useGridSelection compound history gesture', () => {
           statPositions: {},
           graphPositions: {},
           knobPositions: {},
+          spritePositions: {},
           layerGroups: {},
         },
         pluginProjection: [],
@@ -1886,6 +2006,7 @@ describe('useGridSelection compound history gesture', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       layerGroups: { '4key': [{ id: 'g1', name: 'g1' }] },
     };
     const result = options.generate({ base, pluginProjection: [] });

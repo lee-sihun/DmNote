@@ -28,7 +28,7 @@ export const isPluginGroupMemberInMode = (
 ): boolean => normalizePluginInstanceTabId(element.tabId) === mode;
 
 type Groupable = SelectedElement & {
-  type: 'key' | 'stat' | 'graph' | 'knob';
+  type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 };
 
 function isGroupableElement(el: SelectedElement): el is Groupable {
@@ -36,7 +36,8 @@ function isGroupableElement(el: SelectedElement): el is Groupable {
     el.type === 'key' ||
     el.type === 'stat' ||
     el.type === 'graph' ||
-    el.type === 'knob'
+    el.type === 'knob' ||
+    el.type === 'sprite'
   );
 }
 
@@ -47,6 +48,7 @@ function getElementGroupId(
   statPositions: CanonicalEditorDocumentV1['statPositions'],
   graphPositions: CanonicalEditorDocumentV1['graphPositions'],
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'],
 ): string | undefined {
   if (element.type === 'key') {
     return keyPositions[mode]?.find(({ id }) => id === element.id)?.groupId;
@@ -57,7 +59,13 @@ function getElementGroupId(
   if (element.type === 'graph') {
     return graphPositions[mode]?.find(({ id }) => id === element.id)?.groupId;
   }
-  return knobPositions[mode]?.find(({ id }) => id === element.id)?.groupId;
+  if (element.type === 'knob') {
+    return knobPositions[mode]?.find(({ id }) => id === element.id)?.groupId;
+  }
+  return (
+    spritePositions[mode]?.find(({ id }) => id === element.id)?.groupId ??
+    undefined
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -70,10 +78,11 @@ function collectModeGroupMemberCounts(
   statPositions: CanonicalEditorDocumentV1['statPositions'],
   graphPositions: CanonicalEditorDocumentV1['graphPositions'],
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'],
   pluginElements: readonly PluginGroupMemberLike[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
-  const add = (groupId?: string) => {
+  const add = (groupId?: string | null) => {
     if (!groupId) return;
     counts.set(groupId, (counts.get(groupId) || 0) + 1);
   };
@@ -82,6 +91,7 @@ function collectModeGroupMemberCounts(
   (statPositions[mode] || []).forEach((pos) => add(pos?.groupId));
   (graphPositions[mode] || []).forEach((pos) => add(pos?.groupId));
   (knobPositions[mode] || []).forEach((pos) => add(pos?.groupId));
+  (spritePositions[mode] || []).forEach((pos) => add(pos?.groupId));
   // 플러그인 멤버도 그룹 생존에 기여 - 모드 판정은 저장 규칙과 동일
   pluginElements.forEach((element) => {
     if (isPluginGroupMemberInMode(element, mode)) add(element.groupId);
@@ -122,6 +132,7 @@ export function resolveSingleGroupIdFromSelection(
   statPositions: CanonicalEditorDocumentV1['statPositions'],
   graphPositions: CanonicalEditorDocumentV1['graphPositions'],
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'],
 ): string | undefined {
   const groupIds = new Set<string>();
 
@@ -134,6 +145,7 @@ export function resolveSingleGroupIdFromSelection(
       statPositions,
       graphPositions,
       knobPositions,
+      spritePositions,
     );
     if (groupId) {
       groupIds.add(groupId);
@@ -149,6 +161,7 @@ type ApplyGroupIdResult = {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   changed: boolean;
 };
 
@@ -159,6 +172,7 @@ export function applyGroupIdToSelectedElements(params: {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   targetGroupId: string | undefined;
 }): ApplyGroupIdResult {
   const {
@@ -168,6 +182,7 @@ export function applyGroupIdToSelectedElements(params: {
     statPositions,
     graphPositions,
     knobPositions,
+    spritePositions,
     targetGroupId,
   } = params;
 
@@ -175,16 +190,19 @@ export function applyGroupIdToSelectedElements(params: {
   const nextStatPositions = { ...statPositions };
   const nextGraphPositions = { ...graphPositions };
   const nextKnobPositions = { ...knobPositions };
+  const nextSpritePositions = { ...spritePositions };
   const nextKeyMode = [...(keyPositions[mode] || [])];
   const nextStatMode = [...(statPositions[mode] || [])];
   const nextGraphMode = [...(graphPositions[mode] || [])];
   const nextKnobMode = [...(knobPositions[mode] || [])];
+  const nextSpriteMode = [...(spritePositions[mode] || [])];
 
   let changed = false;
   let keyChanged = false;
   let statChanged = false;
   let graphChanged = false;
   let knobChanged = false;
+  let spriteChanged = false;
 
   selectedElements.forEach((element) => {
     if (!isGroupableElement(element)) return;
@@ -219,11 +237,22 @@ export function applyGroupIdToSelectedElements(params: {
       return;
     }
 
-    const index = nextKnobMode.findIndex(({ id }) => id === element.id);
-    const current = nextKnobMode[index];
-    if (!current || current.groupId === targetGroupId) return;
-    nextKnobMode[index] = { ...current, groupId: targetGroupId };
-    knobChanged = true;
+    if (element.type === 'knob') {
+      const index = nextKnobMode.findIndex(({ id }) => id === element.id);
+      const current = nextKnobMode[index];
+      if (!current || current.groupId === targetGroupId) return;
+      nextKnobMode[index] = { ...current, groupId: targetGroupId };
+      knobChanged = true;
+      changed = true;
+      return;
+    }
+
+    const index = nextSpriteMode.findIndex(({ id }) => id === element.id);
+    const current = nextSpriteMode[index];
+    // 스프라이트 groupId는 null 저장이라 undefined 목표와 동치 비교
+    if (!current || (current.groupId ?? undefined) === targetGroupId) return;
+    nextSpriteMode[index] = { ...current, groupId: targetGroupId ?? null };
+    spriteChanged = true;
     changed = true;
   });
 
@@ -231,12 +260,14 @@ export function applyGroupIdToSelectedElements(params: {
   if (statChanged) nextStatPositions[mode] = nextStatMode;
   if (graphChanged) nextGraphPositions[mode] = nextGraphMode;
   if (knobChanged) nextKnobPositions[mode] = nextKnobMode;
+  if (spriteChanged) nextSpritePositions[mode] = nextSpriteMode;
 
   return {
     keyPositions: changed ? nextKeyPositions : keyPositions,
     statPositions: changed ? nextStatPositions : statPositions,
     graphPositions: changed ? nextGraphPositions : graphPositions,
     knobPositions: changed ? nextKnobPositions : knobPositions,
+    spritePositions: changed ? nextSpritePositions : spritePositions,
     changed,
   };
 }
@@ -246,6 +277,7 @@ export interface StableElementGroupProjection {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   layerGroups: LayerGroups;
   changed: boolean;
 }
@@ -258,6 +290,7 @@ export function projectStableElementGroups(params: {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   layerGroups: LayerGroups;
   // normalize의 플러그인 멤버 집계 - 혼합 그룹화는 최종 소속 상태를 전달
   pluginElements: readonly PluginGroupMemberLike[];
@@ -270,6 +303,7 @@ export function projectStableElementGroups(params: {
     statPositions,
     graphPositions,
     knobPositions,
+    spritePositions,
     layerGroups,
     pluginElements,
   } = params;
@@ -278,6 +312,7 @@ export function projectStableElementGroups(params: {
     stat: statPositions,
     graph: graphPositions,
     knob: knobPositions,
+    sprite: spritePositions,
   } as const;
   const selectedElements: SelectedElement[] = [];
   for (const target of targets) {
@@ -318,6 +353,7 @@ export function projectStableElementGroups(params: {
     statPositions,
     graphPositions,
     knobPositions,
+    spritePositions,
     targetGroupId: targetGroup?.id,
   });
   const targetTypes = new Set(targets.map((target) => target.elementType));
@@ -333,6 +369,9 @@ export function projectStableElementGroups(params: {
     knobPositions: targetTypes.has('knob')
       ? grouped.knobPositions
       : knobPositions,
+    spritePositions: targetTypes.has('sprite')
+      ? grouped.spritePositions
+      : spritePositions,
     layerGroups: nextLayerGroups,
     pluginElements,
   });
@@ -341,6 +380,7 @@ export function projectStableElementGroups(params: {
     statPositions: normalized.statPositions,
     graphPositions: normalized.graphPositions,
     knobPositions: normalized.knobPositions,
+    spritePositions: normalized.spritePositions,
     layerGroups: normalized.layerGroups,
     changed:
       grouped.changed ||
@@ -371,6 +411,7 @@ type NormalizeLayerGroupsResult = {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   layerGroups: LayerGroups;
   positionsChanged: boolean;
   groupsChanged: boolean;
@@ -383,6 +424,7 @@ export function normalizeLayerGroupsForMode(params: {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   layerGroups: LayerGroups;
   // 플러그인 멤버 집계 - Rust remove_empty_layer_groups와 동일 규칙 필수
   pluginElements: readonly PluginGroupMemberLike[];
@@ -393,6 +435,7 @@ export function normalizeLayerGroupsForMode(params: {
     statPositions,
     graphPositions,
     knobPositions,
+    spritePositions,
     layerGroups,
     pluginElements,
   } = params;
@@ -402,10 +445,12 @@ export function normalizeLayerGroupsForMode(params: {
   const nextStatPositions = { ...statPositions };
   const nextGraphPositions = { ...graphPositions };
   const nextKnobPositions = { ...knobPositions };
+  const nextSpritePositions = { ...spritePositions };
   const nextKeyMode = [...(keyPositions[mode] || [])];
   const nextStatMode = [...(statPositions[mode] || [])];
   const nextGraphMode = [...(graphPositions[mode] || [])];
   const nextKnobMode = [...(knobPositions[mode] || [])];
+  const nextSpriteMode = [...(spritePositions[mode] || [])];
 
   const initialCounts = collectModeGroupMemberCounts(
     mode,
@@ -413,6 +458,7 @@ export function normalizeLayerGroupsForMode(params: {
     statPositions,
     graphPositions,
     knobPositions,
+    spritePositions,
     pluginElements,
   );
   const groupsToDissolve = new Set<string>();
@@ -431,7 +477,7 @@ export function normalizeLayerGroupsForMode(params: {
 
   let positionsChanged = false;
   if (groupsToDissolve.size > 0) {
-    const shouldClear = (groupId?: string) =>
+    const shouldClear = (groupId?: string | null) =>
       !!groupId && groupsToDissolve.has(groupId);
 
     nextKeyMode.forEach((pos, index) => {
@@ -454,6 +500,11 @@ export function normalizeLayerGroupsForMode(params: {
       nextKnobMode[index] = { ...pos, groupId: undefined };
       positionsChanged = true;
     });
+    nextSpriteMode.forEach((pos, index) => {
+      if (!shouldClear(pos?.groupId)) return;
+      nextSpriteMode[index] = { ...pos, groupId: null };
+      positionsChanged = true;
+    });
   }
 
   if (positionsChanged) {
@@ -461,6 +512,7 @@ export function normalizeLayerGroupsForMode(params: {
     nextStatPositions[mode] = nextStatMode;
     nextGraphPositions[mode] = nextGraphMode;
     nextKnobPositions[mode] = nextKnobMode;
+    nextSpritePositions[mode] = nextSpriteMode;
   }
 
   const finalCounts = collectModeGroupMemberCounts(
@@ -469,6 +521,7 @@ export function normalizeLayerGroupsForMode(params: {
     positionsChanged ? nextStatPositions : statPositions,
     positionsChanged ? nextGraphPositions : graphPositions,
     positionsChanged ? nextKnobPositions : knobPositions,
+    positionsChanged ? nextSpritePositions : spritePositions,
     pluginElements,
   );
   const nextModeGroups = currentModeGroups.filter(
@@ -491,6 +544,7 @@ export function normalizeLayerGroupsForMode(params: {
     statPositions: positionsChanged ? nextStatPositions : statPositions,
     graphPositions: positionsChanged ? nextGraphPositions : graphPositions,
     knobPositions: positionsChanged ? nextKnobPositions : knobPositions,
+    spritePositions: positionsChanged ? nextSpritePositions : spritePositions,
     layerGroups: nextLayerGroups,
     positionsChanged,
     groupsChanged,
@@ -503,20 +557,21 @@ export function normalizeLayerGroupsForMode(params: {
 // ============================================================================
 
 export interface LayerItemForOrder {
-  type: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
+  type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite' | 'plugin';
   id: string;
   index?: number;
   zIndex: number;
   groupId?: string;
 }
 
-/** 5개 스토어에서 아이템을 수집하고 zIndex 내림차순 정렬 */
+/** 6개 스토어에서 아이템을 수집하고 zIndex 내림차순 정렬 */
 export function buildLayerItemsForMode(
   mode: string,
   keyPositions: CanonicalEditorDocumentV1['keyPositions'],
   statPositions: CanonicalEditorDocumentV1['statPositions'],
   graphPositions: CanonicalEditorDocumentV1['graphPositions'],
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'],
   pluginElements: PluginDisplayElementInternal[],
 ): LayerItemForOrder[] {
   const items: LayerItemForOrder[] = [];
@@ -558,6 +613,16 @@ export function buildLayerItemsForMode(
       index,
       zIndex: pos.zIndex ?? index,
       groupId: pos.groupId,
+    });
+  });
+
+  (spritePositions[mode] || []).forEach((pos, index) => {
+    items.push({
+      type: 'sprite',
+      id: pos.id,
+      index,
+      zIndex: pos.zIndex ?? index,
+      groupId: pos.groupId ?? undefined,
     });
   });
 
@@ -615,6 +680,7 @@ export interface ZIndexPatchResult {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   pluginUpdates: Array<{ fullId: string; zIndex: number }>;
 }
 
@@ -626,12 +692,14 @@ export function applyZIndexToLayerOrder(
   statPositions: CanonicalEditorDocumentV1['statPositions'],
   graphPositions: CanonicalEditorDocumentV1['graphPositions'],
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'],
 ): ZIndexPatchResult {
   const maxZIndex = orderedItems.length - 1;
   const keyMode = [...(keyPositions[mode] || [])];
   const statMode = [...(statPositions[mode] || [])];
   const graphMode = [...(graphPositions[mode] || [])];
   const knobMode = [...(knobPositions[mode] || [])];
+  const spriteMode = [...(spritePositions[mode] || [])];
   const pluginUpdates: Array<{ fullId: string; zIndex: number }> = [];
 
   orderedItems.forEach((item, idx) => {
@@ -648,6 +716,9 @@ export function applyZIndexToLayerOrder(
     } else if (item.type === 'knob') {
       const index = knobMode.findIndex((position) => position.id === item.id);
       if (index !== -1) knobMode[index] = { ...knobMode[index], zIndex: z };
+    } else if (item.type === 'sprite') {
+      const index = spriteMode.findIndex((position) => position.id === item.id);
+      if (index !== -1) spriteMode[index] = { ...spriteMode[index], zIndex: z };
     } else if (item.type === 'plugin') {
       pluginUpdates.push({ fullId: item.id, zIndex: z });
     }
@@ -658,6 +729,7 @@ export function applyZIndexToLayerOrder(
     statPositions: { ...statPositions, [mode]: statMode },
     graphPositions: { ...graphPositions, [mode]: graphMode },
     knobPositions: { ...knobPositions, [mode]: knobMode },
+    spritePositions: { ...spritePositions, [mode]: spriteMode },
     pluginUpdates,
   };
 }

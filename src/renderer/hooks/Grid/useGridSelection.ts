@@ -11,6 +11,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
@@ -21,6 +22,7 @@ import {
 import { PASTE_OFFSET } from './constants';
 import type { KeyMappings, KeySlot } from '@src/types/key/keys';
 import { cloneSlot } from '@utils/keySlot';
+import { reissueSpritePoseIds } from '@utils/sprite/poseIdentity';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   buildNextLayerGroupName,
@@ -51,6 +53,7 @@ import type {
   CanonicalStatItemPosition,
   CanonicalGraphItemPosition,
   CanonicalKnobItemPosition,
+  CanonicalReactiveSpritePosition,
   EditorInsertFrozenElementsOpV1,
 } from '@src/types/editor';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
@@ -146,6 +149,7 @@ export function useGridSelection({
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentKnobPositions = useKnobItemStore.getState().positions;
+    const currentSpritePositions = useSpriteStore.getState().positions;
     const frozen = frozenTargets ?? frozenGestureTargetsRef.current;
     frozenGestureTargetsRef.current = null;
     const currentSelection =
@@ -176,7 +180,7 @@ export function useGridSelection({
           element.type !== 'plugin',
       )
       .map((element) => ({
-        type: element.type as 'key' | 'stat' | 'graph' | 'knob',
+        type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
         id: element.id,
       }));
     const allStableIds =
@@ -198,7 +202,7 @@ export function useGridSelection({
         // 이동 정산은 dx·dy만 동결 - width·height까지 실으면 병행 리사이즈를
         // 되돌린다. wire는 슬롯 generator가 최신 base에 id 의도를 재적용
         const geometryIntents: PropertyIntents = new Map(
-          (['key', 'stat', 'graph', 'knob'] as const).map((type) => [
+          (['key', 'stat', 'graph', 'knob', 'sprite'] as const).map((type) => [
             type,
             new Map(
               nativeTargets
@@ -212,7 +216,9 @@ export function useGridSelection({
                       ? currentStatPositions
                       : type === 'graph'
                       ? currentGraphPositions
-                      : currentKnobPositions;
+                      : type === 'knob'
+                      ? currentKnobPositions
+                      : currentSpritePositions;
                   const position = locator
                     ? (
                         record as Record<
@@ -245,7 +251,9 @@ export function useGridSelection({
                 ? 'statPositions'
                 : type === 'graph'
                 ? 'graphPositions'
-                : 'knobPositions';
+                : type === 'knob'
+                ? 'knobPositions'
+                : 'spritePositions';
             const collections = lastAck[field] as Record<
               string,
               Array<{ id: string } & Record<string, unknown>>
@@ -460,6 +468,32 @@ export function useGridSelection({
       useKnobItemStore.getState().setPositions(newKnobPositions);
     }
 
+    // 스프라이트 요소 배치 업데이트
+    const spriteUpdates = selectedElements.filter((el) => el.type === 'sprite');
+    if (spriteUpdates.length > 0) {
+      const currentSpritePositions = useSpriteStore.getState().positions;
+      const newSpritePositions = { ...currentSpritePositions };
+      const tabPositions = [...(newSpritePositions[selectedKeyType] || [])];
+
+      spriteUpdates.forEach((el) => {
+        const index = tabPositions.findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return;
+        const currentPos = tabPositions[index];
+        if (currentPos) {
+          tabPositions[index] = {
+            ...currentPos,
+            dx: currentPos.dx + deltaX,
+            dy: currentPos.dy + deltaY,
+          };
+        }
+      });
+
+      newSpritePositions[selectedKeyType] = tabPositions;
+      useSpriteStore.getState().setPositions(newSpritePositions);
+    }
+
     // 플러그인 요소 배치 업데이트
     const pluginUpdates = selectedElements.filter((el) => el.type === 'plugin');
     let stagedBeforeEagerWrite = false;
@@ -541,6 +575,8 @@ export function useGridSelection({
       useGraphItemStore.getState().positions[selectedKeyType] || [];
     const currentKnobPositions =
       useKnobItemStore.getState().positions[selectedKeyType] || [];
+    const currentSpritePositions =
+      useSpriteStore.getState().positions[selectedKeyType] || [];
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
 
@@ -588,6 +624,16 @@ export function useGridSelection({
         if (position) {
           clipboardItems.push({
             type: 'knob',
+            position: { ...position },
+          });
+        }
+      } else if (element.type === 'sprite') {
+        const position = currentSpritePositions.find(
+          (candidate) => candidate.id === element.id,
+        );
+        if (position) {
+          clipboardItems.push({
+            type: 'sprite',
             position: { ...position },
           });
         }
@@ -695,6 +741,7 @@ export function useGridSelection({
     const statsToAdd: { position: CanonicalStatItemPosition }[] = [];
     const graphsToAdd: { position: CanonicalGraphItemPosition }[] = [];
     const knobsToAdd: { position: CanonicalKnobItemPosition }[] = [];
+    const spritesToAdd: { position: CanonicalReactiveSpritePosition }[] = [];
     const pluginPayloads: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
     for (const item of currentClipboard) {
       if (item.type === 'key') {
@@ -734,6 +781,18 @@ export function useGridSelection({
             ...item.position,
             id: newElementId(),
             groupId: remapGroupId(item.position.groupId),
+            dx: (item.position.dx || 0) + PASTE_OFFSET,
+            dy: (item.position.dy || 0) + PASTE_OFFSET,
+          },
+        });
+      } else if (item.type === 'sprite') {
+        spritesToAdd.push({
+          position: {
+            ...item.position,
+            id: newElementId(),
+            // 사본 poseId 재발급 - 원본과 공유하면 백엔드가 중복으로 거부
+            poses: reissueSpritePoseIds(item.position.poses),
+            groupId: remapGroupId(item.position.groupId ?? undefined) ?? null,
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
           },
@@ -816,6 +875,7 @@ export function useGridSelection({
       statsToAdd.length > 0 ||
       graphsToAdd.length > 0 ||
       knobsToAdd.length > 0 ||
+      spritesToAdd.length > 0 ||
       clipboardGroups.length > 0;
     if (!hasEditorPaste && frozenPluginElements.length === 0) return;
 
@@ -826,6 +886,7 @@ export function useGridSelection({
       useStatItemStore.getState().positions,
       useGraphItemStore.getState().positions,
       useKnobItemStore.getState().positions,
+      useSpriteStore.getState().positions,
       usePluginDisplayElementStore.getState().elements,
     );
     // 앵커 descriptor: 선택 요소와 선택 그룹 최상단 중 더 위를 동결하되,
@@ -879,6 +940,7 @@ export function useGridSelection({
       statPositions: CanonicalEditorDocumentV1['statPositions'];
       graphPositions: CanonicalEditorDocumentV1['graphPositions'];
       knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+      spritePositions: CanonicalEditorDocumentV1['spritePositions'];
       layerGroups: Record<string, Array<{ id: string; name: string }>>;
     }
 
@@ -914,6 +976,7 @@ export function useGridSelection({
           'statPositions',
           'graphPositions',
           'knobPositions',
+          'spritePositions',
         ] as const;
         for (const field of fields) {
           for (const [ownMode, list] of Object.entries(view[field])) {
@@ -931,6 +994,7 @@ export function useGridSelection({
       const nextStatPositions = { ...view.statPositions };
       const nextGraphPositions = { ...view.graphPositions };
       const nextKnobPositions = { ...view.knobPositions };
+      const nextSpritePositions = { ...view.spritePositions };
 
       const appendedNativeIds = new Set<string>();
       let realizedFrozenNativeParts = 0;
@@ -1011,6 +1075,11 @@ export function useGridSelection({
         knobsToAdd,
         'knobPositions',
       );
+      const spriteNext = appendSimple(
+        nextSpritePositions,
+        spritesToAdd,
+        'spritePositions',
+      );
 
       // 신규 그룹 append (id 기준 멱등)
       let layerGroups = view.layerGroups;
@@ -1073,6 +1142,7 @@ export function useGridSelection({
         statNext as never,
         graphNext as never,
         knobNext as never,
+        spriteNext as never,
         combinedProjection,
       );
       const newIdSet = new Set<string>([
@@ -1105,6 +1175,10 @@ export function useGridSelection({
           item: entry.position.id,
           zIndex: entry.position.zIndex,
         })),
+        ...spritesToAdd.map((entry) => ({
+          item: entry.position.id,
+          zIndex: entry.position.zIndex ?? undefined,
+        })),
         ...frozenPluginElements.map((element) => ({
           item: element.fullId,
           zIndex: element.zIndex,
@@ -1136,6 +1210,7 @@ export function useGridSelection({
         statNext as never,
         graphNext as never,
         knobNext as never,
+        spriteNext as never,
       );
       const zByFullId = new Map(
         zPatch.pluginUpdates.map((update) => [update.fullId, update.zIndex]),
@@ -1172,6 +1247,7 @@ export function useGridSelection({
         ...statsToAdd.map((entry) => entry.position.id),
         ...graphsToAdd.map((entry) => entry.position.id),
         ...knobsToAdd.map((entry) => entry.position.id),
+        ...spritesToAdd.map((entry) => entry.position.id),
       ]);
       const finalById = <T extends { id: string }>(
         record: Record<string, T[]>,
@@ -1183,6 +1259,7 @@ export function useGridSelection({
       const finalStats = finalById(plan.zPatch.statPositions);
       const finalGraphs = finalById(plan.zPatch.graphPositions);
       const finalKnobs = finalById(plan.zPatch.knobPositions);
+      const finalSprites = finalById(plan.zPatch.spritePositions);
       const elements: EditorInsertFrozenElementsOpV1['elements'] = [
         ...keysToAdd.map((entry) => ({
           elementType: 'key' as const,
@@ -1201,10 +1278,14 @@ export function useGridSelection({
           elementType: 'knob' as const,
           position: finalKnobs.get(entry.position.id) ?? entry.position,
         })),
+        ...spritesToAdd.map((entry) => ({
+          elementType: 'sprite' as const,
+          position: finalSprites.get(entry.position.id) ?? entry.position,
+        })),
       ];
       const zUpdates: EditorInsertFrozenElementsOpV1['zUpdates'] = [];
       const collectZUpdates = (
-        elementType: 'key' | 'stat' | 'graph' | 'knob',
+        elementType: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
         current: Array<{ id: string }>,
         final: Map<string, { id: string; zIndex?: number }>,
       ) => {
@@ -1226,7 +1307,12 @@ export function useGridSelection({
           view.graphPositions[mode] ?? [],
           finalGraphs,
         ) &&
-        collectZUpdates('knob', view.knobPositions[mode] ?? [], finalKnobs);
+        collectZUpdates('knob', view.knobPositions[mode] ?? [], finalKnobs) &&
+        collectZUpdates(
+          'sprite',
+          view.spritePositions[mode] ?? [],
+          finalSprites,
+        );
       if (!stable) {
         throw new ElementIntentAbort('paste source document is not canonical');
       }
@@ -1282,6 +1368,7 @@ export function useGridSelection({
           statPositions: useStatItemStore.getState().positions as never,
           graphPositions: useGraphItemStore.getState().positions as never,
           knobPositions: useKnobItemStore.getState().positions as never,
+          spritePositions: useSpriteStore.getState().positions as never,
           layerGroups: useLayerGroupStore.getState().layerGroups as never,
         },
         eagerElementsBefore,
@@ -1296,6 +1383,7 @@ export function useGridSelection({
           'statPositions',
           'graphPositions',
           'knobPositions',
+          'spritePositions',
           'layerGroups',
         ],
         mutate: () => {
@@ -1314,6 +1402,9 @@ export function useGridSelection({
           useKnobItemStore
             .getState()
             .setPositions(eagerPlan.zPatch.knobPositions as never);
+          useSpriteStore
+            .getState()
+            .setPositions(eagerPlan.zPatch.spritePositions as never);
           if (eagerPlan.groupsChanged) {
             useLayerGroupStore
               .getState()
@@ -1374,7 +1465,7 @@ export function useGridSelection({
       // 편입 전 abort로 롤백되면 정산 뒤 pruneRolledBackPasteSelection이 정리한다
       const newSelectedElements: SelectedElement[] = [];
       const collect = (
-        type: 'key' | 'stat' | 'graph' | 'knob',
+        type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
         record: Record<string, Array<{ id: string }>>,
         ids: readonly string[],
       ) => {
@@ -1406,6 +1497,11 @@ export function useGridSelection({
         useKnobItemStore.getState().positions as never,
         knobsToAdd.map((entry) => entry.position.id),
       );
+      collect(
+        'sprite',
+        useSpriteStore.getState().positions as never,
+        spritesToAdd.map((entry) => entry.position.id),
+      );
       const presentPluginIds = new Set(
         usePluginDisplayElementStore
           .getState()
@@ -1435,6 +1531,7 @@ export function useGridSelection({
           ...statsToAdd.map((entry) => entry.position.id),
           ...graphsToAdd.map((entry) => entry.position.id),
           ...knobsToAdd.map((entry) => entry.position.id),
+          ...spritesToAdd.map((entry) => entry.position.id),
           ...frozenPluginElements.map((element) => element.fullId),
         ]);
         const presentIds = new Set<string>([
@@ -1448,6 +1545,9 @@ export function useGridSelection({
             useGraphItemStore.getState().positions[selectedKeyType] ?? []
           ).map((position) => position.id),
           ...(useKnobItemStore.getState().positions[selectedKeyType] ?? []).map(
+            (position) => position.id,
+          ),
+          ...(useSpriteStore.getState().positions[selectedKeyType] ?? []).map(
             (position) => position.id,
           ),
           ...usePluginDisplayElementStore
@@ -1493,6 +1593,7 @@ export function useGridSelection({
                 statPositions: base.statPositions as never,
                 graphPositions: base.graphPositions as never,
                 knobPositions: base.knobPositions as never,
+                spritePositions: base.spritePositions as never,
                 layerGroups: base.layerGroups as never,
               },
               pluginProjection,
@@ -1504,6 +1605,7 @@ export function useGridSelection({
                 statPositions: base.statPositions as never,
                 graphPositions: base.graphPositions as never,
                 knobPositions: base.knobPositions as never,
+                spritePositions: base.spritePositions as never,
                 layerGroups: base.layerGroups as never,
               },
               plan,

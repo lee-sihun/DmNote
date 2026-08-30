@@ -260,6 +260,7 @@ const SEMANTIC_POSITION_FIELDS: Record<EditorElementTypeV1, EditorField> = {
   stat: 'statPositions',
   graph: 'graphPositions',
   knob: 'knobPositions',
+  sprite: 'spritePositions',
 };
 
 const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
@@ -483,6 +484,7 @@ const applySemanticOps = (
           statPositions: next.statPositions,
           graphPositions: next.graphPositions,
           knobPositions: next.knobPositions,
+          spritePositions: next.spritePositions,
           layerGroups: next.layerGroups,
           pluginElements: currentPluginGroupMembers(),
         });
@@ -490,6 +492,7 @@ const applySemanticOps = (
         next.statPositions = normalized.statPositions;
         next.graphPositions = normalized.graphPositions;
         next.knobPositions = normalized.knobPositions;
+        next.spritePositions = normalized.spritePositions;
         next.layerGroups = normalized.layerGroups;
       }
       return;
@@ -504,6 +507,7 @@ const applySemanticOps = (
         statPositions: next.statPositions,
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
+        spritePositions: next.spritePositions,
         layerGroups: next.layerGroups,
         pluginElements: currentPluginGroupMembers(),
       });
@@ -512,6 +516,7 @@ const applySemanticOps = (
       next.statPositions = projected.statPositions;
       next.graphPositions = projected.graphPositions;
       next.knobPositions = projected.knobPositions;
+      next.spritePositions = projected.spritePositions;
       next.layerGroups = projected.layerGroups;
       return;
     }
@@ -1058,6 +1063,7 @@ const applySemanticOps = (
         statPositions: next.statPositions,
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
+        spritePositions: next.spritePositions,
         layerGroups: next.layerGroups,
         pluginElements: currentPluginGroupMembers(),
       });
@@ -1065,6 +1071,7 @@ const applySemanticOps = (
       next.statPositions = normalized.statPositions;
       next.graphPositions = normalized.graphPositions;
       next.knobPositions = normalized.knobPositions;
+      next.spritePositions = normalized.spritePositions;
       next.layerGroups = normalized.layerGroups;
       break;
     }

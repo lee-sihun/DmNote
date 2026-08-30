@@ -6,6 +6,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import {
@@ -47,7 +48,7 @@ const validNativeGroupTargets = (
   targets.length <= 4096 &&
   targets.every(
     ({ elementType, id }) =>
-      ['key', 'stat', 'graph', 'knob'].includes(elementType) &&
+      ['key', 'stat', 'graph', 'knob', 'sprite'].includes(elementType) &&
       isNativeElementId(id),
   ) &&
   new Set(targets.map(({ id }) => id)).size === targets.length;
@@ -185,6 +186,7 @@ export const setMixedElementGroups = (
         statPositions: useStatItemStore.getState().positions,
         graphPositions: useGraphItemStore.getState().positions,
         knobPositions: useKnobItemStore.getState().positions,
+        spritePositions: useSpriteStore.getState().positions,
         layerGroups: useLayerGroupStore.getState().layerGroups,
       };
       const projected = projectStableElementGroups({
@@ -206,6 +208,7 @@ export const setMixedElementGroups = (
         useStatItemStore.getState().setPositions(projected.statPositions);
         useGraphItemStore.getState().setPositions(projected.graphPositions);
         useKnobItemStore.getState().setPositions(projected.knobPositions);
+        useSpriteStore.getState().setPositions(projected.spritePositions);
         useLayerGroupStore.getState().setLayerGroups(projected.layerGroups);
         nativeReceipt = {
           rollback: () => {
@@ -231,6 +234,11 @@ export const setMixedElementGroups = (
               useKnobItemStore.getState().positions === projected.knobPositions
             ) {
               useKnobItemStore.getState().setPositions(before.knobPositions);
+            }
+            if (
+              useSpriteStore.getState().positions === projected.spritePositions
+            ) {
+              useSpriteStore.getState().setPositions(before.spritePositions);
             }
             if (
               useLayerGroupStore.getState().layerGroups ===
@@ -313,6 +321,7 @@ const NATIVE_MEMBER_TYPES: readonly NativeElementType[] = [
   'stat',
   'graph',
   'knob',
+  'sprite',
 ];
 
 // 그룹의 native 멤버 수집 - canonical ID가 아닌 멤버가 섞이면 반쪽 토글
@@ -342,7 +351,9 @@ const readStorePositions = (type: NativeElementType): PositionSlice =>
     ? useStatItemStore.getState().positions
     : type === 'graph'
     ? useGraphItemStore.getState().positions
-    : useKnobItemStore.getState().positions) as unknown as PositionSlice;
+    : type === 'knob'
+    ? useKnobItemStore.getState().positions
+    : useSpriteStore.getState().positions) as unknown as PositionSlice;
 
 const readDocumentPositions =
   (base: CanonicalEditorDocumentV1) =>
@@ -353,7 +364,9 @@ const readDocumentPositions =
       ? base.statPositions
       : type === 'graph'
       ? base.graphPositions
-      : base.knobPositions) as unknown as PositionSlice;
+      : type === 'knob'
+      ? base.knobPositions
+      : base.spritePositions) as unknown as PositionSlice;
 
 // 플러그인 hidden eager 반영 - CAS receipt (groupId eager 패턴과 동일)
 const applyPluginHiddenEagerly = (

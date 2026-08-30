@@ -2,6 +2,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 
 import { stableStringify } from '@utils/core/stableStringify';
@@ -135,7 +136,9 @@ const readRecord = (type: NativeElementType): LooseRecord =>
     ? useStatItemStore.getState().positions
     : type === 'graph'
     ? useGraphItemStore.getState().positions
-    : useKnobItemStore.getState().positions) as LooseRecord;
+    : type === 'knob'
+    ? useKnobItemStore.getState().positions
+    : useSpriteStore.getState().positions) as LooseRecord;
 
 const writeRecord = (type: NativeElementType, next: LooseRecord): void => {
   if (type === 'key') {
@@ -144,8 +147,10 @@ const writeRecord = (type: NativeElementType, next: LooseRecord): void => {
     useStatItemStore.getState().setPositions(next as never);
   } else if (type === 'graph') {
     useGraphItemStore.getState().setPositions(next as never);
-  } else {
+  } else if (type === 'knob') {
     useKnobItemStore.getState().setPositions(next as never);
+  } else {
+    useSpriteStore.getState().setPositions(next as never);
   }
 };
 
@@ -259,12 +264,17 @@ export const applyPropertyIntentsEagerly = (
 
 const GEOMETRY_FIELD_BY_TYPE: Record<
   NativeElementType,
-  'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+  | 'keyPositions'
+  | 'statPositions'
+  | 'graphPositions'
+  | 'knobPositions'
+  | 'spritePositions'
 > = {
   key: 'keyPositions',
   stat: 'statPositions',
   graph: 'graphPositions',
   knob: 'knobPositions',
+  sprite: 'spritePositions',
 };
 
 // 최신 base에서 기하 의도를 setBounds op으로 재생성한다. 크기는 base 값을
@@ -349,6 +359,7 @@ type SealedSliceField =
   | 'statPositions'
   | 'graphPositions'
   | 'knobPositions'
+  | 'spritePositions'
   | 'layerGroups';
 
 // ---------------------------------------------------------------------------
@@ -369,6 +380,8 @@ const readFieldRecord = (field: SealedSliceField): Record<string, unknown> =>
     ? useGraphItemStore.getState().positions
     : field === 'knobPositions'
     ? useKnobItemStore.getState().positions
+    : field === 'spritePositions'
+    ? useSpriteStore.getState().positions
     : useLayerGroupStore.getState().layerGroups) as Record<string, unknown>;
 
 const writeFieldModeSlices = (
@@ -393,6 +406,8 @@ const writeFieldModeSlices = (
     useGraphItemStore.getState().setPositions(merged as never);
   } else if (field === 'knobPositions') {
     useKnobItemStore.getState().setPositions(merged as never);
+  } else if (field === 'spritePositions') {
+    useSpriteStore.getState().setPositions(merged as never);
   } else {
     useLayerGroupStore.getState().setLayerGroups(merged as never);
   }

@@ -8,6 +8,7 @@ import {
   useKeyStore,
 } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { invalidateSelectionForChangedIndexedElementArrays } from '@stores/grid/useGridSelectionStore';
@@ -58,6 +59,7 @@ export const captureEditorDocument = (): CanonicalEditorDocumentV1 => {
     statPositions: useStatItemStore.getState().positions,
     graphPositions: useGraphItemStore.getState().positions,
     knobPositions: useKnobItemStore.getState().positions,
+    spritePositions: useSpriteStore.getState().positions,
     layerGroups: useLayerGroupStore.getState().layerGroups,
   };
 };
@@ -75,6 +77,7 @@ export const applyEditorDocument = (
         stat: useStatItemStore.getState().positions[mode] ?? [],
         graph: useGraphItemStore.getState().positions[mode] ?? [],
         knob: useKnobItemStore.getState().positions[mode] ?? [],
+        sprite: useSpriteStore.getState().positions[mode] ?? [],
       },
       {
         keyMappings: document.keys[mode] ?? [],
@@ -82,6 +85,7 @@ export const applyEditorDocument = (
         stat: document.statPositions[mode] ?? [],
         graph: document.graphPositions[mode] ?? [],
         knob: document.knobPositions[mode] ?? [],
+        sprite: document.spritePositions[mode] ?? [],
       },
     );
     const keyChanges: Partial<
@@ -116,6 +120,11 @@ export const applyEditorDocument = (
       hasChanged(useKnobItemStore.getState().positions, document.knobPositions)
     ) {
       useKnobItemStore.setState({ positions: document.knobPositions });
+    }
+    if (
+      hasChanged(useSpriteStore.getState().positions, document.spritePositions)
+    ) {
+      useSpriteStore.setState({ positions: document.spritePositions });
     }
     if (
       hasChanged(

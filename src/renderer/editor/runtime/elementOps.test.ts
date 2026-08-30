@@ -29,6 +29,7 @@ vi.mock('./editorSemanticOps', () => ({
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
   registerLoadedPluginIdsProvider,
@@ -40,6 +41,7 @@ import {
   addGraphAt,
   addKeyAt,
   addKnobAt,
+  addSpriteAt,
   addStatAt,
   commitBatchGeometryByIds,
   commitElementGeometryById,
@@ -49,6 +51,7 @@ import {
   placeDuplicatedKey,
   placeDuplicatedGraph,
   placeDuplicatedKnob,
+  placeDuplicatedSprite,
   placeDuplicatedStat,
   patchElementHiddenById,
   setLayerGroupHidden,
@@ -110,6 +113,7 @@ import type {
   EditorPatchV1,
 } from '@src/types/editor';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
 
 const ID_A = '11111111-1111-4111-8111-111111111111';
 const ID_B = '22222222-2222-4222-8222-222222222222';
@@ -133,6 +137,29 @@ const graphAt = (
   ...patch,
 });
 
+const spriteAt = (id: string): ReactiveSpritePosition & { id: string } => ({
+  id,
+  dx: 0,
+  dy: 0,
+  width: 200,
+  height: 120,
+  hidden: false,
+  zIndex: null,
+  layerName: null,
+  groupId: null,
+  className: null,
+  useInlineStyles: null,
+  baseImage: null,
+  imageFit: null,
+  imageRect: { x: 0, y: 0, width: 100, height: 100 },
+  pivot: { x: 0.5, y: 0.5 },
+  idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+  poses: [],
+  activation: 'whileHeld',
+  transitionMs: 90,
+  transitionEasing: 'linear',
+});
+
 // 슬롯 시점 base. 기본은 호출 시점 스토어 - 대기 중 재정렬·삭제는 테스트가
 // slotBase로 재현한다
 let slotBase: (() => CanonicalEditorDocumentV1) | null = null;
@@ -145,6 +172,7 @@ const documentFromStores = (): CanonicalEditorDocumentV1 =>
     statPositions: structuredClone(useStatItemStore.getState().positions),
     graphPositions: structuredClone(useGraphItemStore.getState().positions),
     knobPositions: structuredClone(useKnobItemStore.getState().positions),
+    spritePositions: structuredClone(useSpriteStore.getState().positions),
     layerGroups: structuredClone(useLayerGroupStore.getState().layerGroups),
   } as CanonicalEditorDocumentV1);
 
@@ -202,6 +230,7 @@ describe('elementOps', () => {
     useStatItemStore.setState({ positions: {} });
     useGraphItemStore.setState({ positions: {} });
     useKnobItemStore.setState({ positions: {} });
+    useSpriteStore.setState({ positions: {} });
     useLayerGroupStore.setState({ layerGroups: {} });
     useGridSelectionStore.setState({ selectedElements: [] });
     registerLoadedPluginIdsProvider(() => new Set());
@@ -375,6 +404,83 @@ describe('elementOps', () => {
     expect(useGraphItemStore.getState().positions['4key']).toHaveLength(1);
     expect(useKnobItemStore.getState().positions['4key']).toHaveLength(1);
     expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
+  });
+
+  it('sprite 삽입·삭제·편입 전 실패 복원은 다른 컬렉션과 같은 계약을 따른다', async () => {
+    const spriteId = crypto.randomUUID();
+    const sprite = spriteAt(spriteId);
+
+    // 삽입: exact frozen op와 eager append
+    await expect(addSpriteAt('4key', sprite)).resolves.toBe(true);
+    const insertOp = api.commitSemanticOps.mock.calls[0][0][0];
+    expect(insertOp).toMatchObject({
+      kind: 'insertFrozenElements',
+      mode: '4key',
+      groups: [],
+      zUpdates: [],
+      elements: [{ elementType: 'sprite', position: { id: spriteId } }],
+    });
+    expect(
+      useSpriteStore.getState().positions['4key'].map((p) => p.id),
+    ).toEqual([spriteId]);
+
+    // 삭제의 편입 전 실패는 eager 제거를 복원한다
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+    await expect(deleteElementById('sprite', spriteId)).rejects.toThrow(
+      'start failed',
+    );
+    expect(
+      useSpriteStore.getState().positions['4key'].map((p) => p.id),
+    ).toEqual([spriteId]);
+
+    // 정상 삭제: deleteElement op와 스토어 제거
+    await expect(deleteElementById('sprite', spriteId)).resolves.toBe(true);
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [{ kind: 'deleteElement', elementType: 'sprite', id: spriteId }],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+    expect(useSpriteStore.getState().positions['4key']).toEqual([]);
+  });
+
+  it('sprite 복제 사본은 poseId를 재발급하고 트리거·변환·이미지를 유지한다', async () => {
+    const source: ReactiveSpritePosition & { id: string } = {
+      ...spriteAt(crypto.randomUUID()),
+      poses: [
+        {
+          poseId: 'pose-src-1',
+          triggers: [ID_A],
+          matchMode: 'exact',
+          transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+          imageOverride: 'sprites/override.png',
+        },
+        {
+          poseId: 'pose-src-2',
+          triggers: [ID_A, ID_B],
+          matchMode: 'exact',
+          transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+          imageOverride: null,
+        },
+      ],
+    };
+
+    await expect(
+      placeDuplicatedSprite('4key', source, 30, 40, 7),
+    ).resolves.toBe(true);
+
+    const element = api.commitSemanticOps.mock.calls[0][0][0].elements[0];
+    expect(element.elementType).toBe('sprite');
+    expect(element.position).toMatchObject({ dx: 30, dy: 40, zIndex: 7 });
+    // 사본 poseId는 재발급 - 원본과 공유하면 백엔드가 중복으로 거부.
+    // 트리거·변환·이미지는 원본과 동일
+    const poses = element.position.poses as typeof source.poses;
+    expect(poses).toHaveLength(2);
+    poses.forEach((pose, index) => {
+      expect(pose.poseId).not.toBe(source.poses[index].poseId);
+      expect(pose).toEqual({ ...source.poses[index], poseId: pose.poseId });
+    });
+    expect(new Set(poses.map((pose) => pose.poseId)).size).toBe(2);
+    // eager 스토어 사본도 wire와 같은 재발급 poses를 갖는다
+    expect(useSpriteStore.getState().positions['4key'][0].poses).toEqual(poses);
   });
 
   it('신규 UUID가 기존 native ID와 충돌하면 eager와 wire를 모두 생략한다', async () => {
@@ -619,6 +725,48 @@ describe('elementOps', () => {
         bounds: { dx: 50, dy: 10, width: 20, height: 30 },
       },
     ]);
+  });
+
+  it('배치 정렬은 key+sprite 혼합 대상 모두 setBounds로 움직인다', async () => {
+    const sprite = { ...spriteAt(ID_B), dx: 50, dy: 10, width: 20, height: 30 };
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), dx: 10, dy: 0, width: 10, height: 20 }],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), dx: 10, dy: 0, width: 10, height: 20 }],
+      },
+    });
+    useSpriteStore.setState({ positions: { '4key': [sprite] } });
+    api.lastAck = documentFromStores();
+
+    await commitBatchGeometryByIds({
+      mode: '4key',
+      targets: [
+        { type: 'key', id: ID_A },
+        { type: 'sprite', id: ID_B },
+      ],
+      operation: { kind: 'align', direction: 'right' },
+    });
+
+    expect(api.commitGeneratedSemanticOps).toHaveBeenCalledOnce();
+    const generate = api.commitGeneratedSemanticOps.mock.calls[0][0];
+    expect(generate(documentFromStores())).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: ID_A,
+        bounds: { dx: 60, dy: 0, width: 10, height: 20 },
+      },
+      {
+        kind: 'setBounds',
+        elementType: 'sprite',
+        id: ID_B,
+        bounds: { dx: 50, dy: 10, width: 20, height: 30 },
+      },
+    ]);
+    // eager: key가 sprite 오른끝에 즉시 정렬
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].dx).toBe(60);
   });
 
   it('배치 geometry는 slot 최신 base에서 전체 계획을 다시 계산한다', async () => {

@@ -7,6 +7,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import Dropdown from '@components/main/common/Dropdown';
 import ReloadButton from '@components/main/common/ReloadButton';
@@ -949,6 +950,7 @@ const Settings = ({
             statPositions: useStatItemStore.getState().positions,
             graphPositions: useGraphItemStore.getState().positions,
             knobPositions: useKnobItemStore.getState().positions,
+            spritePositions: useSpriteStore.getState().positions,
             layerGroups: useLayerGroupStore.getState().layerGroups,
           };
           assertCanonicalEditorDocument(candidate, 'keys_reset_all response');

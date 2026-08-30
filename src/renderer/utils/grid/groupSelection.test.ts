@@ -41,6 +41,7 @@ const mixedSource = (
   statPositions: [{ id: STAT_ID, groupId: GROUP_ID }],
   graphPositions: [],
   knobPositions: [],
+  spritePositions: [],
   pluginElements: [pluginElement(PLUGIN_FULL_ID, GROUP_ID, '4key')],
   modeGroups: [{ id: GROUP_ID }],
   ...overrides,

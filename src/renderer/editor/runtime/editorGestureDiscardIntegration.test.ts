@@ -57,6 +57,7 @@ const makeDocument = (): EditorDocumentV1 => ({
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
+  spritePositions: {},
   layerGroups: {},
 });
 

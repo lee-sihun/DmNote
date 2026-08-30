@@ -29,6 +29,7 @@ const canonicalDocument = (): EditorDocumentV1 => ({
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
+  spritePositions: {},
   layerGroups: {},
 });
 
