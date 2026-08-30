@@ -707,6 +707,58 @@ describe('카운터 지연 타이머', () => {
     expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(2);
   });
 
+  it('초기 gate 전 queued resync는 bootstrap 실패 뒤 한 번만 실행해 복구한다', async () => {
+    act(() => root.unmount());
+    mounted = false;
+
+    let rejectInitial!: (reason?: unknown) => void;
+    const initialBootstrap = new Promise<BootstrapPayload>(
+      (_resolve, reject) => {
+        rejectInitial = reject;
+      },
+    );
+    const failure = new Error('initial bootstrap failed');
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mocks.bootstrap.mockReset();
+    mocks.bootstrap
+      .mockReturnValueOnce(initialBootstrap)
+      .mockResolvedValueOnce(makeBootstrap({ '4key': { KeyK: 6 } }, 30000, 20));
+    mocks.resyncListener = null;
+    mocks.keyState = {
+      ...mocks.keyState,
+      isBootstrapped: false,
+    };
+    setKeyCounter('4key', 'KeyK', 0);
+
+    root = createRoot(container);
+    mounted = true;
+    act(() => {
+      root.render(<Harness />);
+    });
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      mocks.resyncListener?.();
+      mocks.resyncListener?.();
+      mocks.resyncListener?.();
+    });
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      rejectInitial(failure);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(consoleError).toHaveBeenCalledWith('초기 부트스트랩 실패', failure);
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+    expect(mocks.keyState.isBootstrapped).toBe(true);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(6);
+  });
+
   it('같은 세션에서 최신 revision보다 오래된 delta를 무시한다', () => {
     emitCounter(5, '4key', 'KeyK', 5);
     emitCounter(4, '4key', 'KeyK', 4);
