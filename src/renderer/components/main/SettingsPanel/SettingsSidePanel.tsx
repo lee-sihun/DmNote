@@ -3,6 +3,10 @@ import {
   isTopmostPopupLayer,
   registerPopupLayer,
 } from '@components/main/Modal/popupLayer';
+import {
+  getLastInputModality,
+  isPointerFocusRelease,
+} from '@utils/focus/pointerFocusGuard';
 
 export type SettingsPanelKey = 'shortcuts' | 'plugins' | 'css';
 
@@ -63,6 +67,14 @@ const SettingsSidePanel = ({
     return () => {
       const prevFocused = prevFocusedRef.current;
       if (prevFocused && prevFocused.isConnected) {
+        // 마우스 흐름의 닫힘에서는 버튼류 트리거를 다시 잡지 않는다 -
+        // 잔류 포커스가 다음 Space/Enter에 패널을 도로 연다
+        if (
+          getLastInputModality() === 'pointer' &&
+          isPointerFocusRelease(prevFocused)
+        ) {
+          return;
+        }
         prevFocused.focus();
       }
     };
