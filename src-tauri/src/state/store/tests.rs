@@ -17424,11 +17424,17 @@ fn sound_deletion_staging_failure_restores_already_staged_files() {
     std::fs::write(&sound_path, b"sound").unwrap();
     std::fs::create_dir(&invalid_path).unwrap();
 
-    let error = stage_sound_files_for_deletion(&[sound_path.clone(), invalid_path])
+    let error = stage_sound_files_for_deletion(&[sound_path.clone(), invalid_path.clone()])
         .unwrap_err()
         .to_string();
 
-    assert!(error.contains("not a file"));
+    assert_eq!(
+        error,
+        format!(
+            "sound deletion target is not a file at {}",
+            invalid_path.display()
+        )
+    );
     assert_eq!(std::fs::read(&sound_path).unwrap(), b"sound");
     assert!(!std::fs::read_dir(&dir).unwrap().any(|entry| {
         entry
@@ -17943,7 +17949,13 @@ fn unknown_pending_wav_presence_keeps_journal() {
         }
     });
 
-    assert!(result.is_err());
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        format!(
+            "failed to check pending WAV backup at {}",
+            target_path.with_extension("wav.bak").display()
+        )
+    );
     assert_eq!(checks.get(), 2);
     assert_eq!(
         store.snapshot().pending_processed_wav_replacement,
