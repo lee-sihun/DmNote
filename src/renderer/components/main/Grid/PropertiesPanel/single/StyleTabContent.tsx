@@ -70,8 +70,8 @@ import {
   resolveElementShadowForPosition,
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import SoundSection from '../SoundSection';
+import SingleGeometrySection from './SingleGeometrySection';
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
 const SOUND_PAGE_KEY = 'single-style:sound';
@@ -153,9 +153,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
   const DEFAULT_KEY_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
   const DEFAULT_KEY_ACTIVE_FONT_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
-
-  // 개별 편집 모드인지 확인 (로컬 상태 핸들러가 없으면 개별 편집 모드)
-  const isIndividualMode = !onLocalDxChange;
 
   // 키 슬롯 칩 에디터 (keySlot 제공 시에만 활성)
   const slotEditable = keySlot != null && Boolean(onKeyMappingChange);
@@ -511,32 +508,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onCommit: handleGradientCommit,
   });
 
-  // 위치 변경 핸들러
-  const handlePositionXChange = (value: number) => {
-    if (onLocalDxChange) {
-      onLocalDxChange(value);
-    }
-    onGeometryCommit?.('dx', value);
-  };
-
-  const handlePositionYChange = (value: number) => {
-    if (onLocalDyChange) {
-      onLocalDyChange(value);
-    }
-    onGeometryCommit?.('dy', value);
-  };
-
-  // 크기 변경 핸들러
-  const handleWidthChange = (value: number) => {
-    onLocalWidthChange?.(value);
-    onGeometryCommit?.('width', value);
-  };
-
-  const handleHeightChange = (value: number) => {
-    onLocalHeightChange?.(value);
-    onGeometryCommit?.('height', value);
-  };
-
   // 타이핑 중 스타일 프리뷰
   const handleStylePreview = (
     property: keyof KeyPosition,
@@ -557,15 +528,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           : { property: 'fontSize', value },
       );
       return;
-    }
-    if (
-      (property === 'dx' ||
-        property === 'dy' ||
-        property === 'width' ||
-        property === 'height') &&
-      typeof value === 'number'
-    ) {
-      onGeometryPreview?.(property, value);
     }
   };
 
@@ -780,81 +742,20 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         </PropertySection>
       ) : null}
 
-      {/* 위치·크기 */}
-      <PropertySection>
-        <PropertyRow label={t('propertiesPanel.position') || '위치'}>
-          <NumberInput
-            value={
-              isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx
-            }
-            onChange={handlePositionXChange}
-            onPreview={(value) => handleStylePreview('dx', value)}
-            onCancel={() => editGestureController.cancel()}
-            prefix="X"
-            width={AXIS_FIELD_WIDTH}
-            min={-9999}
-            max={9999}
-            allowDecimal
-            decimalScale={1}
-          />
-          <NumberInput
-            value={
-              isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy
-            }
-            onChange={handlePositionYChange}
-            onPreview={(value) => handleStylePreview('dy', value)}
-            onCancel={() => editGestureController.cancel()}
-            prefix="Y"
-            width={AXIS_FIELD_WIDTH}
-            min={-9999}
-            max={9999}
-            allowDecimal
-            decimalScale={1}
-          />
-        </PropertyRow>
-
-        {/* 크기 */}
-        <PropertyRow label={t('propertiesPanel.size') || '크기'}>
-          <NumberInput
-            value={
-              isIndividualMode
-                ? keyPosition.width ?? 60
-                : localWidth ?? keyPosition.width ?? 60
-            }
-            onChange={handleWidthChange}
-            onPreview={(width) => {
-              onLocalWidthChange?.(width);
-              onGeometryPreview?.('width', width);
-            }}
-            onCancel={() => editGestureController.cancel()}
-            prefix="W"
-            width={AXIS_FIELD_WIDTH}
-            min={1}
-            max={999}
-            allowDecimal
-            decimalScale={1}
-          />
-          <NumberInput
-            value={
-              isIndividualMode
-                ? keyPosition.height ?? 60
-                : localHeight ?? keyPosition.height ?? 60
-            }
-            onChange={handleHeightChange}
-            onPreview={(height) => {
-              onLocalHeightChange?.(height);
-              onGeometryPreview?.('height', height);
-            }}
-            onCancel={() => editGestureController.cancel()}
-            prefix="H"
-            width={AXIS_FIELD_WIDTH}
-            min={1}
-            max={999}
-            allowDecimal
-            decimalScale={1}
-          />
-        </PropertyRow>
-      </PropertySection>
+      <SingleGeometrySection
+        keyPosition={keyPosition}
+        localDx={localDx}
+        localDy={localDy}
+        localWidth={localWidth}
+        localHeight={localHeight}
+        onLocalDxChange={onLocalDxChange}
+        onLocalDyChange={onLocalDyChange}
+        onLocalWidthChange={onLocalWidthChange}
+        onLocalHeightChange={onLocalHeightChange}
+        onGeometryPreview={onGeometryPreview}
+        onGeometryCommit={onGeometryCommit}
+        t={t}
+      />
 
       {/* 외형 */}
       <PropertySection>
