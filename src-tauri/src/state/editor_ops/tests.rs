@@ -233,6 +233,134 @@ fn paint_descriptor(
     }
 }
 
+#[test]
+fn property_patch_pair_fallback_and_apply_noop_bool_are_stable() {
+    let descriptor = paint_descriptor(
+        "idle-first",
+        Some((45.0, &[("idle-first", 0.0), ("idle-last", 1.0)])),
+    );
+    let expected_gradient = descriptor
+        .gradient
+        .as_ref()
+        .map(EditorPaintGradientV1::to_gradient_spec);
+    let mut position = KeyPosition {
+        background_color: Some(descriptor.color.clone()),
+        background_gradient: expected_gradient.clone(),
+        active_background_color: Some("   ".to_string()),
+        active_background_gradient: None,
+        ..KeyPosition::default()
+    };
+
+    assert!(preserve_active_paint_fallback(
+        &mut position,
+        PaintSurface::Background
+    ));
+    assert_eq!(position.active_background_color, position.background_color);
+    assert_eq!(
+        position.active_background_gradient,
+        position.background_gradient
+    );
+    assert!(!preserve_active_paint_fallback(
+        &mut position,
+        PaintSurface::Background
+    ));
+
+    let mut color = position.active_background_color.clone();
+    let mut gradient = position.active_background_gradient.clone();
+    assert!(!apply_paint_descriptor(
+        &mut color,
+        &mut gradient,
+        &descriptor
+    ));
+
+    let replacement = paint_descriptor("replacement", None);
+    assert!(apply_paint_descriptor(
+        &mut color,
+        &mut gradient,
+        &replacement
+    ));
+    assert_eq!(color.as_deref(), Some("replacement"));
+    assert!(gradient.is_none());
+    assert!(!apply_paint_descriptor(
+        &mut color,
+        &mut gradient,
+        &replacement
+    ));
+
+    position.active_background_color = Some("explicit-active".to_string());
+    position.active_background_gradient = None;
+    position.background_color = Some("new-idle".to_string());
+    position.background_gradient = None;
+    assert!(!preserve_active_paint_fallback(
+        &mut position,
+        PaintSurface::Background
+    ));
+    assert_eq!(
+        position.active_background_color.as_deref(),
+        Some("explicit-active")
+    );
+}
+
+#[test]
+fn property_patch_validation_precedence_and_synced_note_noop_are_stable() {
+    let store = base_store();
+    let original = store.clone();
+    let invalid_descriptor = paint_descriptor(
+        "mismatched-representative",
+        Some((360.0, &[("first", 0.0), ("last", 1.0)])),
+    );
+    let error = prepare_editor_ops_transition(
+        &store,
+        &[
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &store.key_positions["4key"][0].id,
+                EditorElementPropertyPatchV1::Hidden(true),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::BackgroundPaint(invalid_descriptor),
+            ),
+        ],
+    )
+    .unwrap_err();
+    assert_eq!(validation_code(&error), Some("INVALID_PAINT_GRADIENT"));
+    assert_eq!(
+        error.message,
+        "paint gradient angle must be finite and canonical between 0 and 360"
+    );
+    assert_eq!(store, original);
+
+    let mut synced_store = base_store();
+    let id = synced_store.key_positions["4key"][0].id.clone();
+    let position = &mut synced_store.key_positions.get_mut("4key").unwrap()[0];
+    position.note_color = NoteColor::Solid("same-note".to_string());
+    position.note_gradient = None;
+    position.note_glow_sync_paint = true;
+    assert!(position.mirror_note_body_to_glow());
+    let synced_original = synced_store.clone();
+    let op = patch_property_op(
+        EditorElementTypeV1::Key,
+        id,
+        EditorElementPropertyPatchV1::NotePaint(EditorNotePaintIntentV1::Color(
+            crate::models::EditorNotePaintColorIntentV1 {
+                color: EditorNoteColorV1::Solid("same-note".to_string()),
+            },
+        )),
+    );
+    let transition = prepare_editor_ops_transition(&synced_store, &[op]).unwrap();
+    assert_eq!(
+        transition.op_results[0].status,
+        EditorOpResultStatusV1::NoChange
+    );
+    assert!(transition.changed_fields.is_empty());
+    assert_eq!(
+        transition.candidate,
+        EditorDocumentV1::from_store(&synced_original)
+    );
+}
+
 fn counter_fill_solid(color: &str) -> EditorCounterFillIntentV1 {
     EditorCounterFillIntentV1::Solid(crate::models::EditorCounterFillSolidIntentV1 {
         color: color.to_string(),
