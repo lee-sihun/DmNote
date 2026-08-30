@@ -64,3 +64,6 @@ impl WebSocketSessionProtocol {
         self.envelope("ping", Value::Null)
     }
 }
+
+#[cfg(test)]
+mod tests;
