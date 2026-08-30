@@ -5,6 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CounterAnimationEditorModal from './CounterAnimationEditorModal';
 
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const preview = vi.hoisted(() => ({
+  countDisplayProps: null as Record<string, unknown> | null,
+}));
+
 vi.mock('@components/main/Modal/FullSurfaceModalLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -16,7 +22,10 @@ vi.mock('@components/main/Grid/PropertiesPanel/PropertyInputs', () => ({
   NumberInput: () => null,
 }));
 vi.mock('@components/overlay/counters/CountDisplay', () => ({
-  default: () => null,
+  default: (props: Record<string, unknown>) => {
+    preview.countDisplayProps = props;
+    return <span data-testid="counter-animation-preview-count" />;
+  },
 }));
 
 const pointerEvent = (type: string, clientX: number, clientY: number) => {
@@ -39,6 +48,7 @@ describe('CounterAnimationEditorModal 베지어 드래그', () => {
   let resizeCallback: ResizeObserverCallback;
 
   beforeEach(() => {
+    preview.countDisplayProps = null;
     callbacks = new Map();
     let nextId = 1;
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -115,6 +125,42 @@ describe('CounterAnimationEditorModal 베지어 드래그', () => {
     )!;
 
     expect(svg.getAttribute('preserveAspectRatio')).toBe('xMidYMid meet');
+  });
+
+  it('미리보기는 기본 fallback을 전달하고 press·release 순서로 count와 active를 갱신한다', () => {
+    const key = host.querySelector<HTMLElement>('[data-key-element="true"]')!;
+    const scope = host.querySelector<HTMLElement>(
+      '[data-dmn-user-css-scope=""]',
+    )!;
+    const stage = scope.parentElement!;
+
+    expect(preview.countDisplayProps).toMatchObject({
+      count: 0,
+      active: false,
+      globalKey: 'preview',
+      animationEnabled: true,
+      animationBezier: [0.25, 0.46, 0.45, 0.94],
+      animationScale: 1.1,
+      animationDurationMs: 300,
+    });
+    expect(key.getAttribute('data-state')).toBe('inactive');
+    expect(key.getAttribute('data-key-element')).toBe('true');
+    expect(key.hasAttribute('data-key-image')).toBe(false);
+    expect(stage.textContent).toContain('counterSetting.pressToPreview');
+
+    act(() => stage.dispatchEvent(pointerEvent('pointerdown', 100, 100)));
+    expect(preview.countDisplayProps).toMatchObject({
+      count: 1,
+      active: true,
+    });
+    expect(key.getAttribute('data-state')).toBe('active');
+
+    act(() => window.dispatchEvent(pointerEvent('pointerup', 100, 100)));
+    expect(preview.countDisplayProps).toMatchObject({
+      count: 1,
+      active: false,
+    });
+    expect(key.getAttribute('data-state')).toBe('inactive');
   });
 
   it('가로형 캔버스 실측 뒤에는 같은 비율의 풀블리드 viewBox를 쓴다', () => {
