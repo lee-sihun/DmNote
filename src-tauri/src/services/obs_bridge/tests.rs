@@ -36,6 +36,42 @@ async fn receive_envelope(ws: &mut TestWebSocket, expected_type: &str) -> ObsEnv
     .expect("WS 메시지 수신 타임아웃")
 }
 
+async fn receive_envelope_value(ws: &mut TestWebSocket, expected_type: &str) -> Value {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            match ws.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    let envelope =
+                        serde_json::from_str::<Value>(&text).expect("OBS envelope 파싱 실패");
+                    if envelope.get("type").and_then(Value::as_str) == Some(expected_type) {
+                        return envelope;
+                    }
+                }
+                Some(Ok(_)) => {}
+                Some(Err(error)) => panic!("WS 메시지 수신 실패: {error}"),
+                None => panic!("WS 연결이 예기치 않게 종료됨"),
+            }
+        }
+    })
+    .await
+    .expect("WS 메시지 수신 타임아웃")
+}
+
+async fn wait_for_client_count(bridge: &ObsBridgeService, expected: u32, timeout: Duration) {
+    tokio::time::timeout(timeout, async {
+        while bridge.client_count() != expected {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!(
+            "OBS client count 대기 실패: expected={expected}, actual={}",
+            bridge.client_count()
+        )
+    });
+}
+
 async fn connect_authenticated(port: u16, token: &str) -> TestWebSocket {
     let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}"))
         .await
@@ -385,6 +421,109 @@ async fn lagged_publish_burst_recovers_with_latest_snapshot() {
     let snapshot = receive_envelope(&mut ws, "snapshot").await;
     assert_eq!(snapshot.payload, expected_snapshot);
 
+    bridge.stop();
+}
+
+#[tokio::test]
+async fn websocket_session_preserves_handshake_projection_and_client_sequence() {
+    let bridge = Arc::new(ObsBridgeService::new("session-test"));
+    let expected_snapshot = serde_json::json!({ "revision": 7 });
+    bridge.update_snapshot(expected_snapshot.clone());
+    let port = bridge
+        .start(0, "session-token".to_string())
+        .await
+        .expect("OBS bridge 시작 실패");
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}"))
+        .await
+        .expect("WS 연결 실패");
+
+    // hello 전의 malformed/다른 text envelope 무시
+    ws.send(Message::Text("not-json".to_string()))
+        .await
+        .expect("malformed text 전송 실패");
+    ws.send(Message::Text(
+        make_envelope("ping", 10, Value::Null).to_string(),
+    ))
+    .await
+    .expect("handshake 이전 ping 전송 실패");
+    ws.send(Message::Text(
+        make_envelope(
+            "hello",
+            11,
+            serde_json::json!({
+                "token": "session-token",
+                "protocol": OBS_PROTOCOL_VERSION,
+            }),
+        )
+        .to_string(),
+    ))
+    .await
+    .expect("hello 전송 실패");
+
+    let ack = receive_envelope_value(&mut ws, "hello_ack").await;
+    assert_eq!(ack["v"], OBS_PROTOCOL_VERSION);
+    assert_eq!(ack["seq"], 0);
+    assert_eq!(ack["payload"]["serverVersion"], "session-test");
+    assert_eq!(ack["payload"]["obsMode"], true);
+    assert_eq!(
+        ack["payload"]["allowedList"],
+        serde_json::to_value(build_allowed_list()).expect("allowlist 직렬화 실패")
+    );
+
+    let snapshot = receive_envelope_value(&mut ws, "snapshot").await;
+    assert_eq!(snapshot["seq"], 1);
+    assert_eq!(snapshot["payload"], expected_snapshot);
+    assert_eq!(bridge.client_count(), 1);
+
+    // tokio interval의 기존 첫 immediate tick
+    let server_ping = receive_envelope_value(&mut ws, "ping").await;
+    assert_eq!(server_ping["seq"], 2);
+    assert_eq!(server_ping["payload"], Value::Null);
+
+    ws.send(Message::Text(
+        make_envelope("ping", 12, Value::Null).to_string(),
+    ))
+    .await
+    .expect("client ping 전송 실패");
+    let pong = receive_envelope_value(&mut ws, "pong").await;
+    assert_eq!(pong["seq"], 3);
+    assert_eq!(pong["payload"], Value::Null);
+
+    ws.send(Message::Text(
+        make_envelope("resync_request", 13, Value::Null).to_string(),
+    ))
+    .await
+    .expect("resync_request 전송 실패");
+    let resync = receive_envelope_value(&mut ws, "snapshot").await;
+    assert_eq!(resync["seq"], 4);
+    assert_eq!(resync["payload"], serde_json::json!({ "revision": 7 }));
+
+    ws.send(Message::Text(
+        make_envelope(
+            "invoke_request",
+            14,
+            serde_json::json!({
+                "requestId": "rpc-1",
+                "command": "not-allowed",
+            }),
+        )
+        .to_string(),
+    ))
+    .await
+    .expect("invoke_request 전송 실패");
+    let rpc = receive_envelope_value(&mut ws, "invoke_response").await;
+    assert_eq!(rpc["seq"], 5);
+    assert_eq!(rpc["payload"]["requestId"], "rpc-1");
+    assert_eq!(rpc["payload"]["error"], "Command not allowed: not-allowed");
+
+    bridge.publish("settings:changed", serde_json::json!({ "revision": 8 }));
+    let broadcast = receive_envelope_value(&mut ws, "tauri_event").await;
+    assert_eq!(broadcast["seq"], 6);
+    assert_eq!(broadcast["payload"]["event"], "settings:changed");
+    assert_eq!(broadcast["payload"]["data"]["revision"], 8);
+
+    ws.close(None).await.expect("WS 종료 실패");
+    wait_for_client_count(&bridge, 0, Duration::from_secs(2)).await;
     bridge.stop();
 }
 
@@ -804,12 +943,12 @@ async fn protocol_mismatch_is_rejected_before_auth() {
     let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}"))
         .await
         .expect("WS 연결 실패");
-    // 올바른 토큰이라도 프로토콜 버전이 다르면 거부되어야 함
+    // 토큰까지 틀려도 프로토콜 오류가 먼저 결정되어야 함
     let hello = serde_json::json!({
         "v": 999,
         "type": "hello",
         "seq": 0,
-        "payload": { "token": "token", "protocol": 999 },
+        "payload": { "token": "wrong-token", "protocol": 999 },
     });
     ws.send(Message::Text(hello.to_string()))
         .await
@@ -820,7 +959,96 @@ async fn protocol_mismatch_is_rejected_before_auth() {
         error.payload.get("code").and_then(Value::as_str),
         Some("PROTOCOL_MISMATCH")
     );
+    wait_for_client_count(&bridge, 0, Duration::from_secs(2)).await;
 
+    bridge.stop();
+}
+
+#[tokio::test]
+async fn auth_failure_follows_protocol_validation_and_empty_server_token_disables_auth() {
+    let bridge = Arc::new(ObsBridgeService::new("test"));
+    let port = bridge
+        .start(0, "secret".to_string())
+        .await
+        .expect("OBS bridge 시작 실패");
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}"))
+        .await
+        .expect("WS 연결 실패");
+    ws.send(Message::Text(
+        make_envelope(
+            "hello",
+            0,
+            serde_json::json!({
+                "token": "wrong",
+                "protocol": OBS_PROTOCOL_VERSION,
+            }),
+        )
+        .to_string(),
+    ))
+    .await
+    .expect("hello 전송 실패");
+    let error = receive_envelope_value(&mut ws, "error").await;
+    assert_eq!(error["seq"], 0);
+    assert_eq!(error["payload"]["code"], "AUTH_FAILED");
+    assert_eq!(error["payload"]["message"], "Invalid token");
+    wait_for_client_count(&bridge, 0, Duration::from_secs(2)).await;
+    bridge.stop();
+
+    let bridge = Arc::new(ObsBridgeService::new("test"));
+    let port = bridge
+        .start(0, String::new())
+        .await
+        .expect("빈 토큰 OBS bridge 시작 실패");
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}"))
+        .await
+        .expect("빈 토큰 WS 연결 실패");
+    ws.send(Message::Text(
+        make_envelope(
+            "hello",
+            0,
+            serde_json::json!({ "protocol": OBS_PROTOCOL_VERSION }),
+        )
+        .to_string(),
+    ))
+    .await
+    .expect("빈 토큰 hello 전송 실패");
+    let ack = receive_envelope_value(&mut ws, "hello_ack").await;
+    assert_eq!(ack["seq"], 0);
+    let snapshot = receive_envelope_value(&mut ws, "snapshot").await;
+    assert_eq!(snapshot["seq"], 1);
+    bridge.stop();
+}
+
+#[tokio::test]
+async fn hello_close_and_timeout_both_decrement_client_count() {
+    let bridge = Arc::new(ObsBridgeService::new("test"));
+    let port = bridge
+        .start(0, "token".to_string())
+        .await
+        .expect("OBS bridge 시작 실패");
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}"))
+        .await
+        .expect("WS 연결 실패");
+    wait_for_client_count(&bridge, 1, Duration::from_secs(2)).await;
+    ws.close(None).await.expect("hello 이전 WS 종료 실패");
+    wait_for_client_count(&bridge, 0, Duration::from_secs(2)).await;
+    bridge.stop();
+
+    let bridge = Arc::new(ObsBridgeService::new("test"));
+    let port = bridge
+        .start(0, "token".to_string())
+        .await
+        .expect("OBS bridge 시작 실패");
+    let (_ws, _) = connect_async(format!("ws://127.0.0.1:{port}"))
+        .await
+        .expect("WS 연결 실패");
+    wait_for_client_count(&bridge, 1, Duration::from_secs(2)).await;
+    let started_at = tokio::time::Instant::now();
+    wait_for_client_count(&bridge, 0, Duration::from_secs(7)).await;
+    assert!(
+        started_at.elapsed() >= Duration::from_secs(4),
+        "hello timeout이 기존 5초보다 지나치게 빨라지면 안 됨"
+    );
     bridge.stop();
 }
 
