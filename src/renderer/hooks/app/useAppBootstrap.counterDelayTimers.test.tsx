@@ -668,6 +668,54 @@ describe('카운터 지연 타이머', () => {
     expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(1);
   });
 
+  it('진행 중 연속 OBS 재동기화 요청을 한 번으로 합쳐 순서대로 적용한다', async () => {
+    let resolveFirst!: (bootstrap: BootstrapPayload) => void;
+    let resolveSecond!: (bootstrap: BootstrapPayload) => void;
+    const first = new Promise<BootstrapPayload>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise<BootstrapPayload>((resolve) => {
+      resolveSecond = resolve;
+    });
+    mocks.bootstrap.mockReset();
+    mocks.bootstrap.mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+    act(() => {
+      mocks.resyncListener?.();
+      mocks.resyncListener?.();
+      mocks.resyncListener?.();
+    });
+
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirst(makeBootstrap({ '4key': { KeyK: 1 } }, 30000, 10));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(1);
+
+    await act(async () => {
+      resolveSecond(makeBootstrap({ '4key': { KeyK: 2 } }, 30000, 11));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(2);
+  });
+
+  it('같은 세션에서 최신 revision보다 오래된 delta를 무시한다', () => {
+    emitCounter(5, '4key', 'KeyK', 5);
+    emitCounter(4, '4key', 'KeyK', 4);
+
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(30000);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(5);
+  });
+
   it('unmount 시 모든 카운터 타이머를 취소한다', () => {
     const transitions: number[] = [];
     const unsubscribe = getKeyCounterSignal('4key', 'KeyK').subscribe(
