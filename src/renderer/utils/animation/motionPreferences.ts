@@ -32,27 +32,40 @@ export const prefersReducedMotion = (): boolean => {
   );
 };
 
-const syncReducedMotionAttribute = () => {
-  if (typeof document === 'undefined') return;
-  document.documentElement.toggleAttribute(
+const syncReducedMotionAttribute = (targetDocument: Document) => {
+  targetDocument.documentElement.toggleAttribute(
     REDUCED_MOTION_ATTRIBUTE,
     prefersReducedMotion(),
   );
 };
 
-export const initializeMotionPreferences = () => {
-  syncReducedMotionAttribute();
+const initializedDocuments = new WeakSet<Document>();
+
+export const initializeMotionPreferences = (
+  targetDocument: Document | undefined = typeof document === 'undefined'
+    ? undefined
+    : document,
+) => {
+  if (!targetDocument) return;
+  syncReducedMotionAttribute(targetDocument);
   if (
     MOTION_PREFERENCES.reductionMode !== 'system' ||
-    typeof window === 'undefined' ||
-    typeof window.matchMedia !== 'function'
+    initializedDocuments.has(targetDocument)
   ) {
     return;
   }
 
-  window
+  const targetWindow =
+    targetDocument.defaultView ??
+    (typeof window === 'undefined' ? undefined : window);
+  if (!targetWindow || typeof targetWindow.matchMedia !== 'function') return;
+
+  initializedDocuments.add(targetDocument);
+  targetWindow
     .matchMedia(REDUCED_MOTION_QUERY)
-    .addEventListener('change', syncReducedMotionAttribute);
+    .addEventListener('change', () =>
+      syncReducedMotionAttribute(targetDocument),
+    );
 };
 
 // 지속 시간의 단일 소스는 CSS 토큰이다. 유저 커스텀 CSS가 다이얼을 늘리면

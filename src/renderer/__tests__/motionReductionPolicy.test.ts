@@ -41,6 +41,17 @@ describe('모션 축소 전역 정책', () => {
     expect(readMotionDuration('--test-motion-duration', 100)).toBe(240);
   });
 
+  it('분리 창 문서에도 같은 비활성 정책을 적용한다', () => {
+    const childDocument = document.implementation.createHTMLDocument();
+    childDocument.documentElement.setAttribute('data-dmn-reduced-motion', '');
+
+    initializeMotionPreferences(childDocument);
+
+    expect(
+      childDocument.documentElement.hasAttribute('data-dmn-reduced-motion'),
+    ).toBe(false);
+  });
+
   it('CSS와 회전 아이콘이 OS 미디어 쿼리를 직접 사용하지 않는다', () => {
     expect(mainCss).not.toContain('@media (prefers-reduced-motion: reduce)');
     expect(mainCss).toContain(':root[data-dmn-reduced-motion]');
