@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { isMac } from '@utils/core/platform';
-import { slotCanonical } from '@utils/keySlot';
 import {
   PluginDisplayElementInternal,
   ElementResizeAnchor,
@@ -37,10 +36,7 @@ import {
   getPluginMenuRuntimeState,
   normalizeStateKeys,
 } from '@utils/plugin/pluginMenuRuntimeState';
-import {
-  measureConnectedPluginElement,
-  resolveResizablePluginElementSize,
-} from '@utils/plugin/pluginElementMeasurement';
+import { measureConnectedPluginElement } from '@utils/plugin/pluginElementMeasurement';
 import {
   beginPluginInstancesEditSession,
   endPluginInstancesEditSession,
@@ -48,50 +44,17 @@ import {
 import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/layerZOrderIntent';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { expandGroupSelectionFromStores } from '@utils/grid/groupSelection';
+import {
+  buildPluginElementStyle,
+  buildPluginOverlayHitStyle,
+  calculatePluginAnchorOffset,
+  resolvePluginElementPosition,
+} from '@utils/plugin/pluginElementLayout';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
 // scoped 플러그인 shadow tree에 주입되는 커서 정책 스타일 식별자
 const SHADOW_CURSOR_STYLE_ATTR = 'data-dmn-cursor-policy';
-
-/**
- * 리사이즈 앵커에 따라 크기 변경 시 위치 보정값 계산
- */
-function calculateAnchorOffset(
-  anchor: ElementResizeAnchor,
-  prevSize: { width: number; height: number },
-  newSize: { width: number; height: number },
-): { dx: number; dy: number } {
-  const dw = newSize.width - prevSize.width;
-  const dh = newSize.height - prevSize.height;
-
-  let dx = 0;
-  let dy = 0;
-
-  // X축 보정 (center, right 계열)
-  if (anchor.includes('center') && !anchor.startsWith('center')) {
-    // top-center, bottom-center
-    dx = -dw / 2;
-  } else if (anchor === 'center') {
-    dx = -dw / 2;
-  } else if (anchor.includes('right')) {
-    dx = -dw;
-  } else if (anchor === 'center-left') {
-    dx = 0;
-  } else if (anchor === 'center-right') {
-    dx = -dw;
-  }
-
-  // Y축 보정 (center, bottom 계열)
-  if (anchor.startsWith('center')) {
-    // center-left, center, center-right
-    dy = -dh / 2;
-  } else if (anchor.startsWith('bottom')) {
-    dy = -dh;
-  }
-
-  return { dx, dy };
-}
 
 interface PluginElementProps {
   element: PluginDisplayElementInternal;
@@ -338,7 +301,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
         // 앵커 기반 위치 보정 계산
         let newPosition = element.position;
         if (currentSize && resizeAnchor !== 'top-left') {
-          const { dx, dy } = calculateAnchorOffset(
+          const { dx, dy } = calculatePluginAnchorOffset(
             resizeAnchor,
             currentSize,
             savedSize,
@@ -391,36 +354,13 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       NonNullable<PluginDisplayElementInternal['contextMenu']>['customItems']
     >(undefined);
 
-  // 앵커 기반 위치 계산
-  const calculatedPosition = (() => {
-    let baseX = element.position.x;
-    let baseY = element.position.y;
-
-    // 앵커가 있으면 키 위치 기반으로 계산
-    if (element.anchor?.keyCode && positions && selectedKeyType) {
-      const keyMappings = useKeyStore.getState().keyMappings;
-      const modeKeys = keyMappings[selectedKeyType] || [];
-      // 앵커 keyCode는 canonical 문자열 (멀티 슬롯 포함 매칭)
-      const keyIndex = modeKeys.findIndex(
-        (key) => slotCanonical(key) === element.anchor?.keyCode,
-      );
-
-      if (keyIndex >= 0 && positions[selectedKeyType]?.[keyIndex]) {
-        const keyPosition = positions[selectedKeyType][keyIndex];
-        const offsetX = element.anchor.offset?.x ?? 0;
-        const offsetY = element.anchor.offset?.y ?? 0;
-
-        baseX = keyPosition.dx + offsetX;
-        baseY = keyPosition.dy + offsetY;
-      }
-    }
-
-    // 오버레이에서는 positionOffset 적용
-    return {
-      x: baseX + positionOffset.x,
-      y: baseY + positionOffset.y,
-    };
-  })();
+  const calculatedPosition = resolvePluginElementPosition({
+    element,
+    positions,
+    keyMappings: useKeyStore.getState().keyMappings,
+    selectedKeyType,
+    positionOffset,
+  });
 
   // 스마트 가이드를 위한 다른 요소들의 bounds 가져오기
   const { getOtherElements } = useSmartGuidesElements();
@@ -681,7 +621,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
               prevSize && resizeAnchor !== 'top-left' && !zoomChanged;
 
             if (shouldAdjustPosition) {
-              const { dx, dy } = calculateAnchorOffset(
+              const { dx, dy } = calculatePluginAnchorOffset(
                 resizeAnchor,
                 prevSize,
                 newSize,
@@ -1065,57 +1005,20 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     };
   }, [windowType, definition?.id, element.fullId, updateElementBatched]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const elementStyle: React.CSSProperties = (() => {
-    // 그리드 안 승격 금지 - WebKit은 합성 자식이 생기면 스케일 컨테이너를
-    // 레이어로 만들어 전체가 흐려진다. 오버레이 창은 스케일 조상이 없어 유지
-    const shouldPromoteTransformLayer = windowType === 'overlay';
-
-    const baseStyle: React.CSSProperties = {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      transform:
-        windowType === 'main'
-          ? `translate(${renderX}px, ${renderY}px)`
-          : `translate3d(${renderX}px, ${renderY}px, 0)`,
-      // 명시적인 zIndex가 있으면 사용, 없으면 키 개수 + 배열 인덱스로 계산
-      // 키들 뒤에 순서대로 배치되어 통합 z-order 동작
-      zIndex: element.zIndex ?? keyCount + arrayIndex,
-      // 커서는 dmn-grabbable 클래스가 소유 (호버 무변화, 잡는 동안만 grabbing)
-      cursor: windowType === 'main' ? undefined : 'default',
-      willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
-      pointerEvents: windowType === 'main' ? 'auto' : 'none',
-    };
-
-    // resizable 요소는 첫 측정 전에도 부모 크기를 제공
-    if (definition?.resizable) {
-      const renderSize = resolveResizablePluginElementSize(element);
-      baseStyle.width = renderSize.width;
-      baseStyle.height = renderSize.height;
-      baseStyle.overflow = 'hidden';
-    }
-
-    return { ...baseStyle, ...element.style };
-  })();
-
-  const overlayHitStyle: React.CSSProperties | undefined = (() => {
-    if (windowType !== 'overlay') return undefined;
-
-    const hitSize = resolveResizablePluginElementSize(element);
-    return {
-      position: 'absolute',
-      left: elementStyle.left,
-      top: elementStyle.top,
-      right: elementStyle.right,
-      bottom: elementStyle.bottom,
-      transform: elementStyle.transform,
-      transformOrigin: elementStyle.transformOrigin,
-      width: hitSize.width,
-      height: hitSize.height,
-      boxSizing: 'border-box',
-      pointerEvents: 'none',
-    };
-  })();
+  const elementStyle = buildPluginElementStyle({
+    element,
+    windowType,
+    renderX,
+    renderY,
+    keyCount,
+    arrayIndex,
+    resizable: definition?.resizable === true,
+  });
+  const overlayHitStyle = buildPluginOverlayHitStyle(
+    element,
+    elementStyle,
+    windowType,
+  );
 
   const attachRef = (node: HTMLDivElement | null) => {
     containerRef.current = node;
