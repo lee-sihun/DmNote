@@ -1,9 +1,10 @@
 use super::{
-    compact_canonical_rgba, note_border_representative_hex, scrub_removed_text_outline_fields,
-    FadePosition, GradientSpec, GraphPosition, GraphStatType, GraphType, ImageTransform,
-    KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings,
-    KeyMappings, KeyPosition, KeySlot, KnobPosition, NoteAlignment, NoteColor, NoteSettings,
-    SlotMatch, StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
+    compact_canonical_rgba, key_mappings_contain_multi, normalize_key_mappings, normalize_key_slot,
+    note_border_representative_hex, scrub_removed_text_outline_fields, FadePosition, GradientSpec,
+    GraphPosition, GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
+    KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition, KeySlot,
+    KnobPosition, NoteAlignment, NoteColor, NoteSettings, SlotMatch, StatPosition, StatType,
+    MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
 };
 use serde::Deserialize;
 
@@ -323,6 +324,92 @@ fn malformed_key_slots_normalize_without_deserialization_failure() {
         let slot: KeySlot = serde_json::from_value(raw).unwrap();
         assert_eq!(slot, expected);
     }
+}
+
+#[test]
+fn key_slot_wire_order_and_invalid_match_fallback_are_stable() {
+    let slot = KeySlot::Multi {
+        keys: vec!["A".to_string(), "B".to_string()],
+        match_mode: SlotMatch::Any,
+    };
+    assert_eq!(
+        serde_json::to_string(&slot).unwrap(),
+        r#"{"keys":["A","B"],"match":"any"}"#
+    );
+
+    for raw in [
+        serde_json::json!({ "keys": ["A", "B"], "match": "ALL" }),
+        serde_json::json!({ "keys": ["A", "B"], "match": null }),
+        serde_json::json!({ "keys": ["A", "B"] }),
+    ] {
+        assert_eq!(normalize_key_slot(raw.clone()), KeySlot::default());
+        assert_eq!(
+            serde_json::from_value::<KeySlot>(raw).unwrap(),
+            KeySlot::default()
+        );
+    }
+
+    for key in ["A+B", "A|B", "+"] {
+        let slot: KeySlot = serde_json::from_value(serde_json::json!(key)).unwrap();
+        assert_eq!(slot, KeySlot::Single(key.to_string()));
+        assert_eq!(slot.canonical(), key);
+    }
+}
+
+#[test]
+fn key_mapping_normalization_preserves_first_seen_members_and_helper_semantics() {
+    let mut mappings = KeyMappings::from([(
+        "mode".to_string(),
+        vec![
+            KeySlot::Multi {
+                keys: vec![
+                    "A".to_string(),
+                    String::new(),
+                    "A".to_string(),
+                    "B+C".to_string(),
+                    "B".to_string(),
+                    "C|D".to_string(),
+                    "C".to_string(),
+                ],
+                match_mode: SlotMatch::Any,
+            },
+            KeySlot::Multi {
+                keys: vec!["ONLY".to_string(), "ONLY".to_string()],
+                match_mode: SlotMatch::All,
+            },
+            KeySlot::Multi {
+                keys: Vec::new(),
+                match_mode: SlotMatch::Any,
+            },
+            KeySlot::Single("A+B".to_string()),
+        ],
+    )]);
+
+    assert!(key_mappings_contain_multi(&mappings));
+    normalize_key_mappings(&mut mappings);
+
+    let slots = &mappings["mode"];
+    assert_eq!(
+        slots,
+        &[
+            KeySlot::Multi {
+                keys: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+                match_mode: SlotMatch::Any,
+            },
+            KeySlot::Single("ONLY".to_string()),
+            KeySlot::default(),
+            KeySlot::Single("A+B".to_string()),
+        ]
+    );
+    assert_eq!(
+        slots[0].members().map(String::as_str).collect::<Vec<_>>(),
+        ["A", "B", "C"]
+    );
+    assert_eq!(slots[0].canonical(), "A|B|C");
+    assert!(slots[0].is_multi());
+    assert!(!slots[1].is_multi());
+    assert!(slots[2].is_unassigned());
+    assert!(key_mappings_contain_multi(&mappings));
 }
 
 #[test]
