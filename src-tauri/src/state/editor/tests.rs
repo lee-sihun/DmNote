@@ -1832,6 +1832,43 @@ fn editor_op_bounds_reuse_position_numeric_limits() {
 }
 
 #[test]
+fn editor_op_bounds_report_coordinate_nan_before_dimension_errors() {
+    let error = validate_editor_op_bounds(
+        7,
+        None,
+        EditorBoundsV1 {
+            dx: f64::NAN,
+            dy: MAX_ABS_COORDINATE + 1.0,
+            width: 0.0,
+            height: f64::NAN,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(validation_code(&error), Some("COORDINATE_OUT_OF_RANGE"));
+    assert_eq!(
+        error.message,
+        format!("editor op 7.bounds.dx exceeds ±{MAX_ABS_COORDINATE}")
+    );
+
+    let error = validate_editor_op_bounds(
+        8,
+        None,
+        EditorBoundsV1 {
+            dx: 0.0,
+            dy: 0.0,
+            width: f64::NAN,
+            height: 0.0,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(validation_code(&error), Some("DIMENSION_OUT_OF_RANGE"));
+    assert_eq!(
+        error.message,
+        format!("editor op 8.bounds.width must satisfy 0 < value <= {MAX_DIMENSION}")
+    );
+}
+
+#[test]
 fn canonical_fingerprint_includes_editor_op_payload() {
     let id = Uuid::new_v4().to_string();
     let left = ops_request(vec![set_bounds_op(&id, EditorElementTypeV1::Key)]);
