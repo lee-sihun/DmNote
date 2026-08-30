@@ -2,7 +2,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import TabGridIcon from './icons/TabGridIcon';
 import { useTranslation } from '@contexts/useTranslation';
 import { useIconMotion } from '@hooks/useIconMotion';
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import FloatingPopup from '../Modal/FloatingPopup';
 import { CANVAS_POPUP_CHROME_CLASS } from '../Modal/popupChrome';
 import TabList from '../Modal/content/settings/TabList';
@@ -47,6 +47,7 @@ const TabToolContent = ({ isOpen, setIsOpen }: TabToolContentProps) => {
   const { requestRename, requestDelete } = useTabActions();
   // 바에 올린 커스텀 탭은 팝업 목록에 없다. 이름 변경과 삭제는 여기가 유일한 창구다
   const menu = usePickerItemMenu<string>();
+  const { close: closeMenu, menuKey } = menu;
 
   const orderedTabs = buildOrderedTabs(tabOrder, customTabs, (id) =>
     t(builtinTabLabelKey(id)),
@@ -54,6 +55,11 @@ const TabToolContent = ({ isOpen, setIsOpen }: TabToolContentProps) => {
   const barTabs = orderedTabs.slice(0, barCount);
   // 퇴장 모션이 도는 동안에도 대상이 필요하다 - renderKey로 찾는다
   const menuTab = orderedTabs.find((tab) => tab.id === menu.renderKey);
+
+  useEffect(() => {
+    if (menuKey === null || menuTab) return;
+    closeMenu();
+  }, [closeMenu, menuKey, menuTab]);
 
   return (
     <div className="flex gap-[8px] min-w-0">
@@ -89,7 +95,7 @@ const TabToolContent = ({ isOpen, setIsOpen }: TabToolContentProps) => {
               onClick={() => {
                 if (!isBootstrapped) return;
                 setSelectedKeyType(tab.id);
-                // 바 칩은 팝업 외부 닫힘에서 빠져 있으므로 선택했을 때 직접 닫는다
+                // 바 칩 선택 시 탭 목록 닫기
                 setIsOpen(false);
               }}
             />
@@ -99,8 +105,6 @@ const TabToolContent = ({ isOpen, setIsOpen }: TabToolContentProps) => {
       <button
         ref={gridButtonRef}
         className="flex items-center justify-center w-[40px] h-[40px] p-[5px] bg-fill-faint rounded-surface shrink-0"
-        // 탭을 잡은 채 여기 머물면 팝업이 열린다 - 닫힌 상태로 시작해도 목록으로 옮길 수 있게
-        data-dmn-tab-drag="true"
         onClick={() => {
           if (!isBootstrapped) return;
           setIsOpen(!isOpen);
@@ -208,9 +212,6 @@ const TabButton = ({
       <button
         ref={registerTarget(id, 'horizontal')}
         type="button"
-        // 이 표식이 있으면 팝업이 외부 눌림으로 닫히지 않는다 - 팝업을 연 채
-        // 바에서 탭을 집어 목록으로 옮길 수 있어야 한다
-        data-dmn-tab-drag="true"
         data-dragging={isDragging ? 'true' : undefined}
         // 선택된 탭은 축소 대상에서 빼 이름을 끝까지 보여준다 - 지금 보고 있는 탭이
         // 잘리면 어디 있는지 알 수 없다.

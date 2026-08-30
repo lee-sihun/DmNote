@@ -148,4 +148,20 @@ describe('바 칩 우클릭 메뉴', () => {
 
     expect(container.querySelector('[data-testid="menu"]')).toBeNull();
   });
+
+  it('메뉴 대상 탭이 사라지면 메뉴를 닫는다', () => {
+    rightClick(chipByLabel(CUSTOM.name)!);
+    expect(container.querySelector('[data-testid="menu"]')).not.toBeNull();
+
+    act(() => {
+      useKeyStore.setState({
+        customTabs: [],
+        tabOrder: ['4key', '5key', '6key', '8key'],
+      });
+    });
+
+    expect(container.querySelector('[data-testid="menu"]')).toBeNull();
+    expect(actions.requestRename).not.toHaveBeenCalled();
+    expect(actions.requestDelete).not.toHaveBeenCalled();
+  });
 });
