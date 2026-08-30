@@ -36,7 +36,6 @@ import {
 } from '@utils/core/elementBorder';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
-import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
 import {
   EMPTY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
@@ -61,12 +60,12 @@ import type { BatchElementPropertyUpdate } from '../types';
 import FontWeightDropdown from '../FontWeightDropdown';
 import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 import { aggregateMixedValue } from '@utils/core/mixedValue';
+import BatchSoundSection from './BatchSoundSection';
+
+export { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchSoundSection';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
-// 결합 캡처 소유자(리마운트 경계 밖)가 open 판정에 쓰도록 export
-export const BATCH_STYLE_SOUND_PAGE_KEY = 'batch-style:sound';
-const SOUND_PAGE_KEY = BATCH_STYLE_SOUND_PAGE_KEY;
 
 interface KeyData {
   index: number;
@@ -992,76 +991,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         </PropertySection>
       )}
 
-      {showSoundControls &&
-        (() => {
-          const soundMixedValue = getKeyOnlyMixedValue ?? getMixedValue;
-          return (
-            <PropertySection>
-              <PropertyRow
-                label={
-                  t('propertiesPanel.keySoundEnabled') || '키 사운드 활성화'
-                }
-              >
-                {soundMixedValue((pos) => pos.soundEnabled, false).isMixed ? (
-                  <span className="text-fg-faint text-body italic">Mixed</span>
-                ) : null}
-                <Checkbox
-                  commitStrategy="after-paint"
-                  checked={
-                    soundMixedValue((pos) => pos.soundEnabled, false).value
-                  }
-                  onChange={() => {
-                    const current = soundMixedValue(
-                      (pos) => pos.soundEnabled,
-                      false,
-                    ).value;
-                    const nextEnabled = !current;
-                    onSoundEnabledCommit?.(nextEnabled);
-                  }}
-                />
-              </PropertyRow>
-
-              <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
-                {soundMixedValue((pos) => pos.soundPath, '').isMixed ? (
-                  <span className="text-fg-faint text-body italic">Mixed</span>
-                ) : null}
-                <button
-                  type="button"
-                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                    activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
-                  } text-fg text-body`}
-                  onClick={() => {
-                    if (activePageKey === SOUND_PAGE_KEY) closePage();
-                    else openPage(SOUND_PAGE_KEY);
-                  }}
-                >
-                  {t('propertiesPanel.configure') || '설정하기'}
-                </button>
-              </PropertyRow>
-
-              <PropertyRow
-                label={t('propertiesPanel.soundVolume') || '사운드 볼륨'}
-              >
-                {soundMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
-                  <span className="text-fg-faint text-body italic">Mixed</span>
-                ) : null}
-                <NumberInput
-                  value={soundMixedValue((pos) => pos.soundVolume, 100).value}
-                  onChange={(value) => {
-                    const soundVolume = Math.max(0, Math.min(200, value));
-                    onSoundVolumeCommit?.(soundVolume);
-                  }}
-                  suffix="%"
-                  min={0}
-                  max={200}
-                  isMixed={
-                    soundMixedValue((pos) => pos.soundVolume, 100).isMixed
-                  }
-                />
-              </PropertyRow>
-            </PropertySection>
-          );
-        })()}
+      {showSoundControls ? (
+        <BatchSoundSection
+          soundBinding={soundBinding}
+          onSoundPathCommit={onSoundPathCommit}
+          onSoundEnabledCommit={onSoundEnabledCommit}
+          onSoundVolumeCommit={onSoundVolumeCommit}
+          getMixedValue={getMixedValue}
+          getKeyOnlyMixedValue={getKeyOnlyMixedValue}
+          t={t}
+        />
+      ) : null}
 
       {/* FontPicker — 패널 서브 페이지 */}
       {!hideFontControls &&
@@ -1097,36 +1037,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}
-            onBack={closePage}
-          />,
-          pageHost,
-        )}
-
-      {/* SoundPicker — 패널 서브 페이지 */}
-      {showSoundControls &&
-        renderPageKey === SOUND_PAGE_KEY &&
-        pageHost &&
-        createPortal(
-          <SoundPicker
-            open={true}
-            completionBinding={soundBinding.binding}
-            selectedSound={
-              (getKeyOnlyMixedValue ?? getMixedValue)(
-                (pos) => pos.soundPath,
-                '',
-              ).value || null
-            }
-            onSoundSelect={(soundPath) => {
-              const nextPath = soundPath || '';
-              onSoundPathCommit?.(nextPath);
-            }}
-            previewVolume={
-              (getKeyOnlyMixedValue ?? getMixedValue)(
-                (pos) => pos.soundVolume,
-                100,
-              ).value
-            }
-            pageTitle={t('propertiesPanel.keySound') || '키 사운드'}
             onBack={closePage}
           />,
           pageHost,
