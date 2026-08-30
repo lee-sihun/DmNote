@@ -9,6 +9,7 @@ import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { USER_CSS_SCOPE_SELECTOR } from '@utils/css/scopeUserCss';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
+import { usePointerFocusGuard } from '@hooks/ui/usePointerFocusGuard';
 import { usePanelCloseRequest } from '@hooks/panel/usePanelCloseRequest';
 import ToolBar from '@components/main/Tool/ToolBar';
 import Grid from '@components/main/Grid';
@@ -89,6 +90,8 @@ export default function App() {
   useAppBootstrap();
   usePluginDisplayElementsResponder();
   useBlockBrowserShortcuts();
+  // 클릭 잔류 포커스 무해화 - 키 상시 입력 앱이라 Space/Enter 재활성화 차단
+  usePointerFocusGuard();
 
   // 업데이트 체크
   const {

@@ -1,4 +1,8 @@
 import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react';
+import {
+  getLastInputModality,
+  isPointerFocusRelease,
+} from '@utils/focus/pointerFocusGuard';
 
 export interface FocusRestore {
   /** 열기 전 포커스. 퇴장 유예 중 재오픈이면 captureOpener가 갱신한다 */
@@ -52,6 +56,11 @@ export const useFocusRestore = (
     restoredRef.current = true;
     const opener = openerRef.current;
     if (opener && opener.isConnected) {
+      // 마우스 흐름의 닫힘에서는 버튼류 opener를 다시 잡지 않는다 -
+      // 잔류 포커스가 다음 Space/Enter에 팝업을 도로 연다. 키보드(Escape 등)
+      // 닫힘과 텍스트 입력 opener는 그대로 복원
+      if (getLastInputModality() === 'pointer' && isPointerFocusRelease(opener))
+        return;
       // 모달이 덮여 팝업이 닫힌 경우 잠긴 opener로 포커스를 되돌리면 모달에서
       // 포커스를 빼앗는다 (jsdom은 inert를 강제하지 않아 가드가 필요)
       if (!opener.closest('[inert]')) opener.focus();
