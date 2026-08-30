@@ -43,6 +43,8 @@ describe('defineElement modal handler lifecycle', () => {
     });
     delete window.__dmn_current_plugin_id;
     delete window.__dmn_window_type;
+    delete window.__dmn_getColorPickerState;
+    delete window.__dmn_showColorPicker;
   });
 
   it('instance modal close와 reject 뒤 transient handler만 정리한다', async () => {
@@ -373,6 +375,16 @@ describe('defineElement modal handler lifecycle', () => {
     expect(checkbox).not.toBeNull();
     querySelectorAll.mockRestore();
 
+    const textInput =
+      entries[1]?.querySelector<HTMLInputElement>('input[type="text"]');
+    const textHandler = textInput?.getAttribute('data-plugin-handler-change');
+    window[textHandler as `__dmn_handler_${string}`]?.({
+      target: { value: 'expanded' },
+    } as unknown as Event);
+    expect(update).toHaveBeenLastCalledWith(element.fullId, {
+      settings: expect.objectContaining({ nickname: 'expanded' }),
+    });
+
     const numberInput = entries[2]?.querySelector<HTMLInputElement>(
       'input[type="number"]',
     );
@@ -434,6 +446,22 @@ describe('defineElement modal handler lifecycle', () => {
     expect(colorButton?.classList.contains('shadow-focus-ring')).toBe(true);
     pickerOptions.onClose();
     expect(colorButton?.classList.contains('shadow-focus-ring')).toBe(false);
+
+    const showColorPicker = vi.fn();
+    window.__dmn_getColorPickerState = () => ({
+      isOpen: true,
+      id: 'plugin-plugin-a-plugin-a::one-color',
+      color: '#444444',
+    });
+    window.__dmn_showColorPicker = showColorPicker;
+    handlerRegistry.get(colorHandler || '')?.({
+      target: colorButton,
+    } as unknown as Event);
+    expect(showColorPicker).toHaveBeenCalledWith({
+      initialColor: '#444444',
+      id: 'plugin-plugin-a-plugin-a::one-color',
+    });
+    expect(pickColor).toHaveBeenCalledOnce();
 
     expect(normalizationError).toHaveBeenCalledTimes(1);
     settleDialog?.(false);
