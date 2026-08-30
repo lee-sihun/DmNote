@@ -230,6 +230,60 @@ describe('Settings 플러그인 생명주기 controller', () => {
     );
   });
 
+  it('플러그인만 제거하는 동안 중복 요청을 막고 성공 뒤 상태를 정산한다', async () => {
+    let resolveRemove: ((result: { success: boolean }) => void) | undefined;
+    mocks.remove.mockImplementation(
+      () =>
+        new Promise<{ success: boolean }>((resolve) => {
+          resolveRemove = resolve;
+        }),
+    );
+    const harness = createHarness();
+
+    const first = harness.removePluginOnly('alpha-id');
+    await harness.removePluginOnly('beta-id');
+
+    expect(mocks.remove).toHaveBeenCalledTimes(1);
+    expect(mocks.remove).toHaveBeenCalledWith('alpha-id');
+    expect(harness.removingPluginRef.current).toBe('alpha-id');
+    expect(harness.setPendingPluginId).toHaveBeenCalledTimes(1);
+    expect(harness.setPendingPluginId).toHaveBeenCalledWith('alpha-id');
+
+    resolveRemove?.({ success: true });
+    await first;
+
+    expect(harness.showAlert).not.toHaveBeenCalled();
+    expect(harness.removingPluginRef.current).toBeNull();
+    expect(harness.pendingPluginRef.current).toBeNull();
+    expect(harness.setPendingPluginId.mock.calls).toEqual([
+      ['alpha-id'],
+      [null],
+    ]);
+    expect(harness.setDataDeleteModalOpen).toHaveBeenCalledWith(false);
+    expect(harness.setPluginToDelete).toHaveBeenCalledWith(null);
+  });
+
+  it('플러그인만 제거에 실패해도 경고하고 상태를 정산한다', async () => {
+    mocks.remove.mockResolvedValue({ success: false });
+    const harness = createHarness();
+
+    await harness.removePluginOnly('alpha-id');
+
+    expect(mocks.remove).toHaveBeenCalledTimes(1);
+    expect(mocks.remove).toHaveBeenCalledWith('alpha-id');
+    expect(harness.showAlert).toHaveBeenCalledWith(
+      'settings.jsPluginRemoveFailed',
+    );
+    expect(harness.removingPluginRef.current).toBeNull();
+    expect(harness.pendingPluginRef.current).toBeNull();
+    expect(harness.setPendingPluginId.mock.calls).toEqual([
+      ['alpha-id'],
+      [null],
+    ]);
+    expect(harness.setDataDeleteModalOpen).toHaveBeenCalledWith(false);
+    expect(harness.setPluginToDelete).toHaveBeenCalledWith(null);
+  });
+
   it('데이터 포함 제거는 remove 정산 뒤 prefix를 지우고 실패여도 모달 상태를 닫는다', async () => {
     const order: string[] = [];
     mocks.remove.mockImplementation(async () => {
