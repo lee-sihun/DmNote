@@ -23,6 +23,8 @@ const bootstrap = await dmn.app.bootstrap();
 
 // Bootstrap properties
 console.log(bootstrap.selectedKeyType); // current layout mode ID (e.g. '4key')
+console.log(bootstrap.tabOrder); // display order of built-in and custom tabs
+console.log(bootstrap.barCount); // how many leading tabs sit in the toolbar bar
 console.log(bootstrap.settings); // app settings object
 console.log(bootstrap.keys['4key']); // key mapping (KeySlot union entries)
 console.log(bootstrap.keyCounters); // counter state

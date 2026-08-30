@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import { integrate, MAX_FRAME_DT } from '@utils/animation/spring';
+import { prefersReducedMotion } from '@utils/animation/motionPreferences';
 
 // 노브 본체 스프링 - 포인터에 거의 붙어 오도록 빡빡하게, 감쇠는 임계(2*sqrt(k)=60)의
 // 0.77배라 놓을 때 아주 살짝만 지나쳤다 돌아온다
@@ -16,7 +18,6 @@ const TAIL_SPEED_THRESHOLD = 20;
 const TAIL_RADIUS_PER_SPEED = 0.03;
 const TAIL_MAX_DISTANCE_RATIO = 0.8;
 const TAIL_HIDE_RADIUS = 0.3;
-const MAX_FRAME_DT = 1 / 30;
 
 export interface GooeyFrame {
   cx: number;
@@ -39,41 +40,6 @@ interface GooeySpringOptions {
   size: number;
   apply: (frame: GooeyFrame) => void;
 }
-
-const springStep = (
-  x: number,
-  v: number,
-  target: number,
-  k: number,
-  c: number,
-  dt: number,
-): [number, number] => {
-  const a = k * (target - x) - c * v;
-  const nv = v + a * dt;
-  return [x + nv * dt, nv];
-};
-
-// 60Hz 서브스텝으로 큰 dt에서도 발산하지 않게
-const integrate = (
-  x: number,
-  v: number,
-  target: number,
-  k: number,
-  c: number,
-  dt: number,
-): [number, number] => {
-  let steps = Math.max(1, Math.ceil(dt * 60));
-  const h = dt / steps;
-  while (steps-- > 0) {
-    [x, v] = springStep(x, v, target, k, c, h);
-  }
-  return [x, v];
-};
-
-const prefersReducedMotion = () =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /**
  * 노브 위치를 스프링으로 뒤따르는 본체와 꼬리를 시뮬레이션해 매 프레임 apply로 넘긴다.

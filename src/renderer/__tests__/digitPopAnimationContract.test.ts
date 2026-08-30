@@ -14,7 +14,7 @@ const tokensCss = readFileSync(
 const digitPopKeyframes = mainCss.slice(
   mainCss.indexOf('@keyframes dmnDigitPop'),
   mainCss.indexOf(
-    '@media (prefers-reduced-motion: reduce)',
+    ':root[data-dmn-reduced-motion]',
     mainCss.indexOf('@keyframes dmnDigitPop'),
   ),
 );

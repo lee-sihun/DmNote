@@ -939,6 +939,10 @@ const Settings = ({
     if (resetAllRef.current) return;
     resetAllRef.current = true;
     const reset = async (): Promise<void> => {
+      // 응답 스냅샷은 커밋 시점 값이다. 기다리는 사이 권위 이벤트가 들어오면
+      // 탭 메타데이터는 그쪽이 더 새롭다
+      const generation = useKeyStore.getState().tabMetadataGeneration;
+      const selectionGeneration = useKeyStore.getState().selectionGeneration;
       try {
         const result: KeysResetAllResponse = await keysApi.resetAll();
         if (result) {
@@ -957,9 +961,25 @@ const Settings = ({
             keyMappings: result.keys,
             positions: candidate.keyPositions,
             canonicalPositions: candidate.keyPositions,
-            customTabs: result.customTabs,
-            selectedKeyType: result.selectedKeyType,
           });
+          // 탭 메타데이터는 세대 계약을 탄다. 응답에 tabOrder·barCount가 실려 오는데
+          // 안 읽으면 tabOrder에 방금 지워진 커스텀 id가 남는다
+          useKeyStore.getState().setTabMetadata(
+            {
+              customTabs: result.customTabs,
+              tabOrder: result.tabOrder,
+              barCount: result.barCount,
+            },
+            generation,
+          );
+          // 선택은 세대가 따로다. keys:mode-changed는 순서를 안 건드린다
+          if (
+            useKeyStore.getState().selectionGeneration === selectionGeneration
+          ) {
+            useKeyStore
+              .getState()
+              .commitSelectedKeyType(result.selectedKeyType);
+          }
           // 초기화 이전 요소를 가리키는 stale 선택 제거 — 패널이 무효 대상에 쓰는 것 방지
           useGridSelectionStore.getState().clearSelection();
         }

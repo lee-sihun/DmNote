@@ -1471,6 +1471,8 @@ impl AppState {
             graph_positions: state.graph_positions.clone(),
             knob_positions: state.knob_positions.clone(),
             custom_tabs: state.custom_tabs.clone(),
+            tab_order: state.tab_order.clone(),
+            bar_count: state.bar_count,
             selected_key_type: state.selected_key_type.clone(),
             current_mode,
             active_keys,
@@ -8114,7 +8116,7 @@ mod tests {
                         |store| {
                             store.custom_tabs.push(CustomTab {
                                 id: tab_id.clone(),
-                                name: "QA Counter Tab".to_string(),
+                                name: "Counter".to_string(),
                             });
                             store.keys.insert(tab_id.clone(), Vec::new());
                             store.key_positions.insert(tab_id.clone(), Vec::new());
@@ -8201,7 +8203,7 @@ mod tests {
                 |store| {
                     store.custom_tabs.push(CustomTab {
                         id: tab_id.clone(),
-                        name: "QA Counter Delete Tab".to_string(),
+                        name: "Delete".to_string(),
                     });
                     store.keys.insert(tab_id.clone(), Vec::new());
                     store.key_positions.insert(tab_id.clone(), Vec::new());
@@ -8320,7 +8322,7 @@ mod tests {
                 |store| {
                     store.custom_tabs.push(CustomTab {
                         id: tab_id.clone(),
-                        name: "Before Restore".to_string(),
+                        name: "Before".to_string(),
                     });
                     store.keys.insert(tab_id.clone(), Vec::new());
                     store.key_positions.insert(tab_id.clone(), Vec::new());
@@ -8337,7 +8339,7 @@ mod tests {
             );
         }
         let mut restored_tabs = state.store.snapshot().custom_tabs;
-        restored_tabs[0].name = "After Restore".to_string();
+        restored_tabs[0].name = "After".to_string();
         let admission = state.store.admit_editor_mutation().unwrap();
         let (transaction, runtime_applied) = state
             .commit_editor_transaction_preserving_runtime_counters(&emitter, |runtime_counters| {
@@ -8367,7 +8369,7 @@ mod tests {
             state.store.snapshot().key_counters[&mode][&preserved_key],
             7
         );
-        assert_eq!(state.store.snapshot().custom_tabs[0].name, "After Restore");
+        assert_eq!(state.store.snapshot().custom_tabs[0].name, "After");
         drop(transaction);
 
         assert_eq!(
@@ -8393,7 +8395,7 @@ mod tests {
             8
         );
         assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 8);
-        assert_eq!(state.store.snapshot().custom_tabs[0].name, "Before Restore");
+        assert_eq!(state.store.snapshot().custom_tabs[0].name, "Before");
 
         state.shutdown();
         drop(state);

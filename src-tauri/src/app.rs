@@ -284,6 +284,8 @@ pub fn run() {
             commands::keys::keys::raw_input_unsubscribe,
             commands::keys::keys::custom_tabs_list,
             commands::keys::keys::custom_tabs_create,
+            commands::keys::keys::custom_tabs_rename,
+            commands::keys::keys::tabs_reorder,
             commands::keys::keys::custom_tabs_delete,
             commands::keys::keys::custom_tabs_select,
             commands::keys::keys::custom_tabs_restore,

@@ -55,7 +55,8 @@ const result = await dmn.presets.saveTab();
 ### `dmn.presets.loadTab(): Promise<PresetOperationResult>`
 
 Loads a tab preset file into the currently selected tab. Opens a file picker
-dialog.
+dialog. Tab presets carry no `tabOrder` or `barCount`, so they never change the
+global tab order.
 
 ```javascript
 const result = await dmn.presets.loadTab();
@@ -80,6 +81,8 @@ interface PresetSnapshot {
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
   customTabs: CustomTab[];
+  tabOrder: string[];
+  barCount: number;
   selectedKeyType: string;
   tabNoteOverrides: TabNoteOverrides;
 }
