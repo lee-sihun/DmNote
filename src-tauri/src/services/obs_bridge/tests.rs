@@ -102,6 +102,107 @@ fn websocket_allowlist_uses_exact_matching() {
     assert_eq!(build_allowed_list().len(), ALLOWED_WS_COMMANDS.len());
 }
 
+fn invoke_test_address() -> SocketAddr {
+    "127.0.0.1:34891".parse().expect("테스트 주소 파싱 실패")
+}
+
+#[test]
+fn invoke_parse_failure_responds_only_for_a_string_request_id() {
+    let bridge = ObsBridgeService::new("test");
+    let address = invoke_test_address();
+
+    let payload = serde_json::json!({
+        "requestId": "parse-1",
+        "command": 42,
+    });
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    bridge.handle_invoke_request(&payload, &address, tx);
+    assert_eq!(
+        rx.try_recv().expect("파싱 오류 RPC 응답 누락"),
+        (
+            "parse-1".to_string(),
+            Err(serde_json::json!(
+                "Invalid invoke_request: invalid type: integer `42`, expected a string"
+            )),
+        )
+    );
+
+    for payload in [
+        serde_json::json!({ "command": 42 }),
+        serde_json::json!({ "requestId": 1, "command": 42 }),
+        serde_json::json!({ "requestId": null, "command": 42 }),
+    ] {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        bridge.handle_invoke_request(&payload, &address, tx);
+        assert!(
+            matches!(
+                rx.try_recv(),
+                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+            ),
+            "문자열 requestId가 없으면 응답하지 않아야 함: {payload}"
+        );
+    }
+}
+
+#[test]
+fn invoke_admission_preserves_error_bytes_and_channel_order() {
+    let bridge = ObsBridgeService::new("test");
+    let address = invoke_test_address();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+    bridge.handle_invoke_request(
+        &serde_json::json!({
+            "requestId": "denied",
+            "command": "app_bootstrap_extra",
+            "args": { "ignored": true },
+        }),
+        &address,
+        tx.clone(),
+    );
+    bridge.handle_invoke_request(
+        &serde_json::json!({
+            "requestId": "allowed",
+            "command": "app_bootstrap",
+            "unknown": "ignored",
+        }),
+        &address,
+        tx,
+    );
+
+    assert_eq!(
+        rx.try_recv().expect("allowlist 거부 응답 누락"),
+        (
+            "denied".to_string(),
+            Err(serde_json::json!(
+                "Command not allowed: app_bootstrap_extra"
+            )),
+        )
+    );
+    assert_eq!(
+        rx.try_recv().expect("AppHandle 부재 응답 누락"),
+        (
+            "allowed".to_string(),
+            Err(serde_json::json!("AppHandle not available")),
+        )
+    );
+}
+
+#[test]
+fn invoke_response_send_is_best_effort_after_receiver_closes() {
+    let bridge = ObsBridgeService::new("test");
+    let address = invoke_test_address();
+
+    for payload in [
+        serde_json::json!({ "requestId": "parse", "command": 42 }),
+        serde_json::json!({ "requestId": "denied", "command": "not-allowed" }),
+        serde_json::json!({ "requestId": "no-app", "command": "settings_get" }),
+    ] {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        drop(rx);
+        bridge.handle_invoke_request(&payload, &address, tx);
+    }
+}
+
 #[test]
 fn bridge_messages_targeting_main_are_not_forwarded_to_obs() {
     let broadcast = serde_json::json!({ "type": "PING", "data": null });
