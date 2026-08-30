@@ -49,6 +49,10 @@ const captured = vi.hoisted(() => ({
     ) => void;
     onOpacityPercentChange?: (value: number) => void;
     onOpacityPercentChangeComplete?: (value: number) => void;
+    onOpacityPercentCancel?: () => void;
+    opacityPercent?: number;
+    opacityPercentLabel?: string;
+    hideColorAlpha?: boolean;
   },
   checkboxes: [] as Array<{ checked: boolean; onChange: () => void }>,
   dropdowns: [] as Array<{
@@ -711,6 +715,67 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
     );
     expect(captured.color?.color).toBe('#112233');
+  });
+
+  it('배치 단색 노트 피커는 투명도 preview·commit·Escape 복원을 정식 채널로 전달한다', () => {
+    const canonical = {
+      ...keyAt(ID_A),
+      noteColor: '#112233',
+      noteOpacity: 42,
+    };
+    const props = panelProps();
+    props.activeTab = 'note';
+    props.batchPickerFor = 'noteColor';
+    props.getSelectedKeyOnlyPositions = () => [
+      { index: 0, position: canonical },
+    ];
+    props.getMixedValueCanonical = ((getter: (position: never) => unknown) => ({
+      isMixed: false,
+      value: getter(canonical as never),
+    })) as PanelProps['getMixedValueCanonical'];
+
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...props} />
+        </PanelNavProvider>,
+      );
+    });
+
+    expect(captured.color).toMatchObject({
+      color: '#112233',
+      hideColorAlpha: true,
+      opacityPercent: 42,
+      opacityPercentLabel: 'keySetting.noteOpacity',
+    });
+
+    act(() => captured.color?.onOpacityPercentChange?.(55));
+    expect(gestures.preview).toHaveBeenLastCalledWith(
+      '4key',
+      [{ id: ID_A, patch: { noteOpacity: 55 } }],
+      { domain: 'keyPosition' },
+    );
+
+    act(() => captured.color?.onOpacityPercentChangeComplete?.(60));
+    expect(patches.patchNotePaintByIds).toHaveBeenLastCalledWith(
+      [ID_A],
+      { property: 'notePaint', value: { opacity: 60 } },
+      { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+    );
+
+    gestures.cancel.mockClear();
+    act(() => captured.color?.onOpacityPercentChange?.(70));
+    act(() => captured.color?.onOpacityPercentCancel?.());
+    expect(gestures.cancel).toHaveBeenCalledOnce();
+    expect(captured.color?.opacityPercent).toBe(42);
   });
 
   it.each(['main'] as const)(
