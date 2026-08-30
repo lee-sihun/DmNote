@@ -19,7 +19,7 @@ use crate::{
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        default_missing_note_gradient_multipliers, normalize_key_mappings,
+        default_bar_count, default_missing_note_gradient_multipliers, normalize_key_mappings,
         scrub_removed_text_outline_fields, AppStoreData, CustomCss, CustomCssPatch, CustomJs,
         CustomJsPatch, EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec,
         GraphPositions, KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPositions,
@@ -29,7 +29,12 @@ use crate::{
     },
     services::settings::apply_patch_to_store,
     state::{
+        editor::validate_history_restore_metadata,
         image_asset::{import_image_bytes, import_image_file},
+        tab_metadata::{
+            legacy_tab_order, normalize_bar_count, normalize_tab_order,
+            reconcile_custom_tab_metadata,
+        },
         AppState,
     },
 };
@@ -384,8 +389,9 @@ fn preset_load_from_path(
         &mut graph_positions,
         &mut knob_positions,
     );
-    let custom_tabs = preset
+    let mut custom_tabs = preset
         .custom_tabs
+        .take()
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
     let requested_selected_key_type = preset.selected_key_type;
     let preset_layer_groups = resolve_full_preset_layer_groups(preset.layer_groups, &keys);
@@ -455,6 +461,21 @@ fn preset_load_from_path(
         preset.embedded_local_sounds.as_deref(),
     )?;
     align_imported_key_collections(&mut keys, &mut positions);
+    // 이름 길이·예약어로는 거절하지 않는다. 예전 앱이나 다른 사람이 만든 프리셋이
+    // 통째로 안 열린다 - 손상 복구를 항목 단위로 하는 이 저장소 방침과 어긋난다.
+    // 구조가 어긋난 것도 id로 결합이 확정되면 여기서 메운다. 아래 검증에 남는 것은
+    // 대응을 추측해야 하는 손상뿐이다
+    reconcile_custom_tab_metadata(&mut custom_tabs, &mut keys, &mut positions);
+    // 정렬은 화해가 끝난 목록을 봐야 한다. 고아 모드에서 살아난 탭도 순서에 들어간다
+    let tab_order = preset
+        .tab_order
+        .take()
+        .map(|order| normalize_tab_order(&order, &custom_tabs))
+        .unwrap_or_else(|| legacy_tab_order(&custom_tabs));
+    let bar_count = normalize_bar_count(
+        preset.bar_count.unwrap_or_else(default_bar_count),
+        &tab_order,
+    );
 
     // 탭별 노트 설정 복원 (없으면 빈 맵으로 초기화 → 전역 폴백)
     let mut tab_note_overrides = preset.tab_note_overrides.unwrap_or_default();
@@ -512,7 +533,15 @@ fn preset_load_from_path(
                 store.graph_positions = graph_positions;
                 store.knob_positions = knob_positions;
                 store.custom_tabs = custom_tabs;
+                store.tab_order = tab_order;
+                store.bar_count = bar_count;
                 store.selected_key_type = selected_key_type;
+                validate_history_restore_metadata(
+                    &crate::models::EditorDocumentV1::from_store(store),
+                    &store.custom_tabs,
+                    &store.tab_order,
+                    &store.selected_key_type,
+                )?;
                 store.tab_note_overrides = tab_note_overrides;
                 store.layer_groups = preset_layer_groups;
                 if let Some(tab_css_overrides) = preset_tab_css_overrides {
@@ -525,6 +554,8 @@ fn preset_load_from_path(
                     diff,
                     previous_tab_css_overrides,
                     store.custom_tabs.clone(),
+                    store.tab_order.clone(),
+                    store.bar_count,
                     store.tab_note_overrides.clone(),
                     store.tab_css_overrides.clone(),
                 ))
@@ -545,13 +576,13 @@ fn preset_load_from_path(
         let current_css_state = state.store.snapshot();
         authorize_committed_preset_css_paths(state, &current_css_state, &imported_css_paths);
         state.resync_global_css_watcher(&previous_css_state, &current_css_state);
-        sync_tab_css_runtime(state, app, &transaction.value.1, &transaction.value.4);
+        sync_tab_css_runtime(state, app, &transaction.value.1, &transaction.value.6);
         drop(css_operation_guard);
         publish_editor_change_after_key_runtime(state, app, &transaction.change);
         state.obs_broadcast_counters();
 
         let history_status = transaction.change.history_status.clone();
-        let (diff, _, custom_tabs, tab_note_overrides, _) = transaction.value;
+        let (diff, _, custom_tabs, tab_order, bar_count, tab_note_overrides, _) = transaction.value;
         let selected_key_type = transaction.change.selected_key_type.clone();
         let keys = transaction.change.document.keys;
         let positions = transaction.change.document.key_positions;
@@ -575,6 +606,8 @@ fn preset_load_from_path(
                 graph_positions,
                 knob_positions,
                 custom_tabs,
+                tab_order,
+                bar_count,
                 selected_key_type,
                 tab_note_overrides,
             },
@@ -1712,15 +1745,18 @@ fn restore_position_sound_reference(
 
 fn synthesize_custom_tabs(keys: &KeyMappings) -> Vec<crate::models::CustomTab> {
     let default_modes = default_keys();
-    let mut index = 0usize;
-    keys.keys()
+    let mut custom_ids = keys
+        .keys()
         .filter(|key| !default_modes.contains_key(*key))
-        .map(|id| {
-            index += 1;
-            crate::models::CustomTab {
-                id: id.clone(),
-                name: format!("Custom {}", index),
-            }
+        .cloned()
+        .collect::<Vec<_>>();
+    custom_ids.sort();
+    custom_ids
+        .into_iter()
+        .enumerate()
+        .map(|(index, id)| crate::models::CustomTab {
+            id,
+            name: format!("Custom {}", index + 1),
         })
         .collect()
 }
@@ -1814,6 +1850,26 @@ mod tests {
         apply_patch_to_store(&mut store, &patch);
 
         assert_eq!(store.custom_css_history, history);
+    }
+
+    #[test]
+    fn synthesized_custom_tabs_are_deterministic_without_preset_metadata() {
+        let keys = KeyMappings::from([
+            ("custom-z".to_string(), Vec::new()),
+            ("custom-a".to_string(), Vec::new()),
+            ("4key".to_string(), Vec::new()),
+        ]);
+
+        let tabs = synthesize_custom_tabs(&keys);
+
+        assert_eq!(
+            tabs.iter().map(|tab| tab.id.as_str()).collect::<Vec<_>>(),
+            ["custom-a", "custom-z"]
+        );
+        assert_eq!(
+            tabs.iter().map(|tab| tab.name.as_str()).collect::<Vec<_>>(),
+            ["Custom 1", "Custom 2"]
+        );
     }
 
     #[test]

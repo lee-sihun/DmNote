@@ -290,7 +290,9 @@
   "tabs": {
     "title": "自定义标签页",
     "createTitle": "创建标签页",
+    "renameTitle": "重命名标签页",
     "create": "创建",
+    "rename": "重命名",
     "delete": "删除",
     "deleteConfirm": "删除 '{{name}}' 标签页？",
     "name": {
@@ -303,7 +305,8 @@
     "errors": {
       "max": "最多可添加 30 个标签页",
       "invalid": "无效的名称",
-      "createFail": "创建失败"
+      "createFail": "创建失败",
+      "renameFail": "重命名失败"
     }
   },
   "laboratory": {

@@ -143,6 +143,9 @@ export interface DetachOptions {
   position?: { x: number; y: number };
   // 드래그 도중 tear-off - 포커스를 뺏으면 메인의 드래그 세션이 끊기므로 창만 보인다
   keepMainFocus?: boolean;
+  // Windows 네이티브 드래그 - presentAt 자리에 주입되는 세션 인지 present.
+  // 전환 조정(편집 정산·창 확보·호스트 부착·실패 롤백)은 그대로 이 함수가 소유한다
+  present?: () => Promise<void>;
 }
 
 /**
@@ -169,7 +172,9 @@ export const detachPropertiesPanel = async (
       return 'failed';
     }
     try {
-      if (options.position) {
+      if (options.present) {
+        await options.present();
+      } else if (options.position) {
         await panelWindowApi.presentAt(
           options.position.x,
           options.position.y,

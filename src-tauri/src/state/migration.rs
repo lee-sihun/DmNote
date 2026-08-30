@@ -16,6 +16,7 @@ use uuid::Uuid;
 use super::{
     image_asset::{import_image_bytes, import_image_file},
     local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath},
+    tab_metadata::{legacy_tab_order, normalize_bar_count, normalize_tab_order},
 };
 
 use crate::{
@@ -31,10 +32,10 @@ use crate::{
         GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
         ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
         KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
-        OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
-        TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
-        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
-        IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
+        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
+        StoredOverlayBounds, TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX,
+        IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
+        IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
     },
     services::font_metadata::parse_font_metadata,
 };
@@ -86,6 +87,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
             Ok(mut value) => {
                 let seed_active_css_history = value.get("customCssHistory").is_none();
                 let explicit_invalid_element_id = has_explicit_invalid_element_id(&value);
+                let has_tab_order = value.get("tabOrder").is_some();
+                let has_bar_count = value.get("barCount").is_some();
                 let sound_library_migrated = migrate_sound_library_enabled(&mut value);
                 let text_outline_scrubbed = scrub_removed_text_outline_fields(&mut value);
                 // 메모리 보정만 하고 영속을 빼먹으면 시작마다 같은 보정이 반복된다
@@ -119,6 +122,12 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         needs_persist |= editor_revision_repaired;
                         let semantic_repaired = repair_semantic_identities(&mut data);
                         needs_persist |= semantic_repaired;
+                        let tab_order_changed =
+                            prepare_tab_order_for_load(&mut data, has_tab_order);
+                        needs_persist |= tab_order_changed;
+                        let bar_count_changed =
+                            prepare_bar_count_for_load(&mut data, has_bar_count);
+                        needs_persist |= bar_count_changed;
                         let layout_repaired = repair_custom_tab_key_layout_pairs(
                             &mut data,
                             value.get("keys"),
@@ -143,6 +152,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                             needs_persist,
                             layout_repaired
                                 || semantic_repaired
+                                || (has_tab_order && tab_order_changed)
+                                || (has_bar_count && bar_count_changed)
                                 || editor_revision_repaired
                                 || gradient_pair_repaired
                                 || image_transform_repaired,
@@ -894,6 +905,21 @@ fn has_convertible_note_border_color(data: &AppStoreData) -> bool {
             .any(|knob| convertible(&knob.position.note_border_color))
 }
 
+fn prepare_tab_order_for_load(data: &mut AppStoreData, has_tab_order: bool) -> bool {
+    let original = data.tab_order.clone();
+    if !has_tab_order {
+        data.tab_order = legacy_tab_order(&data.custom_tabs);
+    }
+    data.tab_order = normalize_tab_order(&data.tab_order, &data.custom_tabs);
+    data.tab_order != original
+}
+
+fn prepare_bar_count_for_load(data: &mut AppStoreData, has_bar_count: bool) -> bool {
+    let original = data.bar_count;
+    data.bar_count = normalize_bar_count(data.bar_count, &data.tab_order);
+    !has_bar_count || data.bar_count != original
+}
+
 /// store 데이터 정규화 및 레거시 마이그레이션 적용
 pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     remove_legacy_panel_detach_setting(&mut data);
@@ -901,6 +927,8 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     repair_editor_revision(&mut data);
     normalize_blank_font_colors(&mut data);
     canonicalize_image_modes(&mut data);
+    data.tab_order = normalize_tab_order(&data.tab_order, &data.custom_tabs);
+    data.bar_count = normalize_bar_count(data.bar_count, &data.tab_order);
 
     if data.keys.is_empty() {
         data.keys = default_keys().clone();
@@ -1363,6 +1391,8 @@ fn repair_legacy_state(value: Value) -> AppStoreData {
     let Value::Object(mut source) = value else {
         return normalize_state(AppStoreData::default());
     };
+    let has_tab_order = source.contains_key("tabOrder");
+    let has_bar_count = source.contains_key("barCount");
     migrate_legacy_repair_fields(&mut source);
     let source_keys = source.get("keys").cloned();
     let source_key_positions = source.get("keyPositions").cloned();
@@ -1398,6 +1428,8 @@ fn repair_legacy_state(value: Value) -> AppStoreData {
 
     let mut data =
         serde_json::from_value::<AppStoreData>(Value::Object(recovered)).unwrap_or_default();
+    prepare_tab_order_for_load(&mut data, has_tab_order);
+    prepare_bar_count_for_load(&mut data, has_bar_count);
     migrate_legacy_knob_sensitivity(&mut data);
     repair_image_transforms(&mut data);
     repair_semantic_identities(&mut data);
@@ -1474,6 +1506,7 @@ fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
     match field {
         "noteSettings" => recover_object_fields::<NoteSettings>(field, value),
         "customTabs" => recover_array_entries::<CustomTab>(field, value),
+        "tabOrder" => recover_array_entries::<String>(field, value),
         "keys" => recover_key_mapping_entries(value),
         "soundLibrary" => recover_sound_library_entries(value),
         "keyPositions" => recover_key_position_entries(field, value),
@@ -1503,8 +1536,28 @@ fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
         "customJs" => recover_custom_js(value),
         "gridSettings" => recover_object_fields::<GridSettings>(field, value),
         "shortcuts" => recover_object_fields::<ShortcutsState>(field, value),
+        "overlayBounds" => recover_overlay_bounds(value),
         _ => None,
     }
+}
+
+fn recover_overlay_bounds(value: &Value) -> Option<Value> {
+    if serde_json::from_value::<StoredOverlayBounds>(value.clone()).is_ok() {
+        return Some(value.clone());
+    }
+
+    let Value::Object(source) = value else {
+        return None;
+    };
+    let public = serde_json::from_value::<crate::models::OverlayBounds>(serde_json::json!({
+        "x": source.get("x")?,
+        "y": source.get("y")?,
+        "width": source.get("width")?,
+        "height": source.get("height")?,
+    }))
+    .ok()?;
+    log::warn!("[Store] Discarding invalid overlayBounds nativePosition during recovery");
+    serde_json::to_value(StoredOverlayBounds::from(public)).ok()
 }
 
 fn recover_object_fields<T>(field: &str, value: &Value) -> Option<Value>
@@ -2093,7 +2146,7 @@ fn migrate_legacy_repair_fields(fields: &mut Map<String, Value>) {
         return;
     }
     if let Some(value) = legacy_bounds {
-        if serde_json::from_value::<OverlayBounds>(value.clone()).is_ok() {
+        if serde_json::from_value::<StoredOverlayBounds>(value.clone()).is_ok() {
             fields.insert("overlayBounds".to_string(), value);
             return;
         }
@@ -2249,7 +2302,8 @@ mod tests {
             GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
             KeyCounterColor, KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition,
             LayerGroupDef, NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition,
-            StatType, TabCss, TabNoteSettings, POSITION_COLLECTION_FIELDS,
+            StatType, StoredOverlayBounds, StoredOverlayNativePosition, TabCss, TabNoteSettings,
+            POSITION_COLLECTION_FIELDS,
         },
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -2274,6 +2328,90 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         }
+    }
+
+    #[test]
+    fn legacy_store_builds_tab_order_and_defaults_bar_count() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-tab-order-legacy-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = AppStoreData {
+            custom_tabs: vec![
+                CustomTab {
+                    id: "custom-a".to_string(),
+                    name: "Alpha".to_string(),
+                },
+                CustomTab {
+                    id: "custom-b".to_string(),
+                    name: "Beta".to_string(),
+                },
+            ],
+            ..AppStoreData::default()
+        };
+        data.keys.insert("custom-a".to_string(), Vec::new());
+        data.keys.insert("custom-b".to_string(), Vec::new());
+        data.key_positions
+            .insert("custom-a".to_string(), Vec::new());
+        data.key_positions
+            .insert("custom-b".to_string(), Vec::new());
+        let mut value = serde_json::to_value(data).unwrap();
+        value.as_object_mut().unwrap().remove("tabOrder");
+        value.as_object_mut().unwrap().remove("barCount");
+        std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.needs_persist);
+        assert_eq!(
+            loaded.data.tab_order,
+            ["4key", "5key", "6key", "8key", "custom-b", "custom-a"]
+        );
+        assert_eq!(loaded.data.bar_count, 4);
+    }
+
+    #[test]
+    fn invalid_tab_order_entries_do_not_remove_custom_tabs_during_recovery() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-tab-order-recovery-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = AppStoreData {
+            custom_tabs: vec![
+                CustomTab {
+                    id: "custom-a".to_string(),
+                    name: "Alpha".to_string(),
+                },
+                CustomTab {
+                    id: "custom-b".to_string(),
+                    name: "Beta".to_string(),
+                },
+            ],
+            ..AppStoreData::default()
+        };
+        data.keys.insert("custom-a".to_string(), Vec::new());
+        data.keys.insert("custom-b".to_string(), Vec::new());
+        data.key_positions
+            .insert("custom-a".to_string(), Vec::new());
+        data.key_positions
+            .insert("custom-b".to_string(), Vec::new());
+        let mut value = serde_json::to_value(data).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "tabOrder".to_string(),
+            serde_json::json!(["custom-b", 7, "unknown", "custom-b"]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.repaired);
+        assert_eq!(loaded.data.custom_tabs.len(), 2);
+        assert_eq!(
+            loaded.data.tab_order,
+            ["custom-b", "4key", "5key", "6key", "8key", "custom-a"]
+        );
     }
 
     #[test]
@@ -4294,12 +4432,15 @@ mod tests {
         let mut expected = AppStoreData {
             hardware_acceleration: false,
             always_on_top: false,
-            overlay_bounds: Some(OverlayBounds {
-                x: 11.0,
-                y: 22.0,
-                width: 933.0,
-                height: 411.0,
-            }),
+            overlay_bounds: Some(
+                OverlayBounds {
+                    x: 11.0,
+                    y: 22.0,
+                    width: 933.0,
+                    height: 411.0,
+                }
+                .into(),
+            ),
             obs_mode_enabled: true,
             obs_port: 18_321,
             obs_token: Some("obs-token-sentinel".to_string()),
@@ -4384,6 +4525,97 @@ mod tests {
         remove_all_native_ids(&mut actual_value);
         remove_all_native_ids(&mut expected_value);
         assert_eq!(actual_value, expected_value);
+    }
+
+    #[test]
+    fn overlay_bounds_fixtures_load_and_resave_with_nested_recovery() {
+        let fixtures = [
+            (
+                "legacy",
+                serde_json::json!({
+                    "x": 31.0,
+                    "y": 47.0,
+                    "width": 911.0,
+                    "height": 333.0
+                }),
+                None,
+                false,
+            ),
+            (
+                "native",
+                serde_json::json!({
+                    "x": 31.0,
+                    "y": 47.0,
+                    "width": 911.0,
+                    "height": 333.0,
+                    "nativePosition": {
+                        "x": 62.0,
+                        "y": 94.0,
+                        "logicalEchoX": 31.0,
+                        "logicalEchoY": 47.0
+                    }
+                }),
+                Some(StoredOverlayNativePosition {
+                    x: 62.0,
+                    y: 94.0,
+                    logical_echo_x: 31.0,
+                    logical_echo_y: 47.0,
+                }),
+                false,
+            ),
+            (
+                "invalid-native-child",
+                serde_json::json!({
+                    "x": 31.0,
+                    "y": 47.0,
+                    "width": 911.0,
+                    "height": 333.0,
+                    "nativePosition": {
+                        "x": 62.0,
+                        "y": 94.0,
+                        "logicalEchoX": 31.0,
+                        "logicalEchoY": "broken"
+                    }
+                }),
+                None,
+                true,
+            ),
+        ];
+
+        for (label, bounds, expected_native, expected_repaired) in fixtures {
+            let path = std::env::temp_dir().join(format!(
+                "dmnote-overlay-bounds-{label}-{}.json",
+                uuid::Uuid::new_v4()
+            ));
+            let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+            fixture["overlayBounds"] = bounds;
+            std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+            let loaded = load_store_from_path(&path).unwrap();
+            assert_eq!(loaded.repaired, expected_repaired, "{label}");
+            let expected = StoredOverlayBounds {
+                x: 31.0,
+                y: 47.0,
+                width: 911.0,
+                height: 333.0,
+                native_position: expected_native.clone(),
+            };
+            assert_eq!(
+                loaded.data.overlay_bounds.as_ref(),
+                Some(&expected),
+                "{label}"
+            );
+
+            std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+            let reloaded = load_store_from_path(&path).unwrap();
+            assert!(!reloaded.repaired, "{label}");
+            assert_eq!(
+                reloaded.data.overlay_bounds.as_ref(),
+                Some(&expected),
+                "{label}"
+            );
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     #[test]
@@ -4476,12 +4708,15 @@ mod tests {
         assert_eq!(loaded.data.background_color, "#123456");
         assert_eq!(
             loaded.data.overlay_bounds,
-            Some(OverlayBounds {
-                x: 17.0,
-                y: 29.0,
-                width: LEGACY_OVERLAY_WIDTH,
-                height: LEGACY_OVERLAY_HEIGHT,
-            })
+            Some(
+                OverlayBounds {
+                    x: 17.0,
+                    y: 29.0,
+                    width: LEGACY_OVERLAY_WIDTH,
+                    height: LEGACY_OVERLAY_HEIGHT,
+                }
+                .into()
+            )
         );
     }
 

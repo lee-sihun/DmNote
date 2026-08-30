@@ -15,6 +15,8 @@ interface MockKeyState {
   selectedKeyType: string;
   isBootstrapped: boolean;
   customTabs: unknown[];
+  tabOrder?: string[];
+  barCount?: number;
 }
 
 type MockKeyStoreListener = (
@@ -44,7 +46,44 @@ vi.mock('@contexts/useTranslation', () => ({
 }));
 vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: {
-    getState: vi.fn(() => mocks.keyState),
+    getState: vi.fn(() => ({
+      ...mocks.keyState,
+      // keys:mode-changed 수신부가 쓴다. 선택만 바꾸는 실제 동작을 흉내 낸다
+      commitSelectedKeyType: (selectedKeyType: string) => {
+        const previousState = mocks.keyState;
+        mocks.keyState = { ...previousState, selectedKeyType };
+        mocks.keyStoreListeners.forEach((listener) => {
+          listener(mocks.keyState, previousState);
+        });
+      },
+      adoptTabMetadataEvent: ({
+        customTabs,
+        tabOrder,
+        barCount,
+        selectedKeyType,
+        selectionAuthoritative,
+      }: {
+        customTabs: unknown[];
+        tabOrder: string[];
+        barCount: number;
+        selectedKeyType: string;
+        selectionAuthoritative: boolean;
+      }) => {
+        const previousState = mocks.keyState;
+        mocks.keyState = {
+          ...previousState,
+          customTabs,
+          tabOrder,
+          barCount,
+          selectedKeyType: selectionAuthoritative
+            ? selectedKeyType
+            : previousState.selectedKeyType,
+        };
+        mocks.keyStoreListeners.forEach((listener) => {
+          listener(mocks.keyState, previousState);
+        });
+      },
+    })),
     setState: vi.fn(
       (
         update:
@@ -240,6 +279,8 @@ const makeBootstrap = (
     graphPositions: {},
     knobPositions: {},
     customTabs: [],
+    tabOrder: ['4key', '5key', '6key', '8key'],
+    barCount: 4,
     selectedKeyType: '4key',
     currentMode: '4key',
     activeKeys: [],

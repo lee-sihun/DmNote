@@ -11,6 +11,9 @@ interface MockKeyState {
   selectedKeyType: string;
   isBootstrapped: boolean;
   customTabs: unknown[];
+  tabOrder?: string[];
+  barCount?: number;
+  deferredTabPlacement?: { tabOrder: string[]; barCount: number } | null;
 }
 
 type MockKeyStoreListener = (
@@ -18,11 +21,17 @@ type MockKeyStoreListener = (
   previousState: MockKeyState,
 ) => void;
 
+interface MockCustomTabsPayload {
+  customTabs: unknown[];
+  tabOrder: string[];
+  barCount: number;
+  selectedKeyType: string;
+  selectionAuthoritative: boolean;
+}
+
 const mocks = vi.hoisted(() => ({
   counterStateListener: null as null | ((payload: unknown) => void),
-  customTabsListener: null as
-    | null
-    | ((payload: { customTabs: unknown[]; selectedKeyType: string }) => void),
+  customTabsListener: null as null | ((payload: MockCustomTabsPayload) => void),
   presetSnapshotListener: null as null | ((payload: unknown) => void),
   resyncListener: null as null | (() => void),
   bootstrap: vi.fn(),
@@ -38,8 +47,11 @@ const mocks = vi.hoisted(() => ({
     selectedKeyType: '4key',
     isBootstrapped: true,
     customTabs: [],
+    tabOrder: ['4key', '5key', '6key', '8key'],
+    barCount: 4,
   } as MockKeyState,
   keyStoreListeners: new Set<MockKeyStoreListener>(),
+  adoptTabMetadataEvent: vi.fn<(payload: MockCustomTabsPayload) => void>(),
 }));
 
 vi.mock('@contexts/useTranslation', () => ({
@@ -47,7 +59,10 @@ vi.mock('@contexts/useTranslation', () => ({
 }));
 vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: {
-    getState: vi.fn(() => mocks.keyState),
+    getState: vi.fn(() => ({
+      ...mocks.keyState,
+      adoptTabMetadataEvent: mocks.adoptTabMetadataEvent,
+    })),
     setState: vi.fn(
       (
         update:
@@ -266,12 +281,7 @@ const makeApiMock = () =>
       onCounterChanged: vi.fn(() => vi.fn()),
       customTabs: {
         onChanged: vi.fn(
-          (
-            listener: (payload: {
-              customTabs: unknown[];
-              selectedKeyType: string;
-            }) => void,
-          ) => {
+          (listener: (payload: MockCustomTabsPayload) => void) => {
             mocks.customTabsListener = listener;
             return vi.fn();
           },
@@ -310,6 +320,18 @@ describe('모드 전환 선택 리셋', () => {
     tabNoteOverrides: {},
   });
 
+  const customTabsPayload = (
+    selectedKeyType: string,
+    selectionAuthoritative = true,
+    customTabs: unknown[] = [],
+  ): MockCustomTabsPayload => ({
+    customTabs,
+    tabOrder: ['4key', '5key', '6key', '8key'],
+    barCount: 4,
+    selectedKeyType,
+    selectionAuthoritative,
+  });
+
   const mount = async () => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -343,6 +365,30 @@ describe('모드 전환 선택 리셋', () => {
       customTabs: [],
     };
     mocks.keyStoreListeners.clear();
+    mocks.adoptTabMetadataEvent.mockReset();
+    mocks.adoptTabMetadataEvent.mockImplementation(
+      ({
+        customTabs,
+        tabOrder,
+        barCount,
+        selectedKeyType,
+        selectionAuthoritative,
+      }) => {
+        const previousState = mocks.keyState;
+        mocks.keyState = {
+          ...previousState,
+          customTabs,
+          tabOrder,
+          barCount,
+          selectedKeyType: selectionAuthoritative
+            ? selectedKeyType
+            : previousState.selectedKeyType,
+        };
+        mocks.keyStoreListeners.forEach((listener) => {
+          listener(mocks.keyState, previousState);
+        });
+      },
+    );
     mocks.bootstrap.mockResolvedValue(makeBootstrap());
     clearSelection.mockClear();
 
@@ -362,7 +408,7 @@ describe('모드 전환 선택 리셋', () => {
 
   it('customTabs 변경이 모드를 바꾸면 선택을 리셋한다', () => {
     act(() => {
-      mocks.customTabsListener?.({ customTabs: [], selectedKeyType: '8key' });
+      mocks.customTabsListener?.(customTabsPayload('8key'));
     });
 
     expect(clearSelection).toHaveBeenCalledTimes(1);
@@ -371,14 +417,24 @@ describe('모드 전환 선택 리셋', () => {
 
   it('customTabs만 바뀌고 모드가 같으면 선택을 건드리지 않는다', () => {
     act(() => {
-      mocks.customTabsListener?.({
-        customTabs: [{ id: 'tab-a' }],
-        selectedKeyType: '4key',
-      });
+      mocks.customTabsListener?.(
+        customTabsPayload('4key', true, [{ id: 'tab-a' }]),
+      );
     });
 
     expect(clearSelection).not.toHaveBeenCalled();
     expect(mocks.keyState.customTabs).toEqual([{ id: 'tab-a' }]);
+  });
+
+  it('선택 비권위 이벤트는 진행 중인 선택과 그리드 선택을 보존한다', () => {
+    mocks.keyState = { ...mocks.keyState, selectedKeyType: '8key' };
+
+    act(() => {
+      mocks.customTabsListener?.(customTabsPayload('4key', false));
+    });
+
+    expect(clearSelection).not.toHaveBeenCalled();
+    expect(mocks.keyState.selectedKeyType).toBe('8key');
   });
 
   it('프리셋 스냅샷이 모드를 바꾸면 선택을 리셋한다', () => {
@@ -395,6 +451,42 @@ describe('모드 전환 선택 리셋', () => {
     });
 
     expect(clearSelection).not.toHaveBeenCalled();
+  });
+
+  it('OBS 재동기화 탭 스냅샷도 store 채택 관문을 지난다', async () => {
+    const bootstrap = {
+      ...makeBootstrap(),
+      customTabs: [{ id: 'tab-a', name: 'A' }],
+      tabOrder: ['tab-a', '4key', '5key', '6key', '8key'],
+      barCount: 3,
+      selectedKeyType: 'tab-a',
+    } as unknown as BootstrapPayload;
+    mocks.bootstrap.mockResolvedValueOnce(bootstrap);
+    mocks.keyState = {
+      ...mocks.keyState,
+      customTabs: bootstrap.customTabs,
+      tabOrder: bootstrap.tabOrder,
+      barCount: bootstrap.barCount,
+      selectedKeyType: bootstrap.selectedKeyType,
+      deferredTabPlacement: {
+        tabOrder: ['8key', '6key', '5key', '4key'],
+        barCount: 2,
+      },
+    };
+    mocks.adoptTabMetadataEvent.mockClear();
+
+    await act(async () => {
+      mocks.resyncListener?.();
+      await Promise.resolve();
+    });
+
+    expect(mocks.adoptTabMetadataEvent).toHaveBeenCalledWith({
+      customTabs: bootstrap.customTabs,
+      tabOrder: bootstrap.tabOrder,
+      barCount: bootstrap.barCount,
+      selectedKeyType: bootstrap.selectedKeyType,
+      selectionAuthoritative: true,
+    });
   });
 
   it('OBS 런타임에서는 편집 히스토리 상태를 조회하지 않는다', async () => {
@@ -425,7 +517,7 @@ describe('모드 전환 선택 리셋', () => {
     await mount();
 
     act(() => {
-      mocks.customTabsListener?.({ customTabs: [], selectedKeyType: '8key' });
+      mocks.customTabsListener?.(customTabsPayload('8key'));
     });
 
     expect(clearSelection).not.toHaveBeenCalled();

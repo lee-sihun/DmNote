@@ -1671,12 +1671,16 @@ impl AppStore {
         validate_history_restore_metadata(
             &target.document,
             &target.custom_tabs,
+            &target.tab_order,
             &target.selected_key_type,
         )?;
         let current = EditorDocumentV1::from_store(&current_store);
         let mut scratch = current_store.clone();
         target.document.apply_to_store(&mut scratch);
         scratch.custom_tabs = target.custom_tabs.clone();
+        scratch.tab_order = target.tab_order.clone();
+        scratch.bar_count =
+            crate::state::tab_metadata::normalize_bar_count(target.bar_count, &scratch.tab_order);
         scratch.selected_key_type = target.selected_key_type.clone();
         scratch.key_counters = project_history_key_counters(
             current_key_counters,
@@ -1766,12 +1770,16 @@ impl AppStore {
         validate_history_restore_metadata(
             &target.document,
             &target.custom_tabs,
+            &target.tab_order,
             &target.selected_key_type,
         )?;
         let current = EditorDocumentV1::from_store(&current_store);
         let mut scratch = current_store.clone();
         target.document.apply_to_store(&mut scratch);
         scratch.custom_tabs = target.custom_tabs.clone();
+        scratch.tab_order = target.tab_order.clone();
+        scratch.bar_count =
+            crate::state::tab_metadata::normalize_bar_count(target.bar_count, &scratch.tab_order);
         scratch.selected_key_type = target.selected_key_type.clone();
         scratch.key_counters = project_history_key_counters(
             current_key_counters,
@@ -2299,6 +2307,19 @@ impl AppStore {
             scratch.key_counters = counters.clone();
         }
         let value = updater(&mut scratch)?;
+        if matches!(
+            history_options.scope,
+            Some(HistoryScope::CustomTabs | HistoryScope::PresetFull)
+        ) {
+            scratch.tab_order = crate::state::tab_metadata::normalize_tab_order(
+                &scratch.tab_order,
+                &scratch.custom_tabs,
+            );
+            scratch.bar_count = crate::state::tab_metadata::normalize_bar_count(
+                scratch.bar_count,
+                &scratch.tab_order,
+            );
+        }
         let plugin_reset_applied =
             history_options
                 .plugin_instances_reset
@@ -18029,7 +18050,7 @@ mod tests {
         let initial = store.snapshot();
         let tab = CustomTab {
             id: "history-custom-tab".to_string(),
-            name: "History Custom Tab".to_string(),
+            name: "History".to_string(),
         };
         let tab_id = tab.id.clone();
 
@@ -18131,7 +18152,7 @@ mod tests {
                 |data| {
                     data.custom_tabs.push(CustomTab {
                         id: created_tab_id.clone(),
-                        name: "Override History".to_string(),
+                        name: "Override".to_string(),
                     });
                     data.keys.insert(created_tab_id.clone(), Vec::new());
                     data.key_positions
@@ -18282,7 +18303,7 @@ mod tests {
                 |data| {
                     data.custom_tabs.push(CustomTab {
                         id: create_tab_id.clone(),
-                        name: "Plugin History".to_string(),
+                        name: "Plugin".to_string(),
                     });
                     data.keys.insert(create_tab_id.clone(), Vec::new());
                     data.key_positions.insert(create_tab_id.clone(), Vec::new());
@@ -18482,6 +18503,10 @@ mod tests {
                 data.note_settings.speed = 321;
                 data.note_effect = false;
                 data.laboratory_enabled = false;
+                data.tab_order = ["5key", "4key", "6key", "8key"]
+                    .map(str::to_string)
+                    .to_vec();
+                data.bar_count = 2;
                 data.tab_note_overrides.insert(
                     mode.clone(),
                     TabNoteSettings {
@@ -18552,6 +18577,10 @@ mod tests {
                     data.note_settings.speed = 654;
                     data.note_effect = true;
                     data.laboratory_enabled = true;
+                    data.tab_order = ["8key", "6key", "5key", "4key"]
+                        .map(str::to_string)
+                        .to_vec();
+                    data.bar_count = 3;
                     data.tab_note_overrides.insert(
                         mode.clone(),
                         TabNoteSettings {
@@ -18605,6 +18634,8 @@ mod tests {
             panic!("preset full history change expected");
         };
         assert_eq!(snapshot.as_ref(), &initial);
+        assert_eq!(store.snapshot().tab_order, initial.tab_order);
+        assert_eq!(store.snapshot().bar_count, initial.bar_count);
         assert!(settings_diff.changed.use_custom_css.is_some());
         assert!(settings_diff.changed.custom_css.is_some());
         assert!(settings_diff.changed.use_custom_js.is_some());
@@ -18653,6 +18684,8 @@ mod tests {
             .unwrap()
             .insert(preserved_key.clone(), 17);
         assert_eq!(snapshot.as_ref(), &redo_snapshot);
+        assert_eq!(store.snapshot().tab_order, preset.tab_order);
+        assert_eq!(store.snapshot().bar_count, preset.bar_count);
         assert_eq!(
             settings_diff.changed.background_color.as_deref(),
             Some("#abcdef")
@@ -20691,12 +20724,15 @@ mod tests {
     fn defer_test_bounds(store: &AppStore, x: f64) {
         store
             .update_deferred(|state| {
-                state.overlay_bounds = Some(OverlayBounds {
-                    x,
-                    y: 20.0,
-                    width: 800.0,
-                    height: 300.0,
-                });
+                state.overlay_bounds = Some(
+                    OverlayBounds {
+                        x,
+                        y: 20.0,
+                        width: 800.0,
+                        height: 300.0,
+                    }
+                    .into(),
+                );
                 state.overlay_bounds_are_logical = true;
             })
             .unwrap();

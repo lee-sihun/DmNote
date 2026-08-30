@@ -527,8 +527,15 @@ Creates and selects a new custom tab.
 
 ```javascript
 const result = await dmn.keys.customTabs.create('My Keys');
+// error: "invalid-name" | "name-too-long" | "reserved-name"
+//        | "duplicate-name" | "max-reached"
 console.log(result.result?.id, result.error);
 ```
+
+The name is trimmed before validation. It is rejected when empty
+(`invalid-name`), longer than 10 UTF-16 code units (`name-too-long`), equal to
+`4key`, `5key`, `6key`, or `8key` (`reserved-name`), or already in use
+(`duplicate-name`). Reaching 30 tabs yields `max-reached`.
 
 ### `dmn.keys.customTabs.delete(id): Promise<CustomTabDeleteResult>`
 
@@ -549,10 +556,15 @@ await dmn.keys.customTabs.select('custom-123');
 
 ### `dmn.keys.customTabs.restore(customTabs, selectedKeyType): Promise<void>`
 
-Restores the names/order of existing custom tabs and the selected mode
-atomically. Every tab ID must already have paired `keys` and `keyPositions`;
-use `create`, `delete`, and `updateWithPositions` for topology changes. Invalid
-or orphaned tab metadata is rejected without changing stored data.
+Restores the names of existing custom tabs and the selected mode atomically.
+Every tab ID must already have paired `keys` and `keyPositions`; use `create`,
+`delete`, and `updateWithPositions` for topology changes. Invalid or orphaned
+tab metadata is rejected without changing stored data.
+
+<Callout type="warning">
+  Display order is owned by `tabOrder` and `restore` never touches it. The order
+  of the array you pass is ignored; the stored order is kept as is.
+</Callout>
 
 ```javascript
 await dmn.keys.customTabs.restore(
@@ -563,12 +575,32 @@ await dmn.keys.customTabs.restore(
 
 ### `dmn.keys.customTabs.onChanged(callback): Unsubscribe`
 
-Subscribes to custom tab create, delete, select, and restore changes.
+Subscribes to custom tab create, delete, restore, rename, and reorder
+changes.
+
+Alongside `customTabs` and `selectedKeyType`, the payload carries `tabOrder`,
+`barCount`, and `selectionAuthoritative`. `tabOrder` is the combined display
+order of built-in modes and custom tabs, containing every tab ID exactly once;
+`barCount` is how many of the leading entries appear in the toolbar bar (1 to 4).
+`selectionAuthoritative` is `false` for rename and reorder events, whose
+`selectedKeyType` is only a transaction snapshot, and `true` when the event owns
+the selected mode. Since `list()` returns only an array, read the display order
+from `tabOrder`.
 
 ```javascript
-const unsub = dmn.keys.customTabs.onChanged((payload) => {
-  console.log(payload.customTabs, payload.selectedKeyType);
-});
+const unsub = dmn.keys.customTabs.onChanged(
+  ({
+    customTabs,
+    tabOrder,
+    barCount,
+    selectedKeyType,
+    selectionAuthoritative,
+  }) => {
+    console.log(customTabs, selectedKeyType);
+    console.log('in the bar:', tabOrder.slice(0, barCount));
+    console.log('selected mode belongs to event:', selectionAuthoritative);
+  },
+);
 ```
 
 ---

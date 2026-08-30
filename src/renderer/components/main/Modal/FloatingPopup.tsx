@@ -37,6 +37,10 @@ import {
   subscribeModalLayerActivity,
 } from './popupLayer';
 import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
+import {
+  getPopupDragSessionState,
+  subscribePopupDragSession,
+} from '@utils/ui/popupDragSession';
 import { usePanelHost } from '@contexts/PanelHostContext';
 import { isElementNode } from '@utils/dom/isElementNode';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
@@ -386,6 +390,7 @@ const FloatingPopup = ({
 
   useEffect(() => {
     if (open && autoClose) {
+      let pendingCloseCleanup: (() => void) | null = null;
       const onClickAway = (e: MouseEvent) => {
         const target = e.target as Node;
         if (!refs.floating.current) return;
@@ -407,6 +412,20 @@ const FloatingPopup = ({
           isElementNode(target) &&
           !!target.closest('[data-dmn-popup-submenu="true"]');
         if (isInsideSubMenu) return;
+        // 드래그 후보는 클릭인지 실제 드래그인지 확정될 때까지 닫기 보류
+        const dragState = getPopupDragSessionState();
+        if (dragState === 'active') return;
+        if (dragState === 'pending') {
+          pendingCloseCleanup?.();
+          pendingCloseCleanup = subscribePopupDragSession((state) => {
+            if (state === 'pending') return;
+            pendingCloseCleanup?.();
+            pendingCloseCleanup = null;
+            if (state === 'idle') onClose();
+          });
+          return;
+        }
+
         // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
         const isInsideGradientOverlay =
           isElementNode(target) &&
@@ -419,6 +438,7 @@ const FloatingPopup = ({
 
       ownerDocument.addEventListener('mousedown', onClickAway);
       return () => {
+        pendingCloseCleanup?.();
         ownerDocument.removeEventListener('mousedown', onClickAway);
       };
     }
@@ -510,6 +530,7 @@ const FloatingPopup = ({
     if (!open || autoClose) return;
 
     let pointerCapturedInside = false;
+    let closeRequested = false;
 
     const referenceEl = referenceRef?.current ?? null;
 
@@ -522,6 +543,7 @@ const FloatingPopup = ({
     };
 
     const handleDocumentDown = (event: PointerEvent) => {
+      if (closeRequested) return;
       const target = event.target as Node;
       // floatingRef.current를 이벤트 발생 시점에 동적으로 참조
       const floatingEl = floatingRef.current;
@@ -573,6 +595,12 @@ const FloatingPopup = ({
         return;
       }
 
+      // 이미 승격된 드래그가 다른 팝업 표면을 오갈 때만 유지
+      if (getPopupDragSessionState() === 'active') {
+        pointerCapturedInside = false;
+        return;
+      }
+
       // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
       const isInsideGradientOverlay =
         isElementNode(target) &&
@@ -592,6 +620,7 @@ const FloatingPopup = ({
         return;
       }
 
+      closeRequested = true;
       onClose();
     };
 

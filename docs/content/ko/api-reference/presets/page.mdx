@@ -51,7 +51,8 @@ const result = await dmn.presets.saveTab();
 ### loadTab()
 
 탭 프리셋 파일을 현재 선택된 탭에 불러옵니다. 파일 선택 다이얼로그가
-열립니다.
+열립니다. 탭 프리셋에는 `tabOrder`와 `barCount`가 들어 있지 않아 전역 탭 순서를
+건드리지 않습니다.
 
 ```javascript
 const result = await dmn.presets.loadTab();
@@ -117,6 +118,8 @@ interface PresetSnapshot {
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
   customTabs: CustomTab[];
+  tabOrder: string[];
+  barCount: number;
   selectedKeyType: string;
   tabNoteOverrides: TabNoteOverrides;
 }
@@ -143,6 +146,8 @@ const unsub = dmn.presets.onSnapshot((snapshot) => {
 | `keys` | 키 매핑 |
 | `positions` | 키 위치/크기/개별 옵션(클래스, 이미지, 카운터 설정 포함) |
 | `customTabs` | 커스텀 탭 목록 |
+| `tabOrder` | 내장 모드와 커스텀 탭을 합친 표시 순서 |
+| `barCount` | 그중 툴바 바에 나오는 앞쪽 개수 (1~4) |
 | `selectedKeyType` | 선택된 탭/모드 |
 | `backgroundColor` | 오버레이 배경색 |
 | `noteSettings` / `noteEffect` | 노트 이펙트 관련 설정 |

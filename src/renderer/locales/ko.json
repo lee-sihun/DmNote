@@ -290,7 +290,9 @@
   "tabs": {
     "title": "커스텀 탭",
     "createTitle": "탭 생성",
+    "renameTitle": "탭 이름 변경",
     "create": "생성하기",
+    "rename": "변경하기",
     "delete": "삭제",
     "deleteConfirm": "{{name}} 탭을 삭제하시겠습니까?",
     "name": {
@@ -303,7 +305,8 @@
     "errors": {
       "max": "추가 탭은 최대 30개까지 만들 수 있습니다",
       "invalid": "올바르지 않은 이름입니다",
-      "createFail": "생성에 실패했습니다"
+      "createFail": "생성에 실패했습니다",
+      "renameFail": "이름 변경에 실패했습니다"
     }
   },
   "laboratory": {
