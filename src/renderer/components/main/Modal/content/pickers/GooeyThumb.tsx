@@ -49,35 +49,38 @@ interface GooeyThumbProps {
   checker?: boolean;
 }
 
+// 본체는 원점 고정, 이동은 필터 결과째 g의 CSS transform으로.
+// 필터 안 도형 속성을 매 프레임 바꾸면 WebKit이 이전 영역을 덜 지워 잔상이 남고
+// 임계 경계가 프레임마다 재래스터돼 지글거린다 - 느린 이동에서는 필터 내용이
+// 그대로라 캐시된 래스터가 합성 이동만 한다
 const writeShape = (
+  g: SVGGElement | null,
   rect: SVGRectElement | null,
   tail: SVGCircleElement | null,
   frame: GooeyFrame,
-  radius: number,
 ) => {
-  if (!rect || !tail) return;
-  const d = 2 * radius;
-  rect.setAttribute('x', String(frame.cx - radius));
-  rect.setAttribute('y', String(frame.cy - radius));
-  rect.setAttribute('width', String(d));
-  rect.setAttribute('height', String(d));
-  rect.setAttribute('rx', String(radius));
+  if (!g || !rect || !tail) return;
+  g.style.visibility = 'visible';
+  g.style.transform = `translate(${frame.cx}px, ${frame.cy}px)`;
   if (frame.stretch > 0) {
     const deg = (frame.angle * 180) / Math.PI;
     const sx = 1 + frame.stretch;
     const sy = 1 / (1 + frame.stretch * 0.65);
     rect.setAttribute(
       'transform',
-      `translate(${frame.cx} ${
-        frame.cy
-      }) rotate(${deg}) scale(${sx} ${sy}) rotate(${-deg}) translate(${-frame.cx} ${-frame.cy})`,
+      `rotate(${deg}) scale(${sx} ${sy}) rotate(${-deg})`,
     );
-  } else {
+  } else if (rect.hasAttribute('transform')) {
     rect.removeAttribute('transform');
   }
-  tail.setAttribute('cx', String(frame.tailX));
-  tail.setAttribute('cy', String(frame.tailY));
-  tail.setAttribute('r', String(frame.tailRadius));
+  // 안 보이는 꼬리의 좌표는 쓰지 않는다 - 불필요한 필터 무효화 방지
+  if (frame.tailRadius > 0) {
+    tail.setAttribute('cx', String(frame.tailX - frame.cx));
+    tail.setAttribute('cy', String(frame.tailY - frame.cy));
+    tail.setAttribute('r', String(frame.tailRadius));
+  } else if (tail.getAttribute('r') !== '0') {
+    tail.setAttribute('r', '0');
+  }
 };
 
 /**
@@ -96,6 +99,7 @@ const GooeyThumb = ({
   const id = useId().replace(/:/g, '');
   const filterId = `goo-${id}`;
   const svgRef = useRef<SVGSVGElement>(null);
+  const gRef = useRef<SVGGElement>(null);
   const rectRef = useRef<SVGRectElement>(null);
   const tailRef = useRef<SVGCircleElement>(null);
 
@@ -107,7 +111,7 @@ const GooeyThumb = ({
     y,
     size,
     apply: (frame) => {
-      writeShape(rectRef.current, tailRef.current, frame, radius);
+      writeShape(gRef.current, rectRef.current, tailRef.current, frame);
     },
   });
 
@@ -189,9 +193,22 @@ const GooeyThumb = ({
           </feMerge>
         </filter>
       </defs>
-      <g filter={`url(#${filterId})`} fill="#fff">
+      {/* 첫 스프링 프레임 전에는 원점의 도형이 비치지 않게 숨김 */}
+      <g
+        ref={gRef}
+        filter={`url(#${filterId})`}
+        fill="#fff"
+        style={{ visibility: 'hidden' }}
+      >
         <circle ref={tailRef} r={0} />
-        <rect ref={rectRef} />
+        <rect
+          ref={rectRef}
+          x={-radius}
+          y={-radius}
+          width={size}
+          height={size}
+          rx={radius}
+        />
       </g>
       {/* 실제 값 위치의 히트 영역 - 트랙 밖으로 삐져나온 부분도 잡히도록.
           이벤트는 트랙으로 버블되고 그림은 스프링이 따라온다 */}
