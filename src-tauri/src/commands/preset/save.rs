@@ -12,7 +12,7 @@ use crate::{
     errors::{CmdResult, CommandError},
     models::{
         FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions, KnobPositions,
-        LayerGroups, StatPositions, TabCssOverrides, TabNoteOverrides,
+        LayerGroups, SpritePositions, StatPositions, TabCssOverrides, TabNoteOverrides,
     },
     state::{atomic_file::atomic_replace, AppState},
 };
@@ -58,13 +58,20 @@ fn preset_save_from_path(app: AppHandle, path: PathBuf) -> CmdResult<PresetOpera
     );
     let (font_settings, embedded_local_fonts) =
         build_preset_font_payload(&snapshot.font_settings, &used_font_families)?;
-    let (key_positions, stat_positions, graph_positions, knob_positions, embedded_local_images) =
-        build_preset_image_payload(
-            &snapshot.key_positions,
-            &snapshot.stat_positions,
-            &snapshot.graph_positions,
-            &snapshot.knob_positions,
-        )?;
+    let (
+        key_positions,
+        stat_positions,
+        graph_positions,
+        knob_positions,
+        sprite_positions,
+        embedded_local_images,
+    ) = build_preset_image_payload(
+        &snapshot.key_positions,
+        &snapshot.stat_positions,
+        &snapshot.graph_positions,
+        &snapshot.knob_positions,
+        &snapshot.sprite_positions,
+    )?;
     let (key_positions, stat_positions, graph_positions, knob_positions, embedded_local_sounds) =
         build_preset_sound_payload(
             &key_positions,
@@ -79,6 +86,7 @@ fn preset_save_from_path(app: AppHandle, path: PathBuf) -> CmdResult<PresetOpera
         stat_positions: Some(stat_positions),
         graph_positions: Some(graph_positions),
         knob_positions: Some(knob_positions),
+        sprite_positions: Some(sprite_positions),
         background_color: Some(snapshot.background_color),
         note_settings: Some(snapshot.note_settings),
         note_effect: Some(snapshot.note_effect),
@@ -153,6 +161,10 @@ fn preset_save_tab_from_path(app: AppHandle, path: PathBuf) -> CmdResult<PresetO
     if let Some(positions) = snapshot.knob_positions.get(&tab_id) {
         tab_knob_positions.insert(tab_id.clone(), positions.clone());
     }
+    let mut tab_sprite_positions: SpritePositions = HashMap::new();
+    if let Some(positions) = snapshot.sprite_positions.get(&tab_id) {
+        tab_sprite_positions.insert(tab_id.clone(), positions.clone());
+    }
 
     let used_font_families = collect_used_font_families(
         &tab_key_positions,
@@ -167,12 +179,14 @@ fn preset_save_tab_from_path(app: AppHandle, path: PathBuf) -> CmdResult<PresetO
         tab_stat_positions,
         tab_graph_positions,
         tab_knob_positions,
+        tab_sprite_positions,
         embedded_local_images,
     ) = build_preset_image_payload(
         &tab_key_positions,
         &tab_stat_positions,
         &tab_graph_positions,
         &tab_knob_positions,
+        &tab_sprite_positions,
     )?;
     let (
         tab_key_positions,
@@ -235,6 +249,7 @@ fn preset_save_tab_from_path(app: AppHandle, path: PathBuf) -> CmdResult<PresetO
         stat_positions: Some(tab_stat_positions),
         graph_positions: Some(tab_graph_positions),
         knob_positions: Some(tab_knob_positions),
+        sprite_positions: Some(tab_sprite_positions),
         background_color: None,
         note_settings: None,
         note_effect: None,
@@ -403,22 +418,25 @@ fn build_preset_font_payload(
     ))
 }
 
-fn build_preset_image_payload(
+pub(crate) fn build_preset_image_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,
     knob_positions: &KnobPositions,
+    sprite_positions: &SpritePositions,
 ) -> CmdResult<(
     KeyPositions,
     StatPositions,
     GraphPositions,
     KnobPositions,
+    SpritePositions,
     Vec<EmbeddedLocalImage>,
 )> {
     let mut exported_key_positions = key_positions.clone();
     let mut exported_stat_positions = stat_positions.clone();
     let mut exported_graph_positions = graph_positions.clone();
     let mut exported_knob_positions = knob_positions.clone();
+    let mut exported_sprite_positions = sprite_positions.clone();
     let mut embedded_local_images = Vec::new();
     let mut path_to_image_id: HashMap<String, String> = HashMap::new();
 
@@ -482,11 +500,29 @@ fn build_preset_image_payload(
         }
     }
 
+    for sprites in exported_sprite_positions.values_mut() {
+        for sprite in sprites {
+            rewrite_position_image_reference(
+                &mut sprite.base_image,
+                &mut embedded_local_images,
+                &mut path_to_image_id,
+            )?;
+            for pose in &mut sprite.poses {
+                rewrite_position_image_reference(
+                    &mut pose.image_override,
+                    &mut embedded_local_images,
+                    &mut path_to_image_id,
+                )?;
+            }
+        }
+    }
+
     Ok((
         exported_key_positions,
         exported_stat_positions,
         exported_graph_positions,
         exported_knob_positions,
+        exported_sprite_positions,
         embedded_local_images,
     ))
 }
@@ -701,11 +737,12 @@ mod tests {
         };
         let key_positions = KeyPositions::from([("4key".to_string(), vec![position])]);
 
-        let (exported, _, _, _, embedded) = build_preset_image_payload(
+        let (exported, _, _, _, _, embedded) = build_preset_image_payload(
             &key_positions,
             &StatPositions::new(),
             &GraphPositions::new(),
             &KnobPositions::new(),
+            &SpritePositions::new(),
         )
         .unwrap();
 

@@ -148,6 +148,7 @@
           "sound_set_enabled",
           "sound_set_hidden",
           "sound_update_processed_wav",
+          "sprite_positions_get",
           "stat_positions_get",
           "stat_positions_update",
           "window_close",

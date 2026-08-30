@@ -1470,6 +1470,7 @@ impl AppState {
             stat_positions: state.stat_positions.clone(),
             graph_positions: state.graph_positions.clone(),
             knob_positions: state.knob_positions.clone(),
+            sprite_positions: state.sprite_positions.clone(),
             custom_tabs: state.custom_tabs.clone(),
             selected_key_type: state.selected_key_type.clone(),
             current_mode,

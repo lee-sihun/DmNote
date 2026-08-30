@@ -26,6 +26,7 @@ fn legacy_event_name(field: EditorField) -> &'static str {
         EditorField::StatPositions => "statPositions:changed",
         EditorField::GraphPositions => "graphPositions:changed",
         EditorField::KnobPositions => "knobPositions:changed",
+        EditorField::SpritePositions => "spritePositions:changed",
         EditorField::LayerGroups => "layerGroups:changed",
     }
 }
@@ -76,6 +77,9 @@ pub(crate) fn publish_legacy_editor_fields(
             }
             EditorField::KnobPositions => {
                 emit_best_effort(app, event, &change.document.knob_positions);
+            }
+            EditorField::SpritePositions => {
+                emit_best_effort(app, event, &change.document.sprite_positions);
             }
             EditorField::LayerGroups => {
                 emit_best_effort(app, event, &change.document.layer_groups);
@@ -300,6 +304,7 @@ mod tests {
             EditorField::StatPositions,
             EditorField::GraphPositions,
             EditorField::KnobPositions,
+            EditorField::SpritePositions,
             EditorField::LayerGroups,
         ];
         assert_eq!(&fields, projected_legacy_fields(true, &fields));
@@ -311,6 +316,7 @@ mod tests {
                 "statPositions:changed",
                 "graphPositions:changed",
                 "knobPositions:changed",
+                "spritePositions:changed",
                 "layerGroups:changed",
             ]
         );

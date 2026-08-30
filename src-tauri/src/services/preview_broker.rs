@@ -89,6 +89,25 @@ const KEY_POSITION_PATCH_FIELDS: &[&str] = &[
     "fontStrikethrough",
 ];
 
+const SPRITE_POSITION_PATCH_FIELDS: &[&str] = &[
+    "x",
+    "y",
+    "rotation",
+    "scale",
+    "dx",
+    "dy",
+    "width",
+    "height",
+    "imageRect",
+    "pivot",
+    "idleTransform",
+    "poses",
+    "transitionMs",
+    "transitionEasing",
+    "imageFit",
+    "baseImage",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PreviewKind {
@@ -104,6 +123,7 @@ pub enum PreviewDomain {
     StatPosition,
     GraphPosition,
     KnobPosition,
+    SpritePosition,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -425,10 +445,14 @@ fn validate_publish_request(request: &PreviewPublishRequest) -> Result<(), Strin
             "preview target count exceeds {MAX_PREVIEW_TARGETS}"
         ));
     }
+    let allowed_fields = match request.domain {
+        PreviewDomain::SpritePosition => SPRITE_POSITION_PATCH_FIELDS,
+        _ => KEY_POSITION_PATCH_FIELDS,
+    };
     if let Some(field) = request
         .patch
         .keys()
-        .find(|field| !KEY_POSITION_PATCH_FIELDS.contains(&field.as_str()))
+        .find(|field| !allowed_fields.contains(&field.as_str()))
     {
         return Err(format!("preview patch field '{field}' is not allowed"));
     }
@@ -855,6 +879,7 @@ mod tests {
             PreviewDomain::StatPosition,
             PreviewDomain::GraphPosition,
             PreviewDomain::KnobPosition,
+            PreviewDomain::SpritePosition,
         ];
 
         for (index, domain) in domains.iter().copied().enumerate() {
@@ -872,6 +897,96 @@ mod tests {
             .map(|message| message.domain)
             .collect::<Vec<_>>();
         assert_eq!(forwarded, domains);
+    }
+
+    #[test]
+    fn sprite_position_domain_validates_and_round_trips_through_subscribers() {
+        let broker = PreviewBroker::default();
+        subscribe(&broker, "owner");
+        let messages = Arc::new(Mutex::new(Vec::new()));
+        broker
+            .subscribe("observer", recording_channel(messages.clone()))
+            .expect("observer subscribes");
+        let session_id = session_id();
+        let patch = serde_json::json!({
+            "x": 12,
+            "y": -6,
+            "rotation": 15,
+            "scale": 1.2,
+            "dx": 24,
+            "dy": -8,
+            "width": 320,
+            "height": 180,
+            "imageRect": { "x": 0, "y": 0, "width": 320, "height": 180 },
+            "pivot": { "x": 0.5, "y": 0.75 },
+            "idleTransform": { "x": 0, "y": 0, "rotation": 0, "scale": 1 },
+            "poses": [{ "poseId": "pose-id", "triggers": [] }],
+            "transitionMs": 120,
+            "transitionEasing": "ease-out",
+            "imageFit": "contain",
+            "baseImage": "/images/base.png"
+        });
+        let request: PreviewPublishRequest = serde_json::from_value(serde_json::json!({
+            "schemaVersion": PREVIEW_SCHEMA_VERSION,
+            "sessionId": session_id,
+            "seq": 1,
+            "domain": "spritePosition",
+            "mode": "4key",
+            "targets": [0],
+            "patch": patch
+        }))
+        .expect("spritePosition domain is accepted");
+
+        broker
+            .publish("owner", request)
+            .expect("sprite preview publishes");
+
+        let messages = messages.lock();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].domain, PreviewDomain::SpritePosition);
+        assert_eq!(messages[0].mode, "4key");
+        assert_eq!(Value::Object(messages[0].patch.clone()), patch);
+    }
+
+    #[test]
+    fn preview_patch_allowlist_rejects_unknown_and_cross_domain_fields() {
+        let broker = PreviewBroker::default();
+        subscribe(&broker, "owner");
+        let session_id = session_id();
+        let mut unknown_sprite = request_for_domain(&session_id, 1, PreviewDomain::SpritePosition);
+        unknown_sprite.patch =
+            Map::from_iter([("unknownSpriteField".to_string(), Value::Bool(true))]);
+
+        let unknown_error = broker.publish("owner", unknown_sprite).unwrap_err();
+
+        assert!(unknown_error.contains("unknownSpriteField"));
+
+        let mut sprite_field_on_key =
+            request_for_domain(&session_id, 2, PreviewDomain::KeyPosition);
+        sprite_field_on_key.patch = Map::from_iter([(
+            "pivot".to_string(),
+            serde_json::json!({ "x": 0.5, "y": 0.5 }),
+        )]);
+
+        let cross_domain_error = broker.publish("owner", sprite_field_on_key).unwrap_err();
+
+        assert!(cross_domain_error.contains("pivot"));
+    }
+
+    #[test]
+    fn unknown_preview_domain_is_rejected_during_wire_validation() {
+        let error = serde_json::from_value::<PreviewPublishRequest>(serde_json::json!({
+            "schemaVersion": PREVIEW_SCHEMA_VERSION,
+            "sessionId": session_id(),
+            "seq": 1,
+            "domain": "spritePose",
+            "mode": "4key",
+            "targets": [0],
+            "patch": { "dx": 24 }
+        }))
+        .expect_err("unknown preview domains stay closed");
+
+        assert!(error.to_string().contains("unknown variant"));
     }
 
     #[test]

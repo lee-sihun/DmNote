@@ -31,10 +31,11 @@ use crate::{
         GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
         ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
         KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
-        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
-        StoredOverlayBounds, TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX,
-        IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
-        IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
+        ReactiveSpritePosition, ShortcutsState, SoundLibraryEntry, SpritePositions, StatPosition,
+        StatPositions, StatType, StoredOverlayBounds, TabCss, TabNoteSettings,
+        IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX,
+        IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN,
+        POSITION_COLLECTION_FIELDS,
     },
     services::font_metadata::parse_font_metadata,
 };
@@ -127,6 +128,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         needs_persist |= layout_repaired;
                         needs_persist |= normalize_blank_font_colors(&mut data);
                         needs_persist |= canonicalize_image_modes(&mut data);
+                        needs_persist |= normalize_sprite_triggers(&mut data);
                         let (gradient_changed, gradient_pair_repaired) =
                             canonicalize_gradient_pairs(&mut data);
                         needs_persist |= gradient_changed;
@@ -510,6 +512,14 @@ pub(crate) fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut App
             option_has_non_empty_text(&knob_position.position.active_image)
                 || option_has_non_empty_text(&knob_position.position.inactive_image)
         })
+    }) || data.sprite_positions.values().any(|sprites| {
+        sprites.iter().any(|sprite| {
+            option_has_non_empty_text(&sprite.base_image)
+                || sprite
+                    .poses
+                    .iter()
+                    .any(|pose| option_has_non_empty_text(&pose.image_override))
+        })
     });
 
     if !has_any_images {
@@ -572,6 +582,16 @@ pub(crate) fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut App
         }
     }
 
+    for sprites in data.sprite_positions.values_mut() {
+        for sprite in sprites {
+            changed |= migrate_image_reference_to_app_data(&images_dir, &mut sprite.base_image);
+            for pose in &mut sprite.poses {
+                changed |=
+                    migrate_image_reference_to_app_data(&images_dir, &mut pose.image_override);
+            }
+        }
+    }
+
     changed
 }
 
@@ -600,6 +620,14 @@ pub(crate) fn rehome_foreign_asset_references(
     for positions in data.knob_positions.values_mut() {
         for position in positions {
             changed |= rehome_position_asset_references(app_data_dir, &mut position.position);
+        }
+    }
+    for sprites in data.sprite_positions.values_mut() {
+        for sprite in sprites {
+            changed |= rehome_optional_asset_reference(app_data_dir, &mut sprite.base_image);
+            for pose in &mut sprite.poses {
+                changed |= rehome_optional_asset_reference(app_data_dir, &mut pose.image_override);
+            }
         }
     }
 
@@ -901,6 +929,7 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     repair_editor_revision(&mut data);
     normalize_blank_font_colors(&mut data);
     canonicalize_image_modes(&mut data);
+    normalize_sprite_triggers(&mut data);
 
     if data.keys.is_empty() {
         data.keys = default_keys().clone();
@@ -986,6 +1015,19 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     let _ = data.custom_js.normalize();
 
     data
+}
+
+pub(crate) fn normalize_sprite_triggers(data: &mut AppStoreData) -> bool {
+    let mut changed = false;
+    for sprite in data.sprite_positions.values_mut().flatten() {
+        for pose in &mut sprite.poses {
+            let original = pose.triggers.clone();
+            pose.triggers.sort_unstable();
+            pose.triggers.dedup();
+            changed |= pose.triggers != original;
+        }
+    }
+    changed
 }
 
 fn repair_image_transforms(data: &mut AppStoreData) -> bool {
@@ -1215,6 +1257,7 @@ pub(crate) fn clear_dangling_group_ids(data: &mut AppStoreData) -> bool {
         &mut data.stat_positions,
         &mut data.graph_positions,
         &mut data.knob_positions,
+        &mut data.sprite_positions,
         &data.layer_groups,
     )
 }
@@ -1224,6 +1267,7 @@ pub(crate) fn clear_dangling_group_ids_in(
     stat_positions: &mut StatPositions,
     graph_positions: &mut GraphPositions,
     knob_positions: &mut KnobPositions,
+    sprite_positions: &mut SpritePositions,
     layer_groups: &LayerGroups,
 ) -> bool {
     let valid_ids: HashMap<&str, HashSet<&str>> = layer_groups
@@ -1273,6 +1317,14 @@ pub(crate) fn clear_dangling_group_ids_in(
         for knob in positions.iter_mut() {
             if is_dangling(tab, &knob.position.group_id) {
                 knob.position.group_id = None;
+                changed = true;
+            }
+        }
+    }
+    for (tab, sprites) in sprite_positions.iter_mut() {
+        for sprite in sprites {
+            if is_dangling(tab, &sprite.group_id) {
+                sprite.group_id = None;
                 changed = true;
             }
         }
@@ -1492,6 +1544,7 @@ fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
             value,
             has_valid_knob_identity,
         ),
+        "spritePositions" => recover_position_entries::<ReactiveSpritePosition>(field, value),
         "layerGroups" => recover_position_entries::<LayerGroupDef>(field, value),
         "keyCounters" => recover_key_counter_entries(value),
         "customCss" => recover_object_fields::<CustomCss>(field, value),
@@ -2258,9 +2311,10 @@ struct LegacyOverlayPosition {
 mod tests {
     use super::{
         load_store_from_path, migrate_local_fonts_to_app_data, migrate_sound_library_enabled,
-        normalize_state, parse_portable_asset_reference, recover_key_mapping_entries,
-        rehome_foreign_asset_references, repair_image_transforms, rgba_to_hex, AssetCategory,
-        LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH, LEGACY_PANEL_DETACH_ENABLED_KEY,
+        normalize_state, parse_portable_asset_reference, recover_collection_field,
+        recover_key_mapping_entries, rehome_foreign_asset_references, repair_image_transforms,
+        rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH,
+        LEGACY_PANEL_DETACH_ENABLED_KEY,
     };
     use crate::{
         defaults::{default_keys, default_positions},
@@ -2268,8 +2322,9 @@ mod tests {
             AppStoreData, CustomCssHistoryEntry, CustomFont, CustomTab, FontType, GraphPosition,
             GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
             KeyCounterColor, KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition,
-            LayerGroupDef, NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition,
-            StatType, StoredOverlayBounds, StoredOverlayNativePosition, TabCss, TabNoteSettings,
+            LayerGroupDef, NoteColor, OverlayBounds, ReactiveSpritePosition, SlotMatch,
+            SoundLibraryEntry, SpritePose, SpritePositions, StatPosition, StatType,
+            StoredOverlayBounds, StoredOverlayNativePosition, TabCss, TabNoteSettings,
             POSITION_COLLECTION_FIELDS,
         },
     };
@@ -2295,6 +2350,45 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         }
+    }
+
+    #[test]
+    fn sprite_collection_recovery_keeps_valid_entries_and_drops_invalid_entries() {
+        let valid = serde_json::to_value(ReactiveSpritePosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            ..ReactiveSpritePosition::default()
+        })
+        .unwrap();
+        let recovered = recover_collection_field(
+            "spritePositions",
+            &serde_json::json!({ "4key": [valid, { "width": "invalid" }] }),
+        )
+        .unwrap();
+        let sprites: SpritePositions = serde_json::from_value(recovered).unwrap();
+
+        assert_eq!(sprites["4key"].len(), 1);
+    }
+
+    #[test]
+    fn sprite_trigger_sets_are_sorted_and_deduplicated_during_normalization() {
+        let mut data = AppStoreData::default();
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                poses: vec![SpritePose {
+                    triggers: vec!["b".to_string(), "a".to_string(), "a".to_string()],
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+
+        let normalized = normalize_state(data);
+
+        assert_eq!(
+            normalized.sprite_positions["4key"][0].poses[0].triggers,
+            ["a", "b"]
+        );
     }
 
     #[test]

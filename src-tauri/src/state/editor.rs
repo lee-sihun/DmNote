@@ -11,8 +11,11 @@ use crate::{
     models::{
         AppStoreData, CustomTab, EditorBoundsV1, EditorCommitRequest, EditorDocumentV1,
         EditorElementTypeV1, EditorField, ElementShadowSpec, GraphPosition, KeyCounters,
-        KeyMappings, KeyPosition, KeySlot, KnobPosition, StatPosition,
-        EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
+        KeyMappings, KeyPosition, KeySlot, KnobPosition, ReactiveSpritePosition, SpriteTransform,
+        StatPosition, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
+        MAX_SPRITE_POSES, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
+        SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX,
+        SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
     },
 };
 
@@ -86,6 +89,7 @@ enum NativeElementKind {
     Stat,
     Graph,
     Knob,
+    Sprite,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -120,6 +124,14 @@ enum ViolationPropertyPath {
     },
     ImageTransform {
         name: &'static str,
+        property: &'static str,
+    },
+    SpriteProperty {
+        section: &'static str,
+        property: &'static str,
+    },
+    SpritePoseProperty {
+        pose_index: usize,
         property: &'static str,
     },
 }
@@ -1171,7 +1183,28 @@ fn native_id_alias_by_slot(
         nested_position_ids(&current.knob_positions),
         nested_position_ids(&candidate.knob_positions),
     );
+    collect(
+        sprite_position_ids(&current.sprite_positions),
+        sprite_position_ids(&candidate.sprite_positions),
+    );
     alias
+}
+
+fn sprite_position_ids(
+    collection: &HashMap<String, Vec<ReactiveSpritePosition>>,
+) -> Vec<(&String, Vec<&str>)> {
+    collection
+        .iter()
+        .map(|(mode, positions)| {
+            (
+                mode,
+                positions
+                    .iter()
+                    .map(|position| position.id.as_str())
+                    .collect(),
+            )
+        })
+        .collect()
 }
 
 fn key_position_ids(collection: &HashMap<String, Vec<KeyPosition>>) -> Vec<(&String, Vec<&str>)> {
@@ -1303,6 +1336,7 @@ fn collect_violations(
         .chain(document.stat_positions.keys())
         .chain(document.graph_positions.keys())
         .chain(document.knob_positions.keys())
+        .chain(document.sprite_positions.keys())
         .chain(document.layer_groups.keys())
         .cloned()
         .collect::<BTreeSet<_>>();
@@ -1343,6 +1377,12 @@ fn collect_violations(
     collect_collection_violations(
         "knobPositions",
         &document.knob_positions,
+        allowed_modes,
+        &mut violations,
+    );
+    collect_collection_violations(
+        "spritePositions",
+        &document.sprite_positions,
         allowed_modes,
         &mut violations,
     );
@@ -1407,6 +1447,7 @@ fn collect_violations(
     }
 
     collect_position_style_violations(document, &mut violations);
+    collect_sprite_violations(document, &mut violations);
     let group_ids = collect_group_violations(document, &mut violations);
     collect_group_reference_violations(document, &group_ids, &mut violations);
     violations
@@ -1521,6 +1562,197 @@ fn collect_position_style_violations(
                     violations,
                 );
             }
+        }
+    }
+}
+
+fn collect_sprite_violations(
+    document: &EditorDocumentV1,
+    violations: &mut BTreeSet<ValidationViolation>,
+) {
+    for (mode, sprites) in &document.sprite_positions {
+        for (sprite_index, sprite) in sprites.iter().enumerate() {
+            collect_sprite_transform_violations(
+                sprite,
+                mode,
+                sprite_index,
+                "idleTransform",
+                None,
+                &sprite.idle_transform,
+                violations,
+            );
+
+            for (property, value) in [("x", sprite.pivot.x), ("y", sprite.pivot.y)] {
+                if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+                    violations.insert(ValidationViolation::new(
+                        native_violation_key(
+                            NativeElementKind::Sprite,
+                            &sprite.id,
+                            "INVALID_SPRITE_PIVOT",
+                            ViolationPropertyPath::SpriteProperty {
+                                section: "pivot",
+                                property,
+                            },
+                            InvalidValueSignature::FloatBits(value.to_bits()),
+                        ),
+                        format!(
+                            "spritePositions {mode}[{sprite_index}].pivot.{property} must be between 0 and 1"
+                        ),
+                    ));
+                }
+            }
+
+            for (property, value, positive) in [
+                ("x", sprite.image_rect.x, false),
+                ("y", sprite.image_rect.y, false),
+                ("width", sprite.image_rect.width, true),
+                ("height", sprite.image_rect.height, true),
+            ] {
+                if !value.is_finite() || (positive && value <= 0.0) {
+                    violations.insert(ValidationViolation::new(
+                        native_violation_key(
+                            NativeElementKind::Sprite,
+                            &sprite.id,
+                            "INVALID_SPRITE_RECT",
+                            ViolationPropertyPath::SpriteProperty {
+                                section: "imageRect",
+                                property,
+                            },
+                            InvalidValueSignature::FloatBits(value.to_bits()),
+                        ),
+                        format!(
+                            "spritePositions {mode}[{sprite_index}].imageRect.{property} must be {}",
+                            if positive {
+                                "a positive finite number"
+                            } else {
+                                "a finite number"
+                            }
+                        ),
+                    ));
+                }
+            }
+
+            if sprite.transition_ms > SPRITE_TRANSITION_MS_MAX {
+                violations.insert(ValidationViolation::new(
+                    native_violation_key(
+                        NativeElementKind::Sprite,
+                        &sprite.id,
+                        "INVALID_SPRITE_TRANSITION",
+                        ViolationPropertyPath::SpriteProperty {
+                            section: "transition",
+                            property: "transitionMs",
+                        },
+                        InvalidValueSignature::Count(sprite.transition_ms as usize),
+                    ),
+                    format!(
+                        "spritePositions {mode}[{sprite_index}].transitionMs exceeds {SPRITE_TRANSITION_MS_MAX}"
+                    ),
+                ));
+            }
+
+            let mut trigger_sets = HashSet::new();
+            for (pose_index, pose) in sprite.poses.iter().enumerate() {
+                collect_sprite_transform_violations(
+                    sprite,
+                    mode,
+                    sprite_index,
+                    "poseTransform",
+                    Some(pose_index),
+                    &pose.transform,
+                    violations,
+                );
+                if pose.triggers.is_empty() {
+                    violations.insert(ValidationViolation::new(
+                        native_violation_key(
+                            NativeElementKind::Sprite,
+                            &sprite.id,
+                            "EMPTY_SPRITE_POSE_TRIGGERS",
+                            ViolationPropertyPath::SpritePoseProperty {
+                                pose_index,
+                                property: "triggers",
+                            },
+                            InvalidValueSignature::Count(pose_index),
+                        ),
+                        format!(
+                            "spritePositions {mode}[{sprite_index}].poses[{pose_index}].triggers must not be empty"
+                        ),
+                    ));
+                } else if !trigger_sets.insert(pose.triggers.clone()) {
+                    violations.insert(ValidationViolation::new(
+                        native_violation_key(
+                            NativeElementKind::Sprite,
+                            &sprite.id,
+                            "DUPLICATE_SPRITE_POSE_TRIGGERS",
+                            ViolationPropertyPath::SpritePoseProperty {
+                                pose_index,
+                                property: "triggers",
+                            },
+                            InvalidValueSignature::Text(format!("{:?}", pose.triggers)),
+                        ),
+                        format!(
+                            "spritePositions {mode}[{sprite_index}] contains duplicate pose trigger sets"
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+}
+
+fn collect_sprite_transform_violations(
+    sprite: &ReactiveSpritePosition,
+    mode: &str,
+    sprite_index: usize,
+    section: &'static str,
+    pose_index: Option<usize>,
+    transform: &SpriteTransform,
+    violations: &mut BTreeSet<ValidationViolation>,
+) {
+    for (property, value, minimum, maximum) in [
+        (
+            "x",
+            transform.x,
+            SPRITE_TRANSFORM_OFFSET_MIN,
+            SPRITE_TRANSFORM_OFFSET_MAX,
+        ),
+        (
+            "y",
+            transform.y,
+            SPRITE_TRANSFORM_OFFSET_MIN,
+            SPRITE_TRANSFORM_OFFSET_MAX,
+        ),
+        (
+            "rotation",
+            transform.rotation,
+            SPRITE_TRANSFORM_ROTATION_MIN,
+            SPRITE_TRANSFORM_ROTATION_MAX,
+        ),
+        (
+            "scale",
+            transform.scale,
+            SPRITE_TRANSFORM_SCALE_MIN,
+            SPRITE_TRANSFORM_SCALE_MAX,
+        ),
+    ] {
+        if !value.is_finite() || !(minimum..=maximum).contains(&value) {
+            violations.insert(ValidationViolation::new(
+                native_violation_key(
+                    NativeElementKind::Sprite,
+                    &sprite.id,
+                    "INVALID_SPRITE_TRANSFORM",
+                    pose_index.map_or(
+                        ViolationPropertyPath::SpriteProperty { section, property },
+                        |pose_index| ViolationPropertyPath::SpritePoseProperty {
+                            pose_index,
+                            property,
+                        },
+                    ),
+                    InvalidValueSignature::FloatBits(value.to_bits()),
+                ),
+                format!(
+                    "spritePositions {mode}[{sprite_index}].{section}.{property} must be between {minimum} and {maximum}"
+                ),
+            ));
         }
     }
 }
@@ -1713,6 +1945,11 @@ fn validate_aggregate_metric_limits(
         "knobPositions",
         &current.knob_positions,
         &candidate.knob_positions,
+    )?;
+    validate_collection_limits(
+        "spritePositions",
+        &current.sprite_positions,
+        &candidate.sprite_positions,
     )?;
     validate_collection_limits(
         "layerGroups",
@@ -1961,7 +2198,54 @@ fn validate_per_owner_metric_limits(
         }
     }
 
+    let current_sprite_positions = current
+        .sprite_positions
+        .values()
+        .flatten()
+        .map(|position| (position.id.as_str(), position))
+        .collect::<HashMap<_, _>>();
+    for (mode, sprites) in &candidate.sprite_positions {
+        for (index, sprite) in sprites.iter().enumerate() {
+            let current_sprite = match keying {
+                GrandfatherKeying::StableId => {
+                    current_sprite_positions.get(sprite.id.as_str()).copied()
+                }
+                #[cfg(test)]
+                GrandfatherKeying::ModeIndex => current
+                    .sprite_positions
+                    .get(mode)
+                    .and_then(|sprites| sprites.get(index)),
+                GrandfatherKeying::LegacyPresetModeIndex => current
+                    .sprite_positions
+                    .get(mode)
+                    .and_then(|sprites| sprites.get(index)),
+            };
+            validate_bounds_metrics(
+                &format!("spritePositions {mode}[{index}]"),
+                current_sprite.map(sprite_bounds),
+                sprite_bounds(sprite),
+                keying == GrandfatherKeying::LegacyPresetModeIndex,
+            )?;
+            validate_count_limit(
+                "COLLECTION_TOO_LARGE",
+                &format!("spritePositions {mode}[{index}] pose count"),
+                current_sprite.map_or(0, |sprite| sprite.poses.len()),
+                sprite.poses.len(),
+                MAX_SPRITE_POSES,
+            )?;
+        }
+    }
+
     Ok(())
+}
+
+fn sprite_bounds(sprite: &ReactiveSpritePosition) -> EditorBoundsV1 {
+    EditorBoundsV1 {
+        dx: sprite.dx,
+        dy: sprite.dy,
+        width: sprite.width,
+        height: sprite.height,
+    }
 }
 
 fn validate_key_slot_label_limits(
@@ -2007,6 +2291,7 @@ fn editor_modes(document: &EditorDocumentV1) -> BTreeSet<String> {
         .chain(document.stat_positions.keys())
         .chain(document.graph_positions.keys())
         .chain(document.knob_positions.keys())
+        .chain(document.sprite_positions.keys())
         .chain(document.layer_groups.keys())
         .cloned()
         .collect()
@@ -2026,6 +2311,11 @@ fn render_item_count(document: &EditorDocumentV1) -> usize {
             .sum::<usize>()
         + document
             .knob_positions
+            .values()
+            .map(Vec::len)
+            .sum::<usize>()
+        + document
+            .sprite_positions
             .values()
             .map(Vec::len)
             .sum::<usize>()
@@ -2125,12 +2415,12 @@ fn position_bounds(position: &KeyPosition) -> EditorBoundsV1 {
 
 pub(crate) fn validate_editor_op_bounds(
     op_index: usize,
-    current: Option<&KeyPosition>,
+    current: Option<EditorBoundsV1>,
     bounds: EditorBoundsV1,
 ) -> Result<(), EditorCommitError> {
     validate_bounds_metrics(
         &format!("editor op {op_index}.bounds"),
-        current.map(position_bounds),
+        current,
         bounds,
         false,
     )
@@ -2353,6 +2643,30 @@ fn collect_group_reference_violations(
                 ),
                 format!("{field} {mode}[{index}] references unknown group '{group_id}'"),
             ));
+        }
+    }
+    for (mode, sprites) in &document.sprite_positions {
+        for (index, sprite) in sprites.iter().enumerate() {
+            let Some(group_id) = sprite.group_id.as_deref() else {
+                continue;
+            };
+            if !group_ids
+                .get(mode)
+                .is_some_and(|ids| ids.contains(group_id))
+            {
+                violations.insert(ValidationViolation::new(
+                    native_violation_key(
+                        NativeElementKind::Sprite,
+                        &sprite.id,
+                        "UNKNOWN_GROUP_ID",
+                        ViolationPropertyPath::GroupReference,
+                        InvalidValueSignature::Text(group_id.to_string()),
+                    ),
+                    format!(
+                        "spritePositions {mode}[{index}] references unknown group '{group_id}'"
+                    ),
+                ));
+            }
         }
     }
 }
@@ -3512,6 +3826,40 @@ mod tests {
     }
 
     #[test]
+    fn sprite_patch_element_wire_accepts_generic_and_rejects_dedicated_fields() {
+        let base = serde_json::json!({
+            "baseRevision": 0,
+            "mutationId": Uuid::new_v4().to_string(),
+            "opsVersion": EDITOR_OPS_VERSION,
+            "ops": [{
+                "kind": "patchElement",
+                "elementType": "sprite",
+                "id": Uuid::new_v4().to_string(),
+                "patch": { "property": "hidden", "value": true },
+            }],
+        });
+        decode_editor_commit_request(base.clone()).unwrap();
+
+        for (property, value) in [
+            ("baseImage", serde_json::json!("sprite.png")),
+            ("poses", serde_json::json!([])),
+            ("pivot", serde_json::json!({ "x": 0.5, "y": 0.5 })),
+        ] {
+            let mut wire = base.clone();
+            wire["ops"][0]["patch"] = serde_json::json!({
+                "property": property,
+                "value": value,
+            });
+            let error = decode_editor_commit_request(wire).unwrap_err();
+            assert_eq!(
+                validation_code(&error),
+                Some("INVALID_REQUEST_PAYLOAD"),
+                "{property} must not be a patchElement property"
+            );
+        }
+    }
+
+    #[test]
     fn frozen_insert_wire_is_exact_through_nested_full_records() {
         let request = ops_request(vec![frozen_insert_op(Uuid::new_v4().to_string())]);
         let mut valid = serde_json::to_value(request).unwrap();
@@ -4226,7 +4574,7 @@ mod tests {
         };
         validate_editor_op_bounds(
             0,
-            Some(&grandfathered),
+            Some(position_bounds(&grandfathered)),
             EditorBoundsV1 {
                 width: MAX_DIMENSION + 1.0,
                 ..position_bounds(&grandfathered)

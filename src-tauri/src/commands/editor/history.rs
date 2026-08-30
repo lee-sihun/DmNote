@@ -405,6 +405,7 @@ fn preset_history_event_projection(
             stat_positions: snapshot.document.stat_positions.clone(),
             graph_positions: snapshot.document.graph_positions.clone(),
             knob_positions: snapshot.document.knob_positions.clone(),
+            sprite_positions: snapshot.document.sprite_positions.clone(),
             custom_tabs: snapshot.custom_tabs.clone(),
             selected_key_type: snapshot.selected_key_type.clone(),
             tab_note_overrides: snapshot.settings.tab_note_overrides.clone(),

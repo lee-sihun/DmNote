@@ -1686,6 +1686,7 @@ impl AppStore {
         target.apply_override_patches(&mut scratch);
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
         crate::state::migration::canonicalize_image_modes(&mut scratch);
+        crate::state::migration::normalize_sprite_triggers(&mut scratch);
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
@@ -1786,6 +1787,7 @@ impl AppStore {
         );
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
         crate::state::migration::canonicalize_image_modes(&mut scratch);
+        crate::state::migration::normalize_sprite_triggers(&mut scratch);
         let candidate = EditorDocumentV1::from_store(&scratch);
         validate_paired_update(&current, &candidate, true, true)?;
         scratch.editor_revision = current_store.editor_revision;
@@ -2319,6 +2321,7 @@ impl AppStore {
             .unwrap_or_default();
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
         crate::state::migration::canonicalize_image_modes(&mut scratch);
+        crate::state::migration::normalize_sprite_triggers(&mut scratch);
 
         // editorRevision은 이 트랜잭션만 관리
         scratch.editor_revision = current_store.editor_revision;
@@ -3496,6 +3499,7 @@ fn prepare_editor_patch_transition(
     candidate.apply_to_store(&mut scratch);
     crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
     crate::state::migration::canonicalize_image_modes(&mut scratch);
+    crate::state::migration::normalize_sprite_triggers(&mut scratch);
     candidate = EditorDocumentV1::from_store(&scratch);
 
     validate_paired_update(
@@ -3891,6 +3895,12 @@ fn collect_local_image_paths(app_data_dir: &Path, data: &AppStoreData) -> AssetR
     for position in iter_all_positions(data) {
         paths.collect(app_data_dir, position.active_image.as_ref());
         paths.collect(app_data_dir, position.inactive_image.as_ref());
+    }
+    for sprite in data.sprite_positions.values().flatten() {
+        paths.collect(app_data_dir, sprite.base_image.as_ref());
+        for pose in &sprite.poses {
+            paths.collect(app_data_dir, pose.image_override.as_ref());
+        }
     }
 
     collect_plugin_managed_asset_paths(app_data_dir, data, "images", &mut paths);
@@ -4847,9 +4857,10 @@ mod tests {
             GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
             NoteColor, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
             PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
-            SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
-            StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
-            EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
+            ReactiveSpritePosition, SavedPluginInstance, SettingsPatchInput, SlotMatch,
+            SoundLibraryEntry, SoundSource, SpritePose, StatPosition, StatType, TabCss,
+            TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
+            EDITOR_SCHEMA_VERSION,
         },
         services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
         state::{
@@ -5421,6 +5432,7 @@ mod tests {
                     EditorField::StatPositions,
                     EditorField::GraphPositions,
                     EditorField::KnobPositions,
+                    EditorField::SpritePositions,
                     EditorField::LayerGroups,
                 ],
                 PluginInstancesResetScope::Mode("4key".to_string()),
@@ -10954,6 +10966,77 @@ mod tests {
         assert_eq!(redone.knob_positions["4key"][2].sensitivity, 1.0);
 
         store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn reactive_sprite_editor_commit_patch_round_trips_without_field_loss() {
+        let dir = test_directory("reactive-sprite-editor-commit-round-trip-test");
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let sprite = ReactiveSpritePosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            base_image: Some("https://example.com/base.png".to_string()),
+            poses: vec![SpritePose {
+                pose_id: uuid::Uuid::new_v4().to_string(),
+                triggers: vec![
+                    "00000000-0000-4000-8000-000000000001".to_string(),
+                    "00000000-0000-4000-8000-000000000002".to_string(),
+                ],
+                image_override: Some("https://example.com/pose.png".to_string()),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        };
+        let sprite_positions =
+            crate::models::SpritePositions::from([("4key".to_string(), vec![sprite.clone()])]);
+
+        let committed = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    sprite_positions: Some(sprite_positions.clone()),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
+        assert_eq!(
+            committed.result.changed_fields,
+            [EditorField::SpritePositions]
+        );
+        assert_eq!(committed.document.sprite_positions, sprite_positions);
+        assert_eq!(
+            store.editor_get().document.sprite_positions["4key"],
+            [sprite]
+        );
+
+        let mut duplicate_trigger_sets = committed.document.sprite_positions.clone();
+        let mut duplicate_pose = duplicate_trigger_sets["4key"][0].poses[0].clone();
+        duplicate_pose.pose_id = uuid::Uuid::new_v4().to_string();
+        duplicate_pose.triggers.reverse();
+        duplicate_trigger_sets.get_mut("4key").unwrap()[0]
+            .poses
+            .push(duplicate_pose);
+        let error = store
+            .commit_editor_document(editor_request(
+                committed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    sprite_positions: Some(duplicate_trigger_sets),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("DUPLICATE_SPRITE_POSE_TRIGGERS")
+        );
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -21329,6 +21412,62 @@ mod tests {
             assert!(image_paths.contains(&path_identity_key(&root.join(format!("{kind}.png")))));
             assert!(sound_paths.contains(&path_identity_key(&root.join(format!("{kind}.wav")))));
         }
+    }
+
+    #[test]
+    fn reactive_sprite_images_survive_explicit_orphan_sweep() {
+        let dir = test_directory("reactive-sprite-image-sweep-test");
+        let images = dir.join("images");
+        std::fs::create_dir_all(&images).unwrap();
+        let base_image = images.join("sprite-base.png");
+        let first_pose_image = images.join("sprite-pose-first.png");
+        let second_pose_image = images.join("sprite-pose-second.png");
+        let orphan_image = images.join("orphan.png");
+        for path in [
+            &base_image,
+            &first_pose_image,
+            &second_pose_image,
+            &orphan_image,
+        ] {
+            std::fs::write(path, b"image").unwrap();
+        }
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        legacy_editor_commit(&store, &[EditorField::SpritePositions], |data| {
+            data.sprite_positions.insert(
+                "4key".to_string(),
+                vec![ReactiveSpritePosition {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    base_image: Some(base_image.to_string_lossy().into_owned()),
+                    poses: vec![
+                        SpritePose {
+                            pose_id: uuid::Uuid::new_v4().to_string(),
+                            triggers: vec![uuid::Uuid::new_v4().to_string()],
+                            image_override: Some(first_pose_image.to_string_lossy().into_owned()),
+                            ..SpritePose::default()
+                        },
+                        SpritePose {
+                            pose_id: uuid::Uuid::new_v4().to_string(),
+                            triggers: vec![uuid::Uuid::new_v4().to_string()],
+                            image_override: Some(second_pose_image.to_string_lossy().into_owned()),
+                            ..SpritePose::default()
+                        },
+                    ],
+                    ..ReactiveSpritePosition::default()
+                }],
+            );
+        })
+        .unwrap();
+
+        store.cleanup_orphan_assets_now().unwrap();
+
+        assert!(base_image.exists());
+        assert!(first_pose_image.exists());
+        assert!(second_pose_image.exists());
+        assert!(!orphan_image.exists());
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -285,6 +285,9 @@ fn preserve_editor_before_values(merged: &mut EditorPatchV1, first: &EditorPatch
     if first.knob_positions.is_some() {
         merged.knob_positions.clone_from(&first.knob_positions);
     }
+    if first.sprite_positions.is_some() {
+        merged.sprite_positions.clone_from(&first.sprite_positions);
+    }
     if first.layer_groups.is_some() {
         merged.layer_groups.clone_from(&first.layer_groups);
     }

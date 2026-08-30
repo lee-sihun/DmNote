@@ -185,6 +185,7 @@ pub type KeyCounters = HashMap<String, HashMap<String, u32>>;
 pub type StatPositions = HashMap<String, Vec<StatPosition>>;
 pub type GraphPositions = HashMap<String, Vec<GraphPosition>>;
 pub type KnobPositions = HashMap<String, Vec<KnobPosition>>;
+pub type SpritePositions = HashMap<String, Vec<ReactiveSpritePosition>>;
 
 const DEFAULT_GRADIENT_ANGLE: f64 = 90.0;
 const MAX_GRADIENT_STOPS: usize = 8;
@@ -878,6 +879,189 @@ pub struct KnobPosition {
     pub reverse: bool,
     #[serde(flatten)]
     pub position: KeyPosition,
+}
+
+pub const SPRITE_TRANSFORM_OFFSET_MIN: f64 = -2_000.0;
+pub const SPRITE_TRANSFORM_OFFSET_MAX: f64 = 2_000.0;
+pub const SPRITE_TRANSFORM_ROTATION_MIN: f64 = -180.0;
+pub const SPRITE_TRANSFORM_ROTATION_MAX: f64 = 180.0;
+pub const SPRITE_TRANSFORM_SCALE_MIN: f64 = 0.1;
+pub const SPRITE_TRANSFORM_SCALE_MAX: f64 = 10.0;
+pub const SPRITE_TRANSITION_MS_MAX: u32 = 1_000;
+pub const MAX_SPRITE_POSES: usize = 64;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl Default for SpriteRect {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 200.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteAnchor {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl Default for SpriteAnchor {
+    fn default() -> Self {
+        Self { x: 0.5, y: 0.5 }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteTransform {
+    pub x: f64,
+    pub y: f64,
+    pub rotation: f64,
+    pub scale: f64,
+}
+
+impl Default for SpriteTransform {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            rotation: 0.0,
+            scale: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SpriteImageFit {
+    #[default]
+    Cover,
+    Contain,
+    Fill,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SpritePoseMatchMode {
+    #[default]
+    Exact,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SpriteActivation {
+    #[default]
+    WhileHeld,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpritePose {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pose_id: String,
+    pub triggers: Vec<String>,
+    #[serde(default)]
+    pub match_mode: SpritePoseMatchMode,
+    pub transform: SpriteTransform,
+    #[serde(default)]
+    pub image_override: Option<String>,
+}
+
+impl Default for SpritePose {
+    fn default() -> Self {
+        Self {
+            pose_id: String::new(),
+            triggers: Vec::new(),
+            match_mode: SpritePoseMatchMode::Exact,
+            transform: SpriteTransform::default(),
+            image_override: None,
+        }
+    }
+}
+
+fn default_sprite_transition_ms() -> u32 {
+    90
+}
+
+fn default_sprite_transition_easing() -> String {
+    "cubic-bezier(0.4, 0, 0.2, 1)".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactiveSpritePosition {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    pub dx: f64,
+    pub dy: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(default)]
+    pub hidden: bool,
+    #[serde(default)]
+    pub z_index: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
+    #[serde(default)]
+    pub class_name: Option<String>,
+    #[serde(default)]
+    pub use_inline_styles: Option<bool>,
+    #[serde(default)]
+    pub base_image: Option<String>,
+    #[serde(default)]
+    pub image_fit: Option<SpriteImageFit>,
+    pub image_rect: SpriteRect,
+    pub pivot: SpriteAnchor,
+    pub idle_transform: SpriteTransform,
+    #[serde(default)]
+    pub poses: Vec<SpritePose>,
+    #[serde(default)]
+    pub activation: SpriteActivation,
+    #[serde(default = "default_sprite_transition_ms")]
+    pub transition_ms: u32,
+    #[serde(default = "default_sprite_transition_easing")]
+    pub transition_easing: String,
+}
+
+impl Default for ReactiveSpritePosition {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            dx: 0.0,
+            dy: 0.0,
+            width: 200.0,
+            height: 200.0,
+            hidden: false,
+            z_index: None,
+            layer_name: None,
+            group_id: None,
+            class_name: None,
+            use_inline_styles: None,
+            base_image: None,
+            image_fit: None,
+            image_rect: SpriteRect::default(),
+            pivot: SpriteAnchor::default(),
+            idle_transform: SpriteTransform::default(),
+            poses: Vec::new(),
+            activation: SpriteActivation::WhileHeld,
+            transition_ms: default_sprite_transition_ms(),
+            transition_easing: default_sprite_transition_easing(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -2475,6 +2659,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub knob_positions: KnobPositions,
     #[serde(default)]
+    pub sprite_positions: SpritePositions,
+    #[serde(default)]
     pub layer_groups: LayerGroups,
     #[serde(default)]
     pub key_counters: KeyCounters,
@@ -2562,6 +2748,7 @@ impl Default for AppStoreData {
             stat_positions: StatPositions::new(),
             graph_positions: GraphPositions::new(),
             knob_positions: KnobPositions::new(),
+            sprite_positions: SpritePositions::new(),
             layer_groups: LayerGroups::new(),
             key_counters: KeyCounters::new(),
             background_color: "transparent".to_string(),
@@ -2837,6 +3024,7 @@ pub struct BootstrapPayload {
     pub stat_positions: StatPositions,
     pub graph_positions: GraphPositions,
     pub knob_positions: KnobPositions,
+    pub sprite_positions: SpritePositions,
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
     pub current_mode: String,

@@ -4,7 +4,7 @@ use super::{
     AppStoreData, GradientSpec, GradientStop, GraphPosition, GraphPositions, GraphType, ImageFit,
     ImageMode, KeyCounterAlign, KeyCounterAlignMode, KeyCounterPlacement, KeyCounters, KeyMappings,
     KeyPosition, KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, NoteAlignment,
-    SlotMatch, StatPosition, StatPositions, StatType,
+    SlotMatch, SpritePositions, StatPosition, StatPositions, StatType,
 };
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
@@ -19,6 +19,7 @@ pub enum EditorField {
     StatPositions,
     GraphPositions,
     KnobPositions,
+    SpritePositions,
     LayerGroups,
 }
 
@@ -31,6 +32,8 @@ pub struct EditorDocumentV1 {
     pub stat_positions: StatPositions,
     pub graph_positions: GraphPositions,
     pub knob_positions: KnobPositions,
+    #[serde(default)]
+    pub sprite_positions: SpritePositions,
     pub layer_groups: LayerGroups,
 }
 
@@ -43,6 +46,7 @@ impl EditorDocumentV1 {
             stat_positions: store.stat_positions.clone(),
             graph_positions: store.graph_positions.clone(),
             knob_positions: store.knob_positions.clone(),
+            sprite_positions: store.sprite_positions.clone(),
             layer_groups: store.layer_groups.clone(),
         }
     }
@@ -53,6 +57,7 @@ impl EditorDocumentV1 {
         store.stat_positions = self.stat_positions.clone();
         store.graph_positions = self.graph_positions.clone();
         store.knob_positions = self.knob_positions.clone();
+        store.sprite_positions = self.sprite_positions.clone();
         store.layer_groups = self.layer_groups.clone();
     }
 
@@ -71,6 +76,9 @@ impl EditorDocumentV1 {
         }
         if let Some(value) = patch.knob_positions.as_ref() {
             self.knob_positions = value.clone();
+        }
+        if let Some(value) = patch.sprite_positions.as_ref() {
+            self.sprite_positions = value.clone();
         }
         if let Some(value) = patch.layer_groups.as_ref() {
             self.layer_groups = value.clone();
@@ -94,6 +102,9 @@ impl EditorDocumentV1 {
         if self.knob_positions != next.knob_positions {
             fields.push(EditorField::KnobPositions);
         }
+        if self.sprite_positions != next.sprite_positions {
+            fields.push(EditorField::SpritePositions);
+        }
         if self.layer_groups != next.layer_groups {
             fields.push(EditorField::LayerGroups);
         }
@@ -116,6 +127,9 @@ impl EditorDocumentV1 {
                 }
                 EditorField::KnobPositions => {
                     patch.knob_positions = Some(self.knob_positions.clone());
+                }
+                EditorField::SpritePositions => {
+                    patch.sprite_positions = Some(self.sprite_positions.clone());
                 }
                 EditorField::LayerGroups => {
                     patch.layer_groups = Some(self.layer_groups.clone());
@@ -141,6 +155,8 @@ pub struct EditorPatchV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub knob_positions: Option<KnobPositions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sprite_positions: Option<SpritePositions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer_groups: Option<LayerGroups>,
 }
 
@@ -153,6 +169,7 @@ impl Default for EditorPatchV1 {
             stat_positions: None,
             graph_positions: None,
             knob_positions: None,
+            sprite_positions: None,
             layer_groups: None,
         }
     }
@@ -166,6 +183,7 @@ impl EditorPatchV1 {
             EditorField::StatPositions => self.stat_positions.is_some(),
             EditorField::GraphPositions => self.graph_positions.is_some(),
             EditorField::KnobPositions => self.knob_positions.is_some(),
+            EditorField::SpritePositions => self.sprite_positions.is_some(),
             EditorField::LayerGroups => self.layer_groups.is_some(),
         }
     }
@@ -177,6 +195,7 @@ impl EditorPatchV1 {
             EditorField::StatPositions,
             EditorField::GraphPositions,
             EditorField::KnobPositions,
+            EditorField::SpritePositions,
             EditorField::LayerGroups,
         ]
         .into_iter()
@@ -192,6 +211,7 @@ pub enum EditorElementTypeV1 {
     Stat,
     Graph,
     Knob,
+    Sprite,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -638,6 +658,9 @@ pub enum EditorFrozenElementV1 {
     Knob {
         position: KnobPosition,
     },
+    Sprite {
+        position: super::ReactiveSpritePosition,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -674,15 +697,17 @@ impl EditorFrozenElementV1 {
             Self::Stat { position } => &position.position.id,
             Self::Graph { position } => &position.position.id,
             Self::Knob { position } => &position.position.id,
+            Self::Sprite { position } => &position.id,
         }
     }
 
-    pub(crate) fn position_mut(&mut self) -> &mut KeyPosition {
+    pub(crate) fn key_position_mut(&mut self) -> Option<&mut KeyPosition> {
         match self {
-            Self::Key { position, .. } => position,
-            Self::Stat { position } => &mut position.position,
-            Self::Graph { position } => &mut position.position,
-            Self::Knob { position } => &mut position.position,
+            Self::Key { position, .. } => Some(position),
+            Self::Stat { position } => Some(&mut position.position),
+            Self::Graph { position } => Some(&mut position.position),
+            Self::Knob { position } => Some(&mut position.position),
+            Self::Sprite { .. } => None,
         }
     }
 }

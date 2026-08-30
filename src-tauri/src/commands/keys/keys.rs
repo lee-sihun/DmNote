@@ -122,6 +122,7 @@ fn reset_all_editor_data(
     store.stat_positions = stat_positions.clone();
     store.graph_positions.clear();
     store.knob_positions.clear();
+    store.sprite_positions.clear();
     store.layer_groups.clear();
     store.key_counters = zeroed_counters(keys);
     store.custom_tabs.clear();
@@ -217,6 +218,7 @@ fn apply_reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKi
 
     store.graph_positions.insert(mode.to_string(), Vec::new());
     store.knob_positions.insert(mode.to_string(), Vec::new());
+    store.sprite_positions.insert(mode.to_string(), Vec::new());
     store.layer_groups.remove(mode);
     store.tab_css_overrides.remove(mode);
     store.tab_note_overrides.remove(mode);
@@ -268,6 +270,19 @@ fn mode_positions_equal_without_ids(
     for position in current_knobs.iter_mut().flatten() {
         position.position.id.clear();
     }
+
+    let mut current_sprites = current.sprite_positions.get(mode).cloned();
+    let mut candidate_sprites = candidate.sprite_positions.get(mode).cloned();
+    for sprite in current_sprites
+        .iter_mut()
+        .chain(candidate_sprites.iter_mut())
+        .flatten()
+    {
+        sprite.id.clear();
+        for pose in &mut sprite.poses {
+            pose.pose_id.clear();
+        }
+    }
     for position in candidate_knobs.iter_mut().flatten() {
         position.position.id.clear();
     }
@@ -276,6 +291,7 @@ fn mode_positions_equal_without_ids(
         && optional_collections_equal(current_stats.as_deref(), candidate_stats.as_deref())
         && optional_collections_equal(current_graphs.as_deref(), candidate_graphs.as_deref())
         && optional_collections_equal(current_knobs.as_deref(), candidate_knobs.as_deref())
+        && optional_collections_equal(current_sprites.as_deref(), candidate_sprites.as_deref())
 }
 
 fn optional_collections_equal<T: PartialEq>(
@@ -378,6 +394,7 @@ fn delete_custom_tab_data(store: &mut AppStoreData, id: &str, plan: &CustomTabDe
     store.stat_positions.remove(id);
     store.graph_positions.remove(id);
     store.knob_positions.remove(id);
+    store.sprite_positions.remove(id);
     store.layer_groups.remove(id);
     store.tab_css_overrides.remove(id);
     store.tab_note_overrides.remove(id);
@@ -557,6 +574,7 @@ fn keys_reset_all_inner(
                 EditorField::StatPositions,
                 EditorField::GraphPositions,
                 EditorField::KnobPositions,
+                EditorField::SpritePositions,
                 EditorField::LayerGroups,
             ],
             PluginInstancesResetScope::All,
@@ -590,6 +608,7 @@ fn keys_reset_all_inner(
     let stat_positions = transaction.change.document.stat_positions;
     let graph_positions = transaction.change.document.graph_positions;
     let knob_positions = transaction.change.document.knob_positions;
+    let sprite_positions = transaction.change.document.sprite_positions;
     let layer_groups = transaction.change.document.layer_groups;
     let selected_key_type = transaction.change.selected_key_type;
     let custom_tabs: Vec<CustomTab> = Vec::new();
@@ -604,6 +623,7 @@ fn keys_reset_all_inner(
     emit_best_effort(app, "statPositions:changed", &stat_positions);
     emit_best_effort(app, "graphPositions:changed", &graph_positions);
     emit_best_effort(app, "knobPositions:changed", &knob_positions);
+    emit_best_effort(app, "spritePositions:changed", &sprite_positions);
     emit_best_effort(app, "layerGroups:changed", &layer_groups);
     emit_best_effort(
         app,
@@ -672,6 +692,7 @@ fn keys_reset_mode_inner(
                 EditorField::StatPositions,
                 EditorField::GraphPositions,
                 EditorField::KnobPositions,
+                EditorField::SpritePositions,
                 EditorField::LayerGroups,
             ],
             PluginInstancesResetScope::Mode(mode.clone()),
@@ -718,6 +739,11 @@ fn keys_reset_mode_inner(
         app,
         "knobPositions:changed",
         &transaction.change.document.knob_positions,
+    );
+    emit_best_effort(
+        app,
+        "spritePositions:changed",
+        &transaction.change.document.sprite_positions,
     );
     emit_best_effort(
         app,
@@ -898,6 +924,7 @@ fn custom_tabs_delete_inner(
                             EditorField::StatPositions,
                             EditorField::GraphPositions,
                             EditorField::KnobPositions,
+                            EditorField::SpritePositions,
                             EditorField::LayerGroups,
                         ],
                         plugin_instances_reset: PluginInstancesResetScope::Mode(id.clone()),
@@ -963,6 +990,11 @@ fn custom_tabs_delete_inner(
         app,
         "knobPositions:changed",
         &transaction.change.document.knob_positions,
+    );
+    emit_best_effort(
+        app,
+        "spritePositions:changed",
+        &transaction.change.document.sprite_positions,
     );
     emit_best_effort(
         app,
@@ -1723,6 +1755,7 @@ mod tests {
                     EditorField::StatPositions,
                     EditorField::GraphPositions,
                     EditorField::KnobPositions,
+                    EditorField::SpritePositions,
                     EditorField::LayerGroups,
                 ],
                 PluginInstancesResetScope::Mode(reset_mode.to_string()),
@@ -1790,6 +1823,7 @@ mod tests {
                     EditorField::StatPositions,
                     EditorField::GraphPositions,
                     EditorField::KnobPositions,
+                    EditorField::SpritePositions,
                     EditorField::LayerGroups,
                 ],
                 PluginInstancesResetScope::Mode(mode.to_string()),
@@ -1855,6 +1889,7 @@ mod tests {
                     EditorField::StatPositions,
                     EditorField::GraphPositions,
                     EditorField::KnobPositions,
+                    EditorField::SpritePositions,
                     EditorField::LayerGroups,
                 ],
                 PluginInstancesResetScope::Mode(reset_mode.to_string()),
@@ -1926,6 +1961,7 @@ mod tests {
                     EditorField::StatPositions,
                     EditorField::GraphPositions,
                     EditorField::KnobPositions,
+                    EditorField::SpritePositions,
                     EditorField::LayerGroups,
                 ],
                 PluginInstancesResetScope::Mode(mode.to_string()),
@@ -1998,6 +2034,7 @@ mod tests {
                     EditorField::StatPositions,
                     EditorField::GraphPositions,
                     EditorField::KnobPositions,
+                    EditorField::SpritePositions,
                     EditorField::LayerGroups,
                 ],
                 PluginInstancesResetScope::All,
@@ -2060,6 +2097,7 @@ mod tests {
                     EditorField::StatPositions,
                     EditorField::GraphPositions,
                     EditorField::KnobPositions,
+                    EditorField::SpritePositions,
                     EditorField::LayerGroups,
                 ],
                 PluginInstancesResetScope::All,
@@ -2136,6 +2174,7 @@ mod tests {
                     EditorField::StatPositions,
                     EditorField::GraphPositions,
                     EditorField::KnobPositions,
+                    EditorField::SpritePositions,
                     EditorField::LayerGroups,
                 ],
                 PluginInstancesResetScope::All,
