@@ -27,8 +27,6 @@ import {
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
   DEFAULT_ELEMENT_FONT_BOLD,
-  DEFAULT_ELEMENT_SHADOW_SPEC,
-  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
 import {
   elementImageReplacesSurface,
@@ -42,12 +40,6 @@ import {
 } from '@hooks/pickers/useBatchElementBinding';
 import { usePanelNav } from '../PanelNavContext';
 import BatchGeometrySection from './BatchGeometrySection';
-import ShadowControls from '../ShadowControls';
-import {
-  elementShadowLeafFromPartial,
-  resolveElementShadowForPosition,
-  type ElementShadowSpec,
-} from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type {
@@ -61,6 +53,7 @@ import FontWeightDropdown from '../FontWeightDropdown';
 import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 import { aggregateMixedValue } from '@utils/core/mixedValue';
 import BatchSoundSection from './BatchSoundSection';
+import BatchShadowSection from './BatchShadowSection';
 
 export { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchSoundSection';
 
@@ -278,82 +271,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
   const fontColorFor = (position: KeyPosition, active: boolean) =>
     colorPairFor(position, 'fontColor', active).color?.trim() || undefined;
-
-  const resolvedShadowFor = (position: KeyPosition, active: boolean) => {
-    return resolveElementShadowForPosition({
-      position,
-      elementType: shadowKind,
-      active,
-      defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
-      defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    });
-  };
-
-  const getBatchShadow = (active: boolean) => {
-    const fallback = active
-      ? DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC
-      : DEFAULT_ELEMENT_SHADOW_SPEC;
-    const mixedValue = active ? activeMixedValue : getMixedValue;
-    const enabled = mixedValue(
-      (position) => resolvedShadowFor(position, active).enabled,
-      fallback.enabled,
-    );
-    const color = mixedValue(
-      (position) => resolvedShadowFor(position, active).color,
-      fallback.color,
-    );
-    const offsetX = mixedValue(
-      (position) => resolvedShadowFor(position, active).offsetX,
-      fallback.offsetX,
-    );
-    const offsetY = mixedValue(
-      (position) => resolvedShadowFor(position, active).offsetY,
-      fallback.offsetY,
-    );
-    const blur = mixedValue(
-      (position) => resolvedShadowFor(position, active).blur,
-      fallback.blur,
-    );
-
-    return {
-      value: {
-        enabled: enabled.value,
-        color: color.value,
-        offsetX: offsetX.value,
-        offsetY: offsetY.value,
-        blur: blur.value,
-      },
-      // 대표값은 첫 요소 기준 — 토글 표시용 "하나라도 켜짐"은 별도 계산
-      enabledAny: enabled.value || enabled.isMixed,
-      isMixed:
-        enabled.isMixed ||
-        color.isMixed ||
-        offsetX.isMixed ||
-        offsetY.isMixed ||
-        blur.isMixed,
-    };
-  };
-
-  const batchIdleShadow = getBatchShadow(false);
-  const batchActiveShadow = getBatchShadow(true);
-
-  const handleShadowChange = (
-    state: 'idle' | 'active',
-    _shadow: ElementShadowSpec,
-    patch: Partial<ElementShadowSpec>,
-  ) => {
-    const leaf = elementShadowLeafFromPartial(patch);
-    if (!leaf) return;
-    onShadowCommit?.(
-      state === 'active'
-        ? { property: 'activeShadow', value: leaf }
-        : { property: 'shadow', value: leaf },
-    );
-  };
-
-  const handleShadowEnabledChange = (enabled: boolean) => {
-    onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
-  };
 
   // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
   const getDisplayTextMixed = (): { isMixed: boolean; value: string } => {
@@ -684,26 +601,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       </PropertySection>
 
       {showShadowControls ? (
-        <ShadowControls
-          idleShadow={batchIdleShadow.value}
-          activeShadow={batchActiveShadow.value}
-          idleMixed={batchIdleShadow.isMixed}
-          activeMixed={batchActiveShadow.isMixed}
-          anyEnabled={
-            batchIdleShadow.enabledAny ||
-            (shadowActiveState && batchActiveShadow.enabledAny)
-          }
+        <BatchShadowSection
+          getMixedValue={getMixedValue}
+          getActiveMixedValue={activeMixedValue}
           showActiveState={shadowActiveState}
-          previewAnchor={{ kind: 'batch' }}
-          onChange={handleShadowChange}
-          onPreview={(state, leaf) =>
-            onStylePropertyPreview?.({
-              property: state === 'active' ? 'activeShadow' : 'shadow',
-              value: leaf,
-            })
-          }
-          onPreviewCancel={() => editGestureController.cancel()}
-          onEnabledChange={handleShadowEnabledChange}
+          shadowKind={shadowKind}
+          onShadowCommit={onShadowCommit}
+          onStylePropertyPreview={onStylePropertyPreview}
           panelElement={panelElement}
           t={t}
         />
