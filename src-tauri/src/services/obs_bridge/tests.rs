@@ -3,6 +3,18 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream};
 
 type TestWebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+async fn tcp_pair() -> (TcpStream, TcpStream) {
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("TCP listener 바인딩 실패");
+    let address = listener.local_addr().expect("TCP listener 주소 조회 실패");
+    let (client, server) = tokio::join!(TcpStream::connect(address), listener.accept());
+    (
+        client.expect("TCP client 연결 실패"),
+        server.expect("TCP server accept 실패").0,
+    )
+}
+
 async fn receive_envelope(ws: &mut TestWebSocket, expected_type: &str) -> ObsEnvelope {
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
@@ -312,6 +324,106 @@ fn http_host_validation_rejects_missing_or_duplicate_headers() {
     assert!(!has_allowed_http_host(
         "GET / HTTP/1.1\r\nHost: localhost\r\nHost: example.com\r\n\r\n"
     ));
+}
+
+#[test]
+fn http_header_parser_stops_at_the_first_empty_line_and_preserves_upgrade_tokens() {
+    let headers =
+        "GET / HTTP/1.1\r\nhOsT: localhost:34891\r\nUpgrade: keep-alive, WebSocket\r\n\r\n";
+    let request = format!("{headers}Host: example.com\r\n");
+
+    assert_eq!(http_header_end(request.as_bytes()), Some(headers.len()));
+    assert_eq!(
+        http_header_values(&request, "host"),
+        vec!["localhost:34891"]
+    );
+    assert!(is_websocket_upgrade_request(&request));
+    assert_eq!(http_header_end(b"GET / HTTP/1.1\n\n"), None);
+}
+
+#[test]
+fn websocket_validation_reports_host_before_origin_and_uses_forbidden_status() {
+    let invalid_host_and_origin = WsRequest::builder()
+        .header(header::HOST, "example.com")
+        .header(header::ORIGIN, "https://example.com")
+        .body(())
+        .unwrap();
+    assert_eq!(
+        validate_websocket_request(&invalid_host_and_origin),
+        Err("Invalid Host header")
+    );
+
+    let duplicate_origin = WsRequest::builder()
+        .header(header::HOST, "localhost:34891")
+        .header(header::ORIGIN, "http://localhost:3400")
+        .header(header::ORIGIN, "http://127.0.0.1:3400")
+        .body(())
+        .unwrap();
+    assert_eq!(
+        validate_websocket_request(&duplicate_origin),
+        Err("Invalid Origin header")
+    );
+
+    let response = websocket_forbidden_response("Invalid Host header");
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response.body().as_deref(), Some("Invalid Host header"));
+}
+
+#[tokio::test]
+async fn prefixed_stream_replays_partial_prefix_before_socket_bytes() {
+    let (mut client, server) = tcp_pair().await;
+    client
+        .write_all(b"socket")
+        .await
+        .expect("socket 바이트 전송 실패");
+
+    let mut stream = PrefixedStream::new(b"header".to_vec(), server);
+    let mut first = [0u8; 2];
+    stream
+        .read_exact(&mut first)
+        .await
+        .expect("prefix 첫 조각 수신 실패");
+    assert_eq!(&first, b"he");
+
+    let mut remaining = [0u8; 10];
+    stream
+        .read_exact(&mut remaining)
+        .await
+        .expect("prefix와 socket 바이트 수신 실패");
+    assert_eq!(&remaining, b"adersocket");
+}
+
+#[tokio::test]
+async fn transport_io_preserves_incomplete_header_error_and_empty_response_bytes() {
+    let (mut incomplete_client, mut incomplete_server) = tcp_pair().await;
+    incomplete_client
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost")
+        .await
+        .expect("미완성 header 전송 실패");
+    incomplete_client
+        .shutdown()
+        .await
+        .expect("미완성 header 연결 종료 실패");
+
+    let error = read_http_request_headers(&mut incomplete_server)
+        .await
+        .expect_err("미완성 header가 허용됨");
+    assert_eq!(error.kind(), std::io::ErrorKind::UnexpectedEof);
+    assert_eq!(error.to_string(), "incomplete HTTP request headers");
+
+    let (mut response_client, mut response_server) = tcp_pair().await;
+    write_empty_http_response(&mut response_server, "400 Bad Request").await;
+    drop(response_server);
+
+    let mut response = Vec::new();
+    response_client
+        .read_to_end(&mut response)
+        .await
+        .expect("빈 HTTP 응답 수신 실패");
+    assert_eq!(
+        response,
+        b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
 }
 
 #[test]
