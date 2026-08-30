@@ -35,6 +35,7 @@ import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { getPluginDisplayName } from '@utils/plugin/pluginUtils';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
+import { useObsSettingsController } from '@components/main/useObsSettingsController';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { SupportedLocale } from '@contexts/I18nContextDef';
@@ -46,9 +47,6 @@ import { cssApi } from '@api/modules/cssApi';
 import { jsApi } from '@api/modules/jsApi';
 import { keysApi } from '@api/modules/keysApi';
 import { appApi, windowApi } from '@api/modules/appApi';
-import { obsApi } from '@api/modules/obsApi';
-import type { ObsStatus } from '@src/types/obs';
-import { DEFAULT_OBS_PORT } from '@src/types/obs';
 import { assertCanonicalEditorDocument } from '@src/types/editor';
 
 interface SettingsProps {
@@ -130,19 +128,10 @@ const Settings = ({
   const pendingPluginRef = useRef<string | null>(null);
   const removingPluginRef = useRef<string | null>(null);
   const resetAllRef = useRef(false);
-  const regeneratingObsTokenRef = useRef(false);
   const angleModeChangeRef = useRef(false);
   const pendingResizeAnchorRef = useRef<OverlayResizeAnchor | null>(null);
   const applyingResizeAnchorRef = useRef(false);
   const confirmedResizeAnchorRef = useRef(overlayResizeAnchor);
-
-  // OBS 모드
-  const [obsStatus, setObsStatus] = useState<ObsStatus>({
-    running: false,
-    port: DEFAULT_OBS_PORT,
-    clientCount: 0,
-  });
-  const obsTogglingRef = useRef(false);
 
   useEffect(() => {
     if (!applyingResizeAnchorRef.current) {
@@ -180,39 +169,12 @@ const Settings = ({
     }
   }, [isMacOS, angleMode, setAngleMode]);
 
-  // OBS 상태 이벤트 구독 + clientCount 폴링
-  useEffect(() => {
-    let mounted = true;
-    obsApi
-      .status()
-      .then((status) => {
-        if (mounted) setObsStatus(status);
-      })
-      .catch(() => undefined);
-
-    // start/stop 이벤트 구독
-    const unsubscribe = obsApi.onStatus((status) => {
-      if (mounted) setObsStatus(status);
-    });
-
-    // clientCount는 connect/disconnect 이벤트가 없으므로 폴링 유지
-    const interval = setInterval(async () => {
-      try {
-        const status = await obsApi.status();
-        if (mounted) {
-          setObsStatus((prev) =>
-            prev.clientCount === status.clientCount ? prev : status,
-          );
-        }
-      } catch {}
-    }, 5000);
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-      clearInterval(interval);
-    };
-  }, []);
+  const {
+    obsStatus,
+    handleObsToggle,
+    handleObsCopyUrl,
+    handleObsRegenerateToken,
+  } = useObsSettingsController({ t, showAlert, showConfirm });
 
   const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
     { value: 'ko', label: '한국어' },
@@ -417,62 +379,6 @@ const Settings = ({
       setAutoUpdateEnabled(!next);
       console.error('Failed to toggle auto update', error);
     }
-  };
-
-  const handleObsToggle = async (): Promise<void> => {
-    if (obsTogglingRef.current) return;
-    const next = !obsStatus.running;
-    setObsStatus((prev) => ({ ...prev, running: next }));
-    obsTogglingRef.current = true;
-    try {
-      const status = next ? await obsApi.start() : await obsApi.stop();
-      setObsStatus(status);
-      await settingsApi.update({ obsModeEnabled: next });
-    } catch (error) {
-      console.error('Failed to toggle OBS mode', error);
-      setObsStatus((prev) => ({ ...prev, running: !next }));
-      showAlert?.(
-        next ? t('settings.obsStartFailed') : t('settings.obsStopFailed'),
-      );
-    } finally {
-      obsTogglingRef.current = false;
-    }
-  };
-
-  const handleObsCopyUrl = async (): Promise<void> => {
-    const tokenParam = obsStatus.token ? `?token=${obsStatus.token}` : '';
-    const host = obsStatus.localIp || 'localhost';
-    const url = `http://${host}:${obsStatus.port}${tokenParam}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      showAlert?.(t('settings.obsCopied'));
-    } catch {
-      showAlert?.(url);
-    }
-  };
-
-  const handleObsRegenerateToken = (): void => {
-    if (regeneratingObsTokenRef.current) return;
-    regeneratingObsTokenRef.current = true;
-    showConfirm(
-      t('settings.obsTokenRegenMessage'),
-      async () => {
-        try {
-          const status = await obsApi.regenerateToken();
-          setObsStatus(status);
-        } catch (error) {
-          console.error('Failed to regenerate OBS token', error);
-        } finally {
-          regeneratingObsTokenRef.current = false;
-        }
-      },
-      {
-        confirmText: t('settings.obsTokenRegenConfirm'),
-        onCancel: () => {
-          regeneratingObsTokenRef.current = false;
-        },
-      },
-    );
   };
 
   const handleDeveloperModeToggle = async (): Promise<void> => {
