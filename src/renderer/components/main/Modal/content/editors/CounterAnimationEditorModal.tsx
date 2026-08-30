@@ -1,5 +1,4 @@
-import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type {
   CounterAnimationBezier,
   KeyCounterSettings,
@@ -17,28 +16,20 @@ import {
   findBezierPresetId,
 } from '@utils/cubicBezier';
 import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
-import {
-  createRafLatestScheduler,
-  type ContinuousInputStrategy,
-} from '@utils/animation/rafLatestScheduler';
+import { type ContinuousInputStrategy } from '@utils/animation/rafLatestScheduler';
 import { counterAnimationApi } from '@api/modules/resourceApi';
 import {
-  COUNTER_EDITOR_PADDING as EDITOR_PADDING,
-  COUNTER_EDITOR_SIZE as EDITOR_SIZE,
-  COUNTER_EDITOR_TOTAL_SIZE as TOTAL_SIZE,
   clampCounterDuration as clampDuration,
-  createCounterAnimationEditorState as toInitialState,
   formatCounterBezierInput as formatBezierInput,
   normalizeCounterScale as normalizeScale,
   parseCounterBezierInput as parseBezierInput,
   parseCounterNumber as parseNumber,
-  resolveCounterEditorViewDimensions as viewDims,
 } from './counterAnimationEditorModel';
 import CounterAnimationCurveCanvas, {
   COUNTER_ANIMATION_GRID_MINOR_COLOR as GRID_MINOR_COLOR,
-  COUNTER_ANIMATION_HANDLE_RADIUS as HANDLE_RADIUS,
 } from './CounterAnimationCurveCanvas';
 import CounterAnimationPreviewStage from './CounterAnimationPreviewStage';
+import { useCounterAnimationCanvasSession } from './useCounterAnimationCanvasSession';
 
 type EditorMode = 'create' | 'edit';
 
@@ -59,19 +50,6 @@ interface CounterAnimationEditorModalProps {
   continuousInputStrategy?: ContinuousInputStrategy;
 }
 
-type DragTarget = 'p1' | 'p2' | null;
-
-// 기준 렌더 크기 — 핸들·코너 화면 크기의 기준값 (실제 렌더는 캔버스 실측)
-// 뷰박스 세로는 TOTAL_SIZE 기준, 가로는 캔버스 종횡비만큼 넓어지는 풀블리드 캔버스
-// 오프셋 (0,0) = 커브 정사각이 뷰 중앙, 포인터 수학은 비율 좌표라 크기 변화에 안전
-const EDITOR_RENDER_SIZE = 220;
-const PAN_MARGIN = 14;
-const MIN_ZOOM = 0.15;
-const MAX_ZOOM = 3.0;
-const ZOOM_SENSITIVITY = 0.002;
-const AUTO_FIT_MARGIN = 14;
-const AUTO_FIT_DURATION = 260;
-
 const CounterAnimationEditorModal = ({
   isOpen,
   mode,
@@ -83,613 +61,43 @@ const CounterAnimationEditorModal = ({
   t,
   continuousInputStrategy = 'frame',
 }: CounterAnimationEditorModalProps) => {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const dragTargetRef = useRef<DragTarget>(null);
-  const localBezierRef = useRef<CounterAnimationBezier>([
-    0.25, 0.46, 0.45, 0.94,
-  ]);
-  const draggedBezierRef = useRef<CounterAnimationBezier | null>(null);
-  const viewOffsetRef = useRef({ x: 0, y: 0 });
-  const viewScaleRef = useRef(1);
-  const isPanningRef = useRef(false);
-  const panStartRef = useRef({
-    clientX: 0,
-    clientY: 0,
-    offsetX: 0,
-    offsetY: 0,
-  });
-  const spaceHeldRef = useRef(false);
-  const activePointersRef = useRef<
-    Map<number, { clientX: number; clientY: number }>
-  >(new Map());
-  const pinchStartDistRef = useRef(0);
-  const pinchStartScaleRef = useRef(1);
-  const pinchStartOffsetRef = useRef({ x: 0, y: 0 });
-  const pinchStartMidFracRef = useRef({ x: 0, y: 0 });
-  const autoFitRafRef = useRef<number | null>(null);
-  const editorSizeRef = useRef({
-    width: EDITOR_RENDER_SIZE,
-    height: EDITOR_RENDER_SIZE,
-  });
-
   const [nameInput, setNameInput] = useState('');
-  // 캔버스 실측 — 뷰박스 종횡비와 핸들 화면 크기 계산용
-  const [editorSize, setEditorSize] = useState({
-    width: EDITOR_RENDER_SIZE,
-    height: EDITOR_RENDER_SIZE,
-  });
-  const [localBezier, setLocalBezier] = useState<CounterAnimationBezier>([
-    0.25, 0.46, 0.45, 0.94,
-  ]);
-  const [bezierInput, setBezierInput] = useState('0.25, 0.46, 0.45, 0.94');
   const [scaleInput, setScaleInput] = useState('1.1');
   const [durationInput, setDurationInput] = useState('300');
-  const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 });
-  const [viewScale, setViewScale] = useState(1);
-
   const [isSaving, setIsSaving] = useState(false);
   const savingRef = useRef(false);
   const [errorText, setErrorText] = useState('');
 
-  const [previewCount, setPreviewCount] = useState(0);
-  const [previewActive, setPreviewActive] = useState(false);
-
-  const cancelAutoFit = () => {
-    if (autoFitRafRef.current) {
-      cancelAnimationFrame(autoFitRafRef.current);
-      autoFitRafRef.current = null;
-    }
-  };
-
-  const applyView = (offset: { x: number; y: number }, scale: number) => {
-    viewOffsetRef.current = offset;
-    viewScaleRef.current = scale;
-    setViewOffset(offset);
-    setViewScale(scale);
-  };
-
-  const computeAutoFit = (bezier: CounterAnimationBezier) => {
-    const pts = [
-      { x: EDITOR_PADDING, y: EDITOR_PADDING + EDITOR_SIZE },
-      { x: EDITOR_PADDING + EDITOR_SIZE, y: EDITOR_PADDING },
-      {
-        x: EDITOR_PADDING + bezier[0] * EDITOR_SIZE,
-        y: EDITOR_PADDING + (1 - bezier[1]) * EDITOR_SIZE,
-      },
-      {
-        x: EDITOR_PADDING + bezier[2] * EDITOR_SIZE,
-        y: EDITOR_PADDING + (1 - bezier[3]) * EDITOR_SIZE,
-      },
-    ];
-
-    const ptsMinX = Math.min(...pts.map((p) => p.x));
-    const ptsMaxX = Math.max(...pts.map((p) => p.x));
-    const ptsMinY = Math.min(...pts.map((p) => p.y));
-    const ptsMaxY = Math.max(...pts.map((p) => p.y));
-
-    const minX = Math.min(ptsMinX, EDITOR_PADDING);
-    const maxX = Math.max(ptsMaxX, EDITOR_PADDING + EDITOR_SIZE);
-    const minY = Math.min(ptsMinY, EDITOR_PADDING);
-    const maxY = Math.max(ptsMaxY, EDITOR_PADDING + EDITOR_SIZE);
-
-    // 기본 뷰의 긴 변 허용 범위는 종횡비만큼 넓다 (측정 전에는 정사각 취급)
-    const { width: canvasW, height: canvasH } = editorSizeRef.current;
-    const aspect = canvasH > 0 ? canvasW / canvasH : 1;
-    const defaultView = viewDims(1, aspect);
-    const defaultExtraW = (defaultView.vbW - TOTAL_SIZE) / 2;
-    const defaultExtraH = (defaultView.vbH - TOTAL_SIZE) / 2;
-
-    if (
-      minX >= -defaultExtraW &&
-      maxX <= TOTAL_SIZE + defaultExtraW &&
-      minY >= -defaultExtraH &&
-      maxY <= TOTAL_SIZE + defaultExtraH
-    ) {
-      return { offset: { x: 0, y: 0 }, scale: 1 };
-    }
-
-    const rawW = maxX - minX;
-    const rawH = maxY - minY;
-    const rawSize = Math.max(rawW, rawH, TOTAL_SIZE);
-    const estHandleR = (HANDLE_RADIUS * rawSize) / TOTAL_SIZE;
-    const margin = AUTO_FIT_MARGIN + estHandleR;
-
-    const fitMinX = minX - margin;
-    const fitMaxX = maxX + margin;
-    const fitMinY = minY - margin;
-    const fitMaxY = maxY + margin;
-
-    const needW = fitMaxX - fitMinX;
-    const needH = fitMaxY - fitMinY;
-    // 긴 변은 종횡비만큼 더 보이므로 짧은 변 기준 크기로 환산해 맞춤
-    const needSize = Math.max(
-      needW / Math.max(aspect, 1),
-      needH * Math.min(Math.max(aspect, 0.01), 1),
-      TOTAL_SIZE,
-    );
-
-    const maxVB = TOTAL_SIZE / MIN_ZOOM;
-    const vbSize = Math.min(needSize, maxVB);
-    const fitScale = TOTAL_SIZE / vbSize;
-
-    const cx = (fitMinX + fitMaxX) / 2;
-    const cy = (fitMinY + fitMaxY) / 2;
-
-    return {
-      offset: { x: cx - vbSize / 2, y: cy - vbSize / 2 },
-      scale: fitScale,
-    };
-  };
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const initial = toInitialState(initialPreset);
-    localBezierRef.current = initial.bezier;
-    setNameInput(initial.name);
-    setLocalBezier(initial.bezier);
-    setBezierInput(formatBezierInput(initial.bezier));
-    setScaleInput(String(Math.round(initial.scale * 100) / 100));
-    setDurationInput(String(initial.durationMs));
-    setErrorText('');
-
-    // edit 모드: 컨트롤 포인트가 기본 뷰 밖이면 auto-fit, 아니면 기본 뷰
-    // create 모드: 항상 기본 뷰
-    const fit =
-      mode === 'edit' && initialPreset
-        ? computeAutoFit(initial.bezier)
-        : { offset: { x: 0, y: 0 }, scale: 1 };
-    applyView(fit.offset, fit.scale);
-    isPanningRef.current = false;
-    activePointersRef.current.clear();
-    pinchStartDistRef.current = 0;
-    setPreviewCount(0);
-    setPreviewActive(false);
-  }, [initialPreset, isOpen, mode]);
-
-  useEffect(() => {
-    if (isOpen) return;
-    setPreviewActive(false);
-    isPanningRef.current = false;
-    spaceHeldRef.current = false;
-    activePointersRef.current.clear();
-    pinchStartDistRef.current = 0;
-    cancelAutoFit();
-  }, [isOpen]);
-
-  useEffect(() => () => cancelAutoFit(), []);
-
-  // 캔버스 리사이즈 추적 - 첫 페인트 전에 실측해야 초기 aspect 불일치로
-  // 커브가 늘어났다 복귀하는 프레임이 없음 (preserveAspectRatio=none).
-  // 시트 본문은 첫 paint 뒤에 붙으므로(after-paint) 마운트 이펙트로는 노드를 못 잡는다.
-  // 노드가 실제로 붙는 순간을 ref 콜백으로 받고, 콜백 정체성은 고정한다
-  const observeEditorArea = useCallback((area: HTMLDivElement | null) => {
-    if (!area) return;
-    const measure = () => {
-      const rect = area.getBoundingClientRect();
-      const width = Math.floor(rect.width);
-      const height = Math.floor(rect.height);
-      if (width <= 0 || height <= 0) return;
-      editorSizeRef.current = { width, height };
-      setEditorSize({ width, height });
-    };
-
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(area);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !e.repeat) {
-        spaceHeldRef.current = true;
-        const tag = (e.target as HTMLElement)?.tagName;
-        if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
-          e.preventDefault();
-        }
-        if (svgRef.current) {
-          svgRef.current.style.cursor = 'grab';
-        }
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        spaceHeldRef.current = false;
-        if (svgRef.current && !isPanningRef.current) {
-          svgRef.current.style.cursor = 'default';
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      spaceHeldRef.current = false;
-    };
-  }, [isOpen]);
-
-  // window 리스너는 pointerup/pointercancel 시 자가 정리돼서 클린업 추가 안 해뒀어요
-
-  const handlePreviewPointerDown = (event: React.PointerEvent<HTMLElement>) => {
-    event.preventDefault();
-    setPreviewActive(true);
-    setPreviewCount((prev) => prev + 1);
-
-    const handleUp = () => {
-      setPreviewActive(false);
-      window.removeEventListener('pointerup', handleUp);
-      window.removeEventListener('pointercancel', handleUp);
-    };
-    window.addEventListener('pointerup', handleUp);
-    window.addEventListener('pointercancel', handleUp);
-  };
-
-  const animateViewToFit = (bezier: CounterAnimationBezier) => {
-    cancelAutoFit();
-
-    const target = computeAutoFit(bezier);
-    const fromOffset = { ...viewOffsetRef.current };
-    const fromScale = viewScaleRef.current;
-
-    const EPS = 1e-3;
-    if (
-      Math.abs(target.offset.x - fromOffset.x) < EPS &&
-      Math.abs(target.offset.y - fromOffset.y) < EPS &&
-      Math.abs(target.scale - fromScale) < EPS
-    ) {
-      return;
-    }
-
-    const start = performance.now();
-    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-
-    const tick = (now: number) => {
-      const elapsed = now - start;
-      const t = Math.min(1, elapsed / AUTO_FIT_DURATION);
-      const k = easeOutCubic(t);
-
-      const newOffset = {
-        x: fromOffset.x + (target.offset.x - fromOffset.x) * k,
-        y: fromOffset.y + (target.offset.y - fromOffset.y) * k,
-      };
-      const newScale = fromScale + (target.scale - fromScale) * k;
-
-      applyView(newOffset, newScale);
-
-      if (t < 1) {
-        autoFitRafRef.current = requestAnimationFrame(tick);
-      } else {
-        autoFitRafRef.current = null;
-      }
-    };
-
-    autoFitRafRef.current = requestAnimationFrame(tick);
-  };
-
-  const updateBezierFromClient = (
-    clientX: number,
-    clientY: number,
-    target: DragTarget,
-  ) => {
-    if (!target || !svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-
-    const fracX = (clientX - rect.left) / rect.width;
-    const fracY = (clientY - rect.top) / rect.height;
-
-    const scale = viewScaleRef.current;
-    const offset = viewOffsetRef.current;
-    const { base, vbW, vbH } = viewDims(
-      scale,
-      rect.width / Math.max(rect.height, 1),
-    );
-    const extraW = (vbW - base) / 2;
-    const extraH = (vbH - base) / 2;
-
-    const worldX = offset.x - extraW + fracX * vbW;
-    const worldY = offset.y - extraH + fracY * vbH;
-
-    const bezierX = (worldX - EDITOR_PADDING) / EDITOR_SIZE;
-    const bezierY = 1 - (worldY - EDITOR_PADDING) / EDITOR_SIZE;
-
-    const current = localBezierRef.current;
-    const nextBezier: CounterAnimationBezier =
-      target === 'p1'
-        ? [
-            Math.min(Math.max(bezierX, 0), 1),
-            Math.min(Math.max(bezierY, -4), 4),
-            current[2],
-            current[3],
-          ]
-        : [
-            current[0],
-            current[1],
-            Math.min(Math.max(bezierX, 0), 1),
-            Math.min(Math.max(bezierY, -4), 4),
-          ];
-
-    const clamped = clampCounterBezier(nextBezier);
-    localBezierRef.current = clamped;
-    setLocalBezier(clamped);
-    setBezierInput(formatBezierInput(clamped));
-    draggedBezierRef.current = clamped;
-
-    const hx =
-      EDITOR_PADDING +
-      (target === 'p1' ? clamped[0] : clamped[2]) * EDITOR_SIZE;
-    const hy =
-      EDITOR_PADDING +
-      (1 - (target === 'p1' ? clamped[1] : clamped[3])) * EDITOR_SIZE;
-
-    // 축소 시 auto-pan 과도 이동 방지용 margin 제한
-    const effectiveScale = Math.max(scale, 0.8);
-    const margin = PAN_MARGIN / effectiveScale;
-    let nx = offset.x;
-    let ny = offset.y;
-
-    const viewLeft = offset.x - extraW;
-    const viewTop = offset.y - extraH;
-    if (hx < viewLeft + margin) nx = hx - margin + extraW;
-    else if (hx > viewLeft + vbW - margin) nx = hx - vbW + margin + extraW;
-    if (hy < viewTop + margin) ny = hy - margin + extraH;
-    else if (hy > viewTop + vbH - margin) ny = hy - vbH + margin + extraH;
-
-    if (nx !== offset.x || ny !== offset.y) {
-      const next = { x: nx, y: ny };
-      viewOffsetRef.current = next;
-      setViewOffset(next);
-    }
-  };
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const applyPointerMove = (event: PointerEvent) => {
-      if (
-        activePointersRef.current.size === 2 &&
-        pinchStartDistRef.current > 0
-      ) {
-        const svg = svgRef.current;
-        if (!svg) return;
-        const pointers = Array.from(activePointersRef.current.values());
-        const dx = pointers[1].clientX - pointers[0].clientX;
-        const dy = pointers[1].clientY - pointers[0].clientY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const ratio = dist / pinchStartDistRef.current;
-        const oldScale = pinchStartScaleRef.current;
-        const newScale = Math.min(
-          Math.max(oldScale * ratio, MIN_ZOOM),
-          MAX_ZOOM,
-        );
-
-        const rect = svg.getBoundingClientRect();
-        const aspect = rect.width / Math.max(rect.height, 1);
-        const fracX = pinchStartMidFracRef.current.x;
-        const fracY = pinchStartMidFracRef.current.y;
-        const oldView = viewDims(oldScale, aspect);
-        const newView = viewDims(newScale, aspect);
-        const startOff = pinchStartOffsetRef.current;
-        const worldX =
-          startOff.x - (oldView.vbW - oldView.base) / 2 + fracX * oldView.vbW;
-        const worldY =
-          startOff.y - (oldView.vbH - oldView.base) / 2 + fracY * oldView.vbH;
-        const newOff = {
-          x: worldX + (newView.vbW - newView.base) / 2 - fracX * newView.vbW,
-          y: worldY + (newView.vbH - newView.base) / 2 - fracY * newView.vbH,
-        };
-
-        applyView(newOff, newScale);
-        return;
-      }
-
-      if (isPanningRef.current) {
-        const svg = svgRef.current;
-        if (!svg) return;
-        const rect = svg.getBoundingClientRect();
-        const scale = viewScaleRef.current;
-        const { vbW, vbH } = viewDims(
-          scale,
-          rect.width / Math.max(rect.height, 1),
-        );
-        const dxClient = event.clientX - panStartRef.current.clientX;
-        const dyClient = event.clientY - panStartRef.current.clientY;
-        const dxWorld = -(dxClient / rect.width) * vbW;
-        const dyWorld = -(dyClient / rect.height) * vbH;
-
-        const newOffset = {
-          x: panStartRef.current.offsetX + dxWorld,
-          y: panStartRef.current.offsetY + dyWorld,
-        };
-        viewOffsetRef.current = newOffset;
-        setViewOffset(newOffset);
-        return;
-      }
-
-      updateBezierFromClient(
-        event.clientX,
-        event.clientY,
-        dragTargetRef.current,
-      );
-    };
-    const moveScheduler = createRafLatestScheduler(
-      applyPointerMove,
-      continuousInputStrategy,
-    );
-    const handlePointerMove = (event: PointerEvent) => {
-      if (activePointersRef.current.has(event.pointerId)) {
-        activePointersRef.current.set(event.pointerId, {
-          clientX: event.clientX,
-          clientY: event.clientY,
-        });
-      }
-      moveScheduler.push(event);
-    };
-
-    const handlePointerUp = (event: PointerEvent) => {
-      moveScheduler.flush();
-      activePointersRef.current.delete(event.pointerId);
-      if (activePointersRef.current.size < 2) {
-        pinchStartDistRef.current = 0;
-      }
-
-      if (isPanningRef.current) {
-        isPanningRef.current = false;
-        endDragCursor();
-        if (svgRef.current) {
-          svgRef.current.style.cursor = spaceHeldRef.current
-            ? 'grab'
-            : 'default';
-        }
-        return;
-      }
-
-      // 컨트롤 포인트 드래그 종료 후 auto-fit
-      if (dragTargetRef.current) {
-        endDragCursor();
-        animateViewToFit(localBezierRef.current);
-      }
-
-      draggedBezierRef.current = null;
-      dragTargetRef.current = null;
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-
-    return () => {
-      moveScheduler.cancel();
-      // 드래그 중 모달이 닫히면 전역 커서도 함께 복원
-      if (isPanningRef.current || dragTargetRef.current) endDragCursor();
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-    };
-    // 핸들러는 ref만 읽어서 재구독 불필요 — 매 렌더 재등록이 드래그 렉을 만듦
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [continuousInputStrategy, isOpen]);
-
-  const handlePointPointerDown = (
-    event: React.PointerEvent<SVGCircleElement>,
-    target: DragTarget,
-  ) => {
-    if (event.button !== 0 || spaceHeldRef.current) return;
-    // 드래그가 시작되면 텍스트 편집은 끝난 것으로 본다.
-    // 아래 preventDefault가 포커스를 남기는데, 드래그는 베지어 입력값도 같이 바꾼다.
-    // 편집 세션을 안 끊으면 뒤이은 Escape가 드래그 결과까지 함께 되돌린다
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && active.matches('input, textarea')) {
-      active.blur();
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    cancelAutoFit();
-    // 잡는 동안 grabbing 유지 - 좌표 클램프로 포인터가 핸들 밖에 있어도 복귀 방지
-    beginDragCursor('grabbing');
-    dragTargetRef.current = target;
-  };
-
-  const handleWheel = (event: React.WheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    cancelAutoFit();
-    const svg = svgRef.current;
-    if (!svg) return;
-
-    const rect = svg.getBoundingClientRect();
-    const scale = viewScaleRef.current;
-    const aspect = rect.width / Math.max(rect.height, 1);
-    const { base, vbW, vbH } = viewDims(scale, aspect);
-
-    if (event.ctrlKey || event.metaKey) {
-      const fracX = (event.clientX - rect.left) / rect.width;
-      const fracY = (event.clientY - rect.top) / rect.height;
-
-      const delta = -event.deltaY * ZOOM_SENSITIVITY;
-      const factor = Math.exp(delta);
-      const newScale = Math.min(Math.max(scale * factor, MIN_ZOOM), MAX_ZOOM);
-      const newView = viewDims(newScale, aspect);
-
-      const off = viewOffsetRef.current;
-      const worldX = off.x - (vbW - base) / 2 + fracX * vbW;
-      const worldY = off.y - (vbH - base) / 2 + fracY * vbH;
-      const newOff = {
-        x: worldX + (newView.vbW - newView.base) / 2 - fracX * newView.vbW,
-        y: worldY + (newView.vbH - newView.base) / 2 - fracY * newView.vbH,
-      };
-
-      applyView(newOff, newScale);
-      return;
-    }
-
-    const off = viewOffsetRef.current;
-    const dx =
-      ((event.shiftKey ? event.deltaX || event.deltaY : event.deltaX) /
-        rect.width) *
-      vbW;
-    const dy =
-      ((event.shiftKey && !event.deltaX ? 0 : event.deltaY) / rect.height) *
-      vbH;
-    const newOff = { x: off.x + dx, y: off.y + dy };
-    viewOffsetRef.current = newOff;
-    setViewOffset(newOff);
-  };
-
-  const handleSvgPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
-    cancelAutoFit();
-    activePointersRef.current.set(event.pointerId, {
-      clientX: event.clientX,
-      clientY: event.clientY,
-    });
-
-    if (activePointersRef.current.size === 2) {
-      dragTargetRef.current = null;
-      isPanningRef.current = false;
-      const pointers = Array.from(activePointersRef.current.values());
-      const dx = pointers[1].clientX - pointers[0].clientX;
-      const dy = pointers[1].clientY - pointers[0].clientY;
-      pinchStartDistRef.current = Math.sqrt(dx * dx + dy * dy);
-      pinchStartScaleRef.current = viewScaleRef.current;
-      pinchStartOffsetRef.current = { ...viewOffsetRef.current };
-      const rect = svgRef.current?.getBoundingClientRect();
-      if (rect) {
-        const midX = (pointers[0].clientX + pointers[1].clientX) / 2;
-        const midY = (pointers[0].clientY + pointers[1].clientY) / 2;
-        pinchStartMidFracRef.current = {
-          x: (midX - rect.left) / rect.width,
-          y: (midY - rect.top) / rect.height,
-        };
-      }
-      return;
-    }
-
-    if (event.button === 1 || (event.button === 0 && spaceHeldRef.current)) {
-      event.preventDefault();
-      if (dragTargetRef.current) return;
-      isPanningRef.current = true;
-      panStartRef.current = {
-        clientX: event.clientX,
-        clientY: event.clientY,
-        offsetX: viewOffsetRef.current.x,
-        offsetY: viewOffsetRef.current.y,
-      };
-      beginDragCursor('grabbing');
-      if (svgRef.current) {
-        svgRef.current.style.cursor = 'grabbing';
-      }
-    }
-  };
-
-  const handleDoubleClick = (_event: React.MouseEvent<SVGSVGElement>) => {
-    cancelAutoFit();
-    applyView({ x: 0, y: 0 }, 1);
-  };
-
+  const {
+    svgRef,
+    localBezierRef,
+    editorSize,
+    localBezier,
+    setLocalBezier,
+    bezierInput,
+    setBezierInput,
+    viewOffset,
+    viewScale,
+    previewCount,
+    previewActive,
+    cancelAutoFit,
+    applyView,
+    observeEditorArea,
+    handlePreviewPointerDown,
+    handlePointPointerDown,
+    handleWheel,
+    handleSvgPointerDown,
+    handleDoubleClick,
+  } = useCounterAnimationCanvasSession({
+    isOpen,
+    mode,
+    initialPreset,
+    continuousInputStrategy,
+    setNameInput,
+    setScaleInput,
+    setDurationInput,
+    setErrorText,
+  });
   const selectedPreset = findBezierPresetId(localBezier);
 
   const customLabel = t('counterSetting.presetCustom') || 'Custom';
