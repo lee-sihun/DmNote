@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
 import { paintDescriptor, resolveStatePair } from '@src/types/color';
 import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
@@ -9,36 +8,26 @@ import {
   ColorInput,
   TextInput,
   PropertySection,
-  FontStyleToggle,
-  createFontStyleToggleHandlers,
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { useFontStore } from '@stores/useFontStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_ACTIVE_BG,
-  DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_BORDER,
   DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
-  DEFAULT_ELEMENT_FONT_BOLD,
 } from '@utils/core/elementDefaults';
 import {
   elementImageReplacesSurface,
   resolveElementBorder,
 } from '@utils/core/elementBorder';
-import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
-import FontPickerOpenButton from '@components/main/Modal/content/pickers/FontPickerOpenButton';
 import {
   EMPTY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
-import { usePanelNav } from '../PanelNavContext';
 import BatchGeometrySection from './BatchGeometrySection';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
@@ -49,23 +38,13 @@ import type {
   EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
 import type { BatchElementPropertyUpdate } from '../types';
-import FontWeightDropdown from '../FontWeightDropdown';
-import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
-import { aggregateMixedValue } from '@utils/core/mixedValue';
 import BatchSoundSection from './BatchSoundSection';
 import BatchShadowSection from './BatchShadowSection';
+import BatchTypographySection, {
+  type BatchTypographyKeyData,
+} from './BatchTypographySection';
 
 export { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchSoundSection';
-
-// 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
-const FONT_PAGE_KEY = 'batch-style:font';
-
-interface KeyData {
-  index: number;
-  position: KeyPosition | undefined;
-  keyCode: string | null;
-  keyInfo: { globalKey: string; displayName: string } | null;
-}
 
 interface BatchStyleTabContentProps {
   // 다중 선택 정보
@@ -101,7 +80,7 @@ interface BatchStyleTabContentProps {
     defaultValue: T,
   ) => { isMixed: boolean; value: T };
   // getSelectedKeysData 함수 (displayText Mixed 판단용)
-  getSelectedKeysData: () => KeyData[];
+  getSelectedKeysData: () => BatchTypographyKeyData[];
   // 핸들러
   handleBatchAlign: (
     direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
@@ -205,10 +184,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         .join(',')}`,
     [selectedKeyType, selectedElements],
   );
-  // 인-패널 내비게이션 (폰트/사운드 서브 페이지)
-  const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
-    usePanelNav();
-
   useEffect(() => {
     // 눌림 상태 편집 능력이 사라지면 저장된 active 탭 선택도 리셋
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -267,20 +242,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         100,
       ).isMixed,
     };
-  };
-
-  const fontColorFor = (position: KeyPosition, active: boolean) =>
-    colorPairFor(position, 'fontColor', active).color?.trim() || undefined;
-
-  // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
-  const getDisplayTextMixed = (): { isMixed: boolean; value: string } => {
-    const keysData = getSelectedKeysData();
-    const getEffectiveDisplayText = (data: KeyData): string => {
-      const displayText = data.position?.displayText;
-      if (displayText) return displayText;
-      return data.keyInfo?.displayName || '';
-    };
-    return aggregateMixedValue(keysData, getEffectiveDisplayText, '');
   };
 
   return (
@@ -614,234 +575,24 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       ) : null}
 
       {(!hideDisplayText || !hideFontControls) && (
-        <PropertySection>
-          {/* 표시 텍스트 */}
-          {!hideDisplayText && (
-            <PropertyRow
-              label={t('propertiesPanel.displayText') || '표시 텍스트'}
-            >
-              {(() => {
-                const { isMixed, value } = getDisplayTextMixed();
-                const displayTextValue = getMixedValue(
-                  (pos) => pos.displayText,
-                  '',
-                ).value;
-                // displayText가 직접 설정되어 있으면 그 값을 value에, 아니면 placeholder에 기본값 표시
-                return (
-                  <TextInput
-                    value={isMixed ? '' : displayTextValue}
-                    onChange={(v) =>
-                      onStylePropertyCommit?.({
-                        property: 'displayText',
-                        value: v,
-                      })
-                    }
-                    onPreview={(v) =>
-                      onStylePropertyPreview?.({
-                        property: 'displayText',
-                        value: v,
-                      })
-                    }
-                    onCancel={() => editGestureController.cancel()}
-                    placeholder={isMixed ? 'Mixed' : value}
-                    width="54px"
-                    isMixed={isMixed}
-                  />
-                );
-              })()}
-            </PropertyRow>
-          )}
-
-          {!hideFontControls && (
-            <>
-              {/* 폰트 */}
-              <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
-                {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
-                  <span className="text-fg-faint text-body italic">Mixed</span>
-                ) : null}
-                <FontPickerOpenButton
-                  activePageKey={activePageKey}
-                  pageKey={FONT_PAGE_KEY}
-                  onOpen={() => openPage(FONT_PAGE_KEY)}
-                  onClose={closePage}
-                >
-                  {t('propertiesPanel.configure') || '설정하기'}
-                </FontPickerOpenButton>
-              </PropertyRow>
-
-              {/* 글꼴 크기 */}
-              <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
-                {getMixedValue((pos) => pos.fontSize, 14).isMixed ? (
-                  <span className="text-fg-faint text-body italic">Mixed</span>
-                ) : null}
-                <NumberInput
-                  value={getMixedValue((pos) => pos.fontSize, 14).value}
-                  onChange={(value) =>
-                    onStylePropertyCommit?.({
-                      property: 'fontSize',
-                      value: value,
-                    })
-                  }
-                  onPreview={(value) =>
-                    onStylePropertyPreview?.({
-                      property: 'fontSize',
-                      value: value,
-                    })
-                  }
-                  onCancel={() => editGestureController.cancel()}
-                  suffix="px"
-                  min={8}
-                  max={72}
-                  allowDecimal
-                  decimalScale={1}
-                />
-              </PropertyRow>
-
-              {/* 글꼴 굵기 */}
-              <PropertyRow
-                label={t('propertiesPanel.fontWeight') || '글꼴 굵기'}
-              >
-                {(() => {
-                  const weightState = getMixedValue(
-                    (pos) => pos.fontWeight,
-                    DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
-                  );
-                  return (
-                    <FontWeightDropdown
-                      fontFamilies={getSelectedKeysData().map(
-                        ({ position }) => position?.fontFamily,
-                      )}
-                      value={weightState.value}
-                      isMixed={weightState.isMixed}
-                      onChange={(value) =>
-                        onElementPropertyCommit?.({ fontWeight: value })
-                      }
-                    />
-                  );
-                })()}
-              </PropertyRow>
-
-              {/* 글꼴 색상 */}
-              <PropertyRow
-                label={t('propertiesPanel.fontColor') || '글꼴 색상'}
-              >
-                {(
-                  effectiveColorState === 'active'
-                    ? activeMixedValue(
-                        (pos) => fontColorFor(pos, true),
-                        DEFAULT_ELEMENT_ACTIVE_FONT,
-                      ).isMixed
-                    : getMixedValue(
-                        (pos) => fontColorFor(pos, false),
-                        DEFAULT_ELEMENT_FONT,
-                      ).isMixed
-                ) ? (
-                  <span className="text-fg-faint text-body italic">Mixed</span>
-                ) : null}
-                <ColorInput
-                  colorId={`batch-font:${batchSelectionKey}`}
-                  gradientSurface="font"
-                  {...mixedColorParts(
-                    (pos) =>
-                      fontColorFor(pos, effectiveColorState === 'active'),
-                    effectiveColorState === 'active'
-                      ? DEFAULT_ELEMENT_ACTIVE_FONT
-                      : DEFAULT_ELEMENT_FONT,
-                  )}
-                  value={
-                    getMixedValue(
-                      (pos) => fontColorFor(pos, false),
-                      DEFAULT_ELEMENT_FONT,
-                    ).value
-                  }
-                  activeValue={
-                    activeMixedValue(
-                      (pos) => fontColorFor(pos, true),
-                      DEFAULT_ELEMENT_ACTIVE_FONT,
-                    ).value
-                  }
-                  showStateTabs={shadowActiveState}
-                  stateMode={effectiveColorState}
-                  onStateModeChange={setColorState}
-                  onChange={() => {}}
-                  onChangeComplete={() => {}}
-                  onActiveChangeComplete={() => {}}
-                  onCancel={() => editGestureController.cancel()}
-                  panelElement={panelElement}
-                  canvasAnchor={{ kind: 'batch' }}
-                  gradientValue={
-                    getMixedValue(
-                      (pos) =>
-                        colorPairFor(pos, 'fontColor', false).gradient ?? null,
-                      null,
-                    ).value
-                  }
-                  activeGradientValue={
-                    activeMixedValue(
-                      (pos) =>
-                        colorPairFor(pos, 'fontColor', true).gradient ?? null,
-                      null,
-                    ).value
-                  }
-                  onModePreview={(state, modeValue) =>
-                    onFontColorPreview?.(
-                      state === 'active'
-                        ? {
-                            property: 'activeFontPaint',
-                            value: paintDescriptor(modeValue),
-                          }
-                        : {
-                            property: 'fontPaint',
-                            value: paintDescriptor(modeValue),
-                          },
-                    )
-                  }
-                  onModeCommit={(state, modeValue) =>
-                    onFontColorCommit?.(
-                      state === 'active'
-                        ? {
-                            property: 'activeFontPaint',
-                            value: paintDescriptor(modeValue),
-                          }
-                        : {
-                            property: 'fontPaint',
-                            value: paintDescriptor(modeValue),
-                          },
-                    )
-                  }
-                />
-              </PropertyRow>
-
-              {/* 글꼴 스타일 */}
-              <PropertyRow
-                label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}
-              >
-                <FontStyleToggle
-                  isBold={
-                    getMixedValue(
-                      (pos) =>
-                        pos.fontBold ??
-                        (pos.fontWeight == null
-                          ? DEFAULT_ELEMENT_FONT_BOLD
-                          : pos.fontWeight === 700),
-                      DEFAULT_ELEMENT_FONT_BOLD,
-                    ).value
-                  }
-                  isItalic={getMixedValue((pos) => pos.fontItalic, false).value}
-                  isUnderline={
-                    getMixedValue((pos) => pos.fontUnderline, false).value
-                  }
-                  isStrikethrough={
-                    getMixedValue((pos) => pos.fontStrikethrough, false).value
-                  }
-                  {...createFontStyleToggleHandlers((property, value) =>
-                    onElementPropertyCommit?.({ [property]: value }),
-                  )}
-                />
-              </PropertyRow>
-            </>
-          )}
-        </PropertySection>
+        <BatchTypographySection
+          hideDisplayText={hideDisplayText}
+          hideFontControls={hideFontControls}
+          getMixedValue={getMixedValue}
+          getActiveMixedValue={activeMixedValue}
+          getSelectedKeysData={getSelectedKeysData}
+          effectiveColorState={effectiveColorState}
+          showActiveState={shadowActiveState}
+          onColorStateChange={setColorState}
+          batchSelectionKey={batchSelectionKey}
+          onStylePropertyPreview={onStylePropertyPreview}
+          onStylePropertyCommit={onStylePropertyCommit}
+          onFontColorPreview={onFontColorPreview}
+          onFontColorCommit={onFontColorCommit}
+          onElementPropertyCommit={onElementPropertyCommit}
+          panelElement={panelElement}
+          t={t}
+        />
       )}
 
       {/* 커스텀 CSS 활성화 시에만 클래스명 및 CSS 우선순위 표시 */}
@@ -906,45 +657,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           t={t}
         />
       ) : null}
-
-      {/* FontPicker — 패널 서브 페이지 */}
-      {!hideFontControls &&
-        renderPageKey === FONT_PAGE_KEY &&
-        pageHost &&
-        createPortal(
-          <FontPicker
-            open
-            selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
-            onFontSelect={(fontName) => {
-              if (fontName !== null) {
-                const weightState = getMixedValue(
-                  (pos) => pos.fontWeight,
-                  DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
-                );
-                const nextWeight = resolveSupportedFontWeight(
-                  fontName,
-                  useFontStore.getState().getAllFonts(),
-                );
-                // 굵기 재선택은 폰트 변경과 한 undo 단계 - 따로 되돌리면 새 폰트에
-                // 지원하지 않는 굵기가 남는다
-                const gestureId = crypto.randomUUID();
-                onElementPropertyCommit?.(
-                  { fontFamily: fontName },
-                  { gestureId },
-                );
-                if (weightState.isMixed || nextWeight !== weightState.value) {
-                  onElementPropertyCommit?.(
-                    { fontWeight: nextWeight },
-                    { gestureId },
-                  );
-                }
-              }
-            }}
-            pageTitle={t('propertiesPanel.font') || '폰트'}
-            onBack={closePage}
-          />,
-          pageHost,
-        )}
     </>
   );
 };
