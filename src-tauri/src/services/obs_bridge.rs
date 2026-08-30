@@ -24,19 +24,20 @@ use tokio_tungstenite::{
 };
 
 use crate::models::obs::{
-    make_envelope, HelloAckPayload, ObsBroadcast, ObsEnvelope, ObsStatus, OBS_PROTOCOL_VERSION,
+    make_envelope, ObsBroadcast, ObsEnvelope, ObsStatus, OBS_PROTOCOL_VERSION,
 };
 
 mod media;
 mod rpc;
 mod transport;
+mod websocket;
 
 #[cfg(test)]
 use media::{guess_mime, percent_decode};
 
+use rpc::is_allowed_command;
 #[cfg(test)]
-use rpc::ALLOWED_WS_COMMANDS;
-use rpc::{build_allowed_list, is_allowed_command};
+use rpc::{build_allowed_list, ALLOWED_WS_COMMANDS};
 use transport::{
     bind_address, has_allowed_http_host, http_header_end, is_local_machine_ip,
     is_websocket_upgrade_request, read_http_request_headers, validate_websocket_request,
@@ -44,6 +45,7 @@ use transport::{
 };
 #[cfg(test)]
 use transport::{http_header_values, is_allowed_host_header};
+use websocket::WebSocketSessionProtocol;
 
 // OBS 브라우저 소스는 overlay 창을 대신한다 - main만을 향한 브릿지 메시지는 전달하지 않는다
 fn is_forwarded_to_obs(event: &str, data: &Value) -> bool {
@@ -523,12 +525,7 @@ impl ObsBridgeService {
         let mut broadcast_rx = self.broadcast_tx.subscribe();
 
         // 클라이언트별 시퀀스 카운터
-        let mut client_seq: u64 = 0;
-        let mut next_seq = || {
-            let s = client_seq;
-            client_seq += 1;
-            s
-        };
+        let mut protocol = WebSocketSessionProtocol::new();
 
         // hello 핸드셰이크 대기 (5초 타임아웃)
         let hello_result = tokio::time::timeout(Duration::from_secs(5), async {
@@ -608,13 +605,7 @@ impl ObsBridgeService {
             self.client_count.fetch_sub(1, Ordering::Relaxed);
             return;
         }
-        let ack_payload = serde_json::to_value(HelloAckPayload {
-            server_version: self.server_version.clone(),
-            obs_mode: true,
-            allowed_list: build_allowed_list(),
-        })
-        .unwrap_or_default();
-        let ack_msg = make_envelope("hello_ack", next_seq(), ack_payload);
+        let ack_msg = protocol.hello_ack(self.server_version.clone());
         if ws_tx
             .send(Message::Text(ack_msg.to_string()))
             .await
@@ -630,7 +621,7 @@ impl ObsBridgeService {
             return;
         }
         let snapshot = self.cached_snapshot.read().clone();
-        let snapshot_msg = make_envelope("snapshot", next_seq(), snapshot);
+        let snapshot_msg = protocol.snapshot(snapshot);
         if ws_tx
             .send(Message::Text(snapshot_msg.to_string()))
             .await
@@ -657,7 +648,7 @@ impl ObsBridgeService {
                     match result {
                         Ok(ObsBroadcast::Shutdown) => break,
                         Ok(broadcast) => {
-                            let msg = broadcast_to_envelope(&broadcast, next_seq());
+                            let msg = protocol.broadcast(&broadcast);
                             if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
                                 break;
                             }
@@ -665,7 +656,7 @@ impl ObsBridgeService {
                         Err(broadcast::error::RecvError::Lagged(n)) => {
                             log::warn!("[ObsBridge] {addr}: {n}개 메시지 누락, 스냅샷 재전송");
                             let snapshot = self.cached_snapshot.read().clone();
-                            let msg = make_envelope("snapshot", next_seq(), snapshot);
+                            let msg = protocol.snapshot(snapshot);
                             if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
                                 break;
                             }
@@ -684,14 +675,14 @@ impl ObsBridgeService {
                             if let Ok(envelope) = serde_json::from_str::<ObsEnvelope>(&text) {
                                 match envelope.msg_type.as_str() {
                                     "ping" => {
-                                        let pong = make_envelope("pong", next_seq(), Value::Null);
+                                        let pong = protocol.pong();
                                         if ws_tx.send(Message::Text(pong.to_string())).await.is_err() {
                                             break;
                                         }
                                     }
                                     "resync_request" => {
                                         let snapshot = self.cached_snapshot.read().clone();
-                                        let msg = make_envelope("snapshot", next_seq(), snapshot);
+                                        let msg = protocol.snapshot(snapshot);
                                         if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
                                             break;
                                         }
@@ -719,11 +710,7 @@ impl ObsBridgeService {
                     if !self.is_current_session_token(&expected_token) {
                         break;
                     }
-                    let payload = match result {
-                        Ok(data) => serde_json::json!({ "requestId": request_id, "result": data }),
-                        Err(err) => serde_json::json!({ "requestId": request_id, "error": err }),
-                    };
-                    let msg = make_envelope("invoke_response", next_seq(), payload);
+                    let msg = protocol.invoke_response(request_id, result);
                     if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
                         break;
                     }
@@ -733,7 +720,7 @@ impl ObsBridgeService {
                     if !self.is_current_session_token(&expected_token) {
                         break;
                     }
-                    let ping_msg = make_envelope("ping", next_seq(), Value::Null);
+                    let ping_msg = protocol.ping();
                     if ws_tx.send(Message::Text(ping_msg.to_string())).await.is_err() {
                         break;
                     }
@@ -843,19 +830,6 @@ impl ObsBridgeService {
             },
         )
         .await;
-    }
-}
-
-/// ObsBroadcast → JSON envelope 변환
-fn broadcast_to_envelope(broadcast: &ObsBroadcast, seq: u64) -> Value {
-    match broadcast {
-        ObsBroadcast::Snapshot(snapshot) => make_envelope("snapshot", seq, snapshot.clone()),
-        ObsBroadcast::TauriEvent { event, data } => make_envelope(
-            "tauri_event",
-            seq,
-            serde_json::json!({ "event": event, "data": data }),
-        ),
-        ObsBroadcast::Shutdown => unreachable!("Shutdown은 직접 처리됨"),
     }
 }
 
