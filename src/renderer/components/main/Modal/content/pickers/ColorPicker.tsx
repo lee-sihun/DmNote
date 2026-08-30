@@ -8,7 +8,6 @@ import {
   AlphaSlider,
 } from './colorPickerPrimitives';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
-import TabSwitch from '@components/main/common/TabSwitch';
 import {
   MODES,
   isGradientColor,
@@ -25,14 +24,8 @@ import {
   addToPalette,
   isGradientSpecColor,
   gradientSpecPaletteEntry,
-  type GradientSpecColor,
 } from '@utils/color/colorPaletteStorage';
-import {
-  gradientToCss,
-  toCanonicalGradient,
-  type GradientSpec,
-} from '@src/types/color';
-import { ColorSwatchButton } from './ColorSwatch';
+import { toCanonicalGradient, type GradientSpec } from '@src/types/color';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
 import {
   ColorInput as Input,
@@ -40,9 +33,14 @@ import {
   type GradientSide,
   type PercentInputProps,
 } from './ColorPickerInputs';
+import {
+  ColorPaletteSection,
+  ModeSwitch,
+  StateSwitch,
+  type PaletteValue,
+} from './ColorPickerControls';
 
 type ColorValue = string | GradientColor;
-type PaletteValue = ColorValue | GradientSpecColor;
 
 // normalizeColorInput 기본색과 동일
 const DEFAULT_PICKER_COLOR: ColorObject =
@@ -1036,213 +1034,3 @@ const ColorPickerWrapper = ({
 };
 
 export default ColorPickerWrapper;
-
-// ============================================================================
-// 팔레트 컴포넌트
-// ============================================================================
-
-interface ColorPaletteSectionProps {
-  solidPalette: PaletteValue[];
-  gradientPalette: PaletteValue[];
-  onPaletteClick: (color: PaletteValue, type: string) => void;
-  showGradient: boolean;
-  /** 반대 축 잠금 중 - 솔리드 슬롯은 hex·알파를 함께 쓰므로 컨트롤과 같은 정책을 따른다 */
-  solidLocked?: boolean;
-}
-
-function ColorPaletteSection({
-  solidPalette,
-  gradientPalette,
-  onPaletteClick,
-  showGradient,
-  solidLocked = false,
-}: ColorPaletteSectionProps) {
-  const PALETTE_SIZE = 7;
-
-  // 빈 슬롯 채우기
-  const filledSolid: (PaletteValue | null)[] = [...solidPalette];
-  while (filledSolid.length < PALETTE_SIZE) {
-    filledSolid.push(null);
-  }
-
-  const filledGradient: (PaletteValue | null)[] = [...gradientPalette];
-  while (filledGradient.length < PALETTE_SIZE) {
-    filledGradient.push(null);
-  }
-
-  return (
-    <div className="flex flex-col gap-[6px]">
-      {/* 솔리드 팔레트 */}
-      <div className="flex gap-[6px] justify-between">
-        {filledSolid.map((color, index) => (
-          <PaletteSlot
-            key={`solid-${index}`}
-            color={color}
-            type="solid"
-            disabled={solidLocked}
-            onClick={() => color && onPaletteClick(color, 'solid')}
-          />
-        ))}
-      </div>
-
-      {/* 그라디언트 팔레트 (solidOnly가 아닐 때만 표시) */}
-      {showGradient && (
-        <div className="flex gap-[6px] justify-between">
-          {filledGradient.map((color, index) => (
-            <PaletteSlot
-              key={`gradient-${index}`}
-              color={color}
-              type="gradient"
-              onClick={() => color && onPaletteClick(color, 'gradient')}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface PaletteSlotProps {
-  color: PaletteValue | null;
-  type: string;
-  onClick?: () => void;
-  disabled?: boolean;
-}
-
-function PaletteSlot({
-  color,
-  type,
-  onClick,
-  disabled = false,
-}: PaletteSlotProps) {
-  const isEmpty = !color;
-  const inert = isEmpty || disabled;
-  const specImage = isGradientSpecColor(color)
-    ? gradientToCss(toCanonicalGradient(color))
-    : undefined;
-  const gradient =
-    type === 'gradient' &&
-    color &&
-    typeof color === 'object' &&
-    (color as GradientColor).type === 'gradient'
-      ? (color as GradientColor)
-      : undefined;
-  const solidColor =
-    typeof color === 'string'
-      ? color.startsWith('#') || color.startsWith('rgb')
-        ? color
-        : `#${color}`
-      : isEmpty
-      ? 'var(--ui-fill-faint)'
-      : undefined;
-
-  // 툴팁 텍스트 생성
-  const getTitle = (): string => {
-    if (isEmpty) return '';
-    if (isGradientSpecColor(color)) {
-      const canonical = toCanonicalGradient(color);
-      const stops = canonical.stops
-        .map((s) => s.color.replace('#', '').toUpperCase())
-        .join('\n');
-      return `${stops}\n${canonical.angle}°`;
-    }
-    if (
-      type === 'gradient' &&
-      color &&
-      typeof color === 'object' &&
-      (color as GradientColor).type === 'gradient'
-    ) {
-      const gradientColor = color as GradientColor;
-      const topHex = gradientColor.top.replace('#', '').toUpperCase();
-      const bottomHex = gradientColor.bottom.replace('#', '').toUpperCase();
-      return `${topHex}\n${bottomHex}`;
-    }
-    // 솔리드 색상 툴팁 - 통일된 형식으로 표시
-    if (typeof color === 'string') {
-      // RGBA 형식인 경우 hex로 변환
-      if (color.startsWith('rgba(')) {
-        const match = color.match(
-          /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/,
-        );
-        if (match) {
-          const [, r, g, b, a] = match;
-          const hexColor = `${parseInt(r)
-            .toString(16)
-            .padStart(2, '0')}${parseInt(g)
-            .toString(16)
-            .padStart(2, '0')}${parseInt(b)
-            .toString(16)
-            .padStart(2, '0')}${Math.round(parseFloat(a) * 255)
-            .toString(16)
-            .padStart(2, '0')}`.toUpperCase();
-          return hexColor;
-        }
-      }
-      // Hex 형식 - # 제거하고 대문자로
-      return color.replace('#', '').toUpperCase();
-    }
-    return '';
-  };
-
-  return (
-    <ColorSwatchButton
-      type="button"
-      className={`w-[16px] h-[16px] rounded transition-colors ${
-        inert ? 'cursor-default' : 'cursor-pointer'
-      }`}
-      surfaceClassName="rounded"
-      color={solidColor}
-      gradient={gradient}
-      image={specImage}
-      onClick={inert ? undefined : onClick}
-      disabled={inert}
-      data-palette-slot={type}
-      title={getTitle()}
-    />
-  );
-}
-
-interface StateSwitchProps {
-  state?: string;
-  onChange?: (mode: string) => void;
-}
-
-function StateSwitch({ state, onChange }: StateSwitchProps) {
-  const { t } = useTranslation();
-  const idleLabel = t('colorPicker.idle') || '대기';
-  const activeLabel = t('colorPicker.active') || '입력';
-
-  return (
-    <TabSwitch
-      commitStrategy="after-paint"
-      tabs={[
-        { id: 'idle', label: idleLabel },
-        { id: 'active', label: activeLabel },
-      ]}
-      activeTab={state ?? 'idle'}
-      onTabChange={(id) => onChange?.(id)}
-    />
-  );
-}
-
-interface ModeSwitchProps {
-  mode: string;
-  onChange: (mode: string) => void;
-}
-
-function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
-  const { t } = useTranslation();
-  const solidLabel = t('colorPicker.solid');
-  const gradientLabel = t('colorPicker.gradient');
-  return (
-    <TabSwitch
-      commitStrategy="after-paint"
-      tabs={[
-        { id: MODES.solid, label: solidLabel },
-        { id: MODES.gradient, label: gradientLabel },
-      ]}
-      activeTab={mode}
-      onTabChange={onChange}
-    />
-  );
-}
