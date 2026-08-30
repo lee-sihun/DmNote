@@ -89,6 +89,23 @@ ASIO는 장치 I/O 경계와 순수 정책을 `audio/engine/asio.rs`로 분리�
 
 입력 컴포넌트는 Escape 취소, preview/commit 경계, child window 동작을 회귀 테스트로 고정한 뒤 이동한다.
 
+## 독립 최종 감사 결과
+
+별도 코드 품질 감사와 브랜치 회귀 감사를 병렬로 수행했다. 기준점 이후 57개 커밋과 134개 변경 파일을 검토했으며 P0~P2 동작 회귀는 발견되지 않았다. Grid 장면 분리에서 새로 도입된 네이티브 요소 ref registry가 unmount 시 `null` 값을 보관해 UUID key를 누적하던 P3 항목은 `nativeElementReferenceRegistry`의 삭제 계약과 회귀 테스트로 수정했다.
+
+다음 항목은 완료 범위와 별개의 후속 작업으로 권장한다.
+
+| 우선순위 | 후보 | 권장 경계와 선행 검증 |
+| --- | --- | --- |
+| 높음 | 배치 Graph 설정 중복 | graph-only와 mixed 패널의 type·평균선·speed·color·animation 상태 해석 및 UI를 `BatchGraphSettingsSection`으로 공용화. 두 route의 Mixed 표시, 500~5000ms clamp, 100ms snap, color preview/cancel/commit 표 기반 테스트 필요 |
+| 높음 | OverlayScene 타입 경계 | canonical 위치를 `Record<string, unknown>`으로 다시 캐스팅하는 adapter 제거. Graph/Knob의 공용 render 타입을 명시하고 overlay 렌더 계약·commit budget 테스트 실행 |
+| 높음 | Windows ASIO PR 게이트 | release workflow에만 있는 feature 테스트를 PR Windows check에도 추가하고 `cargo check`·`clippy --all-targets --features asio-backend` 실행. 실제 장치 smoke test는 계속 수동 유지 |
+| 중간 | Grid Key/Stat 외부 카운터 프리뷰 | `KeyCounterPreviewLayer`와 `StatCounterLayer`의 동일한 body·layer DOM을 공용화. Stat의 정수 정규화와 Key active-state preview 차이는 adapter에 유지 |
+| 중간 | Key/Stat 표시 표면 | interaction·signal wrapper는 유지하고 transparent placeholder, border ring, image/error, label/inside counter DOM만 순수 `KeyElementFace`로 분리. active/image failure/inside counter 계약 테스트 선행 |
+| 중간 | 배치 선택 조회 인덱스 | `batchSelectionModel`의 반복 `findIndex`·`find`를 렌더 단위 ID index/snapshot으로 교체. 선택 순서, 누락 ID, canonical/preview 구분 테스트 선행 |
+
+백엔드에서는 아래의 `store.rs` editor/history transaction과 `app_state.rs` frontend/panel/overlay controller 이동이 여전히 가장 큰 구조적 후속 작업이다. helper만 옮기는 대신 inherent impl 자체를 한 책임씩 이동하고, lock·cfg·가시성은 변경하지 않는다.
+
 ## 잔여 대형 백엔드 우선순위
 
 - `state/app_state.rs` — 4782줄
