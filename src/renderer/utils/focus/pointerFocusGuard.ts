@@ -197,8 +197,23 @@ const install = (doc: Document): (() => void) => {
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    // 단축키 조합은 탐색 의도가 아니다 (:focus-visible 휴리스틱과 동일)
+    // 단축키 조합은 탐색 의도가 아님 (:focus-visible 휴리스틱과 동일)
     if (event.metaKey || event.ctrlKey || event.altKey) return;
+    // 클릭·드래그 중 키 입력은 :focus-visible 승격 전에 즉시 무해화
+    if (session) {
+      const focused = doc.activeElement;
+      evaluate();
+      // 이벤트 경로는 디스패치 시점 고정 - blur해도 이 키는 원래 타깃의
+      // 핸들러에 닿는다. 방금 무해화한 컨트롤로 가던 키는 여기서 흡수
+      if (
+        focused &&
+        doc.activeElement !== focused &&
+        event.target === focused
+      ) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+    }
     lastInputModality = 'keyboard';
   };
 

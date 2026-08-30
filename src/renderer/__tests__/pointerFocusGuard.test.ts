@@ -147,6 +147,70 @@ describe('pointerFocusGuard', () => {
     expect(getLastInputModality()).toBe('keyboard');
   });
 
+  it('드래그 중(버튼을 누른 채) 키 입력이 오면 즉시 release한다', () => {
+    // :focus-visible 승격이 일어나기 전에 포커스를 걷어내 미드 드래그 링 방지
+    const slider = mount('<div role="slider" tabindex="0"></div>');
+    slider.dispatchEvent(pointerEvent('pointerdown'));
+    slider.focus();
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'a', bubbles: true }),
+    );
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('retain 컨트롤은 드래그 중 키 입력에도 포커스와 핸들러를 유지한다', () => {
+    const handle = mount(
+      '<div role="slider" tabindex="0" data-dmn-pointer-focus="retain"></div>',
+    );
+    let adjusted = 0;
+    handle.addEventListener('keydown', () => {
+      adjusted += 1;
+    });
+    handle.dispatchEvent(pointerEvent('pointerdown'));
+    handle.focus();
+    handle.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
+    );
+    expect(document.activeElement).toBe(handle);
+    expect(adjusted).toBe(1);
+  });
+
+  it('무해화된 컨트롤이 타깃이던 키는 핸들러에 닿지 않는다', () => {
+    // clickless 폴백 창 재현 - click 없이 포커스만 남은 상태에서 Space
+    const row = mount('<div role="button" tabindex="0">사운드</div>');
+    let toggled = 0;
+    row.addEventListener('keydown', () => {
+      toggled += 1;
+    });
+    row.dispatchEvent(pointerEvent('pointerdown'));
+    row.focus();
+    row.dispatchEvent(pointerEvent('pointerup'));
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: ' ',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(toggled).toBe(0);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('드래그 중 방향키도 release된 슬라이더 핸들러에 닿지 않는다', () => {
+    const slider = mount('<div role="slider" tabindex="0"></div>');
+    let adjusted = 0;
+    slider.addEventListener('keydown', () => {
+      adjusted += 1;
+    });
+    slider.dispatchEvent(pointerEvent('pointerdown'));
+    slider.focus();
+    slider.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
+    );
+    expect(adjusted).toBe(0);
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('clickless 릴리스 대기 중 keydown이 끼어도 release한다', () => {
     // 키 상시 입력 앱 - 폴백 창 안의 키 입력이 release를 취소하면 안 된다
     const slider = mount('<div role="slider" tabindex="0"></div>');

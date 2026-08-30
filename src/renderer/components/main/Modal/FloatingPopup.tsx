@@ -16,6 +16,7 @@ import {
   type Middleware,
   type Placement,
 } from '@floating-ui/react';
+import { getLastInputModality } from '@utils/focus/pointerFocusGuard';
 import {
   getFocusableElements,
   isAvailableFocusTarget,
@@ -160,8 +161,13 @@ const FloatingPopupSurface = ({
     ) {
       return;
     }
+    // 마우스로 연 팝업은 컨트롤에 보이지 않는 포커스를 만들지 않는다 -
+    // 이후 키 입력이 :focus-visible로 승격돼 첫 컨트롤에 링이 떠오른다.
+    // 메뉴는 방향키 탐색이 항목 포커스를 전제하므로 제외
     const initialTarget =
-      !contentReady || initialFocus === 'surface'
+      !contentReady ||
+      initialFocus === 'surface' ||
+      (role !== 'menu' && getLastInputModality() === 'pointer')
         ? surface
         : role === 'menu'
         ? Array.from(
