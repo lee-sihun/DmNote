@@ -1,10 +1,7 @@
 /* eslint-disable react-hooks/refs */
 import React from 'react';
 import type { KeyPosition } from '@src/types/key/keys';
-import type {
-  GraphItemPosition,
-  GraphItemType,
-} from '@src/types/key/graphItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { PANEL_ROOT_CLASS } from '../panelChrome';
@@ -12,14 +9,12 @@ import {
   PropertyRow,
   PropertySection,
   NumberInput,
-  ColorInput,
   BatchStyleTabContent,
   TABS,
   type TabType,
 } from '../index';
 import BatchGeometrySection from './BatchGeometrySection';
 import Checkbox from '@components/main/common/Checkbox';
-import Dropdown from '@components/main/common/Dropdown';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
@@ -27,11 +22,10 @@ import {
   captureBatchElementBinding,
   useBatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { previewBatchGraphColor } from '../previewPatchForwarders';
-import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
 import type { BatchElementPropertyUpdate } from '../types';
 import BatchPanelHeader from './BatchPanelHeader';
+import BatchGraphSettingsSection from './BatchGraphSettingsSection';
+import { createBatchGraphSettingsModel } from './batchGraphSettingsModel';
 import {
   commitBoundActiveImage,
   commitBoundActiveTransparent,
@@ -158,45 +152,11 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
     selectedKeyType,
   );
 
-  const graphShapeOptions = [
-    { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
-    { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
-  ];
-  const graphTypeState = getMixedValueGraphs(
-    (pos) => pos.graphType || 'line',
-    'line' as string,
-  );
-  const showAvgLineState = getMixedValueGraphs(
-    (pos) => pos.showAvgLine ?? true,
-    true,
-  );
-  const graphSpeedState = getMixedValueGraphs(
-    (pos) => Math.round(pos.graphSpeed || 1000),
-    1000,
-  );
-  const graphColorState = getMixedValueGraphs(
-    (pos) => pos.graphColor || '#86EFAC',
-    '#86EFAC',
-  );
-  // 피커 칸은 hex와 알파를 따로 판단한다. 그래프 색은 rgba 문자열일 수 있다
-  const graphColorMixed = {
-    hex: getMixedValueGraphs(
-      (pos) => toRgbHexColor(pos.graphColor || '#86EFAC'),
-      '',
-    ).isMixed,
-    alpha: getMixedValueGraphs(
-      (pos) => parseAlphaPercent(pos.graphColor || '#86EFAC'),
-      100,
-    ).isMixed,
-  };
-  const graphAnimationState = getMixedValueGraphs(
-    (pos) => pos.graphAnimationEnabled ?? true,
-    true,
-  );
-  const hasLineGraph = getSelectedGraphsData().some(
-    (data) =>
-      ((data.position as GraphItemPosition | undefined)?.graphType ||
-        'line') === 'line',
+  const graphSettings = createBatchGraphSettingsModel(
+    getMixedValueGraphs,
+    getSelectedGraphsData().map(
+      ({ position }) => position as GraphItemPosition,
+    ),
   );
   const batchGraphSpacing = getBatchSpacingValue();
 
@@ -239,121 +199,15 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               showShadowControls={false}
               shadowActiveState={false}
               afterSizeContent={
-                <>
-                  <PropertyRow
-                    label={t('propertiesPanel.graphShape') || 'Graph Shape'}
-                  >
-                    {graphTypeState.isMixed ? (
-                      <span className="text-fg-faint text-body italic">
-                        Mixed
-                      </span>
-                    ) : null}
-                    <Dropdown
-                      commitStrategy="after-paint"
-                      options={graphShapeOptions}
-                      value={graphTypeState.value}
-                      onChange={(value) =>
-                        handleGraphBatchSharedSetting({
-                          graphType: value as GraphItemType,
-                        })
-                      }
-                    />
-                  </PropertyRow>
-
-                  {hasLineGraph && (
-                    <div className="flex justify-between items-center w-full min-h-[32px]">
-                      <p className="text-fg-muted text-label">
-                        {t('propertiesPanel.graphShowAverageLine') ||
-                          'Show Average Line'}
-                      </p>
-                      <Checkbox
-                        commitStrategy="after-paint"
-                        checked={showAvgLineState.value}
-                        onChange={() =>
-                          handleGraphBatchSharedSetting({
-                            showAvgLine: !showAvgLineState.value,
-                          })
-                        }
-                      />
-                    </div>
-                  )}
-
-                  <PropertyRow
-                    label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
-                  >
-                    {graphSpeedState.isMixed ? (
-                      <span className="text-fg-faint text-body italic">
-                        Mixed
-                      </span>
-                    ) : null}
-                    <NumberInput
-                      value={graphSpeedState.value}
-                      width="62px"
-                      onChange={(value) => {
-                        const clamped = Math.max(500, Math.min(5000, value));
-                        const snapped = Math.round(clamped / 100) * 100;
-                        handleGraphBatchSharedSetting({
-                          graphSpeed: snapped,
-                        });
-                      }}
-                      min={500}
-                      max={5000}
-                      suffix="ms"
-                      isMixed={graphSpeedState.isMixed}
-                    />
-                  </PropertyRow>
-
-                  <PropertyRow
-                    label={t('propertiesPanel.graphColor') || 'Graph Color'}
-                  >
-                    {graphColorState.isMixed ? (
-                      <span className="text-fg-faint text-body italic">
-                        Mixed
-                      </span>
-                    ) : null}
-                    <ColorInput
-                      value={graphColorState.value}
-                      hexMixed={graphColorMixed.hex}
-                      alphaMixed={graphColorMixed.alpha}
-                      onChange={() => {}}
-                      onPreview={(value) =>
-                        previewBatchGraphColor(
-                          selectedGraphElements.map(({ id }) => id),
-                          selectedKeyType,
-                          value,
-                        )
-                      }
-                      onChangeComplete={(value) =>
-                        handleGraphBatchSharedSetting({ graphColor: value })
-                      }
-                      onCancel={() => editGestureController.cancel()}
-                      colorId={`graph-batch-color-${selectedKeyType}`}
-                      panelElement={panelElement}
-                    />
-                  </PropertyRow>
-
-                  <div className="flex justify-between items-center w-full min-h-[32px]">
-                    <p className="text-fg-muted text-label">
-                      {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
-                    </p>
-                    <div className="flex items-center gap-[6px]">
-                      {graphAnimationState.isMixed ? (
-                        <span className="text-fg-faint text-body italic">
-                          Mixed
-                        </span>
-                      ) : null}
-                      <Checkbox
-                        commitStrategy="after-paint"
-                        checked={graphAnimationState.value}
-                        onChange={() =>
-                          handleGraphBatchSharedSetting({
-                            graphAnimationEnabled: !graphAnimationState.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </>
+                <BatchGraphSettingsSection
+                  model={graphSettings}
+                  graphIds={selectedGraphElements.map(({ id }) => id)}
+                  selectedKeyType={selectedKeyType}
+                  colorId={`graph-batch-color-${selectedKeyType}`}
+                  panelElement={panelElement}
+                  onCommit={handleGraphBatchSharedSetting}
+                  t={t}
+                />
               }
               getMixedValue={getMixedValueGraphsAsKey}
               getSelectedKeysData={getSelectedGraphsData}
