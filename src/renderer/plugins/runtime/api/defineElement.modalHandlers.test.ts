@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCheckbox } from '@utils/plugin/pluginComponents';
+import {
+  createCheckbox,
+  createDropdown,
+  createInput,
+} from '@utils/plugin/pluginComponents';
 import { clearComponentHandlers } from '@utils/plugin/pluginUtils';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { registerPluginInstancesEditSessionFlush } from '../displayElement/instancesCommitQueue';
@@ -200,5 +204,251 @@ describe('defineElement modal handler lifecycle', () => {
     expect(update.mock.invocationCallOrder[0]).toBeLessThan(
       flush.mock.invocationCallOrder[2],
     );
+  });
+
+  it('설정 타입별 preview·commit과 visibility·picker·cancel 계약을 보존한다', async () => {
+    const flush = vi.fn();
+    cleanups.push(registerPluginInstancesEditSessionFlush('plugin-a', flush));
+    const element = {
+      fullId: 'plugin-a::one',
+      definitionId: 'plugin-a',
+      pluginId: 'plugin-a',
+      settings: {
+        enabled: false,
+        nickname: 'short',
+        amount: 2,
+        mode: 'one',
+        color: '#111111',
+      },
+      state: {},
+      position: { x: 0, y: 0 },
+      html: '',
+    } as unknown as PluginDisplayElementInternal;
+    usePluginDisplayElementStore.setState({ elements: [element] });
+
+    let menuItem:
+      | { onClick: (context: unknown) => unknown | Promise<unknown> }
+      | undefined;
+    let settleDialog: ((confirmed: boolean) => void) | undefined;
+    const dialogRoot = document.createElement('div');
+    document.body.appendChild(dialogRoot);
+    cleanups.push(() => dialogRoot.remove());
+    const custom = vi.fn(
+      (html: string) =>
+        new Promise<boolean>((resolve) => {
+          dialogRoot.innerHTML = html;
+          settleDialog = resolve;
+        }),
+    );
+    const addElement = vi.fn();
+    const update = vi.fn();
+    const pickColor = vi.fn();
+    const normalizationError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    createDefineElement({
+      pluginId: 'plugin-a',
+      api: {
+        settings: { get: vi.fn().mockResolvedValue({ language: 'en' }) },
+        ui: {
+          dialog: { custom },
+          components: {
+            checkbox: createCheckbox,
+            input: createInput,
+            dropdown: createDropdown,
+          },
+          pickColor,
+          displayElement: { update, add: addElement },
+          contextMenu: {
+            addGridMenuItem: vi.fn(
+              (item: { onClick: (context: unknown) => unknown }) => {
+                menuItem = item;
+                return 'menu-1';
+              },
+            ),
+            removeMenuItem: vi.fn(),
+          },
+        },
+      },
+      registerCleanup: (cleanup: () => void) => cleanups.push(cleanup),
+      wrapFunctionWithContext: (fn) => fn,
+      isReloading: () => false,
+      waitForReloadEnd: vi.fn().mockResolvedValue(undefined),
+    } as never)({
+      name: 'Example',
+      settingsUI: 'modal',
+      settings: {
+        appearance: { type: 'section', label: 'Appearance' },
+        enabled: { type: 'boolean', default: false, label: 'Enabled' },
+        nickname: {
+          type: 'string',
+          default: '',
+          label: 'Nickname',
+          visible: (settings) => settings.enabled === true,
+        },
+        amount: {
+          type: 'number',
+          default: 0,
+          label: 'Amount',
+          min: 0,
+          max: 10,
+          step: 1,
+        },
+        mode: {
+          type: 'select',
+          default: 'one',
+          label: 'Mode',
+          options: [
+            { label: 'One', value: 'one' },
+            { label: 'Two', value: 'two' },
+          ],
+        },
+        color: { type: 'color', default: '#000000', label: 'Color' },
+        broken: {
+          type: 'string',
+          default: 'broken',
+          label: 'Broken',
+          visible: () => {
+            throw new Error('visibility failed');
+          },
+        },
+      },
+      template: () => '',
+    });
+
+    await menuItem?.onClick({ position: { dx: 0, dy: 0 } });
+    const addConfig = addElement.mock.calls[0]?.[0] as {
+      onClick?: (event: Event) => unknown;
+    };
+    update.mockClear();
+    flush.mockClear();
+    const opening = addConfig.onClick?.({
+      currentTarget: { getAttribute: () => element.fullId },
+    } as unknown as Event) as Promise<void>;
+    await vi.waitFor(() => expect(custom).toHaveBeenCalledOnce());
+
+    expect(custom).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'data-settings-section="plugin-element-plugin-a-plugin-a%3A%3Aone-0"',
+      ),
+      {
+        showCancel: true,
+        confirmText: 'Apply',
+        cancelText: 'Cancel',
+      },
+    );
+    const entries = Array.from(
+      dialogRoot.querySelectorAll<HTMLElement>('[data-settings-entry]'),
+    );
+    expect(entries).toHaveLength(6);
+    expect(entries[1]?.style.display).toBe('none');
+    expect(entries[5]?.style.display).toBe('none');
+
+    const querySelectorAll = vi.spyOn(document, 'querySelectorAll');
+    const checkbox = entries[0]?.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
+    const checkboxHandler = entries[0]
+      ?.querySelector<HTMLElement>('[data-plugin-handler-change]')
+      ?.getAttribute('data-plugin-handler-change');
+    window[checkboxHandler as `__dmn_handler_${string}`]?.({
+      target: { checked: true },
+    } as unknown as Event);
+
+    expect(update).toHaveBeenLastCalledWith(element.fullId, {
+      settings: expect.objectContaining({ enabled: true }),
+    });
+    expect(entries[1]?.style.display).toBe('');
+    expect(querySelectorAll.mock.calls.map(([selector]) => selector)).toEqual([
+      '[data-settings-section]',
+      '[data-settings-entry]',
+      '[data-settings-entry]',
+      '[data-settings-entry]',
+      '[data-settings-entry]',
+      '[data-settings-entry]',
+      '[data-settings-entry]',
+      '[data-settings-empty]',
+    ]);
+    expect(checkbox).not.toBeNull();
+    querySelectorAll.mockRestore();
+
+    const numberInput = entries[2]?.querySelector<HTMLInputElement>(
+      'input[type="number"]',
+    );
+    const numberHandler = numberInput?.getAttribute(
+      'data-plugin-handler-change',
+    );
+    window[numberHandler as `__dmn_handler_${string}`]?.({
+      target: { value: '99' },
+    } as unknown as Event);
+    expect(update).toHaveBeenLastCalledWith(element.fullId, {
+      settings: expect.objectContaining({ amount: 10 }),
+    });
+
+    const dropdown = entries[3]?.querySelector<HTMLElement>(
+      '[data-plugin-handler-change]',
+    );
+    const dropdownHandler = dropdown?.getAttribute(
+      'data-plugin-handler-change',
+    );
+    window[dropdownHandler as `__dmn_handler_${string}`]?.({
+      target: {
+        getAttribute: (name: string) =>
+          name === 'data-selected' ? 'two' : null,
+      },
+    } as unknown as Event);
+    expect(update).toHaveBeenLastCalledWith(element.fullId, {
+      settings: expect.objectContaining({ mode: 'two' }),
+    });
+
+    const colorButton = entries[4]?.querySelector<HTMLButtonElement>(
+      '[data-plugin-handler]',
+    );
+    const colorHandler = colorButton?.getAttribute('data-plugin-handler');
+    handlerRegistry.get(colorHandler || '')?.({
+      target: colorButton,
+    } as unknown as Event);
+    expect(pickColor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialColor: '#111111',
+        id: 'plugin-plugin-a-plugin-a::one-color',
+        referenceElement: colorButton,
+      }),
+    );
+    const pickerOptions = pickColor.mock.calls[0]?.[0] as {
+      onColorChange: (color: string) => void;
+      onColorChangeComplete: (color: string) => void;
+      onClose: () => void;
+    };
+    const updateCountBeforePreview = update.mock.calls.length;
+    pickerOptions.onColorChange('#222222');
+    expect(
+      colorButton?.style.getPropertyValue('--dmn-color-swatch-color'),
+    ).toBe('#222222');
+    expect(update).toHaveBeenCalledTimes(updateCountBeforePreview);
+    pickerOptions.onColorChangeComplete('#333333');
+    expect(update).toHaveBeenLastCalledWith(element.fullId, {
+      settings: expect.objectContaining({ color: '#333333' }),
+    });
+    expect(colorButton?.classList.contains('shadow-focus-ring')).toBe(true);
+    pickerOptions.onClose();
+    expect(colorButton?.classList.contains('shadow-focus-ring')).toBe(false);
+
+    expect(normalizationError).toHaveBeenCalledTimes(1);
+    settleDialog?.(false);
+    await opening;
+
+    expect(update).toHaveBeenLastCalledWith(element.fullId, {
+      settings: {
+        enabled: false,
+        nickname: 'short',
+        amount: 2,
+        mode: 'one',
+        color: '#111111',
+        broken: 'broken',
+      },
+    });
+    expect(flush).toHaveBeenCalledOnce();
   });
 });
