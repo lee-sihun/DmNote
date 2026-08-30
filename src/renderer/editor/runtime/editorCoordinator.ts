@@ -1,11 +1,12 @@
 import { applySemanticOps, fieldsForSemanticOp } from './semanticOpsProjection';
 import { SerialTaskQueue } from './serialTaskQueue';
+import { hasReachedEditorAutoRebaseLimit } from './editorRetryPolicy';
 import {
-  hasReachedEditorAutoRebaseLimit,
-  isSemanticCommitFailureRetryable,
-  shouldAutoRebaseSemanticConflict,
-  shouldRetryUnknownSemanticOutcome,
-} from './editorRetryPolicy';
+  runSemanticCommitAttemptRuntime,
+  type EditorSemanticCommitMeta,
+  type EditorSemanticCommitOutcome,
+  type EditorSemanticOpsGenerator,
+} from './semanticCommitAttemptRuntime';
 import {
   applyEditorPatch,
   applyIsolatedPluginPatch,
@@ -166,20 +167,11 @@ interface EditorSyncOptions {
   reapply?: boolean;
 }
 
-export interface EditorSemanticCommitOutcome {
-  document: CanonicalEditorDocumentV1;
-  opResults: EditorOpResultV1[];
-}
-
-export interface EditorSemanticCommitMeta {
-  gestureId?: string;
-  onEnrolled?: () => void;
-  preflight?: () => void;
-}
-
-export type EditorSemanticOpsGenerator = (
-  base: CanonicalEditorDocumentV1,
-) => readonly EditorOpV1[] | null;
+export type {
+  EditorSemanticCommitMeta,
+  EditorSemanticCommitOutcome,
+  EditorSemanticOpsGenerator,
+} from './semanticCommitAttemptRuntime';
 
 export class EditorReadOnlyError extends Error {
   constructor() {
@@ -542,214 +534,43 @@ class EditorSaveCoordinator {
     generate: EditorSemanticOpsGenerator,
     meta: EditorSemanticCommitMeta,
   ): Promise<EditorSemanticCommitOutcome | null> {
-    await this.start();
-    await this.drainUntilSettled();
-    await this.eventQueue.wait();
-    if (this.conflict) {
-      throw this.error ?? new Error('editor conflict pending');
-    }
-
-    let baseDocument = clone(this.requireLastAck());
-    let baseRevision = this.requireRevision();
-    let mutationId = this.createMutationId();
-    let conflictRetryCount = 0;
-    let totalRetryCount = 0;
-    let enrolled = false;
-
-    while (true) {
-      let ops: EditorOpV1[];
-      try {
-        meta.preflight?.();
-        const generated = generate(clone(baseDocument));
-        if (!generated) {
-          if (enrolled) {
-            this.applyDocument(clone(this.requireLastAck()), 'rejected');
-            if (meta.gestureId) {
-              this.onGestureIdsDiscarded?.([meta.gestureId]);
-            }
-            this.error = null;
-            this.failureKind = null;
-            this.phase = 'idle';
-            this.notify();
-          }
-          return null;
+    return runSemanticCommitAttemptRuntime(generate, meta, {
+      start: () => this.start(),
+      drainUntilSettled: () => this.drainUntilSettled(),
+      waitForEvents: () => this.eventQueue.wait(),
+      readConflict: () => ({
+        active: this.conflict !== null,
+        error: this.error,
+      }),
+      readLastAck: () => this.requireLastAck(),
+      readRevision: () => this.requireRevision(),
+      readInFlightMutationId: () => this.inFlight?.mutationId ?? null,
+      createMutationId: () => this.createMutationId(),
+      setState: (patch) => {
+        if ('inFlight' in patch) this.inFlight = patch.inFlight ?? null;
+        if ('revision' in patch) this.revision = patch.revision ?? null;
+        if ('lastAck' in patch) this.lastAck = patch.lastAck ?? null;
+        if ('error' in patch) this.error = patch.error;
+        if ('failureKind' in patch) {
+          this.failureKind = patch.failureKind ?? null;
         }
-        assertEditorOpsV1(generated);
-        ops = clone([...generated]);
-      } catch (error) {
-        if (enrolled) {
-          this.applyDocument(clone(this.requireLastAck()), 'rejected');
-          if (meta.gestureId) {
-            this.onGestureIdsDiscarded?.([meta.gestureId]);
-          }
-          this.error = null;
-          this.failureKind = null;
-          this.phase = 'idle';
-          this.notify();
-        }
-        throw error;
-      }
-      const request: EditorCommitRequest = {
-        baseRevision,
-        mutationId,
-        opsVersion: EDITOR_OPS_VERSION,
-        ops,
-        ...(meta.gestureId ? { gestureId: meta.gestureId } : {}),
-      };
-      const target = applySemanticOps(baseDocument, ops);
-      assertCanonicalEditorDocument(target, 'semantic target document');
-      this.reapplyFrozenIntent(baseDocument, { ops });
-      const requestFields = [...new Set(ops.flatMap(fieldsForSemanticOp))];
-      const inFlight: InFlightCommit = {
-        mutationId,
-        baseRevision,
-        baseDocument: clone(baseDocument),
-        target,
-        localFields: getChangedEditorFields(baseDocument, target),
-        requestFields,
-        gestureIds: meta.gestureId ? [meta.gestureId] : [],
-        semanticOps: true,
-      };
-      this.inFlight = inFlight;
-      this.rememberOwnMutation(inFlight);
-      this.phase = 'saving';
-      this.error = null;
-      this.failureKind = null;
-      this.notify();
-      if (!enrolled) {
-        enrolled = true;
-        try {
-          meta.onEnrolled?.();
-        } catch (error) {
-          console.error('onEnrolled callback failed', error);
-        }
-      }
-
-      let outcomeUnknownRetryCount = 0;
-      try {
-        let result: EditorCommitResult;
-        let opResults: EditorOpResultV1[];
-        while (true) {
-          try {
-            result = await this.transport.commit(request);
-            assertEditorOpCommitResult(result, ops);
-            opResults = clone(result.opResults!);
-            this.assertSemanticChangedFields(
-              baseDocument,
-              ops,
-              opResults,
-              result,
-            );
-            break;
-          } catch (error) {
-            if (
-              !shouldRetryUnknownSemanticOutcome(
-                error,
-                outcomeUnknownRetryCount,
-              )
-            ) {
-              throw error;
-            }
-            outcomeUnknownRetryCount += 1;
-            totalRetryCount += 1;
-          }
-        }
-
-        const hasMissing = opResults.some(
-          (opResult) => opResult.status === 'targetMissing',
-        );
-        const currentRevision = this.requireRevision();
-        if (hasMissing || result.revision > currentRevision + 1) {
-          await this.syncSemanticCanonical();
-        } else if (result.revision >= currentRevision) {
-          const acknowledged = applySemanticOps(
-            this.requireLastAck(),
-            ops,
-            opResults,
-          );
-          this.revision = result.revision;
-          this.lastAck = clone(acknowledged);
-        }
-        this.error = null;
-        this.failureKind = null;
-        this.phase = 'idle';
-        this.notify();
-        this.logSemanticCommit(result, opResults, totalRetryCount);
-        return {
-          document: clone(this.requireLastAck()),
-          opResults,
-        };
-      } catch (error) {
-        if (this.inFlight?.mutationId === mutationId) this.inFlight = null;
-
-        if (shouldAutoRebaseSemanticConflict(error, conflictRetryCount)) {
-          this.ownMutations.delete(mutationId);
-          try {
-            const canonical = await this.syncSemanticCanonical();
-            baseDocument = canonical.document;
-            baseRevision = canonical.revision;
-            mutationId = this.createMutationId();
-            conflictRetryCount += 1;
-            totalRetryCount += 1;
-            continue;
-          } catch (syncError) {
-            this.applyDocument(clone(this.requireLastAck()), 'rejected');
-            if (inFlight.gestureIds.length > 0) {
-              this.onGestureIdsDiscarded?.(inFlight.gestureIds);
-            }
-            this.error = syncError;
-            this.failureKind = 'transient';
-            this.phase = 'error';
-            this.notify();
-            throw syncError;
-          }
-        }
-
-        if (!isEditorCommitError(error) || error.errorCode !== 'IO_ERROR') {
-          this.ownMutations.delete(mutationId);
-        }
-        let canonical: CanonicalEditorGetResult | null = null;
-        try {
-          canonical = await this.syncSemanticCanonical();
-        } catch {
-          // 원래 커밋 오류를 유지
-          if (!(error instanceof EditorProtocolError)) {
-            this.applyDocument(clone(this.requireLastAck()), 'rejected');
-          }
-        }
-        const protocolOutcomeReflected =
-          error instanceof EditorProtocolError &&
-          canonical !== null &&
-          getChangedEditorFields(
-            canonical.document,
-            applySemanticOps(canonical.document, ops),
-          ).length === 0;
-        if (protocolOutcomeReflected) {
-          if (inFlight.gestureIds.length > 0) {
-            this.onGestureIdsDiscarded?.(inFlight.gestureIds);
-          }
-          this.error = null;
-          this.failureKind = null;
-          this.phase = 'idle';
-          this.notify();
-          throw error;
-        }
-        const retryable = isSemanticCommitFailureRetryable(error);
-        if (
-          !(error instanceof EditorProtocolError) &&
-          inFlight.gestureIds.length > 0
-        ) {
-          this.onGestureIdsDiscarded?.(inFlight.gestureIds);
-        }
-        this.error = error;
-        this.failureKind = retryable ? 'transient' : 'permanent';
-        this.phase = 'error';
-        this.notify();
-        throw error;
-      } finally {
-        if (this.inFlight?.mutationId === mutationId) this.inFlight = null;
-      }
-    }
+        if ('phase' in patch && patch.phase) this.phase = patch.phase;
+      },
+      notify: () => this.notify(),
+      applyDocument: (document, reason) => this.applyDocument(document, reason),
+      reapplyFrozenIntent: (base, ops) =>
+        this.reapplyFrozenIntent(base, { ops }),
+      rememberOwnMutation: (inFlight) => this.rememberOwnMutation(inFlight),
+      forgetOwnMutation: (mutationId) => this.ownMutations.delete(mutationId),
+      discardGestureIds: (gestureIds) =>
+        this.onGestureIdsDiscarded?.(gestureIds),
+      commit: (request) => this.transport.commit(request),
+      syncCanonical: () => this.syncSemanticCanonical(),
+      assertChangedFields: (base, ops, opResults, result) =>
+        this.assertSemanticChangedFields(base, ops, opResults, result),
+      logCommit: (result, opResults, retryCount) =>
+        this.logSemanticCommit(result, opResults, retryCount),
+    });
   }
 
   private async syncSemanticCanonical(): Promise<CanonicalEditorGetResult> {
