@@ -17,6 +17,7 @@ pub(crate) mod macos_termination;
 pub(crate) mod macos_window_corners;
 pub(crate) mod migration;
 pub(crate) mod native_element_id;
+pub(crate) mod panel_drag;
 pub(crate) mod plugin;
 pub mod store;
 #[cfg(target_os = "windows")]
@@ -24,4 +25,7 @@ pub(crate) mod windows_window_corners;
 
 pub(crate) use app_state::PANEL_LABEL;
 pub use app_state::{AppState, PanelDragContext};
+pub(crate) use panel_drag::{
+    PanelDragGeometry, PanelDragHitTestResult, PanelDragOrigin, PanelDragStartMode,
+};
 pub use store::AppStore;

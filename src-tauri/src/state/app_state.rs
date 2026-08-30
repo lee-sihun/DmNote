@@ -29,6 +29,7 @@ use super::{
     history::{
         HistoryAdmissionGate, HistoryAdmissionLease, HistoryBarrierLease, HistoryBarrierWaiter,
     },
+    panel_drag::PanelDragController,
     plugin::{PluginAuthorityLease, PluginRuntimeAuthority},
     store::{
         AdmittedEditorTransaction, AdmittedGestureCommit, AppStore, PluginInstancesResetScope,
@@ -559,6 +560,14 @@ enum PanelVisibilityReason {
     Destroyed,
 }
 
+#[cfg(any(target_os = "windows", test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PanelPresentSnapshot {
+    panel_visible: bool,
+    panel_detached: bool,
+    panel_destroy_reason: Option<PanelVisibilityReason>,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct PanelCloseRequestedPayload {
@@ -1037,6 +1046,7 @@ pub struct AppState {
     /// 메인이 다시 보일 때 이 표식이 선 창만 되돌린다
     panel_hidden_with_main: AtomicBool,
     panel_creation_lock: Mutex<()>,
+    panel_drag: Arc<PanelDragController>,
     panel_close_request: Mutex<PanelCloseRequestState>,
     panel_destroy_reason: Mutex<Option<PanelVisibilityReason>>,
     /// 메인이 window.open 직전에 세우는 1회용 토큰 - 플러그인 JS 등 임의의 window.open이
@@ -1246,6 +1256,7 @@ impl AppState {
             panel_visible: AtomicBool::new(false),
             panel_hidden_with_main: AtomicBool::new(false),
             panel_creation_lock: Mutex::new(()),
+            panel_drag: Arc::new(PanelDragController::default()),
             panel_close_request: Mutex::new(PanelCloseRequestState::Idle),
             panel_destroy_reason: Mutex::new(None),
             panel_open_armed: Mutex::new(None),
@@ -1835,6 +1846,7 @@ impl AppState {
         if self.shutdown_started.swap(true, Ordering::SeqCst) {
             return;
         }
+        self.panel_drag.clear_for_lifecycle(None, "shutdown");
         self.overlay_bounds_generation
             .fetch_add(1, Ordering::SeqCst);
         self.keyboard_task_generation.fetch_add(1, Ordering::SeqCst);
@@ -3211,7 +3223,7 @@ impl AppState {
     // 드문 조작이라 즉시 디스크로 - deferred로 두면 강제 종료 때 유저가 고른 배치가 날아간다.
     // 반드시 panel_creation_lock을 놓은 뒤 부를 것: 저장 대기 동안 창 전환이 막힌다.
     // 사이에 반대 전환이 끝났다면 그쪽 저장이 이미 dirty를 걷어가 여기서 값을 되살리지 않는다
-    fn flush_panel_detached(&self) {
+    pub(crate) fn flush_panel_detached(&self) {
         if let Err(err) = self.store.flush() {
             log::warn!("failed to persist panel detached state: {err}");
         }
@@ -3220,6 +3232,58 @@ impl AppState {
     // 메인이 window.open을 부르기 직전에 세운다. 핸들러가 이 토큰을 1회 소비한다
     pub fn arm_panel_open(&self) {
         *self.panel_open_armed.lock() = Some(Instant::now());
+    }
+
+    pub(crate) fn panel_drag_controller(&self) -> Arc<PanelDragController> {
+        Arc::clone(&self.panel_drag)
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn try_lock_panel_creation_for_drag(
+        &self,
+    ) -> Option<parking_lot::MutexGuard<'_, ()>> {
+        self.panel_creation_lock.try_lock()
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn record_panel_drag_presented(&self, app: &AppHandle) -> PanelPresentSnapshot {
+        let panel_detached = self.store.snapshot().panel_detached;
+        let mut destroy_reason = self.panel_destroy_reason.lock();
+        let snapshot = PanelPresentSnapshot {
+            panel_visible: self.panel_visible.load(Ordering::SeqCst),
+            panel_detached,
+            panel_destroy_reason: *destroy_reason,
+        };
+        *destroy_reason = None;
+        drop(destroy_reason);
+        if let Err(error) =
+            publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+        {
+            self.panel_visible.store(true, Ordering::SeqCst);
+            log::warn!("failed to publish the visible panel state during native drag: {error}");
+        }
+        self.mark_panel_detached(true);
+        snapshot
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn revert_panel_drag_presented(
+        &self,
+        app: &AppHandle,
+        snapshot: PanelPresentSnapshot,
+    ) {
+        if let Err(error) = publish_panel_visibility_transition(
+            &self.panel_visible,
+            app,
+            snapshot.panel_visible,
+            snapshot.panel_destroy_reason,
+        ) {
+            self.panel_visible
+                .store(snapshot.panel_visible, Ordering::SeqCst);
+            log::warn!("failed to publish the restored panel state after native drag: {error}");
+        }
+        self.mark_panel_detached(snapshot.panel_detached);
+        *self.panel_destroy_reason.lock() = snapshot.panel_destroy_reason;
     }
 
     fn take_panel_open_arm(&self) -> bool {
@@ -3411,6 +3475,8 @@ impl AppState {
     // 태스크가 메인 스레드 응답을 기다리는 구간(bounds 샘플링)이 있어 잡으면 역전 데드락.
     // 도킹된(hide) 창은 is_visible이 false라 표식이 서지 않는다
     fn hide_detached_panel_with_main(&self, app: &AppHandle) {
+        self.panel_drag
+            .clear_for_lifecycle(Some(app), "hiddenWithMain");
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
             return;
         };
@@ -3495,6 +3561,7 @@ impl AppState {
         app: &AppHandle,
         reason: PanelVisibilityReason,
     ) -> Result<()> {
+        self.panel_drag.clear_for_lifecycle(Some(app), "docked");
         // 도킹 상태 기록: 명시 재부착과 close-ack 타임아웃 강제 도킹이 모두 이 경로를 지남
         // Destroyed 핸들러에서는 기록 금지 - 종료 시 shutdown_application이 panel.destroy()를
         // 직접 호출해 같은 핸들러로 들어오므로 분리 채 종료할 때마다 플래그가 지워짐.
@@ -3552,6 +3619,8 @@ impl AppState {
         if self.shutdown_started.load(Ordering::SeqCst) {
             return Ok(());
         }
+        self.panel_drag
+            .clear_for_lifecycle(Some(app), "applicationLifecycle");
         let _creation_guard = self.panel_creation_lock.lock();
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
             return Ok(());
@@ -3560,6 +3629,7 @@ impl AppState {
     }
 
     pub fn handle_panel_window_destroyed(&self, app: &AppHandle) {
+        self.panel_drag.finish_window_destroyed(app);
         drop_panel_hidden_with_main(&self.panel_hidden_with_main);
         finish_panel_close(&self.panel_close_request);
         if let Err(error) = self.publish_panel_hidden(app, PanelVisibilityReason::Destroyed) {
@@ -3732,6 +3802,10 @@ impl AppState {
             WindowEvent::Moved(position) => {
                 bounds_persistence
                     .record_event(bounds_session, PanelBoundsChange::Moved(*position));
+                #[cfg(target_os = "windows")]
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    state.panel_drag.handle_moved(&app_handle);
+                }
             }
             WindowEvent::Resized(size) => {
                 bounds_persistence.record_event(bounds_session, PanelBoundsChange::Resized(*size));
@@ -7708,12 +7782,12 @@ mod tests {
         NativeRect, NativeRejectReason, OverlayCloseAction, OverlayPersistenceAuthority,
         OverlayPlacementTrust, OverlayRestoreSource, PanelBoundsChange,
         PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
-        PanelCloseRequestState, PanelCloseRequestedPayload, PanelVisibilityEventEmitter,
-        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
-        DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
-        KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL,
-        PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
-        PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
+        PanelCloseRequestState, PanelCloseRequestedPayload, PanelPresentSnapshot,
+        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
+        PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
+        PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
     };
     use crate::{
         keyboard::KeyboardManager,
@@ -9552,6 +9626,43 @@ mod tests {
             self.events.lock().push(payload);
             Ok(())
         }
+    }
+
+    #[test]
+    fn panel_present_snapshot_restores_docked_state_after_hide() {
+        let snapshot = PanelPresentSnapshot {
+            panel_visible: false,
+            panel_detached: false,
+            panel_destroy_reason: Some(PanelVisibilityReason::Closed),
+        };
+
+        assert!(!snapshot.panel_visible);
+        assert!(!should_restore_panel_on_startup(
+            false,
+            false,
+            snapshot.panel_detached
+        ));
+        assert_eq!(
+            snapshot.panel_destroy_reason,
+            Some(PanelVisibilityReason::Closed)
+        );
+    }
+
+    #[test]
+    fn panel_present_snapshot_preserves_detached_state_for_tray_hide() {
+        let snapshot = PanelPresentSnapshot {
+            panel_visible: true,
+            panel_detached: true,
+            panel_destroy_reason: None,
+        };
+
+        assert!(snapshot.panel_visible);
+        assert!(should_restore_panel_on_startup(
+            false,
+            false,
+            snapshot.panel_detached
+        ));
+        assert_eq!(snapshot.panel_destroy_reason, None);
     }
 
     #[test]
