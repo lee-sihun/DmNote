@@ -1,15 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { StyleTabContentProps } from '../types';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
-import type { ImageFit, KeyPosition } from '@src/types/key/keys';
-import {
-  applyImageTransformLeaf,
-  type ImageMode,
-  type ImageTransformLeaf,
-} from '@src/types/key/imageLayer';
+import type { KeyPosition } from '@src/types/key/keys';
 import { PropertyRow, PropertySection, TextInput } from '../PropertyInputs';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import Checkbox from '../../../common/Checkbox';
@@ -37,6 +31,7 @@ import SingleGeometrySection from './SingleGeometrySection';
 import SingleTypographySection from './SingleTypographySection';
 import SingleSurfaceSection from './SingleSurfaceSection';
 import SingleMappingSection from './SingleMappingSection';
+import SingleImagePickerPopup from './SingleImagePickerPopup';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const SOUND_PAGE_KEY = 'single-style:sound';
@@ -439,70 +434,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     );
   };
 
-  // 이미지 변경 핸들러
-  const handleIdleImageChange = (imageUrl: string) => {
-    onInactiveImageCommit?.(imageUrl);
-  };
-
-  const handleActiveImageChange = (imageUrl: string) => {
-    onActiveImageCommit?.(imageUrl);
-  };
-
-  const handleIdleTransparentChange = (checked: boolean) => {
-    onIdleTransparentCommit?.(checked);
-  };
-
-  const handleActiveTransparentChange = (checked: boolean) => {
-    onActiveTransparentCommit?.(checked);
-  };
-
-  const handleIdleImageReset = () => {
-    onInactiveImageCommit?.('');
-  };
-
-  const handleActiveImageReset = () => {
-    onActiveImageCommit?.('');
-  };
-
-  const handleIdleImageFitChange = (fit: ImageFit) => {
-    onIdleImageFitCommit?.(fit);
-  };
-
-  const handleActiveImageFitChange = (fit: ImageFit) => {
-    onActiveImageFitCommit?.(fit);
-  };
-
-  // 이미지 레이어 모드·변환은 키 전용 - 범용 property 커밋으로 흘린다
-  const handleImageModeChange = (mode: ImageMode) => {
-    onElementPropertyCommit?.({ property: 'imageMode', value: mode });
-  };
-  const handleImageTransformChange = (
-    state: 'idle' | 'active',
-    leaf: ImageTransformLeaf,
-    value: number,
-  ) => {
-    onElementPropertyCommit?.(
-      state === 'idle'
-        ? { property: 'idleImageTransform', value: { leaf, value } }
-        : { property: 'activeImageTransform', value: { leaf, value } },
-    );
-  };
-  // 프리뷰는 leaf가 아니라 전체 변환을 보낸다. 오버레이는 patch를 얕게 합치므로
-  // leaf만 보내면 나머지 축이 사라진다
-  const handleImageTransformPreview = (
-    state: 'idle' | 'active',
-    leaf: ImageTransformLeaf,
-    value: number,
-  ) => {
-    const property =
-      state === 'idle' ? 'idleImageTransform' : 'activeImageTransform';
-    onStylePropertyPreview?.({
-      property,
-      value: applyImageTransformLeaf(keyPosition[property], { leaf, value }),
-    });
-  };
-  const handleImageTransformCancel = () => editGestureController.cancel();
-
   // 클래스명 핸들러
   const handleClassNameChange = (value: string) => {
     onStylePropertyPreview?.({ property: 'className', value: value });
@@ -659,49 +590,23 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         />
       )}
 
-      {/* 이미지 픽커 팝업 - 단일 선택 모드에서만 */}
-      <PopupExit open={showImagePicker}>
-        {showImagePicker && onToggleImagePicker && imageButtonRef ? (
-          <ImagePicker
-            open={showImagePicker}
-            previewAnchor={canvasAnchor ?? null}
-            referenceRef={imageButtonRef}
-            panelElement={panelElement}
-            completionBinding="element-id"
-            idleImage={keyPosition.inactiveImage || ''}
-            activeImage={keyPosition.activeImage || ''}
-            idleTransparent={keyPosition.idleTransparent ?? false}
-            activeTransparent={keyPosition.activeTransparent ?? false}
-            idleImageFit={
-              keyPosition.idleImageFit ?? keyPosition.imageFit ?? 'cover'
-            }
-            activeImageFit={
-              keyPosition.activeImageFit ?? keyPosition.imageFit ?? 'cover'
-            }
-            onIdleImageChange={handleIdleImageChange}
-            onActiveImageChange={handleActiveImageChange}
-            onIdleTransparentChange={handleIdleTransparentChange}
-            onActiveTransparentChange={handleActiveTransparentChange}
-            onIdleImageFitChange={handleIdleImageFitChange}
-            onActiveImageFitChange={handleActiveImageFitChange}
-            onIdleImageReset={handleIdleImageReset}
-            onActiveImageReset={handleActiveImageReset}
-            {...(shadowActiveState
-              ? {
-                  imageMode: keyPosition.imageMode,
-                  idleImageTransform: keyPosition.idleImageTransform,
-                  activeImageTransform: keyPosition.activeImageTransform,
-                  onImageModeChange: handleImageModeChange,
-                  onImageTransformChange: handleImageTransformChange,
-                  onImageTransformPreview: handleImageTransformPreview,
-                  onImageTransformCancel: handleImageTransformCancel,
-                }
-              : {})}
-            onClose={() => onToggleImagePicker()}
-            showActiveState={shadowActiveState}
-          />
-        ) : null}
-      </PopupExit>
+      <SingleImagePickerPopup
+        open={showImagePicker}
+        keyPosition={keyPosition}
+        imageButtonRef={imageButtonRef}
+        panelElement={panelElement}
+        canvasAnchor={canvasAnchor}
+        showActiveState={shadowActiveState}
+        onToggle={onToggleImagePicker}
+        onInactiveImageCommit={onInactiveImageCommit}
+        onActiveImageCommit={onActiveImageCommit}
+        onIdleTransparentCommit={onIdleTransparentCommit}
+        onActiveTransparentCommit={onActiveTransparentCommit}
+        onIdleImageFitCommit={onIdleImageFitCommit}
+        onActiveImageFitCommit={onActiveImageFitCommit}
+        onElementPropertyCommit={onElementPropertyCommit}
+        onStylePropertyPreview={onStylePropertyPreview}
+      />
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
       <PopupExit open={Boolean(pickerFor)}>
