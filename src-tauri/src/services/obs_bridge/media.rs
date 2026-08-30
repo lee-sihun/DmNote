@@ -192,3 +192,6 @@ pub(super) fn percent_decode(input: &str) -> String {
     }
     String::from_utf8_lossy(&result).into_owned()
 }
+
+#[cfg(test)]
+mod tests;
