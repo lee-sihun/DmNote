@@ -87,4 +87,50 @@ describe('createBatchSelectionModel', () => {
       model.getMixedValueCanonical((position) => position.width, 0),
     ).toEqual({ isMixed: false, value: 40 });
   });
+
+  it('누락 ID를 제외하고 생성 시점의 선택 snapshot을 재사용한다', () => {
+    const input = createInput();
+    input.selectedKeyLikeElements = [
+      { type: 'stat', id: 'missing-stat' },
+      ...input.selectedKeyLikeElements,
+      { type: 'key', id: 'missing-key' },
+    ];
+    input.selectedGraphElements = [
+      { type: 'graph', id: 'missing-graph' },
+      ...input.selectedGraphElements,
+    ];
+    const model = createBatchSelectionModel(input);
+
+    expect(model.getSelectedKeysData()).toBe(model.getSelectedKeysData());
+    expect(model.getSelectedGraphsData()).toBe(model.getSelectedGraphsData());
+    expect(
+      model.getSelectedKeysData().map(({ position }) => position.id),
+    ).toEqual(['key-1', 'stat-1']);
+    expect(
+      model.getSelectedGraphsData().map(({ position }) => position.id),
+    ).toEqual(['graph-1']);
+  });
+
+  it('중복 ID는 findIndex와 같은 첫 위치를 사용하고 canonical 중복은 모두 집계한다', () => {
+    const input = createInput();
+    input.positions['4key'] = [
+      keyPosition('key-1', { width: 31 }),
+      keyPosition('key-1', { width: 99 }),
+    ];
+    input.keyMappings['4key'] = ['KeyB', 'KeyC'];
+    input.canonicalPositions['4key'] = [
+      keyPosition('key-1', { width: 41 }),
+      keyPosition('key-1', { width: 51 }),
+    ];
+    const model = createBatchSelectionModel(input);
+
+    expect(model.getSelectedKeysData()[0]).toMatchObject({
+      index: 0,
+      position: { width: 31 },
+      keyCode: 'KeyB',
+    });
+    expect(
+      model.getMixedValueCanonical((position) => position.width, 0),
+    ).toEqual({ isMixed: true, value: 41 });
+  });
 });
