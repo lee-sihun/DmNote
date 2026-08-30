@@ -20,75 +20,90 @@
 | `BatchSelectionPanel.tsx` | 2367줄 | 1277줄 | 공통 handler/header와 그래프·노브·플러그인 전용 패널 분리 |
 | `SingleSelectionPanel.tsx` | 2061줄 | 674줄 | 그래프·노브 패널과 공통 표시 모델 분리 |
 | `Settings.tsx` | 1423줄 | 1172줄 | 키음 출력 UI, 비동기 적용 큐 훅, 순수 view model 분리 |
-| `editorCoordinator.ts` | 3001줄 | 2156줄 | 의미 연산의 document projection과 영향 필드 계산을 `semanticOpsProjection.ts`로 분리 |
+| `Grid.tsx` | 2303줄 | 1269줄 | 네이티브 장면, 선택 overlay, 컨텍스트 메뉴·복제 ghost 모델 분리 |
+| `useGridSelection.ts` | 1552줄 | 1036줄 | 드래그 생명주기, 이동·클립보드·붙여넣기 순수 모델 분리 |
+| `PluginElement.tsx` | 1647줄 | 1421줄 | DOM 상호작용 어댑터와 레이아웃 모델 분리 |
+| `editorCoordinator.ts` | 3001줄 | 2138줄 | 의미 연산 projection, 직렬 작업 큐, 커밋 재시도 정책 분리 |
 | `elementOps.ts` | 2611줄 | 571줄 | document model, 공통 property, group, style, geometry 연산을 도메인 모듈로 분리하고 기존 facade export 유지 |
-| `store.rs` | 22978줄 | 3349줄 | 테스트, writer 영속화, 자산 참조, 사운드 복구·trash·sweep 분리 |
+| `ColorPicker.tsx` | 1513줄 | 1036줄 | 입력 필드와 팔레트·history 제어 UI 분리 |
+| `NumberInput.tsx` | 1440줄 | 1286줄 | draft·수식 parser 모델과 입력 chrome 분리 |
+| `CounterAnimationEditorModal.tsx` | 1417줄 | 1343줄 | draft 병합·정규화 모델 분리 |
+| `SoundTrimModal.tsx` | 1275줄 | 1011줄 | decode·waveform·trim 순수 모델 분리 |
+| `store.rs` | 22978줄 | 2769줄 | 테스트, writer, 자산 참조, 사운드 복구, editor helper, plugin storage transaction 분리 |
 | `editor_ops.rs` | 10154줄 | 2940줄 | 인라인 테스트 모듈 분리 |
 | `migration.rs` | 6053줄 | 2238줄 | 인라인 테스트 모듈 분리 |
 | `editor.rs` | 5777줄 | 2396줄 | 인라인 테스트 모듈 분리 |
-| `app_state.rs` | 9314줄 | 5650줄 | 인라인 테스트와 창 좌표·모니터 배치·패널 bounds 영속화 모듈 분리 |
+| `app_state.rs` | 9314줄 | 4782줄 | 테스트, 창 geometry, 키보드 daemon 정책·제어, 종료 생명주기 분리 |
 | `models/mod.rs` | 4169줄 | 3033줄 | 인라인 테스트 모듈 분리 |
+| `preset/load.rs` | 3104줄 | 1180줄 | 테스트와 폰트·이미지·사운드 자산 복원 분리 |
+| `keys/sound.rs` | 2189줄 | 806줄 | 테스트, 라이브러리 스캔·재조정, WAV 원자 교체 분리 |
+| `audio/engine.rs` | 1712줄 | 911줄 | ASIO 경계, 출력 테스트, clip decode, 명령 스레드 분리 |
 
-ASIO는 장치 I/O 경계와 순수 정책을 `audio/engine/asio.rs`로 분리했다. 버퍼 정규화, 드라이버 목록 정규화, 유효 출력 구성, 빌드 가용성, 오류 코드와 폴백 계약을 하드웨어 없이 검증한다.
+ASIO는 장치 I/O 경계와 순수 정책을 `audio/engine/asio.rs`로 분리했다. 버퍼 정규화, 드라이버 목록 정규화, 유효 출력 구성, 빌드 가용성, 오류 코드와 폴백 계약을 하드웨어 없이 검증한다. Windows release workflow도 `asio-backend` feature의 focused suite를 production build 전에 실행한다.
 
 이번 분리는 IPC command/event 이름, store schema, editor wire 형식, 기존 `elementOps` 공개 export를 바꾸지 않았다. 이동한 Rust 창 좌표 코드는 가시성 키워드와 포맷 차이를 제외한 토큰 비교로 원본과 동일함을 확인했다.
+
+## Grid 네이티브 요소 재사용성 감사
+
+키·통계·그래프·노브의 편집 Grid 렌더러를 오버레이 렌더러와 대조했다.
+
+- 키와 통계는 공용 `components/shared/Key.tsx`를 사용한다.
+- 그래프는 공용 `components/shared/GraphPanel.tsx`을 사용한다.
+- 노브의 링·이미지·인디케이터 DOM은 `components/shared/KnobFace.tsx`로 공용화했다.
+- 네 종류의 scene 조립과 이벤트 생성은 `Grid/core/NativeGridElements.tsx`가 담당한다.
+- `useGridElementInteraction`, `useStableHandlerSlots`, range·movement·clipboard·paste 모델이 포인터와 선택 정책을 공용화한다.
+- 통계 표시명은 `utils/grid/statTypeLabel.ts`, mixed 값 집계는 `utils/core/mixedValue.ts`가 단일 소스다.
+
+따라서 네 종류의 표시 표면을 다시 하나의 거대 조건부 컴포넌트로 합치지 않는다. 차이가 큰 graph 데이터 표현과 knob 회전 상태는 각각의 얇은 adapter에 남기고, 실제로 동일한 DOM·정책만 공유한다.
 
 ## 추가 조사 결과와 잔여 프론트엔드 우선순위
 
 아래 줄 수는 이번 브랜치에서 `wc -l`로 측정한 값이다.
 
-### 1. Grid 상호작용
+### 1. 상위 조립 컴포넌트
 
-- `Grid/core/Grid.tsx` — 2303줄
-  - scene/layer 조립, 포인터·키보드 interaction, overlay UI가 한 렌더 경계에 결합
-  - 선택과 resize/drag hook은 facade에서 주입
-- `hooks/Grid/useGridSelection.ts` — 1552줄
-  - 순수 selection reducer/model과 DOM event adapter 분리 후보
-  - marquee, modifier, group/plugin selection을 각각 테스트
-- `components/shared/PluginElement.tsx` — 1647줄
-  - runtime props 해석, 측정/geometry, pointer/context menu bridge 분리 후보
+- `PropertiesPanel.tsx` — 1549줄: 선택 route별 조립과 preview/commit adapter가 남아 있다.
+- `PluginElement.tsx` — 1421줄: 플러그인 content lifecycle과 runtime props projection이 다음 경계다.
+- `Grid.tsx` — 1269줄: viewport·도구·장면 훅을 조립하는 상위 controller다.
+- `BatchSelectionPanel.tsx` — 1277줄: mixed 4-type adapter와 탭 조립이 남아 있다.
 
-이 영역은 호출 fan-out과 interaction 분기가 가장 높다. 현재 회귀 테스트가 DOM pointer capture, 좌표계, 플러그인 격리를 모두 독립적으로 고정하지 못하므로 이번 단계에서는 직접 이동하지 않았다. 먼저 characterization test를 보강한 뒤 scene 조립 → overlay UI → event adapter 순서로 분리한다.
-
-검증: Grid interaction focused suite, detached panel contract, plugin element isolation, 전체 Vitest.
+이 파일들은 분리된 하위 모델을 호출하는 조립부 비중이 커졌다. 다음 분리는 props contract를 더 넓히는 방식이 아니라 route/controller별 characterization test를 먼저 추가한 뒤 수행한다.
 
 ### 2. 에디터 런타임 후속 경계
 
-- `editor/runtime/editorCoordinator.ts` — 2156줄
-  - mutation queue와 retry/conflict 처리
-  - canonical snapshot 동기화와 event publication
-  - facade에는 public coordinator API와 조립만 유지
-- `editor/runtime/elementStyleOps.ts` — 1231줄
-  - 현재는 style/paint/shadow/media 속성 연산이라는 한 도메인으로 모였음
-  - 추가 분리는 속성군별 transition 테스트를 먼저 고정한 뒤 검토
+- `editor/runtime/editorCoordinator.ts` — 2138줄
+  - canonical snapshot 동기화와 event publication을 다음 후보로 유지
+  - 직렬 queue와 retry/conflict 정책은 이미 독립 모듈
+- `editor/runtime/elementStyleOps.ts` — 952줄
+  - runtime·image 속성 연산은 분리 완료
+  - paint/shadow 속성군은 transition contract를 유지한 채 추가 분리 검토
 
 검증: coordinator conflict·retry·gesture focused suite, element operation export 계약, 전체 Vitest.
 
 ### 3. 공통 입력과 편집기
 
-- `ColorPicker.tsx` — 1513줄: 색상 상태 모델, gradient editor, palette/history UI 분리
-- `NumberInput.tsx` — 1440줄: 수식 parser, scrub/keyboard session, 표시 컴포넌트 분리
-- `CounterAnimationEditorModal.tsx` — 1417줄: draft reducer, media preview, form section 분리
-- `SoundTrimModal.tsx` — 1275줄: waveform/selection model, decode/export 작업, UI 분리
+- `ColorPicker.tsx` — 1036줄: gradient stop 편집기와 picker surface 조립
+- `NumberInput.tsx` — 1286줄: scrub·keyboard 세션 controller
+- `CounterAnimationEditorModal.tsx` — 1343줄: media preview와 form section
+- `SoundTrimModal.tsx` — 1011줄: decode/export 작업과 waveform UI
 
 입력 컴포넌트는 Escape 취소, preview/commit 경계, child window 동작을 회귀 테스트로 고정한 뒤 이동한다.
 
 ## 잔여 대형 백엔드 우선순위
 
-- `state/app_state.rs` — 5650줄
-  - 다음 경계는 frontend flush/lifecycle handshake, keyboard runtime, shutdown coordinator
-  - 창 좌표와 패널 bounds 제어는 `state/app_state/window_geometry.rs` 989줄로 분리 완료
-  - test-only emitter/harness도 별도 test support 모듈로 이동
-- `state/store.rs` — 3349줄
-  - core transaction facade만 남기고 editor/history transaction과 plugin storage transaction 분리
+- `state/app_state.rs` — 4782줄
+  - 다음 경계는 frontend flush/history handshake와 panel/overlay window controller
+  - keyboard daemon과 shutdown lifecycle은 분리 완료
+- `state/store.rs` — 2769줄
+  - 다음 경계는 editor/history transaction inherent impl
+  - writer·asset·plugin storage 모듈은 모두 기존 `commit_locked`를 통해서만 저장
   - writer와 asset 모듈이 store lock을 우회하지 못하도록 현재 commit 경계를 유지
-- `commands/preset/load.rs` — 3104줄
-  - 파일 decode/validation, migration, store transaction, event projection 분리
-- `commands/keys/sound.rs` — 2189줄
-  - scan/library, WAV processing, delete transaction command 분리
-- `audio/engine.rs` — 1712줄
-  - 실시간 `audio_thread`의 장치 전환·오류 복구 분기가 결합되어 있음
-  - timing 동작을 바꾸지 않도록 상태 전이 characterization test 이후 제어 정책만 분리
+- `models/mod.rs` — 3033줄: editor 외 모델을 도메인 파일로 옮기는 후속 후보
+- `state/editor_ops.rs` — 2940줄: 연산군별 validator/apply 경계가 후속 후보
+- `commands/keys/keys.rs` — 2177줄: key mapping command와 import/export 변환 분리 후보
+- `state/history.rs` — 2101줄: snapshot serializer와 admission/stack 정책 분리 후보
+
+`preset/load.rs` 1180줄, `keys/sound.rs` 806줄, `audio/engine.rs` 911줄은 이번 단계의 목표 경계까지 분리했다.
 
 store 자산 분리는 다음 불변식을 계속 지킨다.
 
@@ -125,7 +140,7 @@ Tauri command를 추가하거나 삭제한 단계에서는 production build 후 
 
 자동 테스트는 하드웨어와 무관한 정책을 모든 개발 플랫폼에서 실행한다. 실제 Windows/ASIO 경계는 다음 순서로 별도 확인한다.
 
-1. Windows에서 `cargo test --features asio-backend audio::engine` 실행
+1. Windows release workflow에서 `cargo test --features asio-backend audio::engine --lib` 자동 실행
 2. `npm run tauri:build`로 ASIO feature production build 확인
 3. 장치 목록 정렬·중복 제거와 저장된 분리 장치 표시 확인
 4. 기본값, 0, 비표준 buffer frame 처리 확인
