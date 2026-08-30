@@ -578,17 +578,27 @@ await dmn.keys.customTabs.restore(
 Subscribes to custom tab create, delete, select, restore, rename, and reorder
 changes.
 
-Alongside `customTabs` and `selectedKeyType`, the payload carries `tabOrder` and
-`barCount`. `tabOrder` is the combined display order of built-in modes and custom
-tabs, containing every tab ID exactly once; `barCount` is how many of the leading
-entries appear in the toolbar bar (1 to 4). Since `list()` returns only an array,
-read the display order from `tabOrder`.
+Alongside `customTabs` and `selectedKeyType`, the payload carries `tabOrder`,
+`barCount`, and `selectionAuthoritative`. `tabOrder` is the combined display
+order of built-in modes and custom tabs, containing every tab ID exactly once;
+`barCount` is how many of the leading entries appear in the toolbar bar (1 to 4).
+`selectionAuthoritative` is `false` for rename and reorder events, whose
+`selectedKeyType` is only a transaction snapshot, and `true` when the event owns
+the selected mode. Since `list()` returns only an array, read the display order
+from `tabOrder`.
 
 ```javascript
 const unsub = dmn.keys.customTabs.onChanged(
-  ({ customTabs, tabOrder, barCount, selectedKeyType }) => {
+  ({
+    customTabs,
+    tabOrder,
+    barCount,
+    selectedKeyType,
+    selectionAuthoritative,
+  }) => {
     console.log(customTabs, selectedKeyType);
     console.log('in the bar:', tabOrder.slice(0, barCount));
+    console.log('selected mode belongs to event:', selectionAuthoritative);
   },
 );
 ```

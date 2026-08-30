@@ -55,6 +55,7 @@ interface KeyStoreState {
     tabOrder: string[];
     barCount: number;
     selectedKeyType: string;
+    selectionAuthoritative: boolean;
   }) => void;
   /**
    * 선택 모드를 기록하는 유일한 창구
@@ -183,11 +184,18 @@ export const useKeyStore = create<KeyStoreState>((set, get) => ({
     tabOrder,
     barCount,
     selectedKeyType,
+    selectionAuthoritative,
   }) =>
     set((state) => {
       const tabMetadataGeneration = state.tabMetadataGeneration + 1;
-      // 이 이벤트는 선택도 싣고 온다
-      const selectionGeneration = state.selectionGeneration + 1;
+      // 이름과 순서 변경 이벤트의 선택 보존
+      // 페이로드의 선택은 같은 트랜잭션 스냅샷일 뿐 권위 선택 변경이 아님
+      const selectionPatch = selectionAuthoritative
+        ? {
+            selectionGeneration: state.selectionGeneration + 1,
+            selectedKeyType,
+          }
+        : {};
       // 이 창이 방금 놓은 순서가 아직 응답을 기다리는 중이면 그쪽이 더 새롭다.
       // 앞선 변경의 스냅샷을 그대로 받으면 칩이 한 번 튀었다 돌아오고,
       // 그 사이에 또 놓으면 낡은 순서 위에서 계산돼 방금 한 교체가 사라진다.
@@ -195,19 +203,17 @@ export const useKeyStore = create<KeyStoreState>((set, get) => ({
       return state.pendingTabPlacements > 0
         ? {
             tabMetadataGeneration,
-            selectionGeneration,
             customTabs,
-            selectedKeyType,
             deferredTabPlacement: { tabOrder, barCount },
+            ...selectionPatch,
           }
         : {
             tabMetadataGeneration,
-            selectionGeneration,
             customTabs,
-            selectedKeyType,
             tabOrder,
             barCount: clampBarCount(barCount, tabOrder.length),
             deferredTabPlacement: null,
+            ...selectionPatch,
           };
     }),
   commitSelectedKeyType: (selectedKeyType) =>
@@ -225,6 +231,7 @@ export const useKeyStore = create<KeyStoreState>((set, get) => ({
         customTabs,
         tabOrder,
         barCount: clampBarCount(barCount, tabOrder.length),
+        deferredTabPlacement: null,
       };
     }),
   setKeyMappings: (mappings) => set({ keyMappings: mappings }),

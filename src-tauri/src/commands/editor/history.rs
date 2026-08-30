@@ -259,6 +259,7 @@ fn publish_history_aux_change(
                     tab_order: snapshot.tab_order.clone(),
                     bar_count: snapshot.bar_count,
                     selected_key_type: snapshot.selected_key_type.clone(),
+                    selection_authoritative: true,
                 },
             );
             emit_best_effort(
@@ -313,6 +314,7 @@ fn publish_history_aux_change(
                     tab_order: projection.preset_snapshot.tab_order.clone(),
                     bar_count: projection.preset_snapshot.bar_count,
                     selected_key_type: projection.preset_snapshot.selected_key_type.clone(),
+                    selection_authoritative: true,
                 },
             );
             emit_best_effort(

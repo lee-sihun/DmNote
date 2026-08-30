@@ -162,19 +162,22 @@ export function useAppBootstrap() {
     // 백엔드는 customTabs와 프리셋 스냅샷을 keys:mode-changed보다 먼저 보낸다.
     // 여기서 리셋하지 않으면 그 사이 store가 "새 모드 + 옛 index"가 되고,
     // 그 창에서 확정된 편집이 새 모드의 엉뚱한 요소에 실린다
-    const adoptSelectedKeyType = (
+    const adoptTabMetadata = (
       customTabs: CustomTab[],
       tabOrder: string[],
       barCount: number,
       selectedKeyType: string,
+      selectionAuthoritative = true,
     ) => {
       const modeChanged =
+        selectionAuthoritative &&
         useKeyStore.getState().selectedKeyType !== selectedKeyType;
       useKeyStore.getState().adoptTabMetadataEvent({
         customTabs,
         tabOrder,
         barCount,
         selectedKeyType,
+        selectionAuthoritative,
       });
       if (modeChanged && !isOverlayWindow && window.__dmn_runtime !== 'obs') {
         resetSelectionForModeChange();
@@ -690,17 +693,17 @@ export function useAppBootstrap() {
       if (keyState.selectedKeyType !== bootstrap.selectedKeyType) {
         keyChanges.selectedKeyType = bootstrap.selectedKeyType;
       }
-      if (Object.keys(keyChanges).length > 0) {
-        // 이것도 권위 기록이다. 세대를 올려야 재동기화 직전에 띄운 요청의
-        // 낡은 응답이 여기서 맞춘 상태를 되돌리지 못한다
-        useKeyStore.setState((state) => ({
-          ...state,
-          ...keyChanges,
-          tabMetadataGeneration: state.tabMetadataGeneration + 1,
-          selectionGeneration:
-            state.selectionGeneration +
-            (keyChanges.selectedKeyType === undefined ? 0 : 1),
-        }));
+      if (
+        Object.keys(keyChanges).length > 0 ||
+        Boolean(keyState.deferredTabPlacement)
+      ) {
+        // 재동기화도 권위 스냅샷 채택 관문을 지나 낙관 순서 유예를 보존
+        adoptTabMetadata(
+          bootstrap.customTabs,
+          bootstrap.tabOrder,
+          bootstrap.barCount,
+          bootstrap.selectedKeyType,
+        );
       }
 
       finalizeBootstrap();
@@ -980,8 +983,20 @@ export function useAppBootstrap() {
         }
       }),
       window.api.keys.customTabs.onChanged(
-        ({ customTabs, tabOrder, barCount, selectedKeyType }) => {
-          adoptSelectedKeyType(customTabs, tabOrder, barCount, selectedKeyType);
+        ({
+          customTabs,
+          tabOrder,
+          barCount,
+          selectedKeyType,
+          selectionAuthoritative,
+        }) => {
+          adoptTabMetadata(
+            customTabs,
+            tabOrder,
+            barCount,
+            selectedKeyType,
+            selectionAuthoritative,
+          );
         },
       ),
       window.api.noteTab.onChanged(({ tabId, settings }) => {
@@ -1005,7 +1020,7 @@ export function useAppBootstrap() {
       }),
       window.api.presets.onSnapshot((snapshot) => {
         if (disposed) return;
-        adoptSelectedKeyType(
+        adoptTabMetadata(
           snapshot.customTabs,
           snapshot.tabOrder,
           snapshot.barCount,

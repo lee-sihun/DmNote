@@ -15,6 +15,8 @@ interface MockKeyState {
   selectedKeyType: string;
   isBootstrapped: boolean;
   customTabs: unknown[];
+  tabOrder?: string[];
+  barCount?: number;
 }
 
 type MockKeyStoreListener = (
@@ -50,6 +52,33 @@ vi.mock('@stores/data/useKeyStore', () => ({
       commitSelectedKeyType: (selectedKeyType: string) => {
         const previousState = mocks.keyState;
         mocks.keyState = { ...previousState, selectedKeyType };
+        mocks.keyStoreListeners.forEach((listener) => {
+          listener(mocks.keyState, previousState);
+        });
+      },
+      adoptTabMetadataEvent: ({
+        customTabs,
+        tabOrder,
+        barCount,
+        selectedKeyType,
+        selectionAuthoritative,
+      }: {
+        customTabs: unknown[];
+        tabOrder: string[];
+        barCount: number;
+        selectedKeyType: string;
+        selectionAuthoritative: boolean;
+      }) => {
+        const previousState = mocks.keyState;
+        mocks.keyState = {
+          ...previousState,
+          customTabs,
+          tabOrder,
+          barCount,
+          selectedKeyType: selectionAuthoritative
+            ? selectedKeyType
+            : previousState.selectedKeyType,
+        };
         mocks.keyStoreListeners.forEach((listener) => {
           listener(mocks.keyState, previousState);
         });
@@ -250,6 +279,8 @@ const makeBootstrap = (
     graphPositions: {},
     knobPositions: {},
     customTabs: [],
+    tabOrder: ['4key', '5key', '6key', '8key'],
+    barCount: 4,
     selectedKeyType: '4key',
     currentMode: '4key',
     activeKeys: [],

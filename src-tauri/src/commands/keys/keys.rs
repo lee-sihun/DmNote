@@ -421,6 +421,7 @@ pub struct CustomTabChangePayload {
     pub tab_order: Vec<String>,
     pub bar_count: u8,
     pub selected_key_type: String,
+    pub selection_authoritative: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -512,6 +513,7 @@ fn reorder_change_payload(
         tab_order: snapshot.tab_order.clone(),
         bar_count: snapshot.bar_count,
         selected_key_type: snapshot.selected_key_type.clone(),
+        selection_authoritative: false,
     })
 }
 
@@ -726,6 +728,7 @@ fn keys_reset_all_inner(
             tab_order: tab_order.clone(),
             bar_count,
             selected_key_type: selected_key_type.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(
@@ -952,6 +955,7 @@ fn custom_tabs_create_inner(
             tab_order,
             bar_count,
             selected_key_type: id.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
@@ -1026,6 +1030,7 @@ fn custom_tabs_rename_inner(
                 tab_order: snapshot.tab_order.clone(),
                 bar_count: snapshot.bar_count,
                 selected_key_type: snapshot.selected_key_type.clone(),
+                selection_authoritative: false,
             },
         );
         state.refresh_obs_snapshot();
@@ -1175,6 +1180,7 @@ fn custom_tabs_delete_inner(
             tab_order,
             bar_count,
             selected_key_type: selected_key_type.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
@@ -1378,6 +1384,7 @@ fn custom_tabs_restore_inner(
             tab_order,
             bar_count,
             selected_key_type: selected_key_type.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(

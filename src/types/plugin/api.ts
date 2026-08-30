@@ -35,6 +35,8 @@ export type CustomTabsChangePayload = {
   /** 툴바 바에 내놓는 개수. 1~4 */
   barCount: number;
   selectedKeyType: string;
+  /** 이 이벤트가 selectedKeyType 변경을 소유하는지 여부 */
+  selectionAuthoritative: boolean;
 };
 export type KeyStatePayload = {
   key: string;

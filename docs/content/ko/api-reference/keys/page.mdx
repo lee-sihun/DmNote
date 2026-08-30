@@ -564,16 +564,27 @@ await dmn.keys.customTabs.restore(
 
 커스텀 탭 변경 이벤트를 구독합니다.
 
-페이로드에는 `customTabs`와 `selectedKeyType` 외에 `tabOrder`와 `barCount`가
-함께 실립니다. `tabOrder`는 내장 모드와 커스텀 탭을 합친 표시 순서로 각 탭 ID가
-정확히 한 번씩 들어가고, `barCount`는 그중 툴바 바에 나오는 앞쪽 개수입니다(1~4).
-`list()`는 배열만 돌려주므로 표시 순서는 `tabOrder`로 확인하세요.
+페이로드에는 `customTabs`와 `selectedKeyType` 외에 `tabOrder`, `barCount`,
+`selectionAuthoritative`가 함께 실립니다. `tabOrder`는 내장 모드와 커스텀 탭을
+합친 표시 순서로 각 탭 ID가 정확히 한 번씩 들어가고, `barCount`는 그중 툴바 바에
+나오는 앞쪽 개수입니다(1~4). 이름 변경과 순서 변경 이벤트에서는
+`selectionAuthoritative`가 `false`이며, 이때 `selectedKeyType`은 트랜잭션
+스냅샷일 뿐 선택 변경을 뜻하지 않습니다. 선택 모드를 소유하는 이벤트에서는
+`selectionAuthoritative`가 `true`입니다. `list()`는 배열만 돌려주므로 표시 순서는
+`tabOrder`로 확인하세요.
 
 ```javascript
 const unsub = dmn.keys.customTabs.onChanged(
-  ({ customTabs, tabOrder, barCount, selectedKeyType }) => {
+  ({
+    customTabs,
+    tabOrder,
+    barCount,
+    selectedKeyType,
+    selectionAuthoritative,
+  }) => {
     console.log('선택된 탭:', selectedKeyType);
     console.log('바에 있는 탭:', tabOrder.slice(0, barCount));
+    console.log('이벤트가 선택을 소유함:', selectionAuthoritative);
   },
 );
 ```

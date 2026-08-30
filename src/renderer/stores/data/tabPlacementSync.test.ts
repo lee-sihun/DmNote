@@ -23,6 +23,7 @@ const event = (tabOrder: string[]) => ({
   tabOrder,
   barCount: 4,
   selectedKeyType: '4key',
+  selectionAuthoritative: true,
 });
 
 const store = () => useKeyStore.getState();
@@ -58,6 +59,21 @@ describe('탭 순서 이벤트 채택', () => {
     expect(store().deferredTabPlacement?.tabOrder).toEqual(AUTHORITATIVE);
   });
 
+  it('순서 변경 이벤트는 진행 중인 사용자 선택을 덮지 않는다', () => {
+    store().commitSelectedKeyType('6key');
+    const selectionGeneration = store().selectionGeneration;
+
+    store().adoptTabMetadataEvent({
+      ...event(AUTHORITATIVE),
+      selectedKeyType: '4key',
+      selectionAuthoritative: false,
+    });
+
+    expect(store().selectedKeyType).toBe('6key');
+    expect(store().selectionGeneration).toBe(selectionGeneration);
+    expect(store().tabOrder).toEqual(AUTHORITATIVE);
+  });
+
   it('요청 뒤에 권위 이벤트를 들었으면 응답을 통째로 버린다', () => {
     // 응답 스냅샷은 그 트랜잭션이 커밋된 시점 값이다. 다른 창의 프리셋이나
     // undo가 그 뒤에 커밋되면 이벤트 쪽이 전부 더 새롭다
@@ -73,6 +89,7 @@ describe('탭 순서 이벤트 채택', () => {
       tabOrder: AUTHORITATIVE,
       barCount: 4,
       selectedKeyType: '6key',
+      selectionAuthoritative: true,
     });
 
     store().setTabMetadata(
@@ -117,6 +134,7 @@ describe('탭 순서 이벤트 채택', () => {
       tabOrder: AUTHORITATIVE,
       barCount: 2,
       selectedKeyType: '4key',
+      selectionAuthoritative: true,
     });
 
     store().setTabMetadata(
@@ -141,6 +159,21 @@ describe('탭 순서 이벤트 채택', () => {
 
     expect(store().tabOrder).toEqual(settled);
     expect(store().deferredTabPlacement).toBeNull();
+  });
+
+  it('최신 응답 스냅샷은 앞서 미뤄둔 권위 순서를 폐기한다', () => {
+    store().beginTabPlacementMutation();
+    store().adoptTabMetadataEvent(event(AUTHORITATIVE));
+
+    const settled = ['custom-b', 'custom-a', ...BUILTIN];
+    store().setTabMetadata(
+      { customTabs: tabs, tabOrder: settled, barCount: 4 },
+      store().tabMetadataGeneration,
+    );
+
+    expect(store().deferredTabPlacement).toBeNull();
+    store().endTabPlacementMutation();
+    expect(store().tabOrder).toEqual(settled);
   });
 
   it('응답이 스냅샷 없이 끝나면 미뤄둔 권위 순서를 되살린다', () => {
@@ -174,6 +207,7 @@ describe('탭 순서 이벤트 채택', () => {
       tabOrder: ['4key', '5key'],
       barCount: 4,
       selectedKeyType: '4key',
+      selectionAuthoritative: true,
     });
     store().endTabPlacementMutation();
 
