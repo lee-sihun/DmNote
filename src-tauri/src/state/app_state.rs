@@ -25,7 +25,17 @@ use tauri::{
 use tauri_runtime_wry::wry::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use tokio::sync::oneshot;
 
+mod keyboard_runtime;
 mod window_geometry;
+
+#[cfg(test)]
+use keyboard_runtime::KEYBOARD_DAEMON_STABLE_RUNTIME;
+use keyboard_runtime::{
+    bootstrap_keyboard_state, build_key_sound_binding_table, canonical_hold_duration_ms,
+    key_state_payload, next_keyboard_recovery_plan, resolve_event_age_ms,
+    should_recover_keyboard_daemon, unix_epoch_ms, KeySoundBindingTable, KeyboardDaemonTask,
+    KeyboardRecoveryPlan, KEYBOARD_RECOVERY_DELAYS_MS,
+};
 
 #[cfg(test)]
 use window_geometry::{
@@ -230,9 +240,6 @@ const OVERLAY_CREATION_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
 const EDITOR_FLUSH_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const SHUTDOWN_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_WATCHDOG_EXIT_CODE: i32 = 1;
-const MAX_INPUT_EVENT_AGE_MS: f64 = 10_000.0;
-const KEYBOARD_DAEMON_STABLE_RUNTIME: Duration = Duration::from_secs(30);
-const KEYBOARD_RECOVERY_DELAYS_MS: [u64; 5] = [250, 500, 1_000, 2_000, 4_000];
 pub(crate) const HISTORY_FRONTEND_FLUSH_BUSY: &str = "HISTORY_FRONTEND_FLUSH_BUSY";
 pub(crate) const HISTORY_FRONTEND_FLUSH_CANCELED: &str = "HISTORY_FRONTEND_FLUSH_CANCELED";
 pub(crate) const HISTORY_FRONTEND_FLUSH_EMIT_FAILED: &str = "HISTORY_FRONTEND_FLUSH_EMIT_FAILED";
@@ -636,46 +643,6 @@ struct RuntimePublicationState {
     key_sound_bindings_generation: u64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct KeySoundBinding {
-    sound_path: String,
-    per_key_volume: f32,
-}
-
-type KeySoundBindingTable = HashMap<String, Vec<Option<KeySoundBinding>>>;
-
-fn build_key_sound_binding_table(key_positions: &KeyPositions) -> KeySoundBindingTable {
-    key_positions
-        .iter()
-        .map(|(mode, positions)| {
-            let bindings = positions
-                .iter()
-                .map(|position| {
-                    if !position.sound_enabled.unwrap_or(false) {
-                        return None;
-                    }
-                    let sound_path = position.sound_path.as_deref()?.trim();
-                    if sound_path.is_empty() {
-                        return None;
-                    }
-                    let volume_percent = position.sound_volume.unwrap_or(100.0);
-                    Some(KeySoundBinding {
-                        sound_path: sound_path.to_string(),
-                        per_key_volume: (volume_percent / 100.0).clamp(0.0, 2.0) as f32,
-                    })
-                })
-                .collect();
-            (mode.clone(), bindings)
-        })
-        .collect()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct KeyboardRecoveryPlan {
-    attempt: usize,
-    delay: Duration,
-}
-
 #[derive(Debug)]
 pub(crate) struct AdmittedCounterMutation {
     pub(crate) counters: KeyCounters,
@@ -776,101 +743,6 @@ fn take_panel_open_arm(slot: &mut Option<Instant>, now: Instant) -> bool {
 // 패널 창은 opener가 문서를 채우므로 빈 url(about:blank)로만 연다
 fn is_panel_open_url(url: &str) -> bool {
     url.is_empty() || url == "about:blank"
-}
-
-fn bootstrap_keyboard_state(keyboard: &KeyboardManager) -> (String, Vec<String>) {
-    keyboard.current_mode_and_pressed_keys()
-}
-
-fn unix_epoch_ms() -> Option<f64> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|duration| duration.as_secs_f64() * 1000.0)
-}
-
-fn resolve_event_age_ms(
-    input_ts_ms: Option<f64>,
-    now_wall_ms: Option<f64>,
-    fallback_age_ms: f64,
-) -> f64 {
-    let Some(event_age_ms) = input_ts_ms
-        .zip(now_wall_ms)
-        .map(|(input_ts_ms, now_wall_ms)| now_wall_ms - input_ts_ms)
-    else {
-        return fallback_age_ms;
-    };
-    if event_age_ms.is_finite() && (0.0..=MAX_INPUT_EVENT_AGE_MS).contains(&event_age_ms) {
-        event_age_ms
-    } else {
-        fallback_age_ms
-    }
-}
-
-fn next_keyboard_recovery_plan(
-    current_attempt: usize,
-    daemon_uptime: Duration,
-) -> Option<KeyboardRecoveryPlan> {
-    let attempt = if daemon_uptime >= KEYBOARD_DAEMON_STABLE_RUNTIME {
-        1
-    } else {
-        current_attempt.saturating_add(1)
-    };
-    let delay_ms = *KEYBOARD_RECOVERY_DELAYS_MS.get(attempt.checked_sub(1)?)?;
-    Some(KeyboardRecoveryPlan {
-        attempt,
-        delay: Duration::from_millis(delay_ms),
-    })
-}
-
-fn should_recover_keyboard_daemon(
-    shutdown_started: bool,
-    current_generation: u64,
-    task_generation: Option<u64>,
-    failed_generation: u64,
-) -> bool {
-    !shutdown_started
-        && current_generation == failed_generation
-        && task_generation == Some(failed_generation)
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct KeyStatePayload<'a> {
-    key: &'a str,
-    state: &'a str,
-    mode: &'a str,
-    event_age_ms: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    hold_duration_ms: Option<f64>,
-}
-
-fn key_state_payload<'a>(
-    key: &'a str,
-    state: &'a str,
-    mode: &'a str,
-    event_age_ms: f64,
-    is_down: bool,
-    hold_duration_ms: Option<f64>,
-) -> KeyStatePayload<'a> {
-    KeyStatePayload {
-        key,
-        state,
-        mode,
-        event_age_ms,
-        hold_duration_ms: if is_down { None } else { hold_duration_ms },
-    }
-}
-
-fn canonical_hold_duration_ms(
-    can_use_physical_hold_duration: bool,
-    physical_hold_duration_ms: Option<f64>,
-) -> Option<f64> {
-    if can_use_physical_hold_duration {
-        physical_hold_duration_ms
-    } else {
-        None
-    }
 }
 
 fn collect_frontend_lifecycle_targets<T>(
@@ -5611,39 +5483,6 @@ fn disable_system_context_menu(window: &WebviewWindow) -> Result<()> {
     }
 
     Ok(())
-}
-
-struct KeyboardDaemonTask {
-    generation: u64,
-    running: Arc<AtomicBool>,
-    reader_handle: Option<JoinHandle<()>>,
-    stderr_handle: Option<JoinHandle<()>>,
-    parent_stdin: Option<ChildStdin>,
-    child: Option<Child>,
-}
-
-impl Drop for KeyboardDaemonTask {
-    fn drop(&mut self) {
-        self.running.store(false, Ordering::SeqCst);
-        self.parent_stdin.take();
-
-        if let Some(child) = self.child.as_mut() {
-            if let Err(err) = child.kill() {
-                if err.kind() != std::io::ErrorKind::InvalidInput {
-                    warn!("failed to kill keyboard daemon: {err}");
-                }
-            }
-            let _ = child.wait();
-        }
-
-        if let Some(handle) = self.reader_handle.take() {
-            let _ = handle.join();
-        }
-
-        if let Some(handle) = self.stderr_handle.take() {
-            let _ = handle.join();
-        }
-    }
 }
 
 #[cfg(test)]
