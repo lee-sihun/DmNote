@@ -101,6 +101,7 @@ const authoritativeEventArrives = () => {
     tabOrder: ['custom-z', '4key', '5key', '6key', '8key'],
     barCount: 4,
     selectedKeyType: '6key',
+    selectionAuthoritative: true,
   });
 };
 
@@ -128,7 +129,7 @@ describe('탭 삭제 정산', () => {
 
     click('ask');
     click('confirm');
-    authoritativeEventArrives();
+    act(() => authoritativeEventArrives());
 
     await act(async () => {
       settle({ success: false, error: 'nope' });
@@ -191,7 +192,7 @@ describe('탭 삭제 정산', () => {
 
     click('ask');
     click('confirm');
-    authoritativeEventArrives();
+    act(() => authoritativeEventArrives());
 
     await act(async () => {
       settle({ success: true, selected: '4key' });

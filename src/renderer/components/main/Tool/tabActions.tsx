@@ -5,13 +5,49 @@
  * 같이 언마운트되므로 툴바 쪽에서 소유한다. 바 칩은 팝업이 닫힌 채로도 눌린다
  */
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { keysApi } from '@api/modules/keysApi';
 import Alert from '../Modal/content/dialogs/Alert.jsx';
 import TabNameModal from '../Modal/content/editors/TabNameModal';
 import { TabActionsContext, type TabTarget } from './tabActionsContext';
+import type { CustomTab } from '@src/types/key/keys';
+
+interface DeleteCustomTabRequest {
+  id: string;
+  deletingTabs: Set<string>;
+  previousTabs: CustomTab[];
+  setCustomTabs: (tabs: CustomTab[]) => void;
+  isCurrent: () => boolean;
+  isSelectionCurrent: () => boolean;
+}
+
+const settleCustomTabDelete = async ({
+  id,
+  deletingTabs,
+  previousTabs,
+  setCustomTabs,
+  isCurrent,
+  isSelectionCurrent,
+}: DeleteCustomTabRequest) => {
+  try {
+    const result = await keysApi.customTabs.delete(id);
+    if (!result?.success) {
+      console.warn('Failed to delete custom tab', result?.error);
+      if (isCurrent()) setCustomTabs(previousTabs);
+    } else if (isCurrent() && isSelectionCurrent()) {
+      // 백엔드도 customTabs:changed로 선택을 실어 보내지만 best effort라
+      // 못 받는 경우를 위해 남긴다
+      useKeyStore.getState().commitSelectedKeyType(result.selected);
+    }
+  } catch (error) {
+    if (isCurrent()) setCustomTabs(previousTabs);
+    console.error('Failed to delete custom tab', error);
+  } finally {
+    deletingTabs.delete(id);
+  }
+};
 
 export const TabActionsProvider = ({
   children,
@@ -57,28 +93,26 @@ export const TabActionsProvider = ({
     const isSelectionCurrent = () =>
       useKeyStore.getState().selectionGeneration === selectionGeneration;
     setCustomTabs(previousTabs.filter((tab) => tab.id !== id));
-    try {
-      const result = await keysApi.customTabs.delete(id);
-      if (!result?.success) {
-        console.warn('Failed to delete custom tab', result?.error);
-        if (isCurrent()) setCustomTabs(previousTabs);
-      } else if (isCurrent() && isSelectionCurrent()) {
-        // 백엔드도 customTabs:changed로 선택을 실어 보내지만 best effort라
-        // 못 받는 경우를 위해 남긴다
-        useKeyStore.getState().commitSelectedKeyType(result.selected);
-      }
-    } catch (error) {
-      if (isCurrent()) setCustomTabs(previousTabs);
-      console.error('Failed to delete custom tab', error);
-    } finally {
-      deletingTabsRef.current.delete(id);
-    }
+    await settleCustomTabDelete({
+      id,
+      deletingTabs: deletingTabsRef.current,
+      previousTabs,
+      setCustomTabs,
+      isCurrent,
+      isSelectionCurrent,
+    });
   };
 
+  const contextValue = useMemo(
+    () => ({
+      requestRename: setRenameTarget,
+      requestDelete: setDeleteTarget,
+    }),
+    [setDeleteTarget, setRenameTarget],
+  );
+
   return (
-    <TabActionsContext.Provider
-      value={{ requestRename: setRenameTarget, requestDelete: setDeleteTarget }}
-    >
+    <TabActionsContext.Provider value={contextValue}>
       {children}
 
       <TabNameModal
