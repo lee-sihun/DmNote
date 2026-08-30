@@ -15,6 +15,7 @@ interface LayoutInput {
   currentStatPositions: CanonicalEditorDocumentV1['statPositions'][string];
   currentGraphPositions: CanonicalEditorDocumentV1['graphPositions'][string];
   currentKnobPositions: CanonicalEditorDocumentV1['knobPositions'][string];
+  currentSpritePositions: CanonicalEditorDocumentV1['spritePositions'][string];
   trackHeight: number;
   noteSettings: NoteSettings;
   selectedKeyType?: string;
@@ -42,6 +43,7 @@ export function computeLayout(input: LayoutInput) {
     currentStatPositions,
     currentGraphPositions,
     currentKnobPositions,
+    currentSpritePositions,
     trackHeight,
     noteSettings,
     selectedKeyType,
@@ -56,6 +58,7 @@ export function computeLayout(input: LayoutInput) {
       currentStatPositions.length > 0 ||
       currentGraphPositions.length > 0 ||
       currentKnobPositions.length > 0 ||
+      currentSpritePositions.length > 0 ||
       (pluginElements && pluginElements.length > 0);
     if (!hasContent) return null;
 
@@ -121,6 +124,15 @@ export function computeLayout(input: LayoutInput) {
       ys.push(pos.dy);
       widths.push(pos.dx + (pos.width ?? 80));
       heights.push(pos.dy + (pos.height ?? 80));
+    });
+
+    // 스프라이트 활동 영역 전체를 창 크기에 포함, 클리핑하지 않는다 (계약 §9)
+    currentSpritePositions.forEach((pos) => {
+      if (!pos || pos.hidden) return;
+      xs.push(pos.dx);
+      ys.push(pos.dy);
+      widths.push(pos.dx + (pos.width ?? 200));
+      heights.push(pos.dy + (pos.height ?? 200));
     });
 
     // 플러그인 요소 위치 (앵커 기반 계산 포함)
@@ -201,6 +213,7 @@ export function computeLayout(input: LayoutInput) {
   const displayStatPositions = applyOffset(currentStatPositions);
   const displayGraphPositions = applyOffset(currentGraphPositions);
   const displayKnobPositions = applyOffset(currentKnobPositions);
+  const displaySpritePositions = applyOffset(currentSpritePositions);
 
   const positionOffset = bounds ? { x: offsetX, y: offsetY } : { x: 0, y: 0 };
 
@@ -273,6 +286,7 @@ export function computeLayout(input: LayoutInput) {
     displayStatPositions,
     displayGraphPositions,
     displayKnobPositions,
+    displaySpritePositions,
     positionOffset,
     // 창 높이·배경 박스가 같은 값을 쓰도록 노출 (창 == 콘텐츠 박스 불변식)
     topOffset,

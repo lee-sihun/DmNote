@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {
   currentMonitor,
   getCurrentWindow,
@@ -30,6 +36,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import {
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
@@ -49,6 +56,12 @@ import {
   slotCanonical,
   slotDisplayName,
 } from '@utils/keySlot';
+import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
+import {
+  composePreviewPositions,
+  getPreviewOverlayVersion,
+  subscribePreviewOverlay,
+} from '@src/renderer/editor/runtime/previewOverlay';
 import type { KeySlot } from '@src/types/key/keys';
 
 type KeyDelayTimerHandle = ReturnType<typeof setTimeout>;
@@ -142,6 +155,7 @@ export default function App() {
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
   const knobPositions = useKnobItemStore((state) => state.positions);
+  const spritePositions = useSpriteStore((state) => state.positions);
   // 레이아웃 필드만 투영 구독 - 플러그인 state/html 변경이 App 리렌더로 승격되지 않게
   const pluginElements = useStoreWithEqualityFn(
     usePluginDisplayElementStore,
@@ -770,6 +784,27 @@ export default function App() {
   const currentStatPositions = statPositions[selectedKeyType] ?? EMPTY_SLICE;
   const currentGraphPositions = graphPositions[selectedKeyType] ?? EMPTY_SLICE;
   const currentKnobPositions = knobPositions[selectedKeyType] ?? EMPTY_SLICE;
+  // 키는 useKeyStore.positions가 이미 프리뷰 합성본이지만 sprite는 canonical만
+  // 온다 - 세션 patch를 렌더 시점에 합성해야 메인 캔버스 드래그·스크럽이
+  // 커밋 전에도 오버레이에 반영된다. 프리뷰가 없으면 canonical 참조가 그대로
+  // 돌아와 layout memo가 재계산되지 않는다
+  useSyncExternalStore(
+    subscribePreviewOverlay,
+    getPreviewOverlayVersion,
+    getPreviewOverlayVersion,
+  );
+  const renderedSpritePositions = composePreviewPositions(
+    'spritePosition',
+    spritePositions,
+  );
+  const currentSpritePositions =
+    renderedSpritePositions[selectedKeyType] ?? EMPTY_SLICE;
+
+  // 스프라이트 트리거(키 요소 id) -> canonical 키 문자열, 잎이 시그널을 찾을 때 쓴다
+  const spriteKeyCanonicalMap = useMemo(
+    () => buildSpriteKeyCanonicalMap(currentSlots, currentPositions),
+    [currentSlots, currentPositions],
+  );
 
   // 레이아웃 입력이 실제로 바뀔 때만 재계산 - webglTracks identity가 안정되어
   // updateTrackLayouts effect·WebGL uniform effect가 무관한 리렌더에 재실행되지 않음
@@ -781,6 +816,7 @@ export default function App() {
         currentStatPositions,
         currentGraphPositions,
         currentKnobPositions,
+        currentSpritePositions,
         trackHeight,
         noteSettings,
         selectedKeyType,
@@ -793,6 +829,7 @@ export default function App() {
       currentStatPositions,
       currentGraphPositions,
       currentKnobPositions,
+      currentSpritePositions,
       trackHeight,
       noteSettings,
       selectedKeyType,
@@ -806,6 +843,7 @@ export default function App() {
     displayStatPositions,
     displayGraphPositions,
     displayKnobPositions,
+    displaySpritePositions,
     positionOffset,
     topOffset,
     webglTracks,
@@ -928,6 +966,8 @@ export default function App() {
       displayStatPositions={displayStatPositions}
       displayGraphPositions={displayGraphPositions}
       displayKnobPositions={displayKnobPositions}
+      displaySpritePositions={displaySpritePositions}
+      spriteKeyCanonicalMap={spriteKeyCanonicalMap}
       selectedKeyType={selectedKeyType}
       noteEffect={noteEffect}
       contentSize={contentSize}

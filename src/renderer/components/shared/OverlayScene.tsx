@@ -6,6 +6,7 @@ import StatItem from '@components/overlay/counters/StatItem';
 import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
 import OverlayGraphItemBase from '@components/overlay/counters/OverlayGraphItem';
 import OverlayKnobItemBase from '@components/overlay/counters/OverlayKnobItem';
+import OverlaySpriteItem from '@components/overlay/counters/OverlaySpriteItem';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { type KeyPosition } from '@src/types/key/keys';
@@ -67,6 +68,13 @@ const Tracks = lazy(async () => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type NoteSubscriber = (event: any) => void;
 
+// 미지정 시 identity 안정 기본값
+const EMPTY_SPRITE_POSITIONS: CanonicalEditorDocumentV1['spritePositions'][string] =
+  Object.freeze(
+    [],
+  ) as unknown as CanonicalEditorDocumentV1['spritePositions'][string];
+const EMPTY_SPRITE_KEY_MAP: ReadonlyMap<string, string> = new Map();
+
 interface OverlaySceneProps {
   // 키/위치 데이터 (currentKeys = canonical 문자열)
   currentKeys: string[];
@@ -77,6 +85,9 @@ interface OverlaySceneProps {
   displayStatPositions: CanonicalEditorDocumentV1['statPositions'][string];
   displayGraphPositions: CanonicalEditorDocumentV1['graphPositions'][string];
   displayKnobPositions: CanonicalEditorDocumentV1['knobPositions'][string];
+  displaySpritePositions?: CanonicalEditorDocumentV1['spritePositions'][string];
+  // 스프라이트 트리거(키 요소 id) -> canonical 키 문자열
+  spriteKeyCanonicalMap?: ReadonlyMap<string, string>;
   selectedKeyType: string;
 
   // 노트 이펙트
@@ -114,6 +125,8 @@ const OverlayScene = ({
   displayStatPositions,
   displayGraphPositions,
   displayKnobPositions,
+  displaySpritePositions = EMPTY_SPRITE_POSITIONS,
+  spriteKeyCanonicalMap = EMPTY_SPRITE_KEY_MAP,
   selectedKeyType,
   noteEffect,
   noteSettings,
@@ -247,6 +260,18 @@ const OverlayScene = ({
         };
         return (
           <OverlayKnobItem key={pos.id} index={index} position={knobPosition} />
+        );
+      })}
+      {displaySpritePositions.map((pos, index) => {
+        if (!pos || pos.hidden) return null;
+        // 전개 금지 - 원본 identity를 보존해야 잎의 React.memo가 유지된다
+        const position = resolveZIndexFallback(pos, index);
+        return (
+          <OverlaySpriteItem
+            key={pos.id}
+            position={position}
+            keyCanonicalMap={spriteKeyCanonicalMap}
+          />
         );
       })}
       {keyCounterEnabled ? (

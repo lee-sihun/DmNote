@@ -4,7 +4,7 @@ const cache = new WeakMap<object, { index: number; result: unknown }>();
 // zIndex가 이미 있으면 원본을 그대로 돌려준다. 무조건 펼치면 새 객체가 되어
 // 아래 키 컴포넌트의 memo가 항상 깨지고 키 하나 변경에 전부 다시 그려진다.
 // 백엔드가 미설정 zIndex를 null로 직렬화하므로 결측 판정은 undefined만이 아니라 null까지 본다
-export const resolveZIndexFallback = <T extends { zIndex?: number }>(
+export const resolveZIndexFallback = <T extends { zIndex?: number | null }>(
   base: T,
   index: number,
 ): T => {
