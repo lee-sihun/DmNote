@@ -6,6 +6,7 @@ import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoord
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { SpritePositions } from '@src/types/key/sprites';
 import type { LayerGroups } from '@src/types/layerGroups';
 
 export const statItemsApi = {
@@ -51,6 +52,26 @@ export const knobItemsApi = {
     ),
   onPositionsChanged: (listener: (positions: KnobItemPositions) => void) =>
     subscribe<KnobItemPositions>('knobPositions:changed', listener),
+};
+
+export const spriteItemsApi = {
+  getPositions: () => invoke<SpritePositions>('sprite_positions_get'),
+  // 스프라이트 전용 필드는 ops patchElement가 거부하므로 전체 필드 패치로 커밋.
+  // gestureId는 숫자 스크럽 preview 게스처 정산용
+  updatePositions: (positions: SpritePositions, gestureId?: string) =>
+    enqueueEditorCompatibilityWrite(
+      () =>
+        editorCoordinator.commitPatch(
+          {
+            schemaVersion: 1,
+            spritePositions: positions,
+          },
+          gestureId ? { gestureId } : undefined,
+        ),
+      () => structuredClone(positions),
+    ),
+  onPositionsChanged: (listener: (positions: SpritePositions) => void) =>
+    subscribe<SpritePositions>('spritePositions:changed', listener),
 };
 
 export const layerGroupsApi = {

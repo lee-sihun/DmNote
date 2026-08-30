@@ -1,6 +1,7 @@
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -33,7 +34,7 @@ import type {
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { DisplayItem, LayerItem } from '../types';
 
-type NativeType = 'key' | 'stat' | 'graph' | 'knob';
+type NativeType = 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 
 export interface DropAnchors {
   toDisplayIndex: number;
@@ -274,6 +275,7 @@ const modelFrom = (
     document.statPositions,
     document.graphPositions,
     document.knobPositions,
+    document.spritePositions,
     [...pluginElements],
   ).map(
     (item): LayerItem => ({
@@ -602,6 +604,7 @@ const localDocument = (): CanonicalEditorDocumentV1 => ({
   statPositions: useStatItemStore.getState().positions,
   graphPositions: useGraphItemStore.getState().positions,
   knobPositions: useKnobItemStore.getState().positions,
+  spritePositions: useSpriteStore.getState().positions,
   layerGroups: useLayerGroupStore.getState().layerGroups,
 });
 

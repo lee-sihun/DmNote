@@ -13,6 +13,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   selectPropertyPanelPluginElements,
@@ -54,6 +55,7 @@ import type {
   EditorElementPropertyPatchV1,
   CanonicalKeyPosition,
   CanonicalKnobItemPosition,
+  CanonicalReactiveSpritePosition,
 } from '@src/types/editor';
 import type {
   PluginSettingSchema,
@@ -129,6 +131,7 @@ import {
   PluginSelectionPanel,
   SingleGraphPanel,
   SingleKnobPanel,
+  SingleSpritePanel,
   SingleKeyStatPanel,
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
@@ -407,6 +410,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const canonicalKnobItemPositions = useKnobItemStore(
     (state) => state.positions,
   );
+  const canonicalSpritePositions = useSpriteStore((state) => state.positions);
   useSyncExternalStore(
     subscribePreviewOverlay,
     getPreviewOverlayVersion,
@@ -423,6 +427,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const knobItemPositions = composePreviewPositions(
     'knobPosition',
     canonicalKnobItemPositions,
+  );
+  const spriteItemPositions = composePreviewPositions(
+    'spritePosition',
+    canonicalSpritePositions,
   );
   const { useCustomCSS } = useSettingsStore();
   const pluginElements = usePluginDisplayElementStore(
@@ -464,6 +472,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedKnobElements = selectedElements.filter(
     (el) => el.type === 'knob',
   );
+  const selectedSpriteElements = selectedElements.filter(
+    (el) => el.type === 'sprite',
+  );
   const selectedKeyLikeElements = selectedElements.filter(
     (el) => el.type === 'key' || el.type === 'stat',
   );
@@ -473,6 +484,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       el.type === 'stat' ||
       el.type === 'graph' ||
       el.type === 'knob',
+  );
+  // 기하 대상은 스타일 대상과 별개 - sprite는 배치 스타일이 없지만
+  // 정렬·분배·간격·이동에는 참여한다
+  const selectedBatchGeometryElements = selectedElements.filter(
+    (el) =>
+      el.type === 'key' ||
+      el.type === 'stat' ||
+      el.type === 'graph' ||
+      el.type === 'knob' ||
+      el.type === 'sprite',
   );
   const selectedPluginElements = selectedElements.filter(
     (el) => el.type === 'plugin',
@@ -488,10 +509,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // plugin 단독 배치는 native 대상 0개(빈 배열)로 성립 - invalid ID가
   // 하나라도 섞이면 null (fail-closed)
   const stableBatchGeometryTargets: BatchGeometryTarget[] | null =
-    selectedBatchStyleElements.every(
+    selectedBatchGeometryElements.every(
       (element) => element.id.length > 0 && isNativeElementId(element.id),
     )
-      ? selectedBatchStyleElements.map((element) => ({
+      ? selectedBatchGeometryElements.map((element) => ({
           type: element.type as EditorElementTypeV1,
           id: element.id,
         }))
@@ -615,6 +636,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleKnobIndex >= 0
       ? knobItemPositions[selectedKeyType]?.[singleKnobIndex] ?? null
       : null;
+  const singleSpriteId =
+    selectedSpriteElements.length === 1 ? selectedSpriteElements[0].id : null;
+  const singleSpritePosition: CanonicalReactiveSpritePosition | null =
+    singleSpriteId
+      ? (spriteItemPositions[selectedKeyType] ?? []).find(
+          (position) => position.id === singleSpriteId,
+        ) ?? null
+      : null;
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
   const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
   const selectedGroupInfo = (() => {
@@ -626,6 +655,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const statModePositions = statItemPositions[selectedKeyType] || [];
     const graphModePositions = graphItemPositions[selectedKeyType] || [];
     const knobModePositions = knobItemPositions[selectedKeyType] || [];
+    const spriteModePositions = spriteItemPositions[selectedKeyType] || [];
     // 플러그인 소속은 현재 모드에 def가 있는 groupId만 유효 (레이어 패널과
     // 동일 규칙)
     const modeGroupIds = new Set(layerGroupsForMode.map((group) => group.id));
@@ -650,6 +680,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         currentGroupId = knobModePositions.find(
           (position) => position.id === element.id,
         )?.groupId;
+      } else if (element.type === 'sprite') {
+        currentGroupId =
+          spriteModePositions.find((position) => position.id === element.id)
+            ?.groupId ?? undefined;
       } else if (element.type === 'plugin') {
         const pluginGroupId = pluginElements.find(
           (candidate) => candidate.fullId === element.id,
@@ -677,6 +711,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       statModePositions.filter((pos) => pos?.groupId === groupId).length +
       graphModePositions.filter((pos) => pos?.groupId === groupId).length +
       knobModePositions.filter((pos) => pos?.groupId === groupId).length +
+      spriteModePositions.filter((pos) => pos?.groupId === groupId).length +
       pluginElements.filter(
         (el) =>
           isPluginVisibleInMode(el, selectedKeyType) && el.groupId === groupId,
@@ -823,6 +858,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedPluginElements.length,
     selectedGraphElements.length,
     selectedKnobElements.length,
+    selectedSpriteElements.length,
   ].join('|');
   useEffect(() => {
     closePage();
@@ -912,6 +948,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (singleStatPosition) return singleStatPosition.layerName || '';
     if (singleGraphPosition) return singleGraphPosition.layerName || '';
     if (singleKnobPosition) return singleKnobPosition.layerName || '';
+    if (singleSpritePosition) return singleSpritePosition.layerName || '';
     return '';
   };
 
@@ -928,6 +965,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return `${getStatTypeLabel(singleGraphPosition.statType ?? null)} Graph`;
     }
     if (singleKnobPosition) return 'Knob';
+    if (singleSpritePosition) return 'Sprite';
     return '';
   };
 
@@ -1017,7 +1055,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         singleKeyPosition ||
         singleStatPosition ||
         singleGraphPosition ||
-        singleKnobPosition
+        singleKnobPosition ||
+        singleSpritePosition
       ) {
         setPanelMode('property');
         handleRenameStart();
@@ -1030,6 +1069,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleStatPosition,
     singleGraphPosition,
     singleKnobPosition,
+    singleSpritePosition,
     setPanelMode,
   ]);
 
@@ -1185,7 +1225,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 다중 선택 시 패널 자동 열기 - 개수는 native+plugin 합산
   useEffect(() => {
     if (
-      selectedBatchStyleElements.length + selectedPluginElements.length > 1 &&
+      selectedBatchGeometryElements.length + selectedPluginElements.length >
+        1 &&
       !isPanelVisible &&
       !manuallyClosedRef.current
     ) {
@@ -1193,7 +1234,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setIsPanelVisible(true);
     }
   }, [
-    selectedBatchStyleElements.length,
+    selectedBatchGeometryElements.length,
     selectedPluginElements.length,
     isPanelVisible,
     setIsPanelVisible,
@@ -2077,8 +2118,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchResize,
     handleBatchResizePreview,
   } = useBatchHandlers({
-    selectedKeyLikeElements: selectedBatchStyleElements as {
-      type: 'key' | 'stat' | 'graph' | 'knob';
+    selectedKeyLikeElements: selectedBatchGeometryElements as {
+      type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
       id: string;
       index?: number;
     }[],
@@ -2087,6 +2128,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     graphPositions: graphItemPositions,
     selectedKeyType,
     knobPositions: knobItemPositions,
+    spritePositions: spriteItemPositions,
     pluginLayoutElements: stablePluginGeometryElements,
     onStableGeometryPreview: (operation) => {
       if (!stableBatchGeometryTargets) return;
@@ -2095,7 +2137,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         string,
         {
           type: EditorElementTypeV1;
-          position: KeyPosition;
+          position: Pick<KeyPosition, 'id' | 'dx' | 'dy' | 'width' | 'height'>;
         }
       >();
       for (const target of stableBatchGeometryTargets) {
@@ -2108,7 +2150,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? statItemPositions
             : target.type === 'graph'
             ? graphItemPositions
-            : knobItemPositions;
+            : target.type === 'knob'
+            ? knobItemPositions
+            : spriteItemPositions;
         const position = record[selectedKeyType]?.[locator.index];
         if (!position || position.id !== target.id) return;
         targetsByKey.set(`${target.type}:${target.id}`, {
@@ -2165,7 +2209,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ? 'statPosition'
               : type === 'graph'
               ? 'graphPosition'
-              : 'knobPosition',
+              : type === 'knob'
+              ? 'knobPosition'
+              : 'spritePosition',
         });
       }
     },
@@ -2710,16 +2756,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 플러그인 단독 다중은 경량 기하 배치 패널에 라우트
   const renderSelectionPanelBody = () => {
     const selectionTotalCount =
-      selectedBatchStyleElements.length + selectedPluginElements.length;
+      selectedBatchGeometryElements.length + selectedPluginElements.length;
     const route = resolveSelectionPanelRoute({
       keyLikeCount: selectedKeyLikeElements.length,
       graphCount: selectedGraphElements.length,
       knobCount: selectedKnobElements.length,
+      spriteCount: selectedSpriteElements.length,
       pluginCount: selectedPluginElements.length,
       hasSingleKeyPosition: !!singleKeyPosition,
       hasSingleStatPosition: !!singleStatPosition,
       hasSingleGraphPosition: !!singleGraphPosition,
       hasSingleKnobPosition: !!singleKnobPosition,
+      hasSingleSpritePosition: !!singleSpritePosition,
     });
 
     // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
@@ -2935,6 +2983,27 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           selectedPluginDefinition={selectedPluginDefinition}
           resolvedPluginSettings={resolvedPluginSettings}
           handlePluginSettingChange={handlePluginSettingChange}
+          t={t}
+        />
+      );
+    }
+
+    // 단일 스프라이트 요소 선택인 경우 - 전용 필드 커밋·프리뷰는 패널이 소유
+    if (route.kind === 'singleSprite' && singleSpritePosition) {
+      return (
+        <SingleSpritePanel
+          setPanelElement={setPanelElement}
+          singleSpritePosition={singleSpritePosition}
+          selectedKeyType={selectedKeyType}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          singleScrollRefFor={singleScrollRefFor}
           t={t}
         />
       );

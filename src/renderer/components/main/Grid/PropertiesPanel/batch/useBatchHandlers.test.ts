@@ -89,6 +89,51 @@ describe('useBatchHandlers stable geometry', () => {
     });
   });
 
+  it('sprite 대상도 기하 조작에 참여한다', () => {
+    vi.mocked(resolveElementById).mockImplementation((type, id) =>
+      type === 'key' && id === IDS.first
+        ? { type: 'key', mode: '4key', index: 0 }
+        : type === 'sprite' && id === IDS.second
+        ? { type: 'sprite', mode: '4key', index: 0 }
+        : null,
+    );
+    const onStableGeometryCommit = vi.fn();
+    const onStableGeometryPreview = vi.fn();
+    const handlers = useBatchHandlers({
+      selectedKeyLikeElements: [
+        { type: 'key', id: IDS.first },
+        { type: 'sprite', id: IDS.second },
+      ],
+      keyPositions: { '4key': [position(IDS.first, 0)] },
+      statPositions: {},
+      spritePositions: {
+        '4key': [
+          { id: IDS.second, dx: 40, dy: 0, width: 20, height: 10 } as never,
+        ],
+      },
+      selectedKeyType: '4key',
+      onStableGeometryCommit,
+      onStableGeometryPreview,
+    });
+
+    handlers.handleBatchAlign('left');
+    handlers.handleBatchSpacingPreview(5);
+
+    expect(onStableGeometryCommit).toHaveBeenCalledWith({
+      kind: 'align',
+      direction: 'left',
+    });
+    expect(onStableGeometryPreview).toHaveBeenCalledWith({
+      kind: 'spacing',
+      spacing: 5,
+    });
+    // sprite 위치가 간격 계산에 실제로 잡힌다
+    expect(handlers.getBatchSpacingValue()).toEqual({
+      isMixed: false,
+      value: 30,
+    });
+  });
+
   it('대상 ID를 현재 문서에서 모두 찾지 못하면 preview와 commit을 막는다', () => {
     vi.mocked(resolveElementById).mockImplementation((_type, id) =>
       id === IDS.first ? { type: 'key', mode: '4key', index: 1 } : null,

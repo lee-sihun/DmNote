@@ -9,6 +9,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { buildNextLayerGroupName } from '@utils/layerGroupUtils';
@@ -67,7 +68,8 @@ const stableSelectionGroupId = (
       element.type === 'key' ||
       element.type === 'stat' ||
       element.type === 'graph' ||
-      element.type === 'knob',
+      element.type === 'knob' ||
+      element.type === 'sprite',
   );
   const plugin = elements.filter((element) => element.type === 'plugin');
   if (
@@ -85,6 +87,12 @@ const stableSelectionGroupId = (
   for (const element of native) {
     const locator = resolveElementById(element.type, element.id);
     if (!locator || locator.mode !== mode) return { stable: true };
+    if (element.type === 'sprite') {
+      const groupId =
+        useSpriteStore.getState().positions[mode]?.[locator.index]?.groupId;
+      if (groupId) groupIds.add(groupId);
+      continue;
+    }
     const record =
       element.type === 'key'
         ? useKeyStore.getState().canonicalPositions
@@ -289,7 +297,8 @@ export function useLayerActions({
         element.type === 'key' ||
         element.type === 'stat' ||
         element.type === 'graph' ||
-        element.type === 'knob'
+        element.type === 'knob' ||
+        element.type === 'sprite'
           ? [{ elementType: element.type, id: element.id }]
           : [],
     );

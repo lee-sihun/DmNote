@@ -9,8 +9,9 @@ import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
 
-type KeyLikeType = 'key' | 'stat' | 'graph' | 'knob';
+type KeyLikeType = 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 
 export interface BatchCommitOptions {
   gestureId?: string;
@@ -35,6 +36,7 @@ interface UseBatchHandlersProps {
   statPositions: Record<string, StatItemPosition[] | undefined>;
   graphPositions?: Record<string, GraphItemPosition[] | undefined>;
   knobPositions?: Record<string, KnobItemPosition[] | undefined>;
+  spritePositions?: Record<string, ReactiveSpritePosition[] | undefined>;
   selectedKeyType: string;
   // 혼합 선택의 plugin 대상 bounds - null은 대상 미해결이라 기하 조작 전체 차단
   pluginLayoutElements?: PluginLayoutElement[] | null;
@@ -57,6 +59,7 @@ export function useBatchHandlers({
   statPositions,
   graphPositions,
   knobPositions,
+  spritePositions,
   selectedKeyType,
   pluginLayoutElements = [],
   onStableGeometryCommit,
@@ -72,7 +75,9 @@ export function useBatchHandlers({
         ? statPositions
         : type === 'graph'
         ? graphPositions
-        : knobPositions;
+        : type === 'knob'
+        ? knobPositions
+        : spritePositions;
     const position = record?.[selectedKeyType]?.[locator.index];
     return position?.id === id ? position : null;
   };

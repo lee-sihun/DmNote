@@ -120,6 +120,8 @@ export const previewSingleStyleProperty = (
   id: string,
   patch: EditorStylePropertyPreviewPatchV1,
 ): void => {
+  // 스프라이트는 스타일 프리뷰 대상이 아니다
+  if (type === 'sprite') return;
   const locator = resolveElementById(type, id);
   if (!locator) return;
   if (isShadowPreviewPatch(patch)) {
@@ -261,10 +263,12 @@ export const previewBatchPaint = (
 };
 
 export const previewSinglePaint = (
-  type: PreviewTargetType,
+  type: EditorElementTypeV1,
   id: string,
   patch: EditorPaintPropertyPatchV1,
 ): void => {
+  // 스프라이트는 페인트 프리뷰 대상이 아니다
+  if (type === 'sprite') return;
   const locator = resolveElementById(type, id);
   if (!locator) return;
   previewBatchPaint([{ elementType: type, id }], locator.mode, patch);

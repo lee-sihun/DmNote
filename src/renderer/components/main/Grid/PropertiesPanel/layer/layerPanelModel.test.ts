@@ -24,6 +24,7 @@ describe('layer panel plugin mode scope', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       pluginElements: [
         plugin('same', '4key'),
         plugin('global'),
@@ -43,6 +44,7 @@ describe('layer panel plugin mode scope', () => {
       statPositions: {},
       graphPositions: {},
       knobPositions: {},
+      spritePositions: {},
       pluginElements: [
         plugin('grouped', '4key', 'group-a'),
         plugin('dangling', '4key', 'group-missing'),
