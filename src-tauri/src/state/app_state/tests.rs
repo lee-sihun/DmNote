@@ -2103,6 +2103,136 @@ fn history_flush_completes_only_after_every_window_ack() {
 }
 
 #[test]
+fn lifecycle_ack_rejects_stale_duplicate_and_unknown_windows_without_mutating_pending() {
+    let targets = HashSet::from(["main".to_string(), OVERLAY_LABEL.to_string()]);
+    let mut slot = Some(EditorFlushHandshake {
+        id: "lifecycle-1".to_string(),
+        completion: EditorFlushCompletion::Lifecycle(FrontendLifecycleAction::Quit),
+        target_windows: targets.clone(),
+        pending_windows: targets.clone(),
+    });
+    let gate = Arc::new(HistoryAdmissionGate::default());
+
+    assert!(
+        acknowledge_editor_flush_handshake(&mut slot, "stale-lifecycle", "main", &gate,).is_none()
+    );
+    assert_eq!(slot.as_ref().unwrap().pending_windows, targets);
+    assert!(
+        acknowledge_editor_flush_handshake(&mut slot, "lifecycle-1", "unknown", &gate,).is_none()
+    );
+    assert_eq!(slot.as_ref().unwrap().pending_windows, targets);
+
+    assert!(acknowledge_editor_flush_handshake(&mut slot, "lifecycle-1", "main", &gate,).is_none());
+    assert_eq!(
+        slot.as_ref().unwrap().pending_windows,
+        HashSet::from([OVERLAY_LABEL.to_string()])
+    );
+    assert!(acknowledge_editor_flush_handshake(&mut slot, "lifecycle-1", "main", &gate,).is_none());
+    assert_eq!(
+        slot.as_ref().unwrap().pending_windows,
+        HashSet::from([OVERLAY_LABEL.to_string()])
+    );
+
+    let completed =
+        acknowledge_editor_flush_handshake(&mut slot, "lifecycle-1", OVERLAY_LABEL, &gate)
+            .expect("the last exact acknowledgement should complete lifecycle");
+    let EditorFlushAcknowledge::LifecycleReady(completed) = completed else {
+        panic!("lifecycle acknowledgement should not enter history close");
+    };
+    assert_eq!(completed.id, "lifecycle-1");
+    assert_eq!(completed.target_windows, targets);
+    assert!(slot.is_none());
+}
+
+#[test]
+fn concurrent_duplicate_last_ack_closes_history_gate_exactly_once() {
+    let (sender, _receiver) = tokio::sync::oneshot::channel();
+    let slot = Arc::new(Mutex::new(Some(EditorFlushHandshake {
+        id: "history-concurrent".to_string(),
+        completion: EditorFlushCompletion::History {
+            operation_id: "00000000-0000-0000-0000-000000000006".to_string(),
+            sender: Some(sender),
+            phase: FrontendHistoryFlushPhase::Collecting,
+            barrier: None,
+        },
+        target_windows: HashSet::from(["main".to_string()]),
+        pending_windows: HashSet::from(["main".to_string()]),
+    })));
+    let gate = Arc::new(HistoryAdmissionGate::default());
+    let start = Arc::new(std::sync::Barrier::new(3));
+    let workers = (0..2)
+        .map(|_| {
+            let slot = Arc::clone(&slot);
+            let gate = Arc::clone(&gate);
+            let start = Arc::clone(&start);
+            thread::spawn(move || {
+                start.wait();
+                matches!(
+                    acknowledge_editor_flush_handshake(
+                        &mut slot.lock(),
+                        "history-concurrent",
+                        "main",
+                        &gate,
+                    ),
+                    Some(EditorFlushAcknowledge::HistoryClosing { .. })
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+
+    start.wait();
+    assert_eq!(
+        workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .filter(|closed| *closed)
+            .count(),
+        1
+    );
+    assert!(gate.is_closed());
+    assert!(slot.lock().as_ref().is_some_and(|active| {
+        active.completion.history_phase() == Some(FrontendHistoryFlushPhase::Closing)
+    }));
+
+    drop(slot.lock().take());
+    assert!(!gate.is_closed());
+}
+
+#[test]
+fn history_gate_close_failure_returns_exact_error_and_removes_only_its_handshake() {
+    let gate = Arc::new(HistoryAdmissionGate::default());
+    let existing = gate.close("00000000-0000-0000-0000-000000000007").unwrap();
+    let (sender, _receiver) = tokio::sync::oneshot::channel();
+    let mut slot = Some(EditorFlushHandshake {
+        id: "history-busy".to_string(),
+        completion: EditorFlushCompletion::History {
+            operation_id: "00000000-0000-0000-0000-000000000008".to_string(),
+            sender: Some(sender),
+            phase: FrontendHistoryFlushPhase::Collecting,
+            barrier: None,
+        },
+        target_windows: HashSet::from(["main".to_string()]),
+        pending_windows: HashSet::from(["main".to_string()]),
+    });
+
+    let failed = acknowledge_editor_flush_handshake(&mut slot, "history-busy", "main", &gate)
+        .expect("the last acknowledgement should report gate close failure");
+    let EditorFlushAcknowledge::HistoryCloseFailed { handshake, error } = failed else {
+        panic!("a preclosed gate should fail before the closing phase");
+    };
+    assert_eq!(handshake.id, "history-busy");
+    assert_eq!(error, crate::state::history::HISTORY_IN_PROGRESS);
+    assert!(slot.is_none());
+    assert_eq!(
+        gate.owner().as_deref(),
+        Some("00000000-0000-0000-0000-000000000007")
+    );
+
+    drop(existing);
+    assert!(!gate.is_closed());
+}
+
+#[test]
 fn acknowledged_history_window_blocks_new_mutations_while_other_window_drains() {
     let (sender, _receiver) = tokio::sync::oneshot::channel();
     let targets = HashSet::from(["main".to_string(), PANEL_LABEL.to_string()]);
