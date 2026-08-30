@@ -11,6 +11,8 @@ const captured = vi.hoisted(() => ({
       onPreview?: (value: number) => void;
       min?: number;
       max?: number;
+      allowDecimal?: boolean;
+      decimalScale?: number;
     }
   >(),
   numberList: [] as Array<{
@@ -19,6 +21,8 @@ const captured = vi.hoisted(() => ({
     onPreview?: (value: number) => void;
     min?: number;
     max?: number;
+    allowDecimal?: boolean;
+    decimalScale?: number;
   }>,
   optionalNumbers: [] as Array<{
     value?: number;
@@ -55,16 +59,23 @@ const captured = vi.hoisted(() => ({
   }>,
   image: null as null | {
     completionBinding?: string;
+    showActiveState?: boolean;
+    imageMode?: string;
+    onImageModeChange?: (mode: string) => void;
+    previewAnchor?: {
+      kind: 'key' | 'stat' | 'graph' | 'knob';
+      id: string;
+    } | null;
     onIdleImageChange: (value: string) => void;
     onIdleImageReset: () => void;
     onActiveImageChange?: (value: string) => void;
     onActiveImageReset?: () => void;
     idleTransparent?: boolean;
     activeTransparent?: boolean;
-    onIdleTransparentChange?: (value: boolean) => void;
-    onActiveTransparentChange?: (value: boolean) => void;
     idleImageFit?: string;
     activeImageFit?: string;
+    onIdleTransparentChange?: (value: boolean) => void;
+    onActiveTransparentChange?: (value: boolean) => void;
     onIdleImageFitChange?: (value: string) => void;
     onActiveImageFitChange?: (value: string) => void;
   },
@@ -310,6 +321,7 @@ import {
 } from './SingleSelectionPanel';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import { isEditorElementPropertyPatchV1 } from '@src/types/editor';
+import type { ImageFit } from '@src/types/key/keys';
 
 type CompatProps<T extends React.ElementType> = React.ComponentProps<T> &
   Record<string, unknown>;
@@ -1560,6 +1572,91 @@ describe('single geometry input bindings', () => {
   });
 
   it.each(['graph', 'knob'] as const)(
+    '%s ImagePicker는 active-state와 이미지 변환 지원 범위를 유지한다',
+    (type) => {
+      const id = '11111111-1111-4111-8111-111111111111';
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: false,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                id,
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+                activeTransparent: true,
+                imageFit: 'contain',
+                idleImageFit: '' as ImageFit,
+                activeImageFit: '' as ImageFit,
+              }}
+              showGraphImagePicker
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={{
+                current: document.createElement('button'),
+              }}
+              graphClassNameDraft=""
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                id,
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+                activeTransparent: true,
+                imageFit: 'contain',
+                idleImageFit: '' as ImageFit,
+                activeImageFit: '' as ImageFit,
+              }}
+            />
+          ),
+        );
+      });
+      if (type === 'knob') {
+        const configure = [...container.querySelectorAll('button')].find(
+          (button) => button.textContent === 'propertiesPanel.configure',
+        );
+        act(() => configure?.click());
+      }
+
+      expect(captured.image?.showActiveState ?? true).toBe(type === 'knob');
+      expect(captured.image?.activeTransparent).toBe(type === 'knob');
+      expect(captured.image?.idleImageFit).toBe('contain');
+      expect(captured.image?.activeImageFit).toBe('contain');
+      expect(captured.image?.imageMode).toBeUndefined();
+      expect(captured.image?.onImageModeChange).toBeUndefined();
+      expect(typeof captured.image?.onActiveImageChange).toBe(
+        type === 'knob' ? 'function' : 'undefined',
+      );
+      expect(captured.image?.previewAnchor ?? null).toEqual(
+        type === 'knob' ? { kind: 'knob', id } : null,
+      );
+    },
+  );
+
+  it.each(['graph', 'knob'] as const)(
     '%s ImagePicker load와 reset은 stable callback이 있으면 legacy를 쓰지 않는다',
     (type) => {
       const commit = vi.fn();
@@ -1903,6 +2000,91 @@ describe('single geometry input bindings', () => {
 
       act(() => captured.numbers.get('W')?.onChange(5));
       expect(geometry.mock.calls).toEqual([['width', 20]]);
+    },
+  );
+
+  it.each([
+    ['graph', 0, 0, 200, 100],
+    ['knob', 60.4, 60.6, 60, 61],
+  ] as const)(
+    '%s 기하는 전용 기본 크기·정수 표시·20..9999 정책을 유지한다',
+    (type, width, height, expectedWidth, expectedHeight) => {
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: false,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                width,
+                height,
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              showGraphImagePicker={false}
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={createRef<HTMLButtonElement>()}
+              graphClassNameDraft=""
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                width,
+                height,
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+            />
+          ),
+        );
+      });
+
+      expect(captured.numbers.get('X')).toMatchObject({
+        min: -9999,
+        max: 9999,
+        allowDecimal: true,
+        decimalScale: 1,
+      });
+      expect(captured.numbers.get('Y')).toMatchObject({
+        min: -9999,
+        max: 9999,
+        allowDecimal: true,
+        decimalScale: 1,
+      });
+      expect(captured.numbers.get('W')).toMatchObject({
+        value: expectedWidth,
+        min: 20,
+        max: 9999,
+      });
+      expect(captured.numbers.get('H')).toMatchObject({
+        value: expectedHeight,
+        min: 20,
+        max: 9999,
+      });
+      expect(captured.numbers.get('W')?.allowDecimal).toBeUndefined();
+      expect(captured.numbers.get('H')?.decimalScale).toBeUndefined();
     },
   );
 

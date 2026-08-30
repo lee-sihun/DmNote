@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/refs -- 피커 open 시점 reference DOM 존재 계약 */
 import React from 'react';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import type {
@@ -21,6 +22,10 @@ interface SingleImagePickerPopupProps {
   panelElement?: HTMLElement | null;
   canvasAnchor?: GradientCanvasAnchor;
   showActiveState: boolean;
+  showTransformControls?: boolean;
+  bindActiveState?: boolean;
+  fallbackEmptyImageFit?: boolean;
+  requireMountedReference?: boolean;
   onToggle?: () => void;
   onInactiveImageCommit?: (imageUrl: string) => void;
   onActiveImageCommit?: (imageUrl: string) => void;
@@ -39,6 +44,10 @@ const SingleImagePickerPopup = ({
   panelElement,
   canvasAnchor,
   showActiveState,
+  showTransformControls = showActiveState,
+  bindActiveState = true,
+  fallbackEmptyImageFit = false,
+  requireMountedReference = false,
   onToggle,
   onInactiveImageCommit,
   onActiveImageCommit,
@@ -76,10 +85,19 @@ const SingleImagePickerPopup = ({
       value: applyImageTransformLeaf(keyPosition[property], { leaf, value }),
     });
   };
+  const hasMountedReference =
+    imageButtonRef &&
+    (!requireMountedReference || Boolean(imageButtonRef.current));
+  const idleImageFit = fallbackEmptyImageFit
+    ? keyPosition.idleImageFit || keyPosition.imageFit || 'cover'
+    : keyPosition.idleImageFit ?? keyPosition.imageFit ?? 'cover';
+  const activeImageFit = fallbackEmptyImageFit
+    ? keyPosition.activeImageFit || keyPosition.imageFit || 'cover'
+    : keyPosition.activeImageFit ?? keyPosition.imageFit ?? 'cover';
 
   return (
     <PopupExit open={open}>
-      {open && onToggle && imageButtonRef ? (
+      {open && onToggle && hasMountedReference ? (
         <ImagePicker
           open={open}
           previewAnchor={canvasAnchor ?? null}
@@ -89,30 +107,31 @@ const SingleImagePickerPopup = ({
           idleImage={keyPosition.inactiveImage || ''}
           activeImage={keyPosition.activeImage || ''}
           idleTransparent={keyPosition.idleTransparent ?? false}
-          activeTransparent={keyPosition.activeTransparent ?? false}
-          idleImageFit={
-            keyPosition.idleImageFit ?? keyPosition.imageFit ?? 'cover'
+          activeTransparent={
+            bindActiveState ? keyPosition.activeTransparent ?? false : false
           }
-          activeImageFit={
-            keyPosition.activeImageFit ?? keyPosition.imageFit ?? 'cover'
-          }
+          idleImageFit={idleImageFit}
+          activeImageFit={activeImageFit}
           onIdleImageChange={(imageUrl) => onInactiveImageCommit?.(imageUrl)}
-          onActiveImageChange={(imageUrl) => onActiveImageCommit?.(imageUrl)}
           onIdleTransparentChange={(checked) =>
             onIdleTransparentCommit?.(checked)
-          }
-          onActiveTransparentChange={(checked) =>
-            onActiveTransparentCommit?.(checked)
           }
           onIdleImageFitChange={(fit) =>
             onIdleImageFitCommit?.(fit as ImageFit)
           }
-          onActiveImageFitChange={(fit) =>
-            onActiveImageFitCommit?.(fit as ImageFit)
-          }
           onIdleImageReset={() => onInactiveImageCommit?.('')}
-          onActiveImageReset={() => onActiveImageCommit?.('')}
-          {...(showActiveState
+          {...(bindActiveState
+            ? {
+                onActiveImageChange: (imageUrl: string) =>
+                  onActiveImageCommit?.(imageUrl),
+                onActiveTransparentChange: (checked: boolean) =>
+                  onActiveTransparentCommit?.(checked),
+                onActiveImageFitChange: (fit: string) =>
+                  onActiveImageFitCommit?.(fit as ImageFit),
+                onActiveImageReset: () => onActiveImageCommit?.(''),
+              }
+            : {})}
+          {...(showTransformControls
             ? {
                 imageMode: keyPosition.imageMode,
                 idleImageTransform: keyPosition.idleImageTransform,

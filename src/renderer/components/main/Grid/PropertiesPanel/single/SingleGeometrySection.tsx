@@ -4,9 +4,43 @@ import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { NumberInput, PropertyRow, PropertySection } from '../PropertyInputs';
 
 type GeometryField = 'dx' | 'dy' | 'width' | 'height';
+type SingleGeometryKind = 'key-or-stat' | 'graph' | 'knob';
+
+interface SingleGeometryPolicy {
+  defaultWidth: number;
+  defaultHeight: number;
+  minSize: number;
+  maxSize: number;
+  roundsDisplayedSize: boolean;
+}
+
+const GEOMETRY_POLICY: Record<SingleGeometryKind, SingleGeometryPolicy> = {
+  'key-or-stat': {
+    defaultWidth: 60,
+    defaultHeight: 60,
+    minSize: 1,
+    maxSize: 999,
+    roundsDisplayedSize: false,
+  },
+  graph: {
+    defaultWidth: 200,
+    defaultHeight: 100,
+    minSize: 20,
+    maxSize: 9999,
+    roundsDisplayedSize: true,
+  },
+  knob: {
+    defaultWidth: 60,
+    defaultHeight: 60,
+    minSize: 20,
+    maxSize: 9999,
+    roundsDisplayedSize: true,
+  },
+};
 
 interface SingleGeometrySectionProps {
   keyPosition: KeyPosition;
+  kind?: SingleGeometryKind;
   localDx?: number;
   localDy?: number;
   localWidth?: number;
@@ -17,11 +51,12 @@ interface SingleGeometrySectionProps {
   onLocalHeightChange?: (value: number) => void;
   onGeometryPreview?: (field: GeometryField, value: number) => void;
   onGeometryCommit?: (field: GeometryField, value: number) => void;
-  t: (key: string) => string;
+  t: (key: string) => string | undefined;
 }
 
 const SingleGeometrySection = ({
   keyPosition,
+  kind = 'key-or-stat',
   localDx,
   localDy,
   localWidth,
@@ -35,6 +70,29 @@ const SingleGeometrySection = ({
   t,
 }: SingleGeometrySectionProps) => {
   const isIndividualMode = !onLocalDxChange;
+  const policy = GEOMETRY_POLICY[kind];
+  const usesNativeItemSizePolicy = kind !== 'key-or-stat';
+  const positionLabelFallback = usesNativeItemSizePolicy ? 'Position' : '위치';
+  const sizeLabelFallback = usesNativeItemSizePolicy ? 'Size' : '크기';
+  const displayPosition = (field: 'dx' | 'dy', localValue?: number) => {
+    const value = isIndividualMode ? keyPosition[field] : localValue;
+    return usesNativeItemSizePolicy ? value || 0 : value ?? keyPosition[field];
+  };
+  const displaySize = (
+    field: 'width' | 'height',
+    defaultValue: number,
+    localValue?: number,
+  ) => {
+    const value = isIndividualMode
+      ? keyPosition[field]
+      : localValue ?? keyPosition[field];
+    const resolved = usesNativeItemSizePolicy
+      ? value || defaultValue
+      : value ?? defaultValue;
+    return policy.roundsDisplayedSize ? Math.round(resolved) : resolved;
+  };
+  const normalizeSize = (value: number) =>
+    usesNativeItemSizePolicy ? Math.max(policy.minSize, value) : value;
   const commitPosition = (
     field: 'dx' | 'dy',
     value: number,
@@ -62,9 +120,11 @@ const SingleGeometrySection = ({
 
   return (
     <PropertySection>
-      <PropertyRow label={t('propertiesPanel.position') || '위치'}>
+      <PropertyRow
+        label={t('propertiesPanel.position') || positionLabelFallback}
+      >
         <NumberInput
-          value={isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx}
+          value={displayPosition('dx', localDx)}
           onChange={(value) => commitPosition('dx', value, onLocalDxChange)}
           onPreview={(value) => onGeometryPreview?.('dx', value)}
           onCancel={() => editGestureController.cancel()}
@@ -76,7 +136,7 @@ const SingleGeometrySection = ({
           decimalScale={1}
         />
         <NumberInput
-          value={isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy}
+          value={displayPosition('dy', localDy)}
           onChange={(value) => commitPosition('dy', value, onLocalDyChange)}
           onPreview={(value) => onGeometryPreview?.('dy', value)}
           onCancel={() => editGestureController.cancel()}
@@ -89,40 +149,40 @@ const SingleGeometrySection = ({
         />
       </PropertyRow>
 
-      <PropertyRow label={t('propertiesPanel.size') || '크기'}>
+      <PropertyRow label={t('propertiesPanel.size') || sizeLabelFallback}>
         <NumberInput
-          value={
-            isIndividualMode
-              ? keyPosition.width ?? 60
-              : localWidth ?? keyPosition.width ?? 60
+          value={displaySize('width', policy.defaultWidth, localWidth)}
+          onChange={(value) =>
+            commitSize('width', normalizeSize(value), onLocalWidthChange)
           }
-          onChange={(value) => commitSize('width', value, onLocalWidthChange)}
-          onPreview={(value) => previewSize('width', value, onLocalWidthChange)}
+          onPreview={(value) =>
+            previewSize('width', normalizeSize(value), onLocalWidthChange)
+          }
           onCancel={() => editGestureController.cancel()}
           prefix="W"
           width={AXIS_FIELD_WIDTH}
-          min={1}
-          max={999}
-          allowDecimal
-          decimalScale={1}
+          min={policy.minSize}
+          max={policy.maxSize}
+          {...(!usesNativeItemSizePolicy
+            ? { allowDecimal: true, decimalScale: 1 }
+            : {})}
         />
         <NumberInput
-          value={
-            isIndividualMode
-              ? keyPosition.height ?? 60
-              : localHeight ?? keyPosition.height ?? 60
+          value={displaySize('height', policy.defaultHeight, localHeight)}
+          onChange={(value) =>
+            commitSize('height', normalizeSize(value), onLocalHeightChange)
           }
-          onChange={(value) => commitSize('height', value, onLocalHeightChange)}
           onPreview={(value) =>
-            previewSize('height', value, onLocalHeightChange)
+            previewSize('height', normalizeSize(value), onLocalHeightChange)
           }
           onCancel={() => editGestureController.cancel()}
           prefix="H"
           width={AXIS_FIELD_WIDTH}
-          min={1}
-          max={999}
-          allowDecimal
-          decimalScale={1}
+          min={policy.minSize}
+          max={policy.maxSize}
+          {...(!usesNativeItemSizePolicy
+            ? { allowDecimal: true, decimalScale: 1 }
+            : {})}
         />
       </PropertyRow>
     </PropertySection>

@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/refs */
 import React from 'react';
 import type { ImageFit } from '@src/types/key/keys';
 import type { StatItemType } from '@src/types/key/statItems';
@@ -26,9 +25,6 @@ import {
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
-import PopupExit from '@components/main/Modal/PopupExit';
-import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
-import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -38,6 +34,8 @@ import type {
 } from '@src/types/editor';
 import RenameIcon from './RenameIcon';
 import { getStatTypeLabel } from '@utils/grid/statTypeLabel';
+import SingleGeometrySection from './SingleGeometrySection';
+import SingleImagePickerPopup from './SingleImagePickerPopup';
 
 // ============================================================================
 // Single Graph Selection Panel
@@ -175,69 +173,13 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
           className="properties-panel-overlay-viewport"
         >
           <EditSessionBoundary>
-            <PropertySection>
-              <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
-                <NumberInput
-                  value={singleGraphPosition.dx || 0}
-                  onChange={(value) => {
-                    handleGeometryCommit?.('dx', value);
-                  }}
-                  onPreview={(value) => handleGeometryPreview?.('dx', value)}
-                  onCancel={() => editGestureController.cancel()}
-                  prefix="X"
-                  width={AXIS_FIELD_WIDTH}
-                  min={-9999}
-                  max={9999}
-                  allowDecimal
-                  decimalScale={1}
-                />
-                <NumberInput
-                  value={singleGraphPosition.dy || 0}
-                  onChange={(value) => {
-                    handleGeometryCommit?.('dy', value);
-                  }}
-                  onPreview={(value) => handleGeometryPreview?.('dy', value)}
-                  onCancel={() => editGestureController.cancel()}
-                  prefix="Y"
-                  width={AXIS_FIELD_WIDTH}
-                  min={-9999}
-                  max={9999}
-                  allowDecimal
-                  decimalScale={1}
-                />
-              </PropertyRow>
-
-              <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
-                <NumberInput
-                  value={Math.round(singleGraphPosition.width || 200)}
-                  onChange={(value) => {
-                    handleGeometryCommit?.('width', Math.max(20, value));
-                  }}
-                  onPreview={(value) =>
-                    handleGeometryPreview?.('width', Math.max(20, value))
-                  }
-                  onCancel={() => editGestureController.cancel()}
-                  prefix="W"
-                  width={AXIS_FIELD_WIDTH}
-                  min={20}
-                  max={9999}
-                />
-                <NumberInput
-                  value={Math.round(singleGraphPosition.height || 100)}
-                  onChange={(value) => {
-                    handleGeometryCommit?.('height', Math.max(20, value));
-                  }}
-                  onPreview={(value) =>
-                    handleGeometryPreview?.('height', Math.max(20, value))
-                  }
-                  onCancel={() => editGestureController.cancel()}
-                  prefix="H"
-                  width={AXIS_FIELD_WIDTH}
-                  min={20}
-                  max={9999}
-                />
-              </PropertyRow>
-            </PropertySection>
+            <SingleGeometrySection
+              keyPosition={singleGraphPosition}
+              kind="graph"
+              onGeometryPreview={handleGeometryPreview}
+              onGeometryCommit={handleGeometryCommit}
+              t={t}
+            />
 
             <PropertySection>
               <PropertyRow
@@ -494,42 +436,21 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
         </div>
       </div>
 
-      <PopupExit open={showGraphImagePicker}>
-        {showGraphImagePicker && graphImageButtonRef.current ? (
-          <ImagePicker
-            open={showGraphImagePicker}
-            referenceRef={graphImageButtonRef}
-            panelElement={panelElement}
-            showActiveState={false}
-            completionBinding="element-id"
-            idleImage={singleGraphPosition.inactiveImage || ''}
-            activeImage={singleGraphPosition.activeImage || ''}
-            idleTransparent={singleGraphPosition.idleTransparent ?? false}
-            activeTransparent={false}
-            idleImageFit={
-              singleGraphPosition.idleImageFit ||
-              singleGraphPosition.imageFit ||
-              'cover'
-            }
-            activeImageFit={
-              singleGraphPosition.activeImageFit ||
-              singleGraphPosition.imageFit ||
-              'cover'
-            }
-            onIdleImageChange={(imageUrl: string) =>
-              onInactiveImageCommit?.(imageUrl)
-            }
-            onIdleTransparentChange={(value: boolean) =>
-              onIdleTransparentCommit?.(value)
-            }
-            onIdleImageFitChange={(fit: string) =>
-              onIdleImageFitCommit?.(fit as ImageFit)
-            }
-            onIdleImageReset={() => onInactiveImageCommit?.('')}
-            onClose={() => setShowGraphImagePicker(false)}
-          />
-        ) : null}
-      </PopupExit>
+      <SingleImagePickerPopup
+        open={showGraphImagePicker}
+        keyPosition={singleGraphPosition}
+        imageButtonRef={graphImageButtonRef}
+        panelElement={panelElement}
+        showActiveState={false}
+        showTransformControls={false}
+        bindActiveState={false}
+        fallbackEmptyImageFit
+        requireMountedReference
+        onToggle={() => setShowGraphImagePicker(false)}
+        onInactiveImageCommit={onInactiveImageCommit}
+        onIdleTransparentCommit={onIdleTransparentCommit}
+        onIdleImageFitCommit={onIdleImageFitCommit}
+      />
     </div>
   );
 };

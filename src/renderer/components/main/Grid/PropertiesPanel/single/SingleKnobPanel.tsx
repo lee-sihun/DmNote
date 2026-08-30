@@ -41,10 +41,8 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
-import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -55,6 +53,8 @@ import type {
   EditorElementPropertyPatchV1,
 } from '@src/types/editor';
 import RenameIcon from './RenameIcon';
+import SingleGeometrySection from './SingleGeometrySection';
+import SingleImagePickerPopup from './SingleImagePickerPopup';
 
 // ============================================================================
 // Single Knob Selection Panel
@@ -504,69 +504,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               </PropertyRow>
             </PropertySection>
 
-            <PropertySection>
-              <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
-                <NumberInput
-                  value={singleKnobPosition.dx || 0}
-                  onChange={(value) => {
-                    handleGeometryCommit?.('dx', value);
-                  }}
-                  onPreview={(value) => handleGeometryPreview?.('dx', value)}
-                  onCancel={() => editGestureController.cancel()}
-                  prefix="X"
-                  width={AXIS_FIELD_WIDTH}
-                  min={-9999}
-                  max={9999}
-                  allowDecimal
-                  decimalScale={1}
-                />
-                <NumberInput
-                  value={singleKnobPosition.dy || 0}
-                  onChange={(value) => {
-                    handleGeometryCommit?.('dy', value);
-                  }}
-                  onPreview={(value) => handleGeometryPreview?.('dy', value)}
-                  onCancel={() => editGestureController.cancel()}
-                  prefix="Y"
-                  width={AXIS_FIELD_WIDTH}
-                  min={-9999}
-                  max={9999}
-                  allowDecimal
-                  decimalScale={1}
-                />
-              </PropertyRow>
-
-              <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
-                <NumberInput
-                  value={Math.round(singleKnobPosition.width || 60)}
-                  onChange={(value) => {
-                    handleGeometryCommit?.('width', Math.max(20, value));
-                  }}
-                  onPreview={(value) =>
-                    handleGeometryPreview?.('width', Math.max(20, value))
-                  }
-                  onCancel={() => editGestureController.cancel()}
-                  prefix="W"
-                  width={AXIS_FIELD_WIDTH}
-                  min={20}
-                  max={9999}
-                />
-                <NumberInput
-                  value={Math.round(singleKnobPosition.height || 60)}
-                  onChange={(value) => {
-                    handleGeometryCommit?.('height', Math.max(20, value));
-                  }}
-                  onPreview={(value) =>
-                    handleGeometryPreview?.('height', Math.max(20, value))
-                  }
-                  onCancel={() => editGestureController.cancel()}
-                  prefix="H"
-                  width={AXIS_FIELD_WIDTH}
-                  min={20}
-                  max={9999}
-                />
-              </PropertyRow>
-            </PropertySection>
+            <SingleGeometrySection
+              keyPosition={singleKnobPosition}
+              kind="knob"
+              onGeometryPreview={handleGeometryPreview}
+              onGeometryCommit={handleGeometryCommit}
+              t={t}
+            />
 
             <PropertySection>
               {/* 회전 배율: 1 = 물리 1회전당 화면 1회전 (축 해상도 무관) */}
@@ -783,52 +727,24 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         </div>
       </div>
 
-      <PopupExit open={showImagePicker}>
-        {showImagePicker && imageButtonRef.current ? (
-          <ImagePicker
-            open={showImagePicker}
-            previewAnchor={knobPreviewAnchor}
-            referenceRef={imageButtonRef}
-            panelElement={panelRef.current}
-            completionBinding="element-id"
-            idleImage={singleKnobPosition.inactiveImage || ''}
-            activeImage={singleKnobPosition.activeImage || ''}
-            idleTransparent={singleKnobPosition.idleTransparent ?? false}
-            activeTransparent={singleKnobPosition.activeTransparent ?? false}
-            idleImageFit={
-              singleKnobPosition.idleImageFit ||
-              singleKnobPosition.imageFit ||
-              'cover'
-            }
-            activeImageFit={
-              singleKnobPosition.activeImageFit ||
-              singleKnobPosition.imageFit ||
-              'cover'
-            }
-            onIdleImageChange={(imageUrl: string) =>
-              onInactiveImageCommit?.(imageUrl)
-            }
-            onActiveImageChange={(imageUrl: string) =>
-              onActiveImageCommit?.(imageUrl)
-            }
-            onIdleTransparentChange={(value: boolean) =>
-              onIdleTransparentCommit?.(value)
-            }
-            onActiveTransparentChange={(value: boolean) =>
-              onActiveTransparentCommit?.(value)
-            }
-            onIdleImageFitChange={(fit: string) =>
-              onIdleImageFitCommit?.(fit as ImageFit)
-            }
-            onActiveImageFitChange={(fit: string) =>
-              onActiveImageFitCommit?.(fit as ImageFit)
-            }
-            onIdleImageReset={() => onInactiveImageCommit?.('')}
-            onActiveImageReset={() => onActiveImageCommit?.('')}
-            onClose={() => setShowImagePicker(false)}
-          />
-        ) : null}
-      </PopupExit>
+      <SingleImagePickerPopup
+        open={showImagePicker}
+        keyPosition={singleKnobPosition}
+        imageButtonRef={imageButtonRef}
+        panelElement={panelRef.current}
+        canvasAnchor={knobPreviewAnchor ?? undefined}
+        showActiveState
+        showTransformControls={false}
+        fallbackEmptyImageFit
+        requireMountedReference
+        onToggle={() => setShowImagePicker(false)}
+        onInactiveImageCommit={onInactiveImageCommit}
+        onActiveImageCommit={onActiveImageCommit}
+        onIdleTransparentCommit={onIdleTransparentCommit}
+        onActiveTransparentCommit={onActiveTransparentCommit}
+        onIdleImageFitCommit={onIdleImageFitCommit}
+        onActiveImageFitCommit={onActiveImageFitCommit}
+      />
 
       {/* 대기/입력 색상 ColorPicker (키 패널과 동일한 stateMode 토글) */}
       <PopupExit open={Boolean(pickerFor)}>
