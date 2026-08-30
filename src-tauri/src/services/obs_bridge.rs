@@ -6,8 +6,6 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 use serde_json::Value;
-use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse, InvokeResponseBody};
-use tauri::webview::InvokeRequest;
 use tauri::{AppHandle, Manager, Wry};
 #[cfg(test)]
 use tokio::io::AsyncReadExt;
@@ -26,16 +24,19 @@ use tokio_tungstenite::{
 };
 
 use crate::models::obs::{
-    make_envelope, HelloAckPayload, InvokeRequestPayload, ObsBroadcast, ObsEnvelope, ObsStatus,
-    OBS_PROTOCOL_VERSION,
+    make_envelope, HelloAckPayload, ObsBroadcast, ObsEnvelope, ObsStatus, OBS_PROTOCOL_VERSION,
 };
 
 mod media;
+mod rpc;
 mod transport;
 
 #[cfg(test)]
 use media::{guess_mime, percent_decode};
 
+#[cfg(test)]
+use rpc::ALLOWED_WS_COMMANDS;
+use rpc::{build_allowed_list, is_allowed_command};
 use transport::{
     bind_address, has_allowed_http_host, http_header_end, is_local_machine_ip,
     is_websocket_upgrade_request, read_http_request_headers, validate_websocket_request,
@@ -43,43 +44,6 @@ use transport::{
 };
 #[cfg(test)]
 use transport::{http_header_values, is_allowed_host_header};
-
-/// OBS 클라이언트에서 실행 가능한 커맨드 목록
-const ALLOWED_WS_COMMANDS: &[&str] = &[
-    "app_bootstrap",
-    "settings_get",
-    "editor_get",
-    "layer_groups_get",
-    "note_tab_get_all",
-    "note_tab_get",
-    "css_get",
-    "css_get_use",
-    "css_tab_get_all",
-    "css_tab_get",
-    "js_get",
-    "js_get_use",
-    "get_cursor_settings",
-    "keys_get",
-    "keys_get_counters",
-    "positions_get",
-    "stat_positions_get",
-    "graph_positions_get",
-    "knob_positions_get",
-    "custom_tabs_list",
-    "sound_list",
-    "sound_load_original",
-    "counter_animation_list",
-    "plugin_bridge_send",
-    "plugin_bridge_send_to",
-    "raw_input_subscribe",
-    "raw_input_unsubscribe",
-    "plugin_storage_get",
-    "plugin_storage_set",
-    "plugin_storage_remove",
-    "plugin_storage_keys",
-    "plugin_storage_has_data",
-    // 파괴적 bulk 삭제는 plugin_storage_clear와 동일하게 원격 차단
-];
 
 // OBS 브라우저 소스는 overlay 창을 대신한다 - main만을 향한 브릿지 메시지는 전달하지 않는다
 fn is_forwarded_to_obs(event: &str, data: &Value) -> bool {
@@ -124,17 +88,6 @@ const FORWARDED_EVENTS: &[&str] = &[
     "preset:snapshot",
     "plugin-bridge:message",
 ];
-
-fn is_allowed_command(command: &str) -> bool {
-    ALLOWED_WS_COMMANDS.contains(&command)
-}
-
-fn build_allowed_list() -> Vec<String> {
-    ALLOWED_WS_COMMANDS
-        .iter()
-        .map(|command| command.to_string())
-        .collect()
-}
 
 /// 임베딩 에셋 조회 함수 타입 (path → Option<(bytes, mime_type)>)
 pub type AssetFetcher = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + Sync>;
@@ -796,22 +749,18 @@ impl ObsBridgeService {
     }
 
     /// invoke_request 처리: webview.on_message()로 Tauri 커맨드 파이프라인에 주입
-    fn handle_invoke_request(
-        &self,
-        payload: &Value,
-        addr: &SocketAddr,
-        rpc_tx: tokio::sync::mpsc::UnboundedSender<(String, Result<Value, Value>)>,
-    ) {
-        let req: InvokeRequestPayload = match serde_json::from_value(payload.clone()) {
+    fn handle_invoke_request(&self, payload: &Value, addr: &SocketAddr, rpc_tx: rpc::RpcSender) {
+        let req = match rpc::parse_invoke_request(payload) {
             Ok(r) => r,
             Err(e) => {
                 log::warn!("[ObsBridge] {addr}: invoke_request 파싱 실패: {e}");
                 // requestId를 추출 시도하여 에러 응답 전송 (파싱 실패여도 클라이언트 대기 방지)
                 if let Some(request_id) = payload.get("requestId").and_then(|v| v.as_str()) {
-                    let _ = rpc_tx.send((
+                    rpc::send_rpc_response(
+                        &rpc_tx,
                         request_id.to_string(),
-                        Err(serde_json::json!(format!("Invalid invoke_request: {e}"))),
-                    ));
+                        Err(rpc::invalid_invoke_request_error(&e)),
+                    );
                 }
                 return;
             }
@@ -820,13 +769,11 @@ impl ObsBridgeService {
         // allowlist 검사 (클라이언트 검사와 별도인 백엔드 안전망)
         if !is_allowed_command(&req.command) {
             log::debug!("[ObsBridge] {addr}: 허용되지 않은 cmd={}", req.command);
-            let _ = rpc_tx.send((
+            rpc::send_rpc_response(
+                &rpc_tx,
                 req.request_id,
-                Err(serde_json::json!(format!(
-                    "Command not allowed: {}",
-                    req.command
-                ))),
-            ));
+                Err(rpc::command_not_allowed_error(&req.command)),
+            );
             return;
         }
 
@@ -835,47 +782,37 @@ impl ObsBridgeService {
             Some(h) => h,
             None => {
                 log::warn!("[ObsBridge] {addr}: AppHandle 미설정");
-                let _ = rpc_tx.send((
+                rpc::send_rpc_response(
+                    &rpc_tx,
                     req.request_id,
-                    Err(serde_json::json!("AppHandle not available")),
-                ));
+                    Err(serde_json::json!(rpc::APP_HANDLE_NOT_AVAILABLE)),
+                );
                 return;
             }
         };
 
         // OBS 모드에서 오버레이가 destroy된 상태일 수 있으므로 main window로 fallback
-        let webview_window = match app_handle
-            .get_webview_window("overlay")
-            .or_else(|| app_handle.get_webview_window("main"))
-        {
+        let webview_window = match rpc::select_overlay_or_main(
+            || app_handle.get_webview_window("overlay"),
+            || app_handle.get_webview_window("main"),
+        ) {
             Some(w) => w,
             None => {
                 log::warn!("[ObsBridge] {addr}: webview 없음 (overlay/main 모두)");
-                let _ = rpc_tx.send((
+                rpc::send_rpc_response(
+                    &rpc_tx,
                     req.request_id,
-                    Err(serde_json::json!("No webview window available")),
-                ));
+                    Err(serde_json::json!(rpc::NO_WEBVIEW_AVAILABLE)),
+                );
                 return;
             }
         };
 
         // InvokeRequest 구성
-        // 플랫폼별 로컬 URL (Windows: http://tauri.localhost, macOS/Linux: tauri://localhost)
-        let local_url = if cfg!(windows) || cfg!(target_os = "android") {
-            tauri::Url::parse("http://tauri.localhost").unwrap()
-        } else {
-            tauri::Url::parse("tauri://localhost").unwrap()
-        };
+        let local_url = rpc::local_invoke_url();
         let invoke_key = app_handle.invoke_key().to_string();
-        let request = InvokeRequest {
-            cmd: req.command.clone(),
-            callback: CallbackFn(0),
-            error: CallbackFn(1),
-            url: local_url,
-            body: InvokeBody::Json(req.args),
-            headers: Default::default(),
-            invoke_key,
-        };
+        let request =
+            rpc::build_invoke_request(req.command.clone(), req.args, local_url, invoke_key);
 
         let request_id = req.request_id;
         let cmd = req.command.clone();
@@ -884,25 +821,8 @@ impl ObsBridgeService {
         // OwnedInvokeResponder: 응답을 rpc_tx 채널로 전송
         let responder: Box<tauri::ipc::OwnedInvokeResponder<Wry>> =
             Box::new(move |_webview, _cmd, response, _callback, _error| {
-                let result = match response {
-                    InvokeResponse::Ok(body) => {
-                        let value = match body {
-                            InvokeResponseBody::Json(json_str) => {
-                                serde_json::from_str(&json_str).unwrap_or(Value::Null)
-                            }
-                            InvokeResponseBody::Raw(bytes) => {
-                                // Raw bytes → base64 인코딩
-                                use base64::Engine;
-                                Value::String(
-                                    base64::engine::general_purpose::STANDARD.encode(&bytes),
-                                )
-                            }
-                        };
-                        Ok(value)
-                    }
-                    InvokeResponse::Err(err) => Err(err.0),
-                };
-                let _ = rpc_tx.send((request_id, result));
+                let result = rpc::project_invoke_response(response);
+                rpc::send_rpc_response(&rpc_tx, request_id, result);
             });
 
         log::debug!("[ObsBridge] {addr_clone}: invoke cmd={cmd}");
