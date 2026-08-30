@@ -9,7 +9,7 @@ use std::{
     time::Instant,
 };
 
-use crate::errors::{EditorCommitError, EditorCommitErrorCode};
+use crate::errors::EditorCommitError;
 use crate::models::{
     key_mappings_contain_multi, normalize_key_mappings, AppStoreData, CommittedEditorChange,
     CustomCssPatch, CustomJsPatch, EditorCommitOrigin, EditorCommitRequest, EditorCommitResult,
@@ -60,6 +60,7 @@ use super::plugin::{
 };
 
 mod asset_references;
+mod editor_transactions;
 mod persistence;
 mod sound_assets;
 
@@ -70,6 +71,12 @@ use asset_references::{
 #[cfg(test)]
 use asset_references::{
     collect_local_image_path_keys, collect_local_sound_path_keys, iter_all_positions,
+};
+use editor_transactions::{
+    editor_error_outcome, editor_history_error, ensure_generic_editor_unchanged,
+    insert_gesture_mutation_ack, insert_mutation_ack, prepare_editor_patch_transition,
+    project_editor_history_key_counters, project_history_key_counters, require_history_entry,
+    validate_observed_history_epoch,
 };
 use persistence::StoreWriter;
 pub(crate) use sound_assets::{
@@ -3020,77 +3027,6 @@ fn initialize_default_state() -> AppStoreData {
     data
 }
 
-fn ensure_generic_editor_unchanged(before: &AppStoreData, after: &AppStoreData) -> Result<()> {
-    if before.editor_revision != after.editor_revision
-        || EditorDocumentV1::from_store(before) != EditorDocumentV1::from_store(after)
-    {
-        return Err(anyhow!(
-            "editor fields must be changed through an editor transaction"
-        ));
-    }
-    Ok(())
-}
-
-fn editor_error_outcome(code: EditorCommitErrorCode) -> &'static str {
-    match code {
-        EditorCommitErrorCode::RevisionConflict => "revision_conflict",
-        EditorCommitErrorCode::PluginRevisionConflict => "plugin_revision_conflict",
-        EditorCommitErrorCode::ValidationFailed => "validation_failed",
-        EditorCommitErrorCode::TooManyGestureIds => "too_many_gesture_ids",
-        EditorCommitErrorCode::InvalidGestureId => "invalid_gesture_id",
-        EditorCommitErrorCode::PairedUpdateRequired => "paired_update_required",
-        EditorCommitErrorCode::MultiKeyUnsupported => "multi_key_unsupported",
-        EditorCommitErrorCode::MutationIdReused => "mutation_id_reused",
-        EditorCommitErrorCode::HistoryInProgress => "history_in_progress",
-        EditorCommitErrorCode::HistoryEpochConflict => "history_epoch_conflict",
-        EditorCommitErrorCode::IoError => "io_error",
-    }
-}
-
-fn prepare_editor_patch_transition(
-    current_store: &AppStoreData,
-    changes: &crate::models::EditorPatchV1,
-    touched_fields: &[EditorField],
-) -> std::result::Result<
-    (
-        EditorDocumentV1,
-        EditorDocumentV1,
-        AppStoreData,
-        Vec<EditorField>,
-    ),
-    EditorCommitError,
-> {
-    let current = EditorDocumentV1::from_store(current_store);
-    let mut candidate = current.clone();
-    candidate.apply_patch(changes);
-
-    let mut scratch = current_store.clone();
-    candidate.apply_to_store(&mut scratch);
-    crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
-    crate::state::migration::canonicalize_image_modes(&mut scratch);
-    candidate = EditorDocumentV1::from_store(&scratch);
-
-    validate_paired_update(
-        &current,
-        &candidate,
-        touched_fields.contains(&EditorField::Keys),
-        touched_fields.contains(&EditorField::KeyPositions),
-    )?;
-    scratch.editor_revision = current_store.editor_revision;
-    validate_document_transition(&current, &candidate, current_store, &scratch)?;
-    let changed_fields = current.changed_fields(&candidate);
-
-    Ok((current, candidate, scratch, changed_fields))
-}
-
-fn require_history_entry(plan: HistoryRecordPlan) -> Result<HistoryEntry, String> {
-    match plan {
-        HistoryRecordPlan::Entry(entry) => Ok(*entry),
-        HistoryRecordPlan::Merge { .. } => Err(HISTORY_INVALID_OPPOSITE_ENTRY.to_string()),
-        HistoryRecordPlan::Truncate => Err(HISTORY_ENTRY_TOO_LARGE.to_string()),
-    }
-}
-
 fn plugin_elements_snapshot(
     store: &AppStoreData,
     plugin_id: &str,
@@ -3208,22 +3144,6 @@ fn apply_plugin_elements_snapshot(
     Ok(())
 }
 
-fn editor_history_error(error: EditorCommitError) -> String {
-    format!("{:?}: {}", error.error_code, error.message)
-}
-
-fn validate_observed_history_epoch(
-    history: &HistoryService,
-    observed_history_epoch: Option<u64>,
-) -> std::result::Result<(), EditorCommitError> {
-    if observed_history_epoch.is_some_and(|observed| observed != history.history_epoch()) {
-        return Err(EditorCommitError::history_epoch_conflict(
-            history.history_epoch(),
-        ));
-    }
-    Ok(())
-}
-
 fn preset_history_settings_patch(settings: &PresetHistorySettingsSnapshot) -> SettingsPatchInput {
     let note = &settings.note_settings;
     SettingsPatchInput {
@@ -3275,71 +3195,6 @@ fn changed_map_ids<T: PartialEq>(
         .collect::<Vec<_>>();
     ids.sort();
     ids
-}
-
-fn project_history_key_counters(
-    current: &KeyCounters,
-    historical: &KeyCounters,
-    target_keys: &KeyMappings,
-) -> KeyCounters {
-    let mut projected = historical.clone();
-    sync_key_counters(&mut projected, target_keys);
-    for (mode, counters) in &mut projected {
-        let Some(current_mode) = current.get(mode) else {
-            continue;
-        };
-        for (key, count) in counters {
-            if let Some(current_count) = current_mode.get(key) {
-                *count = *current_count;
-            }
-        }
-    }
-    projected
-}
-
-fn project_editor_history_key_counters(
-    current: &KeyCounters,
-    historical: Option<&KeyCounters>,
-    target_keys: &KeyMappings,
-) -> KeyCounters {
-    let Some(historical) = historical else {
-        let mut projected = current.clone();
-        sync_key_counters(&mut projected, target_keys);
-        return projected;
-    };
-    project_history_key_counters(current, historical, target_keys)
-}
-
-fn insert_mutation_ack(
-    acks: &mut VecDeque<MutationAck>,
-    id: String,
-    fingerprint: RequestFingerprint,
-    result: EditorCommitResult,
-) {
-    if acks.len() == MUTATION_ACK_CAPACITY {
-        acks.pop_front();
-    }
-    acks.push_back(MutationAck {
-        id,
-        fingerprint,
-        result,
-    });
-}
-
-fn insert_gesture_mutation_ack(
-    acks: &mut VecDeque<GestureMutationAck>,
-    id: String,
-    fingerprint: RequestFingerprint,
-    result: GestureCommitResult,
-) {
-    if acks.len() == MUTATION_ACK_CAPACITY {
-        acks.pop_front();
-    }
-    acks.push_back(GestureMutationAck {
-        id,
-        fingerprint,
-        result,
-    });
 }
 
 #[cfg(test)]
