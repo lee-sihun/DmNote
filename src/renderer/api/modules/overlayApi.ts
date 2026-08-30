@@ -24,6 +24,7 @@ export const overlayApi = {
     height: number;
     anchor?: string;
     contentTopOffset?: number;
+    contentLeftOffset?: number;
     fixedPositionDeltaX?: number;
     fixedPositionDeltaY?: number;
   }) => invoke<OverlayBounds>('overlay_resize', { payload }),

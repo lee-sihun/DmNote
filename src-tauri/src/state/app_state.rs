@@ -2409,6 +2409,7 @@ impl AppState {
         width: f64,
         height: f64,
         anchor: Option<String>,
+        content_left_offset: Option<f64>,
         content_top_offset: Option<f64>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
@@ -2450,70 +2451,30 @@ impl AppState {
                 ..current
             }
         };
-        let mut next_content_top_offset = None;
+        let offset_snapshot = self.store.snapshot();
+        let content_left_change = content_offset_change(
+            content_left_offset,
+            offset_snapshot.overlay_last_content_left_offset,
+        );
+        let content_top_change = content_offset_change(
+            content_top_offset,
+            offset_snapshot.overlay_last_content_top_offset,
+        );
+        let next_content_left_offset = content_left_change.map(|(offset, _)| offset);
+        let next_content_top_offset = content_top_change.map(|(offset, _)| offset);
 
         // 초기화 중(첫 resize)에는 anchor 기반 position 재계산을 건너뛰고
         // 기동 시 한 번 해석한 배치를 사용
-        if initializing {
-            // 초기화 중이라도 content_top_offset은 저장해야 다음 resize에서 delta 계산이 정확함
-            if let Some(offset) = content_top_offset {
-                if offset.is_finite() {
-                    next_content_top_offset = Some(offset);
-                }
-            }
-        } else {
-            let scale = placement.target_scale;
-            match anchor {
-                OverlayResizeAnchor::BottomLeft => {
-                    placement.position.y += (current.height - height) * scale
-                }
-                OverlayResizeAnchor::TopRight => {
-                    placement.position.x += (current.width - width) * scale
-                }
-                OverlayResizeAnchor::BottomRight => {
-                    placement.position.x += (current.width - width) * scale;
-                    placement.position.y += (current.height - height) * scale;
-                }
-                OverlayResizeAnchor::Center => {
-                    placement.position.x += (current.width - width) * scale / 2.0;
-                    placement.position.y += (current.height - height) * scale / 2.0;
-                }
-                OverlayResizeAnchor::FixedPosition => {}
-                OverlayResizeAnchor::TopLeft => {}
-            }
-
-            if anchor == OverlayResizeAnchor::FixedPosition {
-                if let Some(delta_x) = fixed_position_delta_x.filter(|value| value.is_finite()) {
-                    placement.position.x += delta_x * scale;
-                }
-                if let Some(delta_y) = fixed_position_delta_y.filter(|value| value.is_finite()) {
-                    placement.position.y += delta_y * scale;
-                }
-            }
-
-            if let Some(offset) = content_top_offset {
-                if offset.is_finite() {
-                    let previous = self
-                        .store
-                        .snapshot()
-                        .overlay_last_content_top_offset
-                        .unwrap_or(offset);
-                    let delta = offset - previous;
-                    if delta != 0.0 {
-                        match anchor {
-                            OverlayResizeAnchor::Center => {
-                                placement.position.y -= delta * scale / 2.0
-                            }
-                            OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
-                            OverlayResizeAnchor::FixedPosition => {
-                                placement.position.y -= delta * scale
-                            }
-                            _ => placement.position.y -= delta * scale,
-                        }
-                    }
-                    next_content_top_offset = Some(offset);
-                }
-            }
+        if !initializing {
+            adjust_overlay_resize_position(
+                &mut placement,
+                current,
+                &anchor,
+                fixed_position_delta_x.filter(|value| value.is_finite()),
+                fixed_position_delta_y.filter(|value| value.is_finite()),
+                content_left_change.map(|(_, delta)| delta),
+                content_top_change.map(|(_, delta)| delta),
+            );
         }
 
         // 크기·위치를 단일 네이티브 트랜잭션으로 적용 - 분리 호출은 창이 두 단계로 움직여 덜컥거림 유발
@@ -2527,6 +2488,7 @@ impl AppState {
             &self.overlay_bounds_generation,
             &self.overlay_placement_trust,
             applied.clone(),
+            next_content_left_offset,
             next_content_top_offset,
             OverlayPersistenceAuthority::General,
         )?;
@@ -2619,6 +2581,7 @@ impl AppState {
             &self.overlay_bounds_generation,
             &self.overlay_placement_trust,
             applied.clone(),
+            None,
             None,
             OverlayPersistenceAuthority::Reset,
         )?;
@@ -4016,6 +3979,7 @@ impl AppState {
                 &self.overlay_bounds_generation,
                 &self.overlay_placement_trust,
                 applied,
+                None,
                 None,
                 OverlayPersistenceAuthority::General,
             ) {
@@ -5881,6 +5845,7 @@ unsafe extern "system" fn overlay_move_subclass_proc(
                             &(*context).trust,
                             frame,
                             None,
+                            None,
                             OverlayPersistenceAuthority::NativeMoveEnded,
                         )
                     }) {
@@ -6279,6 +6244,67 @@ impl NativePlacement {
             y: self.position.y,
             width: self.width * self.target_scale,
             height: self.height * self.target_scale,
+        }
+    }
+}
+
+fn content_offset_change(offset: Option<f64>, previous: Option<f64>) -> Option<(f64, f64)> {
+    let offset = offset.filter(|value| value.is_finite())?;
+    Some((offset, offset - previous.unwrap_or(offset)))
+}
+
+fn adjust_overlay_resize_position(
+    placement: &mut NativePlacement,
+    current: NativePlacement,
+    anchor: &OverlayResizeAnchor,
+    fixed_position_delta_x: Option<f64>,
+    fixed_position_delta_y: Option<f64>,
+    content_left_delta: Option<f64>,
+    content_top_delta: Option<f64>,
+) {
+    let scale = placement.target_scale;
+    match anchor {
+        OverlayResizeAnchor::BottomLeft => {
+            placement.position.y += (current.height - placement.height) * scale
+        }
+        OverlayResizeAnchor::TopRight => {
+            placement.position.x += (current.width - placement.width) * scale
+        }
+        OverlayResizeAnchor::BottomRight => {
+            placement.position.x += (current.width - placement.width) * scale;
+            placement.position.y += (current.height - placement.height) * scale;
+        }
+        OverlayResizeAnchor::Center => {
+            placement.position.x += (current.width - placement.width) * scale / 2.0;
+            placement.position.y += (current.height - placement.height) * scale / 2.0;
+        }
+        OverlayResizeAnchor::FixedPosition | OverlayResizeAnchor::TopLeft => {}
+    }
+
+    if matches!(anchor, OverlayResizeAnchor::FixedPosition) {
+        if let Some(delta_x) = fixed_position_delta_x {
+            placement.position.x += delta_x * scale;
+        }
+        if let Some(delta_y) = fixed_position_delta_y {
+            placement.position.y += delta_y * scale;
+        }
+    }
+
+    if let Some(delta) = content_left_delta.filter(|delta| *delta != 0.0) {
+        match anchor {
+            OverlayResizeAnchor::Center => placement.position.x -= delta * scale / 2.0,
+            OverlayResizeAnchor::TopRight | OverlayResizeAnchor::BottomRight => {}
+            OverlayResizeAnchor::FixedPosition => placement.position.x -= delta * scale,
+            _ => placement.position.x -= delta * scale,
+        }
+    }
+
+    if let Some(delta) = content_top_delta.filter(|delta| *delta != 0.0) {
+        match anchor {
+            OverlayResizeAnchor::Center => placement.position.y -= delta * scale / 2.0,
+            OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
+            OverlayResizeAnchor::FixedPosition => placement.position.y -= delta * scale,
+            _ => placement.position.y -= delta * scale,
         }
     }
 }
@@ -7628,7 +7654,7 @@ fn persist_overlay_placement_from_window(
     authority: OverlayPersistenceAuthority,
 ) -> Result<()> {
     let frame = applied_overlay_frame_from_window(window)?;
-    persist_overlay_placement(store, generation, trust, frame, None, authority)
+    persist_overlay_placement(store, generation, trust, frame, None, None, authority)
 }
 
 fn persist_overlay_placement(
@@ -7636,6 +7662,7 @@ fn persist_overlay_placement(
     generation: &Arc<AtomicU64>,
     trust: &Arc<Mutex<OverlayPlacementTrust>>,
     frame: AppliedOverlayFrame,
+    content_left_offset: Option<f64>,
     content_top_offset: Option<f64>,
     authority: OverlayPersistenceAuthority,
 ) -> Result<()> {
@@ -7650,6 +7677,9 @@ fn persist_overlay_placement(
     store.update_deferred(move |state| {
         state.overlay_bounds = Some(stored);
         state.overlay_bounds_are_logical = true;
+        if let Some(offset) = content_left_offset {
+            state.overlay_last_content_left_offset = Some(offset);
+        }
         if let Some(offset) = content_top_offset {
             state.overlay_last_content_top_offset = Some(offset);
         }
@@ -7760,10 +7790,11 @@ mod tests {
     use super::normalize_stored_overlay_bounds;
     use super::{
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
-        applied_overlay_frame_from_native, apply_panel_bounds_change, begin_panel_close_request,
-        bootstrap_keyboard_state, canonical_hold_duration_ms, changed_panel_max_height,
-        clamp_overlay_dimension, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
-        complete_overlay_scale_resolution, drop_panel_hidden_with_main,
+        adjust_overlay_resize_position, applied_overlay_frame_from_native,
+        apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
+        canonical_hold_duration_ms, changed_panel_max_height, clamp_overlay_dimension,
+        collect_authorized_css_paths, collect_frontend_lifecycle_targets,
+        complete_overlay_scale_resolution, content_offset_change, drop_panel_hidden_with_main,
         frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
         global_css_watch_path, hide_panel_with_main_transition, install_history_handshake,
         install_lifecycle_handshake, is_panel_open_url, key_state_payload,
@@ -7780,13 +7811,13 @@ mod tests {
         EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
         FrontendHistoryFlushReady, FrontendLifecycleAction, KeyCounterEventEmitter,
         LifecycleHandshakeInstall, MonitorData, MonitorSpec, MutationPublicationSequencer, Mutex,
-        NativeRect, NativeRejectReason, OverlayCloseAction, OverlayPersistenceAuthority,
-        OverlayPlacementTrust, OverlayRestoreSource, PanelBoundsChange,
-        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
-        PanelCloseRequestState, PanelCloseRequestedPayload, PanelPresentSnapshot,
-        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
-        PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
-        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        NativePlacement, NativeRect, NativeRejectReason, OverlayCloseAction,
+        OverlayPersistenceAuthority, OverlayPlacementTrust, OverlayPosition, OverlayRestoreSource,
+        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
+        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload,
+        PanelPresentSnapshot, PanelVisibilityEventEmitter, PanelVisibilityPayload,
+        PanelVisibilityReason, PhysicalPosition, PhysicalSize, DEFAULT_OVERLAY_HEIGHT,
+        DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
         PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
     };
@@ -7795,9 +7826,9 @@ mod tests {
         models::{
             AppStoreData, CustomCss, CustomTab, EditorCommitOrigin, EditorCommitRequest,
             EditorField, EditorFrozenKeySlotV1, EditorOpV1, GestureCommitRequest,
-            GesturePluginInstancesChange, KeyCounters, KeySlot, OverlayBounds, PanelBounds,
-            PluginPoint, SavedPluginInstance, StoredOverlayBounds, StoredOverlayNativePosition,
-            TabCss, EDITOR_OPS_VERSION,
+            GesturePluginInstancesChange, KeyCounters, KeySlot, OverlayBounds, OverlayResizeAnchor,
+            PanelBounds, PluginPoint, SavedPluginInstance, StoredOverlayBounds,
+            StoredOverlayNativePosition, TabCss, EDITOR_OPS_VERSION,
         },
         state::{
             history::{HistoryAdmissionGate, HistoryDirection, HistoryScope},
@@ -7811,6 +7842,64 @@ mod tests {
     use std::path::Path;
 
     struct NoopCounterEmitter;
+
+    fn resize_placement(x: f64, y: f64) -> NativePlacement {
+        NativePlacement {
+            position: OverlayPosition { x, y },
+            width: 100.0,
+            height: 100.0,
+            target_scale: 2.0,
+        }
+    }
+
+    #[test]
+    fn unchanged_content_top_baseline_has_zero_first_delta() {
+        assert_eq!(
+            content_offset_change(Some(24.0), Some(24.0)),
+            Some((24.0, 0.0))
+        );
+        assert_eq!(content_offset_change(Some(24.0), None), Some((24.0, 0.0)));
+    }
+
+    #[test]
+    fn top_left_resize_compensates_left_and_top_overhang() {
+        let current = resize_placement(100.0, 200.0);
+        let mut placement = NativePlacement {
+            width: 140.0,
+            height: 160.0,
+            ..current
+        };
+
+        adjust_overlay_resize_position(
+            &mut placement,
+            current,
+            &OverlayResizeAnchor::TopLeft,
+            None,
+            None,
+            Some(10.0),
+            Some(20.0),
+        );
+
+        assert_eq!(placement.position, OverlayPosition { x: 80.0, y: 160.0 });
+    }
+
+    #[test]
+    fn fixed_position_resize_applies_fixed_and_content_deltas_once() {
+        let current = resize_placement(100.0, 200.0);
+        let mut placement = current;
+
+        adjust_overlay_resize_position(
+            &mut placement,
+            current,
+            &OverlayResizeAnchor::FixedPosition,
+            Some(3.0),
+            Some(4.0),
+            Some(10.0),
+            Some(20.0),
+        );
+
+        assert_eq!(placement.position, OverlayPosition { x: 86.0, y: 168.0 });
+    }
 
     impl KeyCounterEventEmitter for NoopCounterEmitter {
         fn emit_key_counters(

@@ -818,6 +818,7 @@ export default function App() {
   const {
     bounds,
     backgroundBox,
+    contentBounds,
     displayPositions,
     displayStatPositions,
     displayGraphPositions,
@@ -825,6 +826,8 @@ export default function App() {
     displaySpritePositions,
     positionOffset,
     topOffset,
+    topMostY,
+    leftMostX,
     webglTracks,
   } = layout;
 
@@ -861,22 +864,27 @@ export default function App() {
     height: number;
     anchor: string;
     contentTopOffset: number;
+    contentLeftOffset: number;
     minX: number;
     minY: number;
   } | null>(null);
 
   useEffect(() => {
-    if (!bounds || !contentSize) return;
+    if (!bounds || !contentBounds || !contentSize) return;
     // OBS 오버레이에는 네이티브 창이 없다 - allowlist 밖이라 호출이 항상 거부되고,
     // 기준선을 지우는 실패 처리와 맞물려 레이아웃이 바뀔 때마다 헛호출이 반복된다
     if (window.__dmn_runtime === 'obs') return;
 
     const totalWidth = contentSize.width;
     const totalHeight = contentSize.height;
-    // computeLayout이 계산한 값을 그대로 - 같은 공식을 여기서 또 쓰지 않는다
-    const contentTopOffset = topOffset;
-    const currentMinX = bounds.minX;
-    const currentMinY = bounds.minY;
+    // computeLayout이 계산한 콘텐츠 원점의 창 좌표를 그대로 - 스프라이트 오버행으로
+    // 창이 위·왼쪽으로 자라면 이 값의 delta만큼 네이티브가 창 원점을 되당긴다
+    const contentTopOffset = topMostY;
+    const contentLeftOffset = leftMostX;
+    // fixed-position 델타는 콘텐츠 원점 기준 - 창 바운즈 기준이면 오버행 시
+    // 콘텐츠 오프셋 보정과 겹쳐 이중 이동이 된다
+    const currentMinX = contentBounds.minX;
+    const currentMinY = contentBounds.minY;
 
     // 이전 값과 비교하여 실제로 변경되었을 때만 resize 호출
     const lastParams = lastResizeParams.current;
@@ -895,6 +903,7 @@ export default function App() {
       Math.abs(lastParams.height - totalHeight) < 0.5 &&
       lastParams.anchor === overlayAnchor &&
       Math.abs(lastParams.contentTopOffset - contentTopOffset) < 0.5 &&
+      Math.abs(lastParams.contentLeftOffset - contentLeftOffset) < 0.5 &&
       (!fixedPositionAnchor ||
         (Math.abs(lastParams.minX - currentMinX) < 0.5 &&
           Math.abs(lastParams.minY - currentMinY) < 0.5))
@@ -907,6 +916,7 @@ export default function App() {
       height: totalHeight,
       anchor: overlayAnchor,
       contentTopOffset,
+      contentLeftOffset,
       minX: currentMinX,
       minY: currentMinY,
     };
@@ -918,6 +928,7 @@ export default function App() {
         height: totalHeight,
         anchor: overlayAnchor,
         contentTopOffset,
+        contentLeftOffset,
         fixedPositionDeltaX: fixedPositionAnchor
           ? fixedPositionDeltaX
           : undefined,
@@ -933,7 +944,15 @@ export default function App() {
       .finally(() => {
         setResizeInFlight((count) => Math.max(0, count - 1));
       });
-  }, [bounds, contentSize, topOffset, overlayAnchor, overlayPadding]);
+  }, [
+    bounds,
+    contentBounds,
+    contentSize,
+    topMostY,
+    leftMostX,
+    overlayAnchor,
+    overlayPadding,
+  ]);
 
   // 모든 요소가 자리 잡은 뒤 한 번에 공개 - 플러그인 요소가 늦게 뜨며 생기던 덜컥거림 제거
   const revealed = useOverlayReveal(isBootstrapped, resizeInFlight > 0);

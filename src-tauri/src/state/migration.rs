@@ -4743,6 +4743,7 @@ mod tests {
             "customCss": { "path": "/tmp/tauri-legacy.css", "content": ".tauri {}" },
             "overlayResizeAnchor": "top-left",
             "overlayBounds": { "x": 31, "y": 47, "width": 911, "height": 333 },
+            "overlayLastContentLeftOffset": 7.5,
             "overlayLastContentTopOffset": 12.5,
             "overlayBoundsAreLogical": false,
             "keyCounterEnabled": true
@@ -4771,6 +4772,8 @@ mod tests {
         assert_eq!(loaded.data.note_settings.speed, 456);
         assert_eq!(loaded.data.background_color, "#2468AC");
         assert!(loaded.data.use_custom_css);
+        assert_eq!(loaded.data.overlay_last_content_left_offset, Some(7.5));
+        assert_eq!(loaded.data.overlay_last_content_top_offset, Some(12.5));
     }
 
     #[test]

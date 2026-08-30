@@ -260,6 +260,8 @@ export function computeLayout(input: LayoutInput) {
 
   // 콘텐츠 상단의 창 좌표. 스프라이트 오버행이 위로 없으면 topOffset과 같다
   const topMostY = contentBounds ? contentBounds.minY + offsetY : 0;
+  // 콘텐츠 왼쪽의 창 좌표. 왼쪽 오버행이 없으면 PADDING과 같다
+  const leftMostX = contentBounds ? contentBounds.minX + offsetX : 0;
 
   // WebGL 트랙 계산
   const webglTracks = currentKeys
@@ -336,6 +338,9 @@ export function computeLayout(input: LayoutInput) {
     // 창 높이·배경 박스가 같은 값을 쓰도록 노출
     topOffset,
     topMostY,
+    leftMostX,
+    // fixed-position 델타의 기준점 - 창 바운즈가 아니라 콘텐츠 원점을 쓴다
+    contentBounds,
     webglTracks,
   };
 }

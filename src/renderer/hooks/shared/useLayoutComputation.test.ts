@@ -73,6 +73,7 @@ describe('computeLayout 스프라이트 오버행', () => {
     });
     expect(layout.positionOffset).toEqual({ x: -70, y: 130 });
     expect(layout.topMostY).toBe(180);
+    expect(layout.leftMostX).toBe(30);
   });
 
   it('45도 회전 오버행은 창 바운즈만 넓히고 배경 박스 크기는 그대로다', () => {
@@ -100,6 +101,8 @@ describe('computeLayout 스프라이트 오버행', () => {
 
     // 트랙 시작은 콘텐츠 상단을 따라간다
     expect(layout.topMostY).toBeCloseTo(221.4214, 3);
+    // 왼쪽 오버행도 같은 방식 - 네이티브 x 보정이 이 delta를 소비한다
+    expect(layout.leftMostX).toBeCloseTo(71.4214, 3);
   });
 
   it('이미지 없는 스프라이트는 회전해도 창을 넓히지 않는다', () => {
