@@ -25,6 +25,7 @@ import {
   patchElementLayerNameById,
   renameLayerGroupById,
 } from '@src/renderer/editor/runtime/elementOps';
+import { layerItemToSelectedElement } from './layerPanelModel';
 import {
   setMixedElementGroups,
   setMixedLayerGroupHidden,
@@ -400,17 +401,7 @@ export function useLayerActions({
       const { clearSelection, toggleSelection } =
         useGridSelectionStore.getState();
       clearSelection();
-      if (item.type === 'key' && item.index !== undefined) {
-        toggleSelection({ type: 'key', id: item.id, index: item.index });
-      } else if (item.type === 'stat' && item.index !== undefined) {
-        toggleSelection({ type: 'stat', id: item.id, index: item.index });
-      } else if (item.type === 'graph' && item.index !== undefined) {
-        toggleSelection({ type: 'graph', id: item.id, index: item.index });
-      } else if (item.type === 'knob' && item.index !== undefined) {
-        toggleSelection({ type: 'knob', id: item.id, index: item.index });
-      } else if (item.type === 'plugin') {
-        toggleSelection({ type: 'plugin', id: item.id });
-      }
+      toggleSelection(layerItemToSelectedElement(item));
       setLastClickedIndex(index);
       const displayIdx = displayItemsRef.current.findIndex(
         (di) => di.displayType === 'layer' && di.item.id === item.id,
@@ -563,9 +554,11 @@ export function useLayerActions({
     if (itemId === 'delete') {
       const selectedElements =
         useGridSelectionStore.getState().selectedElements;
-      if (selectedElements.length === 0) return;
-      onSelectionFromPanel?.();
-      await deleteFrozenSelection(selectedElements);
+      // 빈 선택이어도 메뉴는 닫는다
+      if (selectedElements.length > 0) {
+        onSelectionFromPanel?.();
+        await deleteFrozenSelection(selectedElements);
+      }
     }
 
     setContextMenuOpen(false);

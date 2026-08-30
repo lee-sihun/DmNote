@@ -25,7 +25,11 @@ import CloseEyeIcon from '@assets/svgs/close_eye.svg';
 import OpenEyeIcon from '@assets/svgs/open_eye.svg';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import type { LayerItem } from '../types';
-import { buildLayerItems, buildDisplayItems } from './layerPanelModel';
+import {
+  buildLayerItems,
+  buildDisplayItems,
+  layerItemToSelectedElement,
+} from './layerPanelModel';
 import {
   FolderIcon,
   ChevronIcon,
@@ -39,15 +43,6 @@ import {
 import { useLayerActions } from './useLayerActions';
 import { useLayerDnD } from './useLayerDnD';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
-
-function layerItemToSelectedElement(item: LayerItem): SelectedElement {
-  if (item.type === 'plugin') return { type: 'plugin', id: item.id };
-  return {
-    type: item.type,
-    id: item.id,
-    ...(item.index !== undefined ? { index: item.index } : {}),
-  };
-}
 
 interface LayerGroupDisclosureProps {
   collapsed: boolean;
