@@ -63,6 +63,9 @@ export function isElementResizable(
     return true;
   } else if (element.type === 'knob') {
     return true;
+  } else if (element.type === 'sprite') {
+    // 리사이즈는 활동 영역 박스만 조정한다 - imageRect·poses는 불변
+    return true;
   } else if (element.type === 'plugin') {
     const pluginEl = pluginElements.find(
       (p: PluginDisplayElementInternal) => p.fullId === element.id,
@@ -90,6 +93,7 @@ export function getElementBounds(
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
+  spritePositions?: CanonicalEditorDocumentV1['spritePositions'],
 ): Bounds | null {
   if (element.type === 'key') {
     const pos = positions[selectedKeyType]?.find(
@@ -135,6 +139,18 @@ export function getElementBounds(
       width: pos.width || 60,
       height: pos.height || 60,
     };
+  } else if (element.type === 'sprite') {
+    // 활동 영역 박스가 곧 리사이즈 대상
+    const pos = spritePositions?.[selectedKeyType]?.find(
+      (candidate) => candidate.id === element.id,
+    );
+    if (!pos) return null;
+    return {
+      x: pos.dx,
+      y: pos.dy,
+      width: pos.width || 60,
+      height: pos.height || 60,
+    };
   } else if (element.type === 'plugin') {
     const pluginEl = pluginElements.find(
       (p: PluginDisplayElementInternal) => p.fullId === element.id,
@@ -161,6 +177,7 @@ export function calculateGroupBounds(
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
+  spritePositions?: CanonicalEditorDocumentV1['spritePositions'],
 ): (Bounds & { elementBounds: ElementBounds[] }) | null {
   let minX = Infinity;
   let minY = Infinity;
@@ -192,6 +209,7 @@ export function calculateGroupBounds(
       knobPositions,
       selectedKeyType,
       pluginElements,
+      spritePositions,
     );
     if (!bounds) continue;
 

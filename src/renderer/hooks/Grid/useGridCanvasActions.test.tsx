@@ -15,6 +15,9 @@ const core = vi.hoisted(() => ({
   addKnobAt: vi.fn((_mode: string, _position: unknown) =>
     Promise.resolve(true),
   ),
+  addSpriteAt: vi.fn((_mode: string, _position: unknown) =>
+    Promise.resolve(true),
+  ),
   placeDuplicatedStat: vi.fn(
     (..._args: [string, unknown, number, number, number]) =>
       Promise.resolve(true),
@@ -27,6 +30,10 @@ const core = vi.hoisted(() => ({
       Promise.resolve(true),
   ),
   placeDuplicatedKnob: vi.fn(
+    (..._args: [string, unknown, number, number, number]) =>
+      Promise.resolve(true),
+  ),
+  placeDuplicatedSprite: vi.fn(
     (..._args: [string, unknown, number, number, number]) =>
       Promise.resolve(true),
   ),
@@ -44,8 +51,16 @@ import {
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
+import {
+  CENTER_SPRITE_ANCHOR,
+  DEFAULT_SPRITE_TRANSITION_EASING,
+  DEFAULT_SPRITE_TRANSITION_MS,
+  IDENTITY_SPRITE_TRANSFORM,
+  type ReactiveSpritePosition,
+} from '@src/types/key/sprites';
 
 const stat = (id: string) => ({
   ...createDefaultKeyPosition(),
@@ -66,6 +81,29 @@ const knob = (id: string) => ({
   axisId: '',
   sensitivity: 1,
   reverse: false,
+});
+
+const sprite = (id: string): ReactiveSpritePosition & { id: string } => ({
+  id,
+  dx: 0,
+  dy: 0,
+  width: 200,
+  height: 200,
+  hidden: false,
+  zIndex: null,
+  layerName: null,
+  groupId: null,
+  className: null,
+  useInlineStyles: null,
+  baseImage: null,
+  imageFit: 'contain',
+  imageRect: { x: 0, y: 0, width: 200, height: 200 },
+  pivot: { ...CENTER_SPRITE_ANCHOR },
+  idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },
+  poses: [],
+  activation: 'whileHeld',
+  transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
+  transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
 });
 
 describe('useGridCanvasActions create와 ghost duplicate', () => {
@@ -92,6 +130,7 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
     useStatItemStore.setState({ positions: { '4key': [] } });
     useGraphItemStore.setState({ positions: { '4key': [] } });
     useKnobItemStore.setState({ positions: { '4key': [] } });
+    useSpriteStore.setState({ positions: { '4key': [] } });
     usePluginDisplayElementStore.setState({
       elements: [
         {
@@ -148,6 +187,42 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
     }
   });
 
+  it('addSpriteAtPosition은 기본값 계약과 id 선발급을 고정한다', () => {
+    act(() => {
+      actions.addSpriteAtPosition(11, 22);
+    });
+
+    expect(core.addSpriteAt).toHaveBeenCalledTimes(1);
+    const [mode, payload] = core.addSpriteAt.mock.calls[0] as [
+      string,
+      ReactiveSpritePosition & { id: string },
+    ];
+    expect(mode).toBe('4key');
+    expect(typeof payload.id).toBe('string');
+    expect(payload.id.length).toBeGreaterThan(0);
+    expect(payload).toMatchObject({
+      dx: 11,
+      dy: 22,
+      width: 200,
+      height: 200,
+      hidden: false,
+      zIndex: null,
+      layerName: null,
+      groupId: null,
+      className: null,
+      useInlineStyles: null,
+      baseImage: null,
+      imageFit: 'contain',
+      imageRect: { x: 0, y: 0, width: 200, height: 200 },
+      pivot: CENTER_SPRITE_ANCHOR,
+      idleTransform: IDENTITY_SPRITE_TRANSFORM,
+      poses: [],
+      activation: 'whileHeld',
+      transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
+      transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
+    });
+  });
+
   it('key ghost place는 동결 slot과 payload를 index 재조회 없이 전달한다', () => {
     const source = {
       slot: { main: 'A', modifiers: ['Shift'] },
@@ -164,10 +239,10 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
     );
   });
 
-  it('Grid 공용 add routing은 네 타입을 정확히 한 handler로 보낸다', () => {
+  it('Grid 공용 add routing은 다섯 타입을 정확히 한 handler로 보낸다', () => {
     act(() => {
-      (['key', 'stat', 'graph', 'knob'] as const).forEach((type, index) =>
-        addCanvasElementAt(actions, type, index, index + 10),
+      (['key', 'stat', 'graph', 'knob', 'sprite'] as const).forEach(
+        (type, index) => addCanvasElementAt(actions, type, index, index + 10),
       );
     });
 
@@ -175,9 +250,10 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
     expect(core.addStatAt).toHaveBeenCalledTimes(1);
     expect(core.addGraphAt).toHaveBeenCalledTimes(1);
     expect(core.addKnobAt).toHaveBeenCalledTimes(1);
+    expect(core.addSpriteAt).toHaveBeenCalledTimes(1);
   });
 
-  it('Grid 공용 ghost routing은 네 타입과 key slot 누락 fail-closed를 고정한다', () => {
+  it('Grid 공용 ghost routing은 다섯 타입과 key slot 누락 fail-closed를 고정한다', () => {
     const cases = [
       {
         elementType: 'key' as const,
@@ -204,6 +280,12 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
         keyName: 'Knob',
         position: knob('knob-0'),
       },
+      {
+        elementType: 'sprite' as const,
+        sourceIndex: 0,
+        keyName: 'Sprite',
+        position: sprite('sprite-0'),
+      },
     ];
 
     act(() =>
@@ -216,20 +298,23 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
     expect(core.placeDuplicatedStat).toHaveBeenCalledTimes(1);
     expect(core.placeDuplicatedGraph).toHaveBeenCalledTimes(1);
     expect(core.placeDuplicatedKnob).toHaveBeenCalledTimes(1);
+    expect(core.placeDuplicatedSprite).toHaveBeenCalledTimes(1);
     expect(
       placeFrozenDuplicateAt(actions, { ...cases[0], slot: undefined }, 3, 4),
     ).toBe(false);
     expect(core.placeDuplicatedKey).toHaveBeenCalledTimes(1);
   });
 
-  it('ghost place 3종은 synthetic source도 허용하고 클릭 시 maxZ+1을 동결한다', () => {
+  it('ghost place 4종은 synthetic source도 허용하고 클릭 시 maxZ+1을 동결한다', () => {
     const sourceStat = stat('stat-0');
     const sourceGraph = graph('graph-0');
     const sourceKnob = knob('knob-0');
+    const sourceSprite = sprite('sprite-0');
     act(() => {
       actions.placeDuplicateStat(sourceStat, 1.25, 2.75);
       actions.placeDuplicateGraph(sourceGraph, 3.25, 4.75);
       actions.placeDuplicateKnob(sourceKnob, 5.25, 6.75);
+      actions.placeDuplicateSprite(sourceSprite, 7.25, 8.75);
     });
 
     expect(core.placeDuplicatedStat).toHaveBeenCalledWith(
@@ -251,6 +336,13 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
       sourceKnob,
       5.25,
       6.75,
+      41,
+    );
+    expect(core.placeDuplicatedSprite).toHaveBeenCalledWith(
+      '4key',
+      sourceSprite,
+      7.25,
+      8.75,
       41,
     );
   });

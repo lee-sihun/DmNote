@@ -67,6 +67,8 @@ interface GroupResizeHandlesProps {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
+  // Grid 배선 전에도 컴포넌트가 동작하도록 선택 prop - 미전달 시 스프라이트만 제외
+  spritePositions?: CanonicalEditorDocumentV1['spritePositions'];
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   zoom?: number;
@@ -266,6 +268,7 @@ const GroupResizeHandles = ({
   statPositions,
   graphPositions,
   knobPositions,
+  spritePositions,
   selectedKeyType,
   pluginElements,
   zoom = 1,
@@ -303,6 +306,7 @@ const GroupResizeHandles = ({
     knobPositions,
     selectedKeyType,
     pluginElements,
+    spritePositions,
   );
 
   // 각 요소가 리사이즈 가능한지 확인
@@ -863,6 +867,7 @@ const GroupResizeHandles = ({
           knobPositions,
           selectedKeyType,
           pluginElements,
+          spritePositions,
         );
         if (!bounds) return null;
 

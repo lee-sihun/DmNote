@@ -8,10 +8,12 @@ import {
   addKeyAt,
   addGraphAt,
   addKnobAt,
+  addSpriteAt,
   addStatAt,
   placeDuplicatedGraph,
   placeDuplicatedKey,
   placeDuplicatedKnob,
+  placeDuplicatedSprite,
   placeDuplicatedStat,
 } from '@src/renderer/editor/runtime/elementOps';
 import type { FrozenKeyDuplicate } from '@src/renderer/editor/runtime/elementOps';
@@ -20,11 +22,19 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import type { KeySlot, KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import {
+  CENTER_SPRITE_ANCHOR,
+  DEFAULT_SPRITE_TRANSITION_EASING,
+  DEFAULT_SPRITE_TRANSITION_MS,
+  IDENTITY_SPRITE_TRANSFORM,
+  type ReactiveSpritePosition,
+} from '@src/types/key/sprites';
 import type {
   KeyCounterSettings,
   CounterAnimationBezier,
@@ -51,6 +61,9 @@ function collectAllZIndexes(mode: string) {
   const knobPos = useKnobItemStore.getState().positions[mode] || [];
   const knobZIndexes = knobPos.map((p, i) => p.zIndex ?? i);
 
+  const spritePos = useSpriteStore.getState().positions[mode] || [];
+  const spriteZIndexes = spritePos.map((p, i) => p.zIndex ?? i);
+
   const pluginEls = usePluginDisplayElementStore.getState().elements;
   const pluginZIndexes = pluginEls
     .filter((el) => !el.tabId || el.tabId === mode)
@@ -61,6 +74,7 @@ function collectAllZIndexes(mode: string) {
     statZIndexes,
     graphZIndexes,
     knobZIndexes,
+    spriteZIndexes,
     pluginZIndexes,
   };
 }
@@ -71,6 +85,7 @@ function getMaxZIndex(mode: string): number {
     statZIndexes,
     graphZIndexes,
     knobZIndexes,
+    spriteZIndexes,
     pluginZIndexes,
   } = collectAllZIndexes(mode);
   return Math.max(
@@ -79,6 +94,7 @@ function getMaxZIndex(mode: string): number {
     ...statZIndexes,
     ...graphZIndexes,
     ...knobZIndexes,
+    ...spriteZIndexes,
     ...pluginZIndexes,
   );
 }
@@ -114,10 +130,18 @@ export interface CanvasActions {
     dx: number,
     dy: number,
   ) => void;
+  // Sprite 액션
+  addSpriteAtPosition: (dx: number, dy: number) => void;
+  beginDuplicateSprite: (sourceIndex: number) => DuplicateState | null;
+  placeDuplicateSprite: (
+    templatePosition: ReactiveSpritePosition,
+    dx: number,
+    dy: number,
+  ) => void;
 }
 
 export interface DuplicateState {
-  elementType: 'key' | 'stat' | 'graph' | 'knob';
+  elementType: 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
   sourceIndex: number;
   // 키 복제의 시작 시점 동결 슬롯 - 배치 시 sourceIndex 재조회 금지
   slot?: KeySlot;
@@ -126,10 +150,16 @@ export interface DuplicateState {
     | KeyPosition
     | StatItemPosition
     | GraphItemPosition
-    | KnobItemPosition;
+    | KnobItemPosition
+    | ReactiveSpritePosition;
 }
 
-export type NativeCanvasElementType = 'key' | 'stat' | 'graph' | 'knob';
+export type NativeCanvasElementType =
+  | 'key'
+  | 'stat'
+  | 'graph'
+  | 'knob'
+  | 'sprite';
 
 export const addCanvasElementAt = (
   actions: Pick<
@@ -138,6 +168,7 @@ export const addCanvasElementAt = (
     | 'addStatAtPosition'
     | 'addGraphAtPosition'
     | 'addKnobAtPosition'
+    | 'addSpriteAtPosition'
   >,
   type: NativeCanvasElementType,
   dx: number,
@@ -146,6 +177,7 @@ export const addCanvasElementAt = (
   if (type === 'key') actions.addKeyAtPosition(dx, dy);
   else if (type === 'stat') actions.addStatAtPosition(dx, dy);
   else if (type === 'graph') actions.addGraphAtPosition(dx, dy);
+  else if (type === 'sprite') actions.addSpriteAtPosition(dx, dy);
   else actions.addKnobAtPosition(dx, dy);
 };
 
@@ -156,6 +188,7 @@ export const placeFrozenDuplicateAt = (
     | 'placeDuplicateStat'
     | 'placeDuplicateGraph'
     | 'placeDuplicateKnob'
+    | 'placeDuplicateSprite'
   >,
   duplicate: DuplicateState,
   dx: number,
@@ -173,6 +206,12 @@ export const placeFrozenDuplicateAt = (
   } else if (duplicate.elementType === 'graph') {
     actions.placeDuplicateGraph(
       duplicate.position as GraphItemPosition,
+      dx,
+      dy,
+    );
+  } else if (duplicate.elementType === 'sprite') {
+    actions.placeDuplicateSprite(
+      duplicate.position as ReactiveSpritePosition,
       dx,
       dy,
     );
@@ -425,6 +464,59 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     void addKnobAt(selectedKeyType, position).catch(reportElementOpError);
   };
 
+  const beginDuplicateSprite = (sourceIndex: number): DuplicateState | null => {
+    const current = useSpriteStore.getState().positions;
+    const position = current?.[selectedKeyType]?.[sourceIndex] || null;
+    if (!position) return null;
+    return {
+      elementType: 'sprite',
+      sourceIndex,
+      keyName: 'Sprite',
+      position: { ...position },
+    };
+  };
+
+  const placeDuplicateSprite = (
+    templatePosition: ReactiveSpritePosition,
+    dx: number,
+    dy: number,
+  ) => {
+    const maxZ = getMaxZIndex(selectedKeyType);
+    void placeDuplicatedSprite(
+      selectedKeyType,
+      templatePosition,
+      dx,
+      dy,
+      maxZ + 1,
+    ).catch(reportElementOpError);
+  };
+
+  const addSpriteAtPosition = (dx: number, dy: number) => {
+    const position: ReactiveSpritePosition & { id: string } = {
+      id: newElementId(),
+      dx,
+      dy,
+      width: 200,
+      height: 200,
+      hidden: false,
+      zIndex: null,
+      layerName: null,
+      groupId: null,
+      className: null,
+      useInlineStyles: null,
+      baseImage: null,
+      imageFit: 'contain',
+      imageRect: { x: 0, y: 0, width: 200, height: 200 },
+      pivot: { ...CENTER_SPRITE_ANCHOR },
+      idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },
+      poses: [],
+      activation: 'whileHeld',
+      transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
+      transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
+    };
+    void addSpriteAt(selectedKeyType, position).catch(reportElementOpError);
+  };
+
   return {
     addKeyAtPosition,
     placeDuplicateKey,
@@ -437,5 +529,8 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     addKnobAtPosition,
     beginDuplicateKnob,
     placeDuplicateKnob,
+    addSpriteAtPosition,
+    beginDuplicateSprite,
+    placeDuplicateSprite,
   };
 }

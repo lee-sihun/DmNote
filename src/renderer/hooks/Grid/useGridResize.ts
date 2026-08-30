@@ -843,7 +843,7 @@ export function useGridResize({
     }
     if (finalBounds && frozenTargets.length === 1) {
       const element = frozenTargets[0] as {
-        type: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
+        type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite' | 'plugin';
         id: string;
         index?: number;
       };
@@ -930,14 +930,19 @@ export function useGridResize({
       // 구성. native-only는 전용 의도 커밋이 eager와 wire를 함께 소유하고,
       // plugin 혼합은 eager receipt와 슬롯 generator가 각 경계를 소유한다
       const stableBoundsIntents = new Map<
-        'key' | 'stat' | 'graph' | 'knob',
+        'key' | 'stat' | 'graph' | 'knob' | 'sprite',
         Map<string, Record<string, number>>
       >();
       const isStableEntry = (element: { type: string; id: string }): boolean =>
         element.type !== 'plugin' && isNativeElementId(element.id);
       for (const { element, bounds } of finalData.elementBounds) {
         if (!isStableEntry(element)) continue;
-        const type = element.type as 'key' | 'stat' | 'graph' | 'knob';
+        const type = element.type as
+          | 'key'
+          | 'stat'
+          | 'graph'
+          | 'knob'
+          | 'sprite';
         const byId = stableBoundsIntents.get(type) ?? new Map();
         byId.set(element.id, {
           dx: bounds.x,

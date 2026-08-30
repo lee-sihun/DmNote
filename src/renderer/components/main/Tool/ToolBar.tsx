@@ -15,7 +15,7 @@ import { appApi } from '@api/modules/appApi';
 import { useModalLayerActive } from '../Modal/popupLayer';
 
 interface ToolBarProps {
-  onAddItem: (type: 'key' | 'stat' | 'graph' | 'knob') => void;
+  onAddItem: (type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite') => void;
   onTogglePalette: () => void;
   onClosePalette: () => void;
   isPaletteOpen: boolean;

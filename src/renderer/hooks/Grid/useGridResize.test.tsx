@@ -3,7 +3,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EDITOR_OPS_VERSION } from '@src/types/editor';
+import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 import { useGridResize } from './useGridResize';
 
@@ -169,6 +171,38 @@ const keySelection = (): SelectedElement => ({
 
 const STABLE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const STABLE_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const STABLE_SPRITE = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
+  id,
+  dx: 0,
+  dy: 0,
+  width: 200,
+  height: 120,
+  hidden: false,
+  zIndex: null,
+  layerName: null,
+  groupId: null,
+  className: null,
+  useInlineStyles: null,
+  baseImage: null,
+  imageFit: null,
+  imageRect: { x: 4, y: 8, width: 96, height: 64 },
+  pivot: { x: 0.5, y: 0.5 },
+  idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+  poses: [
+    {
+      poseId: 'pose-1',
+      triggers: [STABLE_A],
+      matchMode: 'exact',
+      transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+      imageOverride: null,
+    },
+  ],
+  activation: 'whileHeld',
+  transitionMs: 90,
+  transitionEasing: 'linear',
+});
 
 const stableKeySelection = (id: string, index = 0): SelectedElement => ({
   id,
@@ -223,6 +257,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.cancelMixedGesture.mockClear();
     mocks.elements = [];
     mocks.keyPositions = [{ dx: 0, dy: 0, width: 40, height: 40 }];
+    useSpriteStore.setState({ positions: {} });
     mocks.gridSettings = {
       alignmentGuides: false,
       spacingGuides: false,
@@ -382,6 +417,63 @@ describe('useGridResize plugin gesture lifecycle', () => {
       ['plugin-a'],
       expect.anything(),
     );
+  });
+
+  it('그룹 resize의 sprite는 활동 영역 박스만 커밋하고 imageRect·poses는 불변이다', async () => {
+    const original = spriteAt(STABLE_SPRITE);
+    useSpriteStore.setState({ positions: { '4key': [original] } });
+    mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
+    const spriteSelected: SelectedElement = {
+      id: STABLE_SPRITE,
+      type: 'sprite',
+      index: 0,
+    };
+    const selected = [spriteSelected, pluginSelection('plugin-a:one')];
+    await renderHarness(selected);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleGroupResize({
+        groupBounds: { x: 10, y: 20, width: 200, height: 80 },
+        elementBounds: [
+          {
+            element: spriteSelected,
+            bounds: { x: 10, y: 20, width: 100, height: 60 },
+          },
+          {
+            element: selected[1],
+            bounds: { x: 120, y: 20, width: 80, height: 60 },
+          },
+        ],
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+      api.handleGroupResizeComplete();
+    });
+
+    // wire: 박스 필드만 setBounds op으로 실린다
+    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
+      pluginGestureIds[0],
+      {
+        opsVersion: EDITOR_OPS_VERSION,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'sprite',
+            id: STABLE_SPRITE,
+            bounds: { dx: 10, dy: 20, width: 100, height: 60 },
+          },
+        ],
+      },
+      ['plugin-a'],
+      expect.anything(),
+    );
+    // eager: 활동 영역만 바뀌고 요소 로컬 데이터는 참조까지 그대로다
+    const eager = useSpriteStore.getState().positions['4key'][0];
+    expect(eager).toMatchObject({ dx: 10, dy: 20, width: 100, height: 60 });
+    expect(eager.imageRect).toBe(original.imageRect);
+    expect(eager.pivot).toBe(original.pivot);
+    expect(eager.poses).toBe(original.poses);
+    expect(eager.idleTransform).toBe(original.idleTransform);
   });
 
   it('혼합 그룹의 native ID가 비정규면 plugin까지 함께 fail-close한다', async () => {

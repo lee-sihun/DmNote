@@ -50,7 +50,7 @@ import { appApi } from '@api/modules/appApi';
 
 import { useUIStore } from '@stores/useUIStore';
 
-type ToolbarAddItemType = 'key' | 'stat' | 'graph' | 'knob';
+type ToolbarAddItemType = 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {

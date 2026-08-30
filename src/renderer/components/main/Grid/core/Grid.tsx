@@ -33,6 +33,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
@@ -60,6 +61,7 @@ import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
 import KnobItem from '../layers/KnobItem';
+import SpriteItem from '../layers/SpriteItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -93,6 +95,10 @@ import {
   DEFAULT_IMAGE_MODE,
   imageTransformToCss,
 } from '@src/types/key/imageLayer';
+import {
+  spriteTransformToCss,
+  type ReactiveSpritePosition,
+} from '@src/types/key/sprites';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_FONT,
@@ -133,7 +139,7 @@ import {
 
 type ToolbarAddRequest = {
   id: number;
-  type: 'key' | 'stat' | 'graph' | 'knob';
+  type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 } | null;
 
 interface GridProps {
@@ -235,6 +241,7 @@ const Grid = ({
     getStatMenuItems,
     getGraphMenuItems,
     getKnobMenuItems,
+    getSpriteMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,
@@ -322,6 +329,7 @@ const Grid = ({
   const canonicalStatPositions = useStatItemStore((state) => state.positions);
   const canonicalGraphPositions = useGraphItemStore((state) => state.positions);
   const canonicalKnobPositions = useKnobItemStore((state) => state.positions);
+  const canonicalSpritePositions = useSpriteStore((state) => state.positions);
   useSyncExternalStore(
     subscribePreviewOverlay,
     getPreviewOverlayVersion,
@@ -338,6 +346,10 @@ const Grid = ({
   const knobPositions = composePreviewPositions(
     'knobPosition',
     canonicalKnobPositions,
+  );
+  const spritePositions = composePreviewPositions(
+    'spritePosition',
+    canonicalSpritePositions,
   );
 
   // 선택 관련 로직 훅 사용
@@ -369,6 +381,7 @@ const Grid = ({
       statPositions,
       graphPositions,
       knobPositions,
+      spritePositions,
       selectedKeyType,
       pluginElements,
       clientToGridCoords,
@@ -451,6 +464,7 @@ const Grid = ({
   const statRefs = useRef<(HTMLElement | null)[]>([]);
   const graphRefs = useRef<(HTMLElement | null)[]>([]);
   const knobRefs = useRef<(HTMLElement | null)[]>([]);
+  const spriteRefs = useRef<(HTMLElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [duplicateState, setDuplicateState] = useState<DuplicateState | null>(
     null,
@@ -475,6 +489,8 @@ const Grid = ({
         useGraphItemStore.getState().positions[selectedKeyType] || [];
       const modeKnobPos =
         useKnobItemStore.getState().positions[selectedKeyType] || [];
+      const modeSpritePos =
+        useSpriteStore.getState().positions[selectedKeyType] || [];
 
       let anyInGroup = false;
       let allInSameGroup = true;
@@ -496,6 +512,10 @@ const Grid = ({
           gid = modeGraphPos.find((position) => position.id === el.id)?.groupId;
         } else if (el.type === 'knob') {
           gid = modeKnobPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'sprite') {
+          gid =
+            modeSpritePos.find((position) => position.id === el.id)?.groupId ??
+            undefined;
         } else if (el.type === 'plugin') {
           // 플러그인 소속도 그룹 메뉴 판정에 포함 - 모드 def가 있는 것만 유효
           const pluginGroupId = usePluginDisplayElementStore
@@ -585,6 +605,13 @@ const Grid = ({
     setDuplicateCursor(null);
   };
 
+  const beginDuplicateSprite = (sourceIndex: number) => {
+    const result = canvasActions.beginDuplicateSprite(sourceIndex);
+    if (!result) return;
+    setDuplicateState(result);
+    setDuplicateCursor(null);
+  };
+
   const duplicateSelectedFromContextMenu = async () => {
     copySelectedElements();
     await pasteElements().catch(reportElementOpError);
@@ -594,11 +621,15 @@ const Grid = ({
   const isStableNativeSelection = (el: {
     type: string;
     id: string;
-  }): el is { type: 'key' | 'stat' | 'graph' | 'knob'; id: string } =>
+  }): el is {
+    type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
+    id: string;
+  } =>
     (el.type === 'key' ||
       el.type === 'stat' ||
       el.type === 'graph' ||
-      el.type === 'knob') &&
+      el.type === 'knob' ||
+      el.type === 'sprite') &&
     el.id.length > 0 &&
     isNativeElementId(el.id);
 
@@ -615,7 +646,13 @@ const Grid = ({
         mode: selectedKeyType,
         targets: orderStableZTargetsForBatch(
           selectedElements.map((element) => ({
-            type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'plugin',
+            type: element.type as
+              | 'key'
+              | 'stat'
+              | 'graph'
+              | 'knob'
+              | 'sprite'
+              | 'plugin',
             id: element.id,
           })),
         ),
@@ -640,7 +677,13 @@ const Grid = ({
         mode: selectedKeyType,
         targets: orderStableZTargetsForBatch(
           selectedElements.map((element) => ({
-            type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'plugin',
+            type: element.type as
+              | 'key'
+              | 'stat'
+              | 'graph'
+              | 'knob'
+              | 'sprite'
+              | 'plugin',
             id: element.id,
           })),
         ),
@@ -679,6 +722,8 @@ const Grid = ({
     const defaultSize =
       toolbarAddRequest.type === 'graph'
         ? { width: 120, height: 60 }
+        : toolbarAddRequest.type === 'sprite'
+        ? { width: 200, height: 200 }
         : { width: 60, height: 60 };
     const targetPos = getViewportCenterSnappedPosition(
       defaultSize.width,
@@ -748,7 +793,7 @@ const Grid = ({
 
   // 요소 클릭 시 그룹 멤버 자동 선택
   const selectElementWithGroup = (
-    type: 'key' | 'stat' | 'graph' | 'knob',
+    type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
     index: number,
   ) => {
     if (isContextOpen) {
@@ -760,10 +805,11 @@ const Grid = ({
       stat: useStatItemStore.getState().positions[selectedKeyType] || [],
       graph: useGraphItemStore.getState().positions[selectedKeyType] || [],
       knob: useKnobItemStore.getState().positions[selectedKeyType] || [],
+      sprite: useSpriteStore.getState().positions[selectedKeyType] || [],
     } as const;
 
     const clicked = collections[type][index];
-    // stat·graph·knob은 렌더 클로저가 아니라 live 스토어를 읽는다. 렌더와
+    // stat·graph·knob·sprite는 렌더 클로저가 아니라 live 스토어를 읽는다. 렌더와
     // 클릭 사이에 배열이 줄면 대상이 없을 수 있어 fail-closed로 닫는다
     if (!clicked) {
       reportElementOpSkipped('group selection (target missing)');
@@ -778,6 +824,7 @@ const Grid = ({
         statPositions: collections.stat,
         graphPositions: collections.graph,
         knobPositions: collections.knob,
+        spritePositions: collections.sprite,
         pluginElements: usePluginDisplayElementStore.getState().elements,
         modeGroups:
           useLayerGroupStore.getState().layerGroups[selectedKeyType] || [],
@@ -790,7 +837,7 @@ const Grid = ({
   // 더블클릭 편집 진입 — 대상이 다중 선택의 멤버면 선택을 보존해 배치 편집으로,
   // 아니면 해당 요소(+그룹)만 선택해 단일 편집으로 property 페이지를 연다
   const openElementEditor = (
-    type: 'key' | 'stat' | 'graph' | 'knob',
+    type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
     index: number,
   ) => {
     const { selectedElements: currentSelection } =
@@ -802,6 +849,8 @@ const Grid = ({
         ? statPositions[selectedKeyType]
         : type === 'graph'
         ? graphPositions[selectedKeyType]
+        : type === 'sprite'
+        ? spritePositions[selectedKeyType]
         : knobPositions[selectedKeyType];
     const targetId = positionsForType?.[index]?.id;
     const isMultiMember =
@@ -816,7 +865,7 @@ const Grid = ({
 
   // 요소 컨텍스트 메뉴 열기
   const openElementContextMenu = (
-    type: 'key' | 'stat' | 'graph' | 'knob',
+    type: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
     index: number,
     clientX: number,
     clientY: number,
@@ -833,6 +882,8 @@ const Grid = ({
         ? useStatItemStore.getState().positions[selectedKeyType]?.[index]
         : type === 'graph'
         ? useGraphItemStore.getState().positions[selectedKeyType]?.[index]
+        : type === 'sprite'
+        ? useSpriteStore.getState().positions[selectedKeyType]?.[index]
         : useKnobItemStore.getState().positions[selectedKeyType]?.[index];
     // 조회가 옵셔널인데 여기서 무방비로 풀면, 렌더와 우클릭 사이에 배열이 줄었을 때
     // TypeError가 나고 에러 바운더리가 없어 앱이 통째로 언마운트된다.
@@ -1065,6 +1116,24 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'knob',
+                  id: pos.id,
+                  index: i,
+                });
+              }
+            });
+
+            // 범위 내 스프라이트 요소도 선택
+            (spritePositions?.[selectedKeyType] || []).forEach((pos, i) => {
+              if (!pos || pos.hidden) return;
+              const elementBounds = {
+                x: pos.dx,
+                y: pos.dy,
+                width: pos.width || 200,
+                height: pos.height || 200,
+              };
+              if (isElementInMarquee(elementBounds, rangeRect)) {
+                newSelectedElements.push({
+                  type: 'sprite',
                   id: pos.id,
                   index: i,
                 });
@@ -1362,6 +1431,80 @@ const Grid = ({
     ));
   };
 
+  const renderSpriteItems = () => {
+    const items = spritePositions?.[selectedKeyType] || [];
+    if (!items.length) return null;
+
+    const handleSpritePositionChange = (
+      index: number,
+      dx: number,
+      dy: number,
+      elementId: string,
+    ) => {
+      commitElementPosition('sprite', elementId, dx, dy);
+    };
+
+    return items.map((position, index) => (
+      <SpriteItem
+        key={position.id}
+        index={index}
+        elementId={position.id}
+        position={position}
+        onPositionChange={handleSpritePositionChange}
+        zIndex={position.zIndex ?? index}
+        onClick={() => {
+          selectElementWithGroup('sprite', index);
+        }}
+        onDoubleClick={() => openElementEditor('sprite', index)}
+        onCtrlClick={() => {
+          toggleSelection({
+            type: 'sprite',
+            id: useSpriteStore.getState().positions[selectedKeyType][index].id,
+            index,
+          });
+        }}
+        onShiftClick={() => {
+          toggleSelection({
+            type: 'sprite',
+            id: useSpriteStore.getState().positions[selectedKeyType][index].id,
+            index,
+          });
+        }}
+        isSelected={selectedElements.some(
+          (el) => el.type === 'sprite' && el.id === position.id,
+        )}
+        selectedElements={selectedElements}
+        onMultiDrag={(deltaX, deltaY) =>
+          moveSelectedElements(deltaX, deltaY, undefined, false)
+        }
+        onMultiDragStart={beginSelectedPluginInstancesDrag}
+        onMultiDragEnd={commitSelectedElementsDrag}
+        activeTool={activeTool}
+        onEraserClick={() => {
+          void deleteElementById('sprite', position.id).catch(
+            reportElementOpError,
+          );
+        }}
+        onContextMenu={(e) => {
+          openElementContextMenu(
+            'sprite',
+            index,
+            e.clientX,
+            e.clientY,
+            spriteRefs.current[index] || null,
+          );
+        }}
+        zoom={zoom}
+        panX={panX}
+        panY={panY}
+        isViewportTransforming={isTransforming}
+        setReferenceRef={(node) => {
+          spriteRefs.current[index] = node;
+        }}
+      />
+    ));
+  };
+
   // 고스트는 실제 요소와 같은 기본 립을 그린다. 링 배경은 전역 규칙이 아닌
   // 인라인으로 - 고스트는 data-*-element가 아니라 전역 게이트를 안 탄다
   const renderGhostBorderRing = (suppressDefault: boolean) => {
@@ -1381,6 +1524,52 @@ const Grid = ({
 
   const renderDuplicateGhost = () => {
     if (!duplicateState || !duplicateCursor) return null;
+
+    if (duplicateState.elementType === 'sprite') {
+      const spritePosition = duplicateState.position as ReactiveSpritePosition;
+      const width = spritePosition.width || 200;
+      const height = spritePosition.height || 200;
+      const offsetX = duplicateCursor.x - width / 2;
+      const offsetY = duplicateCursor.y - height / 2;
+      const ghostImage = resolveImageSource(spritePosition.baseImage);
+      return (
+        <div
+          className="absolute pointer-events-none select-none"
+          style={{
+            width: `${width}px`,
+            height: `${height}px`,
+            transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
+            border: '1px dashed rgba(237, 238, 242, 0.4)',
+            borderRadius: '4px',
+            boxSizing: 'border-box',
+            opacity: 0.5,
+            zIndex: 'var(--z-canvas-drag-preview)',
+          }}
+        >
+          {ghostImage && (
+            <img
+              src={ghostImage}
+              alt=""
+              draggable={false}
+              style={{
+                position: 'absolute',
+                left: `${spritePosition.imageRect.x}px`,
+                top: `${spritePosition.imageRect.y}px`,
+                width: `${spritePosition.imageRect.width}px`,
+                height: `${spritePosition.imageRect.height}px`,
+                objectFit: spritePosition.imageFit ?? 'contain',
+                transformOrigin: `${spritePosition.pivot.x * 100}% ${
+                  spritePosition.pivot.y * 100
+                }%`,
+                transform: spriteTransformToCss(spritePosition.idleTransform),
+                pointerEvents: 'none',
+                userSelect: 'none',
+              }}
+            />
+          )}
+        </div>
+      );
+    }
 
     if (duplicateState.elementType === 'graph') {
       const width = duplicateState.position?.width || 200;
@@ -1407,22 +1596,24 @@ const Grid = ({
       );
     }
 
+    // sprite는 위에서 분기 완료 - 남은 타입은 키형 공통 필드를 공유한다
     const {
-      position: {
-        width = 60,
-        height = 60,
-        inactiveImage,
-        activeImage,
-        imageFit,
-        idleImageFit,
-        imageMode,
-        idleImageTransform,
-        className,
-        shadow,
-        activeShadow,
-      },
-      keyName,
-    } = duplicateState;
+      width = 60,
+      height = 60,
+      inactiveImage,
+      activeImage,
+      imageFit,
+      idleImageFit,
+      imageMode,
+      idleImageTransform,
+      className,
+      shadow,
+      activeShadow,
+    } = duplicateState.position as Exclude<
+      DuplicateState['position'],
+      ReactiveSpritePosition
+    >;
+    const { keyName } = duplicateState;
     const previewImage =
       resolveImageSource(inactiveImage) ||
       resolveImageSource(activeImage) ||
@@ -1612,6 +1803,7 @@ const Grid = ({
           {renderStatItems()}
           {renderGraphItems()}
           {renderKnobItems()}
+          {renderSpriteItems()}
           {/* Outside 카운터 미리보기 레이어 */}
           {keyCounterEnabled && (
             <KeyCounterPreviewLayer
@@ -1695,6 +1887,7 @@ const Grid = ({
           knobPositions,
           selectedKeyType,
           pluginElements,
+          spritePositions,
         );
         if (!bounds) return null;
 
@@ -1733,6 +1926,7 @@ const Grid = ({
             knobPositions,
             selectedKeyType,
             pluginElements,
+            spritePositions,
           );
           const elementId = el.id;
 
@@ -1761,6 +1955,7 @@ const Grid = ({
               knobPositions,
               selectedKeyType,
               pluginElements,
+              spritePositions,
             );
           }
 
@@ -1791,6 +1986,7 @@ const Grid = ({
           statPositions={statPositions}
           graphPositions={graphPositions}
           knobPositions={knobPositions}
+          spritePositions={spritePositions}
           selectedKeyType={selectedKeyType}
           pluginElements={pluginElements}
           zoom={zoom}
@@ -1835,6 +2031,8 @@ const Grid = ({
               ? getGraphMenuItems(contextIndex)
               : contextType === 'knob'
               ? getKnobMenuItems(contextIndex)
+              : contextType === 'sprite'
+              ? getSpriteMenuItems(contextIndex)
               : getKeyMenuItems(contextIndex, contextElementId)
           }
           onSelect={async (id: string) => {
@@ -1870,7 +2068,7 @@ const Grid = ({
             // 메뉴가 열린 동안의 재정렬·삭제를 액션 시점에 재해석.
             // 모드 밖으로 이동한 대상은 소실로 취급한다
             const resolveContextTarget = (
-              targetType: 'key' | 'stat' | 'graph' | 'knob',
+              targetType: 'key' | 'stat' | 'graph' | 'knob' | 'sprite',
             ): number | null => {
               if (!contextElementId) return null;
               const locator = resolveElementById(targetType, contextElementId);
@@ -1937,6 +2135,39 @@ const Grid = ({
                   void commitStableLayerZOrder({
                     mode: selectedKeyType,
                     targets: [{ type: 'graph', id: contextElementId }],
+                    action: 'back',
+                  }).catch(reportElementOpError);
+                }
+              }
+
+              setIsContextOpen(false);
+              setContextPosition(null);
+              return;
+            }
+
+            if (contextType === 'sprite') {
+              const spriteIndex = resolveContextTarget('sprite');
+              if (id === 'delete') {
+                if (contextElementId) {
+                  void deleteElementById('sprite', contextElementId).catch(
+                    reportElementOpError,
+                  );
+                }
+              } else if (id === 'duplicate') {
+                if (spriteIndex != null) beginDuplicateSprite(spriteIndex);
+              } else if (id === 'bringToFront') {
+                if (contextElementId) {
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'sprite', id: contextElementId }],
+                    action: 'front',
+                  }).catch(reportElementOpError);
+                }
+              } else if (id === 'sendToBack') {
+                if (contextElementId) {
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'sprite', id: contextElementId }],
                     action: 'back',
                   }).catch(reportElementOpError);
                 }
@@ -2233,6 +2464,8 @@ const Grid = ({
                 ? 'graph'
                 : id === 'addKnob'
                 ? 'knob'
+                : id === 'addSprite'
+                ? 'sprite'
                 : null;
             if (addType && gridAddLocalPos) {
               addCanvasElementAt(
@@ -2268,6 +2501,7 @@ const Grid = ({
           statPositions={statPositions?.[selectedKeyType] || []}
           graphPositions={graphPositions?.[selectedKeyType] || []}
           knobPositions={knobPositions?.[selectedKeyType] || []}
+          spritePositions={spritePositions?.[selectedKeyType] || []}
           zoom={zoom}
           panX={panX}
           panY={panY}
