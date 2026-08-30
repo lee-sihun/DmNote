@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
     keyboard::KeyboardManager,
-    models::{KeySlot, EDITOR_SCHEMA_VERSION},
+    models::{AppStoreData, KeySlot, EDITOR_SCHEMA_VERSION},
+    state::plugin::plugin_instances_storage_key,
 };
 use std::{
     collections::HashMap,
@@ -26,6 +27,115 @@ fn plugin_snapshot(plugin_id: &str) -> PluginElementsHistorySnapshot {
         plugin_id: plugin_id.to_string(),
         instances: None,
     }
+}
+
+#[test]
+fn custom_tabs_snapshot_keeps_patch_ownership_and_sorted_plugin_ids() {
+    let plugin_a = plugin_instances_storage_key("plugin-a");
+    let plugin_b = plugin_instances_storage_key("plugin-b");
+    let plugin_z = plugin_instances_storage_key("plugin-z");
+    let unrelated = "plugin_data_unrelated/settings".to_string();
+    let mut before = AppStoreData::default();
+    before
+        .plugin_data
+        .insert(plugin_z.clone(), serde_json::json!(["before-z"]));
+    before
+        .plugin_data
+        .insert(plugin_a.clone(), serde_json::json!(["before-a"]));
+    before
+        .plugin_data
+        .insert(unrelated.clone(), serde_json::json!({ "before": true }));
+    let mut after = before.clone();
+    after.plugin_data.remove(&plugin_z);
+    after
+        .plugin_data
+        .insert(plugin_a.clone(), serde_json::json!(["after-a"]));
+    after
+        .plugin_data
+        .insert(plugin_b.clone(), serde_json::json!(["after-b"]));
+    after
+        .plugin_data
+        .insert(unrelated, serde_json::json!({ "after": true }));
+
+    let snapshot = CustomTabsHistorySnapshot::from_transition(&before, &after);
+
+    assert_eq!(
+        snapshot.changed_plugin_ids(),
+        ["plugin-a", "plugin-b", "plugin-z"]
+    );
+    assert_eq!(
+        snapshot.plugin_instances_patch[&plugin_a],
+        Some(serde_json::json!(["before-a"]))
+    );
+    assert_eq!(snapshot.plugin_instances_patch[&plugin_b], None);
+    assert_eq!(
+        snapshot.plugin_instances_patch[&plugin_z],
+        Some(serde_json::json!(["before-z"]))
+    );
+    assert_eq!(snapshot.plugin_instances_patch.len(), 3);
+
+    snapshot.apply_override_patches(&mut after);
+    assert!(snapshot.matches_store(&after));
+}
+
+#[test]
+fn compound_validation_and_payload_serialization_order_are_stable() {
+    assert_eq!(
+        validate_compound_snapshots(&[]).unwrap_err(),
+        "compound history cannot be empty"
+    );
+    assert_eq!(
+        validate_compound_snapshots(&[
+            HistorySnapshot::Editor {
+                changed_fields: vec![EditorField::Keys],
+                before: Box::new(patch("first")),
+                key_counters: None,
+            },
+            HistorySnapshot::Editor {
+                changed_fields: vec![EditorField::Keys],
+                before: Box::new(patch("second")),
+                key_counters: None,
+            },
+            HistorySnapshot::Mode("unsupported-after-duplicate".to_string()),
+        ])
+        .unwrap_err(),
+        "compound history contains duplicate editor snapshots"
+    );
+    assert_eq!(
+        validate_compound_snapshots(&[
+            HistorySnapshot::PluginElements(plugin_snapshot("plugin-a")),
+            HistorySnapshot::PluginElements(plugin_snapshot("plugin-a")),
+        ])
+        .unwrap_err(),
+        "compound history contains duplicate plugin snapshots"
+    );
+    assert_eq!(
+        validate_compound_snapshots(&[HistorySnapshot::Mode("unsupported".to_string())])
+            .unwrap_err(),
+        "compound history contains an unsupported snapshot"
+    );
+    assert_eq!(
+        normalize_gesture_ids(vec![
+            "second".to_string(),
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+            "first".to_string(),
+        ]),
+        ["second", "first", "third"]
+    );
+
+    let before = HistorySnapshot::Mode("4key".to_string());
+    let gesture_ids = vec!["first".to_string(), "second".to_string()];
+    assert_eq!(
+        serde_json::to_string(&HistoryEntryPayload {
+            scope: HistoryScope::Mode,
+            before: &before,
+            gesture_ids: &gesture_ids,
+        })
+        .unwrap(),
+        r#"{"scope":"mode","before":{"kind":"mode","value":"4key"},"gestureIds":["first","second"]}"#
+    );
 }
 
 #[test]
