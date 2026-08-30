@@ -5,10 +5,7 @@ import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import { useSignals } from '@preact/signals-react/runtime';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
-import {
-  isErrorForCurrentSrc,
-  useFailedImageSrcs,
-} from '@hooks/overlay/useFailedImageSrcs';
+import { useFailedImageSrcs } from '@hooks/overlay/useFailedImageSrcs';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import {
   computeKeyElementStyles,
@@ -17,7 +14,10 @@ import {
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
-import KeyLabel from '@components/shared/KeyLabel';
+import {
+  KeyElementContent,
+  OverlayKeyElementFace,
+} from '@components/shared/KeyElementFace';
 import { useCounterAxisAnchor } from '@hooks/shared/useCounterAxisAnchor';
 import {
   useGridElementInteraction,
@@ -192,25 +192,22 @@ const DraggableKey = React.memo(
       previewPosition.inactiveImage,
       previewPosition.activeImage,
     );
-    const {
-      keyStyle: computedKeyStyle,
-      borderRingStyle,
-      imageStyle,
-      textStyle,
-      labelPaintStyle,
-      labelHasGradient,
-      labelMetricsDep,
-      currentImageSrc,
-      hasCurrentImage,
-      imageMode,
-      imageReplaces,
-      labelText,
-    } = computeKeyElementStyles({
+    const computedStyles = computeKeyElementStyles({
       position: previewPosition,
       active: previewActive,
       label: displayName,
       failedImageSrcs,
     });
+    const {
+      keyStyle: computedKeyStyle,
+      textStyle,
+      labelPaintStyle,
+      labelHasGradient,
+      labelMetricsDep,
+      labelText,
+      hasCurrentImage,
+      imageMode,
+    } = computedStyles;
     // 그리드(스케일 레이어) 안에서는 승격 금지 - WebKit은 합성 자식이 하나라도
     // 생기면 스케일 컨테이너 자체를 레이어로 만들어 내용 전체가 흐려진다.
     // 이동 키는 매 프레임 손상 영역만 재페인트하는 쪽이 선명하고 충분히 싸다
@@ -282,42 +279,13 @@ const DraggableKey = React.memo(
         onContextMenu={handleContextMenu}
         onDragStart={(e) => e.preventDefault()}
       >
-        {borderRingStyle && (
-          <span
-            aria-hidden="true"
-            data-gradient-border-ring="true"
-            style={borderRingStyle}
-          />
-        )}
-        {hasCurrentImage && (
-          <img
-            src={currentImageSrc || ''}
-            alt=""
-            data-key-image-layer="true"
-            style={imageStyle}
-            draggable={false}
-            onError={(event) => {
-              if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
-                return;
-              markFailed(currentImageSrc);
-            }}
-          />
-        )}
-        {imageReplaces ? null : showInsideCounter ? (
-          renderInsideCounterPreview()
-        ) : (
-          <div
-            className="flex items-center justify-center h-full font-bold"
-            style={textStyle}
-          >
-            <KeyLabel
-              text={labelText}
-              paintStyle={labelPaintStyle}
-              hasGradient={labelHasGradient}
-              metricsDep={labelMetricsDep}
-            />
-          </div>
-        )}
+        <KeyElementContent
+          styles={{ ...computedStyles, keyStyle }}
+          insideContent={
+            showInsideCounter ? renderInsideCounterPreview() : undefined
+          }
+          markImageFailed={markFailed}
+        />
       </div>
     );
   },
@@ -340,28 +308,21 @@ export const Key = React.memo(function Key({
     position.inactiveImage,
     position.activeImage,
   );
+  const styles = computeKeyElementStyles({
+    position,
+    active,
+    label: keyName,
+    failedImageSrcs,
+  });
   const {
-    keyStyle,
-    borderRingStyle,
-    imageStyle,
     textStyle,
     labelPaintStyle,
     labelHasGradient,
     labelMetricsDep,
     inactiveImageSrc,
     activeImageSrc,
-    currentImageSrc,
-    hasCurrentImage,
-    imageMode,
-    imageReplaces,
-    isTransparent,
     labelText,
-  } = computeKeyElementStyles({
-    position,
-    active,
-    label: keyName,
-    failedImageSrcs,
-  });
+  } = styles;
 
   useEffect(() => {
     warmupImageSource(inactiveImageSrc);
@@ -371,15 +332,13 @@ export const Key = React.memo(function Key({
   const counterSettings = useCounterSettings(position?.counter);
 
   if (position.hidden) return null;
-
-  if (isTransparent) {
+  if (styles.isTransparent) {
     return (
-      <div
-        aria-hidden="true"
-        className={`absolute ${position.className || ''}`}
-        style={{ ...keyStyle, visibility: 'hidden', pointerEvents: 'none' }}
-        data-overlay-hit="true"
-        data-overlay-hit-only="true"
+      <OverlayKeyElementFace
+        position={position}
+        active={active}
+        styles={styles}
+        markImageFailed={markFailed}
       />
     );
   }
@@ -394,62 +353,28 @@ export const Key = React.memo(function Key({
     ? getKeyCounterSignal(mode ?? '', globalKey)
     : undefined;
 
+  const insideContent =
+    showInsideCounter && counterSignal ? (
+      <InsideCounterLayout
+        countSignal={counterSignal}
+        labelText={labelText}
+        textStyle={textStyle}
+        labelPaintStyle={labelPaintStyle}
+        labelHasGradient={labelHasGradient}
+        labelMetricsDep={labelMetricsDep}
+        active={active}
+        counterSettings={counterSettings}
+        useInlineStyles={position.useInlineStyles === true}
+      />
+    ) : undefined;
+
   return (
-    <div
-      className={`absolute ${position.className || ''}`}
-      style={keyStyle}
-      data-state={active ? 'active' : 'inactive'}
-      data-key-element="true"
-      data-overlay-hit="true"
-      data-key-image={hasCurrentImage ? 'true' : undefined}
-      data-key-image-mode={hasCurrentImage ? imageMode : undefined}
-    >
-      {borderRingStyle && (
-        <span
-          aria-hidden="true"
-          data-gradient-border-ring="true"
-          style={borderRingStyle}
-        />
-      )}
-      {hasCurrentImage && (
-        <img
-          src={currentImageSrc || ''}
-          alt=""
-          data-key-image-layer="true"
-          style={imageStyle}
-          draggable={false}
-          onError={(event) => {
-            if (!isErrorForCurrentSrc(event.currentTarget, currentImageSrc))
-              return;
-            markFailed(currentImageSrc);
-          }}
-        />
-      )}
-      {imageReplaces ? null : showInsideCounter && counterSignal ? (
-        <InsideCounterLayout
-          countSignal={counterSignal}
-          labelText={labelText}
-          textStyle={textStyle}
-          labelPaintStyle={labelPaintStyle}
-          labelHasGradient={labelHasGradient}
-          labelMetricsDep={labelMetricsDep}
-          active={active}
-          counterSettings={counterSettings}
-          useInlineStyles={position.useInlineStyles === true}
-        />
-      ) : (
-        <div
-          className="flex items-center justify-center h-full font-bold"
-          style={textStyle}
-        >
-          <KeyLabel
-            text={labelText}
-            paintStyle={labelPaintStyle}
-            hasGradient={labelHasGradient}
-            metricsDep={labelMetricsDep}
-          />
-        </div>
-      )}
-    </div>
+    <OverlayKeyElementFace
+      position={position}
+      active={active}
+      styles={styles}
+      insideContent={insideContent}
+      markImageFailed={markFailed}
+    />
   );
 });
