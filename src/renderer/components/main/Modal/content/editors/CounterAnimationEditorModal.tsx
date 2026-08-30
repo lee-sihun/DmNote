@@ -32,6 +32,20 @@ import {
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
 import { counterAnimationApi } from '@api/modules/resourceApi';
+import {
+  COUNTER_EDITOR_PADDING as EDITOR_PADDING,
+  COUNTER_EDITOR_SIZE as EDITOR_SIZE,
+  COUNTER_EDITOR_TOTAL_SIZE as TOTAL_SIZE,
+  COUNTER_GRID_PATH_MAJOR as GRID_PATH_MAJOR,
+  COUNTER_GRID_PATH_MINOR as GRID_PATH_MINOR,
+  clampCounterDuration as clampDuration,
+  createCounterAnimationEditorState as toInitialState,
+  formatCounterBezierInput as formatBezierInput,
+  normalizeCounterScale as normalizeScale,
+  parseCounterBezierInput as parseBezierInput,
+  parseCounterNumber as parseNumber,
+  resolveCounterEditorViewDimensions as viewDims,
+} from './counterAnimationEditorModel';
 
 type EditorMode = 'create' | 'edit';
 
@@ -54,11 +68,6 @@ interface CounterAnimationEditorModalProps {
 
 type DragTarget = 'p1' | 'p2' | null;
 
-const EDITOR_SIZE = 110;
-const EDITOR_PADDING = 20;
-const TOTAL_SIZE = EDITOR_SIZE + EDITOR_PADDING * 2;
-const GRID_SUB = EDITOR_SIZE / 4;
-const GRID_EXTENT = 40;
 // 캔버스 그리드 색 — 커브 에디터와 미리보기 스테이지가 공유
 // 흰색 알파 토큰이라 반투명 인셋 웰(글래스) 위에서 배경 톤을 따라 자연 합성됨
 const GRID_MAJOR_COLOR = 'var(--ui-line)';
@@ -70,94 +79,11 @@ const HANDLE_HIT_RADIUS = 10;
 // 오프셋 (0,0) = 커브 정사각이 뷰 중앙, 포인터 수학은 비율 좌표라 크기 변화에 안전
 const EDITOR_RENDER_SIZE = 220;
 const PAN_MARGIN = 14;
-const MAX_DURATION = 5000;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 3.0;
 const ZOOM_SENSITIVITY = 0.002;
 const AUTO_FIT_MARGIN = 14;
 const AUTO_FIT_DURATION = 260;
-
-// 격자 경로 — 월드 좌표가 정적이라 모듈에서 1회 생성, <line> 162개 대신 <path> 2개
-const buildGridPath = (major: boolean) => {
-  const far = GRID_EXTENT * GRID_SUB;
-  const start = EDITOR_PADDING - far;
-  const end = EDITOR_PADDING + far;
-  const segments: string[] = [];
-  for (let i = -GRID_EXTENT; i <= GRID_EXTENT; i++) {
-    if ((i % 4 === 0) !== major) continue;
-    const pos = EDITOR_PADDING + i * GRID_SUB;
-    segments.push(`M ${pos} ${start} V ${end}`);
-    segments.push(`M ${start} ${pos} H ${end}`);
-  }
-  return segments.join(' ');
-};
-const GRID_PATH_MAJOR = buildGridPath(true);
-const GRID_PATH_MINOR = buildGridPath(false);
-
-// 뷰박스 치수 — 커브 정사각(TOTAL_SIZE)이 짧은 변에 맞고, 긴 변은 종횡비만큼 넓어짐
-const viewDims = (scale: number, aspect: number) => {
-  const base = TOTAL_SIZE / scale;
-  const safeAspect = Math.max(aspect, 0.01);
-  return {
-    base,
-    vbW: base * Math.max(safeAspect, 1),
-    vbH: base * Math.max(1 / safeAspect, 1),
-  };
-};
-
-const normalizeScale = (value: number) => {
-  if (!Number.isFinite(value)) return 1.1;
-  return value;
-};
-
-const clampDuration = (value: number) => {
-  if (!Number.isFinite(value)) return 300;
-  return Math.min(Math.max(Math.round(value), 1), MAX_DURATION);
-};
-
-const parseNumber = (raw: string): number | null => {
-  if (!raw || raw === '-' || raw === '.' || raw === '-.') return null;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const formatBezierInput = (bezier: CounterAnimationBezier): string =>
-  bezier.map((value) => Number(Number(value).toFixed(2))).join(', ');
-
-const parseBezierInput = (raw: string): CounterAnimationBezier | null => {
-  const values = raw
-    .split(',')
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0);
-  if (values.length !== 4) return null;
-
-  const numbers = values.map((value) => {
-    const n = Number(value);
-    return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
-  });
-  if (numbers.some((v) => !Number.isFinite(v))) return null;
-
-  const clamped = clampCounterBezier(numbers);
-  return [clamped[0], clamped[1], clamped[2], clamped[3]];
-};
-
-const toInitialState = (preset: CounterAnimationPreset | null | undefined) => {
-  if (!preset) {
-    return {
-      name: '',
-      bezier: [0.25, 0.46, 0.45, 0.94] as CounterAnimationBezier,
-      scale: 1.1,
-      durationMs: 300,
-    };
-  }
-
-  return {
-    name: preset.name || '',
-    bezier: clampCounterBezier(preset.bezier),
-    scale: normalizeScale(preset.scale),
-    durationMs: clampDuration(preset.durationMs),
-  };
-};
 
 const CounterAnimationEditorModal = ({
   isOpen,
