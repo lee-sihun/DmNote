@@ -36,7 +36,6 @@ import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import FontPickerOpenButton from '../../../Modal/content/pickers/FontPickerOpenButton';
 import FontWeightDropdown from '../FontWeightDropdown';
-import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
 import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
@@ -72,6 +71,7 @@ import {
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import SoundSection from '../SoundSection';
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
 const SOUND_PAGE_KEY = 'single-style:sound';
@@ -1093,62 +1093,31 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       )}
 
       {showSoundControls && (
-        <PropertySection>
-          <PropertyRow
-            label={t('propertiesPanel.keySoundEnabled') || '키 사운드 활성화'}
-          >
-            <Checkbox
-              commitStrategy="after-paint"
-              checked={keyPosition.soundEnabled ?? false}
-              onChange={() => {
-                const nextEnabled = !(keyPosition.soundEnabled ?? false);
-                onSoundEnabledCommit?.(nextEnabled);
-              }}
-            />
-          </PropertyRow>
-
-          <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
-            <button
-              type="button"
-              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
-              } text-fg text-body`}
-              onClick={() => {
-                setPickerFor(null);
-                if (activePageKey === SOUND_PAGE_KEY) closePage();
-                else openPage(SOUND_PAGE_KEY);
-              }}
-            >
-              {t('propertiesPanel.configure') || '설정하기'}
-            </button>
-          </PropertyRow>
-
-          <PropertyRow
-            label={t('propertiesPanel.soundVolume') || '사운드 볼륨'}
-          >
-            <NumberInput
-              value={keyPosition.soundVolume ?? 100}
-              onChange={(value) => {
-                const soundVolume = Math.max(0, Math.min(200, value));
-                if (onSoundVolumeCommit) {
-                  onSoundVolumeCommit(soundVolume);
-                } else {
-                  handleStyleChangeComplete('soundVolume', soundVolume);
-                }
-              }}
-              onPreview={(value) =>
-                handleStylePreview(
-                  'soundVolume',
-                  Math.max(0, Math.min(200, value)),
-                )
-              }
-              onCancel={() => editGestureController.cancel()}
-              suffix="%"
-              min={0}
-              max={200}
-            />
-          </PropertyRow>
-        </PropertySection>
+        <SoundSection
+          pageKey={SOUND_PAGE_KEY}
+          completionBinding="element-id"
+          soundEnabled={{
+            value: keyPosition.soundEnabled ?? false,
+            isMixed: false,
+          }}
+          soundPath={{ value: keyPosition.soundPath || '', isMixed: false }}
+          soundVolume={{
+            value: keyPosition.soundVolume ?? 100,
+            isMixed: false,
+          }}
+          onSoundEnabledCommit={(value) => onSoundEnabledCommit?.(value)}
+          onSoundPathCommit={(value) => onSoundPathCommit?.(value)}
+          onSoundVolumeCommit={(value) => {
+            if (onSoundVolumeCommit) onSoundVolumeCommit(value);
+            else handleStyleChangeComplete('soundVolume', value);
+          }}
+          onSoundVolumePreview={(value) =>
+            handleStylePreview('soundVolume', value)
+          }
+          onSoundVolumeCancel={() => editGestureController.cancel()}
+          onBeforeToggle={() => setPickerFor(null)}
+          t={t}
+        />
       )}
 
       {/* 이미지 픽커 팝업 - 단일 선택 모드에서만 */}
@@ -1281,26 +1250,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               }
             }}
             pageTitle={t('propertiesPanel.font') || '폰트'}
-            onBack={closePage}
-          />,
-          pageHost,
-        )}
-
-      {/* SoundPicker — 패널 서브 페이지 */}
-      {showSoundControls &&
-        renderPageKey === SOUND_PAGE_KEY &&
-        pageHost &&
-        createPortal(
-          <SoundPicker
-            open
-            completionBinding="element-id"
-            selectedSound={keyPosition.soundPath || null}
-            onSoundSelect={(soundPath) => {
-              const nextPath = soundPath || '';
-              onSoundPathCommit?.(nextPath);
-            }}
-            previewVolume={keyPosition.soundVolume ?? 100}
-            pageTitle={t('propertiesPanel.keySound') || '키 사운드'}
             onBack={closePage}
           />,
           pageHost,
