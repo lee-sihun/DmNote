@@ -6,9 +6,12 @@ import type { ObsStatus } from '@src/types/obs';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const obsHarness = vi.hoisted(() => ({
+  appRestart: vi.fn(),
   clearSelection: vi.fn(),
   copyText: vi.fn(),
   onStatus: vi.fn(),
+  overlayResizeAnchor: 'top-left',
+  overlaySetAnchor: vi.fn(),
   regenerateToken: vi.fn(),
   setAngleMode: vi.fn(),
   setAutoUpdateEnabled: vi.fn(),
@@ -68,7 +71,7 @@ vi.mock('@stores/useSettingsStore', () => ({
     jsPlugins: [],
     language: 'ko',
     setLanguage: obsHarness.setLanguage,
-    overlayResizeAnchor: 'top-left',
+    overlayResizeAnchor: obsHarness.overlayResizeAnchor,
     setOverlayResizeAnchor: obsHarness.setOverlayResizeAnchor,
     keyCounterEnabled: true,
     setKeyCounterEnabled: obsHarness.setKeyCounterEnabled,
@@ -100,7 +103,29 @@ vi.mock('@stores/data/useLayerGroupStore', () => ({
   useLayerGroupStore: { getState: () => ({ layerGroups: {} }) },
 }));
 vi.mock('@components/main/common/Dropdown', () => ({
-  default: () => null,
+  default: ({
+    options,
+    value,
+    onChange,
+    placeholder,
+  }: {
+    options: { value: string; label: string }[];
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+  }) => (
+    <select
+      aria-label={placeholder}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
 }));
 vi.mock('@components/main/common/ReloadButton', () => ({
   default: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
@@ -193,7 +218,7 @@ vi.mock('@api/modules/obsApi', () => ({
   },
 }));
 vi.mock('@api/modules/overlayApi', () => ({
-  overlayApi: { setLock: vi.fn(), setAnchor: vi.fn() },
+  overlayApi: { setLock: vi.fn(), setAnchor: obsHarness.overlaySetAnchor },
 }));
 vi.mock('@api/modules/cssApi', () => ({
   cssApi: { toggle: vi.fn() },
@@ -205,7 +230,7 @@ vi.mock('@api/modules/keysApi', () => ({
   keysApi: { resetCounters: vi.fn(), resetAll: vi.fn() },
 }));
 vi.mock('@api/modules/appApi', () => ({
-  appApi: { restart: vi.fn() },
+  appApi: { restart: obsHarness.appRestart },
   windowApi: { openDevtoolsAll: vi.fn() },
 }));
 
@@ -260,13 +285,15 @@ const createShowConfirmMock = () =>
 
 describe('Settings OBS controller surface', () => {
   let container: HTMLDivElement;
-  let root: Root;
+  let root: Root | null;
   let showAlert: ReturnType<typeof createShowAlertMock>;
   let showConfirm: ReturnType<typeof createShowConfirmMock>;
 
   const renderSettings = async () => {
     await act(async () => {
-      root.render(<Settings showAlert={showAlert} showConfirm={showConfirm} />);
+      root?.render(
+        <Settings showAlert={showAlert} showConfirm={showConfirm} />,
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -283,6 +310,18 @@ describe('Settings OBS controller surface', () => {
   const regenerateButton = (): HTMLButtonElement =>
     container.querySelector('[title="settings.obsTokenRegen"]')!;
 
+  const resizeAnchorSelect = (): HTMLSelectElement =>
+    container.querySelector('[aria-label="settings.selectAnchor"]')!;
+
+  const changeResizeAnchor = (value: string) => {
+    const select = resizeAnchorSelect();
+    Object.getOwnPropertyDescriptor(
+      HTMLSelectElement.prototype,
+      'value',
+    )?.set?.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
   const settle = async () => {
     await act(async () => {
       for (let index = 0; index < 5; index += 1) {
@@ -296,6 +335,11 @@ describe('Settings OBS controller surface', () => {
     vi.clearAllMocks();
     vi.stubGlobal('__APP_VERSION__', 'test');
     obsHarness.statusListener = null;
+    obsHarness.overlayResizeAnchor = 'top-left';
+    obsHarness.setOverlayResizeAnchor.mockImplementation((value: string) => {
+      obsHarness.overlayResizeAnchor = value;
+    });
+    obsHarness.overlaySetAnchor.mockResolvedValue(undefined);
     obsHarness.status.mockResolvedValue(STOPPED_STATUS);
     obsHarness.onStatus.mockImplementation(
       (listener: (status: ObsStatus) => void) => {
@@ -320,7 +364,10 @@ describe('Settings OBS controller surface', () => {
   });
 
   afterEach(() => {
-    act(() => root.unmount());
+    if (root) {
+      act(() => root?.unmount());
+      root = null;
+    }
     container.remove();
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -367,7 +414,8 @@ describe('Settings OBS controller surface', () => {
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
-    act(() => root.unmount());
+    act(() => root?.unmount());
+    root = null;
     expect(obsHarness.unsubscribe).toHaveBeenCalledOnce();
     expect(clearIntervalSpy).toHaveBeenCalledOnce();
     expect(obsHarness.unsubscribe.mock.invocationCallOrder[0]).toBeLessThan(
@@ -510,5 +558,162 @@ describe('Settings OBS controller surface', () => {
     expect(showConfirm.mock.calls[0][2]).toMatchObject({
       confirmText: 'settings.obsTokenRegenConfirm',
     });
+  });
+
+  it('resize anchor 옵션 번역·순서와 직접 적용의 무재시작·무알림 계약을 유지한다', async () => {
+    await renderSettings();
+
+    expect(
+      [...resizeAnchorSelect().options].map(({ value, text }) => ({
+        value,
+        text,
+      })),
+    ).toEqual([
+      { value: 'top-left', text: 'settings.topLeft' },
+      { value: 'bottom-left', text: 'settings.bottomLeft' },
+      { value: 'top-right', text: 'settings.topRight' },
+      { value: 'bottom-right', text: 'settings.bottomRight' },
+      { value: 'center', text: 'settings.center' },
+    ]);
+
+    act(() => changeResizeAnchor('bottom-left'));
+    await settle();
+
+    expect(obsHarness.setOverlayResizeAnchor).toHaveBeenCalledWith(
+      'bottom-left',
+    );
+    expect(obsHarness.overlaySetAnchor).toHaveBeenCalledWith('bottom-left');
+    expect(obsHarness.settingsUpdate).not.toHaveBeenCalled();
+    expect(obsHarness.appRestart).not.toHaveBeenCalled();
+    expect(showAlert).not.toHaveBeenCalled();
+    expect(showConfirm).not.toHaveBeenCalled();
+  });
+
+  it('rapid anchor 변경은 첫 요청과 최신 pending만 순서대로 적용한다', async () => {
+    const first = deferred<void>();
+    const latest = deferred<void>();
+    obsHarness.overlaySetAnchor
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(latest.promise);
+    await renderSettings();
+
+    act(() => {
+      changeResizeAnchor('top-right');
+      changeResizeAnchor('bottom-left');
+      changeResizeAnchor('center');
+    });
+
+    expect(obsHarness.setOverlayResizeAnchor.mock.calls).toEqual([
+      ['top-right'],
+      ['bottom-left'],
+      ['center'],
+    ]);
+    expect(obsHarness.overlaySetAnchor.mock.calls).toEqual([['top-right']]);
+
+    first.resolve();
+    await settle();
+    expect(obsHarness.overlaySetAnchor.mock.calls).toEqual([
+      ['top-right'],
+      ['center'],
+    ]);
+
+    latest.resolve();
+    await settle();
+  });
+
+  it('선행 실패와 최신 pending이 공존하면 중간 rollback 없이 최신 요청을 계속한다', async () => {
+    const first = deferred<void>();
+    const latest = deferred<void>();
+    obsHarness.overlaySetAnchor
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(latest.promise);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await renderSettings();
+
+    act(() => changeResizeAnchor('top-right'));
+    act(() => changeResizeAnchor('bottom-right'));
+    first.reject(new Error('first failed'));
+    await settle();
+
+    expect(obsHarness.setOverlayResizeAnchor.mock.calls).toEqual([
+      ['top-right'],
+      ['bottom-right'],
+    ]);
+    expect(obsHarness.overlaySetAnchor.mock.calls).toEqual([
+      ['top-right'],
+      ['bottom-right'],
+    ]);
+
+    latest.resolve();
+    await settle();
+  });
+
+  it('최종 실패는 마지막 성공 anchor로 rollback하고 다음 요청 gate를 연다', async () => {
+    obsHarness.overlaySetAnchor
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('latest failed'))
+      .mockResolvedValueOnce(undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await renderSettings();
+
+    act(() => changeResizeAnchor('top-right'));
+    await settle();
+    act(() => changeResizeAnchor('bottom-left'));
+    await settle();
+
+    expect(obsHarness.setOverlayResizeAnchor.mock.calls).toEqual([
+      ['top-right'],
+      ['bottom-left'],
+      ['top-right'],
+    ]);
+    expect(console.error).toHaveBeenCalledWith(
+      'Failed to set overlay anchor',
+      expect.any(Error),
+    );
+
+    act(() => changeResizeAnchor('center'));
+    await settle();
+    expect(obsHarness.overlaySetAnchor.mock.calls).toEqual([
+      ['top-right'],
+      ['bottom-left'],
+      ['center'],
+    ]);
+  });
+
+  it('idle authoritative anchor 변경은 이후 실패 rollback 기준을 갱신한다', async () => {
+    await renderSettings();
+    obsHarness.overlayResizeAnchor = 'center';
+    await renderSettings();
+    obsHarness.setOverlayResizeAnchor.mockClear();
+    obsHarness.overlaySetAnchor.mockRejectedValueOnce(
+      new Error('set anchor failed'),
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    act(() => changeResizeAnchor('bottom-right'));
+    await settle();
+
+    expect(obsHarness.setOverlayResizeAnchor.mock.calls).toEqual([
+      ['bottom-right'],
+      ['center'],
+    ]);
+  });
+
+  it('unmount 뒤 늦은 실패도 기존처럼 마지막 confirmed anchor rollback을 수행한다', async () => {
+    const pending = deferred<void>();
+    obsHarness.overlaySetAnchor.mockReturnValueOnce(pending.promise);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await renderSettings();
+
+    act(() => changeResizeAnchor('top-right'));
+    act(() => root?.unmount());
+    root = null;
+    pending.reject(new Error('late failure'));
+    await settle();
+
+    expect(obsHarness.setOverlayResizeAnchor.mock.calls).toEqual([
+      ['top-right'],
+      ['top-left'],
+    ]);
   });
 });
