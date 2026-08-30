@@ -59,6 +59,16 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
   const baseImageSrc = resolveImageSource(position.baseImage);
   const targetImageSrc = resolveImageSource(target.imageSrc);
 
+  // easing 해석은 정규식·베지어 극값 계산이라 렌더마다 돌리지 않는다.
+  // 발산 easing은 도달 계산과 같은 기준으로 강등 (창 클리핑 방지)
+  const transitionCss = useMemo(
+    () =>
+      `transform ${position.transitionMs}ms ${resolveSpriteRenderEasing(
+        position.transitionEasing,
+      )}`,
+    [position.transitionMs, position.transitionEasing],
+  );
+
   // 실패한 src는 baseImage로 폴백, 그것도 실패면 렌더 제외
   let imageSrc = targetImageSrc;
   if (imageSrc && failedImageSrcs.has(imageSrc)) imageSrc = baseImageSrc;
@@ -111,10 +121,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
             ...computeSpriteImageStyle(
               position,
               target.transform,
-              // 발산 easing은 도달 계산과 같은 기준으로 강등 (창 클리핑 방지)
-              `transform ${position.transitionMs}ms ${resolveSpriteRenderEasing(
-                position.transitionEasing,
-              )}`,
+              transitionCss,
             ),
             willChange: 'transform',
           }}

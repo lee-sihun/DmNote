@@ -26,12 +26,56 @@ const byPoseId = (a: SpritePose, b: SpritePose): number => {
 const clampRotation = (deg: number): number =>
   Math.min(180, Math.max(-180, deg));
 
-const setEquals = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => {
-  if (a.size !== b.size) return false;
-  for (const value of a) {
-    if (!b.has(value)) return false;
+// 정확 일치 조회 키 - 중복·순서를 무시한 트리거 집합의 정규형
+const triggerSetKey = (triggers: readonly string[]): string =>
+  [...new Set(triggers)].sort().join('\n');
+
+interface PreparedPoses {
+  // 스프라이트가 참조하는 트리거 전체 (중복 제거)
+  allTriggers: string[];
+  // 트리거 집합 정규형 -> poseId 사전순 첫 pose
+  exactByKey: Map<string, SpritePose>;
+  // 단일 트리거 pose - 키당 poseId 사전순 첫 하나, poseId 순서 유지
+  uniqueSingles: Array<{ key: string; pose: SpritePose }>;
+}
+
+// poses 배열 identity 기준 캐시. 키 이벤트마다 재정렬·Set 재생성을 하지 않기 위한
+// 사전 구조로, 오버레이 레이아웃 캐시가 변경 없는 스프라이트의 참조를 보존하므로
+// 문서가 바뀌지 않는 한 재계산이 없다
+const preparedPosesCache = new WeakMap<readonly SpritePose[], PreparedPoses>();
+
+const preparePoses = (poses: readonly SpritePose[]): PreparedPoses => {
+  const cached = preparedPosesCache.get(poses);
+  if (cached) return cached;
+
+  const sortedPoses = [...poses].sort(byPoseId);
+  const triggerSeen = new Set<string>();
+  const allTriggers: string[] = [];
+  const exactByKey = new Map<string, SpritePose>();
+  const coveredKeys = new Set<string>();
+  const uniqueSingles: Array<{ key: string; pose: SpritePose }> = [];
+
+  for (const pose of sortedPoses) {
+    for (const trigger of pose.triggers) {
+      if (triggerSeen.has(trigger)) continue;
+      triggerSeen.add(trigger);
+      allTriggers.push(trigger);
+    }
+    const key = triggerSetKey(pose.triggers);
+    if (!exactByKey.has(key)) exactByKey.set(key, pose);
+    const uniqueTriggers = new Set(pose.triggers);
+    if (uniqueTriggers.size === 1) {
+      const [only] = uniqueTriggers;
+      if (!coveredKeys.has(only)) {
+        coveredKeys.add(only);
+        uniqueSingles.push({ key: only, pose });
+      }
+    }
   }
-  return true;
+
+  const prepared: PreparedPoses = { allTriggers, exactByKey, uniqueSingles };
+  preparedPosesCache.set(poses, prepared);
+  return prepared;
 };
 
 // 눌린 키 집합만 읽는 순수 해석. 눌린 순서, 시각, 이전 상태에 의존하지 않는다
@@ -39,14 +83,12 @@ export const resolveSpriteTarget = (
   sprite: ReactiveSpritePosition,
   pressedKeyElementIds: ReadonlySet<string>,
 ): SpriteTargetResolution => {
-  const sortedPoses = [...sprite.poses].sort(byPoseId);
+  const prepared = preparePoses(sprite.poses);
 
   // 1단계: 담당 키 중 지금 눌린 것, 담당 밖 키와 죽은 키 id는 여기서 걸러진다
   const active = new Set<string>();
-  for (const pose of sortedPoses) {
-    for (const trigger of pose.triggers) {
-      if (pressedKeyElementIds.has(trigger)) active.add(trigger);
-    }
+  for (const trigger of prepared.allTriggers) {
+    if (pressedKeyElementIds.has(trigger)) active.add(trigger);
   }
 
   // 2단계: 활성 키 없음, 저장된 참조 그대로 반환해 identity 보존
@@ -55,26 +97,19 @@ export const resolveSpriteTarget = (
   }
 
   // 3단계: triggers 집합이 active와 정확히 같은 pose (순서와 중복 무시)
-  for (const pose of sortedPoses) {
-    if (setEquals(new Set(pose.triggers), active)) {
-      return {
-        transform: pose.transform,
-        imageSrc: pose.imageOverride ?? sprite.baseImage,
-      };
-    }
+  const exactPose = prepared.exactByKey.get(triggerSetKey([...active]));
+  if (exactPose) {
+    return {
+      transform: exactPose.transform,
+      imageSrc: exactPose.imageOverride ?? sprite.baseImage,
+    };
   }
 
   // 4단계: 활성 키별 단일 pose 균등 평균, 조합 pose는 참여하지 않는다
-  // 단일 여부는 중복을 무시한 집합 크기 기준, 키당 pose는 poseId 사전순 첫 하나
+  // 키당 pose는 poseId 사전순 첫 하나 (사전 구조가 그 순서를 보존한다)
   const singles: SpritePose[] = [];
-  const coveredKeys = new Set<string>();
-  for (const pose of sortedPoses) {
-    const triggerSet = new Set(pose.triggers);
-    if (triggerSet.size !== 1) continue;
-    const [key] = triggerSet;
-    if (!active.has(key) || coveredKeys.has(key)) continue;
-    coveredKeys.add(key);
-    singles.push(pose);
+  for (const single of prepared.uniqueSingles) {
+    if (active.has(single.key)) singles.push(single.pose);
   }
 
   // 활성 키가 전부 조합 pose에만 속하면 평균 대상이 없다, idle과 동일 처리
