@@ -5,6 +5,12 @@ import {
   fieldsForSemanticOp,
 } from './semanticOpsProjection';
 import { SerialTaskQueue } from './serialTaskQueue';
+import {
+  hasReachedEditorAutoRebaseLimit,
+  isSemanticCommitFailureRetryable,
+  shouldAutoRebaseSemanticConflict,
+  shouldRetryUnknownSemanticOutcome,
+} from './editorRetryPolicy';
 
 import {
   EDITOR_COMMIT_SCHEMA_VERSION,
@@ -188,7 +194,6 @@ interface InFlightCommit {
   semanticOps?: boolean;
 }
 
-const MAX_AUTO_REBASE_ATTEMPTS = 2;
 const MAX_TRACKED_MUTATIONS = 64;
 // Rust state/editor.rs의 MAX_GESTURE_IDS와 동일한 IPC 상한
 const MAX_PENDING_GESTURE_IDS = 32;
@@ -812,9 +817,14 @@ class EditorSaveCoordinator {
             );
             break;
           } catch (error) {
-            const outcomeUnknown =
-              !isEditorCommitError(error) || error.errorCode === 'IO_ERROR';
-            if (!outcomeUnknown || outcomeUnknownRetryCount >= 1) throw error;
+            if (
+              !shouldRetryUnknownSemanticOutcome(
+                error,
+                outcomeUnknownRetryCount,
+              )
+            ) {
+              throw error;
+            }
             outcomeUnknownRetryCount += 1;
             totalRetryCount += 1;
           }
@@ -847,11 +857,7 @@ class EditorSaveCoordinator {
       } catch (error) {
         if (this.inFlight?.mutationId === mutationId) this.inFlight = null;
 
-        if (
-          isEditorCommitError(error) &&
-          error.errorCode === 'REVISION_CONFLICT' &&
-          conflictRetryCount < MAX_AUTO_REBASE_ATTEMPTS
-        ) {
+        if (shouldAutoRebaseSemanticConflict(error, conflictRetryCount)) {
           this.ownMutations.delete(mutationId);
           try {
             const canonical = await this.syncSemanticCanonical();
@@ -903,10 +909,7 @@ class EditorSaveCoordinator {
           this.notify();
           throw error;
         }
-        const retryable =
-          error instanceof EditorProtocolError ||
-          !isEditorCommitError(error) ||
-          isRetryableEditorCommitError(error);
+        const retryable = isSemanticCommitFailureRetryable(error);
         if (
           !(error instanceof EditorProtocolError) &&
           inFlight.gestureIds.length > 0
@@ -1743,7 +1746,7 @@ class EditorSaveCoordinator {
     if (
       overlappingFields.length > 0 ||
       (remainingLocalFields.length > 0 &&
-        rebaseAttempts >= MAX_AUTO_REBASE_ATTEMPTS)
+        hasReachedEditorAutoRebaseLimit(rebaseAttempts))
     ) {
       this.pendingLocal = null;
       this.pendingFields = [];
