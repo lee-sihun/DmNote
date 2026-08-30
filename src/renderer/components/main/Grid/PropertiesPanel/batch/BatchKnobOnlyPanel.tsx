@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/refs */
 import React from 'react';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { KnobItemPosition } from '@src/types/key/knobs';
@@ -12,8 +11,6 @@ import {
   type TabType,
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
-import PopupExit from '@components/main/Modal/PopupExit';
-import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
 import {
   captureBatchElementBinding,
@@ -21,6 +18,7 @@ import {
 } from '@hooks/pickers/useBatchElementBinding';
 import type { BatchElementPropertyUpdate } from '../types';
 import BatchPanelHeader from './BatchPanelHeader';
+import BatchImagePickerPopup from './BatchImagePickerPopup';
 import {
   commitBoundActiveImage,
   commitBoundActiveTransparent,
@@ -267,58 +265,52 @@ const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
         </div>
       </div>
 
-      <PopupExit open={showBatchImagePicker}>
-        {showBatchImagePicker && batchImageButtonRef.current ? (
-          <ImagePicker
-            open={showBatchImagePicker}
-            previewAnchor={{ kind: 'batch' }}
-            referenceRef={batchImageButtonRef}
-            panelElement={panelElement}
-            idleImage={
-              getMixedValueKnobs((pos) => pos.inactiveImage, '').isMixed
-                ? ''
-                : getMixedValueKnobs((pos) => pos.inactiveImage, '').value
-            }
-            activeImage={
-              getMixedValueKnobs((pos) => pos.activeImage, '').isMixed
-                ? ''
-                : getMixedValueKnobs((pos) => pos.activeImage, '').value
-            }
-            idleTransparent={
-              getMixedValueKnobs((pos) => pos.idleTransparent, false).value
-            }
-            activeTransparent={
-              getMixedValueKnobs((pos) => pos.activeTransparent, false).value
-            }
-            completionBinding={knobImageBinding.binding}
-            onIdleImageChange={(imageUrl: string) => {
-              commitBoundInactiveImage(knobImageBinding.selection, imageUrl);
-            }}
-            onActiveImageChange={(imageUrl: string) => {
-              commitBoundActiveImage(knobImageBinding.selection, imageUrl);
-            }}
-            onIdleTransparentChange={(value: boolean) => {
-              commitBoundIdleTransparent(
-                knobTransparencyBinding.selection,
-                value,
-              );
-            }}
-            onActiveTransparentChange={(value: boolean) => {
-              commitBoundActiveTransparent(
-                knobTransparencyBinding.selection,
-                value,
-              );
-            }}
-            onIdleImageReset={() => {
-              commitBoundInactiveImage(knobImageBinding.selection, '');
-            }}
-            onActiveImageReset={() => {
-              commitBoundActiveImage(knobImageBinding.selection, '');
-            }}
-            onClose={() => setShowBatchImagePicker(false)}
-          />
-        ) : null}
-      </PopupExit>
+      <BatchImagePickerPopup
+        open={showBatchImagePicker}
+        referenceRef={batchImageButtonRef}
+        panelElement={panelElement}
+        publishBatchPreview
+        showActiveState
+        idleImage={
+          getMixedValueKnobs((pos) => pos.inactiveImage, '').isMixed
+            ? ''
+            : getMixedValueKnobs((pos) => pos.inactiveImage, '').value
+        }
+        activeImage={
+          getMixedValueKnobs((pos) => pos.activeImage, '').isMixed
+            ? ''
+            : getMixedValueKnobs((pos) => pos.activeImage, '').value
+        }
+        idleTransparent={
+          getMixedValueKnobs((pos) => pos.idleTransparent, false).value
+        }
+        activeTransparent={
+          getMixedValueKnobs((pos) => pos.activeTransparent, false).value
+        }
+        completionBinding={knobImageBinding.binding}
+        onIdleImageChange={(imageUrl) => {
+          commitBoundInactiveImage(knobImageBinding.selection, imageUrl);
+        }}
+        onActiveImageChange={(imageUrl) => {
+          commitBoundActiveImage(knobImageBinding.selection, imageUrl);
+        }}
+        onIdleTransparentChange={(value) => {
+          commitBoundIdleTransparent(knobTransparencyBinding.selection, value);
+        }}
+        onActiveTransparentChange={(value) => {
+          commitBoundActiveTransparent(
+            knobTransparencyBinding.selection,
+            value,
+          );
+        }}
+        onIdleImageReset={() => {
+          commitBoundInactiveImage(knobImageBinding.selection, '');
+        }}
+        onActiveImageReset={() => {
+          commitBoundActiveImage(knobImageBinding.selection, '');
+        }}
+        onClose={() => setShowBatchImagePicker(false)}
+      />
     </div>
   );
 };

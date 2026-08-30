@@ -1,12 +1,9 @@
-/* eslint-disable react-hooks/refs */
 import React from 'react';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { PANEL_ROOT_CLASS } from '../panelChrome';
 import { BatchStyleTabContent, TABS, type TabType } from '../index';
-import PopupExit from '@components/main/Modal/PopupExit';
-import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
 import {
   captureBatchElementBinding,
@@ -14,6 +11,7 @@ import {
 } from '@hooks/pickers/useBatchElementBinding';
 import type { BatchElementPropertyUpdate } from '../types';
 import BatchPanelHeader from './BatchPanelHeader';
+import BatchImagePickerPopup from './BatchImagePickerPopup';
 import BatchGraphSettingsSection from './BatchGraphSettingsSection';
 import { createBatchGraphSettingsModel } from './batchGraphSettingsModel';
 import {
@@ -216,46 +214,40 @@ const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
         </div>
       </div>
 
-      <PopupExit open={showBatchImagePicker}>
-        {showBatchImagePicker && batchImageButtonRef.current ? (
-          <ImagePicker
-            open={showBatchImagePicker}
-            referenceRef={batchImageButtonRef}
-            panelElement={panelElement}
-            showActiveState={false}
-            idleImage={
-              getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
-                ? ''
-                : getMixedValueGraphs((pos) => pos.inactiveImage, '').value
-            }
-            activeImage={
-              getMixedValueGraphs((pos) => pos.activeImage, '').isMixed
-                ? ''
-                : getMixedValueGraphs((pos) => pos.activeImage, '').value
-            }
-            idleTransparent={
-              getMixedValueGraphs((pos) => pos.idleTransparent, false).value
-            }
-            activeTransparent={
-              getMixedValueGraphs((pos) => pos.activeTransparent, false).value
-            }
-            completionBinding={graphImageBinding.binding}
-            onIdleImageChange={(imageUrl: string) => {
-              commitBoundInactiveImage(graphImageBinding.selection, imageUrl);
-            }}
-            onIdleTransparentChange={(value: boolean) => {
-              commitBoundIdleTransparent(
-                graphTransparencyBinding.selection,
-                value,
-              );
-            }}
-            onIdleImageReset={() => {
-              commitBoundInactiveImage(graphImageBinding.selection, '');
-            }}
-            onClose={() => setShowBatchImagePicker(false)}
-          />
-        ) : null}
-      </PopupExit>
+      <BatchImagePickerPopup
+        open={showBatchImagePicker}
+        referenceRef={batchImageButtonRef}
+        panelElement={panelElement}
+        publishBatchPreview={false}
+        showActiveState={false}
+        idleImage={
+          getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
+            ? ''
+            : getMixedValueGraphs((pos) => pos.inactiveImage, '').value
+        }
+        activeImage={
+          getMixedValueGraphs((pos) => pos.activeImage, '').isMixed
+            ? ''
+            : getMixedValueGraphs((pos) => pos.activeImage, '').value
+        }
+        idleTransparent={
+          getMixedValueGraphs((pos) => pos.idleTransparent, false).value
+        }
+        activeTransparent={
+          getMixedValueGraphs((pos) => pos.activeTransparent, false).value
+        }
+        completionBinding={graphImageBinding.binding}
+        onIdleImageChange={(imageUrl) => {
+          commitBoundInactiveImage(graphImageBinding.selection, imageUrl);
+        }}
+        onIdleTransparentChange={(value) => {
+          commitBoundIdleTransparent(graphTransparencyBinding.selection, value);
+        }}
+        onIdleImageReset={() => {
+          commitBoundInactiveImage(graphImageBinding.selection, '');
+        }}
+        onClose={() => setShowBatchImagePicker(false)}
+      />
     </div>
   );
 };

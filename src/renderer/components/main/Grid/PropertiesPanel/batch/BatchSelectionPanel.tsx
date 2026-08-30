@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/refs */
 import React from 'react';
 import type { KeyPosition, NoteColor } from '@src/types/key/keys';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
@@ -19,7 +18,6 @@ import {
 } from '../index';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
 import {
   patchCounterAnimationEnabledByTargets,
@@ -57,6 +55,7 @@ import {
 import type { BatchElementPropertyUpdate } from '../types';
 import { useBatchNotePaint, type BatchNoteSurface } from './useBatchNotePaint';
 import BatchPanelHeader from './BatchPanelHeader';
+import BatchImagePickerPopup from './BatchImagePickerPopup';
 import BatchGraphSettingsSection from './BatchGraphSettingsSection';
 import { createBatchGraphSettingsModel } from './batchGraphSettingsModel';
 import {
@@ -1051,66 +1050,58 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         </PopupExit>
 
         {/* 다중 선택용 ImagePicker */}
-        <PopupExit open={showBatchImagePicker}>
-          {showBatchImagePicker && batchImageButtonRef.current ? (
-            <ImagePicker
-              open={showBatchImagePicker}
-              previewAnchor={{ kind: 'batch' }}
-              referenceRef={batchImageButtonRef}
-              panelElement={panelElement}
-              idleImage={
-                styleMixedValueGetter((pos) => pos.inactiveImage, '').isMixed
-                  ? ''
-                  : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
-              }
-              activeImage={
-                getMixedValueActiveCapable((pos) => pos.activeImage, '').isMixed
-                  ? ''
-                  : getMixedValueActiveCapable((pos) => pos.activeImage, '')
-                      .value
-              }
-              idleTransparent={
-                styleMixedValueGetter((pos) => pos.idleTransparent, false).value
-              }
-              activeTransparent={
-                getMixedValueActiveCapable(
-                  (pos) => pos.activeTransparent,
-                  false,
-                ).value
-              }
-              completionBinding={batchImageBinding.binding}
-              onIdleImageChange={(imageUrl: string) => {
-                commitBoundInactiveImage(batchImageBinding.selection, imageUrl);
-              }}
-              onActiveImageChange={(imageUrl: string) => {
-                commitBoundActiveImage(batchImageBinding.selection, imageUrl);
-              }}
-              onIdleTransparentChange={(value: boolean) => {
-                commitBoundIdleTransparent(
-                  idleTransparencyBinding.selection,
-                  value,
-                );
-              }}
-              onActiveTransparentChange={(value: boolean) => {
-                commitBoundActiveTransparent(
-                  activeTransparencyBinding.selection,
-                  value,
-                );
-              }}
-              onIdleImageReset={() => {
-                commitBoundInactiveImage(batchImageBinding.selection, '');
-              }}
-              onActiveImageReset={() => {
-                commitBoundActiveImage(batchImageBinding.selection, '');
-              }}
-              onClose={() => setShowBatchImagePicker(false)}
-              showActiveState={
-                selectedKeyElements.length > 0 ||
-                selectedKnobElements.length > 0
-              }
-            />
-          ) : null}
-        </PopupExit>
+        <BatchImagePickerPopup
+          open={showBatchImagePicker}
+          referenceRef={batchImageButtonRef}
+          panelElement={panelElement}
+          publishBatchPreview
+          showActiveState={
+            selectedKeyElements.length > 0 || selectedKnobElements.length > 0
+          }
+          idleImage={
+            styleMixedValueGetter((pos) => pos.inactiveImage, '').isMixed
+              ? ''
+              : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
+          }
+          activeImage={
+            getMixedValueActiveCapable((pos) => pos.activeImage, '').isMixed
+              ? ''
+              : getMixedValueActiveCapable((pos) => pos.activeImage, '').value
+          }
+          idleTransparent={
+            styleMixedValueGetter((pos) => pos.idleTransparent, false).value
+          }
+          activeTransparent={
+            getMixedValueActiveCapable((pos) => pos.activeTransparent, false)
+              .value
+          }
+          completionBinding={batchImageBinding.binding}
+          onIdleImageChange={(imageUrl) => {
+            commitBoundInactiveImage(batchImageBinding.selection, imageUrl);
+          }}
+          onActiveImageChange={(imageUrl) => {
+            commitBoundActiveImage(batchImageBinding.selection, imageUrl);
+          }}
+          onIdleTransparentChange={(value) => {
+            commitBoundIdleTransparent(
+              idleTransparencyBinding.selection,
+              value,
+            );
+          }}
+          onActiveTransparentChange={(value) => {
+            commitBoundActiveTransparent(
+              activeTransparencyBinding.selection,
+              value,
+            );
+          }}
+          onIdleImageReset={() => {
+            commitBoundInactiveImage(batchImageBinding.selection, '');
+          }}
+          onActiveImageReset={() => {
+            commitBoundActiveImage(batchImageBinding.selection, '');
+          }}
+          onClose={() => setShowBatchImagePicker(false)}
+        />
       </>
     </div>
   );
