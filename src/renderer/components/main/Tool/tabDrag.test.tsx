@@ -12,23 +12,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const bendMotion = vi.hoisted(() => ({
+  start: vi.fn(),
+  move: vi.fn(),
+  release: vi.fn(() => true),
+  cancel: vi.fn(),
+}));
+
 vi.mock('@api/modules/keysApi', () => ({
   keysApi: { tabs: { swap: vi.fn(() => Promise.resolve({})) } },
 }));
 vi.mock('@hooks/useLenis', () => ({ scrollLenisBy: vi.fn() }));
 vi.mock('@utils/animation/dragBendMotion', () => ({
-  createDragBendMotion: () => ({
-    start: vi.fn(),
-    move: vi.fn(),
-    release: vi.fn(),
-    cancel: vi.fn(),
-  }),
+  createDragBendMotion: () => bendMotion,
 }));
 
 import { keysApi } from '@api/modules/keysApi';
 import { TabDragProvider } from './tabDrag';
 import { useTabDrag } from './tabDragContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import {
+  endPopupDragSession,
+  getPopupDragSessionState,
+} from '@utils/ui/popupDragSession';
 
 const CHIP_ID = 'custom-a';
 const OTHER_ID = 'custom-b';
@@ -151,6 +157,11 @@ const drop = (at: { clientX: number; clientY: number }) => {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.mocked(keysApi.tabs.swap).mockClear();
+  bendMotion.start.mockClear();
+  bendMotion.move.mockClear();
+  bendMotion.release.mockReset();
+  bendMotion.release.mockReturnValue(true);
+  bendMotion.cancel.mockClear();
   useKeyStore.setState({
     customTabs: [
       { id: CHIP_ID, name: 'A' },
@@ -179,6 +190,7 @@ afterEach(() => {
   vi.runOnlyPendingTimers();
   vi.useRealTimers();
   document.body.classList.remove('dmn-dragging');
+  endPopupDragSession();
 });
 
 describe('바와 팝업 양쪽에 등록된 탭', () => {
@@ -221,9 +233,83 @@ describe('바와 팝업 양쪽에 등록된 탭', () => {
     expect(useKeyStore.getState().tabOrder).toEqual(authoritative);
     expect(useKeyStore.getState().pendingTabPlacements).toBe(0);
   });
+
+  it('응답이 끝나지 않아도 유예 상한에서 권위 순서 잠금을 푼다', () => {
+    vi.mocked(keysApi.tabs.swap).mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+
+    startDrag('chip', { clientX: 20, clientY: 15 });
+    drop({ clientX: 150, clientY: 15 });
+
+    expect(useKeyStore.getState().pendingTabPlacements).toBe(1);
+    act(() => vi.advanceTimersByTime(9999));
+    expect(useKeyStore.getState().pendingTabPlacements).toBe(1);
+    act(() => vi.advanceTimersByTime(1));
+    expect(useKeyStore.getState().pendingTabPlacements).toBe(0);
+  });
+
+  it('실패 응답은 더 최신 세대의 배치를 되돌리지 않는다', async () => {
+    let rejectSwap: (error: Error) => void = () => {};
+    vi.mocked(keysApi.tabs.swap).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectSwap = reject;
+        }),
+    );
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    startDrag('chip', { clientX: 20, clientY: 15 });
+    drop({ clientX: 150, clientY: 15 });
+    const authoritative = ['4key', '5key', '6key', '8key', CHIP_ID, OTHER_ID];
+    useKeyStore.setState((state) => ({
+      tabMetadataGeneration: state.tabMetadataGeneration + 1,
+      tabOrder: authoritative,
+    }));
+
+    await act(async () => rejectSwap(new Error('transport')));
+
+    expect(useKeyStore.getState().tabOrder).toEqual(authoritative);
+    expect(useKeyStore.getState().pendingTabPlacements).toBe(0);
+    error.mockRestore();
+  });
 });
 
 describe('탭 드래그 세션 종료', () => {
+  it('포인터를 누른 순간부터 팝업 드래그 후보를 표시한다', () => {
+    const chip = container.querySelector('[data-testid="chip"]')!;
+
+    act(() => {
+      chip.dispatchEvent(pointerEvent('pointerdown', { button: 0 }));
+    });
+    expect(getPopupDragSessionState()).toBe('pending');
+
+    act(() => {
+      window.dispatchEvent(pointerEvent('pointerup'));
+    });
+    expect(getPopupDragSessionState()).toBe('idle');
+  });
+
+  it('임계값 전 버튼이 풀린 세션은 드래그로 승격하지 않는다', () => {
+    const chip = container.querySelector('[data-testid="chip"]')!;
+    act(() => {
+      chip.dispatchEvent(pointerEvent('pointerdown', { button: 0 }));
+      window.dispatchEvent(
+        pointerEvent('pointermove', { clientX: 2, clientY: 2 }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          buttons: 0,
+          clientX: 20,
+          clientY: 20,
+        }),
+      );
+    });
+
+    expect(ghosts()).toHaveLength(0);
+    expect(getPopupDragSessionState()).toBe('idle');
+  });
+
   it.each([
     ['창 포커스 상실', () => window.dispatchEvent(new Event('blur'))],
     [
@@ -292,6 +378,40 @@ describe('탭 드래그 세션 종료', () => {
     });
     expect(ghosts()).toHaveLength(0);
     expect(document.body.classList.contains('dmn-dragging')).toBe(false);
+  });
+
+  it('reduced motion 빗나가기는 고스트를 즉시 회수한다', () => {
+    bendMotion.release.mockReturnValue(false);
+    startDrag();
+
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+
+    expect(ghosts()).toHaveLength(0);
+    expect(document.querySelector('.dmn-tab-returning')).toBeNull();
+  });
+
+  it('드래그 중 외부 순서 변경 뒤 좌표를 다시 측정한다', () => {
+    const other = container.querySelector<HTMLElement>(
+      '[data-testid="chip-other"]',
+    )!;
+    startDrag('chip', { clientX: 20, clientY: 15 });
+    const measureOther = vi.fn(() => rect(100, 0, 200, 30));
+    other.getBoundingClientRect = measureOther;
+
+    act(() => {
+      useKeyStore.setState({
+        tabOrder: [OTHER_ID, CHIP_ID, '4key', '5key', '6key', '8key'],
+      });
+    });
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointermove', { clientX: 150, clientY: 15 }),
+      );
+    });
+
+    expect(measureOther).toHaveBeenCalled();
   });
 
   it('언마운트가 진행 중인 고스트까지 회수한다', () => {

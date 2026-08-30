@@ -140,7 +140,7 @@ describe('createDragBendMotion', () => {
     expect(readVar(el, '--tab-lift')).toBe('var(--ui-tab-lift-scale)');
 
     motion.move({ x: 300, y: 400 });
-    motion.release(false);
+    expect(motion.release(false)).toBe(true);
     expect(readVar(el, '--tab-lift')).toBe('1');
   });
 
@@ -204,5 +204,7 @@ describe('createDragBendMotion', () => {
     expect(readVar(el, '--tab-drag-x')).toBe('100px');
     expect(readVar(el, '--tab-bend-x')).toBe('');
     expect(frames).toHaveLength(0);
+    expect(motion.release(false)).toBe(false);
+    expect(readVar(el, '--tab-drag-x')).toBe('');
   });
 });

@@ -54,8 +54,9 @@ export interface DragBendMotion {
    * 놓았을 때
    * @param landed 드롭에 성공했으면 true - 변수를 즉시 지운다.
    *               빗나갔으면 false - 복귀 전이를 건다
+   * @returns 빗나간 고스트의 복귀 전이를 기다려야 하면 true
    */
-  release: (landed: boolean) => void;
+  release: (landed: boolean) => boolean;
   /**
    * 세션을 즉시 끝낸다. 복귀가 끝난 뒤와 언마운트 정리용
    * @param owner 이 요소를 아직 붙들고 있을 때만 끝낸다. 늦게 도착한 타이머가
@@ -214,7 +215,7 @@ export const createDragBendMotion = (): DragBendMotion => {
      * bend가 반대쪽으로 지나쳤다 수렴하는 구간이 그려지지 않는다
      */
     release(landed) {
-      if (!el) return;
+      if (!el) return false;
       // 추종기 목표를 시작점으로 되돌리면 bend 오버슈트가 스프링에서 그냥 나온다
       pointer = { ...origin };
       writeVar('--tab-lift', '1');
@@ -222,10 +223,11 @@ export const createDragBendMotion = (): DragBendMotion => {
         stopLoop();
         clearVars();
         el = null;
-        return;
+        return false;
       }
       writeOffset();
       wake();
+      return true;
     },
 
     cancel(owner) {

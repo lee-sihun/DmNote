@@ -24,6 +24,11 @@ import { createDragBendMotion } from '@utils/animation/dragBendMotion';
 import { MAX_FRAME_DT } from '@utils/animation/spring';
 import { swapTabs, type TabPlacement } from '@utils/tabOrder';
 import {
+  activatePopupDragSession,
+  beginPopupDragSession,
+  endPopupDragSession,
+} from '@utils/ui/popupDragSession';
+import {
   TabDragContext,
   type TabDragOrientation,
   type TabDragZone,
@@ -33,6 +38,8 @@ import {
 const DRAG_THRESHOLD = 4;
 // 복귀 전이 길이와 맞춘다 (dragBendMotion 스펙)
 const RETURN_DURATION_MS = 400;
+// 응답 유실 시에도 권위 순서 유예가 영구히 잠기지 않게 하는 상한
+const TAB_PLACEMENT_TIMEOUT_MS = 10_000;
 // 착지 스쿼시 길이. main.css의 dmn-tab-land 키프레임과 같이 움직인다
 const LAND_DURATION_MS = 380;
 // 잡은 채 그리드 버튼 위에 머물면 팝업이 열린다
@@ -120,6 +127,19 @@ const swallowNextClick = () => {
   setTimeout(() => window.removeEventListener('click', swallow, true), 0);
 };
 
+const releasePointerCaptureSafely = (
+  element: HTMLElement,
+  pointerId: number,
+) => {
+  const releasePointerCapture = element.releasePointerCapture;
+  if (!releasePointerCapture) return;
+  try {
+    releasePointerCapture.call(element, pointerId);
+  } catch {
+    // 이미 해제된 포인터
+  }
+};
+
 const readPlacement = (): TabPlacement => {
   const state = useKeyStore.getState();
   return { order: state.tabOrder, barCount: state.barCount };
@@ -136,6 +156,7 @@ export const TabDragProvider = ({
   const [landedId, setLandedId] = useState<string | null>(null);
   const [swapTargetId, setSwapTargetId] = useState<string | null>(null);
   const [isOverOpener, setIsOverOpener] = useState(false);
+  const tabOrder = useKeyStore((state) => state.tabOrder);
 
   const targetsRef = useRef(new Map<string, DropTarget>());
   const zonesRef = useRef(new Map<TabDragZone, HTMLElement>());
@@ -176,12 +197,7 @@ export const TabDragProvider = ({
     for (const ghost of [...returningRef.current.keys()]) dropGhost(ghost);
   }, [dropGhost]);
 
-  // 드래그 중에는 아무 칩도 움직이지 않으므로 레이아웃이 그대로다.
-  // 시작 시점에 한 번 재서 캐시한다 - 매 프레임 재면 전이 중인 값을 읽어 판정이 흔들린다.
-  // 캐시를 버리는 계기는 셋이다. 대상이 늘거나 줄었을 때(잡은 채 팝업이 열림),
-  // 목록이 스크롤됐을 때, 프리셋 로드처럼 대상이 통째로 갈렸을 때.
-  // 비우면 개수가 어긋나 다음 조회에서 스스로 다시 잰다 - 개수만 비교하면
-  // 같은 개수로 갈아치우는 경우를 놓친다
+  // 시작 시점에 한 번 재서 캐시하고 레이아웃 근거가 바뀔 때만 버린다
   const rectsRef = useRef(new Map<string, DOMRect>());
   const dropRects = useCallback(() => {
     rectsRef.current = new Map();
@@ -228,10 +244,13 @@ export const TabDragProvider = ({
     }
     rectsRef.current = rects;
   }, []);
-  // 캐시를 버리는 계기는 셋이다. 대상이 늘거나 줄었을 때(잡은 채 팝업이 열림),
-  // 목록이 스크롤됐을 때, 프리셋 로드처럼 대상이 통째로 갈렸을 때.
-  // 비우면 개수가 어긋나 다음 조회에서 스스로 다시 잰다 - 개수만 비교하면
-  // 같은 개수로 갈아치우는 경우를 놓친다
+
+  // 같은 탭 노드가 자리만 바뀌면 ref 콜백은 다시 불리지 않는다. 드래그 중 외부
+  // 순서 변경이 DOM에 반영된 뒤 좌표 캐시를 버려 다음 판정에서 다시 측정
+  useLayoutEffect(() => {
+    if (sessionRef.current?.active) dropRects();
+  }, [dropRects, tabOrder]);
+
   const rectOf = useCallback(
     (key: string) => {
       if (rectsRef.current.size !== targetsRef.current.size) snapshotRects();
@@ -308,6 +327,16 @@ export const TabDragProvider = ({
     // 요청이 큐에서 기다리는 동안 앞선 순서 변경의 customTabs:changed가 도착한다.
     // 그 스냅샷은 방금 놓은 자리보다 낡았으므로 순서 필드만 흘려보낸다
     store.beginTabPlacementMutation();
+    let mutationReleased = false;
+    let mutationTimer: ReturnType<typeof setTimeout> | null = null;
+    const releaseMutation = () => {
+      if (mutationReleased) return;
+      mutationReleased = true;
+      if (mutationTimer) clearTimeout(mutationTimer);
+      mutationTimer = null;
+      useKeyStore.getState().endTabPlacementMutation();
+    };
+    mutationTimer = setTimeout(releaseMutation, TAB_PLACEMENT_TIMEOUT_MS);
     // 배열이 아니라 연산을 보낸다. 기다리는 사이 다른 창에서 탭이 생기거나
     // 사라져도 이 교체는 여전히 유효하다
     void keysApi.tabs
@@ -320,13 +349,17 @@ export const TabDragProvider = ({
         useKeyStore.getState().setTabMetadata(response.result, generation);
       })
       .catch((error) => {
-        if (seq !== commitSeqRef.current) return;
+        const current = useKeyStore.getState();
+        if (
+          seq !== commitSeqRef.current ||
+          current.tabMetadataGeneration !== generation
+        ) {
+          return;
+        }
         console.error('Failed to reorder tabs', error);
-        useKeyStore
-          .getState()
-          .setTabPlacement(placement.order, placement.barCount);
+        current.setTabPlacement(placement.order, placement.barCount);
       })
-      .finally(() => useKeyStore.getState().endTabPlacementMutation());
+      .finally(releaseMutation);
   }, []);
 
   // 착지 스쿼시 클래스는 React가 붙인다. imperative로 붙이면 세션이 끝나며
@@ -342,22 +375,18 @@ export const TabDragProvider = ({
       openerHotRef.current = false;
       setIsOverOpener(false);
       document.body.classList.remove(DRAG_CURSOR_CLASS);
+      endPopupDragSession();
       if (openerTimerRef.current) clearTimeout(openerTimerRef.current);
       openerTimerRef.current = null;
       if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
       scrollRafRef.current = 0;
       if (!session) return;
-      // 이미 놓인 포인터를 해제하면 NotFoundError가 난다. 여기서 던지면 아래
-      // 고스트 회수가 통째로 건너뛰어져 body에 복제본이 박힌다
-      try {
-        session.element.releasePointerCapture?.(session.pointerId);
-      } catch {
-        // 이미 해제된 포인터
-      }
+      // 캡처 해제가 실패해도 고스트 회수는 계속 진행
+      releasePointerCaptureSafely(session.element, session.pointerId);
       if (!session.active) return;
       // 드래그였으면 뒤이어 오는 click은 탭 선택이 아니다
       swallowNextClick();
-      motionRef.current.release(targetId !== null);
+      const waitsForReturn = motionRef.current.release(targetId !== null);
       const ghost = session.ghost;
 
       if (targetId !== null) {
@@ -377,6 +406,11 @@ export const TabDragProvider = ({
 
       // 빗나갔으면 고스트가 제자리로 돌아가고 나서 사라진다
       if (!ghost) return;
+      if (!waitsForReturn) {
+        ghost.remove();
+        motionRef.current.cancel(ghost);
+        return;
+      }
       ghost.classList.add('dmn-tab-returning');
       returningRef.current.set(
         ghost,
@@ -404,6 +438,7 @@ export const TabDragProvider = ({
         targetId: null,
         ghost: null,
       };
+      beginPopupDragSession();
     },
     [endSession],
   );
@@ -512,7 +547,7 @@ export const TabDragProvider = ({
       if (!session || event.pointerId !== session.pointerId) return;
       // 창 밖에서 버튼을 뗀 뒤 돌아오면 pointerup이 안 온다. 눌림이 풀린
       // 채로 움직이는 포인터가 그 신호다
-      if (session.active && event.buttons === 0) {
+      if (event.buttons === 0) {
         endSession(null);
         return;
       }
@@ -524,6 +559,7 @@ export const TabDragProvider = ({
         );
         if (moved < DRAG_THRESHOLD) return;
         session.active = true;
+        activatePopupDragSession();
         session.startedAt = performance.now();
         session.element.setPointerCapture?.(session.pointerId);
         scrollClock = performance.now();
@@ -587,6 +623,7 @@ export const TabDragProvider = ({
         if (timer.current) clearTimeout(timer.current);
       }
       document.body.classList.remove(DRAG_CURSOR_CLASS);
+      endPopupDragSession();
       sessionRef.current?.ghost?.remove();
       dropAllGhosts();
       motion.cancel();
