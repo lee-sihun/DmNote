@@ -1,4 +1,3 @@
-
 use super::{
     apply_sound_scan_to_library, backup_path_for, commit_staged_sound_deletion,
     contains_duplicate_path_separator, emit_sound_reference_changes_with,
