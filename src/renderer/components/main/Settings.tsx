@@ -36,6 +36,7 @@ import { getPluginDisplayName } from '@utils/plugin/pluginUtils';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
 import { useObsSettingsController } from '@components/main/useObsSettingsController';
+import { useOverlayResizeAnchorController } from '@components/main/useOverlayResizeAnchorController';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { SupportedLocale } from '@contexts/I18nContextDef';
@@ -129,15 +130,10 @@ const Settings = ({
   const removingPluginRef = useRef<string | null>(null);
   const resetAllRef = useRef(false);
   const angleModeChangeRef = useRef(false);
-  const pendingResizeAnchorRef = useRef<OverlayResizeAnchor | null>(null);
-  const applyingResizeAnchorRef = useRef(false);
-  const confirmedResizeAnchorRef = useRef(overlayResizeAnchor);
-
-  useEffect(() => {
-    if (!applyingResizeAnchorRef.current) {
-      confirmedResizeAnchorRef.current = overlayResizeAnchor;
-    }
-  }, [overlayResizeAnchor]);
+  const enqueueResizeAnchor = useOverlayResizeAnchorController({
+    overlayResizeAnchor,
+    setOverlayResizeAnchor,
+  });
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
   const { scrollContainerRef } = useLenis();
@@ -333,30 +329,6 @@ const Settings = ({
     } else {
       void apply();
     }
-  };
-
-  const enqueueResizeAnchor = (anchor: OverlayResizeAnchor): void => {
-    pendingResizeAnchorRef.current = anchor;
-    setOverlayResizeAnchor(anchor);
-    if (applyingResizeAnchorRef.current) return;
-
-    applyingResizeAnchorRef.current = true;
-    void (async () => {
-      while (pendingResizeAnchorRef.current) {
-        const requested = pendingResizeAnchorRef.current;
-        pendingResizeAnchorRef.current = null;
-        try {
-          await overlayApi.setAnchor(requested);
-          confirmedResizeAnchorRef.current = requested;
-        } catch (error) {
-          console.error('Failed to set overlay anchor', error);
-          if (!pendingResizeAnchorRef.current) {
-            setOverlayResizeAnchor(confirmedResizeAnchorRef.current);
-          }
-        }
-      }
-      applyingResizeAnchorRef.current = false;
-    })();
   };
 
   const handleTrayToggle = async (): Promise<void> => {
