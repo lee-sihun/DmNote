@@ -6,10 +6,7 @@ import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoord
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
-import type {
-  ReactiveSpritePosition,
-  SpritePositions,
-} from '@src/types/key/sprites';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import type { LayerGroups } from '@src/types/layerGroups';
 
@@ -62,7 +59,6 @@ export const knobItemsApi = {
 };
 
 export const spriteItemsApi = {
-  getPositions: () => invoke<SpritePositions>('sprite_positions_get'),
   // 스프라이트 전용 필드는 ops patchElement가 거부하므로 전체 필드 패치로 커밋.
   // 호출 시점 캡처 전체 레코드는 동결 소유권 검사에 걸려 낙관 적용이 빠지므로
   // 직렬 슬롯 안 최신 base에서 대상 스프라이트만 패치해 생성한다. 대상 소실이면
@@ -99,8 +95,6 @@ export const spriteItemsApi = {
       () => outcome,
     );
   },
-  onPositionsChanged: (listener: (positions: SpritePositions) => void) =>
-    subscribe<SpritePositions>('spritePositions:changed', listener),
 };
 
 export const layerGroupsApi = {

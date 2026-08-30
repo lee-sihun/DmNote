@@ -315,7 +315,6 @@ pub fn run() {
             commands::layout::graph_items::graph_positions_update,
             commands::layout::knob_items::knob_positions_get,
             commands::layout::knob_items::knob_positions_update,
-            commands::layout::sprite_items::sprite_positions_get,
             commands::layout::font::font_load,
             commands::layout::overlay::overlay_get,
             commands::layout::overlay::overlay_set_visible,

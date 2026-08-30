@@ -54,7 +54,6 @@ const ALLOWED_WS_COMMANDS: &[&str] = &[
     "stat_positions_get",
     "graph_positions_get",
     "knob_positions_get",
-    "sprite_positions_get",
     "custom_tabs_list",
     "sound_list",
     "sound_load_original",
@@ -1395,10 +1394,9 @@ mod tests {
 
     #[test]
     fn websocket_allowlist_uses_exact_matching() {
-        assert_eq!(ALLOWED_WS_COMMANDS.len(), 33);
+        assert_eq!(ALLOWED_WS_COMMANDS.len(), 32);
         assert!(is_allowed_command("app_bootstrap"));
         assert!(is_allowed_command("editor_get"));
-        assert!(is_allowed_command("sprite_positions_get"));
         assert!(!is_allowed_command("css_history_get"));
         assert!(is_allowed_command("sound_list"));
         assert!(is_allowed_command("sound_load_original"));
