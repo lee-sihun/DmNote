@@ -9,7 +9,6 @@ import {
 } from './colorPickerPrimitives';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import TabSwitch from '@components/main/common/TabSwitch';
-import { NumberInput } from '@components/main/common/NumberInput';
 import {
   MODES,
   isGradientColor,
@@ -33,8 +32,14 @@ import {
   toCanonicalGradient,
   type GradientSpec,
 } from '@src/types/color';
-import { ColorSwatchButton, ColorSwatchSurface } from './ColorSwatch';
+import { ColorSwatchButton } from './ColorSwatch';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import {
+  ColorInput as Input,
+  GradientInputs,
+  type GradientSide,
+  type PercentInputProps,
+} from './ColorPickerInputs';
 
 type ColorValue = string | GradientColor;
 type PaletteValue = ColorValue | GradientSpecColor;
@@ -42,7 +47,6 @@ type PaletteValue = ColorValue | GradientSpecColor;
 // normalizeColorInput 기본색과 동일
 const DEFAULT_PICKER_COLOR: ColorObject =
   parseHexColor('#561ecb') ?? hsvToColorObject({ h: 0, s: 0, v: 100, a: 1 });
-type GradientSide = 'top' | 'bottom';
 type OpacityTarget = 'solid' | 'top' | 'bottom';
 
 interface ResolvedOpacity {
@@ -1240,274 +1244,5 @@ function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
       activeTab={mode}
       onTabChange={onChange}
     />
-  );
-}
-
-interface PercentInputProps {
-  value: number;
-  label?: string;
-  isMixed?: boolean;
-  disabled?: boolean;
-  /** 포커스 진입. Escape 원복 기준을 잡는 시점 */
-  onEditStart?: () => void;
-  onPreview: (value: number) => void;
-  onCommit: (value: number) => void;
-  onCancel?: () => void;
-}
-
-// 0~100 정수 입력. 속성 패널 숫자 입력과 같은 수식·방향키·자릿수 재생을 갖는다.
-// 폭은 Mixed placeholder가 잘리지 않는 최소값
-const PercentInput = ({
-  value,
-  label,
-  isMixed,
-  disabled,
-  onEditStart,
-  onPreview,
-  onCommit,
-  onCancel,
-}: PercentInputProps) => (
-  <div className="w-[48px] flex-shrink-0" onFocusCapture={onEditStart}>
-    <NumberInput
-      value={value}
-      min={0}
-      max={100}
-      width="48px"
-      isMixed={isMixed}
-      disabled={disabled}
-      ariaLabel={label}
-      onPreview={onPreview}
-      onChange={onCommit}
-      onCancel={onCancel}
-    />
-  </div>
-);
-
-interface InputProps {
-  value?: string;
-  ariaLabel?: string;
-  /** 배치 선택의 hex가 갈리면 편집 전까지 Mixed placeholder */
-  mixed?: boolean;
-  disabled?: boolean;
-  onValueChange?: (value: string) => void;
-  onValueFocus?: () => void;
-  onValueCommit?: () => void;
-  onValueCancel?: () => boolean;
-  previewColor?: string;
-  alpha?: number;
-  alphaPercent?: PercentInputProps;
-}
-
-const Input = ({
-  value = '',
-  ariaLabel,
-  mixed = false,
-  disabled = false,
-  onValueChange,
-  onValueFocus,
-  onValueCommit,
-  onValueCancel,
-  previewColor,
-  alpha,
-  alphaPercent,
-}: InputProps) => {
-  const [editing, setEditing] = useState(false);
-  const cancelledRef = useRef(false);
-  const showMixed = mixed && !editing;
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onValueChange?.(e.target.value);
-  };
-
-  return (
-    <div className="flex items-center gap-[6px] w-full">
-      <div className="relative flex-1 min-w-0">
-        <ColorSwatchSurface
-          className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
-          color={previewColor}
-          opacity={alpha}
-        />
-        <input
-          type="text"
-          disabled={disabled}
-          aria-label={ariaLabel}
-          value={showMixed ? '' : value}
-          placeholder={showMixed ? 'Mixed' : undefined}
-          onChange={handleChange}
-          onFocus={() => {
-            cancelledRef.current = false;
-            setEditing(true);
-            onValueFocus?.();
-          }}
-          onBlur={() => {
-            setEditing(false);
-            if (cancelledRef.current) {
-              cancelledRef.current = false;
-              return;
-            }
-            onValueCommit?.();
-          }}
-          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              event.currentTarget.blur();
-            } else if (event.key === 'Escape' && onValueCancel?.()) {
-              event.preventDefault();
-              cancelledRef.current = true;
-              event.currentTarget.blur();
-            }
-          }}
-          className="block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body text-fg uppercase placeholder:text-fg-faint placeholder:italic placeholder:normal-case disabled:cursor-not-allowed disabled:opacity-50"
-        />
-      </div>
-
-      {alphaPercent && <PercentInput {...alphaPercent} />}
-    </div>
-  );
-};
-
-interface GradientInputsProps {
-  topValue: string;
-  bottomValue: string;
-  colorLabel: string;
-  onTopChange: (value: string) => void;
-  onBottomChange: (value: string) => void;
-  onTopFocus: () => void;
-  onBottomFocus: () => void;
-  onTopCommit: () => void;
-  onBottomCommit: () => void;
-  onTopCancel: () => boolean;
-  onBottomCancel: () => boolean;
-  selected: GradientSide;
-  onSelect?: (side: GradientSide) => void;
-  rightTopPercent?: PercentInputProps;
-  rightBottomPercent?: PercentInputProps;
-}
-
-function GradientInputs({
-  topValue,
-  bottomValue,
-  colorLabel,
-  onTopChange,
-  onBottomChange,
-  onTopFocus,
-  onBottomFocus,
-  onTopCommit,
-  onBottomCommit,
-  onTopCancel,
-  onBottomCancel,
-  selected,
-  onSelect,
-  rightTopPercent,
-  rightBottomPercent,
-}: GradientInputsProps) {
-  return (
-    <div className="flex flex-col gap-[6px]">
-      <GradientInput
-        label="Top"
-        ariaLabel={`${colorLabel} Top`}
-        value={topValue}
-        onChange={onTopChange}
-        onFocus={onTopFocus}
-        onCommit={onTopCommit}
-        onCancel={onTopCancel}
-        selected={selected === 'top'}
-        onSelect={() => onSelect?.('top')}
-        rightPercent={rightTopPercent}
-      />
-      <GradientInput
-        label="Bottom"
-        ariaLabel={`${colorLabel} Bottom`}
-        value={bottomValue}
-        onChange={onBottomChange}
-        onFocus={onBottomFocus}
-        onCommit={onBottomCommit}
-        onCancel={onBottomCancel}
-        selected={selected === 'bottom'}
-        onSelect={() => onSelect?.('bottom')}
-        rightPercent={rightBottomPercent}
-      />
-    </div>
-  );
-}
-
-interface GradientInputProps {
-  label: string;
-  ariaLabel: string;
-  value: string;
-  onChange?: (value: string) => void;
-  onFocus?: () => void;
-  onCommit?: () => void;
-  onCancel?: () => boolean;
-  selected: boolean;
-  onSelect?: () => void;
-  rightPercent?: PercentInputProps;
-}
-
-function GradientInput({
-  label,
-  ariaLabel,
-  value,
-  onChange,
-  onFocus,
-  onCommit,
-  onCancel,
-  selected,
-  onSelect,
-  rightPercent,
-}: GradientInputProps) {
-  const cancelledRef = useRef(false);
-  return (
-    <div className="flex items-center gap-[6px] w-full">
-      <div className="relative flex-1 min-w-0">
-        <ColorSwatchSurface
-          role="button"
-          tabIndex={0}
-          onClick={() => onSelect?.()}
-          onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onSelect?.();
-            }
-          }}
-          className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
-          color={value ? `#${value}` : '#561ecb'}
-        />
-        <input
-          type="text"
-          aria-label={ariaLabel}
-          value={value}
-          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-            onChange?.(event.target.value)
-          }
-          onFocus={() => {
-            cancelledRef.current = false;
-            onSelect?.();
-            onFocus?.();
-          }}
-          onBlur={() => {
-            if (cancelledRef.current) {
-              cancelledRef.current = false;
-              return;
-            }
-            onCommit?.();
-          }}
-          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              event.currentTarget.blur();
-            } else if (event.key === 'Escape' && onCancel?.()) {
-              event.preventDefault();
-              cancelledRef.current = true;
-              event.currentTarget.blur();
-            }
-          }}
-          placeholder={label}
-          className={`block pl-[23px] text-left w-full h-[23px] bg-inset rounded-md text-body text-fg uppercase ${
-            selected ? 'shadow-focus-ring' : 'focus:shadow-focus-ring'
-          }`}
-        />
-      </div>
-      {rightPercent && <PercentInput {...rightPercent} />}
-    </div>
   );
 }
