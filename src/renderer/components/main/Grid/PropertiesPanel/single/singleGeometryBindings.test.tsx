@@ -739,6 +739,80 @@ describe('single geometry input bindings', () => {
     },
   );
 
+  it('knob background paint는 idle/active preview와 final descriptor를 분리한다', () => {
+    const preview = vi.fn();
+    const commit = vi.fn();
+    const legacy = vi.fn();
+    act(() => {
+      root.render(
+        <SingleKnobPanel
+          setPanelElement={vi.fn()}
+          singleKnobPosition={{
+            ...createDefaultKeyPosition(),
+            axisId: 'HIDA:test',
+            sensitivity: 1,
+            reverse: false,
+          }}
+          singleKnobIndex={0}
+          selectedKeyType="4key"
+          isRenaming={false}
+          renameInputRef={createRef<HTMLInputElement>()}
+          renameValue=""
+          setRenameValue={vi.fn()}
+          renameCancelledRef={{ current: false }}
+          handleRenameCommit={vi.fn()}
+          handleRenameCancel={vi.fn()}
+          handleRenameStart={vi.fn()}
+          handleKnobUpdate={legacy}
+          onPaintPreview={preview}
+          onPaintCommit={commit}
+          singleScrollRefFor={() => vi.fn()}
+          panelElement={null}
+          useCustomCSS={false}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    act(() => captured.swatches[0]?.onClick());
+    expect(captured.color?.stateMode).toBe('idle');
+    act(() => captured.color?.onColorChange(' idle preview '));
+    act(() => captured.color?.onColorChangeComplete(' idle final '));
+    act(() => captured.color?.onStateModeChange?.('active'));
+    act(() => captured.color?.onColorChange(' active preview '));
+    act(() => captured.color?.onColorChangeComplete(' active final '));
+
+    expect(preview.mock.calls).toEqual([
+      [
+        {
+          property: 'backgroundPaint',
+          value: { color: ' idle preview ', gradient: null },
+        },
+      ],
+      [
+        {
+          property: 'activeBackgroundPaint',
+          value: { color: ' active preview ', gradient: null },
+        },
+      ],
+    ]);
+    expect(commit.mock.calls).toEqual([
+      [
+        {
+          property: 'backgroundPaint',
+          value: { color: ' idle final ', gradient: null },
+        },
+      ],
+      [
+        {
+          property: 'activeBackgroundPaint',
+          value: { color: ' active final ', gradient: null },
+        },
+      ],
+    ]);
+    expect(legacy).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['key', true],
     ['stat', false],
