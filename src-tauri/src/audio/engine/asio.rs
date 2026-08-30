@@ -27,6 +27,12 @@ fn is_valid_output_config(sample_rate: u32, channels: u16) -> bool {
 }
 
 #[cfg(any(test, all(windows, feature = "asio-backend")))]
+fn eligible_catalog_driver_name(name: &str, sample_rate: u32, channels: u16) -> Option<String> {
+    let name = normalize_driver_name(name);
+    (!name.is_empty() && is_valid_output_config(sample_rate, channels)).then_some(name)
+}
+
+#[cfg(any(test, all(windows, feature = "asio-backend")))]
 fn normalize_driver_names(names: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut names = names
         .into_iter()
@@ -38,6 +44,40 @@ fn normalize_driver_names(names: impl IntoIterator<Item = String>) -> Vec<String
     names
 }
 
+#[cfg(any(test, all(windows, feature = "asio-backend")))]
+fn open_audio_sink_with<Device, Sink, Devices, DevicesError, DescriptionError>(
+    driver_name: &str,
+    buffer_size: Option<u32>,
+    devices: Result<Devices, DevicesError>,
+    mut describe: impl FnMut(&Device) -> Result<String, DescriptionError>,
+    mut open: impl FnMut(Device, u32) -> AudioSinkResult<Sink>,
+) -> AudioSinkResult<Sink>
+where
+    Devices: IntoIterator<Item = Device>,
+    DescriptionError: std::fmt::Display,
+{
+    let driver_name = normalize_driver_name(driver_name);
+    if driver_name.is_empty() {
+        return Err(AudioSinkOpenError::AsioDeviceNotFound);
+    }
+
+    let devices = devices.map_err(|_| AudioSinkOpenError::AsioDeviceNotFound)?;
+    for device in devices {
+        let name = match describe(&device) {
+            Ok(name) => normalize_driver_name(&name),
+            Err(err) => {
+                log::warn!("[KeySound] failed to read ASIO device name: {err}");
+                continue;
+            }
+        };
+        if name == driver_name {
+            return open(device, effective_buffer_frames(buffer_size));
+        }
+    }
+
+    Err(AudioSinkOpenError::AsioDeviceNotFound)
+}
+
 #[cfg(all(windows, feature = "asio-backend"))]
 pub(super) fn open_audio_sink(
     driver_name: &str,
@@ -45,31 +85,23 @@ pub(super) fn open_audio_sink(
 ) -> AudioSinkResult<StreamHandler> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
-    let driver_name = normalize_driver_name(driver_name);
-    if driver_name.is_empty() {
+    // 빈 선택은 host 초기화보다 먼저 거부 - 장치가 없는 환경에서도 동일 오류 유지
+    if normalize_driver_name(driver_name).is_empty() {
         return Err(AudioSinkOpenError::AsioDeviceNotFound);
     }
-
     let host = cpal::host_from_id(cpal::HostId::Asio)
         .map_err(|_| AudioSinkOpenError::AsioDeviceNotFound)?;
-    let devices = host
-        .output_devices()
-        .map_err(|_| AudioSinkOpenError::AsioDeviceNotFound)?;
-
-    for device in devices {
-        let name = match device.description() {
-            Ok(description) => normalize_driver_name(description.name()),
-            Err(err) => {
-                log::warn!("[KeySound] failed to read ASIO device name: {err}");
-                continue;
-            }
-        };
-        if name == driver_name {
-            return open_device_audio_sink(device, buffer_size);
-        }
-    }
-
-    Err(AudioSinkOpenError::AsioDeviceNotFound)
+    open_audio_sink_with(
+        driver_name,
+        buffer_size,
+        host.output_devices(),
+        |device| {
+            device
+                .description()
+                .map(|description| description.name().to_string())
+        },
+        try_open_asio_sink,
+    )
 }
 
 #[cfg(not(all(windows, feature = "asio-backend")))]
@@ -78,14 +110,6 @@ pub(super) fn open_audio_sink(
     _buffer_size: Option<u32>,
 ) -> AudioSinkResult<StreamHandler> {
     Err(AudioSinkOpenError::AsioUnavailableBuild)
-}
-
-#[cfg(all(windows, feature = "asio-backend"))]
-fn open_device_audio_sink(
-    device: cpal::Device,
-    buffer_size: Option<u32>,
-) -> AudioSinkResult<StreamHandler> {
-    try_open_asio_sink(device, effective_buffer_frames(buffer_size))
 }
 
 #[cfg(all(windows, feature = "asio-backend"))]
@@ -142,12 +166,16 @@ pub(super) fn list_drivers() -> Vec<String> {
             .map(|description| normalize_driver_name(description.name()))
             .filter(|name| !name.is_empty())?;
         match device.default_output_config() {
-            Ok(config) if is_valid_output_config(config.sample_rate(), config.channels()) => {
-                Some(name)
-            }
-            Ok(_) => {
-                log::warn!("[KeySound] ASIO 드라이버 '{name}' 목록 제외: 유효하지 않은 샘플레이트/채널 보고");
-                None
+            Ok(config) => {
+                let eligible = eligible_catalog_driver_name(
+                    &name,
+                    config.sample_rate(),
+                    config.channels(),
+                );
+                if eligible.is_none() {
+                    log::warn!("[KeySound] ASIO 드라이버 '{name}' 목록 제외: 유효하지 않은 샘플레이트/채널 보고");
+                }
+                eligible
             }
             Err(err) => {
                 log::warn!("[KeySound] ASIO 드라이버 '{name}' 목록 제외: 기본 구성 조회 실패 ({err})");
@@ -164,12 +192,19 @@ pub(super) fn list_drivers() -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        backend_available, effective_buffer_frames, is_valid_output_config, normalize_buffer_size,
-        normalize_driver_name, normalize_driver_names, DEFAULT_BUFFER_FRAMES,
-    };
     #[cfg(not(all(windows, feature = "asio-backend")))]
-    use super::{open_audio_sink, AudioSinkOpenError};
+    use super::open_audio_sink;
+    use super::{
+        backend_available, effective_buffer_frames, eligible_catalog_driver_name,
+        is_valid_output_config, normalize_buffer_size, normalize_driver_name,
+        normalize_driver_names, open_audio_sink_with, AudioSinkOpenError, DEFAULT_BUFFER_FRAMES,
+    };
+
+    #[derive(Clone, Copy)]
+    struct FakeDevice {
+        id: u8,
+        description: Result<&'static str, &'static str>,
+    }
 
     #[test]
     fn driver_name_normalization_trims_only_outer_whitespace() {
@@ -202,6 +237,17 @@ mod tests {
     }
 
     #[test]
+    fn catalog_policy_requires_nonempty_name_and_valid_output_config() {
+        assert_eq!(
+            eligible_catalog_driver_name("  Focusrite USB ASIO  ", 48_000, 2),
+            Some("Focusrite USB ASIO".to_string())
+        );
+        assert_eq!(eligible_catalog_driver_name("  ", 48_000, 2), None);
+        assert_eq!(eligible_catalog_driver_name("Focusrite", 0, 2), None);
+        assert_eq!(eligible_catalog_driver_name("Focusrite", 48_000, 0), None);
+    }
+
+    #[test]
     fn driver_catalog_is_trimmed_sorted_deduplicated_and_nonempty() {
         assert_eq!(
             normalize_driver_names([
@@ -220,6 +266,86 @@ mod tests {
             backend_available(),
             cfg!(all(windows, feature = "asio-backend"))
         );
+    }
+
+    #[test]
+    fn injected_open_skips_description_errors_and_selects_exact_normalized_name() {
+        let devices = vec![
+            FakeDevice {
+                id: 1,
+                description: Err("description failed"),
+            },
+            FakeDevice {
+                id: 2,
+                description: Ok("Focusrite USB ASIO Extra"),
+            },
+            FakeDevice {
+                id: 3,
+                description: Ok("  Focusrite USB ASIO  "),
+            },
+        ];
+        let mut opened = Vec::new();
+
+        let result = open_audio_sink_with(
+            " Focusrite USB ASIO ",
+            Some(0),
+            Ok::<_, ()>(devices),
+            |device| device.description.map(str::to_string),
+            |device, buffer_frames| {
+                opened.push((device.id, buffer_frames));
+                Ok(device.id)
+            },
+        );
+
+        assert_eq!(result.expect("matching device should open"), 3);
+        assert_eq!(opened, vec![(3, DEFAULT_BUFFER_FRAMES)]);
+    }
+
+    #[test]
+    fn injected_open_maps_catalog_failures_and_propagates_open_failure() {
+        let empty_name = open_audio_sink_with(
+            "  ",
+            Some(128),
+            Err::<Vec<FakeDevice>, _>("must not inspect catalog"),
+            |device| device.description.map(str::to_string),
+            |_device, _buffer_frames| Ok(()),
+        );
+        assert!(matches!(
+            empty_name,
+            Err(AudioSinkOpenError::AsioDeviceNotFound)
+        ));
+
+        let unavailable = open_audio_sink_with(
+            "Focusrite USB ASIO",
+            Some(128),
+            Err::<Vec<FakeDevice>, _>("enumeration failed"),
+            |device| device.description.map(str::to_string),
+            |_device, _buffer_frames| Ok(()),
+        );
+        assert!(matches!(
+            unavailable,
+            Err(AudioSinkOpenError::AsioDeviceNotFound)
+        ));
+
+        let open_failed: Result<(), AudioSinkOpenError> = open_audio_sink_with(
+            "Focusrite USB ASIO",
+            Some(128),
+            Ok::<_, ()>(vec![FakeDevice {
+                id: 1,
+                description: Ok("Focusrite USB ASIO"),
+            }]),
+            |device| device.description.map(str::to_string),
+            |_device, buffer_frames| {
+                assert_eq!(buffer_frames, 128);
+                Err(AudioSinkOpenError::OpenFailed(anyhow::anyhow!(
+                    "driver busy"
+                )))
+            },
+        );
+        assert!(matches!(
+            open_failed,
+            Err(AudioSinkOpenError::OpenFailed(err)) if err.to_string() == "driver busy"
+        ));
     }
 
     #[cfg(not(all(windows, feature = "asio-backend")))]

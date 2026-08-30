@@ -1,0 +1,57 @@
+name: Windows ASIO CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-asio-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  asio-check:
+    name: ASIO 컴파일·정책 테스트
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable, 2026-08-05
+        with:
+          toolchain: stable
+          components: clippy,rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-on-failure: true
+
+      - name: Windows 빌드 도구 확인
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $llvmBin = Join-Path $env:ProgramFiles 'LLVM\bin'
+          $libclang = Join-Path $llvmBin 'libclang.dll'
+          if (-not (Test-Path -LiteralPath $libclang -PathType Leaf)) {
+            throw "libclang.dll을 찾을 수 없습니다: $libclang"
+          }
+          "LIBCLANG_PATH=$llvmBin" >> $env:GITHUB_ENV
+          rustc --version
+          cargo --version
+
+      - name: Rust 포맷 검사
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: ASIO feature 컴파일 검사
+        run: cargo check --manifest-path src-tauri/Cargo.toml --features asio-backend
+
+      - name: ASIO feature Clippy 검사
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features asio-backend -- -D warnings
+
+      - name: ASIO 오디오 정책 테스트
+        run: cargo test --manifest-path src-tauri/Cargo.toml --features asio-backend audio::engine --lib
