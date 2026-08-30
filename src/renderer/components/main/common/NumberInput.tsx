@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
-import DigitPopLayer from '@components/main/common/DigitPopLayer';
-import { useDigitPop, type DigitPopState } from '@hooks/ui/useDigitPop';
+import { useDigitPop } from '@hooks/ui/useDigitPop';
 import { useFrameCoalescer } from '@hooks/ui/useFrameCoalescer';
 import { useFieldError } from '@hooks/ui/useFieldError';
 import {
@@ -15,7 +14,15 @@ import {
 } from '@utils/core/arithmeticExpression';
 import { I18nContext } from '@contexts/I18nContextDef';
 import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';
-import { useScrubDrag, type ScrubDragHandlers } from '@hooks/ui/useScrubDrag';
+import { useScrubDrag } from '@hooks/ui/useScrubDrag';
+import { NumberInputField, NumberInputShell } from './NumberInputChrome';
+import {
+  ARITHMETIC_INPUT_PATTERN,
+  canParseNumericInput,
+  isExpressionDraft,
+  isPartialNumericInput,
+  stepDirection,
+} from './numberInputModel';
 
 export interface NumberInputProps {
   value: number | string;
@@ -68,73 +75,6 @@ export interface OptionalNumberInputProps {
   mixedPlaceholder?: string;
 }
 
-// 숫자 입력 셸 - 외형과 타이포는 label 래퍼가 소유, input은 투명 flex 자식.
-// label 위임으로 프리픽스·여백 클릭도 입력 포커스로 이어지고,
-// 긴 값은 input 내부 스크롤로 처리되어 고정폭에서도 잘리지 않음
-// 잘못된 수식은 링과 흔들기로만 알린다. 말풍선까지 띄우면 좁은 패널에서
-// 아래 행을 덮고, 스크롤 뷰포트가 overflow-y auto라 가로로도 잘린다
-const NumberInputShell: React.FC<{
-  prefix?: React.ReactNode;
-  /** 접두를 좌우로 끌어 값을 바꾸는 게스처. 있으면 접두가 드래그 손잡이가 된다 */
-  scrub?: { active: boolean; handlers: ScrubDragHandlers };
-  width: string;
-  focused: boolean;
-  invalid: boolean;
-  shaking: boolean;
-  onAnimationEnd: (event: React.AnimationEvent<HTMLElement>) => void;
-  children: React.ReactNode;
-}> = ({
-  prefix,
-  scrub,
-  width,
-  focused,
-  invalid,
-  shaking,
-  onAnimationEnd,
-  children,
-}) => (
-  <label
-    // 오류 링은 포커스 링을 대체한다. 둘을 겹치면 같은 자리에서 색이 섞여
-    // 무엇이 잘못됐는지 읽히지 않는다. 보더가 아니라 링이라 상자 크기는 그대로다
-    className={`relative flex items-center gap-[4px] h-[23px] px-[6px] bg-inset rounded-md cursor-text ${
-      invalid ? 'shadow-danger-ring' : focused ? 'shadow-focus-ring' : ''
-    } ${shaking ? 'dmn-field-shake' : ''}`}
-    style={{ width }}
-    onAnimationEnd={onAnimationEnd}
-  >
-    {prefix && (
-      <span
-        className={`shrink-0 text-body text-fg-muted ${
-          scrub ? 'cursor-ew-resize select-none' : ''
-        }`}
-        {...scrub?.handlers}
-      >
-        {prefix}
-      </span>
-    )}
-    {children}
-  </label>
-);
-
-// 재생 방향은 실제 값 변화가 정한다. 한 프레임에 위아래가 섞여 들어와도
-// 마지막 키가 아니라 합산 결과를 따라간다
-const stepDirection = (prev: number, next: number): 1 | -1 =>
-  next < prev ? -1 : 1;
-
-// 자릿수 레이어가 input 글자와 같은 자리에 서야 해서 타이포는 둘이 함께 쓴다
-const NUMBER_FIELD_TYPOGRAPHY = 'text-body tabular-nums';
-const NUMBER_FIELD_CLASS = `w-full h-full bg-transparent text-center text-ellipsis ${NUMBER_FIELD_TYPOGRAPHY}`;
-const ARITHMETIC_INPUT_PATTERN = /^[0-9+\-*/().\s]*$/;
-
-const isPartialNumericInput = (input: string): boolean =>
-  input === '' || input === '-' || input === '.' || input === '-.';
-
-const canParseNumericInput = (input: string): boolean =>
-  input.trim() !== '' && Number.isFinite(Number(input));
-
-const isExpressionDraft = (input: string): boolean =>
-  !isPartialNumericInput(input) && !canParseNumericInput(input);
-
 const useNumberInputMessages = () => {
   const i18n = React.useContext(I18nContext);
   return {
@@ -142,100 +82,6 @@ const useNumberInputMessages = () => {
       i18n?.t('numberInput.expressionHint') ??
       'Expressions supported: + - * / ( )',
   };
-};
-
-interface NumberFieldProps {
-  value: string;
-  inputMode: 'numeric' | 'decimal';
-  placeholder?: string;
-  /** input과 자릿수 레이어가 함께 쓰는 색·기울임 */
-  textClass: string;
-  /** placeholder 전용 표현 - 레이어에는 해당 없음 */
-  placeholderClass?: string;
-  ariaLabel?: string;
-  disabled?: boolean;
-  pop: DigitPopState | null;
-  invalid: boolean;
-  tooltip: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-  onKeyUp: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-  onFocus: () => void;
-  onBlur: () => void;
-}
-
-// input 위에 자릿수 레이어를 겹치는 배치 래퍼.
-// 레이어는 재생 대상 문자열이 현재 표시값과 같을 때만 살아 있다 - 타이핑, blur 단위 부착,
-// 외부 값 변경으로 표시값이 달라지면 별도 정리 경로 없이 스스로 접힌다.
-// 덕분에 재생 상태가 남아 input 글자가 투명한 채로 굳는 경우가 생기지 않는다
-const NumberInputField: React.FC<NumberFieldProps> = ({
-  value,
-  inputMode,
-  placeholder,
-  textClass,
-  placeholderClass = '',
-  ariaLabel,
-  disabled,
-  pop,
-  invalid,
-  tooltip,
-  onChange,
-  onKeyDown,
-  onKeyUp,
-  onFocus,
-  onBlur,
-}) => {
-  const inputRef = useRef<HTMLInputElement>(null);
-  // 값이 칸보다 길면 input은 넘친 쪽을 잘라 보여주고 레이어는 전체를 그린다.
-  // 두 글자 배치가 어긋나므로 그 구간은 재생하지 않는다.
-  //
-  // 재생이 걸릴 때만 잰다. 값이 바뀔 때마다 재면 강제 동기 레이아웃이 스텝마다 붙는데,
-  // 꾹 누르는 구간은 재생이 없으므로 전부 헛일이다 (실측 0.3ms/회, 2초 홀드에 38ms)
-  const [overflowing, setOverflowing] = useState(false);
-
-  useLayoutEffect(() => {
-    if (!pop) return;
-    const input = inputRef.current;
-    if (!input) return;
-    setOverflowing(input.scrollWidth > input.clientWidth);
-  }, [pop]);
-
-  // 낙관적으로 켜고 레이아웃 이펙트가 아니라고 하면 같은 프레임에 접는다.
-  // 이펙트는 paint 전에 끝나므로 어긋난 레이어가 화면에 나가지 않는다
-  const popping = pop !== null && pop.text === value && !overflowing;
-
-  // 래퍼는 배치만 담당한다. input이 갖고 있던 flex 사이징을 그대로 물려받고
-  // input은 그 안을 꽉 채워서, 레이어가 없을 때의 레이아웃은 이전과 동일하다
-  return (
-    <span className="relative flex flex-1 min-w-0 h-full">
-      <input
-        ref={inputRef}
-        type="text"
-        disabled={disabled}
-        inputMode={inputMode}
-        value={value}
-        onChange={onChange}
-        onKeyDown={onKeyDown}
-        onKeyUp={onKeyUp}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        title={tooltip}
-        aria-label={ariaLabel}
-        aria-invalid={invalid || undefined}
-        className={`${NUMBER_FIELD_CLASS} ${textClass} ${placeholderClass} ${
-          popping ? 'dmn-digit-pop-host' : ''
-        }`}
-      />
-      {popping && (
-        <DigitPopLayer
-          key={pop.cycle}
-          pop={pop}
-          className={`${NUMBER_FIELD_TYPOGRAPHY} ${textClass}`}
-        />
-      )}
-    </span>
-  );
 };
 
 export const NumberInput: React.FC<NumberInputProps> = ({
