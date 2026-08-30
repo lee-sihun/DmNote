@@ -27,7 +27,14 @@ const hasChanged = (current: unknown, next: unknown) =>
 let previewSubscribed = false;
 let previewSubscriptionInFlight: Promise<void> | null = null;
 
+// 프리뷰 봉투는 편집 UI가 있는 창(main·panel)끼리의 실시간 피드백 전용.
+// 오버레이·OBS는 방송 화면이라 스크럽 중 덜덜거림 없이 커밋 시점만 반영한다
+const PREVIEW_WINDOW_TYPES = new Set(['main', 'panel']);
+
 const ensurePreviewSubscription = (): Promise<void> => {
+  if (!PREVIEW_WINDOW_TYPES.has(window.__dmn_window_type ?? '')) {
+    return Promise.resolve();
+  }
   if (previewSubscribed) return Promise.resolve();
   if (previewSubscriptionInFlight) return previewSubscriptionInFlight;
 

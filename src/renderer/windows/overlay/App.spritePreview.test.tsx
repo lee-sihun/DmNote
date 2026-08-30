@@ -1,6 +1,6 @@
-// 오버레이 창의 스프라이트 프리뷰 합성 계약
-// 메인 캔버스 드래그·스크럽의 원격 patch가 커밋 전에도 레이아웃 입력에
-// 반영되고, cancel·커밋 정산 후에는 canonical 참조가 그대로 돌아와야 한다
+// 오버레이 창의 스프라이트 반영 계약
+// 오버레이는 방송 화면이라 스크럽 프리뷰 봉투를 반영하지 않고
+// 커밋 정산된 canonical만 레이아웃·씬 입력으로 쓴다
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -228,33 +228,16 @@ describe('overlay sprite preview composition', () => {
     vi.restoreAllMocks();
   });
 
-  it('원격 patch는 canonical을 건드리지 않고 레이아웃·씬 입력에만 합성된다', () => {
+  it('원격 프리뷰 patch는 오버레이 레이아웃·씬 입력에 반영되지 않는다', () => {
     expect(lastLayoutSprites()[0].dx).toBe(15);
 
     act(() => {
       previewOverlay.applyRemoteEnvelope(remoteEnvelope());
     });
 
-    expect(lastLayoutSprites()[0].dx).toBe(99);
-    expect(lastSceneSprites()[0].dx).toBe(99);
-    // canonical 불가침
-    expect(useSpriteStore.getState().positions['4key'][0].dx).toBe(15);
-  });
-
-  it('cancel은 합성을 걷어내고 canonical 참조를 그대로 돌려준다', () => {
-    act(() => {
-      previewOverlay.applyRemoteEnvelope(remoteEnvelope());
-    });
-    expect(lastLayoutSprites()[0].dx).toBe(99);
-
-    act(() => {
-      previewOverlay.applyRemoteEnvelope(
-        remoteEnvelope({ kind: 'cancel', seq: 2 }),
-      );
-    });
-
     expect(lastLayoutSprites()[0].dx).toBe(15);
-    // 프리뷰가 없으면 identity 보존 - layout memo 재계산 없음
+    expect(lastSceneSprites()[0].dx).toBe(15);
+    // canonical 참조가 그대로 유지되어 layout memo 재계산도 없다
     expect(lastLayoutSprites()).toBe(
       useSpriteStore.getState().positions['4key'],
     );

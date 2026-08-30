@@ -7,6 +7,7 @@ import type {
 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import { normalizePluginInstanceTabId } from '@plugins/runtime/displayElement/instanceLifecycle';
+import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 
 export const isPluginVisibleInMode = (
   element: Pick<PluginDisplayElementInternal, 'tabId'>,
@@ -249,9 +250,13 @@ export function applyGroupIdToSelectedElements(params: {
 
     const index = nextSpriteMode.findIndex(({ id }) => id === element.id);
     const current = nextSpriteMode[index];
-    // 스프라이트 groupId는 null 저장이라 undefined 목표와 동치 비교
+    // 명시 null 이력까지 undefined로 접어 동치 비교
     if (!current || (current.groupId ?? undefined) === targetGroupId) return;
-    nextSpriteMode[index] = { ...current, groupId: targetGroupId ?? null };
+    // wire 정규화: 해제(undefined)는 groupId 키 부재로 맞춰 ack와 일치
+    nextSpriteMode[index] = toSpriteWireShape({
+      ...current,
+      groupId: targetGroupId,
+    });
     spriteChanged = true;
     changed = true;
   });
@@ -502,7 +507,8 @@ export function normalizeLayerGroupsForMode(params: {
     });
     nextSpriteMode.forEach((pos, index) => {
       if (!shouldClear(pos?.groupId)) return;
-      nextSpriteMode[index] = { ...pos, groupId: null };
+      // wire 정규화: 해제는 groupId 키 부재로 맞춰 ack와 일치
+      nextSpriteMode[index] = toSpriteWireShape({ ...pos, groupId: undefined });
       positionsChanged = true;
     });
   }

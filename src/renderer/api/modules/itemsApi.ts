@@ -6,8 +6,15 @@ import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoord
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
-import type { SpritePositions } from '@src/types/key/sprites';
+import type {
+  ReactiveSpritePosition,
+  SpritePositions,
+} from '@src/types/key/sprites';
+import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import type { LayerGroups } from '@src/types/layerGroups';
+
+// 커밋 성사 여부를 호출자가 판별하는 typed 결과. targetMissing은 무커밋
+export type SpritePatchCommitResult = 'committed' | 'targetMissing';
 
 export const statItemsApi = {
   getPositions: () => invoke<StatItemPositions>('stat_positions_get'),
@@ -57,19 +64,41 @@ export const knobItemsApi = {
 export const spriteItemsApi = {
   getPositions: () => invoke<SpritePositions>('sprite_positions_get'),
   // 스프라이트 전용 필드는 ops patchElement가 거부하므로 전체 필드 패치로 커밋.
-  // gestureId는 숫자 스크럽 preview 게스처 정산용
-  updatePositions: (positions: SpritePositions, gestureId?: string) =>
-    enqueueEditorCompatibilityWrite(
+  // 호출 시점 캡처 전체 레코드는 동결 소유권 검사에 걸려 낙관 적용이 빠지므로
+  // 직렬 슬롯 안 최신 base에서 대상 스프라이트만 패치해 생성한다. 대상 소실이면
+  // 무커밋 targetMissing. gestureId는 숫자 스크럽 preview 게스처 정산용
+  patchPosition: (
+    mode: string,
+    id: string,
+    patch: Partial<ReactiveSpritePosition>,
+    gestureId?: string,
+  ): Promise<SpritePatchCommitResult> => {
+    let outcome: SpritePatchCommitResult = 'targetMissing';
+    return enqueueEditorCompatibilityWrite(
       () =>
-        editorCoordinator.commitPatch(
-          {
-            schemaVersion: 1,
-            spritePositions: positions,
+        editorCoordinator.commitGeneratedPatch(
+          (base) => {
+            const modePositions = base.spritePositions[mode] ?? [];
+            const index = modePositions.findIndex((sprite) => sprite.id === id);
+            if (index < 0) return null;
+            outcome = 'committed';
+            const nextMode = [...modePositions];
+            // patch가 명시 null layerName·groupId를 실어 와도 wire 형태 유지
+            nextMode[index] = toSpriteWireShape({
+              ...nextMode[index],
+              ...patch,
+              id,
+            });
+            return {
+              schemaVersion: 1,
+              spritePositions: { ...base.spritePositions, [mode]: nextMode },
+            };
           },
           gestureId ? { gestureId } : undefined,
         ),
-      () => structuredClone(positions),
-    ),
+      () => outcome,
+    );
+  },
   onPositionsChanged: (listener: (positions: SpritePositions) => void) =>
     subscribe<SpritePositions>('spritePositions:changed', listener),
 };

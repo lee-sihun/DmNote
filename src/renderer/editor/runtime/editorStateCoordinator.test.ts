@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EditorCommittedV1, EditorDocumentV1 } from '@src/types/editor';
 
@@ -81,8 +81,14 @@ const committedEvent = (
 });
 
 describe('editor state coordinator committed preview cleanup', () => {
+  beforeEach(() => {
+    // 프리뷰 구독은 편집 UI 창(main·panel)에서만 열린다
+    window.__dmn_window_type = 'main';
+  });
+
   afterEach(() => {
     editorCoordinator.stop();
+    delete window.__dmn_window_type;
   });
 
   it('recovers lazy subscription and maps committed gesture cleanup', async () => {

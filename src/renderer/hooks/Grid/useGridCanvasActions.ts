@@ -46,6 +46,7 @@ import {
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_RADIUS,
 } from '@utils/core/elementDefaults';
+import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 
 // 공통: zIndex 목록 수집 - 결과가 persist되는 z 계산에 쓰이므로 canonical 기준
 function collectAllZIndexes(mode: string) {
@@ -492,28 +493,31 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
   };
 
   const addSpriteAtPosition = (dx: number, dy: number) => {
-    const position: ReactiveSpritePosition & { id: string } = {
-      id: newElementId(),
-      dx,
-      dy,
-      width: 200,
-      height: 200,
-      hidden: false,
-      zIndex: null,
-      layerName: null,
-      groupId: null,
-      className: null,
-      useInlineStyles: null,
-      baseImage: null,
-      imageFit: 'contain',
-      imageRect: { x: 0, y: 0, width: 200, height: 200 },
-      pivot: { ...CENTER_SPRITE_ANCHOR },
-      idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },
-      poses: [],
-      activation: 'whileHeld',
-      transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
-      transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
-    };
+    // wire 정규화: nullish layerName·groupId는 키 부재로 맞춰 ack와 일치
+    const position: ReactiveSpritePosition & { id: string } = toSpriteWireShape(
+      {
+        id: newElementId(),
+        dx,
+        dy,
+        width: 200,
+        height: 200,
+        hidden: false,
+        zIndex: null,
+        layerName: null,
+        groupId: null,
+        className: null,
+        useInlineStyles: null,
+        baseImage: null,
+        imageFit: 'contain',
+        imageRect: { x: 0, y: 0, width: 200, height: 200 },
+        pivot: { ...CENTER_SPRITE_ANCHOR },
+        idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },
+        poses: [],
+        activation: 'whileHeld',
+        transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
+        transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
+      },
+    );
     void addSpriteAt(selectedKeyType, position).catch(reportElementOpError);
   };
 

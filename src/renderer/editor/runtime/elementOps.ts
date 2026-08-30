@@ -16,6 +16,7 @@ import {
 import { newElementId } from '../model/elementId';
 import { cloneSlot } from '@utils/keySlot';
 import { reissueSpritePoseIds } from '@utils/sprite/poseIdentity';
+import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import { stableStringify } from '@utils/core/stableStringify';
 import {
   normalizeLayerGroupsForMode,
@@ -626,16 +627,17 @@ export const placeDuplicatedSprite = (
   const cloned = structuredClone(source);
   return insertFrozenElement(mode, {
     elementType: 'sprite',
-    position: {
+    // wire 정규화: 원본의 명시 null layerName·groupId도 키 부재로 맞춘다
+    position: toSpriteWireShape({
       ...cloned,
       id: newElementId(),
       // 사본 poseId 재발급 - 원본과 공유하면 백엔드가 중복으로 거부
       poses: reissueSpritePoseIds(cloned.poses),
-      groupId: groupForMode(mode, source.groupId ?? undefined) ?? null,
+      groupId: groupForMode(mode, source.groupId ?? undefined),
       dx,
       dy,
       zIndex,
-    },
+    }),
   });
 };
 

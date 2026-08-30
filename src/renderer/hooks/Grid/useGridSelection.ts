@@ -22,7 +22,11 @@ import {
 import { PASTE_OFFSET } from './constants';
 import type { KeyMappings, KeySlot } from '@src/types/key/keys';
 import { cloneSlot } from '@utils/keySlot';
-import { reissueSpritePoseIds } from '@utils/sprite/poseIdentity';
+import {
+  reissueSpritePoseIds,
+  remapSpritePoseTriggers,
+} from '@utils/sprite/poseIdentity';
+import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   buildNextLayerGroupName,
@@ -733,6 +737,10 @@ export function useGridSelection({
         : undefined;
     };
 
+    // 배치 내 키 구id -> 신id 수집 - 함께 붙여넣는 스프라이트 트리거가
+    // 원본 키 대신 사본 키를 가리키게 한다 (groupIdMap과 같은 패턴)
+    const keyIdMap = new Map<string, string>();
+
     // 신규 native payload 동결
     const keysToAdd: {
       keyCode: KeySlot;
@@ -745,11 +753,13 @@ export function useGridSelection({
     const pluginPayloads: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
     for (const item of currentClipboard) {
       if (item.type === 'key') {
+        const newKeyId = newElementId();
+        if (item.position.id) keyIdMap.set(item.position.id, newKeyId);
         keysToAdd.push({
           keyCode: cloneSlot(item.keyCode),
           position: {
             ...item.position,
-            id: newElementId(),
+            id: newKeyId,
             groupId: remapGroupId(item.position.groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
@@ -787,15 +797,16 @@ export function useGridSelection({
         });
       } else if (item.type === 'sprite') {
         spritesToAdd.push({
-          position: {
+          // wire 정규화: nullish layerName·groupId는 키 부재로 맞춰 ack와 일치
+          position: toSpriteWireShape({
             ...item.position,
             id: newElementId(),
             // 사본 poseId 재발급 - 원본과 공유하면 백엔드가 중복으로 거부
             poses: reissueSpritePoseIds(item.position.poses),
-            groupId: remapGroupId(item.position.groupId ?? undefined) ?? null,
+            groupId: remapGroupId(item.position.groupId ?? undefined),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
-          },
+          }),
         });
       } else if (item.type === 'plugin') {
         pluginPayloads.push({
@@ -807,6 +818,17 @@ export function useGridSelection({
           },
           tabId: selectedKeyType,
         });
+      }
+    }
+
+    // 스프라이트 트리거를 같은 배치 키의 신 id로 재결합, 배치 밖 키 참조는
+    // 유지. 키가 스프라이트 뒤에 올 수 있어 payload 동결 후 일괄 치환한다
+    if (keyIdMap.size > 0) {
+      for (const sprite of spritesToAdd) {
+        sprite.position.poses = remapSpritePoseTriggers(
+          sprite.position.poses,
+          keyIdMap,
+        );
       }
     }
 

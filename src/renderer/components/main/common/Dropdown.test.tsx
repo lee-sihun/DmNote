@@ -334,6 +334,67 @@ describe('Dropdown keyboard contract', () => {
     expect(trigger?.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('다중 모드는 항목 클릭에도 닫히지 않고 체크 상태를 토글로 보여준다', async () => {
+    const onChange = vi.fn();
+    const renderMulti = async (values: string[]) => {
+      await act(async () => {
+        root.render(
+          <Dropdown
+            options={[
+              { label: 'One', value: 'one' },
+              { label: 'Two', value: 'two' },
+            ]}
+            multiple
+            values={values}
+            onChange={onChange}
+            placeholder="키 선택"
+          />,
+        );
+      });
+    };
+    const optionByText = (text: string) =>
+      [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
+        (option) => option.textContent === text,
+      )!;
+
+    // 빈 선택은 자리표시 문구
+    await renderMulti([]);
+    const trigger = host.querySelector<HTMLButtonElement>(
+      '[aria-haspopup="listbox"]',
+    );
+    expect(trigger?.textContent).toContain('키 선택');
+
+    await renderMulti(['one']);
+    expect(trigger?.textContent).toContain('One');
+    await act(async () => trigger?.click());
+
+    expect(openListbox()?.getAttribute('aria-multiselectable')).toBe('true');
+    expect(optionByText('One').getAttribute('aria-selected')).toBe('true');
+    expect(optionByText('Two').getAttribute('aria-selected')).toBe('false');
+
+    await act(async () => optionByText('Two').click());
+    expect(onChange).toHaveBeenCalledWith('two');
+    expect(openListbox()).not.toBeNull();
+
+    // 컨트롤드 갱신 후 체크와 트리거 요약 반영
+    await renderMulti(['one', 'two']);
+    expect(optionByText('Two').getAttribute('aria-selected')).toBe('true');
+    expect(trigger?.textContent).toContain('One, Two');
+
+    // 키보드 선택도 메뉴를 유지한다
+    await act(async () => {
+      optionByText('One').dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    expect(onChange).toHaveBeenCalledWith('one');
+    expect(openListbox()).not.toBeNull();
+  });
+
   it('closes itself before its parent modal on Escape', async () => {
     const closeModal = vi.fn();
     await act(async () => {

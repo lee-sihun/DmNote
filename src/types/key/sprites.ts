@@ -90,6 +90,8 @@ export type SpriteActivation = z.infer<typeof spriteActivationSchema>;
 
 export const spritePoseSchema = z.object({
   poseId: z.string().min(1),
+  // 사용자 지정 이름. 없으면 UI가 '상태 N'으로 표시하고, 백엔드는 None이면 키를 생략한다
+  name: z.string().nullish(),
   // 키 요소 id 목록. 물리 키가 아니라 레인에 결합해서 키 매핑을 바꿔도 자리를 유지한다
   triggers: z.array(z.string().min(1)).min(1),
   matchMode: spriteMatchModeSchema,
@@ -108,8 +110,9 @@ export const reactiveSpritePositionSchema = z.object({
   height: z.number().finite().positive(),
   hidden: z.boolean(),
   zIndex: z.number().finite().nullable(),
-  layerName: z.string().nullable(),
-  groupId: z.string().nullable(),
+  // 백엔드는 다른 요소 위치와 같이 None이면 두 필드를 직렬화에서 생략한다
+  layerName: z.string().nullish(),
+  groupId: z.string().nullish(),
   className: z.string().nullable(),
   useInlineStyles: z.boolean().nullable(),
 
@@ -138,12 +141,14 @@ export type SpritePositions = Record<string, ReactiveSpritePosition[]>;
 export const DEFAULT_SPRITE_TRANSITION_MS = 90;
 export const DEFAULT_SPRITE_TRANSITION_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
-// 같은 담당 키 집합을 가진 자세가 둘이면 해석이 모호해진다. 저장 전에 걸러낸다
+// 같은 담당 키 집합을 가진 자세가 둘이면 해석이 모호해진다. 저장 전에 걸러낸다.
+// 빈 트리거는 중복이 아니라 미완성 draft다 - 백엔드 검증(EMPTY vs DUPLICATE)과 같은 구분
 export const findDuplicateTriggerPose = (
   poses: readonly SpritePose[],
 ): SpritePose | null => {
   const seen = new Set<string>();
   for (const pose of poses) {
+    if (pose.triggers.length === 0) continue;
     // 집합 비교라 pose 안의 중복 트리거도 무시한다
     const key = [...new Set(pose.triggers)].sort().join(' ');
     if (seen.has(key)) return pose;

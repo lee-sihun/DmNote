@@ -37,9 +37,11 @@ const PopupExit = ({ open, children }: PopupExitProps) => {
 
   if (!mounted || !retained) return null;
 
+  // 호출부가 child에 key를 주면 열린 채 대상이 바뀔 때도 세션이 끊긴다
+  // (상태 행 전환처럼 닫힘 없이 편집 대상을 교체하는 경우)
   return React.cloneElement(retained as React.ReactElement<{ open: boolean }>, {
     open,
-    key: session,
+    key: `${session}:${retained.key ?? ''}`,
   });
 };
 

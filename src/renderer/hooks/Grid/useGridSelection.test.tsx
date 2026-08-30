@@ -499,6 +499,76 @@ describe('useGridSelection compound history gesture', () => {
     expect(spriteElement.position.poses).toEqual(pasted.poses);
   });
 
+  it('키와 함께 붙여넣은 sprite 트리거는 사본 키의 새 id로 재결합된다', async () => {
+    let serial = 0;
+    randomUUID.mockImplementation(
+      () => `80000000-0000-4000-8000-${String(++serial).padStart(12, '0')}`,
+    );
+    const externalKeyId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    const original: CanonicalReactiveSpritePosition = {
+      ...spriteAt(STABLE_SPRITE_ID),
+      poses: [
+        {
+          poseId: 'pose-1',
+          // 배치 안 키와 배치 밖 키 참조 혼합
+          triggers: [STABLE_KEY_ID, externalKeyId],
+          matchMode: 'exact',
+          transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+          imageOverride: null,
+        },
+      ],
+    };
+    act(() => {
+      useSpriteStore.setState({ positions: { '4key': [original] } });
+      useGridSelectionStore.getState().setSelectedElements([
+        { type: 'key', id: STABLE_KEY_ID, index: 0 },
+        { type: 'sprite', id: STABLE_SPRITE_ID, index: 0 },
+      ]);
+    });
+
+    act(() => api.copySelectedElements());
+    await act(async () => api.pasteElements());
+
+    const pastedKey = useKeyStore
+      .getState()
+      .canonicalPositions['4key'].find(
+        (position) => position.id !== STABLE_KEY_ID,
+      )!;
+    const pastedSprite = useSpriteStore
+      .getState()
+      .positions['4key'].find((position) => position.id !== STABLE_SPRITE_ID)!;
+    // 같은 배치의 키는 사본 id로 재결합, 배치 밖 키 참조는 보존
+    expect(pastedSprite.poses[0].triggers).toEqual([
+      pastedKey.id,
+      externalKeyId,
+    ]);
+    // 원본 sprite의 트리거는 그대로
+    expect(
+      useSpriteStore.getState().positions['4key'][0].poses[0].triggers,
+    ).toEqual([STABLE_KEY_ID, externalKeyId]);
+  });
+
+  it('sprite 단독 붙여넣기는 배치 밖 키를 가리키는 트리거를 유지한다', async () => {
+    const original = spriteAt(STABLE_SPRITE_ID);
+    act(() => {
+      useSpriteStore.setState({ positions: { '4key': [original] } });
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([
+          { type: 'sprite', id: STABLE_SPRITE_ID, index: 0 },
+        ]);
+    });
+
+    act(() => api.copySelectedElements());
+    await act(async () => api.pasteElements());
+
+    const pastedSprite = useSpriteStore
+      .getState()
+      .positions['4key'].find((position) => position.id !== STABLE_SPRITE_ID)!;
+    // 담당 키가 배치에 없으므로 원본 키 참조 유지
+    expect(pastedSprite.poses[0].triggers).toEqual([STABLE_KEY_ID]);
+  });
+
   it('혼합 붙여넣기는 editor와 plugin에 같은 gestureId를 전달한다', async () => {
     act(() => {
       useGridSelectionStore.getState().setClipboard([

@@ -24,11 +24,14 @@ import { CANVAS_POPUP_CHROME_CLASS } from '../Modal/popupChrome';
 interface DropdownOption {
   label: string;
   value: string;
+  /** danger 톤 텍스트 표시 (삭제된 참조 등) */
+  danger?: boolean;
 }
 
 interface DropdownProps {
   options: DropdownOption[];
-  value: string;
+  /** 단일 모드 선택 값 (다중 모드에서는 미사용) */
+  value?: string;
   onChange: (value: string) => void;
   commitStrategy?: CommitStrategy;
   placeholder?: string;
@@ -43,8 +46,18 @@ interface DropdownProps {
   widthClass?: string;
   /** 아이콘 트리거의 접근 가능한 이름 - 아이콘만 있는 버튼은 용도·현재 값이 안 읽힌다 */
   ariaLabel?: string;
-  /** 트리거 크기 — sm: 24px 크롬(기본), lg: 30px 크롬(패널 페이지) */
+  /** 트리거 크기 — sm: 23px 크롬(기본), lg: 30px 크롬(패널 페이지) */
   size?: 'sm' | 'lg';
+  /** 다중 선택 모드: 항목 클릭이 메뉴를 닫지 않는 토글이 되고 onChange가 토글된 값을 받음 */
+  multiple?: boolean;
+  /** 다중 모드의 선택 값 목록, 체크 표시와 트리거 요약의 기준 */
+  values?: string[];
+  /** 현재 값이 충돌 상태 - 트리거 요약을 danger 톤으로 표시 */
+  danger?: boolean;
+  /** danger 상태에서 요약 대신 표시할 짧은 라벨 (긴 요약·번역 잘림 방지) */
+  dangerLabel?: string;
+  /** 트리거 툴팁 (충돌 사유 등) */
+  title?: string;
 }
 
 // 확정 픽셀 좌표 — 전부 레이아웃 속성이라 transform 합성 지연과 무관.
@@ -60,7 +73,7 @@ interface MenuPosition {
 
 const Dropdown: React.FC<DropdownProps> = ({
   options,
-  value,
+  value = '',
   onChange,
   commitStrategy = 'sync',
   placeholder = '선택',
@@ -71,6 +84,11 @@ const Dropdown: React.FC<DropdownProps> = ({
   widthClass = '',
   size = 'sm',
   ariaLabel,
+  multiple = false,
+  values,
+  danger = false,
+  dangerLabel,
+  title,
 }) => {
   // 분리 패널 창 안에서는 그 창 기준으로 배치·포털·바깥 클릭 처리
   const { window: ownerWindow, document: ownerDocument } = usePanelHost();
@@ -99,9 +117,10 @@ const Dropdown: React.FC<DropdownProps> = ({
     motionRef: menuRef,
   });
 
-  const selectedIndex = options.findIndex(
-    (option) => option.value === visualValue,
-  );
+  const selectedValues = values ?? [];
+  const selectedIndex = multiple
+    ? options.findIndex((option) => selectedValues.includes(option.value))
+    : options.findIndex((option) => option.value === visualValue);
 
   const openMenu = useCallback(
     (preferredIndex?: number) => {
@@ -143,6 +162,11 @@ const Dropdown: React.FC<DropdownProps> = ({
     (index: number) => {
       const option = options[index];
       if (!option) return;
+      // 다중 모드는 토글이라 메뉴를 닫지 않는다
+      if (multiple) {
+        onChange(option.value);
+        return;
+      }
       if (commitStrategy === 'sync') {
         commitSelection(option.value);
         closeAndFocusTrigger();
@@ -151,7 +175,14 @@ const Dropdown: React.FC<DropdownProps> = ({
       closeAndFocusTrigger();
       commitSelection(option.value);
     },
-    [closeAndFocusTrigger, commitSelection, commitStrategy, options],
+    [
+      closeAndFocusTrigger,
+      commitSelection,
+      commitStrategy,
+      multiple,
+      onChange,
+      options,
+    ],
   );
 
   const moveActiveOption = useCallback(
@@ -419,6 +450,19 @@ const Dropdown: React.FC<DropdownProps> = ({
   }, [open, ownerDocument, ownerWindow]);
 
   const selected = options.find((opt) => opt.value === visualValue);
+  // 다중 모드 트리거 요약: 선택 라벨 나열, 없으면 placeholder
+  const selectedLabels = multiple
+    ? options
+        .filter((opt) => selectedValues.includes(opt.value))
+        .map((opt) => opt.label)
+    : null;
+  const triggerText = selectedLabels
+    ? selectedLabels.length > 0
+      ? selectedLabels.join(', ')
+      : null
+    : selected
+    ? selected.label
+    : null;
 
   const menu =
     mounted && anchor
@@ -432,6 +476,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             // 닫히는 중엔 시각 잔상만 남으므로 포커스·스크린리더 대상에서 뺀다
             inert={motionState === 'closing'}
             role="listbox"
+            aria-multiselectable={multiple || undefined}
             id={menuId}
             className={`dmn-motion fixed flex flex-col p-[5px] gap-[4px] ${CANVAS_POPUP_CHROME_CLASS} rounded-surface z-[var(--z-chrome-submenu)] overflow-x-hidden overflow-y-auto max-h-[200px] ${widthClass}`}
             style={{
@@ -451,28 +496,60 @@ const Dropdown: React.FC<DropdownProps> = ({
                 옵션 없음
               </div>
             ) : (
-              options.map((opt, index) => (
-                <button
-                  key={opt.value}
-                  ref={(element) => {
-                    optionRefs.current[index] = element;
-                  }}
-                  type="button"
-                  role="option"
-                  aria-selected={visualValue === opt.value}
-                  tabIndex={-1}
-                  className={`text-left w-full h-[23px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
-                    visualValue === opt.value
-                      ? 'bg-fill-hover text-fg pointer-events-none'
-                      : 'text-fg-muted hover:bg-fill hover:text-fg'
-                  }`}
-                  onFocus={() => setActiveIndex(index)}
-                  onKeyDown={(event) => handleOptionKeyDown(event, index)}
-                  onClick={() => selectOption(index)}
-                >
-                  <span className="truncate">{opt.label}</span>
-                </button>
-              ))
+              options.map((opt, index) => {
+                const isSelected = multiple
+                  ? selectedValues.includes(opt.value)
+                  : visualValue === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    ref={(element) => {
+                      optionRefs.current[index] = element;
+                    }}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    tabIndex={-1}
+                    className={`text-left w-full h-[23px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
+                      multiple ? 'gap-[5px]' : ''
+                    } ${
+                      !multiple && isSelected
+                        ? 'bg-fill-hover text-fg pointer-events-none'
+                        : opt.danger
+                        ? 'text-danger-fg hover:bg-fill'
+                        : multiple && isSelected
+                        ? 'text-fg hover:bg-fill'
+                        : 'text-fg-muted hover:bg-fill hover:text-fg'
+                    }`}
+                    onFocus={() => setActiveIndex(index)}
+                    onKeyDown={(event) => handleOptionKeyDown(event, index)}
+                    onClick={() => selectOption(index)}
+                  >
+                    <span className="truncate">{opt.label}</span>
+                    {multiple ? (
+                      // 체크 표시, 미선택은 자리만 유지
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 14 14"
+                        fill="none"
+                        aria-hidden="true"
+                        className={`ml-auto shrink-0 ${
+                          isSelected ? '' : 'invisible'
+                        }`}
+                      >
+                        <path
+                          d="M2.5 7.5L5.5 10.5L11.5 3.5"
+                          stroke="currentColor"
+                          strokeWidth="2.1"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : null}
+                  </button>
+                );
+              })
             )}
           </div>,
           ownerDocument.body,
@@ -508,6 +585,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
+          title={title}
           className={`flex box-border items-center justify-between ${
             size === 'lg'
               ? 'h-[30px] px-[10px] rounded-surface'
@@ -519,8 +597,12 @@ const Dropdown: React.FC<DropdownProps> = ({
           onKeyDown={handleTriggerKeyDown}
           disabled={disabled}
         >
-          <span className={`truncate ${!selected ? 'text-fg-muted' : ''}`}>
-            {selected ? selected.label : placeholder}
+          <span
+            className={`truncate ${
+              triggerText === null ? 'text-fg-muted' : ''
+            } ${danger ? 'text-danger-fg' : ''}`}
+          >
+            {danger && dangerLabel ? dangerLabel : triggerText ?? placeholder}
           </span>
           {/* viewBox 14를 8px로 렌더 - 스트로크 2.1이 화면상 1.2 */}
           <svg

@@ -23,9 +23,9 @@ Saves the current configuration to a preset file. Opens a file save dialog.
 ```javascript
 const result = await dmn.presets.save();
 if (result.success) {
-  console.log("Preset saved");
+  console.log('Preset saved');
 } else {
-  console.error("Save failed:", result.error);
+  console.error('Save failed:', result.error);
 }
 ```
 
@@ -37,9 +37,9 @@ picker dialog.
 ```javascript
 const result = await dmn.presets.load();
 if (result.success) {
-  console.log("Preset loaded");
+  console.log('Preset loaded');
 } else {
-  console.error("Load failed:", result.error);
+  console.error('Load failed:', result.error);
 }
 ```
 
@@ -79,54 +79,56 @@ interface PresetSnapshot {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
+  spritePositions: SpritePositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
   tabNoteOverrides: TabNoteOverrides;
 }
 
 const unsub = dmn.presets.onSnapshot((snapshot) => {
-  console.log("Preset loaded:", snapshot.selectedKeyType);
-  console.log("Key mappings:", snapshot.keys);
+  console.log('Preset loaded:', snapshot.selectedKeyType);
+  console.log('Key mappings:', snapshot.keys);
 });
 ```
 
 <Callout type="info">
-  Individual change events (`onChanged`, `onPositionsChanged`, etc.) are not emitted during preset load.
-  Use `onSnapshot` to detect preset loads.
+  Individual change events (`onChanged`, `onPositionsChanged`, etc.) are not
+  emitted during preset load. Use `onSnapshot` to detect preset loads.
 </Callout>
 
 ---
+
 ## Example Usage
 
 ```javascript
 // @id preset-manager
 
-if (dmn.window.type !== "main") return;
+if (dmn.window.type !== 'main') return;
 
 // Save preset menu item
 dmn.ui.contextMenu.addGridMenuItem({
-  id: "save-preset",
-  label: "Save Preset",
+  id: 'save-preset',
+  label: 'Save Preset',
   onClick: async () => {
     const result = await dmn.presets.save();
     if (result.success) {
-      await dmn.ui.dialog.alert("Preset saved!");
+      await dmn.ui.dialog.alert('Preset saved!');
     }
   },
 });
 
 // Load preset menu item
 dmn.ui.contextMenu.addGridMenuItem({
-  id: "load-preset",
-  label: "Load Preset",
+  id: 'load-preset',
+  label: 'Load Preset',
   onClick: async () => {
     const confirmed = await dmn.ui.dialog.confirm(
-      "This will overwrite the current configuration. Continue?"
+      'This will overwrite the current configuration. Continue?',
     );
     if (confirmed) {
       const result = await dmn.presets.load();
       if (result.success) {
-        await dmn.ui.dialog.alert("Preset loaded!");
+        await dmn.ui.dialog.alert('Preset loaded!');
       }
     }
   },

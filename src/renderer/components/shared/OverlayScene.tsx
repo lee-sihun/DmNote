@@ -105,9 +105,10 @@ interface OverlaySceneProps {
   keyCounterEnabled: boolean;
 
   // 선택적
-  // 배경 박스 크기 - 미지정 시 뷰포트 전체
-  // 데스크톱 창은 콘텐츠 박스와 크기가 같아 동일하고, OBS 소스에서는 남는 영역이 투명으로 남는다
-  contentSize?: { width: number; height: number };
+  // 배경 박스 - 미지정 시 뷰포트 전체.
+  // x·y는 스프라이트 이미지 도달 여유로 창 원점이 밀린 만큼의 배경 위치 보정이고,
+  // 배경 밖 여유 영역과 OBS 소스의 남는 영역은 투명으로 남는다
+  contentSize?: { x?: number; y?: number; width: number; height: number };
   // 전환 중 콘텐츠 페이드 - 네이티브 창 알파 미지원 환경에서 리사이즈 아티팩트를 가린다
   contentFade?: { opacity: number; durationMs: number } | null;
   // 초기 리빌 게이트 - false면 모든 요소가 자리 잡을 때까지 화면을 감춘다
@@ -163,11 +164,14 @@ const OverlayScene = ({
             }),
       }}
     >
-      {/* 배경은 콘텐츠 박스에만 - 데스크톱은 창==콘텐츠라 동일하고 OBS 소스에서는 남는 영역이 투명 */}
+      {/* 배경은 콘텐츠 박스에만 - 스프라이트 도달 여유와 OBS 소스의 남는 영역은 투명 */}
       <div
         aria-hidden
         className="dmn-overlay-background pointer-events-none absolute left-0 top-0"
         style={{
+          ...(contentSize && (contentSize.x || contentSize.y)
+            ? { left: contentSize.x ?? 0, top: contentSize.y ?? 0 }
+            : null),
           width: contentSize?.width ?? '100%',
           height: contentSize?.height ?? '100%',
           zIndex: 0,

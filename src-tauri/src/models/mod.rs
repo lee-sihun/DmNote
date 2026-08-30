@@ -971,6 +971,8 @@ pub enum SpriteActivation {
 pub struct SpritePose {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub pose_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub triggers: Vec<String>,
     #[serde(default)]
     pub match_mode: SpritePoseMatchMode,
@@ -983,6 +985,7 @@ impl Default for SpritePose {
     fn default() -> Self {
         Self {
             pose_id: String::new(),
+            name: None,
             triggers: Vec::new(),
             match_mode: SpritePoseMatchMode::Exact,
             transform: SpriteTransform::default(),
@@ -3266,8 +3269,8 @@ mod tests {
         compact_canonical_rgba, note_border_representative_hex, scrub_removed_text_outline_fields,
         FadePosition, GradientSpec, GraphPosition, GraphStatType, GraphType, KeyCounterAlign,
         KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings,
-        KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, StatPosition,
-        StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
+        KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, SpritePose,
+        StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
     };
     use serde::Deserialize;
 
@@ -3295,6 +3298,23 @@ mod tests {
         let mappings: KeyMappings = serde_json::from_value(raw.clone()).unwrap();
 
         assert_eq!(serde_json::to_value(mappings).unwrap(), raw);
+    }
+
+    #[test]
+    fn sprite_pose_name_round_trips_and_none_is_omitted() {
+        let pose = SpritePose {
+            name: Some("왼팔".to_string()),
+            ..SpritePose::default()
+        };
+
+        let serialized = serde_json::to_value(&pose).unwrap();
+        assert_eq!(serialized["name"], "왼팔");
+
+        let restored: SpritePose = serde_json::from_value(serialized).unwrap();
+        assert_eq!(restored.name.as_deref(), Some("왼팔"));
+
+        let unnamed = serde_json::to_value(SpritePose::default()).unwrap();
+        assert!(unnamed.get("name").is_none());
     }
 
     #[test]

@@ -116,8 +116,18 @@ interface KeyPosition {
   activeTransparent?: boolean;
   idleTransparent?: boolean;
   imageMode?: 'replace' | 'overlay'; // 이미지 배치. 없으면 replace(이미지가 키를 대체)
-  idleImageTransform?: { offsetX: number; offsetY: number; rotation: number; scale: number }; // 없으면 identity
-  activeImageTransform?: { offsetX: number; offsetY: number; rotation: number; scale: number };
+  idleImageTransform?: {
+    offsetX: number;
+    offsetY: number;
+    rotation: number;
+    scale: number;
+  }; // 없으면 identity
+  activeImageTransform?: {
+    offsetX: number;
+    offsetY: number;
+    rotation: number;
+    scale: number;
+  };
   count: number;
   noteColor: string | { type: 'gradient'; top: string; bottom: string };
   noteOpacity: number;
@@ -178,7 +188,7 @@ interface ElementShadowSpec {
 ```
 
 모든 요소 위치(`keyPositions`, `statPositions`, `graphPositions`,
-`knobPositions`)는 안정 `id`를 가집니다. 불투명 값으로 다루세요. 읽은 값을
+`knobPositions`, `spritePositions`)는 안정 `id`를 가집니다. 불투명 값으로 다루세요. 읽은 값을
 그대로 되돌려 보내고, 직접 만들지 마세요. `id`가 없거나 미확인인 쓰기는
 백엔드가 새 값을 발급합니다. 같은 `id`가 여러 번 나오면(읽은 요소를 복사해
 덧붙이는 경우처럼) 원래 자리의 요소가 신원을 지키고 나머지 사본이 새 값을

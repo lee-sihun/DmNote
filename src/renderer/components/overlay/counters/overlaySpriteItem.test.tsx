@@ -112,11 +112,12 @@ describe('OverlaySpriteItem', () => {
 
     const img = imgEl();
     expect(img?.getAttribute('src')).toBe(BASE_IMAGE);
-    expect(img?.style.transform).toBe(
+    // 기본 모드는 외관 채널을 변수로만 싣는다 - 전역 :where 규칙 소비
+    expect(img?.style.getPropertyValue('--dmn-sprite-transform-default')).toBe(
       'translate(0px, 0px) rotate(0deg) scale(1)',
     );
     expect(img?.style.transformOrigin).toBe('50% 100%');
-    expect(img?.style.transition).toBe(
+    expect(img?.style.getPropertyValue('--dmn-sprite-transition-default')).toBe(
       'transform 90ms cubic-bezier(0.4, 0, 0.2, 1)',
     );
   });
@@ -126,14 +127,66 @@ describe('OverlaySpriteItem', () => {
 
     act(() => setKeyActive('KeyA', true));
     expect(spriteEl()?.dataset.state).toBe('active');
-    expect(imgEl()?.style.transform).toBe(
-      'translate(10px, -6px) rotate(15deg) scale(1.2)',
-    );
+    expect(
+      imgEl()?.style.getPropertyValue('--dmn-sprite-transform-default'),
+    ).toBe('translate(10px, -6px) rotate(15deg) scale(1.2)');
 
     act(() => setKeyActive('KeyA', false));
     expect(spriteEl()?.dataset.state).toBe('idle');
-    expect(imgEl()?.style.transform).toBe(
+    expect(
+      imgEl()?.style.getPropertyValue('--dmn-sprite-transform-default'),
+    ).toBe('translate(0px, 0px) rotate(0deg) scale(1)');
+  });
+
+  it('useInlineStyles=false는 외관 채널을 인라인 선언 없이 변수로만 싣는다', () => {
+    render(makeSprite({ useInlineStyles: false, imageFit: 'cover' }));
+
+    const img = imgEl();
+    // 인라인 선언이 비어야 사용자 CSS가 !important 없이 이긴다
+    expect(img?.style.transform).toBe('');
+    expect(img?.style.transition).toBe('');
+    expect(img?.style.objectFit).toBe('');
+    expect(img?.style.getPropertyValue('--dmn-sprite-fit-default')).toBe(
+      'cover',
+    );
+    expect(img?.style.getPropertyValue('--dmn-sprite-transform-default')).toBe(
       'translate(0px, 0px) rotate(0deg) scale(1)',
+    );
+    expect(img?.style.getPropertyValue('--dmn-sprite-transition-default')).toBe(
+      'transform 90ms cubic-bezier(0.4, 0, 0.2, 1)',
+    );
+    // 배치·기준점은 모드와 무관하게 인라인
+    expect(img?.style.left).toBe('10px');
+    expect(img?.style.transformOrigin).toBe('50% 100%');
+  });
+
+  it('발산 easing은 전환에서 폴백 곡선으로 강등된다', () => {
+    render(makeSprite({ transitionEasing: 'cubic-bezier(0.5, 10, 0.5, -9)' }));
+
+    expect(
+      imgEl()?.style.getPropertyValue('--dmn-sprite-transition-default'),
+    ).toBe('transform 90ms ease');
+  });
+
+  it('useInlineStyles=true는 외관 채널을 인라인 선언으로 승격한다', () => {
+    render(makeSprite({ useInlineStyles: true, imageFit: 'cover' }));
+
+    const img = imgEl();
+    expect(img?.style.transform).toBe(
+      'translate(0px, 0px) rotate(0deg) scale(1)',
+    );
+    expect(img?.style.transition).toBe(
+      'transform 90ms cubic-bezier(0.4, 0, 0.2, 1)',
+    );
+    expect(img?.style.objectFit).toBe('cover');
+    expect(img?.style.getPropertyValue('--dmn-sprite-transform-default')).toBe(
+      '',
+    );
+
+    // 눌림 전환도 인라인 transform으로 반영
+    act(() => setKeyActive('KeyA', true));
+    expect(imgEl()?.style.transform).toBe(
+      'translate(10px, -6px) rotate(15deg) scale(1.2)',
     );
   });
 

@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   currentMonitor,
   getCurrentWindow,
@@ -57,11 +51,6 @@ import {
   slotDisplayName,
 } from '@utils/keySlot';
 import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
-import {
-  composePreviewPositions,
-  getPreviewOverlayVersion,
-  subscribePreviewOverlay,
-} from '@src/renderer/editor/runtime/previewOverlay';
 import type { KeySlot } from '@src/types/key/keys';
 
 type KeyDelayTimerHandle = ReturnType<typeof setTimeout>;
@@ -784,21 +773,10 @@ export default function App() {
   const currentStatPositions = statPositions[selectedKeyType] ?? EMPTY_SLICE;
   const currentGraphPositions = graphPositions[selectedKeyType] ?? EMPTY_SLICE;
   const currentKnobPositions = knobPositions[selectedKeyType] ?? EMPTY_SLICE;
-  // 키는 useKeyStore.positions가 이미 프리뷰 합성본이지만 sprite는 canonical만
-  // 온다 - 세션 patch를 렌더 시점에 합성해야 메인 캔버스 드래그·스크럽이
-  // 커밋 전에도 오버레이에 반영된다. 프리뷰가 없으면 canonical 참조가 그대로
-  // 돌아와 layout memo가 재계산되지 않는다
-  useSyncExternalStore(
-    subscribePreviewOverlay,
-    getPreviewOverlayVersion,
-    getPreviewOverlayVersion,
-  );
-  const renderedSpritePositions = composePreviewPositions(
-    'spritePosition',
-    spritePositions,
-  );
+  // 오버레이는 방송 화면이라 스크럽 프리뷰를 구독하지 않는다 (커밋 시점만 반영).
+  // 편집 중 실시간 피드백은 편집 캔버스 몫
   const currentSpritePositions =
-    renderedSpritePositions[selectedKeyType] ?? EMPTY_SLICE;
+    spritePositions[selectedKeyType] ?? EMPTY_SLICE;
 
   // 스프라이트 트리거(키 요소 id) -> canonical 키 문자열, 잎이 시그널을 찾을 때 쓴다
   const spriteKeyCanonicalMap = useMemo(
@@ -839,6 +817,7 @@ export default function App() {
   );
   const {
     bounds,
+    backgroundBox,
     displayPositions,
     displayStatPositions,
     displayGraphPositions,
@@ -852,7 +831,9 @@ export default function App() {
   // 레이아웃이 DOM에 반영된 뒤 키 rect를 실측해 네이티브 히트 창과 동기화
   useOverlayHitRegions(layout);
 
-  // 창 크기와 배경 박스가 같은 공식을 공유 (창 == 콘텐츠 박스 불변식)
+  // 창 크기는 창 바운즈(스프라이트 이미지 도달 범위 포함) 기준.
+  // 배경 박스는 computeLayout의 backgroundBox(콘텐츠 바운즈 기준)를 쓰므로
+  // 스프라이트 오버행이 있을 때만 창이 배경보다 커지고 여유 영역은 투명하다.
   // 높이는 computeLayout의 topOffset을 그대로 재사용 - 공식이 한 곳에만 있다
   const contentSize = useMemo(
     () =>
@@ -970,7 +951,7 @@ export default function App() {
       spriteKeyCanonicalMap={spriteKeyCanonicalMap}
       selectedKeyType={selectedKeyType}
       noteEffect={noteEffect}
-      contentSize={contentSize}
+      contentSize={backgroundBox ?? undefined}
       contentFade={contentFade}
       revealed={revealed}
       noteSettings={noteSettings}

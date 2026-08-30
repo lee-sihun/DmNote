@@ -7,6 +7,7 @@ import type { NoteSettings } from '@src/types/settings/noteSettings';
 // 레이아웃이 읽을 수 있는 플러그인 필드는 투영 타입으로 제한 —
 // 필드 추가 시 selectPluginLayoutElements·pluginLayoutElementsEqual 동반 수정 필요
 import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
+import { computeSpriteReachAabb } from '@utils/sprite/spriteReach';
 
 interface LayoutInput {
   // canonical 슬롯 식별자 배열 (slotCanonical 결과, 원본 KeySlot 아님)
@@ -51,8 +52,8 @@ export function computeLayout(input: LayoutInput) {
     overlayPadding: PADDING = 30,
   } = input;
 
-  // bounds 계산
-  const bounds: Bounds | null = (() => {
+  // 콘텐츠 바운즈 계산 - 배경 박스가 덮는 영역의 기준
+  const contentBounds: Bounds | null = (() => {
     const hasContent =
       currentPositions.length > 0 ||
       currentStatPositions.length > 0 ||
@@ -126,7 +127,7 @@ export function computeLayout(input: LayoutInput) {
       heights.push(pos.dy + (pos.height ?? 80));
     });
 
-    // 스프라이트 활동 영역 전체를 창 크기에 포함, 클리핑하지 않는다 (계약 §9)
+    // 스프라이트 활동 영역 전체를 콘텐츠 바운즈에 포함 (계약 §9)
     currentSpritePositions.forEach((pos) => {
       if (!pos || pos.hidden) return;
       xs.push(pos.dx);
@@ -182,10 +183,50 @@ export function computeLayout(input: LayoutInput) {
     };
   })();
 
+  // 창 바운즈 계산 - 스프라이트는 클리핑하지 않으므로 이미지 도달 범위
+  // (모든 자세의 회전·확대·오프셋 AABB 합집합, 전환 오버슈트 여유 포함)가
+  // 활동 영역을 넘으면 그만큼 창을 넓혀 네이티브 창 가장자리 잘림을 막는다.
+  // 배경 박스는 콘텐츠 바운즈 기준을 유지해 눈에 보이는 크기는 변하지 않는다
+  const bounds: Bounds | null = (() => {
+    if (!contentBounds) return null;
+    let { minX, minY, maxX, maxY } = contentBounds;
+    currentSpritePositions.forEach((pos) => {
+      if (!pos || pos.hidden) return;
+      const reach = computeSpriteReachAabb(pos);
+      if (!reach) return;
+      minX = Math.min(minX, pos.dx + reach.minX);
+      minY = Math.min(minY, pos.dy + reach.minY);
+      maxX = Math.max(maxX, pos.dx + reach.maxX);
+      maxY = Math.max(maxY, pos.dy + reach.maxY);
+    });
+    if (
+      minX === contentBounds.minX &&
+      minY === contentBounds.minY &&
+      maxX === contentBounds.maxX &&
+      maxY === contentBounds.maxY
+    ) {
+      return contentBounds;
+    }
+    return { minX, minY, maxX, maxY };
+  })();
+
   // 오프셋 계산
   const topOffset = trackHeight + PADDING;
   const offsetX = bounds ? PADDING - bounds.minX : 0;
   const offsetY = bounds ? topOffset - bounds.minY : 0;
+
+  // 배경 박스 - 콘텐츠 바운즈 + 패딩, 창 좌표 기준.
+  // 스프라이트 도달 여유로 창 원점이 왼쪽·위로 밀리면 x·y가 그만큼 커져
+  // 배경의 화면상 위치·크기는 오버행 유무와 무관하게 동일하다
+  const backgroundBox =
+    bounds && contentBounds
+      ? {
+          x: contentBounds.minX - bounds.minX,
+          y: contentBounds.minY - bounds.minY,
+          width: contentBounds.maxX - contentBounds.minX + PADDING * 2,
+          height: contentBounds.maxY - contentBounds.minY + PADDING + topOffset,
+        }
+      : null;
 
   // 원본 객체와 오프셋이 그대로면 이전 결과를 재사용한다.
   // 매번 새 객체를 만들면 아래쪽 Key의 React.memo가 항상 깨져,
@@ -217,7 +258,8 @@ export function computeLayout(input: LayoutInput) {
 
   const positionOffset = bounds ? { x: offsetX, y: offsetY } : { x: 0, y: 0 };
 
-  const topMostY = bounds ? topOffset : 0;
+  // 콘텐츠 상단의 창 좌표. 스프라이트 오버행이 위로 없으면 topOffset과 같다
+  const topMostY = contentBounds ? contentBounds.minY + offsetY : 0;
 
   // WebGL 트랙 계산
   const webglTracks = currentKeys
@@ -281,14 +323,17 @@ export function computeLayout(input: LayoutInput) {
     .filter(Boolean);
 
   return {
+    // 창 크기 계산이 쓰는 창 바운즈 (콘텐츠 + 스프라이트 이미지 도달 범위)
     bounds,
+    // 배경이 덮는 박스 - 창 좌표 기준, 오버행 여유는 배경 밖 투명으로 남는다
+    backgroundBox,
     displayPositions,
     displayStatPositions,
     displayGraphPositions,
     displayKnobPositions,
     displaySpritePositions,
     positionOffset,
-    // 창 높이·배경 박스가 같은 값을 쓰도록 노출 (창 == 콘텐츠 박스 불변식)
+    // 창 높이·배경 박스가 같은 값을 쓰도록 노출
     topOffset,
     topMostY,
     webglTracks,

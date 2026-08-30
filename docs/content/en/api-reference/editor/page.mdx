@@ -11,7 +11,7 @@ description: Atomic editor document reads, commits, and change events
   document.
 </Callout>
 
-`dmn.editor` reads and updates the six collections that make up the editor
+`dmn.editor` reads and updates the seven collections that make up the editor
 layout as one revisioned document. Use it when one user action changes more
 than one collection, or when a consumer needs a single ordered change stream.
 
@@ -24,6 +24,7 @@ type EditorField =
   | 'statPositions'
   | 'graphPositions'
   | 'knobPositions'
+  | 'spritePositions'
   | 'layerGroups';
 
 interface EditorDocumentV1 {
@@ -33,6 +34,7 @@ interface EditorDocumentV1 {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
+  spritePositions: SpritePositions;
   layerGroups: LayerGroups;
 }
 
@@ -47,20 +49,21 @@ that top-level collection. It is not an item-level diff.
 <Callout type="warning">
   Since the multi-key update, `keys` entries in `EditorDocumentV1` (returned by
   `get()`) and in `EditorPatchV1` (delivered by `onCommitted()`) use the
-  `KeySlot` union (`string | MultiKeySlot`), not plain strings. See the
-  [Keys API](/docs/api-reference/keys) for the slot shape and canonical
-  identifier rules.
+  `KeySlot` union (`string | MultiKeySlot`), not plain strings. See the [Keys
+  API](/docs/api-reference/keys) for the slot shape and canonical identifier
+  rules.
 </Callout>
 
 <Callout>
   Every element in the position collections (`keyPositions`, `statPositions`,
-  `graphPositions`, `knobPositions`) carries a stable `id` (UUID) assigned and
-  owned by the app. Treat it as opaque: echo back the value you read and never
-  invent one. A written element with a missing or unknown `id` gets a fresh one
-  from the backend. If the same `id` appears more than once, for example when
-  you copy an element you read and append it, the element in its original slot
-  keeps the identity and the remaining copies get fresh ones. See the
-  [Keys API](/docs/api-reference/keys) for the identity rules.
+  `graphPositions`, `knobPositions`, `spritePositions`) carries a stable `id`
+  (UUID) assigned and owned by the app. Treat it as opaque: echo back the value
+  you read and never invent one. A written element with a missing or unknown
+  `id` gets a fresh one from the backend. If the same `id` appears more than
+  once, for example when you copy an element you read and append it, the element
+  in its original slot keeps the identity and the remaining copies get fresh
+  ones. The `poseId` carried by each pose of a sprite element follows the same
+  rules. See the [Keys API](/docs/api-reference/keys) for the identity rules.
 </Callout>
 
 ## Read the Current Document
@@ -94,10 +97,10 @@ platform, while no application can guarantee recovery from hardware or
 firmware that violates those barriers.
 
 <Callout type="info">
-  The app's Undo/Redo path also restores the six editor collections, custom-tab
-  metadata, selected mode, counters, preset settings, and per-tab note settings
-  in one backend store transaction. This internal command is intentionally not
-  part of the public plugin API.
+  The app's Undo/Redo path also restores the seven editor collections,
+  custom-tab metadata, selected mode, counters, preset settings, and per-tab
+  note settings in one backend store transaction. This internal command is
+  intentionally not part of the public plugin API.
 </Callout>
 
 ```typescript
@@ -218,19 +221,19 @@ interface EditorCommitError {
 }
 ```
 
-| Code                     | Meaning                                                                   | `retryable` |
-| ------------------------ | ------------------------------------------------------------------------- | ----------- |
-| `REVISION_CONFLICT`      | `baseRevision` is stale; read, reconcile, and commit again                | `true`      |
-| `PLUGIN_REVISION_CONFLICT` | The plugin-scoped revision is stale; read, reconcile, and commit again  | `true`      |
-| `VALIDATION_FAILED`      | The completed document violates an editor validation rule                 | `false`     |
-| `TOO_MANY_GESTURE_IDS`   | `gestureIds` exceeds 32 entries or the combined unique set exceeds 32 IDs | `false`     |
-| `INVALID_GESTURE_ID`     | A gesture ID is not a UUID within the 64-byte limit                       | `false`     |
-| `PAIRED_UPDATE_REQUIRED` | A structural key change omitted its paired collection                     | `false`     |
-| `MULTI_KEY_UNSUPPORTED`  | A `keys` write did not declare `multiKey` while multi-key slots exist     | `false`     |
-| `MUTATION_ID_REUSED`     | The same mutation ID was used for a different request                     | `false`     |
-| `IO_ERROR`               | The document could not be persisted                                       | `true`      |
-| `HISTORY_IN_PROGRESS`    | An undo/redo barrier is in progress; retry after it settles               | `true`      |
-| `HISTORY_EPOCH_CONFLICT` | The observed history epoch is stale; re-read and commit again             | `true`      |
+| Code                       | Meaning                                                                   | `retryable` |
+| -------------------------- | ------------------------------------------------------------------------- | ----------- |
+| `REVISION_CONFLICT`        | `baseRevision` is stale; read, reconcile, and commit again                | `true`      |
+| `PLUGIN_REVISION_CONFLICT` | The plugin-scoped revision is stale; read, reconcile, and commit again    | `true`      |
+| `VALIDATION_FAILED`        | The completed document violates an editor validation rule                 | `false`     |
+| `TOO_MANY_GESTURE_IDS`     | `gestureIds` exceeds 32 entries or the combined unique set exceeds 32 IDs | `false`     |
+| `INVALID_GESTURE_ID`       | A gesture ID is not a UUID within the 64-byte limit                       | `false`     |
+| `PAIRED_UPDATE_REQUIRED`   | A structural key change omitted its paired collection                     | `false`     |
+| `MULTI_KEY_UNSUPPORTED`    | A `keys` write did not declare `multiKey` while multi-key slots exist     | `false`     |
+| `MUTATION_ID_REUSED`       | The same mutation ID was used for a different request                     | `false`     |
+| `IO_ERROR`                 | The document could not be persisted                                       | `true`      |
+| `HISTORY_IN_PROGRESS`      | An undo/redo barrier is in progress; retry after it settles               | `true`      |
+| `HISTORY_EPOCH_CONFLICT`   | The observed history epoch is stale; re-read and commit again             | `true`      |
 
 `details.currentRevision`, `details.validationCode`, `details.field`, or
 `details.currentHistoryEpoch` is included when it applies to the error.

@@ -4,8 +4,9 @@ import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useSpriteEditPreview } from '@stores/grid/useSpriteEditPreviewStore';
 import { resolveImageSource } from '@utils/core/imageSource';
-import { spriteTransformToCss } from '@src/types/key/sprites';
+import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
 interface SelectedElement {
@@ -48,8 +49,8 @@ interface SpriteItemProps {
 const ACTIVITY_AREA_BORDER = '1px dashed rgba(237, 238, 242, 0.4)';
 const SELECTED_AREA_BORDER = '1px solid var(--ui-selection-border)';
 
-// 캔버스의 스프라이트는 정적이다: idle transform 상태만 그린다.
-// 키 눌림 라이브 반응은 오버레이 창(OverlaySpriteItem) 몫
+// 캔버스의 스프라이트는 정적이다: 평소엔 idle 상태, 자세 팝업이 열려 있으면
+// 그 자세를 그린다 (편집창 전용 프리뷰). 키 눌림 라이브 반응은 오버레이 창 몫
 const SpriteItem = ({
   index,
   elementId,
@@ -88,7 +89,23 @@ const SpriteItem = ({
 
   const isSelectionMode = isSelected;
 
-  const imageSrc = resolveImageSource(position.baseImage);
+  // 편집 중 프리뷰 - 자세 팝업이면 그 자세를 그린다. 유효 자세는 composed poses가
+  // 최신(스크럽 프리뷰 병합)이라 우선하고, 무효 draft(preferFallback)나 canonical에
+  // 없는 신규 자세는 발행된 스냅샷으로 그린다. transform과 이미지는 같은 자세에서
+  // 함께 파생 (혼합 상태 방지). 기준점 편집 중이면 축 마커만 얹는다
+  const editPreview = useSpriteEditPreview(elementId);
+  const posePreview = editPreview?.kind === 'pose' ? editPreview : null;
+  const previewPose = posePreview
+    ? posePreview.preferFallback
+      ? posePreview.fallbackPose
+      : position.poses.find((pose) => pose.poseId === posePreview.poseId) ??
+        posePreview.fallbackPose
+    : null;
+  const showPivotMarker = editPreview?.kind === 'pivot';
+
+  const imageSrc = resolveImageSource(
+    previewPose?.imageOverride ?? position.baseImage,
+  );
 
   const draggable = useDraggable({
     gridSize: gridSnapSize,
@@ -245,16 +262,11 @@ const SpriteItem = ({
             alt=""
             draggable={false}
             style={{
-              position: 'absolute',
-              left: `${position.imageRect.x}px`,
-              top: `${position.imageRect.y}px`,
-              width: `${position.imageRect.width}px`,
-              height: `${position.imageRect.height}px`,
-              objectFit: position.imageFit ?? 'contain',
-              transformOrigin: `${position.pivot.x * 100}% ${
-                position.pivot.y * 100
-              }%`,
-              transform: spriteTransformToCss(position.idleTransform),
+              // 정적 렌더라 transition 채널 없음, 외관 채널 규칙은 오버레이와 동일
+              ...computeSpriteImageStyle(
+                position,
+                previewPose ? previewPose.transform : position.idleTransform,
+              ),
               pointerEvents: 'none',
               userSelect: 'none',
             }}
@@ -299,6 +311,48 @@ const SpriteItem = ({
             </svg>
           </div>
         )}
+        {showPivotMarker ? (
+          // 기준점 마커 - 회전·배율 축의 위치를 실시간으로 보여준다 (기준점 편집 동안)
+          <div
+            data-sprite-pivot-marker="true"
+            style={{
+              position: 'absolute',
+              left: `${
+                position.imageRect.x +
+                position.pivot.x * position.imageRect.width
+              }px`,
+              top: `${
+                position.imageRect.y +
+                position.pivot.y * position.imageRect.height
+              }px`,
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none',
+              color: 'var(--ui-selection-border)',
+            }}
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 15 15"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="7.5"
+                cy="7.5"
+                r="3"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M7.5 0.5V3M7.5 12V14.5M0.5 7.5H3M12 7.5H14.5"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ description: 에디터 문서의 원자적 조회, 커밋, 변경 이벤트 API
   있습니다.
 </Callout>
 
-`dmn.editor`는 에디터 레이아웃을 이루는 여섯 컬렉션을 revision이 있는 문서
+`dmn.editor`는 에디터 레이아웃을 이루는 일곱 컬렉션을 revision이 있는 문서
 하나로 조회하고 갱신합니다. 사용자 동작 하나가 여러 컬렉션을 함께 바꾸거나,
 소비자가 순서가 보장된 변경 흐름 하나를 받아야 할 때 사용하세요.
 
@@ -24,6 +24,7 @@ type EditorField =
   | 'statPositions'
   | 'graphPositions'
   | 'knobPositions'
+  | 'spritePositions'
   | 'layerGroups';
 
 interface EditorDocumentV1 {
@@ -33,6 +34,7 @@ interface EditorDocumentV1 {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
+  spritePositions: SpritePositions;
   layerGroups: LayerGroups;
 }
 
@@ -53,12 +55,13 @@ type EditorPatchV1 = {
 
 <Callout>
   위치 컬렉션(`keyPositions`, `statPositions`, `graphPositions`,
-  `knobPositions`)의 모든 요소는 앱이 발급·소유하는 안정 `id`(UUID)를
-  가집니다. 불투명 값으로 다루세요. 읽은 값을 그대로 되돌려 보내고, 직접
-  만들지 마세요. `id`가 없거나 미확인인 요소를 쓰면 백엔드가 새 값을
+  `knobPositions`, `spritePositions`)의 모든 요소는 앱이 발급·소유하는 안정
+  `id`(UUID)를 가집니다. 불투명 값으로 다루세요. 읽은 값을 그대로 되돌려 보내고,
+  직접 만들지 마세요. `id`가 없거나 미확인인 요소를 쓰면 백엔드가 새 값을
   발급합니다. 읽은 요소를 복사해 배열에 덧붙이는 경우처럼 같은 `id`가 여러 번
   나오면, 원래 자리의 요소가 신원을 지키고 나머지 사본이 새 값을 받습니다.
-  신원 규칙은 [Keys API](/docs/api-reference/keys)를 참고하세요.
+  스프라이트 요소의 각 자세가 가진 `poseId`도 같은 규칙을 따릅니다. 신원 규칙은
+  [Keys API](/docs/api-reference/keys)를 참고하세요.
 </Callout>
 
 ## 현재 문서 조회
@@ -92,7 +95,7 @@ console.log(revision, document.keyPositions);
 고장까지 애플리케이션이 절대 보장할 수는 없습니다.
 
 <Callout type="info">
-  앱의 Undo/Redo도 편집 컬렉션 6개, 커스텀 탭 정보, 선택 모드, 카운터, 프리셋
+  앱의 Undo/Redo도 편집 컬렉션 7개, 커스텀 탭 정보, 선택 모드, 카운터, 프리셋
   설정, 탭별 노트 설정을 백엔드 store 트랜잭션 한 번으로 함께 복원합니다. 이
   내부 커맨드는 공개 플러그인 API로 노출하지 않습니다.
 </Callout>
@@ -212,19 +215,19 @@ interface EditorCommitError {
 }
 ```
 
-| 코드                     | 의미                                                      | `retryable` |
-| ------------------------ | --------------------------------------------------------- | ----------- |
-| `REVISION_CONFLICT`      | `baseRevision`이 오래됨. 다시 조회·조정한 뒤 커밋         | `true`      |
-| `PLUGIN_REVISION_CONFLICT` | 플러그인 범위 revision이 오래됨. 다시 조회한 뒤 커밋    | `true`      |
-| `VALIDATION_FAILED`      | 완성된 문서가 에디터 검증 규칙을 위반함                   | `false`     |
-| `TOO_MANY_GESTURE_IDS`   | `gestureIds`가 32개를 넘거나 합친 고유 ID가 32개를 초과함 | `false`     |
-| `INVALID_GESTURE_ID`     | gesture ID가 UUID가 아니거나 64바이트를 초과함            | `false`     |
-| `PAIRED_UPDATE_REQUIRED` | 키 구조 변경에 짝 컬렉션이 빠짐                           | `false`     |
-| `MULTI_KEY_UNSUPPORTED`  | 멀티 키 슬롯이 있는데 `multiKey` 선언 없이 `keys`를 씀    | `false`     |
-| `MUTATION_ID_REUSED`     | 같은 mutation ID를 다른 요청에 재사용함                   | `false`     |
-| `IO_ERROR`               | 문서를 디스크에 저장하지 못함                             | `true`      |
-| `HISTORY_IN_PROGRESS`    | undo/redo 진행 중. 끝난 뒤 재시도                         | `true`      |
-| `HISTORY_EPOCH_CONFLICT` | 관측한 history epoch이 오래됨. 다시 조회한 뒤 커밋        | `true`      |
+| 코드                       | 의미                                                      | `retryable` |
+| -------------------------- | --------------------------------------------------------- | ----------- |
+| `REVISION_CONFLICT`        | `baseRevision`이 오래됨. 다시 조회·조정한 뒤 커밋         | `true`      |
+| `PLUGIN_REVISION_CONFLICT` | 플러그인 범위 revision이 오래됨. 다시 조회한 뒤 커밋      | `true`      |
+| `VALIDATION_FAILED`        | 완성된 문서가 에디터 검증 규칙을 위반함                   | `false`     |
+| `TOO_MANY_GESTURE_IDS`     | `gestureIds`가 32개를 넘거나 합친 고유 ID가 32개를 초과함 | `false`     |
+| `INVALID_GESTURE_ID`       | gesture ID가 UUID가 아니거나 64바이트를 초과함            | `false`     |
+| `PAIRED_UPDATE_REQUIRED`   | 키 구조 변경에 짝 컬렉션이 빠짐                           | `false`     |
+| `MULTI_KEY_UNSUPPORTED`    | 멀티 키 슬롯이 있는데 `multiKey` 선언 없이 `keys`를 씀    | `false`     |
+| `MUTATION_ID_REUSED`       | 같은 mutation ID를 다른 요청에 재사용함                   | `false`     |
+| `IO_ERROR`                 | 문서를 디스크에 저장하지 못함                             | `true`      |
+| `HISTORY_IN_PROGRESS`      | undo/redo 진행 중. 끝난 뒤 재시도                         | `true`      |
+| `HISTORY_EPOCH_CONFLICT`   | 관측한 history epoch이 오래됨. 다시 조회한 뒤 커밋        | `true`      |
 
 오류에 해당할 때 `details.currentRevision`, `details.validationCode`,
 `details.field`, `details.currentHistoryEpoch`가 함께 제공됩니다.

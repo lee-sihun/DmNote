@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
-const { commitPatch } = vi.hoisted(() => ({
+const { commitPatch, commitGeneratedPatch } = vi.hoisted(() => ({
   commitPatch: vi.fn(),
+  commitGeneratedPatch: vi.fn(),
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch },
+  editorCoordinator: { commitPatch, commitGeneratedPatch },
 }));
 
 import { keysApi, updatePositionsWithGesture } from './keysApi';
@@ -18,7 +19,12 @@ import {
   statItemsApi,
 } from './itemsApi';
 
-import type { EditorDocumentV1 } from '@src/types/editor';
+import type {
+  CanonicalEditorDocumentV1,
+  CanonicalReactiveSpritePosition,
+  EditorDocumentV1,
+  EditorPatchV1,
+} from '@src/types/editor';
 import type { KeyPositions } from '@src/types/key/keys';
 
 const document: EditorDocumentV1 = {
@@ -32,10 +38,34 @@ const document: EditorDocumentV1 = {
   layerGroups: { '4key': [{ id: 'group-1', name: 'Group 1' }] },
 };
 
+// 백엔드 실물 wire 형태: layerName·groupId는 None이면 직렬화에서 생략된다
+const spriteFixture = (id: string): CanonicalReactiveSpritePosition => ({
+  id,
+  dx: 0,
+  dy: 0,
+  width: 200,
+  height: 150,
+  hidden: false,
+  zIndex: null,
+  className: null,
+  useInlineStyles: null,
+  baseImage: null,
+  imageFit: null,
+  imageRect: { x: 0, y: 0, width: 100, height: 100 },
+  pivot: { x: 0.5, y: 0.5 },
+  idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+  poses: [],
+  activation: 'whileHeld',
+  transitionMs: 90,
+  transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+});
+
 describe('editor API compatibility adapters', () => {
   beforeEach(() => {
     commitPatch.mockReset();
     commitPatch.mockResolvedValue(structuredClone(document));
+    commitGeneratedPatch.mockReset();
+    commitGeneratedPatch.mockResolvedValue(structuredClone(document));
   });
 
   it('routes key writers through editor_commit and preserves return shapes', async () => {
@@ -83,7 +113,6 @@ describe('editor API compatibility adapters', () => {
     await expect(statItemsApi.updatePositions({})).resolves.toEqual({});
     await expect(graphItemsApi.updatePositions({})).resolves.toEqual({});
     await expect(knobItemsApi.updatePositions({})).resolves.toEqual({});
-    await expect(spriteItemsApi.updatePositions({})).resolves.toEqual({});
     await expect(layerGroupsApi.update(document.layerGroups)).resolves.toEqual(
       document.layerGroups,
     );
@@ -92,23 +121,86 @@ describe('editor API compatibility adapters', () => {
       [{ schemaVersion: 1, statPositions: {} }],
       [{ schemaVersion: 1, graphPositions: {} }],
       [{ schemaVersion: 1, knobPositions: {} }],
-      [{ schemaVersion: 1, spritePositions: {} }, undefined],
       [{ schemaVersion: 1, layerGroups: document.layerGroups }],
     ]);
   });
 
-  it('sprite writer는 gestureId를 editor_commit 메타로 실어 보낸다', async () => {
+  it('sprite patchPosition은 슬롯 안 최신 base에서 대상만 패치해 생성한다', async () => {
+    const spriteA = spriteFixture('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+    const spriteB = spriteFixture('dddddddd-dddd-4ddd-8ddd-dddddddddddd');
+    const base = {
+      ...structuredClone(document),
+      spritePositions: { '4key': [spriteA, spriteB] },
+    } as CanonicalEditorDocumentV1;
+    const generated: Array<EditorPatchV1 | null> = [];
+    commitGeneratedPatch.mockImplementation(
+      async (generate: (base: CanonicalEditorDocumentV1) => unknown) => {
+        generated.push(generate(base) as EditorPatchV1 | null);
+        return structuredClone(document);
+      },
+    );
+
+    // patch가 명시 null layerName·groupId를 실어 와도 wire 형태로 정규화
     await expect(
-      spriteItemsApi.updatePositions(
-        {},
+      spriteItemsApi.patchPosition('4key', spriteA.id, {
+        baseImage: 'hand.png',
+        layerName: null,
+        groupId: null,
+      }),
+    ).resolves.toBe('committed');
+
+    expect(commitGeneratedPatch).toHaveBeenCalledWith(
+      expect.any(Function),
+      undefined,
+    );
+    // 최신 base 기준으로 대상 필드만 갱신, 같은 모드 이웃은 그대로
+    expect(generated[0]).toEqual({
+      schemaVersion: 1,
+      spritePositions: {
+        '4key': [{ ...spriteA, baseImage: 'hand.png' }, spriteB],
+      },
+    });
+    const patched = (generated[0] as EditorPatchV1).spritePositions?.[
+      '4key'
+    ]?.[0] as CanonicalReactiveSpritePosition;
+    expect('layerName' in patched).toBe(false);
+    expect('groupId' in patched).toBe(false);
+  });
+
+  it('sprite patchPosition은 대상 소실이면 무커밋 targetMissing이다', async () => {
+    const emptyBase = structuredClone(document) as CanonicalEditorDocumentV1;
+    const generated: Array<EditorPatchV1 | null> = [];
+    commitGeneratedPatch.mockImplementation(
+      async (generate: (base: CanonicalEditorDocumentV1) => unknown) => {
+        generated.push(generate(emptyBase) as EditorPatchV1 | null);
+        return structuredClone(document);
+      },
+    );
+
+    await expect(
+      spriteItemsApi.patchPosition(
+        '4key',
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        { baseImage: 'hand.png' },
+      ),
+    ).resolves.toBe('targetMissing');
+    expect(generated[0]).toBeNull();
+  });
+
+  it('sprite patchPosition은 gestureId를 editor_commit 메타로 실어 보낸다', async () => {
+    // 수동 mock은 generate를 실행하지 않아 typed 결과는 targetMissing 유지
+    await expect(
+      spriteItemsApi.patchPosition(
+        '4key',
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        { hidden: true },
         '6f9c2f6a-0b1d-4e5f-8a3c-2d7e9b4c1a50',
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBe('targetMissing');
 
-    expect(commitPatch).toHaveBeenCalledWith(
-      { schemaVersion: 1, spritePositions: {} },
-      { gestureId: '6f9c2f6a-0b1d-4e5f-8a3c-2d7e9b4c1a50' },
-    );
+    expect(commitGeneratedPatch).toHaveBeenCalledWith(expect.any(Function), {
+      gestureId: '6f9c2f6a-0b1d-4e5f-8a3c-2d7e9b4c1a50',
+    });
   });
 
   it('preserves each legacy caller return value when writes are queued together', async () => {

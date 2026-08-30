@@ -16,9 +16,9 @@ description: 설정 프리셋 저장 및 불러오기 API
 ```javascript
 const result = await dmn.presets.save();
 if (result.success) {
-  console.log("프리셋 저장 완료");
+  console.log('프리셋 저장 완료');
 } else {
-  console.error("저장 실패:", result.error);
+  console.error('저장 실패:', result.error);
 }
 ```
 
@@ -31,9 +31,9 @@ if (result.success) {
 ```javascript
 const result = await dmn.presets.load();
 if (result.success) {
-  console.log("프리셋 불러오기 완료");
+  console.log('프리셋 불러오기 완료');
 } else {
-  console.error("불러오기 실패:", result.error);
+  console.error('불러오기 실패:', result.error);
 }
 ```
 
@@ -64,32 +64,32 @@ const result = await dmn.presets.loadTab();
 ```javascript
 // @id preset-manager
 
-if (dmn.window.type !== "main") return;
+if (dmn.window.type !== 'main') return;
 
 // 프리셋 저장 메뉴
 dmn.ui.contextMenu.addGridMenuItem({
-  id: "save-preset",
-  label: "프리셋 저장",
+  id: 'save-preset',
+  label: '프리셋 저장',
   onClick: async () => {
     const result = await dmn.presets.save();
     if (result.success) {
-      await dmn.ui.dialog.alert("프리셋이 저장되었습니다!");
+      await dmn.ui.dialog.alert('프리셋이 저장되었습니다!');
     }
   },
 });
 
 // 프리셋 불러오기 메뉴
 dmn.ui.contextMenu.addGridMenuItem({
-  id: "load-preset",
-  label: "프리셋 불러오기",
+  id: 'load-preset',
+  label: '프리셋 불러오기',
   onClick: async () => {
     const confirmed = await dmn.ui.dialog.confirm(
-      "현재 설정이 덮어씌워집니다. 계속하시겠습니까?"
+      '현재 설정이 덮어씌워집니다. 계속하시겠습니까?',
     );
     if (confirmed) {
       const result = await dmn.presets.load();
       if (result.success) {
-        await dmn.ui.dialog.alert("프리셋을 불러왔습니다!");
+        await dmn.ui.dialog.alert('프리셋을 불러왔습니다!');
       }
     }
   },
@@ -116,6 +116,7 @@ interface PresetSnapshot {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
+  spritePositions: SpritePositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
   tabNoteOverrides: TabNoteOverrides;
@@ -124,34 +125,35 @@ interface PresetSnapshot {
 
 ```javascript
 const unsub = dmn.presets.onSnapshot((snapshot) => {
-  console.log("프리셋 로드됨:", snapshot.selectedKeyType);
-  console.log("키 매핑:", snapshot.keys);
+  console.log('프리셋 로드됨:', snapshot.selectedKeyType);
+  console.log('키 매핑:', snapshot.keys);
 });
 ```
 
 <Callout type="info">
-  프리셋 로드 시 개별 이벤트(`onChanged`, `onPositionsChanged` 등)는 발행되지 않습니다.
-  프리셋 로드를 감지하려면 `onSnapshot`을 사용하세요.
+  프리셋 로드 시 개별 이벤트(`onChanged`, `onPositionsChanged` 등)는 발행되지
+  않습니다. 프리셋 로드를 감지하려면 `onSnapshot`을 사용하세요.
 </Callout>
 
 ## 프리셋에 포함되는 항목
 
 프리셋은 “전체 설정 덤프”가 아니라, 아래 항목들을 파일로 저장/복원합니다.
 
-| 필드 | 설명 |
-| --- | --- |
-| `keys` | 키 매핑 |
-| `positions` | 키 위치/크기/개별 옵션(클래스, 이미지, 카운터 설정 포함) |
-| `customTabs` | 커스텀 탭 목록 |
-| `selectedKeyType` | 선택된 탭/모드 |
-| `backgroundColor` | 오버레이 배경색 |
-| `noteSettings` / `noteEffect` | 노트 이펙트 관련 설정 |
-| `laboratoryEnabled` | 실험실(랩) 기능 사용 여부 |
-| `useCustomCSS` / `customCSS` | 커스텀 CSS 사용 여부/내용 |
-| `useCustomJS` / `customJS` | 커스텀 JS 사용 여부/내용(플러그인 목록 포함) |
+| 필드                          | 설명                                                     |
+| ----------------------------- | -------------------------------------------------------- |
+| `keys`                        | 키 매핑                                                  |
+| `positions`                   | 키 위치/크기/개별 옵션(클래스, 이미지, 카운터 설정 포함) |
+| `customTabs`                  | 커스텀 탭 목록                                           |
+| `selectedKeyType`             | 선택된 탭/모드                                           |
+| `backgroundColor`             | 오버레이 배경색                                          |
+| `noteSettings` / `noteEffect` | 노트 이펙트 관련 설정                                    |
+| `laboratoryEnabled`           | 실험실(랩) 기능 사용 여부                                |
+| `useCustomCSS` / `customCSS`  | 커스텀 CSS 사용 여부/내용                                |
+| `useCustomJS` / `customJS`    | 커스텀 JS 사용 여부/내용(플러그인 목록 포함)             |
 
 <Callout type="info">
-  플러그인 설정(`dmn.plugin.storage`)은 프리셋에 포함되지 않습니다. 플러그인 데이터를 포함하려면 별도로 관리하세요.
+  플러그인 설정(`dmn.plugin.storage`)은 프리셋에 포함되지 않습니다. 플러그인
+  데이터를 포함하려면 별도로 관리하세요.
 </Callout>
 
 <Callout type="info">

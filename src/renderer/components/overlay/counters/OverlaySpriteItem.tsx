@@ -9,7 +9,8 @@ import {
 import { resolveImageSource } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import { resolveSpriteTarget } from '@utils/sprite/poseResolver';
-import { spriteTransformToCss } from '@src/types/key/sprites';
+import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
+import { resolveSpriteRenderEasing } from '@utils/sprite/spriteReach';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
 interface OverlaySpriteItemProps {
@@ -102,17 +103,15 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
           alt=""
           draggable={false}
           style={{
-            position: 'absolute',
-            left: `${position.imageRect.x}px`,
-            top: `${position.imageRect.y}px`,
-            width: `${position.imageRect.width}px`,
-            height: `${position.imageRect.height}px`,
-            objectFit: position.imageFit ?? 'contain',
-            transformOrigin: `${position.pivot.x * 100}% ${
-              position.pivot.y * 100
-            }%`,
-            transform: spriteTransformToCss(target.transform),
-            transition: `transform ${position.transitionMs}ms ${position.transitionEasing}`,
+            // 외관 채널은 기본 모드에서 변수로 - 사용자 CSS가 !important 없이 이긴다
+            ...computeSpriteImageStyle(
+              position,
+              target.transform,
+              // 발산 easing은 도달 계산과 같은 기준으로 강등 (창 클리핑 방지)
+              `transform ${position.transitionMs}ms ${resolveSpriteRenderEasing(
+                position.transitionEasing,
+              )}`,
+            ),
             willChange: 'transform',
           }}
           onError={(event) => {

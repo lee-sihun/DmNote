@@ -207,8 +207,6 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
       height: 200,
       hidden: false,
       zIndex: null,
-      layerName: null,
-      groupId: null,
       className: null,
       useInlineStyles: null,
       baseImage: null,
@@ -221,6 +219,9 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
       transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
       transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
     });
+    // wire 정규화 계약: nullish layerName·groupId는 키 부재
+    expect(payload).not.toHaveProperty('layerName');
+    expect(payload).not.toHaveProperty('groupId');
   });
 
   it('key ghost place는 동결 slot과 payload를 index 재조회 없이 전달한다', () => {

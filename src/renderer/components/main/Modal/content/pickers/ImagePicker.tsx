@@ -5,6 +5,10 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import { NumberInput } from '@components/main/common/NumberInput';
 import TabSwitch from '@components/main/common/TabSwitch';
+import {
+  AngleGlyph,
+  ScaleGlyph,
+} from '@components/main/common/TransformGlyphs';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { canDecodeImage } from '@utils/core/assetProbe';
@@ -71,43 +75,6 @@ interface ImagePickerProps {
   /** 비동기 완료 콜백이 안정 ID applier로 라우팅되면 element-id */
   completionBinding?: CompletionBinding;
 }
-
-// 회전·크기 입력의 접두 글리프 - X/Y 글자와 같은 자리
-const AngleGlyph = () => (
-  <svg
-    width="11"
-    height="11"
-    viewBox="0 0 12 12"
-    fill="none"
-    aria-hidden="true"
-  >
-    <path
-      d="M2 2v8h8M2 5.5a4.5 4.5 0 0 1 4.5 4.5"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const ScaleGlyph = () => (
-  <svg
-    width="11"
-    height="11"
-    viewBox="0 0 12 12"
-    fill="none"
-    aria-hidden="true"
-  >
-    <path
-      d="M2 10L10 2M10 2H6.5M10 2v3.5M2 10h3.5M2 10V6.5"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 const STATE_MODES = {
   idle: 'idle',
@@ -220,6 +187,10 @@ const ImagePicker = ({
   const showImageFit =
     typeof onIdleImageFitChange === 'function' ||
     typeof onActiveImageFitChange === 'function';
+  // 투명화 토글도 imageFit과 같은 관례 - 콜백 없는 호출처(스프라이트)에선 숨김
+  const showTransparentToggle =
+    typeof onIdleTransparentChange === 'function' ||
+    typeof onActiveTransparentChange === 'function';
   const handleTransparentToggle = (): void => {
     if (effectiveMode === STATE_MODES.idle) {
       onIdleTransparentChange?.(!idleTransparent);
@@ -441,68 +412,76 @@ const ImagePicker = ({
         </div>
       )}
 
-      {/* 설정 카드 */}
-      <PropertySection>
-        {/* 키 투명화 토글 */}
-        <div className="flex justify-between items-center w-full min-h-[32px]">
-          <p className="text-fg-muted text-label">
-            {t('imagePicker.transparent')}
-          </p>
-          <Checkbox
-            commitStrategy="after-paint"
-            checked={currentTransparent}
-            onChange={handleTransparentToggle}
-          />
-        </div>
+      {/* 설정 카드 - 노출할 컨트롤이 하나도 없으면(스프라이트) 카드 생략 */}
+      {(showTransparentToggle ||
+        showImageFit ||
+        typeof onImageModeChange === 'function') && (
+        <PropertySection>
+          {/* 키 투명화 토글 */}
+          {showTransparentToggle && (
+            <div className="flex justify-between items-center w-full min-h-[32px]">
+              <p className="text-fg-muted text-label">
+                {t('imagePicker.transparent')}
+              </p>
+              <Checkbox
+                commitStrategy="after-paint"
+                checked={currentTransparent}
+                onChange={handleTransparentToggle}
+              />
+            </div>
+          )}
 
-        {/* 이미지 맞춤 */}
-        {showImageFit && (
-          <div className="flex justify-between items-center w-full min-h-[32px]">
-            <p className="text-fg-muted text-label">
-              {t('propertiesPanel.imageFit') || '표시'}
-            </p>
-            <Dropdown
-              commitStrategy="after-paint"
-              value={currentImageFit || 'cover'}
-              options={[
-                {
-                  value: 'cover',
-                  label: t('propertiesPanel.imageFitCover') || '채우기',
-                },
-                {
-                  value: 'contain',
-                  label: t('propertiesPanel.imageFitContain') || '맞춤',
-                },
-                {
-                  value: 'fill',
-                  label: t('propertiesPanel.imageFitFill') || '늘리기',
-                },
-                {
-                  value: 'none',
-                  label: t('propertiesPanel.imageFitNone') || '원본',
-                },
-              ]}
-              onChange={handleImageFitChange}
-            />
-          </div>
-        )}
+          {/* 이미지 맞춤 */}
+          {showImageFit && (
+            <div className="flex justify-between items-center w-full min-h-[32px]">
+              <p className="text-fg-muted text-label">
+                {t('propertiesPanel.imageFit') || '표시'}
+              </p>
+              <Dropdown
+                commitStrategy="after-paint"
+                value={currentImageFit || 'cover'}
+                options={[
+                  {
+                    value: 'cover',
+                    label: t('propertiesPanel.imageFitCover') || '채우기',
+                  },
+                  {
+                    value: 'contain',
+                    label: t('propertiesPanel.imageFitContain') || '맞춤',
+                  },
+                  {
+                    value: 'fill',
+                    label: t('propertiesPanel.imageFitFill') || '늘리기',
+                  },
+                  {
+                    value: 'none',
+                    label: t('propertiesPanel.imageFitNone') || '원본',
+                  },
+                ]}
+                onChange={handleImageFitChange}
+              />
+            </div>
+          )}
 
-        {/* 배치 모드 - 공통 */}
-        {typeof onImageModeChange === 'function' && (
-          <div className="flex justify-between items-center w-full min-h-[32px]">
-            <p className="text-fg-muted text-label">{t('imagePicker.mode')}</p>
-            <Dropdown
-              commitStrategy="after-paint"
-              value={imageMode}
-              options={[
-                { value: 'replace', label: t('imagePicker.modeReplace') },
-                { value: 'overlay', label: t('imagePicker.modeOverlay') },
-              ]}
-              onChange={(value) => onImageModeChange(value as ImageMode)}
-            />
-          </div>
-        )}
-      </PropertySection>
+          {/* 배치 모드 - 공통 */}
+          {typeof onImageModeChange === 'function' && (
+            <div className="flex justify-between items-center w-full min-h-[32px]">
+              <p className="text-fg-muted text-label">
+                {t('imagePicker.mode')}
+              </p>
+              <Dropdown
+                commitStrategy="after-paint"
+                value={imageMode}
+                options={[
+                  { value: 'replace', label: t('imagePicker.modeReplace') },
+                  { value: 'overlay', label: t('imagePicker.modeOverlay') },
+                ]}
+                onChange={(value) => onImageModeChange(value as ImageMode)}
+              />
+            </div>
+          )}
+        </PropertySection>
+      )}
     </PickerSurface>
   );
 };
