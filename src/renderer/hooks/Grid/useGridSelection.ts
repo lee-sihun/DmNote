@@ -822,13 +822,14 @@ export function useGridSelection({
     }
 
     // 스프라이트 트리거를 같은 배치 키의 신 id로 재결합, 배치 밖 키 참조는
-    // 유지. 키가 스프라이트 뒤에 올 수 있어 payload 동결 후 일괄 치환한다
+    // 유지. 키가 스프라이트 뒤에 올 수 있어 payload 동결 후 일괄 치환한다.
+    // 치환된 id가 정렬 순서를 깨뜨릴 수 있어 wire 정규화를 다시 적용한다
     if (keyIdMap.size > 0) {
       for (const sprite of spritesToAdd) {
-        sprite.position.poses = remapSpritePoseTriggers(
-          sprite.position.poses,
-          keyIdMap,
-        );
+        sprite.position = toSpriteWireShape({
+          ...sprite.position,
+          poses: remapSpritePoseTriggers(sprite.position.poses, keyIdMap),
+        });
       }
     }
 

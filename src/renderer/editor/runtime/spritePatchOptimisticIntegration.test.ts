@@ -21,9 +21,12 @@ const runtime = vi.hoisted(() => {
       }),
   );
   const get = vi.fn();
-  const onCommitted = vi.fn((_listener: (event: EditorCommittedV1) => void) =>
-    Object.assign(() => {}, { ready: Promise.resolve() }),
-  );
+  // committed 이벤트를 테스트가 직접 쏠 수 있게 리스너를 캡처한다
+  let committedListener: ((event: EditorCommittedV1) => void) | null = null;
+  const onCommitted = vi.fn((listener: (event: EditorCommittedV1) => void) => {
+    committedListener = listener;
+    return Object.assign(() => {}, { ready: Promise.resolve() });
+  });
   const subscribe = vi.fn(async () => 1);
   const cancel = vi.fn(async () => {});
 
@@ -32,6 +35,7 @@ const runtime = vi.hoisted(() => {
     commit,
     get,
     onCommitted,
+    emitCommitted: (event: EditorCommittedV1) => committedListener?.(event),
     resolveCommit: (result: EditorCommitResult) => resolveCommit(result),
     subscribe,
   };
@@ -179,6 +183,65 @@ describe('스프라이트 필드 패치 낙관 적용 통합', () => {
 
     runtime.resolveCommit({ revision: 1, changedFields: ['spritePositions'] });
     await expect(write).resolves.toBe('committed');
+  });
+
+  it('역순 클릭 트리거 커밋 뒤에도 후속 편집의 낙관 적용이 유지된다', async () => {
+    const { spriteItemsApi, useSpriteStore, editorCoordinator } = harness!;
+    const A_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const B_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const clickOrderPose = {
+      poseId: 'pose-1',
+      triggers: [B_ID, A_ID],
+      matchMode: 'exact' as const,
+      transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+      imageOverride: null,
+    };
+
+    await editorCoordinator.start();
+
+    // 클릭 순서(B 먼저) 그대로 자세를 커밋한다
+    const first = spriteItemsApi.patchPosition('4key', SPRITE_ID, {
+      poses: [clickOrderPose],
+    });
+    await vi.waitFor(() => expect(runtime.commit).toHaveBeenCalledOnce());
+
+    // wire와 낙관 스토어 모두 백엔드 정규화(정렬)와 같은 형태여야 한다
+    const request = runtime.commit.mock.calls[0][0];
+    const wirePose = request.changes?.spritePositions?.['4key']?.[0].poses[0];
+    expect(wirePose?.triggers).toEqual([A_ID, B_ID]);
+    expect(
+      useSpriteStore.getState().positions['4key'][0].poses[0].triggers,
+    ).toEqual([A_ID, B_ID]);
+
+    // 백엔드 실물 순서: committed 이벤트가 응답보다 먼저 도착한다
+    const ackRecord = {
+      ...spriteFixture(),
+      poses: [{ ...clickOrderPose, triggers: [A_ID, B_ID] }],
+    };
+    runtime.emitCommitted({
+      schemaVersion: 1,
+      revision: 1,
+      mutationId: request.mutationId,
+      changedFields: ['spritePositions'],
+      patch: { schemaVersion: 1, spritePositions: { '4key': [ackRecord] } },
+    });
+    runtime.resolveCommit({ revision: 1, changedFields: ['spritePositions'] });
+    await expect(first).resolves.toBe('committed');
+
+    // ack와 로컬이 갈렸다면 이 편집의 소유권 검사가 실패해 낙관 반영이 사라진다
+    const second = spriteItemsApi.patchPosition('4key', SPRITE_ID, {
+      baseImage: 'hand.png',
+    });
+    await vi.waitFor(() => expect(runtime.commit).toHaveBeenCalledTimes(2));
+    expect(useSpriteStore.getState().positions['4key'][0].baseImage).toBe(
+      'hand.png',
+    );
+
+    runtime.resolveCommit({ revision: 2, changedFields: ['spritePositions'] });
+    await expect(second).resolves.toBe('committed');
+    expect(useSpriteStore.getState().positions['4key'][0].baseImage).toBe(
+      'hand.png',
+    );
   });
 
   it('대상 소실이면 무커밋으로 targetMissing을 반환한다', async () => {

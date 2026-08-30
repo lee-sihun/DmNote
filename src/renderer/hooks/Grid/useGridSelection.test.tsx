@@ -424,6 +424,48 @@ describe('useGridSelection compound history gesture', () => {
     ]);
   });
 
+  it('키와 함께 붙여넣은 스프라이트 트리거는 재결합 뒤에도 정렬을 유지한다', async () => {
+    const external = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const original = spriteAt(STABLE_SPRITE_ID);
+    original.poses[0].triggers = [STABLE_KEY_ID, external];
+    // 재발급 id를 전부 외부 참조보다 사전순 뒤로 고정 - 치환이 정렬을 깨게 강제
+    let issued = 0;
+    const uuidSpy = vi
+      .spyOn(globalThis.crypto, 'randomUUID')
+      .mockImplementation(() => {
+        issued += 1;
+        return `ffffffff-ffff-4fff-8fff-${String(999 - issued).padStart(
+          12,
+          '0',
+        )}` as `${string}-${string}-${string}-${string}-${string}`;
+      });
+    try {
+      act(() => {
+        useSpriteStore.setState({ positions: { '4key': [original] } });
+        useGridSelectionStore.getState().setSelectedElements([
+          { type: 'key', id: STABLE_KEY_ID, index: 0 },
+          { type: 'sprite', id: STABLE_SPRITE_ID, index: 0 },
+        ]);
+      });
+
+      act(() => api.copySelectedElements());
+      await act(async () => api.pasteElements());
+
+      const sprites = useSpriteStore.getState().positions['4key'];
+      const pasted = sprites.find(
+        (position) => position.id !== STABLE_SPRITE_ID,
+      )!;
+      const triggers = pasted.poses[0].triggers;
+      // 배치 안 키는 새 id로 재결합, 배치 밖 참조는 유지
+      expect(triggers).toContain(external);
+      expect(triggers).not.toContain(STABLE_KEY_ID);
+      // 치환된 id가 사전순 뒤로 가도 wire 정규형(정렬)이 유지되어야 한다
+      expect([...triggers].sort()).toEqual(triggers);
+    } finally {
+      uuidSpy.mockRestore();
+    }
+  });
+
   it('sprite 복사-붙여넣기 왕복은 poseId만 재발급하고 나머지 로컬 데이터를 유지한다', async () => {
     const original = spriteAt(STABLE_SPRITE_ID);
     act(() => {
