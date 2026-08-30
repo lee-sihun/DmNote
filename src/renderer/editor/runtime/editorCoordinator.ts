@@ -1,9 +1,4 @@
-import { stableStringify } from '@utils/core/stableStringify';
-import {
-  SEMANTIC_POSITION_FIELDS,
-  applySemanticOps,
-  fieldsForSemanticOp,
-} from './semanticOpsProjection';
+import { applySemanticOps, fieldsForSemanticOp } from './semanticOpsProjection';
 import { SerialTaskQueue } from './serialTaskQueue';
 import {
   hasReachedEditorAutoRebaseLimit,
@@ -11,16 +6,32 @@ import {
   shouldAutoRebaseSemanticConflict,
   shouldRetryUnknownSemanticOutcome,
 } from './editorRetryPolicy';
+import {
+  applyEditorPatch,
+  applyIsolatedPluginPatch,
+  canReapplyFrozenOp,
+  clone,
+  fieldsOverlap,
+  frozenPatchOwnedFields,
+  getChangedEditorFields,
+  patchForFields,
+  rebaseEditorDocument,
+  unresolvedLocalFields,
+} from './editorRebaseModel';
+
+export {
+  applyEditorPatch,
+  createEditorPatch,
+  getChangedEditorFields,
+} from './editorRebaseModel';
 
 import {
   EDITOR_COMMIT_SCHEMA_VERSION,
   EDITOR_FIELDS,
   EDITOR_OPS_VERSION,
-  EDITOR_SCHEMA_VERSION,
   EditorProtocolError,
   assertEditorCommitResult,
   assertEditorCommittedEvent,
-  assertEditorDocument,
   assertCanonicalEditorDocument,
   assertEditorGetResult,
   assertEditorOpCommitResult,
@@ -37,8 +48,6 @@ import type {
   EditorCommitResult,
   EditorCommittedV1,
   CanonicalEditorDocumentV1,
-  EditorDocumentV1,
-  EditorElementTypeV1,
   EditorField,
   EditorGetResult,
   CanonicalEditorGetResult,
@@ -46,7 +55,6 @@ import type {
   EditorOpResultV1,
   EditorOpV1,
   EditorPatchV1,
-  EditorLegacyPatchV1,
 } from '@src/types/editor';
 
 export type EditorApplyReason =
@@ -197,189 +205,6 @@ interface InFlightCommit {
 const MAX_TRACKED_MUTATIONS = 64;
 // Rust state/editor.rs의 MAX_GESTURE_IDS와 동일한 IPC 상한
 const MAX_PENDING_GESTURE_IDS = 32;
-
-const clone = <T>(value: T): T => structuredClone(value);
-
-const fieldsOverlap = (
-  first: readonly EditorField[],
-  second: readonly EditorField[],
-): EditorField[] => {
-  const secondSet = new Set(second);
-  return first.filter((field) => secondSet.has(field));
-};
-
-const unresolvedLocalFields = (
-  localFields: readonly EditorField[],
-  pendingLocal: CanonicalEditorDocumentV1,
-  canonical: CanonicalEditorDocumentV1,
-): EditorField[] =>
-  localFields.filter(
-    (field) =>
-      stableStringify(pendingLocal[field]) !==
-      stableStringify(canonical[field]),
-  );
-
-// wire 버전은 전송 경로가 결정한다. 호출부 패치의 schemaVersion은 문서 적용
-// 과정에서 소비되어 여기까지 오지 않으므로, 자사 전송 지점만 v2를 명시한다
-const patchForFields = (
-  document: EditorDocumentV1,
-  fields: readonly EditorField[],
-  schemaVersion: EditorPatchV1['schemaVersion'] = EDITOR_SCHEMA_VERSION,
-): EditorPatchV1 => {
-  const patch: EditorPatchV1 = { schemaVersion };
-  fields.forEach((field) => {
-    Object.assign(patch, { [field]: clone(document[field]) });
-  });
-  return patch;
-};
-
-// 위치 필드에서 id로 요소 항목 탐색
-const findPositionEntryById = (
-  document: CanonicalEditorDocumentV1,
-  elementType: EditorElementTypeV1,
-  id: string,
-): Record<string, unknown> | null => {
-  const record = document[SEMANTIC_POSITION_FIELDS[elementType]] as Record<
-    string,
-    Array<Record<string, unknown> & { id: string }>
-  >;
-  for (const positions of Object.values(record)) {
-    const match = positions.find((position) => position.id === id);
-    if (match) return match;
-  }
-  return null;
-};
-
-// CAS 판정을 건너뛰는 op 표식
-const FROZEN_OP_CAS_EXEMPT = Symbol('frozenOpCasExempt');
-
-// 동결 op가 낙관 재적용에서 되쓰는 대상 조각. setBounds는 기하 필드만,
-// patchElement는 대상 항목, setKeySlot은 결합 인덱스의 슬롯. 값 되돌림
-// 위험이 없는 구조 op(삽입·삭제·정렬 등)는 CAS 비대상으로 항상 재적용
-const frozenOpCasUnit = (
-  document: CanonicalEditorDocumentV1,
-  op: EditorOpV1,
-): unknown => {
-  if (op.kind === 'setBounds') {
-    const entry = findPositionEntryById(document, op.elementType, op.id);
-    if (!entry) return null;
-    return {
-      dx: entry.dx,
-      dy: entry.dy,
-      width: entry.width,
-      height: entry.height,
-    };
-  }
-  if (op.kind === 'patchElement') {
-    return findPositionEntryById(document, op.elementType, op.id);
-  }
-  if (op.kind === 'setKeySlot') {
-    for (const [mode, positions] of Object.entries(document.keyPositions)) {
-      const index = positions.findIndex((position) => position.id === op.id);
-      if (index < 0) continue;
-      return document.keys[mode]?.[index] ?? null;
-    }
-    return null;
-  }
-  return FROZEN_OP_CAS_EXEMPT;
-};
-
-// 동결 op 재적용 소유 판정: 동결 시점 base와 현재 스토어의 대상 조각이
-// 같을 때만 재적용. 다르면 슬롯 대기 중의 2차 편집이 소유한 값이라 보존
-const canReapplyFrozenOp = (
-  op: EditorOpV1,
-  base: CanonicalEditorDocumentV1,
-  current: CanonicalEditorDocumentV1,
-): boolean => {
-  const baseUnit = frozenOpCasUnit(base, op);
-  if (baseUnit === FROZEN_OP_CAS_EXEMPT) return true;
-  const currentUnit = frozenOpCasUnit(current, op);
-  return stableStringify(currentUnit) === stableStringify(baseUnit);
-};
-
-// patch 재적용은 필드 통째 교체라 필드 단위 CAS: 현재 스토어 필드가 동결
-// 시점 base와 같을 때만(소유 증명) 동결 필드를 되쓴다. 다르면 슬롯 대기
-// 중의 2차 편집이 소유한 필드라 보존. wire 커밋 내용에는 영향 없음
-const frozenPatchOwnedFields = (
-  changes: EditorPatchV1,
-  base: CanonicalEditorDocumentV1,
-  current: CanonicalEditorDocumentV1,
-): EditorPatchV1 => {
-  const owned: EditorPatchV1 = { schemaVersion: changes.schemaVersion };
-  EDITOR_FIELDS.forEach((field) => {
-    if (changes[field] === undefined) return;
-    if (stableStringify(current[field]) !== stableStringify(base[field])) {
-      return;
-    }
-    Object.assign(owned, { [field]: changes[field] });
-  });
-  return owned;
-};
-
-export function getChangedEditorFields(
-  base: EditorDocumentV1,
-  next: EditorDocumentV1,
-): EditorField[] {
-  assertEditorDocument(base, 'base editor document');
-  assertEditorDocument(next, 'next editor document');
-
-  return EDITOR_FIELDS.filter(
-    (field) => stableStringify(base[field]) !== stableStringify(next[field]),
-  );
-}
-
-// 버전 인자 없이 patchForFields를 부르므로 항상 v1이다. 이벤트 patch 타입과
-// 맞도록 반환도 v1로 좁힌다
-export function createEditorPatch(
-  base: EditorDocumentV1,
-  next: EditorDocumentV1,
-): EditorLegacyPatchV1 {
-  return patchForFields(
-    next,
-    getChangedEditorFields(base, next),
-  ) as EditorLegacyPatchV1;
-}
-
-export function applyEditorPatch(
-  base: CanonicalEditorDocumentV1,
-  patch: EditorPatchV1,
-): CanonicalEditorDocumentV1 {
-  assertCanonicalEditorDocument(base, 'base editor document');
-  assertEditorPatch(patch);
-
-  const next = clone(base);
-  EDITOR_FIELDS.forEach((field) => {
-    if (patch[field] !== undefined) {
-      Object.assign(next, { [field]: clone(patch[field]) });
-    }
-  });
-  assertCanonicalEditorDocument(next, 'patched editor document');
-  return next;
-}
-
-const applyIsolatedPluginPatch = (
-  base: CanonicalEditorDocumentV1,
-  patch: EditorPatchV1,
-): EditorDocumentV1 => {
-  assertCanonicalEditorDocument(base, 'isolated plugin base document');
-  assertEditorPatch(patch);
-  const next: EditorDocumentV1 = clone(base);
-  EDITOR_FIELDS.forEach((field) => {
-    if (patch[field] !== undefined) {
-      Object.assign(next, { [field]: clone(patch[field]) });
-    }
-  });
-  assertEditorDocument(next, 'isolated plugin target document');
-  return next;
-};
-
-function rebaseEditorDocument(
-  canonical: CanonicalEditorDocumentV1,
-  pendingLocal: CanonicalEditorDocumentV1,
-  localFields: readonly EditorField[],
-): CanonicalEditorDocumentV1 {
-  return applyEditorPatch(canonical, patchForFields(pendingLocal, localFields));
-}
 
 class EditorSaveCoordinator {
   private readonly transport: EditorCoordinatorTransport;
