@@ -7,24 +7,13 @@ import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { EditStateAnchor } from '@stores/grid/useEditStatePreviewStore';
 import type { ImageFit } from '@src/types/key/keys';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import {
-  paintDescriptor,
-  gradientToCss,
-  type ColorModeValue,
-  type GradientSpec,
-} from '@src/types/color';
-import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import { gradientToCss } from '@src/types/color';
 import { axisEventBus } from '@utils/core/axisEventBus';
 import {
-  DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_BORDER,
   DEFAULT_ELEMENT_BORDER_WIDTH,
-  DEFAULT_ELEMENT_ACTIVE_BORDER,
-  DEFAULT_ELEMENT_ACTIVE_BG,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
-import { resolveElementBorder } from '@utils/core/elementBorder';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
@@ -55,6 +44,7 @@ import type {
 import RenameIcon from './RenameIcon';
 import SingleGeometrySection from './SingleGeometrySection';
 import SingleImagePickerPopup from './SingleImagePickerPopup';
+import { useSingleStyleColorController } from './useSingleStyleColorController';
 
 // ============================================================================
 // Single Knob Selection Panel
@@ -193,207 +183,36 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     ? singleKnobPosition.axisId.replace(/^HIDA:/, '')
     : t('propertiesPanel.knobAxisUnset') || '미지정';
 
-  // 대기/입력 색상 (키 패널과 동일한 기본값/전환 로직)
-  const DEFAULT_KNOB_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
-  const DEFAULT_KNOB_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
-  const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
-  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
-
-  type KnobColorTarget = 'backgroundColor' | 'borderColor';
-  type KnobColorProperty =
-    | KnobColorTarget
-    | 'activeBackgroundColor'
-    | 'activeBorderColor';
-
-  const [pickerFor, setPickerFor] = useState<KnobColorTarget | null>(null);
-  const [colorState, setColorState] = useState<'idle' | 'active'>('idle');
-  const bgColorBtnRef = useRef<HTMLButtonElement>(null);
-  const borderColorBtnRef = useRef<HTMLButtonElement>(null);
-
-  const [localColors, setLocalColors] = useState<
-    Record<KnobColorProperty, string>
-  >({
-    backgroundColor:
-      singleKnobPosition.backgroundColor || DEFAULT_KNOB_BACKGROUND_COLOR,
-    activeBackgroundColor:
-      singleKnobPosition.activeBackgroundColor ||
-      singleKnobPosition.backgroundColor ||
-      DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
-    borderColor: singleKnobPosition.borderColor || DEFAULT_KNOB_BORDER_COLOR,
-    activeBorderColor:
-      singleKnobPosition.activeBorderColor ||
-      singleKnobPosition.borderColor ||
-      DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
-  });
-
-  // 피커는 대상 변경 시 닫는다. 축 캡처는 시작 ID를 별도로 동결하므로
-  // 재정렬이나 모드 전환 뒤에도 시작 대상을 유지한다
-  useEffect(() => {
-    setPickerFor(null);
-    setShowImagePicker(false);
-  }, [selectedKeyType, singleKnobPosition.id]);
-
-  // 피커가 닫혀있을 때만 외부 prop과 동기화
-  useEffect(() => {
-    if (!pickerFor) {
-      setLocalColors({
-        backgroundColor:
-          singleKnobPosition.backgroundColor || DEFAULT_KNOB_BACKGROUND_COLOR,
-        activeBackgroundColor:
-          singleKnobPosition.activeBackgroundColor ||
-          singleKnobPosition.backgroundColor ||
-          DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
-        borderColor:
-          singleKnobPosition.borderColor || DEFAULT_KNOB_BORDER_COLOR,
-        activeBorderColor:
-          singleKnobPosition.activeBorderColor ||
-          singleKnobPosition.borderColor ||
-          DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
-      });
-    }
-  }, [
-    pickerFor,
-    singleKnobPosition.backgroundColor,
-    singleKnobPosition.activeBackgroundColor,
-    singleKnobPosition.borderColor,
-    singleKnobPosition.activeBorderColor,
-    DEFAULT_KNOB_BACKGROUND_COLOR,
-    DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
-    DEFAULT_KNOB_BORDER_COLOR,
-    DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
-  ]);
-
-  const resolveColorProperty = (target: KnobColorTarget): KnobColorProperty =>
-    colorState === 'active'
-      ? target === 'backgroundColor'
-        ? 'activeBackgroundColor'
-        : 'activeBorderColor'
-      : target;
-
-  const activeColorPropertyFor = (
-    target: KnobColorTarget,
-  ): 'activeBackgroundColor' | 'activeBorderColor' =>
-    target === 'backgroundColor'
-      ? 'activeBackgroundColor'
-      : 'activeBorderColor';
-
-  const isNonEmptyString = (value: unknown): value is string =>
-    typeof value === 'string' && value.trim().length > 0;
-
-  const colorValueFor = (target: KnobColorTarget): string =>
-    localColors[resolveColorProperty(target)];
-
-  const handleColorChange = (target: KnobColorTarget, color: string) => {
-    const prop = resolveColorProperty(target);
-    setLocalColors((prev) => ({ ...prev, [prop]: color }));
-  };
-
-  // ── 그라데이션 배선 (키 패널과 동일 패턴) — 단색 커밋도 이 경로로 통합 ──
-
-  // 테두리 미지정이면 렌더와 같은 기본 립을 편집 대상으로 보여 준다
-  const defaultKnobBorderGradientFor = (
-    active: boolean,
-  ): GradientSpec | null => {
-    const resolved = resolveElementBorder(singleKnobPosition, active);
-    return resolved.isDefault ? resolved.gradient : null;
-  };
-
-  const storedGradientOf = (prop: KnobColorProperty): GradientSpec | null => {
-    switch (prop) {
-      case 'backgroundColor':
-        return singleKnobPosition.backgroundGradient ?? null;
-      case 'activeBackgroundColor':
-        return singleKnobPosition.activeBackgroundGradient ?? null;
-      case 'borderColor':
-        return (
-          singleKnobPosition.borderGradient ??
-          defaultKnobBorderGradientFor(false)
-        );
-      case 'activeBorderColor':
-        return (
-          singleKnobPosition.activeBorderGradient ??
-          defaultKnobBorderGradientFor(true)
-        );
-      default:
-        return null;
-    }
-  };
-
-  const gradientSpecFor = (target: KnobColorTarget): GradientSpec | null => {
-    const idleGradient = storedGradientOf(target);
-    if (colorState !== 'active') return idleGradient;
-    const activeProp = activeColorPropertyFor(target);
-    const activeGradient = storedGradientOf(activeProp);
-    const activeHasValue =
-      isNonEmptyString(singleKnobPosition[activeProp]) ||
-      activeGradient != null;
-    return activeHasValue ? activeGradient : idleGradient;
-  };
-
-  const handleGradientCommit = (value: ColorModeValue) => {
-    if (!pickerFor) return;
-    const prop = resolveColorProperty(pickerFor);
-    const descriptor = paintDescriptor(value);
-    const paintField =
-      colorState === 'active'
-        ? pickerFor === 'backgroundColor'
-          ? 'activeBackgroundPaint'
-          : 'activeBorderPaint'
-        : pickerFor === 'backgroundColor'
-        ? 'backgroundPaint'
-        : 'borderPaint';
-    setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-    onPaintCommit?.({ property: paintField, value: descriptor } as never);
-  };
-
-  const knobGradientState = useGradientColorState({
-    pair: pickerFor
-      ? {
-          color: colorValueFor(pickerFor),
-          gradient: gradientSpecFor(pickerFor),
-        }
-      : {},
-    fallbackColor: '#ffffff',
-    contextKey: `knob:${selectedKeyType}:${singleKnobPosition.id}:${
-      pickerFor ?? 'none'
-    }:${colorState}`,
-    canvasAnchor: pickerFor
-      ? singleKnobPosition.id && isNativeElementId(singleKnobPosition.id)
-        ? { kind: 'knob', id: singleKnobPosition.id }
-        : undefined
-      : undefined,
-    canvasSurface: pickerFor === 'borderColor' ? 'border' : 'background',
-    canvasState: colorState,
-    onPreview: (value) => {
-      if (!pickerFor) return;
-      const prop = resolveColorProperty(pickerFor);
-      const descriptor = paintDescriptor(value);
-      setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-      const paintField =
-        colorState === 'active'
-          ? pickerFor === 'backgroundColor'
-            ? 'activeBackgroundPaint'
-            : 'activeBorderPaint'
-          : pickerFor === 'backgroundColor'
-          ? 'backgroundPaint'
-          : 'borderPaint';
-      onPaintPreview?.({ property: paintField, value: descriptor } as never);
-    },
-    onCancel: () => editGestureController.cancel(),
-    onCommit: handleGradientCommit,
-  });
-
-  const handlePickerToggle = (target: KnobColorTarget) => {
-    setPickerFor((prev) => (prev === target ? null : target));
-    // 새로 열 때는 항상 대기 탭에서 시작
-    if (pickerFor !== target) setColorState('idle');
-  };
-
   // 그림자·이미지 피커의 캔버스 상태 프리뷰 대상 (색 피커는 세션 훅이 발행)
   const knobPreviewAnchor: EditStateAnchor | null =
     singleKnobPosition.id && isNativeElementId(singleKnobPosition.id)
       ? { kind: 'knob', id: singleKnobPosition.id }
       : null;
+
+  const {
+    pickerFor,
+    setPickerFor,
+    effectiveColorState: colorState,
+    setColorState,
+    backgroundColorButtonRef: bgColorBtnRef,
+    borderColorButtonRef: borderColorBtnRef,
+    handlePickerToggle,
+    colorValueFor,
+    handleColorChange,
+    gradientSpecFor,
+    gradientState: knobGradientState,
+  } = useSingleStyleColorController({
+    keyPosition: singleKnobPosition,
+    shadowActiveState: true,
+    canvasAnchor: knobPreviewAnchor ?? undefined,
+    contextSelectedKeyType: selectedKeyType,
+    pickerResetScope: selectedKeyType,
+    pickerResetTarget: singleKnobPosition.id,
+    onPickerReset: setShowImagePicker,
+    suppressDefaultBorderForImage: false,
+    onPaintPreview,
+    onPaintCommit,
+  });
 
   // 라운딩 기본값: 미지정 시 원형(짧은 변의 절반)
   const effectiveBorderRadius =

@@ -40,6 +40,11 @@ interface UseSingleStyleColorControllerOptions {
   keyPosition: KeyPosition;
   shadowActiveState: boolean;
   canvasAnchor?: GradientCanvasAnchor;
+  contextSelectedKeyType?: string;
+  pickerResetScope?: string;
+  pickerResetTarget?: string;
+  onPickerReset?: (open: false) => void;
+  suppressDefaultBorderForImage?: boolean;
   onPaintPreview?: (patch: EditorPaintPropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
 }
@@ -68,20 +73,31 @@ export const useSingleStyleColorController = ({
   keyPosition,
   shadowActiveState,
   canvasAnchor,
+  contextSelectedKeyType,
+  pickerResetScope,
+  pickerResetTarget,
+  onPickerReset,
+  suppressDefaultBorderForImage = true,
   onPaintPreview,
   onPaintCommit,
 }: UseSingleStyleColorControllerOptions) => {
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const [colorState, setColorState] = useState<ColorState>('idle');
   const effectiveColorState = shadowActiveState ? colorState : 'idle';
-  const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+  const selectedKeyType = useKeyStore(
+    (state) => contextSelectedKeyType ?? state.selectedKeyType,
+  );
 
   useEffect(() => {
     if (!shadowActiveState) {
       setColorState('idle');
       setPickerFor(null);
     }
-  }, [shadowActiveState]);
+    if (pickerResetScope !== undefined || pickerResetTarget !== undefined) {
+      setPickerFor(null);
+      onPickerReset?.(false);
+    }
+  }, [onPickerReset, pickerResetScope, pickerResetTarget, shadowActiveState]);
 
   const backgroundColorButtonRef = useRef<HTMLButtonElement>(null);
   const borderColorButtonRef = useRef<HTMLButtonElement>(null);
@@ -176,7 +192,9 @@ export const useSingleStyleColorController = ({
     if (target === 'borderColor') {
       const active = effectiveColorState === 'active';
       return resolveElementBorder(keyPosition, active, {
-        suppressDefault: elementImageReplacesSurface(keyPosition, active),
+        suppressDefault:
+          suppressDefaultBorderForImage &&
+          elementImageReplacesSurface(keyPosition, active),
       }).gradient;
     }
     const idleGradient = storedGradientOf(target);
