@@ -27,8 +27,6 @@ import {
   registerExposedActions,
   clearExposedActions,
 } from '@utils/displayElementActions';
-import { setupPluginDropdownInteractions } from '@utils/plugin/pluginDropdownManager';
-import { createPluginHandlerDispatcher } from '@utils/plugin/pluginHandlerDispatcher';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { obsApi } from '@api/modules/obsApi';
 import { evaluatePluginMenuItems } from '@utils/plugin/pluginElementContextMenu';
@@ -50,6 +48,7 @@ import {
   calculatePluginAnchorOffset,
   resolvePluginElementPosition,
 } from '@utils/plugin/pluginElementLayout';
+import { attachPluginDomInteractions } from '@utils/plugin/pluginDomInteractions';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
@@ -657,141 +656,13 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
     // data-plugin-handler 이벤트 위임 (메인 윈도우에서만)
     if (windowType === 'main') {
-      const dispatcher = createPluginHandlerDispatcher();
-      // Input blur 핸들러: min/max 자동 정규화
-      const handleInputBlur = (e: Event) => {
-        const targetEl = e.target as HTMLInputElement;
-        if (
-          targetEl.tagName === 'INPUT' &&
-          targetEl.type === 'number' &&
-          targetEl.hasAttribute('data-plugin-input-blur')
-        ) {
-          const minStr = targetEl.getAttribute('data-plugin-input-min');
-          const maxStr = targetEl.getAttribute('data-plugin-input-max');
-          const currentValue = targetEl.value;
+      const detachInteractions = attachPluginDomInteractions(target);
 
-          // 빈 값이거나 숫자가 아닌 경우
-          if (currentValue === '' || isNaN(parseFloat(currentValue))) {
-            // min이 있으면 min으로, 없으면 0으로
-            const defaultValue = minStr ? parseFloat(minStr) : 0;
-            targetEl.value = String(defaultValue);
-            // change 이벤트 발생
-            targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-            return;
-          }
-
-          const numValue = parseFloat(currentValue);
-          let clampedValue = numValue;
-
-          // min/max 범위로 제한
-          if (minStr && numValue < parseFloat(minStr)) {
-            clampedValue = parseFloat(minStr);
-          }
-          if (maxStr && numValue > parseFloat(maxStr)) {
-            clampedValue = parseFloat(maxStr);
-          }
-
-          // 값이 변경되었으면 업데이트
-          if (clampedValue !== numValue) {
-            targetEl.value = String(clampedValue);
-            // change 이벤트 발생
-            targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        }
-      };
-
-      // 체크박스 토글 기능
-      const handleCheckboxToggle = (e: Event) => {
-        const targetEl = e.target as HTMLElement;
-        const checkbox = targetEl.closest('[data-checkbox-toggle]');
-        if (checkbox) {
-          // label 기본 동작(input으로의 합성 클릭 재토글) 차단 — 수동 토글만 커밋
-          e.preventDefault();
-          const input = checkbox.querySelector(
-            'input[type=checkbox]',
-          ) as HTMLInputElement;
-          const knob = checkbox.querySelector('div') as HTMLElement;
-
-          if (input) {
-            input.checked = !input.checked;
-
-            // 스타일 토글 — createCheckbox의 액센트 토큰과 동기
-            if (input.checked) {
-              checkbox.classList.remove('bg-line-strong');
-              checkbox.classList.add('bg-accent');
-              knob.classList.remove('left-[2px]');
-              knob.classList.add('left-[14px]');
-            } else {
-              checkbox.classList.remove('bg-accent');
-              checkbox.classList.add('bg-line-strong');
-              knob.classList.remove('left-[14px]');
-              knob.classList.add('left-[2px]');
-            }
-
-            // change 이벤트 발생
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        }
-      };
-
-      const handleEvent = (e: Event) => {
-        const targetEl = e.target as HTMLElement;
-        const handlerAttr =
-          e.type === 'click'
-            ? 'data-plugin-handler'
-            : e.type === 'input'
-            ? 'data-plugin-handler-input'
-            : e.type === 'change'
-            ? 'data-plugin-handler-change'
-            : null;
-
-        if (!handlerAttr) return;
-
-        // 클릭/변경된 요소 또는 부모에서 핸들러 찾기
-        let currentElement: HTMLElement | null = targetEl;
-        let handlerName: string | null = null;
-
-        while (currentElement && currentElement !== target) {
-          handlerName = currentElement.getAttribute(handlerAttr);
-          if (handlerName) break;
-          currentElement = currentElement.parentElement;
-        }
-
-        if (!handlerName) return;
-
-        // 핸들러 실행 (자동 래핑되어 있음)
-        const handler = (window as unknown as Record<string, unknown>)[
-          handlerName
-        ];
-        if (typeof handler === 'function' && currentElement) {
-          dispatcher.dispatch(
-            currentElement,
-            handler as (event: Event) => unknown,
-            e,
-          );
-        }
-      };
-
-      const detachDropdowns = setupPluginDropdownInteractions(target);
-
-      target.addEventListener('click', handleCheckboxToggle);
-      target.addEventListener('click', handleEvent);
-      target.addEventListener('change', handleEvent);
-      target.addEventListener('input', handleEvent);
-      target.addEventListener('blur', handleInputBlur, true); // capture 단계
-
-      // 정리
       return () => {
-        dispatcher.cleanup();
         if (measurementFrame !== null) {
           cancelAnimationFrame(measurementFrame);
         }
-        target.removeEventListener('click', handleCheckboxToggle);
-        target.removeEventListener('click', handleEvent);
-        target.removeEventListener('change', handleEvent);
-        target.removeEventListener('input', handleEvent);
-        target.removeEventListener('blur', handleInputBlur, true);
-        detachDropdowns();
+        detachInteractions();
       };
     }
 
