@@ -360,6 +360,69 @@ fn preset_rejects_out_of_range_image_transform_with_path() {
 }
 
 #[test]
+fn position_style_validation_first_error_order_is_stable() {
+    let damaged_gradient = serde_json::json!({
+        "angle": 45,
+        "stops": [
+            { "color": "   ", "pos": 0 },
+            { "color": "#445566", "pos": 1 }
+        ]
+    });
+    let mut preset = serde_json::json!({
+        "keyPositions": {
+            "later mode": [{
+                "backgroundGradient": damaged_gradient.clone(),
+                "fontGradient": damaged_gradient.clone(),
+                "shadow": {
+                    "enabled": "yes",
+                    "color": "",
+                    "offsetX": 101,
+                    "offsetY": 101,
+                    "blur": 101
+                },
+                "idleImageTransform": {
+                    "offsetX": 501,
+                    "offsetY": 501,
+                    "rotation": 181,
+                    "scale": 0
+                }
+            }]
+        },
+        "statPositions": {
+            "earlier mode": [{ "backgroundGradient": damaged_gradient }]
+        }
+    });
+
+    assert_eq!(
+        invalid_position_style_detail(&preset).as_deref(),
+        Some(
+            "keyPositions[\"later mode\"][0].backgroundGradient: stops[0].color must not be blank"
+        )
+    );
+
+    let entry = preset["keyPositions"]["later mode"][0]
+        .as_object_mut()
+        .unwrap();
+    entry.remove("backgroundGradient");
+    entry.remove("fontGradient");
+    assert_eq!(
+        invalid_position_style_detail(&preset).as_deref(),
+        Some("keyPositions[\"later mode\"][0].shadow.enabled: must be a boolean")
+    );
+
+    preset["keyPositions"]["later mode"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("shadow");
+    assert_eq!(
+        invalid_position_style_detail(&preset).as_deref(),
+        Some(
+            "keyPositions[\"later mode\"][0].idleImageTransform.offsetX: must be a finite number between -500 and 500"
+        )
+    );
+}
+
+#[test]
 fn general_gradient_preset_rejects_blank_stop_color_with_index() {
     // 공백 stop은 로드 복구가 수렴하지 않는 손상 값 - 문에서 거부
     for field in ["fontGradient", "backgroundGradient", "borderGradient"] {
