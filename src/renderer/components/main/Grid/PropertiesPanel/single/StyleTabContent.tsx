@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import type { StyleTabContentProps } from '../types';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
@@ -24,18 +23,11 @@ import {
   PropertySection,
   NumberInput,
   TextInput,
-  FontStyleToggle,
 } from '../PropertyInputs';
-import { createFontStyleToggleHandlers } from '../fontStyleToggleHandlers';
-import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { useFontStore } from '@stores/useFontStore';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
-import FontPicker from '../../../Modal/content/pickers/FontPicker';
-import FontPickerOpenButton from '../../../Modal/content/pickers/FontPickerOpenButton';
-import FontWeightDropdown from '../FontWeightDropdown';
 import Checkbox from '../../../common/Checkbox';
 import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
@@ -55,8 +47,6 @@ import {
   DEFAULT_ELEMENT_ACTIVE_BORDER,
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_BASE_FONT_WEIGHT,
-  DEFAULT_ELEMENT_FONT_BOLD,
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
@@ -64,7 +54,6 @@ import {
   elementImageReplacesSurface,
   resolveElementBorder,
 } from '@utils/core/elementBorder';
-import { resolveSupportedFontWeight } from '@utils/core/fontWeights';
 import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
@@ -72,8 +61,9 @@ import {
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import SoundSection from '../SoundSection';
 import SingleGeometrySection from './SingleGeometrySection';
+import SingleTypographySection from './SingleTypographySection';
+
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
-const FONT_PAGE_KEY = 'single-style:font';
 const SOUND_PAGE_KEY = 'single-style:sound';
 
 // 피커 타겟 타입
@@ -262,9 +252,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
 
   // 인-패널 내비게이션 (사운드/폰트 서브 페이지)
-  const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
-    usePanelNav();
-
   // 로컬 색상 상태 (드래그 중 UI 업데이트용)
   const [localColors, setLocalColors] = useState<
     Record<StyleColorProperty, string>
@@ -627,15 +614,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   };
   const handleImageTransformCancel = () => editGestureController.cancel();
 
-  // 표시 텍스트 핸들러
-  const handleDisplayTextChange = (value: string) => {
-    onStylePropertyPreview?.({ property: 'displayText', value: value });
-  };
-
-  const handleDisplayTextBlur = (value: string) => {
-    onStylePropertyCommit?.({ property: 'displayText', value: value });
-  };
-
   // 클래스명 핸들러
   const handleClassNameChange = (value: string) => {
     onStylePropertyPreview?.({ property: 'className', value: value });
@@ -874,90 +852,25 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         t={t}
       />
 
-      {/* 텍스트·폰트 */}
-      <PropertySection>
-        {/* 표시 텍스트 */}
-        {!hideDisplayText && (
-          <PropertyRow
-            label={t('propertiesPanel.displayText') || '표시 텍스트'}
-          >
-            <TextInput
-              value={keyPosition.displayText || ''}
-              onChange={handleDisplayTextChange}
-              onBlur={handleDisplayTextBlur}
-              onCancel={() => editGestureController.cancel()}
-              placeholder={keyInfo?.displayName || ''}
-              width="54px"
-            />
-          </PropertyRow>
-        )}
-
-        {/* 폰트 */}
-        <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
-          <FontPickerOpenButton
-            activePageKey={activePageKey}
-            pageKey={FONT_PAGE_KEY}
-            onBeforeOpen={() => setPickerFor(null)}
-            onOpen={() => openPage(FONT_PAGE_KEY)}
-            onClose={closePage}
-          >
-            {t('propertiesPanel.configure') || '설정하기'}
-          </FontPickerOpenButton>
-        </PropertyRow>
-
-        {/* 글꼴 크기 */}
-        <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
-          <NumberInput
-            value={keyPosition.fontSize ?? 14}
-            onChange={(value) => handleStyleChangeComplete('fontSize', value)}
-            onPreview={(value) => handleStylePreview('fontSize', value)}
-            onCancel={() => editGestureController.cancel()}
-            suffix="px"
-            min={8}
-            max={72}
-            allowDecimal
-            decimalScale={1}
-          />
-        </PropertyRow>
-
-        {/* 글꼴 굵기 */}
-        <PropertyRow label={t('propertiesPanel.fontWeight') || '글꼴 굵기'}>
-          <FontWeightDropdown
-            fontFamilies={[keyPosition.fontFamily]}
-            value={keyPosition.fontWeight ?? DEFAULT_ELEMENT_BASE_FONT_WEIGHT}
-            onChange={(value) => handleStyleChangeComplete('fontWeight', value)}
-          />
-        </PropertyRow>
-
-        {/* 글꼴 색상 */}
-        <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
-          <ColorSwatchButton
-            ref={fontColorBtnRef}
-            type="button"
-            onClick={() => handlePickerToggle('fontColor')}
-            open={pickerFor === 'fontColor'}
-            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-            surfaceClassName="rounded-md"
-            color={getDisplayColor(colorValueFor('fontColor'))}
-          />
-        </PropertyRow>
-
-        {/* 글꼴 스타일 */}
-        <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
-          <FontStyleToggle
-            isBold={
-              keyPosition.fontBold ??
-              (keyPosition.fontWeight == null
-                ? DEFAULT_ELEMENT_FONT_BOLD
-                : keyPosition.fontWeight === 700)
-            }
-            isItalic={keyPosition.fontItalic ?? false}
-            isUnderline={keyPosition.fontUnderline ?? false}
-            isStrikethrough={keyPosition.fontStrikethrough ?? false}
-            {...createFontStyleToggleHandlers(handleStyleChangeComplete)}
-          />
-        </PropertyRow>
-      </PropertySection>
+      <SingleTypographySection
+        keyPosition={keyPosition}
+        keyInfo={keyInfo}
+        hideDisplayText={hideDisplayText}
+        fontColorButtonRef={fontColorBtnRef}
+        fontColorOpen={pickerFor === 'fontColor'}
+        fontColor={getDisplayColor(colorValueFor('fontColor'))}
+        onFontColorToggle={() => handlePickerToggle('fontColor')}
+        onBeforeFontOpen={() => setPickerFor(null)}
+        onDisplayTextPreview={(value) =>
+          onStylePropertyPreview?.({ property: 'displayText', value })
+        }
+        onDisplayTextCommit={(value) =>
+          onStylePropertyCommit?.({ property: 'displayText', value })
+        }
+        onStylePreview={handleStylePreview}
+        onStyleCommit={handleStyleChangeComplete}
+        t={t}
+      />
 
       {/* 커스텀 CSS 활성화 시에만 클래스명 및 CSS 우선순위 표시 */}
       {useCustomCSS && (
@@ -1124,37 +1037,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           />
         ) : null}
       </PopupExit>
-
-      {/* FontPicker — 패널 서브 페이지 */}
-      {renderPageKey === FONT_PAGE_KEY &&
-        pageHost &&
-        createPortal(
-          <FontPicker
-            open
-            selectedFont={keyPosition.fontFamily || null}
-            onFontSelect={(fontName) => {
-              if (fontName === null) return;
-              const currentWeight =
-                keyPosition.fontWeight ?? DEFAULT_ELEMENT_BASE_FONT_WEIGHT;
-              const nextWeight = resolveSupportedFontWeight(
-                fontName,
-                useFontStore.getState().getAllFonts(),
-              );
-              // 굵기 재선택은 폰트 변경과 한 undo 단계 - 따로 되돌리면 새 폰트에
-              // 지원하지 않는 굵기가 남는다
-              const gestureId = crypto.randomUUID();
-              handleStyleChangeComplete('fontFamily', fontName, { gestureId });
-              if (nextWeight !== currentWeight) {
-                handleStyleChangeComplete('fontWeight', nextWeight, {
-                  gestureId,
-                });
-              }
-            }}
-            pageTitle={t('propertiesPanel.font') || '폰트'}
-            onBack={closePage}
-          />,
-          pageHost,
-        )}
     </>
   );
 };
