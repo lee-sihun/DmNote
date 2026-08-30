@@ -10,6 +10,11 @@ import {
 } from '@src/types/key/keys';
 import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
 import {
+  reactiveSpritePositionSchema,
+  type ReactiveSpritePosition,
+  type SpritePositions,
+} from '@src/types/key/sprites';
+import {
   STAT_ITEM_TYPES,
   type StatItemPosition,
   type StatItemPositions,
@@ -54,6 +59,7 @@ export const EDITOR_FIELDS = [
   'statPositions',
   'graphPositions',
   'knobPositions',
+  'spritePositions',
   'layerGroups',
 ] as const;
 
@@ -66,6 +72,7 @@ export interface EditorDocumentV1 {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
+  spritePositions: SpritePositions;
   layerGroups: LayerGroups;
 }
 
@@ -73,16 +80,24 @@ export type CanonicalKeyPosition = KeyPosition & { id: string };
 export type CanonicalStatItemPosition = StatItemPosition & { id: string };
 export type CanonicalGraphItemPosition = GraphItemPosition & { id: string };
 export type CanonicalKnobItemPosition = KnobItemPosition & { id: string };
+export type CanonicalReactiveSpritePosition = ReactiveSpritePosition & {
+  id: string;
+};
 
 export interface CanonicalEditorDocumentV1
   extends Omit<
     EditorDocumentV1,
-    'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+    | 'keyPositions'
+    | 'statPositions'
+    | 'graphPositions'
+    | 'knobPositions'
+    | 'spritePositions'
   > {
   keyPositions: Record<string, CanonicalKeyPosition[]>;
   statPositions: Record<string, CanonicalStatItemPosition[]>;
   graphPositions: Record<string, CanonicalGraphItemPosition[]>;
   knobPositions: Record<string, CanonicalKnobItemPosition[]>;
+  spritePositions: Record<string, CanonicalReactiveSpritePosition[]>;
 }
 
 export type EditorPatchV1 = {
@@ -115,7 +130,7 @@ export interface EditorPatchCommitRequest extends EditorCommitRequestBase {
   ops?: never;
 }
 
-export type EditorElementTypeV1 = 'key' | 'stat' | 'graph' | 'knob';
+export type EditorElementTypeV1 = 'key' | 'stat' | 'graph' | 'knob' | 'sprite';
 
 export interface EditorBoundsV1 {
   dx: number;
@@ -141,7 +156,8 @@ export type EditorFrozenElementV1 =
   | { elementType: 'key'; slot: KeySlot; position: CanonicalKeyPosition }
   | { elementType: 'stat'; position: CanonicalStatItemPosition }
   | { elementType: 'graph'; position: CanonicalGraphItemPosition }
-  | { elementType: 'knob'; position: CanonicalKnobItemPosition };
+  | { elementType: 'knob'; position: CanonicalKnobItemPosition }
+  | { elementType: 'sprite'; position: CanonicalReactiveSpritePosition };
 
 export interface EditorFrozenZUpdateV1 {
   elementType: EditorElementTypeV1;
@@ -1102,6 +1118,20 @@ const assertKnobPosition: (
   }
 };
 
+// 스프라이트는 KeyPosition 형태가 아니라 전용 스키마로 검증한다.
+// nullable 필드는 스키마가 직접 허용하므로 별도 정규화가 필요 없다
+const assertSpritePosition: (
+  value: unknown,
+  label: string,
+) => asserts value is ReactiveSpritePosition = (
+  value: unknown,
+  label: string,
+) => {
+  if (!reactiveSpritePositionSchema.safeParse(value).success) {
+    throw new EditorProtocolError(`${label} is not a valid sprite position`);
+  }
+};
+
 const assertLayerGroups = (value: unknown, label: string): void => {
   assertModeRecord(value, label, (item, itemLabel) => {
     if (
@@ -1133,6 +1163,8 @@ const assertEditorCollections = (
       assertModeRecord(collection, collectionLabel, assertGraphPosition),
     knobPositions: (collection, collectionLabel) =>
       assertModeRecord(collection, collectionLabel, assertKnobPosition),
+    spritePositions: (collection, collectionLabel) =>
+      assertModeRecord(collection, collectionLabel, assertSpritePosition),
     layerGroups: assertLayerGroups,
   };
 
@@ -1199,6 +1231,7 @@ const assertLayerGroupReferences = (
       'statPositions',
       'graphPositions',
       'knobPositions',
+      'spritePositions',
     ] as const
   ).forEach((field) => {
     Object.entries(value[field] as Record<string, unknown[]>).forEach(
@@ -1221,6 +1254,7 @@ const assertLayerGroupReferences = (
   });
 };
 
+// 그라데이션 형제 필드 정규화 대상. 스프라이트는 그라데이션 필드가 없어 제외
 const POSITION_COLLECTION_FIELDS = [
   'keyPositions',
   'statPositions',
@@ -1297,6 +1331,7 @@ export function assertCanonicalEditorDocument(
     ['statPositions', document.statPositions],
     ['graphPositions', document.graphPositions],
     ['knobPositions', document.knobPositions],
+    ['spritePositions', document.spritePositions],
   ] as const;
   for (const [field, collection] of collections) {
     for (const [mode, positions] of Object.entries(collection)) {
@@ -1453,6 +1488,23 @@ function assertEditorFrozenElement(
       throw new EditorProtocolError(`${label}.position.id is invalid`);
     }
     assertFrozenPositionZIndex(value.position, `${label}.position`);
+    return;
+  }
+  if (value.elementType === 'sprite') {
+    assertSpritePosition(value.position, `${label}.position`);
+    const position = value.position as Record<string, unknown>;
+    if (!isNativeElementId(position.id)) {
+      throw new EditorProtocolError(`${label}.position.id is invalid`);
+    }
+    // 스프라이트 zIndex는 null 허용 - 정수 범위 검사는 값이 있을 때만
+    if (
+      position.zIndex !== null &&
+      (!Number.isSafeInteger(position.zIndex) ||
+        (position.zIndex as number) < -2_147_483_648 ||
+        (position.zIndex as number) > 2_147_483_647)
+    ) {
+      throw new EditorProtocolError(`${label}.position.zIndex is invalid`);
+    }
     return;
   }
   throw new EditorProtocolError(`${label}.elementType is invalid`);
@@ -1813,7 +1865,9 @@ export function assertEditorOpsV1(
     if (op.kind === 'setBounds') {
       assertExactKeys(op, ['kind', 'elementType', 'id', 'bounds'], opLabel);
       if (
-        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
+          op.elementType as string,
+        ) ||
         !isNativeElementId(op.id)
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
@@ -1825,7 +1879,9 @@ export function assertEditorOpsV1(
     if (op.kind === 'deleteElement') {
       assertExactKeys(op, ['kind', 'elementType', 'id'], opLabel);
       if (
-        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
+          op.elementType as string,
+        ) ||
         !isNativeElementId(op.id)
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
@@ -1836,7 +1892,9 @@ export function assertEditorOpsV1(
     if (op.kind === 'patchElement') {
       assertExactKeys(op, ['kind', 'elementType', 'id', 'patch'], opLabel);
       if (
-        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
+          op.elementType as string,
+        ) ||
         !isNativeElementId(op.id) ||
         !isRecord(op.patch)
       ) {
@@ -1875,7 +1933,7 @@ export function assertEditorOpsV1(
         }
         assertExactKeys(target, ['elementType', 'id'], targetLabel);
         if (
-          !['key', 'stat', 'graph', 'knob'].includes(
+          !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
             target.elementType as string,
           ) ||
           typeof target.id !== 'string' ||
@@ -1981,7 +2039,7 @@ export function assertEditorOpsV1(
         targetLabel: string,
       ) => {
         if (
-          !['key', 'stat', 'graph', 'knob'].includes(
+          !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
             target.elementType as string,
           ) ||
           !isNativeElementId(target.id)
@@ -2089,7 +2147,7 @@ export function assertEditorOpsV1(
       }
       assertExactKeys(update, ['elementType', 'id', 'zIndex'], updateLabel);
       if (
-        !['key', 'stat', 'graph', 'knob'].includes(
+        !['key', 'stat', 'graph', 'knob', 'sprite'].includes(
           update.elementType as string,
         ) ||
         !isNativeElementId(update.id) ||
@@ -2170,6 +2228,7 @@ export function assertEditorOpCommitResult(
     stat: 'statPositions',
     graph: 'graphPositions',
     knob: 'knobPositions',
+    sprite: 'spritePositions',
   };
   const requiredFields = new Set<EditorField>();
   const allowedFields = new Set<EditorField>();
