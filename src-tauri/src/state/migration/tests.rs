@@ -1,8 +1,10 @@
 use super::{
-    load_store_from_path, migrate_local_fonts_to_app_data, migrate_sound_library_enabled,
-    normalize_state, parse_portable_asset_reference, recover_key_mapping_entries,
-    rehome_foreign_asset_references, repair_image_transforms, rgba_to_hex, AssetCategory,
-    LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH, LEGACY_PANEL_DETACH_ENABLED_KEY,
+    decode_font_data_url, decode_image_data_url, load_store_from_path,
+    migrate_local_fonts_to_app_data, migrate_sound_library_enabled, normalize_font_extension,
+    normalize_image_extension, normalize_state, parse_portable_asset_reference,
+    recover_key_mapping_entries, rehome_foreign_asset_references, repair_image_transforms,
+    rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH,
+    LEGACY_PANEL_DETACH_ENABLED_KEY,
 };
 use crate::{
     defaults::{default_keys, default_positions},
@@ -3523,6 +3525,52 @@ fn missing_local_font_is_restored_from_embedded_data_uri() {
     assert_eq!(std::fs::read(&restored_path).unwrap(), font_bytes);
 
     let _ = std::fs::remove_dir_all(app_data_dir);
+}
+
+#[test]
+fn asset_data_url_mime_and_extension_fallback_order_is_stable() {
+    let encoded = BASE64_STANDARD.encode(b"asset-bytes");
+
+    assert_eq!(
+        decode_font_data_url(&format!("data:font/woff2;base64,{encoded}"), Some("otf")),
+        Some((b"asset-bytes".to_vec(), "woff2".to_string()))
+    );
+    assert_eq!(
+        decode_font_data_url(
+            &format!("data:font/custom;base64,{encoded}"),
+            Some(" WOFF ")
+        ),
+        Some((b"asset-bytes".to_vec(), "woff".to_string()))
+    );
+    assert_eq!(
+        decode_font_data_url(
+            &format!("data:application/octet-stream;base64,{encoded}"),
+            Some("woff2")
+        ),
+        None
+    );
+    assert_eq!(
+        decode_font_data_url("data:font/woff2;base64,%%%", Some("otf")),
+        None
+    );
+    assert_eq!(normalize_font_extension(Some(" OTF ")), "otf");
+    assert_eq!(normalize_font_extension(Some("unknown")), "ttf");
+
+    assert_eq!(
+        decode_image_data_url(&format!("data:image/jpeg;base64,{encoded}")),
+        Some((b"asset-bytes".to_vec(), "jpg".to_string()))
+    );
+    assert_eq!(
+        decode_image_data_url(&format!("data:image/unknown;base64,{encoded}")),
+        Some((b"asset-bytes".to_vec(), "png".to_string()))
+    );
+    assert_eq!(
+        decode_image_data_url(&format!("data:font/woff2;base64,{encoded}")),
+        None
+    );
+    assert_eq!(decode_image_data_url("data:image/png;base64,%%%"), None);
+    assert_eq!(normalize_image_extension(Some(" JPEG ")), "jpg");
+    assert_eq!(normalize_image_extension(Some("unknown")), "png");
 }
 
 #[test]
