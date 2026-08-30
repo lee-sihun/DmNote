@@ -1,10 +1,10 @@
 import React from 'react';
 import {
   gradientToCss,
-  gradientRingStyle,
   resolveStatePair,
   type GradientSpec,
 } from '@src/types/color';
+import KnobFace from '@components/shared/KnobFace';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import { resolveImageSource } from '@utils/core/imageSource';
@@ -269,85 +269,24 @@ const KnobItem = ({
       onContextMenu={handleContextMenu}
       onDragStart={(e: React.DragEvent) => e.preventDefault()}
     >
-      <div
-        style={
-          {
-            width: '100%',
-            height: '100%',
-            overflow: 'hidden',
-            position: 'relative',
-            ...(useInline
-              ? {
-                  borderRadius: resolvedRadius,
-                  background: effectiveBgGradient
-                    ? gradientToCss(effectiveBgGradient)
-                    : stateBackgroundColor,
-                  backgroundClip: 'padding-box',
-                  border: resolvedBorder,
-                  padding: showBorderRing
-                    ? `${gradientRingWidth}px`
-                    : undefined,
-                  boxShadow: resolvedShadow,
-                }
-              : {
-                  '--dmn-knob-bg-default': effectiveBgGradient
-                    ? gradientToCss(effectiveBgGradient)
-                    : stateBackgroundColor,
-                  '--dmn-knob-border-default': resolvedBorder,
-                  '--dmn-knob-radius-default': resolvedRadius,
-                  '--dmn-knob-padding-default': showBorderRing
-                    ? `${gradientRingWidth}px`
-                    : '0px',
-                  '--dmn-knob-shadow-default': resolvedShadow,
-                  '--dmn-knob-indicator-default': stateBorderColor,
-                }),
-            boxSizing: 'border-box',
-          } as React.CSSProperties
+      <KnobFace
+        active={previewActive}
+        useInlineStyles={useInline}
+        background={
+          effectiveBgGradient
+            ? gradientToCss(effectiveBgGradient)
+            : stateBackgroundColor
         }
-        data-knob-element="true"
-        data-knob-state={previewActive ? 'active' : 'inactive'}
-      >
-        {showBorderRing && effectiveBorderGradient && (
-          <span
-            aria-hidden="true"
-            data-gradient-border-ring="true"
-            style={{
-              ...gradientRingStyle(effectiveBorderGradient, gradientRingWidth),
-              ...(useInline
-                ? { background: gradientToCss(effectiveBorderGradient) }
-                : {}),
-            }}
-          />
-        )}
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt=""
-            draggable={false}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: resolvedFit,
-              pointerEvents: 'none',
-              userSelect: 'none',
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              position: 'absolute',
-              top: '12%',
-              left: '50%',
-              width: '8%',
-              height: '76%',
-              transform: 'translateX(-50%)',
-              background: useInline ? stateBorderColor : undefined,
-              borderRadius: '4px',
-            }}
-            data-knob-indicator="true"
-          />
-        )}
-      </div>
+        border={resolvedBorder}
+        borderRadius={resolvedRadius}
+        shadow={resolvedShadow}
+        indicatorColor={stateBorderColor}
+        borderGradient={effectiveBorderGradient}
+        borderWidth={gradientRingWidth}
+        showBorderRing={showBorderRing}
+        imageSrc={imageSrc}
+        imageFit={resolvedFit}
+      />
     </div>
   );
 };
