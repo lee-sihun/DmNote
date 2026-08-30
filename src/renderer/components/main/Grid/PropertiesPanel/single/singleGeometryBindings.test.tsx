@@ -1,6 +1,22 @@
 import React, { act, createRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ColorModeValue, ColorPair } from '@src/types/color';
+import type {
+  GradientCanvasAnchor,
+  GradientPreviewState,
+  GradientPreviewSurface,
+} from '@stores/grid/useGradientEditStore';
+
+interface CapturedGradientOptions {
+  pair: ColorPair;
+  contextKey?: string;
+  canvasAnchor?: GradientCanvasAnchor;
+  canvasSurface?: GradientPreviewSurface;
+  canvasState?: GradientPreviewState;
+  onPreview?: (value: ColorModeValue) => void;
+  onCommit: (value: ColorModeValue) => void;
+}
 
 const captured = vi.hoisted(() => ({
   numbers: new Map<
@@ -127,7 +143,8 @@ const captured = vi.hoisted(() => ({
           },
     ) => void;
   }>,
-  swatches: [] as Array<{ onClick: () => void }>,
+  swatches: [] as Array<{ onClick: () => void; image?: string }>,
+  gradientOptions: [] as CapturedGradientOptions[],
   shadows: [] as Array<{
     showActiveState?: boolean;
     onChange: (
@@ -237,7 +254,7 @@ vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
   },
 }));
 vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
-  ColorSwatchButton: (props: { onClick: () => void }) => {
+  ColorSwatchButton: (props: { onClick: () => void; image?: string }) => {
     captured.swatches.push(props);
     return null;
   },
@@ -270,43 +287,21 @@ vi.mock('@hooks/useKeySlotCapture', () => ({
   }),
 }));
 vi.mock('@hooks/pickers/useGradientColorState', () => ({
-  useGradientColorState: ({
-    onPreview,
-    onCommit,
-  }: {
-    onPreview?: (
-      value:
-        | { mode: 'solid'; color: string }
-        | {
-            mode: 'gradient';
-            spec: {
-              angle: number;
-              stops: Array<{ color: string; pos: number }>;
-            };
-          },
-    ) => void;
-    onCommit: (
-      value:
-        | { mode: 'solid'; color: string }
-        | {
-            mode: 'gradient';
-            spec: {
-              angle: number;
-              stops: Array<{ color: string; pos: number }>;
-            };
-          },
-    ) => void;
-  }) => ({
-    pickerColor: '#ffffff',
-    handlePickerColorChange: (color: string, commit: boolean) =>
-      commit
-        ? onCommit({ mode: 'solid', color })
-        : onPreview?.({ mode: 'solid', color }),
-    handleGradientSpecSelect: (spec: {
-      angle: number;
-      stops: Array<{ color: string; pos: number }>;
-    }) => onCommit({ mode: 'gradient', spec }),
-  }),
+  useGradientColorState: (options: CapturedGradientOptions) => {
+    captured.gradientOptions.push(options);
+    const { onPreview, onCommit } = options;
+    return {
+      pickerColor: '#ffffff',
+      handlePickerColorChange: (color: string, commit: boolean) =>
+        commit
+          ? onCommit({ mode: 'solid', color })
+          : onPreview?.({ mode: 'solid', color }),
+      handleGradientSpecSelect: (spec: {
+        angle: number;
+        stops: Array<{ color: string; pos: number }>;
+      }) => onCommit({ mode: 'gradient', spec }),
+    };
+  },
 }));
 vi.mock('@utils/core/axisEventBus', () => ({
   axisEventBus: { subscribe: () => vi.fn() },
@@ -321,7 +316,12 @@ import {
 } from './SingleSelectionPanel';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import { isEditorElementPropertyPatchV1 } from '@src/types/editor';
+import { gradientToCss } from '@src/types/color';
 import type { ImageFit } from '@src/types/key/keys';
+import {
+  DEFAULT_ELEMENT_ACTIVE_BORDER_GRADIENT,
+  DEFAULT_ELEMENT_BORDER_GRADIENT,
+} from '@utils/core/elementDefaults';
 
 type CompatProps<T extends React.ElementType> = React.ComponentProps<T> &
   Record<string, unknown>;
@@ -386,6 +386,7 @@ describe('single geometry input bindings', () => {
     captured.color = null;
     captured.colorInputs.length = 0;
     captured.swatches.length = 0;
+    captured.gradientOptions.length = 0;
     captured.shadows.length = 0;
     captured.nav.activePageKey = null;
     captured.nav.renderPageKey = null;
@@ -811,6 +812,71 @@ describe('single geometry input bindings', () => {
       ],
     ]);
     expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it('knob replace 이미지에서도 기본 border gradient와 native picker 문맥을 보존한다', () => {
+    const position = {
+      ...createDefaultKeyPosition(),
+      axisId: 'HIDA:test',
+      sensitivity: 1,
+      reverse: false,
+      inactiveImage: '/images/knob.png',
+      imageMode: 'replace' as const,
+      borderColor: undefined,
+      borderGradient: undefined,
+      borderWidth: undefined,
+    };
+    act(() => {
+      root.render(
+        <SingleKnobPanel
+          setPanelElement={vi.fn()}
+          singleKnobPosition={position}
+          singleKnobIndex={0}
+          selectedKeyType="4key"
+          isRenaming={false}
+          renameInputRef={createRef<HTMLInputElement>()}
+          renameValue=""
+          setRenameValue={vi.fn()}
+          renameCancelledRef={{ current: false }}
+          handleRenameCommit={vi.fn()}
+          handleRenameCancel={vi.fn()}
+          handleRenameStart={vi.fn()}
+          handleKnobUpdate={vi.fn()}
+          singleScrollRefFor={() => vi.fn()}
+          panelElement={null}
+          useCustomCSS={false}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    expect(captured.swatches[1]?.image).toBe(
+      gradientToCss(DEFAULT_ELEMENT_BORDER_GRADIENT),
+    );
+
+    act(() => captured.swatches[1]?.onClick());
+    const borderPicker = captured.gradientOptions.at(-1);
+    expect(borderPicker?.pair.gradient).toEqual(
+      DEFAULT_ELEMENT_BORDER_GRADIENT,
+    );
+    expect(borderPicker).toMatchObject({
+      contextKey: `knob:4key:${position.id}:borderColor:idle`,
+      canvasAnchor: { kind: 'knob', id: position.id },
+      canvasSurface: 'border',
+      canvasState: 'idle',
+    });
+
+    act(() => captured.color?.onStateModeChange?.('active'));
+    const activeBorderPicker = captured.gradientOptions.at(-1);
+    expect(activeBorderPicker?.pair.gradient).toEqual(
+      DEFAULT_ELEMENT_ACTIVE_BORDER_GRADIENT,
+    );
+    expect(activeBorderPicker).toMatchObject({
+      contextKey: `knob:4key:${position.id}:borderColor:active`,
+      canvasAnchor: { kind: 'knob', id: position.id },
+      canvasSurface: 'border',
+      canvasState: 'active',
+    });
   });
 
   it.each([
