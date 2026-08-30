@@ -18,6 +18,7 @@ export const GridMarqueeBenchmarkSurface = ({
     statPositions: {},
     graphPositions: {},
     knobPositions: {},
+    spritePositions: {},
     selectedKeyType: 'benchmark',
     pluginElements: [],
     clientToGridCoords: (x, y) => ({ x, y }),

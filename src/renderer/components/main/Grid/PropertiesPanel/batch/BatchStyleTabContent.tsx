@@ -50,7 +50,10 @@ import {
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import {
+  ACTION_BUTTON_CHROME_CLASS,
+  AXIS_FIELD_WIDTH,
+} from '@utils/cardRecipes';
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -681,7 +684,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           <button
             ref={batchImageButtonRef}
             type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+            className={`${ACTION_BUTTON_CHROME_CLASS} ${
               showBatchImagePicker ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
             onClick={onToggleBatchImagePicker}
@@ -1034,7 +1037,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 ) : null}
                 <button
                   type="button"
-                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                  className={`${ACTION_BUTTON_CHROME_CLASS} ${
                     activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
                   } text-fg text-body`}
                   onClick={() => {

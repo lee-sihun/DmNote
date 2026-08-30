@@ -79,8 +79,12 @@ import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
-import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import {
+  ACTION_BUTTON_CHROME_CLASS,
+  AXIS_FIELD_WIDTH,
+} from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
+import { RenameIcon } from '../PanelIcons';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorPaintPropertyPatchV1,
@@ -103,32 +107,6 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
       return 'KPS';
   }
 };
-
-// 24 그리드를 12px로 렌더 - 스트로크 2.4가 화면상 1.2
-const RenameIcon: React.FC = () => (
-  <svg
-    width="12"
-    height="12"
-    viewBox="0 0 24 24"
-    fill="none"
-    aria-hidden="true"
-  >
-    <path
-      d="M12 20H21"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 // ============================================================================
 // Plugin Selection Panel
@@ -774,7 +752,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <button
                   ref={graphImageButtonRef}
                   type="button"
-                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                  className={`${ACTION_BUTTON_CHROME_CLASS} ${
                     showGraphImagePicker ? 'shadow-focus-ring' : ''
                   } text-fg text-body`}
                   onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
@@ -1512,7 +1490,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <button
                   ref={imageButtonRef}
                   type="button"
-                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                  className={`${ACTION_BUTTON_CHROME_CLASS} ${
                     showImagePicker ? 'shadow-focus-ring' : ''
                   } text-fg text-body`}
                   onClick={() => setShowImagePicker(!showImagePicker)}

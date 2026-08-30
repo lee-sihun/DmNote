@@ -19,8 +19,7 @@ interface UseGridMarqueeParams {
   statPositions: CanonicalEditorDocumentV1['statPositions'];
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
-  // Grid 배선 전에도 훅이 동작하도록 선택 인자 - 미전달 시 스프라이트만 제외
-  spritePositions?: CanonicalEditorDocumentV1['spritePositions'];
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'];
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   clientToGridCoords: (
@@ -48,7 +47,7 @@ export function useGridMarquee({
   statPositions,
   graphPositions,
   knobPositions,
-  spritePositions = {},
+  spritePositions,
   selectedKeyType,
   pluginElements,
   clientToGridCoords,
@@ -227,8 +226,8 @@ export function useGridMarquee({
         const elementBounds = {
           x: pos.dx,
           y: pos.dy,
-          width: pos.width || 60,
-          height: pos.height || 60,
+          width: pos.width || 200,
+          height: pos.height || 200,
         };
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({

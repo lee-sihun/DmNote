@@ -45,8 +45,8 @@ interface SpriteItemProps {
   isViewportTransforming?: boolean;
 }
 
-// 활동 영역은 에디터 전용 가이드 - 오버레이에는 그리지 않는다
-const ACTIVITY_AREA_BORDER = '1px dashed rgba(237, 238, 242, 0.4)';
+// 활동 영역은 에디터 전용 가이드 - 오버레이에는 그리지 않는다. 복제 고스트도 같은 선을 쓴다
+export const ACTIVITY_AREA_BORDER = '1px dashed rgba(237, 238, 242, 0.4)';
 const SELECTED_AREA_BORDER = '1px solid var(--ui-selection-border)';
 
 // 캔버스의 스프라이트는 정적이다: 평소엔 idle 상태, 자세 팝업이 열려 있으면

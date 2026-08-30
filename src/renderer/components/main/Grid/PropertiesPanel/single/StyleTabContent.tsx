@@ -71,7 +71,10 @@ import {
   resolveElementShadowForPosition,
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import {
+  ACTION_BUTTON_CHROME_CLASS,
+  AXIS_FIELD_WIDTH,
+} from '@utils/cardRecipes';
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
 const SOUND_PAGE_KEY = 'single-style:sound';
@@ -740,7 +743,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             <button
               ref={slotEditButtonRef}
               onClick={() => setSlotPickerOpen((prev) => !prev)}
-              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+              className={`${ACTION_BUTTON_CHROME_CLASS} ${
                 slotPickerOpen ? 'shadow-focus-ring' : ''
               } text-fg text-body`}
             >
@@ -934,7 +937,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             <button
               ref={imageButtonRef}
               type="button"
-              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+              className={`${ACTION_BUTTON_CHROME_CLASS} ${
                 showImagePicker ? 'shadow-focus-ring' : ''
               } text-fg text-body`}
               onClick={onToggleImagePicker}
@@ -1110,7 +1113,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
             <button
               type="button"
-              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+              className={`${ACTION_BUTTON_CHROME_CLASS} ${
                 activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
               } text-fg text-body`}
               onClick={() => {

@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
+import { ACTION_BUTTON_CHROME_CLASS } from '@utils/cardRecipes';
 import { createPortal } from 'react-dom';
 import type { CounterTabContentProps } from '../types';
 import type { KeyCounterAnimationSettings } from '@src/types/key/keys';
@@ -424,7 +425,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         <PropertyRow label={t('counterSetting.animation') || '애니메이션 설정'}>
           <button
             type="button"
-            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+            className={`${ACTION_BUTTON_CHROME_CLASS} ${
               activePageKey === ANIMATION_PAGE_KEY ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
             onClick={() => {

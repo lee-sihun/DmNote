@@ -61,7 +61,7 @@ import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
 import KnobItem from '../layers/KnobItem';
-import SpriteItem from '../layers/SpriteItem';
+import SpriteItem, { ACTIVITY_AREA_BORDER } from '../layers/SpriteItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -95,10 +95,8 @@ import {
   DEFAULT_IMAGE_MODE,
   imageTransformToCss,
 } from '@src/types/key/imageLayer';
-import {
-  spriteTransformToCss,
-  type ReactiveSpritePosition,
-} from '@src/types/key/sprites';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
+import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_FONT,
@@ -1539,7 +1537,7 @@ const Grid = ({
             width: `${width}px`,
             height: `${height}px`,
             transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
-            border: '1px dashed rgba(237, 238, 242, 0.4)',
+            border: ACTIVITY_AREA_BORDER,
             borderRadius: '4px',
             boxSizing: 'border-box',
             opacity: 0.5,
@@ -1552,16 +1550,11 @@ const Grid = ({
               alt=""
               draggable={false}
               style={{
-                position: 'absolute',
-                left: `${spritePosition.imageRect.x}px`,
-                top: `${spritePosition.imageRect.y}px`,
-                width: `${spritePosition.imageRect.width}px`,
-                height: `${spritePosition.imageRect.height}px`,
-                objectFit: spritePosition.imageFit ?? 'contain',
-                transformOrigin: `${spritePosition.pivot.x * 100}% ${
-                  spritePosition.pivot.y * 100
-                }%`,
-                transform: spriteTransformToCss(spritePosition.idleTransform),
+                // 고스트는 CSS 변수 채널이 닿지 않아 인라인 강제
+                ...computeSpriteImageStyle(
+                  { ...spritePosition, useInlineStyles: true },
+                  spritePosition.idleTransform,
+                ),
                 pointerEvents: 'none',
                 userSelect: 'none',
               }}

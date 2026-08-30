@@ -93,7 +93,7 @@ export function getElementBounds(
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
-  spritePositions?: CanonicalEditorDocumentV1['spritePositions'],
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'],
 ): Bounds | null {
   if (element.type === 'key') {
     const pos = positions[selectedKeyType]?.find(
@@ -141,15 +141,15 @@ export function getElementBounds(
     };
   } else if (element.type === 'sprite') {
     // 활동 영역 박스가 곧 리사이즈 대상
-    const pos = spritePositions?.[selectedKeyType]?.find(
+    const pos = spritePositions[selectedKeyType]?.find(
       (candidate) => candidate.id === element.id,
     );
     if (!pos) return null;
     return {
       x: pos.dx,
       y: pos.dy,
-      width: pos.width || 60,
-      height: pos.height || 60,
+      width: pos.width || 200,
+      height: pos.height || 200,
     };
   } else if (element.type === 'plugin') {
     const pluginEl = pluginElements.find(
@@ -177,7 +177,7 @@ export function calculateGroupBounds(
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
-  spritePositions?: CanonicalEditorDocumentV1['spritePositions'],
+  spritePositions: CanonicalEditorDocumentV1['spritePositions'],
 ): (Bounds & { elementBounds: ElementBounds[] }) | null {
   let minX = Infinity;
   let minY = Infinity;

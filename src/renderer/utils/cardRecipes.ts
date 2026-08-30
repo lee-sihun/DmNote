@@ -19,9 +19,11 @@ export const FORM_ROW_CLASS =
 // 행 라벨
 export const FORM_LABEL_CLASS = 'text-fg-muted text-label';
 
-// 카드 행 안 액션 버튼(선택·제거·설정) 크롬
-export const ACTION_BUTTON_CLASS =
-  'px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center text-fg text-body';
+// 카드 행 안 액션 버튼(선택·제거·설정) 크롬. 텍스트 색을 조건부로 얹는
+// 호출처는 CHROME 쪽을 쓴다
+export const ACTION_BUTTON_CHROME_CLASS =
+  'px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center';
+export const ACTION_BUTTON_CLASS = `${ACTION_BUTTON_CHROME_CLASS} text-fg text-body`;
 
 // 좌표·치수 필드 폭 - X/Y/W/H는 한 행에 둘씩 서고 소수 한 자리가 붙어도 잘리면 안 된다.
 // 패널 240px에서 카드 안쪽이 196px이라 두 칸(60+8+60)을 쓰고 라벨에 68px가 남는다.

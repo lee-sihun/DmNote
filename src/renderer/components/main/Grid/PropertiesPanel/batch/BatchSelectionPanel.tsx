@@ -33,6 +33,7 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
+import { RenameIcon } from '../PanelIcons';
 import type { ElementIdSelection } from '@hooks/pickers/useBatchElementBinding';
 import {
   patchActiveImageByTargets,
@@ -263,32 +264,6 @@ const commitBoundSoundPath = (
   const persisted = patchSoundPathByIds(ids, soundPath);
   void persisted.catch(reportElementOpError);
 };
-
-// 24 그리드를 12px로 렌더 - 스트로크 2.4가 화면상 1.2
-const RenameIcon: React.FC = () => (
-  <svg
-    width="12"
-    height="12"
-    viewBox="0 0 24 24"
-    fill="none"
-    aria-hidden="true"
-  >
-    <path
-      d="M12 20H21"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 // ============================================================================
 // Shared batch panel header (group rename + summed count)

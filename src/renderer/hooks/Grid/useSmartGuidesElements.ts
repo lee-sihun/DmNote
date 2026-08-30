@@ -94,7 +94,13 @@ const getOtherElementsSnapshot = (
     const id = pos.id;
     if (!excludeSet.has(id)) {
       bounds.push(
-        calculateBounds(pos.dx, pos.dy, pos.width || 60, pos.height || 60, id),
+        calculateBounds(
+          pos.dx,
+          pos.dy,
+          pos.width || 200,
+          pos.height || 200,
+          id,
+        ),
       );
     }
   });
