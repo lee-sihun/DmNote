@@ -33,6 +33,7 @@ import {
 } from './LayerIcons';
 import { useLayerActions } from './useLayerActions';
 import { useLayerDnD } from './useLayerDnD';
+import LayerRenameInput from './LayerRenameInput';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 import {
   layerItemToSelectedElement,
@@ -563,34 +564,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
                     {/* 그룹 이름 */}
                     {isRenamingGroup ? (
-                      <input
-                        ref={actions.renameInputRef}
-                        type="text"
-                        className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-accent"
+                      <LayerRenameInput
+                        inputRef={actions.renameInputRef}
                         value={actions.renameValue}
-                        onChange={(e) => actions.setRenameValue(e.target.value)}
-                        onBlur={() => {
-                          if (!actions.renameCancelledRef.current) {
-                            actions.handleGroupRenameCommit(
-                              gh.groupId,
-                              actions.renameValue,
-                            );
-                          }
-                          actions.renameCancelledRef.current = false;
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            (e.target as HTMLInputElement).blur();
-                          } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            actions.renameCancelledRef.current = true;
-                            actions.setRenamingItemId(null);
-                          }
-                        }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                        onDoubleClick={(e) => e.stopPropagation()}
+                        cancelledRef={actions.renameCancelledRef}
+                        onChange={actions.setRenameValue}
+                        onCommit={(value) =>
+                          actions.handleGroupRenameCommit(gh.groupId, value)
+                        }
+                        onCancel={() => actions.setRenamingItemId(null)}
                       />
                     ) : (
                       <span className="flex-1 text-body truncate font-medium">
@@ -671,34 +653,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
                   {/* 이름 */}
                   {actions.renamingItemId === item.id ? (
-                    <input
-                      ref={actions.renameInputRef}
-                      type="text"
-                      className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-accent"
+                    <LayerRenameInput
+                      inputRef={actions.renameInputRef}
                       value={actions.renameValue}
-                      onChange={(e) => actions.setRenameValue(e.target.value)}
-                      onBlur={() => {
-                        if (!actions.renameCancelledRef.current) {
-                          actions.handleLayerRenameCommit(
-                            item,
-                            actions.renameValue,
-                          );
-                        }
-                        actions.renameCancelledRef.current = false;
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          (e.target as HTMLInputElement).blur();
-                        } else if (e.key === 'Escape') {
-                          e.preventDefault();
-                          actions.renameCancelledRef.current = true;
-                          actions.setRenamingItemId(null);
-                        }
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                      onDoubleClick={(e) => e.stopPropagation()}
+                      cancelledRef={actions.renameCancelledRef}
+                      onChange={actions.setRenameValue}
+                      onCommit={(value) =>
+                        actions.handleLayerRenameCommit(item, value)
+                      }
+                      onCancel={() => actions.setRenamingItemId(null)}
                     />
                   ) : (
                     <span className="flex-1 text-body truncate">
