@@ -734,6 +734,8 @@ export const EDITOR_CAPACITY_VALIDATION_CODES: ReadonlySet<string> = new Set([
   // setElementGroups targets 상한. 빈 배열은 plugin-only 편집으로 허용되므로
   // 이 코드는 순수 배치 초과 전용이다
   'INVALID_ELEMENT_GROUP_TARGET_COUNT',
+  // 자세당 담당 키 상한 (MAX_SPRITE_POSE_TRIGGERS)
+  'TOO_MANY_SPRITE_POSE_TRIGGERS',
   // validate_plugin_instances_request 말미의 compact size 검사.
   // TOO_MANY_PLUGIN_INSTANCES와 같은 gesture 승격 채널로 프론트에 도달한다
   'PLUGIN_INSTANCES_REQUEST_TOO_LARGE',

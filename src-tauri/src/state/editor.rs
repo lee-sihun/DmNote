@@ -13,9 +13,9 @@ use crate::{
         EditorElementTypeV1, EditorField, ElementShadowSpec, GraphPosition, KeyCounters,
         KeyMappings, KeyPosition, KeySlot, KnobPosition, ReactiveSpritePosition, SpriteTransform,
         StatPosition, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
-        MAX_SPRITE_POSES, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
-        SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX,
-        SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
+        MAX_SPRITE_POSES, MAX_SPRITE_POSE_TRIGGERS, SPRITE_TRANSFORM_OFFSET_MAX,
+        SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN,
+        SPRITE_TRANSFORM_SCALE_MAX, SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
     },
 };
 
@@ -1608,7 +1608,12 @@ fn collect_sprite_violations(
                 ("width", sprite.image_rect.width, true),
                 ("height", sprite.image_rect.height, true),
             ] {
-                if !value.is_finite() || (positive && value <= 0.0) {
+                let valid = if positive {
+                    dimension_within_limit(value)
+                } else {
+                    coordinate_within_limit(value)
+                };
+                if !valid {
                     violations.insert(ValidationViolation::new(
                         native_violation_key(
                             NativeElementKind::Sprite,
@@ -1623,9 +1628,12 @@ fn collect_sprite_violations(
                         format!(
                             "spritePositions {mode}[{sprite_index}].imageRect.{property} must be {}",
                             if positive {
-                                "a positive finite number"
+                                format!("a positive finite number at most {MAX_DIMENSION}")
                             } else {
-                                "a finite number"
+                                format!(
+                                    "a finite number between {} and {MAX_ABS_COORDINATE}",
+                                    -MAX_ABS_COORDINATE
+                                )
                             }
                         ),
                     ));
@@ -1661,6 +1669,43 @@ fn collect_sprite_violations(
                     &pose.transform,
                     violations,
                 );
+                if pose.triggers.len() > MAX_SPRITE_POSE_TRIGGERS {
+                    violations.insert(ValidationViolation::new(
+                        native_violation_key(
+                            NativeElementKind::Sprite,
+                            &sprite.id,
+                            "TOO_MANY_SPRITE_POSE_TRIGGERS",
+                            ViolationPropertyPath::SpritePoseProperty {
+                                pose_index,
+                                property: "triggers",
+                            },
+                            InvalidValueSignature::Count(pose.triggers.len()),
+                        ),
+                        format!(
+                            "spritePositions {mode}[{sprite_index}].poses[{pose_index}].triggers exceeds {MAX_SPRITE_POSE_TRIGGERS}"
+                        ),
+                    ));
+                }
+                for trigger in &pose.triggers {
+                    if crate::state::native_element_id::is_valid_element_id(trigger) {
+                        continue;
+                    }
+                    violations.insert(ValidationViolation::new(
+                        native_violation_key(
+                            NativeElementKind::Sprite,
+                            &sprite.id,
+                            "INVALID_SPRITE_TRIGGER",
+                            ViolationPropertyPath::SpritePoseProperty {
+                                pose_index,
+                                property: "triggers",
+                            },
+                            InvalidValueSignature::Text(trigger.clone()),
+                        ),
+                        format!(
+                            "spritePositions {mode}[{sprite_index}].poses[{pose_index}].triggers contains an invalid element ID"
+                        ),
+                    ));
+                }
                 if pose.triggers.is_empty() {
                     violations.insert(ValidationViolation::new(
                         native_violation_key(
@@ -2716,7 +2761,7 @@ mod tests {
         EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1,
         EditorOpV1, EditorPatchV1, EditorTargetGroupV1, EditorZUpdateV1, ElementShadowSpec,
         GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
-        StatPosition, StatType,
+        ReactiveSpritePosition, SpritePose, SpriteRect, StatPosition, StatType,
     };
 
     use super::*;
@@ -6121,5 +6166,89 @@ mod tests {
             error.details.unwrap().validation_code.as_deref(),
             Some("REQUEST_TOO_LARGE")
         );
+    }
+
+    fn sprite_violation_codes(sprite: ReactiveSpritePosition) -> BTreeSet<&'static str> {
+        let mut document = EditorDocumentV1::from_store(&AppStoreData::default());
+        document
+            .sprite_positions
+            .insert("4key".to_string(), vec![sprite]);
+        let mut violations = BTreeSet::new();
+        collect_sprite_violations(&document, &mut violations);
+        violations.iter().map(ValidationViolation::code).collect()
+    }
+
+    fn sprite_with_triggers(triggers: Vec<String>) -> ReactiveSpritePosition {
+        ReactiveSpritePosition {
+            id: Uuid::new_v4().to_string(),
+            poses: vec![SpritePose {
+                pose_id: Uuid::new_v4().to_string(),
+                triggers,
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        }
+    }
+
+    #[test]
+    fn sprite_pose_trigger_count_accepts_512_and_rejects_513() {
+        let triggers = (1..=MAX_SPRITE_POSE_TRIGGERS)
+            .map(|index| Uuid::from_u128(index as u128).to_string())
+            .collect::<Vec<_>>();
+        let at_limit = sprite_violation_codes(sprite_with_triggers(triggers.clone()));
+        assert!(!at_limit.contains("TOO_MANY_SPRITE_POSE_TRIGGERS"));
+        assert!(!at_limit.contains("INVALID_SPRITE_TRIGGER"));
+
+        let mut over_limit = triggers;
+        over_limit.push(Uuid::from_u128(MAX_SPRITE_POSE_TRIGGERS as u128 + 1).to_string());
+        let over_limit = sprite_violation_codes(sprite_with_triggers(over_limit));
+        assert!(over_limit.contains("TOO_MANY_SPRITE_POSE_TRIGGERS"));
+    }
+
+    #[test]
+    fn sprite_pose_trigger_rejects_invalid_element_id() {
+        let violations =
+            sprite_violation_codes(sprite_with_triggers(vec!["not-an-element-id".to_string()]));
+        assert!(violations.contains("INVALID_SPRITE_TRIGGER"));
+    }
+
+    #[test]
+    fn sprite_image_rect_enforces_coordinate_and_dimension_boundaries() {
+        let at_limit = ReactiveSpritePosition {
+            id: Uuid::new_v4().to_string(),
+            image_rect: SpriteRect {
+                x: MAX_ABS_COORDINATE,
+                y: -MAX_ABS_COORDINATE,
+                width: MAX_DIMENSION,
+                height: MAX_DIMENSION,
+            },
+            ..ReactiveSpritePosition::default()
+        };
+        assert!(!sprite_violation_codes(at_limit.clone()).contains("INVALID_SPRITE_RECT"));
+
+        for image_rect in [
+            SpriteRect {
+                x: MAX_ABS_COORDINATE + 1.0,
+                ..at_limit.image_rect
+            },
+            SpriteRect {
+                y: -MAX_ABS_COORDINATE - 1.0,
+                ..at_limit.image_rect
+            },
+            SpriteRect {
+                width: MAX_DIMENSION + 1.0,
+                ..at_limit.image_rect
+            },
+            SpriteRect {
+                height: MAX_DIMENSION + 1.0,
+                ..at_limit.image_rect
+            },
+        ] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                image_rect,
+                ..at_limit.clone()
+            });
+            assert!(violations.contains("INVALID_SPRITE_RECT"));
+        }
     }
 }

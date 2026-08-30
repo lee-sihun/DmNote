@@ -243,13 +243,51 @@ pub(crate) fn option_has_non_empty_text(value: &Option<String>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::PresetFile;
+    use super::{PresetFile, PresetSnapshot};
     // file URL 경로 테스트가 유닉스 전용이라 Windows에선 미사용 경고 방지
     #[cfg(not(target_os = "windows"))]
     use super::local_source_path_from_image_ref;
     use crate::models::{KeyCounterColor, KeySlot, NoteColor};
     use serde::{Deserialize, Serialize};
     use serde_json::json;
+
+    // 스냅샷 wire 키 집합 고정 - 프론트 공개 타입 PresetSnapshot과 같은 계약
+    #[test]
+    fn preset_snapshot_serializes_expected_wire_keys() {
+        let snapshot = PresetSnapshot {
+            keys: Default::default(),
+            positions: Default::default(),
+            stat_positions: Default::default(),
+            graph_positions: Default::default(),
+            knob_positions: Default::default(),
+            sprite_positions: Default::default(),
+            custom_tabs: Vec::new(),
+            selected_key_type: "4key".to_string(),
+            tab_note_overrides: Default::default(),
+        };
+        let value = serde_json::to_value(&snapshot).expect("snapshot serializes");
+        let mut keys: Vec<&str> = value
+            .as_object()
+            .expect("snapshot is an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "customTabs",
+                "graphPositions",
+                "keys",
+                "knobPositions",
+                "positions",
+                "selectedKeyType",
+                "spritePositions",
+                "statPositions",
+                "tabNoteOverrides",
+            ]
+        );
+    }
 
     #[test]
     fn preset_round_trip_preserves_layer_groups_and_tab_css_overrides() {

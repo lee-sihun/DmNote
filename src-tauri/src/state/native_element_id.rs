@@ -714,7 +714,10 @@ fn sanitize_v1_supplied_patch_ids(
             .flat_map(|sprite| sprite.poses.iter().map(|pose| pose.pose_id.clone()))
             .collect::<HashSet<_>>();
         let mut seen = HashSet::new();
-        for (mode, sprites) in collection {
+        for mode in sorted_modes(collection) {
+            let Some(sprites) = collection.get_mut(&mode) else {
+                continue;
+            };
             for (sprite_index, sprite) in sprites.iter_mut().enumerate() {
                 for (pose_index, pose) in sprite.poses.iter_mut().enumerate() {
                     if pose.pose_id.is_empty() {

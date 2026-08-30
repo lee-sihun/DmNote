@@ -57,6 +57,72 @@ describe('reactiveSpritePositionSchema', () => {
   });
 });
 
+describe('reactiveSpritePositionSchema wire 계약', () => {
+  const withPose = (pose: Partial<SpritePose>) => ({
+    ...backendWireSprite,
+    poses: [
+      {
+        poseId: 'pose-1',
+        triggers: ['566b0333-494c-4d47-a76d-506b71e5ac4c'],
+        matchMode: 'exact',
+        transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+        imageOverride: null,
+        ...pose,
+      },
+    ],
+  });
+
+  it('빈 트리거 자세도 인입은 허용한다 - 복구 store 서빙이 부트스트랩을 죽이면 안 된다', () => {
+    expect(
+      reactiveSpritePositionSchema.safeParse(withPose({ triggers: [] }))
+        .success,
+    ).toBe(true);
+  });
+
+  it('트리거 개수·id 길이 상한을 넘으면 거부한다', () => {
+    const tooMany = Array.from({ length: 513 }, (_, i) => `id-${i}`);
+    expect(
+      reactiveSpritePositionSchema.safeParse(withPose({ triggers: tooMany }))
+        .success,
+    ).toBe(false);
+    expect(
+      reactiveSpritePositionSchema.safeParse(
+        withPose({ triggers: ['a'.repeat(65)] }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('zIndex·transitionMs 소수는 Rust 정수 decode와 같이 거부한다', () => {
+    expect(
+      reactiveSpritePositionSchema.safeParse({
+        ...backendWireSprite,
+        zIndex: 1.5,
+      }).success,
+    ).toBe(false);
+    expect(
+      reactiveSpritePositionSchema.safeParse({
+        ...backendWireSprite,
+        transitionMs: 90.5,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('imageRect가 백엔드 좌표·크기 상한을 넘으면 거부한다', () => {
+    expect(
+      reactiveSpritePositionSchema.safeParse({
+        ...backendWireSprite,
+        imageRect: { x: 40000, y: 0, width: 200, height: 200 },
+      }).success,
+    ).toBe(false);
+    expect(
+      reactiveSpritePositionSchema.safeParse({
+        ...backendWireSprite,
+        imageRect: { x: 0, y: 0, width: 40000, height: 200 },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe('findDuplicateTriggerPose', () => {
   const pose = (poseId: string, triggers: string[]): SpritePose => ({
     poseId,

@@ -889,6 +889,7 @@ pub const SPRITE_TRANSFORM_SCALE_MIN: f64 = 0.1;
 pub const SPRITE_TRANSFORM_SCALE_MAX: f64 = 10.0;
 pub const SPRITE_TRANSITION_MS_MAX: u32 = 1_000;
 pub const MAX_SPRITE_POSES: usize = 64;
+pub const MAX_SPRITE_POSE_TRIGGERS: usize = 512;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -2694,6 +2695,7 @@ pub struct AppStoreData {
     /// 분리 패널 창 존재 여부 (재시작 복원용)
     #[serde(default)]
     pub panel_detached: bool,
+    pub overlay_last_content_left_offset: Option<f64>,
     pub overlay_last_content_top_offset: Option<f64>,
     #[serde(default)]
     pub overlay_bounds_are_logical: bool,
@@ -2768,6 +2770,7 @@ impl Default for AppStoreData {
             overlay_bounds: None,
             panel_bounds: None,
             panel_detached: false,
+            overlay_last_content_left_offset: None,
             overlay_last_content_top_offset: None,
             overlay_bounds_are_logical: false,
             key_counter_enabled: false,
