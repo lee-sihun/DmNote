@@ -18,7 +18,7 @@ import {
   elementShadowLeafFromPartial,
   resolveElementShadowForPosition,
 } from '@src/types/key/shadows';
-import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS } from '../panelChrome';
 import {
   PropertyRow,
   NumberInput,
@@ -41,10 +41,10 @@ import type {
   EditorStylePropertyPreviewPatchV1,
   EditorElementPropertyPatchV1,
 } from '@src/types/editor';
-import RenameIcon from './RenameIcon';
 import SingleGeometrySection from './SingleGeometrySection';
 import SingleImagePickerPopup from './SingleImagePickerPopup';
 import { useSingleStyleColorController } from './useSingleStyleColorController';
+import SinglePanelRenameHeader from './SinglePanelRenameHeader';
 
 // ============================================================================
 // Single Knob Selection Panel
@@ -240,49 +240,21 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   return (
     <div ref={setRef} className={PANEL_ROOT_CLASS}>
-      <div className={PANEL_HEADER_CLASS}>
-        {isRenaming ? (
-          <input
-            ref={renameInputRef}
-            type="text"
-            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onBlur={() => {
-              if (!renameCancelledRef.current) {
-                handleRenameCommit(renameValue);
-              }
-              renameCancelledRef.current = false;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                (e.target as HTMLInputElement).blur();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                handleRenameCancel();
-              }
-            }}
-          />
-        ) : (
-          <div className="flex items-center gap-[4px] min-w-0">
-            <span
-              className="text-fg text-label truncate max-w-[100px] cursor-default"
-              onDoubleClick={handleRenameStart}
-              title={knobTitle}
-            >
-              {knobTitle}
-            </span>
-            <button
-              onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors flex-shrink-0"
-              title={t('contextMenu.rename') || 'Rename'}
-            >
-              <RenameIcon />
-            </button>
-          </div>
-        )}
-      </div>
+      <SinglePanelRenameHeader
+        title={knobTitle}
+        titleClassName="text-fg text-label truncate max-w-[100px] cursor-default"
+        renameButtonTitle={
+          isRenaming ? '' : t('contextMenu.rename') || 'Rename'
+        }
+        isRenaming={isRenaming}
+        renameInputRef={renameInputRef}
+        renameValue={renameValue}
+        setRenameValue={setRenameValue}
+        renameCancelledRef={renameCancelledRef}
+        handleRenameCommit={handleRenameCommit}
+        handleRenameCancel={handleRenameCancel}
+        handleRenameStart={handleRenameStart}
+      />
 
       <div className="flex-1 properties-panel-overlay-scroll">
         <div

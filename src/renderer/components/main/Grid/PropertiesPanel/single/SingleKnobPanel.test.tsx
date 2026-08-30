@@ -215,6 +215,7 @@ describe('SingleKnobPanel 이름 변경 헤더 계약', () => {
         | 'handleRenameCommit'
         | 'handleRenameCancel'
         | 'handleRenameStart'
+        | 't'
       >
     > = {},
   ) => {
@@ -287,6 +288,16 @@ describe('SingleKnobPanel 이름 변경 헤더 계약', () => {
     expect(handleRenameStart.mock.calls[1]?.[0]).toMatchObject({
       type: 'click',
     });
+  });
+
+  it('이름 편집 중에는 rename 번역을 평가하지 않는다', () => {
+    const t = vi.fn((key: string) => key);
+    render({ isRenaming: true, t: t as never });
+    expect(t).not.toHaveBeenCalledWith('contextMenu.rename');
+
+    t.mockClear();
+    render({ isRenaming: false, t: t as never });
+    expect(t).toHaveBeenCalledWith('contextMenu.rename');
   });
 
   it('Enter는 blur 뒤 현재 값을 커밋하고 cancel ref를 초기화한다', () => {
