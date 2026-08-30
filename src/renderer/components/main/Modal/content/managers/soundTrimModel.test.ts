@@ -6,6 +6,12 @@ import {
   encodeWavBase64,
   extractWaveformPeaks,
   formatSecLabel,
+  getSoundTrimHandleGeometry,
+  getSoundTrimRatioFromClientX,
+  isNearSoundTrimHandle,
+  pickSoundTrimDragTarget,
+  planSoundTrimMiddlePan,
+  planSoundTrimWheelViewport,
   stripExtension,
 } from './soundTrimModel';
 
@@ -50,5 +56,71 @@ describe('soundTrimModel', () => {
     expect(view.getUint32(40, true)).toBe(4);
     expect(view.getInt16(44, true)).toBe(16_383);
     expect(view.getInt16(46, true)).toBe(32_767);
+  });
+
+  it('wheel anchor와 middle pan을 동일한 viewport 범위에 고정한다', () => {
+    expect(
+      planSoundTrimWheelViewport({
+        clientX: 112,
+        rectLeft: 0,
+        rectWidth: 224,
+        deltaY: -10_000,
+        viewZoom: 1,
+        viewPanRatio: 0,
+      }),
+    ).toEqual({ viewZoom: 16, viewPanRatio: 0.46875 });
+    expect(
+      planSoundTrimWheelViewport({
+        clientX: 12,
+        rectLeft: 0,
+        rectWidth: 224,
+        deltaY: 10_000,
+        viewZoom: 16,
+        viewPanRatio: 0.46875,
+      }),
+    ).toEqual({ viewZoom: 1, viewPanRatio: 0 });
+    expect(
+      planSoundTrimMiddlePan({
+        clientX: 162,
+        startClientX: 112,
+        startPanRatio: 0.46875,
+        drawableWidth: 200,
+        viewSpan: 0.0625,
+      }),
+    ).toBe(0.453125);
+  });
+
+  it('handle geometry·hit·동률 선택과 client ratio clamp를 보존한다', () => {
+    const geometry = getSoundTrimHandleGeometry({
+      rectWidth: 224,
+      viewStart: 0,
+      viewEnd: 1,
+      startRatio: 0.96,
+      endRatio: 1,
+    });
+    expect(geometry).toEqual({
+      drawableWidth: 200,
+      startX: 204,
+      endX: 212,
+    });
+    expect(isNearSoundTrimHandle(208, geometry.startX, geometry.endX)).toBe(
+      true,
+    );
+    expect(pickSoundTrimDragTarget(208, geometry.startX, geometry.endX)).toBe(
+      'end',
+    );
+    expect(pickSoundTrimDragTarget(207, geometry.startX, geometry.endX)).toBe(
+      'start',
+    );
+    expect(pickSoundTrimDragTarget(100, 12, 212)).toBe('start');
+    expect(
+      getSoundTrimRatioFromClientX({
+        clientX: 300,
+        rectLeft: 0,
+        rectWidth: 224,
+        viewStart: 0,
+        viewEnd: 1,
+      }),
+    ).toBe(1);
   });
 });

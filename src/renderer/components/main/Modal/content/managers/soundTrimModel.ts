@@ -1,5 +1,43 @@
 export const WAVEFORM_PEAK_COUNT = 1600;
 export const WAVEFORM_PAD_X = 12;
+export const SOUND_TRIM_HANDLE_PICK_PX = 10;
+export const SOUND_TRIM_MIN_VIEW_ZOOM = 1;
+export const SOUND_TRIM_MAX_VIEW_ZOOM = 16;
+
+export type SoundTrimDragTarget = 'start' | 'end' | null;
+
+interface SoundTrimWheelViewportInput {
+  clientX: number;
+  rectLeft: number;
+  rectWidth: number;
+  deltaY: number;
+  viewZoom: number;
+  viewPanRatio: number;
+}
+
+interface SoundTrimMiddlePanInput {
+  clientX: number;
+  startClientX: number;
+  startPanRatio: number;
+  drawableWidth: number;
+  viewSpan: number;
+}
+
+interface SoundTrimHandleGeometryInput {
+  rectWidth: number;
+  viewStart: number;
+  viewEnd: number;
+  startRatio: number;
+  endRatio: number;
+}
+
+interface SoundTrimClientRatioInput {
+  clientX: number;
+  rectLeft: number;
+  rectWidth: number;
+  viewStart: number;
+  viewEnd: number;
+}
 
 export const formatSecLabel = (ms: number): string =>
   `${(ms / 1000).toFixed(2)}s`;
@@ -8,6 +46,115 @@ export const clamp = (value: number, min: number, max: number): number => {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+};
+
+export const planSoundTrimWheelViewport = ({
+  clientX,
+  rectLeft,
+  rectWidth,
+  deltaY,
+  viewZoom,
+  viewPanRatio,
+}: SoundTrimWheelViewportInput): {
+  viewZoom: number;
+  viewPanRatio: number;
+} => {
+  const drawableWidth = rectWidth - WAVEFORM_PAD_X * 2;
+  const mouseScreenRatio = clamp(
+    (clientX - rectLeft - WAVEFORM_PAD_X) / Math.max(1, drawableWidth),
+    0,
+    1,
+  );
+  const viewSpan = 1 / viewZoom;
+  const mouseAudioRatio = viewPanRatio + mouseScreenRatio * viewSpan;
+  const zoomFactor = Math.exp(-deltaY * 0.0018);
+  const nextViewZoom = clamp(
+    viewZoom * zoomFactor,
+    SOUND_TRIM_MIN_VIEW_ZOOM,
+    SOUND_TRIM_MAX_VIEW_ZOOM,
+  );
+  const nextViewSpan = 1 / nextViewZoom;
+  const nextViewPanRatio = clamp(
+    mouseAudioRatio - mouseScreenRatio * nextViewSpan,
+    0,
+    Math.max(0, 1 - nextViewSpan),
+  );
+
+  return {
+    viewZoom: nextViewZoom,
+    viewPanRatio: nextViewPanRatio,
+  };
+};
+
+export const planSoundTrimMiddlePan = ({
+  clientX,
+  startClientX,
+  startPanRatio,
+  drawableWidth,
+  viewSpan,
+}: SoundTrimMiddlePanInput): number => {
+  const deltaX = clientX - startClientX;
+  const nextPanRatio =
+    startPanRatio - (deltaX / Math.max(1, drawableWidth)) * viewSpan;
+  return clamp(nextPanRatio, 0, Math.max(0, 1 - viewSpan));
+};
+
+export const getSoundTrimHandleGeometry = ({
+  rectWidth,
+  viewStart,
+  viewEnd,
+  startRatio,
+  endRatio,
+}: SoundTrimHandleGeometryInput): {
+  drawableWidth: number;
+  startX: number;
+  endX: number;
+} => {
+  const drawableWidth = rectWidth - WAVEFORM_PAD_X * 2;
+  const viewSpan = viewEnd - viewStart;
+  return {
+    drawableWidth,
+    startX:
+      WAVEFORM_PAD_X + ((startRatio - viewStart) / viewSpan) * drawableWidth,
+    endX: WAVEFORM_PAD_X + ((endRatio - viewStart) / viewSpan) * drawableWidth,
+  };
+};
+
+export const isNearSoundTrimHandle = (
+  x: number,
+  startX: number,
+  endX: number,
+): boolean =>
+  Math.abs(x - startX) <= SOUND_TRIM_HANDLE_PICK_PX ||
+  Math.abs(x - endX) <= SOUND_TRIM_HANDLE_PICK_PX;
+
+export const pickSoundTrimDragTarget = (
+  x: number,
+  startX: number,
+  endX: number,
+): Exclude<SoundTrimDragTarget, null> => {
+  const pickStart = Math.abs(x - startX) <= SOUND_TRIM_HANDLE_PICK_PX;
+  const pickEnd = Math.abs(x - endX) <= SOUND_TRIM_HANDLE_PICK_PX;
+
+  if (pickStart && pickEnd) {
+    return x < (startX + endX) / 2 ? 'start' : 'end';
+  }
+  if (pickStart) return 'start';
+  if (pickEnd) return 'end';
+  return Math.abs(x - startX) < Math.abs(x - endX) ? 'start' : 'end';
+};
+
+export const getSoundTrimRatioFromClientX = ({
+  clientX,
+  rectLeft,
+  rectWidth,
+  viewStart,
+  viewEnd,
+}: SoundTrimClientRatioInput): number => {
+  const drawableWidth = rectWidth - WAVEFORM_PAD_X * 2;
+  const screenRatio =
+    (clientX - rectLeft - WAVEFORM_PAD_X) / Math.max(1, drawableWidth);
+  return clamp(viewStart + screenRatio * (viewEnd - viewStart), 0, 1);
 };
 
 export const createAudioContext = (): AudioContext => {
