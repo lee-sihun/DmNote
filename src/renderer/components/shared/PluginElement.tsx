@@ -7,7 +7,6 @@ import {
   DisplayElementTemplateHelpers,
 } from '@src/types/plugin/api';
 import { useDraggable } from '@hooks/Grid';
-import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -20,7 +19,6 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelHostStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useTranslation } from '@contexts/useTranslation';
-import ListPopup, { ListItem } from '../main/Modal/ListPopup';
 import { html, styleMap, css } from '@utils/core/templateEngine';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import {
@@ -29,18 +27,12 @@ import {
 } from '@utils/displayElementActions';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { obsApi } from '@api/modules/obsApi';
-import { evaluatePluginMenuItems } from '@utils/plugin/pluginElementContextMenu';
-import {
-  getPluginMenuRuntimeState,
-  normalizeStateKeys,
-} from '@utils/plugin/pluginMenuRuntimeState';
+import { normalizeStateKeys } from '@utils/plugin/pluginMenuRuntimeState';
 import { measureConnectedPluginElement } from '@utils/plugin/pluginElementMeasurement';
 import {
   beginPluginInstancesEditSession,
   endPluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
-import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/layerZOrderIntent';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { expandGroupSelectionFromStores } from '@utils/grid/groupSelection';
 import {
   buildPluginElementStyle,
@@ -49,6 +41,7 @@ import {
   resolvePluginElementPosition,
 } from '@utils/plugin/pluginElementLayout';
 import { attachPluginDomInteractions } from '@utils/plugin/pluginDomInteractions';
+import { usePluginElementContextMenu } from './usePluginElementContextMenu';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
@@ -115,6 +108,19 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
   const locale = i18n.language;
   const localeRef = useRef(locale);
 
+  const pluginTranslate = (
+    key: string,
+    params?: Record<string, string | number>,
+    fallback?: string,
+  ) =>
+    translatePluginMessage({
+      messages: definition?.messages,
+      locale,
+      key,
+      params,
+      fallback,
+    });
+
   // 이전 크기를 추적하여 리사이즈 앵커 기반 위치 보정에 사용
   // 초기값으로 element.measuredSize를 사용하여 리로드 후에도 올바르게 동작
   const prevMeasuredSizeRef = useRef<{ width: number; height: number } | null>(
@@ -160,19 +166,6 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     localeRef.current = locale;
   }, [locale]);
 
-  const pluginTranslate = (
-    key: string,
-    params?: Record<string, string | number>,
-    fallback?: string,
-  ) =>
-    translatePluginMessage({
-      messages: definition?.messages,
-      locale,
-      key,
-      params,
-      fallback,
-    });
-
   const pluginTranslateStable = (
     key: string,
     params?: Record<string, string | number>,
@@ -186,14 +179,22 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       fallback,
     });
 
+  const { contextMenu, deletePluginElement, handleContextMenu } =
+    usePluginElementContextMenu({
+      element,
+      definition,
+      windowType,
+      locale,
+      containerRef,
+      onSelectionContextMenu,
+      t,
+    });
+
   const positions = useKeyStore((state) => state.positions);
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const exposedActionsRef = useRef<
     Record<string, (...args: unknown[]) => unknown>
   >({});
-  // 컨텍스트 메뉴 predicate 예외는 요소·항목당 1회만 기록
-  const menuPredicateErrorRef = useRef(new Set<string>());
-
   // Settings 변경 감지용 ref와 콜백 리스트
   const prevSettingsRef = useRef<Record<string, unknown> | null>(null);
   const settingsChangeListenersRef = useRef<
@@ -339,19 +340,6 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     element.resizeAnchor,
     updateElement,
   ]);
-
-  // 컨텍스트 메뉴 상태
-  const [contextMenuOpen, setContextMenuOpen] = useState(false);
-  const [contextMenuPosition, setContextMenuPosition] = useState({
-    x: 0,
-    y: 0,
-  });
-  // 열림 시점 커스텀 항목 동결. 열림 중 플러그인이 customItems를 교체해도
-  // 표시와 index 디스패치가 같은 배열을 본다
-  const frozenCustomItemsRef =
-    useRef<
-      NonNullable<PluginDisplayElementInternal['contextMenu']>['customItems']
-    >(undefined);
 
   const calculatedPosition = resolvePluginElementPosition({
     element,
@@ -901,78 +889,6 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     }
   };
 
-  // 컨텍스트 메뉴 핸들러
-  const handleContextMenu = (e: React.MouseEvent) => {
-    // 오버레이에서는 기본 브라우저 메뉴만 차단
-    if (windowType !== 'main') {
-      e.preventDefault();
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    const handledBySelectionMenu =
-      onSelectionContextMenu?.({
-        elementId: element.fullId,
-        clientX: e.clientX,
-        clientY: e.clientY,
-        referenceElement: containerRef.current,
-      }) === true;
-    if (handledBySelectionMenu) return;
-
-    // 플러그인 요소 우클릭은 그리드 우클릭으로 전파하지 않음
-    // (contextMenu 설정이 없으면 메뉴만 열지 않고 종료)
-    if (!element.contextMenu) return;
-
-    // 열림 시점 항목 동결 - 열림 중 교체가 index 디스패치를 어긋내지 않게
-    frozenCustomItemsRef.current = element.contextMenu.customItems ?? [];
-    setContextMenuPosition({ x: e.clientX, y: e.clientY });
-    setContextMenuOpen(true);
-  };
-
-  const deleteInFlightRef = useRef(false);
-  const observePluginAction = (result: unknown, label: string) => {
-    if (
-      typeof result === 'object' &&
-      result !== null &&
-      'then' in result &&
-      typeof result.then === 'function'
-    ) {
-      void Promise.resolve(result).catch((error) =>
-        console.error(`[PluginElement] ${label} failed`, error),
-      );
-    }
-  };
-
-  const deletePluginElement = () => {
-    if (deleteInFlightRef.current) return;
-    deleteInFlightRef.current = true;
-    // onDelete 핸들러 호출 (자동 래핑되어 있음)
-    try {
-      if (element.onDelete && typeof element.onDelete === 'string') {
-        const handler = (window as unknown as Record<string, unknown>)[
-          element.onDelete
-        ];
-        if (typeof handler === 'function') {
-          observePluginAction(handler(), 'onDelete');
-        }
-      }
-    } catch (error) {
-      console.error('[PluginElement] onDelete failed', error);
-    }
-    try {
-      if (window.api?.ui?.displayElement) {
-        window.api.ui.displayElement.remove(element.fullId);
-      } else {
-        usePluginDisplayElementStore.getState().removeElement(element.fullId);
-      }
-    } catch (error) {
-      deleteInFlightRef.current = false;
-      console.error('[PluginElement] remove failed', error);
-    }
-  };
-
   // onClick 핸들러
   const handleClick = (e: React.MouseEvent) => {
     // 우클릭은 컨텍스트 메뉴용이므로 제외
@@ -1191,145 +1107,6 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     openPropertiesPanelForSelection();
   };
 
-  const createActionsProxy = (elementId: string) =>
-    new Proxy(
-      {},
-      {
-        get: (_target, prop: string | symbol) => {
-          if (typeof prop !== 'string') return undefined;
-          return (...args: unknown[]) => {
-            sendBridgeMessageBestEffort(
-              'overlay',
-              'plugin:displayElement:invokeAction',
-              {
-                elementId,
-                action: prop,
-                args,
-              },
-            );
-          };
-        },
-      },
-    );
-
-  // 컨텍스트 메뉴 항목 생성 - 마운트된 동안만 커스텀 predicate 평가
-  // 퇴장 모션이 도는 동안 메뉴 DOM을 유지한다. 열림 판정 자체는 그대로 두고
-  // 마운트 게이트만 늘려 상시 마운트로 번지는 걸 막는다
-  const contextMenuPresence = usePopupPresence(contextMenuOpen);
-
-  const contextMenuItems: ListItem[] = (() => {
-    // 닫히는 중에도 항목을 유지해야 잔상이 빈 메뉴로 보이지 않는다
-    if (!contextMenuPresence.mounted || !element.contextMenu) return [];
-
-    const { enableDelete = true, deleteLabel = '삭제' } = element.contextMenu;
-    // 동결 참조 우선 - 표시 항목과 클릭 디스패치가 같은 배열에서 나온다
-    const customItems =
-      frozenCustomItemsRef.current ?? element.contextMenu.customItems ?? [];
-
-    // predicate가 보는 element.state에는 contextMenuStateKeys로 선언된
-    // 오버레이 런타임 값만 병합 — 프리뷰용 state 자체는 불변
-    const menuStateKeys = normalizeStateKeys(definition?.contextMenuStateKeys);
-    const menuElement =
-      menuStateKeys.length > 0
-        ? {
-            ...element,
-            state: {
-              ...element.state,
-              ...getPluginMenuRuntimeState(element.fullId, menuStateKeys),
-            },
-          }
-        : element;
-
-    // visible/disabled/position 계약 이행 (grid/key 메뉴와 동일 의미)
-    const { top, bottom } = evaluatePluginMenuItems(
-      customItems,
-      { element: menuElement, actions: createActionsProxy(element.fullId) },
-      (label) => pluginTranslate(label, undefined, label),
-      (index, kind, error) => {
-        const errorKey = `${element.fullId}:${index}:${kind}`;
-        if (menuPredicateErrorRef.current.has(errorKey)) return;
-        menuPredicateErrorRef.current.add(errorKey);
-        console.error(
-          `[Plugin ${element.pluginId}] Failed to evaluate context menu "${kind}" for item ${index}:`,
-          error,
-        );
-      },
-    );
-
-    const items: ListItem[] = [...top];
-
-    if (enableDelete) {
-      items.push({
-        id: 'delete',
-        label: pluginTranslate(deleteLabel, undefined, deleteLabel),
-      });
-    }
-
-    // z-order 항목 추가
-    items.push(
-      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
-      // { id: "bringForward", label: t("contextMenu.bringForward") },
-      // { id: "sendBackward", label: t("contextMenu.sendBackward") },
-      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
-    );
-
-    items.push(...bottom);
-
-    return items;
-  })();
-
-  // 컨텍스트 메뉴 항목 선택
-  const handleContextMenuSelect = (itemId: string) => {
-    if (itemId === 'delete') {
-      deletePluginElement();
-    } else if (itemId === 'bringToFront') {
-      void commitStableLayerZOrder({
-        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
-        targets: [{ type: 'plugin', id: element.fullId }],
-        action: 'front',
-      }).catch(reportElementOpError);
-    } else if (itemId === 'bringForward') {
-      void commitStableLayerZOrder({
-        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
-        targets: [{ type: 'plugin', id: element.fullId }],
-        action: 'forward',
-      }).catch(reportElementOpError);
-    } else if (itemId === 'sendBackward') {
-      void commitStableLayerZOrder({
-        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
-        targets: [{ type: 'plugin', id: element.fullId }],
-        action: 'backward',
-      }).catch(reportElementOpError);
-    } else if (itemId === 'sendToBack') {
-      void commitStableLayerZOrder({
-        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
-        targets: [{ type: 'plugin', id: element.fullId }],
-        action: 'back',
-      }).catch(reportElementOpError);
-    } else if (itemId.startsWith('custom-')) {
-      const index = parseInt(itemId.replace('custom-', ''), 10);
-      // 동결 배열로만 역참조 - 항목 id의 index와 같은 배열임을 보장
-      const customItem = frozenCustomItemsRef.current?.[index];
-      if (customItem) {
-        // 커스텀 메뉴 실행 (자동 래핑되어 있음)
-        try {
-          observePluginAction(
-            customItem.onClick({
-              element,
-              actions: createActionsProxy(element.fullId),
-            }),
-            `context action ${index}`,
-          );
-        } catch (error) {
-          console.error(
-            `[PluginElement] context action ${index} failed`,
-            error,
-          );
-        }
-      }
-    }
-  };
-
   // 문자열 템플릿(레거시) __html 래퍼를 값 기준으로 고정.
   // React 19는 {__html} 객체 identity가 바뀌면 내용이 같아도 innerHTML을 다시 설정해
   // 내부 노드를 전부 교체한다 - 프레스 중 재렌더(isDragging 등)가 클릭 대상 노드를
@@ -1397,21 +1174,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
           : renderContent()}
       </div>
 
-      {/* 컨텍스트 메뉴 - 줌 영향을 받지 않도록 body에 Portal로 렌더링 */}
-      {windowType === 'main' &&
-        element.contextMenu &&
-        contextMenuPresence.mounted &&
-        createPortal(
-          <ListPopup
-            open={contextMenuOpen}
-            ariaLabel={t('common.more')}
-            position={contextMenuPosition}
-            onClose={() => setContextMenuOpen(false)}
-            items={contextMenuItems}
-            onSelect={handleContextMenuSelect}
-          />,
-          document.body,
-        )}
+      {contextMenu}
     </>
   );
 };
