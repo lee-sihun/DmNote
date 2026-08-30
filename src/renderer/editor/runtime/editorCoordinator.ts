@@ -4,6 +4,7 @@ import {
   applySemanticOps,
   fieldsForSemanticOp,
 } from './semanticOpsProjection';
+import { SerialTaskQueue } from './serialTaskQueue';
 
 import {
   EDITOR_COMMIT_SCHEMA_VERSION,
@@ -409,8 +410,8 @@ class EditorSaveCoordinator {
   private startPromise: Promise<CanonicalEditorGetResult> | null = null;
   private drainPromise: Promise<void> | null = null;
   private syncPromise: Promise<void> | null = null;
-  private eventQueue: Promise<void> = Promise.resolve();
-  private gestureCommitTail: Promise<unknown> = Promise.resolve();
+  private eventQueue = new SerialTaskQueue();
+  private serializedCommitQueue = new SerialTaskQueue();
   private unsubscribeCommitted: EditorReadyUnsubscribe | null = null;
   private bufferedEvents: EditorCommittedV1[] = [];
   private ownMutations = new Set<string>();
@@ -650,7 +651,7 @@ class EditorSaveCoordinator {
     return this.enqueueSerialized(async () => {
       await this.start();
       await this.drainUntilSettled();
-      await this.eventQueue;
+      await this.eventQueue.wait();
       const changes = generate(this.getLatestCommitBase());
       if (!changes) return clone(this.requireLastAck());
       // onEnrolled는 pending/conflict에 실제 편입된 직후 발화 - 호출자의
@@ -713,7 +714,7 @@ class EditorSaveCoordinator {
   ): Promise<EditorSemanticCommitOutcome | null> {
     await this.start();
     await this.drainUntilSettled();
-    await this.eventQueue;
+    await this.eventQueue.wait();
     if (this.conflict) {
       throw this.error ?? new Error('editor conflict pending');
     }
@@ -972,7 +973,7 @@ class EditorSaveCoordinator {
     return this.enqueueSerialized(async () => {
       await this.start();
       await this.drainUntilSettled();
-      await this.eventQueue;
+      await this.eventQueue.wait();
       const result = await mutation();
       try {
         await this.fetchAndApplyCanonical('resync');
@@ -987,11 +988,7 @@ class EditorSaveCoordinator {
   // 플러그인 발신 커밋을 gesture 커밋과 같은 단일 직렬 큐에 태운다.
   // 별도 게이트를 두면 gesture 큐와 상호 대기 교착이 생기므로 큐는 하나만 유지
   private enqueueSerialized<T>(task: () => Promise<T>): Promise<T> {
-    const previous = this.gestureCommitTail;
-    // 앞선 작업 실패가 다음 작업으로 전파되지 않게 양쪽 경로 모두 실행
-    const run = previous.then(task, task);
-    this.gestureCommitTail = run;
-    return run;
+    return this.serializedCommitQueue.enqueue(task);
   }
 
   // 플러그인 발신 keys 쓰기 전용 격리 커밋 (계약 §10)
@@ -1015,7 +1012,7 @@ class EditorSaveCoordinator {
   ): Promise<CanonicalEditorDocumentV1> {
     await this.start();
     await this.drainUntilSettled();
-    await this.eventQueue;
+    await this.eventQueue.wait();
     if (this.conflict) {
       throw this.error ?? new Error('editor conflict pending');
     }
@@ -1109,7 +1106,7 @@ class EditorSaveCoordinator {
     return this.enqueueSerialized(async () => {
       await this.start();
       await this.drainUntilSettled();
-      await this.eventQueue;
+      await this.eventQueue.wait();
       return task();
     });
   }
@@ -1127,25 +1124,9 @@ class EditorSaveCoordinator {
     },
   ): Promise<CanonicalEditorDocumentV1> {
     this.assertWritable();
-    const previous = this.gestureCommitTail;
-    // 앞선 gesture 실패가 다음 gesture로 전파되지 않게 양쪽 경로 모두 실행
-    const runInner = () =>
-      this.commitGestureInner(changes, gestureId, commit, meta);
-    const run = previous.then(runInner, runInner);
-    this.gestureCommitTail = run;
-    void run.then(
-      () => {
-        if (this.gestureCommitTail === run) {
-          this.gestureCommitTail = Promise.resolve();
-        }
-      },
-      () => {
-        if (this.gestureCommitTail === run) {
-          this.gestureCommitTail = Promise.resolve();
-        }
-      },
+    return this.enqueueSerialized(() =>
+      this.commitGestureInner(changes, gestureId, commit, meta),
     );
-    return run;
   }
 
   async retryPending(): Promise<CanonicalEditorDocumentV1> {
@@ -1235,13 +1216,13 @@ class EditorSaveCoordinator {
     await this.waitForGestureCommits();
     if (this.isReadOnly()) {
       await this.start();
-      await this.eventQueue;
+      await this.eventQueue.wait();
       return clone(this.requireLastAck());
     }
     // 인자 없이 호출해 내부 대기 후 캡처 - 대기 사이 착지한 병행 커밋 보존
     await this.commitEditorState();
     if (this.drainPromise) await this.drainPromise;
-    await this.eventQueue;
+    await this.eventQueue.wait();
     return clone(this.requireLastAck());
   }
 
@@ -1452,7 +1433,7 @@ class EditorSaveCoordinator {
   ): Promise<CanonicalEditorDocumentV1> {
     await this.start();
     await this.drainUntilSettled();
-    await this.eventQueue;
+    await this.eventQueue.wait();
     if (this.conflict) {
       throw this.error ?? new Error('editor conflict pending');
     }
@@ -1460,7 +1441,7 @@ class EditorSaveCoordinator {
       // 슬롯 안 준비 단계(plugin 큐 drain·projection 봉인 등) - 대기 중
       // 들어온 이벤트를 반영한 뒤 base를 동결해야 projection과 정렬된다
       await meta.prepare();
-      await this.eventQueue;
+      await this.eventQueue.wait();
       if (this.conflict) {
         throw this.error ?? new Error('editor conflict pending');
       }
@@ -1643,7 +1624,7 @@ class EditorSaveCoordinator {
   }
 
   private async waitForGestureCommits(): Promise<void> {
-    await this.gestureCommitTail.catch(() => undefined);
+    await this.serializedCommitQueue.wait();
   }
 
   private async applyCommitResult(
@@ -1791,11 +1772,9 @@ class EditorSaveCoordinator {
   }
 
   private enqueueEvent(event: EditorCommittedV1): Promise<void> {
-    const queued = this.eventQueue.then(() =>
+    return this.eventQueue.enqueue(() =>
       this.processCommittedEventWithRecovery(event),
     );
-    this.eventQueue = queued.catch(() => undefined);
-    return queued;
   }
 
   private async processCommittedEventWithRecovery(
