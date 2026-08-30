@@ -30,14 +30,16 @@ import { useDeferredContentMount } from '@hooks/ui/useDeferredContentMount';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import {
   hasModalLayerAbove,
-  isInsideHigherPopupLayer,
   isTopmostPopupLayer,
   registerPopupLayer,
   subscribeModalLayerActivity,
 } from './popupLayer';
 import { clampToViewport, POPUP_EDGE_PADDING } from '@utils/ui/popupGeometry';
 import { usePanelHost } from '@contexts/PanelHostContext';
-import { isElementNode } from '@utils/dom/isElementNode';
+import {
+  useFloatingPopupAutoDismissRuntime,
+  useFloatingPopupPersistentDismissRuntime,
+} from './useFloatingPopupDismissRuntime';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface FloatingPopupBaseProps {
@@ -378,45 +380,14 @@ const FloatingPopup = ({
     return subscribeModalLayerActivity(closeIfCovered);
   }, [open, onClose, closeOnModalCover]);
 
-  useEffect(() => {
-    if (open && autoClose) {
-      const onClickAway = (e: MouseEvent) => {
-        const target = e.target as Node;
-        if (!refs.floating.current) return;
-        if (
-          refs.floating.current.contains(target) ||
-          (referenceRef &&
-            referenceRef.current &&
-            referenceRef.current.contains(target))
-        )
-          return;
-        // 모달이 열린 상태에서 모달 내부 클릭으로 팝업이 닫히는 것을 방지
-        // (Modal은 body로 portal 렌더링되기 때문에 floating 내부로 인식되지 않음)
-        const isInsideModal =
-          isElementNode(target) &&
-          !!target.closest('[data-dmn-modal-backdrop="true"]');
-        if (isInsideModal) return;
-        // 서브메뉴도 body 포털이라 floating 내부로 인식되지 않음 — 닫힘 예외
-        const isInsideSubMenu =
-          isElementNode(target) &&
-          !!target.closest('[data-dmn-popup-submenu="true"]');
-        if (isInsideSubMenu) return;
-        // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
-        const isInsideGradientOverlay =
-          isElementNode(target) &&
-          !!target.closest('[data-dmn-gradient-overlay="true"]');
-        if (isInsideGradientOverlay) return;
-        // 위에 쌓인 팝업(자식 피커 등)은 body 포털이라 floating 내부로 인식되지 않음
-        if (isInsideHigherPopupLayer(refs.floating.current, target)) return;
-        onClose();
-      };
-
-      ownerDocument.addEventListener('mousedown', onClickAway);
-      return () => {
-        ownerDocument.removeEventListener('mousedown', onClickAway);
-      };
-    }
-  }, [open, autoClose, onClose, referenceRef, refs.floating, ownerDocument]);
+  useFloatingPopupAutoDismissRuntime({
+    open,
+    autoClose,
+    onClose,
+    referenceRef,
+    refs,
+    ownerDocument,
+  });
 
   useEffect(() => {
     if (open) update?.();
@@ -500,110 +471,15 @@ const FloatingPopup = ({
     };
   }, [mounted, isFixedMode, place, ownerWindow]);
 
-  useEffect(() => {
-    if (!open || autoClose) return;
-
-    let pointerCapturedInside = false;
-
-    const referenceEl = referenceRef?.current ?? null;
-
-    const _handlePointerDownInside = () => {
-      pointerCapturedInside = true;
-    };
-
-    const handlePointerUp = () => {
-      pointerCapturedInside = false;
-    };
-
-    const handleDocumentDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      // floatingRef.current를 이벤트 발생 시점에 동적으로 참조
-      const floatingEl = floatingRef.current;
-      const interactiveEls = interactiveRefs
-        .map((r) => r?.current)
-        .filter(Boolean) as HTMLElement[];
-      const isInsideModal =
-        isElementNode(target) &&
-        !!target.closest('[data-dmn-modal-backdrop="true"]');
-
-      if (!floatingEl) return;
-
-      const isInsideFloating = floatingEl.contains(target);
-      const isInsideReference = referenceEl?.contains(target) ?? false;
-      const isInsideInteractive = interactiveEls.some((el) =>
-        el.contains(target as Node),
-      );
-
-      if (isInsideFloating) {
-        pointerCapturedInside = true;
-        return;
-      }
-
-      if (
-        pointerCapturedInside &&
-        (event.type === 'pointerdown' || event.type === 'mousedown')
-      ) {
-        pointerCapturedInside = false;
-      }
-
-      if (isInsideReference || isInsideInteractive) {
-        pointerCapturedInside = false;
-        return;
-      }
-
-      // 모달이 열린 상태에서 모달 내부 클릭으로 팝업이 닫히는 것을 방지.
-      // (Modal은 body로 portal 렌더링되기 때문에 단순 z-index로는 해결이 안 됨)
-      if (isInsideModal) {
-        pointerCapturedInside = false;
-        return;
-      }
-
-      // 서브메뉴·포털 드롭다운도 body 포털이라 floating 내부로 인식되지 않음
-      const isInsideSubMenu =
-        isElementNode(target) &&
-        !!target.closest('[data-dmn-popup-submenu="true"]');
-      if (isInsideSubMenu) {
-        pointerCapturedInside = false;
-        return;
-      }
-
-      // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
-      const isInsideGradientOverlay =
-        isElementNode(target) &&
-        !!target.closest('[data-dmn-gradient-overlay="true"]');
-      if (isInsideGradientOverlay) {
-        pointerCapturedInside = false;
-        return;
-      }
-
-      // 위에 쌓인 팝업(자식 피커 등)은 body 포털이라 floating 내부로 인식되지 않음
-      if (isInsideHigherPopupLayer(floatingEl, target)) {
-        pointerCapturedInside = false;
-        return;
-      }
-
-      if (pointerCapturedInside) {
-        return;
-      }
-
-      onClose();
-    };
-
-    // 이벤트 리스너는 document에만 등록 (floatingEl은 동적으로 참조)
-    ownerDocument.addEventListener('pointerup', handlePointerUp, true);
-    ownerDocument.addEventListener('pointerdown', handleDocumentDown, true);
-    ownerDocument.addEventListener('mousedown', handleDocumentDown, true);
-
-    return () => {
-      ownerDocument.removeEventListener('pointerup', handlePointerUp, true);
-      ownerDocument.removeEventListener(
-        'pointerdown',
-        handleDocumentDown,
-        true,
-      );
-      ownerDocument.removeEventListener('mousedown', handleDocumentDown, true);
-    };
-  }, [open, autoClose, onClose, referenceRef, interactiveRefs, ownerDocument]);
+  useFloatingPopupPersistentDismissRuntime({
+    open,
+    autoClose,
+    onClose,
+    referenceRef,
+    interactiveRefs,
+    floatingRef,
+    ownerDocument,
+  });
 
   if (!mounted) return null;
 
