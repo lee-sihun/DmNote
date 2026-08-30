@@ -877,6 +877,69 @@ fn noncanonical_gradient_store_repersist_and_reload_is_idempotent() {
 }
 
 #[test]
+fn combined_normalization_pipeline_preserves_order_and_converges_after_one_persist() {
+    let path = std::env::temp_dir().join(format!(
+        "dmnote-combined-normalization-order-{}.json",
+        uuid::Uuid::new_v4()
+    ));
+    let mut data = normalize_state(AppStoreData {
+        keys: default_keys().clone(),
+        key_positions: default_positions().clone(),
+        ..AppStoreData::default()
+    });
+    crate::state::native_element_id::backfill_store_element_ids(&mut data);
+    let preserved_id = data.key_positions["4key"][0].id.clone();
+
+    data.selected_key_type = "missing-mode".to_string();
+    data.keys.get_mut("4key").unwrap().push(KeySlot::from("F5"));
+    data.key_counters
+        .entry("4key".to_string())
+        .or_default()
+        .insert("STALE".to_string(), 99);
+    let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+    position.group_id = Some("missing-group".to_string());
+    position.font_color = Some("  ".to_string());
+    position.image_mode = Some(crate::models::ImageMode::Replace);
+    position.background_color = Some("#BADBAD".to_string());
+    position.background_gradient = serde_json::from_value(serde_json::json!({
+        "angle": 90,
+        "stops": [
+            { "color": "#112233", "pos": 0 },
+            { "color": "#445566", "pos": 1 }
+        ]
+    }))
+    .unwrap();
+    std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+
+    let first = load_store_from_path(&path).unwrap();
+    assert!(first.needs_persist);
+    assert!(first.repaired);
+    assert_eq!(first.data.selected_key_type, "4key");
+    assert_eq!(first.data.key_positions["4key"][0].id, preserved_id);
+    assert_eq!(
+        first.data.keys["4key"].len(),
+        first.data.key_positions["4key"].len()
+    );
+    assert!(crate::state::native_element_id::is_valid_element_id(
+        &first.data.key_positions["4key"].last().unwrap().id
+    ));
+    let position = &first.data.key_positions["4key"][0];
+    assert!(position.group_id.is_none());
+    assert!(position.font_color.is_none());
+    assert!(position.image_mode.is_none());
+    assert_eq!(position.background_color.as_deref(), Some("#112233"));
+    assert!(!first.data.key_counters["4key"].contains_key("STALE"));
+    assert_eq!(first.data.key_counters["4key"]["F5"], 0);
+
+    std::fs::write(&path, serde_json::to_vec_pretty(&first.data).unwrap()).unwrap();
+    let second = load_store_from_path(&path).unwrap();
+    assert!(!second.needs_persist);
+    assert!(!second.repaired);
+    assert_eq!(second.data, first.data);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn blank_font_color_normalization_requests_one_canonical_persist() {
     let path = std::env::temp_dir().join(format!(
         "dmnote-blank-font-color-reload-{}.json",
