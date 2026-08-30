@@ -1,30 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import type { StyleTabContentProps } from '../types';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type { KeyPosition } from '@src/types/key/keys';
 import { PropertyRow, PropertySection, TextInput } from '../PropertyInputs';
-import { useKeyStore } from '@stores/data/useKeyStore';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import Checkbox from '../../../common/Checkbox';
-import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
-import {
-  paintDescriptor,
-  type ColorModeValue,
-  type GradientSpec,
-} from '@src/types/color';
-import {
-  DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_ACTIVE_BG,
-  DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_ACTIVE_FONT,
-  DEFAULT_ELEMENT_BORDER,
-  DEFAULT_ELEMENT_ACTIVE_BORDER,
-} from '@utils/core/elementDefaults';
-import {
-  elementImageReplacesSurface,
-  resolveElementBorder,
-} from '@utils/core/elementBorder';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import SoundSection from '../SoundSection';
 import SingleGeometrySection from './SingleGeometrySection';
@@ -32,21 +13,13 @@ import SingleTypographySection from './SingleTypographySection';
 import SingleSurfaceSection from './SingleSurfaceSection';
 import SingleMappingSection from './SingleMappingSection';
 import SingleImagePickerPopup from './SingleImagePickerPopup';
+import {
+  useSingleStyleColorController,
+  type SingleStyleColorTarget,
+} from './useSingleStyleColorController';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const SOUND_PAGE_KEY = 'single-style:sound';
-
-// 피커 타겟 타입
-type PickerTarget = 'backgroundColor' | 'borderColor' | 'fontColor' | null;
-
-type ColorState = 'idle' | 'active';
-type StyleColorTarget = 'backgroundColor' | 'borderColor' | 'fontColor';
-type GradientColorTarget = StyleColorTarget;
-type ActiveStyleColorProperty =
-  | 'activeBackgroundColor'
-  | 'activeBorderColor'
-  | 'activeFontColor';
-type StyleColorProperty = StyleColorTarget | ActiveStyleColorProperty;
 
 interface StyleTabContentInternalProps extends StyleTabContentProps {
   // 로컬 상태 (단일 선택 시에만 사용, 개별 편집 모드에서는 사용하지 않음)
@@ -107,276 +80,31 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onLocalWidthChange,
   onLocalHeightChange,
 }) => {
-  const DEFAULT_KEY_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
-  const DEFAULT_KEY_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
-  const DEFAULT_KEY_FONT_COLOR = DEFAULT_ELEMENT_FONT;
-  const DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
-  const DEFAULT_KEY_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
-  const DEFAULT_KEY_ACTIVE_FONT_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
-
-  // 통합 피커 상태
-  const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
-  const [colorState, setColorState] = useState<ColorState>('idle');
-  const effectiveColorState = shadowActiveState ? colorState : 'idle';
-  const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
-
-  useEffect(() => {
-    if (!shadowActiveState) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- stat 전환 시 active 편집 상태 즉시 폐기
-      setColorState('idle');
-      setPickerFor(null);
-    }
-  }, [shadowActiveState]);
-
-  // 컬러 버튼 refs
-  const bgColorBtnRef = useRef<HTMLButtonElement>(null);
-  // 폰트 버튼 ref
-  const borderColorBtnRef = useRef<HTMLButtonElement>(null);
-  const fontColorBtnRef = useRef<HTMLButtonElement>(null);
-
-  // 인-패널 내비게이션 (사운드/폰트 서브 페이지)
-  // 로컬 색상 상태 (드래그 중 UI 업데이트용)
-  const [localColors, setLocalColors] = useState<
-    Record<StyleColorProperty, string>
-  >({
-    backgroundColor:
-      keyPosition.backgroundColor || DEFAULT_KEY_BACKGROUND_COLOR,
-    activeBackgroundColor:
-      keyPosition.activeBackgroundColor ||
-      keyPosition.backgroundColor ||
-      DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR,
-    borderColor: keyPosition.borderColor || DEFAULT_KEY_BORDER_COLOR,
-    activeBorderColor:
-      keyPosition.activeBorderColor ||
-      keyPosition.borderColor ||
-      DEFAULT_KEY_ACTIVE_BORDER_COLOR,
-    fontColor: keyPosition.fontColor || DEFAULT_KEY_FONT_COLOR,
-    activeFontColor:
-      keyPosition.activeFontColor ||
-      keyPosition.fontColor ||
-      DEFAULT_KEY_ACTIVE_FONT_COLOR,
-  });
-
-  // 피커가 닫혀있을 때만 외부 prop과 동기화
-  useEffect(() => {
-    if (
-      !pickerFor ||
-      (pickerFor !== 'backgroundColor' &&
-        pickerFor !== 'borderColor' &&
-        pickerFor !== 'fontColor')
-    ) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 닫힌 피커의 표시값을 canonical props와 동기화
-      setLocalColors({
-        backgroundColor:
-          keyPosition.backgroundColor || DEFAULT_KEY_BACKGROUND_COLOR,
-        activeBackgroundColor:
-          keyPosition.activeBackgroundColor ||
-          keyPosition.backgroundColor ||
-          DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR,
-        borderColor: keyPosition.borderColor || DEFAULT_KEY_BORDER_COLOR,
-        activeBorderColor:
-          keyPosition.activeBorderColor ||
-          keyPosition.borderColor ||
-          DEFAULT_KEY_ACTIVE_BORDER_COLOR,
-        fontColor: keyPosition.fontColor || DEFAULT_KEY_FONT_COLOR,
-        activeFontColor:
-          keyPosition.activeFontColor ||
-          keyPosition.fontColor ||
-          DEFAULT_KEY_ACTIVE_FONT_COLOR,
-      });
-    }
-  }, [
+  const {
     pickerFor,
-    keyPosition.backgroundColor,
-    keyPosition.activeBackgroundColor,
-    keyPosition.borderColor,
-    keyPosition.activeBorderColor,
-    keyPosition.fontColor,
-    keyPosition.activeFontColor,
-    DEFAULT_KEY_BACKGROUND_COLOR,
-    DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR,
-    DEFAULT_KEY_BORDER_COLOR,
-    DEFAULT_KEY_ACTIVE_BORDER_COLOR,
-    DEFAULT_KEY_FONT_COLOR,
-    DEFAULT_KEY_ACTIVE_FONT_COLOR,
-  ]);
-
-  // interactiveRefs
-  const colorPickerInteractiveRefs = [
-    bgColorBtnRef,
-    borderColorBtnRef,
-    fontColorBtnRef,
-  ];
-
-  // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
-  const handlePickerToggle = (target: PickerTarget) => {
-    setPickerFor((prev) => (prev === target ? null : target));
-    // 새로 열 때는 항상 대기 탭에서 시작 - 열림과 같은 배치로 리셋해
-    // 첫 렌더부터 이전 "입력" 선택이 새지 않는다
-    if (pickerFor !== target) setColorState('idle');
-  };
-
-  const resolveColorProperty = (
-    target: StyleColorTarget,
-  ): StyleColorProperty => {
-    if (effectiveColorState !== 'active') return target;
-    switch (target) {
-      case 'backgroundColor':
-        return 'activeBackgroundColor';
-      case 'borderColor':
-        return 'activeBorderColor';
-      case 'fontColor':
-        return 'activeFontColor';
-      default:
-        return target;
-    }
-  };
-
-  const activeColorPropertyFor = (
-    target: StyleColorTarget,
-  ): ActiveStyleColorProperty => {
-    switch (target) {
-      case 'backgroundColor':
-        return 'activeBackgroundColor';
-      case 'borderColor':
-        return 'activeBorderColor';
-      case 'fontColor':
-        return 'activeFontColor';
-    }
-  };
-
-  // 상태별 저장된 gradient 형제 값
-  const storedGradientOf = (prop: StyleColorProperty): GradientSpec | null => {
-    switch (prop) {
-      case 'backgroundColor':
-        return keyPosition.backgroundGradient ?? null;
-      case 'activeBackgroundColor':
-        return keyPosition.activeBackgroundGradient ?? null;
-      case 'borderColor':
-        return keyPosition.borderGradient ?? null;
-      case 'activeBorderColor':
-        return keyPosition.activeBorderGradient ?? null;
-      case 'fontColor':
-        return keyPosition.fontGradient ?? null;
-      case 'activeFontColor':
-        return keyPosition.activeFontGradient ?? null;
-      default:
-        return null;
-    }
-  };
-
-  const isNonEmptyString = (value: unknown): value is string =>
-    typeof value === 'string' && value.trim().length > 0;
-
-  // 현재 피커 색상값 가져오기
-  const colorValueFor = (target: StyleColorTarget): string => {
-    return localColors[resolveColorProperty(target)];
-  };
-
-  // 드래그 중 로컬 상태만 갱신 - preview는 그라데이션 상태(handleGradientPreview)가 담당
-  const handleColorChange = (target: StyleColorTarget, color: string) => {
-    const prop = resolveColorProperty(target);
-    setLocalColors((prev) => ({ ...prev, [prop]: color }));
-  };
-
-  // 드래그 완료 시 로컬 반영 - 커밋은 그라데이션 상태(handleGradientCommit)가 담당
-  const handleColorChangeComplete = (
-    target: StyleColorTarget,
-    color: string,
-  ) => {
-    const prop = resolveColorProperty(target);
-    setLocalColors((prev) => ({ ...prev, [prop]: color }));
-  };
-
-  // ── 그라데이션 배선 (배경·테두리·글꼴 공통) ──
-
-  const gradientTarget: GradientColorTarget | null =
-    pickerFor === 'backgroundColor' ||
-    pickerFor === 'borderColor' ||
-    pickerFor === 'fontColor'
-      ? pickerFor
-      : null;
-
-  const gradientSpecFor = (
-    target: GradientColorTarget,
-  ): GradientSpec | null => {
-    // 테두리는 상태별 이미지 억제까지 렌더와 같은 해석기 결과를 그대로 쓴다.
-    // 활성 이미지로 억제된 null이 대기 기본 립으로 되돌아가면 안 된다
-    if (target === 'borderColor') {
-      const active = effectiveColorState === 'active';
-      return resolveElementBorder(keyPosition, active, {
-        suppressDefault: elementImageReplacesSurface(keyPosition, active),
-      }).gradient;
-    }
-    const idleGradient = storedGradientOf(target);
-    if (effectiveColorState !== 'active') return idleGradient;
-    const activeProp = activeColorPropertyFor(target);
-    const activeGradient = storedGradientOf(activeProp);
-    const activeHasValue =
-      isNonEmptyString(keyPosition[activeProp]) || activeGradient != null;
-    return activeHasValue ? activeGradient : idleGradient;
-  };
-
-  // 배경·테두리·글꼴 표면과 상태 조합을 paint 필드로
-  const paintFieldFor = (target: GradientColorTarget) =>
-    target === 'backgroundColor'
-      ? effectiveColorState === 'active'
-        ? 'activeBackgroundPaint'
-        : 'backgroundPaint'
-      : target === 'borderColor'
-      ? effectiveColorState === 'active'
-        ? 'activeBorderPaint'
-        : 'borderPaint'
-      : effectiveColorState === 'active'
-      ? 'activeFontPaint'
-      : 'fontPaint';
-
-  // 드래그와 텍스트 입력은 같은 preview patch를 사용
-  const handleGradientPreview = (value: ColorModeValue) => {
-    if (!gradientTarget) return;
-    const prop = resolveColorProperty(gradientTarget);
-    const descriptor = paintDescriptor(value);
-    setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-    onPaintPreview?.({
-      property: paintFieldFor(gradientTarget),
-      value: descriptor,
-    });
-  };
-
-  const handleGradientCommit = (value: ColorModeValue) => {
-    if (!gradientTarget) return;
-    const prop = resolveColorProperty(gradientTarget);
-    const descriptor = paintDescriptor(value);
-    setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-    onPaintCommit?.({
-      property: paintFieldFor(gradientTarget),
-      value: descriptor,
-    });
-  };
-
-  const gradientState = useGradientColorState({
-    pair: gradientTarget
-      ? {
-          color: colorValueFor(gradientTarget),
-          gradient: gradientSpecFor(gradientTarget),
-        }
-      : {},
-    fallbackColor: '#ffffff',
-    // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
-    contextKey: `${canvasAnchor?.kind ?? 'key'}:${selectedKeyType}:${
-      canvasAnchor?.kind === 'batch' ? 'batch' : canvasAnchor?.id
-    }:${pickerFor ?? 'none'}:${effectiveColorState}`,
-    canvasAnchor: gradientTarget ? canvasAnchor : undefined,
-    canvasSurface:
-      gradientTarget === 'borderColor'
-        ? 'border'
-        : gradientTarget === 'fontColor'
-        ? 'font'
-        : 'background',
-    canvasState: effectiveColorState,
-    onPreview: handleGradientPreview,
-    onCancel: () => editGestureController.cancel(),
-    onCommit: handleGradientCommit,
+    setPickerFor,
+    effectiveColorState,
+    setColorState,
+    backgroundColorButtonRef: bgColorBtnRef,
+    borderColorButtonRef: borderColorBtnRef,
+    fontColorButtonRef: fontColorBtnRef,
+    colorPickerInteractiveRefs,
+    handlePickerToggle,
+    resolveColorProperty,
+    colorValueFor,
+    handleColorChange,
+    handleColorChangeComplete,
+    gradientTarget,
+    gradientSpecFor,
+    gradientState,
+    setLocalColors,
+    getDisplayColor,
+  } = useSingleStyleColorController({
+    keyPosition,
+    shadowActiveState,
+    canvasAnchor,
+    onPaintPreview,
+    onPaintCommit,
   });
 
   // 타이핑 중 스타일 프리뷰
@@ -441,14 +169,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   const handleClassNameBlur = (value: string) => {
     onStylePropertyCommit?.({ property: 'className', value: value });
-  };
-
-  // 색상 표시용 헬퍼 함수
-  const getDisplayColor = (color: string): string => {
-    if (!color) return '#ffffff';
-    if (color.startsWith('rgba') || color.startsWith('rgb')) return color;
-    if (color.startsWith('#')) return color;
-    return '#ffffff';
   };
 
   return (
@@ -624,23 +344,26 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             color={
               gradientTarget
                 ? gradientState.pickerColor
-                : colorValueFor(pickerFor as StyleColorTarget)
+                : colorValueFor(pickerFor as SingleStyleColorTarget)
             }
             onColorChange={(c: string) =>
               gradientTarget
                 ? gradientState.handlePickerColorChange(c, false)
-                : handleColorChange(pickerFor as StyleColorTarget, c)
+                : handleColorChange(pickerFor as SingleStyleColorTarget, c)
             }
             onColorChangeComplete={(c: string) =>
               gradientTarget
                 ? gradientState.handlePickerColorChange(c, true)
-                : handleColorChangeComplete(pickerFor as StyleColorTarget, c)
+                : handleColorChangeComplete(
+                    pickerFor as SingleStyleColorTarget,
+                    c,
+                  )
             }
             onInputCancel={(_target, restoredColor) => {
               gradientState.cancelPreview();
               if (typeof restoredColor === 'string') {
                 const prop = resolveColorProperty(
-                  pickerFor as StyleColorTarget,
+                  pickerFor as SingleStyleColorTarget,
                 );
                 setLocalColors((prev) => ({
                   ...prev,
