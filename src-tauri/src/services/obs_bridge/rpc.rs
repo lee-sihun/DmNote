@@ -127,3 +127,6 @@ pub(super) fn project_invoke_response(response: InvokeResponse) -> RpcResult {
 pub(super) fn send_rpc_response(rpc_tx: &RpcSender, request_id: String, result: RpcResult) {
     let _ = rpc_tx.send((request_id, result));
 }
+
+#[cfg(test)]
+mod tests;
