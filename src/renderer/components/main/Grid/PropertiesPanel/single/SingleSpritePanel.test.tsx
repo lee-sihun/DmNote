@@ -133,6 +133,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       root.render(
         <SingleSpritePanel
           setPanelElement={vi.fn()}
+          panelElement={container}
           singleSpritePosition={position}
           selectedKeyType="4key"
           isRenaming={false}

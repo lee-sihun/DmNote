@@ -111,6 +111,7 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
           multiple
           values={[...poseControls.triggers]}
           onChange={poseControls.onToggleTrigger}
+          ariaLabel={t('propertiesPanel.spriteTriggerKeys') || '담당 키'}
           placeholder={
             t('propertiesPanel.spriteTriggerPlaceholder') || '키 선택'
           }

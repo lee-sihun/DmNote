@@ -2,12 +2,12 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
-import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { spriteItemsApi } from '@api/modules/itemsApi';
 import { imageApi } from '@api/modules/resourceApi';
 import { canDecodeImage } from '@utils/core/assetProbe';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
+import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import { slotDisplayName } from '@utils/keySlot';
 import { ACTION_BUTTON_CLASS, AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { useSpriteEditPreviewStore } from '@stores/grid/useSpriteEditPreviewStore';
@@ -41,34 +41,9 @@ import {
 import MoreVerticalIcon from '@components/main/Modal/content/pickers/MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import EditSessionBoundary from '../EditSessionBoundary';
+import { RenameIcon } from '../PanelIcons';
 import SpritePoseEditorPopup from './SpritePoseEditorPopup';
 import SpriteImageSettingsPopup from './SpriteImageSettingsPopup';
-
-// 24 그리드를 12px로 렌더 - 스트로크 2.4가 화면상 1.2
-const RenameIcon: React.FC = () => (
-  <svg
-    width="12"
-    height="12"
-    viewBox="0 0 24 24"
-    fill="none"
-    aria-hidden="true"
-  >
-    <path
-      d="M12 20H21"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -103,6 +78,7 @@ const isSameEditorTarget = (
 
 interface SingleSpritePanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  panelElement: HTMLDivElement | null;
   singleSpritePosition: CanonicalReactiveSpritePosition;
   selectedKeyType: string;
   isRenaming: boolean;
@@ -119,6 +95,7 @@ interface SingleSpritePanelProps {
 
 export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   setPanelElement,
+  panelElement,
   singleSpritePosition,
   selectedKeyType,
   isRenaming,
@@ -139,12 +116,6 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   );
   const loadingImageRef = useRef(false);
 
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const setRef = (node: HTMLDivElement | null) => {
-    panelRef.current = node;
-    setPanelElement(node);
-  };
-
   // 편집 팝업 앵커 - 여는 순간의 행·버튼(또는 웰)을 담는다
   const poseAnchorRef = useRef<HTMLElement | null>(null);
   // 상태 목록 영역 - 여기서의 pointerdown은 팝업 바깥닫힘을 거치지 않고
@@ -154,33 +125,30 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     null,
   );
 
-  // 자세 팝업은 대상이 갈리면 닫는다
-  useEffect(() => {
-    setEditorTarget(null);
-  }, [selectedKeyType, position.id]);
-
   // 무효 자세(빈/중복 트리거)는 백엔드가 거부하므로 커밋 착지 전까지 패널이 값을 들고 있는다
   const [posesDraft, setPosesDraft] = useState<{
     id: string;
     poses: SpritePose[];
   } | null>(null);
 
-  // draft는 커밋이 canonical에 착지하거나 대상이 바뀔 때 지운다
-  useEffect(() => {
-    setPosesDraft((current) => {
-      if (!current) return current;
-      if (current.id !== position.id) return null;
-      const canonical = useSpriteStore
-        .getState()
-        .positions[selectedKeyType]?.find(
-          (sprite) => sprite.id === position.id,
-        );
-      if (!canonical) return current;
-      return JSON.stringify(canonical.poses) === JSON.stringify(current.poses)
-        ? null
-        : current;
-    });
-  }, [position.id, position.poses, selectedKeyType]);
+  // 대상이 갈리면 팝업을 닫고 draft를 버린다 - effect의 동기 setState는
+  // 캐스케이드 렌더라 렌더 중 보정 패턴을 쓴다
+  const panelTargetKey = `${selectedKeyType}\n${position.id}`;
+  const [lastPanelTargetKey, setLastPanelTargetKey] = useState(panelTargetKey);
+  if (panelTargetKey !== lastPanelTargetKey) {
+    setLastPanelTargetKey(panelTargetKey);
+    setEditorTarget(null);
+    setPosesDraft(null);
+  }
+
+  // draft는 커밋이 canonical에 착지하면 지운다 - position prop이 곧 canonical
+  if (
+    posesDraft &&
+    posesDraft.id === position.id &&
+    JSON.stringify(position.poses) === JSON.stringify(posesDraft.poses)
+  ) {
+    setPosesDraft(null);
+  }
 
   // 담당 키 후보: 현재 모드의 키 요소 목록 (값은 요소 id, 라벨은 슬롯 표시명)
   const modeSlots = keyMappings[selectedKeyType] ?? [];
@@ -311,7 +279,10 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     });
   };
 
-  const updatePoses = (nextPoses: SpritePose[]) => {
+  const updatePoses = (rawPoses: SpritePose[]) => {
+    // draft와 커밋이 같은 wire 정규형(트리거 정렬·dedup)을 공유해야
+    // canonical 착지 비교가 일치해 draft가 제때 풀린다
+    const nextPoses = toSpriteWireShape({ ...position, poses: rawPoses }).poses;
     setPosesDraft({ id: position.id, poses: nextPoses });
     const blocked =
       nextPoses.some((pose) => pose.triggers.length === 0) ||
@@ -433,11 +404,13 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     // 사본은 원본 바로 아래 행 - 담당 키 지정이 다음 단계라 편집 팝업을 바로 연다.
     // 분리 패널 창의 행은 다른 realm이라 instanceof 대신 realm-safe 판정을 쓴다
     const sourceRow = poseListRef.current?.children[sourceIndex];
+    const anchor = isHTMLElementNode(sourceRow)
+      ? sourceRow
+      : poseListRef.current ?? panelElement;
+    if (!anchor) return;
     openEditorPopup(
       { kind: 'pose', positionId: position.id, poseId: pose.poseId },
-      isHTMLElementNode(sourceRow)
-        ? sourceRow
-        : poseListRef.current ?? panelRef.current!,
+      anchor,
     );
   };
 
@@ -590,28 +563,28 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   };
 
   // 키 패널과 동일한 이미지 선택 흐름 (image_load + 디코드 확인)
+  // finalizer 없는 형태 유지 - try/finally는 React Compiler가 컴포넌트 전체를
+  // 최적화에서 제외한다. 재진입 플래그는 모든 경로가 지나는 아래 한 곳에서 푼다
   const pickImage = async (): Promise<string | null> => {
     if (loadingImageRef.current) return null;
     loadingImageRef.current = true;
+    let picked: string | null = null;
     try {
       const result = await imageApi.load();
       if (!result?.success || !result.imagePath) {
         // errorCode가 없는 실패는 사용자 취소
         if (result?.errorCode) showInvalidImageAlert();
-        return null;
-      }
-      // 시그니처를 통과해도 WebView가 못 그리는 파일이 있다. 직전 값을 덮기 전에 확인한다
-      if (!(await canDecodeImage(result.imagePath))) {
+      } else if (!(await canDecodeImage(result.imagePath))) {
+        // 시그니처를 통과해도 WebView가 못 그리는 파일이 있다. 직전 값을 덮기 전에 확인한다
         showInvalidImageAlert();
-        return null;
+      } else {
+        picked = result.imagePath;
       }
-      return result.imagePath;
     } catch (error) {
       console.error('Failed to load image', error);
-      return null;
-    } finally {
-      loadingImageRef.current = false;
     }
+    loadingImageRef.current = false;
+    return picked;
   };
 
   const handleBaseImageSelect = async () => {
@@ -656,7 +629,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       ];
 
   return (
-    <div ref={setRef} className={PANEL_ROOT_CLASS}>
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className={PANEL_HEADER_CLASS}>
         {isRenaming ? (
           <input
@@ -849,6 +822,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                     }}
                     onKeyDown={(event) => {
                       if (event.target !== event.currentTarget) return;
+                      // 이름 변경 중에는 클릭과 동일하게 열기 차단
+                      if (isRenamingPose) return;
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         openPose(event.currentTarget);
@@ -956,19 +931,16 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                   value={position.transitionMs}
                   onChange={(value) =>
                     commitFields({
-                      transitionMs: clamp(
-                        value,
-                        transitionMs.min,
-                        transitionMs.max,
+                      // Rust u32 계약 - 스크럽 소수값을 정수로 고정
+                      transitionMs: Math.round(
+                        clamp(value, transitionMs.min, transitionMs.max),
                       ),
                     })
                   }
                   onPreview={(value) =>
                     previewFields({
-                      transitionMs: clamp(
-                        value,
-                        transitionMs.min,
-                        transitionMs.max,
+                      transitionMs: Math.round(
+                        clamp(value, transitionMs.min, transitionMs.max),
                       ),
                     })
                   }
@@ -1004,7 +976,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
             open
             position={position}
             referenceRef={poseAnchorRef}
-            panelElement={panelRef.current}
+            panelElement={panelElement}
             onCommit={commitFields}
             onPreview={previewFields}
             onCancel={() => editGestureController.cancel()}
@@ -1021,7 +993,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
             ariaLabel={editingPose.name || resolvedNames[editingPoseIndex]}
             transform={editingPose.transform}
             referenceRef={poseAnchorRef}
-            panelElement={panelRef.current}
+            panelElement={panelElement}
             interactiveRefs={[poseListRef]}
             poseControls={{
               keyOptions,
@@ -1037,19 +1009,41 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
             onTransformCommit={(next) =>
               replacePose(editingPoseIndex, { transform: next })
             }
-            onTransformPreview={
-              posesCommittable
-                ? (next) =>
-                    previewFields({
-                      poses: displayPoses.map((entry, index) =>
-                        index === editingPoseIndex
-                          ? { ...entry, transform: next }
-                          : entry,
-                      ),
-                    })
-                : undefined
-            }
-            onTransformCancel={() => editGestureController.cancel()}
+            onTransformPreview={(next) => {
+              // 콜백 부재는 접두 스크럽 자체를 꺼 버린다 - 항상 넘기고 안에서 분기
+              if (posesCommittable) {
+                previewFields({
+                  poses: displayPoses.map((entry, index) =>
+                    index === editingPoseIndex
+                      ? { ...entry, transform: next }
+                      : entry,
+                  ),
+                });
+                return;
+              }
+              // 무효 draft는 커밋 채널에 못 실리므로 캔버스 스냅샷을 직접 갱신
+              if (!editingPose) return;
+              useSpriteEditPreviewStore.getState().publish({
+                kind: 'pose',
+                positionId: position.id,
+                poseId: editingPose.poseId,
+                fallbackPose: { ...editingPose, transform: next },
+                preferFallback: true,
+              });
+            }}
+            onTransformCancel={() => {
+              editGestureController.cancel();
+              // 무효 draft 스크럽은 스냅샷 채널이라 gesture 취소가 복원하지 못한다
+              if (!posesCommittable && editingPose) {
+                useSpriteEditPreviewStore.getState().publish({
+                  kind: 'pose',
+                  positionId: position.id,
+                  poseId: editingPose.poseId,
+                  fallbackPose: editingPose,
+                  preferFallback: true,
+                });
+              }
+            }}
             onClose={() => setEditorTarget(null)}
             t={t}
           />
@@ -1072,5 +1066,3 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     </div>
   );
 };
-
-export default SingleSpritePanel;

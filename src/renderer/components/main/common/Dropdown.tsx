@@ -46,7 +46,7 @@ interface DropdownProps {
   widthClass?: string;
   /** 아이콘 트리거의 접근 가능한 이름 - 아이콘만 있는 버튼은 용도·현재 값이 안 읽힌다 */
   ariaLabel?: string;
-  /** 트리거 크기 — sm: 23px 크롬(기본), lg: 30px 크롬(패널 페이지) */
+  /** 트리거 크기 - sm: 23px 크롬(기본), lg: 30px 크롬(패널 페이지) */
   size?: 'sm' | 'lg';
   /** 다중 선택 모드: 항목 클릭이 메뉴를 닫지 않는 토글이 되고 onChange가 토글된 값을 받음 */
   multiple?: boolean;

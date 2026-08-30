@@ -1452,7 +1452,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
-    id && isNativeElementId(id)
+    // 스프라이트 geometry는 전용 패널 경로만 쓴다 - knob 도메인으로 새지 않게 차단
+    id && isNativeElementId(id) && type !== 'sprite'
       ? (field: GeometryField, value: number) => {
           const locator = resolveElementById(type, id);
           if (!locator) return;
@@ -2993,6 +2994,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return (
         <SingleSpritePanel
           setPanelElement={setPanelElement}
+          panelElement={panelElement}
           singleSpritePosition={singleSpritePosition}
           selectedKeyType={selectedKeyType}
           isRenaming={isRenaming}
