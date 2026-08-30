@@ -177,19 +177,19 @@ body.dmn-dragging * {
   box-shadow: var(--ui-tab-socket-shadow);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dmn-tab-chip,
-  .dmn-tab-chip.dmn-tab-returning {
-    transition: none;
-    rotate: none;
-    scale: none;
-  }
-  .dmn-tab-chip > * {
-    transform: none;
-  }
-  .dmn-tab-chip.dmn-tab-landed {
-    animation: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-tab-chip,
+:root[data-dmn-reduced-motion] .dmn-tab-chip.dmn-tab-returning {
+  transition: none;
+  rotate: none;
+  scale: none;
+}
+
+:root[data-dmn-reduced-motion] .dmn-tab-chip > * {
+  transform: none;
+}
+
+:root[data-dmn-reduced-motion] .dmn-tab-chip.dmn-tab-landed {
+  animation: none;
 }
 
 /* ===== 글래스 백드롭 ===== */
@@ -457,10 +457,8 @@ body.dmn-dragging * {
   pointer-events: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dmn-icon-swap > [data-icon] {
-    transition: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-icon-swap > [data-icon] {
+  transition: none;
 }
 
 /* 글자 스왑 — 바뀌는 부분만 겹쳐두고 크로스페이드.
@@ -506,10 +504,8 @@ body.dmn-dragging * {
   pointer-events: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dmn-text-swap > [data-text] {
-    transition: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-text-swap > [data-text] {
+  transition: none;
 }
 
 /* 직접 클릭이 아닌 외부 상태 변경은 즉시 전환 —
@@ -586,31 +582,31 @@ body.dmn-dragging * {
     border-radius var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  /* 트랙도 함께 꺼야 한다. 노브만 멈추면 노브는 즉시 점프하는데
-     트랙 색만 180ms 동안 흐르며 두 clock이 갈라진다.
-     Tailwind 유틸(transition-colors)을 이기려면 특이도가 한 단계 높아야 한다 */
-  [role='switch'].dmn-toggle-track {
-    transition: none;
-  }
+/* 트랙도 함께 꺼야 한다. 노브만 멈추면 노브는 즉시 점프하는데
+   트랙 색만 180ms 동안 흐르며 두 clock이 갈라진다.
+   Tailwind 유틸(transition-colors)을 이기려면 특이도가 한 단계 높아야 한다 */
+:root[data-dmn-reduced-motion] [role='switch'].dmn-toggle-track {
+  transition: none;
+}
 
-  .dmn-toggle-thumb,
-  [role='switch']:active .dmn-toggle-thumb,
-  [role='switch'][data-dmn-pressed] .dmn-toggle-thumb {
-    transition: none;
-    /* 전환이 없으면 눌림이 깜빡임으로 읽히므로 변형 자체를 끈다 */
-    scale: 1;
-    border-radius: calc(var(--ui-toggle-thumb-size) / 2);
-  }
+:root[data-dmn-reduced-motion] .dmn-toggle-thumb,
+:root[data-dmn-reduced-motion] [role='switch']:active .dmn-toggle-thumb,
+:root[data-dmn-reduced-motion]
+  [role='switch'][data-dmn-pressed]
+  .dmn-toggle-thumb {
+  transition: none;
+  /* 전환이 없으면 눌림이 깜빡임으로 읽히므로 변형 자체를 끈다 */
+  scale: 1;
+  border-radius: calc(var(--ui-toggle-thumb-size) / 2);
+}
 
-  /* 세그먼트 인디케이터 — 토글 노브와 같은 성격의 슬라이딩이라 함께 끈다.
-     전이를 소유한 .dmn-segment-thumb 규칙이 이 블록보다 아래에 있어 같은 특이도로는
-     밀린다. 속성 선택자로 한 단계 올려 순서와 무관하게 이기게 한다.
-     승격(will-change)은 유지 — 모션을 끄는 것과 레이어 승격은 별개고,
-     끈 상태에서도 페인트 비용은 낮은 쪽이 낫다 */
-  .dmn-segment-thumb[aria-hidden] {
-    transition: none;
-  }
+/* 세그먼트 인디케이터 — 토글 노브와 같은 성격의 슬라이딩이라 함께 끈다.
+   전이를 소유한 .dmn-segment-thumb 규칙이 이 블록보다 아래에 있어 같은 특이도로는
+   밀린다. 속성 선택자로 한 단계 올려 순서와 무관하게 이기게 한다.
+   승격(will-change)은 유지 — 모션을 끄는 것과 레이어 승격은 별개고,
+   끈 상태에서도 페인트 비용은 낮은 쪽이 낫다 */
+:root[data-dmn-reduced-motion] .dmn-segment-thumb[aria-hidden] {
+  transition: none;
 }
 
 /* 세그먼트 인디케이터 — 전역 모션 다이얼과 분리. 근거는 tokens.css 참조.
@@ -648,11 +644,9 @@ body.dmn-dragging * {
   transform: translateX(0);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dmn-panel-toggle-divider,
-  .dmn-panel-toggle-lines {
-    transition: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-panel-toggle-divider,
+:root[data-dmn-reduced-motion] .dmn-panel-toggle-lines {
+  transition: none;
 }
 
 @keyframes tooltipFadeIn {
@@ -804,12 +798,10 @@ body.dmn-dragging * {
     var(--ui-popup-ease);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dmn-motion,
-  .dmn-motion-content > *,
-  .dmn-scrim-motion {
-    transition: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-motion,
+:root[data-dmn-reduced-motion] .dmn-motion-content > *,
+:root[data-dmn-reduced-motion] .dmn-scrim-motion {
+  transition: none;
 }
 
 /* 스테이지 콘텐츠 등장 — 비동기 준비(파형 디코드 등)를 마친 콘텐츠의 한 박자 페이드 */
@@ -947,24 +939,23 @@ body.dmn-dragging * {
   background: rgba(255, 255, 255, 0.26);
 }
 
-/* 모션 축소 설정 존중 — 이동은 제거, 표시 자체는 유지 */
-@media (prefers-reduced-motion: reduce) {
-  .tooltip-fade-in,
-  .animate-stage-in,
-  .animate-pulse {
-    animation: none;
-  }
+/* 모션 축소 모드 — 이동은 제거, 표시 자체는 유지 */
+:root[data-dmn-reduced-motion] .tooltip-fade-in,
+:root[data-dmn-reduced-motion] .animate-stage-in,
+:root[data-dmn-reduced-motion] .animate-pulse,
+:root[data-dmn-reduced-motion] .dmn-reload-spin {
+  animation: none;
+}
 
-  /* 비활성 상태 셀렉터가 자체 transition을 가지므로 같은 특이도로 함께 무효화 */
-  .dmn-panel-page,
-  .dmn-panel-page[data-active='false'] {
-    transition: none;
-  }
+/* 비활성 상태 셀렉터가 자체 transition을 가지므로 같은 특이도로 함께 무효화 */
+:root[data-dmn-reduced-motion] .dmn-panel-page,
+:root[data-dmn-reduced-motion] .dmn-panel-page[data-active='false'] {
+  transition: none;
+}
 
-  .dmn-panel-page[data-active='false'] {
-    transform: none;
-    filter: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-panel-page[data-active='false'] {
+  transform: none;
+  filter: none;
 }
 
 /* ===== 툴바 아이콘 호버 모션 =====
@@ -1163,10 +1154,8 @@ svg [data-dmn-icon-motion] {
   transition-timing-function: ease-out;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dmn-icon-press > .dmn-icon-motion {
-    transition: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-icon-press > .dmn-icon-motion {
+  transition: none;
 }
 
 /* 문지르는 물건이라 툴바에서 유일하게 여러 번 왕복한다 */
@@ -1486,10 +1475,8 @@ svg [data-dmn-icon-motion] {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-dmn-icon-play] [data-dmn-icon-motion] {
-    animation-name: none;
-  }
+:root[data-dmn-reduced-motion] [data-dmn-icon-play] [data-dmn-icon-motion] {
+  animation-name: none;
 }
 
 /* 숫자 스텝 팝인 - 방향키로 값이 바뀐 자릿수만 재생한다.
@@ -1539,10 +1526,8 @@ svg [data-dmn-icon-motion] {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dmn-digit-pop > span[data-dmn-digit-changed] {
-    animation-name: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-digit-pop > span[data-dmn-digit-changed] {
+  animation-name: none;
 }
 
 /* 확정할 수 없는 입력 - 값으로 만들 수 없다는 걸 한 번 털어서 알린다.
@@ -1580,8 +1565,6 @@ svg [data-dmn-icon-motion] {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dmn-field-shake {
-    animation-name: none;
-  }
+:root[data-dmn-reduced-motion] .dmn-field-shake {
+  animation-name: none;
 }

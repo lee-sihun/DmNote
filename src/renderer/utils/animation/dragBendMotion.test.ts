@@ -192,7 +192,7 @@ describe('createDragBendMotion', () => {
     expect(readNumber(el, '--tab-bend-x')).toBe(0);
   });
 
-  it('모션 축소 설정에서는 bend를 만들지 않는다', () => {
+  it('모션 축소 설정과 무관하게 탭 드래그 모션을 유지한다', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }));
     const el = makeChip();
     const motion = createDragBendMotion();
@@ -200,11 +200,10 @@ describe('createDragBendMotion', () => {
     motion.move({ x: 300, y: 400 });
     advance(16, 10);
 
-    // 이동은 되어야 드래그 자체가 동작한다
     expect(readVar(el, '--tab-drag-x')).toBe('100px');
-    expect(readVar(el, '--tab-bend-x')).toBe('');
-    expect(frames).toHaveLength(0);
-    expect(motion.release(false)).toBe(false);
-    expect(readVar(el, '--tab-drag-x')).toBe('');
+    expect(Math.abs(readNumber(el, '--tab-bend-x'))).toBeGreaterThan(0);
+    expect(frames.length).toBeGreaterThan(0);
+    expect(motion.release(false)).toBe(true);
+    expect(readVar(el, '--tab-drag-x')).toBe('0px');
   });
 });

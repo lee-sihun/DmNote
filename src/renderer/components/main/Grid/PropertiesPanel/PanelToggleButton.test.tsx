@@ -13,6 +13,8 @@ describe('PanelToggleButton visual-first toggle', () => {
   let host: HTMLDivElement;
   let root: Root;
   let frame: FrameRequestCallback | null;
+  let animateDescriptor: PropertyDescriptor | undefined;
+  let animateMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -24,6 +26,17 @@ describe('PanelToggleButton visual-first toggle', () => {
     });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    animateDescriptor = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      'animate',
+    );
+    animateMock = vi.fn(
+      () => ({ cancel: vi.fn(), onfinish: null } as unknown as Animation),
+    );
+    Object.defineProperty(Element.prototype, 'animate', {
+      configurable: true,
+      value: animateMock,
+    });
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -32,6 +45,11 @@ describe('PanelToggleButton visual-first toggle', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    if (animateDescriptor) {
+      Object.defineProperty(Element.prototype, 'animate', animateDescriptor);
+    } else {
+      Reflect.deleteProperty(Element.prototype, 'animate');
+    }
     vi.unstubAllGlobals();
     vi.useRealTimers();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
@@ -46,6 +64,7 @@ describe('PanelToggleButton visual-first toggle', () => {
 
     act(() => button.click());
     expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(animateMock).toHaveBeenCalledOnce();
     expect(onClick).not.toHaveBeenCalled();
     act(() => {
       (frame as FrameRequestCallback)(performance.now());

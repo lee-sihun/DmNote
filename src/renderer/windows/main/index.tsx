@@ -1,6 +1,9 @@
 import '@styles/tokens.css';
 import '@styles/global.css';
 import '@styles/main.css';
+import { initializeMotionPreferences } from '@utils/animation/motionPreferences';
+
+initializeMotionPreferences();
 
 const benchmarkName = new URLSearchParams(window.location.search).get(
   'benchmark',
