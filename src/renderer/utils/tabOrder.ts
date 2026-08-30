@@ -38,17 +38,37 @@ export const isBuiltinTabId = (id: string): boolean =>
 /**
  * 표시 순서의 탭 id
  *
- * 실체가 없는 id는 버린다. tabOrder가 아직 비어 있으면(부트스트랩 전) 내장 순서로
- * 폴백한다. 이름이 필요 없는 곳 - 단축키 순환, 오버레이 컨텍스트 메뉴 - 이 쓴다
+ * 실체가 없는 id와 중복 제거, 누락된 탭은 뒤에 추가
+ * 백엔드 정규화와 같은 순서로 tabOrder와 customTabs 수신 시점 불일치 방어
  */
 export const orderedTabIds = (
   tabOrder: string[],
   customTabs: CustomTab[],
 ): string[] => {
   const customIds = new Set(customTabs.map((tab) => tab.id));
-  const source: readonly string[] =
-    tabOrder.length > 0 ? tabOrder : BUILTIN_KEY_MODES;
-  return source.filter((id) => isBuiltinTabId(id) || customIds.has(id));
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const id of tabOrder) {
+    if ((isBuiltinTabId(id) || customIds.has(id)) && !seen.has(id)) {
+      seen.add(id);
+      ordered.push(id);
+    }
+  }
+  for (const id of BUILTIN_KEY_MODES) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      ordered.push(id);
+    }
+  }
+  for (const tab of customTabs) {
+    if (!seen.has(tab.id)) {
+      seen.add(tab.id);
+      ordered.push(tab.id);
+    }
+  }
+
+  return ordered;
 };
 
 /**

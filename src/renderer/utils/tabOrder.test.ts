@@ -5,6 +5,7 @@ import {
   clampBarCount,
   isBuiltinTabId,
   MAX_BAR_SLOTS,
+  orderedTabIds,
   swapTabs,
   type TabPlacement,
 } from './tabOrder';
@@ -33,22 +34,53 @@ describe('buildOrderedTabs', () => {
       { id: 'custom-b', name: '기록', isBuiltin: false },
       { id: '8key', name: '8버튼', isBuiltin: true },
       { id: 'custom-a', name: '연습', isBuiltin: false },
+      { id: '5key', name: '5버튼', isBuiltin: true },
+      { id: '6key', name: '6버튼', isBuiltin: true },
     ]);
   });
 
   it('순서에만 있고 실체가 없는 커스텀 id는 버린다', () => {
     expect(
       buildOrderedTabs(['4key', 'ghost'], tabs, label).map((tab) => tab.id),
-    ).toEqual(['4key']);
+    ).toEqual(['4key', '5key', '6key', '8key', 'custom-a', 'custom-b']);
   });
 
-  it('부트스트랩 전 빈 순서는 내장 모드로 폴백한다', () => {
+  it('빈 순서는 내장 모드 뒤에 커스텀 탭을 붙인다', () => {
     expect(buildOrderedTabs([], tabs, label).map((tab) => tab.id)).toEqual([
       '4key',
       '5key',
       '6key',
       '8key',
+      'custom-a',
+      'custom-b',
     ]);
+  });
+});
+
+describe('orderedTabIds 백엔드 정규화 동치', () => {
+  it.each([
+    {
+      name: '중복과 실체 없는 id 제거',
+      order: ['custom-b', 'unknown', '4key', 'custom-b', '5key'],
+      expected: ['custom-b', '4key', '5key', '6key', '8key', 'custom-a'],
+    },
+    {
+      name: '누락 내장 id를 canonical 순서로 추가',
+      order: ['custom-a', '8key'],
+      expected: ['custom-a', '8key', '4key', '5key', '6key', 'custom-b'],
+    },
+    {
+      name: '누락 커스텀 id를 store 순서로 추가',
+      order: ['4key', '5key', '6key', '8key'],
+      expected: ['4key', '5key', '6key', '8key', 'custom-a', 'custom-b'],
+    },
+    {
+      name: '빈 입력에서 전체 순서 구성',
+      order: [],
+      expected: ['4key', '5key', '6key', '8key', 'custom-a', 'custom-b'],
+    },
+  ])('$name', ({ order, expected }) => {
+    expect(orderedTabIds(order, tabs)).toEqual(expected);
   });
 });
 
