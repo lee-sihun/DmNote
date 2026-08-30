@@ -8,6 +8,52 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import GooeyThumb from '@components/main/Modal/content/pickers/GooeyThumb';
+import { createGooeyPath } from '@utils/ui/gooeyPath';
+
+describe('젤리 노브 벡터 경로', () => {
+  it('정착 상태는 필터 없이 정확한 원호 두 개로 닫는다', () => {
+    const path = createGooeyPath({
+      bodyRadius: 6,
+      tailX: 0,
+      tailY: 0,
+      tailRadius: 0,
+    });
+
+    expect(path).not.toContain('C ');
+    expect(path.match(/A 6 6/g)).toHaveLength(2);
+    expect(path.endsWith('Z')).toBe(true);
+  });
+
+  it('꼬리가 드러나면 유한한 Bézier 연결 경로를 만든다', () => {
+    const path = createGooeyPath({
+      bodyRadius: 6,
+      tailX: -8,
+      tailY: 2,
+      tailRadius: 2.5,
+    });
+
+    expect(path).toContain('C ');
+    expect(path).not.toMatch(/NaN|Infinity/);
+    expect(path.endsWith('Z')).toBe(true);
+  });
+
+  it('스프링이 만들 수 있는 거리·각도 범위에서 경로가 퇴화하지 않는다', () => {
+    for (const tailRadius of [0.4, 1, 2, 3]) {
+      for (const distance of [0.5, 3, 6, 9, 12]) {
+        for (const angle of [0, Math.PI / 3, Math.PI, Math.PI * 1.75]) {
+          const path = createGooeyPath({
+            bodyRadius: 6,
+            tailX: Math.cos(angle) * distance,
+            tailY: Math.sin(angle) * distance,
+            tailRadius,
+          });
+          expect(path).not.toMatch(/NaN|Infinity/);
+          expect(path.endsWith('Z')).toBe(true);
+        }
+      }
+    }
+  });
+});
 
 describe('GooeyThumb 스프링 복원력', () => {
   let host: HTMLDivElement;
@@ -58,5 +104,23 @@ describe('GooeyThumb 스프링 복원력', () => {
     const g = bodyGroup();
     expect(g?.style.visibility).toBe('visible');
     expect(g?.style.transform).toBe('translate(50px, 30px)');
+  });
+
+  it('보이는 실루엣은 필터 없는 SVG path이고 그림자만 필터 처리한다', () => {
+    act(() => {
+      root.render(
+        <GooeyThumb x={0.5} y={0.5} size={14} color="#ef4444" checker />,
+      );
+    });
+
+    const body = host.querySelector('[data-dmn-gooey-body]');
+    const shadow = host.querySelector('use[filter]');
+    expect(body?.closest('svg')).not.toBeNull();
+    expect(body?.getAttribute('filter')).toBeNull();
+    expect(body?.getAttribute('shape-rendering')).toBe('geometricPrecision');
+    expect(body?.getAttribute('stroke')).toBe('#fff');
+    expect(shadow?.getAttribute('filter')).toMatch(/^url\(#goo-shadow-/);
+    expect(host.querySelector('feGaussianBlur')).toBeNull();
+    expect(host.querySelector('feColorMatrix')).toBeNull();
   });
 });
