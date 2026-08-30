@@ -18,23 +18,15 @@ import {
 import type { KeySlotUiMode } from '@utils/keySlot';
 import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
 import KeySlotPicker from '@components/main/common/KeySlotPicker';
-import {
-  PropertyRow,
-  PropertySection,
-  NumberInput,
-  TextInput,
-} from '../PropertyInputs';
+import { PropertyRow, PropertySection, TextInput } from '../PropertyInputs';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import Checkbox from '../../../common/Checkbox';
-import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
-import ShadowControls from '../ShadowControls';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import {
   paintDescriptor,
-  gradientToCss,
   type ColorModeValue,
   type GradientSpec,
 } from '@src/types/color';
@@ -45,23 +37,16 @@ import {
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_BORDER,
   DEFAULT_ELEMENT_ACTIVE_BORDER,
-  DEFAULT_ELEMENT_BORDER_WIDTH,
-  DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_SHADOW_SPEC,
-  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
 import {
   elementImageReplacesSurface,
   resolveElementBorder,
 } from '@utils/core/elementBorder';
-import {
-  elementShadowLeafFromPartial,
-  resolveElementShadowForPosition,
-} from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import SoundSection from '../SoundSection';
 import SingleGeometrySection from './SingleGeometrySection';
 import SingleTypographySection from './SingleTypographySection';
+import SingleSurfaceSection from './SingleSurfaceSection';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const SOUND_PAGE_KEY = 'single-style:sound';
@@ -216,22 +201,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       }
     },
   });
-  const shadowElementType = shadowActiveState ? 'key' : 'stat';
-  const idleShadow = resolveElementShadowForPosition({
-    position: keyPosition,
-    elementType: shadowElementType,
-    active: false,
-    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
-    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-  });
-  const activeShadow = resolveElementShadowForPosition({
-    position: keyPosition,
-    elementType: shadowElementType,
-    active: true,
-    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
-    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-  });
-
   // 통합 피커 상태
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const [colorState, setColorState] = useState<ColorState>('idle');
@@ -735,120 +704,32 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         t={t}
       />
 
-      {/* 외형 */}
-      <PropertySection>
-        {/* 배경색 */}
-        <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
-          <ColorSwatchButton
-            ref={bgColorBtnRef}
-            type="button"
-            onClick={() => handlePickerToggle('backgroundColor')}
-            open={pickerFor === 'backgroundColor'}
-            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-            surfaceClassName="rounded-md"
-            color={getDisplayColor(colorValueFor('backgroundColor'))}
-            image={(() => {
-              const spec = gradientSpecFor('backgroundColor');
-              return spec ? gradientToCss(spec) : undefined;
-            })()}
-          />
-        </PropertyRow>
-
-        {/* 테두리 색상 */}
-        <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
-          <ColorSwatchButton
-            ref={borderColorBtnRef}
-            type="button"
-            onClick={() => handlePickerToggle('borderColor')}
-            open={pickerFor === 'borderColor'}
-            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-            surfaceClassName="rounded-md"
-            color={getDisplayColor(colorValueFor('borderColor'))}
-            image={(() => {
-              const spec = gradientSpecFor('borderColor');
-              return spec ? gradientToCss(spec) : undefined;
-            })()}
-          />
-        </PropertyRow>
-
-        {/* 테두리 두께 */}
-        <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
-          <NumberInput
-            value={keyPosition.borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH}
-            onChange={(value) =>
-              handleStyleChangeComplete('borderWidth', value)
-            }
-            onPreview={(value) => handleStylePreview('borderWidth', value)}
-            onCancel={() => editGestureController.cancel()}
-            suffix="px"
-            min={0}
-            max={20}
-            allowDecimal
-            decimalScale={1}
-          />
-        </PropertyRow>
-
-        {/* 모서리 반경 */}
-        <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
-          <NumberInput
-            value={keyPosition.borderRadius ?? DEFAULT_ELEMENT_RADIUS}
-            onChange={(value) =>
-              handleStyleChangeComplete('borderRadius', value)
-            }
-            onPreview={(value) => handleStylePreview('borderRadius', value)}
-            onCancel={() => editGestureController.cancel()}
-            suffix="px"
-            min={0}
-            max={100}
-            allowDecimal
-            decimalScale={1}
-          />
-        </PropertyRow>
-
-        {/* 커스텀 이미지 - 단일 선택 모드에서만 표시 */}
-        {onToggleImagePicker && imageButtonRef && (
-          <PropertyRow
-            label={t('propertiesPanel.customImage') || '커스텀 이미지'}
-          >
-            <button
-              ref={imageButtonRef}
-              type="button"
-              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                showImagePicker ? 'shadow-focus-ring' : ''
-              } text-fg text-body`}
-              onClick={onToggleImagePicker}
-            >
-              {t('propertiesPanel.configure') || '설정하기'}
-            </button>
-          </PropertyRow>
-        )}
-      </PropertySection>
-
-      <ShadowControls
-        idleShadow={idleShadow}
-        activeShadow={activeShadow}
-        showActiveState={shadowActiveState}
-        previewAnchor={canvasAnchor ?? null}
-        onChange={(state, _shadow, patch) => {
-          const leaf = elementShadowLeafFromPartial(patch);
-          if (!leaf) return;
-          onShadowCommit?.(
-            state === 'active'
-              ? { property: 'activeShadow', value: leaf }
-              : { property: 'shadow', value: leaf },
-          );
-        }}
-        onPreview={(state, leaf) =>
-          onStylePropertyPreview?.({
-            property: state === 'active' ? 'activeShadow' : 'shadow',
-            value: leaf,
-          })
-        }
-        onPreviewCancel={() => editGestureController.cancel()}
-        onEnabledChange={(enabled) => {
-          onShadowCommit?.({ property: 'shadowEnabled', value: enabled });
-        }}
+      <SingleSurfaceSection
+        keyPosition={keyPosition}
+        backgroundColorButtonRef={bgColorBtnRef}
+        borderColorButtonRef={borderColorBtnRef}
+        backgroundColorOpen={pickerFor === 'backgroundColor'}
+        borderColorOpen={pickerFor === 'borderColor'}
+        backgroundColor={getDisplayColor(colorValueFor('backgroundColor'))}
+        borderColor={getDisplayColor(colorValueFor('borderColor'))}
+        backgroundGradient={gradientSpecFor('backgroundColor')}
+        borderGradient={gradientSpecFor('borderColor')}
+        onBackgroundColorToggle={() => handlePickerToggle('backgroundColor')}
+        onBorderColorToggle={() => handlePickerToggle('borderColor')}
+        showImagePicker={showImagePicker}
+        imageButtonRef={imageButtonRef}
+        onToggleImagePicker={onToggleImagePicker}
+        shadowActiveState={shadowActiveState}
+        canvasAnchor={canvasAnchor}
         panelElement={panelElement}
+        onStylePreview={(patch) => onStylePropertyPreview?.(patch)}
+        onBorderWidthCommit={(value) =>
+          handleStyleChangeComplete('borderWidth', value)
+        }
+        onBorderRadiusCommit={(value) =>
+          handleStyleChangeComplete('borderRadius', value)
+        }
+        onShadowCommit={onShadowCommit}
         t={t}
       />
 
