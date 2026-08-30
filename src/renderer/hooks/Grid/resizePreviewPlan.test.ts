@@ -120,6 +120,68 @@ describe('calculateResizePreviewPlan', () => {
     expect(plan.guideUpdate.kind).toBe('set');
   });
 
+  it('size-only snap은 정렬 가이드를 비우고 size guide payload만 유지한다', () => {
+    const sizeGuide = {
+      type: 'size-match' as const,
+      dimension: 'width' as const,
+      value: 120,
+      position: { x: 10, y: 20 },
+      matchedElementId: 'reference-a',
+      matchedElementBounds: { left: 0, top: 0, width: 120, height: 80 },
+    };
+    mocks.calculateSizeSnap.mockReturnValue({
+      snappedWidth: 120,
+      snappedHeight: 80,
+      sizeMatchGuides: [sizeGuide],
+      didSnapWidth: true,
+      didSnapHeight: false,
+    });
+
+    const plan = calculateResizePreviewPlan({
+      elementId: 'element-a',
+      newBounds: {
+        x: 10,
+        y: 20,
+        width: 118,
+        height: 80,
+        handle: { id: 'e', dx: 1, dy: 0 },
+      },
+      otherElements: [],
+      settings: { ...settings, sizeMatchGuidesEnabled: true },
+      policy: 'native',
+    });
+
+    expect(plan.bounds).toEqual({ x: 10, y: 20, width: 120, height: 80 });
+    expect(plan.guideUpdate).toMatchObject({
+      kind: 'set',
+      activeGuides: [],
+      spacingGuides: [],
+      sizeMatchGuides: [sizeGuide],
+    });
+  });
+
+  it('handle이 없으면 snap 결과와 기존 guide 상태를 적용하지 않는다', () => {
+    mocks.calculateSnapPoints.mockReturnValue({
+      ...emptySnapResult,
+      snappedX: 0,
+      didSnapX: true,
+    });
+
+    const plan = calculateResizePreviewPlan({
+      elementId: 'element-a',
+      newBounds: { x: 10, y: 20, width: 100, height: 80 },
+      otherElements: [],
+      settings: { ...settings, sizeMatchGuidesEnabled: true },
+      policy: 'plugin',
+    });
+
+    expect(plan).toEqual({
+      bounds: { x: 10, y: 20, width: 100, height: 80 },
+      guideUpdate: { kind: 'none' },
+    });
+    expect(mocks.calculateSizeSnap).not.toHaveBeenCalled();
+  });
+
   it.each([
     { spacingGuidesEnabled: true, disableSpacing: false },
     { spacingGuidesEnabled: false, disableSpacing: true },
