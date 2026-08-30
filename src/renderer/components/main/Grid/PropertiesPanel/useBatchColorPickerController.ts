@@ -2,13 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyPosition, NoteColor } from '@src/types/key/keys';
 import type { EditorCounterFillPropertyPatchV1 } from '@src/types/editor';
 import { normalizeCounterSettings } from '@src/types/key/keys';
-
-export type BatchPickerTarget =
-  | 'noteColor'
-  | 'glowColor'
-  | 'borderColor'
-  | 'fill'
-  | null;
+import type {
+  BatchLocalColors,
+  BatchPickerTarget,
+} from './batch/batchPickerTypes';
 
 interface UseBatchColorPickerControllerOptions {
   selectedKeyCount: number;
@@ -31,7 +28,7 @@ export const useBatchColorPickerController = ({
   >('idle');
   const effectiveBatchCounterColorState =
     selectedKeyCount > 0 ? batchCounterColorState : 'idle';
-  const [batchLocalColors, setBatchLocalColors] = useState({
+  const [batchLocalColors, setBatchLocalColors] = useState<BatchLocalColors>({
     fillIdle: '#FFFFFF',
     fillActive: '#FFFFFF',
   });

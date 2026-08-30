@@ -200,12 +200,7 @@ export const commitBoundSoundPath = (
   void persisted.catch(reportElementOpError);
 };
 
-export type BatchPickerTarget =
-  | 'noteColor'
-  | 'glowColor'
-  | 'borderColor'
-  | 'fill'
-  | null;
+export type { BatchLocalColors, BatchPickerTarget } from './batchPickerTypes';
 
 export type MixedValueResult<T> = { isMixed: boolean; value: T };
 export type MixedValueGetter<P> = <T>(
@@ -218,9 +213,4 @@ export interface KeyData {
   position: KeyPosition | undefined;
   keyCode: string | null;
   keyInfo: { globalKey: string; displayName: string } | null;
-}
-
-export interface BatchLocalColors {
-  fillIdle: string;
-  fillActive: string;
 }
