@@ -1,9 +1,9 @@
 use super::{
     compact_canonical_rgba, note_border_representative_hex, scrub_removed_text_outline_fields,
-    FadePosition, GradientSpec, GraphPosition, GraphStatType, GraphType, KeyCounterAlign,
-    KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings,
-    KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, StatPosition, StatType,
-    MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
+    FadePosition, GradientSpec, GraphPosition, GraphStatType, GraphType, ImageTransform,
+    KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings,
+    KeyMappings, KeyPosition, KeySlot, KnobPosition, NoteAlignment, NoteColor, NoteSettings,
+    SlotMatch, StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
 };
 use serde::Deserialize;
 
@@ -121,6 +121,84 @@ fn element_id_defaults_to_empty_and_flattens_into_every_position_type() {
     }))
     .unwrap();
     assert!(missing.id.is_empty());
+}
+
+#[test]
+fn position_wrappers_preserve_legacy_missing_field_defaults_and_round_trip() {
+    let base = serde_json::json!({
+        "dx": 1,
+        "dy": 2,
+        "width": 60,
+        "count": 3
+    });
+    let mut stat_value = base.clone();
+    stat_value["statType"] = serde_json::json!("kpsAvg");
+    let stat: StatPosition = serde_json::from_value(stat_value).unwrap();
+
+    let mut graph_value = base.clone();
+    graph_value["statType"] = serde_json::json!("total");
+    graph_value["graphType"] = serde_json::json!("bar");
+    graph_value["graphSpeed"] = serde_json::json!(120);
+    graph_value["graphColor"] = serde_json::json!("#123456");
+    let graph: GraphPosition = serde_json::from_value(graph_value).unwrap();
+
+    let knob: KnobPosition = serde_json::from_value(base).unwrap();
+
+    assert!(graph.show_avg_line);
+    assert!(knob.axis_id.is_empty());
+    assert_eq!(knob.sensitivity, 1.0);
+    assert!(!knob.reverse);
+    assert_eq!(
+        serde_json::from_value::<StatPosition>(serde_json::to_value(&stat).unwrap()).unwrap(),
+        stat
+    );
+    assert_eq!(
+        serde_json::from_value::<GraphPosition>(serde_json::to_value(&graph).unwrap()).unwrap(),
+        graph
+    );
+    assert_eq!(
+        serde_json::from_value::<KnobPosition>(serde_json::to_value(&knob).unwrap()).unwrap(),
+        knob
+    );
+}
+
+#[test]
+fn position_serialization_field_order_and_related_defaults_are_stable() {
+    let position = KeyPosition::default();
+    assert!(serde_json::to_string(&position).unwrap().starts_with(
+        r#"{"dx":0.0,"dy":0.0,"width":60.0,"height":60.0,"hidden":false,"activeImage":null"#
+    ));
+    assert!(serde_json::to_string(&StatPosition {
+        stat_type: StatType::Kps,
+        position: position.clone(),
+    })
+    .unwrap()
+    .starts_with(r#"{"statType":"kps","dx":0.0,"dy":0.0,"width":60.0"#));
+    assert!(serde_json::to_string(&GraphPosition {
+        stat_type: GraphStatType::KpsAvg,
+        graph_type: GraphType::Bar,
+        graph_speed: 120,
+        graph_color: "#123456".to_string(),
+        show_avg_line: false,
+        position: position.clone(),
+    })
+    .unwrap()
+    .starts_with(
+        r##"{"statType":"kpsAvg","graphType":"bar","graphSpeed":120,"graphColor":"#123456","showAvgLine":false,"dx":0.0"##
+    ));
+    assert!(serde_json::to_string(&KnobPosition {
+        axis_id: "axis".to_string(),
+        sensitivity: 2.5,
+        reverse: true,
+        position,
+    })
+    .unwrap()
+    .starts_with(r#"{"axisId":"axis","sensitivity":2.5,"reverse":true,"dx":0.0"#));
+    assert_eq!(
+        serde_json::to_string(&ImageTransform::default()).unwrap(),
+        r#"{"offsetX":0.0,"offsetY":0.0,"rotation":0.0,"scale":1.0}"#
+    );
+    assert_eq!(NoteAlignment::default(), NoteAlignment::Center);
 }
 
 #[test]
