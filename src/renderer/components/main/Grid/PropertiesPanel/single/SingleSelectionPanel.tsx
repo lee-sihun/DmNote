@@ -84,7 +84,6 @@ import {
   AXIS_FIELD_WIDTH,
 } from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
-import { RenameIcon } from '../PanelIcons';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorPaintPropertyPatchV1,
@@ -93,6 +92,7 @@ import type {
   EditorStylePropertyPreviewPatchV1,
   EditorElementPropertyPatchV1,
 } from '@src/types/editor';
+import PanelRenameTitle from '../PanelRenameTitle';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -434,47 +434,18 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className={PANEL_HEADER_CLASS}>
-        {isRenaming ? (
-          <input
-            ref={renameInputRef}
-            type="text"
-            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onBlur={() => {
-              if (!renameCancelledRef.current) {
-                handleRenameCommit(renameValue);
-              }
-              renameCancelledRef.current = false;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                (e.target as HTMLInputElement).blur();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                handleRenameCancel();
-              }
-            }}
-          />
-        ) : (
-          <div className="flex items-center gap-[4px] min-w-0">
-            <span
-              className="text-fg text-label truncate max-w-[100px] cursor-default"
-              onDoubleClick={handleRenameStart}
-              title={graphTitle}
-            >
-              {graphTitle}
-            </span>
-            <button
-              onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors flex-shrink-0"
-              title={t('contextMenu.rename') || 'Rename'}
-            >
-              <RenameIcon />
-            </button>
-          </div>
-        )}
+        <PanelRenameTitle
+          title={graphTitle}
+          isRenaming={isRenaming}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameInputRef={renameInputRef}
+          renameCancelledRef={renameCancelledRef}
+          onRenameCommit={handleRenameCommit}
+          onRenameCancel={handleRenameCancel}
+          onRenameStart={handleRenameStart}
+          renameLabel={t('contextMenu.rename') || 'Rename'}
+        />
       </div>
       <div className="flex-1 properties-panel-overlay-scroll">
         <div
@@ -1207,47 +1178,18 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   return (
     <div ref={setRef} className={PANEL_ROOT_CLASS}>
       <div className={PANEL_HEADER_CLASS}>
-        {isRenaming ? (
-          <input
-            ref={renameInputRef}
-            type="text"
-            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onBlur={() => {
-              if (!renameCancelledRef.current) {
-                handleRenameCommit(renameValue);
-              }
-              renameCancelledRef.current = false;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                (e.target as HTMLInputElement).blur();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                handleRenameCancel();
-              }
-            }}
-          />
-        ) : (
-          <div className="flex items-center gap-[4px] min-w-0">
-            <span
-              className="text-fg text-label truncate max-w-[100px] cursor-default"
-              onDoubleClick={handleRenameStart}
-              title={knobTitle}
-            >
-              {knobTitle}
-            </span>
-            <button
-              onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors flex-shrink-0"
-              title={t('contextMenu.rename') || 'Rename'}
-            >
-              <RenameIcon />
-            </button>
-          </div>
-        )}
+        <PanelRenameTitle
+          title={knobTitle}
+          isRenaming={isRenaming}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameInputRef={renameInputRef}
+          renameCancelledRef={renameCancelledRef}
+          onRenameCommit={handleRenameCommit}
+          onRenameCancel={handleRenameCancel}
+          onRenameStart={handleRenameStart}
+          renameLabel={t('contextMenu.rename') || 'Rename'}
+        />
       </div>
 
       <div className="flex-1 properties-panel-overlay-scroll">
@@ -1856,47 +1798,19 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
       <div className="flex-shrink-0">
         {/* 헤더 */}
         <div className={PANEL_HEADER_CLASS}>
-          {isRenaming ? (
-            <input
-              ref={renameInputRef}
-              type="text"
-              className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onBlur={() => {
-                if (!renameCancelledRef.current) {
-                  handleRenameCommit(renameValue);
-                }
-                renameCancelledRef.current = false;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  (e.target as HTMLInputElement).blur();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  handleRenameCancel();
-                }
-              }}
-            />
-          ) : (
-            <div className="flex items-center gap-[4px] min-w-0">
-              <span
-                className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
-                onDoubleClick={handleRenameStart}
-                title={keyLikeTitle}
-              >
-                {keyLikeTitle}
-              </span>
-              <button
-                onClick={handleRenameStart}
-                className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors flex-shrink-0"
-                title={t('contextMenu.rename') || 'Rename'}
-              >
-                <RenameIcon />
-              </button>
-            </div>
-          )}
+          <PanelRenameTitle
+            title={keyLikeTitle}
+            isRenaming={isRenaming}
+            renameValue={renameValue}
+            setRenameValue={setRenameValue}
+            renameInputRef={renameInputRef}
+            renameCancelledRef={renameCancelledRef}
+            onRenameCommit={handleRenameCommit}
+            onRenameCancel={handleRenameCancel}
+            onRenameStart={handleRenameStart}
+            renameLabel={t('contextMenu.rename') || 'Rename'}
+            variant="wide"
+          />
         </div>
 
         {/* 탭 */}

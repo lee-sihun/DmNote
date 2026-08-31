@@ -60,9 +60,9 @@ import {
 import MoreVerticalIcon from '@components/main/Modal/content/pickers/MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import EditSessionBoundary from '../EditSessionBoundary';
-import { RenameIcon } from '../PanelIcons';
 import SpritePoseEditorPopup from './SpritePoseEditorPopup';
 import SpriteImageSettingsPopup from './SpriteImageSettingsPopup';
+import PanelRenameTitle from '../PanelRenameTitle';
 
 // 계약과 동일한 cubic-bezier 문자열만 저장 (transitionEasing은 문자열 그대로 CSS로 간다)
 const SPRITE_EASING_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
@@ -788,47 +788,18 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className={PANEL_HEADER_CLASS}>
-        {isRenaming ? (
-          <input
-            ref={renameInputRef}
-            type="text"
-            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onBlur={() => {
-              if (!renameCancelledRef.current) {
-                handleRenameCommit(renameValue);
-              }
-              renameCancelledRef.current = false;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                (e.target as HTMLInputElement).blur();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                handleRenameCancel();
-              }
-            }}
-          />
-        ) : (
-          <div className="flex items-center gap-[4px] min-w-0">
-            <span
-              className="text-fg text-label truncate max-w-[100px] cursor-default"
-              onDoubleClick={handleRenameStart}
-              title={spriteTitle}
-            >
-              {spriteTitle}
-            </span>
-            <button
-              onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors flex-shrink-0"
-              title={t('contextMenu.rename') || 'Rename'}
-            >
-              <RenameIcon />
-            </button>
-          </div>
-        )}
+        <PanelRenameTitle
+          title={spriteTitle}
+          isRenaming={isRenaming}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameInputRef={renameInputRef}
+          renameCancelledRef={renameCancelledRef}
+          onRenameCommit={handleRenameCommit}
+          onRenameCancel={handleRenameCancel}
+          onRenameStart={handleRenameStart}
+          renameLabel={t('contextMenu.rename') || 'Rename'}
+        />
       </div>
 
       <div className="flex-1 properties-panel-overlay-scroll">

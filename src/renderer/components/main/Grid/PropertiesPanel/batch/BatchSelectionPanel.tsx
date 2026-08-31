@@ -33,7 +33,6 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
-import { RenameIcon } from '../PanelIcons';
 import type { ElementIdSelection } from '@hooks/pickers/useBatchElementBinding';
 import {
   patchActiveImageByTargets,
@@ -87,6 +86,7 @@ import {
 } from '@utils/color/colorUtils';
 import type { BatchElementPropertyUpdate } from '../types';
 import { useBatchNotePaint, type BatchNoteSurface } from './useBatchNotePaint';
+import PanelRenameTitle from '../PanelRenameTitle';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 
@@ -300,47 +300,19 @@ const BatchPanelHeader: React.FC<BatchPanelHeaderProps> = ({
   <div className={PANEL_HEADER_CLASS}>
     <div className="flex items-center gap-[8px]">
       {selectedGroupInfo ? (
-        isRenaming ? (
-          <input
-            ref={renameInputRef}
-            type="text"
-            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onBlur={() => {
-              if (!renameCancelledRef.current) {
-                handleRenameCommit(renameValue);
-              }
-              renameCancelledRef.current = false;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                (e.target as HTMLInputElement).blur();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                handleRenameCancel();
-              }
-            }}
-          />
-        ) : (
-          <div className="flex items-center gap-[4px] min-w-0">
-            <span
-              className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
-              onDoubleClick={handleRenameStart}
-              title={selectedGroupInfo.name}
-            >
-              {selectedGroupInfo.name}
-            </span>
-            <button
-              onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg transition-colors flex-shrink-0"
-              title={t('contextMenu.rename') || 'Rename'}
-            >
-              <RenameIcon />
-            </button>
-          </div>
-        )
+        <PanelRenameTitle
+          title={selectedGroupInfo.name}
+          isRenaming={isRenaming}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameInputRef={renameInputRef}
+          renameCancelledRef={renameCancelledRef}
+          onRenameCommit={handleRenameCommit}
+          onRenameCancel={handleRenameCancel}
+          onRenameStart={handleRenameStart}
+          renameLabel={t('contextMenu.rename') || 'Rename'}
+          variant="wide"
+        />
       ) : (
         <span className="text-fg text-label leading-none">
           {t('propertiesPanel.multiSelection') || '다중 선택'}
