@@ -5,6 +5,9 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
+import { makeCanonicalSpritePosition } from '@utils/sprite/spriteFixtures';
+import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
@@ -67,14 +70,21 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
       ) => {
         await meta?.prepare?.();
         // 슬롯 재계획 generator를 위해 현재 스토어로 canonical base 구성
-        const [keyStore, statStore, graphStore, knobStore, groupStore] =
-          await Promise.all([
-            import('@stores/data/useKeyStore'),
-            import('@stores/data/useStatItemStore'),
-            import('@stores/data/useGraphItemStore'),
-            import('@stores/data/useKnobItemStore'),
-            import('@stores/data/useLayerGroupStore'),
-          ]);
+        const [
+          keyStore,
+          statStore,
+          graphStore,
+          knobStore,
+          spriteStore,
+          groupStore,
+        ] = await Promise.all([
+          import('@stores/data/useKeyStore'),
+          import('@stores/data/useStatItemStore'),
+          import('@stores/data/useGraphItemStore'),
+          import('@stores/data/useKnobItemStore'),
+          import('@stores/data/useSpriteStore'),
+          import('@stores/data/useLayerGroupStore'),
+        ]);
         const base = {
           schemaVersion: 1,
           keys: keyStore.useKeyStore.getState().keyMappings,
@@ -82,6 +92,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
           statPositions: statStore.useStatItemStore.getState().positions,
           graphPositions: graphStore.useGraphItemStore.getState().positions,
           knobPositions: knobStore.useKnobItemStore.getState().positions,
+          spritePositions: spriteStore.useSpriteStore.getState().positions,
           layerGroups: groupStore.useLayerGroupStore.getState().layerGroups,
         };
         const mutation =
@@ -117,6 +128,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
     statPositions: {},
     graphPositions: {},
     knobPositions: {},
+    spritePositions: {},
     layerGroups: {},
   }),
 }));
@@ -197,6 +209,7 @@ import { commitMixedBatchGeometry } from './mixedBatchGeometry';
 import type { BatchGeometryDescriptor } from './elementOps';
 
 const KEY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const SPRITE_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 const INSTANCE_ID = '10000000-0000-4000-8000-000000000001';
 const FULL_ID = `plugin-a::${INSTANCE_ID}`;
 const SECOND_INSTANCE_ID = '10000000-0000-4000-8000-000000000002';
@@ -222,6 +235,7 @@ const seedStores = (
   overrides: {
     keyPosition?: Partial<ReturnType<typeof createDefaultKeyPosition>>;
     plugin?: Partial<PluginDisplayElementInternal>;
+    sprite?: CanonicalReactiveSpritePosition;
   } = {},
 ) => {
   const position = {
@@ -235,6 +249,9 @@ const seedStores = (
     positions: { '4key': [position] },
   } as never);
   useStatItemStore.setState({ positions: {} });
+  useSpriteStore.setState({
+    positions: overrides.sprite ? { '4key': [overrides.sprite] } : {},
+  });
   useGraphItemStore.setState({ positions: {} });
   useKnobItemStore.setState({ positions: {} });
   useLayerGroupStore.setState({ layerGroups: {} });
@@ -304,6 +321,50 @@ describe('commitMixedBatchGeometry', () => {
     ).toEqual({ x: 0, y: 0 });
     expect(useKeyStore.getState().canonicalPositions['4key'][0].dx).toBe(0);
     expect(mocks.commitBatchGeometryByIds).not.toHaveBeenCalled();
+  });
+
+  // 혼합 배치의 스프라이트는 계획 key가 아니라 op id로 full bounds를 찾는다.
+  // 조회 키가 어긋나면 width·height 없는 부분 patch가 eager projection에 흘러든다
+  it('혼합 배치의 스프라이트는 resizeSprite op과 full bounds eager를 싣는다', async () => {
+    seedStores({
+      sprite: makeCanonicalSpritePosition({
+        id: SPRITE_ID,
+        dx: 100,
+        dy: 0,
+        width: 80,
+        height: 40,
+        imageRect: { x: 10, y: 4, width: 40, height: 20 },
+      }),
+    });
+
+    await expect(
+      commitMixedBatchGeometry(
+        {
+          mode: '4key',
+          targets: [
+            { type: 'key', id: KEY_ID },
+            { type: 'sprite', id: SPRITE_ID },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        },
+        [FULL_ID],
+      ),
+    ).resolves.toBe(true);
+
+    const request = mocks.gestureCommit.mock.calls[0]?.[0] as unknown as {
+      editorOps: Array<Record<string, unknown>>;
+    };
+    expect(request.editorOps).toContainEqual({
+      kind: 'resizeSprite',
+      id: SPRITE_ID,
+      bounds: { dx: 0, dy: 0, width: 80, height: 40 },
+    });
+
+    // eager 저장소에도 full bounds가 실려야 한다 (부분 patch였다면 크기가 사라진다)
+    const eager = useSpriteStore.getState().positions['4key'][0];
+    expect(eager).toMatchObject({ dx: 0, dy: 0, width: 80, height: 40 });
+    // 이동만이라 배율 1 - 콘텐츠는 그대로다
+    expect(eager.imageRect).toEqual({ x: 10, y: 4, width: 40, height: 20 });
   });
 
   it('desired projection은 plugin position만 바꾸고 다른 영속 필드는 보존한다', async () => {
