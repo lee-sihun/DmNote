@@ -182,6 +182,25 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 }
 ```
 
+## 스프라이트 스타일 변수
+
+반응형 스프라이트는 담당 키를 누르는 동안 자세가 바뀌는 이미지 한 층을 그립니다.
+배치와 회전 기준점은 창 크기 계산에 그대로 들어가므로 인라인으로 남고, 아래
+외관 채널만 교체할 수 있습니다. 스프라이트의 **인라인 스타일 우선**을 끄고 쓰세요.
+
+| 변수                  | 설명                        | 타입           | 예시                       |
+| --------------------- | --------------------------- | -------------- | -------------------------- |
+| `--sprite-fit`        | 스프라이트 이미지 맞춤 교체 | `<object-fit>` | `cover`, `contain`         |
+| `--sprite-transform`  | 해석된 자세의 변환 교체     | `<transform>`  | `rotate(15deg) scale(1.2)` |
+| `--sprite-transition` | 자세 전환 트랜지션 교체     | `<transition>` | `transform 120ms ease-out` |
+
+```css
+.왼손 [data-sprite-element] > img {
+  --sprite-fit: cover;
+  --sprite-transition: transform 90ms cubic-bezier(0.2, 0, 0, 1);
+}
+```
+
 ## 선택자 레퍼런스
 
 ### 키 선택자
@@ -220,6 +239,14 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 | `[data-knob-state="active"]`      | 입력 중인 노브 표면      |
 | `.노브클래스 [data-knob-element]` | 특정 클래스의 노브 표면  |
 | `[data-knob-indicator]`           | 노브 중앙 회전 표시      |
+
+### 스프라이트 선택자
+
+| 선택자                                    | 설명                      |
+| ----------------------------------------- | ------------------------- |
+| `[data-sprite-element]`                   | 모든 스프라이트 활동 영역 |
+| `[data-sprite-element] > img`             | 스프라이트 이미지 층      |
+| `.스프라이트클래스 [data-sprite-element]` | 특정 클래스의 스프라이트  |
 
 ## 표준 CSS 속성
 
