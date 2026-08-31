@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import Checkbox from '@components/main/common/Checkbox';
@@ -11,11 +11,10 @@ import {
 } from '@components/main/common/TransformGlyphs';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
-import { canDecodeImage } from '@utils/core/assetProbe';
+import { pickValidatedImagePath } from '@utils/core/pickValidatedImage';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
-import { imageApi } from '@api/modules/resourceApi';
 import {
   DEFAULT_IMAGE_MODE,
   IDENTITY_IMAGE_TRANSFORM,
@@ -123,49 +122,30 @@ const ImagePicker = ({
   // 열려 있는 동안 편집 상태를 캔버스 프리뷰로 발행
   useEditStatePreviewPublisher(open ? previewAnchor : null, effectiveMode);
 
-  useEffect(() => {
+  // 입력 상태 탭이 사라지면 저장된 모드도 idle로 되돌린다.
+  // effect의 동기 setState는 캐스케이드 렌더라 렌더 중 보정 패턴을 쓴다
+  const [lastShowActiveState, setLastShowActiveState] =
+    useState(showActiveState);
+  if (lastShowActiveState !== showActiveState) {
+    setLastShowActiveState(showActiveState);
     if (!showActiveState) setMode(STATE_MODES.idle);
-  }, [showActiveState]);
-
-  const showInvalidImageAlert = (): void => {
-    void window.api.ui.dialog
-      .alert(t('imagePicker.invalidImage'), {
-        confirmText: t('common.ok') || '확인',
-      })
-      .catch((error) => {
-        console.error('Failed to open invalid image alert:', error);
-      });
-  };
+  }
 
   const handleImageClick = async (stateMode: string): Promise<void> => {
     if (loadingImageRef.current) return;
     loadingImageRef.current = true;
     setIsLoadingImage(true);
-    try {
-      const result = await imageApi.load();
-      if (!result?.success || !result.imagePath) {
-        // errorCode가 없는 실패는 사용자 취소
-        if (result?.errorCode) showInvalidImageAlert();
-        return;
-      }
-      // 시그니처를 통과해도 WebView가 못 그리는 파일이 있다. 직전 값을 덮기 전에 확인한다
-      if (!(await canDecodeImage(result.imagePath))) {
-        showInvalidImageAlert();
-        return;
-      }
-      // 파일 복사는 이미 끝났다. 대상이 갈렸으면 연결만 하지 않는다
-      // (element-id 결합이면 ID applier가 유효성을 판정하므로 통과)
-      if (!canBindCompletion()) return;
-      if (stateMode === STATE_MODES.idle) {
-        onIdleImageChange?.(result.imagePath);
-      } else {
-        onActiveImageChange?.(result.imagePath);
-      }
-    } catch (error) {
-      console.error('Failed to load image', error);
-    } finally {
-      loadingImageRef.current = false;
-      setIsLoadingImage(false);
+    const picked = await pickValidatedImagePath(t);
+    loadingImageRef.current = false;
+    setIsLoadingImage(false);
+    if (!picked) return;
+    // 파일 복사는 이미 끝났다. 대상이 갈렸으면 연결만 하지 않는다
+    // (element-id 결합이면 ID applier가 유효성을 판정하므로 통과)
+    if (!canBindCompletion()) return;
+    if (stateMode === STATE_MODES.idle) {
+      onIdleImageChange?.(picked);
+    } else {
+      onActiveImageChange?.(picked);
     }
   };
 

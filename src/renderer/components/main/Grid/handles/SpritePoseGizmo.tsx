@@ -1,3 +1,6 @@
+'use no memo';
+// 렌더 중 ref 대입(세션·지오메트리 최신화)이 React Compiler bailout이라
+// 컴파일 대상에서 빠진다. 조용한 제외와 구분되게 명시한다 (GradientAxisHandle과 같은 이유)
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSpritePoseGizmoStore } from '@stores/grid/useSpritePoseGizmoStore';

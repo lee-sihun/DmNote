@@ -6,8 +6,7 @@ import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { spriteItemsApi } from '@api/modules/itemsApi';
-import { imageApi } from '@api/modules/resourceApi';
-import { canDecodeImage } from '@utils/core/assetProbe';
+import { pickValidatedImagePath } from '@utils/core/pickValidatedImage';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
@@ -184,7 +183,12 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   const canonicalPosition = storePosition ?? position;
   const [lastPositionSnapshot, setLastPositionSnapshot] =
     useState(canonicalPosition);
-  const [resizeGestureCancelTick, setResizeGestureCancelTick] = useState(0);
+  // 리사이즈 착지 취소 신호 - 착지 시점의 스프라이트를 함께 실어 effect가
+  // 렌더 시점 대상이 아니라 착지 대상에 작용한다
+  const [resizeGestureCancel, setResizeGestureCancel] = useState<{
+    tick: number;
+    positionId: string;
+  } | null>(null);
   if (lastPositionSnapshot !== canonicalPosition) {
     setLastPositionSnapshot(canonicalPosition);
     if (
@@ -220,7 +224,10 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         // 팝업 리마운트가 진행 중 스크럽 세션을 취소로 닫고, 아래 effect가
         // preview 게스처를 정산해 이전 배율의 절대값 커밋을 차단한다
         if (editorTarget && editorTarget.positionId === canonicalPosition.id) {
-          setResizeGestureCancelTick((tick) => tick + 1);
+          setResizeGestureCancel((prev) => ({
+            tick: (prev?.tick ?? 0) + 1,
+            positionId: canonicalPosition.id,
+          }));
         }
       }
     }
@@ -230,12 +237,12 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   // 정산이 이미 끝난 일반 경로에는 영향이 없다 (계약의 세션 정산 폴백).
   // 기즈모는 세대 무효화로 진행 중 드래그의 pointerup 커밋을 떨군다
   useLayoutEffect(() => {
-    if (resizeGestureCancelTick === 0) return;
+    if (!resizeGestureCancel) return;
     editGestureController.cancel();
-    useSpritePoseGizmoStore.getState().invalidateOwnership(position.id);
-    // 착지 시점의 스프라이트가 대상 - id는 세션 수명 동안 불변
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resizeGestureCancelTick]);
+    useSpritePoseGizmoStore
+      .getState()
+      .invalidateOwnership(resizeGestureCancel.positionId);
+  }, [resizeGestureCancel]);
 
   // 담당 키 후보: 현재 모드의 키 요소 목록 (값은 요소 id, 라벨은 슬롯 표시명)
   const modeSlots = keyMappings[selectedKeyType] ?? [];
@@ -775,37 +782,12 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     }
   };
 
-  const showInvalidImageAlert = (): void => {
-    void window.api.ui.dialog
-      .alert(t('imagePicker.invalidImage'), {
-        confirmText: t('common.ok') || '확인',
-      })
-      .catch((error) => {
-        console.error('Failed to open invalid image alert:', error);
-      });
-  };
-
-  // 키 패널과 동일한 이미지 선택 흐름 (image_load + 디코드 확인)
-  // finalizer 없는 형태 유지 - try/finally는 React Compiler가 컴포넌트 전체를
-  // 최적화에서 제외한다. 재진입 플래그는 모든 경로가 지나는 아래 한 곳에서 푼다
+  // 이미지 피커와 같은 선택 흐름 (image_load + 디코드 확인).
+  // 재진입 플래그만 여기서 관리한다
   const pickImage = async (): Promise<string | null> => {
     if (loadingImageRef.current) return null;
     loadingImageRef.current = true;
-    let picked: string | null = null;
-    try {
-      const result = await imageApi.load();
-      if (!result?.success || !result.imagePath) {
-        // errorCode가 없는 실패는 사용자 취소
-        if (result?.errorCode) showInvalidImageAlert();
-      } else if (!(await canDecodeImage(result.imagePath))) {
-        // 시그니처를 통과해도 WebView가 못 그리는 파일이 있다. 직전 값을 덮기 전에 확인한다
-        showInvalidImageAlert();
-      } else {
-        picked = result.imagePath;
-      }
-    } catch (error) {
-      console.error('Failed to load image', error);
-    }
+    const picked = await pickValidatedImagePath(t);
     loadingImageRef.current = false;
     return picked;
   };
@@ -1261,7 +1243,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
           <SpriteImageSettingsPopup
             // 리사이즈 착지 세대 - 리마운트가 진행 중 스크럽 세션을 취소로 닫아
             // 이전 배율 절대값 커밋을 차단한다 (useScrubDrag 언마운트 취소 계약)
-            key={`resize-${resizeGestureCancelTick}`}
+            key={`resize-${resizeGestureCancel?.tick ?? 0}`}
             open
             position={position}
             referenceRef={poseAnchorRef}
@@ -1277,7 +1259,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         ) : editingPose ? (
           <SpritePoseEditorPopup
             // 리사이즈 착지 세대 - 위 이미지 팝업과 같은 스크럽 차단 계약
-            key={`resize-${resizeGestureCancelTick}`}
+            key={`resize-${resizeGestureCancel?.tick ?? 0}`}
             open
             ariaLabel={editingPose.name || resolvedNames[editingPoseIndex]}
             // 셸은 행 전환 동안 유지되고 편집 subtree·앵커만 poseId로 갈린다
