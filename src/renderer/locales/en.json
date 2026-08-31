@@ -563,7 +563,6 @@
     "spriteAddPose": "Add State",
     "spriteTriggerKeys": "Trigger Keys",
     "spriteTriggerPlaceholder": "Select keys",
-    "spriteImageOverride": "State Image",
     "spriteMissingKey": "Deleted key",
     "spriteNoKeys": "No key elements in this mode",
     "spriteDuplicateTriggers": "Duplicate key combination",

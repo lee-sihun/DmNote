@@ -963,10 +963,6 @@ pub enum SpriteActivation {
     OnPress,
 }
 
-pub(crate) fn default_sprite_activation() -> SpriteActivation {
-    SpriteActivation::WhileHeld
-}
-
 pub(crate) fn default_sprite_press_duration_ms() -> u32 {
     300
 }
@@ -1050,7 +1046,7 @@ pub struct ReactiveSpritePosition {
     pub idle_transform: SpriteTransform,
     #[serde(default)]
     pub poses: Vec<SpritePose>,
-    #[serde(default = "default_sprite_activation")]
+    #[serde(default)]
     pub activation: SpriteActivation,
     #[serde(default = "default_sprite_press_duration_ms")]
     pub press_duration_ms: u32,
@@ -1080,7 +1076,7 @@ impl Default for ReactiveSpritePosition {
             pivot: SpriteAnchor::default(),
             idle_transform: SpriteTransform::default(),
             poses: Vec::new(),
-            activation: default_sprite_activation(),
+            activation: SpriteActivation::default(),
             press_duration_ms: default_sprite_press_duration_ms(),
             transition_ms: default_sprite_transition_ms(),
             transition_easing: default_sprite_transition_easing(),

@@ -1,5 +1,3 @@
-import React from 'react';
-
 // 회전·배율 입력의 접두 글리프 - X/Y 글자와 같은 자리에 서는 11px 아이콘
 
 export const AngleGlyph = () => (

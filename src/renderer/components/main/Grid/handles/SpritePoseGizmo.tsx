@@ -317,7 +317,6 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
       ref={rootRef}
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 'var(--z-canvas-gradient-editor)' }}
-      data-sprite-pose-gizmo="true"
     >
       {/* 축→핀 안내선 */}
       <svg

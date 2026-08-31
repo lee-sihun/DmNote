@@ -182,7 +182,6 @@ export const spritePoseInputSchema = z.object({
   // 구 플러그인 patch는 필드 자체가 없다 - 생략 허용, BE serde default가 채움
   contactPoint: spriteAnchorSchema.optional(),
 });
-export type SpritePoseInput = z.infer<typeof spritePoseInputSchema>;
 
 const reactiveSpritePositionBaseShape = {
   // 백엔드 발급 요소 id. 발급 전에는 키 생략만 허용 - 명시 null은 Rust String

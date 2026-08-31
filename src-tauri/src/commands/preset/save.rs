@@ -418,7 +418,7 @@ fn build_preset_font_payload(
     ))
 }
 
-pub(crate) fn build_preset_image_payload(
+pub(super) fn build_preset_image_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,

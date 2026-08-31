@@ -568,7 +568,6 @@
     "spriteAddPose": "Добавить состояние",
     "spriteTriggerKeys": "Клавиши позы",
     "spriteTriggerPlaceholder": "Выберите клавиши",
-    "spriteImageOverride": "Картинка состояния",
     "spriteMissingKey": "Удалённая клавиша",
     "spriteNoKeys": "В этом режиме нет клавиш",
     "spriteDuplicateTriggers": "Такая комбинация клавиш уже есть",

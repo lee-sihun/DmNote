@@ -563,7 +563,6 @@
     "spriteAddPose": "상태 추가",
     "spriteTriggerKeys": "담당 키",
     "spriteTriggerPlaceholder": "키 선택",
-    "spriteImageOverride": "상태 이미지",
     "spriteMissingKey": "삭제된 키",
     "spriteNoKeys": "이 모드에 키 요소가 없습니다",
     "spriteDuplicateTriggers": "중복된 키 조합입니다",

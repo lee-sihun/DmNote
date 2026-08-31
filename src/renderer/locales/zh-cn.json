@@ -568,7 +568,6 @@
     "spriteAddPose": "添加状态",
     "spriteTriggerKeys": "触发按键",
     "spriteTriggerPlaceholder": "选择按键",
-    "spriteImageOverride": "状态图像",
     "spriteMissingKey": "已删除的按键",
     "spriteNoKeys": "此模式没有按键元素",
     "spriteDuplicateTriggers": "按键组合重复",

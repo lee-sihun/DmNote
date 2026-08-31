@@ -18,7 +18,7 @@ import { anchorToPercent, percentToAnchor } from '@utils/sprite/spriteGeometry';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
 
 // 담당 키·이미지 오버라이드 컨트롤 묶음 (삭제·이름 변경은 행 메뉴가 맡는다)
-export interface SpritePoseControls {
+interface SpritePoseControls {
   keyOptions: ReadonlyArray<{ id: string; label: string }>;
   triggers: readonly string[];
   isDuplicate: boolean;
@@ -31,7 +31,7 @@ export interface SpritePoseControls {
 }
 
 // 손끝 핀 컨트롤 묶음 - 값은 캔버스 노브(Alt 드래그)와 같은 contactPoint
-export interface SpritePosePinControls {
+interface SpritePosePinControls {
   contactPoint: SpriteAnchor;
   /** 회전·배율 스크럽이 손끝을 제자리에 두도록 x·y를 역산 */
   pinLock: boolean;
@@ -56,7 +56,7 @@ interface SpritePoseEditorPopupProps {
   // 행 전환 시 바깥닫힘을 거치지 않는 영역 (상태 목록 well)
   interactiveRefs?: React.RefObject<HTMLElement>[];
   onTransformCommit: (next: SpriteTransform) => void;
-  onTransformPreview?: (next: SpriteTransform) => void;
+  onTransformPreview: (next: SpriteTransform) => void;
   onTransformCancel: () => void;
   onClose: () => void;
   t: (key: string) => string;
@@ -85,10 +85,8 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
   const { offset, rotation, scale } = SPRITE_CONSTRAINTS;
   const commitField = (patch: Partial<SpriteTransform>) =>
     onTransformCommit({ ...transform, ...patch });
-  const previewField = onTransformPreview
-    ? (patch: Partial<SpriteTransform>) =>
-        onTransformPreview({ ...transform, ...patch })
-    : undefined;
+  const previewField = (patch: Partial<SpriteTransform>) =>
+    onTransformPreview({ ...transform, ...patch });
 
   const keyOptionIds = new Set(
     poseControls.keyOptions.map((option) => option.id),
@@ -130,11 +128,8 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
               onChange={(value) =>
                 commitField({ x: clamp(value, offset.min, offset.max) })
               }
-              onPreview={
-                previewField
-                  ? (value) =>
-                      previewField({ x: clamp(value, offset.min, offset.max) })
-                  : undefined
+              onPreview={(value) =>
+                previewField({ x: clamp(value, offset.min, offset.max) })
               }
               onCancel={onTransformCancel}
               prefix="X"
@@ -150,11 +145,8 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
               onChange={(value) =>
                 commitField({ y: clamp(value, offset.min, offset.max) })
               }
-              onPreview={
-                previewField
-                  ? (value) =>
-                      previewField({ y: clamp(value, offset.min, offset.max) })
-                  : undefined
+              onPreview={(value) =>
+                previewField({ y: clamp(value, offset.min, offset.max) })
               }
               onCancel={onTransformCancel}
               prefix="Y"
@@ -174,13 +166,10 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
                   rotation: clamp(value, rotation.min, rotation.max),
                 })
               }
-              onPreview={
-                previewField
-                  ? (value) =>
-                      previewField({
-                        rotation: clamp(value, rotation.min, rotation.max),
-                      })
-                  : undefined
+              onPreview={(value) =>
+                previewField({
+                  rotation: clamp(value, rotation.min, rotation.max),
+                })
               }
               onCancel={onTransformCancel}
               prefix={<AngleGlyph />}
@@ -198,13 +187,10 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
               onChange={(value) =>
                 commitField({ scale: clamp(value / 100, scale.min, scale.max) })
               }
-              onPreview={
-                previewField
-                  ? (value) =>
-                      previewField({
-                        scale: clamp(value / 100, scale.min, scale.max),
-                      })
-                  : undefined
+              onPreview={(value) =>
+                previewField({
+                  scale: clamp(value / 100, scale.min, scale.max),
+                })
               }
               onCancel={onTransformCancel}
               prefix={<ScaleGlyph />}

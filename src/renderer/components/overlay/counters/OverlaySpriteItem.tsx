@@ -62,8 +62,9 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     }
   }
 
-  const target = isOneShot
-    ? { transform: position.idleTransform, imageSrc: position.baseImage }
+  // onPress는 렌더가 idle 고정이라 자세 해석과 폴백 계산을 타지 않는다
+  const heldTarget = isOneShot
+    ? null
     : resolveSpriteTarget(position, pressedIds);
 
   const { failedImageSrcs, markFailed } = useFailedImageSrcs(
@@ -72,7 +73,6 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
   );
 
   const baseImageSrc = resolveImageSource(position.baseImage);
-  const targetImageSrc = resolveImageSource(target.imageSrc);
 
   // easing 해석은 정규식·베지어 극값 계산이라 렌더마다 돌리지 않는다.
   // 발산 easing은 도달 계산과 같은 기준으로 강등 (창 클리핑 방지)
@@ -86,9 +86,13 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     : `transform ${position.transitionMs}ms ${renderEasing}`;
 
   // 실패한 src는 baseImage로 폴백, 그것도 실패면 렌더 제외
-  let imageSrc = targetImageSrc;
-  if (imageSrc && failedImageSrcs.has(imageSrc)) imageSrc = baseImageSrc;
-  if (imageSrc && failedImageSrcs.has(imageSrc)) imageSrc = null;
+  let heldImageSrc = heldTarget
+    ? resolveImageSource(heldTarget.imageSrc)
+    : null;
+  if (heldImageSrc && failedImageSrcs.has(heldImageSrc)) {
+    heldImageSrc = baseImageSrc;
+  }
+  if (heldImageSrc && failedImageSrcs.has(heldImageSrc)) heldImageSrc = null;
 
   // 첫 자세 전환에서 cold decode가 겹치지 않도록 base와 모든 override를 선행 디코드
   const warmupSrcs = useMemo(() => {
@@ -305,25 +309,26 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
               }}
             />
           )
-        : imageSrc && (
+        : heldTarget &&
+          heldImageSrc && (
             <img
               key="held"
-              src={imageSrc}
+              src={heldImageSrc}
               alt=""
               draggable={false}
               style={{
                 // 외관 채널은 기본 모드에서 변수로 - 사용자 CSS가 !important 없이 이긴다
                 ...computeSpriteImageStyle(
                   position,
-                  target.transform,
+                  heldTarget.transform,
                   transitionCss,
                 ),
                 willChange: 'transform',
               }}
               onError={(event) => {
-                if (!isErrorForCurrentSrc(event.currentTarget, imageSrc))
+                if (!isErrorForCurrentSrc(event.currentTarget, heldImageSrc))
                   return;
-                markFailed(imageSrc);
+                markFailed(heldImageSrc);
               }}
             />
           )}

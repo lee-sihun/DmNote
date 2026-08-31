@@ -43,7 +43,7 @@ export function subscribeKeyPressEdge(
   };
 }
 
-export function emitKeyPressEdge(key: string) {
+function emitKeyPressEdge(key: string) {
   const listeners = pressEdgeListeners.get(key);
   if (!listeners) return;
   for (const listener of [...listeners]) listener();
