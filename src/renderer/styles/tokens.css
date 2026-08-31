@@ -125,6 +125,8 @@
      시맨틱 danger를 재사용하지 않는다. 오류가 아니라 위치 스냅 표시 */
   --ui-guide-align: #ff6b6b;
   --ui-guide-align-glow: rgba(255, 107, 107, 0.5);
+  /* 스프라이트 활동 영역 점선 - 캔버스 아이템과 복제 고스트가 함께 쓴다 */
+  --ui-guide-activity: rgba(237, 238, 242, 0.4);
 
   /* 캔버스 선택 크롬 — 셀렉션은 의미 지점이므로 브랜드 바이올렛 */
   --ui-selection: #8b5cf6;

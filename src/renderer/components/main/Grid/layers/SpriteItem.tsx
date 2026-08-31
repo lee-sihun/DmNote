@@ -7,6 +7,10 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSpriteEditPreview } from '@stores/grid/useSpriteEditPreviewStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
+import {
+  activityAreaGuideMetrics,
+  editorChromeScale,
+} from '@utils/grid/activityAreaGuide';
 import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
@@ -47,18 +51,14 @@ interface SpriteItemProps {
 }
 
 // 활동 영역은 에디터 전용 가이드 - 오버레이에는 그리지 않는다.
-// 아이템 자체는 호버에만 점선을 보이고(아래 클래스, 같은 색), 이 상수는 복제 고스트 몫
-export const ACTIVITY_AREA_BORDER = '1px dashed rgba(237, 238, 242, 0.4)';
-
 // 이미지가 있으면 점선이 소음이라 호버에만, 없으면 가이드가 유일한 실체라 상시.
-// 투명 보더를 유지해 호버 시 레이아웃이 밀리지 않는다.
+// 선택 상태는 그리드 공통 아웃라인이 전담한다 - 여기서 또 그리면 이중선이 된다.
 // 호버 판정은 루트(group) 기준 - pointerdown 캡처가 자식 :hover를 끊어
 // 클릭 순간 점선이 한 프레임 꺼지는 깜빡임을 막는다
 const GUIDE_BORDER_CLASS = {
-  selected: 'border border-solid border-[var(--ui-selection-border)]',
   hoverOnly:
-    'border border-dashed border-transparent group-hover/sprite:border-[rgba(237,238,242,0.4)]',
-  always: 'border border-dashed border-[rgba(237,238,242,0.4)]',
+    'border-dashed border-transparent group-hover/sprite:border-[color:var(--ui-guide-activity)]',
+  always: 'border-dashed border-[color:var(--ui-guide-activity)]',
 } as const;
 
 // 캔버스의 스프라이트는 정적이다: 평소엔 idle 상태, 자세 팝업이 열려 있으면
@@ -265,18 +265,10 @@ const SpriteItem = ({
       onDragStart={(e: React.DragEvent) => e.preventDefault()}
     >
       <div
-        className={`rounded-[4px] ${
-          isSelected
-            ? GUIDE_BORDER_CLASS.selected
-            : imageSrc
-            ? GUIDE_BORDER_CLASS.hoverOnly
-            : GUIDE_BORDER_CLASS.always
-        }`}
         style={{
           width: '100%',
           height: '100%',
           position: 'relative',
-          boxSizing: 'border-box',
         }}
         data-sprite-element="true"
         data-selected={isSelected ? 'true' : undefined}
@@ -336,6 +328,24 @@ const SpriteItem = ({
             </svg>
           </div>
         )}
+        {isSelected ? null : (
+          // 활동 영역 가이드 - 레이아웃에 참여하지 않는 별도 층이라 안쪽 이미지
+          // 좌표를 밀지 않는다 (오버레이와 같은 원점). 이미지 위에 그려 가려지지 않는다
+          <div
+            data-sprite-activity-guide="true"
+            className={
+              imageSrc
+                ? GUIDE_BORDER_CLASS.hoverOnly
+                : GUIDE_BORDER_CLASS.always
+            }
+            style={{
+              position: 'absolute',
+              inset: 0,
+              pointerEvents: 'none',
+              ...activityAreaGuideMetrics(zoom),
+            }}
+          />
+        )}
         {showPivotMarker ? (
           // 기준점 마커 - 회전·배율 축의 위치를 실시간으로 보여준다 (기준점 편집 동안)
           <div
@@ -350,7 +360,10 @@ const SpriteItem = ({
                 position.imageRect.y +
                 position.pivot.y * position.imageRect.height
               }px`,
-              transform: 'translate(-50%, -50%)',
+              // 마커도 에디터 크롬이라 화면 크기 고정 - 중심은 축 위치에 남는다
+              transform: `translate(-50%, -50%) scale(${editorChromeScale(
+                zoom,
+              )})`,
               pointerEvents: 'none',
               color: 'var(--ui-selection-border)',
             }}

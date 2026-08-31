@@ -85,11 +85,15 @@ const renderSprite = (
         onPositionChange={() => {}}
         isSelected={options.isSelected ?? false}
         activeTool="move"
+        zoom={options.zoom ?? 1}
       />,
     );
   });
   return container.querySelector<HTMLElement>('[data-sprite-element="true"]');
 };
+
+const activityGuide = () =>
+  container.querySelector<HTMLElement>('[data-sprite-activity-guide="true"]');
 
 describe('SpriteItem 렌더', () => {
   beforeEach(() => {
@@ -104,12 +108,12 @@ describe('SpriteItem 렌더', () => {
     useSpriteEditPreviewStore.setState({ preview: null });
   });
 
-  it('선택 여부에 따라 활동 영역 테두리가 가이드와 선택 색을 오간다', () => {
+  it('활동 영역 가이드는 이미지 유무에 따라 상시·호버로 갈린다', () => {
     // 이미지 없는 스프라이트는 가이드가 유일한 실체 - 점선 상시 표시
     const idle = renderSprite(spritePosition());
     expect(idle).not.toBeNull();
-    expect(idle?.className).toContain('border-dashed');
-    expect(idle?.className).not.toContain('border-transparent');
+    expect(activityGuide()?.className).toContain('border-dashed');
+    expect(activityGuide()?.className).not.toContain('border-transparent');
     expect(idle?.dataset.selected).toBeUndefined();
     // 이미지가 없으면 자리표시자 렌더
     expect(
@@ -118,13 +122,32 @@ describe('SpriteItem 렌더', () => {
 
     // 이미지가 있으면 점선은 소음이라 기본 투명, 호버에만 드러난다.
     // 호버는 캡처를 받는 루트(group) 기준이라 눌린 동안에도 유지된다
-    const withImage = renderSprite(spritePosition({ baseImage: 'hand.png' }));
-    expect(withImage?.className).toContain('border-transparent');
-    expect(withImage?.className).toContain('group-hover/sprite:border-');
+    renderSprite(spritePosition({ baseImage: 'hand.png' }));
+    expect(activityGuide()?.className).toContain('border-transparent');
+    // 호버 색도 고스트와 같은 토큰
+    expect(activityGuide()?.className).toContain(
+      'group-hover/sprite:border-[color:var(--ui-guide-activity)]',
+    );
+  });
 
+  it('선택 상태는 공통 아웃라인이 전담해 내부 가이드를 그리지 않는다', () => {
     const selected = renderSprite(spritePosition(), { isSelected: true });
-    expect(selected?.className).toContain('var(--ui-selection-border)');
     expect(selected?.dataset.selected).toBe('true');
+    // 그리드 아웃라인과 겹쳐 이중선이 되던 자리 - 아예 그리지 않는다
+    expect(activityGuide()).toBeNull();
+  });
+
+  it('이미지 호스트는 보더가 없어 오버레이와 같은 원점을 쓴다', () => {
+    // 보더가 있으면 absolute 이미지가 padding box 기준으로 1px 밀린다
+    const host = renderSprite(spritePosition({ baseImage: 'hand.png' }));
+    expect(host?.style.borderWidth).toBe('');
+    expect(host?.className).not.toContain('border');
+  });
+
+  it('가이드 굵기와 radius는 줌에 반비례해 화면 px로 고정된다', () => {
+    renderSprite(spritePosition(), { zoom: 4 });
+    expect(activityGuide()?.style.borderWidth).toBe('0.25px');
+    expect(activityGuide()?.style.borderRadius).toBe('1px');
   });
 
   it('hidden 스프라이트는 렌더하지 않는다', () => {
@@ -255,9 +278,25 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
     expect(marker).not.toBeNull();
     expect(marker?.style.left).toBe('35px');
     expect(marker?.style.top).toBe('100px');
+    expect(marker?.style.transform).toBe('translate(-50%, -50%) scale(1)');
 
     act(() => useSpriteEditPreviewStore.getState().clear());
     expect(node?.querySelector('[data-sprite-pivot-marker="true"]')).toBeNull();
+  });
+
+  it('기준점 마커도 줌 보정으로 화면 크기를 유지한다', () => {
+    act(() =>
+      useSpriteEditPreviewStore
+        .getState()
+        .publish({ kind: 'pivot', positionId: SPRITE_ID }),
+    );
+    const node = renderSprite(spritePosition(), { zoom: 4 });
+
+    const marker = node?.querySelector<HTMLElement>(
+      '[data-sprite-pivot-marker="true"]',
+    );
+    // 중심은 축 위치에 남고 크기만 줄어든다
+    expect(marker?.style.transform).toBe('translate(-50%, -50%) scale(0.25)');
   });
 
   it('무효 draft 편집은 canonical 값 대신 스냅샷을 우선한다', () => {

@@ -1,0 +1,93 @@
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import SpriteDuplicateGhost from './SpriteDuplicateGhost';
+import { ACTIVITY_AREA_GUIDE_COLOR } from '@utils/grid/activityAreaGuide';
+import type { ReactiveSpritePosition } from '@src/types/key/sprites';
+
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+const position = (
+  overrides: Partial<ReactiveSpritePosition> = {},
+): ReactiveSpritePosition =>
+  ({
+    id: 'ghost-sprite',
+    dx: 0,
+    dy: 0,
+    width: 200,
+    height: 120,
+    hidden: false,
+    zIndex: null,
+    className: null,
+    useInlineStyles: null,
+    baseImage: 'hand.png',
+    imageFit: 'contain',
+    imageRect: { x: 10, y: 20, width: 100, height: 80 },
+    pivot: { x: 0.5, y: 0.5 },
+    idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
+    poses: [],
+    activation: 'whileHeld',
+    pressDurationMs: 300,
+    transitionMs: 90,
+    transitionEasing: 'linear',
+    ...overrides,
+  } as ReactiveSpritePosition);
+
+let container: HTMLDivElement;
+let root: Root;
+
+const renderGhost = (zoom = 1) => {
+  act(() => {
+    root.render(
+      <SpriteDuplicateGhost
+        position={position()}
+        cursor={{ x: 300, y: 200 }}
+        zoom={zoom}
+      />,
+    );
+  });
+  return container.querySelector<HTMLElement>('[data-sprite-ghost="true"]');
+};
+
+describe('SpriteDuplicateGhost', () => {
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('이미지 호스트에 보더를 두지 않아 놓는 순간 이미지가 튀지 않는다', () => {
+    // 보더가 있으면 absolute 이미지가 padding box 기준으로 밀려
+    // 확정된 SpriteItem 위치와 어긋난다
+    const ghost = renderGhost();
+    expect(ghost).not.toBeNull();
+    expect(ghost?.style.borderWidth).toBe('');
+    expect(ghost?.style.borderTopStyle).toBe('');
+  });
+
+  it('활동 영역 점선은 별도 층에 그리고 굵기를 줌으로 보정한다', () => {
+    renderGhost(4);
+    const guide = container.querySelector<HTMLElement>(
+      '[data-sprite-activity-guide="true"]',
+    );
+    expect(guide?.style.borderTopStyle).toBe('dashed');
+    expect(guide?.style.borderWidth).toBe('0.25px');
+    expect(guide?.style.borderRadius).toBe('1px');
+    // 아이템 가이드와 같은 토큰을 쓴다
+    expect(guide?.style.borderColor).toBe(ACTIVITY_AREA_GUIDE_COLOR);
+  });
+
+  it('이미지 원점은 활동 영역 좌상단 기준이다 (아이템과 같은 규칙)', () => {
+    const image = renderGhost()?.querySelector<HTMLImageElement>('img');
+    expect(image?.style.left).toBe('10px');
+    expect(image?.style.top).toBe('20px');
+  });
+});

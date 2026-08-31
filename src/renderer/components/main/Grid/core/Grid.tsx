@@ -62,7 +62,8 @@ import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
 import KnobItem from '../layers/KnobItem';
-import SpriteItem, { ACTIVITY_AREA_BORDER } from '../layers/SpriteItem';
+import SpriteItem from '../layers/SpriteItem';
+import SpriteDuplicateGhost from '../layers/SpriteDuplicateGhost';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -97,7 +98,6 @@ import {
   imageTransformToCss,
 } from '@src/types/key/imageLayer';
 import type { ReactiveSpritePosition } from '@src/types/key/sprites';
-import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_FONT,
@@ -1525,43 +1525,12 @@ const Grid = ({
     if (!duplicateState || !duplicateCursor) return null;
 
     if (duplicateState.elementType === 'sprite') {
-      const spritePosition = duplicateState.position as ReactiveSpritePosition;
-      const width = spritePosition.width || 200;
-      const height = spritePosition.height || 200;
-      const offsetX = duplicateCursor.x - width / 2;
-      const offsetY = duplicateCursor.y - height / 2;
-      const ghostImage = resolveImageSource(spritePosition.baseImage);
       return (
-        <div
-          className="absolute pointer-events-none select-none"
-          style={{
-            width: `${width}px`,
-            height: `${height}px`,
-            transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
-            border: ACTIVITY_AREA_BORDER,
-            borderRadius: '4px',
-            boxSizing: 'border-box',
-            opacity: 0.5,
-            zIndex: 'var(--z-canvas-drag-preview)',
-          }}
-        >
-          {ghostImage && (
-            <img
-              src={ghostImage}
-              alt=""
-              draggable={false}
-              style={{
-                // 고스트는 CSS 변수 채널이 닿지 않아 인라인 강제
-                ...computeSpriteImageStyle(
-                  { ...spritePosition, useInlineStyles: true },
-                  spritePosition.idleTransform,
-                ),
-                pointerEvents: 'none',
-                userSelect: 'none',
-              }}
-            />
-          )}
-        </div>
+        <SpriteDuplicateGhost
+          position={duplicateState.position as ReactiveSpritePosition}
+          cursor={duplicateCursor}
+          zoom={zoom}
+        />
       );
     }
 
