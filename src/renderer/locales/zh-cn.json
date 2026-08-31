@@ -559,7 +559,6 @@
     "knobReverse": "反转方向",
     "spriteBaseImage": "基础图像",
     "spriteImageSelect": "选择",
-    "spriteImageRemove": "移除",
     "spriteImageRect": "位置",
     "spriteImageSize": "大小",
     "spritePivot": "基准点",

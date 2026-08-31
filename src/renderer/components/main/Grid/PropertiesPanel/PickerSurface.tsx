@@ -31,6 +31,8 @@ interface PickerSurfaceProps {
   closeOnScroll?: boolean;
   portalToBody?: boolean;
   interactiveRefs?: React.RefObject<HTMLElement>[];
+  // 열린 채 대상 행만 바뀌는 호출자의 앵커 신원 - 바뀌면 위치를 재측정한다
+  anchorKey?: React.Key;
   onClose: () => void;
   children: React.ReactNode;
   // 중첩 피커 — 카드 옆에 함께 렌더
@@ -54,6 +56,7 @@ const PickerSurface = ({
   closeOnScroll = false,
   portalToBody = true,
   interactiveRefs = [],
+  anchorKey,
   onClose,
   children,
   overlay,
@@ -70,12 +73,14 @@ const PickerSurface = ({
     popupRef: cardRef,
     fallbackWidth,
     fallbackHeight,
+    anchorKey,
   });
   const trigger = useTriggerAnchoredPopupPosition({
     open: open && detached,
     referenceRef,
     popupRef: cardRef,
     fallbackHeight,
+    anchorKey,
   });
 
   // 닫으면 위치 훅이 좌표를 즉시 비운다. 그대로 두면 퇴장 중에 fixed 배치가 풀려

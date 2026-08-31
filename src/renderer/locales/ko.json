@@ -554,7 +554,6 @@
     "knobReverse": "방향 반전",
     "spriteBaseImage": "기본 이미지",
     "spriteImageSelect": "선택",
-    "spriteImageRemove": "제거",
     "spriteImageRect": "위치",
     "spriteImageSize": "크기",
     "spritePivot": "기준점",

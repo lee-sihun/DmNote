@@ -58,12 +58,14 @@ vi.mock('@components/main/Grid/PropertiesPanel/PickerSurface', () => ({
     ariaLabel,
     fallbackHeight,
     offsetY,
+    anchorKey,
   }: {
     open: boolean;
     children: React.ReactNode;
     ariaLabel: string;
     fallbackHeight: number;
     offsetY?: number;
+    anchorKey?: React.Key;
   }) =>
     open ? (
       <div
@@ -71,6 +73,7 @@ vi.mock('@components/main/Grid/PropertiesPanel/PickerSurface', () => ({
         aria-label={ariaLabel}
         data-fallback-height={fallbackHeight}
         data-offset-y={offsetY}
+        data-anchor-key={anchorKey}
       >
         {children}
       </div>
@@ -405,7 +408,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(posePopup()!.getAttribute('aria-label')).toBe(
       'propertiesPanel.spritePose 1',
     );
-    expect(posePopup()!.dataset.fallbackHeight).toBe('220');
+    expect(posePopup()!.dataset.fallbackHeight).toBe('181');
 
     // 같은 행 재클릭 - 토글 닫힘
     act(() => poseEditButtons()[0].click());
@@ -438,6 +441,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       poseId: 'pose-1',
     });
     const firstPopup = posePopup();
+    const firstSessionInput = firstPopup!.querySelector('input');
 
     // 전환 중 프리뷰가 null을 거치면 캔버스가 기본 상태로 한 번 튄다
     const transitions: Array<string | null> = [];
@@ -454,11 +458,14 @@ describe('SingleSpritePanel 자세 편집', () => {
       kind: 'pose',
       poseId: 'pose-2',
     });
-    // 대상별 새 세션 - 팝업이 리마운트되어 입력 draft·포커스가 남지 않는다
     expect(posePopup()!.getAttribute('aria-label')).toBe(
       'propertiesPanel.spritePose 2',
     );
-    expect(posePopup()).not.toBe(firstPopup);
+    // 셸은 유지되어 전환이 이어지고(등장 모션 없음), 편집 subtree만
+    // poseId 세션으로 리마운트되어 입력 draft·포커스가 남지 않는다
+    expect(posePopup()).toBe(firstPopup);
+    expect(posePopup()!.querySelector('input')).not.toBe(firstSessionInput);
+    expect(posePopup()!.dataset.anchorKey).toBe('pose-2');
   });
 
   it('자세 삭제는 남은 자세만으로 커밋한다', async () => {
@@ -1298,10 +1305,9 @@ describe('SingleSpritePanel 자세 편집', () => {
       imagePath: 'pose.png',
     });
 
-    const pickButton = [
-      ...posePopup()!.querySelectorAll<HTMLButtonElement>('button'),
-    ].find(
-      (button) => button.textContent === 'propertiesPanel.spriteImageSelect',
+    // 상태 이미지도 기본 이미지와 같은 전면 선택 버튼 문법
+    const pickButton = posePopup()!.querySelector<HTMLButtonElement>(
+      'button[aria-label="propertiesPanel.spriteImageSelect"]',
     )!;
     await act(async () => pickButton.click());
 

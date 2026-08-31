@@ -7,14 +7,11 @@ import {
   ScaleGlyph,
 } from '@components/main/common/TransformGlyphs';
 import {
-  PropertyRow,
-  PropertySection,
-} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
-import { ACTION_BUTTON_CLASS } from '@utils/cardRecipes';
-import {
   SPRITE_CONSTRAINTS,
+  type SpriteImageFit,
   type SpriteTransform,
 } from '@src/types/key/sprites';
+import SpriteImagePreviewCard from './SpriteImagePreviewCard';
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -24,7 +21,9 @@ export interface SpritePoseControls {
   keyOptions: ReadonlyArray<{ id: string; label: string }>;
   triggers: readonly string[];
   isDuplicate: boolean;
-  hasImageOverride: boolean;
+  imageOverride: string | null;
+  // 미리보기 표시 방식 - 캔버스 렌더가 스프라이트 imageFit을 따르므로 동일 적용
+  imageFit: SpriteImageFit | null;
   onToggleTrigger: (keyId: string) => void;
   onImagePick: () => void;
   onImageReset: () => void;
@@ -33,6 +32,8 @@ export interface SpritePoseControls {
 interface SpritePoseEditorPopupProps {
   open: boolean;
   ariaLabel: string;
+  // 편집 세션 신원 - 내부 subtree 재마운트와 앵커 재측정의 기준
+  poseId: string;
   transform: SpriteTransform;
   referenceRef: React.RefObject<HTMLElement>;
   panelElement: HTMLElement | null;
@@ -47,10 +48,13 @@ interface SpritePoseEditorPopupProps {
 }
 
 // 상태 하나의 편집 팝업 - 담당 키·변환·상태 이미지를 모아 패널 행을 요약으로 남긴다.
-// 카드 규격·변환 그리드는 이미지 피커와 동일
+// 카드 규격·변환 그리드는 이미지 피커와 동일.
+// 셸(PickerSurface)은 행 전환 동안 유지하고 편집 subtree만 poseId로 재마운트해
+// 입력 draft·포커스는 대상별로 끊고 전환 자체는 이어지게 한다
 const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
   open,
   ariaLabel,
+  poseId,
   transform,
   referenceRef,
   panelElement,
@@ -84,168 +88,159 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
       referenceRef={referenceRef}
       panelElement={panelElement}
       fallbackWidth={172}
-      fallbackHeight={220}
+      fallbackHeight={181}
       cardClassName="flex flex-col p-[8px] gap-[8px] w-[172px] rounded-popup"
       offsetY={-93}
       interactiveRefs={interactiveRefs}
+      anchorKey={poseId}
       onClose={onClose}
     >
-      {poseControls.keyOptions.length === 0 && deadTriggers.length === 0 ? (
-        <p className="text-fg-faint text-label">
-          {t('propertiesPanel.spriteNoKeys') || '이 모드에 키 요소가 없습니다'}
-        </p>
-      ) : (
-        <Dropdown
-          options={[
-            ...poseControls.keyOptions.map((option) => ({
-              label: option.label,
-              value: option.id,
-            })),
-            // 죽은 참조도 항목으로 노출해 토글로 제거
-            ...deadTriggers.map((id) => ({
-              label: t('propertiesPanel.spriteMissingKey') || '삭제된 키',
-              value: id,
-              danger: true,
-            })),
-          ]}
-          multiple
-          values={[...poseControls.triggers]}
-          onChange={poseControls.onToggleTrigger}
-          ariaLabel={t('propertiesPanel.spriteTriggerKeys') || '담당 키'}
-          placeholder={
-            t('propertiesPanel.spriteTriggerPlaceholder') || '키 선택'
-          }
-          fullWidth
-          // 중복 조합은 배너 대신 트리거 자체가 짧은 라벨 + 위험 톤 + 사유 툴팁
-          danger={poseControls.isDuplicate}
-          dangerLabel={t('propertiesPanel.spriteDuplicateShort') || '중복 키'}
-          title={
-            poseControls.isDuplicate
-              ? t('propertiesPanel.spriteDuplicateTriggers') ||
-                '중복된 키 조합입니다'
-              : undefined
-          }
+      {/* poseId 경계 - 행 전환마다 편집 subtree만 새 세션으로 */}
+      <React.Fragment key={poseId}>
+        {/* 상태 이미지 - 비우면 캔버스가 기본 이미지를 그대로 쓴다 */}
+        <SpriteImagePreviewCard
+          source={poseControls.imageOverride}
+          imageFit={poseControls.imageFit}
+          onPick={poseControls.onImagePick}
+          onReset={poseControls.onImageReset}
+          t={t}
         />
-      )}
 
-      {/* 위치·회전·배율 - 라벨 대신 접두 글리프가 의미를 맡는다 */}
-      <div className="flex flex-col gap-[4px]">
-        <div className="flex items-center gap-[8px] w-full">
-          <NumberInput
-            value={transform.x}
-            onChange={(value) =>
-              commitField({ x: clamp(value, offset.min, offset.max) })
-            }
-            onPreview={
-              previewField
-                ? (value) =>
-                    previewField({ x: clamp(value, offset.min, offset.max) })
-                : undefined
-            }
-            onCancel={onTransformCancel}
-            prefix="X"
-            ariaLabel={`${t('propertiesPanel.position') || '위치'} X`}
-            width="100%"
-            min={offset.min}
-            max={offset.max}
-            allowDecimal
-            decimalScale={1}
-          />
-          <NumberInput
-            value={transform.y}
-            onChange={(value) =>
-              commitField({ y: clamp(value, offset.min, offset.max) })
-            }
-            onPreview={
-              previewField
-                ? (value) =>
-                    previewField({ y: clamp(value, offset.min, offset.max) })
-                : undefined
-            }
-            onCancel={onTransformCancel}
-            prefix="Y"
-            ariaLabel={`${t('propertiesPanel.position') || '위치'} Y`}
-            width="100%"
-            min={offset.min}
-            max={offset.max}
-            allowDecimal
-            decimalScale={1}
-          />
+        {/* 위치·회전·배율 - 라벨 대신 접두 글리프가 의미를 맡는다 */}
+        <div className="flex flex-col gap-[4px]">
+          <div className="flex items-center gap-[8px] w-full">
+            <NumberInput
+              value={transform.x}
+              onChange={(value) =>
+                commitField({ x: clamp(value, offset.min, offset.max) })
+              }
+              onPreview={
+                previewField
+                  ? (value) =>
+                      previewField({ x: clamp(value, offset.min, offset.max) })
+                  : undefined
+              }
+              onCancel={onTransformCancel}
+              prefix="X"
+              ariaLabel={`${t('propertiesPanel.position') || '위치'} X`}
+              width="100%"
+              min={offset.min}
+              max={offset.max}
+              allowDecimal
+              decimalScale={1}
+            />
+            <NumberInput
+              value={transform.y}
+              onChange={(value) =>
+                commitField({ y: clamp(value, offset.min, offset.max) })
+              }
+              onPreview={
+                previewField
+                  ? (value) =>
+                      previewField({ y: clamp(value, offset.min, offset.max) })
+                  : undefined
+              }
+              onCancel={onTransformCancel}
+              prefix="Y"
+              ariaLabel={`${t('propertiesPanel.position') || '위치'} Y`}
+              width="100%"
+              min={offset.min}
+              max={offset.max}
+              allowDecimal
+              decimalScale={1}
+            />
+          </div>
+          <div className="flex items-center gap-[8px] w-full">
+            <NumberInput
+              value={transform.rotation}
+              onChange={(value) =>
+                commitField({
+                  rotation: clamp(value, rotation.min, rotation.max),
+                })
+              }
+              onPreview={
+                previewField
+                  ? (value) =>
+                      previewField({
+                        rotation: clamp(value, rotation.min, rotation.max),
+                      })
+                  : undefined
+              }
+              onCancel={onTransformCancel}
+              prefix={<AngleGlyph />}
+              ariaLabel={t('propertiesPanel.spriteRotation') || '회전'}
+              suffix="°"
+              width="100%"
+              min={rotation.min}
+              max={rotation.max}
+              allowDecimal
+              decimalScale={1}
+            />
+            {/* 배율은 이미지 피커와 같은 정수 % 표기 - 저장은 배수 그대로 */}
+            <NumberInput
+              value={Math.round(transform.scale * 100)}
+              onChange={(value) =>
+                commitField({ scale: clamp(value / 100, scale.min, scale.max) })
+              }
+              onPreview={
+                previewField
+                  ? (value) =>
+                      previewField({
+                        scale: clamp(value / 100, scale.min, scale.max),
+                      })
+                  : undefined
+              }
+              onCancel={onTransformCancel}
+              prefix={<ScaleGlyph />}
+              ariaLabel={t('propertiesPanel.spriteScale') || '배율'}
+              suffix="%"
+              width="100%"
+              min={scale.min * 100}
+              max={scale.max * 100}
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-[8px] w-full">
-          <NumberInput
-            value={transform.rotation}
-            onChange={(value) =>
-              commitField({
-                rotation: clamp(value, rotation.min, rotation.max),
-              })
-            }
-            onPreview={
-              previewField
-                ? (value) =>
-                    previewField({
-                      rotation: clamp(value, rotation.min, rotation.max),
-                    })
-                : undefined
-            }
-            onCancel={onTransformCancel}
-            prefix={<AngleGlyph />}
-            ariaLabel={t('propertiesPanel.spriteRotation') || '회전'}
-            suffix="°"
-            width="100%"
-            min={rotation.min}
-            max={rotation.max}
-            allowDecimal
-            decimalScale={1}
-          />
-          {/* 배율은 이미지 피커와 같은 정수 % 표기 - 저장은 배수 그대로 */}
-          <NumberInput
-            value={Math.round(transform.scale * 100)}
-            onChange={(value) =>
-              commitField({ scale: clamp(value / 100, scale.min, scale.max) })
-            }
-            onPreview={
-              previewField
-                ? (value) =>
-                    previewField({
-                      scale: clamp(value / 100, scale.min, scale.max),
-                    })
-                : undefined
-            }
-            onCancel={onTransformCancel}
-            prefix={<ScaleGlyph />}
-            ariaLabel={t('propertiesPanel.spriteScale') || '배율'}
-            suffix="%"
-            width="100%"
-            min={scale.min * 100}
-            max={scale.max * 100}
-          />
-        </div>
-      </div>
 
-      {/* 상태 이미지 - 안 고르면 기본 이미지가 그대로 쓰인다 */}
-      <PropertySection>
-        <PropertyRow
-          label={t('propertiesPanel.spriteImageOverride') || '상태 이미지'}
-        >
-          <button
-            type="button"
-            className={ACTION_BUTTON_CLASS}
-            onClick={poseControls.onImagePick}
-          >
-            {t('propertiesPanel.spriteImageSelect') || '선택'}
-          </button>
-          {poseControls.hasImageOverride ? (
-            <button
-              type="button"
-              className={ACTION_BUTTON_CLASS}
-              onClick={poseControls.onImageReset}
-            >
-              {t('propertiesPanel.spriteImageRemove') || '제거'}
-            </button>
-          ) : null}
-        </PropertyRow>
-      </PropertySection>
+        {/* 담당 키 - 미리보기·변환 아래가 정위치, 신규 상태도 카드가 작아 한눈에 보인다 */}
+        {poseControls.keyOptions.length === 0 && deadTriggers.length === 0 ? (
+          <p className="text-fg-faint text-label">
+            {t('propertiesPanel.spriteNoKeys') ||
+              '이 모드에 키 요소가 없습니다'}
+          </p>
+        ) : (
+          <Dropdown
+            options={[
+              ...poseControls.keyOptions.map((option) => ({
+                label: option.label,
+                value: option.id,
+              })),
+              // 죽은 참조도 항목으로 노출해 토글로 제거
+              ...deadTriggers.map((id) => ({
+                label: t('propertiesPanel.spriteMissingKey') || '삭제된 키',
+                value: id,
+                danger: true,
+              })),
+            ]}
+            multiple
+            values={[...poseControls.triggers]}
+            onChange={poseControls.onToggleTrigger}
+            ariaLabel={t('propertiesPanel.spriteTriggerKeys') || '담당 키'}
+            placeholder={
+              t('propertiesPanel.spriteTriggerPlaceholder') || '키 선택'
+            }
+            fullWidth
+            // 중복 조합은 배너 대신 트리거 자체가 짧은 라벨 + 위험 톤 + 사유 툴팁
+            danger={poseControls.isDuplicate}
+            dangerLabel={t('propertiesPanel.spriteDuplicateShort') || '중복 키'}
+            title={
+              poseControls.isDuplicate
+                ? t('propertiesPanel.spriteDuplicateTriggers') ||
+                  '중복된 키 조합입니다'
+                : undefined
+            }
+          />
+        )}
+      </React.Fragment>
     </PickerSurface>
   );
 };

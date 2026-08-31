@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
@@ -311,7 +312,22 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     replacePose(poseIndex, { triggers: nextTriggers });
   };
 
+  // 대상 전환·닫기 전 팝업 안 포커스 동기 정산 - 미커밋 draft는 이전 대상에 커밋되고
+  // 새 세션은 빈 상태로 시작한다
+  const settleEditorPopupFocus = () => {
+    // 분리 패널은 다른 창 문서라 instanceof 대신 캐스팅
+    const ownerDocument = panelElement?.ownerDocument ?? document;
+    const active = ownerDocument.activeElement as HTMLElement | null;
+    if (
+      active?.matches('input, textarea') &&
+      active.closest('[role="dialog"]')
+    ) {
+      flushSync(() => active.blur());
+    }
+  };
+
   const openEditorPopup = (target: SpriteEditorTarget, anchor: HTMLElement) => {
+    settleEditorPopupFocus();
     if (isSameEditorTarget(editorTarget, target)) {
       setEditorTarget(null);
       return;
@@ -985,10 +1001,10 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
           />
         ) : editingPose ? (
           <SpritePoseEditorPopup
-            // 행 전환 스왑마다 새 편집 세션 - 입력 draft·포커스·앵커 측정이 대상별로 초기화
-            key={editingPose.poseId}
             open
             ariaLabel={editingPose.name || resolvedNames[editingPoseIndex]}
+            // 셸은 행 전환 동안 유지되고 편집 subtree·앵커만 poseId로 갈린다
+            poseId={editingPose.poseId}
             transform={editingPose.transform}
             referenceRef={poseAnchorRef}
             panelElement={panelElement}
@@ -997,7 +1013,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
               keyOptions,
               triggers: editingPose.triggers,
               isDuplicate: duplicatePose?.poseId === editingPose.poseId,
-              hasImageOverride: editingPose.imageOverride !== null,
+              imageOverride: editingPose.imageOverride,
+              imageFit: position.imageFit,
               onToggleTrigger: (keyId) =>
                 togglePoseTrigger(editingPoseIndex, keyId),
               onImagePick: () => void handlePoseImageSelect(editingPose.poseId),

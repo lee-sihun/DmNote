@@ -6,12 +6,12 @@ import {
   PropertyRow,
   PropertySection,
 } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
-import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_SPRITE_IMAGE_FIT,
   type ReactiveSpritePosition,
   type SpriteImageFit,
 } from '@src/types/key/sprites';
+import SpriteImagePreviewCard from './SpriteImagePreviewCard';
 
 interface SpriteImageSettingsPopupProps {
   open: boolean;
@@ -48,7 +48,6 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
   t,
 }) => {
   const fit = position.imageFit ?? DEFAULT_SPRITE_IMAGE_FIT;
-  const imageSrc = resolveImageSource(position.baseImage);
 
   const rectField = (patch: Partial<ReactiveSpritePosition['imageRect']>) => ({
     imageRect: { ...position.imageRect, ...patch },
@@ -66,52 +65,13 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
       offsetY={-93}
       onClose={onClose}
     >
-      {/* 이미지 미리보기 - 전면 선택 버튼과 형제 초기화 버튼 (중첩 버튼 금지) */}
-      <div className="relative w-full h-[76px] rounded-[8px] overflow-hidden group">
-        {/* 투명 격자 배경 */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              'var(--ui-checker-pattern) center / var(--ui-checker-size) var(--ui-checker-size) repeat',
-          }}
-        />
-        {imageSrc ? (
-          <img
-            key={imageSrc}
-            src={imageSrc}
-            alt=""
-            draggable={false}
-            className="absolute inset-0 block w-full h-full pointer-events-none select-none"
-            style={{ objectFit: fit as React.CSSProperties['objectFit'] }}
-          />
-        ) : null}
-        <button
-          type="button"
-          aria-label={t('propertiesPanel.spriteImageSelect') || '선택'}
-          onClick={onImagePick}
-          className="absolute inset-0 bg-black opacity-0 hover:opacity-40 focus-visible:opacity-40 transition-opacity cursor-pointer"
-        />
-        {position.baseImage ? (
-          <button
-            type="button"
-            aria-label={t('imagePicker.reset') || '초기화'}
-            title={t('imagePicker.reset') || '초기화'}
-            onClick={onImageReset}
-            // 18px 칩에 라이브 블러는 보이지도 않는다 - 솔리드 토큰 사용 (이미지 피커와 동일)
-            className="absolute top-[4px] right-[4px] z-10 w-[18px] h-[18px] flex items-center justify-center rounded-[5px] bg-glass-dim-solid shadow-elevation-chrome text-fg-faint hover:text-fg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-fast"
-          >
-            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-              <path
-                d="M1 1L7 7M7 1L1 7"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        ) : null}
-      </div>
+      <SpriteImagePreviewCard
+        source={position.baseImage}
+        imageFit={fit}
+        onPick={onImagePick}
+        onReset={onImageReset}
+        t={t}
+      />
 
       {/* 위치·크기·기준점 - 접두 글자와 % 접미로 구분하는 무라벨 그리드 */}
       <div className="flex flex-col gap-[4px]">

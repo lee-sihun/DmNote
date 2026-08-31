@@ -1,5 +1,11 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Key,
+  type RefObject,
+} from 'react';
 import { clampToViewport } from '@utils/ui/popupGeometry';
 
 interface PanelRect {
@@ -122,6 +128,8 @@ interface UsePanelAnchoredPopupPositionOptions {
   popupRef: RefObject<HTMLElement | null>;
   fallbackWidth: number;
   fallbackHeight: number;
+  // 같은 ref 객체로 대상 행만 바꾸는 호출자의 앵커 신원 - 바뀌면 rect 재캡처
+  anchorKey?: Key;
 }
 
 export const usePanelAnchoredPopupPosition = ({
@@ -131,6 +139,7 @@ export const usePanelAnchoredPopupPosition = ({
   popupRef,
   fallbackWidth,
   fallbackHeight,
+  anchorKey,
 }: UsePanelAnchoredPopupPositionOptions): PopupPosition | null => {
   const [position, setPosition] = useState<PopupPosition | null>(null);
   const lastPositionRef = useRef<PopupPosition | null>(null);
@@ -144,7 +153,9 @@ export const usePanelAnchoredPopupPosition = ({
       return;
     }
 
-    // 앵커 중심은 열리는 시점에 한 번만 캡처 — 이후 패널 스크롤·리렌더에도 제자리 유지
+    // 앵커 중심은 열리는(또는 anchorKey가 바뀌는) 시점에 한 번만 캡처 —
+    // 이후 패널 스크롤·리렌더에도 제자리 유지
+    void anchorKey; // 값은 쓰지 않고 재실행 트리거로만 참조
     const anchorElement = referenceRef?.current;
     const anchorRect = anchorElement?.getBoundingClientRect();
     const capturedAnchorCenterY = anchorRect
@@ -188,6 +199,7 @@ export const usePanelAnchoredPopupPosition = ({
       computePositionRef.current = null;
     };
   }, [
+    anchorKey,
     fallbackHeight,
     fallbackWidth,
     open,
@@ -212,6 +224,8 @@ interface UseTriggerAnchoredPopupPositionOptions {
   referenceRef?: RefObject<HTMLElement | null>;
   popupRef: RefObject<HTMLElement | null>;
   fallbackHeight: number;
+  // 같은 ref 객체로 대상 행만 바꾸는 호출자의 앵커 신원 - 바뀌면 rect 재캡처
+  anchorKey?: Key;
 }
 
 export const useTriggerAnchoredPopupPosition = ({
@@ -219,6 +233,7 @@ export const useTriggerAnchoredPopupPosition = ({
   referenceRef,
   popupRef,
   fallbackHeight,
+  anchorKey,
 }: UseTriggerAnchoredPopupPositionOptions): TriggerAnchoredResult => {
   const [result, setResult] = useState<TriggerAnchoredResult>(UNSETTLED);
   const lastPositionRef = useRef<TriggerAnchoredPosition | null>(null);
@@ -241,7 +256,9 @@ export const useTriggerAnchoredPopupPosition = ({
       return;
     }
 
-    // 앵커는 열리는 시점에 한 번만 캡처 — 패널 스크롤·리렌더에도 제자리 유지
+    // 앵커는 열리는(또는 anchorKey가 바뀌는) 시점에 한 번만 캡처 —
+    // 패널 스크롤·리렌더에도 제자리 유지
+    void anchorKey; // 값은 쓰지 않고 재실행 트리거로만 참조
     const triggerRect = trigger.getBoundingClientRect();
     const sectionRect = section.getBoundingClientRect();
     const ownerWindow = trigger.ownerDocument.defaultView ?? window;
@@ -284,7 +301,7 @@ export const useTriggerAnchoredPopupPosition = ({
       ownerWindow.removeEventListener('resize', compute);
       computePositionRef.current = null;
     };
-  }, [fallbackHeight, open, popupRef, referenceRef]);
+  }, [anchorKey, fallbackHeight, open, popupRef, referenceRef]);
 
   useLayoutEffect(() => {
     computePositionRef.current?.();
