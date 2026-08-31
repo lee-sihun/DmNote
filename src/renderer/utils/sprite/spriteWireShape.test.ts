@@ -10,7 +10,6 @@ import { toSpriteWireShape } from './spriteWireShape';
 const basePose = (overrides: Partial<SpritePose> = {}): SpritePose => ({
   poseId: 'pose-1',
   triggers: ['key-1'],
-  matchMode: 'exact',
   transform: { x: 0, y: 0, rotation: 0, scale: 1 },
   imageOverride: null,
   ...overrides,
@@ -32,7 +31,6 @@ const basePosition = (): ReactiveSpritePosition => ({
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
 });

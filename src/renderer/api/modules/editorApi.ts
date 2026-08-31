@@ -17,12 +17,14 @@ import type {
   EditorCommittedV1,
   CanonicalEditorGetResult,
   EditorGetResult,
+  PluginEditorCommitRequest,
 } from '@src/types/editor';
 
 // envelope 무가공 전송. 플러그인 게이트웨이 전용 - multiKey 기본값을 주입하지
 // 않아 플러그인이 선언한 값만 백엔드 게이트에 도달한다 (계약 §10)
 export const editorCommitRaw = async (
-  request: EditorCommitRequest,
+  // 플러그인 요청은 스프라이트가 input 타입(poseId 생략 허용)이라 별도 멤버
+  request: EditorCommitRequest | PluginEditorCommitRequest,
 ): Promise<EditorCommitResult> => {
   if (window.__dmn_runtime === 'obs') throw new EditorReadOnlyError();
   assertSafeEditorRevision(request.baseRevision, 'baseRevision');
@@ -42,7 +44,9 @@ export const editorApi = {
     return result as CanonicalEditorGetResult;
   },
   // 자사 표면: 멀티 키 지원을 항상 선언 (명시값이 있으면 그 값 우선, 계약 §10)
-  commit: (request: EditorCommitRequest): Promise<EditorCommitResult> =>
+  commit: (
+    request: EditorCommitRequest | PluginEditorCommitRequest,
+  ): Promise<EditorCommitResult> =>
     editorCommitRaw({ multiKey: true, ...request }),
   onCommitted: (listener: (event: EditorCommittedV1) => void) =>
     subscribe<EditorCommittedV1>('editor:committed', (event) => {

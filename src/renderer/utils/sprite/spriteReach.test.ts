@@ -31,7 +31,6 @@ const makePose = (
 ): SpritePose => ({
   poseId,
   triggers: [poseId],
-  matchMode: 'exact',
   transform: makeTransform(transform),
   imageOverride,
 });

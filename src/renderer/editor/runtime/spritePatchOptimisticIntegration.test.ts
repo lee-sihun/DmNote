@@ -91,7 +91,6 @@ const spriteFixture = (): CanonicalReactiveSpritePosition => ({
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
 });
@@ -190,9 +189,8 @@ describe('스프라이트 필드 패치 낙관 적용 통합', () => {
     const A_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const B_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     const clickOrderPose = {
-      poseId: 'pose-1',
+      poseId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       triggers: [B_ID, A_ID],
-      matchMode: 'exact' as const,
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
     };

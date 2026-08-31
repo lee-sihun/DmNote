@@ -155,7 +155,6 @@ const spriteAt = (id: string): ReactiveSpritePosition & { id: string } => ({
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'linear',
 });
@@ -449,14 +448,12 @@ describe('elementOps', () => {
         {
           poseId: 'pose-src-1',
           triggers: [ID_A],
-          matchMode: 'exact',
           transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
           imageOverride: 'sprites/override.png',
         },
         {
           poseId: 'pose-src-2',
           triggers: [ID_A, ID_B],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },

@@ -365,12 +365,10 @@ describe('렌더 DOM 계약', () => {
                 {
                   poseId: 'pose-contract',
                   triggers: ['el-contract'],
-                  matchMode: 'exact',
                   transform: { x: 0, y: 0, rotation: 0, scale: 1 },
                   imageOverride: null,
                 },
               ],
-              activation: 'whileHeld',
               transitionMs: 90,
               transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
             }}

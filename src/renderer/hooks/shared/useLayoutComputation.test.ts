@@ -37,7 +37,6 @@ const makeSprite = (
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: makeTransform(),
   poses: [],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
   ...overrides,

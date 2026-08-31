@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   findDuplicateTriggerPose,
+  reactiveSpritePositionInputSchema,
   reactiveSpritePositionSchema,
   type SpritePose,
 } from './sprites';
@@ -9,7 +10,6 @@ import {
 // 백엔드 직렬화 실물 형태. layerName·groupId는 None이면 키 자체가 생략된다
 // (다른 요소 위치와 같은 관례) - 부재를 거부하면 부트스트랩 검증이 통째로 실패한다
 const backendWireSprite = {
-  activation: 'whileHeld',
   baseImage: null,
   className: null,
   dx: 625,
@@ -64,7 +64,6 @@ describe('reactiveSpritePositionSchema wire 계약', () => {
       {
         poseId: 'pose-1',
         triggers: ['566b0333-494c-4d47-a76d-506b71e5ac4c'],
-        matchMode: 'exact',
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
         imageOverride: null,
         ...pose,
@@ -79,16 +78,60 @@ describe('reactiveSpritePositionSchema wire 계약', () => {
     ).toBe(true);
   });
 
-  it('트리거 개수·id 길이 상한을 넘으면 거부한다', () => {
+  it('input 스키마는 트리거 개수·id 길이 상한을 넘으면 거부한다', () => {
+    const tooMany = Array.from({ length: 513 }, (_, i) => `id-${i}`);
+    expect(
+      reactiveSpritePositionInputSchema.safeParse(
+        withPose({ triggers: tooMany }),
+      ).success,
+    ).toBe(false);
+    expect(
+      reactiveSpritePositionInputSchema.safeParse(
+        withPose({ triggers: ['a'.repeat(65)] }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('canonical 스키마는 상한 밖 컬렉션 서빙도 허용한다 - grandfather 데이터가 부트스트랩을 죽이면 안 된다', () => {
     const tooMany = Array.from({ length: 513 }, (_, i) => `id-${i}`);
     expect(
       reactiveSpritePositionSchema.safeParse(withPose({ triggers: tooMany }))
         .success,
+    ).toBe(true);
+    expect(
+      reactiveSpritePositionSchema.safeParse(withPose({ triggers: [''] }))
+        .success,
+    ).toBe(true);
+  });
+
+  it('input 스키마는 poseId 누락을 허용한다 - 백엔드가 새 id를 발급하는 공개 계약', () => {
+    expect(
+      reactiveSpritePositionInputSchema.safeParse(
+        withPose({ poseId: undefined }),
+      ).success,
+    ).toBe(true);
+    expect(
+      reactiveSpritePositionSchema.safeParse(withPose({ poseId: undefined }))
+        .success,
+    ).toBe(false);
+  });
+
+  it('id는 생략만 허용하고 명시 null은 거부한다 - Rust String decode와 동일', () => {
+    const { id: _id, ...withoutId } = backendWireSprite;
+    expect(reactiveSpritePositionSchema.safeParse(withoutId).success).toBe(
+      true,
+    );
+    expect(
+      reactiveSpritePositionSchema.safeParse({
+        ...backendWireSprite,
+        id: null,
+      }).success,
     ).toBe(false);
     expect(
-      reactiveSpritePositionSchema.safeParse(
-        withPose({ triggers: ['a'.repeat(65)] }),
-      ).success,
+      reactiveSpritePositionInputSchema.safeParse({
+        ...backendWireSprite,
+        id: null,
+      }).success,
     ).toBe(false);
   });
 
@@ -127,7 +170,6 @@ describe('findDuplicateTriggerPose', () => {
   const pose = (poseId: string, triggers: string[]): SpritePose => ({
     poseId,
     triggers,
-    matchMode: 'exact',
     transform: { x: 0, y: 0, rotation: 0, scale: 1 },
     imageOverride: null,
   });

@@ -101,7 +101,6 @@ const sprite = (id: string): ReactiveSpritePosition & { id: string } => ({
   pivot: { ...CENTER_SPRITE_ANCHOR },
   idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },
   poses: [],
-  activation: 'whileHeld',
   transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
   transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
 });
@@ -215,7 +214,6 @@ describe('useGridCanvasActions create와 ghost duplicate', () => {
       pivot: CENTER_SPRITE_ANCHOR,
       idleTransform: IDENTITY_SPRITE_TRANSFORM,
       poses: [],
-      activation: 'whileHeld',
       transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
       transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
     });

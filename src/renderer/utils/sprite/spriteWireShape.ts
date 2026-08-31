@@ -1,9 +1,9 @@
-import type {
-  ReactiveSpritePosition,
-  SpritePose,
+import {
+  normalizeSpriteTriggers,
+  type ReactiveSpritePosition,
+  type SpritePose,
 } from '@src/types/key/sprites';
 
-// 백엔드 normalize_sprite_triggers와 동일한 정렬·중복 제거.
 // 클릭 순서 그대로 커밋하면 ack 문서와 로컬 store의 배열 순서가 갈려
 // 이후 낙관 적용 소유권 CAS가 영구히 실패한다. 이미 정규형이면 원본 반환
 const normalizeTriggers = (triggers: string[]): string[] => {
@@ -15,7 +15,7 @@ const normalizeTriggers = (triggers: string[]): string[] => {
     }
   }
   if (ordered) return triggers;
-  return [...new Set(triggers)].sort();
+  return normalizeSpriteTriggers(triggers);
 };
 
 // 자세 name도 같은 관례 - None이면 키 생략

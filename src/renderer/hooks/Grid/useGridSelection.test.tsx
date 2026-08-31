@@ -150,12 +150,10 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
     {
       poseId: 'pose-1',
       triggers: [STABLE_KEY_ID],
-      matchMode: 'exact',
       transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
       imageOverride: null,
     },
   ],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'linear',
 });
@@ -554,7 +552,6 @@ describe('useGridSelection compound history gesture', () => {
           poseId: 'pose-1',
           // 배치 안 키와 배치 밖 키 참조 혼합
           triggers: [STABLE_KEY_ID, externalKeyId],
-          matchMode: 'exact',
           transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
           imageOverride: null,
         },

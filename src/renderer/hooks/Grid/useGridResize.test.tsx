@@ -194,12 +194,10 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
     {
       poseId: 'pose-1',
       triggers: [STABLE_A],
-      matchMode: 'exact',
       transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
       imageOverride: null,
     },
   ],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'linear',
 });

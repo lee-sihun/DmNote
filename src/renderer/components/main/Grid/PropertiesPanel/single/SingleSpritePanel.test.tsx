@@ -118,7 +118,6 @@ const spritePosition = (
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
   ...overrides,
@@ -309,7 +308,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         // 표준 관례: 자동 번호는 생성 시점에 이름으로 고정된다 (sticky)
         name: 'propertiesPanel.spritePose 1',
         triggers: [KEY_ID_A],
-        matchMode: 'exact',
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
         imageOverride: null,
       },
@@ -322,7 +320,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -357,7 +354,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -397,7 +393,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -423,14 +418,12 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
         {
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
-          matchMode: 'exact',
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -474,14 +467,12 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
         {
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
-          matchMode: 'exact',
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -517,14 +508,12 @@ describe('SingleSpritePanel 자세 편집', () => {
           poseId: 'pose-1',
           name: '왼손',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
           imageOverride: 'override.png',
         },
         {
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
-          matchMode: 'exact',
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -570,7 +559,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         poseId: expect.any(String),
         name: '왼손 common.copySuffix',
         triggers: [KEY_ID_C],
-        matchMode: 'exact',
         transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
         imageOverride: 'override.png',
       },
@@ -587,7 +575,6 @@ describe('SingleSpritePanel 자세 편집', () => {
           poseId: 'pose-1',
           name: '왼손 common.copySuffix',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -613,7 +600,6 @@ describe('SingleSpritePanel 자세 편집', () => {
       poseId,
       name,
       triggers: [key],
-      matchMode: 'exact' as const,
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
     });
@@ -652,7 +638,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const poses = Array.from({ length: 5 }, (_, index) => ({
       poseId: `pose-${index + 1}`,
       triggers: [`key-${index}`],
-      matchMode: 'exact' as const,
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
     }));
@@ -697,7 +682,6 @@ describe('SingleSpritePanel 자세 편집', () => {
           poseId: 'pose-1',
           name: 'propertiesPanel.spritePose 1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -722,7 +706,6 @@ describe('SingleSpritePanel 자세 편집', () => {
       poseId,
       name: `propertiesPanel.spritePose ${ordinal}`,
       triggers: [key],
-      matchMode: 'exact' as const,
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
     });
@@ -762,14 +745,12 @@ describe('SingleSpritePanel 자세 편집', () => {
           poseId: 'pose-1',
           name: 'propertiesPanel.spritePose 1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
         {
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -795,7 +776,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const poses = Array.from({ length: 64 }, (_, index) => ({
       poseId: `pose-${index}`,
       triggers: [`key-${index}`],
-      matchMode: 'exact' as const,
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
     }));
@@ -817,7 +797,6 @@ describe('SingleSpritePanel 자세 편집', () => {
     const basePose = {
       poseId: 'pose-1',
       triggers: [KEY_ID_A],
-      matchMode: 'exact' as const,
       transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
       imageOverride: null,
     };
@@ -845,7 +824,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -880,7 +858,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -909,7 +886,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -943,7 +919,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A, KEY_ID_B],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -971,7 +946,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A, deadId],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -1001,7 +975,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -1093,7 +1066,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -1151,7 +1123,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -1201,7 +1172,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
@@ -1314,7 +1284,6 @@ describe('SingleSpritePanel 자세 편집', () => {
         {
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
-          matchMode: 'exact',
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },

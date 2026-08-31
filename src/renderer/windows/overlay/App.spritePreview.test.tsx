@@ -151,7 +151,6 @@ const spritePosition = (dx: number): CanonicalReactiveSpritePosition => ({
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'linear',
 });

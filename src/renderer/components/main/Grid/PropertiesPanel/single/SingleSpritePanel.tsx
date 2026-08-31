@@ -327,7 +327,6 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       poseId: crypto.randomUUID(),
       name: nextDefaultPoseName(materialized),
       triggers: [],
-      matchMode: 'exact',
       // 새 상태는 항등에서 출발 - 기본 배치와의 차이만 상태가 가진다
       transform: { ...IDENTITY_SPRITE_TRANSFORM },
       imageOverride: null,
@@ -476,7 +475,6 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       {
         poseId: 'next',
         triggers: [],
-        matchMode: 'exact',
         transform: IDENTITY_SPRITE_TRANSFORM,
         imageOverride: null,
       },

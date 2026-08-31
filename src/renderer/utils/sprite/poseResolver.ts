@@ -1,7 +1,8 @@
-import type {
-  ReactiveSpritePosition,
-  SpritePose,
-  SpriteTransform,
+import {
+  spriteTriggerSetKey,
+  type ReactiveSpritePosition,
+  type SpritePose,
+  type SpriteTransform,
 } from '@src/types/key/sprites';
 
 // 평균 벡터 길이가 이보다 작으면 방향이 정의되지 않은 것으로 본다 (정반대 각 조합)
@@ -27,8 +28,7 @@ const clampRotation = (deg: number): number =>
   Math.min(180, Math.max(-180, deg));
 
 // 정확 일치 조회 키 - 중복·순서를 무시한 트리거 집합의 정규형
-const triggerSetKey = (triggers: readonly string[]): string =>
-  [...new Set(triggers)].sort().join('\n');
+const triggerSetKey = spriteTriggerSetKey;
 
 interface PreparedPoses {
   // 스프라이트가 참조하는 트리거 전체 (중복 제거)

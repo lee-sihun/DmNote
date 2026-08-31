@@ -62,7 +62,6 @@ const spritePosition = (
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
   ...overrides,
@@ -178,7 +177,6 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
   ): SpritePose => ({
     poseId,
     triggers: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
-    matchMode: 'exact',
     transform: { x: 10, y: 5, rotation: 45, scale: 2 },
     imageOverride: null,
     ...overrides,

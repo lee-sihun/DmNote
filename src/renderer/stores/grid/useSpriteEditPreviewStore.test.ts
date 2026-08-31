@@ -6,7 +6,6 @@ import type { SpritePose } from '@src/types/key/sprites';
 const pose = (poseId: string): SpritePose => ({
   poseId,
   triggers: ['k1'],
-  matchMode: 'exact',
   transform: { x: 0, y: 0, rotation: 0, scale: 1 },
   imageOverride: null,
 });

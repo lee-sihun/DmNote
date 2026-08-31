@@ -27,7 +27,6 @@ const makePose = (
 ): SpritePose => ({
   poseId,
   triggers,
-  matchMode: 'exact',
   transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
   imageOverride: null,
   ...overrides,
@@ -53,7 +52,6 @@ const makeSprite = (
   pivot: { x: 0.5, y: 1 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [makePose('p1', ['el-a'])],
-  activation: 'whileHeld',
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
   ...overrides,
