@@ -124,8 +124,8 @@ export function computeLayout(input: LayoutInput) {
       if (!pos || pos.hidden) return;
       xs.push(pos.dx);
       ys.push(pos.dy);
-      widths.push(pos.dx + (pos.width ?? 80));
-      heights.push(pos.dy + (pos.height ?? 80));
+      widths.push(pos.dx + (pos.width ?? 60));
+      heights.push(pos.dy + (pos.height ?? 60));
     });
 
     // 스프라이트 활동 영역 전체를 콘텐츠 바운즈에 포함 (계약 §9)

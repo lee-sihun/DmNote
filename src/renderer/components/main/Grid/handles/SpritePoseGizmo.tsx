@@ -349,7 +349,6 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
       <div
         role="button"
         aria-label={t('propertiesPanel.spriteContactPoint') || '손끝'}
-        tabIndex={-1}
         title={knobTitle}
         onPointerDown={beginDrag}
         className="absolute pointer-events-auto"

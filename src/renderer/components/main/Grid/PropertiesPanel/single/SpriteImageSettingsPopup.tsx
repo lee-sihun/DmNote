@@ -11,7 +11,19 @@ import {
   type ReactiveSpritePosition,
   type SpriteImageFit,
 } from '@src/types/key/sprites';
+import { clamp } from '@utils/core/clamp';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
+
+// 이미지 상자 입력의 편집 한계. 저장 계약(SPRITE_CONSTRAINTS.imageRect,
+// 좌표 ±32768 / 치수 하한 0.000001)보다 좁다 - 손으로 칠 수 있는 범위만 열고
+// 그 밖의 값은 리사이즈 배율과 플러그인 patch가 만든다. 좁히기만 하므로
+// 기존 값은 표시·보존되고 이 필드를 직접 건드릴 때만 범위로 접힌다
+const IMAGE_RECT_EDIT_LIMITS = {
+  coordMin: -9999,
+  coordMax: 9999,
+  dimensionMin: 1,
+  dimensionMax: 9999,
+} as const;
 
 interface SpriteImageSettingsPopupProps {
   open: boolean;
@@ -84,8 +96,8 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
             prefix="X"
             ariaLabel={`${t('propertiesPanel.spriteImageRect') || '위치'} X`}
             width="100%"
-            min={-9999}
-            max={9999}
+            min={IMAGE_RECT_EDIT_LIMITS.coordMin}
+            max={IMAGE_RECT_EDIT_LIMITS.coordMax}
             allowDecimal
             decimalScale={1}
           />
@@ -97,8 +109,8 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
             prefix="Y"
             ariaLabel={`${t('propertiesPanel.spriteImageRect') || '위치'} Y`}
             width="100%"
-            min={-9999}
-            max={9999}
+            min={IMAGE_RECT_EDIT_LIMITS.coordMin}
+            max={IMAGE_RECT_EDIT_LIMITS.coordMax}
             allowDecimal
             decimalScale={1}
           />
@@ -107,34 +119,66 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
           <NumberInput
             value={position.imageRect.width}
             onChange={(value) =>
-              onCommit(rectField({ width: Math.max(1, value) }))
+              onCommit(
+                rectField({
+                  width: clamp(
+                    value,
+                    IMAGE_RECT_EDIT_LIMITS.dimensionMin,
+                    IMAGE_RECT_EDIT_LIMITS.dimensionMax,
+                  ),
+                }),
+              )
             }
             onPreview={(value) =>
-              onPreview(rectField({ width: Math.max(1, value) }))
+              onPreview(
+                rectField({
+                  width: clamp(
+                    value,
+                    IMAGE_RECT_EDIT_LIMITS.dimensionMin,
+                    IMAGE_RECT_EDIT_LIMITS.dimensionMax,
+                  ),
+                }),
+              )
             }
             onCancel={onCancel}
             prefix="W"
             ariaLabel={`${t('propertiesPanel.spriteImageSize') || '크기'} W`}
             width="100%"
-            min={1}
-            max={9999}
+            min={IMAGE_RECT_EDIT_LIMITS.dimensionMin}
+            max={IMAGE_RECT_EDIT_LIMITS.dimensionMax}
             allowDecimal
             decimalScale={1}
           />
           <NumberInput
             value={position.imageRect.height}
             onChange={(value) =>
-              onCommit(rectField({ height: Math.max(1, value) }))
+              onCommit(
+                rectField({
+                  height: clamp(
+                    value,
+                    IMAGE_RECT_EDIT_LIMITS.dimensionMin,
+                    IMAGE_RECT_EDIT_LIMITS.dimensionMax,
+                  ),
+                }),
+              )
             }
             onPreview={(value) =>
-              onPreview(rectField({ height: Math.max(1, value) }))
+              onPreview(
+                rectField({
+                  height: clamp(
+                    value,
+                    IMAGE_RECT_EDIT_LIMITS.dimensionMin,
+                    IMAGE_RECT_EDIT_LIMITS.dimensionMax,
+                  ),
+                }),
+              )
             }
             onCancel={onCancel}
             prefix="H"
             ariaLabel={`${t('propertiesPanel.spriteImageSize') || '크기'} H`}
             width="100%"
-            min={1}
-            max={9999}
+            min={IMAGE_RECT_EDIT_LIMITS.dimensionMin}
+            max={IMAGE_RECT_EDIT_LIMITS.dimensionMax}
             allowDecimal
             decimalScale={1}
           />
