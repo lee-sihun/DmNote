@@ -1,5 +1,8 @@
 use super::*;
 
+#[cfg(target_os = "windows")]
+use crate::state::app_state::native_window::applied_overlay_frame_from_hwnd;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::state::app_state) enum OverlayRestoreSource {
     #[cfg(any(target_os = "windows", test))]

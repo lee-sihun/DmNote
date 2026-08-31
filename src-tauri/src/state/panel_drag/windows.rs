@@ -161,8 +161,7 @@ unsafe fn start_on_owner_thread(
     mode: PanelDragStartMode,
     enter_sender: oneshot::Sender<()>,
 ) -> OwnerStartResult {
-    use tauri::PhysicalPosition;
-    use windows::Win32::{
+    use ::windows::Win32::{
         Foundation::{LPARAM, POINT, WPARAM},
         UI::{
             Input::KeyboardAndMouse::{GetAsyncKeyState, ReleaseCapture, VK_LBUTTON, VK_RBUTTON},
@@ -172,6 +171,7 @@ unsafe fn start_on_owner_thread(
             },
         },
     };
+    use tauri::PhysicalPosition;
 
     let Some(window) = app.get_webview_window(super::super::PANEL_LABEL) else {
         return owner_start_failure(
@@ -693,7 +693,7 @@ fn main_drag_scale(
 
 #[cfg(target_os = "windows")]
 fn tao_undecorated_shadow_seed_inset(target_scale: f64) -> Option<NativePoint> {
-    use windows::Win32::UI::{
+    use ::windows::Win32::UI::{
         HiDpi::GetSystemMetricsForDpi,
         WindowsAndMessaging::{SM_CXPADDEDBORDER, SM_CXSIZEFRAME},
     };
@@ -752,7 +752,7 @@ unsafe fn ensure_native_observer(
     controller: &PanelDragController,
     window: &tauri::WebviewWindow,
 ) -> Result<*mut NativeDragContext, PanelDragError> {
-    use windows::Win32::UI::Shell::SetWindowSubclass;
+    use ::windows::Win32::UI::Shell::SetWindowSubclass;
 
     const SUBCLASS_ID: usize = 0x444d_5044;
 
@@ -806,7 +806,7 @@ unsafe fn ensure_native_observer(
 
 #[cfg(target_os = "windows")]
 unsafe fn install_native_hook(context: *mut NativeDragContext) -> Result<(), PanelDragError> {
-    use windows::Win32::{
+    use ::windows::Win32::{
         System::Threading::GetCurrentThreadId,
         UI::WindowsAndMessaging::{SetWindowsHookExW, WH_GETMESSAGE},
     };
@@ -859,7 +859,7 @@ unsafe fn install_native_hook(context: *mut NativeDragContext) -> Result<(), Pan
 
 #[cfg(target_os = "windows")]
 unsafe fn cleanup_native_hook(context: *mut NativeDragContext) {
-    use windows::Win32::UI::WindowsAndMessaging::{UnhookWindowsHookEx, HHOOK};
+    use ::windows::Win32::UI::WindowsAndMessaging::{UnhookWindowsHookEx, HHOOK};
 
     if context.is_null() {
         return;
@@ -894,9 +894,9 @@ pub(super) fn schedule_native_hook_cleanup(app: &AppHandle, identity: Arc<Atomic
             unsafe { cleanup_native_hook(context) };
             let hwnd = unsafe { windows_hwnd((*context).hwnd) };
             let _ = unsafe {
-                windows::Win32::UI::WindowsAndMessaging::SendMessageW(
+                ::windows::Win32::UI::WindowsAndMessaging::SendMessageW(
                     hwnd,
-                    windows::Win32::UI::WindowsAndMessaging::WM_CANCELMODE,
+                    ::windows::Win32::UI::WindowsAndMessaging::WM_CANCELMODE,
                     None,
                     None,
                 )
@@ -963,20 +963,20 @@ async fn resolve_start_timeout(
 
 #[cfg(target_os = "windows")]
 unsafe extern "system" fn panel_drag_subclass_proc(
-    hwnd: windows::Win32::Foundation::HWND,
+    hwnd: ::windows::Win32::Foundation::HWND,
     message: u32,
-    wparam: windows::Win32::Foundation::WPARAM,
-    lparam: windows::Win32::Foundation::LPARAM,
+    wparam: ::windows::Win32::Foundation::WPARAM,
+    lparam: ::windows::Win32::Foundation::LPARAM,
     subclass_id: usize,
     reference_data: usize,
-) -> windows::Win32::Foundation::LRESULT {
-    use std::panic::{catch_unwind, AssertUnwindSafe};
-    use windows::Win32::UI::{
+) -> ::windows::Win32::Foundation::LRESULT {
+    use ::windows::Win32::UI::{
         Shell::{DefSubclassProc, RemoveWindowSubclass},
         WindowsAndMessaging::{
             SendMessageW, WM_CANCELMODE, WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE, WM_NCDESTROY,
         },
     };
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     catch_unwind(AssertUnwindSafe(|| unsafe {
         let context = reference_data as *mut NativeDragContext;
@@ -1028,14 +1028,14 @@ unsafe extern "system" fn panel_drag_subclass_proc(
 #[cfg(target_os = "windows")]
 unsafe extern "system" fn panel_drag_message_hook(
     code: i32,
-    wparam: windows::Win32::Foundation::WPARAM,
-    lparam: windows::Win32::Foundation::LPARAM,
-) -> windows::Win32::Foundation::LRESULT {
-    use std::panic::{catch_unwind, AssertUnwindSafe};
-    use windows::Win32::UI::{
+    wparam: ::windows::Win32::Foundation::WPARAM,
+    lparam: ::windows::Win32::Foundation::LPARAM,
+) -> ::windows::Win32::Foundation::LRESULT {
+    use ::windows::Win32::UI::{
         Input::KeyboardAndMouse::VK_ESCAPE,
         WindowsAndMessaging::{CallNextHookEx, MSG, WM_KEYDOWN, WM_SYSKEYDOWN},
     };
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
         if code < 0 || lparam.0 == 0 {
@@ -1056,8 +1056,8 @@ unsafe extern "system" fn panel_drag_message_hook(
 }
 
 #[cfg(target_os = "windows")]
-fn windows_hwnd(value: usize) -> windows::Win32::Foundation::HWND {
-    windows::Win32::Foundation::HWND(value as *mut std::ffi::c_void)
+fn windows_hwnd(value: usize) -> ::windows::Win32::Foundation::HWND {
+    ::windows::Win32::Foundation::HWND(value as *mut std::ffi::c_void)
 }
 
 #[cfg(target_os = "windows")]

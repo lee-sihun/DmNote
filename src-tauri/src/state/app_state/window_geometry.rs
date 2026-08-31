@@ -11,6 +11,7 @@ pub(super) use persistence::{
 pub(super) use persistence::{
     panel_bounds_sample_from_window, PanelBoundsChange, PanelBoundsPersistenceController,
 };
+#[cfg(not(target_os = "windows"))]
 pub(super) fn convert_physical_bounds_to_logical(
     bounds: &OverlayBounds,
     monitors: &MonitorData,

@@ -77,26 +77,30 @@ use native_window::{
     raise_panel_window_without_activation,
 };
 
+#[cfg(any(target_os = "windows", test))]
+use window_geometry::applied_overlay_frame_from_native;
+#[cfg(not(target_os = "macos"))]
+use window_geometry::applied_overlay_frame_from_window;
+#[cfg(not(target_os = "windows"))]
+use window_geometry::convert_physical_bounds_to_logical;
 #[cfg(all(target_os = "windows", not(test)))]
 use window_geometry::OverlayRestoreSource;
-#[cfg(test)]
-use window_geometry::{
-    applied_overlay_frame_from_native, apply_panel_bounds_change, changed_panel_max_height,
-    next_overlay_placement_trust, panel_bounds_from_sample, panel_height_bounds,
-    panel_position_beside_main, resolve_windows_overlay_placement,
-    stored_overlay_bounds_for_persistence, MonitorSpec, NativeRejectReason, OverlayRestoreSource,
-    PanelBoundsPersistenceState, PanelBoundsSample,
-};
 use window_geometry::{
     applied_overlay_frame_from_placement, complete_overlay_scale_resolution,
-    convert_physical_bounds_to_logical, flush_deferred_overlay_bounds, logical_position_to_native,
-    main_window_content_origin, main_window_logical_rect, main_window_native_rect,
-    native_placement_from_window, overlay_restore_window_scale, panel_bounds_sample_from_window,
-    panel_client_to_outer_position, persist_overlay_placement,
-    persist_overlay_placement_from_window, resolve_overlay_placement, resolve_panel_window_layout,
-    AppliedOverlayFrame, MonitorData, NativePlacement, NativeRect, OverlayPersistenceAuthority,
-    OverlayPlacementTrust, OverlayPosition, PanelBoundsChange, PanelBoundsPersistenceController,
-    PanelWindowLayout, ResolvedOverlayPlacement,
+    flush_deferred_overlay_bounds, logical_position_to_native, main_window_content_origin,
+    main_window_logical_rect, main_window_native_rect, native_placement_from_window,
+    overlay_restore_window_scale, panel_bounds_sample_from_window, panel_client_to_outer_position,
+    persist_overlay_placement, persist_overlay_placement_from_window, resolve_overlay_placement,
+    resolve_panel_window_layout, AppliedOverlayFrame, MonitorData, NativePlacement, NativeRect,
+    OverlayPersistenceAuthority, OverlayPlacementTrust, OverlayPosition, PanelBoundsChange,
+    PanelBoundsPersistenceController, PanelWindowLayout, ResolvedOverlayPlacement,
+};
+#[cfg(test)]
+use window_geometry::{
+    apply_panel_bounds_change, changed_panel_max_height, next_overlay_placement_trust,
+    panel_bounds_from_sample, panel_height_bounds, panel_position_beside_main,
+    resolve_windows_overlay_placement, stored_overlay_bounds_for_persistence, MonitorSpec,
+    NativeRejectReason, OverlayRestoreSource, PanelBoundsPersistenceState, PanelBoundsSample,
 };
 pub use window_geometry::{LogicalPoint, LogicalRect, PanelDragContext};
 

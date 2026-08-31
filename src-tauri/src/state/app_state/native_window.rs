@@ -434,7 +434,7 @@ unsafe fn install_overlay_move_observer_on_owner_thread(
 }
 
 #[cfg(target_os = "windows")]
-unsafe fn applied_overlay_frame_from_hwnd(
+pub(in crate::state::app_state) unsafe fn applied_overlay_frame_from_hwnd(
     hwnd: windows::Win32::Foundation::HWND,
 ) -> Result<AppliedOverlayFrame> {
     use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
