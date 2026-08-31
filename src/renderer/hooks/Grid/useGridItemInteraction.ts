@@ -212,8 +212,6 @@ export const useGridItemInteraction = ({
     isDraggingOrResizing,
     draggable,
     handleSelectionDragPointerDown,
-    movedDuringPressRef,
-    pressMovedRef,
     handleClick,
     handleDoubleClick,
     handleContextMenu,

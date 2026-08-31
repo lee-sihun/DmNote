@@ -18,21 +18,6 @@ import { makeCanonicalSpritePosition } from '@utils/sprite/spriteFixtures';
 
 vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
 
-vi.mock('@hooks/Grid', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@hooks/Grid')>();
-  return {
-    ...actual,
-    useDraggable: () => ({
-      ref: () => {},
-      dx: 0,
-      dy: 0,
-      wasMoved: false,
-      isDragging: false,
-      recentPressMovedRef: { current: false },
-    }),
-  };
-});
-
 // 공용 상호작용 훅은 배럴이 아니라 소스 모듈을 직접 쓴다
 vi.mock('@hooks/Grid/useDraggable', () => ({
   useDraggable: () => ({
