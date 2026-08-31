@@ -64,6 +64,61 @@ type EditorPatchV1 = {
   [Keys API](/docs/api-reference/keys)를 참고하세요.
 </Callout>
 
+## 스프라이트 위치 타입
+
+반응형 스프라이트는 담당 키를 누르고 있는 동안 자세가 바뀌는 이미지 레이어입니다.
+키 요소와 달리 키 매핑에 인덱스로 결합하지 않고, 자세마다 담당 키 요소 id를 직접
+참조합니다. 읽은 문서에는 `id`와 `poseId`가 항상 실려 있고, 쓸 때는 둘 다 생략해
+새 값을 발급받을 수 있습니다. 아래 표기된 개수·값 상한은 커밋 시점에
+검증하고, 읽은 문서는 저장된 데이터를 그대로 되돌려줍니다.
+
+```typescript
+// 탭/모드 id(예: "4key")로 키잉
+type SpritePositions = Record<string, ReactiveSpritePosition[]>;
+
+interface ReactiveSpritePosition {
+  id?: string; // 안정 요소 신원 (UUID)
+  dx: number; // 활동 영역 원점과 크기, 오버레이 창 크기 계산에 들어갑니다
+  dy: number;
+  width: number;
+  height: number;
+  hidden: boolean;
+  zIndex: number | null;
+  layerName?: string | null; // 미설정이면 백엔드가 키를 생략합니다
+  groupId?: string | null; // 미설정이면 백엔드가 키를 생략합니다
+  className: string | null;
+  useInlineStyles: boolean | null;
+  baseImage: string | null; // 일치하는 자세가 없을 때 보여줄 이미지
+  imageFit: 'cover' | 'contain' | 'fill' | null; // 렌더링은 부재를 'contain'으로 취급합니다
+  imageRect: { x: number; y: number; width: number; height: number }; // 활동 영역 안 이미지 박스, 좌표는 ±32768 이내
+  pivot: { x: number; y: number }; // 정규화 변환 원점, 각각 0–1
+  idleTransform: SpriteTransform; // 일치하는 자세가 없을 때의 기본 변환
+  poses: SpritePose[]; // 커밋은 최대 64개까지 허용
+  transitionMs: number; // 자세 전환 시간, 0–1000, 기본 90
+  transitionEasing: string; // CSS easing, 기본 'cubic-bezier(0.4, 0, 0.2, 1)'
+}
+
+interface SpritePose {
+  poseId?: string; // 안정 자세 신원 (UUID)
+  name?: string | null; // 미설정이면 백엔드가 키를 생략합니다
+  triggers: string[]; // 키 요소 id 목록, 커밋은 최대 512개까지 허용하며 정렬·중복 제거
+  transform: SpriteTransform;
+  imageOverride: string | null; // 이 자세가 활성인 동안 baseImage를 대체
+}
+
+interface SpriteTransform {
+  x: number; // -2000–2000 px
+  y: number; // -2000–2000 px
+  rotation: number; // -180–180 도
+  scale: number; // 0.1–10
+}
+```
+
+자세는 스프라이트가 참조하는 키 중 현재 눌린 키 집합이 트리거 집합과 정확히
+일치할 때 활성화됩니다. 참조하는 다른 키를 더 누르면 그 자세는 해제되고,
+스프라이트가 참조하지 않는 키는 무시합니다. 한 스프라이트의 두 자세가 같은
+트리거 집합을 가질 수 없고, 빈 트리거 목록은 커밋에서 거부됩니다.
+
 ## 현재 문서 조회
 
 ### `dmn.editor.get(): Promise<EditorGetResult>`

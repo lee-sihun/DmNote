@@ -66,6 +66,63 @@ that top-level collection. It is not an item-level diff.
   rules. See the [Keys API](/docs/api-reference/keys) for the identity rules.
 </Callout>
 
+## Sprite Position Types
+
+Reactive sprites are image layers that switch poses while their trigger keys
+are held. Unlike key elements they are not index-coupled to key mappings; each
+pose references the responsible key element ids directly. Documents you read
+always carry `id` and `poseId`; writes may omit both to receive fresh ones.
+The collection and value limits noted below are enforced when you commit;
+documents you read echo stored data as is.
+
+```typescript
+// Keyed by tab/mode id (e.g., "4key")
+type SpritePositions = Record<string, ReactiveSpritePosition[]>;
+
+interface ReactiveSpritePosition {
+  id?: string; // stable element identity (UUID)
+  dx: number; // activity area origin and size; feeds overlay window sizing
+  dy: number;
+  width: number;
+  height: number;
+  hidden: boolean;
+  zIndex: number | null;
+  layerName?: string | null; // omitted by the backend when unset
+  groupId?: string | null; // omitted by the backend when unset
+  className: string | null;
+  useInlineStyles: boolean | null;
+  baseImage: string | null; // image shown when no pose matches
+  imageFit: 'cover' | 'contain' | 'fill' | null; // rendering treats absent as 'contain'
+  imageRect: { x: number; y: number; width: number; height: number }; // image box inside the activity area, coordinates within ±32768
+  pivot: { x: number; y: number }; // normalized transform origin, 0–1 each
+  idleTransform: SpriteTransform; // base transform when no pose matches
+  poses: SpritePose[]; // commits accept at most 64
+  transitionMs: number; // pose blend duration, 0–1000, default 90
+  transitionEasing: string; // CSS easing, default 'cubic-bezier(0.4, 0, 0.2, 1)'
+}
+
+interface SpritePose {
+  poseId?: string; // stable pose identity (UUID)
+  name?: string | null; // omitted by the backend when unset
+  triggers: string[]; // key element ids; commits accept at most 512, sorted and deduplicated
+  transform: SpriteTransform;
+  imageOverride: string | null; // replaces baseImage while this pose is active
+}
+
+interface SpriteTransform {
+  x: number; // -2000–2000 px
+  y: number; // -2000–2000 px
+  rotation: number; // -180–180 deg
+  scale: number; // 0.1–10
+}
+```
+
+A pose activates while the set of held keys, among the keys the sprite
+references, exactly matches its trigger set - holding an additional referenced
+key deactivates it, while keys the sprite does not reference are ignored. Two
+poses of one sprite may not share the same trigger set, and commits reject
+empty trigger lists.
+
 ## Read the Current Document
 
 ### `dmn.editor.get(): Promise<EditorGetResult>`
