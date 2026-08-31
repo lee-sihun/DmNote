@@ -39,8 +39,8 @@ const MAX_KEY_LABEL_BYTES: usize = 1_024;
 // plugin group_id 검증(state/plugin.rs)도 이 상한을 공유 - 레이어 그룹 id 참조라 동일 규칙
 pub(crate) const MAX_GROUP_ID_BYTES: usize = 256;
 const MAX_GROUP_NAME_BYTES: usize = 1_024;
-const MAX_ABS_COORDINATE: f64 = 32_768.0;
-const MAX_DIMENSION: f64 = 32_768.0;
+pub(crate) const MAX_ABS_COORDINATE: f64 = 32_768.0;
+pub(crate) const MAX_DIMENSION: f64 = 32_768.0;
 use crate::models::{
     SHADOW_BLUR_MAX as MAX_SHADOW_BLUR, SHADOW_BLUR_MIN as MIN_SHADOW_BLUR,
     SHADOW_OFFSET_MAX as MAX_SHADOW_OFFSET, SHADOW_OFFSET_MIN as MIN_SHADOW_OFFSET,
@@ -2765,6 +2765,78 @@ mod tests {
     };
 
     use super::*;
+
+    const SPRITE_CONSTRAINT_FIXTURE: &str =
+        include_str!("../../../tests/fixtures/sprite-constraint-parity.json");
+
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SpriteConstraintFixture {
+        offset: NumericRangeFixture,
+        rotation: NumericRangeFixture,
+        scale: NumericRangeFixture,
+        anchor: NumericRangeFixture,
+        transition_ms: IntegerRangeFixture,
+        image_rect: ImageRectRangeFixture,
+        max_poses: usize,
+        max_triggers_per_pose: usize,
+        default_transition_ms: u32,
+        default_transition_easing: String,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct NumericRangeFixture {
+        min: f64,
+        max: f64,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct IntegerRangeFixture {
+        min: u32,
+        max: u32,
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ImageRectRangeFixture {
+        coord_min: f64,
+        coord_max: f64,
+        dimension_max: f64,
+    }
+
+    fn sprite_constraint_fixture() -> SpriteConstraintFixture {
+        serde_json::from_str(SPRITE_CONSTRAINT_FIXTURE).unwrap()
+    }
+
+    fn validate_new_sprite(
+        sprite: ReactiveSpritePosition,
+    ) -> Result<(), crate::errors::EditorCommitError> {
+        let current_store = AppStoreData::default();
+        let mut candidate_store = current_store.clone();
+        candidate_store
+            .sprite_positions
+            .insert("4key".to_string(), vec![sprite]);
+        validate_document_transition(
+            &EditorDocumentV1::from_store(&current_store),
+            &EditorDocumentV1::from_store(&candidate_store),
+            &current_store,
+            &candidate_store,
+        )
+    }
+
+    fn sprite_with_pose_count(count: usize) -> ReactiveSpritePosition {
+        ReactiveSpritePosition {
+            id: Uuid::from_u128(1).to_string(),
+            poses: (0..count)
+                .map(|index| SpritePose {
+                    pose_id: Uuid::from_u128(1_000 + index as u128).to_string(),
+                    triggers: vec![Uuid::from_u128(10_000 + index as u128).to_string()],
+                    ..SpritePose::default()
+                })
+                .collect(),
+            ..ReactiveSpritePosition::default()
+        }
+    }
 
     fn request(keys: KeyMappings) -> EditorCommitRequest {
         EditorCommitRequest {
@@ -6188,6 +6260,203 @@ mod tests {
             }],
             ..ReactiveSpritePosition::default()
         }
+    }
+
+    #[test]
+    fn sprite_transform_constraints_follow_shared_fixture() {
+        let fixture = sprite_constraint_fixture();
+        assert_eq!(fixture.offset.min, SPRITE_TRANSFORM_OFFSET_MIN);
+        assert_eq!(fixture.offset.max, SPRITE_TRANSFORM_OFFSET_MAX);
+        assert_eq!(fixture.rotation.min, SPRITE_TRANSFORM_ROTATION_MIN);
+        assert_eq!(fixture.rotation.max, SPRITE_TRANSFORM_ROTATION_MAX);
+        assert_eq!(fixture.scale.min, SPRITE_TRANSFORM_SCALE_MIN);
+        assert_eq!(fixture.scale.max, SPRITE_TRANSFORM_SCALE_MAX);
+
+        for transform in [
+            SpriteTransform {
+                x: fixture.offset.min,
+                y: fixture.offset.max,
+                rotation: fixture.rotation.min,
+                scale: fixture.scale.min,
+            },
+            SpriteTransform {
+                x: fixture.offset.max,
+                y: fixture.offset.min,
+                rotation: fixture.rotation.max,
+                scale: fixture.scale.max,
+            },
+        ] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                idle_transform: transform,
+                ..ReactiveSpritePosition::default()
+            });
+            assert!(!violations.contains("INVALID_SPRITE_TRANSFORM"));
+        }
+
+        for transform in [
+            SpriteTransform {
+                x: fixture.offset.min - 0.000_001,
+                ..SpriteTransform::default()
+            },
+            SpriteTransform {
+                y: fixture.offset.max + 0.000_001,
+                ..SpriteTransform::default()
+            },
+            SpriteTransform {
+                rotation: fixture.rotation.max + 0.000_001,
+                ..SpriteTransform::default()
+            },
+            SpriteTransform {
+                rotation: fixture.rotation.min - 0.000_001,
+                ..SpriteTransform::default()
+            },
+            SpriteTransform {
+                scale: fixture.scale.min - 0.000_001,
+                ..SpriteTransform::default()
+            },
+            SpriteTransform {
+                scale: fixture.scale.max + 0.000_001,
+                ..SpriteTransform::default()
+            },
+        ] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                idle_transform: transform,
+                ..ReactiveSpritePosition::default()
+            });
+            assert!(violations.contains("INVALID_SPRITE_TRANSFORM"));
+        }
+    }
+
+    #[test]
+    fn sprite_geometry_constraints_follow_shared_fixture() {
+        let fixture = sprite_constraint_fixture();
+        assert_eq!(fixture.image_rect.coord_min, -MAX_ABS_COORDINATE);
+        assert_eq!(fixture.image_rect.coord_max, MAX_ABS_COORDINATE);
+        assert_eq!(fixture.image_rect.dimension_max, MAX_DIMENSION);
+
+        for pivot in [
+            crate::models::SpriteAnchor {
+                x: fixture.anchor.min,
+                y: fixture.anchor.max,
+            },
+            crate::models::SpriteAnchor {
+                x: fixture.anchor.max,
+                y: fixture.anchor.min,
+            },
+        ] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                pivot,
+                ..ReactiveSpritePosition::default()
+            });
+            assert!(!violations.contains("INVALID_SPRITE_PIVOT"));
+        }
+        for pivot in [
+            crate::models::SpriteAnchor {
+                x: fixture.anchor.min - 0.000_001,
+                y: fixture.anchor.min,
+            },
+            crate::models::SpriteAnchor {
+                x: fixture.anchor.max,
+                y: fixture.anchor.max + 0.000_001,
+            },
+        ] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                pivot,
+                ..ReactiveSpritePosition::default()
+            });
+            assert!(violations.contains("INVALID_SPRITE_PIVOT"));
+        }
+
+        let at_limit = SpriteRect {
+            x: fixture.image_rect.coord_min,
+            y: fixture.image_rect.coord_max,
+            width: fixture.image_rect.dimension_max,
+            height: fixture.image_rect.dimension_max,
+        };
+        assert!(!sprite_violation_codes(ReactiveSpritePosition {
+            image_rect: at_limit,
+            ..ReactiveSpritePosition::default()
+        })
+        .contains("INVALID_SPRITE_RECT"));
+        for image_rect in [
+            SpriteRect {
+                x: fixture.image_rect.coord_min - 1.0,
+                ..at_limit
+            },
+            SpriteRect {
+                y: fixture.image_rect.coord_max + 1.0,
+                ..at_limit
+            },
+            SpriteRect {
+                width: fixture.image_rect.dimension_max + 1.0,
+                ..at_limit
+            },
+            SpriteRect {
+                height: 0.0,
+                ..at_limit
+            },
+        ] {
+            assert!(sprite_violation_codes(ReactiveSpritePosition {
+                image_rect,
+                ..ReactiveSpritePosition::default()
+            })
+            .contains("INVALID_SPRITE_RECT"));
+        }
+    }
+
+    #[test]
+    fn sprite_collection_constraints_follow_shared_fixture() {
+        let fixture = sprite_constraint_fixture();
+        assert_eq!(fixture.max_poses, MAX_SPRITE_POSES);
+        assert_eq!(fixture.max_triggers_per_pose, MAX_SPRITE_POSE_TRIGGERS);
+
+        validate_new_sprite(sprite_with_pose_count(fixture.max_poses)).unwrap();
+        let error = validate_new_sprite(sprite_with_pose_count(fixture.max_poses + 1)).unwrap_err();
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|details| details.validation_code.as_deref()),
+            Some("COLLECTION_TOO_LARGE")
+        );
+
+        let triggers = (0..fixture.max_triggers_per_pose)
+            .map(|index| Uuid::from_u128(20_000 + index as u128).to_string())
+            .collect::<Vec<_>>();
+        let at_limit = sprite_violation_codes(sprite_with_triggers(triggers.clone()));
+        assert!(!at_limit.contains("TOO_MANY_SPRITE_POSE_TRIGGERS"));
+        let mut over_limit = triggers;
+        over_limit
+            .push(Uuid::from_u128(20_000 + fixture.max_triggers_per_pose as u128).to_string());
+        assert!(sprite_violation_codes(sprite_with_triggers(over_limit))
+            .contains("TOO_MANY_SPRITE_POSE_TRIGGERS"));
+    }
+
+    #[test]
+    fn sprite_transition_constraints_and_defaults_follow_shared_fixture() {
+        let fixture = sprite_constraint_fixture();
+        assert_eq!(fixture.transition_ms.min, 0);
+        assert_eq!(fixture.transition_ms.max, SPRITE_TRANSITION_MS_MAX);
+        for transition_ms in [fixture.transition_ms.min, fixture.transition_ms.max] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                transition_ms,
+                ..ReactiveSpritePosition::default()
+            });
+            assert!(!violations.contains("INVALID_SPRITE_TRANSITION"));
+        }
+        assert!(sprite_violation_codes(ReactiveSpritePosition {
+            transition_ms: fixture.transition_ms.max + 1,
+            ..ReactiveSpritePosition::default()
+        })
+        .contains("INVALID_SPRITE_TRANSITION"));
+        assert_eq!(
+            crate::models::default_sprite_transition_ms(),
+            fixture.default_transition_ms
+        );
+        assert_eq!(
+            crate::models::default_sprite_transition_easing(),
+            fixture.default_transition_easing
+        );
     }
 
     #[test]

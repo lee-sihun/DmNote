@@ -1968,6 +1968,60 @@ mod tests {
     }
 
     #[test]
+    fn preset_import_ignores_stale_sprite_strategy_keys() {
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-stale-sprite-strategy-preset-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("preset.json");
+        let sprites = SpritePositions::from([(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                id: uuid::Uuid::new_v4().to_string(),
+                poses: vec![SpritePose {
+                    pose_id: uuid::Uuid::new_v4().to_string(),
+                    triggers: vec![uuid::Uuid::new_v4().to_string()],
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            }],
+        )]);
+        let mut value = serde_json::to_value(PresetFile {
+            sprite_positions: Some(sprites),
+            ..PresetFile::default()
+        })
+        .unwrap();
+        let sprite = value
+            .pointer_mut("/spritePositions/4key/0")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap();
+        sprite.insert("activation".to_string(), serde_json::json!("whileHeld"));
+        sprite
+            .get_mut("poses")
+            .and_then(serde_json::Value::as_array_mut)
+            .and_then(|poses| poses.first_mut())
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .insert("matchMode".to_string(), serde_json::json!("exact"));
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+
+        let imported = read_preset_file(&path).unwrap();
+        let serialized = serde_json::to_value(imported).unwrap();
+        let sprite = serialized
+            .pointer("/spritePositions/4key/0")
+            .and_then(serde_json::Value::as_object)
+            .unwrap();
+
+        assert!(!sprite.contains_key("activation"));
+        assert!(!sprite["poses"][0]
+            .as_object()
+            .unwrap()
+            .contains_key("matchMode"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn committed_preset_css_paths_exclude_unrelated_store_paths() {
         let mut committed = AppStoreData {
             custom_css: CustomCss {

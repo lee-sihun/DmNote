@@ -911,10 +911,87 @@ pub struct EditorTransactionResult<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{ReactiveSpritePosition, SpritePose};
 
     // TS canonical 배열과 공유하는 property 태그 fixture
     const PROPERTY_TAG_FIXTURE: &str =
         include_str!("../../../tests/fixtures/editor-property-tags.json");
+
+    fn sprite_with_pose() -> ReactiveSpritePosition {
+        ReactiveSpritePosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            poses: vec![SpritePose {
+                pose_id: uuid::Uuid::new_v4().to_string(),
+                triggers: vec![uuid::Uuid::new_v4().to_string()],
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        }
+    }
+
+    fn insert_stale_sprite_strategy_keys(value: &mut serde_json::Value, pointer: &str) {
+        let sprite = value
+            .pointer_mut(pointer)
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("sprite object exists");
+        sprite.insert("activation".to_string(), serde_json::json!("whileHeld"));
+        sprite
+            .get_mut("poses")
+            .and_then(serde_json::Value::as_array_mut)
+            .and_then(|poses| poses.first_mut())
+            .expect("pose exists")
+            .as_object_mut()
+            .expect("pose object exists")
+            .insert("matchMode".to_string(), serde_json::json!("exact"));
+    }
+
+    fn assert_stale_sprite_strategy_keys_omitted(value: &serde_json::Value, pointer: &str) {
+        let sprite = value
+            .pointer(pointer)
+            .and_then(serde_json::Value::as_object)
+            .expect("sprite object exists");
+        assert!(!sprite.contains_key("activation"));
+        assert!(!sprite["poses"][0]
+            .as_object()
+            .expect("pose object exists")
+            .contains_key("matchMode"));
+    }
+
+    #[test]
+    fn v1_editor_patch_ignores_stale_sprite_strategy_keys() {
+        let mut sprite_positions = SpritePositions::new();
+        sprite_positions.insert("4key".to_string(), vec![sprite_with_pose()]);
+        let mut value = serde_json::to_value(EditorPatchV1 {
+            sprite_positions: Some(sprite_positions),
+            ..EditorPatchV1::default()
+        })
+        .unwrap();
+        insert_stale_sprite_strategy_keys(&mut value, "/spritePositions/4key/0");
+
+        let restored: EditorPatchV1 = serde_json::from_value(value).unwrap();
+        let serialized = serde_json::to_value(restored).unwrap();
+
+        assert_stale_sprite_strategy_keys_omitted(&serialized, "/spritePositions/4key/0");
+    }
+
+    #[test]
+    fn frozen_sprite_insert_ignores_stale_strategy_keys() {
+        let mut value = serde_json::to_value(EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![EditorFrozenElementV1::Sprite {
+                position: sprite_with_pose(),
+            }],
+            groups: Vec::new(),
+            z_updates: Vec::new(),
+        })
+        .unwrap();
+        insert_stale_sprite_strategy_keys(&mut value, "/elements/0/position");
+
+        let restored: EditorOpV1 = serde_json::from_value(value).unwrap();
+        let serialized = serde_json::to_value(restored).unwrap();
+
+        assert_stale_sprite_strategy_keys_omitted(&serialized, "/elements/0/position");
+    }
 
     fn paint(color: &str) -> EditorPaintDescriptorV1 {
         EditorPaintDescriptorV1 {

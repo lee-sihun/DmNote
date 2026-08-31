@@ -1223,8 +1223,7 @@ fn apply_frozen_insert(
                 position.canonicalize_image_mode();
             } else if let EditorFrozenElementV1::Sprite { position } = &mut element {
                 for pose in &mut position.poses {
-                    pose.triggers.sort_unstable();
-                    pose.triggers.dedup();
+                    pose.normalize_triggers();
                 }
             }
             element

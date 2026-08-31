@@ -247,7 +247,9 @@ mod tests {
     // file URL 경로 테스트가 유닉스 전용이라 Windows에선 미사용 경고 방지
     #[cfg(not(target_os = "windows"))]
     use super::local_source_path_from_image_ref;
-    use crate::models::{KeyCounterColor, KeySlot, NoteColor};
+    use crate::models::{
+        KeyCounterColor, KeySlot, NoteColor, ReactiveSpritePosition, SpritePose, SpritePositions,
+    };
     use serde::{Deserialize, Serialize};
     use serde_json::json;
 
@@ -286,6 +288,65 @@ mod tests {
                 "statPositions",
                 "tabNoteOverrides",
             ]
+        );
+    }
+
+    #[test]
+    fn preset_sprite_wire_keys_exclude_removed_strategy_fields() {
+        let snapshot = PresetSnapshot {
+            sprite_positions: SpritePositions::from([(
+                "4key".to_string(),
+                vec![ReactiveSpritePosition {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    poses: vec![SpritePose {
+                        pose_id: uuid::Uuid::new_v4().to_string(),
+                        triggers: vec![uuid::Uuid::new_v4().to_string()],
+                        ..SpritePose::default()
+                    }],
+                    ..ReactiveSpritePosition::default()
+                }],
+            )]),
+            keys: Default::default(),
+            positions: Default::default(),
+            stat_positions: Default::default(),
+            graph_positions: Default::default(),
+            knob_positions: Default::default(),
+            custom_tabs: Vec::new(),
+            selected_key_type: "4key".to_string(),
+            tab_note_overrides: Default::default(),
+        };
+        let value = serde_json::to_value(snapshot).unwrap();
+        let sprite = value["spritePositions"]["4key"][0].as_object().unwrap();
+        let mut sprite_keys = sprite.keys().map(String::as_str).collect::<Vec<_>>();
+        sprite_keys.sort_unstable();
+        assert_eq!(
+            sprite_keys,
+            [
+                "baseImage",
+                "className",
+                "dx",
+                "dy",
+                "height",
+                "hidden",
+                "id",
+                "idleTransform",
+                "imageFit",
+                "imageRect",
+                "pivot",
+                "poses",
+                "transitionEasing",
+                "transitionMs",
+                "useInlineStyles",
+                "width",
+                "zIndex",
+            ]
+        );
+        let pose = sprite["poses"][0].as_object().unwrap();
+        let mut pose_keys = pose.keys().map(String::as_str).collect::<Vec<_>>();
+        pose_keys.sort_unstable();
+        assert_eq!(
+            pose_keys,
+            ["imageOverride", "poseId", "transform", "triggers"]
         );
     }
 

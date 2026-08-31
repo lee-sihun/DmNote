@@ -944,30 +944,15 @@ impl Default for SpriteTransform {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub enum SpriteImageFit {
-    #[default]
     Cover,
     Contain,
     Fill,
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum SpritePoseMatchMode {
-    #[default]
-    Exact,
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum SpriteActivation {
-    #[default]
-    WhileHeld,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SpritePose {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -975,31 +960,25 @@ pub struct SpritePose {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub triggers: Vec<String>,
-    #[serde(default)]
-    pub match_mode: SpritePoseMatchMode,
     pub transform: SpriteTransform,
     #[serde(default)]
     pub image_override: Option<String>,
 }
 
-impl Default for SpritePose {
-    fn default() -> Self {
-        Self {
-            pose_id: String::new(),
-            name: None,
-            triggers: Vec::new(),
-            match_mode: SpritePoseMatchMode::Exact,
-            transform: SpriteTransform::default(),
-            image_override: None,
-        }
+impl SpritePose {
+    pub fn normalize_triggers(&mut self) -> bool {
+        let original = self.triggers.clone();
+        self.triggers.sort_unstable();
+        self.triggers.dedup();
+        self.triggers != original
     }
 }
 
-fn default_sprite_transition_ms() -> u32 {
+pub(crate) fn default_sprite_transition_ms() -> u32 {
     90
 }
 
-fn default_sprite_transition_easing() -> String {
+pub(crate) fn default_sprite_transition_easing() -> String {
     "cubic-bezier(0.4, 0, 0.2, 1)".to_string()
 }
 
@@ -1033,8 +1012,6 @@ pub struct ReactiveSpritePosition {
     pub idle_transform: SpriteTransform,
     #[serde(default)]
     pub poses: Vec<SpritePose>,
-    #[serde(default)]
-    pub activation: SpriteActivation,
     #[serde(default = "default_sprite_transition_ms")]
     pub transition_ms: u32,
     #[serde(default = "default_sprite_transition_easing")]
@@ -1061,7 +1038,6 @@ impl Default for ReactiveSpritePosition {
             pivot: SpriteAnchor::default(),
             idle_transform: SpriteTransform::default(),
             poses: Vec::new(),
-            activation: SpriteActivation::WhileHeld,
             transition_ms: default_sprite_transition_ms(),
             transition_easing: default_sprite_transition_easing(),
         }
@@ -3272,8 +3248,8 @@ mod tests {
         compact_canonical_rgba, note_border_representative_hex, scrub_removed_text_outline_fields,
         FadePosition, GradientSpec, GraphPosition, GraphStatType, GraphType, KeyCounterAlign,
         KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings,
-        KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, SpritePose,
-        StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
+        KeyPosition, KeySlot, KnobPosition, NoteColor, NoteSettings, SlotMatch, SpriteImageFit,
+        SpritePose, StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
     };
     use serde::Deserialize;
 
@@ -3312,12 +3288,40 @@ mod tests {
 
         let serialized = serde_json::to_value(&pose).unwrap();
         assert_eq!(serialized["name"], "왼팔");
+        assert!(serialized.get("matchMode").is_none());
 
         let restored: SpritePose = serde_json::from_value(serialized).unwrap();
         assert_eq!(restored.name.as_deref(), Some("왼팔"));
 
         let unnamed = serde_json::to_value(SpritePose::default()).unwrap();
         assert!(unnamed.get("name").is_none());
+    }
+
+    #[test]
+    fn sprite_pose_trigger_normalization_reports_changes_once() {
+        let mut pose = SpritePose {
+            triggers: vec!["b".to_string(), "a".to_string(), "b".to_string()],
+            ..SpritePose::default()
+        };
+
+        assert!(pose.normalize_triggers());
+        assert_eq!(pose.triggers, ["a", "b"]);
+        assert!(!pose.normalize_triggers());
+    }
+
+    #[test]
+    fn sprite_image_fit_wire_values_remain_single_word() {
+        for (fit, wire) in [
+            (SpriteImageFit::Cover, "cover"),
+            (SpriteImageFit::Contain, "contain"),
+            (SpriteImageFit::Fill, "fill"),
+        ] {
+            assert_eq!(serde_json::to_value(fit).unwrap(), wire);
+            assert_eq!(
+                serde_json::from_value::<SpriteImageFit>(serde_json::json!(wire)).unwrap(),
+                fit
+            );
+        }
     }
 
     #[test]
