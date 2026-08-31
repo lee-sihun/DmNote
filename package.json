@@ -1,6 +1,6 @@
 {
   "name": "dm-note",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "DM NOTE",
   "scripts": {
     "dev": "vite",

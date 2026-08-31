@@ -72,25 +72,37 @@ use native_window::apply_macos_overlay_fullscreen_behavior;
 pub(crate) use native_window::fade_overlay_window;
 use native_window::{apply_overlay_frame, hide_overlay_window, show_overlay_window};
 #[cfg(target_os = "windows")]
-use native_window::{disable_system_context_menu, raise_panel_window_without_activation};
+use native_window::{
+    disable_system_context_menu, install_overlay_move_observer,
+    raise_panel_window_without_activation,
+};
 
+#[cfg(all(target_os = "windows", not(test)))]
+use window_geometry::OverlayRestoreSource;
 #[cfg(test)]
 use window_geometry::{
-    apply_panel_bounds_change, changed_panel_max_height, panel_bounds_from_sample,
-    panel_height_bounds, panel_position_beside_main, MonitorSpec, PanelBoundsPersistenceState,
-    PanelBoundsSample,
+    applied_overlay_frame_from_native, apply_panel_bounds_change, changed_panel_max_height,
+    next_overlay_placement_trust, panel_bounds_from_sample, panel_height_bounds,
+    panel_position_beside_main, resolve_windows_overlay_placement,
+    stored_overlay_bounds_for_persistence, MonitorSpec, NativeRejectReason, OverlayRestoreSource,
+    PanelBoundsPersistenceState, PanelBoundsSample,
 };
 use window_geometry::{
-    compute_overlay_position, convert_physical_bounds_to_logical, defer_overlay_bounds,
-    defer_overlay_bounds_from_window, flush_deferred_overlay_bounds, main_window_content_origin,
-    main_window_logical_rect, panel_bounds_sample_from_window, panel_client_to_outer_position,
-    resolve_panel_window_layout, MonitorData, OverlayPosition, PanelBoundsChange,
-    PanelBoundsPersistenceController, PanelWindowLayout,
+    applied_overlay_frame_from_placement, complete_overlay_scale_resolution,
+    convert_physical_bounds_to_logical, flush_deferred_overlay_bounds, logical_position_to_native,
+    main_window_content_origin, main_window_logical_rect, main_window_native_rect,
+    native_placement_from_window, overlay_restore_window_scale, panel_bounds_sample_from_window,
+    panel_client_to_outer_position, persist_overlay_placement,
+    persist_overlay_placement_from_window, resolve_overlay_placement, resolve_panel_window_layout,
+    AppliedOverlayFrame, MonitorData, NativePlacement, NativeRect, OverlayPersistenceAuthority,
+    OverlayPlacementTrust, OverlayPosition, PanelBoundsChange, PanelBoundsPersistenceController,
+    PanelWindowLayout, ResolvedOverlayPlacement,
 };
 pub use window_geometry::{LogicalPoint, LogicalRect, PanelDragContext};
 
 use super::{
     history::HistoryAdmissionLease,
+    panel_drag::PanelDragController,
     plugin::{PluginAuthorityLease, PluginRuntimeAuthority},
     store::{
         AdmittedEditorTransaction, AdmittedGestureCommit, AppStore, PluginInstancesResetScope,
@@ -110,7 +122,8 @@ use crate::{
         CommittedEditorChange, DefaultsPayload, EditorCommitRequest, GestureCommitRequest,
         HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings, KeyPositions, KeySlot,
         KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
-        SettingsDiff, SettingsState, TabCssOverrides,
+        SettingsDiff, SettingsState, StoredOverlayBounds, StoredOverlayNativePosition,
+        TabCssOverrides,
     },
     services::{
         css_watcher::CssWatcher,
@@ -151,40 +164,35 @@ fn overlay_bounds_are_usable(bounds: &OverlayBounds) -> bool {
         && bounds.height > 0.0
 }
 
-/// 저장값이 있고 아직 환산되지 않았을 때만 모니터 정보가 필요하다.
-/// 이 판단이 뒤집히면 physical 좌표가 환산 없이 쓰이므로 별도 술어로 고정한다
-fn stored_bounds_need_monitor_data(
-    bounds_are_logical: bool,
-    stored: Option<&OverlayBounds>,
-) -> bool {
-    !bounds_are_logical && stored.is_some()
-}
-
 /// 저장된 사각형을 logical 좌표로 정규화한다.
 /// 구버전 store는 physical px를 담고 있으므로(`overlay_bounds_are_logical == false`)
 /// 환산이 필요하다. 모니터 조회가 비어 환산 근거가 없으면 `fallback_scale`
 /// (보통 창 자신의 scale)로 재시도한다 - 모니터 열거는 실패해도 창 scale은
 /// 살아 있는 경우가 있어, 환산을 포기하고 physical 값을 그대로 쓰는 것보다 낫다.
 /// 그래도 실패하면 None - 호출부가 각자 안전한 대체 경로를 고른다
+#[cfg(not(target_os = "windows"))]
 fn normalize_stored_overlay_bounds(
-    stored: Option<&OverlayBounds>,
+    stored: Option<&StoredOverlayBounds>,
     bounds_are_logical: bool,
     monitors: &MonitorData,
     fallback_scale: Option<f64>,
 ) -> Option<OverlayBounds> {
-    let usable = stored.filter(|bounds| overlay_bounds_are_usable(bounds))?;
+    let usable = stored?.public_bounds();
+    if !overlay_bounds_are_usable(&usable) {
+        return None;
+    }
 
     let normalized = if bounds_are_logical {
-        usable.clone()
+        usable
     } else {
-        match convert_physical_bounds_to_logical(usable, monitors) {
+        match convert_physical_bounds_to_logical(&usable, monitors) {
             Some(converted) => converted,
             None => {
                 let scale = fallback_scale?;
                 log::warn!(
                     "[overlay] monitor data unavailable; converting stored bounds with window scale {scale}"
                 );
-                scale_physical_bounds_to_logical(usable, scale)?
+                scale_physical_bounds_to_logical(&usable, scale)?
             }
         }
     };
@@ -196,29 +204,12 @@ fn normalize_stored_overlay_bounds(
 /// 초기화 resize에서 복원 좌표를 어디에 놓을지 정한다.
 /// 저장된 크기가 아니라 **이번에 적용될 크기**로 판정해야, 화면 안으로
 /// 되돌린다는 목적을 실제로 달성한다 (콘텐츠 크기는 첫 resize에서 처음 확정됨)
-fn initial_overlay_placement(
-    stored: &OverlayBounds,
-    width: f64,
-    height: f64,
-    monitors: &MonitorData,
-) -> OverlayPosition {
-    compute_overlay_position(
-        &OverlayBounds {
-            x: stored.x,
-            y: stored.y,
-            width,
-            height,
-        },
-        true,
-        monitors,
-    )
-}
-
 fn monitor_scale_is_usable(scale: f64) -> bool {
     scale.is_finite() && scale > 0.0
 }
 
 /// 주어진 scale 하나로 physical 사각형을 logical로 나눈다
+#[cfg(not(target_os = "windows"))]
 fn scale_physical_bounds_to_logical(bounds: &OverlayBounds, scale: f64) -> Option<OverlayBounds> {
     if !monitor_scale_is_usable(scale) {
         return None;
@@ -235,24 +226,11 @@ fn scale_physical_bounds_to_logical(bounds: &OverlayBounds, scale: f64) -> Optio
 /// 창이 없을 때 위치 초기화가 딛고 설 사각형.
 /// 저장된 값을 쓰되, 없거나 깨졌거나 환산 불가면 기본 크기로 되돌린다
 fn overlay_reset_fallback_rect(
-    stored: Option<&OverlayBounds>,
+    stored: Option<&StoredOverlayBounds>,
     bounds_are_logical: bool,
     monitors: &MonitorData,
-) -> (LogicalPosition<f64>, LogicalSize<f64>) {
-    // 창이 없는 경로라 창 scale을 근거로 쓸 수 없다
-    match normalize_stored_overlay_bounds(stored, bounds_are_logical, monitors, None) {
-        Some(bounds) => (
-            LogicalPosition::new(bounds.x, bounds.y),
-            LogicalSize::new(
-                clamp_overlay_dimension(bounds.width),
-                clamp_overlay_dimension(bounds.height),
-            ),
-        ),
-        None => (
-            LogicalPosition::new(0.0, 0.0),
-            LogicalSize::new(DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT),
-        ),
-    }
+) -> NativePlacement {
+    resolve_overlay_placement(stored, bounds_are_logical, monitors).placement
 }
 
 const PANEL_WIDTH: f64 = 240.0;
@@ -322,6 +300,14 @@ struct PanelVisibilityPayload {
 enum PanelVisibilityReason {
     Closed,
     Destroyed,
+}
+
+#[cfg(any(target_os = "windows", test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PanelPresentSnapshot {
+    panel_visible: bool,
+    panel_detached: bool,
+    panel_destroy_reason: Option<PanelVisibilityReason>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -651,6 +637,8 @@ pub struct AppState {
     overlay_force_close: Arc<AtomicBool>,
     /// 오버레이 윈도우 초기화 중 Moved/Resized 이벤트에서 bounds 저장 억제
     overlay_initializing: Arc<AtomicBool>,
+    overlay_resolved_placement: Arc<Mutex<Option<ResolvedOverlayPlacement>>>,
+    overlay_placement_trust: Arc<Mutex<OverlayPlacementTrust>>,
     /// 오버레이 생성·가시성 전환 single-flight 가드
     /// 메인 스레드 이벤트 콜백에서 획득 금지 — setup 훅은 이벤트 루프 가동 전이라 예외
     overlay_creation_lock: Mutex<()>,
@@ -665,6 +653,7 @@ pub struct AppState {
     /// 메인이 다시 보일 때 이 표식이 선 창만 되돌린다
     panel_hidden_with_main: AtomicBool,
     panel_creation_lock: Mutex<()>,
+    panel_drag: Arc<PanelDragController>,
     panel_close_request: Mutex<PanelCloseRequestState>,
     panel_destroy_reason: Mutex<Option<PanelVisibilityReason>>,
     /// 메인이 window.open 직전에 세우는 1회용 토큰 - 플러그인 JS 등 임의의 window.open이
@@ -860,6 +849,8 @@ impl AppState {
             overlay_visible: Arc::new(RwLock::new(false)),
             overlay_force_close: Arc::new(AtomicBool::new(false)),
             overlay_initializing: Arc::new(AtomicBool::new(false)),
+            overlay_resolved_placement: Arc::new(Mutex::new(None)),
+            overlay_placement_trust: Arc::new(Mutex::new(OverlayPlacementTrust::Clean)),
             overlay_creation_lock: Mutex::new(()),
             overlay_hit: OverlayHitService::new(
                 snapshot.overlay_visible,
@@ -872,6 +863,7 @@ impl AppState {
             panel_visible: AtomicBool::new(false),
             panel_hidden_with_main: AtomicBool::new(false),
             panel_creation_lock: Mutex::new(()),
+            panel_drag: Arc::new(PanelDragController::default()),
             panel_close_request: Mutex::new(PanelCloseRequestState::Idle),
             panel_destroy_reason: Mutex::new(None),
             panel_open_armed: Mutex::new(None),
@@ -1086,6 +1078,8 @@ impl AppState {
             graph_positions: state.graph_positions.clone(),
             knob_positions: state.knob_positions.clone(),
             custom_tabs: state.custom_tabs.clone(),
+            tab_order: state.tab_order.clone(),
+            bar_count: state.bar_count,
             selected_key_type: state.selected_key_type.clone(),
             current_mode,
             active_keys,

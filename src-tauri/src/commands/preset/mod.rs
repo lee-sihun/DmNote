@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 
+pub(crate) use crate::models::BUILTIN_TAB_IDS;
 use crate::models::{
     CustomCss, CustomJs, CustomTab, FontSettings, GraphPositions, KeyMappings, KeyPositions,
     KnobPositions, LayerGroups, NoteSettings, StatPositions, TabCssOverrides, TabNoteOverrides,
@@ -29,6 +30,8 @@ pub struct PresetSnapshot {
     pub graph_positions: GraphPositions,
     pub knob_positions: KnobPositions,
     pub custom_tabs: Vec<CustomTab>,
+    pub tab_order: Vec<String>,
+    pub bar_count: u8,
     pub selected_key_type: String,
     pub tab_note_overrides: TabNoteOverrides,
 }
@@ -47,6 +50,10 @@ pub(crate) struct PresetFile {
     pub note_effect: Option<bool>,
     pub laboratory_enabled: Option<bool>,
     pub custom_tabs: Option<Vec<CustomTab>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_order: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bar_count: Option<u8>,
     pub selected_key_type: Option<String>,
     #[serde(rename = "useCustomCSS")]
     pub use_custom_css: Option<bool>,
@@ -97,8 +104,6 @@ pub(crate) struct EmbeddedLocalSound {
 
 pub(crate) const PRESET_LOCAL_IMAGE_PREFIX: &str = "dmnote-local-image://";
 pub(crate) const PRESET_LOCAL_SOUND_PREFIX: &str = "dmnote-local-sound://";
-pub(crate) const BUILTIN_TAB_IDS: &[&str] = &["4key", "5key", "6key", "8key"];
-
 pub(crate) fn decode_image_data_url(value: &str) -> Option<(Vec<u8>, String)> {
     let (header, payload) = value.split_once(',')?;
     let header_lower = header.to_ascii_lowercase();

@@ -5,6 +5,8 @@ pub(super) fn repair_legacy_state(value: Value) -> AppStoreData {
     let Value::Object(mut source) = value else {
         return normalize_state(AppStoreData::default());
     };
+    let has_tab_order = source.contains_key("tabOrder");
+    let has_bar_count = source.contains_key("barCount");
     migrate_legacy_repair_fields(&mut source);
     let source_keys = source.get("keys").cloned();
     let source_key_positions = source.get("keyPositions").cloned();
@@ -40,6 +42,8 @@ pub(super) fn repair_legacy_state(value: Value) -> AppStoreData {
 
     let mut data =
         serde_json::from_value::<AppStoreData>(Value::Object(recovered)).unwrap_or_default();
+    prepare_tab_order_for_load(&mut data, has_tab_order);
+    prepare_bar_count_for_load(&mut data, has_bar_count);
     migrate_legacy_knob_sensitivity(&mut data);
     repair_image_transforms(&mut data);
     repair_semantic_identities(&mut data);
@@ -116,6 +120,7 @@ fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
     match field {
         "noteSettings" => recover_object_fields::<NoteSettings>(field, value),
         "customTabs" => recover_array_entries::<CustomTab>(field, value),
+        "tabOrder" => recover_array_entries::<String>(field, value),
         "keys" => recover_key_mapping_entries(value),
         "soundLibrary" => recover_sound_library_entries(value),
         "keyPositions" => recover_key_position_entries(field, value),
@@ -145,8 +150,28 @@ fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
         "customJs" => recover_custom_js(value),
         "gridSettings" => recover_object_fields::<GridSettings>(field, value),
         "shortcuts" => recover_object_fields::<ShortcutsState>(field, value),
+        "overlayBounds" => recover_overlay_bounds(value),
         _ => None,
     }
+}
+
+fn recover_overlay_bounds(value: &Value) -> Option<Value> {
+    if serde_json::from_value::<StoredOverlayBounds>(value.clone()).is_ok() {
+        return Some(value.clone());
+    }
+
+    let Value::Object(source) = value else {
+        return None;
+    };
+    let public = serde_json::from_value::<crate::models::OverlayBounds>(serde_json::json!({
+        "x": source.get("x")?,
+        "y": source.get("y")?,
+        "width": source.get("width")?,
+        "height": source.get("height")?,
+    }))
+    .ok()?;
+    log::warn!("[Store] Discarding invalid overlayBounds nativePosition during recovery");
+    serde_json::to_value(StoredOverlayBounds::from(public)).ok()
 }
 
 fn recover_object_fields<T>(field: &str, value: &Value) -> Option<Value>
@@ -735,7 +760,7 @@ fn migrate_legacy_repair_fields(fields: &mut Map<String, Value>) {
         return;
     }
     if let Some(value) = legacy_bounds {
-        if serde_json::from_value::<OverlayBounds>(value.clone()).is_ok() {
+        if serde_json::from_value::<StoredOverlayBounds>(value.clone()).is_ok() {
             fields.insert("overlayBounds".to_string(), value);
             return;
         }

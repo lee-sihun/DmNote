@@ -2,7 +2,7 @@
 
 ## 목표와 판정 원칙
 
-기준 커밋은 `af1bc19c`이며 작업 브랜치는 `refactor/code-quality-modularization`이다. 이번 작업의 최우선 조건은 **의도한 동작 변경이 없는 책임 분리**다.
+리팩터링 기준 커밋은 `af1bc19c`이며 작업 브랜치는 `refactor/code-quality-modularization`이다. 최종 검증 기준선은 2.0.2 태그를 포함한 `origin/main`의 `4b4d6c22`다. 이번 작업의 최우선 조건은 **의도한 동작 변경이 없는 책임 분리**와 **작업 중 추가된 선행 변경의 완전한 수용**이다.
 
 - UI, 상태·비동기 runtime, 순수 변환 모델을 변경 이유와 검증 경계에 맞춰 분리한다.
 - 공개 import, Tauri command/event, 저장 schema, editor wire 형식을 유지한다.
@@ -14,9 +14,20 @@
 
 ## 브랜치 결과 요약
 
-코드·테스트 242개와 이 결과 문서 1개를 포함해 기준 커밋 대비 총 243개 단계별 커밋, 366개 변경 파일이다. 중간 수정 커밋 11개는 원인을 도입한 커밋에 흡수했고, rewrite 전 트리는 `backup/refactor-code-quality-pre-fixup-20260830`에 보존했다. rewrite 전후 코드 tree hash는 모두 `73d4dfccf034bc9e7290ebf978b956e4082c110a`로 동일하다.
+본 리팩터링 이력은 코드·테스트 242개와 이 결과 문서 1개를 포함해 총 243개 단계별 커밋으로 구성했다. 중간 수정 커밋 11개는 원인을 도입한 커밋에 흡수했고, rewrite 전 트리는 `backup/refactor-code-quality-pre-fixup-20260830`에 보존했다. rewrite 전후 코드 tree hash는 모두 `73d4dfccf034bc9e7290ebf978b956e4082c110a`로 동일하다. 최종 `main` 통합 전 상태는 `backup/refactor-code-quality-pre-main-sync-20260831`에도 별도로 보존했다.
 
-Tauri command는 기준과 현재 모두 145개이고 정렬된 이름 집합도 동일하다. `src-tauri/permissions`와 `docs/content`에는 API 변경에 따른 차이가 없다.
+리팩터링 자체는 공개 API를 바꾸지 않는다. 최신 `main`이 추가한 탭 rename·reorder와 패널 native drag command를 포함해 현재 Tauri command는 `origin/main`과 동일한 150개이며, `src-tauri/permissions`, 생성 schema, `docs/content`에도 `origin/main` 대비 차이가 없다.
+
+## 최신 main 통합 결과
+
+기준 커밋 이후 `origin/main`에 추가된 33개 커밋을 마지막 검증 전에 병합했다. 물리 좌표 기반 패널 drag·overlay 복원, 탭 이름 변경·순서·bar count, pointer 입력 시 초기 focus 정책, gooey·motion 정책, 2.0.2 release 문서와 설정을 모두 유지했다.
+
+- 충돌 13개 파일은 기존 façade를 유지하면서 최신 구현을 추출 모듈에 이식했다.
+- 최신 `main`에서 추가된 Rust 함수와 테스트 이름을 전체 대조했고 누락은 0개였다.
+- 새 좌표 알고리즘이 한 파일에 다시 집중되지 않도록 `window_geometry.rs` 505줄과 `window_geometry/overlay_placement.rs` 902줄로 분리했다.
+- 새 패널 drag 구현도 `panel_drag.rs` 1006줄, Windows native 어댑터 1075줄, 테스트 407줄로 분리했다.
+- 저장된 `tabOrder`·`barCount`·native overlay 좌표를 migration, history, preset, bootstrap에 함께 반영해 원자적 복원 계약을 유지했다.
+- pointer 기반 popup/dropdown 진입은 focus 복원을 생략하고 keyboard 진입은 기존 focus 계약을 유지한다.
 
 아래 줄 수는 기준 커밋과 현재 파일을 `wc -l`로 직접 측정한 값이다. 현재 값은 추출된 하위 모듈을 제외한 façade 또는 상위 조립 파일의 크기다.
 
@@ -27,7 +38,7 @@ Tauri command는 기준과 현재 모두 145개이고 정렬된 이름 집합도
 | `PropertiesPanel.tsx`             | 3407 | 1199 | 선택 route, commit/runtime, plugin 설정, rename, layer action 분리 |
 | `BatchSelectionPanel.tsx`         | 2367 |  668 | 타입별 섹션, 공통 graph/knob, key-like commit runtime 분리         |
 | `SingleSelectionPanel.tsx`        | 2061 |  646 | 타입별 패널과 표시 모델 분리                                       |
-| `Settings.tsx`                    | 1423 |  773 | 오디오 출력, 비동기 적용 큐, resize anchor controller 분리         |
+| `Settings.tsx`                    | 1423 |  793 | 오디오 출력, 비동기 적용 큐, resize anchor controller 분리         |
 | `Grid.tsx`                        | 2303 | 1269 | 네이티브 장면, 선택 overlay, context/ghost 모델 분리               |
 | `useGridSelection.ts`             | 1552 |  494 | drag, movement, clipboard, paste, guide 모델 분리                  |
 | `PluginElement.tsx`               | 1647 |  686 | DOM adapter, layout, snapshot·persistence runtime 분리             |
@@ -46,16 +57,16 @@ Tauri command는 기준과 현재 모두 145개이고 정렬된 이름 집합도
 | ------------------------- | ----: | ---: | --------------------------------------------------------------------- |
 | `state/store.rs`          | 22978 |  829 | persistence, writer, recovery, asset, editor, plugin transaction 분리 |
 | `state/editor_ops.rs`     | 10154 |   49 | 연산군·검증·structural operation과 테스트 분리                        |
-| `state/migration.rs`      |  6053 |  247 | 복구·migration 도메인과 테스트 분리                                   |
+| `state/migration.rs`      |  6053 |  275 | 복구·migration 도메인과 테스트 분리                                   |
 | `state/editor.rs`         |  5777 |  176 | editor 상태·요청·테스트 분리                                          |
-| `state/app_state.rs`      |  9314 | 1265 | 창 geometry, keyboard, shutdown, controller 경계 분리                 |
-| `models/mod.rs`           |  4169 |  805 | editor와 도메인 모델 분리                                             |
-| `commands/preset/load.rs` |  3104 |  939 | font/image/sound 복원과 테스트 분리                                   |
+| `state/app_state.rs`      |  9314 | 1259 | 창 geometry, keyboard, shutdown, controller 경계 분리                 |
+| `models/mod.rs`           |  4169 |  860 | editor와 도메인 모델 분리                                             |
+| `commands/preset/load.rs` |  3104 |  975 | font/image/sound 복원과 테스트 분리                                   |
 | `commands/keys/sound.rs`  |  2189 |  806 | library scan, repair, WAV 교체, 테스트 분리                           |
 | `audio/engine.rs`         |  1788 |  911 | ASIO, decode, output test, command thread 분리                        |
 | `state/history.rs`        |  2101 |  690 | snapshot/admission/transaction 경계 분리                              |
 | `services/obs_bridge.rs`  |  1975 |  837 | 세션·메시지·forwarding 경계 분리                                      |
-| `commands/keys/keys.rs`   |  2177 |  887 | mapping과 import/export 경계 분리                                     |
+| `commands/keys/keys.rs`   |  2177 | 1007 | mapping, custom tab, import/export 경계 분리                           |
 
 store 분리에서도 다음 불변식은 그대로 유지했다.
 
@@ -97,17 +108,18 @@ Graph 데이터 adapter, Knob 회전 상태, Key 활성 상태, Stat 정수 정�
 단계별 focused suite와 독립 서브에이전트 감사를 반복했고, 최종 코드 트리에서 다음 결과를 확인했다.
 
 - TypeScript type check 통과
-- ESLint 오류 0; 기존 `SoundTrimModal.tsx` exhaustive-deps 경고 1건만 유지
+- ESLint 오류·경고 0
 - Prettier check 통과
-- 전체 Vitest: 360개 파일, 3472개 테스트 통과, 18개 skip
+- 전체 Vitest: 372개 파일, 3596개 테스트 통과, 18개 skip
 - Vite production build 통과; 기존 대형 chunk 경고만 유지
-- Rust 전체: 989개 통과, 6개 ignored
+- Rust 전체: 1044개 통과, 6개 ignored
 - Rust fmt, all-target check, Clippy `-D warnings` 통과
 - ASIO feature check·Clippy와 focused 18개 테스트 통과
-- 242개 코드·테스트 커밋 모두 `git diff-tree --check` 통과
+- 최신 `main` 추가 Rust 함수·테스트 이름 대조에서 누락 0개
+- 최종 병합 tree `git diff --check` 통과
 - Rust module 175개와 literal `include_str!` / `include_bytes!` 경로 확인
 
-동작 동일성 판정에는 AST/토큰 정규화 비교, 공개 반환 객체와 hook/ref 선언 순서 비교, close/await/RAF/focus 순서 테스트, 오류 전파·rollback·preview/commit characterization을 함께 사용했다. 마지막 독립 감사에서는 즉시 안전하고 고가치인 추가 P0–P2 회귀·분리 후보를 발견하지 못했다.
+동작 동일성 판정에는 AST/토큰 정규화 비교, 공개 반환 객체와 hook/ref 선언 순서 비교, close/await/RAF/focus 순서 테스트, 오류 전파·rollback·preview/commit characterization을 함께 사용했다. 마지막 독립 감사와 최신 `main` 통합 후 그래프·파일 크기 재감사에서는 즉시 안전하고 고가치인 추가 P0–P2 회귀·분리 후보를 발견하지 못했다. 복잡도가 높은 native window·keyboard runtime은 실제 플랫폼 harness 없이 더 분리하면 호출 순서 회귀 위험이 커 별도 고위험 경계로 유지한다.
 
 ## 의도적으로 보존한 기존 결함
 
@@ -164,6 +176,7 @@ cargo test --lib --features asio-backend audio::engine
 ## 완료 판정
 
 - 공개 API·저장 형식·command/event 집합에 의도한 변경 없음
+- 2.0.2 기준 최신 `origin/main` 선행 변경과 command 150개를 누락 없이 통합
 - 단계별 커밋과 focused/전체 검증 통과
 - rewrite 전후 tree 동일성 확인 및 복구 branch 보존
 - Grid 핵심 표면과 패널 반복 UI 공용화 완료

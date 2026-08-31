@@ -5,6 +5,7 @@ import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { PanelHostContext } from '@contexts/PanelHostContext';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { usePanelHeaderDrag } from '@hooks/panel/usePanelHeaderDrag';
+import { usePointerFocusGuard } from '@hooks/ui/usePointerFocusGuard';
 import { restoreLenisScroll } from '@hooks/useLenis';
 import { panelWindowApi } from '@api/modules/panelWindowApi';
 import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
@@ -270,6 +271,9 @@ const PropertiesPanelHost = ({
     }),
     [placement, childWindow],
   );
+
+  // 분리 창에도 클릭 잔류 포커스 가드 - body 포털 팝업까지 문서 단위로 커버
+  usePointerFocusGuard(hostValue.document);
 
   const onTransitionFailureRef = useRef(onTransitionFailure);
   useEffect(() => {

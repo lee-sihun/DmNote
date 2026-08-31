@@ -19,6 +19,7 @@ import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { clampToViewport } from '@utils/ui/popupGeometry';
 import { usePanelHost } from '@contexts/PanelHostContext';
 import { isNodeLike } from '@utils/dom/isElementNode';
+import { getLastInputModality } from '@utils/focus/pointerFocusGuard';
 import { CANVAS_POPUP_CHROME_CLASS } from '../Modal/popupChrome';
 
 export interface DropdownOption {
@@ -122,6 +123,8 @@ export const useDropdownRuntime = ({
 
   const closeAndFocusTrigger = useCallback(() => {
     setOpen(false);
+    // 마우스로 고른 뒤에는 트리거에 포커스를 남기지 않는다 - Space가 메뉴를 도로 연다
+    if (getLastInputModality() === 'pointer') return;
     buttonRef.current?.focus();
   }, []);
 

@@ -5,6 +5,7 @@ impl AppState {
         if self.shutdown_started.swap(true, Ordering::SeqCst) {
             return;
         }
+        self.panel_drag.clear_for_lifecycle(None, "shutdown");
         self.overlay_bounds_generation
             .fetch_add(1, Ordering::SeqCst);
         self.keyboard_task_generation.fetch_add(1, Ordering::SeqCst);

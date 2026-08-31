@@ -13,7 +13,7 @@
   </p>
 
   [![GitHub release](https://img.shields.io/github/release/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.1/DM.NOTE.v.2.0.1.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/DmNote-App/DmNote/total.svg?logo=github)](https://github.com/DmNote-App/DmNote/releases/download/2.0.2/DM.NOTE.v.2.0.2.zip)
   [![GitHub license](https://img.shields.io/github/license/DmNote-App/DmNote.svg?logo=github)](https://github.com/DmNote-App/DmNote/blob/main/LICENSE)
 </div>
 
@@ -30,7 +30,7 @@
 **지원 환경** · Windows 10/11 · macOS
 리눅스 환경이라면 [커뮤니티 포크 버전](https://github.com/northernorca/DmNote)을 사용해 보시는 것을 추천합니다.
 
-[DM NOTE v2.0.1 다운로드](https://github.com/DmNote-App/DmNote/releases/download/2.0.1/DM.NOTE.v.2.0.1.zip)
+[DM NOTE v2.0.2 다운로드](https://github.com/DmNote-App/DmNote/releases/download/2.0.2/DM.NOTE.v.2.0.2.zip)
 
 [Code signing policy](CODE_SIGNING_POLICY.md)
 

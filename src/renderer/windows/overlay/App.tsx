@@ -111,6 +111,7 @@ export default function App() {
     (state) => state.keyCounterEnabled,
   );
   const customTabs = useKeyStore((state) => state.customTabs);
+  const tabOrder = useKeyStore((state) => state.tabOrder);
   const setSelectedKeyType = useKeyStore((state) => state.setSelectedKeyType);
   useOverlayContextMenuRuntime({
     alwaysOnTop,
@@ -118,6 +119,7 @@ export default function App() {
     setAlwaysOnTop,
     selectedKeyType,
     customTabs,
+    tabOrder,
     setSelectedKeyType,
     t,
   });

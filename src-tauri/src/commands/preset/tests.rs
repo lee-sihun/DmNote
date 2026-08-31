@@ -31,6 +31,16 @@ fn legacy_preset_defaults_new_fields_to_none() {
 
     assert!(preset.layer_groups.is_none());
     assert!(preset.tab_css_overrides.is_none());
+    assert!(preset.bar_count.is_none());
+}
+
+#[test]
+fn preset_round_trip_uses_bar_count_camel_case_field() {
+    let preset: PresetFile = serde_json::from_value(json!({ "barCount": 3 })).unwrap();
+    let serialized = serde_json::to_value(preset).unwrap();
+
+    assert_eq!(serialized["barCount"], 3);
+    assert!(serialized.get("bar_count").is_none());
 }
 
 #[test]

@@ -12,6 +12,9 @@ interface TabNameModalProps {
     name: string,
   ) => Promise<{ error?: string } | void> | { error?: string } | void;
   existingNames?: string[];
+  /** 이름 변경 모드에서 입력에 미리 채울 현재 이름 */
+  initialName?: string;
+  mode?: 'create' | 'rename';
 }
 
 const TabNameModal = ({
@@ -19,6 +22,8 @@ const TabNameModal = ({
   onClose,
   onSubmit,
   existingNames = [],
+  initialName = '',
+  mode = 'create',
 }: TabNameModalProps) => {
   const { t } = useTranslation();
   const [name, setName] = useState('');
@@ -34,16 +39,19 @@ const TabNameModal = ({
     raise();
   };
 
+  const isRename = mode === 'rename';
+  const titleKey = isRename ? 'tabs.renameTitle' : 'tabs.createTitle';
+
   useEffect(() => {
     if (isOpen) {
-      setName('');
+      setName(initialName);
       setError(null);
       setIsSubmitting(false);
       submittingRef.current = false;
       // 퇴장 모션 동안 DOM이 남아 있어 홀드가 끝나기 전에 다시 열릴 수 있다
       clear();
     }
-  }, [isOpen, clear]);
+  }, [isOpen, initialName, clear]);
 
   const validate = (() => {
     return (v: string) => {
@@ -72,14 +80,21 @@ const TabNameModal = ({
           'max-reached': t('tabs.errors.max'),
           'duplicate-name': t('tabs.name.duplicate'),
           'invalid-name': t('tabs.errors.invalid'),
+          'name-too-long': t('tabs.name.max'),
+          'reserved-name': t('tabs.name.reserved'),
         };
-        raiseError(map[res.error] || t('tabs.errors.createFail'));
+        raiseError(
+          map[res.error] ||
+            t(isRename ? 'tabs.errors.renameFail' : 'tabs.errors.createFail'),
+        );
         return;
       }
       onClose();
     } catch (submitError) {
-      console.error('Failed to create custom tab', submitError);
-      raiseError(t('tabs.errors.createFail'));
+      console.error('Failed to submit custom tab name', submitError);
+      raiseError(
+        t(isRename ? 'tabs.errors.renameFail' : 'tabs.errors.createFail'),
+      );
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -99,14 +114,14 @@ const TabNameModal = ({
     <Modal
       motionState={motionState}
       onClick={onClose}
-      ariaLabel={t('tabs.createTitle')}
+      ariaLabel={t(titleKey)}
       contentMountStrategy="after-paint"
     >
       <div
         className="flex flex-col w-[280px] p-[14px] gap-[12px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-title text-fg">{t('tabs.createTitle')}</div>
+        <div className="text-title text-fg">{t(titleKey)}</div>
         {/* 인풋·에러 묶음 — 에러는 인풋에 밀착 */}
         <div className="flex flex-col gap-[6px]">
           <input
@@ -132,7 +147,7 @@ const TabNameModal = ({
             className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
             {...submitPress}
           >
-            {t('tabs.create')}
+            {t(isRename ? 'tabs.rename' : 'tabs.create')}
           </button>
           <button
             disabled={isSubmitting}

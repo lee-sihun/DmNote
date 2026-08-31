@@ -23,14 +23,17 @@ use crate::{
         GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
         ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
         KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
-        OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
-        TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
-        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
-        IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
+        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType,
+        StoredOverlayBounds, TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX,
+        IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
+        IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
     },
 };
 
-use super::{editor, native_element_id};
+use super::{
+    editor, native_element_id,
+    tab_metadata::{legacy_tab_order, normalize_bar_count, normalize_tab_order},
+};
 
 mod assets;
 mod normalization;
@@ -90,6 +93,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
             Ok(mut value) => {
                 let seed_active_css_history = value.get("customCssHistory").is_none();
                 let explicit_invalid_element_id = has_explicit_invalid_element_id(&value);
+                let has_tab_order = value.get("tabOrder").is_some();
+                let has_bar_count = value.get("barCount").is_some();
                 let sound_library_migrated = migrate_sound_library_enabled(&mut value);
                 let text_outline_scrubbed = scrub_removed_text_outline_fields(&mut value);
                 // 메모리 보정만 하고 영속을 빼먹으면 시작마다 같은 보정이 반복된다
@@ -123,6 +128,12 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         needs_persist |= editor_revision_repaired;
                         let semantic_repaired = repair_semantic_identities(&mut data);
                         needs_persist |= semantic_repaired;
+                        let tab_order_changed =
+                            prepare_tab_order_for_load(&mut data, has_tab_order);
+                        needs_persist |= tab_order_changed;
+                        let bar_count_changed =
+                            prepare_bar_count_for_load(&mut data, has_bar_count);
+                        needs_persist |= bar_count_changed;
                         let layout_repaired = repair_custom_tab_key_layout_pairs(
                             &mut data,
                             value.get("keys"),
@@ -147,6 +158,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                             needs_persist,
                             layout_repaired
                                 || semantic_repaired
+                                || (has_tab_order && tab_order_changed)
+                                || (has_bar_count && bar_count_changed)
                                 || editor_revision_repaired
                                 || gradient_pair_repaired
                                 || image_transform_repaired,
@@ -235,6 +248,21 @@ pub(crate) fn find_legacy_store_file() -> Option<PathBuf> {
     } else {
         None
     }
+}
+
+fn prepare_tab_order_for_load(data: &mut AppStoreData, has_tab_order: bool) -> bool {
+    let original = data.tab_order.clone();
+    if !has_tab_order {
+        data.tab_order = legacy_tab_order(&data.custom_tabs);
+    }
+    data.tab_order = normalize_tab_order(&data.tab_order, &data.custom_tabs);
+    data.tab_order != original
+}
+
+fn prepare_bar_count_for_load(data: &mut AppStoreData, has_bar_count: bool) -> bool {
+    let original = data.bar_count;
+    data.bar_count = normalize_bar_count(data.bar_count, &data.tab_order);
+    !has_bar_count || data.bar_count != original
 }
 
 #[derive(Deserialize)]

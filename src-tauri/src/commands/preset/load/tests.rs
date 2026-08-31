@@ -42,6 +42,26 @@ fn full_preset_settings_patch_preserves_custom_css_history() {
 }
 
 #[test]
+fn synthesized_custom_tabs_are_deterministic_without_preset_metadata() {
+    let keys = KeyMappings::from([
+        ("custom-z".to_string(), Vec::new()),
+        ("custom-a".to_string(), Vec::new()),
+        ("4key".to_string(), Vec::new()),
+    ]);
+
+    let tabs = synthesize_custom_tabs(&keys);
+
+    assert_eq!(
+        tabs.iter().map(|tab| tab.id.as_str()).collect::<Vec<_>>(),
+        ["custom-a", "custom-z"]
+    );
+    assert_eq!(
+        tabs.iter().map(|tab| tab.name.as_str()).collect::<Vec<_>>(),
+        ["Custom 1", "Custom 2"]
+    );
+}
+
+#[test]
 fn committed_preset_css_paths_exclude_unrelated_store_paths() {
     let mut committed = AppStoreData {
         custom_css: CustomCss {

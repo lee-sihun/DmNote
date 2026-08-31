@@ -22,6 +22,8 @@ interface BootstrapPayload {
   keys: KeyMappings; // KeySlot union(string | MultiKeySlot) 항목
   positions: KeyPositions;
   customTabs: CustomTab[];
+  tabOrder: string[];
+  barCount: number;
   selectedKeyType: string;
   currentMode: string;
   overlay: {

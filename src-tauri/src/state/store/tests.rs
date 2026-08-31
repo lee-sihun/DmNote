@@ -13181,6 +13181,7 @@ fn custom_tabs_history_restores_typed_state_and_editor_revision() {
             &[EditorField::Keys, EditorField::KeyPositions],
             |data| {
                 data.custom_tabs.push(tab);
+                data.tab_order.push(tab_id.clone());
                 data.keys.insert(tab_id.clone(), Vec::new());
                 data.key_positions.insert(tab_id.clone(), Vec::new());
                 data.selected_key_type = tab_id;
@@ -13273,6 +13274,7 @@ fn custom_tab_delete_history_restores_note_css_and_change_projection() {
                     id: created_tab_id.clone(),
                     name: "Override History".to_string(),
                 });
+                data.tab_order.push(created_tab_id.clone());
                 data.keys.insert(created_tab_id.clone(), Vec::new());
                 data.key_positions
                     .insert(created_tab_id.clone(), Vec::new());
@@ -13312,6 +13314,7 @@ fn custom_tab_delete_history_restores_note_css_and_change_projection() {
             ],
             |data| {
                 data.custom_tabs.retain(|tab| tab.id != deleted_tab_id);
+                data.tab_order.retain(|id| id != &deleted_tab_id);
                 data.keys.remove(&deleted_tab_id);
                 data.key_positions.remove(&deleted_tab_id);
                 data.stat_positions.remove(&deleted_tab_id);
@@ -13424,6 +13427,7 @@ fn custom_tab_delete_history_restores_plugin_instances_atomically() {
                     id: create_tab_id.clone(),
                     name: "Plugin History".to_string(),
                 });
+                data.tab_order.push(create_tab_id.clone());
                 data.keys.insert(create_tab_id.clone(), Vec::new());
                 data.key_positions.insert(create_tab_id.clone(), Vec::new());
                 data.selected_key_type = create_tab_id;
@@ -13486,6 +13490,7 @@ fn custom_tab_delete_history_restores_plugin_instances_atomically() {
             admission,
             |data| {
                 data.custom_tabs.retain(|tab| tab.id != delete_tab_id);
+                data.tab_order.retain(|id| id != &delete_tab_id);
                 data.keys.remove(&delete_tab_id);
                 data.key_positions.remove(&delete_tab_id);
                 data.stat_positions.remove(&delete_tab_id);
@@ -15826,12 +15831,15 @@ fn backup_failure_keeps_damaged_store_untouched() {
 fn defer_test_bounds(store: &AppStore, x: f64) {
     store
         .update_deferred(|state| {
-            state.overlay_bounds = Some(OverlayBounds {
-                x,
-                y: 20.0,
-                width: 800.0,
-                height: 300.0,
-            });
+            state.overlay_bounds = Some(
+                OverlayBounds {
+                    x,
+                    y: 20.0,
+                    width: 800.0,
+                    height: 300.0,
+                }
+                .into(),
+            );
             state.overlay_bounds_are_logical = true;
         })
         .unwrap();

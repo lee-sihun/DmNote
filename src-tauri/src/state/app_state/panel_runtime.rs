@@ -15,7 +15,7 @@ impl AppState {
     // 드문 조작이라 즉시 디스크로 - deferred로 두면 강제 종료 때 유저가 고른 배치가 날아간다.
     // 반드시 panel_creation_lock을 놓은 뒤 부를 것: 저장 대기 동안 창 전환이 막힌다.
     // 사이에 반대 전환이 끝났다면 그쪽 저장이 이미 dirty를 걷어가 여기서 값을 되살리지 않는다
-    fn flush_panel_detached(&self) {
+    pub(crate) fn flush_panel_detached(&self) {
         if let Err(err) = self.store.flush() {
             log::warn!("failed to persist panel detached state: {err}");
         }
@@ -24,6 +24,58 @@ impl AppState {
     // 메인이 window.open을 부르기 직전에 세운다. 핸들러가 이 토큰을 1회 소비한다
     pub fn arm_panel_open(&self) {
         *self.panel_open_armed.lock() = Some(Instant::now());
+    }
+
+    pub(crate) fn panel_drag_controller(&self) -> Arc<PanelDragController> {
+        Arc::clone(&self.panel_drag)
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn try_lock_panel_creation_for_drag(
+        &self,
+    ) -> Option<parking_lot::MutexGuard<'_, ()>> {
+        self.panel_creation_lock.try_lock()
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn record_panel_drag_presented(&self, app: &AppHandle) -> PanelPresentSnapshot {
+        let panel_detached = self.store.snapshot().panel_detached;
+        let mut destroy_reason = self.panel_destroy_reason.lock();
+        let snapshot = PanelPresentSnapshot {
+            panel_visible: self.panel_visible.load(Ordering::SeqCst),
+            panel_detached,
+            panel_destroy_reason: *destroy_reason,
+        };
+        *destroy_reason = None;
+        drop(destroy_reason);
+        if let Err(error) =
+            publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+        {
+            self.panel_visible.store(true, Ordering::SeqCst);
+            log::warn!("failed to publish the visible panel state during native drag: {error}");
+        }
+        self.mark_panel_detached(true);
+        snapshot
+    }
+
+    #[cfg(target_os = "windows")]
+    pub(crate) fn revert_panel_drag_presented(
+        &self,
+        app: &AppHandle,
+        snapshot: PanelPresentSnapshot,
+    ) {
+        if let Err(error) = publish_panel_visibility_transition(
+            &self.panel_visible,
+            app,
+            snapshot.panel_visible,
+            snapshot.panel_destroy_reason,
+        ) {
+            self.panel_visible
+                .store(snapshot.panel_visible, Ordering::SeqCst);
+            log::warn!("failed to publish the restored panel state after native drag: {error}");
+        }
+        self.mark_panel_detached(snapshot.panel_detached);
+        *self.panel_destroy_reason.lock() = snapshot.panel_destroy_reason;
     }
 
     fn take_panel_open_arm(&self) -> bool {
@@ -52,7 +104,7 @@ impl AppState {
             ));
         }
         // 배치 정보는 락과 무관하니 락 밖에서 먼저 읽는다
-        let main_rect = main_window_logical_rect(app);
+        let main_rect = main_window_native_rect(app);
         let monitors = MonitorData::gather(app);
         // 메인 스레드 콜백이라 락은 try_lock만 - 잡고 있는 오프메인 태스크(ack 타임아웃)를
         // 기다리면 역전 데드락
@@ -79,7 +131,7 @@ impl AppState {
         focus: bool,
     ) -> Result<()> {
         // 배치 정보는 락과 무관하니 락 밖에서 먼저 읽는다
-        let main_rect = main_window_logical_rect(app);
+        let main_rect = main_window_native_rect(app);
         let monitors = MonitorData::gather(app);
         let result = {
             let _creation_guard = self.panel_creation_lock.lock();
@@ -93,10 +145,7 @@ impl AppState {
             let mut layout = resolve_panel_window_layout(stored_bounds, main_rect, &monitors, None);
             if let Some(position) = position {
                 let outer = panel_client_to_outer_position(&window, position.x, position.y);
-                layout.position = Some(OverlayPosition {
-                    x: outer.x,
-                    y: outer.y,
-                });
+                layout.position = Some(logical_position_to_native(&window, outer));
             }
             self.apply_panel_window_layout(&window, &layout);
             let _ = window.unminimize();
@@ -142,7 +191,7 @@ impl AppState {
     // 저장값을 비우고 기본 배치로 되돌린다. 창을 새로 보이거나 포커스를 옮기지 않는다.
     // 즉시 저장은 panel_creation_lock 밖에서 - 디스크 대기 동안 창 전환이 막힌다
     pub fn reset_panel_window_position(&self, app: &AppHandle) -> Result<()> {
-        let main_rect = main_window_logical_rect(app);
+        let main_rect = main_window_native_rect(app);
         let monitors = MonitorData::gather(app);
         let window = app.get_webview_window(PANEL_LABEL);
         let layout = window
@@ -182,7 +231,14 @@ impl AppState {
             log::warn!("failed to apply panel size: {err}");
         }
         if let Some(position) = layout.position {
-            if let Err(err) = window.set_position(LogicalPosition::new(position.x, position.y)) {
+            #[cfg(target_os = "windows")]
+            let result = window.set_position(PhysicalPosition::new(
+                position.x.round() as i32,
+                position.y.round() as i32,
+            ));
+            #[cfg(not(target_os = "windows"))]
+            let result = window.set_position(LogicalPosition::new(position.x, position.y));
+            if let Err(err) = result {
                 log::warn!("failed to apply panel position: {err}");
             }
         }
@@ -211,6 +267,8 @@ impl AppState {
     // 태스크가 메인 스레드 응답을 기다리는 구간(bounds 샘플링)이 있어 잡으면 역전 데드락.
     // 도킹된(hide) 창은 is_visible이 false라 표식이 서지 않는다
     pub(super) fn hide_detached_panel_with_main(&self, app: &AppHandle) {
+        self.panel_drag
+            .clear_for_lifecycle(Some(app), "hiddenWithMain");
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
             return;
         };
@@ -295,6 +353,7 @@ impl AppState {
         app: &AppHandle,
         reason: PanelVisibilityReason,
     ) -> Result<()> {
+        self.panel_drag.clear_for_lifecycle(Some(app), "docked");
         // 도킹 상태 기록: 명시 재부착과 close-ack 타임아웃 강제 도킹이 모두 이 경로를 지남
         // Destroyed 핸들러에서는 기록 금지 - 종료 시 shutdown_application이 panel.destroy()를
         // 직접 호출해 같은 핸들러로 들어오므로 분리 채 종료할 때마다 플래그가 지워짐.
@@ -352,6 +411,8 @@ impl AppState {
         if self.shutdown_started.load(Ordering::SeqCst) {
             return Ok(());
         }
+        self.panel_drag
+            .clear_for_lifecycle(Some(app), "applicationLifecycle");
         let _creation_guard = self.panel_creation_lock.lock();
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
             return Ok(());
@@ -360,6 +421,7 @@ impl AppState {
     }
 
     pub fn handle_panel_window_destroyed(&self, app: &AppHandle) {
+        self.panel_drag.finish_window_destroyed(app);
         drop_panel_hidden_with_main(&self.panel_hidden_with_main);
         finish_panel_close(&self.panel_close_request);
         if let Err(error) = self.publish_panel_hidden(app, PanelVisibilityReason::Destroyed) {
@@ -372,7 +434,7 @@ impl AppState {
         &self,
         app: &AppHandle,
         features: tauri::webview::NewWindowFeatures,
-        main_rect: Option<LogicalRect>,
+        main_rect: Option<NativeRect>,
         monitors: &MonitorData,
     ) -> Result<WebviewWindow> {
         let snapshot = self.store.snapshot();
@@ -419,6 +481,7 @@ impl AppState {
             builder = builder.background_color(crate::state::windows_window_corners::SEED_FILL);
         }
 
+        #[cfg(not(target_os = "windows"))]
         if let Some(position) = layout.position {
             builder = builder.position(position.x, position.y);
         }
@@ -426,7 +489,14 @@ impl AppState {
         let window = builder.build().context("failed to create panel window")?;
 
         if let Some(position) = layout.position {
-            if let Err(err) = window.set_position(LogicalPosition::new(position.x, position.y)) {
+            #[cfg(target_os = "windows")]
+            let result = window.set_position(PhysicalPosition::new(
+                position.x.round() as i32,
+                position.y.round() as i32,
+            ));
+            #[cfg(not(target_os = "windows"))]
+            let result = window.set_position(LogicalPosition::new(position.x, position.y));
+            if let Err(err) = result {
                 log::warn!("failed to restore panel position after build: {err}");
             }
         }
@@ -524,6 +594,10 @@ impl AppState {
             WindowEvent::Moved(position) => {
                 bounds_persistence
                     .record_event(bounds_session, PanelBoundsChange::Moved(*position));
+                #[cfg(target_os = "windows")]
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    state.panel_drag.handle_moved(&app_handle);
+                }
             }
             WindowEvent::Resized(size) => {
                 bounds_persistence.record_event(bounds_session, PanelBoundsChange::Resized(*size));

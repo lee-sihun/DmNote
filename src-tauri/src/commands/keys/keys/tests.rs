@@ -1,7 +1,8 @@
 use super::{
-    delete_custom_tab_data, plan_custom_tab_delete, reset_all_editor_data,
+    delete_custom_tab_data, plan_custom_tab_delete, rename_custom_tab_metadata,
+    reorder_change_payload, reorder_tab_metadata, reset_all_editor_data,
     reset_all_editor_data_with_images, reset_mode_data, reset_mode_data_with_images,
-    reset_mode_kind, select_mode_if_available, set_mode_with, ModeResetKind,
+    reset_mode_kind, select_mode_if_available, set_mode_with, ModeResetKind, TabOrderOpV1,
 };
 use crate::{
     defaults::{default_keys, default_positions, default_stat_positions},
@@ -12,7 +13,10 @@ use crate::{
         TabCss, TabNoteSettings,
     },
     state::{
-        app_state::KeyCounterEventEmitter, store::PluginInstancesResetScope, AppState, AppStore,
+        app_state::KeyCounterEventEmitter,
+        history::{HistoryDirection, HistoryScope},
+        store::PluginInstancesResetScope,
+        AppState, AppStore,
     },
 };
 use std::{cell::Cell, collections::HashSet};
@@ -120,6 +124,7 @@ fn populated_custom_tab_store() -> AppStoreData {
 #[test]
 fn deleting_selected_custom_tab_clears_all_tab_scoped_data() {
     let mut store = populated_custom_tab_store();
+    store.bar_count = 5;
     let plan = plan_custom_tab_delete(&store, TARGET_TAB).expect("delete plan");
 
     assert_eq!(plan.next_selected, "custom-before");
@@ -136,6 +141,340 @@ fn deleting_selected_custom_tab_clears_all_tab_scoped_data() {
     assert!(!store.tab_note_overrides.contains_key(TARGET_TAB));
     assert!(!store.key_counters.contains_key(TARGET_TAB));
     assert_eq!(store.selected_key_type, "custom-before");
+    assert_eq!(store.bar_count, 4);
+}
+
+#[test]
+fn deleting_first_selected_tab_chooses_next_builtin_neighbor() {
+    let mut store = populated_custom_tab_store();
+    store.tab_order = [TARGET_TAB, "4key", "custom-before", "5key", "6key", "8key"]
+        .map(str::to_string)
+        .to_vec();
+
+    let plan = plan_custom_tab_delete(&store, TARGET_TAB).expect("delete plan");
+
+    assert_eq!(plan.next_selected, "4key");
+    assert_eq!(
+        plan.tab_order,
+        ["4key", "custom-before", "5key", "6key", "8key"]
+    );
+}
+
+#[test]
+fn rename_rejects_long_reserved_duplicate_and_builtin_targets() {
+    let mut store = populated_custom_tab_store();
+
+    let (_, long_error, _) = rename_custom_tab_metadata(&mut store, TARGET_TAB, "12345678901");
+    let (_, reserved_error, _) = rename_custom_tab_metadata(&mut store, TARGET_TAB, "4key");
+    let (_, duplicate_error, _) = rename_custom_tab_metadata(&mut store, TARGET_TAB, "Before");
+    let (_, builtin_error, _) = rename_custom_tab_metadata(&mut store, "4key", "Built in");
+
+    assert_eq!(long_error.as_deref(), Some("name-too-long"));
+    assert_eq!(reserved_error.as_deref(), Some("reserved-name"));
+    assert_eq!(duplicate_error.as_deref(), Some("duplicate-name"));
+    assert_eq!(builtin_error.as_deref(), Some("unknown-tab"));
+    assert_eq!(
+        store
+            .custom_tabs
+            .iter()
+            .find(|tab| tab.id == TARGET_TAB)
+            .unwrap()
+            .name,
+        "Target"
+    );
+}
+
+#[test]
+fn reorder_applies_after_unrelated_tab_is_created() {
+    let mut store = crate::state::migration::normalize_state(AppStoreData::default());
+    let unrelated_id = "created-after-drag".to_string();
+    store.custom_tabs.push(CustomTab {
+        id: unrelated_id.clone(),
+        name: "Created later".to_string(),
+    });
+    store.tab_order =
+        crate::state::tab_metadata::normalize_tab_order(&store.tab_order, &store.custom_tabs);
+
+    let (snapshot, error, changed) = reorder_tab_metadata(
+        &mut store,
+        &TabOrderOpV1::Swap {
+            a: "4key".to_string(),
+            b: "5key".to_string(),
+        },
+    );
+
+    assert!(error.is_none());
+    assert!(changed);
+    assert_eq!(
+        snapshot.tab_order,
+        ["5key", "4key", "6key", "8key", unrelated_id.as_str()]
+    );
+}
+
+#[test]
+fn reorder_applies_after_unrelated_tab_is_deleted() {
+    let mut store = crate::state::migration::normalize_state(AppStoreData::default());
+    let unrelated_id = "deleted-after-drag".to_string();
+    store.custom_tabs.push(CustomTab {
+        id: unrelated_id.clone(),
+        name: "Deleted later".to_string(),
+    });
+    store.tab_order.push(unrelated_id.clone());
+    store.custom_tabs.retain(|tab| tab.id != unrelated_id);
+    store.tab_order.retain(|id| id != &unrelated_id);
+
+    let (snapshot, error, changed) = reorder_tab_metadata(
+        &mut store,
+        &TabOrderOpV1::Swap {
+            a: "6key".to_string(),
+            b: "8key".to_string(),
+        },
+    );
+
+    assert!(error.is_none());
+    assert!(changed);
+    assert_eq!(snapshot.tab_order, ["4key", "5key", "8key", "6key"]);
+}
+
+#[test]
+fn reorder_unknown_tab_repairs_noncanonical_metadata() {
+    let mut store = crate::state::migration::normalize_state(AppStoreData::default());
+    store.tab_order = ["4key", "unknown", "4key", "5key"]
+        .map(str::to_string)
+        .to_vec();
+    store.bar_count = 9;
+
+    let (snapshot, error, changed) = reorder_tab_metadata(
+        &mut store,
+        &TabOrderOpV1::Swap {
+            a: "missing".to_string(),
+            b: "5key".to_string(),
+        },
+    );
+
+    assert_eq!(error.as_deref(), Some("unknown-tab"));
+    assert!(changed);
+    assert_eq!(snapshot.tab_order, ["4key", "5key", "6key", "8key"]);
+    assert_eq!(snapshot.bar_count, 4);
+    assert_eq!(store.tab_order, snapshot.tab_order);
+    assert_eq!(store.bar_count, snapshot.bar_count);
+    assert!(reorder_change_payload(&snapshot, changed).is_some());
+}
+
+#[test]
+fn reorder_same_tab_repairs_noncanonical_metadata() {
+    let mut store = crate::state::migration::normalize_state(AppStoreData::default());
+    store.tab_order = ["4key", "unknown", "4key", "5key"]
+        .map(str::to_string)
+        .to_vec();
+    store.bar_count = 9;
+
+    let (snapshot, error, changed) = reorder_tab_metadata(
+        &mut store,
+        &TabOrderOpV1::Swap {
+            a: "4key".to_string(),
+            b: "4key".to_string(),
+        },
+    );
+
+    assert!(error.is_none());
+    assert!(changed);
+    assert_eq!(snapshot.tab_order, ["4key", "5key", "6key", "8key"]);
+    assert_eq!(snapshot.bar_count, 4);
+    assert_eq!(store.tab_order, snapshot.tab_order);
+    assert_eq!(store.bar_count, snapshot.bar_count);
+    assert!(reorder_change_payload(&snapshot, changed).is_some());
+}
+
+#[test]
+fn reorder_rejects_each_missing_operand_with_current_snapshot() {
+    for op in [
+        TabOrderOpV1::Swap {
+            a: "missing".to_string(),
+            b: "5key".to_string(),
+        },
+        TabOrderOpV1::Swap {
+            a: "4key".to_string(),
+            b: "missing".to_string(),
+        },
+    ] {
+        let mut store = crate::state::migration::normalize_state(AppStoreData::default());
+        let before = store.clone();
+
+        let (snapshot, error, changed) = reorder_tab_metadata(&mut store, &op);
+
+        assert_eq!(error.as_deref(), Some("unknown-tab"));
+        assert!(!changed);
+        assert_eq!(snapshot.custom_tabs, before.custom_tabs);
+        assert_eq!(snapshot.tab_order, before.tab_order);
+        assert_eq!(snapshot.bar_count, before.bar_count);
+        assert_eq!(snapshot.selected_key_type, before.selected_key_type);
+        assert_eq!(store, before);
+    }
+}
+
+#[test]
+fn reorder_same_tab_is_a_no_op() {
+    let mut store = crate::state::migration::normalize_state(AppStoreData::default());
+    let before = store.clone();
+
+    let (snapshot, error, changed) = reorder_tab_metadata(
+        &mut store,
+        &TabOrderOpV1::Swap {
+            a: "4key".to_string(),
+            b: "4key".to_string(),
+        },
+    );
+
+    assert!(error.is_none());
+    assert!(!changed);
+    assert_eq!(snapshot.tab_order, before.tab_order);
+    assert_eq!(store, before);
+}
+
+#[test]
+fn reorder_true_no_op_preserves_history_events_and_store() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = AppStore::initialize_for_test(directory.path()).unwrap();
+    let before = store.snapshot();
+    let history_before = store.history_status();
+
+    for (op, expected_error) in [
+        (
+            TabOrderOpV1::Swap {
+                a: "4key".to_string(),
+                b: "4key".to_string(),
+            },
+            None,
+        ),
+        (
+            TabOrderOpV1::Swap {
+                a: "missing".to_string(),
+                b: "5key".to_string(),
+            },
+            Some("unknown-tab"),
+        ),
+    ] {
+        let transaction = store
+            .commit_aux_editor_transaction(
+                HistoryScope::CustomTabs,
+                None,
+                EditorCommitOrigin::LegacyAdapter("tabs_reorder_test".to_string()),
+                &[],
+                |data| Ok(reorder_tab_metadata(data, &op)),
+            )
+            .unwrap();
+        let (snapshot, error, changed) = &transaction.value;
+
+        assert_eq!(error.as_deref(), expected_error);
+        assert!(!changed);
+        assert!(transaction.change.event.is_none());
+        assert!(transaction.change.history_status.is_none());
+        assert!(reorder_change_payload(snapshot, *changed).is_none());
+        assert_eq!(store.snapshot(), before);
+    }
+    let history_after = store.history_status();
+    assert_eq!(
+        history_after.history_revision,
+        history_before.history_revision
+    );
+    assert!(!history_after.can_undo);
+    store.flush_and_shutdown().unwrap();
+}
+
+#[test]
+fn reorder_history_undo_restores_tab_order_and_bar_count_together() {
+    let directory = tempfile::tempdir().unwrap();
+    let tab_id = "reorder-tab".to_string();
+    let mut data = crate::state::migration::normalize_state(AppStoreData::default());
+    data.custom_tabs.push(CustomTab {
+        id: tab_id.clone(),
+        name: "Reorder".to_string(),
+    });
+    data.keys.insert(tab_id.clone(), Vec::new());
+    data.key_positions.insert(tab_id.clone(), Vec::new());
+    data.tab_order = ["4key", "5key", "6key", "8key", tab_id.as_str()]
+        .map(str::to_string)
+        .to_vec();
+    data.bar_count = 2;
+    crate::state::native_element_id::backfill_store_element_ids(&mut data);
+    std::fs::write(
+        directory.path().join("store.json"),
+        serde_json::to_vec_pretty(&data).unwrap(),
+    )
+    .unwrap();
+    let store = AppStore::initialize_for_test(directory.path()).unwrap();
+    let before = store.snapshot();
+    let reordered = [tab_id.as_str(), "5key", "6key", "8key", "4key"]
+        .map(str::to_string)
+        .to_vec();
+
+    store
+        .commit_aux_editor_transaction(
+            HistoryScope::CustomTabs,
+            None,
+            EditorCommitOrigin::LegacyAdapter("tabs_reorder_test".to_string()),
+            &[],
+            |data| {
+                let (_, error, changed) = reorder_tab_metadata(
+                    data,
+                    &TabOrderOpV1::Swap {
+                        a: "4key".to_string(),
+                        b: tab_id.clone(),
+                    },
+                );
+                assert!(error.is_none());
+                assert!(changed);
+                Ok(())
+            },
+        )
+        .unwrap();
+    assert_eq!(store.snapshot().tab_order, reordered);
+    assert_eq!(store.snapshot().bar_count, 2);
+
+    let operation_id = uuid::Uuid::new_v4().to_string();
+    let gate = store.history_gate();
+    let barrier = gate.close(&operation_id).unwrap();
+    let counters = store.snapshot().key_counters;
+    let undo = store
+        .apply_history_operation(HistoryDirection::Undo, &operation_id, &counters, || {})
+        .unwrap();
+    drop(barrier);
+
+    assert_eq!(store.snapshot().tab_order, before.tab_order);
+    assert_eq!(store.snapshot().bar_count, before.bar_count);
+    assert!(undo.status.can_redo);
+
+    let operation_id = uuid::Uuid::new_v4().to_string();
+    let barrier = gate.close(&operation_id).unwrap();
+    let counters = store.snapshot().key_counters;
+    let redo = store
+        .apply_history_operation(HistoryDirection::Redo, &operation_id, &counters, || {})
+        .unwrap();
+    drop(barrier);
+
+    assert_eq!(store.snapshot().tab_order, reordered);
+    assert_eq!(store.snapshot().bar_count, 2);
+    assert!(redo.status.can_undo);
+    store.flush_and_shutdown().unwrap();
+}
+
+#[test]
+fn tab_order_op_rejects_unknown_kind_and_unknown_fields() {
+    let unknown_kind = serde_json::from_value::<TabOrderOpV1>(serde_json::json!({
+        "kind": "move",
+        "a": "4key",
+        "b": "5key"
+    }));
+    let unknown_field = serde_json::from_value::<TabOrderOpV1>(serde_json::json!({
+        "kind": "swap",
+        "a": "4key",
+        "b": "5key",
+        "extra": true
+    }));
+
+    assert!(unknown_kind.is_err());
+    assert!(unknown_field.is_err());
 }
 
 #[test]

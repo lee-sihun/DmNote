@@ -12,24 +12,12 @@ pub async fn custom_tabs_create(
     name: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabCreateResult> {
-    if name.trim().is_empty() {
-        return Ok(CustomTabCreateResult {
-            result: None,
-            error: Some("invalid-name".to_string()),
-        });
-    }
-
-    let trimmed = name.trim().to_string();
     let id = generate_custom_tab_id();
-    let tab = CustomTab {
-        id: id.clone(),
-        name: trimmed,
-    };
     run_history_mutation(
         app,
         window.label().to_string(),
         move |app, state, admission| {
-            custom_tabs_create_inner(state, app, id, tab, observed_history_epoch, admission)
+            custom_tabs_create_inner(state, app, id, name, observed_history_epoch, admission)
         },
     )
     .await
@@ -39,7 +27,7 @@ fn custom_tabs_create_inner(
     state: &AppState,
     app: &AppHandle,
     id: String,
-    tab: CustomTab,
+    name: String,
     observed_history_epoch: Option<u64>,
     admission: HistoryAdmissionLease,
 ) -> CmdResult<CustomTabCreateResult> {
@@ -57,25 +45,32 @@ fn custom_tabs_create_inner(
                     admission,
                     runtime_counters,
                     |store| {
-                        if store
-                            .custom_tabs
-                            .iter()
-                            .any(|existing| existing.name == tab.name)
-                        {
-                            return Ok(Err("duplicate-name".to_string()));
-                        }
+                        let name = match validate_custom_tab_name(&name, &store.custom_tabs, None) {
+                            Ok(name) => name,
+                            Err(error) => return Ok(Err(error.to_string())),
+                        };
                         if store.custom_tabs.len() >= MAX_CUSTOM_TABS {
                             return Ok(Err("max-reached".to_string()));
                         }
+                        let tab = CustomTab {
+                            id: id.clone(),
+                            name,
+                        };
                         store.custom_tabs.push(tab.clone());
+                        store.tab_order = normalize_tab_order(&store.tab_order, &store.custom_tabs);
                         store.keys.insert(id.clone(), Vec::new());
                         store.key_positions.insert(id.clone(), Vec::new());
                         store.selected_key_type = id.clone();
-                        Ok(Ok((tab.clone(), store.custom_tabs.clone())))
+                        Ok(Ok((
+                            tab,
+                            store.custom_tabs.clone(),
+                            store.tab_order.clone(),
+                            store.bar_count,
+                        )))
                     },
                 )
         })?;
-    let (tab, custom_tabs) = match transaction.value {
+    let (tab, custom_tabs, tab_order, bar_count) = match transaction.value {
         Ok(result) => result,
         Err(error) => {
             return Ok(CustomTabCreateResult {
@@ -95,7 +90,10 @@ fn custom_tabs_create_inner(
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
+            tab_order,
+            bar_count,
             selected_key_type: id.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
@@ -114,6 +112,122 @@ fn custom_tabs_create_inner(
     Ok(CustomTabCreateResult {
         result: Some(tab),
         error: None,
+    })
+}
+
+#[tauri::command]
+pub async fn custom_tabs_rename(
+    app: AppHandle,
+    window: WebviewWindow,
+    id: String,
+    name: String,
+    observed_history_epoch: Option<u64>,
+) -> CmdResult<TabMetadataResult> {
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| {
+            custom_tabs_rename_inner(state, app, id, name, observed_history_epoch, admission)
+        },
+    )
+    .await
+}
+
+fn custom_tabs_rename_inner(
+    state: &AppState,
+    app: &AppHandle,
+    id: String,
+    name: String,
+    observed_history_epoch: Option<u64>,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<TabMetadataResult> {
+    let (transaction, _) =
+        state.commit_editor_transaction_preserving_runtime_counters(app, |runtime_counters| {
+            state
+                .store
+                .commit_aux_editor_transaction_with_runtime_counters_admission(
+                    AuxEditorTransactionOptions {
+                        scope: HistoryScope::CustomTabs,
+                        observed_history_epoch,
+                        origin: EditorCommitOrigin::LegacyAdapter("custom_tabs_rename".to_string()),
+                        touched_fields: &[],
+                    },
+                    admission,
+                    runtime_counters,
+                    |store| Ok(rename_custom_tab_metadata(store, &id, &name)),
+                )
+        })?;
+    let (snapshot, error, changed) = transaction.value;
+    if changed {
+        publish_editor_change(state, app, &transaction.change, false);
+        emit_best_effort(
+            app,
+            "customTabs:changed",
+            &CustomTabChangePayload {
+                custom_tabs: snapshot.custom_tabs.clone(),
+                tab_order: snapshot.tab_order.clone(),
+                bar_count: snapshot.bar_count,
+                selected_key_type: snapshot.selected_key_type.clone(),
+                selection_authoritative: false,
+            },
+        );
+        state.refresh_obs_snapshot();
+    }
+    emit_aux_history_status(app, &transaction.change);
+
+    Ok(TabMetadataResult {
+        result: Some(snapshot),
+        error,
+    })
+}
+
+#[tauri::command]
+pub async fn tabs_reorder(
+    app: AppHandle,
+    window: WebviewWindow,
+    op: TabOrderOpV1,
+) -> CmdResult<TabMetadataResult> {
+    run_history_mutation(
+        app,
+        window.label().to_string(),
+        move |app, state, admission| tabs_reorder_inner(state, app, op, admission),
+    )
+    .await
+}
+
+fn tabs_reorder_inner(
+    state: &AppState,
+    app: &AppHandle,
+    op: TabOrderOpV1,
+    admission: HistoryAdmissionLease,
+) -> CmdResult<TabMetadataResult> {
+    let (transaction, _) =
+        state.commit_editor_transaction_preserving_runtime_counters(app, |runtime_counters| {
+            state
+                .store
+                .commit_aux_editor_transaction_with_runtime_counters_admission(
+                    AuxEditorTransactionOptions {
+                        scope: HistoryScope::CustomTabs,
+                        observed_history_epoch: None,
+                        origin: EditorCommitOrigin::LegacyAdapter("tabs_reorder".to_string()),
+                        touched_fields: &[],
+                    },
+                    admission,
+                    runtime_counters,
+                    |store| Ok(reorder_tab_metadata(store, &op)),
+                )
+        })?;
+    let (snapshot, error, changed) = transaction.value;
+    if let Some(payload) = reorder_change_payload(&snapshot, changed) {
+        publish_editor_change(state, app, &transaction.change, false);
+        emit_best_effort(app, "customTabs:changed", &payload);
+        state.refresh_obs_snapshot();
+    }
+    emit_aux_history_status(app, &transaction.change);
+
+    Ok(TabMetadataResult {
+        result: Some(snapshot),
+        error,
     })
 }
 
@@ -169,22 +283,25 @@ fn custom_tabs_delete_inner(
                         delete_custom_tab_data(store, &id, &plan);
                         Ok(Ok((
                             store.custom_tabs.clone(),
+                            store.tab_order.clone(),
+                            store.bar_count,
                             store.selected_key_type.clone(),
                             store.tab_note_overrides.clone(),
                         )))
                     },
                 )
         })?;
-    let (custom_tabs, selected_key_type, tab_note_overrides) = match transaction.value {
-        Ok(result) => result,
-        Err(selected) => {
-            return Ok(CustomTabDeleteResult {
-                success: false,
-                selected,
-                error: Some("not-found".to_string()),
-            });
-        }
-    };
+    let (custom_tabs, tab_order, bar_count, selected_key_type, tab_note_overrides) =
+        match transaction.value {
+            Ok(result) => result,
+            Err(selected) => {
+                return Ok(CustomTabDeleteResult {
+                    success: false,
+                    selected,
+                    error: Some("not-found".to_string()),
+                });
+            }
+        };
     if key_runtime_applied {
         publish_editor_change_after_key_runtime(state, app, &transaction.change);
     } else {
@@ -198,7 +315,10 @@ fn custom_tabs_delete_inner(
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs,
+            tab_order,
+            bar_count,
             selected_key_type: selected_key_type.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(app, "keys:changed", &transaction.change.document.keys);
@@ -367,18 +487,27 @@ fn custom_tabs_restore_inner(
                     admission,
                     runtime_counters,
                     move |store| {
+                        let tab_order = normalize_tab_order(&store.tab_order, &custom_tabs);
                         validate_history_restore_metadata(
                             &EditorDocumentV1::from_store(store),
                             &custom_tabs,
+                            &tab_order,
                             &selected_key_type,
                         )?;
                         store.custom_tabs = custom_tabs;
+                        store.tab_order = tab_order;
+                        store.bar_count = normalize_bar_count(store.bar_count, &store.tab_order);
                         store.selected_key_type = selected_key_type;
-                        Ok((store.custom_tabs.clone(), store.selected_key_type.clone()))
+                        Ok((
+                            store.custom_tabs.clone(),
+                            store.tab_order.clone(),
+                            store.bar_count,
+                            store.selected_key_type.clone(),
+                        ))
                     },
                 )
         })?;
-    let (custom_tabs, selected_key_type) = transaction.value;
+    let (custom_tabs, tab_order, bar_count, selected_key_type) = transaction.value;
 
     state.apply_committed_editor_keys_without_counters(
         transaction.change.runtime_publication_generation,
@@ -390,7 +519,10 @@ fn custom_tabs_restore_inner(
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs,
+            tab_order,
+            bar_count,
             selected_key_type: selected_key_type.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(

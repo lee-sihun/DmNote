@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::{
@@ -29,6 +29,7 @@ use crate::{
             AuxEditorResetTransactionOptions, AuxEditorTransactionOptions,
             PluginInstancesResetScope,
         },
+        tab_metadata::{normalize_bar_count, normalize_tab_order, validate_custom_tab_name},
         AppState,
     },
 };
@@ -99,6 +100,7 @@ enum ModeResetKind {
 
 struct CustomTabDeletePlan {
     custom_tabs: Vec<CustomTab>,
+    tab_order: Vec<String>,
     next_selected: String,
 }
 
@@ -127,6 +129,8 @@ fn reset_all_editor_data(
     store.layer_groups.clear();
     store.key_counters = zeroed_counters(keys);
     store.custom_tabs.clear();
+    store.tab_order = normalize_tab_order(&[], &store.custom_tabs);
+    store.bar_count = normalize_bar_count(crate::models::default_bar_count(), &store.tab_order);
     store.selected_key_type = "4key".to_string();
     store.tab_note_overrides.clear();
     store.tab_css_overrides.clear();
@@ -347,34 +351,36 @@ pub(crate) fn reset_mode_data_for_test(store: &mut AppStoreData, mode: &str) -> 
 }
 
 fn plan_custom_tab_delete(store: &AppStoreData, id: &str) -> Option<CustomTabDeletePlan> {
-    let index = store.custom_tabs.iter().position(|tab| tab.id == id)?;
+    store.custom_tabs.iter().position(|tab| tab.id == id)?;
+    let mut tab_order = normalize_tab_order(&store.tab_order, &store.custom_tabs);
+    let index = tab_order.iter().position(|tab_id| tab_id == id)?;
+    let next_selected = if store.selected_key_type == id {
+        if index > 0 {
+            tab_order[index - 1].clone()
+        } else {
+            tab_order.get(1)?.clone()
+        }
+    } else {
+        store.selected_key_type.clone()
+    };
+    tab_order.remove(index);
     let custom_tabs: Vec<CustomTab> = store
         .custom_tabs
         .iter()
         .filter(|tab| tab.id != id)
         .cloned()
         .collect();
-    let selected_tab_deleted = store.selected_key_type == id;
-    let next_selected = if selected_tab_deleted {
-        if custom_tabs.is_empty() {
-            "8key".to_string()
-        } else {
-            custom_tabs[if index > 0 { index - 1 } else { 0 }]
-                .id
-                .clone()
-        }
-    } else {
-        store.selected_key_type.clone()
-    };
-
     Some(CustomTabDeletePlan {
         custom_tabs,
+        tab_order,
         next_selected,
     })
 }
 
 fn delete_custom_tab_data(store: &mut AppStoreData, id: &str, plan: &CustomTabDeletePlan) {
     store.custom_tabs = plan.custom_tabs.clone();
+    store.tab_order = plan.tab_order.clone();
+    store.bar_count = normalize_bar_count(store.bar_count, &store.tab_order);
     store.keys.remove(id);
     store.key_positions.remove(id);
     store.stat_positions.remove(id);
@@ -399,6 +405,8 @@ pub struct ResetAllResponse {
     pub keys: KeyMappings,
     pub positions: KeyPositions,
     pub custom_tabs: Vec<CustomTab>,
+    pub tab_order: Vec<String>,
+    pub bar_count: u8,
     pub selected_key_type: String,
 }
 
@@ -412,7 +420,112 @@ pub struct ResetModeResponse {
 #[serde(rename_all = "camelCase")]
 pub struct CustomTabChangePayload {
     pub custom_tabs: Vec<CustomTab>,
+    pub tab_order: Vec<String>,
+    pub bar_count: u8,
     pub selected_key_type: String,
+    pub selection_authoritative: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabMetadataSnapshot {
+    pub custom_tabs: Vec<CustomTab>,
+    pub tab_order: Vec<String>,
+    pub bar_count: u8,
+    pub selected_key_type: String,
+}
+
+impl TabMetadataSnapshot {
+    fn from_store(store: &AppStoreData) -> Self {
+        Self {
+            custom_tabs: store.custom_tabs.clone(),
+            tab_order: store.tab_order.clone(),
+            bar_count: store.bar_count,
+            selected_key_type: store.selected_key_type.clone(),
+        }
+    }
+}
+
+/// 탭 배치 연산
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum TabOrderOpV1 {
+    /// 두 탭 자리 교환
+    Swap { a: String, b: String },
+}
+
+fn rename_custom_tab_metadata(
+    store: &mut AppStoreData,
+    id: &str,
+    name: &str,
+) -> (TabMetadataSnapshot, Option<String>, bool) {
+    let Some(index) = store.custom_tabs.iter().position(|tab| tab.id == id) else {
+        return (
+            TabMetadataSnapshot::from_store(store),
+            Some("unknown-tab".to_string()),
+            false,
+        );
+    };
+    let name = match validate_custom_tab_name(name, &store.custom_tabs, Some(id)) {
+        Ok(name) => name,
+        Err(error) => {
+            return (
+                TabMetadataSnapshot::from_store(store),
+                Some(error.to_string()),
+                false,
+            );
+        }
+    };
+    let changed = store.custom_tabs[index].name != name;
+    store.custom_tabs[index].name = name;
+    (TabMetadataSnapshot::from_store(store), None, changed)
+}
+
+fn reorder_tab_metadata(
+    store: &mut AppStoreData,
+    op: &TabOrderOpV1,
+) -> (TabMetadataSnapshot, Option<String>, bool) {
+    let mut tab_order = normalize_tab_order(&store.tab_order, &store.custom_tabs);
+    let TabOrderOpV1::Swap { a, b } = op;
+    let error = match (
+        tab_order.iter().position(|id| id == a),
+        tab_order.iter().position(|id| id == b),
+    ) {
+        (Some(a_index), Some(b_index)) => {
+            if a_index != b_index {
+                tab_order.swap(a_index, b_index);
+            }
+            None
+        }
+        _ => Some("unknown-tab".to_string()),
+    };
+    let normalized_bar_count = normalize_bar_count(store.bar_count, &tab_order);
+    let changed = store.tab_order != tab_order || store.bar_count != normalized_bar_count;
+    store.tab_order = tab_order;
+    store.bar_count = normalized_bar_count;
+    (TabMetadataSnapshot::from_store(store), error, changed)
+}
+
+fn reorder_change_payload(
+    snapshot: &TabMetadataSnapshot,
+    changed: bool,
+) -> Option<CustomTabChangePayload> {
+    changed.then(|| CustomTabChangePayload {
+        custom_tabs: snapshot.custom_tabs.clone(),
+        tab_order: snapshot.tab_order.clone(),
+        bar_count: snapshot.bar_count,
+        selected_key_type: snapshot.selected_key_type.clone(),
+        selection_authoritative: false,
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabMetadataResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<TabMetadataSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -595,6 +708,8 @@ fn keys_reset_all_inner(
     let layer_groups = transaction.change.document.layer_groups;
     let selected_key_type = transaction.change.selected_key_type;
     let custom_tabs: Vec<CustomTab> = Vec::new();
+    let tab_order = normalize_tab_order(&[], &custom_tabs);
+    let bar_count = normalize_bar_count(crate::models::default_bar_count(), &tab_order);
     let tab_note_overrides = crate::models::TabNoteOverrides::new();
 
     if let Err(error) = state.emit_settings_changed(&settings_diff, app) {
@@ -612,7 +727,10 @@ fn keys_reset_all_inner(
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
+            tab_order: tab_order.clone(),
+            bar_count,
             selected_key_type: selected_key_type.clone(),
+            selection_authoritative: true,
         },
     );
     emit_best_effort(
@@ -639,6 +757,8 @@ fn keys_reset_all_inner(
         keys,
         positions,
         custom_tabs,
+        tab_order,
+        bar_count,
         selected_key_type,
     })
 }

@@ -11,6 +11,7 @@ import { overlayApi } from '@api/modules/overlayApi';
 import { settingsApi } from '@api/modules/settingsApi';
 import { subscribeHitContextMenu } from './useOverlayHitRegions';
 import type { CustomTab } from '@src/types/key/keys';
+import { buildOrderedTabs, builtinTabLabelKey } from '@utils/tabOrder';
 
 interface UseOverlayContextMenuRuntimeOptions {
   alwaysOnTop: boolean;
@@ -18,6 +19,7 @@ interface UseOverlayContextMenuRuntimeOptions {
   setAlwaysOnTop: (value: boolean) => void;
   selectedKeyType: string;
   customTabs: CustomTab[];
+  tabOrder: string[];
   setSelectedKeyType: (keyType: string) => void;
   t: (key: string) => string;
 }
@@ -28,6 +30,7 @@ export const useOverlayContextMenuRuntime = ({
   setAlwaysOnTop,
   selectedKeyType,
   customTabs,
+  tabOrder,
   setSelectedKeyType,
   t,
 }: UseOverlayContextMenuRuntimeOptions) => {
@@ -48,12 +51,6 @@ export const useOverlayContextMenuRuntime = ({
       return false;
     }
   };
-
-  // 탭 목록 (기본 탭 + 커스텀 탭)
-  const BUILTIN_TABS = ['4key', '5key', '6key', '8key'].map((id) => {
-    const num = id.replace('key', '');
-    return { id, name: t(`mode.button${num}`) };
-  });
 
   const closeOverlayWindow = async () => {
     try {
@@ -139,10 +136,11 @@ export const useOverlayContextMenuRuntime = ({
   const contextMenuOpenRef = useRef(false);
   openOverlayContextMenuAtImpl.current = async (x: number, y: number) => {
     const canOpenMainSettings = await resolveCanOpenMainSettings();
-    const allTabs = [
-      ...BUILTIN_TABS,
-      ...customTabs.map((tab) => ({ id: tab.id, name: tab.name })),
-    ];
+    // 메인에서 정한 표시 순서를 그대로 따른다. 내장 뒤에 커스텀을 붙이면
+    // 사용자가 순서를 바꿔도 이 메뉴만 옛 순서로 남는다
+    const allTabs = buildOrderedTabs(tabOrder, customTabs, (id) =>
+      t(builtinTabLabelKey(id)),
+    );
 
     let menu: Menu | null = null;
     try {

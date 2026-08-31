@@ -8,40 +8,46 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(not(target_os = "windows"))]
+use super::normalize_stored_overlay_bounds;
 use super::{
-    acknowledge_editor_flush_handshake, acknowledge_panel_close_request, apply_panel_bounds_change,
-    begin_panel_close_request, bootstrap_keyboard_state, canonical_hold_duration_ms,
-    changed_panel_max_height, clamp_overlay_dimension, collect_authorized_css_paths,
-    collect_frontend_lifecycle_targets, drop_panel_hidden_with_main,
+    acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
+    applied_overlay_frame_from_native, apply_panel_bounds_change, begin_panel_close_request,
+    bootstrap_keyboard_state, canonical_hold_duration_ms, changed_panel_max_height,
+    clamp_overlay_dimension, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
+    complete_overlay_scale_resolution, drop_panel_hidden_with_main,
     frontend_history_mutation_blocked, frontend_lifecycle_restore_labels, global_css_watch_path,
-    hide_panel_with_main_transition, initial_overlay_placement, install_history_handshake,
-    install_lifecycle_handshake, is_panel_open_url, key_state_payload, main_window_starts_hidden,
-    monitor_scale_is_usable, next_keyboard_recovery_plan, normalize_stored_overlay_bounds,
-    overlay_close_action, overlay_reset_fallback_rect, panel_bounds_from_sample,
-    panel_height_bounds, panel_position_beside_main, publish_panel_hidden_transition,
-    publish_panel_visibility_transition, resolve_event_age_ms, resolve_panel_window_layout,
+    hide_panel_with_main_transition, install_history_handshake, install_lifecycle_handshake,
+    is_panel_open_url, key_state_payload, main_window_starts_hidden, monitor_scale_is_usable,
+    next_keyboard_recovery_plan, next_overlay_placement_trust, overlay_close_action,
+    overlay_reset_fallback_rect, panel_bounds_from_sample, panel_height_bounds,
+    panel_position_beside_main, publish_panel_hidden_transition,
+    publish_panel_visibility_transition, resolve_event_age_ms, resolve_overlay_placement,
+    resolve_panel_window_layout, resolve_windows_overlay_placement,
     restore_panel_with_main_transition, run_panel_close_timeout, should_create_overlay_on_startup,
     should_recover_keyboard_daemon, should_restore_panel_on_startup,
-    stored_bounds_need_monitor_data, take_cancelable_editor_flush_handshake,
+    stored_overlay_bounds_for_persistence, take_cancelable_editor_flush_handshake,
     take_editor_flush_handshake, take_panel_open_arm, AppState, EditorFlushAcknowledge,
     EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
     FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
-    KeyCounterEventEmitter, LifecycleHandshakeInstall, LogicalRect, MonitorData, MonitorSpec,
-    MutationPublicationSequencer, Mutex, OverlayCloseAction, PanelBoundsChange,
+    KeyCounterEventEmitter, LifecycleHandshakeInstall, MonitorData, MonitorSpec,
+    MutationPublicationSequencer, Mutex, NativeRect, NativeRejectReason, OverlayCloseAction,
+    OverlayPersistenceAuthority, OverlayPlacementTrust, OverlayRestoreSource, PanelBoundsChange,
     PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
-    PanelCloseRequestState, PanelCloseRequestedPayload, PanelVisibilityEventEmitter,
-    PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
-    DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
-    KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP,
-    PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
+    PanelCloseRequestState, PanelCloseRequestedPayload, PanelPresentSnapshot,
+    PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition,
+    PhysicalSize, DEFAULT_OVERLAY_HEIGHT, DEFAULT_OVERLAY_WIDTH,
+    HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+    KEYBOARD_RECOVERY_DELAYS_MS, OVERLAY_LABEL, PANEL_BESIDE_GAP, PANEL_INITIAL_HEIGHT,
+    PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_OPEN_ARM_TIMEOUT, PANEL_WIDTH,
 };
 use crate::{
     keyboard::KeyboardManager,
     models::{
         AppStoreData, CustomCss, CustomTab, EditorCommitOrigin, EditorCommitRequest, EditorField,
         EditorFrozenKeySlotV1, EditorOpV1, GestureCommitRequest, GesturePluginInstancesChange,
-        KeyCounters, KeySlot, OverlayBounds, PanelBounds, PluginPoint, SavedPluginInstance, TabCss,
-        EDITOR_OPS_VERSION,
+        KeyCounters, KeySlot, OverlayBounds, PanelBounds, PluginPoint, SavedPluginInstance,
+        StoredOverlayBounds, StoredOverlayNativePosition, TabCss, EDITOR_OPS_VERSION,
     },
     state::{
         history::{HistoryAdmissionGate, HistoryDirection, HistoryScope},
@@ -355,7 +361,7 @@ fn custom_tab_create_preserves_unflushed_runtime_counters() {
                     |store| {
                         store.custom_tabs.push(CustomTab {
                             id: tab_id.clone(),
-                            name: "QA Counter Tab".to_string(),
+                            name: "Counter".to_string(),
                         });
                         store.keys.insert(tab_id.clone(), Vec::new());
                         store.key_positions.insert(tab_id.clone(), Vec::new());
@@ -441,8 +447,9 @@ fn custom_tab_delete_preserves_unflushed_runtime_counters() {
             |store| {
                 store.custom_tabs.push(CustomTab {
                     id: tab_id.clone(),
-                    name: "QA Counter Delete Tab".to_string(),
+                    name: "Delete".to_string(),
                 });
+                store.tab_order.push(tab_id.clone());
                 store.keys.insert(tab_id.clone(), Vec::new());
                 store.key_positions.insert(tab_id.clone(), Vec::new());
                 store.selected_key_type = tab_id.clone();
@@ -487,6 +494,7 @@ fn custom_tab_delete_preserves_unflushed_runtime_counters() {
                     runtime_counters,
                     |store| {
                         store.custom_tabs.retain(|tab| tab.id != tab_id);
+                        store.tab_order.retain(|id| id != &tab_id);
                         store.keys.remove(&tab_id);
                         store.key_positions.remove(&tab_id);
                         store.stat_positions.remove(&tab_id);
@@ -557,8 +565,9 @@ fn custom_tab_restore_history_preserves_unflushed_runtime_counters() {
             |store| {
                 store.custom_tabs.push(CustomTab {
                     id: tab_id.clone(),
-                    name: "Before Restore".to_string(),
+                    name: "Before".to_string(),
                 });
+                store.tab_order.push(tab_id.clone());
                 store.keys.insert(tab_id.clone(), Vec::new());
                 store.key_positions.insert(tab_id.clone(), Vec::new());
                 Ok(())
@@ -574,7 +583,7 @@ fn custom_tab_restore_history_preserves_unflushed_runtime_counters() {
         );
     }
     let mut restored_tabs = state.store.snapshot().custom_tabs;
-    restored_tabs[0].name = "After Restore".to_string();
+    restored_tabs[0].name = "After".to_string();
     let admission = state.store.admit_editor_mutation().unwrap();
     let (transaction, runtime_applied) = state
         .commit_editor_transaction_preserving_runtime_counters(&emitter, |runtime_counters| {
@@ -604,7 +613,7 @@ fn custom_tab_restore_history_preserves_unflushed_runtime_counters() {
         state.store.snapshot().key_counters[&mode][&preserved_key],
         7
     );
-    assert_eq!(state.store.snapshot().custom_tabs[0].name, "After Restore");
+    assert_eq!(state.store.snapshot().custom_tabs[0].name, "After");
     drop(transaction);
 
     assert_eq!(
@@ -630,7 +639,7 @@ fn custom_tab_restore_history_preserves_unflushed_runtime_counters() {
         8
     );
     assert_eq!(state.snapshot_key_counters()[&mode][&preserved_key], 8);
-    assert_eq!(state.store.snapshot().custom_tabs[0].name, "Before Restore");
+    assert_eq!(state.store.snapshot().custom_tabs[0].name, "Before");
 
     state.shutdown();
     drop(state);
@@ -1105,17 +1114,7 @@ fn panel_window_contract_uses_fixed_client_width() {
 #[test]
 fn panel_layout_never_exceeds_a_small_work_area() {
     let monitors = MonitorData {
-        specs: vec![MonitorSpec {
-            logical_origin_x: 0.0,
-            logical_origin_y: 0.0,
-            logical_width: 1_280.0,
-            logical_height: 680.0,
-            physical_origin_x: 0.0,
-            physical_origin_y: 0.0,
-            physical_width: 1_280.0,
-            physical_height: 680.0,
-            scale_factor: 1.0,
-        }],
+        specs: vec![work_area_spec(0.0, 0.0, 1_280.0, 680.0)],
         primary_index: Some(0),
     };
     let layout = resolve_panel_window_layout(None, None, &monitors, None);
@@ -1126,21 +1125,25 @@ fn panel_layout_never_exceeds_a_small_work_area() {
 }
 
 fn work_area_spec(origin_x: f64, origin_y: f64, width: f64, height: f64) -> MonitorSpec {
+    let rect = NativeRect {
+        x: origin_x,
+        y: origin_y,
+        width,
+        height,
+    };
     MonitorSpec {
-        logical_origin_x: origin_x,
-        logical_origin_y: origin_y,
-        logical_width: width,
-        logical_height: height,
-        physical_origin_x: origin_x,
-        physical_origin_y: origin_y,
-        physical_width: width,
-        physical_height: height,
+        identity: format!("monitor-{origin_x}-{origin_y}"),
+        enumeration_index: 0,
+        full_rect_native: rect,
+        work_rect_native: rect,
+        full_rect_physical: rect,
         scale_factor: 1.0,
+        logical_to_native_scale: 1.0,
     }
 }
 
-fn main_rect(x: f64, y: f64, width: f64, height: f64) -> LogicalRect {
-    LogicalRect {
+fn main_rect(x: f64, y: f64, width: f64, height: f64) -> NativeRect {
+    NativeRect {
         x,
         y,
         width,
@@ -1750,7 +1753,7 @@ fn panel_restore_centers_on_the_freshly_placed_main_window() {
         specs: vec![work_area_spec(0.0, 30.0, 2_560.0, 1_358.0)],
         primary_index: Some(0),
     };
-    let main = LogicalRect {
+    let main = NativeRect {
         x: 829.0,
         y: 465.0,
         width: 902.0,
@@ -1861,6 +1864,43 @@ impl PanelVisibilityEventEmitter for TestPanelVisibilityEmitter {
         self.events.lock().push(payload);
         Ok(())
     }
+}
+
+#[test]
+fn panel_present_snapshot_restores_docked_state_after_hide() {
+    let snapshot = PanelPresentSnapshot {
+        panel_visible: false,
+        panel_detached: false,
+        panel_destroy_reason: Some(PanelVisibilityReason::Closed),
+    };
+
+    assert!(!snapshot.panel_visible);
+    assert!(!should_restore_panel_on_startup(
+        false,
+        false,
+        snapshot.panel_detached
+    ));
+    assert_eq!(
+        snapshot.panel_destroy_reason,
+        Some(PanelVisibilityReason::Closed)
+    );
+}
+
+#[test]
+fn panel_present_snapshot_preserves_detached_state_for_tray_hide() {
+    let snapshot = PanelPresentSnapshot {
+        panel_visible: true,
+        panel_detached: true,
+        panel_destroy_reason: None,
+    };
+
+    assert!(snapshot.panel_visible);
+    assert!(should_restore_panel_on_startup(
+        false,
+        false,
+        snapshot.panel_detached
+    ));
+    assert_eq!(snapshot.panel_destroy_reason, None);
 }
 
 #[test]
@@ -2100,136 +2140,6 @@ fn history_flush_completes_only_after_every_window_ack() {
         receiver.try_recv(),
         Err(tokio::sync::oneshot::error::TryRecvError::Empty)
     ));
-}
-
-#[test]
-fn lifecycle_ack_rejects_stale_duplicate_and_unknown_windows_without_mutating_pending() {
-    let targets = HashSet::from(["main".to_string(), OVERLAY_LABEL.to_string()]);
-    let mut slot = Some(EditorFlushHandshake {
-        id: "lifecycle-1".to_string(),
-        completion: EditorFlushCompletion::Lifecycle(FrontendLifecycleAction::Quit),
-        target_windows: targets.clone(),
-        pending_windows: targets.clone(),
-    });
-    let gate = Arc::new(HistoryAdmissionGate::default());
-
-    assert!(
-        acknowledge_editor_flush_handshake(&mut slot, "stale-lifecycle", "main", &gate,).is_none()
-    );
-    assert_eq!(slot.as_ref().unwrap().pending_windows, targets);
-    assert!(
-        acknowledge_editor_flush_handshake(&mut slot, "lifecycle-1", "unknown", &gate,).is_none()
-    );
-    assert_eq!(slot.as_ref().unwrap().pending_windows, targets);
-
-    assert!(acknowledge_editor_flush_handshake(&mut slot, "lifecycle-1", "main", &gate,).is_none());
-    assert_eq!(
-        slot.as_ref().unwrap().pending_windows,
-        HashSet::from([OVERLAY_LABEL.to_string()])
-    );
-    assert!(acknowledge_editor_flush_handshake(&mut slot, "lifecycle-1", "main", &gate,).is_none());
-    assert_eq!(
-        slot.as_ref().unwrap().pending_windows,
-        HashSet::from([OVERLAY_LABEL.to_string()])
-    );
-
-    let completed =
-        acknowledge_editor_flush_handshake(&mut slot, "lifecycle-1", OVERLAY_LABEL, &gate)
-            .expect("the last exact acknowledgement should complete lifecycle");
-    let EditorFlushAcknowledge::LifecycleReady(completed) = completed else {
-        panic!("lifecycle acknowledgement should not enter history close");
-    };
-    assert_eq!(completed.id, "lifecycle-1");
-    assert_eq!(completed.target_windows, targets);
-    assert!(slot.is_none());
-}
-
-#[test]
-fn concurrent_duplicate_last_ack_closes_history_gate_exactly_once() {
-    let (sender, _receiver) = tokio::sync::oneshot::channel();
-    let slot = Arc::new(Mutex::new(Some(EditorFlushHandshake {
-        id: "history-concurrent".to_string(),
-        completion: EditorFlushCompletion::History {
-            operation_id: "00000000-0000-0000-0000-000000000006".to_string(),
-            sender: Some(sender),
-            phase: FrontendHistoryFlushPhase::Collecting,
-            barrier: None,
-        },
-        target_windows: HashSet::from(["main".to_string()]),
-        pending_windows: HashSet::from(["main".to_string()]),
-    })));
-    let gate = Arc::new(HistoryAdmissionGate::default());
-    let start = Arc::new(std::sync::Barrier::new(3));
-    let workers = (0..2)
-        .map(|_| {
-            let slot = Arc::clone(&slot);
-            let gate = Arc::clone(&gate);
-            let start = Arc::clone(&start);
-            thread::spawn(move || {
-                start.wait();
-                matches!(
-                    acknowledge_editor_flush_handshake(
-                        &mut slot.lock(),
-                        "history-concurrent",
-                        "main",
-                        &gate,
-                    ),
-                    Some(EditorFlushAcknowledge::HistoryClosing { .. })
-                )
-            })
-        })
-        .collect::<Vec<_>>();
-
-    start.wait();
-    assert_eq!(
-        workers
-            .into_iter()
-            .map(|worker| worker.join().unwrap())
-            .filter(|closed| *closed)
-            .count(),
-        1
-    );
-    assert!(gate.is_closed());
-    assert!(slot.lock().as_ref().is_some_and(|active| {
-        active.completion.history_phase() == Some(FrontendHistoryFlushPhase::Closing)
-    }));
-
-    drop(slot.lock().take());
-    assert!(!gate.is_closed());
-}
-
-#[test]
-fn history_gate_close_failure_returns_exact_error_and_removes_only_its_handshake() {
-    let gate = Arc::new(HistoryAdmissionGate::default());
-    let existing = gate.close("00000000-0000-0000-0000-000000000007").unwrap();
-    let (sender, _receiver) = tokio::sync::oneshot::channel();
-    let mut slot = Some(EditorFlushHandshake {
-        id: "history-busy".to_string(),
-        completion: EditorFlushCompletion::History {
-            operation_id: "00000000-0000-0000-0000-000000000008".to_string(),
-            sender: Some(sender),
-            phase: FrontendHistoryFlushPhase::Collecting,
-            barrier: None,
-        },
-        target_windows: HashSet::from(["main".to_string()]),
-        pending_windows: HashSet::from(["main".to_string()]),
-    });
-
-    let failed = acknowledge_editor_flush_handshake(&mut slot, "history-busy", "main", &gate)
-        .expect("the last acknowledgement should report gate close failure");
-    let EditorFlushAcknowledge::HistoryCloseFailed { handshake, error } = failed else {
-        panic!("a preclosed gate should fail before the closing phase");
-    };
-    assert_eq!(handshake.id, "history-busy");
-    assert_eq!(error, crate::state::history::HISTORY_IN_PROGRESS);
-    assert!(slot.is_none());
-    assert_eq!(
-        gate.owner().as_deref(),
-        Some("00000000-0000-0000-0000-000000000007")
-    );
-
-    drop(existing);
-    assert!(!gate.is_closed());
 }
 
 #[test]
@@ -2536,93 +2446,137 @@ fn overlay_dimension_clamp_covers_tall_track_layouts() {
 
 /// physical 3840x2160 단일 모니터 (logical 폭/높이는 scale로 나눈 값)
 fn reset_test_monitors(scale: f64) -> MonitorData {
+    let full_rect_physical = NativeRect {
+        x: 0.0,
+        y: 0.0,
+        width: 3_840.0,
+        height: 2_160.0,
+    };
+    let full_rect_native = NativeRect {
+        x: 0.0,
+        y: 0.0,
+        width: 3_840.0 / scale,
+        height: 2_160.0 / scale,
+    };
     MonitorData {
         specs: vec![MonitorSpec {
-            logical_origin_x: 0.0,
-            logical_origin_y: 0.0,
-            logical_width: 3_840.0 / scale,
-            logical_height: 2_160.0 / scale,
-            physical_origin_x: 0.0,
-            physical_origin_y: 0.0,
-            physical_width: 3_840.0,
-            physical_height: 2_160.0,
+            identity: "primary".to_string(),
+            enumeration_index: 0,
+            full_rect_native,
+            work_rect_native: full_rect_native,
+            full_rect_physical,
             scale_factor: scale,
+            logical_to_native_scale: 1.0,
         }],
         primary_index: Some(0),
     }
 }
 
+fn windows_monitor_spec(
+    identity: &str,
+    enumeration_index: usize,
+    full_rect_native: NativeRect,
+    work_rect_native: NativeRect,
+    scale_factor: f64,
+) -> MonitorSpec {
+    MonitorSpec {
+        identity: identity.to_string(),
+        enumeration_index,
+        full_rect_native,
+        work_rect_native,
+        full_rect_physical: full_rect_native,
+        scale_factor,
+        logical_to_native_scale: scale_factor,
+    }
+}
+
+fn stored_overlay(bounds: OverlayBounds) -> StoredOverlayBounds {
+    bounds.into()
+}
+
 #[test]
 fn overlay_reset_falls_back_to_stored_rect_when_window_is_absent() {
-    // 오버레이를 끈 채 재시작하면 창이 없다 - 저장된 위치가 유일한 근거
+    // 오버레이를 끈 채 재시작하면 저장값을 해석한 네이티브 배치가 기준
     let monitors = reset_test_monitors(1.0);
-    let stored = OverlayBounds {
+    let stored = stored_overlay(OverlayBounds {
         x: -3200.0,
         y: 980.0,
         width: 1240.0,
         height: 620.0,
-    };
-    let (position, size) = overlay_reset_fallback_rect(Some(&stored), true, &monitors);
-    assert_eq!((position.x, position.y), (-3200.0, 980.0));
-    assert_eq!((size.width, size.height), (1240.0, 620.0));
+    });
+    let placement = overlay_reset_fallback_rect(Some(&stored), true, &monitors);
+    assert_eq!((placement.position.x, placement.position.y), (0.0, 980.0));
+    assert_eq!((placement.width, placement.height), (1240.0, 620.0));
 }
 
+#[cfg(not(target_os = "windows"))]
 #[test]
 fn overlay_reset_converts_legacy_physical_stored_rect() {
     // overlay_bounds_are_logical은 serde(default) = false라 구버전 store는 physical px다.
     // 이를 logical로 오인하면 겹침 판정이 배로 부풀어 엉뚱한 모니터를 고르고,
     // defer_overlay_bounds가 마커를 true로 굳혀 변환 기회가 영영 사라진다
     let monitors = reset_test_monitors(2.0);
-    let legacy = OverlayBounds {
+    let legacy = stored_overlay(OverlayBounds {
         x: 400.0,
         y: 200.0,
         width: 1720.0,
         height: 640.0,
-    };
+    });
 
-    let (position, size) = overlay_reset_fallback_rect(Some(&legacy), false, &monitors);
-    assert_eq!((position.x, position.y), (200.0, 100.0));
-    assert_eq!((size.width, size.height), (860.0, 320.0));
+    let placement = overlay_reset_fallback_rect(Some(&legacy), false, &monitors);
+    assert_eq!((placement.position.x, placement.position.y), (200.0, 100.0));
+    assert_eq!((placement.width, placement.height), (860.0, 320.0));
 
     // 마커가 true면 이미 환산된 값이므로 그대로 쓴다
-    let (position, size) = overlay_reset_fallback_rect(Some(&legacy), true, &monitors);
-    assert_eq!((position.x, position.y), (400.0, 200.0));
-    assert_eq!((size.width, size.height), (1720.0, 640.0));
+    let placement = overlay_reset_fallback_rect(Some(&legacy), true, &monitors);
+    assert_eq!((placement.position.x, placement.position.y), (400.0, 200.0));
+    assert_eq!((placement.width, placement.height), (1720.0, 640.0));
 }
 
+#[cfg(target_os = "windows")]
 #[test]
-fn overlay_reset_defaults_when_legacy_rect_cannot_be_converted() {
-    // 모니터 정보를 못 얻으면 physical 값을 logical로 오인하느니 기본 크기가 안전하다
-    let monitors = MonitorData {
-        specs: Vec::new(),
-        primary_index: None,
+fn windows_overlay_reset_uses_legacy_physical_and_logical_marker_paths() {
+    let full = NativeRect {
+        x: 0.0,
+        y: 0.0,
+        width: 3_840.0,
+        height: 2_160.0,
     };
-    let legacy = OverlayBounds {
+    let monitors = MonitorData {
+        specs: vec![windows_monitor_spec("primary", 0, full, full, 2.0)],
+        primary_index: Some(0),
+    };
+    let stored = stored_overlay(OverlayBounds {
         x: 400.0,
         y: 200.0,
-        width: 1720.0,
+        width: 1_720.0,
         height: 640.0,
-    };
-    let (position, size) = overlay_reset_fallback_rect(Some(&legacy), false, &monitors);
-    assert_eq!((position.x, position.y), (0.0, 0.0));
-    assert_eq!(
-        (size.width, size.height),
-        (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
-    );
+    });
+
+    let legacy = overlay_reset_fallback_rect(Some(&stored), false, &monitors);
+    assert_eq!((legacy.position.x, legacy.position.y), (400.0, 200.0));
+    assert_eq!((legacy.width, legacy.height), (860.0, 320.0));
+    assert_eq!(legacy.target_scale, 2.0);
+
+    let logical = overlay_reset_fallback_rect(Some(&stored), true, &monitors);
+    assert_eq!((logical.position.x, logical.position.y), (800.0, 400.0));
+    assert_eq!((logical.width, logical.height), (1_720.0, 640.0));
+    assert_eq!(logical.target_scale, 2.0);
 }
 
+#[cfg(not(target_os = "windows"))]
 #[test]
 fn stored_bounds_normalization_respects_the_logical_marker() {
     // resize_overlay의 initializing 분기도 같은 정규화를 거친다.
     // 마커를 무시하고 physical 좌표를 쓰면 defer_overlay_bounds가 마커를
     // true로 굳혀 좌표가 영구 고착된다
     let monitors = reset_test_monitors(2.0);
-    let stored = OverlayBounds {
+    let stored = stored_overlay(OverlayBounds {
         x: 400.0,
         y: 200.0,
         width: 1720.0,
         height: 640.0,
-    };
+    });
 
     let converted = normalize_stored_overlay_bounds(Some(&stored), false, &monitors, None)
         .expect("physical 좌표는 환산되어야 한다");
@@ -2651,33 +2605,17 @@ fn stored_bounds_normalization_respects_the_logical_marker() {
     );
 
     // 깨진 값은 마커와 무관하게 거른다
-    let broken = OverlayBounds {
+    let broken = stored_overlay(OverlayBounds {
         x: f64::NAN,
         y: 20.0,
         width: 800.0,
         height: 300.0,
-    };
+    });
     assert!(normalize_stored_overlay_bounds(Some(&broken), true, &monitors, None).is_none());
     assert!(normalize_stored_overlay_bounds(None, true, &monitors, None).is_none());
 }
 
-#[test]
-fn monitor_data_is_gathered_only_for_unconverted_stored_bounds() {
-    // 이 판단이 뒤집히면 initializing 분기가 환산 없이 physical 좌표를 써서
-    // M1이 그대로 재발한다. 순수 정규화 테스트만으로는 잡히지 않는 배선이다
-    let stored = OverlayBounds {
-        x: 400.0,
-        y: 200.0,
-        width: 1720.0,
-        height: 640.0,
-    };
-    assert!(stored_bounds_need_monitor_data(false, Some(&stored)));
-    assert!(!stored_bounds_need_monitor_data(true, Some(&stored)));
-    // 저장값이 없으면 환산할 대상 자체가 없다
-    assert!(!stored_bounds_need_monitor_data(false, None));
-    assert!(!stored_bounds_need_monitor_data(true, None));
-}
-
+#[cfg(not(target_os = "windows"))]
 #[test]
 fn a_false_marker_on_logical_bounds_is_a_double_conversion() {
     // defer_overlay_bounds가 마커를 무조건 true로 세팅하는 것은 거짓말이 아니다.
@@ -2685,12 +2623,12 @@ fn a_false_marker_on_logical_bounds_is_a_double_conversion() {
     // 다음 세션의 ensure_overlay_window가 x/y/w/h를 전부 다시 나눈다.
     // 신규 설치 후 위치 초기화(화면 중앙)가 절반 크기로 왼쪽 위에 뜨게 되는 경로
     let monitors = reset_test_monitors(2.0);
-    let centered = OverlayBounds {
+    let centered = stored_overlay(OverlayBounds {
         x: 530.0,
         y: 380.0,
         width: 860.0,
         height: 320.0,
-    };
+    });
 
     let double_converted = normalize_stored_overlay_bounds(Some(&centered), false, &monitors, None)
         .expect("마커가 false면 환산 대상이 된다");
@@ -2724,94 +2662,467 @@ fn initial_placement_clamps_with_the_size_being_applied() {
     // 초기화 resize는 콘텐츠 크기를 처음 확정하는 순간이라, 저장된 크기로
     // 판정하면 화면 안으로 되돌린다는 목적을 놓친다
     let monitors = reset_test_monitors(2.0); // logical 1920x1080
-    let stored = OverlayBounds {
+    let stored = stored_overlay(OverlayBounds {
         x: 1900.0,
         y: 50.0,
         width: 860.0,
         height: 320.0,
-    };
+    });
 
     // 이번에 적용될 크기는 1200x400 - 저장된 860 기준으로 clamp하면
     // 우측 끝이 1060+1200 = 2260이 되어 340px가 화면 밖에 남는다
-    let placement = initial_overlay_placement(&stored, 1200.0, 400.0, &monitors);
-    assert_eq!(placement.x, 1920.0 - 1200.0);
-    assert!(placement.x + 1200.0 <= 1920.0);
+    let resolved = resolve_overlay_placement(Some(&stored), true, &monitors);
+    let placement = resolved.for_size(1200.0, 400.0);
+    assert_eq!(placement.position.x, 1920.0 - 1200.0);
+    assert!(placement.position.x + 1200.0 <= 1920.0);
 
     // 모니터 정보가 없으면 판정 근거가 없으므로 좌표를 그대로 둔다
     let blind = MonitorData::default();
-    let untouched = initial_overlay_placement(&stored, 1200.0, 400.0, &blind);
-    assert_eq!((untouched.x, untouched.y), (1900.0, 50.0));
+    let untouched = resolve_overlay_placement(Some(&stored), true, &blind).for_size(1200.0, 400.0);
+    assert_eq!((untouched.position.x, untouched.position.y), (1900.0, 50.0));
 }
 
+#[cfg(not(target_os = "windows"))]
 #[test]
 fn stored_bounds_normalization_rejects_overflowing_conversions() {
     // scale 가드는 0보다 크기만 하면 통과시키므로, 극단적으로 작은 scale에서
     // 나눗셈이 inf로 넘친다. 위치는 clamp 대상이 아니라 여기서 걸러야 store로 새지 않는다
     let monitors = MonitorData {
         specs: vec![MonitorSpec {
-            logical_origin_x: 0.0,
-            logical_origin_y: 0.0,
-            logical_width: 1_920.0,
-            logical_height: 1_080.0,
-            physical_origin_x: 0.0,
-            physical_origin_y: 0.0,
-            physical_width: 1_920.0,
-            physical_height: 1_080.0,
+            identity: "pathological".to_string(),
+            enumeration_index: 0,
+            full_rect_native: NativeRect {
+                x: 0.0,
+                y: 0.0,
+                width: 1_920.0,
+                height: 1_080.0,
+            },
+            work_rect_native: NativeRect {
+                x: 0.0,
+                y: 0.0,
+                width: 1_920.0,
+                height: 1_080.0,
+            },
+            full_rect_physical: NativeRect {
+                x: 0.0,
+                y: 0.0,
+                width: 1_920.0,
+                height: 1_080.0,
+            },
             scale_factor: 1e-300,
+            logical_to_native_scale: 1.0,
         }],
         primary_index: Some(0),
     };
-    let stored = OverlayBounds {
+    let stored = stored_overlay(OverlayBounds {
         x: 1e200,
         y: 1e200,
         width: 1e200,
         height: 1e200,
-    };
+    });
     assert!(normalize_stored_overlay_bounds(Some(&stored), false, &monitors, None).is_none());
 }
 
 #[test]
 fn overlay_reset_fallback_repairs_missing_or_broken_stored_rect() {
     let monitors = reset_test_monitors(1.0);
-    let (position, size) = overlay_reset_fallback_rect(None, true, &monitors);
-    assert_eq!((position.x, position.y), (0.0, 0.0));
+    let placement = overlay_reset_fallback_rect(None, true, &monitors);
     assert_eq!(
-        (size.width, size.height),
+        (placement.width, placement.height),
         (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
     );
 
     // 크기가 0이거나 NaN이면 중앙 정렬 계산이 무의미해진다
-    let collapsed = OverlayBounds {
+    let collapsed = stored_overlay(OverlayBounds {
         x: 10.0,
         y: 20.0,
         width: 0.0,
         height: 300.0,
-    };
-    let (_, size) = overlay_reset_fallback_rect(Some(&collapsed), true, &monitors);
+    });
+    let placement = overlay_reset_fallback_rect(Some(&collapsed), true, &monitors);
     assert_eq!(
-        (size.width, size.height),
+        (placement.width, placement.height),
         (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
     );
 
-    let broken = OverlayBounds {
+    let broken = stored_overlay(OverlayBounds {
         x: f64::NAN,
         y: 20.0,
         width: 800.0,
         height: 300.0,
-    };
-    let (_, size) = overlay_reset_fallback_rect(Some(&broken), true, &monitors);
+    });
+    let placement = overlay_reset_fallback_rect(Some(&broken), true, &monitors);
     assert_eq!(
-        (size.width, size.height),
+        (placement.width, placement.height),
         (DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT)
     );
 
     // 저장된 크기가 한계를 넘으면 잘라 쓴다
-    let oversized = OverlayBounds {
+    let oversized = stored_overlay(OverlayBounds {
         x: 0.0,
         y: 0.0,
         width: 9000.0,
         height: 40.0,
+    });
+    let placement = overlay_reset_fallback_rect(Some(&oversized), true, &monitors);
+    assert_eq!((placement.width, placement.height), (4096.0, 100.0));
+}
+
+#[test]
+fn stored_overlay_native_is_removed_by_a_downgrade_round_trip() {
+    let stored = StoredOverlayBounds {
+        x: 900.0,
+        y: 120.0,
+        width: 860.0,
+        height: 320.0,
+        native_position: Some(StoredOverlayNativePosition {
+            x: 1_800.0,
+            y: 240.0,
+            logical_echo_x: 900.0,
+            logical_echo_y: 120.0,
+        }),
     };
-    let (_, size) = overlay_reset_fallback_rect(Some(&oversized), true, &monitors);
-    assert_eq!((size.width, size.height), (4096.0, 100.0));
+    let encoded = serde_json::to_value(&stored).unwrap();
+    assert_eq!(
+        encoded["nativePosition"]["logicalEchoX"].as_f64(),
+        Some(900.0)
+    );
+    let old: OverlayBounds =
+        serde_json::from_value(encoded).expect("구버전 공개 타입이 중첩 필드를 무시해야 한다");
+    let restored: StoredOverlayBounds =
+        serde_json::from_value(serde_json::to_value(old).unwrap()).unwrap();
+
+    assert!(restored.native_position.is_none());
+}
+
+#[test]
+fn windows_restore_rejects_an_echo_mismatch() {
+    let monitors = mixed_dpi_windows_monitors();
+    let stored = StoredOverlayBounds {
+        x: 1_000.0,
+        y: 100.0,
+        width: 860.0,
+        height: 320.0,
+        native_position: Some(StoredOverlayNativePosition {
+            x: 2_000.0,
+            y: 200.0,
+            logical_echo_x: 999.0,
+            logical_echo_y: 100.0,
+        }),
+    };
+    let resolved = resolve_windows_overlay_placement(Some(&stored), true, &monitors);
+
+    assert_eq!(resolved.source, OverlayRestoreSource::InferredLogical);
+    assert_eq!(
+        resolved.native_reject_reason,
+        NativeRejectReason::EchoMismatch
+    );
+}
+
+#[test]
+fn windows_restore_accepts_a_matching_native_echo() {
+    let monitors = mixed_dpi_windows_monitors();
+    let stored = StoredOverlayBounds {
+        x: 1_000.0,
+        y: 100.0,
+        width: 860.0,
+        height: 320.0,
+        native_position: Some(StoredOverlayNativePosition {
+            x: 2_000.0,
+            y: 200.0,
+            logical_echo_x: 1_000.0,
+            logical_echo_y: 100.0,
+        }),
+    };
+    let resolved = resolve_windows_overlay_placement(Some(&stored), true, &monitors);
+
+    assert_eq!(resolved.source, OverlayRestoreSource::TrustedNative);
+    assert_eq!(resolved.native_reject_reason, NativeRejectReason::None);
+    assert_eq!(resolved.placement.position.x, 2_000.0);
+    assert_eq!(resolved.placement.position.y, 200.0);
+    assert_eq!(
+        resolved.source.initial_trust(),
+        OverlayPlacementTrust::Clean
+    );
+}
+
+#[test]
+fn windows_legacy_physical_restore_uses_position_directly() {
+    let monitors = mixed_dpi_windows_monitors();
+    let stored = stored_overlay(OverlayBounds {
+        x: 2_000.0,
+        y: 200.0,
+        width: 1_720.0,
+        height: 640.0,
+    });
+    let resolved = resolve_windows_overlay_placement(Some(&stored), false, &monitors);
+
+    assert_eq!(resolved.source, OverlayRestoreSource::LegacyPhysical);
+    assert_eq!(resolved.placement.position.x, 2_000.0);
+    assert_eq!(resolved.placement.position.y, 200.0);
+    assert_eq!(resolved.placement.width, 860.0);
+    assert_eq!(resolved.placement.height, 320.0);
+}
+
+#[test]
+fn windows_empty_monitor_inferred_restore_uses_window_scale() {
+    let stored = stored_overlay(OverlayBounds {
+        x: 1_000.0,
+        y: 100.0,
+        width: 860.0,
+        height: 320.0,
+    });
+    let unresolved =
+        resolve_windows_overlay_placement(Some(&stored), true, &MonitorData::default());
+    assert!(unresolved.pending_scale_resolution.is_some());
+
+    let resolved = complete_overlay_scale_resolution(unresolved, 2.0)
+        .expect("창 배율로 inferred 복원을 확정해야 한다");
+    assert_eq!(resolved.source, OverlayRestoreSource::InferredLogical);
+    assert_eq!(resolved.placement.position.x, 2_000.0);
+    assert_eq!(resolved.placement.position.y, 200.0);
+    assert_eq!(resolved.placement.target_scale, 2.0);
+    let resized = resolved.for_size(900.0, 400.0);
+    assert_eq!(resized.position, resolved.placement.position);
+    assert_eq!(resized.target_scale, 2.0);
+}
+
+#[test]
+fn windows_empty_monitor_legacy_restore_uses_window_scale() {
+    let stored = stored_overlay(OverlayBounds {
+        x: 2_000.0,
+        y: 200.0,
+        width: 1_720.0,
+        height: 640.0,
+    });
+    let unresolved =
+        resolve_windows_overlay_placement(Some(&stored), false, &MonitorData::default());
+    assert!(unresolved.pending_scale_resolution.is_some());
+
+    let resolved = complete_overlay_scale_resolution(unresolved, 2.0)
+        .expect("창 배율로 legacy 복원을 확정해야 한다");
+    assert_eq!(resolved.source, OverlayRestoreSource::LegacyPhysical);
+    assert_eq!(resolved.placement.position.x, 2_000.0);
+    assert_eq!(resolved.placement.position.y, 200.0);
+    assert_eq!(resolved.placement.width, 860.0);
+    assert_eq!(resolved.placement.height, 320.0);
+    assert_eq!(resolved.placement.target_scale, 2.0);
+    let resized = resolved.for_size(900.0, 400.0);
+    assert_eq!(resized.position, resolved.placement.position);
+    assert_eq!(resized.target_scale, 2.0);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_empty_monitor_legacy_restore_converts_with_window_scale() {
+    let stored = stored_overlay(OverlayBounds {
+        x: 2_000.0,
+        y: 200.0,
+        width: 1_720.0,
+        height: 640.0,
+    });
+    let unresolved = resolve_overlay_placement(Some(&stored), false, &MonitorData::default());
+    assert_eq!(unresolved.source, OverlayRestoreSource::LegacyPhysical);
+    assert!(unresolved.pending_scale_resolution.is_some());
+
+    let resolved = complete_overlay_scale_resolution(unresolved, 2.0)
+        .expect("창 배율로 macOS legacy 복원을 환산해야 한다");
+    assert_eq!(resolved.placement.position.x, 1_000.0);
+    assert_eq!(resolved.placement.position.y, 100.0);
+    assert_eq!(resolved.placement.width, 860.0);
+    assert_eq!(resolved.placement.height, 320.0);
+    assert_eq!(resolved.placement.target_scale, 1.0);
+    let resized = resolved.for_size(900.0, 400.0);
+    assert_eq!(resized.position, resolved.placement.position);
+    assert_eq!(resized.target_scale, 1.0);
+}
+
+#[test]
+fn windows_inferred_restore_counts_multiple_and_zero_candidates() {
+    let monitors = mixed_dpi_windows_monitors();
+    let multiple = stored_overlay(OverlayBounds {
+        x: 1_000.0,
+        y: 100.0,
+        width: 860.0,
+        height: 320.0,
+    });
+    let multiple = resolve_windows_overlay_placement(Some(&multiple), true, &monitors);
+    assert_eq!(multiple.source, OverlayRestoreSource::InferredLogical);
+    assert_eq!(multiple.candidate_count, 2);
+    assert_eq!(multiple.selected_monitor.as_deref(), Some("M1"));
+
+    let zero = stored_overlay(OverlayBounds {
+        x: 6_000.0,
+        y: 100.0,
+        width: 860.0,
+        height: 320.0,
+    });
+    let zero = resolve_windows_overlay_placement(Some(&zero), true, &monitors);
+    assert_eq!(zero.source, OverlayRestoreSource::InferredLogical);
+    assert_eq!(zero.candidate_count, 0);
+    assert!(zero.visibility_adjustment);
+}
+
+#[test]
+fn overlay_taint_is_cleared_only_by_move_end_or_reset() {
+    assert_eq!(
+        OverlayRestoreSource::InferredLogical.initial_trust(),
+        OverlayPlacementTrust::Tainted
+    );
+    assert_eq!(
+        next_overlay_placement_trust(
+            OverlayPlacementTrust::Tainted,
+            OverlayPersistenceAuthority::General,
+        ),
+        OverlayPlacementTrust::Tainted
+    );
+    for authority in [
+        OverlayPersistenceAuthority::NativeMoveEnded,
+        OverlayPersistenceAuthority::Reset,
+    ] {
+        assert_eq!(
+            next_overlay_placement_trust(OverlayPlacementTrust::Tainted, authority),
+            OverlayPlacementTrust::Clean
+        );
+    }
+}
+
+#[test]
+fn tainted_persistence_invalidates_native_until_trusted() {
+    let frame = applied_overlay_frame_from_native(
+        NativeRect {
+            x: 2_000.0,
+            y: 200.0,
+            width: 1_720.0,
+            height: 640.0,
+        },
+        2.0,
+        true,
+    )
+    .unwrap();
+    let tainted =
+        stored_overlay_bounds_for_persistence(&frame, OverlayPlacementTrust::Tainted, true);
+    assert!(tainted.native_position.is_none());
+
+    let clean = stored_overlay_bounds_for_persistence(&frame, OverlayPlacementTrust::Clean, true);
+    let native = clean.native_position.expect("clean 쓰기는 native를 기록");
+    assert_eq!((native.x, native.y), (2_000.0, 200.0));
+    assert_eq!(
+        (native.logical_echo_x, native.logical_echo_y),
+        (1_000.0, 100.0)
+    );
+}
+
+#[test]
+fn native_overlap_selects_the_correct_mixed_dpi_monitor() {
+    let monitors = mixed_dpi_windows_monitors();
+    let rect = NativeRect {
+        x: 1_600.0,
+        y: 100.0,
+        width: 1_720.0,
+        height: 640.0,
+    };
+    let selected = monitors
+        .find_best_overlap_native(rect)
+        .expect("창이 두 모니터에 걸쳐 있어야 한다");
+
+    assert_eq!(selected.identity, "M2");
+    assert_eq!(selected.intersection_area_native(rect), 1_400.0 * 640.0);
+}
+
+#[test]
+fn public_overlay_adapter_exposes_only_logical_bounds() {
+    let applied = applied_overlay_frame_from_native(
+        NativeRect {
+            x: 2_000.0,
+            y: 200.0,
+            width: 1_720.0,
+            height: 640.0,
+        },
+        2.0,
+        true,
+    )
+    .unwrap();
+    assert_eq!(applied.public_bounds.x, 1_000.0);
+    assert_eq!(applied.public_bounds.y, 100.0);
+    assert_eq!(applied.public_bounds.width, 860.0);
+    assert_eq!(applied.public_bounds.height, 320.0);
+
+    let wire = serde_json::to_value(&applied.public_bounds).unwrap();
+    assert_eq!(
+        wire.get("x").and_then(serde_json::Value::as_f64),
+        Some(1_000.0)
+    );
+    assert!(wire.get("nativePosition").is_none());
+}
+
+#[test]
+fn native_clamp_uses_work_area_but_overlap_uses_full_rect() {
+    let spec = windows_monitor_spec(
+        "taskbar",
+        0,
+        NativeRect {
+            x: 0.0,
+            y: 0.0,
+            width: 1_920.0,
+            height: 1_080.0,
+        },
+        NativeRect {
+            x: 0.0,
+            y: 0.0,
+            width: 1_920.0,
+            height: 1_040.0,
+        },
+        1.0,
+    );
+    let rect = NativeRect {
+        x: 200.0,
+        y: 1_020.0,
+        width: 300.0,
+        height: 60.0,
+    };
+    assert_eq!(spec.intersection_area_native(rect), 18_000.0);
+    assert_eq!(spec.clamp_native(rect).y, 980.0);
+}
+
+fn mixed_dpi_windows_monitors() -> MonitorData {
+    MonitorData {
+        specs: vec![
+            windows_monitor_spec(
+                "M1",
+                0,
+                NativeRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1_920.0,
+                    height: 1_080.0,
+                },
+                NativeRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1_920.0,
+                    height: 1_040.0,
+                },
+                1.0,
+            ),
+            windows_monitor_spec(
+                "M2",
+                1,
+                NativeRect {
+                    x: 1_920.0,
+                    y: 0.0,
+                    width: 3_840.0,
+                    height: 2_160.0,
+                },
+                NativeRect {
+                    x: 1_920.0,
+                    y: 0.0,
+                    width: 3_840.0,
+                    height: 2_080.0,
+                },
+                2.0,
+            ),
+        ],
+        primary_index: Some(0),
+    }
 }

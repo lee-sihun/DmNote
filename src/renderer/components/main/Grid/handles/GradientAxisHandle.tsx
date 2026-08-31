@@ -157,6 +157,8 @@ const GradientAxisOverlay = ({
         <div
           role="slider"
           tabIndex={0}
+          // 마우스로 잡은 뒤 방향키 미세 조정이 설계된 컨트롤 - 잔류 포커스 가드 제외
+          data-dmn-pointer-focus="retain"
           aria-label={t('colorPicker.gradientAngle')}
           aria-valuemin={0}
           aria-valuemax={359}

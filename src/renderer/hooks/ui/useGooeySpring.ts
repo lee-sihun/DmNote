@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import { integrate, MAX_FRAME_DT } from '@utils/animation/spring';
+import { prefersReducedMotion } from '@utils/animation/motionPreferences';
 
 // 노브 본체 스프링 - 포인터에 거의 붙어 오도록 빡빡하게, 감쇠는 임계(2*sqrt(k)=60)의
 // 0.77배라 놓을 때 아주 살짝만 지나쳤다 돌아온다
@@ -16,7 +18,9 @@ const TAIL_SPEED_THRESHOLD = 20;
 const TAIL_RADIUS_PER_SPEED = 0.03;
 const TAIL_MAX_DISTANCE_RATIO = 0.8;
 const TAIL_HIDE_RADIUS = 0.3;
-const MAX_FRAME_DT = 1 / 30;
+// 마지막 프레임 후 이 시간이 지나도록 rAF가 안 돌았으면 엔진이 루프를 멈춘 것
+// (창 가림·이동 중 WebKit rAF 중단) - 잔존 id를 버리고 다시 건다
+const STALL_RESUME_MS = 250;
 
 export interface GooeyFrame {
   cx: number;
@@ -39,41 +43,6 @@ interface GooeySpringOptions {
   size: number;
   apply: (frame: GooeyFrame) => void;
 }
-
-const springStep = (
-  x: number,
-  v: number,
-  target: number,
-  k: number,
-  c: number,
-  dt: number,
-): [number, number] => {
-  const a = k * (target - x) - c * v;
-  const nv = v + a * dt;
-  return [x + nv * dt, nv];
-};
-
-// 60Hz 서브스텝으로 큰 dt에서도 발산하지 않게
-const integrate = (
-  x: number,
-  v: number,
-  target: number,
-  k: number,
-  c: number,
-  dt: number,
-): [number, number] => {
-  let steps = Math.max(1, Math.ceil(dt * 60));
-  const h = dt / steps;
-  while (steps-- > 0) {
-    [x, v] = springStep(x, v, target, k, c, h);
-  }
-  return [x, v];
-};
-
-const prefersReducedMotion = () =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /**
  * 노브 위치를 스프링으로 뒤따르는 본체와 꼬리를 시뮬레이션해 매 프레임 apply로 넘긴다.
@@ -143,7 +112,9 @@ export const useGooeySpring = ({
     };
 
     const snap = () => {
-      const { tx, ty } = targetPx();
+      const { tx, ty, w, h } = targetPx();
+      // 숨김(크기 0) 측정에서는 박제 금지 - 크기 회복 신호가 실측 좌표로 정착
+      if (w === 0 || h === 0) return;
       sim.cx = tx;
       sim.cy = ty;
       sim.tailX = tx;
@@ -164,9 +135,16 @@ export const useGooeySpring = ({
 
     const frame = (now: number) => {
       sim.raf = 0;
-      const dt = Math.min(MAX_FRAME_DT, (now - sim.lastTime) / 1000);
+      // rAF 타임스탬프는 wake의 performance.now()보다 앞설 수 있다 - 음수 dt는
+      // 스프링을 역적분하고 꼬리 반지름을 목표 반대로 키운다
+      const dt = Math.min(
+        MAX_FRAME_DT,
+        Math.max(0, (now - sim.lastTime) / 1000),
+      );
       sim.lastTime = now;
       const { tx, ty, w, h } = targetPx();
+      // 한 축이라도 0이면 퇴화 레이아웃 - 0 좌표 정착 대신 wake 재개 대기
+      if (w === 0 || h === 0) return;
       const S = sizeRef.current;
 
       [sim.cx, sim.vx] = integrate(
@@ -250,13 +228,34 @@ export const useGooeySpring = ({
         snap();
         return;
       }
-      if (sim.raf) return;
+      if (sim.raf) {
+        // 스케줄은 남았는데 오래 안 돌았다면 엔진이 중단한 루프 - 다시 건다.
+        // 정상 구동 중에는 lastTime이 프레임마다 갱신되므로 여기서 걸리지 않는다
+        if (performance.now() - sim.lastTime < STALL_RESUME_MS) return;
+        cancelAnimationFrame(sim.raf);
+      }
       sim.lastTime = performance.now();
       sim.raf = requestAnimationFrame(frame);
     };
 
     wake.current();
+    // 창 가림·전환에서 멈춘 마지막 프레임(꼬리 방울)이 굳지 않게 재개 신호 구독,
+    // 숨김 해제(크기 0 → 실측)는 ResizeObserver가 잡는다
+    const el = measureRef.current;
+    const doc = el?.ownerDocument ?? document;
+    const win = doc.defaultView ?? window;
+    const resume = () => wake.current();
+    doc.addEventListener('visibilitychange', resume);
+    win.addEventListener('focus', resume);
+    let resizeObserver: ResizeObserver | null = null;
+    if (el && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(resume);
+      resizeObserver.observe(el);
+    }
     return () => {
+      resizeObserver?.disconnect();
+      doc.removeEventListener('visibilitychange', resume);
+      win.removeEventListener('focus', resume);
       if (sim.raf) cancelAnimationFrame(sim.raf);
       sim.raf = 0;
     };

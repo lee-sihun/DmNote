@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { panelWindowApi } from '@api/modules/panelWindowApi';
+import {
+  panelWindowApi,
+  type PanelDragGeometry,
+} from '@api/modules/panelWindowApi';
 import { PANEL_HEADER_HEIGHT } from '@components/main/Grid/PropertiesPanel/panelChrome';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import {
@@ -8,7 +11,14 @@ import {
   dockPropertiesPanel,
   usePanelHostStore,
 } from '@stores/grid/usePanelHostStore';
+import { getPanelChildWindow } from '@utils/panelWindow/panelChildWindow';
+import { isWindows } from '@utils/core/platform';
 import { isElementNode } from '@utils/dom/isElementNode';
+
+import {
+  startNativePanelDrag,
+  type NativePanelDragHandle,
+} from './panelNativeDragSession';
 
 // 패널 헤더 배경 드래그로 분리/도킹 (OBS/Qt 도크 위젯 방식).
 //
@@ -17,8 +27,13 @@ import { isElementNode } from '@utils/dom/isElementNode';
 // 분리 상태: 헤더를 잡고 끌면 창이 따라온다. 메인의 도크 존 위에서 놓으면 도킹
 //
 // 창은 자식 창을 미리 만들어 두므로(PropertiesPanelHost 워밍업) 첫 이동에서 바로 뜬다.
-// 좌표: mousemove의 screenX/Y(CSS px, 화면 논리 좌표)가 곧 Tauri LogicalPosition이다.
-// 창 밖으로 나가도 드래그를 시작한 문서가 mousemove를 계속 받는다(WebKit 마우스 캡처)
+//
+// 플랫폼 전략은 임계 통과 시 한 번 고른다:
+// - macOS(legacy): mousemove의 screenX/Y(CSS px)가 곧 Tauri LogicalPosition이라 매 프레임
+//   moveTo로 창을 민다. 창 밖으로 나가도 시작 문서가 mousemove를 계속 받는다(WebKit 캡처)
+// - Windows(native): screenX는 Chromium DIP(디스플레이별 원점 보정)라 LogicalPosition이
+//   아니다. 혼합 DPI에서 배율 토글 진동이 생겨 이동을 OS 모달 루프에 인계한다 -
+//   panelNativeDragSession, 계약은 tasks/plan/panel-drag-coordinate-space.md
 
 // 이만큼 움직여야 제스처 시작(창이 뜸) - 클릭과 구분
 const DRAG_START_PX = 6;
@@ -45,6 +60,10 @@ interface DragSession {
   // 시작 시점의 배치 - 세션 중간에 바뀌어도 이 값 기준으로 정리한다
   origin: 'docked' | 'detached';
   startScreen: { x: number; y: number };
+  // 최초 mousedown의 client 좌표 - Windows 네이티브 세션의 스냅백 기준점
+  pressClient: { x: number; y: number };
+  // Windows 네이티브 세션 - 있으면 이동·종료 권위가 OS와 백엔드에 있다
+  native: NativePanelDragHandle | null;
   // 커서 - 패널 프레임 좌상단 (창을 이 오프셋만큼 커서 아래에 둔다)
   grabOffset: { x: number; y: number };
   // 화면 논리 좌표의 도크 존 - 여기 놓으면 도킹
@@ -139,6 +158,7 @@ export const usePanelHeaderDrag = ({
       if (session.moveFrame !== null) {
         session.ownerWindow.cancelAnimationFrame(session.moveFrame);
       }
+      session.native?.dispose();
       session.cleanup();
       setDockHint(false);
       document.body.classList.remove('dmn-dragging');
@@ -165,6 +185,49 @@ export const usePanelHeaderDrag = ({
         },
         DOCK_ZONE_MARGIN_PX,
       );
+    };
+
+    // Windows 백엔드용 도크 존 - 메인 content 기준 CSS px (네이티브 원점은 백엔드가 더한다)
+    const computeDockAreaCss = (): PanelDragGeometry['dockAreaCss'] => {
+      const area = dockAreaRef.current;
+      if (!area) return null;
+      const rect = area.getBoundingClientRect();
+      return inflate(
+        {
+          x: rect.right - FALLBACK_PANEL_WIDTH,
+          y: rect.top,
+          width: FALLBACK_PANEL_WIDTH,
+          height: rect.height,
+        },
+        DOCK_ZONE_MARGIN_PX,
+      );
+    };
+
+    // Windows: 이동 권한을 OS에 인계 - 이후 mousemove는 무시, 종료는 drag-ended 이벤트
+    const beginNativeDrag = (session: DragSession) => {
+      const geometry: PanelDragGeometry = {
+        gestureId: crypto.randomUUID(),
+        origin: session.origin,
+        grabOffsetCss: session.grabOffset,
+        pressClientCss: session.pressClient,
+        dockAreaCss: computeDockAreaCss(),
+        // 이 모듈은 메인 창 컨텍스트에서 돈다 - window는 항상 메인 창이다
+        mainDevicePixelRatio: window.devicePixelRatio,
+        // seed는 패널 표면이 그린다 - 자식 창의 실측 DPR. 아직 없으면 null
+        // (메인 DPR 값을 보내면 패널 창 배율로 나뉘어 엉뚱한 잔차가 정상값으로
+        // 통과한다). 첫 tear-off는 창이 detach 전환 안에서 생기므로 docked 경로는
+        // panelNativeDragSession이 present 직전에 다시 실측해 덮어쓴다
+        panelDevicePixelRatio:
+          getPanelChildWindow()?.window.devicePixelRatio ?? null,
+      };
+      session.native = startNativePanelDrag(geometry, {
+        dockAreaAlive: () => dockAreaRef.current !== null,
+        snapBackPx: SNAP_BACK_PX,
+        onDockHint: setDockHint,
+        onFinished: () => {
+          if (sessionRef.current === session) endSession();
+        },
+      });
     };
 
     const windowPositionFor = (session: DragSession) => ({
@@ -248,6 +311,8 @@ export const usePanelHeaderDrag = ({
       if (!session) return;
       session.lastScreen = { x: event.screenX, y: event.screenY };
 
+      if (session.native) return;
+
       if (!session.started) {
         const dx = event.screenX - session.startScreen.x;
         const dy = event.screenY - session.startScreen.y;
@@ -255,6 +320,11 @@ export const usePanelHeaderDrag = ({
         session.started = true;
         document.body.classList.add('dmn-dragging');
         session.ownerDocument.body.classList.add('dmn-dragging');
+        // 플랫폼 전략은 여기서 한 번 갈린다 - Windows는 OS 인계, macOS는 기존 경로
+        if (isWindows()) {
+          beginNativeDrag(session);
+          return;
+        }
         if (session.origin === 'detached') {
           session.draggingWindow = true;
         } else {
@@ -273,6 +343,11 @@ export const usePanelHeaderDrag = ({
       const session = sessionRef.current;
       if (!session) return;
       session.lastScreen = { x: event.screenX, y: event.screenY };
+      if (session.native) {
+        // 종료 권위는 drag-ended 이벤트 - 인계 전 해제만 기록해 둔다
+        session.native.noteDomMouseUp({ x: event.clientX, y: event.clientY });
+        return;
+      }
       if (!session.started) {
         endSession();
         return;
@@ -286,11 +361,12 @@ export const usePanelHeaderDrag = ({
       finishDrop(session);
     };
 
-    // Esc: 도킹에서 끌어낸 창은 제자리로 돌려놓는다
+    // Esc: 도킹에서 끌어낸 창은 제자리로 돌려놓는다.
+    // 네이티브 세션은 OS 모달 루프가 Esc를 소유한다 - outcome=escaped로 돌아온다
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       const session = sessionRef.current;
-      if (!session || session.tearingOff) return;
+      if (!session || session.native || session.tearingOff) return;
       const snapBack = session.origin === 'docked' && session.draggingWindow;
       endSession();
       if (snapBack) void dockPropertiesPanel();
@@ -317,6 +393,8 @@ export const usePanelHeaderDrag = ({
       const session: DragSession = {
         origin: usePanelHostStore.getState().placement,
         startScreen: { x: event.screenX, y: event.screenY },
+        pressClient: { x: event.clientX, y: event.clientY },
+        native: null,
         grabOffset: {
           x: event.clientX - frameRect.left,
           y: event.clientY - frameRect.top,
@@ -342,11 +420,14 @@ export const usePanelHeaderDrag = ({
       doc.addEventListener('mouseup', handleMouseUp);
       doc.addEventListener('keydown', handleKeyDown, true);
 
-      // 도크 존은 메인 창 위치를 물어봐야 한다 - 왕복 동안 시작해도 무방
-      void resolveMainContentOrigin().then((origin) => {
-        if (sessionRef.current !== session || !origin) return;
-        session.dockZoneScreen = computeDockZone(origin);
-      });
+      // 도크 존은 메인 창 위치를 물어봐야 한다 - 왕복 동안 시작해도 무방.
+      // Windows 네이티브 경로는 도크 판정이 백엔드라 이 왕복이 필요 없다
+      if (!isWindows()) {
+        void resolveMainContentOrigin().then((origin) => {
+          if (sessionRef.current !== session || !origin) return;
+          session.dockZoneScreen = computeDockZone(origin);
+        });
+      }
     };
 
     doc.addEventListener('mousedown', handleMouseDown);

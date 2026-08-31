@@ -7,6 +7,11 @@ import {
   stubAnimationFrame,
 } from '@src/renderer/__tests__/deferredContentHarness';
 import { PanelHostContext } from '@contexts/PanelHostContext';
+import {
+  activatePopupDragSession,
+  beginPopupDragSession,
+  endPopupDragSession,
+} from '@utils/ui/popupDragSession';
 
 describe('FloatingPopup focus contract', () => {
   let host: HTMLDivElement;
@@ -26,6 +31,7 @@ describe('FloatingPopup focus contract', () => {
     await act(async () => root.unmount());
     host.remove();
     document.body.innerHTML = '';
+    endPopupDragSession();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -405,6 +411,101 @@ describe('FloatingPopup focus contract', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(closeBottom).not.toHaveBeenCalled();
     expect(closeTop).toHaveBeenCalledTimes(1);
+  });
+
+  it('탭 표식만 있는 외부 대상은 일반 클릭처럼 닫는다', async () => {
+    const onClose = vi.fn();
+    const outside = document.createElement('button');
+    outside.setAttribute('data-dmn-tab-drag', 'true');
+    document.body.appendChild(outside);
+    await act(async () => {
+      root.render(
+        <FloatingPopup
+          open
+          ariaLabel="Outside popup"
+          fixedX={0}
+          fixedY={0}
+          animate={false}
+          onClose={onClose}
+        />,
+      );
+    });
+
+    act(() => {
+      outside.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('드래그 후보가 클릭으로 끝나면 닫고 실제 드래그면 보존한다', async () => {
+    const onClose = vi.fn();
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    await act(async () => {
+      root.render(
+        <FloatingPopup
+          open
+          ariaLabel="Drag popup"
+          fixedX={0}
+          fixedY={0}
+          animate={false}
+          onClose={onClose}
+        />,
+      );
+    });
+
+    beginPopupDragSession();
+    act(() => {
+      outside.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+      );
+    });
+    expect(onClose).not.toHaveBeenCalled();
+
+    act(() => endPopupDragSession());
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    onClose.mockClear();
+    beginPopupDragSession();
+    activatePopupDragSession();
+    act(() => {
+      outside.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+      );
+    });
+    act(() => endPopupDragSession());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('고정 피커는 탭 표식이 있던 외부 버튼에서도 닫는다', async () => {
+    const onClose = vi.fn();
+    const outside = document.createElement('button');
+    outside.setAttribute('data-dmn-tab-drag', 'true');
+    document.body.appendChild(outside);
+    await act(async () => {
+      root.render(
+        <FloatingPopup
+          open
+          autoClose={false}
+          ariaLabel="Picker popup"
+          fixedX={0}
+          fixedY={0}
+          animate={false}
+          onClose={onClose}
+        />,
+      );
+    });
+
+    act(() => {
+      outside.dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('uses opening order instead of DOM order for Escape ownership', async () => {

@@ -32,6 +32,7 @@ const CHROME_LADDER = [
   'z-chrome-popup',
   'z-chrome-modal',
   'z-chrome-submenu',
+  'z-chrome-drag',
   'z-chrome-tooltip',
 ];
 

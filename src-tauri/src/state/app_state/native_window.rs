@@ -68,38 +68,37 @@ fn reset_overlay_alpha(window: &WebviewWindow) {
 /// set_size와 set_position을 나눠 부르면 창 이동이 두 트랜잭션으로 쪼개져 중간 프레임이 보인다
 pub(super) fn apply_overlay_frame(
     window: &WebviewWindow,
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    scale_factor: f64,
-) -> Result<OverlayBounds> {
-    let requested = OverlayBounds {
-        x,
-        y,
-        width,
-        height,
-    };
+    placement: NativePlacement,
+) -> Result<AppliedOverlayFrame> {
     #[cfg(target_os = "macos")]
     {
         use objc::{class, msg_send, sel, sel_impl};
 
-        let _ = scale_factor;
+        let requested = applied_overlay_frame_from_placement(placement);
         // 메인 스레드에서 큐잉 후 대기하면 교착하므로 직접 실행
         let on_main: bool = unsafe { msg_send![class!(NSThread), isMainThread] };
         if on_main {
-            return Ok(apply_overlay_frame_macos(window, x, y, width, height).unwrap_or(requested));
+            return Ok(apply_overlay_frame_macos(window, placement)
+                .map(|public_bounds| AppliedOverlayFrame {
+                    public_bounds,
+                    native_position: None,
+                })
+                .unwrap_or(requested));
         }
 
         let (tx, rx) = std::sync::mpsc::channel();
         let target = window.clone();
         window.app_handle().run_on_main_thread(move || {
-            let _ = tx.send(apply_overlay_frame_macos(&target, x, y, width, height));
+            let _ = tx.send(apply_overlay_frame_macos(&target, placement));
         })?;
         Ok(rx
             .recv_timeout(Duration::from_millis(OVERLAY_FRAME_APPLY_TIMEOUT_MS))
             .ok()
             .flatten()
+            .map(|public_bounds| AppliedOverlayFrame {
+                public_bounds,
+                native_position: None,
+            })
             .unwrap_or(requested))
     }
     #[cfg(target_os = "windows")]
@@ -107,21 +106,23 @@ pub(super) fn apply_overlay_frame(
         use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
 
         let hwnd = window.hwnd()?;
-        let px = (x * scale_factor).round() as i32;
-        let py = (y * scale_factor).round() as i32;
-        let pw = (width * scale_factor).round() as i32;
-        let ph = (height * scale_factor).round() as i32;
+        let px = placement.position.x.round() as i32;
+        let py = placement.position.y.round() as i32;
+        let pw = (placement.width * placement.target_scale).round() as i32;
+        let ph = (placement.height * placement.target_scale).round() as i32;
         unsafe {
             SetWindowPos(hwnd, None, px, py, pw, ph, SWP_NOZORDER | SWP_NOACTIVATE)?;
         }
-        Ok(requested)
+        applied_overlay_frame_from_window(window)
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
-        let _ = scale_factor;
-        window.set_size(LogicalSize::new(width, height))?;
-        window.set_position(LogicalPosition::new(x, y))?;
-        Ok(requested)
+        window.set_size(LogicalSize::new(placement.width, placement.height))?;
+        window.set_position(LogicalPosition::new(
+            placement.position.x,
+            placement.position.y,
+        ))?;
+        applied_overlay_frame_from_window(window)
     }
 }
 
@@ -129,17 +130,17 @@ pub(super) fn apply_overlay_frame(
 #[cfg(target_os = "macos")]
 fn apply_overlay_frame_macos(
     window: &WebviewWindow,
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
+    placement: NativePlacement,
 ) -> Option<OverlayBounds> {
     use cocoa::foundation::{NSPoint, NSRect, NSSize};
     use objc::{class, msg_send, sel, sel_impl};
 
     let fallback = || {
-        let _ = window.set_size(LogicalSize::new(width, height));
-        let _ = window.set_position(LogicalPosition::new(x, y));
+        let _ = window.set_size(LogicalSize::new(placement.width, placement.height));
+        let _ = window.set_position(LogicalPosition::new(
+            placement.position.x,
+            placement.position.y,
+        ));
     };
 
     match window.ns_window() {
@@ -155,8 +156,11 @@ fn apply_overlay_frame_macos(
             let primary: *mut objc::runtime::Object = msg_send![screens, objectAtIndex: 0usize];
             let screen_frame: NSRect = msg_send![primary, frame];
 
-            let flipped_y = screen_frame.size.height - (y + height);
-            let frame = NSRect::new(NSPoint::new(x, flipped_y), NSSize::new(width, height));
+            let flipped_y = screen_frame.size.height - (placement.position.y + placement.height);
+            let frame = NSRect::new(
+                NSPoint::new(placement.position.x, flipped_y),
+                NSSize::new(placement.width, placement.height),
+            );
             let _: () = msg_send![ns_window, setFrame: frame display: true];
 
             // AppKit이 창을 화면 안으로 되밀 수 있어 실제 반영된 프레임을 읽는다
@@ -340,4 +344,171 @@ pub(super) fn disable_system_context_menu(window: &WebviewWindow) -> Result<()> 
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+struct OverlayMoveObserverContext {
+    store: Arc<AppStore>,
+    generation: Arc<AtomicU64>,
+    trust: Arc<Mutex<OverlayPlacementTrust>>,
+    entered: AtomicBool,
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn install_overlay_move_observer(
+    window: &WebviewWindow,
+    store: Arc<AppStore>,
+    generation: Arc<AtomicU64>,
+    trust: Arc<Mutex<OverlayPlacementTrust>>,
+) -> Result<()> {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use windows::Win32::{
+        System::Threading::GetCurrentThreadId, UI::WindowsAndMessaging::GetWindowThreadProcessId,
+    };
+
+    let hwnd = window.hwnd()?;
+    let owner_thread = unsafe { GetWindowThreadProcessId(hwnd, None) };
+    if owner_thread == 0 {
+        return Err(anyhow!("failed to identify overlay HWND owner thread"));
+    }
+    if owner_thread == unsafe { GetCurrentThreadId() } {
+        return unsafe {
+            install_overlay_move_observer_on_owner_thread(window, store, generation, trust)
+        };
+    }
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let target = window.clone();
+    window.app_handle().run_on_main_thread(move || {
+        let result = catch_unwind(AssertUnwindSafe(|| unsafe {
+            install_overlay_move_observer_on_owner_thread(&target, store, generation, trust)
+        }))
+        .unwrap_or_else(|_| Err(anyhow!("overlay move observer installation panicked")));
+        let _ = sender.send(result);
+    })?;
+    receiver
+        .recv_timeout(Duration::from_secs(3))
+        .map_err(|error| anyhow!("overlay move observer owner result unavailable: {error}"))?
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn install_overlay_move_observer_on_owner_thread(
+    window: &WebviewWindow,
+    store: Arc<AppStore>,
+    generation: Arc<AtomicU64>,
+    trust: Arc<Mutex<OverlayPlacementTrust>>,
+) -> Result<()> {
+    use windows::Win32::{
+        System::Threading::GetCurrentThreadId,
+        UI::{Shell::SetWindowSubclass, WindowsAndMessaging::GetWindowThreadProcessId},
+    };
+
+    const SUBCLASS_ID: usize = 0x444d_4f50;
+
+    let hwnd = window.hwnd()?;
+    let owner_thread = unsafe { GetWindowThreadProcessId(hwnd, None) };
+    if owner_thread == 0 || owner_thread != unsafe { GetCurrentThreadId() } {
+        return Err(anyhow!(
+            "overlay move observer installation requires the HWND owner thread"
+        ));
+    }
+    let context = Box::into_raw(Box::new(OverlayMoveObserverContext {
+        store,
+        generation,
+        trust,
+        entered: AtomicBool::new(false),
+    }));
+    let installed = unsafe {
+        SetWindowSubclass(
+            hwnd,
+            Some(overlay_move_subclass_proc),
+            SUBCLASS_ID,
+            context as usize,
+        )
+    };
+    if !installed.as_bool() {
+        unsafe { drop(Box::from_raw(context)) };
+        return Err(anyhow!("failed to subclass overlay HWND"));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn applied_overlay_frame_from_hwnd(
+    hwnd: windows::Win32::Foundation::HWND,
+) -> Result<AppliedOverlayFrame> {
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    use windows::Win32::{Foundation::RECT, UI::HiDpi::GetDpiForWindow};
+
+    let mut rect = RECT::default();
+    unsafe { GetWindowRect(hwnd, &mut rect)? };
+    let dpi = unsafe { GetDpiForWindow(hwnd) };
+    let scale = f64::from(dpi) / 96.0;
+    applied_overlay_frame_from_native(
+        NativeRect {
+            x: f64::from(rect.left),
+            y: f64::from(rect.top),
+            width: f64::from(rect.right - rect.left),
+            height: f64::from(rect.bottom - rect.top),
+        },
+        scale,
+        true,
+    )
+    .ok_or_else(|| anyhow!("overlay HWND frame is invalid"))
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn overlay_move_subclass_proc(
+    hwnd: windows::Win32::Foundation::HWND,
+    message: u32,
+    wparam: windows::Win32::Foundation::WPARAM,
+    lparam: windows::Win32::Foundation::LPARAM,
+    subclass_id: usize,
+    reference_data: usize,
+) -> windows::Win32::Foundation::LRESULT {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use windows::Win32::UI::{
+        Shell::{DefSubclassProc, RemoveWindowSubclass},
+        WindowsAndMessaging::{WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE, WM_NCDESTROY},
+    };
+
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        let context = reference_data as *mut OverlayMoveObserverContext;
+        if context.is_null() {
+            return DefSubclassProc(hwnd, message, wparam, lparam);
+        }
+        match message {
+            WM_ENTERSIZEMOVE => {
+                (*context).entered.store(true, Ordering::Release);
+            }
+            WM_EXITSIZEMOVE => {
+                if (*context).entered.swap(false, Ordering::AcqRel) {
+                    match applied_overlay_frame_from_hwnd(hwnd).and_then(|frame| {
+                        persist_overlay_placement(
+                            &(*context).store,
+                            &(*context).generation,
+                            &(*context).trust,
+                            frame,
+                            None,
+                            OverlayPersistenceAuthority::NativeMoveEnded,
+                        )
+                    }) {
+                        Ok(()) => {}
+                        Err(error) => {
+                            log::warn!("failed to persist overlay move end: {error:#}")
+                        }
+                    }
+                }
+            }
+            WM_NCDESTROY => {
+                let _ = RemoveWindowSubclass(hwnd, Some(overlay_move_subclass_proc), subclass_id);
+                let result = DefSubclassProc(hwnd, message, wparam, lparam);
+                drop(Box::from_raw(context));
+                return result;
+            }
+            _ => {}
+        }
+        DefSubclassProc(hwnd, message, wparam, lparam)
+    }))
+    .unwrap_or_else(|_| unsafe { DefSubclassProc(hwnd, message, wparam, lparam) })
 }

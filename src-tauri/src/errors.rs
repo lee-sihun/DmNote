@@ -1,5 +1,51 @@
 use serde::Serialize;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanelDragErrorCode {
+    InvalidGeometry,
+    MonitorUnavailable,
+    PanelNotOpen,
+    PresentFailed,
+    DragStartFailed,
+    DragStartNotObserved,
+}
+
+impl PanelDragErrorCode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidGeometry => "INVALID_GEOMETRY",
+            Self::MonitorUnavailable => "MONITOR_UNAVAILABLE",
+            Self::PanelNotOpen => "PANEL_NOT_OPEN",
+            Self::PresentFailed => "PRESENT_FAILED",
+            Self::DragStartFailed => "DRAG_START_FAILED",
+            Self::DragStartNotObserved => "DRAG_START_NOT_OBSERVED",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelDragError {
+    pub error_code: PanelDragErrorCode,
+    pub message: String,
+}
+
+impl PanelDragError {
+    pub fn new(error_code: PanelDragErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            error_code,
+            message: format!("{}: {}", error_code.as_str(), message.into()),
+        }
+    }
+}
+
+impl std::fmt::Display for PanelDragError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.message)
+    }
+}
+
+impl std::error::Error for PanelDragError {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum EditorCommitErrorCode {
@@ -183,6 +229,9 @@ pub enum CommandError {
 
     #[error(transparent)]
     Editor(#[from] EditorCommitError),
+
+    #[error(transparent)]
+    PanelDrag(#[from] PanelDragError),
 }
 
 impl CommandError {

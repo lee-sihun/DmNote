@@ -1,10 +1,10 @@
 use super::{
     compact_canonical_rgba, key_mappings_contain_multi, normalize_key_mappings, normalize_key_slot,
-    note_border_representative_hex, scrub_removed_text_outline_fields, FadePosition, GradientSpec,
-    GraphPosition, GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
-    KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition, KeySlot,
-    KnobPosition, NoteAlignment, NoteColor, NoteSettings, SlotMatch, StatPosition, StatType,
-    MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
+    note_border_representative_hex, scrub_removed_text_outline_fields, AppStoreData, FadePosition,
+    GradientSpec, GraphPosition, GraphStatType, GraphType, ImageTransform, KeyCounterAlign,
+    KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings,
+    KeyPosition, KeySlot, KnobPosition, NoteAlignment, NoteColor, NoteSettings, SlotMatch,
+    StatPosition, StatType, MAX_SLOT_KEYS, POSITION_COLLECTION_FIELDS,
 };
 use serde::Deserialize;
 
@@ -21,6 +21,16 @@ struct NoteBorderStopColorFixture {
 struct ValidNoteBorderStopColor {
     input: String,
     representative: String,
+}
+
+#[test]
+fn app_store_data_defaults_missing_bar_count_to_four() {
+    let mut value = serde_json::to_value(AppStoreData::default()).unwrap();
+    value.as_object_mut().unwrap().remove("barCount");
+
+    let restored: AppStoreData = serde_json::from_value(value).unwrap();
+
+    assert_eq!(restored.bar_count, 4);
 }
 
 #[test]

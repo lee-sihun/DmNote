@@ -165,6 +165,8 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     repair_editor_revision(&mut data);
     normalize_blank_font_colors(&mut data);
     canonicalize_image_modes(&mut data);
+    data.tab_order = normalize_tab_order(&data.tab_order, &data.custom_tabs);
+    data.bar_count = normalize_bar_count(data.bar_count, &data.tab_order);
 
     if data.keys.is_empty() {
         data.keys = default_keys().clone();

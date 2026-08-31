@@ -9,6 +9,7 @@ import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { USER_CSS_SCOPE_SELECTOR } from '@utils/css/scopeUserCss';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
+import { usePointerFocusGuard } from '@hooks/ui/usePointerFocusGuard';
 import { usePanelCloseRequest } from '@hooks/panel/usePanelCloseRequest';
 import ToolBar from '@components/main/Tool/ToolBar';
 import Grid from '@components/main/Grid';
@@ -31,6 +32,7 @@ import PopupExit from '@components/main/Modal/PopupExit';
 import Palette from '@components/main/Modal/content/pickers/Palette';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { orderedTabIds } from '@utils/tabOrder';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import { usePluginDisplayElementsResponder } from '@hooks/app/usePluginDisplayElementsResponder';
 import {
@@ -75,13 +77,21 @@ function getErrorMessage(error: unknown): string {
 
 export default function App() {
   const setGridAreaHovered = useUIStore((state) => state.setGridAreaHovered);
-  const { selectedKeyType, setSelectedKeyType, isBootstrapped } = useKeyStore();
+  const {
+    selectedKeyType,
+    setSelectedKeyType,
+    isBootstrapped,
+    tabOrder,
+    customTabs,
+  } = useKeyStore();
   // 메인창은 그리드 미리보기 영역에만 유저 CSS 적용 - 에디터 크롬은 순정 유지
   useCustomCssInjection({ scopeSelector: USER_CSS_SCOPE_SELECTOR });
   useCustomJsInjection(isBootstrapped);
   useAppBootstrap();
   usePluginDisplayElementsResponder();
   useBlockBrowserShortcuts();
+  // 클릭 잔류 포커스 무해화 - 키 상시 입력 앱이라 Space/Enter 재활성화 차단
+  usePointerFocusGuard();
 
   // 업데이트 체크
   const {
@@ -269,13 +279,14 @@ export default function App() {
       // 키 리스닝 중이면 탭 전환 차단
       if (window.__dmn_isKeyListening) return;
 
-      const defaults = ['4key', '5key', '6key', '8key'];
-      if (!isBootstrapped || !defaults.includes(selectedKeyType)) return;
+      // 순환 순서는 사용자가 정한 표시 순서를 따른다. 내장 배열로 돌면
+      // 커스텀 탭에서는 아무 일도 안 일어나고 화면 순서와도 어긋난다
+      const order = orderedTabIds(tabOrder, customTabs);
+      const idx = order.indexOf(selectedKeyType);
+      if (!isBootstrapped || idx < 0) return;
       e.preventDefault();
       e.stopPropagation();
-      const idx = defaults.indexOf(selectedKeyType);
-      const next = defaults[(idx + 1) % defaults.length];
-      setSelectedKeyType(next);
+      setSelectedKeyType(order[(idx + 1) % order.length]);
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
@@ -285,6 +296,8 @@ export default function App() {
     isBootstrapped,
     isSettingsOpen,
     shortcuts?.switchKeyMode,
+    tabOrder,
+    customTabs,
   ]);
 
   useEffect(() => {

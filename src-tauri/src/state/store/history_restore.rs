@@ -463,12 +463,15 @@ impl AppStore {
         validate_history_restore_metadata(
             &target.document,
             &target.custom_tabs,
+            &target.tab_order,
             &target.selected_key_type,
         )?;
         let current = EditorDocumentV1::from_store(&current_store);
         let mut scratch = current_store.clone();
         target.document.apply_to_store(&mut scratch);
         scratch.custom_tabs = target.custom_tabs.clone();
+        scratch.tab_order = target.tab_order.clone();
+        scratch.bar_count = target.bar_count;
         scratch.selected_key_type = target.selected_key_type.clone();
         scratch.key_counters = project_history_key_counters(
             current_key_counters,
@@ -558,12 +561,15 @@ impl AppStore {
         validate_history_restore_metadata(
             &target.document,
             &target.custom_tabs,
+            &target.tab_order,
             &target.selected_key_type,
         )?;
         let current = EditorDocumentV1::from_store(&current_store);
         let mut scratch = current_store.clone();
         target.document.apply_to_store(&mut scratch);
         scratch.custom_tabs = target.custom_tabs.clone();
+        scratch.tab_order = target.tab_order.clone();
+        scratch.bar_count = target.bar_count;
         scratch.selected_key_type = target.selected_key_type.clone();
         scratch.key_counters = project_history_key_counters(
             current_key_counters,

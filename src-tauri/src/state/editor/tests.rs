@@ -2123,7 +2123,13 @@ fn history_restore_requires_metadata_for_every_custom_editor_mode() {
         .insert("custom".to_string(), vec![KeyPosition::default()]);
     let document = EditorDocumentV1::from_store(&store);
 
-    let error = validate_history_restore_metadata(&document, &[], "4key").unwrap_err();
+    let error = validate_history_restore_metadata(
+        &document,
+        &[],
+        &AppStoreData::default().tab_order,
+        "4key",
+    )
+    .unwrap_err();
 
     assert_eq!(
         error.details.unwrap().validation_code.as_deref(),
@@ -2139,11 +2145,40 @@ fn history_restore_rejects_metadata_without_paired_editor_collections() {
         name: "Custom".to_string(),
     }];
 
-    let error = validate_history_restore_metadata(&document, &tabs, "custom").unwrap_err();
+    let tab_order = crate::state::tab_metadata::normalize_tab_order(&[], &tabs);
+    let error =
+        validate_history_restore_metadata(&document, &tabs, &tab_order, "custom").unwrap_err();
 
     assert_eq!(
         error.details.unwrap().validation_code.as_deref(),
         Some("CUSTOM_TAB_DOCUMENT_MISSING")
+    );
+}
+
+// 입력 이름 상한을 복원 경로에 적용하면 기존의 긴 이름이 undo를 막는다
+#[test]
+fn history_restore_accepts_names_longer_than_the_input_limit() {
+    let mut store = AppStoreData::default();
+    store
+        .keys
+        .insert("custom".to_string(), vec![KeySlot::from("A")]);
+    store
+        .key_positions
+        .insert("custom".to_string(), vec![KeyPosition::default()]);
+    let document = EditorDocumentV1::from_store(&store);
+    let long_name = "내 커스텀 연습 세팅";
+    assert!(long_name.encode_utf16().count() > 10);
+    let tabs = vec![CustomTab {
+        id: "custom".to_string(),
+        name: long_name.to_string(),
+    }];
+    let tab_order = crate::state::tab_metadata::normalize_tab_order(&[], &tabs);
+
+    validate_history_restore_metadata(&document, &tabs, &tab_order, "custom").unwrap();
+
+    assert_eq!(
+        crate::state::tab_metadata::validate_custom_tab_name(long_name, &[], None),
+        Err("name-too-long")
     );
 }
 

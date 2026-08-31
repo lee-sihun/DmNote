@@ -562,6 +562,49 @@ pub struct OverlayBounds {
     pub height: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredOverlayNativePosition {
+    pub x: f64,
+    pub y: f64,
+    pub logical_echo_x: f64,
+    pub logical_echo_y: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredOverlayBounds {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_position: Option<StoredOverlayNativePosition>,
+}
+
+impl StoredOverlayBounds {
+    pub fn public_bounds(&self) -> OverlayBounds {
+        OverlayBounds {
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
+impl From<OverlayBounds> for StoredOverlayBounds {
+    fn from(bounds: OverlayBounds) -> Self {
+        Self {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            native_position: None,
+        }
+    }
+}
+
 /// 분리 패널의 마지막 기하 정보. 복원에 쓰는 값은 height뿐이고
 /// x/y는 이동 기록으로만 남는다 - 패널은 열 때마다 메인 창 옆에 다시 배치된다
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -602,6 +645,12 @@ pub struct CustomTab {
     pub name: String,
 }
 
+pub const BUILTIN_TAB_IDS: [&str; 4] = ["4key", "5key", "6key", "8key"];
+
+pub(crate) fn default_bar_count() -> u8 {
+    crate::state::tab_metadata::MAX_BAR_SLOTS
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerGroupDef {
@@ -625,6 +674,10 @@ pub struct AppStoreData {
     pub selected_key_type: String,
     #[serde(default)]
     pub custom_tabs: Vec<CustomTab>,
+    #[serde(default)]
+    pub tab_order: Vec<String>,
+    #[serde(default = "default_bar_count")]
+    pub bar_count: u8,
     pub angle_mode: String,
     pub language: String,
     pub laboratory_enabled: bool,
@@ -673,7 +726,7 @@ pub struct AppStoreData {
     #[serde(default)]
     pub custom_js: CustomJs,
     pub overlay_resize_anchor: OverlayResizeAnchor,
-    pub overlay_bounds: Option<OverlayBounds>,
+    pub overlay_bounds: Option<StoredOverlayBounds>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_bounds: Option<PanelBounds>,
     /// 분리 패널 창 존재 여부 (재시작 복원용)
@@ -723,6 +776,8 @@ impl Default for AppStoreData {
             note_settings: NoteSettings::default(),
             selected_key_type: "4key".to_string(),
             custom_tabs: Vec::new(),
+            tab_order: BUILTIN_TAB_IDS.iter().map(|id| (*id).to_string()).collect(),
+            bar_count: default_bar_count(),
             angle_mode: default_angle_mode(),
             language: "ko".to_string(),
             laboratory_enabled: false,

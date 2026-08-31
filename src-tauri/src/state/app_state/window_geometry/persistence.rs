@@ -404,8 +404,12 @@ impl PanelBoundsPersistenceController {
     ) -> Result<()> {
         let Some((min_height, monitor_max_height)) = window
             .current_monitor()?
-            .and_then(MonitorSpec::from_monitor)
-            .map(|monitor| panel_height_bounds(Some(monitor.logical_height)))
+            .and_then(|monitor| MonitorSpec::from_monitor(monitor, 0))
+            .map(|monitor| {
+                panel_height_bounds(Some(
+                    monitor.native_length_to_logical(monitor.work_rect_native.height),
+                ))
+            })
         else {
             return Ok(());
         };

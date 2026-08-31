@@ -13,7 +13,8 @@ use crate::{
         GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
         KeyCounterColor, KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition,
         LayerGroupDef, NoteColor, OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition,
-        StatType, TabCss, TabNoteSettings, POSITION_COLLECTION_FIELDS,
+        StatType, StoredOverlayBounds, StoredOverlayNativePosition, TabCss, TabNoteSettings,
+        POSITION_COLLECTION_FIELDS,
     },
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -38,6 +39,90 @@ fn data_with_one_position() -> AppStoreData {
         key_positions: default_positions().clone(),
         ..AppStoreData::default()
     }
+}
+
+#[test]
+fn legacy_store_builds_tab_order_and_defaults_bar_count() {
+    let path = std::env::temp_dir().join(format!(
+        "dmnote-tab-order-legacy-{}.json",
+        uuid::Uuid::new_v4()
+    ));
+    let mut data = AppStoreData {
+        custom_tabs: vec![
+            CustomTab {
+                id: "custom-a".to_string(),
+                name: "Alpha".to_string(),
+            },
+            CustomTab {
+                id: "custom-b".to_string(),
+                name: "Beta".to_string(),
+            },
+        ],
+        ..AppStoreData::default()
+    };
+    data.keys.insert("custom-a".to_string(), Vec::new());
+    data.keys.insert("custom-b".to_string(), Vec::new());
+    data.key_positions
+        .insert("custom-a".to_string(), Vec::new());
+    data.key_positions
+        .insert("custom-b".to_string(), Vec::new());
+    let mut value = serde_json::to_value(data).unwrap();
+    value.as_object_mut().unwrap().remove("tabOrder");
+    value.as_object_mut().unwrap().remove("barCount");
+    std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+
+    let loaded = load_store_from_path(&path).unwrap();
+    let _ = std::fs::remove_file(path);
+
+    assert!(loaded.needs_persist);
+    assert_eq!(
+        loaded.data.tab_order,
+        ["4key", "5key", "6key", "8key", "custom-b", "custom-a"]
+    );
+    assert_eq!(loaded.data.bar_count, 4);
+}
+
+#[test]
+fn invalid_tab_order_entries_do_not_remove_custom_tabs_during_recovery() {
+    let path = std::env::temp_dir().join(format!(
+        "dmnote-tab-order-recovery-{}.json",
+        uuid::Uuid::new_v4()
+    ));
+    let mut data = AppStoreData {
+        custom_tabs: vec![
+            CustomTab {
+                id: "custom-a".to_string(),
+                name: "Alpha".to_string(),
+            },
+            CustomTab {
+                id: "custom-b".to_string(),
+                name: "Beta".to_string(),
+            },
+        ],
+        ..AppStoreData::default()
+    };
+    data.keys.insert("custom-a".to_string(), Vec::new());
+    data.keys.insert("custom-b".to_string(), Vec::new());
+    data.key_positions
+        .insert("custom-a".to_string(), Vec::new());
+    data.key_positions
+        .insert("custom-b".to_string(), Vec::new());
+    let mut value = serde_json::to_value(data).unwrap();
+    value.as_object_mut().unwrap().insert(
+        "tabOrder".to_string(),
+        serde_json::json!(["custom-b", 7, "unknown", "custom-b"]),
+    );
+    std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+
+    let loaded = load_store_from_path(&path).unwrap();
+    let _ = std::fs::remove_file(path);
+
+    assert!(loaded.repaired);
+    assert_eq!(loaded.data.custom_tabs.len(), 2);
+    assert_eq!(
+        loaded.data.tab_order,
+        ["custom-b", "4key", "5key", "6key", "8key", "custom-a"]
+    );
 }
 
 #[test]
@@ -2120,12 +2205,15 @@ fn invalid_field_recovery_preserves_every_other_store_field() {
     let mut expected = AppStoreData {
         hardware_acceleration: false,
         always_on_top: false,
-        overlay_bounds: Some(OverlayBounds {
-            x: 11.0,
-            y: 22.0,
-            width: 933.0,
-            height: 411.0,
-        }),
+        overlay_bounds: Some(
+            OverlayBounds {
+                x: 11.0,
+                y: 22.0,
+                width: 933.0,
+                height: 411.0,
+            }
+            .into(),
+        ),
         obs_mode_enabled: true,
         obs_port: 18_321,
         obs_token: Some("obs-token-sentinel".to_string()),
@@ -2210,6 +2298,97 @@ fn invalid_field_recovery_preserves_every_other_store_field() {
     remove_all_native_ids(&mut actual_value);
     remove_all_native_ids(&mut expected_value);
     assert_eq!(actual_value, expected_value);
+}
+
+#[test]
+fn overlay_bounds_fixtures_load_and_resave_with_nested_recovery() {
+    let fixtures = [
+        (
+            "legacy",
+            serde_json::json!({
+                "x": 31.0,
+                "y": 47.0,
+                "width": 911.0,
+                "height": 333.0
+            }),
+            None,
+            false,
+        ),
+        (
+            "native",
+            serde_json::json!({
+                "x": 31.0,
+                "y": 47.0,
+                "width": 911.0,
+                "height": 333.0,
+                "nativePosition": {
+                    "x": 62.0,
+                    "y": 94.0,
+                    "logicalEchoX": 31.0,
+                    "logicalEchoY": 47.0
+                }
+            }),
+            Some(StoredOverlayNativePosition {
+                x: 62.0,
+                y: 94.0,
+                logical_echo_x: 31.0,
+                logical_echo_y: 47.0,
+            }),
+            false,
+        ),
+        (
+            "invalid-native-child",
+            serde_json::json!({
+                "x": 31.0,
+                "y": 47.0,
+                "width": 911.0,
+                "height": 333.0,
+                "nativePosition": {
+                    "x": 62.0,
+                    "y": 94.0,
+                    "logicalEchoX": 31.0,
+                    "logicalEchoY": "broken"
+                }
+            }),
+            None,
+            true,
+        ),
+    ];
+
+    for (label, bounds, expected_native, expected_repaired) in fixtures {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-overlay-bounds-{label}-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture["overlayBounds"] = bounds;
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert_eq!(loaded.repaired, expected_repaired, "{label}");
+        let expected = StoredOverlayBounds {
+            x: 31.0,
+            y: 47.0,
+            width: 911.0,
+            height: 333.0,
+            native_position: expected_native.clone(),
+        };
+        assert_eq!(
+            loaded.data.overlay_bounds.as_ref(),
+            Some(&expected),
+            "{label}"
+        );
+
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.repaired, "{label}");
+        assert_eq!(
+            reloaded.data.overlay_bounds.as_ref(),
+            Some(&expected),
+            "{label}"
+        );
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 #[test]
@@ -2302,12 +2481,15 @@ fn electron_1_2_store_preserves_tabs_keys_settings_and_window_position() {
     assert_eq!(loaded.data.background_color, "#123456");
     assert_eq!(
         loaded.data.overlay_bounds,
-        Some(OverlayBounds {
-            x: 17.0,
-            y: 29.0,
-            width: LEGACY_OVERLAY_WIDTH,
-            height: LEGACY_OVERLAY_HEIGHT,
-        })
+        Some(
+            OverlayBounds {
+                x: 17.0,
+                y: 29.0,
+                width: LEGACY_OVERLAY_WIDTH,
+                height: LEGACY_OVERLAY_HEIGHT,
+            }
+            .into()
+        )
     );
 }
 
