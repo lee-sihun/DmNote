@@ -1,3 +1,4 @@
+import { makeSpritePose, makeSpritePosition } from './spriteFixtures';
 import { describe, expect, it } from 'vitest';
 
 import type {
@@ -7,36 +8,10 @@ import type {
 
 import { toSpriteWireShape } from './spriteWireShape';
 
-const basePose = (overrides: Partial<SpritePose> = {}): SpritePose => ({
-  contactPoint: { x: 0.5, y: 1 },
-  poseId: 'pose-1',
-  triggers: ['key-1'],
-  transform: { x: 0, y: 0, rotation: 0, scale: 1 },
-  imageOverride: null,
-  ...overrides,
-});
+const basePose = (overrides: Partial<SpritePose> = {}): SpritePose =>
+  makeSpritePose({ triggers: ['key-1'], ...overrides });
 
-const basePosition = (): ReactiveSpritePosition => ({
-  activation: 'whileHeld',
-  pressDurationMs: 300,
-  id: 'sprite-1',
-  dx: 0,
-  dy: 0,
-  width: 200,
-  height: 200,
-  hidden: false,
-  zIndex: null,
-  className: null,
-  useInlineStyles: null,
-  baseImage: null,
-  imageFit: null,
-  imageRect: { x: 0, y: 0, width: 200, height: 200 },
-  pivot: { x: 0.5, y: 0.5 },
-  idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
-  poses: [],
-  transitionMs: 90,
-  transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-});
+const basePosition = (): ReactiveSpritePosition => makeSpritePosition();
 
 describe('toSpriteWireShape', () => {
   it('명시 null layerName·groupId 키를 제거한다', () => {

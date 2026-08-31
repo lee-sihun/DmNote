@@ -16,6 +16,10 @@ import {
 } from '@stores/signals/keySignals';
 
 import OverlaySpriteItem from './OverlaySpriteItem';
+import {
+  makeCanonicalSpritePosition,
+  makeSpritePose,
+} from '@utils/sprite/spriteFixtures';
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -28,41 +32,31 @@ const makePose = (
   poseId: string,
   triggers: string[],
   overrides: Partial<SpritePose> = {},
-): SpritePose => ({
-  contactPoint: { x: 0.5, y: 1 },
-  poseId,
-  triggers,
-  transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
-  imageOverride: null,
-  ...overrides,
-});
+): SpritePose =>
+  makeSpritePose({
+    poseId,
+    triggers,
+    transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
+    ...overrides,
+  });
 
 const makeSprite = (
   overrides: Partial<CanonicalReactiveSpritePosition> = {},
-): CanonicalReactiveSpritePosition => ({
-  activation: 'whileHeld',
-  pressDurationMs: 300,
-  id: 'sprite-1',
-  dx: 12,
-  dy: 24,
-  width: 300,
-  height: 200,
-  hidden: false,
-  zIndex: 5,
-  layerName: null,
-  groupId: null,
-  className: null,
-  useInlineStyles: null,
-  baseImage: BASE_IMAGE,
-  imageFit: null,
-  imageRect: { x: 10, y: 20, width: 120, height: 80 },
-  pivot: { x: 0.5, y: 1 },
-  idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
-  poses: [makePose('p1', ['el-a'])],
-  transitionMs: 90,
-  transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-  ...overrides,
-});
+): CanonicalReactiveSpritePosition =>
+  makeCanonicalSpritePosition({
+    dx: 12,
+    dy: 24,
+    width: 300,
+    height: 200,
+    zIndex: 5,
+    layerName: null,
+    groupId: null,
+    baseImage: BASE_IMAGE,
+    imageRect: { x: 10, y: 20, width: 120, height: 80 },
+    pivot: { x: 0.5, y: 1 },
+    poses: [makePose('p1', ['el-a'])],
+    ...overrides,
+  });
 
 const keyCanonicalMap: ReadonlyMap<string, string> = new Map([
   ['el-a', 'KeyA'],

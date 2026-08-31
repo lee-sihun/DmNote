@@ -8,18 +8,13 @@ import {
   resolvePoseNames,
   stripCopySuffix,
 } from './spritePoseNames';
+import { makeSpritePose } from './spriteFixtures';
 
 const LABEL = '상태';
 const SUFFIX = '복제';
 
-const pose = (poseId: string, name: string | null = null): SpritePose => ({
-  poseId,
-  name,
-  triggers: [],
-  transform: { x: 0, y: 0, rotation: 0, scale: 1 },
-  imageOverride: null,
-  contactPoint: { x: 0.5, y: 1 },
-});
+const pose = (poseId: string, name: string | null = null): SpritePose =>
+  makeSpritePose({ poseId, name });
 
 describe('resolvePoseNames', () => {
   it('무명 자세에 1부터 번호를 매긴다', () => {

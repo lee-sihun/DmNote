@@ -7,6 +7,7 @@ import type {
 } from '@src/types/key/sprites';
 
 import { resolveSpriteTarget } from './poseResolver';
+import { makeSpritePose, makeSpritePosition } from './spriteFixtures';
 
 const makeTransform = (
   overrides: Partial<SpriteTransform> = {},
@@ -23,40 +24,27 @@ const makePose = (
   triggers: string[],
   transform: Partial<SpriteTransform> = {},
   imageOverride: string | null = null,
-): SpritePose => ({
-  contactPoint: { x: 0.5, y: 1 },
-  poseId,
-  triggers,
-  transform: makeTransform(transform),
-  imageOverride,
-});
+): SpritePose =>
+  makeSpritePose({
+    poseId,
+    triggers,
+    transform: makeTransform(transform),
+    imageOverride,
+  });
 
 const makeSprite = (
   poses: SpritePose[],
   overrides: Partial<ReactiveSpritePosition> = {},
-): ReactiveSpritePosition => ({
-  activation: 'whileHeld',
-  pressDurationMs: 300,
-  dx: 0,
-  dy: 0,
-  width: 200,
-  height: 120,
-  hidden: false,
-  zIndex: null,
-  layerName: null,
-  groupId: null,
-  className: null,
-  useInlineStyles: null,
-  baseImage: 'base.png',
-  imageFit: null,
-  imageRect: { x: 0, y: 0, width: 100, height: 100 },
-  pivot: { x: 0.5, y: 0.5 },
-  idleTransform: makeTransform(),
-  poses,
-  transitionMs: 90,
-  transitionEasing: 'linear',
-  ...overrides,
-});
+): ReactiveSpritePosition =>
+  makeSpritePosition({
+    width: 200,
+    height: 120,
+    baseImage: 'base.png',
+    imageRect: { x: 0, y: 0, width: 100, height: 100 },
+    transitionEasing: 'linear',
+    poses,
+    ...overrides,
+  });
 
 // 진리표 기준 스프라이트: 키 요소 kA, kS, kD와 단일 자세 3개
 const poseA = makePose('poseA', ['kA'], { x: 10, y: -30, rotation: -30 });

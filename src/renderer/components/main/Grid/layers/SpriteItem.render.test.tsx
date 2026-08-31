@@ -10,6 +10,7 @@ import SpriteItem from '@components/main/Grid/layers/SpriteItem';
 import { useSpriteEditPreviewStore } from '@stores/grid/useSpriteEditPreviewStore';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import type { SpritePose } from '@src/types/key/sprites';
+import { makeCanonicalSpritePosition } from '@utils/sprite/spriteFixtures';
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -56,30 +57,16 @@ const SPRITE_ID = '00000000-0000-4000-8000-000000000801';
 
 const spritePosition = (
   overrides: Partial<CanonicalReactiveSpritePosition> = {},
-): CanonicalReactiveSpritePosition => ({
-  activation: 'whileHeld',
-  pressDurationMs: 300,
-  id: SPRITE_ID,
-  dx: 10,
-  dy: 20,
-  width: 200,
-  height: 200,
-  hidden: false,
-  zIndex: null,
-  layerName: null,
-  groupId: null,
-  className: null,
-  useInlineStyles: null,
-  baseImage: null,
-  imageFit: 'contain',
-  imageRect: { x: 0, y: 0, width: 200, height: 200 },
-  pivot: { x: 0.5, y: 0.5 },
-  idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
-  poses: [],
-  transitionMs: 90,
-  transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-  ...overrides,
-});
+): CanonicalReactiveSpritePosition =>
+  makeCanonicalSpritePosition({
+    id: SPRITE_ID,
+    dx: 10,
+    dy: 20,
+    layerName: null,
+    groupId: null,
+    imageFit: 'contain',
+    ...overrides,
+  });
 
 let container: HTMLDivElement;
 let root: Root;

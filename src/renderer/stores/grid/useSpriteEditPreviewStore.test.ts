@@ -2,14 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useSpriteEditPreviewStore } from './useSpriteEditPreviewStore';
 import type { SpritePose } from '@src/types/key/sprites';
+import { makeSpritePose } from '@utils/sprite/spriteFixtures';
 
-const pose = (poseId: string): SpritePose => ({
-  contactPoint: { x: 0.5, y: 1 },
-  poseId,
-  triggers: ['k1'],
-  transform: { x: 0, y: 0, rotation: 0, scale: 1 },
-  imageOverride: null,
-});
+const pose = (poseId: string): SpritePose =>
+  makeSpritePose({ poseId, triggers: ['k1'] });
 
 describe('useSpriteEditPreviewStore', () => {
   afterEach(() => {

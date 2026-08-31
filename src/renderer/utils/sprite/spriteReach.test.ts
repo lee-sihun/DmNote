@@ -11,6 +11,7 @@ import {
   SPRITE_SAFE_FALLBACK_EASING,
   type SpriteReachGeometry,
 } from './spriteReach';
+import { makeSpritePose } from './spriteFixtures';
 
 const OVERSHOOT_EASING = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
@@ -28,13 +29,13 @@ const makePose = (
   poseId: string,
   transform: Partial<SpriteTransform> = {},
   imageOverride: string | null = null,
-): SpritePose => ({
-  contactPoint: { x: 0.5, y: 1 },
-  poseId,
-  triggers: [poseId],
-  transform: makeTransform(transform),
-  imageOverride,
-});
+): SpritePose =>
+  makeSpritePose({
+    poseId,
+    triggers: [poseId],
+    transform: makeTransform(transform),
+    imageOverride,
+  });
 
 // 활동 영역 200x200에 imageRect가 영역 전체, pivot 중앙 (기본 생성값 형태)
 const makeSprite = (
