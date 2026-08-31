@@ -9,7 +9,7 @@ use super::{
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
 pub const EDITOR_COMMIT_SCHEMA_VERSION_V2: u16 = 2;
-pub const EDITOR_OPS_VERSION: u16 = 2;
+pub const EDITOR_OPS_VERSION: u16 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -543,6 +543,10 @@ pub enum EditorOpV1 {
         id: String,
         bounds: EditorBoundsV1,
     },
+    ResizeSprite {
+        id: String,
+        bounds: EditorBoundsV1,
+    },
     DeleteElement {
         #[serde(rename = "elementType")]
         element_type: EditorElementTypeV1,
@@ -598,6 +602,7 @@ impl EditorOpV1 {
                 .iter()
                 .any(|element| matches!(element, EditorFrozenElementV1::Key { .. })),
             Self::SetBounds { .. }
+            | Self::ResizeSprite { .. }
             | Self::PatchElement { .. }
             | Self::ReorderElements { .. }
             | Self::SetElementGroups { .. }
@@ -608,6 +613,7 @@ impl EditorOpV1 {
     pub fn target_id(&self) -> Option<&str> {
         match self {
             Self::SetBounds { id, .. }
+            | Self::ResizeSprite { id, .. }
             | Self::DeleteElement { id, .. }
             | Self::PatchElement { id, .. }
             | Self::SetKeySlot { id, .. } => Some(id),
@@ -1650,5 +1656,17 @@ mod tests {
             }]),
         )
         .may_change_keys());
+        let sprite_id = uuid::Uuid::new_v4().to_string();
+        let resize = EditorOpV1::ResizeSprite {
+            id: sprite_id.clone(),
+            bounds: EditorBoundsV1 {
+                dx: 1.0,
+                dy: 2.0,
+                width: 200.0,
+                height: 100.0,
+            },
+        };
+        assert_eq!(resize.target_id(), Some(sprite_id.as_str()));
+        assert!(!request(None, Some(vec![resize])).may_change_keys());
     }
 }

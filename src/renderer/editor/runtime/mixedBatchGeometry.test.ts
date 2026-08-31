@@ -121,9 +121,16 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   }),
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
-  commitBatchGeometryByIds: mocks.commitBatchGeometryByIds,
-}));
+vi.mock('@src/renderer/editor/runtime/elementOps', async (importOriginal) => {
+  // op 구성·eager projection은 실물, 배치 위임 경계만 mock
+  const actual = await importOriginal<
+    typeof import('@src/renderer/editor/runtime/elementOps')
+  >();
+  return {
+    ...actual,
+    commitBatchGeometryByIds: mocks.commitBatchGeometryByIds,
+  };
+});
 
 vi.mock('@src/renderer/editor/runtime/editorWriteBarrier', () => ({
   trackEditorWrite: <T>(promise: T) => promise,

@@ -45,6 +45,7 @@ const fixture = (): OpsParityFixture =>
 // 잡으므로 신규 op 추가 시 이 목록과 fixture 케이스를 함께 늘려야 한다
 const ALL_OP_KINDS = {
   setBounds: true,
+  resizeSprite: true,
   deleteElement: true,
   insertFrozenElements: true,
   reorderElements: true,
@@ -77,7 +78,7 @@ const createParityHarness = (initial: CanonicalEditorDocumentV1) => {
         changedFields,
         opResults: (request.ops ?? []).map(
           (op): EditorOpResultV1 =>
-            op.kind === 'setBounds'
+            op.kind === 'setBounds' || op.kind === 'resizeSprite'
               ? { status, bounds: op.bounds }
               : { status },
         ),

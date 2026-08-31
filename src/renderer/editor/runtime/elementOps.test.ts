@@ -199,7 +199,7 @@ describe('elementOps', () => {
         return {
           document: documentFromStores(),
           opResults: _ops.map((op) =>
-            op.kind === 'setBounds'
+            op.kind === 'setBounds' || op.kind === 'resizeSprite'
               ? { status: 'applied', bounds: op.bounds }
               : { status: 'applied' },
           ),
@@ -215,7 +215,7 @@ describe('elementOps', () => {
         return {
           document: documentFromStores(),
           opResults: ops.map((op) =>
-            op.kind === 'setBounds'
+            op.kind === 'setBounds' || op.kind === 'resizeSprite'
               ? { status: 'applied', bounds: op.bounds }
               : { status: 'applied' },
           ),
@@ -728,7 +728,7 @@ describe('elementOps', () => {
     ]);
   });
 
-  it('배치 정렬은 key+sprite 혼합 대상 모두 setBounds로 움직인다', async () => {
+  it('배치 정렬의 sprite는 resizeSprite로 이동한다 (치수 불변이라 배율 1)', async () => {
     const sprite = { ...spriteAt(ID_B), dx: 50, dy: 10, width: 20, height: 30 };
     useKeyStore.setState({
       canonicalPositions: {
@@ -760,14 +760,70 @@ describe('elementOps', () => {
         bounds: { dx: 60, dy: 0, width: 10, height: 20 },
       },
       {
-        kind: 'setBounds',
-        elementType: 'sprite',
+        kind: 'resizeSprite',
         id: ID_B,
         bounds: { dx: 50, dy: 10, width: 20, height: 30 },
       },
     ]);
     // eager: key가 sprite 오른끝에 즉시 정렬
     expect(useKeyStore.getState().canonicalPositions['4key'][0].dx).toBe(60);
+  });
+
+  it('배치 resize의 sprite는 resizeSprite + projection eager로 콘텐츠까지 스케일한다', async () => {
+    const sprite = {
+      ...spriteAt(ID_B),
+      dx: 50,
+      dy: 10,
+      width: 200,
+      height: 120,
+      imageRect: { x: 4, y: 8, width: 96, height: 64 },
+      idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
+    };
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), dx: 10, dy: 0, width: 10, height: 20 }],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), dx: 10, dy: 0, width: 10, height: 20 }],
+      },
+    });
+    useSpriteStore.setState({ positions: { '4key': [sprite] } });
+    api.lastAck = documentFromStores();
+
+    await commitBatchGeometryByIds({
+      mode: '4key',
+      targets: [
+        { type: 'key', id: ID_A },
+        { type: 'sprite', id: ID_B },
+      ],
+      operation: { kind: 'resize', dimension: 'width', value: 400 },
+    });
+
+    expect(api.commitGeneratedSemanticOps).toHaveBeenCalledOnce();
+    const generate = api.commitGeneratedSemanticOps.mock.calls[0][0];
+    expect(generate(documentFromStores())).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: ID_A,
+        bounds: { dx: 10, dy: 0, width: 400, height: 20 },
+      },
+      {
+        kind: 'resizeSprite',
+        id: ID_B,
+        bounds: { dx: 50, dy: 10, width: 400, height: 120 },
+      },
+    ]);
+    // eager: sx=2, sy=1로 스프라이트 콘텐츠 동반 스케일
+    const eager = useSpriteStore.getState().positions['4key'][0];
+    expect(eager).toMatchObject({ width: 400, height: 120 });
+    expect(eager.imageRect).toEqual({ x: 8, y: 8, width: 192, height: 64 });
+    expect(eager.idleTransform).toEqual({
+      x: 24,
+      y: -6,
+      rotation: 15,
+      scale: 1.5,
+    });
   });
 
   it('배치 geometry는 slot 최신 base에서 전체 계획을 다시 계산한다', async () => {
@@ -1418,6 +1474,96 @@ describe('elementOps', () => {
       width: 90,
       height: 80,
     });
+  });
+
+  it('단일 sprite bounds는 resizeSprite op으로 콘텐츠까지 eager 스케일한다', async () => {
+    const sprite = {
+      ...spriteAt(ID_B),
+      imageRect: { x: 4, y: 8, width: 96, height: 64 },
+      idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
+      poses: [
+        {
+          poseId: 'pose-1',
+          triggers: [ID_A],
+          transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
+          imageOverride: null,
+          contactPoint: { x: 0.5, y: 1 },
+        },
+      ],
+    };
+    useSpriteStore.setState({ positions: { '4key': [sprite] } });
+
+    const committed = await commitSingleElementBoundsById(
+      'sprite',
+      ID_B,
+      { dx: 5, dy: 8, width: 400, height: 60 },
+      'resize-gesture',
+    );
+
+    expect(committed).toBe(true);
+    // wire는 bounds만 - 배율은 백엔드가 최신 base 기준으로 재적용
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'resizeSprite',
+          id: ID_B,
+          bounds: { dx: 5, dy: 8, width: 400, height: 60 },
+        },
+      ],
+      expect.objectContaining({ gestureId: 'resize-gesture' }),
+    );
+    // eager: 200x120 → 400x60 (sx=2, sy=0.5)
+    const eager = useSpriteStore.getState().positions['4key'][0];
+    expect(eager).toMatchObject({ dx: 5, dy: 8, width: 400, height: 60 });
+    expect(eager.imageRect).toEqual({ x: 8, y: 4, width: 192, height: 32 });
+    expect(eager.idleTransform).toEqual({
+      x: 24,
+      y: -3,
+      rotation: 15,
+      scale: 1.5,
+    });
+    expect(eager.poses[0].transform).toEqual({
+      x: -60,
+      y: 22,
+      rotation: -90,
+      scale: 0.5,
+    });
+    expect(eager.pivot).toBe(sprite.pivot);
+    expect(eager.poses[0].contactPoint).toEqual({ x: 0.5, y: 1 });
+  });
+
+  it('sprite bounds의 편입 전 실패는 콘텐츠 필드까지 CAS 복원한다', async () => {
+    const sprite = {
+      ...spriteAt(ID_B),
+      imageRect: { x: 4, y: 8, width: 96, height: 64 },
+      idleTransform: { x: 12, y: -6, rotation: 15, scale: 1.5 },
+      poses: [
+        {
+          poseId: 'pose-1',
+          triggers: [ID_A],
+          transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
+          imageOverride: null,
+          contactPoint: { x: 0.5, y: 1 },
+        },
+      ],
+    };
+    useSpriteStore.setState({ positions: { '4key': [sprite] } });
+    api.commitSemanticOps.mockRejectedValue(new Error('start failed'));
+
+    await expect(
+      commitSingleElementBoundsById('sprite', ID_B, {
+        dx: 5,
+        dy: 8,
+        width: 400,
+        height: 60,
+      }),
+    ).rejects.toThrow('start failed');
+
+    const restored = useSpriteStore.getState().positions['4key'][0];
+    expect(restored).toMatchObject({ dx: 0, dy: 0, width: 200, height: 120 });
+    expect(restored.imageRect).toEqual(sprite.imageRect);
+    expect(restored.idleTransform).toEqual(sprite.idleTransform);
+    expect(restored.poses).toEqual(sprite.poses);
   });
 
   it('단일 bounds op의 targetMissing은 canonical 동기화 결과를 유지한다', async () => {

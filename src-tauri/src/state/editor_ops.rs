@@ -13,14 +13,17 @@ use crate::{
         EditorPaintGradientV1, EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1,
         ElementShadowSpec, GradientSpec, ImageMode, ImageTransform, ImageTransformLeafPatchV1,
         KeyPosition, LayerGroupDef, NoteColor, NoteGradientShadow, ReactiveSpritePosition,
-        IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX,
-        IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN,
-        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        SpriteTransform, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
+        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
+        IMAGE_TRANSFORM_SCALE_MIN, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX,
+        SHADOW_OFFSET_MIN, SPRITE_RESIZE_MIN_DIMENSION, SPRITE_TRANSFORM_OFFSET_MAX,
+        SPRITE_TRANSFORM_OFFSET_MIN,
     },
 };
 
 use super::editor::{
     validate_document_transition, validate_editor_op_bounds, validate_editor_op_target_type,
+    MAX_ABS_COORDINATE, MAX_DIMENSION,
 };
 use super::native_element_id::{validate_document_element_ids, DUPLICATE_ELEMENT_ID};
 use super::plugin::{plugin_group_refs_from_store, PluginGroupRefs};
@@ -973,6 +976,22 @@ fn element_common_at_mut<'a>(
     })
 }
 
+fn sprite_at_mut<'a>(
+    document: &'a mut EditorDocumentV1,
+    location: &ElementLocation,
+) -> Result<&'a mut ReactiveSpritePosition, EditorCommitError> {
+    document
+        .sprite_positions
+        .get_mut(&location.mode)
+        .and_then(|positions| positions.get_mut(location.index))
+        .ok_or_else(|| {
+            EditorCommitError::validation(
+                "ELEMENT_LOCATOR_INVALID",
+                "native element locator no longer matches the editor document",
+            )
+        })
+}
+
 fn position_at_mut<'a>(
     document: &'a mut EditorDocumentV1,
     location: &ElementLocation,
@@ -1590,6 +1609,75 @@ fn apply_bounds(common: ElementCommonMut<'_>, bounds: &EditorBoundsV1) {
     *common.height = bounds.height;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpriteResizeValueField {
+    Offset,
+    Coordinate,
+    Dimension,
+}
+
+#[allow(clippy::neg_cmp_op_on_partial_ord)]
+fn sprite_resize_ratio(prev: f64, next: f64) -> f64 {
+    if !(prev > 0.0) || !prev.is_finite() || !(next > 0.0) || !next.is_finite() {
+        return 1.0;
+    }
+    let ratio = next / prev;
+    if ratio.is_finite() {
+        ratio
+    } else {
+        1.0
+    }
+}
+
+fn scale_sprite_resize_value(value: f64, ratio: f64, field: SpriteResizeValueField) -> f64 {
+    // 배율 1은 클램프 없는 완전 passthrough - 순수 이동이 검증상 유효한
+    // 극소 치수(하한 미만)까지 비트 단위로 보존한다
+    if ratio == 1.0 {
+        return value;
+    }
+    let (min, max) = match field {
+        SpriteResizeValueField::Offset => {
+            (SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_OFFSET_MAX)
+        }
+        SpriteResizeValueField::Coordinate => (-MAX_ABS_COORDINATE, MAX_ABS_COORDINATE),
+        SpriteResizeValueField::Dimension => (SPRITE_RESIZE_MIN_DIMENSION, MAX_DIMENSION),
+    };
+    (value * ratio).max(min).min(max)
+}
+
+fn scale_sprite_transform_offsets(transform: &mut SpriteTransform, sx: f64, sy: f64) {
+    transform.x = scale_sprite_resize_value(transform.x, sx, SpriteResizeValueField::Offset);
+    transform.y = scale_sprite_resize_value(transform.y, sy, SpriteResizeValueField::Offset);
+}
+
+fn apply_sprite_resize(sprite: &mut ReactiveSpritePosition, bounds: &EditorBoundsV1) {
+    let sx = sprite_resize_ratio(sprite.width, bounds.width);
+    let sy = sprite_resize_ratio(sprite.height, bounds.height);
+
+    sprite.dx = bounds.dx;
+    sprite.dy = bounds.dy;
+    sprite.width = bounds.width;
+    sprite.height = bounds.height;
+    sprite.image_rect.x =
+        scale_sprite_resize_value(sprite.image_rect.x, sx, SpriteResizeValueField::Coordinate);
+    sprite.image_rect.y =
+        scale_sprite_resize_value(sprite.image_rect.y, sy, SpriteResizeValueField::Coordinate);
+    sprite.image_rect.width = scale_sprite_resize_value(
+        sprite.image_rect.width,
+        sx,
+        SpriteResizeValueField::Dimension,
+    );
+    sprite.image_rect.height = scale_sprite_resize_value(
+        sprite.image_rect.height,
+        sy,
+        SpriteResizeValueField::Dimension,
+    );
+    scale_sprite_transform_offsets(&mut sprite.idle_transform, sx, sy);
+    for pose in &mut sprite.poses {
+        scale_sprite_transform_offsets(&mut pose.transform, sx, sy);
+    }
+}
+
 fn delete_elements(
     document: &mut EditorDocumentV1,
     delete_ids: &HashMap<EditorElementTypeV1, HashSet<String>>,
@@ -1704,6 +1792,7 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
             | EditorOpV1::PatchElement {
                 element_type, id, ..
             } => Some((*element_type, id)),
+            EditorOpV1::ResizeSprite { id, .. } => Some((EditorElementTypeV1::Sprite, id)),
             EditorOpV1::SetKeySlot { id, .. } => {
                 if let Some(location) = locations.get(id) {
                     validate_editor_op_target_type(
@@ -2175,6 +2264,34 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
                     EditorOpResultStatusV1::NoChange
                 } else {
                     apply_bounds(element_common_at_mut(&mut candidate, location)?, bounds);
+                    EditorOpResultStatusV1::Applied
+                };
+                op_results.push(EditorOpResultV1 {
+                    status,
+                    bounds: element_bounds(&candidate, location),
+                });
+            }
+            EditorOpV1::ResizeSprite { id, bounds } => {
+                let Some(location) = locations.get(id) else {
+                    validate_editor_op_bounds(op_index, None, *bounds)?;
+                    op_results.push(EditorOpResultV1 {
+                        status: EditorOpResultStatusV1::TargetMissing,
+                        bounds: None,
+                    });
+                    continue;
+                };
+
+                let current_bounds = element_bounds(&candidate, location).ok_or_else(|| {
+                    EditorCommitError::validation(
+                        "ELEMENT_LOCATOR_INVALID",
+                        "native element locator no longer matches the editor document",
+                    )
+                })?;
+                validate_editor_op_bounds(op_index, Some(current_bounds), *bounds)?;
+                let status = if current_bounds == *bounds {
+                    EditorOpResultStatusV1::NoChange
+                } else {
+                    apply_sprite_resize(sprite_at_mut(&mut candidate, location)?, bounds);
                     EditorOpResultStatusV1::Applied
                 };
                 op_results.push(EditorOpResultV1 {
@@ -3125,7 +3242,8 @@ mod tests {
             EditorFrozenElementV1, EditorFrozenGroupV1, EditorFrozenKeySlotV1, EditorGroupUpdateV1,
             EditorOpResultStatusV1, EditorOpV1, EditorTargetGroupV1, EditorZUpdateV1,
             GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
-            ReactiveSpritePosition, SpritePose, StatPosition, StatType,
+            ReactiveSpritePosition, SpriteAnchor, SpritePose, SpriteRect, SpriteTransform,
+            StatPosition, StatType,
         },
         state::native_element_id::{
             backfill_store_element_ids, DUPLICATE_ELEMENT_ID, INVALID_ELEMENT_ID,
@@ -3133,6 +3251,124 @@ mod tests {
     };
 
     use super::*;
+
+    const SPRITE_RESIZE_SCALE_PARITY_FIXTURE: &str =
+        include_str!("../../../tests/fixtures/sprite-resize-scale-parity.json");
+
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct SpriteResizeScaleParityFixture {
+        version: u16,
+        comment: String,
+        ranges: SpriteResizeScaleParityRanges,
+        cases: Vec<SpriteResizeScaleParityCase>,
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct SpriteResizeScaleParityRanges {
+        offset: [f64; 2],
+        coord: [f64; 2],
+        dimension: [f64; 2],
+    }
+
+    #[derive(Debug, Clone, Copy, serde::Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    enum SpriteResizeScaleParityField {
+        Ratio,
+        Offset,
+        Coord,
+        Dimension,
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct SpriteResizeScaleParityCase {
+        name: String,
+        field: SpriteResizeScaleParityField,
+        prev: f64,
+        next: f64,
+        value: Option<f64>,
+        expected: f64,
+        expected_hex: String,
+    }
+
+    fn resize_sprite_op(id: impl Into<String>, bounds: EditorBoundsV1) -> EditorOpV1 {
+        EditorOpV1::ResizeSprite {
+            id: id.into(),
+            bounds,
+        }
+    }
+
+    fn sprite_bounds(position: &ReactiveSpritePosition) -> EditorBoundsV1 {
+        EditorBoundsV1 {
+            dx: position.dx,
+            dy: position.dy,
+            width: position.width,
+            height: position.height,
+        }
+    }
+
+    #[test]
+    fn sprite_resize_scale_math_matches_shared_fixture_bits() {
+        let fixture: SpriteResizeScaleParityFixture =
+            serde_json::from_str(SPRITE_RESIZE_SCALE_PARITY_FIXTURE).unwrap();
+        assert_eq!(fixture.version, 1);
+        assert!(!fixture.comment.is_empty());
+        assert_eq!(
+            fixture.ranges.offset,
+            [SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_OFFSET_MAX]
+        );
+        assert_eq!(
+            fixture.ranges.coord,
+            [-MAX_ABS_COORDINATE, MAX_ABS_COORDINATE]
+        );
+        assert_eq!(
+            fixture.ranges.dimension,
+            [SPRITE_RESIZE_MIN_DIMENSION, MAX_DIMENSION]
+        );
+
+        for case in fixture.cases {
+            let expected_bits = u64::from_str_radix(
+                case.expected_hex
+                    .strip_prefix("0x")
+                    .expect("expectedHex must use the 0x prefix"),
+                16,
+            )
+            .expect("expectedHex must contain IEEE754 f64 bits");
+            assert_eq!(
+                case.expected.to_bits(),
+                expected_bits,
+                "case {} fixture decimal and expectedHex",
+                case.name
+            );
+            let ratio = sprite_resize_ratio(case.prev, case.next);
+            let actual = match case.field {
+                SpriteResizeScaleParityField::Ratio => ratio,
+                SpriteResizeScaleParityField::Offset => scale_sprite_resize_value(
+                    case.value.expect("scaled case must contain value"),
+                    ratio,
+                    SpriteResizeValueField::Offset,
+                ),
+                SpriteResizeScaleParityField::Coord => scale_sprite_resize_value(
+                    case.value.expect("scaled case must contain value"),
+                    ratio,
+                    SpriteResizeValueField::Coordinate,
+                ),
+                SpriteResizeScaleParityField::Dimension => scale_sprite_resize_value(
+                    case.value.expect("scaled case must contain value"),
+                    ratio,
+                    SpriteResizeValueField::Dimension,
+                ),
+            };
+            assert_eq!(
+                actual.to_bits(),
+                expected_bits,
+                "case {} result bits",
+                case.name
+            );
+        }
+    }
 
     fn base_store() -> AppStoreData {
         let mut store = AppStoreData {
@@ -3836,6 +4072,329 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+    }
+
+    #[test]
+    fn resize_sprite_wire_uses_only_kind_id_and_bounds() {
+        let id = uuid::Uuid::new_v4().to_string();
+        let bounds = EditorBoundsV1 {
+            dx: 1.0,
+            dy: 2.0,
+            width: 300.0,
+            height: 150.0,
+        };
+        let op = resize_sprite_op(&id, bounds);
+        assert_eq!(
+            serde_json::to_value(&op).unwrap(),
+            serde_json::json!({
+                "kind": "resizeSprite",
+                "id": id,
+                "bounds": {
+                    "dx": 1.0,
+                    "dy": 2.0,
+                    "width": 300.0,
+                    "height": 150.0,
+                },
+            })
+        );
+        assert!(serde_json::from_value::<EditorOpV1>(serde_json::json!({
+            "kind": "resizeSprite",
+            "id": uuid::Uuid::new_v4().to_string(),
+            "bounds": {
+                "dx": 1.0,
+                "dy": 2.0,
+                "width": 300.0,
+                "height": 150.0,
+            },
+            "elementType": "sprite",
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn resize_sprite_scales_uniform_and_nonuniform_content() {
+        let mut store = store_with_sprite();
+        let position = &mut store.sprite_positions.get_mut("4key").unwrap()[0];
+        position.dx = 10.0;
+        position.dy = 20.0;
+        position.width = 200.0;
+        position.height = 100.0;
+        position.image_rect = SpriteRect {
+            x: 40.0,
+            y: -10.0,
+            width: 160.0,
+            height: 80.0,
+        };
+        position.pivot = SpriteAnchor { x: 0.25, y: 0.75 };
+        position.idle_transform = SpriteTransform {
+            x: 12.0,
+            y: -6.0,
+            rotation: 15.0,
+            scale: 1.5,
+        };
+        position.poses = vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            transform: SpriteTransform {
+                x: -30.0,
+                y: 44.0,
+                rotation: -90.0,
+                scale: 0.5,
+            },
+            contact_point: SpriteAnchor { x: 0.5, y: 1.0 },
+            ..SpritePose::default()
+        }];
+        let original = position.clone();
+        let id = position.id.clone();
+
+        let nonuniform_bounds = EditorBoundsV1 {
+            dx: 5.0,
+            dy: 8.0,
+            width: 400.0,
+            height: 50.0,
+        };
+        let nonuniform =
+            prepare_editor_ops_transition(&store, &[resize_sprite_op(&id, nonuniform_bounds)])
+                .unwrap();
+        let resized = &nonuniform.candidate.sprite_positions["4key"][0];
+        assert_eq!(sprite_bounds(resized), nonuniform_bounds);
+        assert_eq!(
+            resized.image_rect,
+            SpriteRect {
+                x: 80.0,
+                y: -5.0,
+                width: 320.0,
+                height: 40.0,
+            }
+        );
+        assert_eq!(
+            (resized.idle_transform.x, resized.idle_transform.y),
+            (24.0, -3.0)
+        );
+        assert_eq!(
+            (resized.poses[0].transform.x, resized.poses[0].transform.y),
+            (-60.0, 22.0)
+        );
+        assert_eq!(
+            resized.idle_transform.rotation,
+            original.idle_transform.rotation
+        );
+        assert_eq!(resized.idle_transform.scale, original.idle_transform.scale);
+        assert_eq!(
+            resized.poses[0].transform.rotation,
+            original.poses[0].transform.rotation
+        );
+        assert_eq!(
+            resized.poses[0].transform.scale,
+            original.poses[0].transform.scale
+        );
+        assert_eq!(resized.pivot, original.pivot);
+        assert_eq!(
+            resized.poses[0].contact_point,
+            original.poses[0].contact_point
+        );
+        assert_eq!(
+            nonuniform.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(nonuniform.op_results[0].bounds, Some(nonuniform_bounds));
+
+        let uniform_bounds = EditorBoundsV1 {
+            dx: -5.0,
+            dy: -8.0,
+            width: 400.0,
+            height: 200.0,
+        };
+        let uniform =
+            prepare_editor_ops_transition(&store, &[resize_sprite_op(id, uniform_bounds)]).unwrap();
+        let resized = &uniform.candidate.sprite_positions["4key"][0];
+        assert_eq!(
+            resized.image_rect,
+            SpriteRect {
+                x: 80.0,
+                y: -20.0,
+                width: 320.0,
+                height: 160.0,
+            }
+        );
+        assert_eq!(
+            (resized.idle_transform.x, resized.idle_transform.y),
+            (24.0, -12.0)
+        );
+        assert_eq!(
+            (resized.poses[0].transform.x, resized.poses[0].transform.y),
+            (-60.0, 88.0)
+        );
+    }
+
+    #[test]
+    fn resize_sprite_clamps_scaled_fields_at_contract_boundaries() {
+        let mut store = store_with_sprite();
+        let position = &mut store.sprite_positions.get_mut("4key").unwrap()[0];
+        position.width = 1.0;
+        position.height = 1.0;
+        position.image_rect = SpriteRect {
+            x: 2.0,
+            y: -2.0,
+            width: 2.0,
+            height: 0.000_000_000_001,
+        };
+        position.idle_transform = SpriteTransform {
+            x: 1.0,
+            y: -1.0,
+            ..SpriteTransform::default()
+        };
+        position.poses = vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            transform: SpriteTransform {
+                x: -1.0,
+                y: 1.0,
+                ..SpriteTransform::default()
+            },
+            ..SpritePose::default()
+        }];
+        let id = position.id.clone();
+        let bounds = EditorBoundsV1 {
+            dx: MAX_ABS_COORDINATE,
+            dy: -MAX_ABS_COORDINATE,
+            width: MAX_DIMENSION,
+            height: MAX_DIMENSION,
+        };
+
+        let transition =
+            prepare_editor_ops_transition(&store, &[resize_sprite_op(id, bounds)]).unwrap();
+        let resized = &transition.candidate.sprite_positions["4key"][0];
+        assert_eq!(resized.image_rect.x, MAX_ABS_COORDINATE);
+        assert_eq!(resized.image_rect.y, -MAX_ABS_COORDINATE);
+        assert_eq!(resized.image_rect.width, MAX_DIMENSION);
+        assert_eq!(resized.image_rect.height, SPRITE_RESIZE_MIN_DIMENSION);
+        assert_eq!(resized.idle_transform.x, SPRITE_TRANSFORM_OFFSET_MAX);
+        assert_eq!(resized.idle_transform.y, SPRITE_TRANSFORM_OFFSET_MIN);
+        assert_eq!(resized.poses[0].transform.x, SPRITE_TRANSFORM_OFFSET_MIN);
+        assert_eq!(resized.poses[0].transform.y, SPRITE_TRANSFORM_OFFSET_MAX);
+    }
+
+    #[test]
+    fn resize_sprite_defends_zero_previous_dimensions_with_identity_ratios() {
+        let mut position = ReactiveSpritePosition {
+            width: 0.0,
+            height: 0.0,
+            image_rect: SpriteRect {
+                x: 3.0,
+                y: -4.0,
+                width: 5.0,
+                height: 6.0,
+            },
+            idle_transform: SpriteTransform {
+                x: 7.0,
+                y: -8.0,
+                ..SpriteTransform::default()
+            },
+            poses: vec![SpritePose {
+                transform: SpriteTransform {
+                    x: 9.0,
+                    y: -10.0,
+                    ..SpriteTransform::default()
+                },
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        };
+        let content_before = (
+            position.image_rect,
+            position.idle_transform,
+            position.poses.clone(),
+        );
+        let bounds = EditorBoundsV1 {
+            dx: 11.0,
+            dy: 12.0,
+            width: 100.0,
+            height: 200.0,
+        };
+
+        apply_sprite_resize(&mut position, &bounds);
+
+        assert_eq!(sprite_bounds(&position), bounds);
+        assert_eq!(
+            (position.image_rect, position.idle_transform, position.poses,),
+            content_before
+        );
+    }
+
+    #[test]
+    fn resize_sprite_reports_missing_and_no_change_with_bounds_contract() {
+        let store = store_with_sprite();
+        let position = &store.sprite_positions["4key"][0];
+        let current_bounds = sprite_bounds(position);
+        let current_document = EditorDocumentV1::from_store(&store);
+
+        let no_change = prepare_editor_ops_transition(
+            &store,
+            &[resize_sprite_op(&position.id, current_bounds)],
+        )
+        .unwrap();
+        assert_eq!(no_change.candidate, current_document);
+        assert_eq!(
+            no_change.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert_eq!(no_change.op_results[0].bounds, Some(current_bounds));
+
+        let missing = prepare_editor_ops_transition(
+            &store,
+            &[resize_sprite_op(
+                uuid::Uuid::new_v4().to_string(),
+                EditorBoundsV1 {
+                    dx: 20.0,
+                    dy: 30.0,
+                    width: 400.0,
+                    height: 250.0,
+                },
+            )],
+        )
+        .unwrap();
+        assert_eq!(missing.candidate, current_document);
+        assert_eq!(
+            missing.op_results[0],
+            EditorOpResultV1 {
+                status: EditorOpResultStatusV1::TargetMissing,
+                bounds: None,
+            }
+        );
+    }
+
+    #[test]
+    fn resize_sprite_type_mismatch_rejects_the_whole_mixed_batch() {
+        let store = base_store();
+        let before = store.clone();
+        let first_id = store.key_positions["4key"][0].id.clone();
+        let second_id = store.key_positions["4key"][1].id.clone();
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                EditorOpV1::SetBounds {
+                    element_type: EditorElementTypeV1::Key,
+                    id: first_id,
+                    bounds: EditorBoundsV1 {
+                        dx: 100.0,
+                        dy: 200.0,
+                        width: 60.0,
+                        height: 60.0,
+                    },
+                },
+                resize_sprite_op(
+                    second_id,
+                    EditorBoundsV1 {
+                        dx: 10.0,
+                        dy: 20.0,
+                        width: 300.0,
+                        height: 150.0,
+                    },
+                ),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        assert_eq!(store, before);
     }
 
     #[test]

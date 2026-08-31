@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "comment": "resizeSprite 스케일 수학 파리티 fixture. ratio = next/prev (무효·비유한은 1, 언더플로 0 허용), 값 적용 = clamp(value * ratio, min, max), clamp는 max(min)→min(max) 순서. 필드 범위: offset ±2000, coord ±32768, dimension [0.000001, 32768]. 소비자: tests/sprite-resize-scale-parity.test.ts, src-tauri Rust 테스트. expectedHex는 IEEE754 f64 big-endian 비트 - 양측이 to_bits로 대조한다",
+  "ranges": {
+    "offset": [-2000, 2000],
+    "coord": [-32768, 32768],
+    "dimension": [0.000001, 32768]
+  },
+  "cases": [
+    {
+      "name": "offset-uniform-double",
+      "field": "offset",
+      "prev": 100,
+      "next": 200,
+      "value": 250,
+      "expected": 500,
+      "expectedHex": "0x407f400000000000"
+    },
+    {
+      "name": "offset-nonuniform-shrink",
+      "field": "offset",
+      "prev": 320,
+      "next": 200,
+      "value": -40.5,
+      "expected": -25.3125,
+      "expectedHex": "0xc039500000000000"
+    },
+    {
+      "name": "offset-clamp-max",
+      "field": "offset",
+      "prev": 100,
+      "next": 1000,
+      "value": 250,
+      "expected": 2000,
+      "expectedHex": "0x409f400000000000"
+    },
+    {
+      "name": "offset-clamp-min",
+      "field": "offset",
+      "prev": 100,
+      "next": 1000,
+      "value": -250,
+      "expected": -2000,
+      "expectedHex": "0xc09f400000000000"
+    },
+    {
+      "name": "offset-negative-zero",
+      "field": "offset",
+      "prev": 100,
+      "next": 200,
+      "value": -0,
+      "expected": -0,
+      "expectedHex": "0x8000000000000000"
+    },
+    {
+      "name": "offset-third-bits",
+      "field": "offset",
+      "prev": 3,
+      "next": 1,
+      "value": 99,
+      "expected": 33,
+      "expectedHex": "0x4040800000000000"
+    },
+    {
+      "name": "offset-ratio-underflow-zero",
+      "field": "offset",
+      "prev": 4,
+      "next": 5e-324,
+      "value": 123,
+      "expected": 0,
+      "expectedHex": "0x0000000000000000"
+    },
+    {
+      "name": "coord-nonuniform",
+      "field": "coord",
+      "prev": 320,
+      "next": 200,
+      "value": -40.5,
+      "expected": -25.3125,
+      "expectedHex": "0xc039500000000000"
+    },
+    {
+      "name": "coord-clamp-min",
+      "field": "coord",
+      "prev": 10,
+      "next": 32768,
+      "value": -1000,
+      "expected": -32768,
+      "expectedHex": "0xc0e0000000000000"
+    },
+    {
+      "name": "dimension-basic",
+      "field": "dimension",
+      "prev": 200,
+      "next": 150,
+      "value": 180,
+      "expected": 135,
+      "expectedHex": "0x4060e00000000000"
+    },
+    {
+      "name": "dimension-floor-underflow",
+      "field": "dimension",
+      "prev": 1000,
+      "next": 1e-9,
+      "value": 5,
+      "expected": 0.000001,
+      "expectedHex": "0x3eb0c6f7a0b5ed8d"
+    },
+    {
+      "name": "dimension-clamp-max",
+      "field": "dimension",
+      "prev": 10,
+      "next": 32768,
+      "value": 100,
+      "expected": 32768,
+      "expectedHex": "0x40e0000000000000"
+    },
+    {
+      "name": "dimension-ratio-one-passthrough-below-floor",
+      "field": "dimension",
+      "prev": 200,
+      "next": 200,
+      "value": 1e-7,
+      "expected": 1e-7,
+      "expectedHex": "0x3e7ad7f29abcaf48"
+    },
+    {
+      "name": "offset-ratio-one-passthrough-beyond-max",
+      "field": "offset",
+      "prev": 100,
+      "next": 100,
+      "value": 5000,
+      "expected": 5000,
+      "expectedHex": "0x40b3880000000000"
+    },
+    {
+      "name": "ratio-subnormal-overflow-guard",
+      "field": "ratio",
+      "prev": 5e-324,
+      "next": 32768,
+      "expected": 1,
+      "expectedHex": "0x3ff0000000000000"
+    },
+    {
+      "name": "ratio-underflow-zero",
+      "field": "ratio",
+      "prev": 4,
+      "next": 5e-324,
+      "expected": 0,
+      "expectedHex": "0x0000000000000000"
+    },
+    {
+      "name": "ratio-identity-same",
+      "field": "ratio",
+      "prev": 240,
+      "next": 240,
+      "expected": 1,
+      "expectedHex": "0x3ff0000000000000"
+    }
+  ]
+}

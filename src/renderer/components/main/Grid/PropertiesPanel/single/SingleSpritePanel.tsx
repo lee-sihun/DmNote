@@ -4,10 +4,12 @@ import { editGestureController } from '@src/renderer/editor/runtime/editGestureC
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { spriteItemsApi } from '@api/modules/itemsApi';
 import { imageApi } from '@api/modules/resourceApi';
 import { canDecodeImage } from '@utils/core/assetProbe';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
+import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import { slotDisplayName } from '@utils/keySlot';
 import { ACTION_BUTTON_CLASS, AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
@@ -167,6 +169,73 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   ) {
     setPosesDraft(null);
   }
+
+  // 리사이즈 착지 시 draft rebase - canonical 콘텐츠가 이전 스냅샷의 projection과
+  // 정확히 일치하면(리사이즈 정산) 무효 draft의 자세도 같은 배율로 따라간다.
+  // 판정은 합성 prop이 아니라 스토어 기준 - 활성 스크럽 프리뷰가 prop의 poses를
+  // 덮어도 착지 감지가 빗나가지 않는다. 박스만 바뀌는 legacy patch는 imageRect가
+  // 어긋나 제외되고, undo 복원은 왕복 오차로 불일치할 수 있어 건드리지 않는다
+  const storePosition = useSpriteStore(
+    (state: { positions: Record<string, ReactiveSpritePosition[]> }) =>
+      state.positions[selectedKeyType]?.find(
+        (candidate) => candidate.id === position.id,
+      ) ?? null,
+  );
+  const canonicalPosition = storePosition ?? position;
+  const [lastPositionSnapshot, setLastPositionSnapshot] =
+    useState(canonicalPosition);
+  const [resizeGestureCancelTick, setResizeGestureCancelTick] = useState(0);
+  if (lastPositionSnapshot !== canonicalPosition) {
+    setLastPositionSnapshot(canonicalPosition);
+    if (
+      lastPositionSnapshot.id === canonicalPosition.id &&
+      (lastPositionSnapshot.width !== canonicalPosition.width ||
+        lastPositionSnapshot.height !== canonicalPosition.height)
+    ) {
+      const nextBounds = {
+        dx: canonicalPosition.dx,
+        dy: canonicalPosition.dy,
+        width: canonicalPosition.width,
+        height: canonicalPosition.height,
+      };
+      const projected = projectSpriteResize(lastPositionSnapshot, nextBounds);
+      const resizeLanded =
+        JSON.stringify(projected.imageRect) ===
+          JSON.stringify(canonicalPosition.imageRect) &&
+        JSON.stringify(projected.idleTransform) ===
+          JSON.stringify(canonicalPosition.idleTransform) &&
+        JSON.stringify(projected.poses) ===
+          JSON.stringify(canonicalPosition.poses);
+      if (resizeLanded) {
+        if (posesDraft && posesDraft.id === canonicalPosition.id) {
+          setPosesDraft({
+            id: posesDraft.id,
+            poses: projectSpriteResize(
+              { ...lastPositionSnapshot, poses: posesDraft.poses },
+              nextBounds,
+            ).poses,
+          });
+        }
+        // 편집 팝업(자세·이미지 설정)이 열린 채 착지하면 세대를 올린다 -
+        // 팝업 리마운트가 진행 중 스크럽 세션을 취소로 닫고, 아래 effect가
+        // preview 게스처를 정산해 이전 배율의 절대값 커밋을 차단한다
+        if (editorTarget && editorTarget.positionId === canonicalPosition.id) {
+          setResizeGestureCancelTick((tick) => tick + 1);
+        }
+      }
+    }
+  }
+
+  // 게스처 취소는 렌더 밖에서 - cancel은 활성 게스처가 없으면 no-op이라
+  // 정산이 이미 끝난 일반 경로에는 영향이 없다 (계약의 세션 정산 폴백).
+  // 기즈모는 세대 무효화로 진행 중 드래그의 pointerup 커밋을 떨군다
+  useLayoutEffect(() => {
+    if (resizeGestureCancelTick === 0) return;
+    editGestureController.cancel();
+    useSpritePoseGizmoStore.getState().invalidateOwnership(position.id);
+    // 착지 시점의 스프라이트가 대상 - id는 세션 수명 동안 불변
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resizeGestureCancelTick]);
 
   // 담당 키 후보: 현재 모드의 키 요소 목록 (값은 요소 id, 라벨은 슬롯 표시명)
   const modeSlots = keyMappings[selectedKeyType] ?? [];
@@ -1190,6 +1259,9 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       <PopupExit open={imageEditing || editingPose !== null}>
         {imageEditing ? (
           <SpriteImageSettingsPopup
+            // 리사이즈 착지 세대 - 리마운트가 진행 중 스크럽 세션을 취소로 닫아
+            // 이전 배율 절대값 커밋을 차단한다 (useScrubDrag 언마운트 취소 계약)
+            key={`resize-${resizeGestureCancelTick}`}
             open
             position={position}
             referenceRef={poseAnchorRef}
@@ -1204,6 +1276,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
           />
         ) : editingPose ? (
           <SpritePoseEditorPopup
+            // 리사이즈 착지 세대 - 위 이미지 팝업과 같은 스크럽 차단 계약
+            key={`resize-${resizeGestureCancelTick}`}
             open
             ariaLabel={editingPose.name || resolvedNames[editingPoseIndex]}
             // 셸은 행 전환 동안 유지되고 편집 subtree·앵커만 poseId로 갈린다

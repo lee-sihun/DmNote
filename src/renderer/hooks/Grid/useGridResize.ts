@@ -1,6 +1,5 @@
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import {
-  applyPropertyIntentsEagerly,
   reportElementOpError,
   reportElementOpSkipped,
   type ElementIntentReceipt,
@@ -10,8 +9,10 @@ import type { EditorOpV1 } from '@src/types/editor';
 import { runMixedElementOpsIntent } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
+  applyBoundsIntentsEagerly,
   commitElementBoundsById,
   commitSingleElementBoundsById,
+  elementBoundsOp,
 } from '@src/renderer/editor/runtime/elementOps';
 import { useEffect, useRef, useState } from 'react';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
@@ -979,7 +980,8 @@ export function useGridResize({
         groupSettlement = {
           kind: 'intents',
           stableIntents: stableBoundsIntents,
-          receipt: applyPropertyIntentsEagerly(stableBoundsIntents),
+          // 스프라이트는 projection이 콘텐츠 스케일까지 eager·receipt에 싣는다
+          receipt: applyBoundsIntentsEagerly(stableBoundsIntents),
         };
       }
 
@@ -1032,17 +1034,14 @@ export function useGridResize({
         const ops: EditorOpV1[] = [];
         for (const [elementType, byId] of settlement.stableIntents) {
           for (const [id, bounds] of byId) {
-            ops.push({
-              kind: 'setBounds',
-              elementType,
-              id,
-              bounds: {
+            ops.push(
+              elementBoundsOp(elementType, id, {
                 dx: bounds.dx as number,
                 dy: bounds.dy as number,
                 width: bounds.width as number,
                 height: bounds.height as number,
-              },
-            });
+              }),
+            );
           }
         }
         void runMixedElementOpsIntent({

@@ -428,7 +428,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
     );
   });
 
-  it('그룹 resize의 sprite는 활동 영역 박스만 커밋하고 imageRect·poses는 불변이다', async () => {
+  it('그룹 resize의 sprite는 resizeSprite op으로 bounds와 콘텐츠를 함께 스케일한다', async () => {
     const original = spriteAt(STABLE_SPRITE);
     useSpriteStore.setState({ positions: { '4key': [original] } });
     mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
@@ -459,15 +459,15 @@ describe('useGridResize plugin gesture lifecycle', () => {
       api.handleGroupResizeComplete();
     });
 
-    // wire: 박스 필드만 setBounds op으로 실린다
+    // wire: sprite는 resizeSprite op - bounds만 실리고 배율은 백엔드가 최신
+    // base 기준으로 재적용한다
     expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
       pluginGestureIds[0],
       {
         opsVersion: EDITOR_OPS_VERSION,
         ops: [
           {
-            kind: 'setBounds',
-            elementType: 'sprite',
+            kind: 'resizeSprite',
             id: STABLE_SPRITE,
             bounds: { dx: 10, dy: 20, width: 100, height: 60 },
           },
@@ -476,13 +476,20 @@ describe('useGridResize plugin gesture lifecycle', () => {
       ['plugin-a'],
       expect.anything(),
     );
-    // eager: 활동 영역만 바뀌고 요소 로컬 데이터는 참조까지 그대로다
+    // eager: 200x120 → 100x60 (sx=sy=0.5)로 콘텐츠까지 비례 스케일.
+    // pivot·contactPoint는 정규화 좌표라 불변 (pivot은 참조까지 보존)
     const eager = useSpriteStore.getState().positions['4key'][0];
     expect(eager).toMatchObject({ dx: 10, dy: 20, width: 100, height: 60 });
-    expect(eager.imageRect).toBe(original.imageRect);
+    expect(eager.imageRect).toEqual({ x: 2, y: 4, width: 48, height: 32 });
+    expect(eager.idleTransform).toEqual({ x: 0, y: 0, rotation: 0, scale: 1 });
+    expect(eager.poses[0].transform).toEqual({
+      x: 6,
+      y: -3,
+      rotation: 15,
+      scale: 1.2,
+    });
     expect(eager.pivot).toBe(original.pivot);
-    expect(eager.poses).toBe(original.poses);
-    expect(eager.idleTransform).toBe(original.idleTransform);
+    expect(eager.poses[0].contactPoint).toEqual({ x: 0.5, y: 1 });
   });
 
   it('혼합 그룹의 native ID가 비정규면 plugin까지 함께 fail-close한다', async () => {

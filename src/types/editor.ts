@@ -53,7 +53,7 @@ export const EDITOR_SCHEMA_VERSION = 1 as const;
 // 유지하고 id를 additive로 싣는다. v2 커밋은 포함된 모든 위치 항목에 유효 ID가
 // 필수라 백엔드가 형식·전역 유일성을 강제한다. 구형 플러그인 gateway만 v1로 남는다
 export const EDITOR_COMMIT_SCHEMA_VERSION = 2 as const;
-export const EDITOR_OPS_VERSION = 2 as const;
+export const EDITOR_OPS_VERSION = 3 as const;
 
 export const EDITOR_FIELDS = [
   'keys',
@@ -154,6 +154,16 @@ export interface EditorBoundsV1 {
 export interface EditorSetBoundsOpV1 {
   kind: 'setBounds';
   elementType: EditorElementTypeV1;
+  id: string;
+  bounds: EditorBoundsV1;
+}
+
+// 스프라이트 전용 - bounds 교체와 함께 imageRect·idleTransform·poses의
+// px 좌표를 이전 bounds 대비 배율로 스케일한다. 배율은 적용 시점 문서의
+// bounds 기준(last-writer-wins) - 드래그 중 외부 patch가 끼어들어도
+// 최종 bounds는 요청 값, 콘텐츠는 최신 상태 기준 비례로 수렴한다
+export interface EditorResizeSpriteOpV1 {
+  kind: 'resizeSprite';
   id: string;
   bounds: EditorBoundsV1;
 }
@@ -573,6 +583,7 @@ export interface EditorSetKeySlotOpV1 {
 
 export type EditorOpV1 =
   | EditorSetBoundsOpV1
+  | EditorResizeSpriteOpV1
   | EditorDeleteElementOpV1
   | EditorInsertFrozenElementsOpV1
   | EditorReorderElementsOpV1
@@ -1945,6 +1956,15 @@ export function assertEditorOpsV1(
       assertEditorBounds(op.bounds, `${opLabel}.bounds`);
       return;
     }
+    if (op.kind === 'resizeSprite') {
+      assertExactKeys(op, ['kind', 'id', 'bounds'], opLabel);
+      if (!isNativeElementId(op.id)) {
+        throw new EditorProtocolError(`${opLabel} target is invalid`);
+      }
+      assertUniqueDirectTarget(op.id, opLabel);
+      assertEditorBounds(op.bounds, `${opLabel}.bounds`);
+      return;
+    }
     if (op.kind === 'deleteElement') {
       assertExactKeys(op, ['kind', 'elementType', 'id'], opLabel);
       if (
@@ -2327,6 +2347,22 @@ export function assertEditorOpCommitResult(
       if (result.status === 'applied') {
         requiredFields.add(positionFields[op.elementType]);
         allowedFields.add(positionFields[op.elementType]);
+      }
+      return;
+    }
+    if (op.kind === 'resizeSprite') {
+      if (
+        result.status !== 'targetMissing' &&
+        ((result.status !== 'applied' && result.status !== 'noChange') ||
+          result.bounds === undefined)
+      ) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] is invalid for resizeSprite`,
+        );
+      }
+      if (result.status === 'applied') {
+        requiredFields.add('spritePositions');
+        allowedFields.add('spritePositions');
       }
       return;
     }

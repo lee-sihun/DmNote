@@ -27,6 +27,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import { isEditorShadowPropertyPatchV1 } from '@src/types/editor';
 
 import {
@@ -303,6 +304,7 @@ const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
     return [SEMANTIC_POSITION_FIELDS[op.elementType]];
   }
   if (op.kind === 'setKeySlot') return ['keys'];
+  if (op.kind === 'resizeSprite') return ['spritePositions'];
   const positionField = SEMANTIC_POSITION_FIELDS[op.elementType];
   if (op.kind === 'setBounds') return [positionField];
   return op.elementType === 'key' ? ['keys', 'keyPositions'] : [positionField];
@@ -1032,6 +1034,24 @@ const applySemanticOps = (
       }
       return;
     }
+    if (op.kind === 'resizeSprite') {
+      if (result?.status === 'noChange') return;
+      const positionsByMode = next.spritePositions;
+      for (const [mode, positions] of Object.entries(positionsByMode)) {
+        const index = positions.findIndex((position) => position.id === op.id);
+        if (index < 0) continue;
+        // 결과 bounds(서버 확정)가 있으면 그것으로 projection - 배율 수학은
+        // resizeProjection 하나가 양측 계약을 소유한다
+        const bounds = result?.bounds ?? op.bounds;
+        positionsByMode[mode] = positions.map((position, positionIndex) =>
+          positionIndex === index
+            ? projectSpriteResize(position, bounds)
+            : position,
+        );
+        break;
+      }
+      return;
+    }
     const field = SEMANTIC_POSITION_FIELDS[op.elementType];
     const positionsByMode = next[field] as Record<
       string,
@@ -1115,6 +1135,20 @@ const frozenOpCasUnit = (
       dy: entry.dy,
       width: entry.width,
       height: entry.height,
+    };
+  }
+  if (op.kind === 'resizeSprite') {
+    const entry = findPositionEntryById(document, 'sprite', op.id);
+    if (!entry) return null;
+    // resize가 소유하는 조각 전체 - bounds와 스케일 대상 콘텐츠
+    return {
+      dx: entry.dx,
+      dy: entry.dy,
+      width: entry.width,
+      height: entry.height,
+      imageRect: entry.imageRect,
+      idleTransform: entry.idleTransform,
+      poses: entry.poses,
     };
   }
   if (op.kind === 'patchElement') {

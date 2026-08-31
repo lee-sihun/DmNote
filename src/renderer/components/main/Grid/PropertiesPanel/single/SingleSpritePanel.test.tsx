@@ -6,6 +6,8 @@ import { SingleSpritePanel } from './SingleSpritePanel';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useSpriteEditPreviewStore } from '@stores/grid/useSpriteEditPreviewStore';
+import { useSpritePoseGizmoStore } from '@stores/grid/useSpritePoseGizmoStore';
+import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -1186,6 +1188,126 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(
       preview?.kind === 'pose' ? preview.fallbackPose.triggers : null,
     ).toEqual([]);
+  });
+
+  it('리사이즈 착지 시 무효 draft 자세가 같은 배율로 rebase된다', async () => {
+    const position = spritePosition({
+      imageRect: { x: 4, y: 8, width: 96, height: 64 },
+      poses: [
+        {
+          contactPoint: { x: 0.5, y: 1 },
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+          imageOverride: null,
+        },
+      ],
+    });
+    seed(position);
+    render(position);
+
+    act(() => poseEditButtons()[0].click());
+    // 유일한 담당 키 해제 - 커밋이 막힌 무효 draft가 transform을 들고 있다
+    await act(async () => triggerDropdownByText('A').click());
+    await act(async () => menuOptionByText('A').click());
+    expect(useSpriteEditPreviewStore.getState().preview).toMatchObject({
+      preferFallback: true,
+    });
+
+    // 리사이즈 착지: canonical 콘텐츠가 projection 결과 그대로 도착 (sx=0.5, sy=2)
+    const resized = projectSpriteResize(position, {
+      dx: 0,
+      dy: 0,
+      width: 100,
+      height: 300,
+    });
+    seed(resized);
+    render(resized);
+
+    const preview = useSpriteEditPreviewStore.getState().preview;
+    expect(
+      preview?.kind === 'pose' ? preview.fallbackPose.transform : null,
+    ).toEqual({ x: 6, y: -12, rotation: 15, scale: 1.2 });
+    expect(
+      preview?.kind === 'pose' ? preview.fallbackPose.triggers : null,
+    ).toEqual([]);
+  });
+
+  it('자세 팝업이 열린 채 리사이즈가 착지하면 진행 중 편집 게스처를 취소한다', async () => {
+    const position = spritePosition({
+      imageRect: { x: 4, y: 8, width: 96, height: 64 },
+      poses: [
+        {
+          contactPoint: { x: 0.5, y: 1 },
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+          imageOverride: null,
+        },
+      ],
+    });
+    seed(position);
+    render(position);
+
+    act(() => poseEditButtons()[0].click());
+    mocks.gestureCancel.mockClear();
+    const popupBefore = container.querySelector<HTMLElement>(
+      '[data-testid="pose-popup"]',
+    );
+    expect(popupBefore).not.toBeNull();
+    const generationBefore = useSpritePoseGizmoStore.getState().generation;
+
+    const resized = projectSpriteResize(position, {
+      dx: 0,
+      dy: 0,
+      width: 100,
+      height: 300,
+    });
+    seed(resized);
+    render(resized);
+
+    // 활성 게스처가 없으면 no-op이지만 취소 호출 자체는 착지마다 일어난다
+    expect(mocks.gestureCancel).toHaveBeenCalled();
+    // 팝업 리마운트 - 진행 중 스크럽 세션이 언마운트 취소로 닫힌다
+    expect(popupBefore!.isConnected).toBe(false);
+    expect(
+      container.querySelector('[data-testid="pose-popup"]'),
+    ).not.toBeNull();
+    // 기즈모 소유권 세대 무효화 - 진행 중 캔버스 드래그의 pointerup 커밋 차단
+    expect(useSpritePoseGizmoStore.getState().generation).toBeGreaterThan(
+      generationBefore,
+    );
+  });
+
+  it('박스만 바뀌는 변경은 draft 자세를 건드리지 않는다', async () => {
+    const position = spritePosition({
+      imageRect: { x: 4, y: 8, width: 96, height: 64 },
+      poses: [
+        {
+          contactPoint: { x: 0.5, y: 1 },
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+          imageOverride: null,
+        },
+      ],
+    });
+    seed(position);
+    render(position);
+
+    act(() => poseEditButtons()[0].click());
+    await act(async () => triggerDropdownByText('A').click());
+    await act(async () => menuOptionByText('A').click());
+
+    // legacy patch 계열: 박스 치수만 바뀌고 imageRect·자세는 그대로
+    const boxOnly = { ...position, width: 100, height: 300 };
+    seed(boxOnly);
+    render(boxOnly);
+
+    const preview = useSpriteEditPreviewStore.getState().preview;
+    expect(
+      preview?.kind === 'pose' ? preview.fallbackPose.transform : null,
+    ).toEqual({ x: 12, y: -6, rotation: 15, scale: 1.2 });
   });
 
   it('기준점 행을 만지는 동안 축 마커가 발행되고 벗어나면 회수된다', () => {

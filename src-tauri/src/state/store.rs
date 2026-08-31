@@ -4858,8 +4858,8 @@ mod tests {
             NoteColor, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
             PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
             ReactiveSpritePosition, SavedPluginInstance, SettingsPatchInput, SlotMatch,
-            SoundLibraryEntry, SoundSource, SpritePose, StatPosition, StatType, TabCss,
-            TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
+            SoundLibraryEntry, SoundSource, SpritePose, SpriteRect, SpriteTransform, StatPosition,
+            StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
             EDITOR_SCHEMA_VERSION,
         },
         services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
@@ -5116,6 +5116,13 @@ mod tests {
     ) -> EditorOpV1 {
         EditorOpV1::SetBounds {
             element_type,
+            id: id.into(),
+            bounds,
+        }
+    }
+
+    fn resize_sprite_op(id: impl Into<String>, bounds: EditorBoundsV1) -> EditorOpV1 {
+        EditorOpV1::ResizeSprite {
             id: id.into(),
             bounds,
         }
@@ -17156,6 +17163,137 @@ mod tests {
                 EditorField::KnobPositions,
             ]
         );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn resize_sprite_and_set_bounds_batch_undoes_as_one_history_entry() {
+        let dir = test_directory("resize-sprite-mixed-batch-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut data = initialize_default_state();
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                id: uuid::Uuid::new_v4().to_string(),
+                dx: 10.0,
+                dy: 20.0,
+                width: 200.0,
+                height: 100.0,
+                image_rect: SpriteRect {
+                    x: 40.0,
+                    y: -10.0,
+                    width: 160.0,
+                    height: 80.0,
+                },
+                idle_transform: SpriteTransform {
+                    x: 12.0,
+                    y: -6.0,
+                    ..SpriteTransform::default()
+                },
+                poses: vec![SpritePose {
+                    pose_id: uuid::Uuid::new_v4().to_string(),
+                    transform: SpriteTransform {
+                        x: -30.0,
+                        y: 44.0,
+                        ..SpriteTransform::default()
+                    },
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+        crate::state::native_element_id::backfill_store_element_ids(&mut data);
+        let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+        store.persist_current().unwrap();
+        let initial = store.editor_get();
+        let key = initial.document.key_positions["4key"][0].clone();
+        let sprite = initial.document.sprite_positions["4key"][0].clone();
+        let key_bounds = EditorBoundsV1 {
+            dx: key.dx + 50.0,
+            dy: key.dy + 25.0,
+            width: key.width,
+            height: key.height,
+        };
+        let sprite_bounds = EditorBoundsV1 {
+            dx: 5.0,
+            dy: 8.0,
+            width: 400.0,
+            height: 50.0,
+        };
+
+        let change = store
+            .commit_editor_document(editor_ops_request(
+                initial.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![
+                    resize_sprite_op(&sprite.id, sprite_bounds),
+                    set_bounds_op(EditorElementTypeV1::Key, &key.id, key_bounds),
+                ],
+            ))
+            .unwrap();
+
+        assert_eq!(change.result.revision, initial.revision + 1);
+        assert_eq!(
+            change.result.changed_fields,
+            [EditorField::KeyPositions, EditorField::SpritePositions]
+        );
+        assert_eq!(
+            change
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| (result.status, result.bounds))
+                .collect::<Vec<_>>(),
+            vec![
+                (EditorOpResultStatusV1::Applied, Some(sprite_bounds)),
+                (EditorOpResultStatusV1::Applied, Some(key_bounds)),
+            ]
+        );
+        assert_eq!(store.history_status().history_revision, 1);
+        let committed = store.editor_get().document;
+        assert_eq!(bounds(&committed.key_positions["4key"][0]), key_bounds);
+        assert_eq!(
+            (
+                committed.sprite_positions["4key"][0].dx,
+                committed.sprite_positions["4key"][0].dy,
+                committed.sprite_positions["4key"][0].width,
+                committed.sprite_positions["4key"][0].height,
+            ),
+            (
+                sprite_bounds.dx,
+                sprite_bounds.dy,
+                sprite_bounds.width,
+                sprite_bounds.height,
+            )
+        );
+        assert_eq!(
+            committed.sprite_positions["4key"][0].image_rect,
+            SpriteRect {
+                x: 80.0,
+                y: -5.0,
+                width: 320.0,
+                height: 40.0,
+            }
+        );
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &operation_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+
+        let restored = store.editor_get().document;
+        assert_eq!(restored.key_positions["4key"][0], key);
+        assert_eq!(restored.sprite_positions["4key"][0], sprite);
+        assert!(!undo.status.can_undo);
+        assert!(undo.status.can_redo);
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

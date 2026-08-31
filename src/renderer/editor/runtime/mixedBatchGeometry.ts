@@ -22,12 +22,13 @@ import {
 } from './batchGeometryPlan';
 import {
   ElementIntentAbort,
-  applyPropertyIntentsEagerly,
   combineReceipts,
   type ElementIntentReceipt,
 } from './elementIntent';
 import {
+  applyBoundsIntentsEagerly,
   commitBatchGeometryByIds,
+  elementBoundsOp,
   type BatchGeometryDescriptor,
 } from './elementOps';
 import { runMixedGestureElementIntent } from './mixedElementIntent';
@@ -181,12 +182,9 @@ const planMixedBatchGeometry = (
   for (const { key, bounds } of plan.bounds) {
     const native = targetByKey.get(key);
     if (native) {
-      nativeOps.push({
-        kind: 'setBounds',
-        elementType: native.type,
-        id: native.id,
-        bounds,
-      });
+      // 스프라이트는 resizeSprite - 이 경로는 치수 불변 연산만 통과하므로
+      // 배율 1이지만 정산 경로 전체와 op 종류를 통일한다
+      nativeOps.push(elementBoundsOp(native.type, native.id, bounds));
       continue;
     }
     if (key.startsWith(PLUGIN_KEY_PREFIX)) {
@@ -367,21 +365,31 @@ export const commitMixedBatchGeometry = (
         rotatePluginInstancesEditSession(pluginId, gestureId),
       );
 
-      // eager: native 기하 필드 CAS + 플러그인 position CAS
+      // eager: native 기하 필드 CAS + 플러그인 position CAS.
+      // 스프라이트는 full bounds projection이 콘텐츠까지 소유한다
       const nativeIntents = new Map<
         NativeElementType,
         Map<string, Record<string, unknown>>
       >();
+      const spriteBoundsById = new Map(
+        initialPlanned.nativeOps.flatMap((op) =>
+          op.kind === 'resizeSprite' ? [[op.id, op.bounds] as const] : [],
+        ),
+      );
       for (const { key, patch } of initialPlanned.updates) {
         const target = targetByKey.get(key);
         if (!target) continue;
         const byId = nativeIntents.get(target.type) ?? new Map();
-        byId.set(target.id, patch);
+        const spriteBounds =
+          target.type === 'sprite'
+            ? spriteBoundsById.get(target.id)
+            : undefined;
+        byId.set(target.id, spriteBounds ? { ...spriteBounds } : patch);
         nativeIntents.set(target.type, byId);
       }
       const nativeReceipt =
         nativeIntents.size > 0
-          ? applyPropertyIntentsEagerly(nativeIntents)
+          ? applyBoundsIntentsEagerly(nativeIntents)
           : null;
       let pluginReceipt: ElementIntentReceipt | null = null;
       try {

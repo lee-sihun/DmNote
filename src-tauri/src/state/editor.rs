@@ -2821,6 +2821,7 @@ mod tests {
         transition_ms: IntegerRangeFixture,
         press_duration_ms: IntegerRangeFixture,
         image_rect: ImageRectRangeFixture,
+        resize_min_dimension: f64,
         max_poses: usize,
         max_triggers_per_pose: usize,
         default_transition_ms: u32,
@@ -4643,8 +4644,8 @@ mod tests {
     #[test]
     fn editor_ops_enforce_version_count_ids_and_global_target_uniqueness() {
         let id = Uuid::new_v4().to_string();
-        // 구버전 1과 미래 버전 3 모두 거부, v1 이중 수용 없음
-        for unsupported_version in [1, 3] {
+        // 구버전과 미래 버전 모두 거부, 다중 버전 수용 없음
+        for unsupported_version in [1, 2, 4] {
             let mut unsupported = ops_request(vec![set_bounds_op(&id, EditorElementTypeV1::Key)]);
             unsupported.ops_version = Some(unsupported_version);
             assert_eq!(
@@ -4687,6 +4688,23 @@ mod tests {
         ]);
         assert_eq!(
             validation_code(&validate_request_envelope(&duplicate).unwrap_err()),
+            Some("DUPLICATE_EDITOR_OP_TARGET")
+        );
+
+        let duplicate_resize = ops_request(vec![
+            set_bounds_op(&id, EditorElementTypeV1::Key),
+            EditorOpV1::ResizeSprite {
+                id: id.clone(),
+                bounds: EditorBoundsV1 {
+                    dx: 10.0,
+                    dy: 20.0,
+                    width: 200.0,
+                    height: 100.0,
+                },
+            },
+        ]);
+        assert_eq!(
+            validation_code(&validate_request_envelope(&duplicate_resize).unwrap_err()),
             Some("DUPLICATE_EDITOR_OP_TARGET")
         );
 
@@ -6379,6 +6397,10 @@ mod tests {
         assert_eq!(fixture.image_rect.coord_min, -MAX_ABS_COORDINATE);
         assert_eq!(fixture.image_rect.coord_max, MAX_ABS_COORDINATE);
         assert_eq!(fixture.image_rect.dimension_max, MAX_DIMENSION);
+        assert_eq!(
+            fixture.resize_min_dimension,
+            crate::models::SPRITE_RESIZE_MIN_DIMENSION
+        );
 
         for pivot in [
             crate::models::SpriteAnchor {

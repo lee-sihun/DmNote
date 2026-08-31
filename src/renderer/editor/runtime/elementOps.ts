@@ -16,6 +16,7 @@ import {
 import { newElementId } from '../model/elementId';
 import { cloneSlot } from '@utils/keySlot';
 import { reissueSpritePoseIds } from '@utils/sprite/poseIdentity';
+import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import { stableStringify } from '@utils/core/stableStringify';
 import {
@@ -2438,18 +2439,11 @@ const planBatchGeometry = (
   );
   return {
     ...plan,
+    // 스프라이트는 배치에서도 resizeSprite - 치수가 변하는 연산(resize)은
+    // 콘텐츠가 함께 스케일되고, 이동 계열은 배율 1이라 setBounds와 동일
     ops: plan.bounds.flatMap(({ key, bounds }) => {
       const target = targetById.get(key);
-      return target
-        ? [
-            {
-              kind: 'setBounds' as const,
-              elementType: target.type,
-              id: target.id,
-              bounds,
-            },
-          ]
-        : [];
+      return target ? [elementBoundsOp(target.type, target.id, bounds)] : [];
     }),
   };
 };
@@ -2473,15 +2467,24 @@ export const commitBatchGeometryByIds = (
   const targetById = new Map(
     frozenDescriptor.targets.map((target) => [target.id, target] as const),
   );
+  // 스프라이트 eager는 부분 patch가 아니라 full bounds로 projection해야
+  // 콘텐츠 스케일까지 싣는다
+  const fullBoundsByKey = new Map(
+    initialPlan.bounds.map(({ key, bounds }) => [key, bounds] as const),
+  );
   for (const { key, patch } of initialPlan.updates) {
     const target = targetById.get(key);
     if (!target) continue;
     const byId = intents.get(target.type) ?? new Map();
-    byId.set(target.id, patch as Record<string, unknown>);
+    const spriteBounds =
+      target.type === 'sprite' ? fullBoundsByKey.get(key) : undefined;
+    byId.set(
+      target.id,
+      (spriteBounds ? { ...spriteBounds } : patch) as Record<string, unknown>,
+    );
     intents.set(target.type, byId);
   }
-  const receipt =
-    intents.size > 0 ? applyPropertyIntentsEagerly(intents) : null;
+  const receipt = intents.size > 0 ? applyBoundsIntentsEagerly(intents) : null;
   let enrolled = false;
   return commitGeneratedSemanticOps(
     (base) => planBatchGeometry(base, frozenDescriptor)?.ops ?? null,
@@ -2572,6 +2575,64 @@ export const commitElementGeometryById = (
     });
 };
 
+// bounds 정산 op - 스프라이트는 bounds와 콘텐츠 스케일을 한 몸으로 갖는
+// resizeSprite, 나머지는 setBounds
+export const elementBoundsOp = (
+  elementType: NativeElementType,
+  id: string,
+  bounds: EditorBoundsV1,
+): EditorOpV1 =>
+  elementType === 'sprite'
+    ? { kind: 'resizeSprite', id, bounds }
+    : { kind: 'setBounds', elementType, id, bounds };
+
+// 스프라이트 리사이즈 eager intent - 로컬 스토어의 현재 콘텐츠를 projection
+// 으로 스케일해 bounds와 함께 싣는다. 백엔드는 최신 base에 같은 수학을
+// 재적용한다 (resizeProjection 하나가 양측 계약 소유). 로컬에 없으면 eager
+// 적용 대상도 없으므로 bounds만 남긴다
+const spriteResizeEagerIntent = (
+  id: string,
+  bounds: EditorBoundsV1,
+): Record<string, unknown> => {
+  const record = useSpriteStore.getState().positions ?? {};
+  for (const positions of Object.values(record)) {
+    const current = positions?.find((position) => position.id === id);
+    if (current) {
+      const projected = projectSpriteResize(current, bounds);
+      return {
+        dx: projected.dx,
+        dy: projected.dy,
+        width: projected.width,
+        height: projected.height,
+        imageRect: projected.imageRect,
+        idleTransform: projected.idleTransform,
+        poses: projected.poses,
+      };
+    }
+  }
+  return { ...bounds };
+};
+
+// bounds intent의 eager 적용 - 스프라이트 항목은 projection 결과(콘텐츠
+// 포함)로 치환해 receipt가 스케일 필드까지 소유하게 한다
+export const applyBoundsIntentsEagerly = (
+  intents: PropertyIntents,
+): ElementIntentReceipt | null => {
+  let eagerIntents = intents;
+  const spriteIntents = intents.get('sprite');
+  if (spriteIntents && spriteIntents.size > 0) {
+    const projectedById = new Map<string, Record<string, unknown>>();
+    for (const [id, patch] of spriteIntents) {
+      const bounds = patch as unknown as EditorBoundsV1;
+      projectedById.set(id, spriteResizeEagerIntent(id, bounds));
+    }
+    const next = new Map(intents);
+    next.set('sprite', projectedById);
+    eagerIntents = next;
+  }
+  return applyPropertyIntentsEagerly(eagerIntents);
+};
+
 // 리사이즈 완료 전용: 시작 시 동결한 대상 id들에 최종 bounds를 하나의
 // intent로 - eager와 wire, receipt를 같은 의도가 소유한다. 대상 소실은
 // targetLost로 eager 복원, 오류는 전파
@@ -2602,22 +2663,19 @@ export const commitElementBoundsById = (
         return Promise.resolve(false);
       }
       seenIds.add(id);
-      ops.push({
-        kind: 'setBounds',
-        elementType,
-        id,
-        bounds: {
+      ops.push(
+        elementBoundsOp(elementType, id, {
           dx: patch.dx,
           dy: patch.dy,
           width: patch.width,
           height: patch.height,
-        },
-      });
+        }),
+      );
     }
   }
   if (ops.length === 0) return Promise.resolve(false);
 
-  const receipt = applyPropertyIntentsEagerly(intents);
+  const receipt = applyBoundsIntentsEagerly(intents);
   let enrolled = false;
   return commitSemanticOps(ops, {
     ...(gestureId ? { gestureId } : {}),
@@ -2654,18 +2712,15 @@ export const commitSingleElementBoundsById = (
   const intents: PropertyIntents = new Map([
     [type, new Map([[id, { ...bounds }]])],
   ]);
-  const receipt = applyPropertyIntentsEagerly(intents);
+  const receipt = applyBoundsIntentsEagerly(intents);
   let enrolled = false;
 
-  return commitSemanticOps(
-    [{ kind: 'setBounds', elementType: type, id, bounds }],
-    {
-      ...(gestureId ? { gestureId } : {}),
-      onEnrolled: () => {
-        enrolled = true;
-      },
+  return commitSemanticOps([elementBoundsOp(type, id, bounds)], {
+    ...(gestureId ? { gestureId } : {}),
+    onEnrolled: () => {
+      enrolled = true;
     },
-  )
+  })
     .then(({ opResults }) => opResults[0]?.status !== 'targetMissing')
     .catch((error) => {
       if (!enrolled) receipt?.rollback();
