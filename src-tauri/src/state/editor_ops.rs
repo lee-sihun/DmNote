@@ -1678,6 +1678,48 @@ fn apply_sprite_resize(sprite: &mut ReactiveSpritePosition, bounds: &EditorBound
     }
 }
 
+fn apply_bounds_op<F>(
+    candidate: &mut EditorDocumentV1,
+    locations: &HashMap<String, ElementLocation>,
+    op_index: usize,
+    id: &str,
+    bounds: EditorBoundsV1,
+    mutate: F,
+) -> Result<EditorOpResultV1, EditorCommitError>
+where
+    F: FnOnce(
+        &mut EditorDocumentV1,
+        &ElementLocation,
+        &EditorBoundsV1,
+    ) -> Result<(), EditorCommitError>,
+{
+    let Some(location) = locations.get(id) else {
+        validate_editor_op_bounds(op_index, None, bounds)?;
+        return Ok(EditorOpResultV1 {
+            status: EditorOpResultStatusV1::TargetMissing,
+            bounds: None,
+        });
+    };
+
+    let current_bounds = element_bounds(candidate, location).ok_or_else(|| {
+        EditorCommitError::validation(
+            "ELEMENT_LOCATOR_INVALID",
+            "native element locator no longer matches the editor document",
+        )
+    })?;
+    validate_editor_op_bounds(op_index, Some(current_bounds), bounds)?;
+    let status = if current_bounds == bounds {
+        EditorOpResultStatusV1::NoChange
+    } else {
+        mutate(candidate, location, &bounds)?;
+        EditorOpResultStatusV1::Applied
+    };
+    Ok(EditorOpResultV1 {
+        status,
+        bounds: element_bounds(candidate, location),
+    })
+}
+
 fn delete_elements(
     document: &mut EditorDocumentV1,
     delete_ids: &HashMap<EditorElementTypeV1, HashSet<String>>,
@@ -2244,60 +2286,30 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
     for (op_index, op) in ops.iter().enumerate() {
         match op {
             EditorOpV1::SetBounds { id, bounds, .. } => {
-                let Some(location) = locations.get(id) else {
-                    validate_editor_op_bounds(op_index, None, *bounds)?;
-                    op_results.push(EditorOpResultV1 {
-                        status: EditorOpResultStatusV1::TargetMissing,
-                        bounds: None,
-                    });
-                    continue;
-                };
-
-                let current_bounds = element_bounds(&candidate, location).ok_or_else(|| {
-                    EditorCommitError::validation(
-                        "ELEMENT_LOCATOR_INVALID",
-                        "native element locator no longer matches the editor document",
-                    )
-                })?;
-                validate_editor_op_bounds(op_index, Some(current_bounds), *bounds)?;
-                let status = if current_bounds == *bounds {
-                    EditorOpResultStatusV1::NoChange
-                } else {
-                    apply_bounds(element_common_at_mut(&mut candidate, location)?, bounds);
-                    EditorOpResultStatusV1::Applied
-                };
-                op_results.push(EditorOpResultV1 {
-                    status,
-                    bounds: element_bounds(&candidate, location),
-                });
+                op_results.push(apply_bounds_op(
+                    &mut candidate,
+                    &locations,
+                    op_index,
+                    id,
+                    *bounds,
+                    |candidate, location, bounds| {
+                        apply_bounds(element_common_at_mut(candidate, location)?, bounds);
+                        Ok(())
+                    },
+                )?);
             }
             EditorOpV1::ResizeSprite { id, bounds } => {
-                let Some(location) = locations.get(id) else {
-                    validate_editor_op_bounds(op_index, None, *bounds)?;
-                    op_results.push(EditorOpResultV1 {
-                        status: EditorOpResultStatusV1::TargetMissing,
-                        bounds: None,
-                    });
-                    continue;
-                };
-
-                let current_bounds = element_bounds(&candidate, location).ok_or_else(|| {
-                    EditorCommitError::validation(
-                        "ELEMENT_LOCATOR_INVALID",
-                        "native element locator no longer matches the editor document",
-                    )
-                })?;
-                validate_editor_op_bounds(op_index, Some(current_bounds), *bounds)?;
-                let status = if current_bounds == *bounds {
-                    EditorOpResultStatusV1::NoChange
-                } else {
-                    apply_sprite_resize(sprite_at_mut(&mut candidate, location)?, bounds);
-                    EditorOpResultStatusV1::Applied
-                };
-                op_results.push(EditorOpResultV1 {
-                    status,
-                    bounds: element_bounds(&candidate, location),
-                });
+                op_results.push(apply_bounds_op(
+                    &mut candidate,
+                    &locations,
+                    op_index,
+                    id,
+                    *bounds,
+                    |candidate, location, bounds| {
+                        apply_sprite_resize(sprite_at_mut(candidate, location)?, bounds);
+                        Ok(())
+                    },
+                )?);
             }
             EditorOpV1::DeleteElement { element_type, id } => {
                 let Some(location) = locations.get(id) else {
@@ -4360,6 +4372,112 @@ mod tests {
                 bounds: None,
             }
         );
+    }
+
+    #[test]
+    fn missing_bounds_targets_still_reject_invalid_bounds() {
+        let store = store_with_sprite();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let invalid_bounds = EditorBoundsV1 {
+            dx: 20.0,
+            dy: 30.0,
+            width: 0.0,
+            height: 250.0,
+        };
+
+        for op in [
+            EditorOpV1::SetBounds {
+                element_type: EditorElementTypeV1::Sprite,
+                id: missing_id.clone(),
+                bounds: invalid_bounds,
+            },
+            resize_sprite_op(missing_id.clone(), invalid_bounds),
+        ] {
+            let error = prepare_editor_ops_transition(&store, &[op]).unwrap_err();
+            assert_eq!(validation_code(&error), Some("DIMENSION_OUT_OF_RANGE"));
+        }
+    }
+
+    #[test]
+    fn sequential_sprite_resizes_use_candidate_bounds_for_each_ratio() {
+        let mut store = store_with_sprite();
+        let position = &mut store.sprite_positions.get_mut("4key").unwrap()[0];
+        position.width = 200.0;
+        position.height = 100.0;
+        position.image_rect = SpriteRect {
+            x: 20.0,
+            y: -10.0,
+            width: 100.0,
+            height: 50.0,
+        };
+        position.idle_transform = SpriteTransform {
+            x: 10.0,
+            y: -4.0,
+            ..SpriteTransform::default()
+        };
+        position.poses = vec![SpritePose {
+            pose_id: uuid::Uuid::new_v4().to_string(),
+            transform: SpriteTransform {
+                x: -6.0,
+                y: 8.0,
+                ..SpriteTransform::default()
+            },
+            ..SpritePose::default()
+        }];
+        let id = position.id.clone();
+        let first_bounds = EditorBoundsV1 {
+            dx: 10.0,
+            dy: 20.0,
+            width: 400.0,
+            height: 200.0,
+        };
+        let second_bounds = EditorBoundsV1 {
+            dx: -10.0,
+            dy: -20.0,
+            width: 100.0,
+            height: 50.0,
+        };
+
+        let transition = prepare_editor_ops_transition(
+            &store,
+            &[
+                resize_sprite_op(&id, first_bounds),
+                resize_sprite_op(id, second_bounds),
+            ],
+        )
+        .unwrap();
+        let resized = &transition.candidate.sprite_positions["4key"][0];
+
+        assert_eq!(sprite_bounds(resized), second_bounds);
+        assert_eq!(
+            resized.image_rect,
+            SpriteRect {
+                x: 10.0,
+                y: -5.0,
+                width: 50.0,
+                height: 25.0,
+            }
+        );
+        assert_eq!(
+            (resized.idle_transform.x, resized.idle_transform.y),
+            (5.0, -2.0)
+        );
+        assert_eq!(
+            (resized.poses[0].transform.x, resized.poses[0].transform.y,),
+            (-3.0, 4.0)
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+            ]
+        );
+        assert_eq!(transition.op_results[1].bounds, Some(second_bounds));
     }
 
     #[test]
