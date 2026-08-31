@@ -345,6 +345,8 @@ describe('렌더 DOM 계약', () => {
         root.render(
           <OverlaySpriteItem
             position={{
+              activation: 'whileHeld',
+              pressDurationMs: 300,
               id: 'sprite-contract',
               dx: 4,
               dy: 8,
@@ -363,6 +365,7 @@ describe('렌더 DOM 계약', () => {
               idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
               poses: [
                 {
+                  contactPoint: { x: 0.5, y: 1 },
                   poseId: 'pose-contract',
                   triggers: ['el-contract'],
                   transform: { x: 0, y: 0, rotation: 0, scale: 1 },

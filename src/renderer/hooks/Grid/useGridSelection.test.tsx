@@ -130,6 +130,8 @@ const STABLE_GRAPH_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const STABLE_KNOB_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const STABLE_SPRITE_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id,
   dx: 15,
   dy: 25,
@@ -148,6 +150,7 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [
     {
+      contactPoint: { x: 0.5, y: 1 },
       poseId: 'pose-1',
       triggers: [STABLE_KEY_ID],
       transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
@@ -549,6 +552,7 @@ describe('useGridSelection compound history gesture', () => {
       ...spriteAt(STABLE_SPRITE_ID),
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           // 배치 안 키와 배치 밖 키 참조 혼합
           triggers: [STABLE_KEY_ID, externalKeyId],

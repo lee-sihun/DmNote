@@ -45,6 +45,8 @@ const SPRITE_ID = '00000000-0000-4000-8000-000000000801';
 const spritePosition = (
   overrides: Partial<CanonicalReactiveSpritePosition> = {},
 ): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id: SPRITE_ID,
   dx: 10,
   dy: 20,
@@ -72,7 +74,7 @@ let root: Root;
 
 const renderSprite = (
   position: CanonicalReactiveSpritePosition,
-  options: { isSelected?: boolean } = {},
+  options: { isSelected?: boolean; zoom?: number } = {},
 ) => {
   act(() => {
     root.render(
@@ -183,6 +185,7 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
     poseId: string,
     overrides: Partial<SpritePose> = {},
   ): SpritePose => ({
+    contactPoint: { x: 0.5, y: 1 },
     poseId,
     triggers: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
     transform: { x: 10, y: 5, rotation: 45, scale: 2 },

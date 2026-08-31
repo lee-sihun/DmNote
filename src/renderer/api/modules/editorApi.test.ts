@@ -1345,6 +1345,8 @@ describe('canonical 검증의 스프라이트 poseId 네임스페이스', () => 
   const sprite = (
     overrides: Partial<ReactiveSpritePosition> = {},
   ): ReactiveSpritePosition => ({
+    activation: 'whileHeld',
+    pressDurationMs: 300,
     id: SPRITE_ID,
     dx: 0,
     dy: 0,
@@ -1361,6 +1363,7 @@ describe('canonical 검증의 스프라이트 poseId 네임스페이스', () => 
     idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
     poses: [
       {
+        contactPoint: { x: 0.5, y: 1 },
         poseId: POSE_ID,
         triggers: [],
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },

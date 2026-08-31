@@ -25,20 +25,21 @@ use crate::{
     },
     defaults::{default_keys, default_positions},
     models::{
-        default_missing_note_gradient_multipliers, default_sprite_transition_ms,
-        normalize_key_slot, scrub_removed_text_outline_fields, AppStoreData,
-        CounterAnimationPreset, CustomCss, CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab,
-        FontType, FontWeightRange, GradientSpec, GraphPosition, GraphPositions, GraphStatType,
-        GraphType, GridSettings, ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings,
-        KeyPosition, KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroupDef,
-        LayerGroups, NoteSettings, ReactiveSpritePosition, ShortcutsState, SoundLibraryEntry,
-        SpriteAnchor, SpritePositions, SpriteRect, SpriteTransform, StatPosition, StatPositions,
-        StatType, StoredOverlayBounds, TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX,
-        IMAGE_TRANSFORM_OFFSET_MIN, IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN,
-        IMAGE_TRANSFORM_SCALE_MAX, IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS,
-        SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_ROTATION_MAX,
-        SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX, SPRITE_TRANSFORM_SCALE_MIN,
-        SPRITE_TRANSITION_MS_MAX,
+        default_missing_note_gradient_multipliers, default_sprite_contact_point,
+        default_sprite_press_duration_ms, default_sprite_transition_ms, normalize_key_slot,
+        scrub_removed_text_outline_fields, AppStoreData, CounterAnimationPreset, CustomCss,
+        CustomCssHistoryEntry, CustomFont, CustomJs, CustomTab, FontType, FontWeightRange,
+        GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
+        ImageMode, ImageTransform, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
+        KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings,
+        ReactiveSpritePosition, ShortcutsState, SoundLibraryEntry, SpriteAnchor, SpritePositions,
+        SpriteRect, SpriteTransform, StatPosition, StatPositions, StatType, StoredOverlayBounds,
+        TabCss, TabNoteSettings, IMAGE_TRANSFORM_OFFSET_MAX, IMAGE_TRANSFORM_OFFSET_MIN,
+        IMAGE_TRANSFORM_ROTATION_MAX, IMAGE_TRANSFORM_ROTATION_MIN, IMAGE_TRANSFORM_SCALE_MAX,
+        IMAGE_TRANSFORM_SCALE_MIN, POSITION_COLLECTION_FIELDS, SPRITE_PRESS_DURATION_MS_MAX,
+        SPRITE_PRESS_DURATION_MS_MIN, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
+        SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX,
+        SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
     },
     services::font_metadata::parse_font_metadata,
 };
@@ -1040,8 +1041,11 @@ fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
     const IMAGE_RECT_COORDINATE_MAX: f64 = MAX_ABS_COORDINATE;
     const IMAGE_RECT_DIMENSION_MAX: f64 = MAX_DIMENSION;
 
-    fn repair_bounded(value: &mut f64, fallback: f64, minimum: f64, maximum: f64) -> bool {
-        if value.is_finite() && (minimum..=maximum).contains(value) {
+    fn repair_bounded<T>(value: &mut T, fallback: T, minimum: T, maximum: T) -> bool
+    where
+        T: Copy + PartialOrd,
+    {
+        if (minimum..=maximum).contains(value) {
             return false;
         }
         *value = fallback;
@@ -1091,8 +1095,7 @@ fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
         )
     }
 
-    fn repair_anchor(anchor: &mut SpriteAnchor) -> bool {
-        let fallback = SpriteAnchor::default();
+    fn repair_anchor(anchor: &mut SpriteAnchor, fallback: SpriteAnchor) -> bool {
         repair_bounded(&mut anchor.x, fallback.x, 0.0, 1.0)
             | repair_bounded(&mut anchor.y, fallback.y, 0.0, 1.0)
     }
@@ -1127,14 +1130,21 @@ fn repair_sprite_numeric_ranges(data: &mut AppStoreData) -> bool {
             | repair_positive(&mut position.width, fallback.width, None)
             | repair_positive(&mut position.height, fallback.height, None)
             | repair_rect(&mut position.image_rect)
-            | repair_anchor(&mut position.pivot)
-            | repair_transform(&mut position.idle_transform);
+            | repair_anchor(&mut position.pivot, SpriteAnchor::default())
+            | repair_transform(&mut position.idle_transform)
+            | repair_bounded(
+                &mut position.press_duration_ms,
+                default_sprite_press_duration_ms(),
+                SPRITE_PRESS_DURATION_MS_MIN,
+                SPRITE_PRESS_DURATION_MS_MAX,
+            );
         if position.transition_ms > SPRITE_TRANSITION_MS_MAX {
             position.transition_ms = default_sprite_transition_ms();
             repaired = true;
         }
         for pose in &mut position.poses {
             repaired |= repair_transform(&mut pose.transform);
+            repaired |= repair_anchor(&mut pose.contact_point, default_sprite_contact_point());
         }
         repaired
     }
@@ -5994,6 +6004,7 @@ mod tests {
                 poses: vec![SpritePose {
                     pose_id: uuid::Uuid::new_v4().to_string(),
                     triggers: original_triggers.clone(),
+                    contact_point: SpriteAnchor { x: -0.1, y: 1.1 },
                     transform: SpriteTransform {
                         x: 2_001.0,
                         y: -18.0,
@@ -6002,6 +6013,7 @@ mod tests {
                     },
                     ..SpritePose::default()
                 }],
+                press_duration_ms: 5_001,
                 transition_ms: 1_001,
                 ..ReactiveSpritePosition::default()
             }],
@@ -6033,6 +6045,10 @@ mod tests {
         assert_eq!(sprite.poses.len(), 1);
         assert_eq!(sprite.poses[0].triggers, original_triggers);
         assert_eq!(
+            sprite.poses[0].contact_point,
+            SpriteAnchor { x: 0.5, y: 1.0 }
+        );
+        assert_eq!(
             sprite.poses[0].transform,
             SpriteTransform {
                 x: 0.0,
@@ -6041,6 +6057,7 @@ mod tests {
                 scale: 1.0,
             }
         );
+        assert_eq!(sprite.press_duration_ms, 300);
         assert_eq!(sprite.transition_ms, 0);
         assert!(!repair_sprite_numeric_ranges(&mut data));
     }
@@ -6175,7 +6192,7 @@ mod tests {
     }
 
     #[test]
-    fn store_load_ignores_stale_sprite_strategy_keys() {
+    fn store_load_round_trips_sprite_activation_and_ignores_removed_match_mode() {
         let path = std::env::temp_dir().join(format!(
             "dmnote-stale-sprite-strategy-store-{}.json",
             uuid::Uuid::new_v4()
@@ -6198,7 +6215,7 @@ mod tests {
             .pointer_mut("/spritePositions/4key/0")
             .and_then(serde_json::Value::as_object_mut)
             .unwrap();
-        sprite.insert("activation".to_string(), serde_json::json!("whileHeld"));
+        sprite.insert("activation".to_string(), serde_json::json!("onPress"));
         sprite
             .get_mut("poses")
             .and_then(serde_json::Value::as_array_mut)
@@ -6216,11 +6233,61 @@ mod tests {
             .and_then(serde_json::Value::as_object)
             .unwrap();
 
-        assert!(!sprite.contains_key("activation"));
+        assert_eq!(sprite["activation"], serde_json::json!("onPress"));
         assert!(!sprite["poses"][0]
             .as_object()
             .unwrap()
             .contains_key("matchMode"));
+    }
+
+    #[test]
+    fn store_load_defaults_missing_sprite_activation_duration_and_contact_point() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-missing-sprite-oneshot-fields-store-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = store_with_each_native_collection();
+        data.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                id: uuid::Uuid::new_v4().to_string(),
+                poses: vec![SpritePose {
+                    pose_id: uuid::Uuid::new_v4().to_string(),
+                    triggers: vec![uuid::Uuid::new_v4().to_string()],
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+        let mut value = serde_json::to_value(data).unwrap();
+        let sprite = value
+            .pointer_mut("/spritePositions/4key/0")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap();
+        sprite.remove("activation");
+        sprite.remove("pressDurationMs");
+        sprite
+            .get_mut("poses")
+            .and_then(serde_json::Value::as_array_mut)
+            .and_then(|poses| poses.first_mut())
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .remove("contactPoint");
+        std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+        let sprite = &loaded.data.sprite_positions["4key"][0];
+
+        assert_eq!(
+            serde_json::to_value(sprite.activation).unwrap(),
+            serde_json::json!("whileHeld")
+        );
+        assert_eq!(sprite.press_duration_ms, 300);
+        assert_eq!(
+            sprite.poses[0].contact_point,
+            SpriteAnchor { x: 0.5, y: 1.0 }
+        );
     }
 
     #[test]

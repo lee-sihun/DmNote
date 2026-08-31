@@ -887,7 +887,10 @@ pub const SPRITE_TRANSFORM_ROTATION_MIN: f64 = -180.0;
 pub const SPRITE_TRANSFORM_ROTATION_MAX: f64 = 180.0;
 pub const SPRITE_TRANSFORM_SCALE_MIN: f64 = 0.1;
 pub const SPRITE_TRANSFORM_SCALE_MAX: f64 = 10.0;
+pub const SPRITE_RESIZE_MIN_DIMENSION: f64 = 0.000_001;
 pub const SPRITE_TRANSITION_MS_MAX: u32 = 1_000;
+pub const SPRITE_PRESS_DURATION_MS_MIN: u32 = 1;
+pub const SPRITE_PRESS_DURATION_MS_MAX: u32 = 5_000;
 pub const MAX_SPRITE_POSES: usize = 64;
 pub const MAX_SPRITE_POSE_TRIGGERS: usize = 512;
 
@@ -952,7 +955,27 @@ pub enum SpriteImageFit {
     Fill,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SpriteActivation {
+    #[default]
+    WhileHeld,
+    OnPress,
+}
+
+pub(crate) fn default_sprite_activation() -> SpriteActivation {
+    SpriteActivation::WhileHeld
+}
+
+pub(crate) fn default_sprite_press_duration_ms() -> u32 {
+    300
+}
+
+pub(crate) fn default_sprite_contact_point() -> SpriteAnchor {
+    SpriteAnchor { x: 0.5, y: 1.0 }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SpritePose {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -963,6 +986,21 @@ pub struct SpritePose {
     pub transform: SpriteTransform,
     #[serde(default)]
     pub image_override: Option<String>,
+    #[serde(default = "default_sprite_contact_point")]
+    pub contact_point: SpriteAnchor,
+}
+
+impl Default for SpritePose {
+    fn default() -> Self {
+        Self {
+            pose_id: String::new(),
+            name: None,
+            triggers: Vec::new(),
+            transform: SpriteTransform::default(),
+            image_override: None,
+            contact_point: default_sprite_contact_point(),
+        }
+    }
 }
 
 impl SpritePose {
@@ -1012,6 +1050,10 @@ pub struct ReactiveSpritePosition {
     pub idle_transform: SpriteTransform,
     #[serde(default)]
     pub poses: Vec<SpritePose>,
+    #[serde(default = "default_sprite_activation")]
+    pub activation: SpriteActivation,
+    #[serde(default = "default_sprite_press_duration_ms")]
+    pub press_duration_ms: u32,
     #[serde(default = "default_sprite_transition_ms")]
     pub transition_ms: u32,
     #[serde(default = "default_sprite_transition_easing")]
@@ -1038,6 +1080,8 @@ impl Default for ReactiveSpritePosition {
             pivot: SpriteAnchor::default(),
             idle_transform: SpriteTransform::default(),
             poses: Vec::new(),
+            activation: default_sprite_activation(),
+            press_duration_ms: default_sprite_press_duration_ms(),
             transition_ms: default_sprite_transition_ms(),
             transition_easing: default_sprite_transition_easing(),
         }

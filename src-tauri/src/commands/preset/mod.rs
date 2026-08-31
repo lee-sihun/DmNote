@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn preset_sprite_wire_keys_exclude_removed_strategy_fields() {
+    fn preset_sprite_wire_keys_include_oneshot_fields_and_exclude_removed_match_mode() {
         let snapshot = PresetSnapshot {
             sprite_positions: SpritePositions::from([(
                 "4key".to_string(),
@@ -322,6 +322,7 @@ mod tests {
         assert_eq!(
             sprite_keys,
             [
+                "activation",
                 "baseImage",
                 "className",
                 "dx",
@@ -334,6 +335,7 @@ mod tests {
                 "imageRect",
                 "pivot",
                 "poses",
+                "pressDurationMs",
                 "transitionEasing",
                 "transitionMs",
                 "useInlineStyles",
@@ -346,7 +348,13 @@ mod tests {
         pose_keys.sort_unstable();
         assert_eq!(
             pose_keys,
-            ["imageOverride", "poseId", "transform", "triggers"]
+            [
+                "contactPoint",
+                "imageOverride",
+                "poseId",
+                "transform",
+                "triggers"
+            ]
         );
     }
 

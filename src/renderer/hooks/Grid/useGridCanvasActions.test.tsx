@@ -84,6 +84,8 @@ const knob = (id: string) => ({
 });
 
 const sprite = (id: string): ReactiveSpritePosition & { id: string } => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id,
   dx: 0,
   dy: 0,

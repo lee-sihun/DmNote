@@ -8,6 +8,7 @@ import type {
 import { toSpriteWireShape } from './spriteWireShape';
 
 const basePose = (overrides: Partial<SpritePose> = {}): SpritePose => ({
+  contactPoint: { x: 0.5, y: 1 },
   poseId: 'pose-1',
   triggers: ['key-1'],
   transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -16,6 +17,8 @@ const basePose = (overrides: Partial<SpritePose> = {}): SpritePose => ({
 });
 
 const basePosition = (): ReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id: 'sprite-1',
   dx: 0,
   dy: 0,

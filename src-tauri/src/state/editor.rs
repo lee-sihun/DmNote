@@ -13,9 +13,10 @@ use crate::{
         EditorElementTypeV1, EditorField, ElementShadowSpec, GraphPosition, KeyCounters,
         KeyMappings, KeyPosition, KeySlot, KnobPosition, ReactiveSpritePosition, SpriteTransform,
         StatPosition, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
-        MAX_SPRITE_POSES, MAX_SPRITE_POSE_TRIGGERS, SPRITE_TRANSFORM_OFFSET_MAX,
-        SPRITE_TRANSFORM_OFFSET_MIN, SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN,
-        SPRITE_TRANSFORM_SCALE_MAX, SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
+        MAX_SPRITE_POSES, MAX_SPRITE_POSE_TRIGGERS, SPRITE_PRESS_DURATION_MS_MAX,
+        SPRITE_PRESS_DURATION_MS_MIN, SPRITE_TRANSFORM_OFFSET_MAX, SPRITE_TRANSFORM_OFFSET_MIN,
+        SPRITE_TRANSFORM_ROTATION_MAX, SPRITE_TRANSFORM_ROTATION_MIN, SPRITE_TRANSFORM_SCALE_MAX,
+        SPRITE_TRANSFORM_SCALE_MIN, SPRITE_TRANSITION_MS_MAX,
     },
 };
 
@@ -1658,6 +1659,26 @@ fn collect_sprite_violations(
                 ));
             }
 
+            if !(SPRITE_PRESS_DURATION_MS_MIN..=SPRITE_PRESS_DURATION_MS_MAX)
+                .contains(&sprite.press_duration_ms)
+            {
+                violations.insert(ValidationViolation::new(
+                    native_violation_key(
+                        NativeElementKind::Sprite,
+                        &sprite.id,
+                        "INVALID_SPRITE_PRESS_DURATION",
+                        ViolationPropertyPath::SpriteProperty {
+                            section: "activation",
+                            property: "pressDurationMs",
+                        },
+                        InvalidValueSignature::Count(sprite.press_duration_ms as usize),
+                    ),
+                    format!(
+                        "spritePositions {mode}[{sprite_index}].pressDurationMs must be between {SPRITE_PRESS_DURATION_MS_MIN} and {SPRITE_PRESS_DURATION_MS_MAX}"
+                    ),
+                ));
+            }
+
             let mut trigger_sets = HashSet::new();
             for (pose_index, pose) in sprite.poses.iter().enumerate() {
                 collect_sprite_transform_violations(
@@ -1669,6 +1690,26 @@ fn collect_sprite_violations(
                     &pose.transform,
                     violations,
                 );
+                for (property, value) in [("x", pose.contact_point.x), ("y", pose.contact_point.y)]
+                {
+                    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+                        violations.insert(ValidationViolation::new(
+                            native_violation_key(
+                                NativeElementKind::Sprite,
+                                &sprite.id,
+                                "INVALID_SPRITE_CONTACT_POINT",
+                                ViolationPropertyPath::SpritePoseProperty {
+                                    pose_index,
+                                    property,
+                                },
+                                InvalidValueSignature::FloatBits(value.to_bits()),
+                            ),
+                            format!(
+                                "spritePositions {mode}[{sprite_index}].poses[{pose_index}].contactPoint.{property} must be between 0 and 1"
+                            ),
+                        ));
+                    }
+                }
                 if pose.triggers.len() > MAX_SPRITE_POSE_TRIGGERS {
                     violations.insert(ValidationViolation::new(
                         native_violation_key(
@@ -2761,7 +2802,8 @@ mod tests {
         EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1,
         EditorOpV1, EditorPatchV1, EditorTargetGroupV1, EditorZUpdateV1, ElementShadowSpec,
         GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
-        ReactiveSpritePosition, SpritePose, SpriteRect, StatPosition, StatType,
+        ReactiveSpritePosition, SpriteActivation, SpriteAnchor, SpritePose, SpriteRect,
+        StatPosition, StatType,
     };
 
     use super::*;
@@ -2777,11 +2819,15 @@ mod tests {
         scale: NumericRangeFixture,
         anchor: NumericRangeFixture,
         transition_ms: IntegerRangeFixture,
+        press_duration_ms: IntegerRangeFixture,
         image_rect: ImageRectRangeFixture,
         max_poses: usize,
         max_triggers_per_pose: usize,
         default_transition_ms: u32,
         default_transition_easing: String,
+        default_activation: SpriteActivation,
+        default_press_duration_ms: u32,
+        default_contact_point: SpriteAnchor,
     }
 
     #[derive(serde::Deserialize)]
@@ -6367,6 +6413,45 @@ mod tests {
             assert!(violations.contains("INVALID_SPRITE_PIVOT"));
         }
 
+        for contact_point in [
+            SpriteAnchor {
+                x: fixture.anchor.min,
+                y: fixture.anchor.max,
+            },
+            SpriteAnchor {
+                x: fixture.anchor.max,
+                y: fixture.anchor.min,
+            },
+        ] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                poses: vec![SpritePose {
+                    contact_point,
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            });
+            assert!(!violations.contains("INVALID_SPRITE_CONTACT_POINT"));
+        }
+        for contact_point in [
+            SpriteAnchor {
+                x: fixture.anchor.min - 0.000_001,
+                y: fixture.anchor.min,
+            },
+            SpriteAnchor {
+                x: fixture.anchor.max,
+                y: fixture.anchor.max + 0.000_001,
+            },
+        ] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                poses: vec![SpritePose {
+                    contact_point,
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            });
+            assert!(violations.contains("INVALID_SPRITE_CONTACT_POINT"));
+        }
+
         let at_limit = SpriteRect {
             x: fixture.image_rect.coord_min,
             y: fixture.image_rect.coord_max,
@@ -6449,6 +6534,27 @@ mod tests {
             ..ReactiveSpritePosition::default()
         })
         .contains("INVALID_SPRITE_TRANSITION"));
+
+        assert_eq!(fixture.press_duration_ms.min, SPRITE_PRESS_DURATION_MS_MIN);
+        assert_eq!(fixture.press_duration_ms.max, SPRITE_PRESS_DURATION_MS_MAX);
+        for press_duration_ms in [fixture.press_duration_ms.min, fixture.press_duration_ms.max] {
+            let violations = sprite_violation_codes(ReactiveSpritePosition {
+                press_duration_ms,
+                ..ReactiveSpritePosition::default()
+            });
+            assert!(!violations.contains("INVALID_SPRITE_PRESS_DURATION"));
+        }
+        for press_duration_ms in [
+            fixture.press_duration_ms.min - 1,
+            fixture.press_duration_ms.max + 1,
+        ] {
+            assert!(sprite_violation_codes(ReactiveSpritePosition {
+                press_duration_ms,
+                ..ReactiveSpritePosition::default()
+            })
+            .contains("INVALID_SPRITE_PRESS_DURATION"));
+        }
+
         assert_eq!(
             crate::models::default_sprite_transition_ms(),
             fixture.default_transition_ms
@@ -6456,6 +6562,16 @@ mod tests {
         assert_eq!(
             crate::models::default_sprite_transition_easing(),
             fixture.default_transition_easing
+        );
+        let default_sprite = ReactiveSpritePosition::default();
+        assert_eq!(default_sprite.activation, fixture.default_activation);
+        assert_eq!(
+            default_sprite.press_duration_ms,
+            fixture.default_press_duration_ms
+        );
+        assert_eq!(
+            SpritePose::default().contact_point,
+            fixture.default_contact_point
         );
     }
 

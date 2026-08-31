@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_SPRITE_ACTIVATION,
+  DEFAULT_SPRITE_CONTACT_POINT,
+  DEFAULT_SPRITE_PRESS_DURATION_MS,
   DEFAULT_SPRITE_TRANSITION_EASING,
   DEFAULT_SPRITE_TRANSITION_MS,
   SPRITE_CONSTRAINTS,
@@ -29,10 +32,15 @@ interface SpriteConstraintFixture {
   anchor: { min: number; max: number };
   transitionMs: { min: number; max: number };
   imageRect: { coordMin: number; coordMax: number; dimensionMax: number };
+  resizeMinDimension: number;
   maxPoses: number;
   maxTriggersPerPose: number;
+  pressDurationMs: { min: number; max: number };
   defaultTransitionMs: number;
   defaultTransitionEasing: string;
+  defaultActivation: string;
+  defaultPressDurationMs: number;
+  defaultContactPoint: { x: number; y: number };
 }
 
 const fixture = JSON.parse(
@@ -55,6 +63,8 @@ const baseSprite = () => ({
   pivot: { x: 0.5, y: 0.5 },
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [] as unknown[],
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
 });
@@ -64,6 +74,7 @@ const pose = (poseId: string, triggers: string[]) => ({
   triggers,
   transform: { x: 0, y: 0, rotation: 0, scale: 1 },
   imageOverride: null,
+  contactPoint: { x: 0.5, y: 1 },
 });
 
 describe('sprite constraint parity (fixture)', () => {
@@ -86,10 +97,14 @@ describe('sprite constraint parity (fixture)', () => {
     expect(SPRITE_CONSTRAINTS.anchor).toEqual(fixture.anchor);
     expect(SPRITE_CONSTRAINTS.transitionMs).toEqual(fixture.transitionMs);
     expect(SPRITE_CONSTRAINTS.imageRect).toEqual(fixture.imageRect);
+    expect(SPRITE_CONSTRAINTS.resizeMinDimension).toBe(
+      fixture.resizeMinDimension,
+    );
     expect(SPRITE_CONSTRAINTS.maxPoses).toBe(fixture.maxPoses);
     expect(SPRITE_CONSTRAINTS.maxTriggersPerPose).toBe(
       fixture.maxTriggersPerPose,
     );
+    expect(SPRITE_CONSTRAINTS.pressDurationMs).toEqual(fixture.pressDurationMs);
   });
 
   it('전환 기본값은 fixture와 일치한다 - easing은 바이트 단위 동일해야 프리셋 매칭이 산다', () => {
@@ -97,6 +112,11 @@ describe('sprite constraint parity (fixture)', () => {
     expect(DEFAULT_SPRITE_TRANSITION_EASING).toBe(
       fixture.defaultTransitionEasing,
     );
+    expect(DEFAULT_SPRITE_ACTIVATION).toBe(fixture.defaultActivation);
+    expect(DEFAULT_SPRITE_PRESS_DURATION_MS).toBe(
+      fixture.defaultPressDurationMs,
+    );
+    expect(DEFAULT_SPRITE_CONTACT_POINT).toEqual(fixture.defaultContactPoint);
   });
 
   it('transform 스칼라는 fixture 경계에서 통과하고 근소 초과에서 거부된다', () => {
@@ -168,6 +188,44 @@ describe('sprite constraint parity (fixture)', () => {
         transitionMs: fixture.transitionMs.max + 1,
       }).success,
     ).toBe(false);
+
+    for (const value of [
+      fixture.pressDurationMs.min,
+      fixture.pressDurationMs.max,
+    ]) {
+      expect(
+        reactiveSpritePositionSchema.safeParse({
+          ...baseSprite(),
+          pressDurationMs: value,
+        }).success,
+      ).toBe(true);
+    }
+    expect(
+      reactiveSpritePositionSchema.safeParse({
+        ...baseSprite(),
+        pressDurationMs: fixture.pressDurationMs.min - 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      reactiveSpritePositionSchema.safeParse({
+        ...baseSprite(),
+        pressDurationMs: fixture.pressDurationMs.max + 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('canonical은 새 필드를 요구하고 input은 생략을 허용한다 - 구 플러그인 patch 호환', () => {
+    const {
+      activation: _activation,
+      pressDurationMs: _pressDurationMs,
+      ...legacySprite
+    } = baseSprite();
+    const { contactPoint: _contactPoint, ...legacyPose } = pose('p', ['t']);
+    const legacy = { ...legacySprite, poses: [legacyPose] };
+    expect(reactiveSpritePositionSchema.safeParse(legacy).success).toBe(false);
+    expect(reactiveSpritePositionInputSchema.safeParse(legacy).success).toBe(
+      true,
+    );
   });
 
   it('input 스키마 컬렉션 상한은 fixture 값에서 통과하고 +1에서 거부된다', () => {

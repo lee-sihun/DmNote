@@ -9,7 +9,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import type { SpritePose } from '@src/types/key/sprites';
-import { resetAllKeySignals, setKeyActive } from '@stores/signals/keySignals';
+import {
+  applyEventKeyState,
+  resetAllKeySignals,
+  setKeyActive,
+} from '@stores/signals/keySignals';
 
 import OverlaySpriteItem from './OverlaySpriteItem';
 
@@ -25,6 +29,7 @@ const makePose = (
   triggers: string[],
   overrides: Partial<SpritePose> = {},
 ): SpritePose => ({
+  contactPoint: { x: 0.5, y: 1 },
   poseId,
   triggers,
   transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
@@ -35,6 +40,8 @@ const makePose = (
 const makeSprite = (
   overrides: Partial<CanonicalReactiveSpritePosition> = {},
 ): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id: 'sprite-1',
   dx: 12,
   dy: 24,
@@ -234,5 +241,215 @@ describe('OverlaySpriteItem', () => {
   it('hidden이면 아무것도 그리지 않는다', () => {
     render(makeSprite({ hidden: true }));
     expect(spriteEl()).toBeNull();
+  });
+});
+
+// onPress 단발 재생 - edge 채널·WAAPI 소유권·이미지 수명주기
+describe('OverlaySpriteItem onPress', () => {
+  interface MockAnimation {
+    keyframes: Array<Record<string, string>>;
+    options: KeyframeAnimationOptions;
+    cancel: () => void;
+    cancelled: boolean;
+    onfinish: (() => void) | null;
+    oncancel: (() => void) | null;
+  }
+
+  let container: HTMLDivElement;
+  let root: Root;
+  let animations: MockAnimation[];
+  const proto = HTMLImageElement.prototype as unknown as { animate?: unknown };
+  const originalAnimate = proto.animate;
+
+  const oneShotSprite = (
+    overrides: Partial<CanonicalReactiveSpritePosition> = {},
+  ) =>
+    makeSprite({
+      activation: 'onPress',
+      pressDurationMs: 300,
+      poses: [makePose('p1', ['el-a'], { imageOverride: OVERRIDE_IMAGE })],
+      ...overrides,
+    });
+
+  const render = (
+    position: CanonicalReactiveSpritePosition,
+    map: ReadonlyMap<string, string> = keyCanonicalMap,
+  ) => {
+    act(() => {
+      root.render(
+        <OverlaySpriteItem position={position} keyCanonicalMap={map} />,
+      );
+    });
+  };
+
+  const imgEl = () => container.querySelector('img');
+
+  beforeEach(() => {
+    animations = [];
+    proto.animate = function animate(
+      keyframes: Array<Record<string, string>>,
+      options: KeyframeAnimationOptions,
+    ) {
+      const animation: MockAnimation = {
+        keyframes,
+        options,
+        cancelled: false,
+        cancel: () => {
+          animation.cancelled = true;
+          animation.oncancel?.();
+        },
+        onfinish: null,
+        oncancel: null,
+      };
+      animations.push(animation);
+      return animation;
+    };
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    resetAllKeySignals();
+    if (originalAnimate === undefined) delete proto.animate;
+    else proto.animate = originalAnimate;
+  });
+
+  it('실입력 DOWN edge가 자세→idle 재생을 시작하고 종료 시 기본 이미지로 복원한다', () => {
+    render(oneShotSprite());
+    const img = imgEl()!;
+    expect(img.src).toContain(BASE_IMAGE);
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(1);
+    expect(animations[0].keyframes[0].transform).toBe(
+      'translate(10px, -6px) rotate(15deg) scale(1.2)',
+    );
+    expect(animations[0].keyframes[1].transform).toBe(
+      'translate(0px, 0px) rotate(0deg) scale(1)',
+    );
+    expect(animations[0].options.duration).toBe(300);
+    expect(animations[0].options.fill).toBe('none');
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+
+    act(() => animations[0].onfinish?.());
+    expect(img.src).toContain(BASE_IMAGE);
+  });
+
+  it('하이드레이션 레벨 세팅은 재생을 트리거하지 않는다 - 유령 단발 방지', () => {
+    render(oneShotSprite());
+    act(() => setKeyActive('KeyA', true));
+    act(() => setKeyActive('KeyA', false));
+    expect(animations).toHaveLength(0);
+  });
+
+  it('이미 눌린 키의 반복 DOWN은 edge가 아니다', () => {
+    render(oneShotSprite());
+    act(() => applyEventKeyState('KeyA', true));
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(1);
+  });
+
+  it('재트리거는 이전 재생을 취소하고, 늦은 복원 콜백이 새 이미지를 덮지 않는다', () => {
+    render(oneShotSprite());
+    act(() => applyEventKeyState('KeyA', true));
+    const first = animations[0];
+    // 소유권 검증 대상 - 재트리거 전에 콜백을 캡처해 지연 호출을 재현한다
+    const lateRestore = first.onfinish;
+
+    act(() => applyEventKeyState('KeyA', false));
+    act(() => applyEventKeyState('KeyA', true));
+    expect(first.cancelled).toBe(true);
+    expect(first.onfinish).toBeNull();
+    expect(animations).toHaveLength(2);
+
+    lateRestore?.();
+    expect(imgEl()!.src).toContain(OVERRIDE_IMAGE);
+
+    act(() => animations[1].onfinish?.());
+    expect(imgEl()!.src).toContain(BASE_IMAGE);
+  });
+
+  it('기본 이미지 없이 자세 이미지만 있어도 재생 순간에만 표시된다', () => {
+    render(oneShotSprite({ baseImage: null }));
+    const img = imgEl()!;
+    expect(img.style.visibility).toBe('hidden');
+    expect(img.hasAttribute('src')).toBe(false);
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(img.style.visibility).toBe('');
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+
+    act(() => animations[0].onfinish?.());
+    expect(img.style.visibility).toBe('hidden');
+    expect(img.hasAttribute('src')).toBe(false);
+  });
+
+  it('리싱크가 레벨을 선점해도 실제 DOWN edge는 재생된다', () => {
+    render(oneShotSprite());
+    // OBS 대조·하이드레이션이 이벤트보다 먼저 레벨을 true로 올린 상황
+    act(() => setKeyActive('KeyA', true));
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(1);
+  });
+
+  it('이미지 없는 자세로 재트리거하면 이전 자세 이미지 잔상을 걷어낸다', () => {
+    render(
+      oneShotSprite({
+        baseImage: null,
+        poses: [
+          makePose('p1', ['el-a'], { imageOverride: OVERRIDE_IMAGE }),
+          makePose('p2', ['el-b']),
+        ],
+      }),
+      new Map([
+        ['el-a', 'KeyA'],
+        ['el-b', 'KeyB'],
+      ]),
+    );
+    const img = imgEl()!;
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+    act(() => applyEventKeyState('KeyA', false));
+
+    act(() => applyEventKeyState('KeyB', true));
+    expect(animations).toHaveLength(2);
+    expect(img.hasAttribute('src')).toBe(false);
+    expect(img.style.visibility).toBe('hidden');
+  });
+
+  it('whileHeld로 전환하면 진행 중 재생이 취소된다', () => {
+    const sprite = oneShotSprite();
+    render(sprite);
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations[0].cancelled).toBe(false);
+
+    act(() => applyEventKeyState('KeyA', false));
+    render({ ...sprite, activation: 'whileHeld' });
+    expect(animations[0].cancelled).toBe(true);
+    // 재생 중 직접 쓴 override src가 새 모드로 새지 않는다 (분기 key 재마운트)
+    expect(imgEl()!.src).toContain(BASE_IMAGE);
+  });
+
+  it('외부 취소도 기본 이미지 복원 계약을 지킨다', () => {
+    render(oneShotSprite());
+    const img = imgEl()!;
+    act(() => applyEventKeyState('KeyA', true));
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+
+    // 우리 재트리거·정리가 아닌 외부 cancel (콜백이 붙은 채로 취소됨)
+    act(() => animations[0].cancel());
+    expect(img.src).toContain(BASE_IMAGE);
+  });
+
+  it('whileHeld 스프라이트는 edge 채널로 재생되지 않는다', () => {
+    render(makeSprite());
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(0);
   });
 });

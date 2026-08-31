@@ -13,8 +13,13 @@ export const SPRITE_CONSTRAINTS = {
   scale: { min: 0.1, max: 10 },
   anchor: { min: 0, max: 1 },
   transitionMs: { min: 0, max: 1000 },
+  // 카운터 애니메이션과 같은 범위 - 백엔드 검증과 동일
+  pressDurationMs: { min: 1, max: 5000 },
   // 백엔드 MAX_ABS_COORDINATE/MAX_DIMENSION과 동일
   imageRect: { coordMin: -32768, coordMax: 32768, dimensionMax: 32768 },
+  // 리사이즈 배율 언더플로가 치수 검증(0 초과)을 깨지 않게 하는 하한.
+  // 백엔드 SPRITE_RESIZE_MIN_DIMENSION과 동일
+  resizeMinDimension: 0.000001,
   maxPoses: 64,
   // 백엔드 MAX_SPRITE_POSE_TRIGGERS와 동일
   maxTriggersPerPose: 512,
@@ -111,6 +116,31 @@ export const CENTER_SPRITE_ANCHOR: SpriteAnchor = Object.freeze({
   y: 0.5,
 });
 
+// 자세 이미지의 키 접점(핀) 기본값 - 손 이미지 기준 바닥 중앙.
+// 백엔드 default_sprite_contact_point와 동일
+export const DEFAULT_SPRITE_CONTACT_POINT: SpriteAnchor = Object.freeze({
+  x: 0.5,
+  y: 1,
+});
+
+// 키 반응 방식: 누르는 동안 유지 vs 누른 순간 한 번 재생.
+// 백엔드 SpriteActivation과 동일 camelCase 문자열
+export const spriteActivationSchema = z.union([
+  z.literal('whileHeld'),
+  z.literal('onPress'),
+]);
+export type SpriteActivation = z.infer<typeof spriteActivationSchema>;
+
+export const DEFAULT_SPRITE_ACTIVATION: SpriteActivation = 'whileHeld';
+export const DEFAULT_SPRITE_PRESS_DURATION_MS = 300;
+
+// Rust u32 - 소수는 decode 거부라 정수로 고정
+const spritePressDurationSchema = z
+  .number()
+  .int()
+  .min(SPRITE_CONSTRAINTS.pressDurationMs.min)
+  .max(SPRITE_CONSTRAINTS.pressDurationMs.max);
+
 // 백엔드 normalize_sprite_triggers와 동일한 canonical 정규형(정렬+중복 제거).
 // ASCII UUID만 통과하므로 JS 사전순과 Rust 바이트순이 갈리지 않는다
 export const normalizeSpriteTriggers = (
@@ -135,6 +165,9 @@ export const spritePoseSchema = z.object({
   poseId: z.string().min(1),
   triggers: z.array(z.string()),
   ...spritePoseBaseShape,
+  // 손끝 고정 도우미의 핀 - 자세 이미지 기준이라 자세 레벨.
+  // 서빙은 BE serde default가 항상 채운다
+  contactPoint: spriteAnchorSchema,
 });
 export type SpritePose = z.infer<typeof spritePoseSchema>;
 
@@ -146,6 +179,8 @@ export const spritePoseInputSchema = z.object({
     .array(z.string().min(1).max(SPRITE_CONSTRAINTS.triggerIdMaxLength))
     .max(SPRITE_CONSTRAINTS.maxTriggersPerPose),
   ...spritePoseBaseShape,
+  // 구 플러그인 patch는 필드 자체가 없다 - 생략 허용, BE serde default가 채움
+  contactPoint: spriteAnchorSchema.optional(),
 });
 export type SpritePoseInput = z.infer<typeof spritePoseInputSchema>;
 
@@ -185,6 +220,9 @@ const reactiveSpritePositionBaseShape = {
 
 export const reactiveSpritePositionSchema = z.object({
   ...reactiveSpritePositionBaseShape,
+  // 서빙은 BE serde default가 항상 채우므로 필수
+  activation: spriteActivationSchema,
+  pressDurationMs: spritePressDurationSchema,
   poses: z.array(spritePoseSchema),
 });
 export type ReactiveSpritePosition = z.infer<
@@ -193,6 +231,9 @@ export type ReactiveSpritePosition = z.infer<
 
 export const reactiveSpritePositionInputSchema = z.object({
   ...reactiveSpritePositionBaseShape,
+  // 구 플러그인 patch 호환 - 생략 허용, BE serde default가 채움
+  activation: spriteActivationSchema.optional(),
+  pressDurationMs: spritePressDurationSchema.optional(),
   poses: z.array(spritePoseInputSchema).max(SPRITE_CONSTRAINTS.maxPoses),
 });
 export type ReactiveSpritePositionInput = z.infer<

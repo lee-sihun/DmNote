@@ -29,6 +29,7 @@ const makePose = (
   transform: Partial<SpriteTransform> = {},
   imageOverride: string | null = null,
 ): SpritePose => ({
+  contactPoint: { x: 0.5, y: 1 },
   poseId,
   triggers: [poseId],
   transform: makeTransform(transform),

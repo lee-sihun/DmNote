@@ -30,7 +30,9 @@ import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import {
   CENTER_SPRITE_ANCHOR,
+  DEFAULT_SPRITE_ACTIVATION,
   DEFAULT_SPRITE_IMAGE_FIT,
+  DEFAULT_SPRITE_PRESS_DURATION_MS,
   DEFAULT_SPRITE_SIZE,
   DEFAULT_SPRITE_TRANSITION_EASING,
   DEFAULT_SPRITE_TRANSITION_MS,
@@ -520,6 +522,8 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
         pivot: { ...CENTER_SPRITE_ANCHOR },
         idleTransform: { ...IDENTITY_SPRITE_TRANSFORM },
         poses: [],
+        activation: DEFAULT_SPRITE_ACTIVATION,
+        pressDurationMs: DEFAULT_SPRITE_PRESS_DURATION_MS,
         transitionMs: DEFAULT_SPRITE_TRANSITION_MS,
         transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
       },

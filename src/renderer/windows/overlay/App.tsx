@@ -32,6 +32,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import {
+  applyEventKeyState,
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
 } from '@stores/signals/keySignals';
@@ -484,11 +485,12 @@ export default function App() {
         });
         timerEntry.timers.clear();
         keyDelayTimersRef.current.delete(key);
-        setKeyActiveSignal(key, isDown);
+        // 이벤트 경로만 press edge를 발화한다 - 하이드레이션·리싱크는 유령 edge 방지
+        applyEventKeyState(key, isDown);
         return;
       }
 
-      const apply = () => setKeyActiveSignal(key, isDown);
+      const apply = () => applyEventKeyState(key, isDown);
       const timer = setTimeout(() => {
         const pendingApply = pendingKeyDelayTimersRef.current.get(timer);
         if (!pendingApply) return;

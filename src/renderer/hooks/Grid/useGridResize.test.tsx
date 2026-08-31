@@ -53,10 +53,18 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
   sendBridgeMessageBestEffort: mocks.sendBridge,
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
-  commitElementBoundsById: mocks.commitGroupBounds,
-  commitSingleElementBoundsById: mocks.commitSingleBounds,
-}));
+vi.mock('@src/renderer/editor/runtime/elementOps', async (importOriginal) => {
+  // eager 적용·op 구성은 실물을 쓰고 wire 커밋만 mock - sprite projection
+  // 계약이 테스트에서 실제 경로로 돈다
+  const actual = await importOriginal<
+    typeof import('@src/renderer/editor/runtime/elementOps')
+  >();
+  return {
+    ...actual,
+    commitElementBoundsById: mocks.commitGroupBounds,
+    commitSingleElementBoundsById: mocks.commitSingleBounds,
+  };
+});
 
 vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
   usePluginDisplayElementStore: {
@@ -174,6 +182,8 @@ const STABLE_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const STABLE_SPRITE = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
 const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id,
   dx: 0,
   dy: 0,
@@ -192,6 +202,7 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   idleTransform: { x: 0, y: 0, rotation: 0, scale: 1 },
   poses: [
     {
+      contactPoint: { x: 0.5, y: 1 },
       poseId: 'pose-1',
       triggers: [STABLE_A],
       transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },

@@ -929,12 +929,15 @@ mod tests {
         }
     }
 
-    fn insert_stale_sprite_strategy_keys(value: &mut serde_json::Value, pointer: &str) {
+    fn insert_sprite_activation_and_removed_match_mode(
+        value: &mut serde_json::Value,
+        pointer: &str,
+    ) {
         let sprite = value
             .pointer_mut(pointer)
             .and_then(serde_json::Value::as_object_mut)
             .expect("sprite object exists");
-        sprite.insert("activation".to_string(), serde_json::json!("whileHeld"));
+        sprite.insert("activation".to_string(), serde_json::json!("onPress"));
         sprite
             .get_mut("poses")
             .and_then(serde_json::Value::as_array_mut)
@@ -945,12 +948,15 @@ mod tests {
             .insert("matchMode".to_string(), serde_json::json!("exact"));
     }
 
-    fn assert_stale_sprite_strategy_keys_omitted(value: &serde_json::Value, pointer: &str) {
+    fn assert_sprite_activation_round_trips_and_match_mode_is_omitted(
+        value: &serde_json::Value,
+        pointer: &str,
+    ) {
         let sprite = value
             .pointer(pointer)
             .and_then(serde_json::Value::as_object)
             .expect("sprite object exists");
-        assert!(!sprite.contains_key("activation"));
+        assert_eq!(sprite["activation"], serde_json::json!("onPress"));
         assert!(!sprite["poses"][0]
             .as_object()
             .expect("pose object exists")
@@ -958,7 +964,7 @@ mod tests {
     }
 
     #[test]
-    fn v1_editor_patch_ignores_stale_sprite_strategy_keys() {
+    fn v1_editor_patch_round_trips_sprite_activation_and_ignores_removed_match_mode() {
         let mut sprite_positions = SpritePositions::new();
         sprite_positions.insert("4key".to_string(), vec![sprite_with_pose()]);
         let mut value = serde_json::to_value(EditorPatchV1 {
@@ -966,16 +972,19 @@ mod tests {
             ..EditorPatchV1::default()
         })
         .unwrap();
-        insert_stale_sprite_strategy_keys(&mut value, "/spritePositions/4key/0");
+        insert_sprite_activation_and_removed_match_mode(&mut value, "/spritePositions/4key/0");
 
         let restored: EditorPatchV1 = serde_json::from_value(value).unwrap();
         let serialized = serde_json::to_value(restored).unwrap();
 
-        assert_stale_sprite_strategy_keys_omitted(&serialized, "/spritePositions/4key/0");
+        assert_sprite_activation_round_trips_and_match_mode_is_omitted(
+            &serialized,
+            "/spritePositions/4key/0",
+        );
     }
 
     #[test]
-    fn frozen_sprite_insert_ignores_stale_strategy_keys() {
+    fn frozen_sprite_insert_round_trips_activation_and_ignores_removed_match_mode() {
         let mut value = serde_json::to_value(EditorOpV1::InsertFrozenElements {
             mode: "4key".to_string(),
             elements: vec![EditorFrozenElementV1::Sprite {
@@ -985,12 +994,53 @@ mod tests {
             z_updates: Vec::new(),
         })
         .unwrap();
-        insert_stale_sprite_strategy_keys(&mut value, "/elements/0/position");
+        insert_sprite_activation_and_removed_match_mode(&mut value, "/elements/0/position");
 
         let restored: EditorOpV1 = serde_json::from_value(value).unwrap();
         let serialized = serde_json::to_value(restored).unwrap();
 
-        assert_stale_sprite_strategy_keys_omitted(&serialized, "/elements/0/position");
+        assert_sprite_activation_round_trips_and_match_mode_is_omitted(
+            &serialized,
+            "/elements/0/position",
+        );
+    }
+
+    #[test]
+    fn v1_editor_patch_defaults_missing_sprite_oneshot_fields() {
+        let mut sprite_positions = SpritePositions::new();
+        sprite_positions.insert("4key".to_string(), vec![sprite_with_pose()]);
+        let mut value = serde_json::to_value(EditorPatchV1 {
+            sprite_positions: Some(sprite_positions),
+            ..EditorPatchV1::default()
+        })
+        .unwrap();
+        let sprite = value
+            .pointer_mut("/spritePositions/4key/0")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap();
+        sprite.remove("activation");
+        sprite.remove("pressDurationMs");
+        sprite
+            .get_mut("poses")
+            .and_then(serde_json::Value::as_array_mut)
+            .and_then(|poses| poses.first_mut())
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .remove("contactPoint");
+
+        let restored: EditorPatchV1 = serde_json::from_value(value).unwrap();
+        let serialized = serde_json::to_value(restored).unwrap();
+        let sprite = serialized
+            .pointer("/spritePositions/4key/0")
+            .and_then(serde_json::Value::as_object)
+            .unwrap();
+
+        assert_eq!(sprite["activation"], serde_json::json!("whileHeld"));
+        assert_eq!(sprite["pressDurationMs"], serde_json::json!(300));
+        assert_eq!(
+            sprite["poses"][0]["contactPoint"],
+            serde_json::json!({ "x": 0.5, "y": 1.0 })
+        );
     }
 
     fn paint(color: &str) -> EditorPaintDescriptorV1 {

@@ -22,6 +22,8 @@ const backendWireSprite = {
   imageRect: { height: 200, width: 200, x: 0, y: 0 },
   pivot: { x: 0.5, y: 0.5 },
   poses: [],
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
   transitionMs: 90,
   useInlineStyles: null,
@@ -66,6 +68,7 @@ describe('reactiveSpritePositionSchema wire 계약', () => {
         triggers: ['566b0333-494c-4d47-a76d-506b71e5ac4c'],
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
         imageOverride: null,
+        contactPoint: { x: 0.5, y: 1 },
         ...pose,
       },
     ],
@@ -168,6 +171,7 @@ describe('reactiveSpritePositionSchema wire 계약', () => {
 
 describe('findDuplicateTriggerPose', () => {
   const pose = (poseId: string, triggers: string[]): SpritePose => ({
+    contactPoint: { x: 0.5, y: 1 },
     poseId,
     triggers,
     transform: { x: 0, y: 0, rotation: 0, scale: 1 },

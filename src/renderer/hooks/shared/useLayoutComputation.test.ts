@@ -20,6 +20,8 @@ const makeTransform = (
 const makeSprite = (
   overrides: Partial<CanonicalReactiveSpritePosition> = {},
 ): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id: 'sprite-1',
   dx: 100,
   dy: 50,

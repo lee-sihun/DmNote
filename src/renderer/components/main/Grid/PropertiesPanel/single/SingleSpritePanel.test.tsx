@@ -104,6 +104,8 @@ const OTHER_SPRITE_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const spritePosition = (
   overrides: Partial<CanonicalReactiveSpritePosition> = {},
 ): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id: SPRITE_ID,
   dx: 0,
   dy: 0,
@@ -215,13 +217,16 @@ describe('SingleSpritePanel 자세 편집', () => {
       `[data-testid="pose-popup"][aria-label="${label}"]`,
     );
 
-  // 담당 키 드롭다운 트리거는 요약 텍스트로 찾는다
+  // 담당 키 드롭다운은 자세 팝업(dialog) 안에서만 찾는다 - 패널의 반응 방식
+  // 드롭다운('spriteActivationHold'의 A)이 부분 일치에 걸리는 것을 차단
   const triggerDropdownByText = (text: string) =>
     [
       ...container.querySelectorAll<HTMLButtonElement>(
         'button[aria-haspopup="listbox"]',
       ),
-    ].find((button) => button.textContent?.includes(text))!;
+    ]
+      .filter((button) => button.closest('[data-testid="pose-popup"]'))
+      .find((button) => button.textContent?.includes(text))!;
 
   const openListbox = () =>
     document.querySelector(
@@ -313,6 +318,7 @@ describe('SingleSpritePanel 자세 편집', () => {
         triggers: [KEY_ID_A],
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
         imageOverride: null,
+        contactPoint: { x: 0.5, y: 1 },
       },
     ]);
   });
@@ -321,6 +327,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -355,6 +362,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -394,6 +402,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -408,7 +417,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     expect(posePopup()!.getAttribute('aria-label')).toBe(
       'propertiesPanel.spritePose 1',
     );
-    expect(posePopup()!.dataset.fallbackHeight).toBe('181');
+    expect(posePopup()!.dataset.fallbackHeight).toBe('297');
 
     // 같은 행 재클릭 - 토글 닫힘
     act(() => poseEditButtons()[0].click());
@@ -419,12 +428,14 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
@@ -472,12 +483,14 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
           imageOverride: null,
         },
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
@@ -512,6 +525,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           name: '왼손',
           triggers: [KEY_ID_A],
@@ -519,6 +533,7 @@ describe('SingleSpritePanel 자세 편집', () => {
           imageOverride: 'override.png',
         },
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
@@ -568,6 +583,7 @@ describe('SingleSpritePanel 자세 편집', () => {
         triggers: [KEY_ID_C],
         transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
         imageOverride: 'override.png',
+        contactPoint: { x: 0.5, y: 1 },
       },
       // 구조 변경 시 무명 상태는 보이던 번호가 이름으로 고정된다
       { ...position.poses[1], name: 'propertiesPanel.spritePose 1' },
@@ -579,6 +595,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           name: '왼손 common.copySuffix',
           triggers: [KEY_ID_A],
@@ -609,6 +626,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [key],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
+      contactPoint: { x: 0.5, y: 1 },
     });
     const position = spritePosition({
       poses: [
@@ -647,6 +665,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [`key-${index}`],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
+      contactPoint: { x: 0.5, y: 1 },
     }));
     const position = spritePosition({ poses });
     seed(position);
@@ -686,6 +705,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           name: 'propertiesPanel.spritePose 1',
           triggers: [KEY_ID_A],
@@ -715,6 +735,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [key],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
+      contactPoint: { x: 0.5, y: 1 },
     });
     const position = spritePosition({
       poses: [
@@ -749,6 +770,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           name: 'propertiesPanel.spritePose 1',
           triggers: [KEY_ID_A],
@@ -756,6 +778,7 @@ describe('SingleSpritePanel 자세 편집', () => {
           imageOverride: null,
         },
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -785,6 +808,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [`key-${index}`],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
+      contactPoint: { x: 0.5, y: 1 },
     }));
     const position = spritePosition({ poses });
     seed(position);
@@ -806,6 +830,7 @@ describe('SingleSpritePanel 자세 편집', () => {
       triggers: [KEY_ID_A],
       transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
       imageOverride: null,
+      contactPoint: { x: 0.5, y: 1 },
     };
     const position = spritePosition({ poses: [basePose] });
     seed(position);
@@ -829,6 +854,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -863,6 +889,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -891,6 +918,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -924,6 +952,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A, KEY_ID_B],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -951,6 +980,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A, deadId],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -980,6 +1010,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1071,6 +1102,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1128,6 +1160,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1177,6 +1210,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1289,6 +1323,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     const position = spritePosition({
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },

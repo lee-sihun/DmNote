@@ -1968,7 +1968,7 @@ mod tests {
     }
 
     #[test]
-    fn preset_import_ignores_stale_sprite_strategy_keys() {
+    fn preset_import_round_trips_sprite_activation_and_ignores_removed_match_mode() {
         let root = std::env::temp_dir().join(format!(
             "dmnote-stale-sprite-strategy-preset-{}",
             uuid::Uuid::new_v4()
@@ -1996,7 +1996,7 @@ mod tests {
             .pointer_mut("/spritePositions/4key/0")
             .and_then(serde_json::Value::as_object_mut)
             .unwrap();
-        sprite.insert("activation".to_string(), serde_json::json!("whileHeld"));
+        sprite.insert("activation".to_string(), serde_json::json!("onPress"));
         sprite
             .get_mut("poses")
             .and_then(serde_json::Value::as_array_mut)
@@ -2013,11 +2013,66 @@ mod tests {
             .and_then(serde_json::Value::as_object)
             .unwrap();
 
-        assert!(!sprite.contains_key("activation"));
+        assert_eq!(sprite["activation"], serde_json::json!("onPress"));
         assert!(!sprite["poses"][0]
             .as_object()
             .unwrap()
             .contains_key("matchMode"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn preset_import_defaults_missing_sprite_oneshot_fields() {
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-missing-sprite-oneshot-fields-preset-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("preset.json");
+        let sprites = SpritePositions::from([(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                id: uuid::Uuid::new_v4().to_string(),
+                poses: vec![SpritePose {
+                    pose_id: uuid::Uuid::new_v4().to_string(),
+                    triggers: vec![uuid::Uuid::new_v4().to_string()],
+                    ..SpritePose::default()
+                }],
+                ..ReactiveSpritePosition::default()
+            }],
+        )]);
+        let mut value = serde_json::to_value(PresetFile {
+            sprite_positions: Some(sprites),
+            ..PresetFile::default()
+        })
+        .unwrap();
+        let sprite = value
+            .pointer_mut("/spritePositions/4key/0")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap();
+        sprite.remove("activation");
+        sprite.remove("pressDurationMs");
+        sprite
+            .get_mut("poses")
+            .and_then(serde_json::Value::as_array_mut)
+            .and_then(|poses| poses.first_mut())
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .remove("contactPoint");
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+
+        let imported = read_preset_file(&path).unwrap();
+        let sprite = &imported.sprite_positions.as_ref().unwrap()["4key"][0];
+
+        assert_eq!(
+            serde_json::to_value(sprite.activation).unwrap(),
+            serde_json::json!("whileHeld")
+        );
+        assert_eq!(sprite.press_duration_ms, 300);
+        assert_eq!(
+            serde_json::to_value(sprite.poses[0].contact_point).unwrap(),
+            serde_json::json!({ "x": 0.5, "y": 1.0 })
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 

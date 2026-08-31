@@ -12,13 +12,23 @@ import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import { slotDisplayName } from '@utils/keySlot';
 import { ACTION_BUTTON_CLASS, AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { useSpriteEditPreviewStore } from '@stores/grid/useSpriteEditPreviewStore';
+import { useSpritePoseGizmoStore } from '@stores/grid/useSpritePoseGizmoStore';
 import {
+  contactWorldPosition,
+  solveTranslationKeepingContact,
+  type ContactGeometry,
+} from '@utils/sprite/contactSolver';
+import {
+  DEFAULT_SPRITE_CONTACT_POINT,
   DEFAULT_SPRITE_TRANSITION_EASING,
   IDENTITY_SPRITE_TRANSFORM,
   SPRITE_CONSTRAINTS,
   findDuplicateTriggerPose,
   type ReactiveSpritePosition,
+  type SpriteActivation,
+  type SpriteAnchor,
   type SpritePose,
+  type SpriteTransform,
 } from '@src/types/key/sprites';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
@@ -125,6 +135,11 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   const [editorTarget, setEditorTarget] = useState<SpriteEditorTarget | null>(
     null,
   );
+  // 도우미 토글 - 저장하지 않는 편집 세션 상태.
+  // 핀 고정: 회전·배율 스크럽이 손끝을 제자리에 두도록 x·y 역산
+  // 뻗기: 캔버스 노브 드래그가 scale까지 역산
+  const [pinLockEnabled, setPinLockEnabled] = useState(false);
+  const [stretchEnabled, setStretchEnabled] = useState(false);
 
   // 무효 자세(빈/중복 트리거)는 백엔드가 거부하므로 커밋 착지 전까지 패널이 값을 들고 있는다
   const [posesDraft, setPosesDraft] = useState<{
@@ -140,6 +155,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     setLastPanelTargetKey(panelTargetKey);
     setEditorTarget(null);
     setPosesDraft(null);
+    setPinLockEnabled(false);
+    setStretchEnabled(false);
   }
 
   // draft는 커밋이 canonical에 착지하면 지운다 - position prop이 곧 canonical
@@ -303,6 +320,124 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       ),
     );
 
+  const poseGeometry = (pose: SpritePose): ContactGeometry => ({
+    imageRect: position.imageRect,
+    pivot: position.pivot,
+    contactPoint: pose.contactPoint,
+  });
+
+  // 핀 고정 보정 - 회전·배율 변경에만 적용한다. x·y 직접 입력은 위치 지정 의도라
+  // 건드리지 않고, 퇴화(핀=축)면 원값 그대로 둔다
+  const withPinLock = (next: SpriteTransform): SpriteTransform => {
+    if (!pinLockEnabled || !editingPose) return next;
+    const base = editingPose.transform;
+    if (next.rotation === base.rotation && next.scale === base.scale) {
+      return next;
+    }
+    const geometry = poseGeometry(editingPose);
+    const solved = solveTranslationKeepingContact(
+      geometry,
+      { rotation: next.rotation, scale: next.scale },
+      contactWorldPosition(geometry, base),
+    );
+    return solved.status === 'ok' ? solved.transform : next;
+  };
+
+  // 자세 필드 실시간 프리뷰 - 커밋 가능하면 gesture 채널, 무효 draft면 캔버스 스냅샷
+  const previewPosePatch = (patch: Partial<SpritePose>) => {
+    if (posesCommittable) {
+      previewFields({
+        poses: displayPoses.map((entry, index) =>
+          index === editingPoseIndex ? { ...entry, ...patch } : entry,
+        ),
+      });
+      return;
+    }
+    if (!editingPose) return;
+    useSpriteEditPreviewStore.getState().publish({
+      kind: 'pose',
+      positionId: position.id,
+      poseId: editingPose.poseId,
+      fallbackPose: { ...editingPose, ...patch },
+      preferFallback: true,
+    });
+  };
+
+  const handleTransformPreview = (next: SpriteTransform) =>
+    previewPosePatch({ transform: withPinLock(next) });
+
+  const handleTransformCommit = (next: SpriteTransform) =>
+    replacePose(editingPoseIndex, { transform: withPinLock(next) });
+
+  const handleTransformCancel = () => {
+    editGestureController.cancel();
+    // 무효 draft 스크럽은 스냅샷 채널이라 gesture 취소가 복원하지 못한다
+    if (!posesCommittable && editingPose) {
+      useSpriteEditPreviewStore.getState().publish({
+        kind: 'pose',
+        positionId: position.id,
+        poseId: editingPose.poseId,
+        fallbackPose: editingPose,
+        preferFallback: true,
+      });
+    }
+  };
+
+  // 기즈모 콜백은 ref 경유 - 세션 재발행 없이 항상 최신 렌더의 배선을 쓴다
+  const gizmoHandlersRef = useRef<{
+    preview: (next: SpriteTransform) => void;
+    commit: (next: SpriteTransform) => void;
+    cancel: () => void;
+    commitContactPoint: (point: SpriteAnchor) => void;
+  } | null>(null);
+  useEffect(() => {
+    gizmoHandlersRef.current = {
+      // 노브 드래그는 축 고정 역산이 x·y까지 이미 정했다 - 핀 고정 보정 미적용
+      preview: (next) => previewPosePatch({ transform: next }),
+      commit: (next) => replacePose(editingPoseIndex, { transform: next }),
+      cancel: handleTransformCancel,
+      commitContactPoint: (point) =>
+        replacePose(editingPoseIndex, { contactPoint: point }),
+    };
+  });
+
+  // 자세 팝업이 열려 있는 동안 캔버스 기즈모 세션 발행
+  useLayoutEffect(() => {
+    const store = useSpritePoseGizmoStore.getState();
+    if (activeEditorTarget?.kind === 'pose' && editingPose) {
+      store.setSession({
+        positionId: position.id,
+        poseId: editingPose.poseId,
+        origin: { dx: position.dx, dy: position.dy },
+        imageRect: position.imageRect,
+        pivot: position.pivot,
+        contactPoint: editingPose.contactPoint,
+        transform: editingPose.transform,
+        stretch: stretchEnabled,
+        preview: (next) => gizmoHandlersRef.current?.preview(next),
+        commit: (next) => gizmoHandlersRef.current?.commit(next),
+        cancel: () => gizmoHandlersRef.current?.cancel(),
+        commitContactPoint: (point) =>
+          gizmoHandlersRef.current?.commitContactPoint(point),
+      });
+    } else {
+      store.setSession(null);
+    }
+  }, [
+    activeEditorTarget,
+    editingPose,
+    position.id,
+    position.dx,
+    position.dy,
+    position.imageRect,
+    position.pivot,
+    stretchEnabled,
+  ]);
+  useLayoutEffect(
+    () => () => useSpritePoseGizmoStore.getState().setSession(null),
+    [],
+  );
+
   const togglePoseTrigger = (poseIndex: number, keyId: string) => {
     const pose = displayPoses[poseIndex];
     if (!pose) return;
@@ -346,6 +481,10 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       // 새 상태는 항등에서 출발 - 기본 배치와의 차이만 상태가 가진다
       transform: { ...IDENTITY_SPRITE_TRANSFORM },
       imageOverride: null,
+      // 핀은 이전 상태를 따라간다 - 정렬된 이미지 세트에서 재지정 반복 방지
+      contactPoint: {
+        ...(materialized.at(-1)?.contactPoint ?? DEFAULT_SPRITE_CONTACT_POINT),
+      },
     };
     updatePoses([...materialized, pose]);
     // 새 상태는 담당 키 선택이 다음 단계라 편집 팝업을 바로 연다.
@@ -493,6 +632,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
         triggers: [],
         transform: IDENTITY_SPRITE_TRANSFORM,
         imageOverride: null,
+        contactPoint: DEFAULT_SPRITE_CONTACT_POINT,
       },
     ])[poses.length];
 
@@ -626,7 +766,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   };
 
   const spriteTitle = position.layerName || 'Sprite';
-  const { anchor, transitionMs } = SPRITE_CONSTRAINTS;
+  const { anchor, transitionMs, pressDurationMs } = SPRITE_CONSTRAINTS;
   const pivotPercent = (value: number) => Math.round(value * 1000) / 10;
   const easingValue =
     position.transitionEasing || DEFAULT_SPRITE_TRANSITION_EASING;
@@ -936,34 +1076,98 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
               ) : null}
             </div>
 
-            {/* 전환 */}
+            {/* 전환·반응 */}
             <PropertySection>
               <PropertyRow
-                label={t('propertiesPanel.spriteTransition') || '전환 시간'}
+                label={t('propertiesPanel.spriteActivation') || '반응 방식'}
               >
-                <NumberInput
-                  value={position.transitionMs}
+                <Dropdown
+                  options={[
+                    {
+                      label:
+                        t('propertiesPanel.spriteActivationHold') ||
+                        '누름 유지',
+                      value: 'whileHeld',
+                    },
+                    {
+                      label:
+                        t('propertiesPanel.spriteActivationPress') ||
+                        '단발 재생',
+                      value: 'onPress',
+                    },
+                  ]}
+                  value={position.activation}
                   onChange={(value) =>
-                    commitFields({
-                      // Rust u32 계약 - 스크럽 소수값을 정수로 고정
-                      transitionMs: Math.round(
-                        clamp(value, transitionMs.min, transitionMs.max),
-                      ),
-                    })
+                    commitFields({ activation: value as SpriteActivation })
                   }
-                  onPreview={(value) =>
-                    previewFields({
-                      transitionMs: Math.round(
-                        clamp(value, transitionMs.min, transitionMs.max),
-                      ),
-                    })
-                  }
-                  onCancel={() => editGestureController.cancel()}
-                  suffix="ms"
-                  min={transitionMs.min}
-                  max={transitionMs.max}
+                  align="right"
                 />
               </PropertyRow>
+              {position.activation === 'onPress' ? (
+                <PropertyRow
+                  label={
+                    t('propertiesPanel.spritePressDuration') || '재생 시간'
+                  }
+                >
+                  <NumberInput
+                    value={position.pressDurationMs}
+                    onChange={(value) =>
+                      commitFields({
+                        // Rust u32 계약 - 스크럽 소수값을 정수로 고정
+                        pressDurationMs: Math.round(
+                          clamp(
+                            value,
+                            pressDurationMs.min,
+                            pressDurationMs.max,
+                          ),
+                        ),
+                      })
+                    }
+                    onPreview={(value) =>
+                      previewFields({
+                        pressDurationMs: Math.round(
+                          clamp(
+                            value,
+                            pressDurationMs.min,
+                            pressDurationMs.max,
+                          ),
+                        ),
+                      })
+                    }
+                    onCancel={() => editGestureController.cancel()}
+                    suffix="ms"
+                    min={pressDurationMs.min}
+                    max={pressDurationMs.max}
+                  />
+                </PropertyRow>
+              ) : (
+                <PropertyRow
+                  label={t('propertiesPanel.spriteTransition') || '전환 시간'}
+                >
+                  <NumberInput
+                    value={position.transitionMs}
+                    onChange={(value) =>
+                      commitFields({
+                        // Rust u32 계약 - 스크럽 소수값을 정수로 고정
+                        transitionMs: Math.round(
+                          clamp(value, transitionMs.min, transitionMs.max),
+                        ),
+                      })
+                    }
+                    onPreview={(value) =>
+                      previewFields({
+                        transitionMs: Math.round(
+                          clamp(value, transitionMs.min, transitionMs.max),
+                        ),
+                      })
+                    }
+                    onCancel={() => editGestureController.cancel()}
+                    suffix="ms"
+                    min={transitionMs.min}
+                    max={transitionMs.max}
+                  />
+                </PropertyRow>
+              )}
 
               <PropertyRow
                 label={t('propertiesPanel.spriteEasing') || '가속 곡선'}
@@ -975,7 +1179,6 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                     commitFields({ transitionEasing: value })
                   }
                   align="right"
-                  widthClass="w-[110px]"
                 />
               </PropertyRow>
             </PropertySection>
@@ -1021,43 +1224,20 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
               onImageReset: () =>
                 replacePose(editingPoseIndex, { imageOverride: null }),
             }}
-            onTransformCommit={(next) =>
-              replacePose(editingPoseIndex, { transform: next })
-            }
-            onTransformPreview={(next) => {
-              // 콜백 부재는 접두 스크럽 자체를 꺼 버린다 - 항상 넘기고 안에서 분기
-              if (posesCommittable) {
-                previewFields({
-                  poses: displayPoses.map((entry, index) =>
-                    index === editingPoseIndex
-                      ? { ...entry, transform: next }
-                      : entry,
-                  ),
-                });
-                return;
-              }
-              // 무효 draft는 커밋 채널에 못 실리므로 캔버스 스냅샷을 직접 갱신
-              if (!editingPose) return;
-              useSpriteEditPreviewStore.getState().publish({
-                kind: 'pose',
-                positionId: position.id,
-                poseId: editingPose.poseId,
-                fallbackPose: { ...editingPose, transform: next },
-                preferFallback: true,
-              });
-            }}
-            onTransformCancel={() => {
-              editGestureController.cancel();
-              // 무효 draft 스크럽은 스냅샷 채널이라 gesture 취소가 복원하지 못한다
-              if (!posesCommittable && editingPose) {
-                useSpriteEditPreviewStore.getState().publish({
-                  kind: 'pose',
-                  positionId: position.id,
-                  poseId: editingPose.poseId,
-                  fallbackPose: editingPose,
-                  preferFallback: true,
-                });
-              }
+            // 콜백 부재는 접두 스크럽 자체를 꺼 버린다 - 항상 넘기고 안에서 분기
+            onTransformCommit={handleTransformCommit}
+            onTransformPreview={handleTransformPreview}
+            onTransformCancel={handleTransformCancel}
+            pinControls={{
+              contactPoint: editingPose.contactPoint,
+              pinLock: pinLockEnabled,
+              stretch: stretchEnabled,
+              onContactPointCommit: (point) =>
+                replacePose(editingPoseIndex, { contactPoint: point }),
+              onContactPointPreview: (point) =>
+                previewPosePatch({ contactPoint: point }),
+              onPinLockToggle: () => setPinLockEnabled((value) => !value),
+              onStretchToggle: () => setStretchEnabled((value) => !value),
             }}
             onClose={() => setEditorTarget(null)}
             t={t}

@@ -138,6 +138,8 @@ const graphAt = (
 });
 
 const spriteAt = (id: string): ReactiveSpritePosition & { id: string } => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id,
   dx: 0,
   dy: 0,
@@ -446,12 +448,14 @@ describe('elementOps', () => {
       ...spriteAt(crypto.randomUUID()),
       poses: [
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-src-1',
           triggers: [ID_A],
           transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
           imageOverride: 'sprites/override.png',
         },
         {
+          contactPoint: { x: 0.5, y: 1 },
           poseId: 'pose-src-2',
           triggers: [ID_A, ID_B],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },

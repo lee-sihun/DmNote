@@ -76,6 +76,8 @@ let harness: Harness | null = null;
 
 // 백엔드 실물 wire 형태: layerName·groupId는 None이면 직렬화에서 생략된다
 const spriteFixture = (): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id: SPRITE_ID,
   dx: 0,
   dy: 0,
@@ -193,6 +195,7 @@ describe('스프라이트 필드 패치 낙관 적용 통합', () => {
       triggers: [B_ID, A_ID],
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
+      contactPoint: { x: 0.5, y: 1 },
     };
 
     await editorCoordinator.start();

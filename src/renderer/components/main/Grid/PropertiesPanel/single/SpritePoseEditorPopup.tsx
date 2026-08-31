@@ -1,5 +1,6 @@
 import React from 'react';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
+import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import { NumberInput } from '@components/main/common/NumberInput';
 import {
@@ -8,6 +9,7 @@ import {
 } from '@components/main/common/TransformGlyphs';
 import {
   SPRITE_CONSTRAINTS,
+  type SpriteAnchor,
   type SpriteImageFit,
   type SpriteTransform,
 } from '@src/types/key/sprites';
@@ -29,6 +31,19 @@ export interface SpritePoseControls {
   onImageReset: () => void;
 }
 
+// 손끝 핀 컨트롤 묶음 - 값은 캔버스 노브(Alt 드래그)와 같은 contactPoint
+export interface SpritePosePinControls {
+  contactPoint: SpriteAnchor;
+  /** 회전·배율 스크럽이 손끝을 제자리에 두도록 x·y를 역산 */
+  pinLock: boolean;
+  /** 캔버스 노브 드래그가 scale까지 역산 */
+  stretch: boolean;
+  onContactPointCommit: (point: SpriteAnchor) => void;
+  onContactPointPreview: (point: SpriteAnchor) => void;
+  onPinLockToggle: () => void;
+  onStretchToggle: () => void;
+}
+
 interface SpritePoseEditorPopupProps {
   open: boolean;
   ariaLabel: string;
@@ -38,6 +53,7 @@ interface SpritePoseEditorPopupProps {
   referenceRef: React.RefObject<HTMLElement>;
   panelElement: HTMLElement | null;
   poseControls: SpritePoseControls;
+  pinControls: SpritePosePinControls;
   // 행 전환 시 바깥닫힘을 거치지 않는 영역 (상태 목록 well)
   interactiveRefs?: React.RefObject<HTMLElement>[];
   onTransformCommit: (next: SpriteTransform) => void;
@@ -59,6 +75,7 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
   referenceRef,
   panelElement,
   poseControls,
+  pinControls,
   interactiveRefs,
   onTransformCommit,
   onTransformPreview,
@@ -88,7 +105,7 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
       referenceRef={referenceRef}
       panelElement={panelElement}
       fallbackWidth={172}
-      fallbackHeight={181}
+      fallbackHeight={297}
       cardClassName="flex flex-col p-[8px] gap-[8px] w-[172px] rounded-popup"
       offsetY={-93}
       interactiveRefs={interactiveRefs}
@@ -197,6 +214,85 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
               width="100%"
               min={scale.min * 100}
               max={scale.max * 100}
+            />
+          </div>
+        </div>
+
+        {/* 핀(손끝) - 자세 이미지 기준 %. 캔버스 노브·Alt 드래그와 같은 값 */}
+        <div className="flex flex-col gap-[4px]">
+          <span className="text-label text-fg-muted">
+            {t('propertiesPanel.spriteContactPoint') || '손끝'}
+          </span>
+          <div className="flex items-center gap-[8px] w-full">
+            <NumberInput
+              value={Math.round(pinControls.contactPoint.x * 1000) / 10}
+              onChange={(value) =>
+                pinControls.onContactPointCommit({
+                  ...pinControls.contactPoint,
+                  x: clamp(value, 0, 100) / 100,
+                })
+              }
+              onPreview={(value) =>
+                pinControls.onContactPointPreview({
+                  ...pinControls.contactPoint,
+                  x: clamp(value, 0, 100) / 100,
+                })
+              }
+              onCancel={onTransformCancel}
+              prefix="X"
+              suffix="%"
+              ariaLabel={`${
+                t('propertiesPanel.spriteContactPoint') || '손끝'
+              } X`}
+              width="100%"
+              min={0}
+              max={100}
+              allowDecimal
+              decimalScale={1}
+            />
+            <NumberInput
+              value={Math.round(pinControls.contactPoint.y * 1000) / 10}
+              onChange={(value) =>
+                pinControls.onContactPointCommit({
+                  ...pinControls.contactPoint,
+                  y: clamp(value, 0, 100) / 100,
+                })
+              }
+              onPreview={(value) =>
+                pinControls.onContactPointPreview({
+                  ...pinControls.contactPoint,
+                  y: clamp(value, 0, 100) / 100,
+                })
+              }
+              onCancel={onTransformCancel}
+              prefix="Y"
+              suffix="%"
+              ariaLabel={`${
+                t('propertiesPanel.spriteContactPoint') || '손끝'
+              } Y`}
+              width="100%"
+              min={0}
+              max={100}
+              allowDecimal
+              decimalScale={1}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-label text-fg-muted">
+              {t('propertiesPanel.spritePinLock') || '핀 고정'}
+            </span>
+            <Checkbox
+              checked={pinControls.pinLock}
+              onChange={pinControls.onPinLockToggle}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-label text-fg-muted">
+              {t('propertiesPanel.spriteStretch') || '뻗기'}
+            </span>
+            <Checkbox
+              checked={pinControls.stretch}
+              onChange={pinControls.onStretchToggle}
             />
           </div>
         </div>

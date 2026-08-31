@@ -40,6 +40,8 @@ const document: EditorDocumentV1 = {
 
 // 백엔드 실물 wire 형태: layerName·groupId는 None이면 직렬화에서 생략된다
 const spriteFixture = (id: string): CanonicalReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   id,
   dx: 0,
   dy: 0,

@@ -94,6 +94,8 @@ interface ReactiveSpritePosition {
   pivot: { x: number; y: number }; // 정규화 변환 원점, 각각 0–1
   idleTransform: SpriteTransform; // 일치하는 자세가 없을 때의 기본 변환
   poses: SpritePose[]; // 커밋은 최대 64개까지 허용
+  activation: 'whileHeld' | 'onPress'; // 기본 whileHeld. onPress는 누른 순간 자세를 한 번 재생하고 idle로 복귀
+  pressDurationMs: number; // onPress 재생 시간, 1–5000, 기본 300
   transitionMs: number; // 자세 전환 시간, 0–1000, 기본 0
   transitionEasing: string; // CSS easing, 기본 'cubic-bezier(0.4, 0, 0.2, 1)'
 }
@@ -104,6 +106,7 @@ interface SpritePose {
   triggers: string[]; // 키 요소 id 목록, 커밋은 최대 512개까지 허용하며 정렬·중복 제거
   transform: SpriteTransform;
   imageOverride: string | null; // 이 자세가 활성인 동안 baseImage를 대체
+  contactPoint: { x: number; y: number }; // 자세 이미지의 키 접점(핀), 정규화 0–1, 기본 {0.5, 1}. 에디터 도우미 전용이고 런타임 해석에는 쓰이지 않습니다
 }
 
 interface SpriteTransform {

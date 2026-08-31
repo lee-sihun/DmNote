@@ -97,6 +97,8 @@ interface ReactiveSpritePosition {
   pivot: { x: number; y: number }; // normalized transform origin, 0–1 each
   idleTransform: SpriteTransform; // base transform when no pose matches
   poses: SpritePose[]; // commits accept at most 64
+  activation: 'whileHeld' | 'onPress'; // default whileHeld. onPress plays the pose once on key-down, then returns to idle
+  pressDurationMs: number; // onPress playback duration, 1–5000, default 300
   transitionMs: number; // pose blend duration, 0–1000, default 0
   transitionEasing: string; // CSS easing, default 'cubic-bezier(0.4, 0, 0.2, 1)'
 }
@@ -107,6 +109,7 @@ interface SpritePose {
   triggers: string[]; // key element ids; commits accept at most 512, sorted and deduplicated
   transform: SpriteTransform;
   imageOverride: string | null; // replaces baseImage while this pose is active
+  contactPoint: { x: number; y: number }; // normalized key-contact pin of the pose image, 0–1 each, default {0.5, 1}. Editor helper only; runtime resolution ignores it
 }
 
 interface SpriteTransform {

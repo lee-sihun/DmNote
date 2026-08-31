@@ -50,6 +50,7 @@ import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
 import ResizeHandles from '../handles/ResizeHandles';
 import GradientAxisOverlay from '../handles/GradientAxisHandle';
+import SpritePoseGizmo from '../handles/SpritePoseGizmo';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import GroupResizeHandles from '../handles/GroupResizeHandles';
 import {
@@ -2004,6 +2005,8 @@ const Grid = ({
         panX={panX}
         panY={panY}
       />
+      {/* 온캔버스 스프라이트 자세 기즈모 — 자세 팝업이 열려 있을 때만 표시 */}
+      <SpritePoseGizmo zoom={zoom} panX={panX} panY={panY} />
       {/* 우클릭 리스트 팝업 */}
       <div className="relative">
         <ListPopup

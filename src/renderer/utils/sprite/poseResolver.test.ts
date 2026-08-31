@@ -24,6 +24,7 @@ const makePose = (
   transform: Partial<SpriteTransform> = {},
   imageOverride: string | null = null,
 ): SpritePose => ({
+  contactPoint: { x: 0.5, y: 1 },
   poseId,
   triggers,
   transform: makeTransform(transform),
@@ -34,6 +35,8 @@ const makeSprite = (
   poses: SpritePose[],
   overrides: Partial<ReactiveSpritePosition> = {},
 ): ReactiveSpritePosition => ({
+  activation: 'whileHeld',
+  pressDurationMs: 300,
   dx: 0,
   dy: 0,
   width: 200,

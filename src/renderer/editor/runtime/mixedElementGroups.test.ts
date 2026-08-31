@@ -513,6 +513,8 @@ describe('setMixedLayerGroupHidden', () => {
       positions: {
         '4key': [
           {
+            activation: 'whileHeld',
+            pressDurationMs: 300,
             id: SPRITE_ID,
             dx: 0,
             dy: 0,
