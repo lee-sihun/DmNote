@@ -264,6 +264,3 @@ export const findDuplicateTriggerPose = (
   }
   return null;
 };
-
-export const spriteTransformToCss = (transform: SpriteTransform): string =>
-  `translate(${transform.x}px, ${transform.y}px) rotate(${transform.rotation}deg) scale(${transform.scale})`;

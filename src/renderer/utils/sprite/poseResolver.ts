@@ -5,11 +5,10 @@ import {
   type SpriteTransform,
 } from '@src/types/key/sprites';
 
+import { DEG_TO_RAD, RAD_TO_DEG } from './spriteGeometry';
+
 // 평균 벡터 길이가 이보다 작으면 방향이 정의되지 않은 것으로 본다 (정반대 각 조합)
 const DEGENERATE_MEAN_VECTOR_EPSILON = 1e-9;
-
-const DEG_TO_RAD = Math.PI / 180;
-const RAD_TO_DEG = 180 / Math.PI;
 
 export interface SpriteTargetResolution {
   transform: SpriteTransform;
@@ -77,6 +76,12 @@ const preparePoses = (poses: readonly SpritePose[]): PreparedPoses => {
   preparedPosesCache.set(poses, prepared);
   return prepared;
 };
+
+// 스프라이트가 참조하는 키 요소 id 전체 (중복 제거, poseId 사전순).
+// 오버레이 잎의 눌림 구독 목록과 자세 해석이 같은 전처리 결과를 공유한다
+export const spriteTriggerIds = (
+  poses: readonly SpritePose[],
+): readonly string[] => preparePoses(poses).allTriggers;
 
 // 눌린 키 집합만 읽는 순수 해석. 눌린 순서, 시각, 이전 상태에 의존하지 않는다
 export const resolveSpriteTarget = (

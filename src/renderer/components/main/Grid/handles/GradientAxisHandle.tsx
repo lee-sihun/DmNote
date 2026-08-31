@@ -20,6 +20,7 @@ import {
 } from '@utils/animation/rafLatestScheduler';
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import { useCommittedApplyStore } from '@stores/data/useCommittedApplyStore';
+import { suppressNextClick } from '@utils/dom/suppressNextClick';
 
 /**
  * 온캔버스 그라데이션 축 - 피커가 그라데이션 형식으로 열려 있는 동안
@@ -583,18 +584,6 @@ const GradientAxisOverlay = ({
 
   // 창 포커스 상실 - pointerup이 오지 않으므로 유령 드래그 방지 취소
   const handleWindowBlur = () => cancelActiveDrag();
-
-  // 드래그 제스처의 후속 click이 그리드 선택 해제로 새지 않게 1회 억제
-  const suppressNextClick = () => {
-    const swallow = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      window.removeEventListener('click', swallow, true);
-    };
-    window.addEventListener('click', swallow, true);
-    // click이 아예 안 오는 경로(cancel 등) 대비 - 다음 틱에 정리
-    setTimeout(() => window.removeEventListener('click', swallow, true), 0);
-  };
 
   // 프레스 즉시 grabbing - 키와 같은 정책(호버 무변화, 잡는 동안만 grabbing).
   // pointerdown preventDefault로 :active가 안 걸리고, 캡처 중에도 커서는

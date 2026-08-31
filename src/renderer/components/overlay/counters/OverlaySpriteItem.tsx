@@ -11,10 +11,15 @@ import {
 } from '@hooks/overlay/useFailedImageSrcs';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
-import { resolveSpriteTarget } from '@utils/sprite/poseResolver';
-import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
+import {
+  resolveSpriteTarget,
+  spriteTriggerIds,
+} from '@utils/sprite/poseResolver';
+import {
+  computeSpriteImageStyle,
+  spriteTransformToCss,
+} from '@utils/sprite/spriteImageStyles';
 import { resolveSpriteRenderEasing } from '@utils/sprite/spriteReach';
-import { spriteTransformToCss } from '@src/types/key/sprites';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
 interface OverlaySpriteItemProps {
@@ -43,19 +48,8 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
   const isOneShot = position.activation === 'onPress';
 
-  // 자세들이 참조하는 키 요소 id 전체 (중복 제거)
-  const triggerIds = useMemo(() => {
-    const seen = new Set<string>();
-    const ids: string[] = [];
-    for (const pose of position.poses) {
-      for (const trigger of pose.triggers) {
-        if (seen.has(trigger)) continue;
-        seen.add(trigger);
-        ids.push(trigger);
-      }
-    }
-    return ids;
-  }, [position.poses]);
+  // 자세들이 참조하는 키 요소 id 전체. 해석기가 poses identity로 캐시해 둔 것을 그대로 쓴다
+  const triggerIds = spriteTriggerIds(position.poses);
 
   // whileHeld만 렌더 중 시그널을 읽어 구독을 형성한다 - onPress는 edge 채널 전용이라
   // 눌림 레벨 변화에 리렌더될 이유가 없다

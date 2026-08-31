@@ -5,16 +5,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSpritePoseGizmoStore } from '@stores/grid/useSpritePoseGizmoStore';
 import {
-  CONTACT_EPSILON,
   contactWorldPosition,
   solveTransformTowardTarget,
   type ContactGeometry,
 } from '@utils/sprite/contactSolver';
 import {
+  DEFAULT_SPRITE_CONTACT_POINT,
   SPRITE_CONSTRAINTS,
   type SpriteAnchor,
   type SpriteTransform,
 } from '@src/types/key/sprites';
+import { anchorPx } from '@utils/sprite/spriteGeometry';
+import { suppressNextClick } from '@utils/dom/suppressNextClick';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
 import { beginDragCursor, endDragCursor } from '@utils/core/dragCursor';
 import {
@@ -47,6 +49,9 @@ interface DragState {
 }
 
 const KNOB_HIT_SIZE = 22;
+// 노브를 잡을 수 있는 최소 팔 길이(요소 로컬 px). 솔버의 CONTACT_EPSILON은
+// "수학적으로 방향이 정의되지 않음"이고 이쪽은 "화면에서 집을 수 없음"이라 따로 둔다
+const MIN_GRABBABLE_ARM_PX = 1e-3;
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
@@ -118,18 +123,15 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
   };
 
   const displayTransform = dragTransform ?? session.transform;
-  const axisPx = {
-    x: session.imageRect.x + session.pivot.x * session.imageRect.width,
-    y: session.imageRect.y + session.pivot.y * session.imageRect.height,
-  };
+  const axis = anchorPx(session.imageRect, session.pivot);
   const contactWorld = contactWorldPosition(geometry, displayTransform);
   const knobScreen = {
     x: (session.origin.dx + contactWorld.x) * zoom + panX,
     y: (session.origin.dy + contactWorld.y) * zoom + panY,
   };
   const axisScreen = {
-    x: (session.origin.dx + displayTransform.x + axisPx.x) * zoom + panX,
-    y: (session.origin.dy + displayTransform.y + axisPx.y) * zoom + panY,
+    x: (session.origin.dx + displayTransform.x + axis.x) * zoom + panX,
+    y: (session.origin.dy + displayTransform.y + axis.y) * zoom + panY,
   };
 
   // 핀=축 퇴화 - 방향이 정의되지 않아 조작 불가, 핀 재배치(Alt)만 허용
@@ -138,7 +140,7 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
     y: (geometry.contactPoint.y - session.pivot.y) * session.imageRect.height,
   };
   const degenerate =
-    Math.hypot(baseVector.x, baseVector.y) <= CONTACT_EPSILON * 1000;
+    Math.hypot(baseVector.x, baseVector.y) <= MIN_GRABBABLE_ARM_PX;
 
   const clientToElementLocal = (clientX: number, clientY: number) => {
     const geo = geoRef.current;
@@ -154,12 +156,9 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
   const targetToPin = (target: { x: number; y: number }): SpriteAnchor => {
     const geo = geoRef.current;
     const live = sessionRef.current;
-    if (!geo || !live) return { x: 0.5, y: 1 };
+    if (!geo || !live) return DEFAULT_SPRITE_CONTACT_POINT;
     const { imageRect, pivot } = geo.geometry;
-    const axis = {
-      x: imageRect.x + pivot.x * imageRect.width,
-      y: imageRect.y + pivot.y * imageRect.height,
-    };
+    const axis = anchorPx(imageRect, pivot);
     const transform = lastSolvedRef.current ?? live.transform;
     const rad = (-transform.rotation * Math.PI) / 180;
     const cos = Math.cos(rad);
@@ -201,16 +200,6 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
     lastSolvedRef.current = solved.transform;
     setDragTransform(solved.transform);
     live.preview(solved.transform);
-  };
-
-  const suppressNextClick = () => {
-    const swallow = (event: MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      window.removeEventListener('click', swallow, true);
-    };
-    window.addEventListener('click', swallow, true);
-    setTimeout(() => window.removeEventListener('click', swallow, true), 0);
   };
 
   const releaseGrabbed = () => {

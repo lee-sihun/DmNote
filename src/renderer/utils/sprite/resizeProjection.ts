@@ -2,6 +2,8 @@ import type { SpriteRect, SpriteTransform } from '@src/types/key/sprites';
 import { SPRITE_CONSTRAINTS } from '@src/types/key/sprites';
 import type { EditorBoundsV1 } from '@src/types/editor';
 
+import { clamp } from '@utils/core/clamp';
+
 // 스프라이트 리사이즈 projection - resizeSprite op의 프론트 구현.
 // 백엔드 적용기와 분기·연산 순서(나눗셈 1회, 값마다 곱셈 1회, clamp는
 // max→min)를 비트 단위로 공유한다. eager 적용·낙관 target·conflict rebase가
@@ -16,9 +18,6 @@ export interface SpriteResizeProjectable {
   idleTransform: SpriteTransform;
   poses: ReadonlyArray<{ transform: SpriteTransform }>;
 }
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
 
 // 유한 비음수 배율. 무효 prev/next와 subnormal 나눗셈 오버플로는 1(무배율)로,
 // 극단 축소의 언더플로 0은 축소 의도 보존을 위해 그대로 허용한다

@@ -6,7 +6,9 @@ import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { spriteItemsApi } from '@api/modules/itemsApi';
+import { clamp } from '@utils/core/clamp';
 import { pickValidatedImagePath } from '@utils/core/pickValidatedImage';
+import { anchorToPercent, percentToAnchor } from '@utils/sprite/spriteGeometry';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import { projectSpriteResize } from '@utils/sprite/resizeProjection';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
@@ -56,9 +58,6 @@ import EditSessionBoundary from '../EditSessionBoundary';
 import { RenameIcon } from '../PanelIcons';
 import SpritePoseEditorPopup from './SpritePoseEditorPopup';
 import SpriteImageSettingsPopup from './SpriteImageSettingsPopup';
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
 
 // 계약과 동일한 cubic-bezier 문자열만 저장 (transitionEasing은 문자열 그대로 CSS로 간다)
 const SPRITE_EASING_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
@@ -818,7 +817,6 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
 
   const spriteTitle = position.layerName || 'Sprite';
   const { anchor, transitionMs, pressDurationMs } = SPRITE_CONSTRAINTS;
-  const pivotPercent = (value: number) => Math.round(value * 1000) / 10;
   const easingValue =
     position.transitionEasing || DEFAULT_SPRITE_TRANSITION_EASING;
   const easingOptions = SPRITE_EASING_PRESETS.some(
@@ -930,12 +928,12 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                   onPointerDownCapture={() => setPivotEngaged(true)}
                 >
                   <NumberInput
-                    value={pivotPercent(position.pivot.x)}
+                    value={anchorToPercent(position.pivot.x)}
                     onChange={(value) =>
                       commitFields({
                         pivot: {
                           ...position.pivot,
-                          x: clamp(value, 0, 100) / 100,
+                          x: percentToAnchor(value),
                         },
                       })
                     }
@@ -943,7 +941,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                       previewFields({
                         pivot: {
                           ...position.pivot,
-                          x: clamp(value, 0, 100) / 100,
+                          x: percentToAnchor(value),
                         },
                       })
                     }
@@ -960,12 +958,12 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                     decimalScale={1}
                   />
                   <NumberInput
-                    value={pivotPercent(position.pivot.y)}
+                    value={anchorToPercent(position.pivot.y)}
                     onChange={(value) =>
                       commitFields({
                         pivot: {
                           ...position.pivot,
-                          y: clamp(value, 0, 100) / 100,
+                          y: percentToAnchor(value),
                         },
                       })
                     }
@@ -973,7 +971,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                       previewFields({
                         pivot: {
                           ...position.pivot,
-                          y: clamp(value, 0, 100) / 100,
+                          y: percentToAnchor(value),
                         },
                       })
                     }

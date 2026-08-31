@@ -1,10 +1,14 @@
 import type { CSSProperties } from 'react';
 import {
   DEFAULT_SPRITE_IMAGE_FIT,
-  spriteTransformToCss,
   type ReactiveSpritePosition,
   type SpriteTransform,
 } from '@src/types/key/sprites';
+
+// 자세 변환의 CSS 표현. transform-origin은 pivot이 맡으므로 여기서는
+// translate → rotate → scale 순서만 고정한다
+export const spriteTransformToCss = (transform: SpriteTransform): string =>
+  `translate(${transform.x}px, ${transform.y}px) rotate(${transform.rotation}deg) scale(${transform.scale})`;
 
 // 외관 채널 계산에 필요한 최소 필드
 type SpriteImageStyleSource = Pick<

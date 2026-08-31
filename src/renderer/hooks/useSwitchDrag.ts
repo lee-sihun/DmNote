@@ -9,6 +9,7 @@ import {
 import type React from 'react';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
 import { prefersReducedMotion } from '@utils/animation/motionPreferences';
+import { clamp } from '@utils/core/clamp';
 
 // 드래그 중 이동 전환을 끄는 표식. dmn- 접두사는 플러그인 마크업과의 속성 충돌 방지
 const DRAG_ATTR = 'data-dmn-dragging';
@@ -66,9 +67,6 @@ interface UseSwitchDragOptions {
   // '외부 변경'으로 판정돼 정착 모션이 잘린다
   markPress: () => void;
 }
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
 
 // 슬롭은 의도를 가르는 문턱일 뿐 이동량이 아니다. 문턱을 넘은 만큼만 노브에 실어야
 // 승격 순간에 튀지 않고 그 뒤로도 손끝과 1:1로 붙는다

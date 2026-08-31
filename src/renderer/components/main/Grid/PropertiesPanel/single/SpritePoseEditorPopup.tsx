@@ -13,10 +13,9 @@ import {
   type SpriteImageFit,
   type SpriteTransform,
 } from '@src/types/key/sprites';
+import { clamp } from '@utils/core/clamp';
+import { anchorToPercent, percentToAnchor } from '@utils/sprite/spriteGeometry';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
 
 // 담당 키·이미지 오버라이드 컨트롤 묶음 (삭제·이름 변경은 행 메뉴가 맡는다)
 export interface SpritePoseControls {
@@ -225,17 +224,17 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
           </span>
           <div className="flex items-center gap-[8px] w-full">
             <NumberInput
-              value={Math.round(pinControls.contactPoint.x * 1000) / 10}
+              value={anchorToPercent(pinControls.contactPoint.x)}
               onChange={(value) =>
                 pinControls.onContactPointCommit({
                   ...pinControls.contactPoint,
-                  x: clamp(value, 0, 100) / 100,
+                  x: percentToAnchor(value),
                 })
               }
               onPreview={(value) =>
                 pinControls.onContactPointPreview({
                   ...pinControls.contactPoint,
-                  x: clamp(value, 0, 100) / 100,
+                  x: percentToAnchor(value),
                 })
               }
               onCancel={onTransformCancel}
@@ -251,17 +250,17 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
               decimalScale={1}
             />
             <NumberInput
-              value={Math.round(pinControls.contactPoint.y * 1000) / 10}
+              value={anchorToPercent(pinControls.contactPoint.y)}
               onChange={(value) =>
                 pinControls.onContactPointCommit({
                   ...pinControls.contactPoint,
-                  y: clamp(value, 0, 100) / 100,
+                  y: percentToAnchor(value),
                 })
               }
               onPreview={(value) =>
                 pinControls.onContactPointPreview({
                   ...pinControls.contactPoint,
-                  y: clamp(value, 0, 100) / 100,
+                  y: percentToAnchor(value),
                 })
               }
               onCancel={onTransformCancel}

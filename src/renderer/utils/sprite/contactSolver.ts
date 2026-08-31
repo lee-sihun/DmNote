@@ -5,6 +5,9 @@ import type {
 } from '@src/types/key/sprites';
 import { SPRITE_CONSTRAINTS } from '@src/types/key/sprites';
 
+import { clamp } from '@utils/core/clamp';
+import { DEG_TO_RAD, RAD_TO_DEG, anchorPx } from './spriteGeometry';
+
 // 핀(손끝) 기반 자세 역산 - 에디터 전용 순수 기하.
 // 좌표계는 요소 로컬 px. transform은 translate → rotate → scale 순서이고
 // pivot(transform-origin)이 회전·배율의 축이므로
@@ -26,25 +29,11 @@ export type ContactSolveResult =
 // 핀·축 거리, 목표 벡터가 이보다 짧으면 방향이 정의되지 않은 것으로 본다
 export const CONTACT_EPSILON = 1e-6;
 
-const DEG_TO_RAD = Math.PI / 180;
-const RAD_TO_DEG = 180 / Math.PI;
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
-
 // atan2 차(-360~360도)를 최단 호 표현(-180~180]으로 접는다
 const wrapDegrees = (deg: number): number => {
   const wrapped = ((deg + 540) % 360) - 180;
   return wrapped === -180 ? 180 : wrapped;
 };
-
-const anchorPx = (
-  rect: SpriteRect,
-  anchor: SpriteAnchor,
-): { x: number; y: number } => ({
-  x: rect.x + anchor.x * rect.width,
-  y: rect.y + anchor.y * rect.height,
-});
 
 /** 현재 transform이 적용된 핀의 요소 로컬 위치 */
 export const contactWorldPosition = (

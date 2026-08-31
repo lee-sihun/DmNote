@@ -7,6 +7,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSpriteEditPreview } from '@stores/grid/useSpriteEditPreviewStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
+import { anchorPx } from '@utils/sprite/spriteGeometry';
 import {
   activityAreaGuideMetrics,
   editorChromeScale,
@@ -120,6 +121,7 @@ const SpriteItem = ({
         posePreview.fallbackPose
     : null;
   const showPivotMarker = editPreview?.kind === 'pivot';
+  const pivotMarkerPx = anchorPx(position.imageRect, position.pivot);
 
   const imageSrc = resolveImageSource(
     previewPose?.imageOverride ?? position.baseImage,
@@ -352,14 +354,8 @@ const SpriteItem = ({
             data-sprite-pivot-marker="true"
             style={{
               position: 'absolute',
-              left: `${
-                position.imageRect.x +
-                position.pivot.x * position.imageRect.width
-              }px`,
-              top: `${
-                position.imageRect.y +
-                position.pivot.y * position.imageRect.height
-              }px`,
+              left: `${pivotMarkerPx.x}px`,
+              top: `${pivotMarkerPx.y}px`,
               // 마커도 에디터 크롬이라 화면 크기 고정 - 중심은 축 위치에 남는다
               transform: `translate(-50%, -50%) scale(${editorChromeScale(
                 zoom,

@@ -3,6 +3,8 @@ import type {
   SpriteTransform,
 } from '@src/types/key/sprites';
 
+import { anchorPx } from './spriteGeometry';
+
 // 스프라이트 이미지 도달 범위 계산.
 // 저장된 모든 상태(idle + pose)의 imageRect에 pivot 기준 scale·rotation·offset을
 // 적용한 AABB의 합집합이다. 창 바운즈가 이 값을 포함해야 이미지가 활동 영역을
@@ -177,8 +179,7 @@ export const computeSpriteReachAabb = (
   );
 
   const { imageRect, pivot } = sprite;
-  const pivotX = imageRect.x + pivot.x * imageRect.width;
-  const pivotY = imageRect.y + pivot.y * imageRect.height;
+  const { x: pivotX, y: pivotY } = anchorPx(imageRect, pivot);
   // pivot 기준 상대 좌표 네 모서리
   const corners: Array<[number, number]> = [
     [imageRect.x - pivotX, imageRect.y - pivotY],
