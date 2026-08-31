@@ -46,9 +46,20 @@ interface SpriteItemProps {
   isViewportTransforming?: boolean;
 }
 
-// 활동 영역은 에디터 전용 가이드 - 오버레이에는 그리지 않는다. 복제 고스트도 같은 선을 쓴다
+// 활동 영역은 에디터 전용 가이드 - 오버레이에는 그리지 않는다.
+// 아이템 자체는 호버에만 점선을 보이고(아래 클래스, 같은 색), 이 상수는 복제 고스트 몫
 export const ACTIVITY_AREA_BORDER = '1px dashed rgba(237, 238, 242, 0.4)';
-const SELECTED_AREA_BORDER = '1px solid var(--ui-selection-border)';
+
+// 이미지가 있으면 점선이 소음이라 호버에만, 없으면 가이드가 유일한 실체라 상시.
+// 투명 보더를 유지해 호버 시 레이아웃이 밀리지 않는다.
+// 호버 판정은 루트(group) 기준 - pointerdown 캡처가 자식 :hover를 끊어
+// 클릭 순간 점선이 한 프레임 꺼지는 깜빡임을 막는다
+const GUIDE_BORDER_CLASS = {
+  selected: 'border border-solid border-[var(--ui-selection-border)]',
+  hoverOnly:
+    'border border-dashed border-transparent group-hover/sprite:border-[rgba(237,238,242,0.4)]',
+  always: 'border border-dashed border-[rgba(237,238,242,0.4)]',
+} as const;
 
 // 캔버스의 스프라이트는 정적이다: 평소엔 idle 상태, 자세 팝업이 열려 있으면
 // 그 자세를 그린다 (편집창 전용 프리뷰). 키 눌림 라이브 반응은 오버레이 창 몫
@@ -231,7 +242,9 @@ const SpriteItem = ({
   return (
     <div
       ref={attachRef}
-      className={`absolute select-none dmn-grabbable ${className || ''}`}
+      className={`group/sprite absolute select-none dmn-grabbable ${
+        className || ''
+      }`}
       style={{
         width: `${width}px`,
         height: `${height}px`,
@@ -252,13 +265,18 @@ const SpriteItem = ({
       onDragStart={(e: React.DragEvent) => e.preventDefault()}
     >
       <div
+        className={`rounded-[4px] ${
+          isSelected
+            ? GUIDE_BORDER_CLASS.selected
+            : imageSrc
+            ? GUIDE_BORDER_CLASS.hoverOnly
+            : GUIDE_BORDER_CLASS.always
+        }`}
         style={{
           width: '100%',
           height: '100%',
           position: 'relative',
           boxSizing: 'border-box',
-          border: isSelected ? SELECTED_AREA_BORDER : ACTIVITY_AREA_BORDER,
-          borderRadius: '4px',
         }}
         data-sprite-element="true"
         data-selected={isSelected ? 'true' : undefined}

@@ -103,17 +103,25 @@ describe('SpriteItem 렌더', () => {
   });
 
   it('선택 여부에 따라 활동 영역 테두리가 가이드와 선택 색을 오간다', () => {
+    // 이미지 없는 스프라이트는 가이드가 유일한 실체 - 점선 상시 표시
     const idle = renderSprite(spritePosition());
     expect(idle).not.toBeNull();
-    expect(idle?.style.border).toContain('dashed');
+    expect(idle?.className).toContain('border-dashed');
+    expect(idle?.className).not.toContain('border-transparent');
     expect(idle?.dataset.selected).toBeUndefined();
     // 이미지가 없으면 자리표시자 렌더
     expect(
       idle?.querySelector('[data-sprite-placeholder="true"]'),
     ).not.toBeNull();
 
+    // 이미지가 있으면 점선은 소음이라 기본 투명, 호버에만 드러난다.
+    // 호버는 캡처를 받는 루트(group) 기준이라 눌린 동안에도 유지된다
+    const withImage = renderSprite(spritePosition({ baseImage: 'hand.png' }));
+    expect(withImage?.className).toContain('border-transparent');
+    expect(withImage?.className).toContain('group-hover/sprite:border-');
+
     const selected = renderSprite(spritePosition(), { isSelected: true });
-    expect(selected?.style.border).toContain('var(--ui-selection-border)');
+    expect(selected?.className).toContain('var(--ui-selection-border)');
     expect(selected?.dataset.selected).toBe('true');
   });
 
