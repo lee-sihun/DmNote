@@ -11,7 +11,10 @@ import {
 } from '@components/main/common/TransformGlyphs';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
-import { pickValidatedImagePath } from '@utils/core/pickValidatedImage';
+import {
+  pickValidatedImagePath,
+  runImageCompletion,
+} from '@utils/core/pickValidatedImage';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
@@ -136,17 +139,21 @@ const ImagePicker = ({
     loadingImageRef.current = true;
     setIsLoadingImage(true);
     const picked = await pickValidatedImagePath(t);
+    if (picked) {
+      // 파일 복사는 이미 끝났다. 대상이 갈렸으면 연결만 하지 않는다
+      // (element-id 결합이면 ID applier가 유효성을 판정하므로 통과).
+      // 재진입 가드는 연결까지 끝난 뒤에 푼다 - 콜백 안에서 다시 누르는 경로 차단
+      runImageCompletion(() => {
+        if (!canBindCompletion()) return;
+        if (stateMode === STATE_MODES.idle) {
+          onIdleImageChange?.(picked);
+        } else {
+          onActiveImageChange?.(picked);
+        }
+      });
+    }
     loadingImageRef.current = false;
     setIsLoadingImage(false);
-    if (!picked) return;
-    // 파일 복사는 이미 끝났다. 대상이 갈렸으면 연결만 하지 않는다
-    // (element-id 결합이면 ID applier가 유효성을 판정하므로 통과)
-    if (!canBindCompletion()) return;
-    if (stateMode === STATE_MODES.idle) {
-      onIdleImageChange?.(picked);
-    } else {
-      onActiveImageChange?.(picked);
-    }
   };
 
   const handleReset = (): void => {

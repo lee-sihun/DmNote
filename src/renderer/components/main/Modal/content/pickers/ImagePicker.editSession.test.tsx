@@ -129,6 +129,39 @@ describe('ImagePicker 비동기 완료와 대상 전환', () => {
     expect(onIdleImageChange).toHaveBeenCalledWith('/tmp/picked.png');
   });
 
+  // 연결 콜백이 던져도 재진입 가드는 반드시 풀려야 한다.
+  // 안 풀리면 그 뒤로 이미지 선택 버튼이 영영 죽는다
+  it('연결 콜백이 던져도 로그만 남기고 다음 선택이 가능하다', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    onIdleImageChange.mockImplementationOnce(() => {
+      throw new Error('boom');
+    });
+    mount(true);
+    clickPreview();
+    await finishLoad();
+
+    expect(consoleError).toHaveBeenCalled();
+
+    clickPreview();
+    await finishLoad({ success: true, imagePath: '/tmp/second.png' });
+    expect(onIdleImageChange).toHaveBeenLastCalledWith('/tmp/second.png');
+    consoleError.mockRestore();
+  });
+
+  // 콜백 안에서 다시 누르는 경로 - 가드가 콜백보다 먼저 풀리면 두 번째 파일창이 뜬다
+  it('연결 콜백 중 다시 눌러도 두 번째 파일창을 열지 않는다', async () => {
+    onIdleImageChange.mockImplementationOnce(() => {
+      clickPreview();
+    });
+    mount(true);
+    clickPreview();
+    await finishLoad();
+
+    expect(apiMocks.imageLoad).toHaveBeenCalledTimes(1);
+  });
+
   it('대기 중 모드가 바뀌면 연결하지 않는다', async () => {
     mount(true);
     clickPreview();

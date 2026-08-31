@@ -44,3 +44,15 @@ export const pickValidatedImagePath = async (
     return null;
   }
 };
+
+/**
+ * 선택 완료 처리를 감싸 예외가 재진입 가드 해제를 건너뛰지 못하게 한다.
+ * 호출부가 try를 들면 그 컴포넌트가 React Compiler 최적화에서 빠지므로 여기서 삼킨다
+ */
+export const runImageCompletion = (complete: () => void): void => {
+  try {
+    complete();
+  } catch (error) {
+    console.error('Failed to apply picked image', error);
+  }
+};
