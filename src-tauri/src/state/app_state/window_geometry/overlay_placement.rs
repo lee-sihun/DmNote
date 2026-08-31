@@ -753,7 +753,7 @@ pub(in crate::state::app_state) fn applied_overlay_frame_from_window(
     #[cfg(target_os = "windows")]
     {
         let hwnd = window.hwnd()?;
-        return unsafe { applied_overlay_frame_from_hwnd(hwnd) };
+        unsafe { applied_overlay_frame_from_hwnd(hwnd) }
     }
     #[cfg(not(target_os = "windows"))]
     {

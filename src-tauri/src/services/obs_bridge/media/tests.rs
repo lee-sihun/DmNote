@@ -1,7 +1,6 @@
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
-use base64::Engine as _;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream};
 
