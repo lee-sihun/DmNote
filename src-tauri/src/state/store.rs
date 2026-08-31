@@ -22706,12 +22706,16 @@ mod tests {
         let stat_sound = dir.join("sounds").join("stat.wav");
         let graph_sound = dir.join("sounds").join("graph.wav");
         let knob_sound = dir.join("sounds").join("knob.wav");
+        let sprite_base_image = dir.join("images").join("sprite-base.png");
+        let sprite_pose_image = dir.join("images").join("sprite-pose.png");
         for path in [
             &font_path,
             &library_sound,
             &stat_sound,
             &graph_sound,
             &knob_sound,
+            &sprite_base_image,
+            &sprite_pose_image,
         ] {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, b"asset-fixture").unwrap();
@@ -22765,6 +22769,18 @@ mod tests {
             })
             .unwrap(),
         );
+        let sprite = serde_json::to_value(ReactiveSpritePosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            base_image: Some(sprite_base_image.to_string_lossy().into_owned()),
+            poses: vec![SpritePose {
+                pose_id: uuid::Uuid::new_v4().to_string(),
+                triggers: vec![uuid::Uuid::new_v4().to_string()],
+                image_override: Some(sprite_pose_image.to_string_lossy().into_owned()),
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        })
+        .unwrap();
 
         let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
         let fields = fixture.as_object_mut().unwrap();
@@ -22779,6 +22795,10 @@ mod tests {
             json!({ "asset-mode": [graph] }),
         );
         fields.insert("knobPositions".to_string(), json!({ "asset-mode": [knob] }));
+        fields.insert(
+            "spritePositions".to_string(),
+            json!({ "asset-mode": [sprite, { "width": "invalid" }] }),
+        );
         std::fs::write(
             dir.join("store.json"),
             serde_json::to_vec_pretty(&fixture).unwrap(),
@@ -22795,6 +22815,7 @@ mod tests {
         assert_eq!(snapshot.stat_positions["asset-mode"].len(), 1);
         assert_eq!(snapshot.graph_positions["asset-mode"].len(), 1);
         assert_eq!(snapshot.knob_positions["asset-mode"].len(), 1);
+        assert_eq!(snapshot.sprite_positions["asset-mode"].len(), 1);
         recovered.cleanup_orphan_assets_now().unwrap();
         recovered.flush_and_shutdown().unwrap();
         drop(recovered);
@@ -22808,6 +22829,8 @@ mod tests {
             &stat_sound,
             &graph_sound,
             &knob_sound,
+            &sprite_base_image,
+            &sprite_pose_image,
         ] {
             assert!(path.exists(), "recovered asset was quarantined: {path:?}");
         }
