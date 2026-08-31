@@ -11,6 +11,11 @@ import { pickValidatedImagePath } from '@utils/core/pickValidatedImage';
 import { anchorToPercent, percentToAnchor } from '@utils/sprite/spriteGeometry';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import { projectSpriteResize } from '@utils/sprite/resizeProjection';
+import {
+  copyPoseName,
+  materializePoseNames,
+  resolvePoseNames,
+} from '@utils/sprite/spritePoseNames';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import { slotDisplayName } from '@utils/keySlot';
 import { ACTION_BUTTON_CLASS, AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
@@ -548,7 +553,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
 
   const addPose = (anchor: HTMLElement) => {
     if (displayPoses.length >= SPRITE_CONSTRAINTS.maxPoses) return;
-    const materialized = materializePoseNames(displayPoses);
+    const materialized = materializePoseNames(displayPoses, poseNameLabel);
     const pose: SpritePose = {
       poseId: crypto.randomUUID(),
       name: nextDefaultPoseName(materialized),
@@ -572,45 +577,14 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
 
   const removePose = (poseIndex: number) =>
     updatePoses(
-      materializePoseNames(displayPoses).filter(
+      materializePoseNames(displayPoses, poseNameLabel).filter(
         (_, index) => index !== poseIndex,
       ),
     );
 
-  // "이름 복제"·"이름 복제 3"을 다시 복제해도 루트를 유지하고 숫자만 올린다.
-  // 카운터는 2부터만 생성되므로 "복제 0"·"복제 01" 같은 이름은 사용자 작명으로 보존
-  const stripCopySuffix = (name: string, suffix: string): string => {
-    const marker = ` ${suffix}`;
-    const markerIndex = name.lastIndexOf(marker);
-    if (markerIndex <= 0) return name;
-    const tail = name.slice(markerIndex + marker.length);
-    if (tail === '') return name.slice(0, markerIndex);
-    const digits = tail.startsWith(' ') ? tail.slice(1) : '';
-    const isGeneratedCounter =
-      /^\d+$/.test(digits) &&
-      digits === String(Number(digits)) &&
-      Number(digits) >= 2;
-    return isGeneratedCounter ? name.slice(0, markerIndex) : name;
-  };
-
-  // 사본 이름: 원본 이름 + 복제 접미사, 겹치면 2부터 숫자를 올린다
-  const copyPoseName = (poses: SpritePose[], sourceIndex: number): string => {
-    const suffix = t('common.copySuffix') || '복제';
-    const base = poses[sourceIndex].name || resolvedNames[sourceIndex];
-    const root = stripCopySuffix(base, suffix);
-    const usedNames = new Set(
-      poses.flatMap((pose) => (pose.name ? [pose.name] : [])),
-    );
-    let candidate = `${root} ${suffix}`;
-    for (let counter = 2; usedNames.has(candidate); counter += 1) {
-      candidate = `${root} ${suffix} ${counter}`;
-    }
-    return candidate;
-  };
-
   const clonePose = (sourcePoseId: string) => {
     if (displayPoses.length >= SPRITE_CONSTRAINTS.maxPoses) return;
-    const materialized = materializePoseNames(displayPoses);
+    const materialized = materializePoseNames(displayPoses, poseNameLabel);
     const sourceIndex = materialized.findIndex(
       (entry) => entry.poseId === sourcePoseId,
     );
@@ -619,7 +593,12 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     const pose: SpritePose = {
       ...source,
       poseId: crypto.randomUUID(),
-      name: copyPoseName(materialized, sourceIndex),
+      name: copyPoseName(
+        materialized,
+        sourceIndex,
+        poseNameLabel,
+        t('common.copySuffix') || '복제',
+      ),
       transform: { ...source.transform },
       // 같은 트리거 집합은 저장이 거부되므로 담당 키는 비워서 시작한다.
       // 빈 트리거 draft는 상태 추가와 같은 보류 경로를 탄다
@@ -667,49 +646,23 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   }, [renamingPoseId]);
 
   const poseNameLabel = t('propertiesPanel.spritePose') || '상태';
-
-  // 무명(name=null) 상태에 줄 번호를 표시·고정 공용으로 계산한다.
-  // 저장된 '상태 N'이 점유한 번호는 건너뛰므로 명시 이름과 혼재해도 중복이 없다
-  const resolvedPoseNames = (poses: readonly SpritePose[]): string[] => {
-    const prefix = `${poseNameLabel} `;
-    const used = new Set<number>();
-    for (const pose of poses) {
-      if (!pose.name?.startsWith(prefix)) continue;
-      const digits = pose.name.slice(prefix.length);
-      if (!/^\d+$/.test(digits) || digits !== String(Number(digits))) continue;
-      used.add(Number(digits));
-    }
-    let next = 1;
-    return poses.map((pose) => {
-      if (pose.name) return pose.name;
-      while (used.has(next)) next += 1;
-      used.add(next);
-      return `${poseNameLabel} ${next}`;
-    });
-  };
-  const resolvedNames = resolvedPoseNames(displayPoses);
-
-  // 구조 변경(추가·복제·삭제) 직전에 무명 상태의 현재 표시 번호를 이름으로 고정한다.
-  // 표시값 그대로 저장하므로 화면 변화는 없고, 이후 삽입·삭제에도 번호가 유지된다 (sticky)
-  const materializePoseNames = (poses: SpritePose[]): SpritePose[] => {
-    const names = resolvedPoseNames(poses);
-    return poses.map((pose, index) =>
-      pose.name ? pose : { ...pose, name: names[index] },
-    );
-  };
+  const resolvedNames = resolvePoseNames(displayPoses, poseNameLabel);
 
   // 새 상태 기본 이름 - 점유된 '상태 N' 중 비어 있는 가장 작은 번호
   const nextDefaultPoseName = (poses: SpritePose[]): string =>
-    resolvedPoseNames([
-      ...poses,
-      {
-        poseId: 'next',
-        triggers: [],
-        transform: IDENTITY_SPRITE_TRANSFORM,
-        imageOverride: null,
-        contactPoint: DEFAULT_SPRITE_CONTACT_POINT,
-      },
-    ])[poses.length];
+    resolvePoseNames(
+      [
+        ...poses,
+        {
+          poseId: 'next',
+          triggers: [],
+          transform: IDENTITY_SPRITE_TRANSFORM,
+          imageOverride: null,
+          contactPoint: DEFAULT_SPRITE_CONTACT_POINT,
+        },
+      ],
+      poseNameLabel,
+    )[poses.length];
 
   const startPoseRename = (poseId: string) => {
     const poseIndex = displayPoses.findIndex(
@@ -743,10 +696,11 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     // 자기 이름을 뺀 점유 번호 기준으로 빈 번호를 준다
     const nextName =
       trimmed === ''
-        ? resolvedPoseNames(
+        ? resolvePoseNames(
             displayPoses.map((pose, index) =>
               index === poseIndex ? { ...pose, name: null } : pose,
             ),
+            poseNameLabel,
           )[poseIndex]
         : trimmed;
     if ((displayPoses[poseIndex].name ?? null) === nextName) return;
