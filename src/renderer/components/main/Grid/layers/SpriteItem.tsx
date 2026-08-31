@@ -10,42 +10,7 @@ import {
 } from '@utils/grid/activityAreaGuide';
 import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
-
-interface SelectedElement {
-  id: string;
-  type?: string;
-  index?: number;
-}
-
-interface SpriteItemProps {
-  index: number;
-  elementId: string;
-  position: CanonicalReactiveSpritePosition;
-  onPositionChange: (
-    index: number,
-    dx: number,
-    dy: number,
-    elementId: string,
-  ) => void;
-  onClick?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
-  onCtrlClick?: (e: React.MouseEvent) => void;
-  onShiftClick?: (e: React.MouseEvent) => void;
-  isSelected?: boolean;
-  selectedElements?: SelectedElement[];
-  onMultiDrag?: (dx: number, dy: number) => void;
-  onMultiDragStart?: () => void | (() => void);
-  onMultiDragEnd?: () => void;
-  activeTool?: string;
-  onEraserClick?: () => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
-  setReferenceRef?: (node: HTMLElement | null) => void;
-  zoom?: number;
-  panX?: number;
-  panY?: number;
-  zIndex?: number;
-  isViewportTransforming?: boolean;
-}
+import type { GridItemProps } from './gridItemProps';
 
 // 활동 영역은 에디터 전용 가이드 - 오버레이에는 그리지 않는다.
 // 이미지가 있으면 점선이 소음이라 호버에만, 없으면 가이드가 유일한 실체라 상시.
@@ -83,7 +48,7 @@ const SpriteItem = ({
   panY = 0,
   zIndex = 0,
   isViewportTransforming = false,
-}: SpriteItemProps) => {
+}: GridItemProps<CanonicalReactiveSpritePosition>) => {
   const {
     dx = 0,
     dy = 0,

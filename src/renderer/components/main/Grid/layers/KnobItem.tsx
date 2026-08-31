@@ -23,6 +23,7 @@ import {
   resolveElementShadow,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
+import type { GridItemProps } from './gridItemProps';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -54,42 +55,6 @@ interface KnobPosition {
   zIndex?: number;
 }
 
-interface SelectedElement {
-  id: string;
-  type?: string;
-  index?: number;
-}
-
-interface KnobItemProps {
-  index: number;
-  elementId: string;
-  position: KnobPosition;
-  onPositionChange: (
-    index: number,
-    dx: number,
-    dy: number,
-    elementId: string,
-  ) => void;
-  onClick?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
-  onCtrlClick?: (e: React.MouseEvent) => void;
-  onShiftClick?: (e: React.MouseEvent) => void;
-  isSelected?: boolean;
-  selectedElements?: SelectedElement[];
-  onMultiDrag?: (dx: number, dy: number) => void;
-  onMultiDragStart?: () => void | (() => void);
-  onMultiDragEnd?: () => void;
-  activeTool?: string;
-  onEraserClick?: () => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
-  setReferenceRef?: (node: HTMLElement | null) => void;
-  zoom?: number;
-  panX?: number;
-  panY?: number;
-  zIndex?: number;
-  isViewportTransforming?: boolean;
-}
-
 const KnobItem = ({
   index,
   elementId,
@@ -113,7 +78,7 @@ const KnobItem = ({
   panY = 0,
   zIndex = 0,
   isViewportTransforming = false,
-}: KnobItemProps) => {
+}: GridItemProps<KnobPosition>) => {
   const {
     dx = 0,
     dy = 0,

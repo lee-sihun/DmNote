@@ -4,6 +4,7 @@ import { useGridItemInteraction } from '@hooks/Grid/useGridItemInteraction';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import GraphPanel from '@components/shared/GraphPanel';
 import { resolveImageSource } from '@utils/core/imageSource';
+import type { GridItemProps } from './gridItemProps';
 
 interface GraphPosition {
   hidden?: boolean;
@@ -28,42 +29,6 @@ interface GraphPosition {
   imageFit?: string;
   useInlineStyles?: boolean;
   zIndex?: number;
-}
-
-interface SelectedElement {
-  id: string;
-  type?: string;
-  index?: number;
-}
-
-interface GraphItemProps {
-  index: number;
-  elementId: string;
-  position: GraphPosition;
-  onPositionChange: (
-    index: number,
-    dx: number,
-    dy: number,
-    elementId: string,
-  ) => void;
-  onClick?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
-  onCtrlClick?: (e: React.MouseEvent) => void;
-  onShiftClick?: (e: React.MouseEvent) => void;
-  isSelected?: boolean;
-  selectedElements?: SelectedElement[];
-  onMultiDrag?: (dx: number, dy: number) => void;
-  onMultiDragStart?: () => void | (() => void);
-  onMultiDragEnd?: () => void;
-  activeTool?: string;
-  onEraserClick?: () => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
-  setReferenceRef?: (node: HTMLElement | null) => void;
-  zoom?: number;
-  panX?: number;
-  panY?: number;
-  zIndex?: number;
-  isViewportTransforming?: boolean;
 }
 
 const PREVIEW_HISTORY_BASE: number[] = [
@@ -95,7 +60,7 @@ const GraphItem = ({
   panY = 0,
   zIndex = 0,
   isViewportTransforming = false,
-}: GraphItemProps) => {
+}: GridItemProps<GraphPosition>) => {
   const {
     dx = 0,
     dy = 0,
