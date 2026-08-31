@@ -2446,18 +2446,55 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            AppStoreData, CustomCssHistoryEntry, CustomFont, CustomTab, FontType, GraphPosition,
-            GraphStatType, GraphType, ImageTransform, KeyCounterAlign, KeyCounterAlignMode,
-            KeyCounterColor, KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition,
-            LayerGroupDef, NoteColor, OverlayBounds, ReactiveSpritePosition, SlotMatch,
-            SoundLibraryEntry, SpriteAnchor, SpritePose, SpritePositions, SpriteRect,
+            AppStoreData, CustomCssHistoryEntry, CustomFont, CustomTab, EditorDocumentV1, FontType,
+            GraphPosition, GraphStatType, GraphType, ImageTransform, KeyCounterAlign,
+            KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement, KeyMappings, KeyPosition,
+            KeySlot, KnobPosition, LayerGroupDef, NoteColor, OverlayBounds, ReactiveSpritePosition,
+            SlotMatch, SoundLibraryEntry, SpriteAnchor, SpritePose, SpritePositions, SpriteRect,
             SpriteTransform, StatPosition, StatType, StoredOverlayBounds,
             StoredOverlayNativePosition, TabCss, TabNoteSettings, POSITION_COLLECTION_FIELDS,
         },
+        state::editor::validate_document_transition,
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
     use serde::{Deserialize, Serialize};
     use unicode_normalization::UnicodeNormalization;
+
+    const SPRITE_CONSTRAINT_FIXTURE: &str =
+        include_str!("../../../tests/fixtures/sprite-constraint-parity.json");
+
+    #[derive(Clone, Copy, Deserialize)]
+    struct NumericRangeFixture {
+        min: f64,
+        max: f64,
+    }
+
+    #[derive(Clone, Copy, Deserialize)]
+    struct IntegerRangeFixture {
+        min: u32,
+        max: u32,
+    }
+
+    #[derive(Clone, Copy, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ImageRectRangeFixture {
+        coord_min: f64,
+        coord_max: f64,
+        dimension_max: f64,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SpriteNumericConstraintFixture {
+        offset: NumericRangeFixture,
+        rotation: NumericRangeFixture,
+        scale: NumericRangeFixture,
+        anchor: NumericRangeFixture,
+        transition_ms: IntegerRangeFixture,
+        image_rect: ImageRectRangeFixture,
+        resize_min_dimension: f64,
+        press_duration_ms: IntegerRangeFixture,
+    }
 
     fn rehome_test_directory(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("dmnote-rehome-{label}-{}", uuid::Uuid::new_v4()))
@@ -5967,6 +6004,277 @@ mod tests {
         assert!(!loaded.data.graph_positions.contains_key("invalid-mode"));
         assert!(!loaded.data.knob_positions.contains_key("invalid-mode"));
         assert_eq!(loaded.data.font_settings.custom_fonts, vec![font]);
+    }
+
+    fn sprite_for_numeric_constraint_parity() -> ReactiveSpritePosition {
+        ReactiveSpritePosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            poses: vec![SpritePose {
+                pose_id: uuid::Uuid::new_v4().to_string(),
+                triggers: vec![uuid::Uuid::new_v4().to_string()],
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        }
+    }
+
+    fn sprite_passes_editor_validation(sprite: ReactiveSpritePosition) -> bool {
+        let current_store = AppStoreData::default();
+        let mut candidate_store = current_store.clone();
+        candidate_store
+            .sprite_positions
+            .insert("4key".to_string(), vec![sprite]);
+        validate_document_transition(
+            &EditorDocumentV1::from_store(&current_store),
+            &EditorDocumentV1::from_store(&candidate_store),
+            &current_store,
+            &candidate_store,
+        )
+        .is_ok()
+    }
+
+    fn repair_single_sprite_numeric_ranges(
+        sprite: ReactiveSpritePosition,
+    ) -> (bool, ReactiveSpritePosition) {
+        let mut data = AppStoreData::default();
+        data.sprite_positions
+            .insert("4key".to_string(), vec![sprite]);
+        let repaired = repair_sprite_numeric_ranges(&mut data);
+        let sprite = data.sprite_positions.remove("4key").unwrap().remove(0);
+        (repaired, sprite)
+    }
+
+    fn assert_valid_and_unrepaired(name: &str, sprite: ReactiveSpritePosition) {
+        assert!(
+            sprite_passes_editor_validation(sprite.clone()),
+            "validator rejected {name}"
+        );
+        let original = sprite.clone();
+        let (repaired, sprite) = repair_single_sprite_numeric_ranges(sprite);
+        assert!(!repaired, "repair changed valid {name}");
+        assert_eq!(sprite, original, "repair mutated valid {name}");
+    }
+
+    fn assert_invalid_then_repaired(name: &str, sprite: ReactiveSpritePosition) {
+        assert!(
+            !sprite_passes_editor_validation(sprite.clone()),
+            "validator accepted invalid {name}"
+        );
+        let (repaired, sprite) = repair_single_sprite_numeric_ranges(sprite);
+        assert!(repaired, "repair ignored invalid {name}");
+        assert!(
+            sprite_passes_editor_validation(sprite),
+            "repair left {name} invalid"
+        );
+    }
+
+    #[test]
+    fn sprite_validator_and_repair_ranges_follow_shared_fixture_for_every_numeric_field() {
+        #[derive(Clone, Copy)]
+        struct BoundedFloatField {
+            name: &'static str,
+            minimum: f64,
+            maximum: f64,
+            outside_delta: f64,
+            set: fn(&mut ReactiveSpritePosition, f64),
+        }
+
+        #[derive(Clone, Copy)]
+        struct PositiveFloatField {
+            name: &'static str,
+            maximum: f64,
+            set: fn(&mut ReactiveSpritePosition, f64),
+        }
+
+        #[derive(Clone, Copy)]
+        struct IntegerField {
+            name: &'static str,
+            minimum: u32,
+            maximum: u32,
+            set: fn(&mut ReactiveSpritePosition, u32),
+        }
+
+        let fixture: SpriteNumericConstraintFixture =
+            serde_json::from_str(SPRITE_CONSTRAINT_FIXTURE).unwrap();
+        let bounded_fields: [BoundedFloatField; 14] = [
+            BoundedFloatField {
+                name: "idleTransform.x",
+                minimum: fixture.offset.min,
+                maximum: fixture.offset.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.idle_transform.x = value,
+            },
+            BoundedFloatField {
+                name: "idleTransform.y",
+                minimum: fixture.offset.min,
+                maximum: fixture.offset.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.idle_transform.y = value,
+            },
+            BoundedFloatField {
+                name: "idleTransform.rotation",
+                minimum: fixture.rotation.min,
+                maximum: fixture.rotation.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.idle_transform.rotation = value,
+            },
+            BoundedFloatField {
+                name: "idleTransform.scale",
+                minimum: fixture.scale.min,
+                maximum: fixture.scale.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.idle_transform.scale = value,
+            },
+            BoundedFloatField {
+                name: "poses[0].transform.x",
+                minimum: fixture.offset.min,
+                maximum: fixture.offset.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.poses[0].transform.x = value,
+            },
+            BoundedFloatField {
+                name: "poses[0].transform.y",
+                minimum: fixture.offset.min,
+                maximum: fixture.offset.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.poses[0].transform.y = value,
+            },
+            BoundedFloatField {
+                name: "poses[0].transform.rotation",
+                minimum: fixture.rotation.min,
+                maximum: fixture.rotation.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.poses[0].transform.rotation = value,
+            },
+            BoundedFloatField {
+                name: "poses[0].transform.scale",
+                minimum: fixture.scale.min,
+                maximum: fixture.scale.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.poses[0].transform.scale = value,
+            },
+            BoundedFloatField {
+                name: "pivot.x",
+                minimum: fixture.anchor.min,
+                maximum: fixture.anchor.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.pivot.x = value,
+            },
+            BoundedFloatField {
+                name: "pivot.y",
+                minimum: fixture.anchor.min,
+                maximum: fixture.anchor.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.pivot.y = value,
+            },
+            BoundedFloatField {
+                name: "poses[0].contactPoint.x",
+                minimum: fixture.anchor.min,
+                maximum: fixture.anchor.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.poses[0].contact_point.x = value,
+            },
+            BoundedFloatField {
+                name: "poses[0].contactPoint.y",
+                minimum: fixture.anchor.min,
+                maximum: fixture.anchor.max,
+                outside_delta: 0.001,
+                set: |sprite, value| sprite.poses[0].contact_point.y = value,
+            },
+            BoundedFloatField {
+                name: "imageRect.x",
+                minimum: fixture.image_rect.coord_min,
+                maximum: fixture.image_rect.coord_max,
+                outside_delta: 1.0,
+                set: |sprite, value| sprite.image_rect.x = value,
+            },
+            BoundedFloatField {
+                name: "imageRect.y",
+                minimum: fixture.image_rect.coord_min,
+                maximum: fixture.image_rect.coord_max,
+                outside_delta: 1.0,
+                set: |sprite, value| sprite.image_rect.y = value,
+            },
+        ];
+        let positive_fields: [PositiveFloatField; 2] = [
+            PositiveFloatField {
+                name: "imageRect.width",
+                maximum: fixture.image_rect.dimension_max,
+                set: |sprite, value| sprite.image_rect.width = value,
+            },
+            PositiveFloatField {
+                name: "imageRect.height",
+                maximum: fixture.image_rect.dimension_max,
+                set: |sprite, value| sprite.image_rect.height = value,
+            },
+        ];
+        let integer_fields: [IntegerField; 2] = [
+            IntegerField {
+                name: "transitionMs",
+                minimum: fixture.transition_ms.min,
+                maximum: fixture.transition_ms.max,
+                set: |sprite, value| sprite.transition_ms = value,
+            },
+            IntegerField {
+                name: "pressDurationMs",
+                minimum: fixture.press_duration_ms.min,
+                maximum: fixture.press_duration_ms.max,
+                set: |sprite, value| sprite.press_duration_ms = value,
+            },
+        ];
+
+        for field in bounded_fields {
+            for (edge, value) in [("minimum", field.minimum), ("maximum", field.maximum)] {
+                let mut sprite = sprite_for_numeric_constraint_parity();
+                (field.set)(&mut sprite, value);
+                assert_valid_and_unrepaired(&format!("{} {edge}", field.name), sprite);
+            }
+            for (side, value) in [
+                ("below minimum", field.minimum - field.outside_delta),
+                ("above maximum", field.maximum + field.outside_delta),
+                ("non-finite", f64::NAN),
+            ] {
+                let mut sprite = sprite_for_numeric_constraint_parity();
+                (field.set)(&mut sprite, value);
+                assert_invalid_then_repaired(&format!("{} {side}", field.name), sprite);
+            }
+        }
+
+        for field in positive_fields {
+            for (edge, value) in [
+                ("positive resize sentinel", fixture.resize_min_dimension),
+                ("maximum", field.maximum),
+            ] {
+                let mut sprite = sprite_for_numeric_constraint_parity();
+                (field.set)(&mut sprite, value);
+                assert_valid_and_unrepaired(&format!("{} {edge}", field.name), sprite);
+            }
+            for (side, value) in [
+                ("not positive", 0.0),
+                ("above maximum", field.maximum + 1.0),
+                ("non-finite", f64::NAN),
+            ] {
+                let mut sprite = sprite_for_numeric_constraint_parity();
+                (field.set)(&mut sprite, value);
+                assert_invalid_then_repaired(&format!("{} {side}", field.name), sprite);
+            }
+        }
+
+        for field in integer_fields {
+            for (edge, value) in [("minimum", field.minimum), ("maximum", field.maximum)] {
+                let mut sprite = sprite_for_numeric_constraint_parity();
+                (field.set)(&mut sprite, value);
+                assert_valid_and_unrepaired(&format!("{} {edge}", field.name), sprite);
+            }
+            if let Some(value) = field.minimum.checked_sub(1) {
+                let mut sprite = sprite_for_numeric_constraint_parity();
+                (field.set)(&mut sprite, value);
+                assert_invalid_then_repaired(&format!("{} below minimum", field.name), sprite);
+            }
+            let mut sprite = sprite_for_numeric_constraint_parity();
+            (field.set)(&mut sprite, field.maximum.checked_add(1).unwrap());
+            assert_invalid_then_repaired(&format!("{} above maximum", field.name), sprite);
+        }
     }
 
     #[test]
