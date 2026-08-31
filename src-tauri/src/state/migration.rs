@@ -6041,7 +6041,7 @@ mod tests {
                 scale: 1.0,
             }
         );
-        assert_eq!(sprite.transition_ms, 90);
+        assert_eq!(sprite.transition_ms, 0);
         assert!(!repair_sprite_numeric_ranges(&mut data));
     }
 

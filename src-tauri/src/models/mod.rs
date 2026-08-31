@@ -975,7 +975,7 @@ impl SpritePose {
 }
 
 pub(crate) fn default_sprite_transition_ms() -> u32 {
-    90
+    0
 }
 
 pub(crate) fn default_sprite_transition_easing() -> String {

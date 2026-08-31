@@ -97,7 +97,7 @@ interface ReactiveSpritePosition {
   pivot: { x: number; y: number }; // normalized transform origin, 0–1 each
   idleTransform: SpriteTransform; // base transform when no pose matches
   poses: SpritePose[]; // commits accept at most 64
-  transitionMs: number; // pose blend duration, 0–1000, default 90
+  transitionMs: number; // pose blend duration, 0–1000, default 0
   transitionEasing: string; // CSS easing, default 'cubic-bezier(0.4, 0, 0.2, 1)'
 }
 

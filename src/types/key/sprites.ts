@@ -205,7 +205,7 @@ export type SpritePositionsInput = Record<
   ReactiveSpritePositionInput[]
 >;
 
-export const DEFAULT_SPRITE_TRANSITION_MS = 90;
+export const DEFAULT_SPRITE_TRANSITION_MS = 0;
 export const DEFAULT_SPRITE_TRANSITION_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
 // 같은 담당 키 집합을 가진 자세가 둘이면 해석이 모호해진다. 저장 전에 걸러낸다.

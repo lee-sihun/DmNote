@@ -94,7 +94,7 @@ interface ReactiveSpritePosition {
   pivot: { x: number; y: number }; // 정규화 변환 원점, 각각 0–1
   idleTransform: SpriteTransform; // 일치하는 자세가 없을 때의 기본 변환
   poses: SpritePose[]; // 커밋은 최대 64개까지 허용
-  transitionMs: number; // 자세 전환 시간, 0–1000, 기본 90
+  transitionMs: number; // 자세 전환 시간, 0–1000, 기본 0
   transitionEasing: string; // CSS easing, 기본 'cubic-bezier(0.4, 0, 0.2, 1)'
 }
 
