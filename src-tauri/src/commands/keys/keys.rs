@@ -270,6 +270,9 @@ fn mode_positions_equal_without_ids(
     for position in current_knobs.iter_mut().flatten() {
         position.position.id.clear();
     }
+    for position in candidate_knobs.iter_mut().flatten() {
+        position.position.id.clear();
+    }
 
     let mut current_sprites = current.sprite_positions.get(mode).cloned();
     let mut candidate_sprites = candidate.sprite_positions.get(mode).cloned();
@@ -282,9 +285,6 @@ fn mode_positions_equal_without_ids(
         for pose in &mut sprite.poses {
             pose.pose_id.clear();
         }
-    }
-    for position in candidate_knobs.iter_mut().flatten() {
-        position.position.id.clear();
     }
 
     current_keys == candidate_keys

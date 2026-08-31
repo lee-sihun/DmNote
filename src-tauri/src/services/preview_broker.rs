@@ -90,10 +90,6 @@ const KEY_POSITION_PATCH_FIELDS: &[&str] = &[
 ];
 
 const SPRITE_POSITION_PATCH_FIELDS: &[&str] = &[
-    "x",
-    "y",
-    "rotation",
-    "scale",
     "dx",
     "dy",
     "width",
@@ -909,10 +905,6 @@ mod tests {
             .expect("observer subscribes");
         let session_id = session_id();
         let patch = serde_json::json!({
-            "x": 12,
-            "y": -6,
-            "rotation": 15,
-            "scale": 1.2,
             "dx": 24,
             "dy": -8,
             "width": 320,
@@ -961,8 +953,18 @@ mod tests {
 
         assert!(unknown_error.contains("unknownSpriteField"));
 
+        for (seq, field) in ["x", "y", "rotation", "scale"].into_iter().enumerate() {
+            let mut removed_field =
+                request_for_domain(&session_id, seq as u64 + 2, PreviewDomain::SpritePosition);
+            removed_field.patch = Map::from_iter([(field.to_string(), serde_json::json!(1.0))]);
+
+            let removed_error = broker.publish("owner", removed_field).unwrap_err();
+
+            assert!(removed_error.contains(field));
+        }
+
         let mut sprite_field_on_key =
-            request_for_domain(&session_id, 2, PreviewDomain::KeyPosition);
+            request_for_domain(&session_id, 6, PreviewDomain::KeyPosition);
         sprite_field_on_key.patch = Map::from_iter([(
             "pivot".to_string(),
             serde_json::json!({ "x": 0.5, "y": 0.5 }),
