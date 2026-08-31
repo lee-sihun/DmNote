@@ -159,6 +159,21 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     }
     if (canonicals.size === 0) return undefined;
 
+    // 직접 쓴 src·visibility를 현재 문서의 기본 이미지로 되돌린다.
+    // 재생 종료·취소와 구독 해제가 같은 복원 규칙을 쓴다
+    const showLatestBaseImage = (el: HTMLImageElement) => {
+      const currentBase = resolveImageSource(
+        latestRef.current.position.baseImage,
+      );
+      if (currentBase) {
+        el.src = currentBase;
+        el.style.visibility = '';
+      } else {
+        el.removeAttribute('src');
+        el.style.visibility = 'hidden';
+      }
+    };
+
     const handleEdge = () => {
       const el = imgRef.current;
       if (!el) return;
@@ -194,16 +209,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       const restore = () => {
         if (playbackRef.current.generation !== generation) return;
         // 재생 중 문서가 바뀌었을 수 있어 캡처값 대신 최신 baseImage로 복원
-        const currentBase = resolveImageSource(
-          latestRef.current.position.baseImage,
-        );
-        if (currentBase) {
-          el.src = currentBase;
-          el.style.visibility = '';
-        } else {
-          el.removeAttribute('src');
-          el.style.visibility = 'hidden';
-        }
+        showLatestBaseImage(el);
       };
 
       const fromCss = spriteTransformToCss(resolved.transform);
@@ -250,19 +256,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       // 직접 쓴 src·visibility 잔상 제거 - React는 prop이 같으면 DOM을 다시
       // 쓰지 않으므로 여기서 현재 문서 기준으로 복원한다 (전환 시에는 key가
       // 노드를 갈아 끼우고, 같은 분기 안 재구독에는 이 복원이 잡는다)
-      const el = mountedImg;
-      if (el) {
-        const currentBase = resolveImageSource(
-          latestRef.current.position.baseImage,
-        );
-        if (currentBase) {
-          el.src = currentBase;
-          el.style.visibility = '';
-        } else {
-          el.removeAttribute('src');
-          el.style.visibility = 'hidden';
-        }
-      }
+      if (mountedImg) showLatestBaseImage(mountedImg);
     };
   }, [isOneShot, triggerIds, keyCanonicalMap]);
 

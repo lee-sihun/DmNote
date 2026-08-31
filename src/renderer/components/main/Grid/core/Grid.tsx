@@ -64,6 +64,7 @@ import GraphItem from '../layers/GraphItem';
 import KnobItem from '../layers/KnobItem';
 import SpriteItem from '../layers/SpriteItem';
 import SpriteDuplicateGhost from '../layers/SpriteDuplicateGhost';
+import DuplicateGhostHost from '../layers/DuplicateGhostHost';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -1535,27 +1536,20 @@ const Grid = ({
     }
 
     if (duplicateState.elementType === 'graph') {
-      const width = duplicateState.position?.width || 200;
-      const height = duplicateState.position?.height || 100;
-      const offsetX = duplicateCursor.x - width / 2;
-      const offsetY = duplicateCursor.y - height / 2;
       return (
-        <div
-          className="absolute pointer-events-none select-none"
-          style={{
-            width: `${width}px`,
-            height: `${height}px`,
-            transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
+        <DuplicateGhostHost
+          width={duplicateState.position?.width || 200}
+          height={duplicateState.position?.height || 100}
+          cursor={duplicateCursor}
+          surfaceStyle={{
             background: DEFAULT_ELEMENT_BG,
             border: 'none',
             borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
             overflow: 'hidden',
-            opacity: 0.5,
-            zIndex: 'var(--z-canvas-drag-preview)',
           }}
         >
           {renderGhostBorderRing(false)}
-        </div>
+        </DuplicateGhostHost>
       );
     }
 
@@ -1601,26 +1595,18 @@ const Grid = ({
     // keyName은 호출부에서 slotDisplayName으로 합성된 표시 라벨
     const displayName = keyName || '';
 
-    // 키의 중심이 마우스에 위치하도록 오프셋 계산
-    const offsetX = duplicateCursor.x - width / 2;
-    const offsetY = duplicateCursor.y - height / 2;
-
     return (
-      <div
-        className={`absolute pointer-events-none select-none ${
-          className || ''
-        }`}
-        style={{
-          width: `${width}px`,
-          height: `${height}px`,
-          transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
+      <DuplicateGhostHost
+        width={width}
+        height={height}
+        cursor={duplicateCursor}
+        className={className}
+        surfaceStyle={{
           backgroundColor,
           borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
           border: 'none',
           boxShadow: previewShadow,
           overflow: ghostImageReplaces ? 'hidden' : 'visible',
-          opacity: 0.5,
-          zIndex: 'var(--z-canvas-drag-preview)',
         }}
       >
         {renderGhostBorderRing(ghostImageReplaces)}
@@ -1655,7 +1641,7 @@ const Grid = ({
             {displayName}
           </div>
         )}
-      </div>
+      </DuplicateGhostHost>
     );
   };
 

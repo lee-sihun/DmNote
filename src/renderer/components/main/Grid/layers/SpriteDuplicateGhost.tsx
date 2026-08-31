@@ -1,3 +1,4 @@
+import DuplicateGhostHost from './DuplicateGhostHost';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import {
@@ -26,18 +27,11 @@ const SpriteDuplicateGhost = ({
   const ghostImage = resolveImageSource(position.baseImage);
 
   return (
-    <div
-      className="absolute pointer-events-none select-none"
-      data-sprite-ghost="true"
-      style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        transform: `translate3d(${cursor.x - width / 2}px, ${
-          cursor.y - height / 2
-        }px, 0)`,
-        opacity: 0.5,
-        zIndex: 'var(--z-canvas-drag-preview)',
-      }}
+    <DuplicateGhostHost
+      width={width}
+      height={height}
+      cursor={cursor}
+      dataAttributes={{ 'data-sprite-ghost': 'true' }}
     >
       {ghostImage && (
         <img
@@ -65,7 +59,7 @@ const SpriteDuplicateGhost = ({
           ...activityAreaGuideMetrics(zoom),
         }}
       />
-    </div>
+    </DuplicateGhostHost>
   );
 };
 
