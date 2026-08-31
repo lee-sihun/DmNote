@@ -27,6 +27,7 @@ import {
 } from './elementIntent';
 import {
   applyBoundsIntentsEagerly,
+  buildNativeBoundsIntents,
   commitBatchGeometryByIds,
   elementBoundsOp,
   type BatchGeometryDescriptor,
@@ -367,26 +368,16 @@ export const commitMixedBatchGeometry = (
 
       // eager: native 기하 필드 CAS + 플러그인 position CAS.
       // 스프라이트는 full bounds projection이 콘텐츠까지 소유한다
-      const nativeIntents = new Map<
-        NativeElementType,
-        Map<string, Record<string, unknown>>
-      >();
       const spriteBoundsById = new Map(
         initialPlanned.nativeOps.flatMap((op) =>
           op.kind === 'resizeSprite' ? [[op.id, op.bounds] as const] : [],
         ),
       );
-      for (const { key, patch } of initialPlanned.updates) {
-        const target = targetByKey.get(key);
-        if (!target) continue;
-        const byId = nativeIntents.get(target.type) ?? new Map();
-        const spriteBounds =
-          target.type === 'sprite'
-            ? spriteBoundsById.get(target.id)
-            : undefined;
-        byId.set(target.id, spriteBounds ? { ...spriteBounds } : patch);
-        nativeIntents.set(target.type, byId);
-      }
+      const nativeIntents = buildNativeBoundsIntents(
+        initialPlanned.updates,
+        (key) => targetByKey.get(key),
+        (target) => spriteBoundsById.get(target.id),
+      );
       const nativeReceipt =
         nativeIntents.size > 0
           ? applyBoundsIntentsEagerly(nativeIntents)

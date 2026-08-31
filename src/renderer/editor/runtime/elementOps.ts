@@ -2460,30 +2460,17 @@ export const commitBatchGeometryByIds = (
   if (!initialPlan || initialPlan.updates.length === 0) {
     return Promise.resolve(false);
   }
-  const intents = new Map<
-    NativeElementType,
-    Map<string, Record<string, unknown>>
-  >();
   const targetById = new Map(
     frozenDescriptor.targets.map((target) => [target.id, target] as const),
   );
-  // 스프라이트 eager는 부분 patch가 아니라 full bounds로 projection해야
-  // 콘텐츠 스케일까지 싣는다
   const fullBoundsByKey = new Map(
     initialPlan.bounds.map(({ key, bounds }) => [key, bounds] as const),
   );
-  for (const { key, patch } of initialPlan.updates) {
-    const target = targetById.get(key);
-    if (!target) continue;
-    const byId = intents.get(target.type) ?? new Map();
-    const spriteBounds =
-      target.type === 'sprite' ? fullBoundsByKey.get(key) : undefined;
-    byId.set(
-      target.id,
-      (spriteBounds ? { ...spriteBounds } : patch) as Record<string, unknown>,
-    );
-    intents.set(target.type, byId);
-  }
+  const intents = buildNativeBoundsIntents(
+    initialPlan.updates,
+    (key) => targetById.get(key),
+    (_target, key) => fullBoundsByKey.get(key),
+  );
   const receipt = intents.size > 0 ? applyBoundsIntentsEagerly(intents) : null;
   let enrolled = false;
   return commitGeneratedSemanticOps(
@@ -2611,6 +2598,35 @@ const spriteResizeEagerIntent = (
     }
   }
   return { ...bounds };
+};
+
+// bounds intent 맵 조립 - 이동 계열은 부분 patch, 스프라이트는 full bounds를
+// 실어야 eager 적용이 콘텐츠 스케일까지 소유한다. 단일 배치와 혼합 배치가
+// 같은 규칙을 쓰되 스프라이트 bounds를 찾는 키(계획 key vs op id)만 다르다
+export const buildNativeBoundsIntents = <
+  TTarget extends { id: string; type: NativeElementType },
+>(
+  updates: readonly { key: string; patch: Record<string, unknown> }[],
+  targetForKey: (key: string) => TTarget | undefined,
+  spriteBoundsFor: (target: TTarget, key: string) => EditorBoundsV1 | undefined,
+): PropertyIntents => {
+  const intents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { key, patch } of updates) {
+    const target = targetForKey(key);
+    if (!target) continue;
+    const byId = intents.get(target.type) ?? new Map();
+    const spriteBounds =
+      target.type === 'sprite' ? spriteBoundsFor(target, key) : undefined;
+    byId.set(
+      target.id,
+      (spriteBounds ? { ...spriteBounds } : patch) as Record<string, unknown>,
+    );
+    intents.set(target.type, byId);
+  }
+  return intents;
 };
 
 // bounds intent의 eager 적용 - 스프라이트 항목은 projection 결과(콘텐츠
