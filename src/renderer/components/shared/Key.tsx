@@ -3,18 +3,13 @@ import React, { useEffect, useRef } from 'react';
 import { getKeySignal } from '@stores/signals/keySignals';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import { useSignals } from '@preact/signals-react/runtime';
-import { isMac } from '@utils/core/platform';
-import { useDraggable } from '@hooks/Grid';
-import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
+import { useGridItemInteraction } from '@hooks/Grid/useGridItemInteraction';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
 import {
   isErrorForCurrentSrc,
   useFailedImageSrcs,
 } from '@hooks/overlay/useFailedImageSrcs';
-import { useSmartGuidesElements } from '@hooks/Grid';
-import { useSettingsStore } from '@stores/useSettingsStore';
-import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import {
   computeKeyElementStyles,
@@ -113,7 +108,6 @@ const DraggableKey = React.memo(
   }: DraggableKeyProps) => {
     useSignals();
 
-    const macOS = isMac();
     // keyName은 호출부에서 합성이 끝난 표시 라벨
     const displayName = keyName;
     const { dx, dy, width, height = 60, className, counter } = position;
@@ -124,18 +118,6 @@ const DraggableKey = React.memo(
       counterEnabled &&
       counterSettings.enabled &&
       counterSettings.placement === 'inside';
-
-    const { getOtherElements } = useSmartGuidesElements();
-
-    const gridSnapSize = useSettingsStore(
-      (state) => state.gridSettings?.gridSnapSize ?? 5,
-    );
-
-    const isDraggingOrResizing = useGridSelectionStore(
-      (state) => state.isDraggingOrResizing,
-    );
-
-    const effectiveElementId = elementId;
 
     // 편집 세션 일시 페인트 — 드래그 프리뷰가 저장·히스토리를 거치지 않고
     // 해당 표면의 spec과 대기/입력 상태 전체를 함께 그린다
@@ -174,115 +156,41 @@ const DraggableKey = React.memo(
       anchorOrigin,
     );
 
-    const isSelectionMode = isSelected;
-
-    const draggable = useDraggable({
-      gridSize: gridSnapSize,
-      initialX: dx,
-      initialY: dy,
-      onPositionChange: (newDx: number, newDy: number) => {
-        if (!isSelectionMode) {
-          // 프리즈된 index의 재해석은 수신 측이 elementId로 수행
-          onPositionChange(index, newDx, newDy, elementId);
-        }
-      },
+    const {
+      isSelectionMode,
+      isDraggingOrResizing,
+      draggable,
+      handleSelectionDragPointerDown,
+      handleClick,
+      handleDoubleClick,
+      handleContextMenu,
+      attachRef: attachInteractionRef,
+    } = useGridItemInteraction({
+      index,
+      elementId,
+      dx,
+      dy,
+      elementWidth: width || 60,
+      elementHeight: height || 60,
+      isSelected,
+      selectedElements,
       zoom,
       panX,
       panY,
-      elementId: effectiveElementId,
-      elementWidth: width || 60,
-      elementHeight: height || 60,
-      getOtherElements,
-      disabled: isSelectionMode,
-    });
-
-    const {
-      handlePointerDown: handleSelectionDragPointerDown,
-      movedDuringPressRef,
-      pressMovedRef,
-    } = useSelectionDrag({
-      enabled: isSelectionMode,
-      zoom,
-      startX: dx,
-      startY: dy,
-      elementId: effectiveElementId,
-      elementWidth: width || 60,
-      elementHeight: height || 60,
-      selectedElements,
-      getOtherElements,
-      onMultiDragStart,
+      activeTool,
+      isViewportTransforming,
+      onPositionChange,
+      onClick,
+      onDoubleClick,
+      onCtrlClick,
+      onShiftClick,
       onMultiDrag,
+      onMultiDragStart,
       onMultiDragEnd,
+      onEraserClick,
+      onContextMenu,
+      setReferenceRef,
     });
-
-    const handleClick = (e: React.MouseEvent) => {
-      // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
-      // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
-      if (macOS && e.ctrlKey) return;
-      // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 수식키 토글·
-      // 범위 선택·지우개로 새지 않게 흡수. 개별 드래그는 wasMoved,
-      // 선택 모드 다중 드래그는 pressMovedRef가 판별 (선택 모드에서는
-      // 개별 draggable이 disabled라 wasMoved가 항상 false)
-      if (draggable.wasMoved || pressMovedRef.current) {
-        e.stopPropagation();
-        return;
-      }
-      const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
-      const isShiftPressed = e.shiftKey;
-
-      if (isSelectionMode && isPrimaryModifierPressed && onCtrlClick) {
-        e.stopPropagation();
-        onCtrlClick(e);
-        return;
-      }
-
-      if (isSelectionMode) {
-        e.stopPropagation();
-        return;
-      }
-
-      if (activeTool === 'eraser') {
-        onEraserClick?.();
-        return;
-      }
-
-      if (!draggable.wasMoved) {
-        if (isShiftPressed && onShiftClick) {
-          e.stopPropagation();
-          onShiftClick(e);
-          return;
-        }
-        if (isPrimaryModifierPressed && onCtrlClick) {
-          e.stopPropagation();
-          onCtrlClick(e);
-          return;
-        }
-        if (onClick) {
-          onClick(e);
-        }
-      }
-    };
-
-    // 더블클릭 편집 진입 — 순수 더블클릭만 통과.
-    // 두 번째 press가 다중 드래그로 이어진 경우(movedDuringPressRef)와
-    // 단일 드래그(wasMoved), 수식키·지우개·뷰포트 변환 중은 제외
-    const handleDoubleClick = (e: React.MouseEvent) => {
-      if (!onDoubleClick) return;
-      if (macOS && e.ctrlKey) return;
-      if (e.shiftKey || e.metaKey || e.ctrlKey) return;
-      if (activeTool === 'eraser') return;
-      if (isViewportTransforming) return;
-      if (draggable.recentPressMovedRef.current || movedDuringPressRef.current)
-        return;
-      e.stopPropagation();
-      onDoubleClick(e);
-    };
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onContextMenu?.(e);
-    };
 
     const renderDx = draggable.dx;
     const renderDy = draggable.dy;
@@ -378,12 +286,10 @@ const DraggableKey = React.memo(
       );
     };
 
+    // 카운터 축 앵커가 루트 노드를 읽으므로 공용 부착 앞에 먼저 채운다
     const attachRef = (node: HTMLElement | null) => {
       keyRootRef.current = node;
-      if (!isSelectionMode) {
-        draggable.ref(node);
-      }
-      if (typeof setReferenceRef === 'function') setReferenceRef(node);
+      attachInteractionRef(node);
     };
 
     return (

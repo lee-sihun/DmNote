@@ -5,11 +5,7 @@ import {
   resolveStatePair,
   type GradientSpec,
 } from '@src/types/color';
-import { isMac } from '@utils/core/platform';
-import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
-import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
-import { useSettingsStore } from '@stores/useSettingsStore';
-import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useGridItemInteraction } from '@hooks/Grid/useGridItemInteraction';
 import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import { useEditStatePreviewActive } from '@stores/grid/useEditStatePreviewStore';
 import { resolveImageSource } from '@utils/core/imageSource';
@@ -118,7 +114,6 @@ const KnobItem = ({
   zIndex = 0,
   isViewportTransforming = false,
 }: KnobItemProps) => {
-  const macOS = isMac();
   const {
     dx = 0,
     dy = 0,
@@ -211,17 +206,6 @@ const KnobItem = ({
     !showBorderRing && gradientRingWidth > 0
       ? `${gradientRingWidth}px solid ${resolvedKnobBorder.color}`
       : 'none';
-  const { getOtherElements } = useSmartGuidesElements();
-  const gridSnapSize = useSettingsStore(
-    (state: { gridSettings?: { gridSnapSize?: number } }) =>
-      state.gridSettings?.gridSnapSize ?? 5,
-  );
-  const isDraggingOrResizing = useGridSelectionStore(
-    (state: { isDraggingOrResizing: boolean }) => state.isDraggingOrResizing,
-  );
-
-  const isSelectionMode = isSelected;
-  const effectiveElementId = elementId;
 
   const inactiveImageSrc = resolveImageSource(inactiveImage);
   const activeImageSrc = resolveImageSource(activeImage);
@@ -251,120 +235,43 @@ const KnobItem = ({
       : idleImageFit || imageFit || 'cover'
   ) as React.CSSProperties['objectFit'];
 
-  const draggable = useDraggable({
-    gridSize: gridSnapSize,
-    initialX: dx,
-    initialY: dy,
-    onPositionChange: (newDx: number, newDy: number) => {
-      if (!isSelectionMode) {
-        // 프리즈된 index의 재해석은 수신 측이 elementId로 수행
-        onPositionChange(index, newDx, newDy, elementId);
-      }
-    },
+  const {
+    isSelectionMode,
+    isDraggingOrResizing,
+    draggable,
+    handleSelectionDragPointerDown,
+    handleClick,
+    handleDoubleClick,
+    handleContextMenu,
+    attachRef,
+  } = useGridItemInteraction({
+    index,
+    elementId,
+    dx,
+    dy,
+    elementWidth: width || 60,
+    elementHeight: height || 60,
+    isSelected,
+    selectedElements,
     zoom,
     panX,
     panY,
-    elementId: effectiveElementId,
-    elementWidth: width || 60,
-    elementHeight: height || 60,
-    getOtherElements,
-    disabled: isSelectionMode,
-  });
-
-  const {
-    handlePointerDown: handleSelectionDragPointerDown,
-    movedDuringPressRef,
-    pressMovedRef,
-  } = useSelectionDrag({
-    enabled: isSelectionMode,
-    zoom,
-    startX: dx,
-    startY: dy,
-    elementId: effectiveElementId,
-    elementWidth: width || 60,
-    elementHeight: height || 60,
-    selectedElements,
-    getOtherElements,
-    onMultiDragStart,
+    activeTool,
+    isViewportTransforming,
+    onPositionChange,
+    onClick,
+    onDoubleClick,
+    onCtrlClick,
+    onShiftClick,
     onMultiDrag,
+    onMultiDragStart,
     onMultiDragEnd,
+    onEraserClick,
+    onContextMenu,
+    setReferenceRef,
   });
 
   if (position?.hidden) return null;
-
-  const handleClick = (e: React.MouseEvent) => {
-    // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
-    // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
-    if (macOS && e.ctrlKey) return;
-    // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 수식키 토글·
-    // 범위 선택·지우개로 새지 않게 흡수. 개별 드래그는 wasMoved,
-    // 선택 모드 다중 드래그는 pressMovedRef가 판별 (선택 모드에서는
-    // 개별 draggable이 disabled라 wasMoved가 항상 false)
-    if (draggable.wasMoved || pressMovedRef.current) {
-      e.stopPropagation();
-      return;
-    }
-    const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
-    const isShiftPressed = e.shiftKey;
-
-    if (isSelectionMode && isPrimaryModifierPressed && onCtrlClick) {
-      e.stopPropagation();
-      onCtrlClick(e);
-      return;
-    }
-
-    if (isSelectionMode) {
-      e.stopPropagation();
-      return;
-    }
-
-    if (activeTool === 'eraser') {
-      onEraserClick?.();
-      return;
-    }
-
-    if (!draggable.wasMoved) {
-      if (isShiftPressed && onShiftClick) {
-        e.stopPropagation();
-        onShiftClick(e);
-        return;
-      }
-      if (isPrimaryModifierPressed && onCtrlClick) {
-        e.stopPropagation();
-        onCtrlClick(e);
-        return;
-      }
-      onClick?.(e);
-    }
-  };
-
-  // 더블클릭 편집 진입 — 순수 더블클릭만 통과 (드래그·수식키·지우개·뷰포트 변환 제외)
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    if (!onDoubleClick) return;
-    if (macOS && e.ctrlKey) return;
-    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
-    if (activeTool === 'eraser') return;
-    if (isViewportTransforming) return;
-    if (draggable.recentPressMovedRef.current || movedDuringPressRef.current)
-      return;
-    e.stopPropagation();
-    onDoubleClick(e);
-  };
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onContextMenu?.(e);
-  };
-
-  const attachRef = (node: HTMLElement | null) => {
-    if (!isSelectionMode) {
-      draggable.ref(node);
-    }
-    if (typeof setReferenceRef === 'function') {
-      setReferenceRef(node);
-    }
-  };
 
   const transform = `translate(calc(${draggable.dx}px + var(--key-offset-x, 0px)), calc(${draggable.dy}px + var(--key-offset-y, 0px)))`;
 

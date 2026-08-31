@@ -33,6 +33,18 @@ vi.mock('@hooks/Grid', async (importOriginal) => {
   };
 });
 
+// 공용 상호작용 훅은 배럴이 아니라 소스 모듈을 직접 쓴다
+vi.mock('@hooks/Grid/useDraggable', () => ({
+  useDraggable: () => ({
+    ref: () => {},
+    dx: 0,
+    dy: 0,
+    wasMoved: false,
+    isDragging: false,
+    recentPressMovedRef: { current: false },
+  }),
+}));
+
 vi.mock('@hooks/Grid/useSelectionDrag', () => ({
   useSelectionDrag: () => ({
     handlePointerDown: () => {},
