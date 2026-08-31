@@ -8,6 +8,7 @@ import {
 } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
+  DEFAULT_SPRITE_IMAGE_FIT,
   type ReactiveSpritePosition,
   type SpriteImageFit,
 } from '@src/types/key/sprites';
@@ -46,7 +47,7 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
   onClose,
   t,
 }) => {
-  const fit = position.imageFit ?? 'contain';
+  const fit = position.imageFit ?? DEFAULT_SPRITE_IMAGE_FIT;
   const imageSrc = resolveImageSource(position.baseImage);
 
   const rectField = (patch: Partial<ReactiveSpritePosition['imageRect']>) => ({

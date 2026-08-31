@@ -11,7 +11,7 @@ import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import type { LayerGroups } from '@src/types/layerGroups';
 
 // 커밋 성사 여부를 호출자가 판별하는 typed 결과. targetMissing은 무커밋
-export type SpritePatchCommitResult = 'committed' | 'targetMissing';
+type SpritePatchCommitResult = 'committed' | 'targetMissing';
 
 export const statItemsApi = {
   getPositions: () => invoke<StatItemPositions>('stat_positions_get'),

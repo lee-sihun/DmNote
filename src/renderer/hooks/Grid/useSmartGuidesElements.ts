@@ -9,6 +9,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { calculateBounds, type ElementBounds } from '@utils/grid/smartGuides';
+import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 
 /**
  * 특정 요소를 제외한 모든 요소의 bounds를 반환
@@ -97,8 +98,8 @@ const getOtherElementsSnapshot = (
         calculateBounds(
           pos.dx,
           pos.dy,
-          pos.width || 200,
-          pos.height || 200,
+          pos.width || DEFAULT_SPRITE_SIZE,
+          pos.height || DEFAULT_SPRITE_SIZE,
           id,
         ),
       );

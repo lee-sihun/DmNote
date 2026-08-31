@@ -11,6 +11,7 @@ import {
 } from '@stores/grid/useGridSelectionStore';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
+import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 import { getActiveElement } from '@utils/dom/activeElement';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
 
@@ -226,8 +227,8 @@ export function useGridMarquee({
         const elementBounds = {
           x: pos.dx,
           y: pos.dy,
-          width: pos.width || 200,
-          height: pos.height || 200,
+          width: pos.width || DEFAULT_SPRITE_SIZE,
+          height: pos.height || DEFAULT_SPRITE_SIZE,
         };
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({

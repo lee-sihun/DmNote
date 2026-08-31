@@ -7,6 +7,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSpriteEditPreview } from '@stores/grid/useSpriteEditPreviewStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
+import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
 interface SelectedElement {
@@ -76,7 +77,13 @@ const SpriteItem = ({
   isViewportTransforming = false,
 }: SpriteItemProps) => {
   const macOS = isMac();
-  const { dx = 0, dy = 0, width = 200, height = 200, className } = position;
+  const {
+    dx = 0,
+    dy = 0,
+    width = DEFAULT_SPRITE_SIZE,
+    height = DEFAULT_SPRITE_SIZE,
+    className,
+  } = position;
 
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
@@ -121,8 +128,8 @@ const SpriteItem = ({
     panX,
     panY,
     elementId,
-    elementWidth: width || 200,
-    elementHeight: height || 200,
+    elementWidth: width || DEFAULT_SPRITE_SIZE,
+    elementHeight: height || DEFAULT_SPRITE_SIZE,
     getOtherElements,
     disabled: isSelectionMode,
   });
@@ -137,8 +144,8 @@ const SpriteItem = ({
     startX: dx,
     startY: dy,
     elementId,
-    elementWidth: width || 200,
-    elementHeight: height || 200,
+    elementWidth: width || DEFAULT_SPRITE_SIZE,
+    elementHeight: height || DEFAULT_SPRITE_SIZE,
     selectedElements,
     getOtherElements,
     onMultiDragStart,

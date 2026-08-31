@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import {
+  DEFAULT_SPRITE_IMAGE_FIT,
   spriteTransformToCss,
   type ReactiveSpritePosition,
   type SpriteTransform,
@@ -22,7 +23,7 @@ export const computeSpriteImageStyle = (
   transition?: string,
 ): CSSProperties => {
   const useInline = position.useInlineStyles === true;
-  const fit = position.imageFit ?? 'contain';
+  const fit = position.imageFit ?? DEFAULT_SPRITE_IMAGE_FIT;
   const transformCss = spriteTransformToCss(transform);
   return {
     position: 'absolute',

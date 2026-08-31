@@ -8,6 +8,7 @@ import type { NoteSettings } from '@src/types/settings/noteSettings';
 // 필드 추가 시 selectPluginLayoutElements·pluginLayoutElementsEqual 동반 수정 필요
 import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
 import { computeSpriteReachAabb } from '@utils/sprite/spriteReach';
+import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 
 interface LayoutInput {
   // canonical 슬롯 식별자 배열 (slotCanonical 결과, 원본 KeySlot 아님)
@@ -132,8 +133,8 @@ export function computeLayout(input: LayoutInput) {
       if (!pos || pos.hidden) return;
       xs.push(pos.dx);
       ys.push(pos.dy);
-      widths.push(pos.dx + (pos.width ?? 200));
-      heights.push(pos.dy + (pos.height ?? 200));
+      widths.push(pos.dx + (pos.width ?? DEFAULT_SPRITE_SIZE));
+      heights.push(pos.dy + (pos.height ?? DEFAULT_SPRITE_SIZE));
     });
 
     // 플러그인 요소 위치 (앵커 기반 계산 포함)
