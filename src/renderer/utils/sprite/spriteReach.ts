@@ -87,8 +87,8 @@ const cubicBezierYRange = (
 };
 
 // easing 출력(보간 진행률)의 최소·최대.
-// CSS가 해석하지 못하는 문자열은 transition 선언 자체가 무효라 스냅 전환이 되고,
-// 보간이 일어나지 않으므로 [0, 1]로 본다
+// 해석하지 못하는 문자열은 렌더가 폴백 곡선으로 강등하고 그 곡선도 [0, 1]이라
+// 여기서 같은 값을 돌려주면 도달 계산과 실제 전환이 어긋나지 않는다
 export const easingOutputRange = (
   easing: string,
 ): { min: number; max: number } => {
@@ -129,13 +129,66 @@ const easingOvershootEpsilon = (easing: string): number => {
   return Math.max(max - 1, -min, 0);
 };
 
+const STEPS_FN_RE = new RegExp(
+  String.raw`^steps\(\s*([+-]?\d+)\s*(?:,\s*(jump-start|jump-end|jump-none|jump-both|start|end)\s*)?\)$`,
+  'i',
+);
+
+// <linear-stop> = <number> && <linear-stop-length>? - 백분율 단독 스톱은 무효다.
+// 파싱을 parseFloat에 맡기면 `1%`나 괄호가 새는 `1)`이 유한값으로 통과한다
+const LINEAR_STOP_RE = new RegExp(
+  String.raw`^${CSS_NUMBER}(?:\s+${CSS_NUMBER}%){0,2}$`,
+);
+
+// 렌더 채널 양쪽이 받아들이는 문법인지. CSS transition은 무효 문자열을 선언째
+// 버리고 넘어가지만 WAAPI는 TypeError를 던져 재생 자체가 끊기므로, 두 채널이
+// 같은 값을 쓰려면 여기서 문법을 확정해야 한다
+const isRenderableEasing = (easing: string): boolean => {
+  const trimmed = easing.trim();
+  const lower = trimmed.toLowerCase();
+  if (NON_OVERSHOOT_KEYWORDS.has(lower)) return true;
+
+  const steps = STEPS_FN_RE.exec(trimmed);
+  // jump-none은 구간이 둘 이상이어야 성립한다
+  if (steps) {
+    const count = Number(steps[1]);
+    if (count < 1) return false;
+    return count > 1 || steps[2]?.toLowerCase() !== 'jump-none';
+  }
+
+  const bezier = CUBIC_BEZIER_RE.exec(trimmed);
+  // x 제어점이 0~1 밖이면 무효 곡선
+  if (bezier) {
+    const [x1, , x2] = bezier.slice(1, 5).map(Number);
+    return x1 >= 0 && x1 <= 1 && x2 >= 0 && x2 <= 1;
+  }
+
+  const linearFn = LINEAR_FN_RE.exec(trimmed);
+  if (linearFn) {
+    const stops = linearFn[1].split(',').map((stop) => stop.trim());
+    // 스톱은 둘 이상이어야 한다 - linear(0)은 목록 최소 개수를 못 채워 무효다.
+    // 무한대 스톱은 엔진이 유한값으로 잘라 도달 계산과 실제 전환이 갈리므로 함께 강등
+    return (
+      stops.length >= 2 &&
+      stops.every(
+        (stop) =>
+          LINEAR_STOP_RE.test(stop) && Number.isFinite(Number.parseFloat(stop)),
+      )
+    );
+  }
+  return false;
+};
+
 // 지나침 폭이 1 이상이면 재타깃 반복마다 지나침 위에서 다시 출발해 누적이
 // 발산하고, 어떤 유한한 창 여유로도 클리핑을 막을 수 없다. 그런 easing은
-// 렌더에서 표준 곡선으로 강등해 도달 계산과 실제 전환이 같은 상한을 공유한다
+// 렌더에서 표준 곡선으로 강등해 도달 계산과 실제 전환이 같은 상한을 공유한다.
+// 문법 자체가 무효인 값도 같은 곡선으로 강등한다
 export const SPRITE_SAFE_FALLBACK_EASING = 'ease';
 
 export const resolveSpriteRenderEasing = (easing: string): string =>
-  easingOvershootEpsilon(easing) < 1 ? easing : SPRITE_SAFE_FALLBACK_EASING;
+  isRenderableEasing(easing) && easingOvershootEpsilon(easing) < 1
+    ? easing
+    : SPRITE_SAFE_FALLBACK_EASING;
 
 // 전환이 목표를 지나칠 수 있는 비율. 보간값 v = a + p(b - a)에서 진행률 p가
 // [0, 1]을 벗어나는 최대 폭 e를 구하고, 전환 중 재타깃이 반복되면 지나침 위에서

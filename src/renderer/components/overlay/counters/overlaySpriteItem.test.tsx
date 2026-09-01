@@ -446,4 +446,13 @@ describe('OverlaySpriteItem onPress', () => {
     act(() => applyEventKeyState('KeyA', true));
     expect(animations).toHaveLength(0);
   });
+
+  // WAAPI는 무효 easing을 TypeError로 거부한다 - 강등 없이 넘기면 재생이 끊기고
+  // 복원 콜백이 붙지 않아 자세 이미지가 그대로 고착된다
+  it('무효 easing은 폴백 곡선으로 강등해 재생에 넘긴다', () => {
+    render(oneShotSprite({ transitionEasing: 'cubic-bezier(2, 0, 0.5, 1)' }));
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(1);
+    expect(animations[0].options.easing).toBe('ease');
+  });
 });

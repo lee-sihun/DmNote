@@ -202,4 +202,58 @@ describe('easingOvershootExtension', () => {
     expect(resolveSpriteRenderEasing(OVERSHOOT_EASING)).toBe(OVERSHOOT_EASING);
     expect(resolveSpriteRenderEasing('linear')).toBe('linear');
   });
+
+  // WAAPI는 무효 easing에 TypeError를 던져 단발 재생을 통째로 끊는다.
+  // CSS transition만 보던 시절의 통과 규칙이 남으면 그 예외가 그대로 나간다
+  it('문법이 무효한 easing은 폴백 곡선으로 강등된다', () => {
+    for (const easing of [
+      'cubic-bezier(2, 0, 0.5, 1)',
+      'cubic-bezier(-1, 0, 0.5, 1)',
+      'cubic-bezier(0, 0, 1.2, 1)',
+      'wobble',
+      'ease-in-out-back',
+      'steps(0)',
+      'steps(-2)',
+      'steps(1, jump-none)',
+      'linear(0, abc, 1)',
+      // 백분율 단독 스톱과 괄호 누수 - parseFloat에 맡기면 유한값으로 새어 나간다
+      'linear(0, 1%, 1)',
+      'linear(0, 50%, 1)',
+      'linear(0, 1))',
+      'linear(0,1) junk)',
+      // 스톱 하나짜리 목록과 무한대 스톱 - 앞은 엔진이 거부하고
+      // 뒤는 유한값으로 잘려 도달 계산이 [0, 1]로 오판한다
+      'linear(0)',
+      'linear(1)',
+      'linear(1e999, 0)',
+      'linear(0, 1e999)',
+      'linear(-1e999, 1)',
+      '',
+    ]) {
+      expect(resolveSpriteRenderEasing(easing)).toBe(
+        SPRITE_SAFE_FALLBACK_EASING,
+      );
+    }
+  });
+
+  it('유효한 문법은 강등 대상이 아니다', () => {
+    for (const easing of [
+      'ease-in-out',
+      'step-start',
+      'steps(4)',
+      'steps(4, jump-none)',
+      'steps(2, end)',
+      'steps(+2, end)',
+      'linear(0, 0.25 75%, 1)',
+      'linear(0, 0.5 25% 75%, 1)',
+      ' cubic-bezier(0.4, 0, 0.2, 1) ',
+    ]) {
+      expect(resolveSpriteRenderEasing(easing)).toBe(easing);
+    }
+  });
+
+  it('무효 easing 강등은 도달 여유를 늘리지 않는다', () => {
+    expect(easingOvershootExtension('cubic-bezier(2, 0, 0.5, 1)')).toBe(0);
+    expect(easingOvershootExtension('wobble')).toBe(0);
+  });
 });
