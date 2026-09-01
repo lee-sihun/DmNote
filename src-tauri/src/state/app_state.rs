@@ -2451,15 +2451,16 @@ impl AppState {
                 ..current
             }
         };
-        let offset_snapshot = self.store.snapshot();
-        let content_left_change = content_offset_change(
-            content_left_offset,
-            offset_snapshot.overlay_last_content_left_offset,
-        );
-        let content_top_change = content_offset_change(
-            content_top_offset,
-            offset_snapshot.overlay_last_content_top_offset,
-        );
+        // 직전 오프셋 두 개만 읽는다, 리사이즈마다 store 전체를 복제하지 않도록
+        let (last_content_left_offset, last_content_top_offset) = self.store.with_state(|state| {
+            (
+                state.overlay_last_content_left_offset,
+                state.overlay_last_content_top_offset,
+            )
+        });
+        let content_left_change =
+            content_offset_change(content_left_offset, last_content_left_offset);
+        let content_top_change = content_offset_change(content_top_offset, last_content_top_offset);
         let next_content_left_offset = content_left_change.map(|(offset, _)| offset);
         let next_content_top_offset = content_top_change.map(|(offset, _)| offset);
 
