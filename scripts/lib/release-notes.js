@@ -178,8 +178,8 @@ const buildReleaseNotes = ({ version, assets, contributors }) => {
   ];
 
   const notes = [];
-  // 2.0.0부터 서명·공증되어 xattr 우회가 불필요 — 그 이전 macOS 자산에만 가이드를 남긴다
-  if (hasMac && older('2.0.0')) {
+  // 가이드가 권한 설정 중심으로 개편되어 모든 macOS 릴리즈에 링크를 남긴다
+  if (hasMac) {
     notes.push(
       `- [macOS 설치 및 권한 설정 가이드](${repoUrl}/blob/main/docs/mac_guide.md)`,
     );
