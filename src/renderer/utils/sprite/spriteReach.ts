@@ -235,10 +235,6 @@ export const easingOvershootExtension = (easing: string): number => {
   return epsilon / (1 - epsilon);
 };
 
-// 렌더 가능한 이미지가 하나도 없으면 null.
-// 해석기 4단계의 평균 상태는 x·y·scale이 상태 값들의 볼록 결합이라 아래
-// 범위 계산에 자동으로 포함되고, rotation 원형 평균은 회전 동일 시 같은 각,
-// 상이 시 원 상한이 모든 각을 커버한다
 // 스프라이트 하나의 눌림 조합 상한. 반응 키가 10개를 넘는 문서는 사실상 없고,
 // 넘으면 2^g가 급격히 커진다. 초과분은 자세 범위 과대 근사로 폴백한다.
 // 레이아웃 전체 합계 예산은 호출부가 따로 건다 - 이 상한만으로는 스프라이트가
@@ -316,6 +312,10 @@ const enumerateReachableTargets = (
   return targets;
 };
 
+// 렌더 가능한 이미지가 하나도 없으면 null.
+// 해석기 4단계의 평균 상태는 x·y·scale이 상태 값들의 볼록 결합이라 아래
+// 범위 계산에 자동으로 포함되고, rotation 원형 평균은 회전 동일 시 같은 각,
+// 상이 시 원 상한이 모든 각을 커버한다
 export const computeSpriteReachAabb = (
   sprite: SpriteReachGeometry,
   canonicalByTrigger: ReadonlyMap<string, string>,

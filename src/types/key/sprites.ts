@@ -62,7 +62,7 @@ export const IDENTITY_SPRITE_TRANSFORM: SpriteTransform = Object.freeze({
 });
 
 // 백엔드 계약과 동일 3종. 키 이미지의 none은 스프라이트에 없다
-export const spriteImageFitSchema = z.union([
+const spriteImageFitSchema = z.union([
   z.literal('cover'),
   z.literal('contain'),
   z.literal('fill'),
@@ -125,7 +125,7 @@ export const DEFAULT_SPRITE_CONTACT_POINT: SpriteAnchor = Object.freeze({
 
 // 키 반응 방식: 누르는 동안 유지 vs 누른 순간 한 번 재생.
 // 백엔드 SpriteActivation과 동일 camelCase 문자열
-export const spriteActivationSchema = z.union([
+const spriteActivationSchema = z.union([
   z.literal('whileHeld'),
   z.literal('onPress'),
 ]);
@@ -161,7 +161,7 @@ const spritePoseBaseShape = {
 // canonical(서빙): 키 요소 id 목록. 물리 키가 아니라 레인에 결합해서 키 매핑을
 // 바꿔도 자리를 유지한다. 빈 배열·빈 문자열·상한 초과는 인입 허용 - 복구·grandfather를
 // 거친 store가 서빙해도 부트스트랩이 죽지 않아야 한다 (신규 커밋은 백엔드 검증이 차단)
-export const spritePoseSchema = z.object({
+const spritePoseSchema = z.object({
   poseId: z.string().min(1),
   triggers: z.array(z.string()),
   ...spritePoseBaseShape,
@@ -173,7 +173,7 @@ export type SpritePose = z.infer<typeof spritePoseSchema>;
 
 // input(플러그인 patch): poseId 누락은 백엔드가 새 id를 발급하는 공개 계약이라 허용,
 // 컬렉션 상한은 백엔드 커밋 검증과 같은 값으로 선차단
-export const spritePoseInputSchema = z.object({
+const spritePoseInputSchema = z.object({
   poseId: z.string().min(1).optional(),
   triggers: z
     .array(z.string().min(1).max(SPRITE_CONSTRAINTS.triggerIdMaxLength))

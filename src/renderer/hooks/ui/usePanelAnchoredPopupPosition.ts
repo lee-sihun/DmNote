@@ -153,7 +153,7 @@ export const usePanelAnchoredPopupPosition = ({
       return;
     }
 
-    // 앵커 중심은 열리는(또는 anchorKey가 바뀌는) 시점에 한 번만 캡처 —
+    // 앵커 중심은 열리는(또는 anchorKey가 바뀌는) 시점에 한 번만 캡처 -
     // 이후 패널 스크롤·리렌더에도 제자리 유지
     void anchorKey; // 값은 쓰지 않고 재실행 트리거로만 참조
     const anchorElement = referenceRef?.current;
@@ -256,7 +256,7 @@ export const useTriggerAnchoredPopupPosition = ({
       return;
     }
 
-    // 앵커는 열리는(또는 anchorKey가 바뀌는) 시점에 한 번만 캡처 —
+    // 앵커는 열리는(또는 anchorKey가 바뀌는) 시점에 한 번만 캡처 -
     // 패널 스크롤·리렌더에도 제자리 유지
     void anchorKey; // 값은 쓰지 않고 재실행 트리거로만 참조
     const triggerRect = trigger.getBoundingClientRect();

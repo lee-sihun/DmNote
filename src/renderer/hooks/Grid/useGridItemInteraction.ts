@@ -132,7 +132,7 @@ export const useGridItemInteraction = ({
   });
 
   const handleClick = (e: React.MouseEvent) => {
-    // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
+    // macOS ctrl+클릭은 우클릭 제스처 - Chromium이 contextmenu 뒤에 click도 발화하므로
     // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
     if (macOS && e.ctrlKey) return;
     // 드래그로 끝난 press의 trailing click은 클릭이 아니다 - 수식키 토글·
@@ -177,7 +177,7 @@ export const useGridItemInteraction = ({
     }
   };
 
-  // 더블클릭 편집 진입 — 순수 더블클릭만 통과.
+  // 더블클릭 편집 진입 - 순수 더블클릭만 통과.
   // 두 번째 press가 다중 드래그로 이어진 경우(movedDuringPressRef)와
   // 단일 드래그(wasMoved), 수식키·지우개·뷰포트 변환 중은 제외
   const handleDoubleClick = (e: React.MouseEvent) => {

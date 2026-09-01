@@ -27,7 +27,7 @@ export type ContactSolveResult =
   | { status: 'degenerate' };
 
 // 핀·축 거리, 목표 벡터가 이보다 짧으면 방향이 정의되지 않은 것으로 본다
-export const CONTACT_EPSILON = 1e-6;
+const CONTACT_EPSILON = 1e-6;
 
 // atan2 차(-360~360도)를 최단 호 표현(-180~180]으로 접는다
 const wrapDegrees = (deg: number): number => {
