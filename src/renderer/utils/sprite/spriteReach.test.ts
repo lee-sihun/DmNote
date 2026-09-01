@@ -169,6 +169,31 @@ describe('easingOutputRange', () => {
     expect(easingOutputRange('linear(-0.2, 0.5 50%, 1)').min).toBe(-0.2);
   });
 
+  // 유한한 초대형 제어점은 3*y1이나 b*b가 넘쳐 판별식이 NaN이 되고,
+  // NaN >= 0이 false라 극점을 통째로 놓쳐 범위를 {0, 1}로 오판했다.
+  // 브라우저는 이 곡선을 거부하지 않으므로 창 여유 0으로 스프라이트가 잘린다
+  it('중간 연산이 넘치면 제어점 볼록 껍질로 폴백한다', () => {
+    expect(easingOutputRange('cubic-bezier(0, 1e308, 1, 0)').max).toBe(1e308);
+    expect(easingOutputRange('cubic-bezier(0, -1e308, 1, 0)').min).toBe(-1e308);
+    // 3*y1 - 3*y2가 Infinity - Infinity로 상쇄되는 경우도 같다
+    expect(easingOutputRange('cubic-bezier(0, 1e308, 1, 1e308)').max).toBe(
+      1e308,
+    );
+    // Number 변환 자체가 Infinity인 입력
+    expect(easingOutputRange('cubic-bezier(0, 1e999, 1, 0)').max).toBe(
+      Infinity,
+    );
+  });
+
+  it('넘치지 않는 큰 제어점은 해석적 극점을 그대로 쓴다', () => {
+    // 껍질(1e100)이 아니라 실제 극점이어야 한다 - 폴백이 상시 적용되면 안 된다
+    expect(easingOutputRange('cubic-bezier(0, 1e100, 1, 0)').max).toBeCloseTo(
+      4.444444444444445e99,
+      -85,
+    );
+    expect(easingOutputRange('cubic-bezier(0.5, 2, 0.5, 1)').max).toBe(1.25);
+  });
+
   it('해석 불가 문자열은 스냅 전환이라 0~1로 본다', () => {
     expect(easingOutputRange('not-an-easing')).toEqual({ min: 0, max: 1 });
     // x 제어점이 0~1 밖이면 CSS 선언 자체가 무효
@@ -201,6 +226,26 @@ describe('easingOvershootExtension', () => {
   it('지나침 폭 1 미만 easing은 강등 없이 유지된다', () => {
     expect(resolveSpriteRenderEasing(OVERSHOOT_EASING)).toBe(OVERSHOOT_EASING);
     expect(resolveSpriteRenderEasing('linear')).toBe('linear');
+    // 넘치지 않는 큰 제어점은 지나침이 커서 강등되지만, 판정은 해석적 값 기준이다
+    expect(resolveSpriteRenderEasing('cubic-bezier(0.5, 2, 0.5, 1)')).toBe(
+      'cubic-bezier(0.5, 2, 0.5, 1)',
+    );
+  });
+
+  // 범위를 {0, 1}로 오판하면 강등도 안 걸리고 창 여유도 0이라
+  // 실제 곡선이 아무리 튀어도 방어가 전부 통과해 버린다
+  it('연산이 넘치는 제어점은 강등되고 창 여유가 0이다', () => {
+    for (const easing of [
+      'cubic-bezier(0, 1e308, 1, 0)',
+      'cubic-bezier(0, -1e308, 1, 0)',
+      'cubic-bezier(0, 1e308, 1, 1e308)',
+      'cubic-bezier(0, 1e999, 1, 0)',
+    ]) {
+      expect(resolveSpriteRenderEasing(easing)).toBe(
+        SPRITE_SAFE_FALLBACK_EASING,
+      );
+      expect(easingOvershootExtension(easing)).toBe(0);
+    }
   });
 
   // WAAPI는 무효 easing에 TypeError를 던져 단발 재생을 통째로 끊는다.

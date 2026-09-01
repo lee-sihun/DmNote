@@ -58,15 +58,26 @@ const cubicBezierYRange = (
     const u = 1 - t;
     return 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t;
   };
+  // y(t)는 제어점 y {0, y1, y2, 1}의 볼록 결합이라 항상 이 껍질 안에 있다.
+  // min·max뿐이라 overflow가 없어, 해석적 계산을 믿을 수 없을 때 쓰는 보수적 상한
+  const hull = { min: Math.min(0, y1, y2), max: Math.max(1, y1, y2) };
+  // 비유한 y는 끝점 evaluate도 0 * Infinity = NaN이라 계산 전에 껍질로 나간다
+  if (!Number.isFinite(y1) || !Number.isFinite(y2)) return hull;
+
   // dy/dt / 3 = a·t² + b·t + c
   const a = 3 * y1 - 3 * y2 + 1;
   const b = 2 * y2 - 4 * y1;
   const c = y1;
+  // y가 유한해도 중간 연산이 넘칠 수 있다. 넘친 값으로 판별식을 구하면 NaN이 되고
+  // NaN >= 0이 false라 극점을 통째로 놓쳐 범위를 {0, 1}로 오판한다
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return hull;
+
   const candidates = [0, 1];
   if (Math.abs(a) < 1e-12) {
     if (Math.abs(b) > 1e-12) candidates.push(-c / b);
   } else {
     const discriminant = b * b - 4 * a * c;
+    if (!Number.isFinite(discriminant)) return hull;
     if (discriminant >= 0) {
       const sqrtDiscriminant = Math.sqrt(discriminant);
       candidates.push(
@@ -78,8 +89,9 @@ const cubicBezierYRange = (
   let min = Infinity;
   let max = -Infinity;
   for (const t of candidates) {
-    if (t < 0 || t > 1) continue;
+    if (!Number.isFinite(t) || t < 0 || t > 1) continue;
     const value = evaluate(t);
+    if (!Number.isFinite(value)) return hull;
     min = Math.min(min, value);
     max = Math.max(max, value);
   }
@@ -163,10 +175,18 @@ const isRenderableEasing = (easing: string): boolean => {
   }
 
   const bezier = CUBIC_BEZIER_RE.exec(trimmed);
-  // x 제어점이 0~1 밖이면 무효 곡선
+  // x 제어점이 0~1 밖이면 무효 곡선. 비유한 y는 엔진이 유한값으로 잘라
+  // 도달 계산과 실제 전환이 갈리므로 linear() 정지점과 같은 기준으로 강등한다
   if (bezier) {
-    const [x1, , x2] = bezier.slice(1, 5).map(Number);
-    return x1 >= 0 && x1 <= 1 && x2 >= 0 && x2 <= 1;
+    const [x1, y1, x2, y2] = bezier.slice(1, 5).map(Number);
+    return (
+      x1 >= 0 &&
+      x1 <= 1 &&
+      x2 >= 0 &&
+      x2 <= 1 &&
+      Number.isFinite(y1) &&
+      Number.isFinite(y2)
+    );
   }
 
   const linearFn = LINEAR_FN_RE.exec(trimmed);
