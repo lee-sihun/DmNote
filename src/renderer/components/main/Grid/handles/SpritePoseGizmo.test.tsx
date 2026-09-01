@@ -56,7 +56,12 @@ describe('SpritePoseGizmo', () => {
   const pointer = (
     type: string,
     target: EventTarget,
-    init: { clientX?: number; clientY?: number; pointerId?: number } = {},
+    init: {
+      clientX?: number;
+      clientY?: number;
+      pointerId?: number;
+      buttons?: number;
+    } = {},
   ) =>
     act(() => {
       target.dispatchEvent(
@@ -64,6 +69,8 @@ describe('SpritePoseGizmo', () => {
           bubbles: true,
           cancelable: true,
           button: 0,
+          // 실제 브라우저처럼 누른 상태가 기본이고 up만 0이다
+          buttons: init.buttons ?? (type === 'pointerup' ? 0 : 1),
           clientX: init.clientX ?? 0,
           clientY: init.clientY ?? 0,
           pointerId: init.pointerId ?? 1,
@@ -211,6 +218,28 @@ describe('SpritePoseGizmo', () => {
     // 락 반환까지 포기 경로와 동일해야 한다
     expect(tryAcquireDragSession()).toBe(true);
     releaseDragSession();
+  });
+
+  it('창 밖에서 버튼이 떼진 stale move는 커밋 없이 드래그를 끝낸다', async () => {
+    const session = makeSession();
+    render(session);
+
+    pointer('pointerdown', knob()!, { clientX: 50, clientY: 200 });
+    pointer('pointermove', window, { clientX: 200, clientY: 50, buttons: 0 });
+
+    expect(session.cancel).toHaveBeenCalledTimes(1);
+    expect(session.commit).not.toHaveBeenCalled();
+    // 락을 돌려놔야 다음 드래그가 시작된다
+    expect(tryAcquireDragSession()).toBe(true);
+    releaseDragSession();
+
+    // 끝난 드래그라 뒤늦은 move도 preview를 열지 않는다
+    (session.preview as ReturnType<typeof vi.fn>).mockClear();
+    pointer('pointermove', window, { clientX: 210, clientY: 60 });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(session.preview).not.toHaveBeenCalled();
   });
 
   it('소유권 무효화 뒤의 move는 preview를 되열지 않는다', async () => {

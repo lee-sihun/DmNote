@@ -268,6 +268,11 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
 
   const handleWindowMove = (event: PointerEvent) => {
     if (event.pointerId !== dragRef.current?.pointerId) return;
+    // 창 밖에서 버튼이 이미 떼졌으면 stale 드래그 - 커밋 없이 종료
+    if (event.buttons === 0) {
+      cancelActiveDrag();
+      return;
+    }
     moveSchedulerRef.current?.push(event);
   };
   const handleWindowCancel = (event: PointerEvent) => {
