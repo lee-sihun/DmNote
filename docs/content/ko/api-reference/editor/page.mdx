@@ -98,7 +98,7 @@ interface ReactiveSpritePosition {
   poses: SpritePose[]; // 커밋은 최대 64개까지 허용
   activation: 'whileHeld' | 'onPress'; // 기본 whileHeld. onPress는 누른 순간 자세를 한 번 재생하고 idle로 복귀
   pressDurationMs: number; // onPress 재생 시간, 1–5000, 기본 300
-  transitionMs: number; // 자세 전환 시간, 0–1000, 기본 0
+  transitionMs: number; // 자세 전환 시간, 0–1000, 기본 0. onPress는 무시하고 pressDurationMs 동안 재생
   transitionEasing: string; // CSS easing, 기본 'cubic-bezier(0.4, 0, 0.2, 1)'
 }
 
@@ -120,8 +120,11 @@ interface SpriteTransform {
 ```
 
 자세는 스프라이트가 참조하는 키 중 현재 눌린 키 집합이 트리거 집합과 정확히
-일치할 때 활성화됩니다. 참조하는 다른 키를 더 누르면 그 자세는 해제되고,
-스프라이트가 참조하지 않는 키는 무시합니다. 한 스프라이트의 두 자세가 같은
+일치할 때 활성화되고, 스프라이트가 참조하지 않는 키는 무시합니다. 정확히
+일치하는 자세가 없으면 눌린 키 각각의 단일 트리거 자세를 같은 비중으로
+섞습니다. x·y·scale은 산술 평균, rotation은 원형 평균이고 이미지는 poseId
+사전순 첫 override를 씁니다. 트리거가 둘 이상인 자세는 섞기에 참여하지 않으므로
+눌린 키가 그런 자세에만 있으면 idle로 돌아갑니다. 한 스프라이트의 두 자세가 같은
 트리거 집합을 가질 수 없고, 빈 트리거 목록은 커밋에서 거부됩니다.
 
 ## 현재 문서 조회

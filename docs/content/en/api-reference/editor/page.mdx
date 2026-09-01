@@ -102,7 +102,7 @@ interface ReactiveSpritePosition {
   poses: SpritePose[]; // commits accept at most 64
   activation: 'whileHeld' | 'onPress'; // default whileHeld. onPress plays the pose once on key-down, then returns to idle
   pressDurationMs: number; // onPress playback duration, 1–5000, default 300
-  transitionMs: number; // pose blend duration, 0–1000, default 0
+  transitionMs: number; // pose transition duration, 0–1000, default 0. Ignored by onPress, which plays for pressDurationMs
   transitionEasing: string; // CSS easing, default 'cubic-bezier(0.4, 0, 0.2, 1)'
 }
 
@@ -124,10 +124,13 @@ interface SpriteTransform {
 ```
 
 A pose activates while the set of held keys, among the keys the sprite
-references, exactly matches its trigger set - holding an additional referenced
-key deactivates it, while keys the sprite does not reference are ignored. Two
-poses of one sprite may not share the same trigger set, and commits reject
-empty trigger lists.
+references, exactly matches its trigger set; keys the sprite does not reference
+are ignored. When no pose matches exactly, the single-trigger poses of the held
+keys are blended with equal weight: x, y and scale are averaged, rotation uses a
+circular mean, and the image comes from the first override in poseId order.
+Poses with two or more triggers never take part in blending, so a sprite whose
+held keys only appear in such poses returns to idle. Two poses of one sprite may
+not share the same trigger set, and commits reject empty trigger lists.
 
 ## Read the Current Document
 
