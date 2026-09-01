@@ -12,6 +12,16 @@ import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import { useSpriteStore } from '@stores/data/useSpriteStore';
+import {
+  makeCanonicalSpritePosition,
+  makeSpritePose,
+} from '@utils/sprite/spriteFixtures';
+
+type MixedGetter = <T>(
+  getter: (pos: { width?: number; height?: number }) => T | undefined,
+  defaultValue: T,
+) => { isMixed: boolean; value: T };
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -942,6 +952,126 @@ describe('PropertiesPanel canonical native contract', () => {
     expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
     expect(legacyBatchStyleCommitMock).not.toHaveBeenCalled();
     expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+  });
+
+  describe('혼합 선택 크기 표시 집합', () => {
+    const MIXED_KEY_ID = 'a4444444-4444-4444-8444-444444444444';
+    const MIXED_SPRITE_ID = 'a5555555-5555-4555-8555-555555555555';
+
+    // 크기 입력은 resize가 실제로 조절하는 집합을 그대로 읽어야 한다.
+    // 스타일 집합에는 스프라이트가 없어서 그걸 쓰면 키 값이 대표로 뜨고,
+    // 그 값을 확정하면 스프라이트 imageRect와 모든 자세 오프셋까지 배율이 먹는다
+    it('키와 스프라이트를 함께 고르면 크기 getter가 Mixed를 낸다', () => {
+      const key = { ...createDefaultKeyPosition(), id: MIXED_KEY_ID };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [key] },
+        canonicalPositions: { '4key': [key] },
+      });
+      useSpriteStore.setState({
+        positions: {
+          '4key': [
+            makeCanonicalSpritePosition({
+              id: MIXED_SPRITE_ID,
+              layerName: null,
+              groupId: null,
+              width: 200,
+              height: 200,
+            }),
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: MIXED_KEY_ID, index: 0 },
+          { type: 'sprite', id: MIXED_SPRITE_ID, index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+
+      mounted = mountPanel();
+
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        getMixedValue: MixedGetter;
+        getMixedValueGeometry: MixedGetter;
+      };
+
+      expect(props.getMixedValueGeometry((pos) => pos.width, 60)).toEqual({
+        isMixed: true,
+        value: 60,
+      });
+      // 스타일 집합은 스프라이트를 보지 않는다 - 크기에 이걸 쓰면 안 되는 이유
+      expect(props.getMixedValue((pos) => pos.width, 60)).toEqual({
+        isMixed: false,
+        value: 60,
+      });
+    });
+
+    // 커밋은 resizeSprite로 imageRect와 자세까지 스케일한다. 미리보기가 원시
+    // bounds만 얹으면 드래그 중엔 활동 영역만 줄다가 놓는 순간 튄다
+    it('스프라이트 크기 미리보기는 이미지와 자세까지 커밋과 같게 투영한다', () => {
+      const key = { ...createDefaultKeyPosition(), id: MIXED_KEY_ID };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [key] },
+        canonicalPositions: { '4key': [key] },
+      });
+      useSpriteStore.setState({
+        positions: {
+          '4key': [
+            makeCanonicalSpritePosition({
+              id: MIXED_SPRITE_ID,
+              layerName: null,
+              groupId: null,
+              width: 200,
+              height: 200,
+              imageRect: { x: 0, y: 0, width: 200, height: 200 },
+              poses: [
+                makeSpritePose({
+                  poseId: 'pose-1',
+                  transform: { x: -60, y: 0, rotation: 0, scale: 1 },
+                }),
+              ],
+            }),
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: MIXED_KEY_ID, index: 0 },
+          { type: 'sprite', id: MIXED_SPRITE_ID, index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+
+      mounted = mountPanel();
+      const geometryProps = batchPropsMock.mock.lastCall?.[0] as {
+        onStableGeometryPreview: (operation: Record<string, unknown>) => void;
+      };
+      act(() =>
+        geometryProps.onStableGeometryPreview({
+          kind: 'resize',
+          dimension: 'width',
+          value: 100,
+        }),
+      );
+
+      const spriteCall = previewMock.mock.calls.find(
+        (call) =>
+          (call[2] as { domain?: string } | undefined)?.domain ===
+          'spritePosition',
+      );
+      expect(spriteCall).toBeTruthy();
+      const patch = (
+        spriteCall?.[1] as Array<{ id: string; patch: Record<string, unknown> }>
+      )[0].patch;
+      // 200 -> 100 이므로 배율 0.5가 콘텐츠에도 그대로 걸린다
+      expect(patch.width).toBe(100);
+      expect(patch.imageRect).toMatchObject({ width: 100 });
+      expect(
+        (patch.poses as Array<{ transform: { x: number } }>)[0].transform.x,
+      ).toBe(-30);
+    });
   });
 
   describe('혼합 선택 batch geometry pluginTargets 결합', () => {

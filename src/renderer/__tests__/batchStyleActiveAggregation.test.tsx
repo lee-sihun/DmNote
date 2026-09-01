@@ -168,6 +168,7 @@ describe('혼합 선택 active 그림자 집계', () => {
             hideFontControls
             shadowActiveState
             getMixedValue={mixedGetter([statPosition, keyPosition])}
+            getMixedValueSize={mixedGetter([statPosition, keyPosition])}
             getKeyOnlyMixedValue={mixedGetter([keyPosition])}
             getSelectedKeysData={() => []}
             handleBatchAlign={vi.fn()}
@@ -223,6 +224,7 @@ describe('혼합 선택 active 그림자 집계', () => {
             showShadowControls={false}
             shadowActiveState={false}
             getMixedValue={mixedGetter([graphPosition])}
+            getMixedValueSize={mixedGetter([graphPosition])}
             getSelectedKeysData={() => []}
             handleBatchAlign={vi.fn()}
             handleBatchDistribute={vi.fn()}
@@ -278,6 +280,7 @@ describe('혼합 선택 active 그림자 집계', () => {
             hideFontControls
             showShadowControls={false}
             getMixedValue={mixedGetter([keyPosition, keyPosition])}
+            getMixedValueSize={mixedGetter([keyPosition, keyPosition])}
             getSelectedKeysData={() => []}
             handleBatchAlign={vi.fn()}
             handleBatchDistribute={vi.fn()}
@@ -364,6 +367,7 @@ describe('그래프 전용 배치 패널 배선', () => {
             handleBatchStyleChangeComplete={vi.fn()}
             handleGraphBatchSharedSetting={vi.fn()}
             getMixedValueGraphs={mixedGraphs}
+            getMixedValueGeometry={mixedGraphs}
             getMixedValueGraphsAsKey={mixedGraphs}
             getSelectedGraphsData={() => []}
             batchScrollRefFor={() => () => {}}

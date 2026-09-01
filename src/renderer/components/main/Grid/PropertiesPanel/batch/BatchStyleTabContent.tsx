@@ -110,6 +110,12 @@ interface BatchStyleTabContentProps {
     getter: (pos: KeyPosition) => T | undefined,
     defaultValue: T,
   ) => { isMixed: boolean; value: T };
+  // 크기 전용 - 스타일 필드와 조절 대상이 다르다 (스프라이트는 스타일이 없지만
+  // 크기는 조절된다). 표시와 조절이 갈리면 대표값에 가린 채 덮인다
+  getMixedValueSize: <T>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ) => { isMixed: boolean; value: T };
   // getSelectedKeysData 함수 (displayText Mixed 판단용)
   getSelectedKeysData: () => KeyData[];
   // 핸들러
@@ -179,6 +185,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   imageSuppressesDefaultBorder = true,
   afterSizeContent,
   getMixedValue,
+  getMixedValueSize,
   getSelectedKeysData,
   handleBatchAlign,
   handleBatchDistribute,
@@ -394,7 +401,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         {/* 크기 */}
         <PropertyRow label={t('propertiesPanel.size') || '크기'}>
           <NumberInput
-            value={getMixedValue((pos) => pos.width, 60).value}
+            value={getMixedValueSize((pos) => pos.width, 60).value}
             onChange={(value) => handleBatchResize('width', value)}
             onPreview={(value) => handleBatchResizePreview('width', value)}
             onCancel={() => editGestureController.cancel()}
@@ -404,10 +411,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             max={9999}
             allowDecimal
             decimalScale={1}
-            isMixed={getMixedValue((pos) => pos.width, 60).isMixed}
+            isMixed={getMixedValueSize((pos) => pos.width, 60).isMixed}
           />
           <NumberInput
-            value={getMixedValue((pos) => pos.height, 60).value}
+            value={getMixedValueSize((pos) => pos.height, 60).value}
             onChange={(value) => handleBatchResize('height', value)}
             onPreview={(value) => handleBatchResizePreview('height', value)}
             onCancel={() => editGestureController.cancel()}
@@ -417,7 +424,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             max={9999}
             allowDecimal
             decimalScale={1}
-            isMixed={getMixedValue((pos) => pos.height, 60).isMixed}
+            isMixed={getMixedValueSize((pos) => pos.height, 60).isMixed}
           />
         </PropertyRow>
       </PropertySection>

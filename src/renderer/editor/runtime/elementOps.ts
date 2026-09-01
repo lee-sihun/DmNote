@@ -16,7 +16,7 @@ import {
 import { newElementId } from '../model/elementId';
 import { cloneSlot } from '@utils/keySlot';
 import { reissueSpritePoseIds } from '@utils/sprite/poseIdentity';
-import { projectSpriteResize } from '@utils/sprite/resizeProjection';
+import { spriteResizePatch } from '@utils/sprite/resizeProjection';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import { stableStringify } from '@utils/core/stableStringify';
 import {
@@ -2585,16 +2585,7 @@ const spriteResizeEagerIntent = (
   for (const positions of Object.values(record)) {
     const current = positions?.find((position) => position.id === id);
     if (current) {
-      const projected = projectSpriteResize(current, bounds);
-      return {
-        dx: projected.dx,
-        dy: projected.dy,
-        width: projected.width,
-        height: projected.height,
-        imageRect: projected.imageRect,
-        idleTransform: projected.idleTransform,
-        poses: projected.poses,
-      };
+      return spriteResizePatch(current, bounds);
     }
   }
   return { ...bounds };

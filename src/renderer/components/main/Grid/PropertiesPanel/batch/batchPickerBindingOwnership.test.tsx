@@ -473,6 +473,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       getMixedValue: mixedValue,
       getMixedValueCanonical: mixedValue,
       getMixedValueBatch: mixedValue,
+      getMixedValueGeometry: mixedValue,
       getMixedValueGraphs: mixedValue,
       getMixedValueGraphsAsKey: mixedValue,
       getMixedValueKnobs: mixedValue,

@@ -118,3 +118,29 @@ export const projectSpriteResize = <T extends SpriteResizeProjectable>(
     })),
   };
 };
+
+/**
+ * 리사이즈가 실제로 바꾸는 필드만 뽑은 patch. bounds와 그 배율로 스케일된
+ * 콘텐츠가 한 몸이라, eager 커밋과 편집 중 미리보기가 이 함수 하나를 공유해야
+ * 놓는 순간 이미지·자세가 튀지 않는다.
+ * position은 반드시 canonical - preview 합성분을 넣으면 이전 프레임의 배율
+ * 위에 다시 배율이 얹혀 누적된다
+ */
+export const spriteResizePatch = (
+  position: SpriteResizeProjectable,
+  bounds: EditorBoundsV1,
+): Pick<
+  SpriteResizeProjectable,
+  'dx' | 'dy' | 'width' | 'height' | 'imageRect' | 'idleTransform' | 'poses'
+> => {
+  const projected = projectSpriteResize(position, bounds);
+  return {
+    dx: projected.dx,
+    dy: projected.dy,
+    width: projected.width,
+    height: projected.height,
+    imageRect: projected.imageRect,
+    idleTransform: projected.idleTransform,
+    poses: projected.poses,
+  };
+};

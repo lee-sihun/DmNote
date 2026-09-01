@@ -406,6 +406,8 @@ interface BatchKeyLikePanelProps {
   /** 프리뷰가 섞이지 않은 canonical 기준. 게스처 취소 뒤 로컬 복원용 */
   getMixedValueCanonical: MixedValueGetter<KeyPosition>;
   getMixedValueBatch: MixedValueGetter<KeyPosition>;
+  /** 크기 표시 전용 - resize 대상 집합(스프라이트 포함)에서 파생된다 */
+  getMixedValueGeometry: MixedValueGetter<KeyPosition>;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getMixedValueKeysOnly: MixedValueGetter<KeyPosition>;
@@ -480,6 +482,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   getMixedValue,
   getMixedValueCanonical,
   getMixedValueBatch,
+  getMixedValueGeometry,
   getMixedValueGraphs,
   getMixedValueKeysOnly,
   getMixedValueActiveCapable,
@@ -1058,6 +1061,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   selectedKnobElements.length > 0
                 }
                 getMixedValue={styleMixedValueGetter}
+                getMixedValueSize={getMixedValueGeometry}
                 getSelectedKeysData={styleSelectedDataGetter}
                 afterSizeContent={
                   hasGraphSelection ? (
@@ -1585,6 +1589,8 @@ interface BatchGraphOnlyPanelProps {
   ) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
+  /** 크기 표시 전용 - resize 대상 집합(스프라이트 포함)에서 파생된다 */
+  getMixedValueGeometry: MixedValueGetter<KeyPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getSelectedGraphsData: () => KeyData[];
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
@@ -1621,6 +1627,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   onElementPropertyCommit,
   handleGraphBatchSharedSetting,
   getMixedValueGraphs,
+  getMixedValueGeometry,
   getMixedValueGraphsAsKey,
   getSelectedGraphsData,
   batchScrollRefFor,
@@ -1853,6 +1860,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 </>
               }
               getMixedValue={getMixedValueGraphsAsKey}
+              getMixedValueSize={getMixedValueGeometry}
               getSelectedKeysData={getSelectedGraphsData}
               handleBatchAlign={handleBatchAlign}
               handleBatchDistribute={handleBatchDistribute}
@@ -1963,6 +1971,8 @@ interface BatchKnobOnlyPanelProps {
   ) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
+  /** 크기 표시 전용 - resize 대상 집합(스프라이트 포함)에서 파생된다 */
+  getMixedValueGeometry: MixedValueGetter<KeyPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
   getSelectedKnobsData: () => KeyData[];
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
@@ -1999,6 +2009,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   onElementPropertyCommit,
   handleKnobBatchSharedSetting,
   getMixedValueKnobs,
+  getMixedValueGeometry,
   getMixedValueKnobsAsKey,
   getSelectedKnobsData,
   batchScrollRefFor,
@@ -2134,6 +2145,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 </>
               }
               getMixedValue={getMixedValueKnobsAsKey}
+              getMixedValueSize={getMixedValueGeometry}
               getSelectedKeysData={getSelectedKnobsData}
               handleBatchAlign={handleBatchAlign}
               handleBatchDistribute={handleBatchDistribute}
