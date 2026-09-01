@@ -4,7 +4,7 @@ import type { SpritePose, SpriteTransform } from '@src/types/key/sprites';
 import { DEFAULT_SPRITE_TRANSITION_EASING } from '@src/types/key/sprites';
 
 import {
-  computeSpriteReachAabb,
+  computeSpriteReachAabb as computeReachWithLiveKeys,
   easingOutputRange,
   easingOvershootExtension,
   resolveSpriteRenderEasing,
@@ -12,6 +12,16 @@ import {
   type SpriteReachGeometry,
 } from './spriteReach';
 import { makeSpritePose } from './spriteFixtures';
+
+// 기본은 모든 트리거 생존 - 죽은 키 케이스만 집합을 명시한다
+const computeSpriteReachAabb = (
+  sprite: SpriteReachGeometry,
+  liveTriggerIds?: ReadonlySet<string>,
+) =>
+  computeReachWithLiveKeys(
+    sprite,
+    liveTriggerIds ?? new Set(sprite.poses.flatMap((pose) => pose.triggers)),
+  );
 
 const OVERSHOOT_EASING = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
@@ -146,6 +156,89 @@ describe('computeSpriteReachAabb', () => {
           baseImage: null,
           poses: [makePose('p1', { x: 100 }, '  ')],
         }),
+      ),
+    ).toBeNull();
+  });
+
+  // 키를 지우면 그 자세는 영원히 재생되지 않는다. 도달 계산만 그걸 모르면
+  // 창이 넓어진 채 남아 키를 지워도 레이아웃이 되돌아오지 않는다
+  it('트리거 키가 사라진 자세는 도달 범위를 넓히지 않는다', () => {
+    const withDead = computeSpriteReachAabb(
+      makeSprite({
+        poses: [makePose('alive', { x: 40 }), makePose('dead', { x: -2000 })],
+      }),
+      new Set(['alive']),
+    );
+
+    expect(withDead).toEqual(
+      computeSpriteReachAabb(
+        makeSprite({ poses: [makePose('alive', { x: 40 })] }),
+      ),
+    );
+    expect(withDead?.minX).toBe(0);
+  });
+
+  // 조합 자세는 트리거 전부가 눌려야 선택된다 - 하나만 죽어도 재생 불가
+  it('조합 자세는 트리거 하나만 사라져도 제외된다', () => {
+    const combo = makeSpritePose({
+      poseId: 'combo',
+      triggers: ['alive', 'dead'],
+      transform: makeTransform({ x: -2000 }),
+      imageOverride: null,
+    });
+
+    expect(
+      computeSpriteReachAabb(
+        makeSprite({ poses: [combo] }),
+        new Set(['alive']),
+      ),
+    ).toEqual(computeSpriteReachAabb(makeSprite()));
+  });
+
+  // 활성 키가 없으면 해석기는 무조건 idle을 낸다 - 트리거 없는 자세는
+  // 어떤 눌림 조합에서도 선택되지 않는다 (복구·grandfather 데이터로 들어온다)
+  it('트리거가 빈 자세는 도달 범위를 넓히지 않는다', () => {
+    const orphan = makeSpritePose({
+      poseId: 'orphan',
+      triggers: [],
+      transform: makeTransform({ x: -2000 }),
+      imageOverride: null,
+    });
+
+    expect(computeSpriteReachAabb(makeSprite({ poses: [orphan] }))).toEqual(
+      computeSpriteReachAabb(makeSprite()),
+    );
+  });
+
+  // 같은 트리거 집합이 겹치면 해석기는 poseId 사전순 첫 자세만 쓴다
+  it('트리거 집합이 겹치는 뒤 순위 자세는 제외된다', () => {
+    const first = makeSpritePose({
+      poseId: 'a',
+      triggers: ['k'],
+      transform: makeTransform({ x: 40 }),
+      imageOverride: null,
+    });
+    const shadowed = makeSpritePose({
+      poseId: 'b',
+      triggers: ['k'],
+      transform: makeTransform({ x: -2000 }),
+      imageOverride: null,
+    });
+
+    expect(
+      computeSpriteReachAabb(makeSprite({ poses: [first, shadowed] })),
+    ).toEqual(computeSpriteReachAabb(makeSprite({ poses: [first] })));
+  });
+
+  // 기본 이미지가 없고 죽은 자세의 override만 남으면 그릴 게 없다
+  it('죽은 자세의 override만 남으면 이미지 없음으로 본다', () => {
+    expect(
+      computeSpriteReachAabb(
+        makeSprite({
+          baseImage: null,
+          poses: [makePose('dead', { x: -2000 }, 'pose.png')],
+        }),
+        new Set(),
       ),
     ).toBeNull();
   });

@@ -8,6 +8,7 @@ import type { NoteSettings } from '@src/types/settings/noteSettings';
 // 필드 추가 시 selectPluginLayoutElements·pluginLayoutElementsEqual 동반 수정 필요
 import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
 import { computeSpriteReachAabb } from '@utils/sprite/spriteReach';
+import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
 import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 
 interface LayoutInput {
@@ -191,9 +192,14 @@ export function computeLayout(input: LayoutInput) {
   const bounds: Bounds | null = (() => {
     if (!contentBounds) return null;
     let { minX, minY, maxX, maxY } = contentBounds;
+    // 재생 매핑과 같은 기준의 생존 키 - 요소가 남아 있어도 슬롯이 비면 누를 수
+    // 없다. 오버레이 잎이 쓰는 바로 그 결합을 그대로 재사용한다
+    const liveKeyIds = new Set(
+      buildSpriteKeyCanonicalMap(currentKeys, currentPositions).keys(),
+    );
     currentSpritePositions.forEach((pos) => {
       if (!pos || pos.hidden) return;
-      const reach = computeSpriteReachAabb(pos);
+      const reach = computeSpriteReachAabb(pos, liveKeyIds);
       if (!reach) return;
       minX = Math.min(minX, pos.dx + reach.minX);
       minY = Math.min(minY, pos.dy + reach.minY);

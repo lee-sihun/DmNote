@@ -5,6 +5,8 @@ import type {
 
 import { isRenderableImageRef } from '@utils/core/imageSource';
 
+import { selectableSpritePoses } from './poseResolver';
+
 import { anchorPx } from './spriteGeometry';
 
 // 스프라이트 이미지 도달 범위 계산.
@@ -234,15 +236,20 @@ export const easingOvershootExtension = (easing: string): number => {
 // 상이 시 원 상한이 모든 각을 커버한다
 export const computeSpriteReachAabb = (
   sprite: SpriteReachGeometry,
+  liveTriggerIds: ReadonlySet<string>,
 ): SpriteAabb | null => {
+  // 재생될 수 없는 자세는 창을 넓히지 않는다. 키를 지운 뒤에도 여유가 남으면
+  // 레이아웃이 되돌아오지 않는다. 선택 가능 판정은 해석기와 같은 전처리에서
+  // 파생시켜 두 규칙이 갈릴 수 없게 한다
+  const reachablePoses = selectableSpritePoses(sprite.poses, liveTriggerIds);
   const hasImage =
     isRenderableImageRef(sprite.baseImage) ||
-    sprite.poses.some((pose) => isRenderableImageRef(pose.imageOverride));
+    reachablePoses.some((pose) => isRenderableImageRef(pose.imageOverride));
   if (!hasImage) return null;
 
   const transforms: SpriteTransform[] = [
     sprite.idleTransform,
-    ...sprite.poses.map((pose) => pose.transform),
+    ...reachablePoses.map((pose) => pose.transform),
   ];
 
   const extension = easingOvershootExtension(sprite.transitionEasing);

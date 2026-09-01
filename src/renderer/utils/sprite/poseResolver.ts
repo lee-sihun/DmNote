@@ -82,6 +82,30 @@ const preparePoses = (poses: readonly SpritePose[]): PreparedPoses => {
   return prepared;
 };
 
+// 어떤 눌림 조합에서도 선택될 수 있는 자세만. 도달 범위 계산이 해석 규칙과
+// 갈리지 않도록 같은 전처리를 공유한다. 트리거가 비었거나(활성 집합이 비면
+// 무조건 idle) 죽은 키를 가리키거나, 같은 트리거 집합의 뒤 순위 중복이면
+// 영원히 선택되지 않는다
+export const selectableSpritePoses = (
+  poses: readonly SpritePose[],
+  liveTriggerIds: ReadonlySet<string>,
+): SpritePose[] => {
+  const prepared = preparePoses(poses);
+  const selectable = new Set<SpritePose>();
+  for (const pose of prepared.exactByKey.values()) {
+    if (
+      pose.triggers.length > 0 &&
+      pose.triggers.every((trigger) => liveTriggerIds.has(trigger))
+    ) {
+      selectable.add(pose);
+    }
+  }
+  for (const { key, pose } of prepared.uniqueSingles) {
+    if (liveTriggerIds.has(key)) selectable.add(pose);
+  }
+  return poses.filter((pose) => selectable.has(pose));
+};
+
 // 스프라이트가 참조하는 키 요소 id 전체 (중복 제거, poseId 사전순).
 // 오버레이 잎의 눌림 구독 목록과 자세 해석이 같은 전처리 결과를 공유한다
 export const spriteTriggerIds = (
