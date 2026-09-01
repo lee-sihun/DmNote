@@ -91,7 +91,7 @@
     }
   ],
   "contributorsPerLine": 7,
-  "contributorTemplate": "<a href=\"<%= contributor.profile %>\"><img src=\"<%= contributor.avatar_url + (contributor.avatar_url.indexOf(\"?\") < 0 ? \"?\" : \"&\") + \"s=\" + options.imageSize * 2 %>\" width=\"<%= options.imageSize %>\" alt=\"<%- contributor.name || contributor.login %>\"/><br /><sub><b><%- contributor.name || contributor.login %></b></sub></a><br /><%= contributions.replace(/<\\/a> <a/g, \"</a>&nbsp;<a\") %><br /><img width=\"1\" height=\"1\" hspace=\"30\" align=\"left\" alt=\"\"/>",
+  "contributorTemplate": "<a href=\"<%= contributor.profile %>\"><img src=\"<%= contributor.avatar_url + (contributor.avatar_url.indexOf(\"?\") < 0 ? \"?\" : \"&\") + \"s=\" + options.imageSize * 2 %>\" width=\"<%= options.imageSize %>\" alt=\"<%- contributor.name || contributor.login %>\"/><br /><sub><b><%- contributor.name || contributor.login %></b></sub></a><br /><%= contributions.replace(/>([^<]+)<\\/a>/g, function (m, e) { var hex = Array.from(e.replace(/\\uFE0F/g, \"\")).filter(function (c) { return c !== \"\\u200D\"; }).map(function (c) { return c.codePointAt(0).toString(16); }).join(\"-\"); return \"><img src=\\\"https://github.githubassets.com/images/icons/emoji/unicode/\" + hex + \".png?v8\\\" width=\\\"20\\\" align=\\\"absmiddle\\\" alt=\\\"\" + e + \"\\\"/></a>\"; }) %><br /><img width=\"1\" height=\"1\" hspace=\"30\" align=\"left\" alt=\"\"/>",
   "skipCi": true,
   "contributorsSortAlphabetically": false,
   "commitType": "docs"
