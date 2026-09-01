@@ -1,6 +1,6 @@
 /**
  * 반응형 스프라이트 잎 렌더
- * - 트리거 눌림이 transform과 data-state를 바꾸고, 미눌림이면 idle을 유지한다
+ * - 트리거 눌림이 transform과 data-sprite-state를 바꾸고, 미눌림이면 inactive를 유지한다
  * - 매핑에 없는 트리거는 무시되고, 실패한 이미지 src는 baseImage로 폴백한다
  */
 import React, { act } from 'react';
@@ -103,7 +103,7 @@ describe('OverlaySpriteItem', () => {
 
     const el = spriteEl();
     expect(el).not.toBeNull();
-    expect(el?.dataset.state).toBe('idle');
+    expect(el?.dataset.spriteState).toBe('inactive');
 
     // 히트 마커로 네이티브 히트 패널에 참여 - 상호작용은 패널 몫이라 pointer-events는 none 유지
     const wrapper = wrapperEl();
@@ -132,13 +132,13 @@ describe('OverlaySpriteItem', () => {
     render(makeSprite());
 
     act(() => setKeyActive('KeyA', true));
-    expect(spriteEl()?.dataset.state).toBe('active');
+    expect(spriteEl()?.dataset.spriteState).toBe('active');
     expect(
       imgEl()?.style.getPropertyValue('--dmn-sprite-transform-default'),
     ).toBe('translate(10px, -6px) rotate(15deg) scale(1.2)');
 
     act(() => setKeyActive('KeyA', false));
-    expect(spriteEl()?.dataset.state).toBe('idle');
+    expect(spriteEl()?.dataset.spriteState).toBe('inactive');
     expect(
       imgEl()?.style.getPropertyValue('--dmn-sprite-transform-default'),
     ).toBe('translate(0px, 0px) rotate(0deg) scale(1)');
@@ -235,7 +235,7 @@ describe('OverlaySpriteItem', () => {
     render(makeSprite(), new Map());
 
     act(() => setKeyActive('KeyA', true));
-    expect(spriteEl()?.dataset.state).toBe('idle');
+    expect(spriteEl()?.dataset.spriteState).toBe('inactive');
   });
 
   it('imageOverride pose는 눌림에서 이미지를 교체한다', () => {
@@ -271,7 +271,7 @@ describe('OverlaySpriteItem', () => {
     });
     expect(imgEl()).toBeNull();
     // 이미지가 없어도 요소 자체는 남는다
-    expect(spriteEl()?.dataset.state).toBe('active');
+    expect(spriteEl()?.dataset.spriteState).toBe('active');
   });
 
   // 문서가 안내하는 선택자 형태 - 에디터에서만 먹고 오버레이에서 빗나가면

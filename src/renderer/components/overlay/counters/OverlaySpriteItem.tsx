@@ -352,7 +352,9 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
         // 이미지 절대 배치의 포함 블록 - 래퍼와 같은 박스라 원점이 바뀌지 않는다
         style={{ width: '100%', height: '100%', position: 'relative' }}
         data-sprite-element="true"
-        data-state={!isOneShot && pressedIds.size > 0 ? 'active' : 'idle'}
+        data-sprite-state={
+          !isOneShot && pressedIds.size > 0 ? 'active' : 'inactive'
+        }
       >
         {isOneShot
           ? mountOneShotImage && (

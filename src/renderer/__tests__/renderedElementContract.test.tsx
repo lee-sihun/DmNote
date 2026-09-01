@@ -391,7 +391,7 @@ describe('렌더 DOM 계약', () => {
       expect(wrapper).not.toBeNull();
       expect(wrapper!.contains(el)).toBe(true);
       expect(wrapper).not.toBe(el);
-      expect(el!.getAttribute('data-state')).toBe('idle');
+      expect(el!.getAttribute('data-sprite-state')).toBe('inactive');
     });
   });
 

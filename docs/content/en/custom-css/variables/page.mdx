@@ -247,11 +247,13 @@ you can replace. Disable **Inline Styles Priority** on the sprite to use them.
 
 ### Sprite Selectors
 
-| Selector                             | Description                |
-| ------------------------------------ | -------------------------- |
-| `[data-sprite-element]`              | Every sprite activity area |
-| `[data-sprite-element] > img`        | The sprite image layer     |
-| `.spriteClass [data-sprite-element]` | A specific class's sprite  |
+| Selector                             | Description                                                     |
+| ------------------------------------ | --------------------------------------------------------------- |
+| `[data-sprite-element]`              | Every sprite activity area                                      |
+| `[data-sprite-element] > img`        | The sprite image layer                                          |
+| `[data-sprite-state="inactive"]`     | Sprites with no trigger key held                                |
+| `[data-sprite-state="active"]`       | Sprites with a trigger key held (onPress sprites stay inactive) |
+| `.spriteClass [data-sprite-element]` | A specific class's sprite                                       |
 
 ## Standard CSS Properties
 
