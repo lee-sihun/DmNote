@@ -58,12 +58,15 @@ that top-level collection. It is not an item-level diff.
   Every element in the position collections (`keyPositions`, `statPositions`,
   `graphPositions`, `knobPositions`, `spritePositions`) carries a stable `id`
   (UUID) assigned and owned by the app. Treat it as opaque: echo back the value
-  you read and never invent one. A written element with a missing or unknown
-  `id` gets a fresh one from the backend. If the same `id` appears more than
-  once, for example when you copy an element you read and append it, the element
-  in its original slot keeps the identity and the remaining copies get fresh
-  ones. The `poseId` carried by each pose of a sprite element follows the same
-  rules. See the [Keys API](/docs/api-reference/keys) for the identity rules.
+  you read and never invent one. A written element whose `id` is missing or
+  unknown inherits the `id` of an existing element whose remaining fields match;
+  with no match, the backend assigns a fresh one. Omitting an `id` does not
+  guarantee a fresh identity, and editing an element's values while omitting its
+  `id` may give it one. If the same `id` appears more than once, for example
+  when you copy an element you read and append it, the element in its original
+  slot keeps the identity and the remaining copies get fresh ones. The `poseId`
+  carried by each pose of a sprite element follows the same rules. See the [Keys
+  API](/docs/api-reference/keys) for the identity rules.
 </Callout>
 
 ## Sprite Position Types
@@ -71,7 +74,7 @@ that top-level collection. It is not an item-level diff.
 Reactive sprites are image layers that switch poses while their trigger keys
 are held. Unlike key elements they are not index-coupled to key mappings; each
 pose references the responsible key element ids directly. Documents you read
-always carry `id` and `poseId`; writes may omit both to receive fresh ones.
+always carry `id` and `poseId`; echo both back when you write.
 The collection and value limits noted below are enforced when you commit;
 documents you read echo stored data as is.
 

@@ -399,8 +399,11 @@ interface ElementShadowSpec {
 
 Every element position (`keyPositions`, `statPositions`, `graphPositions`,
 `knobPositions`, `spritePositions`) carries a stable `id`. Treat it as opaque: echo back the value
-you read and never invent one. A write whose `id` is missing or unknown gets a
-fresh one assigned by the backend. When the same `id` appears more than once,
+you read and never invent one. A write whose `id` is missing or unknown
+inherits the `id` of an existing element whose remaining fields match; with no
+match, the backend assigns a fresh one. Omitting an `id` does not guarantee a
+fresh identity, and editing an element's values while omitting its `id` may
+give it one. When the same `id` appears more than once,
 for example when you copy an element you read and append it, the element in
 its original slot keeps the identity and the remaining copies get fresh ones.
 Loading a full preset re-issues every `id`; a tab preset re-issues only the

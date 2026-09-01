@@ -6,7 +6,7 @@ use crate::{
     errors::EditorCommitError,
     models::{
         AppStoreData, EditorDocumentV1, EditorPatchV1, GraphPosition, KeyMappings, KeyPosition,
-        KeySlot, KnobPosition, ReactiveSpritePosition, StatPosition,
+        KeySlot, KnobPosition, ReactiveSpritePosition, SpritePose, StatPosition,
         EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_SCHEMA_VERSION,
     },
 };
@@ -755,15 +755,33 @@ fn adapt_v1_sprite_pose_ids(
         for sprite in sprites {
             let current_sprite = current_sprites
                 .and_then(|sprites| sprites.iter().find(|current| current.id == sprite.id));
-            for (pose_index, pose) in sprite.poses.iter_mut().enumerate() {
+            let normalized_current = current_sprite
+                .map(|sprite| {
+                    sprite
+                        .poses
+                        .iter()
+                        .map(sprite_pose_value_without_id)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            for pose in &mut sprite.poses {
                 if !pose.pose_id.is_empty() {
                     consumed_current_ids.insert(pose.pose_id.clone());
                     continue;
                 }
-                let inherited = current_sprite
-                    .and_then(|sprite| sprite.poses.get(pose_index))
-                    .map(|pose| pose.pose_id.clone())
-                    .filter(|id| is_valid_element_id(id) && !consumed_current_ids.contains(id));
+                let target = sprite_pose_value_without_id(pose);
+                let inherited = current_sprite.and_then(|sprite| {
+                    sprite
+                        .poses
+                        .iter()
+                        .zip(&normalized_current)
+                        .find(|(current_pose, normalized)| {
+                            is_valid_element_id(&current_pose.pose_id)
+                                && !consumed_current_ids.contains(&current_pose.pose_id)
+                                && **normalized == target
+                        })
+                        .map(|(current_pose, _)| current_pose.pose_id.clone())
+                });
                 if let Some(id) = inherited {
                     consumed_current_ids.insert(id.clone());
                     pose.pose_id = id;
@@ -773,6 +791,13 @@ fn adapt_v1_sprite_pose_ids(
             }
         }
     }
+}
+
+fn sprite_pose_value_without_id(pose: &SpritePose) -> SpritePose {
+    let mut copy = pose.clone();
+    copy.pose_id.clear();
+    copy.normalize_triggers();
+    copy
 }
 
 /// id를 비운 값 사본. 비교마다 양쪽을 clone하지 않도록, 스캔 전에 한 번씩만
@@ -1374,6 +1399,36 @@ mod tests {
             .unwrap()
     }
 
+    fn sprite_pose(trigger: u128, transform_x: f64) -> SpritePose {
+        let mut pose = SpritePose {
+            triggers: vec![Uuid::from_u128(trigger).to_string()],
+            ..SpritePose::default()
+        };
+        pose.transform.x = transform_x;
+        pose
+    }
+
+    fn store_with_sprites(sprites: Vec<ReactiveSpritePosition>) -> AppStoreData {
+        let mut store = AppStoreData {
+            sprite_positions: HashMap::from([("mode".to_string(), sprites)]),
+            ..AppStoreData::default()
+        };
+        rekey_store_element_ids(&mut store);
+        store
+    }
+
+    fn prepare_v1_sprite_patch(
+        store: &AppStoreData,
+        sprites: Vec<ReactiveSpritePosition>,
+    ) -> Vec<ReactiveSpritePosition> {
+        let mut patch = EditorPatchV1 {
+            sprite_positions: Some(HashMap::from([("mode".to_string(), sprites)])),
+            ..EditorPatchV1::default()
+        };
+        prepare_commit_patch_element_ids(store, &mut patch).unwrap();
+        patch.sprite_positions.unwrap().remove("mode").unwrap()
+    }
+
     #[test]
     fn backfill_assigns_globally_unique_sprite_and_pose_ids() {
         let duplicate = uuid::Uuid::new_v4().to_string();
@@ -1568,6 +1623,154 @@ mod tests {
             validation_code(prepare_commit_patch_element_ids(&store, &mut duplicate).unwrap_err()),
             DUPLICATE_ELEMENT_ID
         );
+    }
+
+    #[test]
+    fn v1_idless_sprite_pose_reorder_inherits_ids_by_value() {
+        let store = store_with_sprites(vec![ReactiveSpritePosition {
+            poses: vec![sprite_pose(10, 1.0), sprite_pose(20, 2.0)],
+            ..ReactiveSpritePosition::default()
+        }]);
+        let original = &store.sprite_positions["mode"][0];
+        let original_ids = original
+            .poses
+            .iter()
+            .map(|pose| pose.pose_id.clone())
+            .collect::<Vec<_>>();
+        let mut candidate = original.clone();
+        candidate.poses.swap(0, 1);
+        for pose in &mut candidate.poses {
+            pose.pose_id.clear();
+        }
+
+        let assigned = prepare_v1_sprite_patch(&store, vec![candidate]);
+
+        assert_eq!(assigned[0].poses[0].pose_id, original_ids[1]);
+        assert_eq!(assigned[0].poses[1].pose_id, original_ids[0]);
+    }
+
+    #[test]
+    fn v1_idless_sprite_pose_value_change_gets_fresh_id() {
+        let store = store_with_sprites(vec![ReactiveSpritePosition {
+            poses: vec![sprite_pose(10, 1.0)],
+            ..ReactiveSpritePosition::default()
+        }]);
+        let original = &store.sprite_positions["mode"][0];
+        let original_pose_id = original.poses[0].pose_id.clone();
+        let mut candidate = original.clone();
+        candidate.poses[0].pose_id.clear();
+        candidate.poses[0].transform.x = 9.0;
+
+        let assigned = prepare_v1_sprite_patch(&store, vec![candidate]);
+        let assigned_pose_id = &assigned[0].poses[0].pose_id;
+
+        assert_ne!(assigned_pose_id, &original_pose_id);
+        assert!(is_valid_element_id(assigned_pose_id));
+    }
+
+    #[test]
+    fn v1_idless_sprite_pose_normalizes_triggers_for_value_matching() {
+        let trigger_a = Uuid::from_u128(10).to_string();
+        let trigger_b = Uuid::from_u128(20).to_string();
+        let store = store_with_sprites(vec![ReactiveSpritePosition {
+            poses: vec![SpritePose {
+                triggers: vec![trigger_a.clone(), trigger_b.clone()],
+                ..SpritePose::default()
+            }],
+            ..ReactiveSpritePosition::default()
+        }]);
+        let original = &store.sprite_positions["mode"][0];
+        let original_pose_id = original.poses[0].pose_id.clone();
+        let mut candidate = original.clone();
+        candidate.poses[0].pose_id.clear();
+        candidate.poses[0].triggers = vec![trigger_b, trigger_a.clone(), trigger_a];
+
+        let assigned = prepare_v1_sprite_patch(&store, vec![candidate]);
+
+        assert_eq!(assigned[0].poses[0].pose_id, original_pose_id);
+    }
+
+    #[test]
+    fn v1_idless_sprite_pose_does_not_inherit_from_another_sprite() {
+        let store = store_with_sprites(vec![
+            ReactiveSpritePosition {
+                poses: vec![sprite_pose(10, 1.0)],
+                ..ReactiveSpritePosition::default()
+            },
+            ReactiveSpritePosition {
+                poses: vec![sprite_pose(20, 2.0)],
+                ..ReactiveSpritePosition::default()
+            },
+        ]);
+        let sprites = &store.sprite_positions["mode"];
+        let first_pose_id = sprites[0].poses[0].pose_id.clone();
+        let second_pose_id = sprites[1].poses[0].pose_id.clone();
+        let mut candidate = sprites.clone();
+        candidate[0].poses[0] = candidate[1].poses[0].clone();
+        candidate[0].poses[0].pose_id.clear();
+
+        let assigned = prepare_v1_sprite_patch(&store, candidate);
+        let assigned_pose_id = &assigned[0].poses[0].pose_id;
+
+        assert_ne!(assigned_pose_id, &first_pose_id);
+        assert_ne!(assigned_pose_id, &second_pose_id);
+        assert!(is_valid_element_id(assigned_pose_id));
+        assert_eq!(assigned[1].poses[0].pose_id, second_pose_id);
+    }
+
+    #[test]
+    fn v1_idless_new_sprite_parent_gets_fresh_pose_ids() {
+        let store = store_with_sprites(vec![ReactiveSpritePosition {
+            poses: vec![sprite_pose(10, 1.0), sprite_pose(20, 2.0)],
+            ..ReactiveSpritePosition::default()
+        }]);
+        let original = &store.sprite_positions["mode"][0];
+        let original_pose_ids = original
+            .poses
+            .iter()
+            .map(|pose| pose.pose_id.clone())
+            .collect::<HashSet<_>>();
+        let mut candidate = original.clone();
+        candidate.id.clear();
+        for pose in &mut candidate.poses {
+            pose.pose_id.clear();
+        }
+
+        let assigned = prepare_v1_sprite_patch(&store, vec![candidate]);
+
+        assert_ne!(assigned[0].id, original.id);
+        assert!(assigned[0]
+            .poses
+            .iter()
+            .all(|pose| !original_pose_ids.contains(&pose.pose_id)));
+    }
+
+    #[test]
+    fn v1_idless_equal_sprite_poses_consume_current_ids_in_order() {
+        let pose = sprite_pose(10, 1.0);
+        let store = store_with_sprites(vec![ReactiveSpritePosition {
+            poses: vec![pose.clone(), pose],
+            ..ReactiveSpritePosition::default()
+        }]);
+        let original = &store.sprite_positions["mode"][0];
+        let original_ids = original
+            .poses
+            .iter()
+            .map(|pose| pose.pose_id.clone())
+            .collect::<Vec<_>>();
+        let mut candidate = original.clone();
+        for pose in &mut candidate.poses {
+            pose.pose_id.clear();
+        }
+
+        let assigned = prepare_v1_sprite_patch(&store, vec![candidate]);
+        let assigned_ids = assigned[0]
+            .poses
+            .iter()
+            .map(|pose| pose.pose_id.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(assigned_ids, original_ids);
     }
 
     #[test]
