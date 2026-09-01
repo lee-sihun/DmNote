@@ -138,12 +138,12 @@ describe('키 표시 지연 타이머', () => {
     });
   };
 
-  const emitKeyState = (state: 'DOWN' | 'UP') => {
+  const emitKeyState = (state: 'DOWN' | 'UP', mode = '4key') => {
     act(() => {
       mocks.keyEventListener?.({
         key: 'KeyK',
         state,
-        mode: '4key',
+        mode,
         eventAgeMs: 0,
       });
     });
@@ -235,6 +235,31 @@ describe('키 표시 지연 타이머', () => {
     vi.advanceTimersByTime(1);
     expect(getKeySignal('KeyK').value).toBe(true);
     unsubscribe();
+  });
+
+  it('탭 전환 직후 도착한 이전 모드 이벤트는 새 탭 신호를 켜지 않는다', async () => {
+    // 백엔드 확인 전에 화면 모드만 먼저 바뀐 구간을 재현
+    await act(async () => {
+      useKeyStore.setState({
+        selectedKeyType: '8key',
+        keyMappings: { '4key': ['KeyK'], '8key': ['KeyK'] },
+        positions: {
+          '4key': [createDefaultKeyPosition(0, 0)],
+          '8key': [createDefaultKeyPosition(0, 0)],
+        },
+      });
+    });
+    await flushAsync();
+
+    emitKeyState('DOWN', '4key');
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getKeySignal('KeyK').value).toBe(false);
+
+    // 현재 탭 이벤트는 그대로 반영된다
+    emitKeyState('DOWN', '8key');
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(30000);
+    expect(getKeySignal('KeyK').value).toBe(true);
   });
 
   it('keys reset 시 모든 키 타이머를 취소한다', () => {

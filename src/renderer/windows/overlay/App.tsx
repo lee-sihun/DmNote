@@ -520,8 +520,13 @@ export default function App() {
         if (hydrationCancelled) return undefined;
         const unsubscribeKeyEvents = keyEventBus.subscribe(
           ({ key, state, mode, eventAgeMs, holdDurationMs }) => {
-            seenSinceResetRef.current.add(key);
+            // 대조 원장은 모드로 네임스페이스돼 있어 낡은 모드도 그대로 기록한다
             reconcileSeenRef.current?.add(`${mode}::${key}`);
+            // 탭 전환은 백엔드 확인 전에 화면 모드를 먼저 바꾸므로, 그 사이 도착한
+            // 이전 모드 이벤트가 새 탭 신호를 켜면 onPress 스프라이트까지 발동한다.
+            // 대조 경로(reconcileWithBootstrap)가 쓰는 기준과 같게 건다
+            if (mode !== keyEventContextRef.current.selectedKeyType) return;
+            seenSinceResetRef.current.add(key);
             const isDown = state === 'DOWN';
             // 키 UI 업데이트 (딜레이 적용)
             updateKeySignalWithDelay(key, isDown);
