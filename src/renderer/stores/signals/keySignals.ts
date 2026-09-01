@@ -46,7 +46,14 @@ export function subscribeKeyPressEdge(
 function emitKeyPressEdge(key: string) {
   const listeners = pressEdgeListeners.get(key);
   if (!listeners) return;
-  for (const listener of [...listeners]) listener();
+  // 구독자별 격리 - 잎 하나가 던져도 나머지 구독자와 호출자의 노트 처리가 이어진다
+  for (const listener of [...listeners]) {
+    try {
+      listener();
+    } catch (error) {
+      console.error('[keySignals] press edge listener error:', error);
+    }
+  }
 }
 
 // 이벤트 경로가 마지막으로 적용한 레벨 - edge 판정 전용.
