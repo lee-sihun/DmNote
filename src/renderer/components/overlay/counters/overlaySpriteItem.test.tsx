@@ -174,6 +174,41 @@ describe('OverlaySpriteItem', () => {
     ).toBe('transform 90ms ease');
   });
 
+  // whileHeld의 보간자는 CSS transition이라 onPress의 WAAPI try/catch가 닿지 않는다.
+  // 엔진이 모르는 timing-function은 선언 전체가 버려져 0ms 스냅이 되므로,
+  // 문법 게이트를 통과한 값도 선언 전에 엔진 지원을 확인해야 한다
+  it('엔진이 거부하는 easing은 whileHeld 전환에서도 폴백 곡선으로 강등된다', () => {
+    const unsupported = 'linear(0, 0.25 75%, 1)';
+    const supports = vi
+      .spyOn(CSS, 'supports')
+      .mockImplementation((...args: unknown[]) =>
+        args[0] === 'transition-timing-function' && args[1] === unsupported
+          ? false
+          : true,
+      );
+
+    render(makeSprite({ transitionEasing: unsupported }));
+
+    expect(
+      imgEl()?.style.getPropertyValue('--dmn-sprite-transition-default'),
+    ).toBe('transform 90ms ease');
+    supports.mockRestore();
+  });
+
+  // 강등 게이트가 지원되는 곡선까지 삼키면 whileHeld가 통째로 기본 곡선이 된다.
+  // 폴백만 검사하면 그 회귀를 못 잡는다
+  it('엔진이 지원하는 easing은 원문 그대로 전환에 실린다', () => {
+    const supported = 'linear(0, 0.5 50%, 1)';
+    const supports = vi.spyOn(CSS, 'supports').mockReturnValue(true);
+
+    render(makeSprite({ transitionEasing: supported }));
+
+    expect(
+      imgEl()?.style.getPropertyValue('--dmn-sprite-transition-default'),
+    ).toBe(`transform 90ms ${supported}`);
+    supports.mockRestore();
+  });
+
   it('useInlineStyles=true는 외관 채널을 인라인 선언으로 승격한다', () => {
     render(makeSprite({ useInlineStyles: true, imageFit: 'cover' }));
 

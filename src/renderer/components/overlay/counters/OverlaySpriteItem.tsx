@@ -19,7 +19,10 @@ import {
   computeSpriteImageStyle,
   spriteTransformToCss,
 } from '@utils/sprite/spriteImageStyles';
-import { resolveSpriteRenderEasing } from '@utils/sprite/spriteReach';
+import {
+  resolveSpriteRenderEasing,
+  SPRITE_SAFE_FALLBACK_EASING,
+} from '@utils/sprite/spriteReach';
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 
 interface OverlaySpriteItemProps {
@@ -98,10 +101,21 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
   // easing 해석은 정규식·베지어 극값 계산이라 렌더마다 돌리지 않는다.
   // 발산 easing은 도달 계산과 같은 기준으로 강등 (창 클리핑 방지)
-  const renderEasing = useMemo(
-    () => resolveSpriteRenderEasing(position.transitionEasing),
-    [position.transitionEasing],
-  );
+  const renderEasing = useMemo(() => {
+    const resolved = resolveSpriteRenderEasing(position.transitionEasing);
+    // onPress의 보간자는 WAAPI뿐이라 전환 선언을 내지 않는다 - 엔진 질의도 생략
+    if (isOneShot) return resolved;
+    // CSS.supports가 없으면 판정할 방법이 없으니 통과시킨다 (테스트 DOM 포함)
+    if (typeof CSS === 'undefined' || typeof CSS.supports !== 'function') {
+      return resolved;
+    }
+    // whileHeld의 보간자는 CSS transition이라 WAAPI try/catch가 닿지 않는다.
+    // 무효한 timing-function은 선언 전체가 버려져 0ms 스냅이 되므로, 문법 게이트를
+    // 통과한 값도 선언 전에 엔진에 직접 물어본다
+    return CSS.supports('transition-timing-function', resolved)
+      ? resolved
+      : SPRITE_SAFE_FALLBACK_EASING;
+  }, [position.transitionEasing, isOneShot]);
   // onPress는 전환 채널 미사용 - WAAPI가 유일한 보간자다
   const transitionCss = isOneShot
     ? undefined
