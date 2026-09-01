@@ -325,6 +325,8 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
       ref={rootRef}
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 'var(--z-canvas-gradient-editor)' }}
+      // 노브 조작이 자세 팝업의 바깥 클릭으로 읽히지 않게 한다
+      data-dmn-canvas-editor-overlay="true"
     >
       {/* 축→핀 안내선 */}
       <svg

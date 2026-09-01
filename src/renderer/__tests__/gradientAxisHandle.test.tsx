@@ -210,7 +210,9 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     });
 
     expect(useGradientEditStore.getState().session).toBeNull();
-    expect(host.querySelector('[data-dmn-gradient-overlay="true"]')).toBeNull();
+    expect(
+      host.querySelector('[data-dmn-canvas-editor-overlay="true"]'),
+    ).toBeNull();
   });
 
   it('축을 잡고 window에서 움직이면 각도 프리뷰·커밋이 적용된다', () => {

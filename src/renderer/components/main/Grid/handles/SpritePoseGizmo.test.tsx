@@ -114,6 +114,15 @@ describe('SpritePoseGizmo', () => {
     expect(el.style.top).toBe('189px');
   });
 
+  // 팝업은 body 포털이라 캔버스 노브는 바깥 클릭으로 읽힌다. 이 마커가 없으면
+  // 노브를 누르는 순간 자세 팝업이 닫히고 세션이 걷혀 드래그가 즉사한다
+  it('루트에 온캔버스 편집 오버레이 마커를 싣는다', () => {
+    render(makeSession());
+    expect(
+      knob()!.closest('[data-dmn-canvas-editor-overlay="true"]'),
+    ).not.toBeNull();
+  });
+
   it('노브 드래그는 up에서 마지막 move를 flush해 커밋한다 - 축 고정 회전 역산', () => {
     const session = makeSession();
     render(session);

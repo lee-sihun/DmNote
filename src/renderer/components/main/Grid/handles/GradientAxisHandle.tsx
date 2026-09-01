@@ -738,7 +738,7 @@ const GradientAxisOverlay = ({
       className="absolute inset-0 pointer-events-none"
       // 리사이즈 핸들 위, 사이드 패널 아래에 두는 내부 편집 층 - 패널 위로 새지 않게
       style={{ zIndex: 'var(--z-canvas-gradient-editor)' }}
-      data-dmn-gradient-overlay="true"
+      data-dmn-canvas-editor-overlay="true"
     >
       {/* 조작 UI 묶음 - 핸들 드래그나 피커 색 드래그 동안 흐려져
           가려진 대상의 실제 색이 보인다. 값 배지는 묶음 밖이라 선명 유지 */}
