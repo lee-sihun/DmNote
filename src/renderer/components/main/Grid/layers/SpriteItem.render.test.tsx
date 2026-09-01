@@ -378,4 +378,42 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
       'translate(1px, 2px) rotate(0deg) scale(1)',
     );
   });
+
+  // 캔버스가 깨진 아이콘을 그리면 송출 화면과 미리보기가 갈린다.
+  // 오버레이는 같은 상황에서 base 폴백 후 이미지 없음으로 내려간다
+  it('실패한 이미지는 기본 이미지로 폴백하고 둘 다 실패하면 자리표시자로 간다', () => {
+    const node = renderSprite(
+      spritePosition({
+        baseImage: '/base.png',
+        poses: [pose('pose-1', { imageOverride: '/override.png' })],
+      }),
+    );
+    const img = () => node?.querySelector('img');
+
+    act(() =>
+      useSpriteEditPreviewStore.getState().publish({
+        kind: 'pose',
+        positionId: SPRITE_ID,
+        poseId: 'pose-1',
+        fallbackPose: pose('pose-1', { imageOverride: '/override.png' }),
+        preferFallback: true,
+      }),
+    );
+    expect(img()?.getAttribute('src')).toBe('/override.png');
+
+    act(() => {
+      img()?.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+    expect(img()?.getAttribute('src')).toBe('/base.png');
+
+    act(() => {
+      img()?.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+    expect(img()).toBeNull();
+    // 이미지가 없는 상태이므로 자리표시자와 상시 가이드로 함께 내려간다
+    expect(
+      node?.querySelector('[data-sprite-placeholder="true"]'),
+    ).not.toBeNull();
+    expect(activityGuide()?.className).not.toContain('border-transparent');
+  });
 });

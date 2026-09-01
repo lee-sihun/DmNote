@@ -1,6 +1,10 @@
 import React from 'react';
 import { useGridItemInteraction } from '@hooks/Grid/useGridItemInteraction';
 import { useSpriteEditPreview } from '@stores/grid/useSpriteEditPreviewStore';
+import {
+  isErrorForCurrentSrc,
+  useFailedImageSrcs,
+} from '@hooks/overlay/useFailedImageSrcs';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
 import { anchorPx } from '@utils/sprite/spriteGeometry';
@@ -72,9 +76,20 @@ const SpriteItem = ({
   const showPivotMarker = editPreview?.kind === 'pivot';
   const pivotMarkerPx = anchorPx(position.imageRect, position.pivot);
 
-  const imageSrc = resolveImageSource(
+  // 유실 이미지를 그대로 두면 캔버스에 깨진 아이콘이 박히고, 송출 화면(오버레이)은
+  // 폴백을 그려 미리보기가 결과와 어긋난다. 폴백 규칙은 오버레이와 같다.
+  // 훅 인자는 저장된 경로로 고정 - 편집 중 draft override를 넣으면 스크럽마다
+  // 키가 바뀌어 실패 집합이 초기화된다
+  const { failedImageSrcs, markFailed } = useFailedImageSrcs(
+    position.baseImage,
+    ...position.poses.map((pose) => pose.imageOverride),
+  );
+  const baseSrc = resolveImageSource(position.baseImage);
+  const fallbackSrc = baseSrc && !failedImageSrcs.has(baseSrc) ? baseSrc : null;
+  let imageSrc = resolveImageSource(
     previewPose?.imageOverride ?? position.baseImage,
   );
+  if (imageSrc && failedImageSrcs.has(imageSrc)) imageSrc = fallbackSrc;
 
   const {
     isSelectionMode,
@@ -163,6 +178,10 @@ const SpriteItem = ({
               ),
               pointerEvents: 'none',
               userSelect: 'none',
+            }}
+            onError={(event) => {
+              if (!isErrorForCurrentSrc(event.currentTarget, imageSrc)) return;
+              markFailed(imageSrc);
             }}
           />
         ) : (
