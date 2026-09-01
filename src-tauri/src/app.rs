@@ -66,6 +66,12 @@ pub fn run() {
         return;
     }
 
+    // macOS: 접근성 권한 확인 및 미부여 시 시스템 노브로그 표시
+    #[cfg(target_os = "macos")]
+    if !interaction_benchmark {
+        request_accessibility_permission();
+    }
+
     if let Err(err) = setup_logging() {
         eprintln!("Failed to initialize logging: {err}");
     }
@@ -961,4 +967,67 @@ fn extract_zip_bytes_to_dir(zip_bytes: &[u8], dest_dir: &std::path::Path) -> Res
     }
 
     Ok(())
+}
+
+/// macOS 접근성(Accessibility) 권한을 확인하고,
+/// 없으면 시스템 권한 요청 노브로그를 자동으로 표시합니다.
+/// `AXIsProcessTrustedWithOptions`에 `kAXTrustedCheckOptionPrompt: true`를 전달하면
+/// macOS가 자동으로 "시스템 설정 > 개인정보 보호 및 보안 > 손쉬운 사용" 허용 팝업을 띄워줍니다.
+/// 참고: 입력 모니터링(Input Monitoring) 권한은 rdev가 CGEventTap을 생성할 때
+/// macOS가 자동으로 프롬프트를 표시합니다.
+#[cfg(target_os = "macos")]
+fn request_accessibility_permission() {
+    use std::ffi::c_void;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFDictionaryCreate(
+            allocator: *const c_void,
+            keys: *const *const c_void,
+            values: *const *const c_void,
+            num_values: isize,
+            key_callbacks: *const c_void,
+            value_callbacks: *const c_void,
+        ) -> *const c_void;
+        fn CFRelease(cf: *const c_void);
+
+        static kCFBooleanTrue: *const c_void;
+        static kCFTypeDictionaryKeyCallBacks: c_void;
+        static kCFTypeDictionaryValueCallBacks: c_void;
+    }
+
+    extern "C" {
+        static kAXTrustedCheckOptionPrompt: *const c_void;
+    }
+
+    unsafe {
+        let keys: [*const c_void; 1] = [kAXTrustedCheckOptionPrompt];
+        let values: [*const c_void; 1] = [kCFBooleanTrue];
+
+        let options = CFDictionaryCreate(
+            std::ptr::null(),
+            keys.as_ptr(),
+            values.as_ptr(),
+            1,
+            &kCFTypeDictionaryKeyCallBacks as *const c_void,
+            &kCFTypeDictionaryValueCallBacks as *const c_void,
+        );
+
+        let trusted = AXIsProcessTrustedWithOptions(options);
+
+        if !options.is_null() {
+            CFRelease(options);
+        }
+
+        if trusted {
+            log::info!("macOS 접근성 권한이 이미 허용되어 있습니다.");
+        } else {
+            log::warn!("macOS 접근성 권한이 허용되지 않았습니다. 시스템 설정에서 허용해 주세요.");
+        }
+    }
 }

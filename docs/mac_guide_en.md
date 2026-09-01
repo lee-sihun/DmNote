@@ -34,7 +34,9 @@ DM NOTE requires two permissions to capture keyboard and mouse input:
 
 ### Setup Instructions
 
-The app does not automatically show the **Accessibility** permission prompt at launch. Configure both permissions, including Input Monitoring, manually:
+When you first run the app, the **Accessibility** permission popup will appear automatically.
+
+**Input Monitoring** permission may not show a popup, so you need to set it up manually:
 
 1. Open **System Settings**
 2. Go to **Privacy & Security**
