@@ -5,7 +5,7 @@
  */
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CanonicalReactiveSpritePosition } from '@src/types/editor';
 import type { SpritePose } from '@src/types/key/sprites';
@@ -562,6 +562,106 @@ describe('OverlaySpriteItem onPress', () => {
     act(() => applyEventKeyState('KeyA', false));
     act(() => applyEventKeyState('KeyA', true));
     expect(imgEl()!.getAttribute('src')).toBe(OVERRIDE_IMAGE);
+  });
+
+  // 문법 게이트는 엔진 지원까지 알 수 없다 - macOS 11 WebKit과 OBS의 CEF는
+  // linear()를 거부한다. 던지는 자리가 src 교체 뒤라 복원이 없으면 고착된다.
+  // 거부 easing은 모듈 수준에 기억되므로 케이스마다 다른 값을 쓴다
+  const rejectAnimate = () => {
+    proto.animate = function animate() {
+      throw new TypeError('unsupported easing');
+    };
+  };
+
+  it('엔진이 easing을 거부하면 스냅 폴백으로 재생하고 복원한다', () => {
+    vi.useFakeTimers();
+    rejectAnimate();
+    render(oneShotSprite({ transitionEasing: 'linear(0, 0.25 25%, 1)' }));
+    const img = imgEl()!;
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+    expect(img.style.transform).toBe(
+      'translate(10px, -6px) rotate(15deg) scale(1.2)',
+    );
+
+    act(() => vi.advanceTimersByTime(300));
+    // 기본 모드는 transform을 비워야 CSS 변수 채널이 idle을 되찾는다
+    expect(img.style.transform).toBe('');
+    expect(img.src).toContain(BASE_IMAGE);
+    vi.useRealTimers();
+  });
+
+  it('인라인 우선 모드의 스냅 폴백은 idle transform을 직접 되돌린다', () => {
+    vi.useFakeTimers();
+    rejectAnimate();
+    render(
+      oneShotSprite({
+        useInlineStyles: true,
+        transitionEasing: 'linear(0, 0.75 75%, 1)',
+      }),
+    );
+    const img = imgEl()!;
+
+    act(() => applyEventKeyState('KeyA', true));
+    act(() => vi.advanceTimersByTime(300));
+    // 비우면 React가 인라인으로 쓴 idle transform까지 사라진다 (prop 동일이라 복구 없음)
+    expect(img.style.transform).toBe(
+      'translate(0px, 0px) rotate(0deg) scale(1)',
+    );
+    vi.useRealTimers();
+  });
+
+  it('폴백 재생 중 재구독되면 자세 transform도 함께 걷는다', () => {
+    vi.useFakeTimers();
+    rejectAnimate();
+    const sprite = oneShotSprite({
+      useInlineStyles: true,
+      transitionEasing: 'linear(0, 0.4 40%, 1)',
+    });
+    render(sprite);
+    const img = imgEl()!;
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(img.style.transform).toBe(
+      'translate(10px, -6px) rotate(15deg) scale(1.2)',
+    );
+
+    // 자세 목록 교체로 구독 effect가 다시 돈다 - 타이머만 지우면 각도가 남는다
+    render({
+      ...sprite,
+      poses: [
+        makePose('p1', ['el-a'], { imageOverride: OVERRIDE_IMAGE }),
+        makePose('p2', ['el-a'], { imageOverride: OVERRIDE_IMAGE }),
+      ],
+    });
+    expect(imgEl()!.style.transform).toBe(
+      'translate(0px, 0px) rotate(0deg) scale(1)',
+    );
+    vi.useRealTimers();
+  });
+
+  it('폴백 만료는 캡처값이 아니라 최신 idle transform으로 되돌린다', () => {
+    vi.useFakeTimers();
+    rejectAnimate();
+    const sprite = oneShotSprite({
+      useInlineStyles: true,
+      transitionEasing: 'linear(0, 0.6 60%, 1)',
+    });
+    render(sprite);
+
+    act(() => applyEventKeyState('KeyA', true));
+    // 재생 중 idle이 바뀐다 - React가 최신 값을 쓴 뒤 타이머가 옛 값을 덮으면 안 된다
+    render({
+      ...sprite,
+      idleTransform: { x: 4, y: 8, rotation: 30, scale: 2 },
+    });
+
+    act(() => vi.advanceTimersByTime(300));
+    expect(imgEl()!.style.transform).toBe(
+      'translate(4px, 8px) rotate(30deg) scale(2)',
+    );
+    vi.useRealTimers();
   });
 
   it('기본 이미지만 있고 그마저 실패하면 노드를 내린다', () => {

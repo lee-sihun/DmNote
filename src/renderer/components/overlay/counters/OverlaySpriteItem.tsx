@@ -27,6 +27,24 @@ interface OverlaySpriteItemProps {
   keyCanonicalMap: ReadonlyMap<string, string>;
 }
 
+// 엔진이 거부한 easing - 문법이 유효해도 구형 WebKit(macOS 11)이나 OBS의 CEF는
+// linear()를 모른다. 한 번 거부당하면 다시 시도하지 않는다
+const rejectedEasings = new Set<string>();
+
+// 폴백 재생이 직접 쓴 transform을 문서의 idle로 되돌린다.
+// 기본 모드는 비우면 CSS 변수 채널이 받고, 인라인 우선 모드는 React가 쓴 것과
+// 같은 선언을 되돌린다. 호출부가 항상 최신 문서를 넘겨야 재생 중 idleTransform·
+// 인라인 우선이 바뀌어도 캡처해 둔 옛 값을 다시 덮지 않는다
+const restoreIdleTransform = (
+  el: HTMLImageElement,
+  position: CanonicalReactiveSpritePosition,
+) => {
+  el.style.transform =
+    position.useInlineStyles === true
+      ? spriteTransformToCss(position.idleTransform)
+      : '';
+};
+
 // 단발(onPress) 재생 상태 - 재트리거 소유권 검증용 세대 포함.
 // 늦게 도착한 이전 재생의 복원 콜백이 새 재생의 이미지를 덮지 못하게 한다
 interface OneShotPlayback {
@@ -128,22 +146,6 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     animation: null,
     timer: null,
   });
-  // 진행 중 재생 정리 - 세대 무효화로 늦은 콜백까지 차단 (멱등)
-  const stopPlayback = () => {
-    const playback = playbackRef.current;
-    playback.generation += 1;
-    if (playback.animation) {
-      playback.animation.onfinish = null;
-      playback.animation.oncancel = null;
-      playback.animation.cancel();
-      playback.animation = null;
-    }
-    if (playback.timer !== null) {
-      clearTimeout(playback.timer);
-      playback.timer = null;
-    }
-  };
-
   // edge 핸들러는 구독 effect보다 자주 갱신되는 값을 ref로 읽는다 (재구독 방지).
   // layout 단계 갱신이라 구독 해제 cleanup도 최신 문서·실패 집합으로 복원한다
   const latestRef = useRef({ position, failedImageSrcs });
@@ -170,6 +172,26 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     } else {
       el.removeAttribute('src');
       el.style.visibility = 'hidden';
+    }
+  };
+
+  // 진행 중 재생 정리 - 세대 무효화로 늦은 콜백까지 차단 (멱등).
+  // 노드는 호출부가 넘긴다 - 언마운트 뒤 정리에서는 imgRef가 이미 비어 있다
+  const stopPlayback = (el: HTMLImageElement | null) => {
+    const playback = playbackRef.current;
+    playback.generation += 1;
+    if (playback.animation) {
+      playback.animation.onfinish = null;
+      playback.animation.oncancel = null;
+      playback.animation.cancel();
+      playback.animation = null;
+    }
+    if (playback.timer !== null) {
+      clearTimeout(playback.timer);
+      playback.timer = null;
+      // 폴백이 쓴 transform은 React prop이 그대로라 리렌더가 걷어내지 못한다.
+      // 취소도 정상 만료와 같은 복원을 거쳐야 자세 각도가 남지 않는다
+      if (el) restoreIdleTransform(el, latestRef.current.position);
     }
   };
 
@@ -206,7 +228,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
       const playback = playbackRef.current;
       // 재트리거 소유권 이전 - 이전 재생의 콜백을 떼고 취소한다
-      stopPlayback();
+      stopPlayback(el);
       const generation = playback.generation;
 
       if (src) {
@@ -226,17 +248,40 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
       const fromCss = spriteTransformToCss(resolved.transform);
       const toCss = spriteTransformToCss(pos.idleTransform);
-      if (typeof el.animate === 'function') {
-        // 자세에서 시작해 idle로 돌아오는 한 방향 재생 - 스냅 타격 + 이즈 복귀.
-        // fill: none이라 종료 후에는 CSS 변수 채널(idle)이 그대로 복귀값이다
-        const animation = el.animate(
-          [{ transform: fromCss }, { transform: toCss }],
-          {
-            duration: pos.pressDurationMs,
-            easing: resolveSpriteRenderEasing(pos.transitionEasing),
-            fill: 'none',
-          },
-        );
+      // WAAPI 부재·거부 공용 폴백 - 자세로 스냅했다가 시간 후 복귀 (보간 없음)
+      const snapBack = () => {
+        el.style.transform = fromCss;
+        playback.timer = window.setTimeout(() => {
+          if (playbackRef.current.generation !== generation) return;
+          playbackRef.current.timer = null;
+          restoreIdleTransform(el, latestRef.current.position);
+          restore();
+        }, pos.pressDurationMs);
+      };
+
+      const easing = resolveSpriteRenderEasing(pos.transitionEasing);
+      let animation: Animation | null = null;
+      if (typeof el.animate === 'function' && !rejectedEasings.has(easing)) {
+        try {
+          // 자세에서 시작해 idle로 돌아오는 한 방향 재생 - 스냅 타격 + 이즈 복귀.
+          // fill: none이라 종료 후에는 CSS 변수 채널(idle)이 그대로 복귀값이다
+          animation = el.animate(
+            [{ transform: fromCss }, { transform: toCss }],
+            {
+              duration: pos.pressDurationMs,
+              easing,
+              fill: 'none',
+            },
+          );
+        } catch (error) {
+          // 문법 게이트는 엔진의 지원 여부까지는 알 수 없다. 여기서 던지면
+          // 이미 자세 이미지로 바꾼 뒤라 복원 없이는 그대로 고착된다
+          rejectedEasings.add(easing);
+          console.error('[sprite] 엔진이 거부한 easing:', easing, error);
+        }
+      }
+
+      if (animation) {
         const settle = () => {
           if (playbackRef.current.generation !== generation) return;
           playbackRef.current.animation = null;
@@ -247,14 +292,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
         animation.oncancel = settle;
         playback.animation = animation;
       } else {
-        // WAAPI 부재 폴백 - 자세로 스냅했다가 시간 후 복귀 (보간 없음)
-        el.style.transform = fromCss;
-        playback.timer = window.setTimeout(() => {
-          if (playbackRef.current.generation !== generation) return;
-          playbackRef.current.timer = null;
-          el.style.transform = '';
-          restore();
-        }, pos.pressDurationMs);
+        snapBack();
       }
     };
 
@@ -264,7 +302,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
       // whileHeld 전환·트리거 교체 시 진행 중 재생을 함께 끊는다
-      stopPlayback();
+      stopPlayback(mountedImg);
       // 직접 쓴 src·visibility 잔상 제거 - React는 prop이 같으면 DOM을 다시
       // 쓰지 않으므로 여기서 현재 문서 기준으로 복원한다 (전환 시에는 key가
       // 노드를 갈아 끼우고, 같은 분기 안 재구독에는 이 복원이 잡는다)
