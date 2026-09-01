@@ -73,6 +73,8 @@ export interface ClipboardKnobData {
 export interface ClipboardSpriteData {
   type: 'sprite';
   position: ReactiveSpritePosition;
+  // 복사 시점의 트리거 -> canonical 키. 다른 탭에 붙일 때 같은 키로 다시 결합한다
+  triggerCanonicals?: Record<string, string>;
 }
 
 // 클립보드에 저장되는 플러그인 요소 데이터
@@ -107,6 +109,9 @@ interface GridSelectionState {
   clipboard: ClipboardItem[];
   // 클립보드에 포함된 그룹 정보 (그룹 헤더 선택 후 복사 시)
   clipboardGroups: { id: string; name: string; collapsed?: boolean }[];
+  // 복사한 모드. 탭을 옮겨 붙여넣는지 판정한다 - 요소 id는 문서 전역 유일이라
+  // 다른 탭에서는 스프라이트 자세 트리거가 절대 해석되지 않는다
+  clipboardMode: string | null;
 
   // 마퀴 선택 상태
   isMarqueeSelecting: boolean;
@@ -138,6 +143,7 @@ interface GridSelectionState {
   setClipboard: (
     items: ClipboardItem[],
     groups?: { id: string; name: string; collapsed?: boolean }[],
+    mode?: string | null,
   ) => void;
   clearClipboard: () => void;
 
@@ -168,6 +174,7 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   lastSelectedKeyBounds: null,
   clipboard: [],
   clipboardGroups: [],
+  clipboardMode: null,
   isMarqueeSelecting: false,
   marqueeStart: null,
   marqueeEnd: null,
@@ -265,12 +272,16 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
     set({ lastSelectedKeyBounds: bounds });
   },
 
-  setClipboard: (items, groups) => {
-    set({ clipboard: items, clipboardGroups: groups || [] });
+  setClipboard: (items, groups, mode) => {
+    set({
+      clipboard: items,
+      clipboardGroups: groups || [],
+      clipboardMode: mode ?? null,
+    });
   },
 
   clearClipboard: () => {
-    set({ clipboard: [], clipboardGroups: [] });
+    set({ clipboard: [], clipboardGroups: [], clipboardMode: null });
   },
 
   startMarqueeSelection: (x, y) => {

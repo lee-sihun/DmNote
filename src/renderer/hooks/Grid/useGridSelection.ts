@@ -25,7 +25,9 @@ import { cloneSlot } from '@utils/keySlot';
 import {
   reissueSpritePoseIds,
   remapSpritePoseTriggers,
+  rebindPoseTriggersByKey,
 } from '@utils/sprite/poseIdentity';
+import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
 import { toSpriteWireShape } from '@utils/sprite/spriteWireShape';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
@@ -584,6 +586,12 @@ export function useGridSelection({
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
 
+    // 트리거 id -> canonical 키. 재생 매핑과 같은 결합을 쓴다
+    const sourceKeyCanonicals = buildSpriteKeyCanonicalMap(
+      currentMappings,
+      currentPositions,
+    );
+
     const clipboardItems: ClipboardItem[] = [];
 
     for (const element of selectedElements) {
@@ -639,6 +647,15 @@ export function useGridSelection({
           clipboardItems.push({
             type: 'sprite',
             position: { ...position },
+            // 다른 탭에 붙일 때 같은 키로 다시 결합하려면 지금의 결합을 얼려야 한다
+            triggerCanonicals: Object.fromEntries(
+              position.poses.flatMap((pose) =>
+                pose.triggers.flatMap((trigger) => {
+                  const canonical = sourceKeyCanonicals.get(trigger);
+                  return canonical === undefined ? [] : [[trigger, canonical]];
+                }),
+              ),
+            ),
           });
         }
       } else if (element.type === 'plugin') {
@@ -683,7 +700,7 @@ export function useGridSelection({
         }
       }
 
-      setClipboard(clipboardItems, clipboardGroups);
+      setClipboard(clipboardItems, clipboardGroups, selectedKeyType);
     }
   };
 
@@ -697,6 +714,7 @@ export function useGridSelection({
     if (currentClipboard.length === 0) return;
     const gestureId = crypto.randomUUID();
     const clipboardGroups = useGridSelectionStore.getState().clipboardGroups;
+    const clipboardMode = useGridSelectionStore.getState().clipboardMode;
     const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
     const currentSelectedElements =
       useGridSelectionStore.getState().selectedElements;
@@ -749,7 +767,10 @@ export function useGridSelection({
     const statsToAdd: { position: CanonicalStatItemPosition }[] = [];
     const graphsToAdd: { position: CanonicalGraphItemPosition }[] = [];
     const knobsToAdd: { position: CanonicalKnobItemPosition }[] = [];
-    const spritesToAdd: { position: CanonicalReactiveSpritePosition }[] = [];
+    const spritesToAdd: {
+      position: CanonicalReactiveSpritePosition;
+      triggerCanonicals?: Record<string, string>;
+    }[] = [];
     const pluginPayloads: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
     for (const item of currentClipboard) {
       if (item.type === 'key') {
@@ -797,6 +818,7 @@ export function useGridSelection({
         });
       } else if (item.type === 'sprite') {
         spritesToAdd.push({
+          triggerCanonicals: item.triggerCanonicals,
           // wire 정규화: nullish layerName·groupId는 키 부재로 맞춰 ack와 일치
           position: toSpriteWireShape({
             ...item.position,
@@ -824,11 +846,43 @@ export function useGridSelection({
     // 스프라이트 트리거를 같은 배치 키의 신 id로 재결합, 배치 밖 키 참조는
     // 유지. 키가 스프라이트 뒤에 올 수 있어 payload 동결 후 일괄 치환한다.
     // 치환된 id가 정렬 순서를 깨뜨릴 수 있어 wire 정규화를 다시 적용한다
-    if (keyIdMap.size > 0) {
+    // 다른 탭으로 옮겨 붙이면 함께 복사된 키로 재결합되지 못한 트리거는 원본 탭
+    // 키를 계속 가리킨다. 요소 id는 문서 전역 유일이라 대상 탭에서 절대 해석되지
+    // 않아 눌러도 반응하지 않는 자세가 조용히 남는다. 트리거만 비우면 백엔드가
+    // EMPTY_SPRITE_POSE_TRIGGERS로 커밋을 막으므로 그 자세를 통째로 버린다.
+    // 같은 탭이면 배치 밖 키 참조를 그대로 두는 기존 계약을 유지한다
+    const isCrossModePaste =
+      clipboardMode !== null && clipboardMode !== selectedKeyType;
+    if (spritesToAdd.length > 0) {
+      // 같은 탭이면 배치 밖 트리거를 그대로 둔다 (의도된 계약). 다른 탭이면 그
+      // 참조가 절대 해석되지 않으므로 복사 시 얼려둔 canonical 키로 다시 결합한다
+      const targetKeyIdsByCanonical = new Map<string, string[]>();
+      if (isCrossModePaste) {
+        const { keyMappings: km, canonicalPositions: pos } =
+          useKeyStore.getState();
+        for (const [id, canonical] of buildSpriteKeyCanonicalMap(
+          km[selectedKeyType] ?? [],
+          pos[selectedKeyType] ?? [],
+        )) {
+          const ids = targetKeyIdsByCanonical.get(canonical) ?? [];
+          ids.push(id);
+          targetKeyIdsByCanonical.set(canonical, ids);
+        }
+      }
       for (const sprite of spritesToAdd) {
+        const remapped =
+          keyIdMap.size > 0
+            ? remapSpritePoseTriggers(sprite.position.poses, keyIdMap)
+            : sprite.position.poses;
         sprite.position = toSpriteWireShape({
           ...sprite.position,
-          poses: remapSpritePoseTriggers(sprite.position.poses, keyIdMap),
+          poses: isCrossModePaste
+            ? rebindPoseTriggersByKey(
+                remapped,
+                sprite.triggerCanonicals ?? {},
+                targetKeyIdsByCanonical,
+              )
+            : remapped,
         });
       }
     }

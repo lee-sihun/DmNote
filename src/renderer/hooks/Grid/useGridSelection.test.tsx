@@ -480,7 +480,12 @@ describe('useGridSelection compound history gesture', () => {
 
     act(() => api.copySelectedElements());
     expect(useGridSelectionStore.getState().clipboard).toEqual([
-      { type: 'sprite', position: original },
+      {
+        type: 'sprite',
+        position: original,
+        // 다른 탭 붙여넣기에서 같은 키로 다시 결합하기 위한 동결분
+        triggerCanonicals: { [STABLE_KEY_ID]: 'KeyA' },
+      },
     ]);
 
     await act(async () => api.pasteElements());
@@ -610,6 +615,103 @@ describe('useGridSelection compound history gesture', () => {
       .positions['4key'].find((position) => position.id !== STABLE_SPRITE_ID)!;
     // 담당 키가 배치에 없으므로 원본 키 참조 유지
     expect(pastedSprite.poses[0].triggers).toEqual([STABLE_KEY_ID]);
+  });
+
+  // 요소 id는 문서 전역 유일이라 다른 탭 키를 가리키는 트리거는 절대 해석되지
+  // 않는다. 자세를 지우면 변환·이미지까지 잃으므로 같은 키로 다시 결합한다
+  it('다른 탭에서 복사한 sprite는 같은 키에 다시 결합한다', async () => {
+    const targetKeyId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    act(() => {
+      // 대상 탭의 KeyA는 다른 요소 id를 갖는다 (id는 문서 전역 유일)
+      useKeyStore.setState({
+        keyMappings: { '4key': ['KeyA'] },
+        positions: { '4key': [{ ...keyPosition, id: targetKeyId }] },
+        canonicalPositions: { '4key': [{ ...keyPosition, id: targetKeyId }] },
+      });
+      useSpriteStore.setState({ positions: { '4key': [] } });
+      useGridSelectionStore.getState().setClipboard(
+        [
+          {
+            type: 'sprite',
+            position: spriteAt(STABLE_SPRITE_ID),
+            // 원본 탭에서 이 트리거는 KeyA에 물려 있었다
+            triggerCanonicals: { [STABLE_KEY_ID]: 'KeyA' },
+          },
+        ],
+        [],
+        '7key',
+      );
+    });
+
+    await act(async () => api.pasteElements());
+
+    const pasted = useSpriteStore.getState().positions['4key'][0];
+    // 원본 탭 키 id가 아니라 대상 탭의 같은 키로 옮겨 붙는다
+    expect(pasted.poses).toHaveLength(1);
+    expect(pasted.poses[0].triggers).toEqual([targetKeyId]);
+    expect(pasted.poses[0].transform).toEqual(
+      spriteAt(STABLE_SPRITE_ID).poses[0].transform,
+    );
+  });
+
+  // 대상 탭에 같은 키가 없으면 원본 참조를 남긴다 - 패널이 "삭제된 키"로 보여주고
+  // 사용자가 직접 고른다. 지우면 변환·이미지가 조용히 사라진다
+  it('대상 탭에 같은 키가 없으면 자세를 지우지 않고 참조를 남긴다', async () => {
+    act(() => {
+      useKeyStore.setState({
+        keyMappings: { '4key': ['KeyZ'] },
+        positions: { '4key': [keyPosition] },
+        canonicalPositions: { '4key': [keyPosition] },
+      });
+      useSpriteStore.setState({ positions: { '4key': [] } });
+      useGridSelectionStore.getState().setClipboard(
+        [
+          {
+            type: 'sprite',
+            position: spriteAt(STABLE_SPRITE_ID),
+            triggerCanonicals: { [STABLE_KEY_ID]: 'KeyA' },
+          },
+        ],
+        [],
+        '7key',
+      );
+    });
+
+    await act(async () => api.pasteElements());
+
+    const pasted = useSpriteStore.getState().positions['4key'][0];
+    expect(pasted.poses).toHaveLength(1);
+    expect(pasted.poses[0].triggers).toEqual([STABLE_KEY_ID]);
+  });
+
+  // 담당 키를 함께 복사했으면 사본 키로 재결합되므로 자세가 살아남는다
+  it('다른 탭 붙여넣기도 함께 복사한 키의 자세는 살린다', async () => {
+    let serial = 0;
+    randomUUID.mockImplementation(
+      () => `80000000-0000-4000-8000-${String(++serial).padStart(12, '0')}`,
+    );
+    act(() => {
+      useSpriteStore.setState({ positions: { '4key': [] } });
+      useGridSelectionStore.getState().setClipboard(
+        [
+          { type: 'key', keyCode: 'KeyA', position: keyPosition },
+          { type: 'sprite', position: spriteAt(STABLE_SPRITE_ID) },
+        ],
+        [],
+        '7key',
+      );
+    });
+
+    await act(async () => api.pasteElements());
+
+    const pastedKey = useKeyStore
+      .getState()
+      .canonicalPositions['4key'].find(
+        (position) => position.id !== STABLE_KEY_ID,
+      )!;
+    const pasted = useSpriteStore.getState().positions['4key'][0];
+    expect(pasted.poses).toHaveLength(1);
+    expect(pasted.poses[0].triggers).toEqual([pastedKey.id]);
   });
 
   it('혼합 붙여넣기는 editor와 plugin에 같은 gestureId를 전달한다', async () => {

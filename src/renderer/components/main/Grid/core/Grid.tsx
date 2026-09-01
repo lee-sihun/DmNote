@@ -764,10 +764,13 @@ const Grid = ({
   );
   const previousSelectedKeyTypeRef = useRef<string>(selectedKeyType);
 
-  // 탭 변경 시 선택 해제
+  // 탭 변경 시 선택 해제. 대기 중인 커서 복제도 함께 취소한다 - 원본 탭 요소를
+  // 다른 탭에 놓으면 스프라이트 자세 트리거가 원본 탭 키를 가리켜 죽는다.
+  // 탭 바는 그리드 밖이라 배치 취소용 onMouseDownCapture도 타지 않는다
   useEffect(() => {
     if (previousSelectedKeyTypeRef.current !== selectedKeyType) {
       clearSelection();
+      setDuplicateState(null);
       previousSelectedKeyTypeRef.current = selectedKeyType;
     }
   }, [selectedKeyType, clearSelection]);
