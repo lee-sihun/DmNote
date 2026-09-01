@@ -48,7 +48,7 @@ Five interface languages, shortcuts, settings reset, and auto-update round it ou
 
 Grab the latest build from the download link above, unzip it, and run it.
 
-<!-- macOS needs a few permissions first. Check the [macOS installation and permission guide](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_en.md). -->
+macOS needs a few permissions first. Check the [macOS installation and permission guide](https://github.com/DmNote-App/DmNote/blob/main/docs/mac_guide_en.md).
 
 Settings live in the `%appdata%/com.dmnote.desktop` folder.
 

@@ -48,7 +48,7 @@
 
 위 다운로드 링크에서 최신 버전을 받아 압축을 풀고 실행하면 바로 사용할 수 있습니다.
 
-<!-- macOS는 별도 권한 설정이 필요합니다. [macOS 설치 및 권한 설정 가이드](docs/mac_guide.md)를 먼저 확인해 주세요. -->
+macOS는 별도 권한 설정이 필요합니다. [macOS 설치 및 권한 설정 가이드](docs/mac_guide.md)를 먼저 확인해 주세요.
 
 설정은 `%appdata%/com.dmnote.desktop` 폴더에 저장됩니다.
 
