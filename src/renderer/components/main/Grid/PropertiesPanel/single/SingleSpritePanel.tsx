@@ -7,6 +7,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { spriteItemsApi } from '@api/modules/itemsApi';
 import { clamp } from '@utils/core/clamp';
+import { stableStringify } from '@utils/core/stableStringify';
 import { pickValidatedImagePath } from '@utils/core/pickValidatedImage';
 import { anchorToPercent, percentToAnchor } from '@utils/sprite/spriteGeometry';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
@@ -195,6 +196,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   } | null>(null);
   if (lastPositionSnapshot !== canonicalPosition) {
     setLastPositionSnapshot(canonicalPosition);
+    let draftRebased = false;
     if (
       lastPositionSnapshot.id === canonicalPosition.id &&
       (lastPositionSnapshot.width !== canonicalPosition.width ||
@@ -223,6 +225,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
               nextBounds,
             ).poses,
           });
+          draftRebased = true;
         }
         // 편집 팝업(자세·이미지 설정)이 열린 채 착지하면 세대를 올린다 -
         // 팝업 리마운트가 진행 중 스크럽 세션을 취소로 닫고, 아래 effect가
@@ -234,6 +237,23 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
           }));
         }
       }
+    }
+    // 외부에서 poses가 갈리면(undo·redo·다른 창 편집) 초안을 버린다.
+    // 내 커밋 착지는 canonical이 초안과 같아 여기 걸리지 않으므로, 무효 초안이
+    // 남아 있다가 다시 유효해지는 순간 이전 배열을 통째로 되살리는 것만 막는다.
+    // 폐기는 되돌릴 수 없어 키 순서에 둔감한 비교를 쓴다 - 백엔드 문서 교체로
+    // 직렬화 순서만 바뀐 것을 외부 변경으로 오판하면 편집 중인 값이 사라진다
+    if (
+      !draftRebased &&
+      posesDraft &&
+      posesDraft.id === canonicalPosition.id &&
+      lastPositionSnapshot.id === canonicalPosition.id &&
+      stableStringify(lastPositionSnapshot.poses) !==
+        stableStringify(canonicalPosition.poses) &&
+      stableStringify(canonicalPosition.poses) !==
+        stableStringify(posesDraft.poses)
+    ) {
+      setPosesDraft(null);
     }
   }
 

@@ -1233,6 +1233,59 @@ describe('SingleSpritePanel 자세 편집', () => {
     ).toEqual([]);
   });
 
+  it('무효 draft 중 외부에서 poses가 갈리면 초안을 버린다', async () => {
+    const position = spritePosition({
+      poses: [
+        {
+          contactPoint: { x: 0.5, y: 1 },
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
+          imageOverride: null,
+        },
+      ],
+    });
+    seed(position);
+    render(position);
+
+    act(() => poseEditButtons()[0].click());
+    // 유일한 담당 키 해제 - 커밋이 막힌 무효 draft가 이전 transform을 들고 있다
+    await act(async () => triggerDropdownByText('A').click());
+    await act(async () => menuOptionByText('A').click());
+    mocks.patchPosition.mockClear();
+
+    // undo가 자세를 이전 값으로 되돌린 상황 (박스는 그대로라 리사이즈 rebase 밖)
+    const undone = spritePosition({
+      poses: [
+        {
+          contactPoint: { x: 0.5, y: 1 },
+          poseId: 'pose-1',
+          triggers: [KEY_ID_A],
+          transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+          imageOverride: null,
+        },
+      ],
+    });
+    seed(undone);
+    render(undone);
+
+    // 초안이 폐기돼 canonical이 그대로 보인다 - 드롭다운은 열린 채로 남아 있다
+    expect(openListbox()).not.toBeNull();
+    await act(async () => menuOptionByText('S').click());
+
+    // 되돌린 canonical 위에서 커밋된다 - 초안의 옛 배열이 되살아나지 않는다
+    const committed = mocks.patchPosition.mock.calls.at(-1)?.[2] as {
+      poses: Array<{ transform: unknown; triggers: string[] }>;
+    };
+    expect(committed.poses[0].triggers).toEqual([KEY_ID_A, KEY_ID_B]);
+    expect(committed.poses[0].transform).toEqual({
+      x: 0,
+      y: 0,
+      rotation: 0,
+      scale: 1,
+    });
+  });
+
   it('자세 팝업이 열린 채 리사이즈가 착지하면 진행 중 편집 게스처를 취소한다', async () => {
     const position = spritePosition({
       imageRect: { x: 4, y: 8, width: 96, height: 64 },
