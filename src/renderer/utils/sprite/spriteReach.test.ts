@@ -135,6 +135,21 @@ describe('computeSpriteReachAabb', () => {
     expect(computeSpriteReachAabb(makeSprite({ baseImage: null }))).toBeNull();
   });
 
+  // 스키마가 빈 문자열을 막지 않아 플러그인·임포트로 들어온다.
+  // 렌더러는 이걸 이미지 없음으로 보므로 창 여유만 헛되이 커진다
+  it('공백뿐인 이미지 참조는 이미지 없음으로 본다', () => {
+    expect(computeSpriteReachAabb(makeSprite({ baseImage: '' }))).toBeNull();
+    expect(computeSpriteReachAabb(makeSprite({ baseImage: '   ' }))).toBeNull();
+    expect(
+      computeSpriteReachAabb(
+        makeSprite({
+          baseImage: null,
+          poses: [makePose('p1', { x: 100 }, '  ')],
+        }),
+      ),
+    ).toBeNull();
+  });
+
   it('pose imageOverride만 있어도 도달 범위를 계산한다', () => {
     const reach = computeSpriteReachAabb(
       makeSprite({

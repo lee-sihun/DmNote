@@ -416,4 +416,28 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
     ).not.toBeNull();
     expect(activityGuide()?.className).not.toContain('border-transparent');
   });
+
+  // 스키마가 빈 문자열을 막지 않아 플러그인·임포트로 들어온다.
+  // 해석기는 공백 override를 이미지 없음으로 보고 base를 쓰므로, 프리뷰가
+  // 여기서 자리표시자로 내려가면 캔버스와 송출 화면이 갈린다
+  it('공백뿐인 override 자세를 프리뷰해도 기본 이미지를 그린다', () => {
+    act(() =>
+      useSpriteEditPreviewStore.getState().publish({
+        kind: 'pose',
+        positionId: SPRITE_ID,
+        poseId: 'pose-1',
+        fallbackPose: pose('pose-1', { imageOverride: '   ' }),
+        preferFallback: true,
+      }),
+    );
+    const node = renderSprite(
+      spritePosition({
+        baseImage: '/base.png',
+        poses: [pose('pose-1', { imageOverride: '   ' })],
+      }),
+    );
+
+    expect(node?.querySelector('img')?.getAttribute('src')).toBe('/base.png');
+    expect(node?.querySelector('[data-sprite-placeholder="true"]')).toBeNull();
+  });
 });

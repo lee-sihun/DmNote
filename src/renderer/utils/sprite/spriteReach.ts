@@ -3,6 +3,8 @@ import type {
   SpriteTransform,
 } from '@src/types/key/sprites';
 
+import { isRenderableImageRef } from '@utils/core/imageSource';
+
 import { anchorPx } from './spriteGeometry';
 
 // 스프라이트 이미지 도달 범위 계산.
@@ -234,8 +236,8 @@ export const computeSpriteReachAabb = (
   sprite: SpriteReachGeometry,
 ): SpriteAabb | null => {
   const hasImage =
-    sprite.baseImage != null ||
-    sprite.poses.some((pose) => pose.imageOverride != null);
+    isRenderableImageRef(sprite.baseImage) ||
+    sprite.poses.some((pose) => isRenderableImageRef(pose.imageOverride));
   if (!hasImage) return null;
 
   const transforms: SpriteTransform[] = [

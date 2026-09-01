@@ -38,6 +38,21 @@ function resolveForObs(path: string): string {
   return `${window.location.origin}/media/${encoded}${tokenQuery}`;
 }
 
+/**
+ * 렌더에 쓸 수 있는 이미지 참조면 그대로, 아니면 null. 스키마가 빈 문자열을
+ * 막지 않으므로 플러그인·임포트 경로로 공백만 든 값이 들어온다.
+ * resolveImageSource가 그런 값을 null로 접는 것과 같은 기준이라, 폴백 판정도
+ * 이걸 거쳐야 "이미지 없음"의 의미가 경로마다 갈리지 않는다
+ */
+export function toRenderableImageRef(value?: string | null): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+/** 위 판정의 술어 형태 - 폴백 없이 존재 여부만 볼 때 쓴다 */
+export function isRenderableImageRef(value?: string | null): boolean {
+  return toRenderableImageRef(value) !== null;
+}
+
 export function resolveImageSource(value?: string | null): string | null {
   const raw = typeof value === 'string' ? value.trim() : '';
   if (!raw) return null;

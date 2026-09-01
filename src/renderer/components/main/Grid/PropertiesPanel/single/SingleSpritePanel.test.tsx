@@ -1064,6 +1064,28 @@ describe('SingleSpritePanel 자세 편집', () => {
     });
   });
 
+  // 스키마가 빈 문자열을 막지 않아 플러그인·임포트로 들어온다. 그릴 수는 없지만
+  // 저장소에는 남아 있으므로, 칩이 그 값을 지우는 유일한 길이다
+  it('공백뿐인 이미지 경로는 그리지 않되 초기화로 정리할 수 있다', () => {
+    const position = spritePosition({ baseImage: '   ' });
+    seed(position);
+    render(position);
+
+    act(() => buttonByText('propertiesPanel.configure').click());
+    const popup = popupByLabel('propertiesPanel.spriteBaseImage')!;
+
+    expect(popup.querySelector('img')).toBeNull();
+
+    const reset = popup.querySelector<HTMLButtonElement>(
+      'button[aria-label="imagePicker.reset"]',
+    )!;
+    expect(reset).toBeTruthy();
+    act(() => reset.click());
+    expect(mocks.patchPosition.mock.calls.at(-1)?.[2]).toEqual({
+      baseImage: null,
+    });
+  });
+
   it('이미지 설정 팝업의 위치·기준점 입력은 imageRect·pivot 패치로 커밋한다', () => {
     const position = spritePosition();
     seed(position);

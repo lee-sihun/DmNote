@@ -80,6 +80,43 @@ describe('resolveSpriteTarget 진리표', () => {
     expect(result.imageSrc).toBe('base.png');
   });
 
+  // 스키마가 빈 문자열을 막지 않아 플러그인·임포트로 들어온다. 렌더러는 이걸
+  // 이미지 없음으로 보므로, 여기서 base를 가리면 누른 순간 이미지가 사라진다
+  it('공백뿐인 imageOverride는 baseImage를 가리지 않는다', () => {
+    const blankExact = makeSprite([makePose('pB', ['kA'], { x: 10 }, '  ')]);
+    expect(resolveSpriteTarget(blankExact, pressed('kA')).imageSrc).toBe(
+      'base.png',
+    );
+
+    // 단일 평균 분기 - 정확 일치가 없고 참여 단일 자세가 하나뿐인 조합이라야
+    // 이 경로를 탄다 (조합 자세는 평균에 참여하지 않는다)
+    const blankSingleAverage = makeSprite([
+      makePose('pB', ['kA'], { x: 10 }, '  '),
+      makePose('pCombo', ['kS', 'kD'], { x: 20 }, 'combo.png'),
+    ]);
+    expect(
+      resolveSpriteTarget(blankSingleAverage, pressed('kA', 'kS')).imageSrc,
+    ).toBe('base.png');
+
+    // 다중 평균 분기
+    const blankSingles = makeSprite([
+      makePose('pB', ['kA'], { x: 10 }, ''),
+      makePose('pC', ['kS'], { x: 20 }, ''),
+    ]);
+    expect(
+      resolveSpriteTarget(blankSingles, pressed('kA', 'kS')).imageSrc,
+    ).toBe('base.png');
+
+    // 공백 자세 뒤에 실제 override가 있으면 그쪽이 선택돼야 한다
+    const mixed = makeSprite([
+      makePose('pB', ['kA'], { x: 10 }, '  '),
+      makePose('pC', ['kS'], { x: 20 }, 'real.png'),
+    ]);
+    expect(resolveSpriteTarget(mixed, pressed('kA', 'kS')).imageSrc).toBe(
+      'real.png',
+    );
+  });
+
   it('kA와 kS가 눌리면 두 자세의 균등 평균을 낸다', () => {
     const result = resolveSpriteTarget(baseSprite, pressed('kA', 'kS'));
 
@@ -210,7 +247,7 @@ describe('resolveSpriteTarget 진리표', () => {
     expect(result.imageSrc).toBe('base.png');
   });
 
-  it('정확 일치 자세의 imageOverride ?? baseImage 규칙을 지킨다', () => {
+  it('정확 일치 자세는 자기 override, 없으면 baseImage를 쓴다', () => {
     const withOverride = makePose('poseA', ['kA'], {}, 'pose-a.png');
     const sprite = makeSprite([withOverride, poseS]);
 

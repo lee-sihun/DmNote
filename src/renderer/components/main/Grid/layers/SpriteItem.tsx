@@ -7,6 +7,7 @@ import {
 } from '@hooks/overlay/useFailedImageSrcs';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { computeSpriteImageStyle } from '@utils/sprite/spriteImageStyles';
+import { resolvePoseImage } from '@utils/sprite/poseResolver';
 import { anchorPx } from '@utils/sprite/spriteGeometry';
 import {
   activityAreaGuideMetrics,
@@ -87,7 +88,7 @@ const SpriteItem = ({
   const baseSrc = resolveImageSource(position.baseImage);
   const fallbackSrc = baseSrc && !failedImageSrcs.has(baseSrc) ? baseSrc : null;
   let imageSrc = resolveImageSource(
-    previewPose?.imageOverride ?? position.baseImage,
+    resolvePoseImage(previewPose?.imageOverride, position.baseImage),
   );
   if (imageSrc && failedImageSrcs.has(imageSrc)) imageSrc = fallbackSrc;
 

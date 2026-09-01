@@ -436,6 +436,23 @@ describe('OverlaySpriteItem onPress', () => {
     expect(img.hasAttribute('src')).toBe(false);
   });
 
+  // 스키마가 빈 문자열을 막지 않아 플러그인·임포트로 들어온다. 렌더러가 이걸
+  // 이미지 없음으로 보는 이상 마운트 판정도 같아야 한다 - 아니면 재생할 것이
+  // 없는 노드에 대고 WAAPI와 타이머만 돌린다
+  it('공백 override만 있고 기본 이미지가 없으면 재생 노드를 만들지 않는다', () => {
+    render(
+      oneShotSprite({
+        baseImage: null,
+        poses: [makePose('p1', ['el-a'], { imageOverride: '   ' })],
+      }),
+    );
+
+    expect(imgEl()).toBeNull();
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(0);
+  });
+
   it('리싱크가 레벨을 선점해도 실제 DOWN edge는 재생된다', () => {
     render(oneShotSprite());
     // OBS 대조·하이드레이션이 이벤트보다 먼저 레벨을 true로 올린 상황

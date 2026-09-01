@@ -5,6 +5,11 @@ import {
   type SpriteTransform,
 } from '@src/types/key/sprites';
 
+import {
+  isRenderableImageRef,
+  toRenderableImageRef,
+} from '@utils/core/imageSource';
+
 import { DEG_TO_RAD, RAD_TO_DEG } from './spriteGeometry';
 
 // 평균 벡터 길이가 이보다 작으면 방향이 정의되지 않은 것으로 본다 (정반대 각 조합)
@@ -83,6 +88,14 @@ export const spriteTriggerIds = (
   poses: readonly SpritePose[],
 ): readonly string[] => preparePoses(poses).allTriggers;
 
+// 자세가 그릴 이미지 - 렌더 가능한 override가 있으면 그것, 아니면 기본 이미지.
+// 공백 override는 이미지 없음이라 base를 가리지 않는다. 해석 분기와 편집기
+// 프리뷰가 같은 폴백을 손으로 다시 쓰다가 갈렸던 자리라 한 곳에 모은다
+export const resolvePoseImage = (
+  imageOverride: string | null | undefined,
+  baseImage: string | null,
+): string | null => toRenderableImageRef(imageOverride) ?? baseImage;
+
 // 눌린 키 집합만 읽는 순수 해석. 눌린 순서, 시각, 이전 상태에 의존하지 않는다
 export const resolveSpriteTarget = (
   sprite: ReactiveSpritePosition,
@@ -106,7 +119,7 @@ export const resolveSpriteTarget = (
   if (exactPose) {
     return {
       transform: exactPose.transform,
-      imageSrc: exactPose.imageOverride ?? sprite.baseImage,
+      imageSrc: resolvePoseImage(exactPose.imageOverride, sprite.baseImage),
     };
   }
 
@@ -127,7 +140,7 @@ export const resolveSpriteTarget = (
     const [pose] = singles;
     return {
       transform: pose.transform,
-      imageSrc: pose.imageOverride ?? sprite.baseImage,
+      imageSrc: resolvePoseImage(pose.imageOverride, sprite.baseImage),
     };
   }
 
@@ -158,7 +171,7 @@ export const resolveSpriteTarget = (
   // poseId 사전순 첫 imageOverride, 없으면 baseImage
   let imageSrc = sprite.baseImage;
   for (const pose of singles) {
-    if (pose.imageOverride != null) {
+    if (isRenderableImageRef(pose.imageOverride)) {
       imageSrc = pose.imageOverride;
       break;
     }

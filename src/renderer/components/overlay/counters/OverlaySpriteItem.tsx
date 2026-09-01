@@ -9,7 +9,10 @@ import {
   isErrorForCurrentSrc,
   useFailedImageSrcs,
 } from '@hooks/overlay/useFailedImageSrcs';
-import { resolveImageSource } from '@utils/core/imageSource';
+import {
+  isRenderableImageRef,
+  resolveImageSource,
+} from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import {
   resolveSpriteTarget,
@@ -148,8 +151,8 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
   // 기본 이미지가 없어도 자세 override만으로 유효한 onPress 스프라이트가 성립한다.
   // 안정 img 노드를 유지하고 idle에는 숨겨야 edge 핸들러가 재생할 대상이 있다
-  const hasOverrideImage = position.poses.some(
-    (pose) => pose.imageOverride != null,
+  const hasOverrideImage = position.poses.some((pose) =>
+    isRenderableImageRef(pose.imageOverride),
   );
   const mountOneShotImage =
     isOneShot && (idleBaseSrc !== null || hasOverrideImage);

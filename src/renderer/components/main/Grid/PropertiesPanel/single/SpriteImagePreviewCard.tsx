@@ -50,6 +50,8 @@ const SpriteImagePreviewCard = ({
         onClick={onPick}
         className="absolute inset-0 bg-black opacity-0 hover:opacity-40 focus-visible:opacity-40 transition-opacity cursor-pointer"
       />
+      {/* 초기화는 그림이 아니라 저장값 기준 - 공백 경로처럼 그릴 수 없는 값도
+          지울 수 있어야 한다. 칩이 그 값의 유일한 표시다 (이미지 피커와 같은 기준) */}
       {source ? (
         <button
           type="button"
