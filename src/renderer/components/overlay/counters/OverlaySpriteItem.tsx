@@ -1,5 +1,5 @@
 'use no memo';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import {
   getKeySignal,
@@ -73,6 +73,10 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
   );
 
   const baseImageSrc = resolveImageSource(position.baseImage);
+  // 실패한 기본 이미지는 "기본 이미지 없음"으로 취급한다 - 깨진 노드를 남기면
+  // 투명 오버레이 위에 회색 대체 박스가 상주한다 (whileHeld 분기와 같은 규칙)
+  const idleBaseSrc =
+    baseImageSrc && !failedImageSrcs.has(baseImageSrc) ? baseImageSrc : null;
 
   // easing 해석은 정규식·베지어 극값 계산이라 렌더마다 돌리지 않는다.
   // 발산 easing은 도달 계산과 같은 기준으로 강등 (창 클리핑 방지)
@@ -116,7 +120,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     (pose) => pose.imageOverride != null,
   );
   const mountOneShotImage =
-    isOneShot && (baseImageSrc !== null || hasOverrideImage);
+    isOneShot && (idleBaseSrc !== null || hasOverrideImage);
 
   const imgRef = useRef<HTMLImageElement | null>(null);
   const playbackRef = useRef<OneShotPlayback>({
@@ -140,11 +144,34 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     }
   };
 
-  // edge 핸들러는 구독 effect보다 자주 갱신되는 값을 ref로 읽는다 (재구독 방지)
+  // edge 핸들러는 구독 effect보다 자주 갱신되는 값을 ref로 읽는다 (재구독 방지).
+  // layout 단계 갱신이라 구독 해제 cleanup도 최신 문서·실패 집합으로 복원한다
   const latestRef = useRef({ position, failedImageSrcs });
-  useEffect(() => {
+  useLayoutEffect(() => {
     latestRef.current = { position, failedImageSrcs };
   });
+
+  // 직접 쓴 src·visibility를 현재 문서의 기본 이미지로 되돌린다.
+  // 재생 종료·취소, 구독 해제, 로드 실패가 같은 복원 규칙을 쓴다.
+  // excludedSrc는 방금 실패해 아직 실패 집합에 반영되지 않은 src
+  const restoreBaseImage = (
+    el: HTMLImageElement,
+    excludedSrc?: string | null,
+  ) => {
+    const { position: pos, failedImageSrcs: failed } = latestRef.current;
+    const currentBase = resolveImageSource(pos.baseImage);
+    if (
+      currentBase &&
+      currentBase !== excludedSrc &&
+      !failed.has(currentBase)
+    ) {
+      el.src = currentBase;
+      el.style.visibility = '';
+    } else {
+      el.removeAttribute('src');
+      el.style.visibility = 'hidden';
+    }
+  };
 
   useEffect(() => {
     if (!isOneShot) return undefined;
@@ -159,21 +186,6 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
     }
     if (canonicals.size === 0) return undefined;
 
-    // 직접 쓴 src·visibility를 현재 문서의 기본 이미지로 되돌린다.
-    // 재생 종료·취소와 구독 해제가 같은 복원 규칙을 쓴다
-    const showLatestBaseImage = (el: HTMLImageElement) => {
-      const currentBase = resolveImageSource(
-        latestRef.current.position.baseImage,
-      );
-      if (currentBase) {
-        el.src = currentBase;
-        el.style.visibility = '';
-      } else {
-        el.removeAttribute('src');
-        el.style.visibility = 'hidden';
-      }
-    };
-
     const handleEdge = () => {
       const el = imgRef.current;
       if (!el) return;
@@ -187,10 +199,10 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       }
       const resolved = resolveSpriteTarget(pos, pressed);
 
+      let baseSrc = resolveImageSource(pos.baseImage);
+      if (baseSrc && failed.has(baseSrc)) baseSrc = null;
       let src = resolveImageSource(resolved.imageSrc);
-      if (src && failed.has(src)) src = resolveImageSource(pos.baseImage);
-      if (src && failed.has(src)) src = null;
-      const baseSrc = resolveImageSource(pos.baseImage);
+      if (src && failed.has(src)) src = baseSrc;
 
       const playback = playbackRef.current;
       // 재트리거 소유권 이전 - 이전 재생의 콜백을 떼고 취소한다
@@ -209,7 +221,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       const restore = () => {
         if (playbackRef.current.generation !== generation) return;
         // 재생 중 문서가 바뀌었을 수 있어 캡처값 대신 최신 baseImage로 복원
-        showLatestBaseImage(el);
+        restoreBaseImage(el);
       };
 
       const fromCss = spriteTransformToCss(resolved.transform);
@@ -256,7 +268,7 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
       // 직접 쓴 src·visibility 잔상 제거 - React는 prop이 같으면 DOM을 다시
       // 쓰지 않으므로 여기서 현재 문서 기준으로 복원한다 (전환 시에는 key가
       // 노드를 갈아 끼우고, 같은 분기 안 재구독에는 이 복원이 잡는다)
-      if (mountedImg) showLatestBaseImage(mountedImg);
+      if (mountedImg) restoreBaseImage(mountedImg);
     };
   }, [isOneShot, triggerIds, keyCanonicalMap]);
 
@@ -294,18 +306,25 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
                 // 다음 모드로 새어 나가지 않게 한다
                 key="one-shot"
                 ref={imgRef}
-                src={baseImageSrc ?? undefined}
+                src={idleBaseSrc ?? undefined}
                 alt=""
                 draggable={false}
                 style={{
                   ...computeSpriteImageStyle(position, position.idleTransform),
                   willChange: 'transform',
                   // 기본 이미지가 없으면 재생 순간에만 보인다
-                  ...(baseImageSrc ? {} : { visibility: 'hidden' as const }),
+                  ...(idleBaseSrc ? {} : { visibility: 'hidden' as const }),
                 }}
                 onError={(event) => {
-                  const src = event.currentTarget.getAttribute('src');
-                  if (src) markFailed(src);
+                  // 재생이 DOM에 직접 쓴 src도 실제 실패 URL과 대조한다 -
+                  // 늦게 도착한 이전 src의 오류가 멀쩡한 이미지를 낙인찍지 않게
+                  const el = event.currentTarget;
+                  const src = el.getAttribute('src');
+                  if (!isErrorForCurrentSrc(el, src)) return;
+                  markFailed(src);
+                  // 직접 쓴 src는 React prop이 그대로라 리렌더가 걷어내지 못한다.
+                  // 재생이 끝날 때까지 깨진 이미지를 두지 않게 여기서 되돌린다
+                  restoreBaseImage(el, src);
                 }}
               />
             )

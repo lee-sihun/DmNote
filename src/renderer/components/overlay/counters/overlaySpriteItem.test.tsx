@@ -473,4 +473,102 @@ describe('OverlaySpriteItem onPress', () => {
     expect(animations).toHaveLength(1);
     expect(animations[0].options.easing).toBe('ease');
   });
+
+  it('실패한 기본 이미지는 idle에서 숨기고 재생 복원도 숨김으로 끝낸다', () => {
+    render(oneShotSprite());
+    const img = imgEl()!;
+    expect(img.src).toContain(BASE_IMAGE);
+
+    act(() => {
+      img.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+    // 깨진 노드를 남기면 투명 오버레이 위에 대체 박스가 상주한다
+    expect(imgEl()!.hasAttribute('src')).toBe(false);
+    expect(imgEl()!.style.visibility).toBe('hidden');
+
+    // 자세 이미지는 멀쩡하므로 재생은 그대로 되고, 복원만 숨김으로 간다
+    act(() => applyEventKeyState('KeyA', true));
+    expect(imgEl()!.src).toContain(OVERRIDE_IMAGE);
+    act(() => animations[0].onfinish?.());
+    expect(imgEl()!.hasAttribute('src')).toBe(false);
+    expect(imgEl()!.style.visibility).toBe('hidden');
+  });
+
+  it('재생 중 자세 이미지가 실패하면 그 자리에서 기본 이미지로 되돌린다', () => {
+    render(oneShotSprite());
+    act(() => applyEventKeyState('KeyA', true));
+    const img = imgEl()!;
+    expect(img.getAttribute('src')).toBe(OVERRIDE_IMAGE);
+
+    act(() => {
+      img.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+    // 직접 쓴 src라 React prop이 그대로다 - 리렌더를 기다리면 재생이 끝날 때까지
+    // (최대 pressDurationMs) 깨진 이미지가 남는다
+    expect(imgEl()!.getAttribute('src')).toBe(BASE_IMAGE);
+    expect(imgEl()!.style.visibility).toBe('');
+  });
+
+  it('기본 이미지도 실패한 상태면 자세 실패 즉시 노드를 숨긴다', () => {
+    render(oneShotSprite());
+    act(() => {
+      imgEl()!.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(imgEl()!.getAttribute('src')).toBe(OVERRIDE_IMAGE);
+    act(() => {
+      imgEl()!.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+    expect(imgEl()!.hasAttribute('src')).toBe(false);
+    expect(imgEl()!.style.visibility).toBe('hidden');
+  });
+
+  it('자세 이미지도 실패하면 실패한 base로 폴백하지 않는다', () => {
+    render(oneShotSprite());
+    act(() => {
+      imgEl()!.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(imgEl()!.src).toContain(OVERRIDE_IMAGE);
+    act(() => {
+      imgEl()!.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+
+    act(() => applyEventKeyState('KeyA', false));
+    act(() => applyEventKeyState('KeyA', true));
+    expect(imgEl()!.hasAttribute('src')).toBe(false);
+    expect(imgEl()!.style.visibility).toBe('hidden');
+  });
+
+  // jsdom은 실패 로드에 currentSrc를 채우지 않아 가드가 항상 통과한다.
+  // 실기 엔진의 불일치를 재현해야 검증이 성립한다
+  it('늦게 도착한 이전 src의 오류는 재생 중 이미지를 낙인찍지 않는다', () => {
+    render(oneShotSprite());
+    act(() => applyEventKeyState('KeyA', true));
+    const img = imgEl()!;
+    expect(img.getAttribute('src')).toBe(OVERRIDE_IMAGE);
+
+    // 직전 base 요청의 오류가 자세 이미지로 갈아탄 뒤에 도착한 상황
+    Object.defineProperty(img, 'currentSrc', {
+      value: BASE_IMAGE,
+      configurable: true,
+    });
+    act(() => {
+      img.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+
+    act(() => applyEventKeyState('KeyA', false));
+    act(() => applyEventKeyState('KeyA', true));
+    expect(imgEl()!.getAttribute('src')).toBe(OVERRIDE_IMAGE);
+  });
+
+  it('기본 이미지만 있고 그마저 실패하면 노드를 내린다', () => {
+    render(oneShotSprite({ poses: [makePose('p1', ['el-a'])] }));
+    act(() => {
+      imgEl()!.dispatchEvent(new Event('error', { bubbles: false }));
+    });
+    expect(imgEl()).toBeNull();
+  });
 });
