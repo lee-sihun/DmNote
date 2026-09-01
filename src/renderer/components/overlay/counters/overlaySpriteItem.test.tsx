@@ -77,6 +77,9 @@ describe('OverlaySpriteItem', () => {
     });
   };
 
+  // 위치·히트는 래퍼, 상태 표식은 안쪽 표면 (노브와 같은 배치)
+  const wrapperEl = () =>
+    container.querySelector<HTMLElement>('[data-overlay-hit="true"]');
   const spriteEl = () =>
     container.querySelector<HTMLElement>('[data-sprite-element="true"]');
   const imgEl = () => spriteEl()?.querySelector('img') ?? null;
@@ -101,13 +104,17 @@ describe('OverlaySpriteItem', () => {
     const el = spriteEl();
     expect(el).not.toBeNull();
     expect(el?.dataset.state).toBe('idle');
-    expect(el?.style.transform).toBe('translate3d(12px, 24px, 0)');
-    expect(el?.style.width).toBe('300px');
-    expect(el?.style.height).toBe('200px');
-    expect(el?.style.zIndex).toBe('5');
-    expect(el?.style.pointerEvents).toBe('none');
+
     // 히트 마커로 네이티브 히트 패널에 참여 - 상호작용은 패널 몫이라 pointer-events는 none 유지
-    expect(el?.dataset.overlayHit).toBe('true');
+    const wrapper = wrapperEl();
+    expect(wrapper).not.toBeNull();
+    expect(wrapper).not.toBe(el);
+    expect(wrapper?.contains(el!)).toBe(true);
+    expect(wrapper?.style.transform).toBe('translate3d(12px, 24px, 0)');
+    expect(wrapper?.style.width).toBe('300px');
+    expect(wrapper?.style.height).toBe('200px');
+    expect(wrapper?.style.zIndex).toBe('5');
+    expect(wrapper?.style.pointerEvents).toBe('none');
 
     const img = imgEl();
     expect(img?.getAttribute('src')).toBe(BASE_IMAGE);
@@ -232,9 +239,20 @@ describe('OverlaySpriteItem', () => {
     expect(spriteEl()?.dataset.state).toBe('active');
   });
 
+  // 문서가 안내하는 선택자 형태 - 에디터에서만 먹고 오버레이에서 빗나가면
+  // 사용자가 편집창에서 확인한 CSS가 실제 화면에서 조용히 사라진다
+  it('문서의 클래스 한정 선택자가 오버레이에서 매치된다', () => {
+    render(makeSprite({ className: 'left-hand' }));
+    expect(
+      container.querySelector('.left-hand [data-sprite-element] > img'),
+    ).not.toBeNull();
+  });
+
   it('hidden이면 아무것도 그리지 않는다', () => {
     render(makeSprite({ hidden: true }));
     expect(spriteEl()).toBeNull();
+    // 래퍼가 남으면 보이지 않는 히트 영역이 생긴다
+    expect(wrapperEl()).toBeNull();
   });
 });
 

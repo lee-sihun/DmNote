@@ -340,7 +340,7 @@ describe('렌더 DOM 계약', () => {
   });
 
   describe('오버레이 SpriteItem', () => {
-    it('루트에 data 속성과 히트 마커를 싣는다', () => {
+    it('래퍼가 히트 마커를, 안쪽 표면이 data 속성을 싣는다', () => {
       act(() => {
         root.render(
           <OverlaySpriteItem
@@ -383,8 +383,14 @@ describe('렌더 DOM 계약', () => {
         '[data-sprite-element="true"]',
       );
       expect(el).not.toBeNull();
-      // 다른 표시 요소와 같은 히트 참여 - 마커가 없으면 오버레이 클릭이 관통한다
-      expect(el!.dataset.overlayHit).toBe('true');
+      // 클래스는 위치 래퍼, 표식은 안쪽 표면 - 노브·카운터와 같은 배치라
+      // 사용자 CSS의 `.클래스 [data-sprite-element]`가 성립한다
+      const wrapper = host.querySelector<HTMLElement>(
+        '[data-overlay-hit="true"]',
+      );
+      expect(wrapper).not.toBeNull();
+      expect(wrapper!.contains(el)).toBe(true);
+      expect(wrapper).not.toBe(el);
       expect(el!.getAttribute('data-state')).toBe('idle');
     });
   });

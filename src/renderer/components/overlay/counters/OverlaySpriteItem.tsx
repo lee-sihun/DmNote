@@ -262,7 +262,9 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
   if (position.hidden) return null;
 
-  // 히트 기준은 활동 영역 박스(루트) - 에디터 선택 박스와 같은 의미이고 포즈 전환
+  // 사용자 클래스는 위치 래퍼에, 표식은 안쪽 표면에 - 노브·카운터와 같은 배치라
+  // 문서의 `.클래스 [data-sprite-element]` 선택자가 에디터와 오버레이에서 같이 먹는다.
+  // 히트 기준은 활동 영역 박스(래퍼) - 에디터 선택 박스와 같은 의미이고 포즈 전환
   // 중에도 rect가 안정적이다. 이미지 박스는 transform을 따라 움직여 실측 시점에
   // 따라 어긋나므로 히트 표식을 img로 옮기지 않는다
   return (
@@ -277,55 +279,60 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
         zIndex: position.zIndex ?? 0,
         pointerEvents: 'none',
       }}
-      data-sprite-element="true"
       data-overlay-hit="true"
-      data-state={!isOneShot && pressedIds.size > 0 ? 'active' : 'idle'}
     >
-      {isOneShot
-        ? mountOneShotImage && (
-            <img
-              // 분기별 key - 모드 전환 시 노드 재사용을 끊어 직접 쓴 src가
-              // 다음 모드로 새어 나가지 않게 한다
-              key="one-shot"
-              ref={imgRef}
-              src={baseImageSrc ?? undefined}
-              alt=""
-              draggable={false}
-              style={{
-                ...computeSpriteImageStyle(position, position.idleTransform),
-                willChange: 'transform',
-                // 기본 이미지가 없으면 재생 순간에만 보인다
-                ...(baseImageSrc ? {} : { visibility: 'hidden' as const }),
-              }}
-              onError={(event) => {
-                const src = event.currentTarget.getAttribute('src');
-                if (src) markFailed(src);
-              }}
-            />
-          )
-        : heldTarget &&
-          heldImageSrc && (
-            <img
-              key="held"
-              src={heldImageSrc}
-              alt=""
-              draggable={false}
-              style={{
-                // 외관 채널은 기본 모드에서 변수로 - 사용자 CSS가 !important 없이 이긴다
-                ...computeSpriteImageStyle(
-                  position,
-                  heldTarget.transform,
-                  transitionCss,
-                ),
-                willChange: 'transform',
-              }}
-              onError={(event) => {
-                if (!isErrorForCurrentSrc(event.currentTarget, heldImageSrc))
-                  return;
-                markFailed(heldImageSrc);
-              }}
-            />
-          )}
+      <div
+        // 이미지 절대 배치의 포함 블록 - 래퍼와 같은 박스라 원점이 바뀌지 않는다
+        style={{ width: '100%', height: '100%', position: 'relative' }}
+        data-sprite-element="true"
+        data-state={!isOneShot && pressedIds.size > 0 ? 'active' : 'idle'}
+      >
+        {isOneShot
+          ? mountOneShotImage && (
+              <img
+                // 분기별 key - 모드 전환 시 노드 재사용을 끊어 직접 쓴 src가
+                // 다음 모드로 새어 나가지 않게 한다
+                key="one-shot"
+                ref={imgRef}
+                src={baseImageSrc ?? undefined}
+                alt=""
+                draggable={false}
+                style={{
+                  ...computeSpriteImageStyle(position, position.idleTransform),
+                  willChange: 'transform',
+                  // 기본 이미지가 없으면 재생 순간에만 보인다
+                  ...(baseImageSrc ? {} : { visibility: 'hidden' as const }),
+                }}
+                onError={(event) => {
+                  const src = event.currentTarget.getAttribute('src');
+                  if (src) markFailed(src);
+                }}
+              />
+            )
+          : heldTarget &&
+            heldImageSrc && (
+              <img
+                key="held"
+                src={heldImageSrc}
+                alt=""
+                draggable={false}
+                style={{
+                  // 외관 채널은 기본 모드에서 변수로 - 사용자 CSS가 !important 없이 이긴다
+                  ...computeSpriteImageStyle(
+                    position,
+                    heldTarget.transform,
+                    transitionCss,
+                  ),
+                  willChange: 'transform',
+                }}
+                onError={(event) => {
+                  if (!isErrorForCurrentSrc(event.currentTarget, heldImageSrc))
+                    return;
+                  markFailed(heldImageSrc);
+                }}
+              />
+            )}
+      </div>
     </div>
   );
 });
