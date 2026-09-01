@@ -140,9 +140,15 @@ const LINEAR_STOP_RE = new RegExp(
   String.raw`^${CSS_NUMBER}(?:\s+${CSS_NUMBER}%){0,2}$`,
 );
 
-// 렌더 채널 양쪽이 받아들이는 문법인지. CSS transition은 무효 문자열을 선언째
-// 버리고 넘어가지만 WAAPI는 TypeError를 던져 재생 자체가 끊기므로, 두 채널이
-// 같은 값을 쓰려면 여기서 문법을 확정해야 한다
+// 도달 범위를 정적으로 계산할 수 있는 문법인지. CSS transition은 무효 문자열을
+// 선언째 버리고 넘어가지만 WAAPI는 TypeError를 던져 재생이 끊기므로, 두 채널이
+// 같은 값을 쓰려면 여기서 문법을 확정해야 한다.
+// 통과 = 엔진 지원 보장이 아니다. linear()는 Chrome 113·Safari 17.2부터라
+// macOS 11의 WebKit이나 구형 OBS의 CEF는 거부한다 - 그쪽은 재생 시점 폴백이 맡는다.
+// 명세상 유효해도 뺀 것들
+//   - calc()·var(): 출력 범위를 정적으로 못 구해 창 여유를 잡을 수 없다
+//   - 위치 우선 linear 정지점(`75% 0.25`): WebKit이 거부해 프리셋이 플랫폼을
+//     넘을 때 동작이 갈린다
 const isRenderableEasing = (easing: string): boolean => {
   const trimmed = easing.trim();
   const lower = trimmed.toLowerCase();
