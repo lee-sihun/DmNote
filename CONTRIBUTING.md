@@ -101,12 +101,6 @@ src-tauri/src/         # Rust 백엔드
 - 플러그인 API(`dmn.*`) 또는 Tauri 커맨드 변경 시 `docs/content/` 하위 MDX 문서 업데이트
 - `en/`, `ko/` 두 언어 모두 반영
 
-### 기여자 표
-
-- README 하단 기여자 표는 [all-contributors](https://allcontributors.org)가 `.all-contributorsrc`로 생성 — 마커 사이를 직접 수정하지 말고 `npm run contributors:add` / `contributors:generate` 사용 (봇 PR도 같은 설정으로 생성)
-- `contributorTemplate`은 좁은 화면에서 셀이 찌그러지지 않도록 이모지 줄을 `&nbsp;`로 채워 셀 최소 폭을 고정한다 (GitHub은 CSS를 제거하므로 유일한 수단). 상수: `narrow = 80` — 좁은 화면 셀 내용 최소 폭(px), `21.5` — 이모지 글리프 폭(Chrome 20 / WebKit 23 실측 중간값), `4.2` — `&nbsp;` 폭 실측
-- 모바일 칸 크기를 바꾸려면 `narrow`만 조정 후 `npm run contributors:generate` (100 미만이면 데스크톱에는 영향 없음)
-
 ## ✅ PR 전 체크리스트
 
 ### 프론트엔드 변경 시
