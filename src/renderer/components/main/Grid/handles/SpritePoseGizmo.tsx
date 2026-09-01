@@ -180,6 +180,8 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
     const drag = dragRef.current;
     const live = sessionRef.current;
     if (!drag || !live) return;
+    // 소유권이 갈린 뒤의 move는 이미 취소된 preview를 되열 뿐이라 버린다
+    if (!ownsSession()) return;
     const target = clientToElementLocal(event.clientX, event.clientY);
     if (!target) return;
 
@@ -236,14 +238,18 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
     if (!drag) return;
     // 다른 포인터의 up이 첫 드래그를 커밋하지 못하게 한다 (멀티터치)
     if (event.pointerId !== drag.pointerId) return;
+    // 소유권을 잃었으면 커밋도 flush도 하지 않고 포기 경로로 간다 -
+    // 대기 move를 flush하면 리사이즈 착지가 닫아둔 preview가 다시 열린다
+    if (!ownsSession()) {
+      cancelActiveDrag();
+      return;
+    }
     // 같은 프레임의 마지막 move가 rAF에 남아 있으면 커밋 전에 반영한다
     moveSchedulerRef.current?.flush();
-    if (ownerGenerationRef.current === generationNow()) {
-      if (drag.mode === 'aim' && lastSolvedRef.current) {
-        drag.session.commit(lastSolvedRef.current);
-      } else if (drag.mode === 'pin' && lastPinRef.current) {
-        drag.session.commitContactPoint(lastPinRef.current);
-      }
+    if (drag.mode === 'aim' && lastSolvedRef.current) {
+      drag.session.commit(lastSolvedRef.current);
+    } else if (drag.mode === 'pin' && lastPinRef.current) {
+      drag.session.commitContactPoint(lastPinRef.current);
     }
     finishDrag();
   };
@@ -257,6 +263,8 @@ const SpritePoseGizmo = ({ zoom, panX, panY }: SpritePoseGizmoProps) => {
   };
 
   const generationNow = () => useSpritePoseGizmoStore.getState().generation;
+  // 드래그 시작 때 잡은 세대가 아직 유효한지 - preview·커밋의 공통 전제
+  const ownsSession = () => ownerGenerationRef.current === generationNow();
 
   const handleWindowMove = (event: PointerEvent) => {
     if (event.pointerId !== dragRef.current?.pointerId) return;

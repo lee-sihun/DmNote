@@ -180,6 +180,47 @@ describe('SpritePoseGizmo', () => {
     expect(session.commit).not.toHaveBeenCalled();
   });
 
+  // 리사이즈 착지·undo는 세션을 유지한 채 세대만 올린다. 이때 대기 중이던 마지막
+  // move를 flush하면 패널이 이미 닫아둔 preview 제스처가 다시 열리고, 커밋만
+  // 생략되어 낡은 세션이 남는다
+  it('소유권이 무효화되면 대기 move를 버리고 커밋 없이 취소한다', () => {
+    const session = makeSession();
+    render(session);
+
+    pointer('pointerdown', knob()!, { clientX: 50, clientY: 200 });
+    pointer('pointermove', window, { clientX: 200, clientY: 50 });
+    act(() =>
+      useSpritePoseGizmoStore.getState().invalidateOwnership('sprite-1'),
+    );
+    (session.preview as ReturnType<typeof vi.fn>).mockClear();
+
+    pointer('pointerup', window, { clientX: 200, clientY: 50 });
+
+    expect(session.preview).not.toHaveBeenCalled();
+    expect(session.commit).not.toHaveBeenCalled();
+    expect(session.cancel).toHaveBeenCalledTimes(1);
+    // 락 반환까지 포기 경로와 동일해야 한다
+    expect(tryAcquireDragSession()).toBe(true);
+    releaseDragSession();
+  });
+
+  it('소유권 무효화 뒤의 move는 preview를 되열지 않는다', async () => {
+    const session = makeSession();
+    render(session);
+
+    pointer('pointerdown', knob()!, { clientX: 50, clientY: 200 });
+    act(() =>
+      useSpritePoseGizmoStore.getState().invalidateOwnership('sprite-1'),
+    );
+
+    pointer('pointermove', window, { clientX: 200, clientY: 50 });
+    // rAF 스케줄러가 타이머로 강등돼 있어 한 틱 뒤에 콜백이 돈다
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(session.preview).not.toHaveBeenCalled();
+  });
+
   it('Alt 드래그는 transform 대신 핀 위치를 커밋한다', () => {
     const session = makeSession();
     render(session);
