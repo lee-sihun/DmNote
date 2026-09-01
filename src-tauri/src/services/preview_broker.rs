@@ -98,6 +98,7 @@ const SPRITE_POSITION_PATCH_FIELDS: &[&str] = &[
     "pivot",
     "idleTransform",
     "poses",
+    "pressDurationMs",
     "transitionMs",
     "transitionEasing",
     "imageFit",
@@ -913,6 +914,7 @@ mod tests {
             "pivot": { "x": 0.5, "y": 0.75 },
             "idleTransform": { "x": 0, "y": 0, "rotation": 0, "scale": 1 },
             "poses": [{ "poseId": "pose-id", "triggers": [] }],
+            "pressDurationMs": 300,
             "transitionMs": 120,
             "transitionEasing": "ease-out",
             "imageFit": "contain",
@@ -938,6 +940,28 @@ mod tests {
         assert_eq!(messages[0].domain, PreviewDomain::SpritePosition);
         assert_eq!(messages[0].mode, "4key");
         assert_eq!(Value::Object(messages[0].patch.clone()), patch);
+    }
+
+    #[test]
+    fn sprite_position_preview_allowlist_matches_supported_contract() {
+        assert_eq!(
+            SPRITE_POSITION_PATCH_FIELDS,
+            [
+                "dx",
+                "dy",
+                "width",
+                "height",
+                "imageRect",
+                "pivot",
+                "idleTransform",
+                "poses",
+                "pressDurationMs",
+                "transitionMs",
+                "transitionEasing",
+                "imageFit",
+                "baseImage",
+            ]
+        );
     }
 
     #[test]
