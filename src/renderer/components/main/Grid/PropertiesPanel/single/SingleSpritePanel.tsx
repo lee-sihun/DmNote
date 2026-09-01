@@ -165,11 +165,12 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     setStretchEnabled(false);
   }
 
-  // draft는 커밋이 canonical에 착지하면 지운다 - position prop이 곧 canonical
+  // draft는 커밋이 canonical에 착지하면 지운다 - position prop이 곧 canonical.
+  // 백엔드 직렬화 순서가 초안과 달라도 같은 내용이면 착지로 본다
   if (
     posesDraft &&
     posesDraft.id === position.id &&
-    JSON.stringify(position.poses) === JSON.stringify(posesDraft.poses)
+    stableStringify(position.poses) === stableStringify(posesDraft.poses)
   ) {
     setPosesDraft(null);
   }
@@ -210,12 +211,12 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       };
       const projected = projectSpriteResize(lastPositionSnapshot, nextBounds);
       const resizeLanded =
-        JSON.stringify(projected.imageRect) ===
-          JSON.stringify(canonicalPosition.imageRect) &&
-        JSON.stringify(projected.idleTransform) ===
-          JSON.stringify(canonicalPosition.idleTransform) &&
-        JSON.stringify(projected.poses) ===
-          JSON.stringify(canonicalPosition.poses);
+        stableStringify(projected.imageRect) ===
+          stableStringify(canonicalPosition.imageRect) &&
+        stableStringify(projected.idleTransform) ===
+          stableStringify(canonicalPosition.idleTransform) &&
+        stableStringify(projected.poses) ===
+          stableStringify(canonicalPosition.poses);
       if (resizeLanded) {
         if (posesDraft && posesDraft.id === canonicalPosition.id) {
           setPosesDraft({
