@@ -132,7 +132,7 @@ enum ViolationPropertyPath {
         property: &'static str,
     },
     SpritePoseProperty {
-        pose_index: usize,
+        pose_id: String,
         property: &'static str,
     },
 }
@@ -1086,6 +1086,18 @@ pub(crate) enum GrandfatherKeying {
     LegacyPresetModeIndex,
 }
 
+#[derive(Default)]
+struct NativeIdAliases {
+    elements: HashMap<String, String>,
+    sprite_poses: HashMap<String, String>,
+}
+
+impl NativeIdAliases {
+    fn is_empty(&self) -> bool {
+        self.elements.is_empty() && self.sprite_poses.is_empty()
+    }
+}
+
 /// 기존 store에 있던 손실 없는 비정상 데이터는 유지하되 새 비정상 상태는 만들지 않음
 pub(crate) fn validate_document_transition(
     current: &EditorDocumentV1,
@@ -1128,7 +1140,7 @@ pub(crate) fn validate_document_transition_with_keying(
     validate_metric_limits(current, candidate, keying)?;
 
     let native_id_alias = match keying {
-        GrandfatherKeying::StableId => HashMap::new(),
+        GrandfatherKeying::StableId => NativeIdAliases::default(),
         #[cfg(test)]
         GrandfatherKeying::ModeIndex => native_id_alias_by_slot(current, candidate),
         GrandfatherKeying::LegacyPresetModeIndex => native_id_alias_by_slot(current, candidate),
@@ -1146,49 +1158,76 @@ pub(crate) fn validate_document_transition_with_keying(
     Ok(())
 }
 
-// 후보 요소 id → 같은 (모드, 자리)의 현재 요소 id. 프리셋 트랜잭션은 커밋
-// 직전 id를 재발급하므로 신원으로는 관용 상대를 찾을 수 없다
+// 프리셋 후보 요소와 자세 id를 같은 모드와 자리의 현재 id로 연결
 fn native_id_alias_by_slot(
     current: &EditorDocumentV1,
     candidate: &EditorDocumentV1,
-) -> HashMap<String, String> {
-    let mut alias = HashMap::new();
-    let mut collect = |current_ids: Vec<(&String, Vec<&str>)>,
-                       candidate_ids: Vec<(&String, Vec<&str>)>| {
-        let current_by_mode = current_ids.into_iter().collect::<HashMap<_, _>>();
-        for (mode, ids) in candidate_ids {
-            let Some(current_mode_ids) = current_by_mode.get(mode) else {
-                continue;
-            };
-            for (index, id) in ids.into_iter().enumerate() {
-                if let Some(current_id) = current_mode_ids.get(index) {
-                    alias.insert(id.to_string(), current_id.to_string());
+) -> NativeIdAliases {
+    let mut aliases = NativeIdAliases::default();
+    {
+        let mut collect = |current_ids: Vec<(&String, Vec<&str>)>,
+                           candidate_ids: Vec<(&String, Vec<&str>)>| {
+            let current_by_mode = current_ids.into_iter().collect::<HashMap<_, _>>();
+            for (mode, ids) in candidate_ids {
+                let Some(current_mode_ids) = current_by_mode.get(mode) else {
+                    continue;
+                };
+                for (index, id) in ids.into_iter().enumerate() {
+                    if let Some(current_id) = current_mode_ids.get(index) {
+                        aliases
+                            .elements
+                            .insert(id.to_string(), current_id.to_string());
+                    }
                 }
             }
-        }
-    };
+        };
 
-    collect(
-        key_position_ids(&current.key_positions),
-        key_position_ids(&candidate.key_positions),
+        collect(
+            key_position_ids(&current.key_positions),
+            key_position_ids(&candidate.key_positions),
+        );
+        collect(
+            nested_position_ids(&current.stat_positions),
+            nested_position_ids(&candidate.stat_positions),
+        );
+        collect(
+            nested_position_ids(&current.graph_positions),
+            nested_position_ids(&candidate.graph_positions),
+        );
+        collect(
+            nested_position_ids(&current.knob_positions),
+            nested_position_ids(&candidate.knob_positions),
+        );
+        collect(
+            sprite_position_ids(&current.sprite_positions),
+            sprite_position_ids(&candidate.sprite_positions),
+        );
+    }
+    collect_sprite_pose_id_aliases(
+        &current.sprite_positions,
+        &candidate.sprite_positions,
+        &mut aliases.sprite_poses,
     );
-    collect(
-        nested_position_ids(&current.stat_positions),
-        nested_position_ids(&candidate.stat_positions),
-    );
-    collect(
-        nested_position_ids(&current.graph_positions),
-        nested_position_ids(&candidate.graph_positions),
-    );
-    collect(
-        nested_position_ids(&current.knob_positions),
-        nested_position_ids(&candidate.knob_positions),
-    );
-    collect(
-        sprite_position_ids(&current.sprite_positions),
-        sprite_position_ids(&candidate.sprite_positions),
-    );
-    alias
+    aliases
+}
+
+fn collect_sprite_pose_id_aliases(
+    current: &HashMap<String, Vec<ReactiveSpritePosition>>,
+    candidate: &HashMap<String, Vec<ReactiveSpritePosition>>,
+    aliases: &mut HashMap<String, String>,
+) {
+    for (mode, candidate_sprites) in candidate {
+        let Some(current_sprites) = current.get(mode) else {
+            continue;
+        };
+        for (candidate_sprite, current_sprite) in candidate_sprites.iter().zip(current_sprites) {
+            for (candidate_pose, current_pose) in
+                candidate_sprite.poses.iter().zip(&current_sprite.poses)
+            {
+                aliases.insert(candidate_pose.pose_id.clone(), current_pose.pose_id.clone());
+            }
+        }
+    }
 }
 
 fn sprite_position_ids(
@@ -1265,7 +1304,7 @@ impl HasKeyPosition for KnobPosition {
 fn is_grandfathered(
     current_violation_keys: &BTreeSet<ViolationKey>,
     candidate: &ValidationViolation,
-    native_id_alias: &HashMap<String, String>,
+    native_id_alias: &NativeIdAliases,
 ) -> bool {
     if current_violation_keys.contains(&candidate.key) {
         return true;
@@ -1277,8 +1316,20 @@ fn is_grandfathered(
     let ViolationOwner::NativeElement { kind, id } = &candidate.key.owner else {
         return false;
     };
-    let Some(current_id) = native_id_alias.get(id) else {
+    let Some(current_id) = native_id_alias.elements.get(id) else {
         return false;
+    };
+    let property_path = match &candidate.key.property_path {
+        ViolationPropertyPath::SpritePoseProperty { pose_id, property } => {
+            let Some(current_pose_id) = native_id_alias.sprite_poses.get(pose_id) else {
+                return false;
+            };
+            ViolationPropertyPath::SpritePoseProperty {
+                pose_id: current_pose_id.clone(),
+                property,
+            }
+        }
+        property_path => property_path.clone(),
     };
     let aliased = ViolationKey {
         owner: ViolationOwner::NativeElement {
@@ -1286,7 +1337,7 @@ fn is_grandfathered(
             id: current_id.clone(),
         },
         code: candidate.key.code,
-        property_path: candidate.key.property_path.clone(),
+        property_path,
         invalid_value: candidate.key.invalid_value.clone(),
     };
     current_violation_keys.contains(&aliased)
@@ -1686,7 +1737,7 @@ fn collect_sprite_violations(
                     mode,
                     sprite_index,
                     "poseTransform",
-                    Some(pose_index),
+                    Some((pose_index, &pose.pose_id)),
                     &pose.transform,
                     violations,
                 );
@@ -1699,7 +1750,7 @@ fn collect_sprite_violations(
                                 &sprite.id,
                                 "INVALID_SPRITE_CONTACT_POINT",
                                 ViolationPropertyPath::SpritePoseProperty {
-                                    pose_index,
+                                    pose_id: pose.pose_id.clone(),
                                     property,
                                 },
                                 InvalidValueSignature::FloatBits(value.to_bits()),
@@ -1717,7 +1768,7 @@ fn collect_sprite_violations(
                             &sprite.id,
                             "TOO_MANY_SPRITE_POSE_TRIGGERS",
                             ViolationPropertyPath::SpritePoseProperty {
-                                pose_index,
+                                pose_id: pose.pose_id.clone(),
                                 property: "triggers",
                             },
                             InvalidValueSignature::Count(pose.triggers.len()),
@@ -1737,7 +1788,7 @@ fn collect_sprite_violations(
                             &sprite.id,
                             "INVALID_SPRITE_TRIGGER",
                             ViolationPropertyPath::SpritePoseProperty {
-                                pose_index,
+                                pose_id: pose.pose_id.clone(),
                                 property: "triggers",
                             },
                             InvalidValueSignature::Text(trigger.clone()),
@@ -1754,10 +1805,10 @@ fn collect_sprite_violations(
                             &sprite.id,
                             "EMPTY_SPRITE_POSE_TRIGGERS",
                             ViolationPropertyPath::SpritePoseProperty {
-                                pose_index,
+                                pose_id: pose.pose_id.clone(),
                                 property: "triggers",
                             },
-                            InvalidValueSignature::Count(pose_index),
+                            InvalidValueSignature::Empty,
                         ),
                         format!(
                             "spritePositions {mode}[{sprite_index}].poses[{pose_index}].triggers must not be empty"
@@ -1770,7 +1821,7 @@ fn collect_sprite_violations(
                             &sprite.id,
                             "DUPLICATE_SPRITE_POSE_TRIGGERS",
                             ViolationPropertyPath::SpritePoseProperty {
-                                pose_index,
+                                pose_id: pose.pose_id.clone(),
                                 property: "triggers",
                             },
                             InvalidValueSignature::Text(format!("{:?}", pose.triggers)),
@@ -1790,7 +1841,7 @@ fn collect_sprite_transform_violations(
     mode: &str,
     sprite_index: usize,
     section: &'static str,
-    pose_index: Option<usize>,
+    pose_identity: Option<(usize, &str)>,
     transform: &SpriteTransform,
     violations: &mut BTreeSet<ValidationViolation>,
 ) {
@@ -1826,10 +1877,10 @@ fn collect_sprite_transform_violations(
                     NativeElementKind::Sprite,
                     &sprite.id,
                     "INVALID_SPRITE_TRANSFORM",
-                    pose_index.map_or(
+                    pose_identity.map_or(
                         ViolationPropertyPath::SpriteProperty { section, property },
-                        |pose_index| ViolationPropertyPath::SpritePoseProperty {
-                            pose_index,
+                        |(_, pose_id)| ViolationPropertyPath::SpritePoseProperty {
+                            pose_id: pose_id.to_string(),
                             property,
                         },
                     ),
@@ -5268,8 +5319,171 @@ mod tests {
         assert!(is_grandfathered(
             &current,
             &ValidationViolation::new(key, "different diagnostic message"),
-            &HashMap::new()
+            &NativeIdAliases::default()
         ));
+    }
+
+    fn sprite_pose_with_triggers(triggers: Vec<String>) -> SpritePose {
+        SpritePose {
+            pose_id: Uuid::new_v4().to_string(),
+            triggers,
+            ..SpritePose::default()
+        }
+    }
+
+    fn store_with_grandfathered_sprite_poses(poses: Vec<SpritePose>) -> AppStoreData {
+        let mut store = default_editor_store();
+        store.sprite_positions.insert(
+            "4key".to_string(),
+            vec![ReactiveSpritePosition {
+                id: Uuid::new_v4().to_string(),
+                poses,
+                ..ReactiveSpritePosition::default()
+            }],
+        );
+        store
+    }
+
+    fn empty_trigger_violation_key(
+        document: &EditorDocumentV1,
+        store: &AppStoreData,
+        pose_id: &str,
+    ) -> ViolationKey {
+        collect_violations(document, &allowed_modes(store))
+            .into_iter()
+            .find(|violation| {
+                violation.code() == "EMPTY_SPRITE_POSE_TRIGGERS"
+                    && matches!(
+                        &violation.key.property_path,
+                        ViolationPropertyPath::SpritePoseProperty {
+                            pose_id: violation_pose_id,
+                            ..
+                        } if violation_pose_id == pose_id
+                    )
+            })
+            .expect("empty trigger violation exists")
+            .key
+    }
+
+    #[test]
+    fn sprite_pose_violation_survives_deleting_an_earlier_pose() {
+        let normal = sprite_pose_with_triggers(vec![Uuid::new_v4().to_string()]);
+        let invalid = sprite_pose_with_triggers(Vec::new());
+        let invalid_pose_id = invalid.pose_id.clone();
+        let store = store_with_grandfathered_sprite_poses(vec![normal, invalid]);
+        let current = EditorDocumentV1::from_store(&store);
+        let mut candidate = current.clone();
+        candidate.sprite_positions.get_mut("4key").unwrap()[0]
+            .poses
+            .remove(0);
+        let mut candidate_store = store.clone();
+        candidate.apply_to_store(&mut candidate_store);
+
+        validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+        assert_eq!(
+            candidate.sprite_positions["4key"][0].poses[0].pose_id,
+            invalid_pose_id
+        );
+    }
+
+    #[test]
+    fn sprite_pose_violation_follows_pose_id_across_reorder() {
+        let normal = sprite_pose_with_triggers(vec![Uuid::new_v4().to_string()]);
+        let invalid = sprite_pose_with_triggers(Vec::new());
+        let invalid_pose_id = invalid.pose_id.clone();
+        let store = store_with_grandfathered_sprite_poses(vec![normal, invalid]);
+        let current = EditorDocumentV1::from_store(&store);
+        let mut candidate = current.clone();
+        candidate.sprite_positions.get_mut("4key").unwrap()[0]
+            .poses
+            .swap(0, 1);
+        let mut candidate_store = store.clone();
+        candidate.apply_to_store(&mut candidate_store);
+
+        validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+        assert_eq!(
+            candidate.sprite_positions["4key"][0].poses[0].pose_id,
+            invalid_pose_id
+        );
+    }
+
+    #[test]
+    fn same_sprite_pose_violation_on_a_new_pose_id_is_rejected() {
+        let invalid = sprite_pose_with_triggers(Vec::new());
+        let store = store_with_grandfathered_sprite_poses(vec![invalid]);
+        let current = EditorDocumentV1::from_store(&store);
+        let mut candidate = current.clone();
+        candidate.sprite_positions.get_mut("4key").unwrap()[0]
+            .poses
+            .push(sprite_pose_with_triggers(Vec::new()));
+        let mut candidate_store = store.clone();
+        candidate.apply_to_store(&mut candidate_store);
+
+        let error = validate_document_transition(&current, &candidate, &store, &candidate_store)
+            .unwrap_err();
+
+        assert_eq!(validation_code(&error), Some("EMPTY_SPRITE_POSE_TRIGGERS"));
+    }
+
+    #[test]
+    fn empty_sprite_pose_trigger_signature_is_index_independent() {
+        let normal = sprite_pose_with_triggers(vec![Uuid::new_v4().to_string()]);
+        let invalid = sprite_pose_with_triggers(Vec::new());
+        let invalid_pose_id = invalid.pose_id.clone();
+        let store = store_with_grandfathered_sprite_poses(vec![normal, invalid]);
+        let current = EditorDocumentV1::from_store(&store);
+        let current_key = empty_trigger_violation_key(&current, &store, &invalid_pose_id);
+        let mut reordered = current.clone();
+        reordered.sprite_positions.get_mut("4key").unwrap()[0]
+            .poses
+            .swap(0, 1);
+        let reordered_key = empty_trigger_violation_key(&reordered, &store, &invalid_pose_id);
+
+        assert_eq!(current_key, reordered_key);
+        assert_eq!(current_key.invalid_value, InvalidValueSignature::Empty);
+    }
+
+    #[test]
+    fn preset_pose_alias_grandfathers_rekeyed_existing_violation() {
+        let invalid = sprite_pose_with_triggers(Vec::new());
+        let store = store_with_grandfathered_sprite_poses(vec![invalid]);
+        let current = EditorDocumentV1::from_store(&store);
+        let mut candidate_store = store.clone();
+        crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+        let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+        validate_document_transition_with_keying(
+            &current,
+            &candidate,
+            &store,
+            &candidate_store,
+            GrandfatherKeying::LegacyPresetModeIndex,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn preset_pose_alias_rejects_new_violation() {
+        let normal = sprite_pose_with_triggers(vec![Uuid::new_v4().to_string()]);
+        let store = store_with_grandfathered_sprite_poses(vec![normal]);
+        let current = EditorDocumentV1::from_store(&store);
+        let mut candidate_store = store.clone();
+        crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+        candidate_store.sprite_positions.get_mut("4key").unwrap()[0]
+            .poses
+            .push(sprite_pose_with_triggers(Vec::new()));
+        let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+        let error = validate_document_transition_with_keying(
+            &current,
+            &candidate,
+            &store,
+            &candidate_store,
+            GrandfatherKeying::LegacyPresetModeIndex,
+        )
+        .unwrap_err();
+
+        assert_eq!(validation_code(&error), Some("EMPTY_SPRITE_POSE_TRIGGERS"));
     }
 
     #[test]
