@@ -91,7 +91,7 @@
     }
   ],
   "contributorsPerLine": 7,
-  "contributorTemplate": "<a href=\"<%= contributor.profile %>\"><img src=\"<%= contributor.avatar_url + (contributor.avatar_url.indexOf(\"?\") < 0 ? \"?\" : \"&\") + \"s=\" + options.imageSize * 2 %>\" width=\"<%= options.imageSize %>\" alt=\"<%- contributor.name || contributor.login %>\"/><br /><sub><b><%- contributor.name || contributor.login %></b></sub></a><br /><% var narrow = 80, e = contributor.contributions.length, n = Math.max(0, Math.round((narrow - e * 21.5 - (e - 1) * 4.2) / 4.2)); %><%= \"&nbsp;\".repeat(Math.floor(n / 2)) %><%= contributions.replace(/<\\/a> <a/g, \"</a>&nbsp;<a\") %><%= \"&nbsp;\".repeat(Math.ceil(n / 2)) %>",
+  "contributorTemplate": "<a href=\"<%= contributor.profile %>\"><img src=\"<%= contributor.avatar_url + (contributor.avatar_url.indexOf(\"?\") < 0 ? \"?\" : \"&\") + \"s=\" + options.imageSize * 2 %>\" width=\"<%= options.imageSize %>\" alt=\"<%- contributor.name || contributor.login %>\"/><br /><sub><b><%- contributor.name || contributor.login %></b></sub></a><br /><%= contributions.replace(/<\\/a> <a/g, \"</a>&nbsp;<a\") %><br /><img width=\"1\" height=\"1\" hspace=\"30\" align=\"left\" alt=\"\"/>",
   "skipCi": true,
   "contributorsSortAlphabetically": false,
   "commitType": "docs"
