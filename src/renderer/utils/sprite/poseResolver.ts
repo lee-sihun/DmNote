@@ -122,7 +122,8 @@ export const resolvePoseImage = (
 
 // 눌린 키 집합만 읽는 순수 해석. 눌린 순서, 시각, 이전 상태에 의존하지 않는다
 export const resolveSpriteTarget = (
-  sprite: ReactiveSpritePosition,
+  // 도달 범위 계산도 같은 해석을 돌린다 - 전체 위치가 아니라 해석에 쓰는 세 필드만 받는다
+  sprite: Pick<ReactiveSpritePosition, 'poses' | 'idleTransform' | 'baseImage'>,
   pressedKeyElementIds: ReadonlySet<string>,
 ): SpriteTargetResolution => {
   const prepared = preparePoses(sprite.poses);

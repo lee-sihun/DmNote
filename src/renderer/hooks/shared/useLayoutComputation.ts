@@ -7,7 +7,10 @@ import type { NoteSettings } from '@src/types/settings/noteSettings';
 // 레이아웃이 읽을 수 있는 플러그인 필드는 투영 타입으로 제한 —
 // 필드 추가 시 selectPluginLayoutElements·pluginLayoutElementsEqual 동반 수정 필요
 import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
-import { computeSpriteReachAabb } from '@utils/sprite/spriteReach';
+import {
+  computeSpriteReachAabb,
+  spriteReachEnumerationCost,
+} from '@utils/sprite/spriteReach';
 import { buildSpriteKeyCanonicalMap } from '@utils/sprite/spriteKeyBinding';
 import { DEFAULT_SPRITE_SIZE } from '@src/types/key/sprites';
 
@@ -194,12 +197,27 @@ export function computeLayout(input: LayoutInput) {
     let { minX, minY, maxX, maxY } = contentBounds;
     // 재생 매핑과 같은 기준의 생존 키 - 요소가 남아 있어도 슬롯이 비면 누를 수
     // 없다. 오버레이 잎이 쓰는 바로 그 결합을 그대로 재사용한다
-    const liveKeyIds = new Set(
-      buildSpriteKeyCanonicalMap(currentKeys, currentPositions).keys(),
+    const canonicalByKeyId = buildSpriteKeyCanonicalMap(
+      currentKeys,
+      currentPositions,
     );
+    // 상태 열거는 정밀하지만 문서 상한(스프라이트 512 x 자세 64 x 트리거 512)에서는
+    // 수백 ms가 나온다. 전체 예상량을 먼저 재고 예산을 넘으면 모든 스프라이트를 함께
+    // 과대 근사로 돌린다 - 일부만 열거하면 스프라이트 순서에 창 크기가 딸려간다.
+    // 예산은 실측 기준(약 33만 단위에서 19ms)에서 30ms 언저리로 잡았다
+    const REACH_ENUMERATION_BUDGET = 500_000;
+    let enumerationCost = 0;
+    for (const pos of currentSpritePositions) {
+      if (!pos || pos.hidden) continue;
+      enumerationCost += spriteReachEnumerationCost(pos, canonicalByKeyId);
+      if (enumerationCost > REACH_ENUMERATION_BUDGET) break;
+    }
+    const enumerate = enumerationCost <= REACH_ENUMERATION_BUDGET;
     currentSpritePositions.forEach((pos) => {
       if (!pos || pos.hidden) return;
-      const reach = computeSpriteReachAabb(pos, liveKeyIds);
+      const reach = computeSpriteReachAabb(pos, canonicalByKeyId, {
+        enumerate,
+      });
       if (!reach) return;
       minX = Math.min(minX, pos.dx + reach.minX);
       minY = Math.min(minY, pos.dy + reach.minY);

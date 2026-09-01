@@ -5,7 +5,12 @@ import type {
 
 import { isRenderableImageRef } from '@utils/core/imageSource';
 
-import { selectableSpritePoses } from './poseResolver';
+import {
+  resolveSpriteTarget,
+  selectableSpritePoses,
+  spriteTriggerIds,
+  type SpriteTargetResolution,
+} from './poseResolver';
 
 import { anchorPx } from './spriteGeometry';
 
@@ -234,23 +239,118 @@ export const easingOvershootExtension = (easing: string): number => {
 // 해석기 4단계의 평균 상태는 x·y·scale이 상태 값들의 볼록 결합이라 아래
 // 범위 계산에 자동으로 포함되고, rotation 원형 평균은 회전 동일 시 같은 각,
 // 상이 시 원 상한이 모든 각을 커버한다
+// 스프라이트 하나의 눌림 조합 상한. 반응 키가 10개를 넘는 문서는 사실상 없고,
+// 넘으면 2^g가 급격히 커진다. 초과분은 자세 범위 과대 근사로 폴백한다.
+// 레이아웃 전체 합계 예산은 호출부가 따로 건다 - 이 상한만으로는 스프라이트가
+// 많은 문서의 총 비용을 막지 못한다
+const MAX_REACH_ENUMERATION_GROUPS = 10;
+
+// 실제로 만들어질 수 있는 눌림 상태마다 해석기를 돌려 나온 transform 목록.
+// 같은 canonical 키에 묶인 트리거는 항상 함께 눌린다 - 잎이 canonical 신호로
+// pressed 집합을 만들기 때문이다. 그래서 그룹 단위 on/off의 모든 조합이 곧
+// 도달 가능한 상태다. canonical끼리는 독립으로 본다: 백엔드가 전이를 개별
+// 이벤트로 순차 발행하고 프론트도 하나씩 적용해서, 물리적으로 불가능해 보이는
+// 중간 조합('A+B'만 켜지고 'A'는 아직 꺼진 순간)도 실제로 해석기에 들어간다.
+// 상한 초과면 null - 호출부가 기존 과대 근사로 돌아간다
+const canonicalGroups = (
+  sprite: SpriteReachGeometry,
+  canonicalByTrigger: ReadonlyMap<string, string>,
+): Array<Set<string>> => {
+  const groupsByCanonical = new Map<string, Set<string>>();
+  for (const pose of sprite.poses) {
+    for (const trigger of pose.triggers) {
+      const canonical = canonicalByTrigger.get(trigger);
+      if (canonical === undefined) continue;
+      const group = groupsByCanonical.get(canonical) ?? new Set<string>();
+      group.add(trigger);
+      groupsByCanonical.set(canonical, group);
+    }
+  }
+  return [...groupsByCanonical.values()];
+};
+
+/**
+ * 열거 비용 추정치. 상태 수 x 상태당 순회량이고, 그룹 수가 상한을 넘으면 Infinity.
+ * 호출부가 레이아웃 전체 합계를 먼저 재고 예산을 넘으면 모든 스프라이트를 함께
+ * 폴백시킨다 - 일부만 열거하면 스프라이트 순서에 따라 창 크기가 달라진다
+ */
+export const spriteReachEnumerationCost = (
+  sprite: SpriteReachGeometry,
+  canonicalByTrigger: ReadonlyMap<string, string>,
+): number => {
+  const groups = canonicalGroups(sprite, canonicalByTrigger);
+  if (groups.length > MAX_REACH_ENUMERATION_GROUPS)
+    return Number.POSITIVE_INFINITY;
+  // 그룹 구성은 고유 키가 아니라 자세마다의 트리거 등장을 전부 훑는다. 자세 64개가
+  // 같은 키 512개를 반복 참조하면 3만 번이라, 고유 수만 세면 크게 과소평가된다.
+  // 비용 계산과 실제 열거에서 한 번씩 돌므로 두 배로 잡는다
+  const triggerReferences = sprite.poses.reduce(
+    (sum, pose) => sum + pose.triggers.length,
+    0,
+  );
+  const activeIds = groups.reduce((sum, group) => sum + group.size, 0);
+  // 상태마다 활성 id 복사 + 해석기의 트리거·단일 자세 순회 + 활성 집합 정렬
+  const perState =
+    activeIds + spriteTriggerIds(sprite.poses).length + sprite.poses.length + 1;
+  return triggerReferences * 2 + 2 ** groups.length * perState;
+};
+
+const enumerateReachableTargets = (
+  sprite: SpriteReachGeometry,
+  canonicalByTrigger: ReadonlyMap<string, string>,
+): SpriteTargetResolution[] | null => {
+  const groups = canonicalGroups(sprite, canonicalByTrigger);
+  if (groups.length > MAX_REACH_ENUMERATION_GROUPS) return null;
+
+  const targets: SpriteTargetResolution[] = [];
+  const stateCount = 2 ** groups.length;
+  for (let mask = 0; mask < stateCount; mask++) {
+    const pressed = new Set<string>();
+    for (let index = 0; index < groups.length; index++) {
+      if (mask & (1 << index)) {
+        for (const trigger of groups[index]) pressed.add(trigger);
+      }
+    }
+    targets.push(resolveSpriteTarget(sprite, pressed));
+  }
+  return targets;
+};
+
 export const computeSpriteReachAabb = (
   sprite: SpriteReachGeometry,
-  liveTriggerIds: ReadonlySet<string>,
+  canonicalByTrigger: ReadonlyMap<string, string>,
+  options: { enumerate?: boolean } = {},
 ): SpriteAabb | null => {
-  // 재생될 수 없는 자세는 창을 넓히지 않는다. 키를 지운 뒤에도 여유가 남으면
-  // 레이아웃이 되돌아오지 않는다. 선택 가능 판정은 해석기와 같은 전처리에서
-  // 파생시켜 두 규칙이 갈릴 수 없게 한다
-  const reachablePoses = selectableSpritePoses(sprite.poses, liveTriggerIds);
-  const hasImage =
-    isRenderableImageRef(sprite.baseImage) ||
-    reachablePoses.some((pose) => isRenderableImageRef(pose.imageOverride));
-  if (!hasImage) return null;
+  // 상태를 열거하면 자세를 개별로 세는 과대 근사가 사라진다 - 같은 물리 키에
+  // 묶인 자세들은 평균으로만 도달하므로 범위가 그만큼 좁아진다.
+  // 이미지 판정도 같은 열거 결과로 해야 한다: 조합 자세가 공동 활성화 때문에
+  // 정확 일치할 수 없으면 그 override는 어떤 상태에서도 그려지지 않는다
+  const targets =
+    options.enumerate === false
+      ? null
+      : enumerateReachableTargets(sprite, canonicalByTrigger);
 
-  const transforms: SpriteTransform[] = [
-    sprite.idleTransform,
-    ...reachablePoses.map((pose) => pose.transform),
-  ];
+  let transforms: SpriteTransform[];
+  if (targets) {
+    if (!targets.some((target) => isRenderableImageRef(target.imageSrc)))
+      return null;
+    transforms = targets.map((target) => target.transform);
+  } else {
+    // 폴백도 재생될 수 없는 자세는 빼야 키를 지운 뒤 여유가 회수된다.
+    // 선택 가능 판정은 해석기와 같은 전처리에서 파생시켜 규칙이 갈릴 수 없게 한다
+    const reachablePoses = selectableSpritePoses(
+      sprite.poses,
+      new Set(canonicalByTrigger.keys()),
+    );
+    const hasImage =
+      isRenderableImageRef(sprite.baseImage) ||
+      reachablePoses.some((pose) => isRenderableImageRef(pose.imageOverride));
+    if (!hasImage) return null;
+    transforms = [
+      sprite.idleTransform,
+      ...reachablePoses.map((pose) => pose.transform),
+    ];
+  }
 
   const extension = easingOvershootExtension(sprite.transitionEasing);
   const extendedRange = (values: number[]): { lo: number; hi: number } => {

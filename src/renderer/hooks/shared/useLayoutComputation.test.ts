@@ -44,9 +44,20 @@ const makeSprite = (
   ...overrides,
 });
 
-const makeInput = (sprites: CanonicalReactiveSpritePosition[]) => ({
-  currentKeys: [],
-  currentPositions: [],
+const makeInput = (
+  sprites: CanonicalReactiveSpritePosition[],
+  keys: { canonicals: string[]; ids: string[] } = { canonicals: [], ids: [] },
+) => ({
+  currentKeys: keys.canonicals,
+  // 키는 스프라이트 활동 영역과 같은 자리에 둔다 - 콘텐츠 바운즈를 바꾸지 않아야
+  // 도달 범위 차이만 검증된다
+  currentPositions: keys.ids.map((id) => ({
+    id,
+    dx: 100,
+    dy: 50,
+    width: 200,
+    height: 200,
+  })) as never,
   currentStatPositions: [],
   currentGraphPositions: [],
   currentKnobPositions: [],
@@ -140,5 +151,111 @@ describe('computeLayout 스프라이트 오버행', () => {
     );
     expect(layout.bounds).toBeNull();
     expect(layout.backgroundBox).toBeNull();
+  });
+});
+
+// 열거 게이트는 레이아웃 전체가 함께 켜지고 함께 꺼진다 - 일부만 열거하면
+// 스프라이트 순서에 창 크기가 딸려간다
+describe('computeLayout 도달 범위 열거 게이트', () => {
+  // k1·k2가 같은 물리 키라 두 자세는 평균으로만 도달한다
+  const coActivated = () =>
+    makeSprite({
+      id: 'co',
+      poses: [
+        {
+          contactPoint: { x: 0.5, y: 1 },
+          poseId: 'a',
+          triggers: ['k1'],
+          transform: makeTransform({ x: -2000 }),
+          imageOverride: null,
+        },
+        {
+          contactPoint: { x: 0.5, y: 1 },
+          poseId: 'b',
+          triggers: ['k2'],
+          transform: makeTransform({ x: 2000 }),
+          imageOverride: null,
+        },
+      ],
+    });
+
+  // 서로 다른 키 11개 - 스프라이트별 상한을 넘겨 전체 폴백을 유발한다
+  const overCap = (overrides: Partial<CanonicalReactiveSpritePosition> = {}) =>
+    makeSprite({
+      id: 'over-cap',
+      poses: Array.from({ length: 11 }, (_, index) => ({
+        contactPoint: { x: 0.5, y: 1 },
+        poseId: `cap-${index}`,
+        triggers: [`c${index}`],
+        transform: makeTransform(),
+        imageOverride: null,
+      })),
+      ...overrides,
+    });
+
+  const keys = {
+    canonicals: [
+      'KeyA',
+      'KeyA',
+      ...Array.from({ length: 11 }, (_, i) => `C${i}`),
+    ],
+    ids: ['k1', 'k2', ...Array.from({ length: 11 }, (_, i) => `c${i}`)],
+  };
+
+  it('열거가 켜지면 같은 키에 묶인 자세는 창을 넓히지 않는다', () => {
+    const layout = computeLayout(makeInput([coActivated()], keys));
+    expect(layout.bounds).toEqual({
+      minX: 100,
+      minY: 50,
+      maxX: 300,
+      maxY: 250,
+    });
+  });
+
+  it('숨긴 고비용 스프라이트는 게이트 판정에 끼지 않는다', () => {
+    const layout = computeLayout(
+      makeInput([coActivated(), overCap({ hidden: true })], keys),
+    );
+    expect(layout.bounds).toEqual({
+      minX: 100,
+      minY: 50,
+      maxX: 300,
+      maxY: 250,
+    });
+  });
+
+  // 개별은 상한 안이지만 합계가 예산을 넘는 경우 - 숫자 예산 자체를 고정한다.
+  // g=10 스프라이트 하나가 약 31,764이라 16개면 500,000을 넘는다
+  const tenGroup = (id: string) =>
+    makeSprite({
+      id,
+      poses: Array.from({ length: 10 }, (_, index) => ({
+        contactPoint: { x: 0.5, y: 1 },
+        poseId: `${id}-${index}`,
+        triggers: [`c${index}`],
+        transform: makeTransform(),
+        imageOverride: null,
+      })),
+    });
+
+  it('개별은 상한 안이어도 합계가 예산을 넘으면 전부 폴백한다', () => {
+    const fill = (count: number) =>
+      Array.from({ length: count }, (_, index) => tenGroup(`ten-${index}`));
+
+    // 15개까지는 예산 안이라 열거가 유지된다
+    expect(
+      computeLayout(makeInput([coActivated(), ...fill(15)], keys)).bounds,
+    ).toEqual({ minX: 100, minY: 50, maxX: 300, maxY: 250 });
+
+    // 16개면 합계가 넘어 전부 폴백하고 창이 다시 넓어진다
+    expect(
+      computeLayout(makeInput([coActivated(), ...fill(16)], keys)).bounds.minX,
+    ).toBeLessThan(0);
+  });
+
+  it('상한을 넘는 스프라이트가 하나라도 있으면 전부 폴백한다', () => {
+    const layout = computeLayout(makeInput([coActivated(), overCap()], keys));
+    // 폴백은 두 자세를 개별로 세므로 창이 다시 넓어진다
+    expect(layout.bounds.minX).toBeLessThan(0);
   });
 });

@@ -13,14 +13,20 @@ import {
 } from './spriteReach';
 import { makeSpritePose } from './spriteFixtures';
 
-// 기본은 모든 트리거 생존 - 죽은 키 케이스만 집합을 명시한다
+// 기본은 모든 트리거가 살아있고 서로 다른 키에 물린 상태 (완전 독립).
+// 죽은 키·공동 활성화 케이스만 맵을 명시한다
 const computeSpriteReachAabb = (
   sprite: SpriteReachGeometry,
-  liveTriggerIds?: ReadonlySet<string>,
+  canonicalByTrigger?: ReadonlyMap<string, string>,
 ) =>
   computeReachWithLiveKeys(
     sprite,
-    liveTriggerIds ?? new Set(sprite.poses.flatMap((pose) => pose.triggers)),
+    canonicalByTrigger ??
+      new Map(
+        sprite.poses.flatMap((pose) =>
+          pose.triggers.map((trigger) => [trigger, trigger] as const),
+        ),
+      ),
   );
 
 const OVERSHOOT_EASING = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
@@ -167,7 +173,7 @@ describe('computeSpriteReachAabb', () => {
       makeSprite({
         poses: [makePose('alive', { x: 40 }), makePose('dead', { x: -2000 })],
       }),
-      new Set(['alive']),
+      new Map([['alive', 'KeyA']]),
     );
 
     expect(withDead).toEqual(
@@ -190,7 +196,7 @@ describe('computeSpriteReachAabb', () => {
     expect(
       computeSpriteReachAabb(
         makeSprite({ poses: [combo] }),
-        new Set(['alive']),
+        new Map([['alive', 'KeyA']]),
       ),
     ).toEqual(computeSpriteReachAabb(makeSprite()));
   });
@@ -230,6 +236,169 @@ describe('computeSpriteReachAabb', () => {
     ).toEqual(computeSpriteReachAabb(makeSprite({ poses: [first] })));
   });
 
+  // 같은 물리 키에 묶인 키 요소는 항상 함께 눌린다. 두 자세는 개별로 도달하지
+  // 못하고 평균으로만 나타나므로 범위가 그만큼 좁아진다
+  it('같은 키에 묶인 자세들은 평균까지만 도달한다', () => {
+    const poses = [
+      makeSpritePose({
+        poseId: 'a',
+        triggers: ['k1'],
+        transform: makeTransform({ x: -2000 }),
+        imageOverride: null,
+      }),
+      makeSpritePose({
+        poseId: 'b',
+        triggers: ['k2'],
+        transform: makeTransform({ x: 2000 }),
+        imageOverride: null,
+      }),
+    ];
+    const sprite = makeSprite({ poses });
+
+    // k1·k2가 같은 KeyA에 물리면 둘만 함께 눌리는 상태뿐이라 평균 0으로 수렴
+    expect(
+      computeSpriteReachAabb(
+        sprite,
+        new Map([
+          ['k1', 'KeyA'],
+          ['k2', 'KeyA'],
+        ]),
+      ),
+    ).toEqual(computeSpriteReachAabb(makeSprite()));
+
+    // 서로 다른 키면 각각 단독으로 도달하므로 범위가 그대로 넓다
+    const independent = computeSpriteReachAabb(
+      sprite,
+      new Map([
+        ['k1', 'KeyA'],
+        ['k2', 'KeyS'],
+      ]),
+    );
+    expect(independent?.minX).toBe(-2000);
+    expect(independent?.maxX).toBe(2200);
+  });
+
+  // 조합 자세가 공동 활성화 때문에 정확 일치할 수 없으면 그 override는 어떤
+  // 상태에서도 그려지지 않는다. 자세 목록만 보면 이걸 놓쳐 빈 창을 넓힌다
+  it('어떤 상태에서도 그릴 이미지가 없으면 도달 범위가 없다', () => {
+    const sprite = makeSprite({
+      baseImage: null,
+      poses: [
+        // 이미지가 달린 조합 자세 - a가 켜지면 c도 함께 켜져 정확 일치가 안 된다
+        makeSpritePose({
+          poseId: 'image',
+          triggers: ['a', 'b'],
+          transform: makeTransform(),
+          imageOverride: 'pose.png',
+        }),
+        makeSpritePose({
+          poseId: 'plain',
+          triggers: ['c'],
+          transform: makeTransform({ x: 2000 }),
+          imageOverride: null,
+        }),
+      ],
+    });
+
+    expect(
+      computeSpriteReachAabb(
+        sprite,
+        new Map([
+          ['a', 'KeyA'],
+          ['c', 'KeyA'],
+          ['b', 'KeyB'],
+        ]),
+      ),
+    ).toBeNull();
+  });
+
+  // 폴백 경로도 재생 불가능한 자세를 계속 제외해야 한다
+  it('폴백에서도 죽은 키·빈 트리거·중복 자세는 제외된다', () => {
+    const alive = makeSpritePose({
+      poseId: 'alive',
+      triggers: ['k'],
+      transform: makeTransform({ x: 40 }),
+      imageOverride: null,
+    });
+    const noEnum = { enumerate: false } as const;
+    const baseline = computeReachWithLiveKeys(
+      makeSprite({ poses: [alive] }),
+      new Map([['k', 'KeyA']]),
+      noEnum,
+    );
+
+    for (const extra of [
+      makeSpritePose({
+        poseId: 'dead',
+        triggers: ['gone'],
+        transform: makeTransform({ x: -2000 }),
+        imageOverride: null,
+      }),
+      makeSpritePose({
+        poseId: 'orphan',
+        triggers: [],
+        transform: makeTransform({ x: -2000 }),
+        imageOverride: null,
+      }),
+      makeSpritePose({
+        poseId: 'zshadowed',
+        triggers: ['k'],
+        transform: makeTransform({ x: -2000 }),
+        imageOverride: null,
+      }),
+    ]) {
+      expect(
+        computeReachWithLiveKeys(
+          makeSprite({ poses: [alive, extra] }),
+          new Map([['k', 'KeyA']]),
+          noEnum,
+        ),
+      ).toEqual(baseline);
+    }
+  });
+
+  // 조합 폭발을 막는 상한. 넘으면 자세 범위 과대 근사로 돌아간다
+  it('키 그룹이 상한을 넘으면 과대 근사로 폴백한다', () => {
+    const spread = (count: number) => {
+      const poses = [
+        makeSpritePose({
+          poseId: 'a',
+          triggers: ['k1'],
+          transform: makeTransform({ x: -2000 }),
+          imageOverride: null,
+        }),
+        makeSpritePose({
+          poseId: 'b',
+          triggers: ['k2'],
+          transform: makeTransform({ x: 2000 }),
+          imageOverride: null,
+        }),
+      ];
+      const canonicals: Array<readonly [string, string]> = [
+        ['k1', 'KeyA'],
+        ['k2', 'KeyA'],
+      ];
+      // k1·k2가 한 그룹이므로 나머지 count-1개를 서로 다른 키로 채운다
+      for (let i = 0; i < count - 1; i++) {
+        poses.push(
+          makeSpritePose({
+            poseId: `pad-${i}`,
+            triggers: [`pad${i}`],
+            transform: makeTransform(),
+            imageOverride: null,
+          }),
+        );
+        canonicals.push([`pad${i}`, `Pad${i}`]);
+      }
+      return computeSpriteReachAabb(makeSprite({ poses }), new Map(canonicals));
+    };
+
+    // 10그룹까지는 열거해서 공동 활성화를 반영한다
+    expect(spread(10)).toEqual(computeSpriteReachAabb(makeSprite()));
+    // 11그룹부터는 폴백이라 두 극단이 다시 들어간다
+    expect(spread(11)?.minX).toBe(-2000);
+  });
+
   // 기본 이미지가 없고 죽은 자세의 override만 남으면 그릴 게 없다
   it('죽은 자세의 override만 남으면 이미지 없음으로 본다', () => {
     expect(
@@ -238,7 +407,7 @@ describe('computeSpriteReachAabb', () => {
           baseImage: null,
           poses: [makePose('dead', { x: -2000 }, 'pose.png')],
         }),
-        new Set(),
+        new Map(),
       ),
     ).toBeNull();
   });
