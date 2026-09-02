@@ -364,7 +364,16 @@ describe('OverlaySpriteItem onPress', () => {
     resetAllKeySignals();
     if (originalAnimate === undefined) delete proto.animate;
     else proto.animate = originalAnimate;
+    vi.restoreAllMocks();
   });
+
+  // 사용자 CSS가 공개 변수로 자세 transform을 대체한 상태
+  const stubTransformOverride = (value: string) => {
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      getPropertyValue: (name: string) =>
+        name === '--sprite-transform' ? value : '',
+    } as unknown as CSSStyleDeclaration);
+  };
 
   it('실입력 DOWN edge가 자세→idle 재생을 시작하고 종료 시 기본 이미지로 복원한다', () => {
     render(oneShotSprite());
@@ -549,6 +558,51 @@ describe('OverlaySpriteItem onPress', () => {
     expect(animations).toHaveLength(1);
     act(() => applyEventKeyState('KeyB', true));
     expect(animations).toHaveLength(2);
+  });
+
+  // 기본 모드의 외관 채널은 변수라 사용자 --sprite-transform이 자세 transform을
+  // 대체한다. 애니메이션 원점은 사용자 CSS를 이기므로 재생 전에 걸러야 whileHeld와
+  // 같은 결과(이미지만 교체)가 된다
+  it('기본 모드에서 사용자 --sprite-transform이 잡혀 있으면 transform을 움직이지 않고 이미지만 재생한다', () => {
+    vi.useFakeTimers();
+    stubTransformOverride('rotate(0deg)');
+    render(oneShotSprite());
+    const img = imgEl()!;
+
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(0);
+    expect(img.style.transform).toBe('');
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+
+    act(() => vi.advanceTimersByTime(300));
+    expect(img.src).toContain(BASE_IMAGE);
+    vi.useRealTimers();
+  });
+
+  it('오버라이드 중 재트리거는 이전 복원을 걷고 다시 예약한다', () => {
+    vi.useFakeTimers();
+    stubTransformOverride('rotate(0deg)');
+    render(oneShotSprite());
+    const img = imgEl()!;
+
+    act(() => applyEventKeyState('KeyA', true));
+    act(() => vi.advanceTimersByTime(200));
+    act(() => applyEventKeyState('KeyA', false));
+    act(() => applyEventKeyState('KeyA', true));
+    act(() => vi.advanceTimersByTime(200));
+    // 첫 재생 기준 400ms가 지났지만 두 번째 재생이 소유권을 가져 아직 자세 이미지다
+    expect(img.src).toContain(OVERRIDE_IMAGE);
+    act(() => vi.advanceTimersByTime(100));
+    expect(img.src).toContain(BASE_IMAGE);
+    vi.useRealTimers();
+  });
+
+  it('인라인 우선 모드는 사용자 변수와 무관하게 transform을 보간한다', () => {
+    stubTransformOverride('rotate(0deg)');
+    render(oneShotSprite({ useInlineStyles: true }));
+    act(() => applyEventKeyState('KeyA', true));
+    expect(animations).toHaveLength(1);
+    expect(animations[0].keyframes[0]).toHaveProperty('transform');
   });
 
   it('whileHeld 스프라이트는 edge 채널로 재생되지 않는다', () => {

@@ -20,6 +20,7 @@ import {
 } from '@utils/sprite/poseResolver';
 import {
   computeSpriteImageStyle,
+  hasSpriteTransformOverride,
   spriteTransformToCss,
 } from '@utils/sprite/spriteImageStyles';
 import {
@@ -288,15 +289,27 @@ const OverlaySpriteItem = React.memo(function OverlaySpriteItem({
 
       const fromCss = spriteTransformToCss(resolved.transform);
       const toCss = spriteTransformToCss(pos.idleTransform);
-      // WAAPI 부재·거부 공용 폴백 - 자세로 스냅했다가 시간 후 복귀 (보간 없음)
-      const snapBack = () => {
-        el.style.transform = fromCss;
+      // 보간 없는 재생의 만료 복원 - 자세 이미지를 pressDurationMs 뒤 되돌린다
+      const scheduleRestore = () => {
         playback.timer = window.setTimeout(() => {
           if (playbackRef.current.generation !== generation) return;
           playbackRef.current.timer = null;
           restoreIdleTransform(el, latestRef.current.position);
           restore();
         }, pos.pressDurationMs);
+      };
+      // 기본 모드에서 사용자가 --sprite-transform을 잡았으면 자세 transform은 그
+      // 값으로 대체된 것이다. 애니메이션 원점은 사용자 CSS를 이기므로 여기서 걸러
+      // whileHeld처럼 이미지만 바꾼다. 보간 자체는 컴포지터 경로를 지키려 native
+      // transform에 건다 - 커스텀 속성 보간은 매 프레임 메인 스레드 스타일 재계산이다
+      if (pos.useInlineStyles !== true && hasSpriteTransformOverride(el)) {
+        scheduleRestore();
+        return;
+      }
+      // WAAPI 부재·거부 공용 폴백 - 자세로 스냅했다가 시간 후 복귀 (보간 없음)
+      const snapBack = () => {
+        el.style.transform = fromCss;
+        scheduleRestore();
       };
 
       const easing = resolveSpriteRenderEasing(pos.transitionEasing);

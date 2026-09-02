@@ -193,11 +193,11 @@ trigger keys are held. Placement and the rotation origin stay inline because the
 window bounds are computed from them; the appearance channels below are the ones
 you can replace. Disable **Inline Styles Priority** on the sprite to use them.
 
-| Variable              | Description                                                 | Type           | Example                    |
-| --------------------- | ----------------------------------------------------------- | -------------- | -------------------------- |
-| `--sprite-fit`        | Replacement fit for the sprite image                        | `<object-fit>` | `cover`, `contain`         |
-| `--sprite-transform`  | Replacement transform for the resolved pose                 | `<transform>`  | `rotate(15deg) scale(1.2)` |
-| `--sprite-transition` | Replacement transition for the pose change (whileHeld only) | `<transition>` | `transform 120ms ease-out` |
+| Variable              | Description                                                                            | Type           | Example                    |
+| --------------------- | -------------------------------------------------------------------------------------- | -------------- | -------------------------- |
+| `--sprite-fit`        | Replacement fit for the sprite image                                                   | `<object-fit>` | `cover`, `contain`         |
+| `--sprite-transform`  | Replacement transform for the resolved pose (an onPress sprite then only swaps images) | `<transform>`  | `rotate(15deg) scale(1.2)` |
+| `--sprite-transition` | Replacement transition for the pose change (whileHeld only)                            | `<transition>` | `transform 120ms ease-out` |
 
 ```css
 .left-hand [data-sprite-element] > img {

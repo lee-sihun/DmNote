@@ -51,3 +51,18 @@ export const computeSpriteImageStyle = (
         } as CSSProperties)),
   };
 };
+
+// 사용자가 공개 변수로 자세 transform을 대체했는지. 애니메이션 원점은 사용자 CSS를
+// 이기므로 onPress 재생이 이 값을 존중하려면 재생 전에 직접 확인해야 한다
+export const SPRITE_TRANSFORM_OVERRIDE_VAR = '--sprite-transform';
+
+export const hasSpriteTransformOverride = (el: Element): boolean => {
+  const view = el.ownerDocument.defaultView;
+  if (!view) return false;
+  return (
+    view
+      .getComputedStyle(el)
+      .getPropertyValue(SPRITE_TRANSFORM_OVERRIDE_VAR)
+      .trim() !== ''
+  );
+};
