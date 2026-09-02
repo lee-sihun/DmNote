@@ -534,6 +534,8 @@ describe('setMixedLayerGroupHidden', () => {
             poses: [],
             transitionMs: 90,
             transitionEasing: 'linear',
+            imagePlacement: 'box',
+            referenceNaturalSize: null,
           },
         ],
       },

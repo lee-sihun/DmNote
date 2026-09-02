@@ -95,6 +95,8 @@ const spriteFixture = (): CanonicalReactiveSpritePosition => ({
   poses: [],
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  imagePlacement: 'box',
+  referenceNaturalSize: null,
 });
 
 // 프론트 생성 리터럴 형태: 두 필드를 명시 null로 채운다
@@ -196,6 +198,8 @@ describe('스프라이트 필드 패치 낙관 적용 통합', () => {
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
     };
 
     await editorCoordinator.start();

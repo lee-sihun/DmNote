@@ -193,6 +193,8 @@ describe('SpriteItem 자세 편집 프리뷰', () => {
     overrides: Partial<SpritePose> = {},
   ): SpritePose => ({
     contactPoint: { x: 0.5, y: 1 },
+    imagePivot: null,
+    imageOverrideMetrics: null,
     poseId,
     triggers: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
     transform: { x: 10, y: 5, rotation: 45, scale: 2 },

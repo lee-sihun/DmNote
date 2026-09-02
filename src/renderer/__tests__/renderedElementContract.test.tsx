@@ -366,6 +366,8 @@ describe('렌더 DOM 계약', () => {
               poses: [
                 {
                   contactPoint: { x: 0.5, y: 1 },
+                  imagePivot: null,
+                  imageOverrideMetrics: null,
                   poseId: 'pose-contract',
                   triggers: ['el-contract'],
                   transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -374,6 +376,8 @@ describe('렌더 DOM 계약', () => {
               ],
               transitionMs: 90,
               transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+              imagePlacement: 'box',
+              referenceNaturalSize: null,
             }}
             keyCanonicalMap={new Map()}
           />,

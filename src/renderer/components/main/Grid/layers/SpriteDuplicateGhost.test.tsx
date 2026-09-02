@@ -33,6 +33,8 @@ const position = (
     pressDurationMs: 300,
     transitionMs: 90,
     transitionEasing: 'linear',
+    imagePlacement: 'box',
+    referenceNaturalSize: null,
     ...overrides,
   } as ReactiveSpritePosition);
 

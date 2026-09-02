@@ -1364,6 +1364,8 @@ describe('canonical 검증의 스프라이트 poseId 네임스페이스', () => 
     poses: [
       {
         contactPoint: { x: 0.5, y: 1 },
+        imagePivot: null,
+        imageOverrideMetrics: null,
         poseId: POSE_ID,
         triggers: [],
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1372,6 +1374,8 @@ describe('canonical 검증의 스프라이트 poseId 네임스페이스', () => 
     ],
     transitionMs: 90,
     transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    imagePlacement: 'box',
+    referenceNaturalSize: null,
     ...overrides,
   });
 

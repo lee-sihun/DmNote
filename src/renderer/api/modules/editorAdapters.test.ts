@@ -59,6 +59,8 @@ const spriteFixture = (id: string): CanonicalReactiveSpritePosition => ({
   poses: [],
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  imagePlacement: 'box',
+  referenceNaturalSize: null,
 });
 
 describe('editor API compatibility adapters', () => {

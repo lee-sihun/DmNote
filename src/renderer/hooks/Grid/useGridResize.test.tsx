@@ -203,6 +203,8 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   poses: [
     {
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
       poseId: 'pose-1',
       triggers: [STABLE_A],
       transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
@@ -211,6 +213,8 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   ],
   transitionMs: 90,
   transitionEasing: 'linear',
+  imagePlacement: 'box',
+  referenceNaturalSize: null,
 });
 
 const stableKeySelection = (id: string, index = 0): SelectedElement => ({

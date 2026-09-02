@@ -155,6 +155,8 @@ const spritePosition = (dx: number): CanonicalReactiveSpritePosition => ({
   poses: [],
   transitionMs: 90,
   transitionEasing: 'linear',
+  imagePlacement: 'box',
+  referenceNaturalSize: null,
 });
 
 const remoteEnvelope = (

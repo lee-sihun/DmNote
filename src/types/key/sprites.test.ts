@@ -69,6 +69,8 @@ describe('reactiveSpritePositionSchema wire 계약', () => {
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
         imageOverride: null,
         contactPoint: { x: 0.5, y: 1 },
+        imagePivot: null,
+        imageOverrideMetrics: null,
         ...pose,
       },
     ],
@@ -172,6 +174,8 @@ describe('reactiveSpritePositionSchema wire 계약', () => {
 describe('findDuplicateTriggerPose', () => {
   const pose = (poseId: string, triggers: string[]): SpritePose => ({
     contactPoint: { x: 0.5, y: 1 },
+    imagePivot: null,
+    imageOverrideMetrics: null,
     poseId,
     triggers,
     transform: { x: 0, y: 0, rotation: 0, scale: 1 },

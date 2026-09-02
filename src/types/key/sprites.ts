@@ -17,6 +17,8 @@ export const SPRITE_CONSTRAINTS = {
   pressDurationMs: { min: 1, max: 5000 },
   // 백엔드 MAX_ABS_COORDINATE/MAX_DIMENSION과 동일
   imageRect: { coordMin: -32768, coordMax: 32768, dimensionMax: 32768 },
+  // 이미지 원본 픽셀 크기(정수). WebView 디코드 상한과 같은 32768
+  imageMetrics: { dimensionMin: 1, dimensionMax: 32768 },
   // 리사이즈 배율 언더플로가 치수 검증(0 초과)을 깨지 않게 하는 하한.
   // 백엔드 SPRITE_RESIZE_MIN_DIMENSION과 동일
   resizeMinDimension: 0.000001,
@@ -123,6 +125,46 @@ export const DEFAULT_SPRITE_CONTACT_POINT: SpriteAnchor = Object.freeze({
   y: 1,
 });
 
+// 이미지 배치 방식. box는 모든 이미지를 imageRect에 fit으로 끼우는 방식이고,
+// pivot은 이미지마다 자기 축을 스프라이트 기준점에 맞추고 기준 이미지의 픽셀
+// 배율로 그린다(크기·비율이 달라도 축이 유지된다). 백엔드 SpriteImagePlacement와 동일
+const spriteImagePlacementSchema = z.union([
+  z.literal('box'),
+  z.literal('pivot'),
+]);
+export type SpriteImagePlacement = z.infer<typeof spriteImagePlacementSchema>;
+
+// wire 부재·기존 데이터는 box, UI가 새로 만드는 스프라이트만 pivot
+export const DEFAULT_SPRITE_IMAGE_PLACEMENT: SpriteImagePlacement = 'box';
+export const NEW_SPRITE_IMAGE_PLACEMENT: SpriteImagePlacement = 'pivot';
+
+// 원본 픽셀 크기 - WebView 디코드가 보고한 naturalWidth/Height. Rust u32라 정수
+const spriteNaturalDimensionSchema = z
+  .number()
+  .int()
+  .min(SPRITE_CONSTRAINTS.imageMetrics.dimensionMin)
+  .max(SPRITE_CONSTRAINTS.imageMetrics.dimensionMax);
+
+// 이미지 경로에 결합된 원본 크기. source가 현재 경로와 같을 때만 유효하고,
+// 경로만 바뀐 stale 값은 pivot 모드 커밋에서 거절된다
+export const spriteImageMetricsSchema = z.object({
+  source: z.string().min(1),
+  width: spriteNaturalDimensionSchema,
+  height: spriteNaturalDimensionSchema,
+});
+export type SpriteImageMetrics = z.infer<typeof spriteImageMetricsSchema>;
+
+// pivot 모드의 픽셀 배율 기준 크기. base가 있으면 source=base 경로, base를
+// 지우면 크기는 두고 source만 null(자세 이미지만 남아도 배율이 흔들리지 않게)
+export const spriteReferenceNaturalSizeSchema = z.object({
+  source: z.string().min(1).nullable(),
+  width: spriteNaturalDimensionSchema,
+  height: spriteNaturalDimensionSchema,
+});
+export type SpriteReferenceNaturalSize = z.infer<
+  typeof spriteReferenceNaturalSizeSchema
+>;
+
 // 키 반응 방식: 누르는 동안 유지 vs 누른 순간 한 번 재생.
 // 백엔드 SpriteActivation과 동일 camelCase 문자열
 const spriteActivationSchema = z.union([
@@ -168,6 +210,12 @@ const spritePoseSchema = z.object({
   // 손끝 고정 도우미의 핀 - 자세 이미지 기준이라 자세 레벨.
   // 서빙은 BE serde default가 항상 채운다
   contactPoint: spriteAnchorSchema,
+  // pivot 배치의 자세 이미지 축(이미지 정규화). null이면 스프라이트 기준점 상속.
+  // imageOverride가 없으면 백엔드가 null로 정규화한다. 구형 백엔드 문서는 키가
+  // 없으므로 부재를 null로 받는다
+  imagePivot: spriteAnchorSchema.nullable().default(null),
+  // imageOverride 경로에 결합된 원본 크기. override가 있으면 pivot 모드 필수
+  imageOverrideMetrics: spriteImageMetricsSchema.nullable().default(null),
 });
 export type SpritePose = z.infer<typeof spritePoseSchema>;
 
@@ -181,6 +229,9 @@ const spritePoseInputSchema = z.object({
   ...spritePoseBaseShape,
   // 구 플러그인 patch는 필드 자체가 없다 - 생략 허용, BE serde default가 채움
   contactPoint: spriteAnchorSchema.optional(),
+  // 기존 poseId의 생략은 백엔드가 canonical 값을 보존한다(v1 presence 병합)
+  imagePivot: spriteAnchorSchema.nullish(),
+  imageOverrideMetrics: spriteImageMetricsSchema.nullish(),
 });
 
 const reactiveSpritePositionBaseShape = {
@@ -223,6 +274,13 @@ export const reactiveSpritePositionSchema = z.object({
   activation: spriteActivationSchema,
   pressDurationMs: spritePressDurationSchema,
   poses: z.array(spritePoseSchema),
+  // 배치 방식·기준 크기 - 구형 백엔드 문서에는 키가 없으므로 부재를 기본값으로 받는다
+  imagePlacement: spriteImagePlacementSchema.default(
+    DEFAULT_SPRITE_IMAGE_PLACEMENT,
+  ),
+  referenceNaturalSize: spriteReferenceNaturalSizeSchema
+    .nullable()
+    .default(null),
 });
 export type ReactiveSpritePosition = z.infer<
   typeof reactiveSpritePositionSchema
@@ -234,6 +292,9 @@ export const reactiveSpritePositionInputSchema = z.object({
   activation: spriteActivationSchema.optional(),
   pressDurationMs: spritePressDurationSchema.optional(),
   poses: z.array(spritePoseInputSchema).max(SPRITE_CONSTRAINTS.maxPoses),
+  // 기존 id의 생략은 백엔드가 canonical 값을 보존한다(v1 presence 병합)
+  imagePlacement: spriteImagePlacementSchema.optional(),
+  referenceNaturalSize: spriteReferenceNaturalSizeSchema.nullish(),
 });
 export type ReactiveSpritePositionInput = z.infer<
   typeof reactiveSpritePositionInputSchema

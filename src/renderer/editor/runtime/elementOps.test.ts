@@ -159,6 +159,8 @@ const spriteAt = (id: string): ReactiveSpritePosition & { id: string } => ({
   poses: [],
   transitionMs: 90,
   transitionEasing: 'linear',
+  imagePlacement: 'box',
+  referenceNaturalSize: null,
 });
 
 // 슬롯 시점 base. 기본은 호출 시점 스토어 - 대기 중 재정렬·삭제는 테스트가
@@ -449,6 +451,8 @@ describe('elementOps', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-src-1',
           triggers: [ID_A],
           transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
@@ -456,6 +460,8 @@ describe('elementOps', () => {
         },
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-src-2',
           triggers: [ID_A, ID_B],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1488,6 +1494,8 @@ describe('elementOps', () => {
           transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
           imageOverride: null,
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
         },
       ],
     };
@@ -1544,6 +1552,8 @@ describe('elementOps', () => {
           transform: { x: -30, y: 44, rotation: -90, scale: 0.5 },
           imageOverride: null,
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
         },
       ],
     };

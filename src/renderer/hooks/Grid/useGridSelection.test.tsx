@@ -151,6 +151,8 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   poses: [
     {
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
       poseId: 'pose-1',
       triggers: [STABLE_KEY_ID],
       transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
@@ -159,6 +161,8 @@ const spriteAt = (id: string): CanonicalReactiveSpritePosition => ({
   ],
   transitionMs: 90,
   transitionEasing: 'linear',
+  imagePlacement: 'box',
+  referenceNaturalSize: null,
 });
 const keyPosition = {
   id: STABLE_KEY_ID,
@@ -558,6 +562,8 @@ describe('useGridSelection compound history gesture', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           // 배치 안 키와 배치 밖 키 참조 혼합
           triggers: [STABLE_KEY_ID, externalKeyId],

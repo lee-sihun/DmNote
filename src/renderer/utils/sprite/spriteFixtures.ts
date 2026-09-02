@@ -6,6 +6,7 @@ import type {
 import {
   DEFAULT_SPRITE_ACTIVATION,
   DEFAULT_SPRITE_CONTACT_POINT,
+  DEFAULT_SPRITE_IMAGE_PLACEMENT,
   DEFAULT_SPRITE_PRESS_DURATION_MS,
   DEFAULT_SPRITE_SIZE,
   DEFAULT_SPRITE_TRANSITION_EASING,
@@ -25,6 +26,8 @@ export const makeSpritePose = (
   transform: { ...IDENTITY_SPRITE_TRANSFORM },
   imageOverride: null,
   contactPoint: { ...DEFAULT_SPRITE_CONTACT_POINT },
+  imagePivot: null,
+  imageOverrideMetrics: null,
   ...overrides,
 });
 
@@ -57,6 +60,8 @@ export const makeSpritePosition = (
   poses: [],
   transitionMs: 90,
   transitionEasing: DEFAULT_SPRITE_TRANSITION_EASING,
+  imagePlacement: DEFAULT_SPRITE_IMAGE_PLACEMENT,
+  referenceNaturalSize: null,
   ...overrides,
 });
 
