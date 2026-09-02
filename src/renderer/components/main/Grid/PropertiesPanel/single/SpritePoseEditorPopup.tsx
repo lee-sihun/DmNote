@@ -15,6 +15,7 @@ import {
   SPRITE_CONSTRAINTS,
   type SpriteAnchor,
   type SpriteImageFit,
+  type SpriteImagePlacement,
   type SpriteTransform,
 } from '@src/types/key/sprites';
 import { SECTION_LABEL_CLASS, SECTION_WRAPPER_CLASS } from '@utils/cardRecipes';
@@ -48,6 +49,17 @@ interface SpritePosePinControls {
   onStretchToggle: () => void;
 }
 
+// 자세 이미지 축 컨트롤 묶음 - 축 배치에서만 뜻이 있다. null이면 스프라이트 기준점 상속
+interface SpritePosePivotControls {
+  placement: SpriteImagePlacement;
+  /** 자세 이미지가 없으면 축은 기본 이미지 것이라 편집 대상이 아니다 */
+  hasOverride: boolean;
+  imagePivot: SpriteAnchor | null;
+  spritePivot: SpriteAnchor;
+  onImagePivotCommit: (point: SpriteAnchor | null) => void;
+  onImagePivotPreview: (point: SpriteAnchor) => void;
+}
+
 interface SpritePoseEditorPopupProps {
   open: boolean;
   ariaLabel: string;
@@ -58,6 +70,7 @@ interface SpritePoseEditorPopupProps {
   panelElement: HTMLElement | null;
   poseControls: SpritePoseControls;
   pinControls: SpritePosePinControls;
+  pivotControls: SpritePosePivotControls;
   // 행 전환 시 바깥닫힘을 거치지 않는 영역 (상태 목록 well)
   interactiveRefs?: React.RefObject<HTMLElement>[];
   onTransformCommit: (next: SpriteTransform) => void;
@@ -80,6 +93,7 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
   panelElement,
   poseControls,
   pinControls,
+  pivotControls,
   interactiveRefs,
   onTransformCommit,
   onTransformPreview,
@@ -287,6 +301,90 @@ const SpritePoseEditorPopup: React.FC<SpritePoseEditorPopupProps> = ({
             </PropertyRow>
           </PropertySection>
         </div>
+
+        {/* 축 - 축 배치에서 자세 이미지의 회전·배율 축. 기본은 스프라이트 기준점 상속이고,
+            그림의 손목 위치가 다른 이미지만 따로 찍는다 */}
+        {pivotControls.placement === 'pivot' && pivotControls.hasOverride ? (
+          <div className={SECTION_WRAPPER_CLASS}>
+            <p className={SECTION_LABEL_CLASS}>
+              {t('propertiesPanel.spriteImagePivot') || '축'}
+            </p>
+            <PropertySection>
+              <PropertyRow
+                label={
+                  t('propertiesPanel.spriteInheritPivot') || '기본 축 사용'
+                }
+              >
+                <Checkbox
+                  checked={pivotControls.imagePivot === null}
+                  onChange={() =>
+                    pivotControls.onImagePivotCommit(
+                      pivotControls.imagePivot === null
+                        ? { ...pivotControls.spritePivot }
+                        : null,
+                    )
+                  }
+                />
+              </PropertyRow>
+              {pivotControls.imagePivot !== null ? (
+                <div className="flex items-center gap-[8px] w-full min-h-[32px]">
+                  <NumberInput
+                    value={anchorToPercent(pivotControls.imagePivot.x)}
+                    onChange={(value) =>
+                      pivotControls.onImagePivotCommit({
+                        ...(pivotControls.imagePivot as SpriteAnchor),
+                        x: percentToAnchor(value),
+                      })
+                    }
+                    onPreview={(value) =>
+                      pivotControls.onImagePivotPreview({
+                        ...(pivotControls.imagePivot as SpriteAnchor),
+                        x: percentToAnchor(value),
+                      })
+                    }
+                    onCancel={onTransformCancel}
+                    prefix="X"
+                    suffix="%"
+                    ariaLabel={`${
+                      t('propertiesPanel.spriteImagePivot') || '축'
+                    } X`}
+                    width="100%"
+                    min={0}
+                    max={100}
+                    allowDecimal
+                    decimalScale={1}
+                  />
+                  <NumberInput
+                    value={anchorToPercent(pivotControls.imagePivot.y)}
+                    onChange={(value) =>
+                      pivotControls.onImagePivotCommit({
+                        ...(pivotControls.imagePivot as SpriteAnchor),
+                        y: percentToAnchor(value),
+                      })
+                    }
+                    onPreview={(value) =>
+                      pivotControls.onImagePivotPreview({
+                        ...(pivotControls.imagePivot as SpriteAnchor),
+                        y: percentToAnchor(value),
+                      })
+                    }
+                    onCancel={onTransformCancel}
+                    prefix="Y"
+                    suffix="%"
+                    ariaLabel={`${
+                      t('propertiesPanel.spriteImagePivot') || '축'
+                    } Y`}
+                    width="100%"
+                    min={0}
+                    max={100}
+                    allowDecimal
+                    decimalScale={1}
+                  />
+                </div>
+              ) : null}
+            </PropertySection>
+          </div>
+        ) : null}
 
         {/* 담당 키 - 미리보기·변환 아래가 정위치, 신규 상태도 카드가 작아 한눈에 보인다 */}
         {poseControls.keyOptions.length === 0 && deadTriggers.length === 0 ? (

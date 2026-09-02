@@ -1,6 +1,10 @@
 import { imageApi } from '@api/modules/resourceApi';
 
-import { canDecodeImage } from './assetProbe';
+import {
+  canDecodeImage,
+  probeImageSize,
+  type ProbedImageSize,
+} from './assetProbe';
 
 type Translate = (
   key: string,
@@ -23,9 +27,17 @@ const showInvalidImageAlert = (t: Translate): void => {
  * React Compiler가 그 컴포넌트를 통째로 최적화에서 제외하는 원인이 된다.
  * 재진입 가드와 로딩 표시는 호출부 몫
  */
-export const pickValidatedImagePath = async (
-  t: Translate,
-): Promise<string | null> => {
+export interface PickedImage extends ProbedImageSize {
+  path: string;
+}
+
+/**
+ * 파일 선택 + 디코드 확인을 통과한 이미지 경로와 원본 픽셀 크기. 디코드 확인이
+ * 이미 이미지를 로드하므로 크기는 그 자리에서 나온다 - 스프라이트 축 배치가
+ * 경로와 한 커밋으로 저장한다
+ */
+// 파일창 결과 - 취소는 null, 실패는 안내 뒤 null. 예외는 여기서 삼킨다
+const loadPickedPath = async (t: Translate): Promise<string | null> => {
   try {
     const result = await imageApi.load();
     if (!result?.success || !result.imagePath) {
@@ -33,16 +45,58 @@ export const pickValidatedImagePath = async (
       if (result?.errorCode) showInvalidImageAlert(t);
       return null;
     }
-    // 시그니처를 통과해도 WebView가 못 그리는 파일이 있다. 직전 값을 덮기 전에 확인한다
-    if (!(await canDecodeImage(result.imagePath))) {
-      showInvalidImageAlert(t);
-      return null;
-    }
     return result.imagePath;
   } catch (error) {
     console.error('Failed to load image', error);
     return null;
   }
+};
+
+export const pickValidatedImage = async (
+  t: Translate,
+): Promise<PickedImage | null> => {
+  const path = await loadPickedPath(t);
+  if (!path) return null;
+  // 시그니처를 통과해도 WebView가 못 그리는 파일이 있다. 직전 값을 덮기 전에 확인한다
+  const size = await probeImageSize(path).catch((error: unknown) => {
+    console.error('Failed to probe image', error);
+    return null;
+  });
+  if (!size) {
+    showInvalidImageAlert(t);
+    return null;
+  }
+  return { path, ...size };
+};
+
+/** 경로만 필요한 호출부(키 이미지 피커) - 디코드 확인만 거친다 */
+export const pickValidatedImagePath = async (
+  t: Translate,
+): Promise<string | null> => {
+  const path = await loadPickedPath(t);
+  if (!path) return null;
+  const decodable = await canDecodeImage(path).catch((error: unknown) => {
+    console.error('Failed to probe image', error);
+    return false;
+  });
+  if (!decodable) {
+    showInvalidImageAlert(t);
+    return null;
+  }
+  return path;
+};
+
+/** 이미 저장된 이미지의 원본 크기 - 못 읽으면 안내하고 null */
+export const probeImageMetrics = async (
+  path: string,
+  t: Translate,
+): Promise<ProbedImageSize | null> => {
+  const size = await probeImageSize(path).catch((error: unknown) => {
+    console.error('Failed to probe image', error);
+    return null;
+  });
+  if (!size) showInvalidImageAlert(t);
+  return size;
 };
 
 /**

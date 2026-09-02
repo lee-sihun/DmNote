@@ -8,7 +8,21 @@ import { useSpriteStore } from '@stores/data/useSpriteStore';
 import { spriteItemsApi } from '@api/modules/itemsApi';
 import { clamp } from '@utils/core/clamp';
 import { stableStringify } from '@utils/core/stableStringify';
-import { pickValidatedImagePath } from '@utils/core/pickValidatedImage';
+import {
+  pickValidatedImage,
+  probeImageMetrics,
+} from '@utils/core/pickValidatedImage';
+import { toRenderableImageRef } from '@utils/core/imageSource';
+import {
+  fitImageRectToNaturalSize,
+  placeSpriteVisual,
+  spritePoseVisual,
+  type SpriteNaturalSize,
+} from '@utils/sprite/spritePlacement';
+import {
+  pivotPlacementImageSources,
+  planPivotPlacementCommit,
+} from '@utils/sprite/spritePlacementSwitch';
 import { anchorToPercent, percentToAnchor } from '@utils/sprite/spriteGeometry';
 import { isHTMLElementNode } from '@utils/dom/isElementNode';
 import { projectSpriteResize } from '@utils/sprite/resizeProjection';
@@ -36,6 +50,7 @@ import {
   type ReactiveSpritePosition,
   type SpriteActivation,
   type SpriteAnchor,
+  type SpriteImagePlacement,
   type SpritePose,
   type SpriteTransform,
 } from '@src/types/key/sprites';
@@ -64,6 +79,23 @@ import EditSessionBoundary from '../EditSessionBoundary';
 import SpritePoseEditorPopup from './SpritePoseEditorPopup';
 import SpriteImageSettingsPopup from './SpriteImageSettingsPopup';
 import PanelRenameTitle from '../PanelRenameTitle';
+
+// 축·접점은 그 자세 이미지의 배치 rect 기준 - pivot 모드에서는 자세마다 rect가 다르고
+// 축은 그 rect 안의 자세 축이라, 솔버 수식은 그대로 두고 입력만 배치로 맞춘다
+const poseContactGeometry = (
+  position: ReactiveSpritePosition,
+  pose: SpritePose,
+): ContactGeometry => {
+  const placement = placeSpriteVisual(
+    position,
+    spritePoseVisual(position, pose),
+  );
+  return {
+    imageRect: placement.rect,
+    pivot: placement.pivot,
+    contactPoint: pose.contactPoint,
+  };
+};
 
 // 계약과 동일한 cubic-bezier 문자열만 저장 (transitionEasing은 문자열 그대로 CSS로 간다)
 const SPRITE_EASING_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
@@ -360,8 +392,10 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     };
   }, [position.id, selectedKeyType]);
   const latestPosesRef = useRef(displayPoses);
+  const latestPositionRef = useRef(position);
   useEffect(() => {
     latestPosesRef.current = displayPoses;
+    latestPositionRef.current = position;
   });
 
   // id 기반 필드 패치 커밋: 직렬 슬롯 안 최신 base로 patch를 생성해
@@ -398,7 +432,11 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     });
   };
 
-  const updatePoses = (rawPoses: SpritePose[]) => {
+  // extra는 poses와 한 커밋으로 실어야 하는 스프라이트 필드(기준 크기 초기화 등)
+  const updatePoses = (
+    rawPoses: SpritePose[],
+    extra: Partial<ReactiveSpritePosition> = {},
+  ) => {
     // draft와 커밋이 같은 wire 정규형(트리거 정렬·dedup)을 공유해야
     // canonical 착지 비교가 일치해 draft가 제때 풀린다
     const nextPoses = toSpriteWireShape({ ...position, poses: rawPoses }).poses;
@@ -411,7 +449,7 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       editGestureController.cancel();
       return;
     }
-    commitFields({ poses: nextPoses });
+    commitFields({ ...extra, poses: nextPoses });
   };
 
   const replacePose = (poseIndex: number, patch: Partial<SpritePose>) =>
@@ -421,11 +459,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       ),
     );
 
-  const poseGeometry = (pose: SpritePose): ContactGeometry => ({
-    imageRect: position.imageRect,
-    pivot: position.pivot,
-    contactPoint: pose.contactPoint,
-  });
+  const poseGeometry = (pose: SpritePose): ContactGeometry =>
+    poseContactGeometry(position, pose);
 
   // 핀 고정 보정 - 회전·배율 변경에만 적용한다. x·y 직접 입력은 위치 지정 의도라
   // 건드리지 않고, 퇴화(핀=축)면 원값 그대로 둔다
@@ -508,12 +543,13 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
   useLayoutEffect(() => {
     const store = useSpritePoseGizmoStore.getState();
     if (activeEditorTarget?.kind === 'pose' && editingPose) {
+      const geometry = poseContactGeometry(position, editingPose);
       store.setSession({
         positionId: position.id,
         poseId: editingPose.poseId,
         origin: { dx: position.dx, dy: position.dy },
-        imageRect: position.imageRect,
-        pivot: position.pivot,
+        imageRect: geometry.imageRect,
+        pivot: geometry.pivot,
         contactPoint: editingPose.contactPoint,
         transform: editingPose.transform,
         stretch: stretchEnabled,
@@ -526,16 +562,9 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
     } else {
       store.setSession(null);
     }
-  }, [
-    activeEditorTarget,
-    editingPose,
-    position.id,
-    position.dx,
-    position.dy,
-    position.imageRect,
-    position.pivot,
-    stretchEnabled,
-  ]);
+    // 배치 기하가 위치의 여러 필드(상자·기준점·배치 방식·기준 크기·기본 이미지)에서
+    // 파생되므로 위치 전체를 의존성으로 둔다
+  }, [activeEditorTarget, editingPose, position, stretchEnabled]);
   // 언마운트 뒤에도 기즈모는 드래그 시작 시점 세션을 붙들고 취소를 부른다. 마지막
   // 렌더의 배선이 남아 있으면 무효 draft를 fallback preview로 다시 발행해 버린 자세가
   // 캔버스에 남으므로, 게스처만 닫는 배선으로 바꾼 뒤 세션을 내린다
@@ -599,6 +628,9 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
       contactPoint: {
         ...(materialized.at(-1)?.contactPoint ?? DEFAULT_SPRITE_CONTACT_POINT),
       },
+      // 축·원본 크기는 상태 이미지를 고를 때 그 이미지 기준으로 채운다
+      imagePivot: null,
+      imageOverrideMetrics: null,
     };
     updatePoses([...materialized, pose]);
     // 새 상태는 담당 키 선택이 다음 단계라 편집 팝업을 바로 연다.
@@ -693,6 +725,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
           transform: IDENTITY_SPRITE_TRANSFORM,
           imageOverride: null,
           contactPoint: DEFAULT_SPRITE_CONTACT_POINT,
+          imagePivot: null,
+          imageOverrideMetrics: null,
         },
       ],
       poseNameLabel,
@@ -771,36 +805,135 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
 
   // 이미지 피커와 같은 선택 흐름 (image_load + 디코드 확인).
   // 재진입 플래그만 여기서 관리한다
-  const pickImage = async (): Promise<string | null> => {
+  const pickImage = async () => {
     if (loadingImageRef.current) return null;
     loadingImageRef.current = true;
-    const picked = await pickValidatedImagePath(t);
+    const picked = await pickValidatedImage(t);
     loadingImageRef.current = false;
     return picked;
   };
 
+  // 기본 이미지는 픽셀 배율의 기준이라 크기를 경로와 한 커밋으로 묶는다
   const handleBaseImageSelect = async () => {
     const requestedGeneration = asyncGenerationRef.current;
-    const path = await pickImage();
-    if (!path) return;
+    const picked = await pickImage();
+    if (!picked) return;
     // 파일창이 떠 있는 동안 대상 전환·언마운트가 지났으면 폐기
     if (asyncGenerationRef.current !== requestedGeneration) return;
-    commitFields({ baseImage: path });
+    const latest = latestPositionRef.current;
+    commitFields({
+      baseImage: picked.path,
+      referenceNaturalSize: {
+        source: picked.path,
+        width: picked.width,
+        height: picked.height,
+      },
+      // 축 배치는 상자가 비트맵을 감싸야 여백이 없다 - 기준점은 제자리
+      ...(latest.imagePlacement === 'pivot'
+        ? {
+            imageRect: fitImageRectToNaturalSize(
+              latest.imageRect,
+              latest.pivot,
+              picked,
+            ),
+          }
+        : {}),
+    });
   };
+
+  // 기본 이미지를 지워도 기준 크기는 남긴다 - 자세 이미지만 남은 뒤 배율이 흔들리지 않게
+  const handleBaseImageReset = () =>
+    commitFields({
+      baseImage: null,
+      referenceNaturalSize: position.referenceNaturalSize
+        ? { ...position.referenceNaturalSize, source: null }
+        : null,
+    });
 
   const handlePoseImageSelect = async (poseId: string) => {
     const requestedGeneration = asyncGenerationRef.current;
-    const path = await pickImage();
-    if (!path) return;
+    const picked = await pickImage();
+    if (!picked) return;
     if (asyncGenerationRef.current !== requestedGeneration) return;
     // 자세가 사라졌으면 폐기하고, 최신 poses에 다시 결합한다
     const latest = latestPosesRef.current;
     if (!latest.some((pose) => pose.poseId === poseId)) return;
+    // 기본 이미지도 기준 크기도 없으면 첫 자세 이미지가 기준이 된다 (source 없음)
+    const referenceInit: Partial<ReactiveSpritePosition> =
+      toRenderableImageRef(position.baseImage) === null &&
+      !position.referenceNaturalSize
+        ? {
+            referenceNaturalSize: {
+              source: null,
+              width: picked.width,
+              height: picked.height,
+            },
+          }
+        : {};
     updatePoses(
       latest.map((pose) =>
-        pose.poseId === poseId ? { ...pose, imageOverride: path } : pose,
+        pose.poseId === poseId
+          ? {
+              ...pose,
+              imageOverride: picked.path,
+              imageOverrideMetrics: {
+                source: picked.path,
+                width: picked.width,
+                height: picked.height,
+              },
+            }
+          : pose,
       ),
+      referenceInit,
     );
+  };
+
+  // 배치 방식 전환. 축 배치는 모든 이미지의 원본 크기가 필요하므로 저장된 이미지를
+  // 전부 읽어 한 커밋으로 채운다. 읽기는 비동기라 그 사이 자세가 바뀔 수 있어, 결과를
+  // 경로별로 두고 커밋 직전의 최신 문서에 병합한다. 하나라도 못 읽거나 최신 문서가
+  // 읽지 않은 이미지를 가리키면 전환하지 않는다
+  const handlePlacementChange = async (next: SpriteImagePlacement) => {
+    if (next === position.imagePlacement) return;
+    if (next === 'box') {
+      commitFields({ imagePlacement: 'box' });
+      return;
+    }
+    if (loadingImageRef.current) return;
+    loadingImageRef.current = true;
+    const requestedGeneration = asyncGenerationRef.current;
+    const probes = new Map<string, SpriteNaturalSize>();
+    let failed = false;
+    for (const source of pivotPlacementImageSources({
+      baseImage: position.baseImage,
+      poses: latestPosesRef.current,
+    })) {
+      const size = await probeImageMetrics(source, t);
+      if (!size) {
+        failed = true;
+        break;
+      }
+      probes.set(source, size);
+    }
+    loadingImageRef.current = false;
+    if (failed || asyncGenerationRef.current !== requestedGeneration) return;
+
+    const latest = latestPositionRef.current;
+    const plan = planPivotPlacementCommit(
+      { ...latest, poses: latestPosesRef.current },
+      probes,
+    );
+    if (!plan) return;
+    // 자세가 커밋 불가 상태(빈 담당 키·중복)면 전환도 미룬다 - 축 배치는 자세 크기가 필수라
+    // 자세 없이 방식만 바꾸면 백엔드 검증에 걸린다
+    const blocked =
+      plan.poses.some((pose) => pose.triggers.length === 0) ||
+      findDuplicateTriggerPose(plan.poses) !== null;
+    if (blocked) return;
+    commitFields({
+      imagePlacement: 'pivot',
+      referenceNaturalSize: plan.referenceNaturalSize,
+      poses: toSpriteWireShape({ ...latest, poses: plan.poses }).poses,
+    });
   };
 
   const spriteTitle = position.layerName || 'Sprite';
@@ -1212,7 +1345,8 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
             onPreview={previewFields}
             onCancel={() => editGestureController.cancel()}
             onImagePick={() => void handleBaseImageSelect()}
-            onImageReset={() => commitFields({ baseImage: null })}
+            onImageReset={handleBaseImageReset}
+            onPlacementChange={(next) => void handlePlacementChange(next)}
             onClose={() => setEditorTarget(null)}
             t={t}
           />
@@ -1233,12 +1367,21 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
               triggers: editingPose.triggers,
               isDuplicate: duplicatePose?.poseId === editingPose.poseId,
               imageOverride: editingPose.imageOverride,
-              imageFit: position.imageFit,
+              // 축 배치는 캔버스가 비트맵을 그대로 그리므로 썸네일도 맞춤으로
+              imageFit:
+                position.imagePlacement === 'pivot'
+                  ? 'contain'
+                  : position.imageFit,
               onToggleTrigger: (keyId) =>
                 togglePoseTrigger(editingPoseIndex, keyId),
               onImagePick: () => void handlePoseImageSelect(editingPose.poseId),
+              // 이미지를 지우면 그 이미지에 매인 크기·축도 함께 지운다
               onImageReset: () =>
-                replacePose(editingPoseIndex, { imageOverride: null }),
+                replacePose(editingPoseIndex, {
+                  imageOverride: null,
+                  imageOverrideMetrics: null,
+                  imagePivot: null,
+                }),
             }}
             // 콜백 부재는 접두 스크럽 자체를 꺼 버린다 - 항상 넘기고 안에서 분기
             onTransformCommit={handleTransformCommit}
@@ -1254,6 +1397,17 @@ export const SingleSpritePanel: React.FC<SingleSpritePanelProps> = ({
                 previewPosePatch({ contactPoint: point }),
               onPinLockToggle: () => setPinLockEnabled((value) => !value),
               onStretchToggle: () => setStretchEnabled((value) => !value),
+            }}
+            pivotControls={{
+              placement: position.imagePlacement,
+              hasOverride:
+                toRenderableImageRef(editingPose.imageOverride) !== null,
+              imagePivot: editingPose.imagePivot,
+              spritePivot: position.pivot,
+              onImagePivotCommit: (point) =>
+                replacePose(editingPoseIndex, { imagePivot: point }),
+              onImagePivotPreview: (point) =>
+                previewPosePatch({ imagePivot: point }),
             }}
             onClose={() => setEditorTarget(null)}
             t={t}

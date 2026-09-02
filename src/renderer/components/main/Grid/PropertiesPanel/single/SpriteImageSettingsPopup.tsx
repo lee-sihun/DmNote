@@ -10,6 +10,7 @@ import {
   DEFAULT_SPRITE_IMAGE_FIT,
   type ReactiveSpritePosition,
   type SpriteImageFit,
+  type SpriteImagePlacement,
 } from '@src/types/key/sprites';
 import { clamp } from '@utils/core/clamp';
 import SpriteImagePreviewCard from './SpriteImagePreviewCard';
@@ -29,7 +30,7 @@ interface SpriteImageSettingsPopupProps {
   open: boolean;
   position: Pick<
     ReactiveSpritePosition,
-    'baseImage' | 'imageFit' | 'imageRect'
+    'baseImage' | 'imageFit' | 'imageRect' | 'imagePlacement'
   >;
   referenceRef: React.RefObject<HTMLElement>;
   panelElement: HTMLElement | null;
@@ -39,6 +40,8 @@ interface SpriteImageSettingsPopupProps {
   /** 파일 선택·디코드 검증·대상 재확인은 패널이 소유한다 */
   onImagePick: () => void;
   onImageReset: () => void;
+  /** 배치 방식 전환 - 축 배치는 패널이 이미지 크기를 읽어 한 커밋으로 채운다 */
+  onPlacementChange: (next: SpriteImagePlacement) => void;
   onClose: () => void;
   t: (key: string) => string;
 }
@@ -56,6 +59,7 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
   onCancel,
   onImagePick,
   onImageReset,
+  onPlacementChange,
   onClose,
   t,
 }) => {
@@ -79,7 +83,8 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
     >
       <SpriteImagePreviewCard
         source={position.baseImage}
-        imageFit={fit}
+        // 축 배치는 캔버스가 비트맵을 그대로 그리므로 썸네일도 맞춤으로
+        imageFit={position.imagePlacement === 'pivot' ? 'contain' : fit}
         onPick={onImagePick}
         onReset={onImageReset}
         t={t}
@@ -187,6 +192,28 @@ const SpriteImageSettingsPopup: React.FC<SpriteImageSettingsPopupProps> = ({
 
       {/* 설정 카드 */}
       <PropertySection>
+        {/* 배치 - 상자 맞춤은 모든 이미지를 상자에 끼우고, 축 기준은 이미지마다
+            자기 축을 기준점에 맞춰 크기·비율이 달라도 축이 유지된다 */}
+        <PropertyRow
+          label={t('propertiesPanel.spriteImagePlacement') || '배치'}
+        >
+          <Dropdown
+            options={[
+              {
+                label: t('propertiesPanel.spritePlacementPivot') || '축 기준',
+                value: 'pivot',
+              },
+              {
+                label: t('propertiesPanel.spritePlacementBox') || '상자 맞춤',
+                value: 'box',
+              },
+            ]}
+            value={position.imagePlacement}
+            onChange={(value) =>
+              onPlacementChange(value as SpriteImagePlacement)
+            }
+          />
+        </PropertyRow>
         <PropertyRow label={t('propertiesPanel.imageFit') || '표시'}>
           <Dropdown
             options={[

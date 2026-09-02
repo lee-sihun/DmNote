@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
     }),
   ),
   canDecodeImage: vi.fn(() => Promise.resolve(true)),
+  probeImageSize: vi.fn(() => Promise.resolve({ width: 64, height: 32 })),
 }));
 
 vi.mock('@api/modules/itemsApi', () => ({
@@ -48,6 +49,7 @@ vi.mock('@api/modules/resourceApi', () => ({
 
 vi.mock('@utils/core/assetProbe', () => ({
   canDecodeImage: mocks.canDecodeImage,
+  probeImageSize: mocks.probeImageSize,
   canLoadFont: vi.fn(() => Promise.resolve(true)),
 }));
 
@@ -131,6 +133,8 @@ const spritePosition = (
   poses: [],
   transitionMs: 90,
   transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  imagePlacement: 'box',
+  referenceNaturalSize: null,
   ...overrides,
 });
 
@@ -253,6 +257,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     mocks.patchPosition.mockResolvedValue(undefined);
     mocks.imageLoad.mockResolvedValue({ success: false });
     mocks.canDecodeImage.mockResolvedValue(true);
+    mocks.probeImageSize.mockResolvedValue({ width: 64, height: 32 });
     useKeyStore.setState({
       selectedKeyType: '4key',
       keyMappings: { '4key': ['A', 'S'] },
@@ -325,6 +330,8 @@ describe('SingleSpritePanel 자세 편집', () => {
         transform: { x: 0, y: 0, rotation: 0, scale: 1 },
         imageOverride: null,
         contactPoint: { x: 0.5, y: 1 },
+        imagePivot: null,
+        imageOverrideMetrics: null,
       },
     ]);
   });
@@ -334,6 +341,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -369,6 +378,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -409,6 +420,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -435,6 +448,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -442,6 +457,8 @@ describe('SingleSpritePanel 자세 편집', () => {
         },
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
@@ -490,6 +507,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -497,6 +516,8 @@ describe('SingleSpritePanel 자세 편집', () => {
         },
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
@@ -532,6 +553,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           name: '왼손',
           triggers: [KEY_ID_A],
@@ -540,6 +563,8 @@ describe('SingleSpritePanel 자세 편집', () => {
         },
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
           transform: { x: 4, y: 0, rotation: 0, scale: 1 },
@@ -590,6 +615,8 @@ describe('SingleSpritePanel 자세 편집', () => {
         transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
         imageOverride: 'override.png',
         contactPoint: { x: 0.5, y: 1 },
+        imagePivot: null,
+        imageOverrideMetrics: null,
       },
       // 구조 변경 시 무명 상태는 보이던 번호가 이름으로 고정된다
       { ...position.poses[1], name: 'propertiesPanel.spritePose 1' },
@@ -602,6 +629,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           name: '왼손 common.copySuffix',
           triggers: [KEY_ID_A],
@@ -633,6 +662,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
     });
     const position = spritePosition({
       poses: [
@@ -672,6 +703,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
     }));
     const position = spritePosition({ poses });
     seed(position);
@@ -712,6 +745,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           name: 'propertiesPanel.spritePose 1',
           triggers: [KEY_ID_A],
@@ -742,6 +777,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
     });
     const position = spritePosition({
       poses: [
@@ -777,6 +814,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           name: 'propertiesPanel.spritePose 1',
           triggers: [KEY_ID_A],
@@ -785,6 +824,8 @@ describe('SingleSpritePanel 자세 편집', () => {
         },
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-2',
           triggers: [KEY_ID_B],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -815,6 +856,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       transform: { x: 0, y: 0, rotation: 0, scale: 1 },
       imageOverride: null,
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
     }));
     const position = spritePosition({ poses });
     seed(position);
@@ -837,6 +880,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       transform: { x: 10, y: -6, rotation: 15, scale: 1.2 },
       imageOverride: null,
       contactPoint: { x: 0.5, y: 1 },
+      imagePivot: null,
+      imageOverrideMetrics: null,
     };
     const position = spritePosition({ poses: [basePose] });
     seed(position);
@@ -861,6 +906,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -896,6 +943,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -925,6 +974,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -959,6 +1010,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A, KEY_ID_B],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -987,6 +1040,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A, deadId],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1017,6 +1072,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1051,7 +1108,10 @@ describe('SingleSpritePanel 자세 편집', () => {
     )!;
     act(() => reset.click());
     expect(mocks.patchPosition).toHaveBeenCalledTimes(1);
-    expect(mocks.patchPosition.mock.calls[0][2]).toEqual({ baseImage: null });
+    expect(mocks.patchPosition.mock.calls[0][2]).toEqual({
+      baseImage: null,
+      referenceNaturalSize: null,
+    });
 
     // 미리보기 전면 선택 버튼은 파일창 결과를 baseImage로 커밋
     mocks.imageLoad.mockResolvedValue({
@@ -1063,8 +1123,34 @@ describe('SingleSpritePanel 자세 편집', () => {
     )!;
     await act(async () => select.click());
     expect(mocks.patchPosition).toHaveBeenCalledTimes(2);
+    // 원본 크기는 디코드 확인이 읽은 값을 경로와 한 커밋으로 싣는다
     expect(mocks.patchPosition.mock.calls[1][2]).toEqual({
       baseImage: 'body.png',
+      referenceNaturalSize: { source: 'body.png', width: 64, height: 32 },
+    });
+  });
+
+  it('축 배치에서 기본 이미지를 고르면 상자를 이미지 비율로 맞추고 기준점은 제자리에 둔다', async () => {
+    const position = spritePosition({
+      baseImage: 'hand.png',
+      imagePlacement: 'pivot',
+      referenceNaturalSize: { source: 'hand.png', width: 10, height: 10 },
+    });
+    seed(position);
+    render(position);
+
+    act(() => buttonByText('propertiesPanel.configure').click());
+    const popup = popupByLabel('propertiesPanel.spriteBaseImage')!;
+    mocks.imageLoad.mockResolvedValue({ success: true, imagePath: 'body.png' });
+    const select = popup.querySelector<HTMLButtonElement>(
+      'button[aria-label="propertiesPanel.spriteImageSelect"]',
+    )!;
+    await act(async () => select.click());
+    // 상자 100x100, 이미지 64x32 → 100x50, 가운데 기준점(50,50) 유지 → y 25
+    expect(mocks.patchPosition.mock.calls.at(-1)?.[2]).toEqual({
+      baseImage: 'body.png',
+      referenceNaturalSize: { source: 'body.png', width: 64, height: 32 },
+      imageRect: { x: 0, y: 25, width: 100, height: 50 },
     });
   });
 
@@ -1087,6 +1173,7 @@ describe('SingleSpritePanel 자세 편집', () => {
     act(() => reset.click());
     expect(mocks.patchPosition.mock.calls.at(-1)?.[2]).toEqual({
       baseImage: null,
+      referenceNaturalSize: null,
     });
   });
 
@@ -1131,6 +1218,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1189,6 +1278,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1222,6 +1313,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
@@ -1264,6 +1357,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
@@ -1285,6 +1380,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1318,6 +1415,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
@@ -1464,6 +1563,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 12, y: -6, rotation: 15, scale: 1.2 },
@@ -1512,6 +1613,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1607,9 +1710,12 @@ describe('SingleSpritePanel 자세 편집', () => {
       imageRect: { x: 0, y: 0, width: 1, height: 100 },
     });
 
+    // 설정 카드의 드롭다운은 배치·표시 순서 - 표시는 두 번째
     await act(async () =>
       popup
-        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .querySelectorAll<HTMLButtonElement>(
+          'button[aria-haspopup="listbox"]',
+        )[1]
         .click(),
     );
     await act(async () =>
@@ -1625,6 +1731,8 @@ describe('SingleSpritePanel 자세 편집', () => {
       poses: [
         {
           contactPoint: { x: 0.5, y: 1 },
+          imagePivot: null,
+          imageOverrideMetrics: null,
           poseId: 'pose-1',
           triggers: [KEY_ID_A],
           transform: { x: 0, y: 0, rotation: 0, scale: 1 },
@@ -1647,10 +1755,15 @@ describe('SingleSpritePanel 자세 편집', () => {
     )!;
     await act(async () => pickButton.click());
 
-    expect(mocks.canDecodeImage).toHaveBeenCalledWith('pose.png');
+    expect(mocks.probeImageSize).toHaveBeenCalledWith('pose.png');
     expect(mocks.patchPosition).toHaveBeenCalledTimes(1);
     const patch = mocks.patchPosition.mock
       .calls[0][2] as Partial<CanonicalReactiveSpritePosition>;
     expect(patch.poses?.[0].imageOverride).toBe('pose.png');
+    expect(patch.poses?.[0].imageOverrideMetrics).toEqual({
+      source: 'pose.png',
+      width: 64,
+      height: 32,
+    });
   });
 });
