@@ -100,6 +100,8 @@ interface ReactiveSpritePosition {
   pressDurationMs: number; // onPress 재생 시간, 1–5000, 기본 300
   transitionMs: number; // 자세 전환 시간, 0–1000, 기본 0. onPress는 무시하고 pressDurationMs 동안 재생
   transitionEasing: string; // CSS easing, 기본 'cubic-bezier(0.4, 0, 0.2, 1)'
+  imagePlacement: 'box' | 'pivot'; // 이미지 배치 방식, 기본 box. pivot은 이미지마다 자기 축을 기준점에 맞추고 기준 이미지의 픽셀 배율로 그립니다
+  referenceNaturalSize: { source: string | null; width: number; height: number } | null; // pivot 배치의 픽셀 배율 기준. baseImage가 있으면 source가 그 경로와 같아야 하고, 없으면 null이어야 합니다
 }
 
 interface SpritePose {
@@ -109,6 +111,8 @@ interface SpritePose {
   transform: SpriteTransform;
   imageOverride: string | null; // 이 자세가 활성인 동안 baseImage를 대체
   contactPoint: { x: number; y: number }; // 자세 이미지의 키 접점(핀), 정규화 0–1, 기본 {0.5, 1}. 에디터 도우미 전용이고 런타임 해석에는 쓰이지 않습니다
+  imagePivot: { x: number; y: number } | null; // pivot 배치에서 이 자세 이미지의 축, 정규화 0–1. null이면 스프라이트 pivot을 상속하고, imageOverride가 없으면 null로 정규화됩니다
+  imageOverrideMetrics: { source: string; width: number; height: number } | null; // imageOverride의 원본 픽셀 크기(정수, 1–32768). pivot 배치에서 override가 있으면 필수이고 source가 경로와 정확히 같아야 합니다
 }
 
 interface SpriteTransform {
@@ -126,6 +130,17 @@ interface SpriteTransform {
 사전순 첫 override를 씁니다. 트리거가 둘 이상인 자세는 섞기에 참여하지 않으므로
 눌린 키가 그런 자세에만 있으면 idle로 돌아갑니다. 한 스프라이트의 두 자세가 같은
 트리거 집합을 가질 수 없고, 빈 트리거 목록은 커밋에서 거부됩니다.
+
+배치 방식이 `pivot`이면 이미지마다 축을 기준점 P(imageRect 원점 + pivot × 크기)에
+놓고, 크기는 원본 픽셀 × 기준 배율입니다. 기준 배율은 imageRect를
+referenceNaturalSize로 나눈 값으로 contain은 작은 쪽, cover는 큰 쪽, fill은 축별
+배율입니다. 자세를 섞을 때 축은 평균하지 않고 이미지를 고른 자세의 축을 씁니다.
+pivot 배치에서 원본 크기가 없거나 경로와 어긋나면 커밋이 `VALIDATION_FAILED`로
+거절되며 `details.validationCode`는 `MISSING_SPRITE_IMAGE_METRICS`,
+`STALE_SPRITE_IMAGE_METRICS`, `INVALID_SPRITE_IMAGE_METRICS` 중 하나입니다.
+schemaVersion 1 패치에서 이미 있는 요소·자세의 `imagePlacement`,
+`referenceNaturalSize`, `imagePivot`, `imageOverrideMetrics`, `contactPoint`,
+`activation`, `pressDurationMs`를 생략하면 저장된 값이 유지됩니다.
 
 ## 현재 문서 조회
 

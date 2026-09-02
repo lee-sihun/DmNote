@@ -206,6 +206,11 @@ you can replace. Disable **Inline Styles Priority** on the sprite to use them.
 }
 ```
 
+`--sprite-fit` only matters under box placement. Under anchor-based placement the
+image element already has the source aspect ratio, so contain and cover do not
+change the result; overriding fill, or the element size itself, voids the
+anchor and fingertip alignment guarantees.
+
 ## Selector Reference
 
 ### Key Selectors

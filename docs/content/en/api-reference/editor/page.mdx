@@ -104,6 +104,8 @@ interface ReactiveSpritePosition {
   pressDurationMs: number; // onPress playback duration, 1–5000, default 300
   transitionMs: number; // pose transition duration, 0–1000, default 0. Ignored by onPress, which plays for pressDurationMs
   transitionEasing: string; // CSS easing, default 'cubic-bezier(0.4, 0, 0.2, 1)'
+  imagePlacement: 'box' | 'pivot'; // image placement, default box. pivot aligns each image's own anchor to the pivot point and draws it at the reference image's pixel scale
+  referenceNaturalSize: { source: string | null; width: number; height: number } | null; // pixel-scale reference for pivot placement. source must equal baseImage when one is set, and be null otherwise
 }
 
 interface SpritePose {
@@ -113,6 +115,8 @@ interface SpritePose {
   transform: SpriteTransform;
   imageOverride: string | null; // replaces baseImage while this pose is active
   contactPoint: { x: number; y: number }; // normalized key-contact pin of the pose image, 0–1 each, default {0.5, 1}. Editor helper only; runtime resolution ignores it
+  imagePivot: { x: number; y: number } | null; // anchor of this pose image under pivot placement, 0–1 each. null inherits the sprite pivot; normalized to null when imageOverride is absent
+  imageOverrideMetrics: { source: string; width: number; height: number } | null; // intrinsic pixel size of imageOverride (integers, 1–32768). Required under pivot placement when an override is set, and source must equal the path exactly
 }
 
 interface SpriteTransform {
@@ -131,6 +135,19 @@ circular mean, and the image comes from the first override in poseId order.
 Poses with two or more triggers never take part in blending, so a sprite whose
 held keys only appear in such poses returns to idle. Two poses of one sprite may
 not share the same trigger set, and commits reject empty trigger lists.
+
+Under `pivot` placement every image puts its own anchor on the pivot point P
+(imageRect origin + pivot × size) and is drawn at intrinsic pixels × the
+reference scale. The reference scale divides imageRect by referenceNaturalSize:
+contain takes the smaller ratio, cover the larger, fill uses each axis. When
+poses blend, anchors are never averaged; the pose whose image was chosen supplies
+its anchor. Under pivot placement a missing or mismatched intrinsic size rejects
+the commit with `VALIDATION_FAILED` and a `details.validationCode` of
+`MISSING_SPRITE_IMAGE_METRICS`, `STALE_SPRITE_IMAGE_METRICS`, or
+`INVALID_SPRITE_IMAGE_METRICS`. A schemaVersion 1 patch that omits
+`imagePlacement`, `referenceNaturalSize`, `imagePivot`, `imageOverrideMetrics`,
+`contactPoint`, `activation`, or `pressDurationMs` on an existing element or
+pose keeps the stored value.
 
 ## Read the Current Document
 
